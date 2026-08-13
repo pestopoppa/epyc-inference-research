@@ -219,6 +219,7 @@ KIND_PROPOSAL_SKIPPED = "PROPOSAL_SKIPPED"
 KIND_STOP_STATE = "STOP_STATE"
 KIND_MICROBENCH_RUN_COMPLETED = "MICROBENCH_RUN_COMPLETED"
 KIND_T0_REFUSAL = "T0_REFUSAL"
+KIND_POST_T0_QUIET_BOUNDARY = "POST_T0_QUIET_BOUNDARY"
 KIND_COMPOSITION_REQUESTED = "COMPOSITION_REQUESTED"
 KIND_COMPOSITION_FAILED = "COMPOSITION_FAILED"
 KIND_COMPOSITION_REJECTED = "COMPOSITION_REJECTED"
@@ -250,6 +251,7 @@ NATIVE_KINDS = frozenset({
     KIND_PROPOSAL_SKIPPED, KIND_STOP_STATE, KIND_PREFLIGHT_ATTESTATION,
     KIND_MICROBENCH_RUN_COMPLETED,
     KIND_T0_REFUSAL,
+    KIND_POST_T0_QUIET_BOUNDARY,
     KIND_COMPOSITION_REQUESTED,
     KIND_COMPOSITION_FAILED, KIND_COMPOSITION_REJECTED,
     KIND_OPERATOR_RELEASE_DRY_RUN_REQUESTED,
@@ -274,6 +276,7 @@ RECORD_ID_KEY_BY_KIND = {
     KIND_COMPOSITION_REJECTED: "attempt_sha256",
     KIND_OPERATOR_RELEASE_DRY_RUN_REQUESTED: "request_id",
     KIND_OPERATOR_RELEASE_DRY_RUN_TERMINATED: "terminal_sha256",
+    KIND_POST_T0_QUIET_BOUNDARY: "receipt_id",
 }
 
 # §5.8 storage classes. Only the expirable class may ever be tombstoned:
@@ -1111,6 +1114,48 @@ def _validate_native_payload(kind: str, payload: Mapping[str, Any]) -> list:
                 out.append(f"{key}: required and non-empty")
         if payload.get("rate_measured") is not False:
             out.append("rate_measured: must be false on a pre-event T0 refusal")
+    elif kind == KIND_POST_T0_QUIET_BOUNDARY:
+        for key in ("campaign_id", "receipt_id", "completed_at"):
+            value = payload.get(key)
+            if not isinstance(value, str) or not value.strip():
+                out.append(f"{key}: required and non-empty")
+        for key, expected in (("quiet_barrier_s", 65.0),
+                              ("sample_interval_s", 5.0),
+                              ("required_samples", 3)):
+            if payload.get(key) != expected:
+                out.append(f"{key}: must be the fixed post-T0 boundary value {expected!r}")
+        teardowns = payload.get("t0_sandbox_teardowns")
+        if not isinstance(teardowns, list) or not teardowns:
+            out.append("t0_sandbox_teardowns: required, non-empty list")
+        else:
+            for index, row in enumerate(teardowns):
+                if not isinstance(row, Mapping):
+                    out.append(f"t0_sandbox_teardowns[{index}]: must be a mapping")
+                    continue
+                ref = row.get("capture_ref")
+                teardown = row.get("teardown")
+                if not isinstance(ref, str) or not ref.startswith("akcap:"):
+                    out.append(f"t0_sandbox_teardowns[{index}].capture_ref: required akcap reference")
+                if (not isinstance(teardown, Mapping)
+                        or teardown.get("verified_empty") is not True
+                        or teardown.get("removed") is not True):
+                    out.append(f"t0_sandbox_teardowns[{index}].teardown: must prove verified_empty and removed")
+        samples = payload.get("samples")
+        if not isinstance(samples, list) or len(samples) != 3:
+            out.append("samples: required list of exactly three quiet observations")
+        elif all(isinstance(row, Mapping) for row in samples):
+            for index, row in enumerate(samples, start=1):
+                if row.get("index") != index:
+                    out.append(f"samples[{index - 1}].index: must be {index}")
+                if not isinstance(row.get("host_state"), Mapping):
+                    out.append(f"samples[{index - 1}].host_state: required mapping")
+                attestation = row.get("claim_attestation")
+                if (not isinstance(attestation, Mapping)
+                        or attestation.get("outcome") != schemas.PASS):
+                    out.append(f"samples[{index - 1}].claim_attestation: must be a PASS mapping")
+                load = row.get("load")
+                if not isinstance(load, Mapping) or load.get("outcome") != schemas.PASS:
+                    out.append(f"samples[{index - 1}].load: must be a PASS mapping")
     elif kind == KIND_PROPOSAL_SKIPPED:
         for key in ("proposal_ref", "reason"):
             value = payload.get(key)

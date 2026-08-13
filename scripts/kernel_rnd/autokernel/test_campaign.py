@@ -534,7 +534,8 @@ class TestPostT0QuietBoundary(unittest.TestCase):
         sleeps = []
         states = [self._state(3.0) for _ in range(3)]
         ops = self._ops(states, sleeps)
-        with tempfile.TemporaryDirectory() as directory:
+        with tempfile.TemporaryDirectory() as directory, \
+                tempfile.TemporaryDirectory() as journal_root:
             sink = t0_provider.DirectoryCaptureSink(directory)
             refs = tuple(sink.store(self._capture(
                 teardown={"verified_empty": True, "removed": True})) for _ in range(2))
@@ -545,8 +546,13 @@ class TestPostT0QuietBoundary(unittest.TestCase):
             witness = mock.Mock()
             witness.attest.return_value = attestation
             with mock.patch.object(campaign.microbench, "CpuRegionClaimAdapter",
-                                   return_value=witness):
-                receipt = ops.settle_after_t0(spec(), object())
+                                   return_value=witness), \
+                    mock.patch.object(campaign.storage, "assert_not_scratch",
+                                      side_effect=lambda root, **_kw: root):
+                receipt = ops.settle_after_t0(
+                    spec(journal_root=journal_root), object())
+            entries = journal_module.Journal(
+                journal_root, campaign_id="ak-test").read_all()
         self.assertEqual(sleeps, [campaign.POST_T0_QUIET_BARRIER_S,
                                   campaign.POST_T0_QUIET_SAMPLE_INTERVAL_S,
                                   campaign.POST_T0_QUIET_SAMPLE_INTERVAL_S])
@@ -554,6 +560,12 @@ class TestPostT0QuietBoundary(unittest.TestCase):
         self.assertEqual(witness.attest.call_count, 3)
         self.assertTrue(all(row["load"]["outcome"] == schemas.PASS
                             for row in receipt["samples"]))
+        quiet_entries = [entry for entry in entries
+                         if entry.kind == journal_module.KIND_POST_T0_QUIET_BOUNDARY]
+        self.assertEqual(len(quiet_entries), 1)
+        self.assertEqual(quiet_entries[0].payload, receipt)
+        self.assertEqual(
+            [row["capture_ref"] for row in receipt["t0_sandbox_teardowns"]], list(refs))
 
     def test_missing_teardown_refuses_before_waiting_or_t1(self):
         sleeps = []
@@ -761,6 +773,64 @@ class TestAFailedT0ComputesNoSpeedNumber(unittest.TestCase):
         self.assertIsNone(result.decision)
         self.assertIn("AcceptRuleMisuse", result.error)
         self.assertTrue(all(r.released for r in result.releases))
+
+    def test_an_invalid_t0_event_hard_refuses_before_any_t1_block(self):
+        class InvalidT0EventOps(SpyOps):
+            def admit_t1_after_t0(self, spec_, tree):
+                self._record("admit_t1_after_t0")
+                raise campaign.T0EvaluationAdmissionRefusal(
+                    "T0 evaluation event cannot admit T1: violations=['protocol_id']")
+
+        ops = InvalidT0EventOps(
+            pairs=pairs_from_positions(TG128_OVER_TEN_POSITIONS,
+                                       candidate_factor=1.5, orders=BALANCED))
+        result = campaign.run_campaign(spec(), ops)
+        self.assertEqual(result.state, campaign.STATE_T0_FAILED)
+        self.assertIn("T0 evaluation event cannot admit T1", result.error)
+        self.assertIn("admit_t1_after_t0", ops.calls)
+        self.assertNotIn("run_paired_blocks", ops.calls)
+        self.assertEqual(result.pairs, ())
+        self.assertIsNone(result.decision)
+        self.assertTrue(all(release.released for release in result.releases))
+
+
+class TestT0EventAdmission(unittest.TestCase):
+    """T1 needs the governed T0 event, not merely a raw-gate PASS bit."""
+
+    def test_unversioned_protocol_is_refused_before_close_or_t1(self):
+        ops = campaign.HostOps(nominal_khz=1)
+        ops._t0_request = mock.Mock(protocol_id=campaign.api.PROTOCOL_ID)
+        ops._t0_gate_results = (mock.Mock(),)
+        with mock.patch.object(ops, "close_evaluation_window") as close, \
+                self.assertRaisesRegex(campaign.T0EvaluationAdmissionRefusal,
+                                       "exact ratified protocol"):
+            ops.admit_t1_after_t0(spec(), object())
+        close.assert_not_called()
+
+    def test_schema_invalid_t0_event_is_refused_and_not_retained(self):
+        ops = campaign.HostOps(nominal_khz=1)
+        request = mock.Mock(protocol_id=campaign.api.PROTOCOL_VERSIONED_ID)
+        gate = mock.Mock()
+        gate.to_dict.return_value = {"gate_id": "t0.fixture"}
+        ops._t0_request = request
+        ops._t0_gate_results = (gate,)
+        outcome = mock.Mock(
+            event={"event_id": "ake-malformed"},
+            event_violations=("protocol_id: invalid",),
+            event_blocked_reason=None,
+            verdict=mock.Mock(status=campaign.api.STATUS_PASS))
+        dispatcher = mock.Mock()
+        dispatcher.dispatch.return_value = outcome
+        with mock.patch.object(ops, "close_evaluation_window") as close, \
+                mock.patch.object(ops, "_event_request", return_value=request), \
+                mock.patch.object(ops, "_window_attestations", return_value=mock.Mock()), \
+                mock.patch.object(campaign.api, "TierDispatcher", return_value=dispatcher), \
+                self.assertRaisesRegex(campaign.T0EvaluationAdmissionRefusal,
+                                       "violations=.*protocol_id"):
+            ops.admit_t1_after_t0(spec(), object())
+        close.assert_called_once()
+        self.assertIsNone(ops._t0_evaluation_event)
+        self.assertIsNone(ops._t0_event_request)
 
 
 # =============================================================================

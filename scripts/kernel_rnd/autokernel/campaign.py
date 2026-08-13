@@ -681,6 +681,18 @@ class T0Outcome:
                           in self.gates]}
 
 
+class T0EvaluationAdmissionRefusal(RuntimeError):
+    """The measured T0 gates passed, but their governed event cannot admit T1.
+
+    A gate-only ``T0Outcome`` is deliberately a small loop seam.  It is not,
+    however, sufficient authority to spend the first timing block: the event
+    must also cite the exact ratified protocol and validate under the event
+    schema.  This typed refusal lets the driver retain T0's terminal state and
+    skip T1 rather than accidentally classifying a bad evidence record as a
+    generic driver failure after timing has begun.
+    """
+
+
 def anchor_drift(pairs: Sequence[Pair]) -> float:
     """How much the ANCHOR arm moved across this run. The in-run neutral control.
 
@@ -2108,6 +2120,7 @@ class CampaignOps(Protocol):
     def build(self, spec: CampaignSpec, tree: Any) -> Any: ...
     def run_t0(self, spec: CampaignSpec, build: Any) -> T0Outcome: ...
     def settle_after_t0(self, spec: CampaignSpec, claim: Any) -> Any: ...
+    def admit_t1_after_t0(self, spec: CampaignSpec, tree: Any) -> Any: ...
     def run_paired_blocks(self, spec: CampaignSpec, build: Any,
                           claim: Any) -> Optional[Sequence[Pair]]: ...
     def teardown_worktree(self, spec: CampaignSpec, tree: Any) -> Any: ...
@@ -2499,6 +2512,8 @@ class HostOps:
         self._t0_request: Optional[api.EvaluationRequest] = None
         self._t0_report: Optional[correctness.T0Report] = None
         self._t0_gate_results: tuple = ()
+        self._t0_event_request: Optional[api.EvaluationRequest] = None
+        self._t0_evaluation_event: Optional[dict] = None
         self._t0_started = False
         self._t0_capture_archive: Optional[t0_provider.DirectoryCaptureSink] = None
         self._t0_capture_refs: tuple[str, ...] = ()
@@ -3584,7 +3599,7 @@ class HostOps:
             event_id=f"ake-{spec.campaign_id}-{spec.candidate_id}-t0",
             campaign_id=spec.campaign_id, candidate_id=spec.candidate_id,
             tier="T0", backend=spec.backend, phase=command.phase,
-            cell_class=command.cell_class, protocol_id="P-AK-SEARCH-1",
+            cell_class=command.cell_class, protocol_id=api.PROTOCOL_VERSIONED_ID,
             artifact=artifact, anchor=anchor_identity,
             evaluator=self._evaluator_identity(authority),
             scope_denominator=command.scope_denominator,
@@ -3625,6 +3640,47 @@ class HostOps:
                                  params=spec.params_for_arm(arm), arm=arm)
 
     # -- 5. the paired blocks ---------------------------------------------
+
+    def admit_t1_after_t0(self, spec: CampaignSpec, tree: Any) -> None:
+        """Close, validate and retain T0's event before the first T1 block.
+
+        T0's raw gates are necessary but not sufficient: an unversioned
+        protocol citation, a voided window, or an event-schema failure makes
+        the T0 evidence unusable.  Previously the event was first constructed
+        during finalization, after T1 had already spent timing blocks.  Capture
+        the T0 close boundary now and make its emitted, schema-valid PASS event
+        the sole admission ticket for T1.
+        """
+        if self._t0_request is None or not self._t0_gate_results:
+            raise T0EvaluationAdmissionRefusal(
+                "T0 produced no retained evaluation request and gate set; T1 is refused")
+        if self._t0_request.protocol_id != api.PROTOCOL_VERSIONED_ID:
+            raise T0EvaluationAdmissionRefusal(
+                "T0 event cites " + repr(self._t0_request.protocol_id) +
+                ", not exact ratified protocol " + repr(api.PROTOCOL_VERSIONED_ID))
+
+        # This is the T0 window's close, while its claim and worktree are
+        # still live.  The final close later belongs to T1 and must not replace
+        # the T0 receipt we are about to validate and retain.
+        self.close_evaluation_window(spec, tree)
+        evidence = [gate.to_dict() for gate in self._t0_gate_results]
+        request = self._event_request(self._t0_request, evidence, "t0")
+        window = self._window_attestations(
+            spec, request,
+            raw_evidence_ref="sha256:" + schemas.content_hash(evidence),
+            rate_run=None)
+        outcome = api.TierDispatcher(gate_runners={
+            "T0": _RecordedGateRunner(self._t0_gate_results),
+        }).dispatch(request, window, effect=None)
+        if outcome.event is None or outcome.event_violations \
+                or outcome.verdict.status != api.STATUS_PASS:
+            raise T0EvaluationAdmissionRefusal(
+                "T0 evaluation event cannot admit T1: "
+                f"status={outcome.verdict.status!r} "
+                f"blocked={outcome.event_blocked_reason!r} "
+                f"violations={list(outcome.event_violations)}")
+        self._t0_event_request = request
+        self._t0_evaluation_event = outcome.event
 
     def settle_after_t0(self, spec: CampaignSpec, claim: Any) -> Mapping[str, Any]:
         """Prove T0 has drained, then observe a fresh quiet host before T1.
@@ -3692,14 +3748,42 @@ class HostOps:
                 self._sleep(POST_T0_QUIET_SAMPLE_INTERVAL_S)
         receipt = {
             "schema": "epyc.autokernel.post_t0_quiet_boundary.v1",
+            "campaign_id": spec.campaign_id,
             "quiet_barrier_s": POST_T0_QUIET_BARRIER_S,
             "sample_interval_s": POST_T0_QUIET_SAMPLE_INTERVAL_S,
             "required_samples": POST_T0_QUIET_SAMPLES,
             "t0_sandbox_teardowns": teardown_receipts,
             "samples": samples,
+            "completed_at": datetime.now(timezone.utc).isoformat(),
         }
+        receipt["receipt_id"] = "akq-" + schemas.content_hash(receipt)[:24]
+        # The event is the durable receipt, not merely a hash folded into a
+        # later evaluation event.  A failure after this boundary (including a
+        # T1 refusal) must not erase the proof that T0's sandbox children were
+        # gone and that all three fresh samples were quiet under this claim.
+        self._journal_post_t0_quiet_boundary(spec, receipt)
         self._post_t0_settlement = receipt
         return receipt
+
+    @staticmethod
+    def _journal_post_t0_quiet_boundary(spec: CampaignSpec,
+                                        receipt: Mapping[str, Any]) -> None:
+        if not spec.journal_root:
+            raise RuntimeError("post-T0 quiet boundary needs an executing campaign journal")
+        root = storage.assert_not_scratch(spec.journal_root, what="campaign journal root")
+        book = journal_module.Journal(root, campaign_id=spec.campaign_id)
+        book.initialize()
+        receipt_id = receipt["receipt_id"]
+        with book.write_lock():
+            prior = [entry for entry in book.read_all()
+                     if entry.kind == journal_module.KIND_POST_T0_QUIET_BOUNDARY
+                     and entry.record_id == receipt_id]
+            if prior:
+                if schemas.content_hash(prior[0].payload) != schemas.content_hash(receipt):
+                    raise RuntimeError(
+                        f"post-T0 quiet receipt {receipt_id!r} names different bytes")
+                return
+            book.append(journal_module.KIND_POST_T0_QUIET_BOUNDARY, receipt)
 
     def run_paired_blocks(self, spec: CampaignSpec, build: Any,
                           claim: Any) -> Optional[Sequence[Pair]]:
@@ -3797,7 +3881,7 @@ class HostOps:
             event_id=f"ake-{spec.campaign_id}-{spec.candidate_id}-t1",
             campaign_id=spec.campaign_id, candidate_id=spec.candidate_id,
             tier="T1", backend=spec.backend, phase=command.phase,
-            cell_class=command.cell_class, protocol_id="P-AK-SEARCH-1",
+            cell_class=command.cell_class, protocol_id=api.PROTOCOL_VERSIONED_ID,
             artifact=artifact, anchor=anchor,
             evaluator=self._evaluator_identity(authority),
             scope_denominator=command.scope_denominator,
@@ -4031,7 +4115,12 @@ class HostOps:
         """Build T0 then T1 from retained executed evidence; never from display pairs."""
         events = []
         t0_request = None
-        if self._t0_request is not None and self._t0_gate_results:
+        if self._t0_evaluation_event is not None:
+            if self._t0_event_request is None:
+                raise RuntimeError("retained T0 event has no matching request")
+            t0_request = self._t0_event_request
+            events.append(self._t0_evaluation_event)
+        elif self._t0_request is not None and self._t0_gate_results:
             evidence = [gate.to_dict() for gate in self._t0_gate_results]
             t0_request = self._event_request(self._t0_request, evidence, "t0")
             window = self._window_attestations(
@@ -4433,6 +4522,15 @@ def run_campaign(spec: CampaignSpec, ops: Any) -> CampaignResult:
             # work remains in load1.  The concrete HostOps boundary preserves
             # all teardown receipts and proves quietness under the held claim.
             settle(spec, claim)
+
+        admit_t1 = getattr(ops, "admit_t1_after_t0", None)
+        if executes and callable(admit_t1):
+            try:
+                admit_t1(spec, tree)
+            except T0EvaluationAdmissionRefusal as exc:
+                state = STATE_T0_FAILED
+                return _finish(spec, ops, ledger, state=state, t0=t0, decision=None,
+                               pairs=(), pre=pre, error=str(exc), tree=tree)
 
         observed = ops.run_paired_blocks(spec, build, claim)
         if observed is None:
