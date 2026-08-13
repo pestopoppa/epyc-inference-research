@@ -38,12 +38,13 @@ CPU_LIST = recipes.CANONICAL_PREFIX[recipes.CANONICAL_PREFIX.index("-c") + 1]
 PRODUCTION_ROOT = Path("/mnt/raid0/llm/llama.cpp")
 PRODUCTION_COMMIT = "0db32c06e3e550065b78311a6031ef3dd2c4f27c"
 INSTRUMENT_ROOT = Path(os.environ.get(
-    "AUTOKERNEL_INSTRUMENT_ROOT", "/mnt/raid0/llm/llama.cpp-ak-controls-v9-final"))
+    "AUTOKERNEL_INSTRUMENT_ROOT",
+    "/mnt/raid0/llm/autokernel/worktrees/ak-iqk-t0-instrument-20260813"))
 INSTRUMENT_BINARY = Path(os.environ.get(
     "AUTOKERNEL_INSTRUMENT_BINARY",
-    str(INSTRUMENT_ROOT / "build-v9-cpu/bin/llama-bench")))
-INSTRUMENT_BRANCH = "experimental-v9-autokernel-t1-hardening-final"
-INSTRUMENT_COMMIT = "974b5fcb3670ee234242ebe5271266373ade7bf2"
+    str(INSTRUMENT_ROOT / "build-ak-t0-cpu-65b35ff4/bin/llama-bench")))
+INSTRUMENT_BRANCH = "experimental-v9-autokernel-t0-instrument-20260813"
+INSTRUMENT_COMMIT = "65b35ff4e4d08e78c8c35a13353407866d25237d"
 MODEL = Path(
     "/mnt/raid0/llm/models/lmstudio-community/"
     "Qwen2.5-Coder-0.5B-GGUF/Qwen2.5-Coder-0.5B-Q4_K_M.gguf")
@@ -98,11 +99,11 @@ BELIEF_PRODUCER_ID = "autokernel.execution.live_controls/v2"
 
 def _ensure_instrument_build() -> None:
     """Materialize the complete read-only T0/T1 instrument before calibration."""
-    bindir = INSTRUMENT_ROOT / "build-v9-cpu" / "bin"
+    bindir = INSTRUMENT_BINARY.parent
     required = tuple(bindir / name for name in INSTRUMENT_BUILD_TARGETS)
     if all(path.is_file() and os.access(path, os.X_OK) for path in required):
         return
-    build_dir = INSTRUMENT_ROOT / "build-v9-cpu"
+    build_dir = bindir.parent
     if not build_dir.is_dir():
         raise RuntimeError(f"instrument build directory is missing: {build_dir}")
     subprocess.run(

@@ -1036,10 +1036,10 @@ PRODUCTION_COMMIT = "0db32c06e3e550065b78311a6031ef3dd2c4f27c"
 #: evaluator-only llama-bench changes are present without modifying production.
 #: Kernel proposals may change kernel sources but RVP-C6-1 requires all reward
 #: translation units to remain byte-identical to this commit.
-MEASUREMENT_REPO = "/mnt/raid0/llm/llama.cpp-ak-controls-v9-final"
-MEASUREMENT_BRANCH = "experimental-v9-autokernel-t1-hardening-final"
-MEASUREMENT_COMMIT = "974b5fcb3670ee234242ebe5271266373ade7bf2"
-MEASUREMENT_BUILD_ROOT = os.path.join(MEASUREMENT_REPO, "build-v9-cpu")
+MEASUREMENT_REPO = "/mnt/raid0/llm/autokernel/worktrees/ak-iqk-t0-instrument-20260813"
+MEASUREMENT_BRANCH = "experimental-v9-autokernel-t0-instrument-20260813"
+MEASUREMENT_COMMIT = "65b35ff4e4d08e78c8c35a13353407866d25237d"
+MEASUREMENT_BUILD_ROOT = os.path.join(MEASUREMENT_REPO, "build-ak-t0-cpu-65b35ff4")
 
 
 def load_calibration_bundle(path: os.PathLike[str] | str) -> LeanCalibration:

@@ -419,7 +419,7 @@ class TestTheDryRunComposesEndToEnd(unittest.TestCase):
         self.assertEqual(live_controls.INSTRUMENT_BRANCH, campaign.MEASUREMENT_BRANCH)
         self.assertEqual(live_controls.INSTRUMENT_COMMIT, campaign.MEASUREMENT_COMMIT)
         self.assertEqual(campaign.MEASUREMENT_COMMIT,
-                         "974b5fcb3670ee234242ebe5271266373ade7bf2")
+                         "65b35ff4e4d08e78c8c35a13353407866d25237d")
 
     def test_the_ledger_released_everything(self):
         result, _ops, _text = self.compose()

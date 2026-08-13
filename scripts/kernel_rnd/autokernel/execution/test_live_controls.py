@@ -24,6 +24,8 @@ class InstrumentSelection(unittest.TestCase):
                     path.touch()
                     path.chmod(0o755)
             with mock.patch.object(live_controls, "INSTRUMENT_ROOT", root), \
+                 mock.patch.object(live_controls, "INSTRUMENT_BINARY",
+                                   bindir / "llama-bench"), \
                  mock.patch.object(live_controls.subprocess, "run", side_effect=build) as run:
                 live_controls._ensure_instrument_build()
             run.assert_called_once_with(
@@ -41,7 +43,7 @@ class InstrumentSelection(unittest.TestCase):
         self.assertEqual(str(module.INSTRUMENT_ROOT), "/tmp/ak-clean-instrument")
         self.assertEqual(
             str(module.INSTRUMENT_BINARY),
-            "/tmp/ak-clean-instrument/build-v9-cpu/bin/llama-bench")
+            "/tmp/ak-clean-instrument/build-ak-t0-cpu-65b35ff4/bin/llama-bench")
 
     def test_binary_override_is_separate_and_explicit(self):
         with mock.patch.dict(os.environ, {
