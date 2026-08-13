@@ -659,6 +659,11 @@ class TestModelGatedProducerGuards(unittest.TestCase):
             self.assertEqual(receipt["scope"], "model_load_and_inference_only")
             self.assertIs(receipt["released"], True)
             self.assertTrue(receipt["lock_path"].endswith("inference-call-window.lock"))
+            # held_s must span the WHOLE resident interval (server launch through
+            # the page query + terminate), not just the post-health snapshot —
+            # the query monkeypatch below runs in ~real time, so the flock is
+            # provably held across the model call, not just around startup.
+            self.assertGreater(receipt["held_s"], 0.0)
             self.assertIn("window=held", manifest.detail)
             # The flock is genuinely free again — a second acquire succeeds.
             w = unlimited_ocr._inference_call_window()

@@ -274,6 +274,7 @@ class UnlimitedOcrProducer:
         errors = 0
         cleanup: dict[str, Any] = {}
         window_receipt: dict[str, Any] = {}
+        _lease = None
         # R11/2026-08-13: model load + inference calls must hold the shared
         # inference-call window so a large-model load squeezes between CPU calls
         # instead of perturbing the same memory system. The whole server-resident
@@ -292,6 +293,7 @@ class UnlimitedOcrProducer:
             _window_ctx = _window.hold()
         try:
             with _window_ctx as lease:
+                _lease = lease
                 with server_stderr.open("w", encoding="utf-8") as stderr:
                     proc = subprocess.Popen(
                         server_argv,
@@ -363,6 +365,12 @@ class UnlimitedOcrProducer:
                 cleanup = terminate(proc)
                 write_json(response_dir / "cleanup.json", cleanup)
             if _window is not None and window_receipt.get("released") is False:
+                # held_s spans the WHOLE server-resident interval: recompute at
+                # release from the lease's acquisition stamp, not just the
+                # post-health snapshot captured above.
+                if _lease is not None:
+                    window_receipt["held_s"] = max(
+                        0.0, time.monotonic() - _lease.acquired_monotonic_s)
                 window_receipt["released"] = True
             write_json(response_dir / "inference_window.json", window_receipt)
 
