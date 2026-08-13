@@ -424,6 +424,13 @@ class TestCleanCandidatePasses(unittest.TestCase):
             C.GID_SCHEMA_DIFF_POLICY, C.GID_STATIC_COMPILE, C.GID_ASAN,
             C.GID_UBSAN, C.GID_STATE_SAFETY})
 
+    def test_static_bundle_refuses_tampered_or_mismatched_frame(self):
+        req = request()
+        raw = C.seal_static_t0_bundle(req, run(req=req)).to_dict()
+        raw["source_sha256"] = sha("other-source")
+        with self.assertRaises(ValueError):
+            C.T0StaticBundle.from_dict(raw)
+
     def test_coherence_is_byte_identical_against_the_named_anchor(self):
         report = run()
         self.assertEqual(report.coherence.label, C.COHERENCE_BYTE_IDENTICAL)
