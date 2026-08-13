@@ -3128,7 +3128,12 @@ class HostOps:
             declared_surface_files=(),
             envelope=correctness.ChangeClassEnvelope(
                 change_class="parameter", max_changed_lines=1, max_files_touched=1),
-            branch_name=tree.branch.name, commit_argv=(),
+            # A clean build is intentionally made in a detached worktree at the
+            # committed candidate snapshot.  The diff record's legacy
+            # ``branch_name`` field still requires a non-empty provenance label,
+            # but a snapshot does not have (and must not invent) a branch.
+            branch_name=tree.branch.name if tree.branch else "detached",
+            commit_argv=(),
             record_schema_violations=())
 
         declared_ops = tuple(spec.proposal["change"].get("predicted_affected_surface", ()))

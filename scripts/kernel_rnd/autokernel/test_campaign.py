@@ -1581,7 +1581,11 @@ class TestExecuteRefusesAnOpsThatCannotFinishARun(unittest.TestCase):
         built = spec(proposal=iqk_parameter_proposal())
         tree = mock.Mock()
         tree.path.path = str(Path(self.tempdir.name) / "candidate")
-        tree.branch.name = "experimental-ak-test"
+        # Production T0 builds run from a committed, detached snapshot rather
+        # than claiming the source actor's branch.  A branch label here would
+        # hide the exact runtime condition that the worktree API represents as
+        # ``None``.
+        tree.branch = None
         tree.unified_diff_from_source.return_value = ""
         plan = mock.Mock()
         plan.build_dir.path = str(Path(self.tempdir.name) / "build")
@@ -1616,7 +1620,7 @@ class TestExecuteRefusesAnOpsThatCannotFinishARun(unittest.TestCase):
                     return_value=symbols) as symbol_adapter, \
                 mock.patch.object(
                     campaign.chain, "diff_policy_evidence",
-                    return_value=diff), \
+                    return_value=diff) as diff_policy_evidence, \
                 mock.patch.object(
                     campaign.chain, "t0_plan_evidence",
                     return_value=projected) as project:
@@ -1629,6 +1633,8 @@ class TestExecuteRefusesAnOpsThatCannotFinishARun(unittest.TestCase):
             (("GGML_IQK", "0"),))
         self.assertEqual(
             symbol_adapter.call_args.kwargs["candidate_root"], tree.path.path)
+        self.assertEqual(
+            diff_policy_evidence.call_args.kwargs["branch_name"], "detached")
         surface = project.call_args.kwargs["change_surface"].surface
         self.assertTrue(surface.derived_touches_dispatch)
         self.assertFalse(surface.derived_touches_memory)
