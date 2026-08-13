@@ -26,7 +26,7 @@ decides whether today is a campaign or a plumbing session.
 | `instrument_integrity.py` | Pins reward-bearing measurement source to the named anchor before every live invocation | candidate/anchor source roots |
 | `physical_bounds.py` | Re-derives the per-shape physical time floor and throughput ceiling from predeclared work/peak receipts | live runner requires it |
 | `control_runner.py` | Scores the five controls through the same dispatcher a candidate uses | live 5/5 panel, 2026-08-05 |
-| `live_controls.py` | Predeclares, measures, calibrates and scores the live CPU controls, including the fixed five-block control extension needed to make a positive verdict reachable | live; dry-run by default |
+| `live_controls.py` | Predeclares, measures, calibrates and scores recipe-local live CPU controls, including the fixed five-block control extension needed to make a positive verdict reachable | live; dry-run by default; explicit prefill/decode cell |
 | `chain.py` | The **seams** between the above and the evaluator that reads them, plus the four T0 evidence projections (build, symbols, diff, change surface) | projection only; reads ELF/diff/log text it is handed, spawns nothing |
 | `../campaign.py` | **The entrypoint.** Composes everything above into one loop and gives it a `main()` | dry-run composition yes; no candidate built, no bench spawned |
 
@@ -72,6 +72,24 @@ validated `--proposal-manifest` using the current proposal schema, an exact-unit
 measurement-instrument commit and recipe; the v8 control bundle is rejected on
 v9. The proposal is fsynced before preflight or any host work, and an identical
 resume reuses that event; the same proposal id with different bytes is refused.
+
+### Recipe-local CPU controls
+
+`live_controls.py` defaults to the prefill frame (`pp512`).  The required
+held-out decode path must instead be calibrated in its own frame:
+
+```bash
+python3 -m scripts.kernel_rnd.autokernel.execution.live_controls \
+  --campaign-id <fresh-ak-controls-decode-id> \
+  --output <fresh-absolute-control-root> \
+  --recipe t1b.llama_cpu.llama_bench_decode.v1 --execute --i-hold-the-host
+```
+
+Decode uses the canonical bounded `tg128` cell and its `tg256` wrong-work
+sentinel. It cannot borrow a prefill bundle: every declaration, raw vector,
+physical frame, calibration solve, recovery check, and later campaign admission
+names the selected recipe. This command spends inference and belongs only in an
+authorized quiet-host window.
 
 The driver's accept rule is `min(delta) > 0` over N pre-committed paired blocks
 AND `median(relative) > contribution_floor`; both N's minimum and the floor come

@@ -217,6 +217,46 @@ class CalibrationFrame(unittest.TestCase):
         self.assertEqual(captured["candidate_binding"], binding)
         self.assertEqual(captured["anchor_binding"], binding)
 
+    def test_decode_recipe_has_its_own_non_prefill_frame(self):
+        """Decode calibration must never silently reuse pp512 inputs."""
+        try:
+            live_controls.configure_recipe(live_controls.DECODE_RECIPE_ID)
+            self.assertEqual(live_controls.RECIPE_ID, live_controls.DECODE_RECIPE_ID)
+            self.assertEqual(live_controls._params(prompt=live_controls.PROMPT_TOKENS)["n_gen"],
+                             live_controls.DECODE_TOKENS)
+            self.assertNotIn("n_prompt", live_controls._params(
+                prompt=live_controls.PROMPT_TOKENS))
+            self.assertIn(":tg128:", live_controls._unit_id(
+                label="aa_calibration", prompt=live_controls.PROMPT_TOKENS))
+        finally:
+            importlib.reload(live_controls)
+
+    def test_parser_selects_decode_before_any_execution(self):
+        args = live_controls.build_parser().parse_args([
+            "--campaign-id", "ak-controls-v9-decode", "--output", "/tmp/ak-decode",
+            "--recipe", live_controls.DECODE_RECIPE_ID])
+        self.assertEqual(args.recipe, live_controls.DECODE_RECIPE_ID)
+
+    def test_decode_declaration_binds_decode_frame(self):
+        try:
+            live_controls.configure_recipe(live_controls.DECODE_RECIPE_ID)
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                identity = live_controls.LiveCampaignIdentity("ak-controls-decode", str(root))
+                live_controls._write_declaration(
+                    root, identity=identity, instrument_sha="1" * 64,
+                    copy_sha="1" * 64, instrument_linkage="2" * 64,
+                    copy_linkage="2" * 64, toolchain_manifest_sha256="3" * 64,
+                    sealed_binding=live_controls.recipes.ToolBinding(
+                        binary="/sealed/llama-bench", source_root="/sealed",
+                        library_path="/sealed"))
+                declaration = json.loads((root / "campaign_declaration.json").read_text())
+            self.assertEqual(declaration["recipe_id"], live_controls.DECODE_RECIPE_ID)
+            self.assertEqual(declaration["calibration_frame"]["decode_tokens"], 128)
+            self.assertNotIn("prompt_tokens", declaration["calibration_frame"])
+        finally:
+            importlib.reload(live_controls)
+
 
 class RecordedCompositionMaterial(unittest.TestCase):
 

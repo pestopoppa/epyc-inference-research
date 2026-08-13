@@ -33,7 +33,12 @@ from ..evaluator import api, controls, recipes, statistics
 from . import (control_runner, cpu_region_claim, microbench, physical_bounds,
                powercap_broker, sandbox)
 
-RECIPE_ID = "t1b.llama_cpu.llama_bench_prefill.v1"
+# ``RECIPE_ID`` remains the process-local active cell for compatibility with
+# the recovery helpers below.  ``configure_recipe`` is called once by the CLI
+# before it creates any evidence directory; it never changes an in-flight run.
+PREFILL_RECIPE_ID = "t1b.llama_cpu.llama_bench_prefill.v1"
+DECODE_RECIPE_ID = "t1b.llama_cpu.llama_bench_decode.v1"
+RECIPE_ID = PREFILL_RECIPE_ID
 CPU_LIST = recipes.CANONICAL_PREFIX[recipes.CANONICAL_PREFIX.index("-c") + 1]
 PRODUCTION_ROOT = Path("/mnt/raid0/llm/llama.cpp")
 PRODUCTION_COMMIT = "0db32c06e3e550065b78311a6031ef3dd2c4f27c"
@@ -74,6 +79,8 @@ CONTROL_EXTENSION_BLOCKS = 5
 CONTRIBUTION_FLOOR = 0.03
 PROMPT_TOKENS = 512
 WRONG_PROMPT_TOKENS = 2048
+DECODE_TOKENS = 128
+WRONG_DECODE_TOKENS = 256
 NOMINAL_KHZ = 2_500_000
 # Conservative work LOWER bounds and hardware UPPER bounds. These make the
 # screen permissive: crossing it is evidence of wrong work/unit/timer, while
@@ -104,6 +111,49 @@ CONTROL_PROMPT_BY_LABEL = {
     "negative_committed_cell": PROMPT_TOKENS,
     "negative_wrong_cell": WRONG_PROMPT_TOKENS,
 }
+
+
+def configure_recipe(recipe_id: str) -> None:
+    """Select one CPU tiny-graph cell before any live-control work.
+
+    Calibration is recipe-local.  The legacy globals are deliberately updated
+    as one closed frame because the module's recovery path replays raw vectors
+    in a fresh CLI process; no process may switch recipes after writing a
+    declaration.  Prefill remains the default byte-for-byte frame.
+    """
+    global RECIPE_ID, PROMPT_TOKENS, WRONG_PROMPT_TOKENS, CONTROL_PROMPT_BY_LABEL
+    if recipe_id == PREFILL_RECIPE_ID:
+        prompt, wrong = 512, 2048
+    elif recipe_id == DECODE_RECIPE_ID:
+        prompt, wrong = DECODE_TOKENS, WRONG_DECODE_TOKENS
+    else:
+        raise ValueError(f"unsupported live-control CPU recipe: {recipe_id}")
+    RECIPE_ID, PROMPT_TOKENS, WRONG_PROMPT_TOKENS = recipe_id, prompt, wrong
+    CONTROL_PROMPT_BY_LABEL = {
+        "aa_calibration": prompt, "neutral_calibration": prompt,
+        ANCHOR_MOTION_LABEL: prompt, "positive": prompt,
+        "historical_win_replay": prompt, "negative_committed_cell": prompt,
+        "negative_wrong_cell": wrong,
+    }
+
+
+def _token_fields() -> dict[str, int | None]:
+    """Closed declaration fields for the active recipe's work dimension."""
+    if RECIPE_ID == PREFILL_RECIPE_ID:
+        return {"prompt_tokens": PROMPT_TOKENS,
+                "wrong_prompt_tokens": WRONG_PROMPT_TOKENS,
+                "decode_tokens": None, "wrong_decode_tokens": None}
+    return {"prompt_tokens": None, "wrong_prompt_tokens": None,
+            "decode_tokens": PROMPT_TOKENS,
+            "wrong_decode_tokens": WRONG_PROMPT_TOKENS}
+
+
+def _calibration_frame() -> dict[str, object]:
+    token_key = "prompt_tokens" if RECIPE_ID == PREFILL_RECIPE_ID else "decode_tokens"
+    return {"recipe_id": RECIPE_ID, token_key: PROMPT_TOKENS,
+            "reps": CALIBRATION_REPS,
+            "candidate_ggml_iqk": CALIBRATION_IQK,
+            "anchor_ggml_iqk": CALIBRATION_IQK}
 # The controls have intentionally different purposes, but every live control
 # uses the same repetition count as an executable campaign.  Only the positive
 # and historical controls exercise the IQK intervention; calibration itself
@@ -377,17 +427,10 @@ def _write_declaration(output_root: Path, *, identity: LiveCampaignIdentity,
         "cpu_list": CPU_LIST,
         "model": str(MODEL),
         "model_sha256": _sha256_file(MODEL) if MODEL.is_file() else None,
-        "prompt_tokens": PROMPT_TOKENS,
-        "wrong_prompt_tokens": WRONG_PROMPT_TOKENS,
+        **_token_fields(),
         "calibration_blocks": CALIBRATION_BLOCKS,
         "neutral_blocks": NEUTRAL_BLOCKS,
-        "calibration_frame": {
-            "recipe_id": RECIPE_ID,
-            "prompt_tokens": PROMPT_TOKENS,
-            "reps": CALIBRATION_REPS,
-            "candidate_ggml_iqk": CALIBRATION_IQK,
-            "anchor_ggml_iqk": CALIBRATION_IQK,
-        },
+        "calibration_frame": _calibration_frame(),
         "anchor_motion_window_blocks": ANCHOR_MOTION_WINDOW_BLOCKS,
         "anchor_motion_settling": ANCHOR_MOTION_SETTLING,
         "contribution_floor": CONTRIBUTION_FLOOR,
@@ -751,8 +794,9 @@ def _load_recorded_material(
             ("anchor_receipt", anchor_iqk)):
         receipt = raw.get(arm)
         params = receipt.get("params") if isinstance(receipt, Mapping) else None
+        token_key = "n_prompt" if RECIPE_ID == PREFILL_RECIPE_ID else "n_gen"
         if not isinstance(params, Mapping) or params.get("ggml_iqk") != expected_iqk \
-                or params.get("n_prompt") != prompt or params.get("reps") != reps \
+                or params.get(token_key) != prompt or params.get("reps") != reps \
                 or params.get("model") != str(MODEL):
             raise ValueError(f"{path}: {arm} does not match the declared arm parameters")
     run = _RecordedRun(
@@ -765,13 +809,15 @@ def _load_recorded_material(
 def _params(*, prompt: int, reps: int = CALIBRATION_REPS) -> dict:
     if isinstance(reps, bool) or not isinstance(reps, int) or reps < 1:
         raise ValueError("live-control repetitions must be a positive integer")
-    return {"model": str(MODEL), "n_prompt": prompt, "reps": reps,
+    token_key = "n_prompt" if RECIPE_ID == PREFILL_RECIPE_ID else "n_gen"
+    return {"model": str(MODEL), token_key: prompt, "reps": reps,
             "autokernel_seed": 2026081101,
             "output_format": "json"}
 
 
 def _unit_id(*, label: str, prompt: int) -> str:
-    return f"{MODEL.name}:pp{prompt}:{label}"
+    unit = "pp" if RECIPE_ID == PREFILL_RECIPE_ID else "tg"
+    return f"{MODEL.name}:{unit}{prompt}:{label}"
 
 
 def _physical_envelope(*, label: str, prompt: int) -> physical_bounds.PhysicalEnvelope:
@@ -904,7 +950,8 @@ def _campaign_inputs(aa: LiveMaterial, neutral: LiveMaterial,
     anchors = tuple(
         statistics.median(block.anchor_samples) for block in aa.blocks)
     inputs = statistics.CalibrationInputs(
-        backend="llama_cpu", phase="prefill", cell_class=recipes.CELL_CLASS_TINY_GRAPH,
+        backend="llama_cpu", phase=recipes.get_recipe(RECIPE_ID).phase,
+        cell_class=recipes.CELL_CLASS_TINY_GRAPH,
         campaign_seed=identity.campaign_seed, controls=declared, stopping_rule=rule,
         construction=construction, effect_scale=statistics.EFFECT_SCALE_RELATIVE,
         metric_direction="higher_better",
@@ -1008,7 +1055,7 @@ def _evaluate_controls(*, solve: statistics.CalibrationSolve,
         "controls": controls.CONTROL_DEFINITIONS_DIGEST,
         "runner": control_runner.CONTROL_RUNNER_ID})
     binding = control_runner.CampaignBinding(
-        campaign_id=identity.campaign_id, backend="llama_cpu", phase="prefill",
+        campaign_id=identity.campaign_id, backend="llama_cpu", phase=recipes.get_recipe(RECIPE_ID).phase,
         cell_class=recipes.CELL_CLASS_TINY_GRAPH,
         protocol_id=api.PROTOCOL_VERSIONED_ID,
         evaluator=api.EvaluatorIdentity(
@@ -1018,7 +1065,7 @@ def _evaluate_controls(*, solve: statistics.CalibrationSolve,
         scope_denominator=api.ScopeDenominator(
             machine_subset="full", numa_nodes=(), devices=(), cores=96),
         scope_manifest_sha256=schemas.content_hash({"cpu_list": CPU_LIST}),
-        co_residency="single", metric="prefill_tokens_per_s",
+        co_residency="single", metric=recipes.get_recipe(RECIPE_ID).metric,
         metric_direction="higher_better", reps=1, change_class="parameter",
         anchor=anchor,
         campaign_controls=declared, calibration=outputs)
@@ -1026,7 +1073,8 @@ def _evaluate_controls(*, solve: statistics.CalibrationSolve,
         pipeline=pipeline, fixtures=fixture_set, binding=binding,
         campaign_statistics=campaign_stats)
     declaration = controls.HistoricalWinReplayDeclaration(
-        win_id="iqk-prefill-port", backend="llama_cpu", phase="prefill",
+        win_id=("iqk-prefill-port" if RECIPE_ID == PREFILL_RECIPE_ID else "iqk-decode-control"),
+        backend="llama_cpu", phase=recipes.get_recipe(RECIPE_ID).phase,
         reference_direction="higher_better",
         reference_band=controls.ReferenceBand(low=0.03, high=0.60),
         evidence_locator=("data/kernel-v8-candidate/cpu-prefill-regression/"
@@ -1097,11 +1145,11 @@ def _evaluate_controls(*, solve: statistics.CalibrationSolve,
         durability_outcome=schemas.PASS,
         check=schemas.Check(schemas.PASS, ("historical fixture resolves in git",)))
     run_context = controls.ControlRunContext(
-        campaign_id=identity.campaign_id, backend="llama_cpu", phase="prefill",
+        campaign_id=identity.campaign_id, backend="llama_cpu", phase=recipes.get_recipe(RECIPE_ID).phase,
         cell_class=recipes.CELL_CLASS_TINY_GRAPH, window_id=identity.window_id, tier="T1",
         seed="DERIVED-BY-SWEEP", anchor=anchor, declaration=declaration)
     context = controls.ControlContext(
-        campaign_id=identity.campaign_id, backend="llama_cpu", phase="prefill",
+        campaign_id=identity.campaign_id, backend="llama_cpu", phase=recipes.get_recipe(RECIPE_ID).phase,
         cell_class=recipes.CELL_CLASS_TINY_GRAPH, window_id=identity.window_id,
         historical=historical,
         neutral_dispersion=controls.neutral_dispersion_check(solve),
@@ -1439,13 +1487,7 @@ def evaluate_existing(output_root: Path, *, campaign_id: str) -> dict:
         "calibration_blocks": declaration.get("calibration_blocks")
                               == CALIBRATION_BLOCKS,
         "neutral_blocks": declaration.get("neutral_blocks") == NEUTRAL_BLOCKS,
-        "calibration_frame": declaration.get("calibration_frame") == {
-            "recipe_id": RECIPE_ID,
-            "prompt_tokens": PROMPT_TOKENS,
-            "reps": CALIBRATION_REPS,
-            "candidate_ggml_iqk": CALIBRATION_IQK,
-            "anchor_ggml_iqk": CALIBRATION_IQK,
-        },
+        "calibration_frame": declaration.get("calibration_frame") == _calibration_frame(),
         "contribution_floor": declaration.get("contribution_floor")
                               == CONTRIBUTION_FLOOR,
     }
@@ -1633,6 +1675,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--output", type=Path, required=True,
         help="fresh absolute evidence directory; execution refuses reuse")
+    parser.add_argument(
+        "--recipe", choices=(PREFILL_RECIPE_ID, DECODE_RECIPE_ID),
+        default=PREFILL_RECIPE_ID,
+        help="recipe-local control cell; prefill remains the default")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--execute", action="store_true")
     mode.add_argument(
@@ -1644,11 +1690,13 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    configure_recipe(args.recipe)
     plan = {
         "campaign_id": args.campaign_id, "cpu_list": CPU_LIST,
         "production_source": f"{PRODUCTION_ROOT}@{PRODUCTION_COMMIT}",
         "measurement_binary": str(INSTRUMENT_BINARY),
         "measurement_instrument_commit": INSTRUMENT_COMMIT,
+        "recipe_id": RECIPE_ID,
         "model": str(MODEL),
         "calibration_blocks": CALIBRATION_BLOCKS,
         "neutral_blocks": NEUTRAL_BLOCKS,
