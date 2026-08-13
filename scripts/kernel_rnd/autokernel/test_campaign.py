@@ -1236,6 +1236,108 @@ class TestTheAcceptedCalibrationBindsTheLiveRule(unittest.TestCase):
         self.assertEqual(check.outcome, schemas.FAIL)
         self.assertIn("cell-local", " ".join(check.reasons))
 
+    def test_evaluator_bundle_seal_survives_post_start_checkout_mutation(self):
+        """Close must compare the evaluator loaded at start, not a later checkout."""
+        passed = schemas.Check(schemas.PASS)
+        controls = campaign.api.CampaignControls(
+            calibration_block_count=20, contribution_floor=0.03,
+            max_candidates=10, confirmation_admission_count=2,
+            max_blocks_per_candidate=20, storage_floor_bytes_free=1)
+        outputs = campaign.api.CalibrationOutputs(
+            backend="llama_cpu", phase="prefill", cell_class="tiny_real_graph",
+            noise_floor_phi=0.03, b_min_blocks=10, alpha_sel=0.1,
+            alpha_conf=0.05, anchor_gate_band=(90.0, 110.0), accepted=True,
+            solve_order_recorded=campaign.api.CALIBRATION_SOLVE_ORDER,
+            samples_ref="raw/aa", e_process_construction_id=
+            "sign_martingale_predictable_lambda/v1")
+        authority = control_runner.LiveEvaluationAuthority(
+            campaign_controls=controls, calibration=outputs,
+            controls=campaign.api.ControlPanel(
+                positive=passed, neutral=passed, degraded_negative=passed,
+                aa=passed, historical_replay=passed), aa_cadence=passed,
+            control_definitions_immutable=passed, construction_id="test/v1",
+            stopping_rule_id="test-stop/v1", mde=0.02,
+            runtime_source_label_ref="sha256:runtime-source", evidence_ref="/durable/test",
+            calibration_frame={
+                "recipe_id": campaign.HISTORICAL_CALIBRATED_RECIPE_ID,
+                "prompt_tokens": 512, "reps": campaign.IQK_MATCHED_PAIR_REPS,
+                "candidate_ggml_iqk": "0", "anchor_ggml_iqk": "0",
+            })
+        lean = campaign.LeanCalibration(
+            recipe_id=campaign.HISTORICAL_CALIBRATED_RECIPE_ID,
+            contribution_floor=0.03, b_min_blocks=10, max_blocks=20,
+            noise_floor_phi=0.03, mde=0.02,
+            production_commit=campaign.PRODUCTION_COMMIT,
+            measurement_commit=campaign.MEASUREMENT_COMMIT,
+            evidence_ref=authority.evidence_ref, evaluation_authority=authority)
+        durable_parent = Path(campaign.__file__).resolve().parents[3] / "data"
+        with tempfile.TemporaryDirectory(dir=durable_parent) as tmp:
+            root = Path(tmp)
+            source = root / "loaded_evaluator.py"
+            source.write_text("value = 'before'\n", encoding="utf-8")
+            run_spec = spec(campaign_id="ak-evaluator-seal", journal_root=str(root),
+                            calibration=lean, blocks=10,
+                            proposal=iqk_parameter_proposal("ak-evaluator-seal"), reps=1)
+            ops = campaign.HostOps(nominal_khz=1)
+            with mock.patch.object(campaign.HostOps, "_evaluator_bundle_files",
+                                   return_value=(source,)):
+                sealed = ops._bind_evaluator_identity(run_spec)
+                source.write_text("value = 'after'\n", encoding="utf-8")
+                self.assertEqual(ops._evaluator_identity(authority), sealed)
+            manifest = json.loads((root / "evaluator-bundle" / "manifest.json").read_text())
+            snap = root / "evaluator-bundle" / manifest["files"][0]["snapshot"]
+            self.assertEqual(snap.read_text(encoding="utf-8"), "value = 'before'\n")
+
+    def test_evaluator_bundle_seal_refuses_mutation_during_capture(self):
+        """A race during the start-time seal remains a pre-claim integrity failure."""
+        passed = schemas.Check(schemas.PASS)
+        controls = campaign.api.CampaignControls(
+            calibration_block_count=20, contribution_floor=0.03,
+            max_candidates=10, confirmation_admission_count=2,
+            max_blocks_per_candidate=20, storage_floor_bytes_free=1)
+        outputs = campaign.api.CalibrationOutputs(
+            backend="llama_cpu", phase="prefill", cell_class="tiny_real_graph",
+            noise_floor_phi=0.03, b_min_blocks=10, alpha_sel=0.1,
+            alpha_conf=0.05, anchor_gate_band=(90.0, 110.0), accepted=True,
+            solve_order_recorded=campaign.api.CALIBRATION_SOLVE_ORDER,
+            samples_ref="raw/aa", e_process_construction_id=
+            "sign_martingale_predictable_lambda/v1")
+        authority = control_runner.LiveEvaluationAuthority(
+            campaign_controls=controls, calibration=outputs,
+            controls=campaign.api.ControlPanel(passed, passed, passed, passed, passed),
+            aa_cadence=passed, control_definitions_immutable=passed,
+            construction_id="test/v1", stopping_rule_id="test-stop/v1", mde=0.02,
+            runtime_source_label_ref="sha256:runtime-source", evidence_ref="/durable/test")
+        lean = campaign.LeanCalibration(
+            recipe_id=campaign.HISTORICAL_CALIBRATED_RECIPE_ID,
+            contribution_floor=0.03, b_min_blocks=10, max_blocks=20,
+            noise_floor_phi=0.03, mde=0.02,
+            production_commit=campaign.PRODUCTION_COMMIT,
+            measurement_commit=campaign.MEASUREMENT_COMMIT,
+            evidence_ref=authority.evidence_ref, evaluation_authority=authority)
+        durable_parent = Path(campaign.__file__).resolve().parents[3] / "data"
+        with tempfile.TemporaryDirectory(dir=durable_parent) as tmp:
+            root = Path(tmp)
+            source = root / "racing_evaluator.py"
+            source.write_text("before\n", encoding="utf-8")
+            run_spec = spec(campaign_id="ak-evaluator-race", journal_root=str(root),
+                            calibration=lean, blocks=10)
+            original_hash = campaign.storage.hash_file
+            mutated = False
+            def mutate_before_hash(path):
+                nonlocal mutated
+                if str(path) == str(source) and not mutated:
+                    mutated = True
+                    source.write_text("after\n", encoding="utf-8")
+                return original_hash(path)
+            ops = campaign.HostOps(nominal_khz=1)
+            with mock.patch.object(campaign.HostOps, "_evaluator_bundle_files",
+                                   return_value=(source,)), \
+                 mock.patch.object(campaign.storage, "hash_file", side_effect=mutate_before_hash):
+                with self.assertRaisesRegex(RuntimeError, "changed while"):
+                    ops._bind_evaluator_identity(run_spec)
+            self.assertFalse((root / "evaluator-bundle").exists())
+
     def test_the_contribution_floor_is_not_the_anchor_movement_bound(self):
         pairs = pairs_from_positions(
             (100.0,) * 10, candidate_factor=1.025, orders=BALANCED)

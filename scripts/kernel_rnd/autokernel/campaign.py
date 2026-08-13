@@ -2749,6 +2749,8 @@ class HostOps:
         self._host_health_close: Optional[schemas.Check] = None
         self._anchors_at_close: dict[str, api.AnchorIdentity] = {}
         self._anchor_close_checks: dict[str, schemas.Check] = {}
+        self._evaluator_bundle_snapshot: Optional[api.EvaluatorIdentity] = None
+        self._evaluator_bundle_snapshot_ref: Optional[str] = None
         self._evaluator_close_check: Optional[schemas.Check] = None
         self._runtime_close_check: Optional[schemas.Check] = None
         self._recipe_receipts: dict[tuple[str, str], api.RecipeReceipt] = {}
@@ -2814,6 +2816,93 @@ class HostOps:
 
     # -- 0. preflight ------------------------------------------------------
 
+    @staticmethod
+    def _evaluator_bundle_files() -> tuple[Path, ...]:
+        """Return the complete driver-side evaluator closure to seal at start."""
+        return (
+            Path(__file__), Path(api.__file__), Path(correctness.__file__),
+            Path(schemas.__file__), Path(recipes.__file__),
+            Path(control_runner.__file__), Path(source_prerequisite_producer.__file__),
+        ) + source_prerequisite_package.evaluator_source_files()
+
+    def _bind_evaluator_identity(self, spec: CampaignSpec) -> api.EvaluatorIdentity:
+        """Persist the loaded evaluator's start-time bytes before a claim.
+
+        A close-window reread of the shared checkout is not a test of the
+        evaluator this Python process executed: another session can legitimately
+        update the checkout while T0/T1 run.  Seal once, then use that durable
+        start-time identity for every request and the close comparison.
+        """
+        if self._evaluator_bundle_snapshot is not None:
+            return self._evaluator_bundle_snapshot
+        if spec.calibration is None or spec.calibration.evaluation_authority is None:
+            raise RuntimeError("evaluator bundle seal requires accepted live authority")
+        if not spec.journal_root:
+            raise RuntimeError("evaluator bundle seal requires an executing campaign journal")
+        root = storage.assert_not_scratch(spec.journal_root, what="campaign journal root")
+        bundle_root = Path(root) / "evaluator-bundle"
+        files_root = bundle_root / "files"
+        if bundle_root.exists():
+            raise RuntimeError(
+                f"evaluator bundle directory already exists at {bundle_root}; "
+                "a campaign id may not reuse a prior evaluator seal")
+        files_root.mkdir(parents=True, mode=0o700)
+        source_hashes: dict[str, str] = {}
+        records: list[dict[str, str]] = []
+        try:
+            files = tuple(sorted(self._evaluator_bundle_files(), key=str))
+            if not files or len({str(path) for path in files}) != len(files):
+                raise RuntimeError("evaluator bundle closure is empty or contains duplicate paths")
+            for index, path in enumerate(files):
+                source = Path(path)
+                content = source.read_bytes()
+                digest = hashlib.sha256(content).hexdigest()
+                source_key = str(source)
+                destination = files_root / f"{index:02d}-{digest}-{source.name}"
+                destination.write_bytes(content)
+                destination.chmod(0o400)
+                source_hashes[source_key] = digest
+                records.append({"source": source_key, "sha256": digest,
+                                "snapshot": str(destination.relative_to(bundle_root))})
+            # A mutation while the seal is being made is a pre-start integrity
+            # failure.  Later edits are deliberately irrelevant to this loaded
+            # evaluator, but this race must fail before a claim is acquired.
+            for source_key, digest in source_hashes.items():
+                if storage.hash_file(source_key) != digest:
+                    raise RuntimeError(
+                        f"evaluator source {source_key!r} changed while its start-time "
+                        "bundle was being sealed")
+            authority = spec.calibration.evaluation_authority
+            identity = api.EvaluatorIdentity(
+                id="autokernel.campaign-live-evaluation/v1",
+                bundle_sha256=schemas.content_hash(source_hashes),
+                runtime_source_label_ref=authority.runtime_source_label_ref,
+            )
+            manifest = {
+                "schema": "epyc.autokernel.evaluator-bundle.v1",
+                "campaign_id": spec.campaign_id,
+                "identity": identity.to_dict(), "files": records,
+            }
+            manifest["snapshot_sha256"] = schemas.content_hash(manifest)
+            manifest_path = bundle_root / "manifest.json"
+            manifest_path.write_text(json.dumps(manifest, sort_keys=True) + "\n",
+                                     encoding="utf-8")
+            manifest_path.chmod(0o400)
+        except BaseException:
+            # Do not leave a partial directory that a same-id retry could call a
+            # seal.  It contains only bytes written by this method.
+            if bundle_root.exists():
+                for path in sorted(bundle_root.rglob("*"), reverse=True):
+                    if path.is_file():
+                        path.unlink()
+                    elif path.is_dir():
+                        path.rmdir()
+                bundle_root.rmdir()
+            raise
+        self._evaluator_bundle_snapshot = identity
+        self._evaluator_bundle_snapshot_ref = str(manifest_path)
+        return identity
+
     def record_proposal(self, spec: CampaignSpec) -> Any:
         """Fsync the current proposal schema before host work; resume is idempotent."""
         if spec.proposal is None or not spec.journal_root:
@@ -2849,6 +2938,10 @@ class HostOps:
                 "an executing campaign requires --journal-root before any claim or T0 "
                 "inference; completed benchmark attempts cannot be machine-enforced in "
                 "volatile memory",))
+        # Arithmetic/preflight-only callers have no live evaluator authority.
+        # Real T0/T1 requests require it and are sealed here, before any claim.
+        if spec.calibration is not None and spec.calibration.evaluation_authority is not None:
+            self._bind_evaluator_identity(spec)
         self._storage_open = self._storage_check(spec)
         reasons: list = []
         outcome = schemas.PASS
@@ -3430,24 +3523,19 @@ class HostOps:
         os.makedirs(capture_root, mode=0o700, exist_ok=True)
         return t0_provider.DirectoryCaptureSink(capture_root)
 
-    @staticmethod
-    def _evaluator_identity(authority: control_runner.LiveEvaluationAuthority
+    def _evaluator_identity(self, authority: control_runner.LiveEvaluationAuthority
                             ) -> api.EvaluatorIdentity:
-        """Hash the exact prospective evaluator bundle used by this driver."""
-        files = (
-            Path(__file__), Path(api.__file__), Path(correctness.__file__),
-            Path(schemas.__file__), Path(recipes.__file__),
-            Path(control_runner.__file__),
-            Path(source_prerequisite_producer.__file__),
-        ) + source_prerequisite_package.evaluator_source_files()
-        bundle_sha = schemas.content_hash({
-            str(path): storage.hash_file(path) for path in sorted(files)
-        })
-        return api.EvaluatorIdentity(
-            id="autokernel.campaign-live-evaluation/v1",
-            bundle_sha256=bundle_sha,
-            runtime_source_label_ref=authority.runtime_source_label_ref,
-        )
+        """Return the immutable evaluator identity sealed before preflight."""
+        identity = self._evaluator_bundle_snapshot
+        if identity is None:
+            raise RuntimeError(
+                "evaluator identity requested before the immutable start-time bundle "
+                "was sealed")
+        if identity.runtime_source_label_ref != authority.runtime_source_label_ref:
+            raise RuntimeError(
+                "live authority runtime-source label differs from the start-time "
+                "evaluator bundle")
+        return identity
 
     def _parameter_t0_evidence(self, spec: CampaignSpec, *, identity: Any,
                                build_evidence: Any) -> dict:
