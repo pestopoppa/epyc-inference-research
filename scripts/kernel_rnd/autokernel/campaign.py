@@ -3505,8 +3505,17 @@ class HostOps:
         artifact_root = (MEASUREMENT_BUILD_ROOT if arm == "anchor"
                          else plan.build_dir.path)
         bindir = os.path.join(artifact_root, "bin")
-        binding = recipes.ToolBinding(binary=os.path.join(bindir, tool),
-                                      source_root=root, library_path=bindir)
+        binary = os.path.join(bindir, tool)
+        if arm == "candidate":
+            # Candidate artifacts live in the clean build closure, outside the
+            # snapshot worktree.  Preserve both identities in the binding so
+            # execution cannot silently resolve libraries from another tree.
+            binding = recipes.ToolBinding.for_external_build(
+                binary=binary, source_root=root, build_root=plan.build_dir.path,
+                library_path=bindir)
+        else:
+            binding = recipes.ToolBinding(binary=binary, source_root=root,
+                                          library_path=bindir)
         return recipes.construct(spec.recipe_id, binding=binding,
                                  params=spec.params_for_arm(arm), arm=arm)
 

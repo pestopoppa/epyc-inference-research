@@ -362,6 +362,35 @@ class TestTheDryRunComposesEndToEnd(unittest.TestCase):
         self.assertEqual(len(differing), 1, f"arms differ at {differing}")
         self.assertIn("llama-bench", anchor[differing[0]])
 
+    def test_construct_candidate_uses_external_build_binding(self):
+        ops = campaign.HostOps.__new__(campaign.HostOps)
+        with tempfile.TemporaryDirectory() as root:
+            snapshot_root = Path(root) / "snapshot"
+            snapshot_root.joinpath(".git").mkdir(parents=True)
+            build_root = Path(root) / "build-clean"
+            snapshot = mock.Mock(path=mock.Mock(path=str(snapshot_root)))
+            plan = mock.Mock(build_dir=mock.Mock(path=str(build_root)))
+            ops._build_state = {"plan": plan, "tree": snapshot}
+            campaign_spec = spec()
+            with mock.patch.object(campaign.recipes, "construct",
+                                   return_value=mock.sentinel.command) as construct:
+                result = ops._construct(campaign_spec, arm="candidate")
+        self.assertIs(result, mock.sentinel.command)
+        binding = construct.call_args.kwargs["binding"]
+        self.assertTrue(binding.external_build_root.endswith("build-clean"))
+        self.assertTrue(binding.source_root.endswith("snapshot"))
+        self.assertTrue(binding.binary.endswith("build-clean/bin/llama-bench"))
+
+    def test_construct_anchor_keeps_ordinary_binding(self):
+        ops = campaign.HostOps.__new__(campaign.HostOps)
+        ops._build_state = {"plan": mock.Mock(), "tree": mock.Mock(
+            path=mock.Mock(path="/snapshot"))}
+        campaign_spec = spec()
+        with mock.patch.object(campaign.recipes, "construct",
+                               return_value=mock.sentinel.command) as construct:
+            ops._construct(campaign_spec, arm="anchor")
+        self.assertIsNone(construct.call_args.kwargs["binding"].external_build_root)
+
     def test_parameter_proposal_renders_the_iqk_difference_on_the_two_arms(self):
         rendered = campaign.render_bench_commands(
             spec(proposal=iqk_parameter_proposal()))
