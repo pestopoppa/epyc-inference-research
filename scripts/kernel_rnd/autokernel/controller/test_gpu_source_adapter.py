@@ -9,6 +9,7 @@ import subprocess
 from .. import schemas
 from . import discovery_controller as D
 from . import gpu_source_adapter as A
+from . import gpu_source_evidence as E
 from .test_gpu_source_evidence import ClaimFactory, FakeExecutors, digest, plan
 
 
@@ -54,6 +55,9 @@ class GpuSourceAdapterTests(unittest.TestCase):
         (production / "README").write_text("frozen\n")
         subprocess.run(["git", "-C", str(production), "add", "README"], check=True)
         subprocess.run(["git", "-C", str(production), "commit", "-qm", "freeze"], check=True)
+        protected_readme = E.BoundInputFile(
+            "production_artifact", (production / "README").resolve(),
+            __import__("hashlib").sha256((production / "README").read_bytes()).hexdigest())
         evidence_plan = plan(root / "inputs")
         (root / "candidate-build").mkdir()
         (root / "anchor-build").mkdir()
@@ -78,6 +82,7 @@ class GpuSourceAdapterTests(unittest.TestCase):
             claim_journal=object(), claim_acquirer=claims,
             claim_verifier=lambda _receipt: True, claim_timeout_s=0,
             protected_roots=(production.resolve(),),
+            protected_files=(protected_readme,),
             receipt_series=(lambda _candidate, result: (prior, result))
                            if series else (lambda _candidate, result: (result,)))
         candidate = SimpleNamespace(source_manifest_sha256=evidence_plan.manifest_sha256)
@@ -152,7 +157,7 @@ class GpuSourceAdapterTests(unittest.TestCase):
                 return original(*args)
             adapter.build_source = mutating_builder
             with mock.patch.object(D, "GpuSourceScreener", FakeDelegate):
-                with self.assertRaisesRegex(A.GpuSourceAdapterError, "protected production"):
+                with self.assertRaisesRegex(A.GpuSourceAdapterError, "protected production artifacts"):
                     adapter.screen(candidate, authorization, lease)
 
     def test_json_screen_normalizes_all_tuple_fields(self):

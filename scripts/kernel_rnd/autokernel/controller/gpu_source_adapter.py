@@ -166,7 +166,8 @@ def _inflight_identity(inflight: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def _protected_snapshot(paths: Sequence[Path]) -> dict[str, Any]:
+def _protected_snapshot(paths: Sequence[Path],
+                        files: Sequence[evidence.BoundInputFile]) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for raw in paths:
         path = raw.resolve()
@@ -187,6 +188,15 @@ def _protected_snapshot(paths: Sequence[Path]) -> dict[str, Any]:
             "status_sha256": hashlib.sha256(completed.stdout.encode()).hexdigest(),
             "clean": completed.stdout == "",
         }
+    file_rows: dict[str, Any] = {}
+    for item in files:
+        try:
+            evidence._verify_bound(item)
+        except evidence.EvidenceProducerError as exc:
+            raise GpuSourceAdapterError(
+                "protected production artifacts changed") from exc
+        file_rows[str(item.path.resolve())] = item.sha256
+    result["protected_files"] = file_rows
     return result
 
 
@@ -278,6 +288,7 @@ class GovernedGpuSourceAdapter:
         receipt_series: Callable[[controller.PlannedCandidate,
                                   controller.SealedScreen], Sequence[controller.SealedScreen]],
         protected_roots: Sequence[Path],
+        protected_files: Sequence[evidence.BoundInputFile],
     ) -> None:
         if not operations_root.is_absolute():
             raise GpuSourceAdapterError("operations_root must be absolute")
@@ -295,6 +306,16 @@ class GovernedGpuSourceAdapter:
         self.protected_roots = tuple(path.resolve() for path in protected_roots)
         if not self.protected_roots:
             raise GpuSourceAdapterError("production protected roots are required")
+        self.protected_files = tuple(protected_files)
+        if not self.protected_files:
+            raise GpuSourceAdapterError("protected production artifacts are required")
+        for item in self.protected_files:
+            if not isinstance(item, evidence.BoundInputFile):
+                raise GpuSourceAdapterError("protected artifact must be a typed bound file")
+            if not any(item.path.resolve().is_relative_to(root)
+                       for root in self.protected_roots):
+                raise GpuSourceAdapterError(
+                    "protected artifact must reside below a protected root")
 
     def _root(self, operation_key: str) -> Path:
         return self.operations_root / _operation_key(operation_key)
@@ -333,7 +354,7 @@ class GovernedGpuSourceAdapter:
         if not isinstance(before, Mapping):
             raise GpuSourceAdapterError("source build lacks outer production snapshot")
         build = self.build_source(candidate, authorization, lease)
-        if _protected_snapshot(self.protected_roots) != before:
+        if _protected_snapshot(self.protected_roots, self.protected_files) != before:
             raise GpuSourceAdapterError("source builder changed protected production tree")
         if not isinstance(build, controller.GpuSourceBuild):
             raise GpuSourceAdapterError("source builder returned no typed GPU build")
@@ -374,8 +395,10 @@ class GovernedGpuSourceAdapter:
             })
             return args
 
-        protected_before = _protected_snapshot(self.protected_roots)
-        if not all(row["clean"] for row in protected_before.values()):
+        protected_before = _protected_snapshot(
+            self.protected_roots, self.protected_files)
+        if not all(row["clean"] for key, row in protected_before.items()
+                   if key != "protected_files"):
             raise GpuSourceAdapterError("protected production tree is dirty before screen")
         self._active_protected_snapshot = protected_before
         delegate = controller.GpuSourceScreener(
@@ -385,7 +408,8 @@ class GovernedGpuSourceAdapter:
         try:
             result = delegate.screen(candidate, authorization, lease)
         finally:
-            protected_after = _protected_snapshot(self.protected_roots)
+            protected_after = _protected_snapshot(
+                self.protected_roots, self.protected_files)
             del self._active_protected_snapshot
             if protected_after != protected_before:
                 raise GpuSourceAdapterError(
@@ -537,6 +561,7 @@ def build_governed_gpu_source_adapter(
                               controller.SealedScreen], Sequence[controller.SealedScreen]]
                     = lambda _candidate, current: (current,),
     protected_roots: Sequence[Path] = (),
+    protected_files: Sequence[evidence.BoundInputFile] = (),
 ) -> GovernedGpuSourceAdapter:
     """Build the concrete controller adapter without executing any command."""
     return GovernedGpuSourceAdapter(
@@ -546,7 +571,7 @@ def build_governed_gpu_source_adapter(
         rocprof_executor=rocprof_executor, claim_journal=claim_journal,
         claim_acquirer=claim_acquirer, claim_verifier=claim_verifier,
         claim_timeout_s=claim_timeout_s, receipt_series=receipt_series,
-        protected_roots=protected_roots)
+        protected_roots=protected_roots, protected_files=protected_files)
 
 
 __all__ = [
