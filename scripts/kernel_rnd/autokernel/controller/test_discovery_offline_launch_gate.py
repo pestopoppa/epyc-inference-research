@@ -312,6 +312,19 @@ class OfflineLaunchGate(unittest.TestCase):
         self.assertIn("teardown_worktree", source)
         self.assertIn("TeardownReceipt", source)
 
+    def test_static_builder_validates_build_results_and_required_targets(self):
+        """A failed/missing bench or correctness target never becomes evidence."""
+        source = inspect.getsource(S.StaticGpuSourceBuilder.build)
+        self.assertIn("test-backend-ops", source)
+        self.assertIn("BuildDisposition", source)
+        self.assertIn("returncode", source)
+
+    def test_runtime_paths_are_operation_key_scoped_for_s1_and_s2(self):
+        """Independent replications cannot collide in a campaign-only path."""
+        source = inspect.getsource(S.StaticGpuSourceBuilder.build)
+        self.assertIn('permit["operation_key"]', source)
+        self.assertIn("operation_key", inspect.getsource(S.SharedRewardRuntime.materialize))
+
     def test_source_scope_rejects_reward_symbols_even_under_kernel_prefix(self):
         """A path prefix alone cannot authorize benchmark/reward manipulation."""
         manifest = mock.Mock(
