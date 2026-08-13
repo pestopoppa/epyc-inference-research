@@ -2050,6 +2050,7 @@ class SpawnResult:
     sandbox_receipt: Optional[dict] = None
     sandbox_teardown: Optional[dict] = None
     device_sampling_receipt: Optional[gpu_device_sampler.DeviceSamplingReceipt] = None
+    scheduler_smt_receipt: Optional[dict] = None
 
     def to_dict(self) -> dict:
         return {"argv": list(self.argv), "returncode": self.returncode,
@@ -2063,7 +2064,150 @@ class SpawnResult:
                 "sandbox_teardown": self.sandbox_teardown,
                 "device_sampling_receipt": (
                     None if self.device_sampling_receipt is None
-                    else self.device_sampling_receipt.to_dict())}
+                    else self.device_sampling_receipt.to_dict()),
+                "scheduler_smt_receipt": self.scheduler_smt_receipt}
+
+
+def _proc_cpu_ticks(cpus: Sequence[int]) -> dict[int, tuple[int, int]]:
+    """Return ``cpu -> (busy_ticks, total_ticks)`` from one /proc/stat read.
+
+    This deliberately reports kernel accounting ticks rather than inventing a
+    percent from wall time.  A reader can derive utilization from the two
+    snapshots and can see exactly which sibling threads were observed.
+    """
+    wanted = set(cpus)
+    result: dict[int, tuple[int, int]] = {}
+    try:
+        lines = Path("/proc/stat").read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return result
+    for line in lines:
+        fields = line.split()
+        if not fields or not re.fullmatch(r"cpu[0-9]+", fields[0]):
+            continue
+        cpu = int(fields[0][3:])
+        if cpu not in wanted:
+            continue
+        try:
+            ticks = [int(value) for value in fields[1:]]
+        except ValueError:
+            continue
+        if len(ticks) < 5:
+            continue
+        total = sum(ticks)
+        idle = ticks[3] + ticks[4]
+        result[cpu] = (total - idle, total)
+    return result
+
+
+def _thread_siblings(cpus: Sequence[int]) -> dict[int, tuple[int, ...]]:
+    """Read the host's SMT topology for this exact invocation footprint.
+
+    Observation failure is carried explicitly in the receipt rather than
+    assumed away; this evidence must not turn a sysfs race into a benchmark
+    refusal after the benchmark already ran.
+    """
+    result: dict[int, tuple[int, ...]] = {}
+    for cpu in sorted(set(cpus)):
+        path = Path(f"/sys/devices/system/cpu/cpu{cpu}/topology/thread_siblings_list")
+        try:
+            result[cpu] = tuple(sorted(_parse_cpu_list(
+                path.read_text(encoding="ascii").strip())))
+        except (OSError, ValueError):
+            result[cpu] = ()
+    return result
+
+
+def _proc_scheduler_sample(pid: int) -> Optional[dict]:
+    """Targeted scheduler facts for the process this spawner created.
+
+    No process enumeration or command-name matching is involved.  The PID is
+    the ``Popen`` handle's PID, so this is evidence about this invocation only.
+    """
+    try:
+        raw = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
+        tail = raw[raw.rfind(")") + 2:].split()
+        # Fields 14, 15, and 39, after state (field 3) occupies tail[0].
+        sample = {"user_ticks": int(tail[11]), "system_ticks": int(tail[12]),
+                  "last_processor": int(tail[36])}
+        status = Path(f"/proc/{pid}/status").read_text(encoding="utf-8")
+        allowed = next((line.split(":", 1)[1].strip() for line in status.splitlines()
+                        if line.startswith("Cpus_allowed_list:")), None)
+        sample["allowed_cpu_list"] = allowed
+        return sample
+    except (OSError, IndexError, ValueError):
+        return None
+
+
+class _SchedulerSmtSampler:
+    """Best-effort, per-Popen scheduler/SMT receipt collector.
+
+    The claimed process itself causes most utilization on its taskset CPUs.
+    Recording both those threads and their SMT siblings makes a later noise
+    attribution falsifiable: high sibling utilization is visible instead of an
+    after-the-fact claim that affinity isolated physical cores.
+    """
+
+    def __init__(self, pid: int, cpu_list: str) -> None:
+        self.pid = pid
+        self.cpu_list = cpu_list
+        try:
+            self.requested_cpus = tuple(sorted(_parse_cpu_list(cpu_list)))
+        except ValueError:
+            self.requested_cpus = ()
+        self.siblings = _thread_siblings(self.requested_cpus)
+        self.observed_cpus = tuple(sorted(set(self.requested_cpus).union(
+            *(set(value) for value in self.siblings.values()))))
+        self.started_at = _utc_now()
+        self.cpu_open = _proc_cpu_ticks(self.observed_cpus)
+        self.first_process = _proc_scheduler_sample(pid)
+        self.last_process = self.first_process
+        self.processors: set[int] = set()
+        if self.first_process is not None:
+            self.processors.add(self.first_process["last_processor"])
+        self.samples = 1 if self.first_process is not None else 0
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._sample, daemon=True,
+                                        name=f"autokernel-scheduler-{pid}")
+        self._thread.start()
+
+    def _sample(self) -> None:
+        while not self._stop.wait(0.02):
+            sample = _proc_scheduler_sample(self.pid)
+            if sample is None:
+                continue
+            self.last_process = sample
+            self.samples += 1
+            self.processors.add(sample["last_processor"])
+
+    def stop(self) -> dict:
+        self._stop.set()
+        self._thread.join(timeout=1.0)
+        cpu_close = _proc_cpu_ticks(self.observed_cpus)
+        per_cpu = {}
+        for cpu in self.observed_cpus:
+            opened, closed = self.cpu_open.get(cpu), cpu_close.get(cpu)
+            if opened is None or closed is None:
+                per_cpu[str(cpu)] = {"observed": False}
+                continue
+            busy = max(0, closed[0] - opened[0])
+            total = max(0, closed[1] - opened[1])
+            per_cpu[str(cpu)] = {"observed": True, "busy_ticks": busy,
+                                 "total_ticks": total,
+                                 "utilization": None if total == 0 else busy / total}
+        return {
+            "schema": "epyc.autokernel.scheduler_smt_invocation_receipt.v1",
+            "pid": self.pid, "started_at": self.started_at, "ended_at": _utc_now(),
+            "requested_cpu_list": self.cpu_list,
+            "requested_cpus": list(self.requested_cpus),
+            "thread_siblings": {str(cpu): list(siblings)
+                                for cpu, siblings in sorted(self.siblings.items())},
+            "observed_cpus": list(self.observed_cpus), "per_cpu": per_cpu,
+            "process_scheduler": {"samples": self.samples,
+                                  "first": self.first_process,
+                                  "last": self.last_process,
+                                  "processors_observed": sorted(self.processors)},
+        }
 
 
 class ProductionTreeWrite(MicrobenchError):
@@ -2186,6 +2330,7 @@ class SubprocessSpawner:
         sandbox_receipt = None
         sandbox_teardown = None
         device_sampling_receipt = None
+        scheduler_smt_receipt = None
         with tempfile.TemporaryDirectory(prefix="autokernel-microbench-",
                                          dir=self._workdir_root) as workdir:
             evaluator_dir = Path(workdir, "evaluator")
@@ -2236,6 +2381,9 @@ class SubprocessSpawner:
                     cpus = _parse_cpu_list(cpu_list)
                 except (ValueError, IndexError):
                     cpus = ()
+                    cpu_list = ""
+                scheduler_sampler = (_SchedulerSmtSampler(pid, cpu_list)
+                                     if cpus else None)
                 if cpus:
                     def sample_while_alive() -> None:
                         while not stop_sampling.is_set():
@@ -2261,6 +2409,8 @@ class SubprocessSpawner:
                     stop_sampling.set()
                     if sampler is not None:
                         sampler.join(timeout=1.0)
+                    if scheduler_sampler is not None:
+                        scheduler_smt_receipt = scheduler_sampler.stop()
                     if device_session is not None:
                         try:
                             device_sampling_receipt = device_session.stop()
@@ -2300,7 +2450,8 @@ class SubprocessSpawner:
                            khz_peak_by_cpu=tuple(sorted(peaks.items())),
                            sandbox_receipt=sandbox_receipt,
                            sandbox_teardown=sandbox_teardown,
-                           device_sampling_receipt=device_sampling_receipt)
+                           device_sampling_receipt=device_sampling_receipt,
+                           scheduler_smt_receipt=scheduler_smt_receipt)
 
     def _terminate(self, proc: "subprocess.Popen") -> int:
         """SIGTERM, then SIGKILL, then confirm reaped. Only this handle, ever."""

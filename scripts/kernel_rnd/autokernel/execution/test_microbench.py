@@ -1886,6 +1886,24 @@ class TestProcessDisciplineActuallyTerminates(unittest.TestCase):
         self.assertFalse(result.timed_out)
         self.assertFalse(result.terminated_by_runner)
 
+    @unittest.skipUnless(Path("/usr/bin/taskset").exists() and Path("/bin/sleep").exists(),
+                         "taskset or sleep unavailable")
+    def test_taskset_invocation_carries_scheduler_and_smt_utilization_receipt(self):
+        """The receipt is per spawned PID, not a post-exit host assertion."""
+        result = M.SubprocessSpawner().run(
+            ["/usr/bin/taskset", "-c", "0", "/bin/sleep", "0.08"],
+            {"PATH": "/usr/bin:/bin"}, timeout_s=30)
+        receipt = result.scheduler_smt_receipt
+        self.assertIsInstance(receipt, dict)
+        self.assertEqual(receipt["schema"],
+                         "epyc.autokernel.scheduler_smt_invocation_receipt.v1")
+        self.assertEqual(receipt["requested_cpu_list"], "0")
+        self.assertEqual(receipt["requested_cpus"], [0])
+        self.assertIn("0", receipt["thread_siblings"])
+        self.assertIn("0", receipt["per_cpu"])
+        self.assertGreaterEqual(receipt["process_scheduler"]["samples"], 1)
+        self.assertIn("scheduler_smt_receipt", result.to_dict())
+
     @unittest.skipUnless(Path("/usr/bin/env").exists(), "no /usr/bin/env")
     def test_the_child_receives_only_the_env_it_was_given(self):
         """Structural proof that `os.environ` does not leak into a measurement."""
