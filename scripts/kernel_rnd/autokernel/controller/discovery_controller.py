@@ -16,9 +16,11 @@ from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 import hashlib
 import importlib
+import inspect
 import json
 import os
 from pathlib import Path
+import statistics
 import tempfile
 from typing import Any, Callable, Mapping, Protocol, Sequence
 
@@ -36,6 +38,10 @@ TERRA = {"provider": "codex", "model": "gpt-5.6-terra", "effort": "high", "role"
 
 
 class DiscoveryControllerError(RuntimeError): pass
+
+
+class PrecomputeScreenRefusal(DiscoveryControllerError):
+    """Typed adapter refusal proving that no governed operation was started."""
 
 
 def _now() -> str:
@@ -119,6 +125,14 @@ class SealedScreen:
     candidate_only: bool = True
     promotion_claim: bool = False
     stages: tuple[str, ...] = ("materialized", "built", "correctness", "attribution", "screen")
+    # A series is one exact patch measured in one exact frame/baseline.  It is
+    # deliberately not a hypothesis id: one scientific question can produce
+    # several mutually independent source patches.
+    series_key: str | None = None
+    component_series_keys: tuple[str, ...] = ()
+    # Pooled only by the controller after exact-series verification.  Adapter
+    # receipts report their individual measured effect; they cannot nominate.
+    series_effect_fraction: float | None = None
 
     def __post_init__(self) -> None:
         if self.classification not in {"candidate", "screened_out", "inconclusive", "failed", "top_k_replicated_candidate", "replicated_but_subadditive"}: raise DiscoveryControllerError("unknown screen class")
@@ -128,6 +142,16 @@ class SealedScreen:
             raise DiscoveryControllerError("screen did not prove the required fail-closed stage order")
         for value in (self.result_sha256, self.baseline_sha256, self.source_proof_sha256, self.dispatch_proof_sha256):
             if not HASH.fullmatch(value): raise DiscoveryControllerError("sealed result requires evidence hashes")
+        if self.series_key is not None and not HASH.fullmatch(self.series_key):
+            raise DiscoveryControllerError("screen series key must be a sealed hash")
+        # JSON recovery naturally turns a tuple into a list; normalize it at
+        # the durable boundary, then keep the in-memory receipt immutable.
+        if isinstance(self.component_series_keys, list):
+            object.__setattr__(self, "component_series_keys", tuple(self.component_series_keys))
+        if not isinstance(self.component_series_keys, tuple) or not all(HASH.fullmatch(value) for value in self.component_series_keys):
+            raise DiscoveryControllerError("component series provenance must be sealed hashes")
+        if self.series_effect_fraction is not None and not isinstance(self.series_effect_fraction, (int, float)):
+            raise DiscoveryControllerError("pooled series effect must be numeric")
 
 
 class Planner(Protocol):
@@ -298,8 +322,15 @@ class ControllerConfig:
     max_iterations: int = 1
     nomination_threshold: float = 0.03
     dry_run: bool = False
+    # This is the AutoKernel evidence root that owns the canonical progression
+    # projection.  The controller state root is never silently treated as a
+    # second evidence tree in live mode.
+    evidence_root: Path | None = None
     def __post_init__(self) -> None:
-        if not self.output_root.is_absolute() or not 1 <= self.max_iterations <= 1000 or self.nomination_threshold <= 0: raise DiscoveryControllerError("invalid controller config")
+        if (not self.output_root.is_absolute() or not 1 <= self.max_iterations <= 1000
+                or self.nomination_threshold <= 0
+                or self.evidence_root is not None and not self.evidence_root.is_absolute()):
+            raise DiscoveryControllerError("invalid controller config")
 
 
 class DurableState:
@@ -379,9 +410,15 @@ def _restore_pending(value: Mapping[str, Any]) -> PlannedCandidate:
 
 
 def _append_nomination(root: Path, item: PlannedCandidate, result: SealedScreen, threshold: float) -> None:
-    if result.effect_fraction < threshold: return
+    # A single screen is discovery evidence, never a nomination.  Only a
+    # replicated series that retained a positive pooled classification may be
+    # placed in the operator queue.
+    if (result.series_effect_fraction is None
+            or result.series_effect_fraction < threshold
+            or result.classification != "top_k_replicated_candidate"):
+        return
     path=root / "promotion-queue.jsonl"; lock=root / "promotion-queue.lock"; key=_sha({"result":result.result_sha256,"manifest":item.source_manifest_sha256})
-    row={"schema":"epyc.autokernel.discovery_nomination.v1","idempotency_key":key,"receipt_path":result.receipt_path,"result_sha256":result.result_sha256,"source_manifest_sha256":item.source_manifest_sha256,"effect_fraction":result.effect_fraction,"threshold":threshold,"promotion_claim":False,"operator_decision_required":True,"authority":AUTHORITY}
+    row={"schema":"epyc.autokernel.discovery_nomination.v1","idempotency_key":key,"receipt_path":result.receipt_path,"result_sha256":result.result_sha256,"source_manifest_sha256":item.source_manifest_sha256,"effect_fraction":result.effect_fraction,"series_effect_fraction":result.series_effect_fraction,"threshold":threshold,"promotion_claim":False,"operator_decision_required":True,"authority":AUTHORITY}
     lock.parent.mkdir(parents=True,exist_ok=True)
     with lock.open("a+") as guard:
         fcntl.flock(guard.fileno(),fcntl.LOCK_EX)
@@ -403,16 +440,90 @@ def classify_screen_series(effects: Sequence[float], *, component_pooled_effects
         return "screened_out" if effects[0] <= 0 else "candidate"
     if min(effects) < 0 < max(effects):
         return "inconclusive"
+    # A materially divergent pair is no more rankable than opposite signs.
+    # This is the discovery lane's 10 percentage-point spread rule, not a
+    # calibration gate; it requests a retest rather than declaring a failure.
+    if max(effects) - min(effects) >= 0.10:
+        return "inconclusive"
     if all(v > 0 for v in effects) and component_pooled_effects and (sum(effects) / len(effects)) < max(component_pooled_effects):
         return "replicated_but_subadditive"
     if all(v > 0 for v in effects):
         return "top_k_replicated_candidate"
     return "screened_out"
 
+def _screen_series_key(item: PlannedCandidate, result: SealedScreen) -> str:
+    """Return the hash that permits only like-for-like replications to pool."""
+    if result.series_key is not None:
+        return result.series_key
+    # Legacy/replay fakes have no explicitly captured frame.  Their fallback
+    # remains conservative: different patch, regime, or immutable baseline is
+    # a different series.  Live GPU adapters must populate series_key from the
+    # sealed model/workload/runtime frame before returning a SealedScreen.
+    return _sha({"source_manifest_sha256": item.source_manifest_sha256,
+                 "regime": item.regime,
+                 "baseline_sha256": result.baseline_sha256})
+
+
+def _pooled_component_effects(state: Mapping[str, Any], component_keys: Sequence[str]) -> list[float]:
+    values: list[float] = []
+    for key in component_keys:
+        effects = [float(row["effect_fraction"]) for row in state["iterations"]
+                   if row.get("series_key") == key and isinstance(row.get("effect_fraction"), (int, float))]
+        if effects:
+            values.append(sum(effects) / len(effects))
+    return values
+
 def _classified_result(state: Mapping[str, Any], item: PlannedCandidate, result: SealedScreen) -> SealedScreen:
-    prior=[float(row["effect_fraction"]) for row in state["iterations"] if row.get("hypothesis_id")==item.hypothesis_id and isinstance(row.get("effect_fraction"),(int,float))]
-    classification=classify_screen_series(prior+[result.effect_fraction])
-    return SealedScreen(receipt_path=result.receipt_path,result_sha256=result.result_sha256,effect_fraction=result.effect_fraction,classification=classification,baseline_sha256=result.baseline_sha256,source_proof_sha256=result.source_proof_sha256,dispatch_proof_sha256=result.dispatch_proof_sha256,candidate_only=result.candidate_only,promotion_claim=result.promotion_claim,stages=result.stages)
+    series_key = _screen_series_key(item, result)
+    prior = [float(row["effect_fraction"]) for row in state["iterations"]
+             if row.get("series_key") == series_key
+             and isinstance(row.get("effect_fraction"), (int, float))]
+    # Component provenance is measured/sealed by the adapter.  Planner text
+    # cannot name its own component evidence and thereby manufacture a
+    # subadditivity claim.
+    raw_components = result.component_series_keys
+    if not isinstance(raw_components, (list, tuple)) or not all(isinstance(key, str) and HASH.fullmatch(key) for key in raw_components):
+        raise DiscoveryControllerError("composition requires exact component series provenance")
+    components = tuple(raw_components)
+    effects = prior + [result.effect_fraction]
+    classification = classify_screen_series(
+        effects,
+        component_pooled_effects=_pooled_component_effects(state, components),
+    )
+    return SealedScreen(receipt_path=result.receipt_path,result_sha256=result.result_sha256,effect_fraction=result.effect_fraction,classification=classification,baseline_sha256=result.baseline_sha256,source_proof_sha256=result.source_proof_sha256,dispatch_proof_sha256=result.dispatch_proof_sha256,candidate_only=result.candidate_only,promotion_claim=result.promotion_claim,stages=result.stages,series_key=series_key,component_series_keys=components,series_effect_fraction=float(statistics.median(effects)))
+
+
+def _schedule_replication(state: dict[str, Any], *, item: PlannedCandidate,
+                          authorization: hypotheses.ClaimAuthorization,
+                          row: Mapping[str, Any], result: SealedScreen,
+                          max_iterations: int) -> None:
+    """Queue exactly one independent S2 for a positive exact series.
+
+    Replication is not a second planner proposal.  It reuses the sealed patch,
+    authorization, frame series key, and critic acceptance, then obtains a new
+    resource lease at the next turn.  This supplies the evidence required for
+    a nomination without conflating unrelated source patches under the same
+    hypothesis.
+    """
+    if (result.classification != "candidate" or state["next"] > max_iterations
+            or state.get("pending") is not None):
+        return
+    replica = dict(row)
+    replica.update(turn=state["next"], status="replication_pending",
+                   replication_of=result.result_sha256,
+                   series_key=result.series_key,
+                   component_series_keys=list(result.component_series_keys),
+                   critic={"decision": "accept",
+                           "reason": "independent replication of sealed candidate"})
+    state["pending"] = {
+        "row": replica,
+        "candidate": _pending_item(item),
+        # S2 receives a fresh authorization at its own compute boundary.  The
+        # original token is retained as provenance only; it is never replayed
+        # as permission for a second device claim.
+        "confirmation": True,
+        "parent_authorization": authorization.to_dict(),
+    }
 
 
 def run_controller(config: ControllerConfig, *, planner: Planner, critic: Critic, screener: Screener, lease: Lease) -> dict[str, Any]:
@@ -446,16 +557,26 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
             if not isinstance(recovery,Recovery) or recovery.status == "ambiguous": raise DiscoveryControllerError("inflight operation cannot be safely reconciled")
             result=recovery.result if recovery.status == "sealed_result" else screener.screen(item,authorization,permit)
         if not isinstance(result,SealedScreen): raise DiscoveryControllerError("inflight recovery produced no sealed result")
-        result=_classified_result(state,item,result); row=dict(inflight["row"]); row.update(status=result.classification,result_sha256=result.result_sha256,evidence={"baseline":result.baseline_sha256,"source":result.source_proof_sha256,"dispatch":result.dispatch_proof_sha256},effect_fraction=result.effect_fraction)
+        result=_classified_result(state,item,result); row=dict(inflight["row"]); row.update(status=result.classification,result_sha256=result.result_sha256,evidence={"baseline":result.baseline_sha256,"source":result.source_proof_sha256,"dispatch":result.dispatch_proof_sha256},effect_fraction=result.effect_fraction,series_effect_fraction=result.series_effect_fraction,series_key=result.series_key,component_series_keys=list(result.component_series_keys))
         _record_attempt_once(tracker,item,str(item.proposal.get("proposal_id",row["proposal_sha256"])),result)
-        state.pop("inflight",None); state.pop("pending",None); state["iterations"].append(row); state["next"]+=1; _append_nomination(config.output_root,item,result,config.nomination_threshold); _write_projection(config.output_root); store.save(state,"recovered_screen")
+        state.pop("inflight",None); state.pop("pending",None); state["iterations"].append(row); state["next"]+=1; _schedule_replication(state,item=item,authorization=authorization,row=row,result=result,max_iterations=config.max_iterations); _append_nomination(config.output_root,item,result,config.nomination_threshold); _write_projection(config.evidence_root or config.output_root); store.save(state,"recovered_screen")
     while not state["complete"] and state["next"] <= config.max_iterations:
         turn=state["next"]; context=_context(state,tracker,turn)
         with tempfile.TemporaryDirectory(prefix=f"ak-discovery-{turn}-", dir=config.output_root) as temp:
             workspace=Path(temp)
             pending=state.get("pending")
             if pending is not None:
-                item=_restore_pending(pending); authorization=hypotheses.ClaimAuthorization.from_dict(pending["authorization"]); row=dict(pending["row"]); review=Critique(**row["critic"])
+                item=_restore_pending(pending); row=dict(pending["row"]); review=Critique(**row["critic"])
+                if "authorization" in pending:
+                    authorization=hypotheses.ClaimAuthorization.from_dict(pending["authorization"])
+                elif pending.get("confirmation") is True:
+                    # A positive S1 is not a receipted negative.  Re-consult
+                    # DNR and mint the explicit confirmation token before its
+                    # own device claim, rather than reusing S1's token.
+                    _ensure_question(tracker,item)
+                    authorization=tracker.authorize_claim(item.hypothesis_id,purpose="candidate_only_confirmation",authorized_by="discovery_controller",ledger=do_not_repeat.compile_for_tracker(tracker))
+                else:
+                    raise DiscoveryControllerError("pending candidate lacks a sealed authorization")
             else:
                 item=planner.plan(context=context,workspace=workspace)
                 review=critic.review(item,context=context,workspace=workspace)
@@ -468,39 +589,115 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                 try: authorization=tracker.authorize_claim(item.hypothesis_id,purpose="candidate_only_discovery",authorized_by="discovery_controller",ledger=ledger)
                 except hypotheses.HypothesisError as exc:
                     row.update(status="authorization_refused",reason=str(exc)); state["iterations"].append(row); state["next"]+=1; store.save(state,"authorization_refused"); continue
+            if config.dry_run:
+                # The dry-run still proves exact Sol/Terra actor attestation,
+                # plan schema, critic binding, and DNR authorization.  It
+                # deliberately never asks for a resource lease or starts a
+                # source build, correctness, attribution, or model call.
+                row.update(status="dry_run_authorized", authorization=authorization.to_dict())
+                state.pop("pending", None); state["iterations"].append(row); state["next"] += 1
+                store.save(state, "dry_run_authorized")
+                continue
             permit=lease.admit(item)
             if not bool(permit.get("admitted")):
                 # Waiting is durable but is not an experiment and cannot spend an
                 # iteration budget.  Planning/critique may continue elsewhere;
                 # this exact candidate is retried only after a new lease admits it.
-                row.update(status="waiting_resource",lease=dict(permit)); state["pending"]={"row":row,"candidate":_pending_item(item),"authorization":authorization.to_dict()}; store.save(state,"waiting_resource"); break
-            operation_key=_sha({"turn":turn,"manifest":item.source_manifest_sha256,"authorization":authorization.to_dict()})
+                row.update(status="waiting_resource",lease=dict(permit)); state["pending"]={"row":row,"candidate":_pending_item(item),"authorization":authorization.to_dict(),"confirmation":bool(pending and pending.get("confirmation")),"parent_authorization":pending.get("parent_authorization") if pending else None}; store.save(state,"waiting_resource"); break
+            repetition=2 if pending and pending.get("confirmation") else 1
+            operation_key=_sha({"turn":turn,"manifest":item.source_manifest_sha256,"authorization":authorization.to_dict(),"repetition":repetition})
+            # The governed GPU adapter owns an operation-key-bound receipt
+            # namespace.  It refuses an unkeyed lease, making recovery and
+            # result reconciliation refer to the same durable operation.
+            permit={**dict(permit), "operation_key":operation_key, "repetition":repetition}
             state["inflight"]={"operation_key":operation_key,"row":row,"candidate":_pending_item(item),"authorization":authorization.to_dict(),"lease":dict(permit)}
             store.save(state,"pre_screen_intent")
             try: result=screener.screen(item,authorization,permit)
-            except Exception as exc:
+            except PrecomputeScreenRefusal as exc:
                 state.pop("inflight",None); row.update(status="screen_refused",reason=f"{type(exc).__name__}: {exc}"); state["iterations"].append(row); state["next"]+=1; store.save(state,"screen_refused"); continue
+            except Exception as exc:
+                # The durable start intent has been written.  An ordinary
+                # exception may follow a build, claim, or model invocation, so
+                # it is an ambiguous operation until the governed adapter
+                # reconciles its operation-key-bound artifacts on restart.
+                state["inflight"]["exception"]={"type":type(exc).__name__,"message":str(exc)}
+                store.save(state,"screen_ambiguous")
+                raise
             state["inflight"]["result"]=asdict(result); store.save(state,"post_screen_result")
-            result=_classified_result(state,item,result); row.update(status=result.classification,result_sha256=result.result_sha256,evidence={"baseline":result.baseline_sha256,"source":result.source_proof_sha256,"dispatch":result.dispatch_proof_sha256},effect_fraction=result.effect_fraction)
+            result=_classified_result(state,item,result); row.update(status=result.classification,result_sha256=result.result_sha256,evidence={"baseline":result.baseline_sha256,"source":result.source_proof_sha256,"dispatch":result.dispatch_proof_sha256},effect_fraction=result.effect_fraction,series_effect_fraction=result.series_effect_fraction,series_key=result.series_key,component_series_keys=list(result.component_series_keys))
             # Record the measured disposition before exposing it to the next
             # planner context.  This is the only source of repeat suppression.
             _record_attempt_once(tracker,item,str(item.proposal.get("proposal_id",row["proposal_sha256"])),result)
-            state.pop("inflight",None); state["iterations"].append(row); state["next"]+=1; _append_nomination(config.output_root,item,result,config.nomination_threshold); _write_projection(config.output_root); store.save(state,"screened")
+            state.pop("inflight",None); state.pop("pending",None); state["iterations"].append(row); state["next"]+=1; _schedule_replication(state,item=item,authorization=authorization,row=row,result=result,max_iterations=config.max_iterations); _append_nomination(config.output_root,item,result,config.nomination_threshold); _write_projection(config.evidence_root or config.output_root); store.save(state,"screened")
     state["complete"]=state["next"]>config.max_iterations
     if state["complete"]: state.pop("pending",None)
     store.save(state,"complete" if state["complete"] else "paused"); return state
 
 
-def _load_factory(reference: str) -> Mapping[str, Any]:
-    module,name=reference.split(":",1); value=getattr(importlib.import_module(module),name)()
-    if not isinstance(value,Mapping): raise DiscoveryControllerError("adapter factory must return mapping")
-    return value
+def build_controller_adapters(*, planner: Planner, critic: Critic, screener: Screener,
+                              lease: Lease) -> dict[str, Any]:
+    """Bind the four concrete controller seams without accepting shell commands.
+
+    A live factory constructs its governed GPU source screener separately (with
+    its proof producer configuration) and supplies that object here.  Keeping
+    this top-level boundary object-only prevents a JSON launch manifest from
+    becoming an arbitrary command executor.
+    """
+    parts = {"planner": planner, "critic": critic, "screener": screener, "lease": lease}
+    if any(value is None for value in parts.values()):
+        raise DiscoveryControllerError("controller adapters must bind every required seam")
+    if not callable(getattr(planner, "plan", None)) or not callable(getattr(critic, "review", None)):
+        raise DiscoveryControllerError("controller factory did not bind typed planner/critic actors")
+    if not callable(getattr(screener, "screen", None)) or not callable(getattr(screener, "reconcile", None)):
+        raise DiscoveryControllerError("controller factory did not bind governed screen/reconcile adapter")
+    if not callable(getattr(lease, "admit", None)):
+        raise DiscoveryControllerError("controller factory did not bind a resource lease adapter")
+    return parts
+
+
+def _load_adapter_config(path: str | None) -> Mapping[str, Any]:
+    if path is None:
+        return {}
+    config_path = Path(path).resolve(strict=True)
+    if config_path.is_symlink() or not config_path.is_file():
+        raise DiscoveryControllerError("adapter config must be a regular file")
+    try:
+        value = json.loads(config_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise DiscoveryControllerError("adapter config must be a JSON object") from exc
+    if not isinstance(value, Mapping):
+        raise DiscoveryControllerError("adapter config must be a JSON object")
+    return dict(value)
+
+
+def _load_factory(reference: str, factory_config: Mapping[str, Any] | None = None) -> Mapping[str, Any]:
+    if reference.count(":") != 1:
+        raise DiscoveryControllerError("adapter factory must be module:callable")
+    module, name = reference.split(":", 1)
+    try:
+        factory = getattr(importlib.import_module(module), name)
+    except (ImportError, AttributeError) as exc:
+        raise DiscoveryControllerError("adapter factory could not be imported") from exc
+    if not callable(factory):
+        raise DiscoveryControllerError("adapter factory must be callable")
+    # Standard factory contract is factory(config: Mapping) -> adapter bundle.
+    # A no-argument factory stays useful for narrowly-bound deployment modules.
+    try:
+        signature = inspect.signature(factory)
+        value = factory() if not signature.parameters else factory(dict(factory_config or {}))
+    except (TypeError, ValueError) as exc:
+        raise DiscoveryControllerError("adapter factory has an unsupported signature") from exc
+    if not isinstance(value, Mapping):
+        raise DiscoveryControllerError("adapter factory must return mapping")
+    try:
+        return build_controller_adapters(**dict(value))
+    except TypeError as exc:
+        raise DiscoveryControllerError("adapter factory must return exactly planner, critic, screener, lease") from exc
 
 
 def main(argv: Sequence[str] | None=None) -> int:
-    parser=argparse.ArgumentParser(description=__doc__); parser.add_argument("--output-root",required=True); parser.add_argument("--max-iterations",type=int,default=1); parser.add_argument("--dry-run",action="store_true"); parser.add_argument("--adapter-factory")
-    args=parser.parse_args(argv); config=ControllerConfig(Path(args.output_root).resolve(),args.max_iterations,dry_run=args.dry_run)
-    if not args.adapter_factory: raise DiscoveryControllerError("concrete adapter factory required; use --dry-run with an explicit simulated factory in tests")
-    parts=_load_factory(args.adapter_factory); run_controller(config,planner=parts["planner"],critic=parts["critic"],screener=parts["screener"],lease=parts["lease"]); return 0
+    parser=argparse.ArgumentParser(description=__doc__); parser.add_argument("--output-root",required=True); parser.add_argument("--max-iterations",type=int,default=1); parser.add_argument("--dry-run",action="store_true"); parser.add_argument("--adapter-factory", required=True); parser.add_argument("--adapter-config"); parser.add_argument("--evidence-root")
+    args=parser.parse_args(argv); config=ControllerConfig(Path(args.output_root).resolve(),args.max_iterations,dry_run=args.dry_run,evidence_root=Path(args.evidence_root).resolve() if args.evidence_root else None)
+    parts=_load_factory(args.adapter_factory, _load_adapter_config(args.adapter_config)); run_controller(config,planner=parts["planner"],critic=parts["critic"],screener=parts["screener"],lease=parts["lease"]); return 0
 
 if __name__=="__main__": main()

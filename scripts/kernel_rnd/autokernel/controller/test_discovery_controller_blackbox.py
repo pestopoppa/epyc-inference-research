@@ -124,6 +124,10 @@ class ProcessCrash(BaseException):
     pass
 
 
+class OrdinaryAfterStart(RuntimeError):
+    pass
+
+
 class CrashBeforeRunner(Screen):
     def __init__(self):
         super().__init__()
@@ -133,6 +137,18 @@ class CrashBeforeRunner(Screen):
         self.entries += 1
         if self.entries == 1:
             raise ProcessCrash("before fake runner")
+        return super().screen(item, authorization, lease)
+
+
+class ExceptionAfterStart(Screen):
+    def __init__(self):
+        super().__init__()
+        self.entries = 0
+
+    def screen(self, item, authorization, lease):
+        self.entries += 1
+        if self.entries == 1:
+            raise OrdinaryAfterStart("adapter lost result after operation start")
         return super().screen(item, authorization, lease)
 
 
@@ -295,6 +311,23 @@ class BlackBoxLaunchGate(unittest.TestCase):
             self.assertTrue(completed["complete"])
             self.assertEqual((planner.calls, critic.calls, screen.calls), (1, 1, 1))
 
+    def test_ordinary_post_start_exception_requires_reconcile_before_retry(self):
+        with tempfile.TemporaryDirectory() as temp, \
+                patch.object(D.source_candidate, "SourcePatchManifest", Manifest), \
+                patch.object(D, "_write_projection"):
+            root = Path(temp)
+            planner, critic, screen = Planner(), Critic(), ExceptionAfterStart()
+            with self.assertRaises(OrdinaryAfterStart):
+                D.run_controller(self.config(root), planner=planner, critic=critic,
+                                 screener=screen, lease=Lease((True,)))
+            state = json.loads((root / "out" / "state.json").read_text())
+            self.assertIn("inflight", state)
+            self.assertEqual(state["inflight"]["exception"]["type"], "OrdinaryAfterStart")
+            resumed = D.run_controller(self.config(root), planner=planner, critic=critic,
+                                       screener=screen, lease=Lease((True,)))
+            self.assertTrue(resumed["complete"])
+            self.assertEqual((planner.calls, critic.calls, screen.calls), (1, 1, 1))
+
     def test_process_crash_after_runner_does_not_repeat_compute(self):
         with tempfile.TemporaryDirectory() as temp, \
                 patch.object(D.source_candidate, "SourcePatchManifest", Manifest), \
@@ -315,7 +348,7 @@ class BlackBoxLaunchGate(unittest.TestCase):
             self.assertEqual(screen.compute_calls, 1)
             self.assertEqual(planner.calls, 1)
             queue = root / "out" / "promotion-queue.jsonl"
-            self.assertEqual(len(queue.read_text().splitlines()), 1)
+            self.assertFalse(queue.exists(), "one positive screen is not a nomination")
 
     def test_ambiguous_inflight_recovery_refuses_duplicate_compute(self):
         with tempfile.TemporaryDirectory() as temp, \
@@ -377,34 +410,53 @@ class BlackBoxLaunchGate(unittest.TestCase):
             self.assertEqual(critic.calls, 0)
 
     def test_pooled_classifier_never_combines_distinct_source_manifests(self):
-        class TwoPatchPlanner(Planner):
-            def plan(self, *, context, workspace):
-                self.calls += 1
-                digest = ("a" if self.calls == 1 else "b") * 64
-                return D.PlannedCandidate(
-                    "akh-shared-question",
-                    "one question with two different patches",
-                    "no throughput improvement",
-                    {"backend": "gpu", "phase": "decode"},
-                    {"proposal_id": f"akp-patch-{self.calls}"},
-                    Manifest(proposal_id=f"akp-patch-{self.calls}"),
-                    digest,
-                )
-
         with tempfile.TemporaryDirectory() as temp, \
                 patch.object(D.source_candidate, "SourcePatchManifest", Manifest), \
                 patch.object(D, "_write_projection"):
             root = Path(temp)
-            result = D.run_controller(
-                D.ControllerConfig(root / "out", max_iterations=2),
-                planner=TwoPatchPlanner(), critic=Critic(),
-                screener=SeriesScreen((0.01, 0.02)),
-                lease=Lease((True, True)),
+            first = D.PlannedCandidate(
+                "akh-shared-question", "one question with two different patches",
+                "no throughput improvement", {"backend": "gpu", "phase": "decode"},
+                {"proposal_id": "akp-patch-1"}, Manifest(proposal_id="akp-patch-1"), "a" * 64,
+            )
+            second = D.PlannedCandidate(
+                "akh-shared-question", "one question with two different patches",
+                "no throughput improvement", {"backend": "gpu", "phase": "decode"},
+                {"proposal_id": "akp-patch-2"}, Manifest(proposal_id="akp-patch-2"), "b" * 64,
+            )
+            initial = D.SealedScreen("result-a.json", "a" * 64, 0.01, "candidate", H, H, H)
+            prior = D._classified_result({"iterations": []}, first, initial)
+            next_result = D._classified_result(
+                {"iterations": [{"series_key": prior.series_key, "effect_fraction": 0.01}]},
+                second, D.SealedScreen("result-b.json", "b" * 64, 0.02, "candidate", H, H, H),
             )
             self.assertEqual(
-                [row["status"] for row in result["iterations"]],
-                ["candidate", "candidate"],
+                next_result.classification, "candidate",
             )
+
+    def test_positive_candidate_schedules_one_s2_without_replanning(self):
+        with tempfile.TemporaryDirectory() as temp, \
+                patch.object(D.source_candidate, "SourcePatchManifest", Manifest), \
+                patch.object(D, "_write_projection"):
+            root = Path(temp)
+            planner, critic = Planner(), Critic()
+            screen = SeriesScreen((0.04, 0.03))
+            result = D.run_controller(
+                D.ControllerConfig(root / "out", max_iterations=2),
+                planner=planner, critic=critic, screener=screen,
+                lease=Lease((True, True)),
+            )
+            self.assertEqual((planner.calls, critic.calls, screen.calls), (1, 1, 2))
+            self.assertEqual(screen.items[0].source_manifest_sha256,
+                             screen.items[1].source_manifest_sha256)
+            self.assertEqual(
+                [row["status"] for row in result["iterations"]],
+                ["candidate", "top_k_replicated_candidate"],
+            )
+            tracked = D._tracker(D.DurableState(root / "out")).get("akh-blackbox")
+            self.assertEqual(len(tracked.claim_authorizations), 2)
+            queue = root / "out" / "promotion-queue.jsonl"
+            self.assertEqual(len(queue.read_text().splitlines()), 1)
 
     def test_pooled_classifier_handles_sign_conflict_and_subadditive_stack(self):
         self.assertEqual(D.classify_screen_series([0.01]), "candidate")

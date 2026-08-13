@@ -9,6 +9,8 @@ H="a"*64
 RUNTIME={"kind":"docker_workspace_bind_only","docker_path":"/docker","docker_sha256":H,"image_id":"image","codex_native_sha256":H,"code_mode_host_sha256":H,"ca_certificate_sha256":H,"writable_host_binds":["/workspace"],"host_network_mode":"docker_bridge"}
 class Manifest:
  campaign_id="ak-test"; proposal_id="akp-test"; candidate_id="akc-test"; source_tree="llama.cpp"; production_base_commit="0"*40; instrument_commit="0"*40; change_class="fusion"; declared_files=("ggml/src/ggml.c",); declared_symbols={"ggml/src/ggml.c":("<file-scope>",)}; mechanism_id="test"; patch_sha256="0"*64; patch_bundle_sha256=H; patch_bytes=b"diff --git a/ggml/src/ggml.c b/ggml/src/ggml.c\n--- a/ggml/src/ggml.c\n+++ b/ggml/src/ggml.c\n@@ -1 +1 @@\n-x\n+y\n"
+ def __init__(self, **values):
+  for key, value in values.items(): setattr(self,key,value)
 class FakePlanner:
  def __init__(self): self.calls=[]
  def attest(self): return {**D.SOL,"runtime":RUNTIME}
@@ -24,6 +26,7 @@ class FakeScreen:
  def __init__(self,values): self.values=iter(values); self.calls=0
  def screen(self,*args):
   self.calls+=1; return D.SealedScreen("receipt",H[:-1]+str(self.calls),next(self.values),"candidate",H,H,H)
+ def reconcile(self,inflight): return D.Recovery("safe_to_start")
 
 class Tests(unittest.TestCase):
  def cfg(self,root,n=2): return D.ControllerConfig(root/"out",n)
@@ -31,15 +34,30 @@ class Tests(unittest.TestCase):
   self.assertEqual(D.sealed_roster()["claude_members"],0); self.assertEqual([x["model"] for x in D.sealed_roster()["members"]],["gpt-5.6-sol","gpt-5.6-terra"])
  def test_veto_blocks_compute_and_feedback_is_next_context(self):
   with tempfile.TemporaryDirectory() as t, patch.object(D.source_candidate,"SourcePatchManifest",Manifest), patch.object(D,"_write_projection"):
-   p=FakePlanner(); s=FakeScreen([.04,.03]); r=D.run_controller(self.cfg(Path(t),3),planner=p,critic=FakeCritic(["reject","accept","accept"]),screener=s,lease=Lease())
-   self.assertEqual([x["status"] for x in r["iterations"]],["critic_reject","candidate","candidate"]); self.assertEqual(s.calls,2); self.assertIn(H[:-1]+"1",p.calls[2]["prior_results"])
- def test_threshold_is_only_idempotent_operator_nomination(self):
+   p=FakePlanner(); s=FakeScreen([.04,.03,.04]); r=D.run_controller(self.cfg(Path(t),4),planner=p,critic=FakeCritic(["reject","accept","accept"]),screener=s,lease=Lease())
+   self.assertEqual([x["status"] for x in r["iterations"]],["critic_reject","candidate","top_k_replicated_candidate","top_k_replicated_candidate"]); self.assertEqual(s.calls,3); self.assertEqual(len(p.calls),3); self.assertIn(H[:-1]+"1",p.calls[2]["prior_results"]); self.assertIn(H[:-1]+"2",p.calls[2]["prior_results"])
+ def test_single_positive_screen_never_nominates(self):
   with tempfile.TemporaryDirectory() as t, patch.object(D.source_candidate,"SourcePatchManifest",Manifest), patch.object(D,"_write_projection"):
    root=Path(t); r=D.run_controller(self.cfg(root,1),planner=FakePlanner(),critic=FakeCritic(["accept"]),screener=FakeScreen([.04]),lease=Lease())
-   row=(root/"out"/"promotion-queue.jsonl").read_text(); self.assertIn('"promotion_claim": false',row); self.assertIn('"operator_decision_required": true',row); self.assertEqual(len(r["iterations"]),1)
+   self.assertEqual(r["iterations"][0]["status"],"candidate")
+   self.assertFalse((root/"out"/"promotion-queue.jsonl").exists())
+ def test_replicated_positive_threshold_is_idempotent_operator_nomination(self):
+  with tempfile.TemporaryDirectory() as t, patch.object(D.source_candidate,"SourcePatchManifest",Manifest), patch.object(D,"_write_projection"):
+   root=Path(t); r=D.run_controller(self.cfg(root,2),planner=FakePlanner(),critic=FakeCritic(["accept","accept"]),screener=FakeScreen([.04,.03]),lease=Lease())
+   row=(root/"out"/"promotion-queue.jsonl").read_text(); self.assertIn('"promotion_claim": false',row); self.assertIn('"operator_decision_required": true',row); self.assertEqual(len(row.splitlines()),1); self.assertEqual(r["iterations"][-1]["status"],"top_k_replicated_candidate")
+ def test_nomination_uses_pooled_exact_series_effect_not_s2_order(self):
+  for effects, expected in (((.001,.04),True),((.04,.001),True),((.001,.002),False)):
+   with self.subTest(effects=effects), tempfile.TemporaryDirectory() as t, patch.object(D.source_candidate,"SourcePatchManifest",Manifest), patch.object(D,"_write_projection"):
+    root=Path(t); result=D.run_controller(D.ControllerConfig(root/"out",2,nomination_threshold=.02),planner=FakePlanner(),critic=FakeCritic(["accept"]),screener=FakeScreen(effects),lease=Lease())
+    queue=root/"out"/"promotion-queue.jsonl"; self.assertEqual(queue.exists(),expected)
+    if expected: self.assertAlmostEqual(result["iterations"][-1]["series_effect_fraction"],sum(effects)/2)
+ def test_replication_spread_is_inconclusive_not_a_nomination(self):
+  with tempfile.TemporaryDirectory() as t, patch.object(D.source_candidate,"SourcePatchManifest",Manifest), patch.object(D,"_write_projection"):
+   root=Path(t); r=D.run_controller(self.cfg(root,2),planner=FakePlanner(),critic=FakeCritic(["accept"]),screener=FakeScreen([.12,.001]),lease=Lease())
+   self.assertEqual(r["iterations"][-1]["status"],"inconclusive"); self.assertFalse((root/"out"/"promotion-queue.jsonl").exists())
  def test_refused_screen_stops_and_resume_does_not_repeat(self):
   class Bad(FakeScreen):
-   def screen(self,*args): raise RuntimeError("build failed")
+   def screen(self,*args): raise D.PrecomputeScreenRefusal("build failed before operation start")
   with tempfile.TemporaryDirectory() as t, patch.object(D.source_candidate,"SourcePatchManifest",Manifest), patch.object(D,"_write_projection"):
    root=Path(t); p=FakePlanner(); r=D.run_controller(self.cfg(root,1),planner=p,critic=FakeCritic(["accept"]),screener=Bad([]),lease=Lease()); again=D.run_controller(self.cfg(root,1),planner=p,critic=FakeCritic(["accept"]),screener=Bad([]),lease=Lease())
    self.assertEqual(r["iterations"][0]["status"],"screen_refused"); self.assertEqual(again,r); self.assertEqual(len(p.calls),1)
@@ -87,3 +105,16 @@ class Tests(unittest.TestCase):
   self.assertEqual(D.classify_screen_series([.01,.02]),"top_k_replicated_candidate")
   self.assertEqual(D.classify_screen_series([.01,-.01]),"inconclusive")
   self.assertEqual(D.classify_screen_series([.01,.006],component_pooled_effects=[.02]),"replicated_but_subadditive")
+ def test_dry_run_authorizes_without_lease_or_screen(self):
+  class ExplosiveLease:
+   def admit(self,item): raise AssertionError("dry run may not ask for a compute lease")
+  with tempfile.TemporaryDirectory() as t, patch.object(D.source_candidate,"SourcePatchManifest",Manifest), patch.object(D,"_write_projection"):
+   p=FakePlanner(); s=FakeScreen([.1]); r=D.run_controller(D.ControllerConfig(Path(t)/"out",1,dry_run=True),planner=p,critic=FakeCritic(["accept"]),screener=s,lease=ExplosiveLease())
+   self.assertEqual(r["iterations"][0]["status"],"dry_run_authorized"); self.assertEqual((len(p.calls),s.calls),(1,0))
+ def test_canonical_projection_uses_evidence_root_not_state_root(self):
+  with tempfile.TemporaryDirectory() as t, patch.object(D.source_candidate,"SourcePatchManifest",Manifest), patch.object(D,"_write_projection") as projection:
+   root=Path(t); evidence=root/"canonical-evidence"; D.run_controller(D.ControllerConfig(root/"state",1,evidence_root=evidence),planner=FakePlanner(),critic=FakeCritic(["accept"]),screener=FakeScreen([.1]),lease=Lease())
+   projection.assert_called_once_with(evidence)
+ def test_adapter_bundle_requires_exact_four_seams(self):
+  parts=D.build_controller_adapters(planner=FakePlanner(),critic=FakeCritic(["accept"]),screener=FakeScreen([.1]),lease=Lease())
+  self.assertEqual(set(parts),{"planner","critic","screener","lease"})
