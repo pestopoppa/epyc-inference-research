@@ -19,6 +19,7 @@ from scripts.benchmark import run_autokernel_gpu_discovery as gpu_runner
 from . import discovery_controller as C
 from . import discovery_deployment as D
 from . import discovery_deployment_factory as F
+from . import discovery_static_registry as S
 from . import gpu_source_evidence as E
 from .test_discovery_controller_blackbox import Critic, Lease, Manifest, Planner
 from . import test_discovery_deployment as deployment_tests
@@ -94,7 +95,13 @@ class OfflineLaunchGate(unittest.TestCase):
                 "allowed_symbols": {path: sorted(symbols)
                                     for path, symbols in template.allowed_symbols.items()},
                 "semantics": dict(template.semantics),
-                "dispatch": repr(template.dispatch),
+                "dispatch": {
+                    "candidate_exact": [vars(row) for row in template.dispatch.candidate_exact],
+                    "anchor_exact": [vars(row) for row in template.dispatch.anchor_exact],
+                    "candidate_forbidden": [vars(row) for row in template.dispatch.candidate_forbidden],
+                    "anchor_forbidden": [vars(row) for row in template.dispatch.anchor_forbidden],
+                    "invariants": [vars(row) for row in template.dispatch.invariants],
+                },
             }}}
             template_sha = __import__("hashlib").sha256(
                 __import__("json").dumps(template_body, sort_keys=True,
@@ -252,6 +259,7 @@ class OfflineLaunchGate(unittest.TestCase):
                 (build / "bin" / "libggml-hip.so").write_bytes(hip)
                 builds.append(build)
             model = root / "model.gguf"; model.write_bytes(b"model")
+            common = root / "common-runtime"; common.mkdir()
             def commit(argv, **_kwargs):
                 return mock.Mock(returncode=0,
                                  stdout=("a" if str(builds[0]) in argv else "b") * 40)
@@ -261,6 +269,7 @@ class OfflineLaunchGate(unittest.TestCase):
                 campaign_id="ak-offline", calls=3, workload="prefill_pp512",
                 allow_small_model_cpu_overlap=True,
                 measurement_binary=str(builds[0] / "bin" / "llama-bench"),
+                common_loader_dir=str(common),
                 anchor_loader_dir=str(builds[0] / "bin"),
                 candidate_loader_dir=str(builds[1] / "bin"),
                 small_model_max_bytes=512 * 1024 * 1024,
@@ -295,6 +304,13 @@ class OfflineLaunchGate(unittest.TestCase):
         self.assertNotIn('and getattr(args, "measurement_binary", None)', source)
         self.assertIn("libggml-hip.so.0", source)
         self.assertIn("non-HIP", source)
+
+    def test_static_builder_always_tears_down_owned_worktrees(self):
+        """Success and failure both end in governed teardown receipts."""
+        source = inspect.getsource(S.StaticGpuSourceBuilder.build)
+        self.assertIn("finally", source)
+        self.assertIn("teardown_worktree", source)
+        self.assertIn("TeardownReceipt", source)
 
     def test_source_scope_rejects_reward_symbols_even_under_kernel_prefix(self):
         """A path prefix alone cannot authorize benchmark/reward manipulation."""
