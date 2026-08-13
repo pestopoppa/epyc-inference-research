@@ -36,6 +36,33 @@ def _required_passing_gate(event: Mapping[str, Any], block: str, gate_id: str) -
     return gate_id
 
 
+def _require_speed_rank_admissible(event: Mapping[str, Any]) -> None:
+    """Require the final T1's own verdict-bearing rank admission.
+
+    A campaign's accept rule is deliberately simpler than the evaluator: it
+    decides whether every precommitted paired block favoured the candidate and
+    cleared the declared contribution floor.  The evaluator can subsequently
+    withhold the speed rank when the *closed* T1 window exposes a void,
+    incomplete discipline, or an effect below MDE.  Banking the former while
+    ignoring the latter would turn an unrankable final evaluation into a
+    durable frontier candidate.
+
+    This value lives in the emitted event's search-discipline block, which is
+    the event-bound projection of ``Verdict.speed_rank_admissible``.  Missing
+    is refused rather than treated as the historical default: a legacy record
+    cannot prove a rank it did not journal.
+    """
+    performance = event.get("performance")
+    discipline = (performance.get("search_discipline")
+                  if isinstance(performance, Mapping) else None)
+    admitted = (discipline.get("speed_rank_admissible")
+                if isinstance(discipline, Mapping) else None)
+    if admitted is not True:
+        raise CompletedCampaignAdapterError(
+            f"{event.get('event_id')}: final T1 evaluation is not "
+            "speed-rank-admissible")
+
+
 def project(*, campaign_record: Mapping[str, Any], journal_root: str,
             campaign_id: str, proposal_id: str,
             completion_event_id: str) -> ProjectedCampaign:
@@ -59,6 +86,7 @@ def project(*, campaign_record: Mapping[str, Any], journal_root: str,
                    if event.get("tier") == "T1" and event.get("status") == "pass"), None)
         if t0 is None or t1 is None:
             raise CompletedCampaignAdapterError("banking requires passing T0 and T1 events")
+        _require_speed_rank_admissible(t1)
         dispatch_gate = _required_passing_gate(
             t0, "stability", "no_fallback_dispatch_trace")
         mechanism_gate = _required_passing_gate(
