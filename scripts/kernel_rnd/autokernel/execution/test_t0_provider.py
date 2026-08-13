@@ -296,6 +296,34 @@ class BackendOpsConsoleParsing(unittest.TestCase):
         self.assertEqual(run.unsupported_by_op(), ())
         run.reconcile()
 
+    def test_numeric_failure_prefix_is_counted_as_a_failed_case(self):
+        text = ("Testing 1 devices\n\nBackend 1/1: CPU\n"
+                "[MUL_MAT_ID] ERR = 0.000528677 > 0.000500000   "
+                "MUL_MAT_ID(type_a=iq3_xxs,type_b=f32,n_mats=4,n_used=2,"
+                "b=0,m=512,n=15,k=256): test failed FAIL\n"
+                "  0/1 tests passed\n\nFailing tests:\n"
+                "  MUL_MAT_ID(type_a=iq3_xxs,type_b=f32,n_mats=4,n_used=2,"
+                "b=0,m=512,n=15,k=256)\n"
+                "  Backend CPU: FAIL\n0/1 backends passed\nFAIL\n")
+        run = t0.parse_backend_ops_console(text)
+        self.assertEqual(len(run.cases), 1)
+        self.assertEqual(run.cases[0].status, "fail")
+        self.assertEqual(run.failed_ops(), ("MUL_MAT_ID",))
+        self.assertEqual(run.failing_tests, (
+            "MUL_MAT_ID(type_a=iq3_xxs,type_b=f32,n_mats=4,n_used=2,"
+            "b=0,m=512,n=15,k=256)",))
+        self.assertEqual(run.backends[0].status, "FAIL")
+        self.assertEqual(run.overall, "FAIL")
+        run.reconcile()
+
+    def test_numeric_failure_prefix_refuses_mismatched_diagnostic_op(self):
+        text = ("Testing 1 devices\n\nBackend 1/1: CPU\n"
+                "[ADD] ERR = 1 > 0.5   MUL_MAT(type_a=f32): test failed FAIL\n"
+                "  0/1 tests passed\n  Backend CPU: FAIL\n"
+                "0/1 backends passed\nFAIL\n")
+        with self.assertRaisesRegex(t0.OutputParseError, "diagnostic names"):
+            t0.parse_backend_ops_console(text)
+
     def test_value_transform_receipt_and_v2_property_transform_are_structured(self):
         text = ("Testing 1 devices\n\nBackend 1/1: CPU\n"
                 "  SOFT_MAX(type=f32): AK_VALUE_V1 "
