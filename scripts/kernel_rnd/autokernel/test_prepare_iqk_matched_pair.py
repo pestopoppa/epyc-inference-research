@@ -39,6 +39,9 @@ class MatchedPairPreparationTest(unittest.TestCase):
             candidate_ref="registered:ggml_iqk", model=str(self.model),
             proposal=self.intervention,
             calibration=campaign.load_calibration_bundle(self.calibration),
+            # The synthetic bundle has a sealed 12-block anchor-motion trace;
+            # the fixture's derived frame must name that same ranked window.
+            blocks=12,
             reps=campaign.IQK_MATCHED_PAIR_REPS)
         envelope = physical_bounds.PhysicalEnvelope(
             shape_id=base.measurement_unit_id, delivered_unit="token",
