@@ -688,6 +688,43 @@ class Pair:
 
 
 @dataclass(frozen=True)
+class CandidateOnlyObservation:
+    """One discovery call compared descriptively with an amortized bank.
+
+    This is intentionally not a :class:`Pair`: no anchor ran in this block and
+    therefore there is no within-block arm order.  Treating ``candidate_only``
+    as a Pair order would either lie about execution or violate Pair's paired
+    design invariant.
+    """
+
+    block_index: int
+    baseline_reference: float
+    candidate: float
+
+    def __post_init__(self) -> None:
+        for name in ("baseline_reference", "candidate"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, (int, float)) \
+                    or value <= 0:
+                raise ValueError(f"CandidateOnlyObservation.{name} must be positive")
+
+    @property
+    def delta(self) -> float:
+        return float(self.candidate) - float(self.baseline_reference)
+
+    @property
+    def relative(self) -> float:
+        return self.delta / float(self.baseline_reference)
+
+    def to_dict(self) -> dict:
+        return {"block_index": self.block_index,
+                "observation_kind": "candidate_only",
+                "baseline_reference": self.baseline_reference,
+                "candidate": self.candidate, "delta": self.delta,
+                "relative": self.relative}
+
+
+@dataclass(frozen=True)
 class T0Outcome:
     """T0's answer, reduced to the one bit the loop branches on, plus the detail."""
 
@@ -930,7 +967,8 @@ def decide(pairs: Sequence[Pair], *, t0: T0Outcome, blocks_precommitted: int,
         **common)
 
 
-def screening_decision(pairs: Sequence[Pair], *, blocks_precommitted: int) -> AcceptDecision:
+def screening_decision(pairs: Sequence[CandidateOnlyObservation], *,
+                       blocks_precommitted: int) -> AcceptDecision:
     """Record a bounded discovery observation without acceptance authority.
 
     This deliberately does not call :func:`decide`: screening has no executed
@@ -939,8 +977,10 @@ def screening_decision(pairs: Sequence[Pair], *, blocks_precommitted: int) -> Ac
     false so callers cannot confuse a cheap screen with a confirmation.
     """
     items = tuple(pairs)
-    if len(items) != blocks_precommitted or not all(isinstance(p, Pair) for p in items):
-        raise AcceptRuleMisuse("screening requires exactly its precommitted Pair blocks")
+    if len(items) != blocks_precommitted or not all(
+            isinstance(p, CandidateOnlyObservation) for p in items):
+        raise AcceptRuleMisuse(
+            "screening requires exactly its precommitted candidate-only observations")
     ordered = tuple(sorted(items, key=lambda p: p.block_index))
     return AcceptDecision(
         keep=False, blocks=len(ordered),
@@ -950,7 +990,7 @@ def screening_decision(pairs: Sequence[Pair], *, blocks_precommitted: int) -> Ac
         min_delta=min(p.delta for p in ordered),
         median_relative=float(median(tuple(p.relative for p in ordered))),
         deltas=tuple(p.delta for p in ordered), relatives=tuple(p.relative for p in ordered),
-        anchors=tuple(p.anchor for p in ordered), orders=tuple(p.order for p in ordered))
+        anchors=tuple(p.baseline_reference for p in ordered), orders=())
 
 
 # =============================================================================
@@ -4225,7 +4265,7 @@ class HostOps:
             report["inference_witness"] = witness
             self._screening_report = report
             center = float(report["baseline_center"])
-            return tuple(Pair(index, center, value, "candidate_only")
+            return tuple(CandidateOnlyObservation(index, center, value)
                          for index, value in enumerate(report["candidate_samples"]))
         anchor_cmd = self._construct(spec, arm="anchor")
         anchor_identity = self._anchor_identity_for_bench(spec)

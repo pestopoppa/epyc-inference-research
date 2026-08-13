@@ -511,9 +511,9 @@ class TestTheDryRunComposesEndToEnd(unittest.TestCase):
 
     def test_screening_is_bounded_nonpromotable_and_skips_t0_settling(self):
         ops = SpyOps(pairs=(
-            campaign.Pair(0, 100.0, 108.0, "candidate_first"),
-            campaign.Pair(1, 100.0, 108.0, "anchor_first"),
-            campaign.Pair(2, 100.0, 108.0, "candidate_first"),
+            campaign.CandidateOnlyObservation(0, 100.0, 108.0),
+            campaign.CandidateOnlyObservation(1, 100.0, 108.0),
+            campaign.CandidateOnlyObservation(2, 100.0, 108.0),
         ))
         ops._screening_report = {
             "candidate_invocations": 3, "anchor_invocations": 0,
@@ -1979,6 +1979,49 @@ class TestExecuteRefusesAnOpsThatCannotFinishARun(unittest.TestCase):
         plan.schedule.assert_called_once_with()
         schedule.orders.assert_called_once_with(built.blocks)
         pairs.assert_called_once_with(run)
+
+    def test_host_screening_returns_truthful_candidate_only_observations(self):
+        model = Path(self.tempdir.name) / "screen.gguf"
+        model.write_bytes(b"screen-model")
+        frame = {
+            "recipe_id": "t1b.llama_cpu.llama_bench_prefill.v1",
+            "backend": "llama_cpu", "model_sha256": campaign.storage.hash_file(model),
+            "instrument_commit": campaign.MEASUREMENT_COMMIT,
+            "production_commit": campaign.PRODUCTION_COMMIT,
+            "boot_sha256": schemas.content_hash({
+                "boot_id": Path("/proc/sys/kernel/random/boot_id")
+                .read_text(encoding="utf-8").strip()}),
+            "reps": 1, "n_prompt": 512, "n_gen": 128,
+        }
+        bank = screening_baseline.BaselineBank(frame, (100.0, 100.0, 100.0), 100.0)
+        built = spec(model=str(model), blocks=3, reps=1, screening_only=True,
+                     screening_baseline=bank)
+        ops = campaign.HostOps(nominal_khz=2_900_000)
+        ops._claim_binding = object()
+        ops._spawner = object()
+        report = {
+            "baseline_center": 100.0, "candidate_samples": [102.0, 99.0, 104.0],
+            "relative_effects": [0.02, -0.01, 0.04], "median_relative": 0.02,
+            "candidate_invocations": 3, "anchor_invocations": 0,
+            "host_noise_policy": "recorded_not_blocking", "non_promotable": True,
+            "nomination": "top_k_candidate_only_not_a_keep",
+            "uncertainty": "screening_noise_unquantified_nonpromotable",
+        }
+        with mock.patch.object(ops, "_construct", return_value=mock.Mock()), \
+                mock.patch.object(ops, "_candidate_sandbox_policy"), \
+                mock.patch.object(campaign.screening_baseline,
+                                  "competing_inference_witness",
+                                  return_value={"competing": False}), \
+                mock.patch.object(campaign.screening_baseline, "screen",
+                                  return_value=dict(report)):
+            observed = ops.run_paired_blocks(built, object(), object())
+        self.assertTrue(all(isinstance(item, campaign.CandidateOnlyObservation)
+                            for item in observed))
+        self.assertTrue(all("order" not in item.to_dict() for item in observed))
+        decision = campaign.screening_decision(observed, blocks_precommitted=3)
+        self.assertFalse(decision.keep)
+        self.assertEqual(decision.orders, ())
+        self.assertEqual(ops._screening_report["anchor_invocations"], 0)
 
     def test_parameter_proposal_rejects_source_prerequisite_package(self):
         package = mock.Mock(
