@@ -3997,13 +3997,13 @@ class HostOps:
             return
         events = self._evaluation_events(spec)
         self._cached_evaluation_events = events
-        # A failed T0 is a real, durable refusal, but it is not a candidate
-        # record.  In particular, there is deliberately no AcceptDecision on
-        # this path; passing ``None`` into least-commitment materialization
-        # turns a truthful T0 failure into a secondary terminal error.  Keep
-        # the already-built T0 event(s) cached for journaling and stop before
-        # deriving any decision-dependent candidate fields.
-        if state == STATE_T0_FAILED:
+        # Evaluation events are durable on every terminal path, but candidate
+        # records and least-commitment verdicts are *decision-derived*.  An
+        # error/refusal has no AcceptDecision, so trying to materialize it
+        # would turn the primary campaign failure into a misleading secondary
+        # CapturePlanError.  Keep the already-built event(s) cached for
+        # journaling, and derive records only from a decided terminal result.
+        if state != STATE_DECIDED:
             return
         if self._build_identity is None or self._build_snapshot is None \
                 or self._t0_request is None or spec.proposal is None:
@@ -4011,12 +4011,7 @@ class HostOps:
         event_ids = tuple(event["event_id"] for event in events)
         event = events[-1] if events else None
         evaluator = self._t0_request.evaluator
-        if state == STATE_DECIDED:
-            status = "evaluating" if decision is not None and decision.keep else "rejected"
-        elif state == STATE_T0_FAILED:
-            status = "invalid"
-        else:
-            status = "evaluating"
+        status = "evaluating" if decision is not None and decision.keep else "rejected"
         derived_tokens = (
             tuple(f"file:{path}" for path in self._source_application.actual_files)
             if self._source_application is not None else ("flag:GGML_IQK",))
