@@ -1041,6 +1041,12 @@ MEASUREMENT_BRANCH = "experimental-v9-autokernel-t0-instrument-20260813"
 MEASUREMENT_COMMIT = "65b35ff4e4d08e78c8c35a13353407866d25237d"
 MEASUREMENT_BUILD_ROOT = os.path.join(MEASUREMENT_REPO, "build-ak-t0-cpu-65b35ff4")
 
+# ``llama-cli`` now starts an embedded HTTP server and talks to it over a
+# loopback socket. Candidate T0 is deliberately network-denied, so use the
+# direct API completion executable for the behavioural probe instead. This is
+# a measurement-tool identity, not a candidate choice.
+T0_GENERATION_TOOL = "llama-completion"
+
 
 def load_calibration_bundle(path: os.PathLike[str] | str) -> LeanCalibration:
     """Load accepted live controls bound to the exact production/instrument pair.
@@ -2238,7 +2244,7 @@ class DryRunOps:
                    "would configure and build with GGML_CCACHE=OFF forced and the load "
                    "average cap as a PRECONDITION (HostTooContended before configure).",
                    build_dir=spec.build_dir,
-                   targets=["llama-cli", "llama-bench", "test-backend-ops"])
+                   targets=[T0_GENERATION_TOOL, "llama-bench", "test-backend-ops"])
         return _DRY_RUN_BUILD
 
     def run_t0(self, spec: CampaignSpec, build: Any) -> T0Outcome:
@@ -2915,7 +2921,7 @@ class HostOps:
                 "no executed evaluator identity was available at window close")
         else:
             for request in requests:
-                tool = request.anchor.tool or "llama-cli"
+                tool = request.anchor.tool or T0_GENERATION_TOOL
                 try:
                     capture = t0_provider.capture_anchor_identity(
                         anchor=self._measurement_anchor_build(tool), tools=self._t0_tools(),
@@ -3068,8 +3074,9 @@ class HostOps:
             build_dir=worktree.default_build_dir(spec.campaign_id, spec.candidate_id),
             actor_worktree=tree.path,
             parallelism=worktree.BuildParallelism(jobs=64, load_average_cap=8.0),
-            targets=("llama-cli", "llama-bench", "test-backend-ops"),
-            cmake_defines=(("LLAMA_FATAL_WARNINGS", "ON"),),
+            targets=(T0_GENERATION_TOOL, "llama-bench", "test-backend-ops"),
+            cmake_defines=(("LLAMA_FATAL_WARNINGS", "ON"),
+                           ("LLAMA_BUILD_EXAMPLES", "ON")),
             cmake="/usr/bin/cmake")
         log_path = os.path.join(spec.build_root, spec.campaign_id,
                                 f"{spec.candidate_id}.log")
@@ -3099,12 +3106,12 @@ class HostOps:
     def _t0_generation_plan(spec: CampaignSpec) -> t0_provider.GenerationPlan:
         """The T0 graph/output probe, bound to this campaign's exact model.
 
-        ``llama-cli`` accepts a prompt without a model argument, then exits
-        before it can construct either a graph or generated output.  T0's
-        backend-op suite is independent of that invocation, so the resulting
-        failure can otherwise look like an empty candidate trace after a
-        successful operator test.  Keep the model in the typed plan rather
-        than relying on an ambient default or a build-local model path.
+        The direct completion executable needs the model explicitly to
+        construct a graph and generate output. Keep it in the typed plan,
+        rather than relying on an ambient default or a build-local model path.
+        ``llama-cli`` is intentionally not used: its current implementation
+        starts a loopback HTTP server, while T0's candidate sandbox is
+        network-denied.
         """
         return t0_provider.GenerationPlan(
             prompt="The capital of France is", prompt_ref="ak-prompt-001",
@@ -3157,7 +3164,8 @@ class HostOps:
         if diff_text.strip():
             raise RuntimeError("parameter T0 evidence refuses a non-empty source diff")
         if self._t0_anchor_binding is None:
-            raise RuntimeError("parameter T0 evidence requires the measured llama-cli anchor")
+            raise RuntimeError(
+                f"parameter T0 evidence requires the measured {T0_GENERATION_TOOL} anchor")
 
         anchor_lib_capture = t0_provider.capture_anchor_identity(
             anchor=self._measurement_anchor_build("libggml.so.0"),
@@ -3298,7 +3306,7 @@ class HostOps:
         """
         bindir = os.path.join(plan.build_dir.path, "bin")
         artifacts = {
-            "llama-cli": os.path.join(bindir, "llama-cli"),
+            T0_GENERATION_TOOL: os.path.join(bindir, T0_GENERATION_TOOL),
             "test-backend-ops": os.path.join(bindir, "test-backend-ops"),
             "libggml.so.0": os.path.join(bindir, "libggml.so.0"),
             "libggml-base.so.0": os.path.join(bindir, "libggml-base.so.0"),
@@ -3307,7 +3315,7 @@ class HostOps:
         for name, path in artifacts.items():
             if not os.path.isfile(path):
                 invalid.append(f"{name}: missing or not a regular file ({path})")
-            elif name in {"llama-cli", "test-backend-ops"} and not os.access(path, os.X_OK):
+            elif name in {T0_GENERATION_TOOL, "test-backend-ops"} and not os.access(path, os.X_OK):
                 invalid.append(f"{name}: not executable ({path})")
         if invalid:
             raise RuntimeError(
@@ -3346,14 +3354,14 @@ class HostOps:
         identity = worktree.build_identity(
             result, candidate_id=spec.candidate_id, campaign_id=spec.campaign_id,
             worktree=tree, snapshot=snapshot,
-            output_binary=artifacts["llama-cli"],
+            output_binary=artifacts[T0_GENERATION_TOOL],
             toolchain="cmake + GNU make",
             libraries={name: artifacts[name] for name in
                        ("libggml.so.0", "libggml-base.so.0")})
         candidate_capture = t0_provider.capture_anchor_identity(
             anchor=t0_provider.AnchorBuild(
                 worktree=tree.path.path, source_commit=tree.head_commit(),
-                binary=artifacts["llama-cli"],
+                binary=artifacts[T0_GENERATION_TOOL],
                 library_path=os.path.join(plan.build_dir.path, "bin")),
             tools=self._t0_tools(), runner=t0_provider.SubprocessRunner(),
             base_env=tuple(sorted(self._construct(spec, arm="candidate").env.items())),
@@ -3361,11 +3369,11 @@ class HostOps:
         identity = replace(identity, linkage_sha256=candidate_capture.linkage_sha256)
         self._build_identity = identity
         early_anchor_capture = t0_provider.capture_anchor_identity(
-            anchor=self._measurement_anchor_build("llama-cli"),
+            anchor=self._measurement_anchor_build(T0_GENERATION_TOOL),
             tools=self._t0_tools(), runner=t0_provider.SubprocessRunner(),
             base_env=tuple(sorted(self._construct(spec, arm="anchor").env.items())),
             parameter_env=spec.t0_parameter_env_for_arm("anchor"))
-        early_anchor = chain.bind_anchor(early_anchor_capture, tool="llama-cli")
+        early_anchor = chain.bind_anchor(early_anchor_capture, tool=T0_GENERATION_TOOL)
         early_request = self._evaluation_request(
             spec, identity=identity, anchor_identity=early_anchor.identity,
             device_state=None,
@@ -3427,7 +3435,7 @@ class HostOps:
                 suite_source_sha256=identity.snapshot_sha256,
                 suite_seed=spec.suite_seed, capabilities=None),
                 dispatch=t0_provider.DispatchTracePlan(derived_surface=spec.t0_ops),
-                anchor=self._measurement_anchor_build("llama-cli"),
+                anchor=self._measurement_anchor_build(T0_GENERATION_TOOL),
                 generation=self._t0_generation_plan(spec),
                 backend=spec.backend,
                 base_env=tuple(sorted(self._construct(spec, arm="anchor").env.items())),
@@ -3440,7 +3448,7 @@ class HostOps:
                 sink=capture_sink,
                 generation_seeds=(42, 42),
                 oracle_ids=(f"oracle://{MEASUREMENT_BRANCH}",))
-        t0_anchor = chain.bind_anchor(anchor_capture, tool="llama-cli")  # seam 3
+        t0_anchor = chain.bind_anchor(anchor_capture, tool=T0_GENERATION_TOOL)  # seam 3
         self._t0_anchor_binding = t0_anchor
         if spec.proposal is not None and spec.proposal.get("change_class") == "parameter":
             derived = self._parameter_t0_evidence(
@@ -3525,12 +3533,12 @@ class HostOps:
         """
         plan = self._build_state["plan"]
         tree = self._build_state["tree"]
-        binary = os.path.join(plan.build_dir.path, "bin", "llama-cli")
+        binary = os.path.join(plan.build_dir.path, "bin", T0_GENERATION_TOOL)
         artifact = chain.measure_artifact_identity(          # seam 2
             source_root=tree.path.path, binary=binary,
             linkage_sha256=candidate_linkage_sha256)
         command = self._construct(spec, arm="candidate")
-        self._recipe_receipts[("T0", anchor_identity.tool or "llama-cli")] = \
+        self._recipe_receipts[("T0", anchor_identity.tool or T0_GENERATION_TOOL)] = \
             command.receipt
         if spec.calibration is None or spec.calibration.evaluation_authority is None:
             raise RuntimeError("live evaluation request requires accepted typed authority")
@@ -3742,7 +3750,7 @@ class HostOps:
         binding = chain.bind_anchor(capture, tool="llama-bench")
         if self._t0_anchor_binding is None:
             raise RuntimeError(
-                "the T1 anchor was requested before T0 captured its llama-cli anchor")
+                f"the T1 anchor was requested before T0 captured its {T0_GENERATION_TOOL} anchor")
         same_build = chain.check_anchor_build_is_one_build(
             (self._t0_anchor_binding, binding))
         if same_build.outcome != schemas.PASS:
@@ -3828,7 +3836,7 @@ class HostOps:
         host_ref = "sha256:" + schemas.content_hash(host_material)
         host_health = self._host_health_close or unknown(
             "host health was not re-attested at window close")
-        anchor_tool = request.anchor.tool or "llama-cli"
+        anchor_tool = request.anchor.tool or T0_GENERATION_TOOL
         anchor_identity_check = self._anchor_close_checks.get(anchor_tool) or unknown(
             f"anchor identity for {anchor_tool} was not re-captured at window close")
         if rate_run is not None:

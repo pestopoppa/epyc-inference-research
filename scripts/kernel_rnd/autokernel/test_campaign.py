@@ -1542,6 +1542,8 @@ class TestExecuteRefusesAnOpsThatCannotFinishARun(unittest.TestCase):
                 campaign.HostOps(nominal_khz=2_900_000).build(spec(), tree), result)
         plan = run.call_args.args[0]
         self.assertEqual(dict(plan.effective_defines)["LLAMA_FATAL_WARNINGS"], "ON")
+        self.assertEqual(dict(plan.effective_defines)["LLAMA_BUILD_EXAMPLES"], "ON")
+        self.assertIn(campaign.T0_GENERATION_TOOL, plan.targets)
 
     def test_failed_build_is_refused_before_artifact_hashing(self):
         """THE BITE: a failed compiler result cannot enter T0 evidence assembly."""
@@ -1574,7 +1576,7 @@ class TestExecuteRefusesAnOpsThatCannotFinishARun(unittest.TestCase):
                 side_effect=AssertionError("artifact hashing must not start")):
             with self.assertRaisesRegex(
                     RuntimeError,
-                    "missing/unusable required build artifacts before artifact hashing.*llama-cli"):
+                    "missing/unusable required build artifacts before artifact hashing.*llama-completion"):
                 ops.run_t0(spec(), succeeded)
 
     def test_executed_t0_constructs_the_complete_cpu_evaluator_policy(self):
@@ -1592,12 +1594,12 @@ class TestExecuteRefusesAnOpsThatCannotFinishARun(unittest.TestCase):
         self.assertEqual(policy.policy_ref, "ak-policy/v1")
 
     def test_t0_generation_plan_binds_the_campaign_model(self):
-        """T0 cannot treat a model-less llama-cli invocation as a graph probe."""
+        """T0 binds the direct no-socket generator to the measured model."""
         built = spec()
         plan = campaign.HostOps._t0_generation_plan(built)
         self.assertEqual(plan.extra_argv, ("-m", built.model))
         invocation = campaign.t0_provider.build_generation_invocation(
-            binary="/tmp/llama-cli", library_path="/tmp", plan=plan, base_env=())
+            binary="/tmp/llama-completion", library_path="/tmp", plan=plan, base_env=())
         self.assertEqual(invocation.argv[invocation.argv.index("-m") + 1], built.model)
 
     def test_t0_capture_sink_is_durable_and_outside_candidate_sandbox(self):
@@ -1625,10 +1627,10 @@ class TestExecuteRefusesAnOpsThatCannotFinishARun(unittest.TestCase):
         ops._build_state = {"tree": tree, "plan": plan}
         anchor_capture = campaign.t0_provider.AnchorCapture(
             source_commit=campaign.MEASUREMENT_COMMIT,
-            binary_sha256=schemas.content_hash({"tool": "llama-cli"}),
+            binary_sha256=schemas.content_hash({"tool": campaign.T0_GENERATION_TOOL}),
             linkage_sha256=schemas.content_hash({"libs": "anchor"}))
         ops._t0_anchor_binding = campaign.chain.bind_anchor(
-            anchor_capture, tool="llama-cli")
+            anchor_capture, tool=campaign.T0_GENERATION_TOOL)
         library_capture = campaign.t0_provider.AnchorCapture(
             source_commit=campaign.MEASUREMENT_COMMIT,
             binary_sha256=schemas.content_hash({"tool": "libggml.so.0"}),
