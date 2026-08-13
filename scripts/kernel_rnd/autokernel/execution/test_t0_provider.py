@@ -729,6 +729,19 @@ class SanitizerAndDiagnosticParsing(unittest.TestCase):
         self.assertEqual(splits, ((0, "CPU", 0),))
         self.assertEqual(nodes[0][1], "MUL_MAT")
 
+    def test_sched_trace_accepts_bare_timestamp_from_durable_completion_capture(self):
+        # llama_completion's stderr uses bare timestamps and can concatenate a
+        # record boundary to the preceding scheduler line when the logger does
+        # not emit a newline.  This is a reduced excerpt of the durable r23
+        # capture, not a synthetic bracketed CLI rendering.
+        trace = ("## SPLIT #0: CPU # 0 inputs0.00.123.678 D \n"
+                 "0.00.123.682 D node #  0 (  GET_ROWS):                 embd "
+                 "(   3K) [  CPU         ] use=2,c=1:\n")
+        emitted, splits, nodes = t0.parse_sched_trace(trace)
+        self.assertTrue(emitted)
+        self.assertEqual(splits, ((0, "CPU", 0),))
+        self.assertEqual(nodes, ((0, "GET_ROWS", "embd", "CPU", ""),))
+
     def test_sched_trace_without_the_marker_reports_no_instrumentation(self):
         emitted, splits, nodes = t0.parse_sched_trace("llama_perf_context_print: load time\n")
         self.assertFalse(emitted)

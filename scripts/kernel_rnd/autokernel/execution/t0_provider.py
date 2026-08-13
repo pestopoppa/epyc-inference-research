@@ -2261,12 +2261,25 @@ def parse_compiler_diagnostics(text: str) -> tuple:
 
 
 _SPLIT_RE = re.compile(r"^## SPLIT #(\d+): (\S+) # (\d+) inputs")
-_NODE_RE = re.compile(r"^node #\s*(\d+) \(\s*(\S+)\s*\):\s+(\S+)\s+\(\s*\S+\s*\)\s+\[\s*(\S+)\s+(\S+)\s*\]")
+_NODE_RE = re.compile(
+    r"^node #\s*(\d+) \(\s*(\S+)\s*\):\s+(\S+)\s+"
+    r"\(\s*\S+\s*\)\s+\[\s*(\S+)(?:\s+(\S+))?\s*\]"
+)
 # ``common_log`` writes debug records as ``[M.ss.mmm.uuu] D <message>`` when
 # timestamps/prefixes are on (the CLI default), and plain ``D <message>`` when
 # timestamps are off.  GGML's scheduler emits one logical line per log call;
 # accept exactly those documented wrappers, then parse the scheduler grammar.
-_DEBUG_LOG_PREFIX_RE = re.compile(r"^(?:\[\d+\.\d{2}\.\d{3}\.\d{3}\]\s+)?D\s+")
+_DEBUG_LOG_TIMESTAMP_RE = r"(?:\[\d+\.\d{2}\.\d{3}\.\d{3}\]|\d+\.\d{2}\.\d{3}\.\d{3})"
+_DEBUG_LOG_PREFIX_RE = re.compile(
+    rf"^(?:{_DEBUG_LOG_TIMESTAMP_RE}\s+)?D\s+"
+)
+# The direct ``llama_completion`` capture writes some scheduler records without
+# a trailing newline: the next bare timestamp is concatenated to the previous
+# record (for example ``...use=2,c=1:0.00.123.682 D node #...``).  Split at
+# those record boundaries before applying the normal per-record grammar.
+_DEBUG_LOG_RECORD_BOUNDARY_RE = re.compile(
+    rf"(?<!^)(?={_DEBUG_LOG_TIMESTAMP_RE}\s+D\s+)"
+)
 
 
 def parse_sched_trace(text: str) -> tuple:
@@ -2287,17 +2300,18 @@ def parse_sched_trace(text: str) -> tuple:
     nodes: list = []
     emitted = False
     for line in clean.splitlines():
-        stripped = _DEBUG_LOG_PREFIX_RE.sub("", line.strip(), count=1)
-        match = _SPLIT_RE.match(stripped)
-        if match:
-            emitted = True
-            splits.append((int(match.group(1)), match.group(2), int(match.group(3))))
-            continue
-        match = _NODE_RE.match(stripped)
-        if match:
-            emitted = True
-            nodes.append((int(match.group(1)), match.group(2), match.group(3),
-                          match.group(4), match.group(5)))
+        for record in _DEBUG_LOG_RECORD_BOUNDARY_RE.split(line):
+            stripped = _DEBUG_LOG_PREFIX_RE.sub("", record.strip(), count=1)
+            match = _SPLIT_RE.match(stripped)
+            if match:
+                emitted = True
+                splits.append((int(match.group(1)), match.group(2), int(match.group(3))))
+                continue
+            match = _NODE_RE.match(stripped)
+            if match:
+                emitted = True
+                nodes.append((int(match.group(1)), match.group(2), match.group(3),
+                              match.group(4), match.group(5) or ""))
     return emitted, tuple(splits), tuple(nodes)
 
 
