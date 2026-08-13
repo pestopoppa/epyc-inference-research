@@ -1060,7 +1060,7 @@ class TestTheAcceptedCalibrationBindsTheLiveRule(unittest.TestCase):
             runtime_source_label_ref="sha256:test", evidence_ref="/durable/test",
             calibration_frame={
                 "recipe_id": campaign.HISTORICAL_CALIBRATED_RECIPE_ID,
-                "prompt_tokens": 512, "reps": 5,
+                "prompt_tokens": 512, "reps": campaign.IQK_MATCHED_PAIR_REPS,
                 "candidate_ggml_iqk": "0", "anchor_ggml_iqk": "0",
             })
         lean = campaign.LeanCalibration(
@@ -1070,10 +1070,11 @@ class TestTheAcceptedCalibrationBindsTheLiveRule(unittest.TestCase):
             production_commit=campaign.PRODUCTION_COMMIT,
             measurement_commit=campaign.MEASUREMENT_COMMIT,
             evidence_ref="/durable/test", evaluation_authority=authority)
-        valid = spec(proposal=iqk_parameter_proposal(), calibration=lean, reps=5)
-        self.assertEqual(valid.reps, 5)
+        valid = spec(proposal=iqk_parameter_proposal(), calibration=lean,
+                     reps=campaign.IQK_MATCHED_PAIR_REPS)
+        self.assertEqual(valid.reps, campaign.IQK_MATCHED_PAIR_REPS)
         with self.assertRaisesRegex(ValueError, "calibration_frame.*anchor recipe"):
-            spec(proposal=iqk_parameter_proposal(), calibration=lean, reps=1)
+            spec(proposal=iqk_parameter_proposal(), calibration=lean, reps=5)
 
     def test_the_v8_constants_are_historical_regression_fixtures(self):
         repo = Path(campaign.__file__).resolve().parents[3]

@@ -367,6 +367,11 @@ AA_EVIDENCE_REF = "data/autokernel_aa_20260804/README.md"
 #: ``--calibration-bundle`` and verifies both source identities first.
 HISTORICAL_CALIBRATION_EVIDENCE_REF = "data/autokernel_controls_3pct_20260805/"
 HISTORICAL_CALIBRATED_RECIPE_ID = "t1b.llama_cpu.llama_bench_prefill.v1"
+# The current governed CPU IQK experiment is a one-invocation paired-block
+# instrument.  This is deliberately separate from CampaignSpec's generic
+# legacy default: the matched-pair producer below binds every executable IQK
+# pair to this value, while unrelated campaign families retain their own frame.
+IQK_MATCHED_PAIR_REPS = 1
 HISTORICAL_CONTRIBUTION_FLOOR = 0.03
 HISTORICAL_B_MIN_BLOCKS = 12
 HISTORICAL_MAX_BLOCKS = 20

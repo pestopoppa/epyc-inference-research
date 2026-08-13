@@ -38,6 +38,13 @@ AA_CONTROL_FALSIFIER = (
     "the required control-integrity gates."
 )
 
+# The live A/A calibration and the ranked CPU-IQK pair are one comparison
+# frame.  r3 established that five repetitions cannot resolve the predeclared
+# 3% contribution floor inside the 20-block ceiling, while the same instrument
+# at one repetition had already supplied usable A/A evidence.  Do not allow a
+# copied manifest to silently select a different repetition regime.
+IQK_MATCHED_PAIR_REPS = campaign.IQK_MATCHED_PAIR_REPS
+
 
 class PreparationError(ValueError):
     pass
@@ -340,6 +347,10 @@ def prepare(raw: Mapping[str, Any]) -> dict[str, Any]:
     if any(isinstance(value, bool) or not isinstance(value, int) or value <= 0
            for value in (blocks, reps)):
         raise PreparationError("blocks and reps must be positive integers")
+    if reps != IQK_MATCHED_PAIR_REPS:
+        raise PreparationError(
+            "CPU-IQK matched pairs require "
+            f"reps={IQK_MATCHED_PAIR_REPS}; got reps={reps}")
     proposal = _load(proposal_path, "intervention proposal")
     # The source proposal is an immutable semantic template. Each real campaign
     # gets fresh identities before every receipt is derived and bound.

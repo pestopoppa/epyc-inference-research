@@ -28,7 +28,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
-from .. import schemas
+from .. import campaign, schemas
 from ..evaluator import api, controls, recipes, statistics
 from . import (control_runner, cpu_region_claim, microbench, physical_bounds,
                powercap_broker, sandbox)
@@ -52,10 +52,10 @@ CALIBRATION_BLOCKS = 200
 NEUTRAL_BLOCKS = 60
 # A calibration licenses a particular comparison frame, not merely a binary.
 # The IQK intervention compares enabled code against the disabled baseline and
-# campaign pairs use five llama-bench repetitions.  Keep the A/A calibration
+# campaign pairs use one llama-bench repetition.  Keep the A/A calibration
 # in that baseline frame: calibrating IQK-on against itself would produce an
 # apparently healthy noise pool whose anchor band cannot govern IQK-off runs.
-CALIBRATION_REPS = 5
+CALIBRATION_REPS = campaign.IQK_MATCHED_PAIR_REPS
 CALIBRATION_IQK = "0"
 CONTROL_EXTENSION_ROUNDS = 1
 CONTROL_EXTENSION_BLOCKS = 5
@@ -328,7 +328,8 @@ def _instrument_receipt_capability(binary: Path) -> schemas.Check:
 def _write_declaration(output_root: Path, *, identity: LiveCampaignIdentity,
                        instrument_sha: str, copy_sha: str,
                        instrument_linkage: str, copy_linkage: str,
-                       toolchain_manifest_sha256: str) -> str:
+                       toolchain_manifest_sha256: str,
+                       sealed_binding: recipes.ToolBinding) -> str:
     """Commit the fresh campaign inputs before the first measurement."""
     source_manifest = {
         "schema": "epyc.autokernel.runtime_source_label.v1",
@@ -340,6 +341,13 @@ def _write_declaration(output_root: Path, *, identity: LiveCampaignIdentity,
         "measurement_toolchain_manifest_sha256": toolchain_manifest_sha256,
         "copied_linkage_sha256": copy_linkage,
         "binary_copy_exact": instrument_sha == copy_sha,
+        # Path equality is load-bearing for A/A: equal bytes at two different
+        # binary/LD_LIBRARY_PATH locations do not measure the same process
+        # frame.  Raw receipts below must repeat these exact paths.
+        "aa_sealed_binding": {
+            "binary_path": sealed_binding.binary,
+            "library_path": sealed_binding.library_path,
+        },
     }
     source_sha = schemas.content_hash(source_manifest)
     _write_json(output_root / "runtime-source-label.json",
@@ -802,6 +810,12 @@ def _measure(*, label: str, blocks: int, claim: object,
              output_root: Path,
              host_state: Callable[..., microbench.HostState],
              identity: LiveCampaignIdentity) -> LiveMaterial:
+    # An A/A vector measures process/path noise as well as binary bytes.  The
+    # sealed copy is therefore BOTH arms whenever their declared factor values
+    # are equal.  Only a real IQK intervention is allowed to retain the
+    # worktree anchor path as the second executable path.
+    if candidate_iqk == anchor_iqk:
+        anchor_binding = candidate_binding
     declared_prompt = CONTROL_PROMPT_BY_LABEL.get(label)
     if declared_prompt != prompt:
         raise ValueError(
@@ -1160,7 +1174,8 @@ def execute(output_root: Path, *, campaign_id: str,
         output_root, identity=identity,
         instrument_sha=instrument_sha, copy_sha=copy_sha,
         instrument_linkage=instrument_linkage, copy_linkage=copy_linkage,
-        toolchain_manifest_sha256=_build_toolchain_manifest(output_root))
+        toolchain_manifest_sha256=_build_toolchain_manifest(output_root),
+        sealed_binding=candidate_binding)
     _write_preflight(output_root, instrument_sha=instrument_sha, copy_sha=copy_sha,
                      host_state=host_state)
     anchor = api.AnchorIdentity(
@@ -1346,6 +1361,12 @@ def evaluate_existing(output_root: Path, *, campaign_id: str) -> dict:
     if _sha256_file(copied_binary) != copy_sha \
             or _sha256_file(INSTRUMENT_BINARY) != runtime.get("measurement_binary_sha256"):
         raise ValueError("measurement binary or its evidence copy changed after capture")
+    expected_aa_binding = {
+        "binary_path": str(copied_binary),
+        "library_path": str(copied_binary.parent),
+    }
+    if runtime.get("aa_sealed_binding") != expected_aa_binding:
+        raise ValueError("runtime source label does not declare the sealed A/A path")
 
     preflight = _load_json(output_root / "preflight.json")
     preflight_checks = preflight.get("checks")
@@ -1385,6 +1406,15 @@ def evaluate_existing(output_root: Path, *, campaign_id: str) -> dict:
         output_root, identity=identity, label="neutral_calibration",
         expected_blocks=NEUTRAL_BLOCKS, prompt=PROMPT_TOKENS,
         candidate_iqk=CALIBRATION_IQK, anchor_iqk=CALIBRATION_IQK)
+    for label, raw in (("aa_calibration", aa_raw),
+                       ("neutral_calibration", neutral_raw)):
+        for arm in ("candidate_receipt", "anchor_receipt"):
+            receipt = raw.get(arm)
+            actual = ({key: receipt.get(key) for key in expected_aa_binding}
+                      if isinstance(receipt, Mapping) else None)
+            if actual != expected_aa_binding:
+                raise ValueError(
+                    f"{label} {arm} is not bound to the declared sealed A/A path")
     declared, rule, construction, split, solve = _campaign_inputs(
         aa, neutral, identity)
     stored_calibration = _load_json(output_root / "calibration.json")

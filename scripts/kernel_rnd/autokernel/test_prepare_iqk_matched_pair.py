@@ -38,7 +38,8 @@ class MatchedPairPreparationTest(unittest.TestCase):
             candidate_id="akc-20260812-1001",
             candidate_ref="registered:ggml_iqk", model=str(self.model),
             proposal=self.intervention,
-            calibration=campaign.load_calibration_bundle(self.calibration))
+            calibration=campaign.load_calibration_bundle(self.calibration),
+            reps=campaign.IQK_MATCHED_PAIR_REPS)
         envelope = physical_bounds.PhysicalEnvelope(
             shape_id=base.measurement_unit_id, delivered_unit="token",
             flops_per_unit=1.0, bytes_per_unit=1.0,
@@ -81,7 +82,7 @@ class MatchedPairPreparationTest(unittest.TestCase):
             "intervention_campaign_id": self.intervention["campaign_id"],
             "intervention_proposal_id": self.intervention["proposal_id"],
             "control_proposal_id": self.control["proposal_id"],
-            "blocks": 10, "reps": 5,
+            "blocks": 10, "reps": campaign.IQK_MATCHED_PAIR_REPS,
             "intervention": {
                 "campaign_id": self.intervention["campaign_id"],
                 "candidate_id": self.intervention_plan["candidate_id"],
@@ -137,6 +138,12 @@ class MatchedPairPreparationTest(unittest.TestCase):
             frames.append(raw["factors"])
         changed = [key for key in frames[0] if frames[0][key] != frames[1][key]]
         self.assertEqual(changed, ["ggml_iqk"])
+
+    def test_pair_refuses_a_noncanonical_repetition_frame(self):
+        raw = self.manifest()
+        raw["reps"] = 5
+        with self.assertRaisesRegex(P.PreparationError, "require reps=1"):
+            P.prepare(raw)
 
     def test_provider_is_rebound_to_current_calibration_anchor(self):
         result = P.prepare(self.manifest())
