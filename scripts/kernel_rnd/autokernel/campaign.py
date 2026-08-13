@@ -2578,8 +2578,8 @@ class DryRunOps:
 
     def build(self, spec: CampaignSpec, tree: Any) -> Any:
         self._step("build",
-                   "would configure and build with GGML_CCACHE=OFF forced and the load "
-                   "average cap as a PRECONDITION (HostTooContended before configure).",
+                   "would configure and build with GGML_CCACHE=OFF forced; ordinary host "
+                   "load is recorded as noise and does not delay the build.",
                    build_dir=spec.build_dir,
                    targets=[T0_GENERATION_TOOL, "llama-bench", "test-backend-ops"])
         return _DRY_RUN_BUILD
@@ -2604,6 +2604,19 @@ class DryRunOps:
     def run_paired_blocks(self, spec: CampaignSpec, build: Any,
                           claim: Any) -> Optional[Sequence[Pair]]:
         rendered = render_bench_commands(spec)
+        if spec.screening_only:
+            assert spec.screening_baseline is not None
+            self._step(
+                "paired_blocks",
+                f"would run exactly {spec.blocks} candidate-only discovery calls against "
+                "the sealed reusable baseline bank; zero anchors, no T0, no settling, "
+                "and no promotion authority.",
+                candidate_invocations=spec.blocks, anchor_invocations=0,
+                baseline_sha256=spec.screening_baseline.to_dict()["baseline_sha256"],
+                candidate_argv=rendered["candidate"]["argv"],
+                candidate_env=rendered["candidate"]["env"],
+                ordinary_load_policy="recorded_not_blocking")
+            return None
         self._step(
             "paired_blocks",
             f"would run {spec.blocks} PRE-COMMITTED alternating paired blocks "
@@ -2670,8 +2683,14 @@ def render_bench_commands(spec: CampaignSpec, *,
     """
     out: dict = {}
     tool = spec.recipe.tool
+    runtime_parameter_screen = (
+        spec.screening_only
+        and spec.proposal is not None
+        and spec.proposal["change_class"] == "parameter"
+    )
     for arm, root in (("anchor", MEASUREMENT_BUILD_ROOT),
-                      ("candidate", spec.build_dir)):
+                      ("candidate", (MEASUREMENT_BUILD_ROOT
+                                     if runtime_parameter_screen else spec.build_dir))):
         # Rendering is a preview over placeholder roots; both the binary and
         # library directory are intentionally under the binding source root.
         # The live candidate path is bound as an external build in _construct,
@@ -5653,7 +5672,9 @@ def main(argv: Optional[Sequence[str]] = None, *, out: Optional[Any] = None,
     if spec.screening_only:
         print("  authority   SCREENING_ONLY / NON_PROMOTABLE: no T0, stabilization, "
               "KEEP, archive, or promotion", file=detail_stream)
-    if spec.calibration is None:
+        print("  accept      candidate-only top-K nomination under unquantified noise; "
+              "strict confirmation required", file=detail_stream)
+    elif spec.calibration is None:
         print("  accept      UNCALIBRATED CELL — dry-run composition only; live ranking "
               "will refuse", file=detail_stream)
     else:
@@ -5662,8 +5683,9 @@ def main(argv: Optional[Sequence[str]] = None, *, out: Optional[Any] = None,
         print(f"  calibration B_min={spec.calibration.b_min_blocks}, "
               f"MDE={spec.calibration.mde:.4%}: "
               f"{spec.calibration.evidence_ref}", file=detail_stream)
-    print(f"  anchor movement bound: {spec.drift_bound:.4%} from {AA_EVIDENCE_REF}",
-          file=detail_stream)
+    if not spec.screening_only:
+        print(f"  anchor movement bound: {spec.drift_bound:.4%} from {AA_EVIDENCE_REF}",
+              file=detail_stream)
     print("", file=detail_stream)
 
     try:

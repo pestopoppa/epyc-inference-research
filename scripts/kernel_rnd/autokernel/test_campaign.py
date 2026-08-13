@@ -563,6 +563,42 @@ class TestTheDryRunComposesEndToEnd(unittest.TestCase):
              "prove_production_unchanged", "journal"],
         )
 
+    def test_parameter_screen_dry_run_describes_three_calls_and_zero_anchors(self):
+        base = screening_bank()
+        bank = screening_baseline.BaselineBank(
+            {**base.frame, "anchor_ggml_iqk": "0"},
+            base.anchor_samples, base.sentinel_before,
+            base.anchor_command, base.anchor_artifacts)
+        result, ops, text = self.compose(
+            blocks=3, proposal=iqk_parameter_proposal(),
+            screening_only=True, screening_baseline=bank)
+        self.assertEqual(result.state, campaign.STATE_COMPOSED)
+        self.assertNotIn("create_worktree", ops.calls)
+        self.assertNotIn("build", ops.calls)
+        self.assertIn("candidate-only discovery calls", text)
+        self.assertIn("anchor_invocations: 0", text)
+        self.assertIn(campaign.MEASUREMENT_BUILD_ROOT + "/bin/llama-bench", text)
+        self.assertNotIn("/ak-build/ak-test/akc-test/bin/llama-bench", text)
+
+    def test_source_screen_still_builds_an_isolated_candidate(self):
+        ops = SpyOps(pairs=(
+            campaign.CandidateOnlyObservation(0, 100.0, 108.0),
+            campaign.CandidateOnlyObservation(1, 100.0, 108.0),
+            campaign.CandidateOnlyObservation(2, 100.0, 108.0),
+        ))
+        campaign.run_campaign(
+            spec(blocks=3, proposal=proposal_manifest(), screening_only=True,
+                 screening_baseline=screening_bank()), ops)
+        for step in ("create_worktree", "apply_candidate", "build"):
+            self.assertIn(step, ops.calls)
+
+    def test_non_screen_parameter_campaign_still_builds_and_runs_t0(self):
+        ops = SpyOps(pairs=pairs_from_positions(
+            TG128_OVER_TEN_POSITIONS, candidate_factor=1.08, orders=BALANCED))
+        campaign.run_campaign(spec(proposal=iqk_parameter_proposal()), ops)
+        for step in ("create_worktree", "apply_candidate", "build", "run_t0"):
+            self.assertIn(step, ops.calls)
+
     def test_screening_refuses_more_than_three_blocks(self):
         with self.assertRaisesRegex(ValueError, "capped at 3"):
             spec(blocks=4, screening_only=True, screening_baseline=screening_bank())
