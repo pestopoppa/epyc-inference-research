@@ -80,6 +80,34 @@ class ProgressionTest(unittest.TestCase):
             self.assertEqual(doc["unexplored"], [])
             self.assertFalse(doc["promotion_claim"])
 
+    def test_five_call_gpu_retest_supersedes_three_call_screen(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            screens = root / "screens"
+            for campaign, calls, effect, effects in (
+                    ("poll-s1", 3, .09, [.08, .09, .10]),
+                    ("poll-s2", 5, -.01, [-.02, .40, -.01, .35, -.15])):
+                result = screens / campaign / "result.json"
+                result.parent.mkdir(parents=True)
+                result.write_text(json.dumps({
+                    "schema": "epyc.autokernel.gpu_candidate_only_screen.v2",
+                    "campaign_id": campaign, "non_promotable": True,
+                    "promotion_claim": False, "ok": True, "state": "decided",
+                    "candidate_invocations": calls, "anchor_invocations": calls,
+                    "hip_residency_proved": True, "median_relative": effect,
+                    "relative_effects": effects,
+                    "cpu_overlap_policy": "allowed_discovery_noise",
+                    "sole_factor": {"name": "gpu_poll", "anchor": 50,
+                                    "candidate": 0},
+                }))
+            doc = progression.build_progression(root)
+            self.assertEqual(len(doc["candidates"]), 1)
+            candidate = doc["candidates"][0]
+            self.assertEqual(candidate["effect_fraction"], -.01)
+            self.assertEqual(candidate["stage"], "inconclusive")
+            self.assertIn("5+5", candidate["confidence"])
+            self.assertEqual(candidate["evidence"][0]["campaign_id"], "poll-s2")
+
 
 if __name__ == "__main__":
     unittest.main()

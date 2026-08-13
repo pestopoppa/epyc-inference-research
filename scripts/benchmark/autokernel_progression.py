@@ -79,13 +79,15 @@ def _cpu_screen(path: Path, receipt: dict[str, Any]) -> dict[str, Any] | None:
 
 def _gpu_screen(path: Path, receipt: dict[str, Any]) -> dict[str, Any] | None:
     factor = receipt.get("sole_factor") or receipt.get("sole_build_factor")
+    candidate_calls = receipt.get("candidate_invocations")
+    anchor_calls = receipt.get("anchor_invocations")
     if not (receipt.get("schema") in {
                 "epyc.autokernel.gpu_candidate_only_screen.v1",
                 "epyc.autokernel.gpu_candidate_only_screen.v2"}
             and receipt.get("non_promotable") is True
             and receipt.get("ok") is True and receipt.get("state") == "decided"
-            and receipt.get("candidate_invocations") == 3
-            and receipt.get("anchor_invocations") == 3
+            and candidate_calls in {3, 5, 9}
+            and anchor_calls == candidate_calls
             and receipt.get("hip_residency_proved") is True
             and isinstance(factor, dict)
             and isinstance(receipt.get("median_relative"), (int, float))):
@@ -109,14 +111,16 @@ def _gpu_screen(path: Path, receipt: dict[str, Any]) -> dict[str, Any] | None:
         and (sign_conflict or (effect_spread is not None and effect_spread >= 0.10))
     )
     stage = "inconclusive" if noisy_overlap else "candidate"
-    confidence = "directional / unquantified noise (3+3 calls; HIP resident)"
+    confidence = (f"directional / unquantified noise ({anchor_calls}+{candidate_calls} "
+                  "calls; HIP resident)")
     current_gate = "correctness + strict matched confirmation"
     next_action = "Confirm correctness, then run promotion-grade paired evidence."
     if noisy_overlap:
         conflict = "sign-conflicted" if sign_conflict else "high-dispersion"
         spread = f"; {effect_spread * 100:.2f} pp spread" if effect_spread is not None else ""
         confidence = (
-            f"inconclusive: CPU-overlap discovery noise; {conflict} 3+3 vector{spread}"
+            f"inconclusive: CPU-overlap discovery noise; {conflict} "
+            f"{anchor_calls}+{candidate_calls} vector{spread}"
         )
         current_gate = "clean/windowed discovery retest"
         next_action = (

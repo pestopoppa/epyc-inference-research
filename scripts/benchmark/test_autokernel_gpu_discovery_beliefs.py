@@ -52,6 +52,7 @@ def baseline_body() -> dict:
                         "anchor": "OFF", "candidate": "ON"},
         "anchor_identity": identity("anchor"),
         "candidate_identity": identity("candidate"),
+        "anchor_invocations": 3,
         "anchor_samples": samples, "anchor_runs": runs(samples),
     }
 
@@ -114,6 +115,27 @@ class TestGpuDiscoveryBeliefs(unittest.TestCase):
         old["campaign_id"] = "ak-gpu-screen-s2-pre-hook"
         self.assertNotIn("belief_measurements", old)
         self.assertNotIn("baseline_sha256", old)
+
+    def test_five_call_retest_binds_dynamic_reps(self) -> None:
+        body = baseline_body()
+        body["anchor_invocations"] = 5
+        body["anchor_samples"] = [100.0, 101.0, 102.0, 103.0, 104.0]
+        body["anchor_runs"] = runs(body["anchor_samples"])
+        bank = beliefs.attach_baseline_beliefs(body, producer_path=PRODUCER)
+        candidate = result_body(bank)
+        candidate["anchor_invocations"] = 5
+        candidate["candidate_invocations"] = 5
+        candidate["candidate_samples"] = [110.0, 111.0, 112.0, 113.0, 114.0]
+        candidate["candidate_runs"] = runs(candidate["candidate_samples"])
+        candidate["baseline_center"] = sum(bank["anchor_samples"]) / 5
+        candidate["relative_effects"] = [
+            (sample - candidate["baseline_center"]) / candidate["baseline_center"]
+            for sample in candidate["candidate_samples"]]
+        candidate["median_relative"] = sorted(candidate["relative_effects"])[2]
+        result = beliefs.attach_result_beliefs(
+            candidate, bank=bank, producer_path=PRODUCER)
+        self.assertEqual(bank["belief_measurements"][0]["reps"], 5)
+        self.assertEqual(result["belief_measurements"][0]["reps"], 5)
 
     def test_result_refuses_a_tampered_bank_or_derived_effect(self) -> None:
         bank = beliefs.attach_baseline_beliefs(

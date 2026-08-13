@@ -83,6 +83,7 @@ def artifacts(build: Path) -> dict:
 def build_identity(build: Path) -> dict:
     identity = {
         "source_commit": SOURCE_COMMIT,
+        "hip_graphs": cache_bool(build, "GGML_HIP_GRAPHS"),
         "rocwmma_fattn": cache_bool(build, "GGML_HIP_ROCWMMA_FATTN"),
         "mmq_mfma": cache_bool(build, "GGML_HIP_MMQ_MFMA"),
         "artifacts": artifacts(build),
@@ -101,7 +102,11 @@ def _kfd_pids() -> tuple[int, ...]:
 def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
            flash_attention: bool, campaign_id: str,
            cpu_journal: cpu_region_claim.RegionClaimJournal,
-           allow_small_model_cpu_overlap: bool = False) -> dict:
+           allow_small_model_cpu_overlap: bool = False,
+           threads: int = 8, batch: int = 512, ubatch: int = 512,
+           mmap: bool = True, no_op_offload: bool = False,
+           split_mode: str = "layer", no_kv_offload: bool = False,
+           poll: int = 50) -> dict:
     """Run one model load/measurement while excluding CPU model calls only."""
     if allow_small_model_cpu_overlap:
         model_bytes = model.stat().st_size
@@ -122,7 +127,9 @@ def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
                 })
         result = _invoke_locked(
             build=build, model=model, seed=seed, baseline_vram=baseline_vram,
-            flash_attention=flash_attention)
+            flash_attention=flash_attention, threads=threads, ubatch=ubatch,
+            batch=batch, mmap=mmap, no_op_offload=no_op_offload,
+            split_mode=split_mode, no_kv_offload=no_kv_offload, poll=poll)
         result["inference_call_window"] = None
         result["cpu_coverage"] = {
             "schema": "epyc.autokernel.discovery_cpu_overlap.v1",
@@ -153,7 +160,9 @@ def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
                 coverage_receipt = coverage.to_dict()
             result = _invoke_locked(
                 build=build, model=model, seed=seed, baseline_vram=baseline_vram,
-                flash_attention=flash_attention)
+                flash_attention=flash_attention, threads=threads, ubatch=ubatch,
+                batch=batch, mmap=mmap, no_op_offload=no_op_offload,
+                split_mode=split_mode, no_kv_offload=no_kv_offload, poll=poll)
             if getattr(coverage, "borrowed", False):
                 coverage.validate()
         finally:
@@ -170,11 +179,19 @@ def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
 
 
 def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
-                   flash_attention: bool) -> dict:
+                   flash_attention: bool, threads: int = 8, ubatch: int = 512,
+                   batch: int = 512, mmap: bool = True,
+                   no_op_offload: bool = False, split_mode: str = "layer",
+                   no_kv_offload: bool = False, poll: int = 50) -> dict:
     binary = build / "bin" / "llama-bench"
     argv = ("taskset", "-c", CPU_LIST, "numactl", "--interleave=all", str(binary),
             "-m", str(model), "-p", "512", "-n", "0", "-r", "1", "-ngl", "99",
             "-fa", "on" if flash_attention else "off",
+            "-t", str(threads), "-b", str(batch), "-ub", str(ubatch),
+            "-mmp", "1" if mmap else "0",
+            "-nopo", "1" if no_op_offload else "0", "-sm", split_mode,
+            "-nkvo", "1" if no_kv_offload else "0",
+            "--poll", str(poll),
             "--autokernel-harden", str(seed), "-o", "jsonl")
     env = {**os.environ, "LD_LIBRARY_PATH": f"{binary.parent}:/opt/rocm/lib"}
     process = subprocess.Popen(argv, env=env, stdin=subprocess.DEVNULL,
@@ -219,6 +236,17 @@ def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
     if (row.get("n_prompt") != 512 or row.get("n_gen") != 0
             or row.get("flash_attn") != expected_flash):
         raise RuntimeError("GPU discovery result differs from the sealed pp512 frame")
+    expected = {
+        "n_threads": threads, "n_batch": batch, "n_ubatch": ubatch,
+        "use_mmap": mmap, "no_op_offload": 1 if no_op_offload else 0,
+        "split_mode": split_mode,
+        "no_kv_offload": no_kv_offload,
+        "poll": poll,
+    }
+    mismatched = {key: (row.get(key), value) for key, value in expected.items()
+                  if row.get(key) != value}
+    if mismatched:
+        raise RuntimeError(f"GPU discovery result differs from sealed runtime config: {mismatched}")
     if not any(sample["owned_kfd_pids"] for sample in samples):
         raise RuntimeError("GPU discovery window has no owned KFD residency sample")
     if max(sample["vram_used_bytes"] for sample in samples) <= baseline_vram:
@@ -261,6 +289,66 @@ def factor_spec(*, factor: str, anchor_build: Path, candidate_build: Path,
             "name": "GGML_HIP_ROCWMMA_FATTN", "anchor": "OFF", "candidate": "ON",
             "anchor_flash_attention": True, "candidate_flash_attention": True,
         }
+    if factor == "hip_graphs":
+        if anchor_identity["rocwmma_fattn"] != candidate_identity["rocwmma_fattn"]:
+            raise RuntimeError("HIP graphs arms must keep ROCWMMA_FATTN identical")
+        if anchor_identity["mmq_mfma"] != candidate_identity["mmq_mfma"]:
+            raise RuntimeError("HIP graphs arms must keep MMQ_MFMA identical")
+        if anchor_identity["hip_graphs"] is not True or candidate_identity["hip_graphs"] is not False:
+            raise RuntimeError("sole factor must be GGML_HIP_GRAPHS ON->OFF")
+        return {
+            "name": "GGML_HIP_GRAPHS", "anchor": "ON", "candidate": "OFF",
+            "anchor_flash_attention": True, "candidate_flash_attention": True,
+        }
+    if factor in {"helper_threads", "helper_threads_12", "helper_threads_16",
+                  "helper_threads_24", "batch", "batch_up", "ubatch", "ubatch_up",
+                  "mmap", "op_offload", "split_row", "kv_offload", "poll_zero"}:
+        if anchor_build != candidate_build or anchor_identity != candidate_identity:
+            raise RuntimeError(f"{factor} screen requires one identical sealed build")
+        configs = {
+            "helper_threads": ("gpu_helper_threads", 8, 4),
+            "helper_threads_12": ("gpu_helper_threads", 8, 12),
+            "helper_threads_16": ("gpu_helper_threads", 8, 16),
+            "helper_threads_24": ("gpu_helper_threads", 8, 24),
+            "batch": ("batch_size", 512, 256),
+            "batch_up": ("batch_size", 512, 1024),
+            "ubatch": ("ubatch_size", 512, 256),
+            "ubatch_up": ("ubatch_size", 512, 1024),
+            "mmap": ("mmap", "ON", "OFF"),
+            "op_offload": ("op_offload", "ON", "OFF"),
+            "split_row": ("split_mode", "layer", "row"),
+            "kv_offload": ("kv_offload", "ON", "OFF"),
+            "poll_zero": ("gpu_poll", 50, 0),
+        }
+        name, anchor, candidate = configs[factor]
+        result = {"name": name, "anchor": anchor, "candidate": candidate,
+                "anchor_flash_attention": True, "candidate_flash_attention": True,
+                "anchor_threads": 8,
+                "candidate_threads": (4 if factor == "helper_threads" else
+                                      12 if factor == "helper_threads_12" else
+                                      16 if factor == "helper_threads_16" else 8),
+                "anchor_batch": 512,
+                "candidate_batch": (256 if factor == "batch" else
+                                    1024 if factor == "batch_up" else 512),
+                "anchor_ubatch": 512,
+                "candidate_ubatch": (256 if factor == "ubatch" else
+                                     1024 if factor == "ubatch_up" else 512),
+                "anchor_mmap": True, "candidate_mmap": False if factor == "mmap" else True}
+        if factor == "op_offload":
+            result["anchor_no_op_offload"] = False
+            result["candidate_no_op_offload"] = True
+        if factor == "split_row":
+            result["anchor_split_mode"] = "layer"
+            result["candidate_split_mode"] = "row"
+        if factor == "kv_offload":
+            result["anchor_no_kv_offload"] = False
+            result["candidate_no_kv_offload"] = True
+        if factor == "helper_threads_24":
+            result["candidate_threads"] = 24
+        if factor == "poll_zero":
+            result["anchor_poll"] = 50
+            result["candidate_poll"] = 0
+        return result
     raise RuntimeError(f"unsupported GPU discovery factor: {factor}")
 
 
@@ -288,8 +376,24 @@ def preflight(args: argparse.Namespace) -> dict:
         "sole_factor": {key: factor[key] for key in ("name", "anchor", "candidate")},
         "anchor_flash_attention": factor["anchor_flash_attention"],
         "candidate_flash_attention": factor["candidate_flash_attention"],
+        "anchor_threads": factor.get("anchor_threads", 8),
+        "candidate_threads": factor.get("candidate_threads", 8),
+        "anchor_batch": factor.get("anchor_batch", 512),
+        "candidate_batch": factor.get("candidate_batch", 512),
+        "anchor_ubatch": factor.get("anchor_ubatch", 512),
+        "candidate_ubatch": factor.get("candidate_ubatch", 512),
+        "anchor_mmap": factor.get("anchor_mmap", True),
+        "candidate_mmap": factor.get("candidate_mmap", True),
+        "anchor_no_op_offload": factor.get("anchor_no_op_offload", False),
+        "candidate_no_op_offload": factor.get("candidate_no_op_offload", False),
+        "anchor_split_mode": factor.get("anchor_split_mode", "layer"),
+        "candidate_split_mode": factor.get("candidate_split_mode", "layer"),
+        "anchor_no_kv_offload": factor.get("anchor_no_kv_offload", False),
+        "candidate_no_kv_offload": factor.get("candidate_no_kv_offload", False),
+        "anchor_poll": factor.get("anchor_poll", 50),
+        "candidate_poll": factor.get("candidate_poll", 50),
         "frame": "pp512-ngl99",
-        "invocations": {"anchor": 3, "candidate": 3},
+        "invocations": {"anchor": args.calls, "candidate": args.calls},
         "inference_executed": False,
     }
 
@@ -324,9 +428,16 @@ def run(args: argparse.Namespace) -> dict:
             build=anchor_build, model=model, seed=args.seed + i,
             baseline_vram=baseline_vram,
             flash_attention=sealed["anchor_flash_attention"],
+            threads=sealed["anchor_threads"], ubatch=sealed["anchor_ubatch"],
+            batch=sealed["anchor_batch"],
+            mmap=sealed["anchor_mmap"],
+            no_op_offload=sealed["anchor_no_op_offload"],
+            split_mode=sealed["anchor_split_mode"],
+            no_kv_offload=sealed["anchor_no_kv_offload"],
+            poll=sealed["anchor_poll"],
             campaign_id=args.campaign_id, cpu_journal=cpu_journal,
             allow_small_model_cpu_overlap=args.allow_small_model_cpu_overlap)
-            for i in range(3)]
+            for i in range(args.calls)]
         bank_body = {
             "schema": SCHEMA_BANK, "campaign_id": args.campaign_id,
             "status": "complete", "started_at": started_at, "ended_at": utc_now(),
@@ -337,6 +448,7 @@ def run(args: argparse.Namespace) -> dict:
                       "source_commit": SOURCE_COMMIT, "cpu_list": CPU_LIST,
                       "device": "AMD Instinct MI210", "architecture": "gfx90a"},
             "sole_factor": sole_factor,
+            "anchor_invocations": args.calls,
             "anchor_identity": anchor_identity,
             "candidate_identity": candidate_identity,
             "anchor_samples": [run["metric"] for run in anchor_runs],
@@ -346,13 +458,20 @@ def run(args: argparse.Namespace) -> dict:
             bank_body, producer_path=Path(__file__).resolve())
         atomic_json(out / "baseline-bank.json", bank)
         candidate_runs = [invoke(
-            build=candidate_build, model=model, seed=args.seed + 3 + i,
+            build=candidate_build, model=model, seed=args.seed + args.calls + i,
             baseline_vram=baseline_vram,
             flash_attention=sealed["candidate_flash_attention"],
+            threads=sealed["candidate_threads"], ubatch=sealed["candidate_ubatch"],
+            batch=sealed["candidate_batch"],
+            mmap=sealed["candidate_mmap"],
+            no_op_offload=sealed["candidate_no_op_offload"],
+            split_mode=sealed["candidate_split_mode"],
+            no_kv_offload=sealed["candidate_no_kv_offload"],
+            poll=sealed["candidate_poll"],
             campaign_id=args.campaign_id, cpu_journal=cpu_journal,
             allow_small_model_cpu_overlap=args.allow_small_model_cpu_overlap)
-            for i in range(3)]
-        center = sum(bank["anchor_samples"]) / 3
+            for i in range(args.calls)]
+        center = sum(bank["anchor_samples"]) / len(bank["anchor_samples"])
         values = [run["metric"] for run in candidate_runs]
         effects = [(value - center) / center for value in values]
         numeric = sampler.stop().to_dict()
@@ -364,7 +483,7 @@ def run(args: argparse.Namespace) -> dict:
             "state": "decided", "ok": True, "non_promotable": True,
             "nomination": "top_k_candidate_only_not_a_keep",
             "baseline_sha256": bank["baseline_sha256"],
-            "anchor_invocations": 3, "candidate_invocations": 3,
+            "anchor_invocations": args.calls, "candidate_invocations": args.calls,
             "baseline_center": center, "candidate_samples": values,
             "relative_effects": effects, "median_relative": median(effects),
             "host_noise_policy": "ordinary_host_activity_recorded_not_blocking",
@@ -409,11 +528,17 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--model", required=True)
     result.add_argument("--output-dir", required=True)
     result.add_argument("--campaign-id", required=True)
-    result.add_argument("--factor", choices=("mmq_mfma", "flash_attention", "rocwmma_fattn"),
+    result.add_argument("--factor", choices=("mmq_mfma", "flash_attention", "rocwmma_fattn",
+                                             "hip_graphs", "helper_threads", "helper_threads_12",
+                                             "helper_threads_16", "helper_threads_24", "batch",
+                                             "batch_up", "ubatch", "ubatch_up", "mmap",
+                                             "op_offload", "split_row", "kv_offload", "poll_zero"),
                         default="mmq_mfma")
     result.add_argument("--preflight-only", action="store_true")
     result.add_argument("--preflight-output")
     result.add_argument("--seed", type=int, default=8613)
+    result.add_argument("--calls", type=int, choices=(3, 5, 9), default=3,
+                        help="fresh invocations per arm (discovery evidence only)")
     result.add_argument("--allow-small-model-cpu-overlap", action="store_true",
                         help="nonpromotable discovery only: treat CPU inference as noise "
                              "for models no larger than the sealed small-model limit")

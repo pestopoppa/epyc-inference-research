@@ -6,13 +6,14 @@ from unittest import mock
 from scripts.benchmark import run_autokernel_gpu_discovery as gpu
 
 
-def _build(root: Path, *, rocwmma: str, mfma: str) -> Path:
+def _build(root: Path, *, rocwmma: str, mfma: str, graphs: str = "ON") -> Path:
     build = root / f"build-{rocwmma}-{mfma}"
     bindir = build / "bin"
     bindir.mkdir(parents=True)
     (build / "CMakeCache.txt").write_text(
         f"GGML_HIP_ROCWMMA_FATTN:BOOL={rocwmma}\n"
-        f"GGML_HIP_MMQ_MFMA:BOOL={mfma}\n", encoding="utf-8")
+        f"GGML_HIP_MMQ_MFMA:BOOL={mfma}\n"
+        f"GGML_HIP_GRAPHS:BOOL={graphs}\n", encoding="utf-8")
     binary = bindir / "llama-bench"
     binary.write_bytes(b"sealed-binary")
     binary.chmod(0o755)
@@ -35,7 +36,8 @@ class TestGpuDiscoveryBuildIdentity(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             build = _build(Path(directory), rocwmma="ON", mfma="OFF")
             (build / "CMakeCache.txt").write_text(
-                "GGML_HIP_ROCWMMA_FATTN:BOOL=ON\n", encoding="utf-8")
+                "GGML_HIP_ROCWMMA_FATTN:BOOL=ON\n"
+                "GGML_HIP_GRAPHS:BOOL=ON\n", encoding="utf-8")
             with self.assertRaisesRegex(RuntimeError, "GGML_HIP_MMQ_MFMA"):
                 gpu.build_identity(build)
 
@@ -85,6 +87,37 @@ class TestGpuDiscoveryBuildIdentity(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "MMQ_MFMA=OFF"):
                 gpu.factor_spec(
                     factor="rocwmma_fattn", anchor_build=anchor,
+                    candidate_build=candidate,
+                    anchor_identity=gpu.build_identity(anchor),
+                    candidate_identity=gpu.build_identity(candidate))
+
+    def test_hip_graphs_factor_keeps_other_compile_factors_fixed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            anchor = _build(root / "anchor", rocwmma="ON", mfma="OFF",
+                            graphs="ON").resolve()
+            candidate = _build(root / "candidate", rocwmma="ON", mfma="OFF",
+                               graphs="OFF").resolve()
+            factor = gpu.factor_spec(
+                factor="hip_graphs", anchor_build=anchor,
+                candidate_build=candidate,
+                anchor_identity=gpu.build_identity(anchor),
+                candidate_identity=gpu.build_identity(candidate))
+        self.assertEqual(factor["name"], "GGML_HIP_GRAPHS")
+        self.assertEqual((factor["anchor"], factor["candidate"]), ("ON", "OFF"))
+        self.assertTrue(factor["anchor_flash_attention"])
+        self.assertTrue(factor["candidate_flash_attention"])
+
+    def test_hip_graphs_factor_refuses_other_compile_factor_change(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            anchor = _build(root / "anchor", rocwmma="ON", mfma="OFF",
+                            graphs="ON").resolve()
+            candidate = _build(root / "candidate", rocwmma="OFF", mfma="OFF",
+                               graphs="OFF").resolve()
+            with self.assertRaisesRegex(RuntimeError, "ROCWMMA_FATTN identical"):
+                gpu.factor_spec(
+                    factor="hip_graphs", anchor_build=anchor,
                     candidate_build=candidate,
                     anchor_identity=gpu.build_identity(anchor),
                     candidate_identity=gpu.build_identity(candidate))

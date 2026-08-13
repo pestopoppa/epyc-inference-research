@@ -22,7 +22,7 @@ RESULT_SCHEMA = "epyc.autokernel.gpu_candidate_only_screen.v2"
 PRODUCER_ID = "scripts.benchmark.run_autokernel_gpu_discovery/v3"
 PRODUCER_PATH = "scripts/benchmark/run_autokernel_gpu_discovery.py"
 AUTHORITY = "nonpromotable_candidate_only_discovery"
-REPS_BASIS = "scored:three candidate-only MI210 llama-bench invocations"
+ALLOWED_DISCOVERY_REPS = {3, 5, 9}
 
 
 class BeliefRefused(ValueError):
@@ -43,10 +43,10 @@ def _mapping(value: Any, label: str) -> Mapping[str, Any]:
     return value
 
 
-def _samples(value: Any, label: str) -> list[float]:
+def _samples(value: Any, label: str, *, expected: int) -> list[float]:
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes)) \
-            or len(value) != 3:
-        raise BeliefRefused(f"{label} must contain exactly three samples")
+            or len(value) != expected:
+        raise BeliefRefused(f"{label} must contain exactly {expected} samples")
     samples = []
     for index, item in enumerate(value):
         if isinstance(item, bool) or not isinstance(item, (int, float)) \
@@ -65,7 +65,7 @@ def _producer(path: Path) -> dict:
 
 def _row(*, measurement_id: str, metric: str, value: float, unit: str,
          category: str, claim: str, reps_basis: str, extra: Mapping[str, Any],
-         protocol_id: str) -> dict:
+         protocol_id: str, reps: int) -> dict:
     row = {
         "measurement_id": measurement_id,
         "metric": metric,
@@ -74,7 +74,7 @@ def _row(*, measurement_id: str, metric: str, value: float, unit: str,
         "metric_direction": "higher_better",
         "category": category,
         "protocol_id": protocol_id,
-        "reps": 3,
+        "reps": reps,
         "reps_basis": reps_basis,
         "claim": claim,
         "extra": dict(extra),
@@ -127,9 +127,12 @@ def attach_baseline_beliefs(receipt: Mapping[str, Any], *, producer_path: Path) 
         raise BeliefRefused("baseline receipt must be a complete v2 bank")
     if "belief_measurements" in receipt or "baseline_sha256" in receipt:
         raise BeliefRefused("baseline belief attachment is write-once")
-    samples = _samples(receipt.get("anchor_samples"), "anchor_samples")
+    reps = receipt.get("anchor_invocations")
+    if reps not in ALLOWED_DISCOVERY_REPS:
+        raise BeliefRefused("anchor_invocations must be one of 3, 5, or 9")
+    samples = _samples(receipt.get("anchor_samples"), "anchor_samples", expected=reps)
     runs = receipt.get("anchor_runs")
-    if not isinstance(runs, list) or len(runs) != 3 \
+    if not isinstance(runs, list) or len(runs) != reps \
             or any(not isinstance(run, dict) or run.get("metric") != sample
                    or run.get("hip_residency_proved") is not True
                    for run, sample in zip(runs, samples)):
@@ -147,9 +150,9 @@ def attach_baseline_beliefs(receipt: Mapping[str, Any], *, producer_path: Path) 
         category="BASELINE",
         claim=("Non-promotable GPU discovery anchor observed median pp512 throughput "
                f"{median(samples):.9g} tokens/s"),
-        reps_basis="scored:three anchor-bank MI210 llama-bench invocations",
+        reps_basis=f"scored:{reps} anchor-bank MI210 llama-bench invocations",
         extra={**common, "arithmetic_baseline_center": center},
-        protocol_id=BANK_SCHEMA)]
+        protocol_id=BANK_SCHEMA, reps=reps)]
     result["baseline_sha256"] = schemas.content_hash(result)
     return result
 
@@ -168,9 +171,13 @@ def attach_result_beliefs(receipt: Mapping[str, Any], *, bank: Mapping[str, Any]
     if not isinstance(bank_sha, str) or bank_sha != schemas.content_hash(unsigned_bank) \
             or receipt.get("baseline_sha256") != bank_sha:
         raise BeliefRefused("candidate result does not bind the sealed anchor bank")
-    samples = _samples(receipt.get("candidate_samples"), "candidate_samples")
+    reps = receipt.get("candidate_invocations")
+    if reps not in ALLOWED_DISCOVERY_REPS or receipt.get("anchor_invocations") != reps:
+        raise BeliefRefused("matched invocation counts must both be one of 3, 5, or 9")
+    samples = _samples(receipt.get("candidate_samples"), "candidate_samples",
+                       expected=reps)
     runs = receipt.get("candidate_runs")
-    if not isinstance(runs, list) or len(runs) != 3 \
+    if not isinstance(runs, list) or len(runs) != reps \
             or any(not isinstance(run, dict) or run.get("metric") != sample
                    or run.get("hip_residency_proved") is not True
                    for run, sample in zip(runs, samples)):
@@ -179,14 +186,17 @@ def attach_result_beliefs(receipt: Mapping[str, Any], *, bank: Mapping[str, Any]
     if isinstance(baseline_center, bool) or not isinstance(baseline_center, (int, float)) \
             or not math.isfinite(baseline_center) or baseline_center <= 0:
         raise BeliefRefused("baseline_center must be positive and finite")
-    bank_samples = _samples(bank.get("anchor_samples"), "bank.anchor_samples")
-    if not math.isclose(float(baseline_center), sum(bank_samples) / 3,
+    if bank.get("anchor_invocations") != reps:
+        raise BeliefRefused("candidate invocation count differs from sealed bank")
+    bank_samples = _samples(bank.get("anchor_samples"), "bank.anchor_samples",
+                            expected=reps)
+    if not math.isclose(float(baseline_center), sum(bank_samples) / len(bank_samples),
                         rel_tol=1e-12, abs_tol=1e-12):
         raise BeliefRefused("baseline_center does not rederive from the sealed bank")
     effects = [(sample - float(baseline_center)) / float(baseline_center)
                for sample in samples]
     declared_effects = receipt.get("relative_effects")
-    if not isinstance(declared_effects, list) or len(declared_effects) != 3 \
+    if not isinstance(declared_effects, list) or len(declared_effects) != reps \
             or any(isinstance(value, bool) or not isinstance(value, (int, float))
                    or not math.isclose(float(value), expected, rel_tol=1e-12, abs_tol=1e-12)
                    for value, expected in zip(declared_effects, effects)):
@@ -217,15 +227,17 @@ def attach_result_beliefs(receipt: Mapping[str, Any], *, bank: Mapping[str, Any]
             category="CANDIDATE",
             claim=("Non-promotable GPU candidate discovery observed median pp512 throughput "
                    f"{median(samples):.9g} tokens/s"),
-            reps_basis=REPS_BASIS, extra=common, protocol_id=RESULT_SCHEMA),
+            reps_basis=f"scored:{reps} candidate-only MI210 llama-bench invocations",
+            extra=common, protocol_id=RESULT_SCHEMA, reps=reps),
         _row(
             measurement_id="gpu_discovery_candidate_pp512_median_relative_effect",
             metric="gpu_prefill_relative_effect_vs_sealed_anchor",
             value=median(effects), unit="fraction", category="CANDIDATE",
             claim=("Non-promotable GPU candidate discovery observed median relative effect "
                    f"{median(effects):.9g} versus its sealed anchor bank"),
-            reps_basis=REPS_BASIS,
-            extra={**common, "relative_effects": effects}, protocol_id=RESULT_SCHEMA),
+            reps_basis=f"scored:{reps} candidate-only MI210 llama-bench invocations",
+            extra={**common, "relative_effects": effects}, protocol_id=RESULT_SCHEMA,
+            reps=reps),
     ]
     result = dict(receipt)
     result["baseline_anchor_samples"] = bank_samples
