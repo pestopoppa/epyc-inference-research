@@ -598,6 +598,65 @@ class CalibrationBlockCheckpoint(unittest.TestCase):
                 self._checkpoint(root, plan=self._plan(seed="second"))
 
 
+class CalibrationBoundaryResume(unittest.TestCase):
+
+    def test_claim_budget_covers_the_declared_long_decode_campaign(self):
+        self.assertEqual(live_controls.CLAIM_MAX_HOLD_S, 6 * 3600)
+
+    def test_derived_calibration_is_admitted_only_when_recomputed_exactly(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "raw").mkdir()
+            for name in ("aa_calibration.json", "neutral_calibration.json"):
+                (root / "raw" / name).write_text("{}\n", encoding="utf-8")
+            expected = {"accepted": True, "derived": "fixture"}
+            (root / "calibration.json").write_text(
+                json.dumps(expected) + "\n", encoding="utf-8")
+            material = mock.Mock()
+            solve = mock.Mock()
+            solve.to_dict.return_value = expected
+            identity = live_controls.LiveCampaignIdentity(
+                "ak-controls-calibration-boundary", str(root))
+            # Stop immediately after the new boundary validation.  This keeps
+            # the test narrow while proving calibration.json is no longer a
+            # blanket terminal-material refusal and is recomputed, not trusted.
+            with mock.patch.object(
+                    live_controls, "_load_recorded_material",
+                    return_value=(material, {})) as load, \
+                 mock.patch.object(
+                    live_controls, "_campaign_inputs",
+                    return_value=(None, None, None, None, solve)), \
+                 mock.patch.object(
+                    live_controls, "_load_json",
+                    side_effect=lambda path: (
+                        expected if Path(path).name == "calibration.json"
+                        else (_ for _ in ()).throw(RuntimeError("boundary passed")))):
+                with self.assertRaisesRegex(RuntimeError, "boundary passed"):
+                    live_controls._validate_resume_existing(root, identity=identity)
+            self.assertEqual(load.call_count, 2)
+
+    def test_tampered_derived_calibration_fails_before_resume_inference(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "raw").mkdir()
+            for name in ("aa_calibration.json", "neutral_calibration.json"):
+                (root / "raw" / name).write_text("{}\n", encoding="utf-8")
+            (root / "calibration.json").write_text(
+                json.dumps({"accepted": False}) + "\n", encoding="utf-8")
+            solve = mock.Mock()
+            solve.to_dict.return_value = {"accepted": True}
+            identity = live_controls.LiveCampaignIdentity(
+                "ak-controls-calibration-tamper", str(root))
+            with mock.patch.object(
+                    live_controls, "_load_recorded_material",
+                    return_value=(mock.Mock(), {})), \
+                 mock.patch.object(
+                    live_controls, "_campaign_inputs",
+                    return_value=(None, None, None, None, solve)):
+                with self.assertRaisesRegex(ValueError, "deterministic solve"):
+                    live_controls._validate_resume_existing(root, identity=identity)
+
+
 class ProspectiveBeliefReceipt(unittest.TestCase):
 
     class _Result:

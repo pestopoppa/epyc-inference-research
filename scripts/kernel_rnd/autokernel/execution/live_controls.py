@@ -106,6 +106,13 @@ BLOCK_CHECKPOINT_MANIFEST_SCHEMA = (
     "epyc.autokernel.live_control_block_checkpoint_manifest.v1")
 CONTROL_EXTENSION_ROUNDS = 1
 CONTROL_EXTENSION_BLOCKS = 5
+# The full decode calibration is deliberately much larger than the prefill
+# campaign: 200 + 60 calibration blocks, a 15-block anchor-motion trace, and
+# as many as four 20-block controls, with five fresh pairs per block.  The old
+# two-hour declaration expired during that declared work on the reference host
+# even though its flock remained held.  Expiry is an admissibility gate before
+# every invocation, so declare a budget that covers the complete campaign.
+CLAIM_MAX_HOLD_S = 6 * 3600
 CONTRIBUTION_FLOOR = 0.03
 PROMPT_TOKENS = 512
 WRONG_PROMPT_TOKENS = 2048
@@ -1629,8 +1636,7 @@ def _validate_resume_existing(
     if not output_root.is_dir() or output_root.is_symlink():
         raise ValueError("--resume-existing requires an existing non-symlink directory")
     forbidden = (
-        "summary.json", "control_sweep.json", "calibration.json", "host.json",
-        "claim_receipt.json")
+        "summary.json", "control_sweep.json", "host.json", "claim_receipt.json")
     present = [name for name in forbidden if (output_root / name).exists()]
     if present:
         raise ValueError(f"resume refuses terminal/post-calibration material: {present}")
@@ -1651,6 +1657,29 @@ def _validate_resume_existing(
     if "neutral_calibration" in checkpoint_labels \
             and "aa_calibration.json" not in raw_files:
         raise ValueError("neutral checkpoint exists before a completed AA raw vector")
+
+    # ``calibration.json`` is deterministic derived material written after both
+    # calibration legs and before anchor motion.  An expiry or crash at that
+    # exact boundary must be resumable, but only when the file is reproduced by
+    # the two immutable raw vectors byte-for-value.  Never accept a typed solve.
+    calibration_path = output_root / "calibration.json"
+    if calibration_path.exists():
+        if raw_files != ["aa_calibration.json", "neutral_calibration.json"]:
+            raise ValueError(
+                "resume calibration.json requires complete AA and neutral raw vectors")
+        aa, _ = _load_recorded_material(
+            output_root, identity=identity, label="aa_calibration",
+            expected_blocks=CALIBRATION_BLOCKS, prompt=PROMPT_TOKENS,
+            candidate_iqk=CALIBRATION_IQK, anchor_iqk=CALIBRATION_IQK)
+        neutral, _ = _load_recorded_material(
+            output_root, identity=identity, label="neutral_calibration",
+            expected_blocks=NEUTRAL_BLOCKS, prompt=PROMPT_TOKENS,
+            candidate_iqk=CALIBRATION_IQK, anchor_iqk=CALIBRATION_IQK)
+        expected_calibration = _campaign_inputs(aa, neutral, identity)[-1].to_dict()
+        if _load_json(calibration_path) != expected_calibration:
+            raise ValueError(
+                "resume calibration.json differs from the deterministic solve "
+                "recomputed from the immutable AA and neutral raw vectors")
 
     declaration = _load_json(output_root / "campaign_declaration.json")
     checks = {
@@ -1857,7 +1886,7 @@ def execute(output_root: Path, *, campaign_id: str, resume_existing: bool = Fals
                 CPU_LIST, purpose="AutoKernel five-control calibration block",
                 campaign_id=identity.campaign_id, journal=journal,
                 role=inference_window.WINDOWED_CPU_ROLE, timeout_s=60.0,
-                max_hold_s=2 * 3600),
+                max_hold_s=CLAIM_MAX_HOLD_S),
             inference_window.InferenceCallWindow(timeout_s=600.0)) as claim:
         if resume is not None:
             new_claim = claim.receipt().to_dict()
