@@ -30,7 +30,7 @@ class InstrumentSelection(unittest.TestCase):
                 live_controls._ensure_instrument_build()
             run.assert_called_once_with(
                 ["/usr/bin/cmake", "--build", str(root / "build-v9-cpu"), "--target",
-                 "llama-cli", "llama-bench", "test-backend-ops", "-j", "64"],
+                 "llama-completion", "llama-bench", "test-backend-ops", "-j", "64"],
                 cwd=str(root), check=True)
 
     def tearDown(self):

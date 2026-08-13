@@ -84,7 +84,7 @@ CONTROL_PROMPT_BY_LABEL = {
     "negative_committed_cell": PROMPT_TOKENS,
     "negative_wrong_cell": WRONG_PROMPT_TOKENS,
 }
-INSTRUMENT_BUILD_TARGETS = ("llama-cli", "llama-bench", "test-backend-ops")
+INSTRUMENT_BUILD_TARGETS = ("llama-completion", "llama-bench", "test-backend-ops")
 REQUIRED_HARDENING_RECEIPTS = (
     b"autokernel_hybrid_ab_complete",
     b"autokernel_thread_set_stable",
