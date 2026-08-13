@@ -609,7 +609,7 @@ def _raising(exc, ops, name):
 
 
 class TestPostT0QuietBoundary(unittest.TestCase):
-    """The T0→T1 boundary waits for attributable decay; it never weakens T1."""
+    """The T0→T1 boundary proves teardown, claim ownership and inference exclusion."""
 
     @staticmethod
     def _state(load1: float) -> microbench.HostState:
@@ -632,9 +632,9 @@ class TestPostT0QuietBoundary(unittest.TestCase):
             nominal_khz=3_000_000, sleep=sleeps.append,
             host_state=lambda **_kw: scripted.pop(0))
 
-    def test_requires_all_teardowns_then_three_claim_witnessed_quiet_samples(self):
+    def test_requires_all_teardowns_then_one_claim_witnessed_noise_sample(self):
         sleeps = []
-        states = [self._state(3.0) for _ in range(3)]
+        states = [self._state(3.0)]
         ops = self._ops(states, sleeps)
         with tempfile.TemporaryDirectory() as directory, \
                 tempfile.TemporaryDirectory() as journal_root:
@@ -649,6 +649,10 @@ class TestPostT0QuietBoundary(unittest.TestCase):
             witness.attest.return_value = attestation
             with mock.patch.object(campaign.microbench, "CpuRegionClaimAdapter",
                                    return_value=witness), \
+                    mock.patch.object(campaign.screening_baseline,
+                                      "competing_inference_witness",
+                                      return_value={"competing": False,
+                                                    "findings": []}), \
                     mock.patch.object(campaign.storage, "assert_not_scratch",
                                       side_effect=lambda root, **_kw: root):
                 receipt = ops.settle_after_t0(
@@ -657,6 +661,7 @@ class TestPostT0QuietBoundary(unittest.TestCase):
                 journal_root, campaign_id="ak-test").read_all()
         self.assertEqual(sleeps, [])
         self.assertEqual(len(receipt["samples"]), 1)
+        self.assertFalse(receipt["samples"][0]["inference_witness"]["competing"])
         self.assertEqual(witness.attest.call_count, 1)
         quiet_entries = [entry for entry in entries
                          if entry.kind == journal_module.KIND_POST_T0_QUIET_BOUNDARY]
