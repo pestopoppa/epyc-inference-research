@@ -3261,6 +3261,19 @@ class TestTheGateIsTheSameGateInBothModes(_HypothesisGateCase):
 class TestProspectiveEvaluationDurability(unittest.TestCase):
     """An evaluated run writes evaluation evidence before terminal STOP_STATE."""
 
+    def test_t0_failure_caches_evidence_without_materializing_a_candidate(self):
+        ops = campaign.HostOps(nominal_khz=1)
+        event = {"event_id": "ake-t0-refusal-fixture"}
+        with mock.patch.object(ops, "_evaluation_events", return_value=(event,)), \
+                mock.patch.object(
+                    campaign.candidate_record, "build_candidate_record",
+                    side_effect=AssertionError("T0 refusal must not build a candidate")):
+            ops.prepare_durable_records(
+                spec(proposal=iqk_parameter_proposal()),
+                state=campaign.STATE_T0_FAILED, decision=None)
+        self.assertEqual(ops._cached_evaluation_events, (event,))
+        self.assertIsNone(ops._cached_candidate_record)
+
     def test_t0_failure_writes_no_speed_and_evaluation_precedes_stop(self):
         ops = EvaluationSpyOps(t0=FAILING_T0)
         result = campaign.run_campaign(spec(), ops)

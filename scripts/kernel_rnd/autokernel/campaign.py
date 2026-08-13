@@ -3997,6 +3997,14 @@ class HostOps:
             return
         events = self._evaluation_events(spec)
         self._cached_evaluation_events = events
+        # A failed T0 is a real, durable refusal, but it is not a candidate
+        # record.  In particular, there is deliberately no AcceptDecision on
+        # this path; passing ``None`` into least-commitment materialization
+        # turns a truthful T0 failure into a secondary terminal error.  Keep
+        # the already-built T0 event(s) cached for journaling and stop before
+        # deriving any decision-dependent candidate fields.
+        if state == STATE_T0_FAILED:
+            return
         if self._build_identity is None or self._build_snapshot is None \
                 or self._t0_request is None or spec.proposal is None:
             return
