@@ -5021,13 +5021,28 @@ def run_campaign(spec: CampaignSpec, ops: Any) -> CampaignResult:
         claim = ops.acquire_claim(spec)
         ledger.hold("cpu_region_claim", lambda: ops.release_claim(claim))
 
-        tree = ops.create_worktree(spec)
-        captured_tree = tree
-        ledger.hold("campaign_worktree",
-                    lambda: ops.teardown_worktree(spec, captured_tree))
+        parameter_screen = (
+            spec.screening_only
+            and spec.proposal is not None
+            and spec.proposal["change_class"] == "parameter"
+        )
+        if parameter_screen:
+            # A registered runtime-parameter screen changes no source or build
+            # material.  Both arms must execute the exact instrument sealed by
+            # the baseline bank; creating a candidate worktree/build is wasted
+            # work and, worse, gives the two arms different artifact identities.
+            # ``HostOps._construct`` projects the candidate command from that
+            # one instrument and changes only the registered parameter surface.
+            tree = None
+            build = None
+        else:
+            tree = ops.create_worktree(spec)
+            captured_tree = tree
+            ledger.hold("campaign_worktree",
+                        lambda: ops.teardown_worktree(spec, captured_tree))
 
-        ops.apply_candidate(spec, tree)
-        build = ops.build(spec, tree)
+            ops.apply_candidate(spec, tree)
+            build = ops.build(spec, tree)
 
         if spec.screening_only:
             # Screening intentionally reuses the already-selected measurement

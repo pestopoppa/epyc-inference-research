@@ -533,6 +533,36 @@ class TestTheDryRunComposesEndToEnd(unittest.TestCase):
         self.assertTrue(result.to_dict()["non_promotable"])
         self.assertEqual(result.to_dict()["screening_report"]["anchor_invocations"], 0)
 
+    def test_registered_parameter_screen_skips_worktree_and_build(self):
+        base = screening_bank()
+        bank = screening_baseline.BaselineBank(
+            {**base.frame, "anchor_ggml_iqk": "0"},
+            base.anchor_samples, base.sentinel_before,
+            base.anchor_command, base.anchor_artifacts)
+        ops = SpyOps(pairs=(
+            campaign.CandidateOnlyObservation(0, 100.0, 108.0),
+            campaign.CandidateOnlyObservation(1, 100.0, 108.0),
+            campaign.CandidateOnlyObservation(2, 100.0, 108.0),
+        ))
+        ops._screening_report = {
+            "candidate_invocations": 3, "anchor_invocations": 0,
+            "non_promotable": True,
+        }
+        result = campaign.run_campaign(
+            spec(blocks=3, proposal=iqk_parameter_proposal(),
+                 screening_only=True, screening_baseline=bank), ops)
+        self.assertEqual(result.state, campaign.STATE_DECIDED)
+        self.assertNotIn("create_worktree", ops.calls)
+        self.assertNotIn("apply_candidate", ops.calls)
+        self.assertNotIn("build", ops.calls)
+        self.assertNotIn("teardown_worktree", ops.calls)
+        self.assertEqual(
+            ops.calls,
+            ["record_proposal", "preflight", "acquire_claim",
+             "run_paired_blocks", "release_claim",
+             "prove_production_unchanged", "journal"],
+        )
+
     def test_screening_refuses_more_than_three_blocks(self):
         with self.assertRaisesRegex(ValueError, "capped at 3"):
             spec(blocks=4, screening_only=True, screening_baseline=screening_bank())
