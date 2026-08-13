@@ -2517,6 +2517,27 @@ class HostOps:
         return schemas.Check(schemas.PASS, (
             f"journal filesystem has {free} bytes free, at or above floor {floor}",))
 
+    @staticmethod
+    def _t0_evaluator_policy(spec: CampaignSpec) -> correctness.T0Policy:
+        """Return the fixed evaluator policy for an executed campaign.
+
+        The policy lives on the evaluator side of the boundary, but construction
+        happens here because the campaign supplies the backend identity.  It is
+        intentionally explicit: :class:`T0Policy` has no defaults, and a bare
+        construction would turn a protocol omission into a live-run failure.
+        """
+        return correctness.T0Policy(
+            required_backend_ops=correctness.MANDATORY_BACKEND_OPS,
+            symbol_shrinkage_reject_ratio=0.6,
+            diff_ceiling=correctness.DiffComplexityCeiling(
+                backend=spec.backend,
+                max_changed_lines=400,
+                max_files_touched=10,
+                shared_core_forces_review=True),
+            determinism_min_runs=2,
+            coherence_tolerance_floor=0.98,
+            policy_ref="ak-policy/v1")
+
     # -- 0. preflight ------------------------------------------------------
 
     def record_proposal(self, spec: CampaignSpec) -> Any:
@@ -3448,7 +3469,8 @@ class HostOps:
                 determinism_class="not_measured", same_seed_repeat_runs=0)
         )
         request = replace(provisional, determinism=measured_determinism)
-        report = correctness.evaluate_t0(request, evidence, correctness.T0Policy())
+        report = correctness.evaluate_t0(
+            request, evidence, self._t0_evaluator_policy(spec))
         self._t0_request = request
         self._t0_report = report
         self._t0_gate_results = report.gates

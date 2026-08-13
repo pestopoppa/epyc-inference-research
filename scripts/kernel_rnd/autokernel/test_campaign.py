@@ -1577,6 +1577,20 @@ class TestExecuteRefusesAnOpsThatCannotFinishARun(unittest.TestCase):
                     "missing/unusable required build artifacts before artifact hashing.*llama-cli"):
                 ops.run_t0(spec(), succeeded)
 
+    def test_executed_t0_constructs_the_complete_cpu_evaluator_policy(self):
+        """The live T0 path must not instantiate the no-default policy bare.
+
+        T0Policy intentionally rejects an implicit policy.  Pin the campaign's
+        protocol choices here so a constructor-field addition fails this test
+        before a live campaign can reach T0.
+        """
+        policy = campaign.HostOps._t0_evaluator_policy(spec())
+        self.assertEqual(policy.required_backend_ops,
+                         campaign.correctness.MANDATORY_BACKEND_OPS)
+        self.assertEqual(policy.diff_ceiling.backend, campaign.BACKEND_CPU)
+        self.assertEqual(policy.determinism_min_runs, 2)
+        self.assertEqual(policy.policy_ref, "ak-policy/v1")
+
     def test_parameter_t0_adapter_derives_the_nonbehavioural_gate_surfaces(self):
         built = spec(proposal=iqk_parameter_proposal())
         tree = mock.Mock()
