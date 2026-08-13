@@ -159,6 +159,7 @@ class GpuSourceAdapterTests(unittest.TestCase):
             with mock.patch.object(D, "GpuSourceScreener", FakeDelegate):
                 with self.assertRaisesRegex(A.GpuSourceAdapterError, "protected production artifacts"):
                     adapter.screen(candidate, authorization, lease)
+            self.assertFalse(hasattr(adapter, "_active_protected_snapshot"))
 
     def test_json_screen_normalizes_all_tuple_fields(self):
         fields = {
