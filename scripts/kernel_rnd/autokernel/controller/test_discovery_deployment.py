@@ -24,6 +24,8 @@ class DeploymentConfigTests(unittest.TestCase):
     def config(self, root: Path) -> tuple[Path, dict]:
         production = root / "production"
         production.mkdir()
+        source = production / "ggml.cu"
+        source.write_text("__global__ void kernel() {}\n", encoding="utf-8")
         (root / "locks").mkdir()
         wrapper = root / "codex-wrapper"
         wrapper.write_text("#!/bin/sh\n", encoding="utf-8")
@@ -39,8 +41,10 @@ class DeploymentConfigTests(unittest.TestCase):
             "workload_sha256": inputs["workload"]["sha256"],
             "runtime_config_sha256": inputs["runtime_config"]["sha256"],
             "profile_receipts": [],
-            "hotspots": [{"surface": "ggml/src/ggml-hip", "symbol": "kernel", "share": .5,
-                           "source_excerpt": "__global__ void kernel() {}"}],
+            "hotspots": [{"surface": "ggml/src/ggml-cuda", "symbol": "kernel", "share": .5,
+                           "source_path": str(source), "source_sha256": digest(source),
+                           "source_excerpt": "__global__ void kernel() {}",
+                           "source_excerpt_sha256": hashlib.sha256(b"__global__ void kernel() {}").hexdigest()}],
             "source_constraints": {"allowed_roots": ["ggml/src/ggml-hip/"]},
             "initial_strategies": ["one wave"],
         }
@@ -79,7 +83,8 @@ class DeploymentConfigTests(unittest.TestCase):
         return path, value
 
     def load(self, path: Path):
-        with mock.patch.object(D, "_verify_production"):
+        with mock.patch.object(D, "_verify_production"), \
+                mock.patch.object(D, "FROZEN_PRODUCTION_PATH", path.parent / "production"):
             return D.load_deployment_config(path)
 
     def test_loads_digest_bound_declarative_config(self):

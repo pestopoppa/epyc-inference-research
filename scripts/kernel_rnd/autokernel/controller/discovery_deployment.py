@@ -148,17 +148,32 @@ def _planner_context(value: object, *, model: ImmutableInput,
                        and isinstance(row["path"], str) and SHA.fullmatch(str(row["sha256"]))
                        for row in receipts)):
         raise DeploymentConfigError("planner_context profile receipts are malformed")
+    for row in receipts:
+        receipt = _absolute(row["path"], "planner_context.profile_receipt.path")
+        _digest_file(receipt, row["sha256"], "planner_context.profile_receipt")
+    required_hotspot = {"surface", "symbol", "share", "source_path", "source_sha256",
+                        "source_excerpt", "source_excerpt_sha256"}
     if (not isinstance(hotspots, list) or len(hotspots) > 128
-            or not all(isinstance(row, Mapping) and set(row).issubset(
-                       {"surface", "symbol", "share", "note", "source_excerpt"})
-                       and {"surface", "symbol", "share"}.issubset(row)
+            or not all(isinstance(row, Mapping) and set(row).issubset(required_hotspot | {"note"})
+                       and required_hotspot.issubset(row)
                        and isinstance(row["surface"], str) and isinstance(row["symbol"], str)
                        and isinstance(row["share"], (int, float)) and not isinstance(row["share"], bool)
                        and math.isfinite(float(row["share"]))
-                       and ("source_excerpt" not in row or (isinstance(row["source_excerpt"], str)
-                             and len(row["source_excerpt"]) <= 8192))
+                       and isinstance(row["source_excerpt"], str) and len(row["source_excerpt"]) <= 8192
+                       and isinstance(row["source_path"], str)
+                       and SHA.fullmatch(str(row["source_sha256"]))
+                       and SHA.fullmatch(str(row["source_excerpt_sha256"]))
                        for row in hotspots)):
         raise DeploymentConfigError("planner_context hotspots are malformed or unbounded")
+    for row in hotspots:
+        source = _absolute(row["source_path"], "planner_context.hotspot.source_path")
+        if not _under(source, FROZEN_PRODUCTION_PATH.resolve(strict=True)):
+            raise DeploymentConfigError("planner_context source excerpt is outside frozen production")
+        _digest_file(source, row["source_sha256"], "planner_context.hotspot.source")
+        if hashlib.sha256(row["source_excerpt"].encode("utf-8")).hexdigest() != row["source_excerpt_sha256"]:
+            raise DeploymentConfigError("planner_context source excerpt hash mismatch")
+        if row["source_excerpt"] not in source.read_text(encoding="utf-8"):
+            raise DeploymentConfigError("planner_context excerpt does not occur in sealed source")
     if (not isinstance(body["source_constraints"], Mapping)
             or not isinstance(body["initial_strategies"], list)
             or len(body["initial_strategies"]) > 64
