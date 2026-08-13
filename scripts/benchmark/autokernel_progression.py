@@ -96,6 +96,33 @@ def _gpu_screen(path: Path, receipt: dict[str, Any]) -> dict[str, Any] | None:
         row = run.get("raw_row") if isinstance(run, dict) else None
         if isinstance(row, dict) and isinstance(row.get("test_time"), str):
             observed = max(observed or row["test_time"], row["test_time"])
+    effects = receipt.get("relative_effects") or []
+    numeric_effects = [float(value) for value in effects
+                       if isinstance(value, (int, float))]
+    sign_conflict = bool(numeric_effects
+                         and min(numeric_effects) < 0 < max(numeric_effects))
+    effect_spread = (max(numeric_effects) - min(numeric_effects)
+                     if numeric_effects else None)
+    overlap_policy = receipt.get("cpu_overlap_policy")
+    noisy_overlap = bool(
+        overlap_policy == "allowed_discovery_noise"
+        and (sign_conflict or (effect_spread is not None and effect_spread >= 0.10))
+    )
+    stage = "inconclusive" if noisy_overlap else "candidate"
+    confidence = "directional / unquantified noise (3+3 calls; HIP resident)"
+    current_gate = "correctness + strict matched confirmation"
+    next_action = "Confirm correctness, then run promotion-grade paired evidence."
+    if noisy_overlap:
+        conflict = "sign-conflicted" if sign_conflict else "high-dispersion"
+        spread = f"; {effect_spread * 100:.2f} pp spread" if effect_spread is not None else ""
+        confidence = (
+            f"inconclusive: CPU-overlap discovery noise; {conflict} 3+3 vector{spread}"
+        )
+        current_gate = "clean/windowed discovery retest"
+        next_action = (
+            "Retest under shared model-call windows; do not interpret the median as "
+            "a negative conclusion."
+        )
     return {
         "key": f"gpu:{factor.get('name')}:prefill pp512",
         "lane": "GPU", "candidate": str(factor.get("name")),
@@ -103,10 +130,15 @@ def _gpu_screen(path: Path, receipt: dict[str, Any]) -> dict[str, Any] | None:
         "workload": "MI210 prefill pp512", "metric": "prefill_tokens_per_s",
         "metric_direction": "higher_better",
         "effect_fraction": receipt["median_relative"],
-        "evidence_tier": "screening", "stage": "candidate",
-        "confidence": "directional / unquantified noise (3+3 calls; HIP resident)",
-        "current_gate": "correctness + strict matched confirmation",
-        "next_action": "Confirm correctness, then run promotion-grade paired evidence.",
+        "evidence_tier": "screening", "stage": stage,
+        "confidence": confidence,
+        "noise": {
+            "cpu_overlap_policy": overlap_policy,
+            "sign_conflict": sign_conflict,
+            "effect_spread_fraction": effect_spread,
+        },
+        "current_gate": current_gate,
+        "next_action": next_action,
         "promotable": False, "champion": False, "observed_at": observed,
         "evidence": [_evidence(path, receipt)],
     }
@@ -167,13 +199,17 @@ def build_progression(root: Path = DEFAULT_ROOT) -> dict[str, Any]:
     unexplored = []
     completed_ids = {e["campaign_id"] for item in candidates.values()
                      for e in item["evidence"]}
+    completed_gpu_factors = {
+        item["candidate"] for item in candidates.values() if item["lane"] == "GPU"
+    }
     latest_preflight: dict[str, tuple[Path, dict[str, Any]]] = {}
     for path in sorted(screens.glob("*.preflight.json")):
         receipt = _load(path)
         factor = receipt.get("sole_factor") if receipt else None
         if not (isinstance(receipt, dict) and isinstance(factor, dict)
                 and receipt.get("inference_executed") is False
-                and receipt.get("campaign_id") not in completed_ids):
+                and receipt.get("campaign_id") not in completed_ids
+                and str(factor.get("name")) not in completed_gpu_factors):
             continue
         key = str(factor.get("name"))
         prior = latest_preflight.get(key)
@@ -191,7 +227,8 @@ def build_progression(root: Path = DEFAULT_ROOT) -> dict[str, Any]:
     ordered = sorted(candidates.values(),
                      key=lambda row: (row["lane"], -row["effect_fraction"], row["candidate"]))
     funnel = {
-        "candidate": sum(row["stage"] == "candidate" for row in ordered),
+        "candidate": sum(row["stage"] in {"candidate", "inconclusive"}
+                         for row in ordered),
         "strict_keep": sum(row["stage"] == "strict_keep" for row in ordered),
         "champion": sum(row["champion"] for row in ordered),
         "promotable": sum(row["promotable"] for row in ordered),
@@ -205,7 +242,8 @@ def build_progression(root: Path = DEFAULT_ROOT) -> dict[str, Any]:
         "strategy": {
             "pursued": [row for row in ordered if row["stage"] == "candidate"],
             "accepted": [row for row in ordered if row["stage"] == "strict_keep"],
-            "abandoned": [row for row in ordered if row["stage"] == "rejected"],
+            "abandoned": [row for row in ordered
+                          if row["stage"] in {"rejected", "inconclusive"}],
         },
         "unexplored": unexplored,
     }

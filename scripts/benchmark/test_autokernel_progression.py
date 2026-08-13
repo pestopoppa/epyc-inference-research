@@ -42,6 +42,44 @@ class ProgressionTest(unittest.TestCase):
                                           "state": "error", "non_promotable": True}))
             self.assertEqual(progression.build_progression(root)["candidates"], [])
 
+    def test_noisy_gpu_overlap_is_inconclusive_and_dedupes_factor_preflight(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            result = root / "screens" / "rocwmma-terminal" / "result.json"
+            result.parent.mkdir(parents=True)
+            result.write_text(json.dumps({
+                "schema": "epyc.autokernel.gpu_candidate_only_screen.v2",
+                "campaign_id": "rocwmma-terminal", "non_promotable": True,
+                "promotion_claim": False, "ok": True, "state": "decided",
+                "candidate_invocations": 3, "anchor_invocations": 3,
+                "hip_residency_proved": True, "median_relative": -.21,
+                "relative_effects": [-.25, .15, -.21],
+                "cpu_overlap_policy": "allowed_discovery_noise",
+                "sole_factor": {"name": "GGML_HIP_ROCWMMA_FATTN",
+                                "anchor": "OFF", "candidate": "ON"},
+            }))
+            # The campaign name differs, but the terminal receipt already covers
+            # this exact factor.  It must not remain in the opportunity queue.
+            preflight = root / "screens" / "rocwmma-old-name.preflight.json"
+            preflight.write_text(json.dumps({
+                "campaign_id": "ak-gpu-rocwmma-screen-old-name",
+                "inference_executed": False,
+                "sole_factor": {"name": "GGML_HIP_ROCWMMA_FATTN",
+                                "anchor": "OFF", "candidate": "ON"},
+            }))
+
+            doc = progression.build_progression(root)
+            candidate = doc["candidates"][0]
+            self.assertEqual(candidate["stage"], "inconclusive")
+            self.assertTrue(candidate["noise"]["sign_conflict"])
+            self.assertAlmostEqual(candidate["noise"]["effect_spread_fraction"], .40)
+            self.assertIn("CPU-overlap discovery noise", candidate["confidence"])
+            self.assertEqual(doc["funnel"]["candidate"], 1)
+            self.assertEqual(doc["strategy"]["pursued"], [])
+            self.assertEqual(doc["strategy"]["abandoned"], [candidate])
+            self.assertEqual(doc["unexplored"], [])
+            self.assertFalse(doc["promotion_claim"])
+
 
 if __name__ == "__main__":
     unittest.main()
