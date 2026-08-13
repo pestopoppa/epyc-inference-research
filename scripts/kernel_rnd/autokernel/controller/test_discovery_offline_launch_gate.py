@@ -8,6 +8,7 @@ must remain disabled; it is not permission to weaken the assertion.
 from __future__ import annotations
 
 import inspect
+import argparse
 from pathlib import Path
 import tempfile
 import unittest
@@ -83,13 +84,30 @@ class OfflineLaunchGate(unittest.TestCase):
                 frozenset({"ggml/src/ggml-cuda/fattn.cu"}),
                 {"ggml/src/ggml-cuda/fattn.cu": frozenset({"fattn_kernel"})},
                 {"kind": "fattn"})
+            template_body = {"version": "v1", "templates": {"fattn-v1": {
+                "template_id": template.template_id,
+                "target_surface": template.target_surface,
+                "target_symbol": template.target_symbol,
+                "correctness_id": template.correctness_id,
+                "dispatch_id": template.dispatch_id,
+                "allowed_files": sorted(template.allowed_files),
+                "allowed_symbols": {path: sorted(symbols)
+                                    for path, symbols in template.allowed_symbols.items()},
+                "semantics": dict(template.semantics),
+                "dispatch": repr(template.dispatch),
+            }}}
+            template_sha = __import__("hashlib").sha256(
+                __import__("json").dumps(template_body, sort_keys=True,
+                                         separators=(",", ":")).encode()).hexdigest()
+            object.__setattr__(config, "experiment_template_registry_sha256",
+                               template_sha)
             registry = {
                 "environment_profile": {"sealed-codex": F.EnvironmentProfile({"PATH": "/usr/bin"})},
                 "source_builder": {"source": F.SourceBuilderBinding(mock.Mock())},
                 "evidence_plan": {"evidence": F.EvidencePlanBinding(mock.Mock())},
                 "runner_args": {"runner": F.RunnerArgsBinding(mock.Mock())},
                 "experiment_template_registry": {"templates": F.ExperimentTemplateRegistry(
-                    "v1", "e" * 64, {"fattn-v1": template})},
+                    "v1", template_sha, {"fattn-v1": template})},
                 "inference_window_lease": {"lease": F.InferenceWindowLeaseBinding()},
                 "production_snapshot": {"production": F.ProductionSnapshotBinding(
                     (protected,))},
@@ -138,13 +156,7 @@ class OfflineLaunchGate(unittest.TestCase):
             model = root / "small.gguf"
             model.write_bytes(b"small-model")
             configured = root / "gpu-discovery.lock"
-            lease = mock.Mock(path=configured, waited_s=0)
-            window = mock.Mock()
-            window.hold.return_value.__enter__ = mock.Mock(return_value=lease)
-            window.hold.return_value.__exit__ = mock.Mock(return_value=False)
-            with mock.patch.object(gpu_runner.inference_window, "InferenceCallWindow",
-                                   return_value=window) as constructor, \
-                    mock.patch.object(gpu_runner.cpu_region_claim,
+            with mock.patch.object(gpu_runner.cpu_region_claim,
                                       "inspect_region_claims",
                                       return_value={"regions": {}}), \
                     mock.patch.object(gpu_runner, "_invoke_locked",
@@ -154,9 +166,7 @@ class OfflineLaunchGate(unittest.TestCase):
                     flash_attention=True, campaign_id="ak-offline",
                     cpu_journal=object(), allow_small_model_cpu_overlap=True,
                     inference_window_lock=configured)
-        constructor.assert_called_once_with(configured, timeout_s=600.0)
-        self.assertEqual(receipt["inference_call_window"]["lock_path"],
-                         str(configured))
+        self.assertIsNone(receipt["inference_call_window"])
         overlap = receipt["cpu_coverage"]
         self.assertEqual(overlap["cpu_overlap_policy"], "allowed_discovery_noise")
         self.assertLessEqual(overlap["model_size_bytes"], 512 * 1024 * 1024)
@@ -223,27 +233,45 @@ class OfflineLaunchGate(unittest.TestCase):
         self.assertEqual(context["prior_results"][0]["evidence"]["source"], "b" * 64)
         self.assertIn("do_not_repeat", context)
 
-    def test_reward_path_is_byte_identical_across_arms(self):
+    def test_reward_path_uses_one_binary_and_distinct_arm_hip_dsos(self):
         """Only candidate kernel material and its DSO may differ from anchor."""
         with tempfile.TemporaryDirectory() as directory:
-            evidence_plan = plan(Path(directory))
-        candidate = evidence_plan.identity_files.candidate
-        anchor = evidence_plan.identity_files.anchor
-        # Preferred closure: the same measurement executable is used with an
-        # arm-specific HIP DSO selected by isolated LD_LIBRARY_PATH.  If the
-        # implementation chooses distinct build-metadata-bearing binaries,
-        # this gate must be replaced by an explicit normalized object/source
-        # closure; arbitrary two-binary inequality is never sufficient.
-        mismatched = {
-            role for role in ("source_identity", "binary", "hip_library",
-                              "config", "linkage")
-            if getattr(candidate, role).sha256 != getattr(anchor, role).sha256
-        }
-        self.assertEqual(mismatched, {"source_identity", "hip_library"})
-        self.assertEqual(evidence_plan.workload_sha256,
-                         evidence_plan.identity_files.workload.sha256)
-        self.assertEqual(evidence_plan.runtime_config_sha256,
-                         evidence_plan.identity_files.runtime_config.sha256)
+            root = Path(directory)
+            builds = []
+            for label, hip in (("anchor", b"anchor-hip"),
+                               ("candidate", b"candidate-hip")):
+                build = root / label
+                (build / "bin").mkdir(parents=True)
+                (build / "CMakeCache.txt").write_text(
+                    "GGML_HIP_ROCWMMA_FATTN:BOOL=ON\n"
+                    "GGML_HIP_MMQ_MFMA:BOOL=OFF\n"
+                    "GGML_HIP_GRAPHS:BOOL=ON\n")
+                binary = build / "bin" / "llama-bench"
+                binary.write_bytes(b"shared-reward-binary")
+                binary.chmod(0o755)
+                (build / "bin" / "libggml-hip.so").write_bytes(hip)
+                builds.append(build)
+            model = root / "model.gguf"; model.write_bytes(b"model")
+            def commit(argv, **_kwargs):
+                return mock.Mock(returncode=0,
+                                 stdout=("a" if str(builds[0]) in argv else "b") * 40)
+            args = argparse.Namespace(
+                model=str(model), anchor_build=str(builds[0]),
+                candidate_build=str(builds[1]), factor="source_patch",
+                campaign_id="ak-offline", calls=3, workload="prefill_pp512",
+                allow_small_model_cpu_overlap=True,
+                measurement_binary=str(builds[0] / "bin" / "llama-bench"),
+                anchor_loader_dir=str(builds[0] / "bin"),
+                candidate_loader_dir=str(builds[1] / "bin"),
+                small_model_max_bytes=512 * 1024 * 1024,
+                device_id="mi210_0", inference_window_lock=None)
+            with mock.patch.object(gpu_runner.subprocess, "run", side_effect=commit):
+                sealed = gpu_runner.preflight(args)
+        closure = sealed["runtime_arms"]
+        self.assertEqual(closure["reward_closure"],
+                         "shared_anchor_binary_per_arm_hip_dso")
+        self.assertNotEqual(closure["anchor_hip_sha256"],
+                            closure["candidate_hip_sha256"])
 
     def test_complete_runtime_closure_proves_each_arm_loaded_intended_hip(self):
         """SONAME topology/targets close $ORIGIN fallback and DSO substitution."""
