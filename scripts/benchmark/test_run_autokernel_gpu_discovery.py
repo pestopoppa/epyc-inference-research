@@ -60,3 +60,30 @@ class TestGpuDiscoveryBuildIdentity(unittest.TestCase):
                     candidate_build=candidate,
                     anchor_identity=gpu.build_identity(anchor),
                     candidate_identity=gpu.build_identity(candidate))
+
+    def test_rocwmma_factor_keeps_mmq_off_and_flash_on(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            anchor = _build(root / "anchor", rocwmma="OFF", mfma="OFF").resolve()
+            candidate = _build(root / "candidate", rocwmma="ON", mfma="OFF").resolve()
+            factor = gpu.factor_spec(
+                factor="rocwmma_fattn", anchor_build=anchor,
+                candidate_build=candidate,
+                anchor_identity=gpu.build_identity(anchor),
+                candidate_identity=gpu.build_identity(candidate))
+        self.assertEqual(factor["name"], "GGML_HIP_ROCWMMA_FATTN")
+        self.assertEqual((factor["anchor"], factor["candidate"]), ("OFF", "ON"))
+        self.assertTrue(factor["anchor_flash_attention"])
+        self.assertTrue(factor["candidate_flash_attention"])
+
+    def test_rocwmma_factor_refuses_mmq_enabled(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            anchor = _build(root / "anchor", rocwmma="OFF", mfma="ON").resolve()
+            candidate = _build(root / "candidate", rocwmma="ON", mfma="ON").resolve()
+            with self.assertRaisesRegex(RuntimeError, "MMQ_MFMA=OFF"):
+                gpu.factor_spec(
+                    factor="rocwmma_fattn", anchor_build=anchor,
+                    candidate_build=candidate,
+                    anchor_identity=gpu.build_identity(anchor),
+                    candidate_identity=gpu.build_identity(candidate))

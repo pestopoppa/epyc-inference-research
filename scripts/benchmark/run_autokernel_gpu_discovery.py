@@ -171,6 +171,15 @@ def factor_spec(*, factor: str, anchor_build: Path, candidate_build: Path,
             "name": "flash_attention", "anchor": "OFF", "candidate": "ON",
             "anchor_flash_attention": False, "candidate_flash_attention": True,
         }
+    if factor == "rocwmma_fattn":
+        if anchor_identity["mmq_mfma"] or candidate_identity["mmq_mfma"]:
+            raise RuntimeError("both ROCWMMA arms must keep MMQ_MFMA=OFF")
+        if anchor_identity["rocwmma_fattn"] is not False or candidate_identity["rocwmma_fattn"] is not True:
+            raise RuntimeError("sole factor must be GGML_HIP_ROCWMMA_FATTN OFF->ON")
+        return {
+            "name": "GGML_HIP_ROCWMMA_FATTN", "anchor": "OFF", "candidate": "ON",
+            "anchor_flash_attention": True, "candidate_flash_attention": True,
+        }
     raise RuntimeError(f"unsupported GPU discovery factor: {factor}")
 
 
@@ -295,7 +304,7 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--model", required=True)
     result.add_argument("--output-dir", required=True)
     result.add_argument("--campaign-id", required=True)
-    result.add_argument("--factor", choices=("mmq_mfma", "flash_attention"),
+    result.add_argument("--factor", choices=("mmq_mfma", "flash_attention", "rocwmma_fattn"),
                         default="mmq_mfma")
     result.add_argument("--preflight-only", action="store_true")
     result.add_argument("--preflight-output")
