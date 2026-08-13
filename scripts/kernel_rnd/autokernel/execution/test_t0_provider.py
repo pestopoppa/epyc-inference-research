@@ -509,6 +509,12 @@ class BackendOpsCapabilityParsing(unittest.TestCase):
         with self.assertRaises(t0.InstrumentCapabilityError):
             t0.parse_backend_ops_help("Usage: unrelated-tool --output\n")
 
+    def test_help_rejects_flags_outside_the_usage_line(self):
+        with self.assertRaisesRegex(t0.InstrumentCapabilityError, "baseline"):
+            t0.parse_backend_ops_help(
+                "Usage: test-backend-ops [mode]\n"
+                "[-o <op,..>] [-b <backend>] [--output <console|sql|csv>]\n")
+
     def test_current_csv_keeps_reference_receipt_out_of_error_message(self):
         receipt = ("AK_REF_V1 metric=test_backend_ops_error/v1 observed=0 "
                    "tolerance=1e-07 comparisons=2 oracle=ggml_cpu_reference/v1")
@@ -1141,6 +1147,57 @@ def _linkage_capture(provider_plan, text, *, binary=None, library_path=None, exi
 
 
 class OpSuiteCollection(unittest.TestCase):
+
+    def test_live_capability_probe_accepts_a_valid_help_banner_with_nonzero_exit(self):
+        """The selected binary uses exit 1 for `--help`; its parsed banner is authoritative."""
+        plan = execution_plan(op_suite=op_suite_plan(capabilities=None))
+        help_text = ("Usage: test-backend-ops [mode] [-o <op,..>] [-b <backend>] "
+                     "[--output <console|sql|csv>] [--suite-seed <n>] "
+                     "[--autokernel-properties] [-j <n>]\n")
+        suite_text = ("Testing 1 devices\n\nBackend 1/1: CPU\n"
+                      "  MUL_MAT(type=f32): OK\n"
+                      "  MUL_MAT_ID(type=f32): OK\n"
+                      "  2/2 tests passed\n  Backend CPU: OK\n"
+                      "1/1 backends passed\nOK\n")
+        claim = FakeClaim()
+        provider = t0.ExecutedT0EvidenceProvider(
+            plan=plan,
+            runner=t0.RecordedProcessRunner([
+                _help_capture(plan, help_text, exit_code=1),
+                _console_capture(plan, suite_text),
+            ]),
+            claim=claim)
+        evidence = provider.collect_op_suite(t0._Collected())
+        self.assertEqual(evidence.ops_exercised, ("MUL_MAT", "MUL_MAT_ID"))
+        self.assertTrue(claim.is_held())
+
+    def test_live_capability_probe_refuses_non_banner_output_before_claim(self):
+        plan = execution_plan(op_suite=op_suite_plan(capabilities=None))
+        claim = FakeClaim(held=False)
+        provider = t0.ExecutedT0EvidenceProvider(
+            plan=plan,
+            runner=t0.RecordedProcessRunner([
+                _help_capture(plan, "error: unknown option --output", exit_code=1),
+            ]),
+            claim=claim)
+        with self.assertRaisesRegex(t0.InstrumentCapabilityError, "not a strict help banner"):
+            provider.collect_op_suite(t0._Collected())
+        self.assertFalse(claim.is_held())
+
+    def test_live_capability_probe_refuses_unexpected_exit_before_claim(self):
+        plan = execution_plan(op_suite=op_suite_plan(capabilities=None))
+        help_text = ("Usage: test-backend-ops [mode] [-o <op,..>] [-b <backend>] "
+                     "[--output <console|sql|csv>] [-j <n>]\n")
+        claim = FakeClaim(held=False)
+        provider = t0.ExecutedT0EvidenceProvider(
+            plan=plan,
+            runner=t0.RecordedProcessRunner([
+                _help_capture(plan, help_text, exit_code=2),
+            ]),
+            claim=claim)
+        with self.assertRaisesRegex(t0.InstrumentCapabilityError, "exit=2"):
+            provider.collect_op_suite(t0._Collected())
+        self.assertFalse(claim.is_held())
 
     def test_live_capability_probe_refuses_before_the_cpu_claim_on_baseline_binary(self):
         plan = execution_plan(op_suite=op_suite_plan(capabilities=None))

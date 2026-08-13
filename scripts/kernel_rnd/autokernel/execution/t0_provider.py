@@ -1088,14 +1088,30 @@ _FULL_BACKEND_OPS_CAPABILITIES = BackendOpsCapabilities(
     source="declared complete AutoKernel test-backend-ops capability set")
 
 _BACKEND_OPS_HELP_FLAG_RE = re.compile(r"(?<![A-Za-z0-9_-])(--[A-Za-z][A-Za-z0-9-]*)")
+_BACKEND_OPS_USAGE_RE = re.compile(
+    r"(?m)^Usage:\s+\S*test-backend-ops\s+.+$")
 
 
 def parse_backend_ops_help(text: str) -> BackendOpsCapabilities:
-    """Parse only flags visibly advertised by a captured help banner."""
+    """Parse only flags visibly advertised by a strict captured help banner.
+
+    Some supported ``test-backend-ops`` builds conventionally return 1 after
+    printing usage for ``--help``. The banner is the capability evidence, not
+    that conventional status. Require the baseline interface on a real Usage
+    line before optional flags may be trusted.
+    """
     if not isinstance(text, str):
         raise TypeError("test-backend-ops --help output must be a str")
-    flags = frozenset(_BACKEND_OPS_HELP_FLAG_RE.findall(_strip_ansi(text)))
-    if "--output" not in flags or "-o <op" not in text or "-b <backend" not in text:
+    normalized = _strip_ansi(text)
+    usage_match = _BACKEND_OPS_USAGE_RE.search(normalized)
+    if usage_match is None:
+        raise InstrumentCapabilityError(
+            "test-backend-ops --help did not contain a Usage: ...test-backend-ops banner. "
+            "Refusing to treat arbitrary process output as a capability statement.")
+    usage = usage_match.group(0)
+    flags = frozenset(_BACKEND_OPS_HELP_FLAG_RE.findall(normalized))
+    if ("--output" not in flags or "--output" not in usage
+            or "-o <op" not in usage or "-b <backend" not in usage):
         raise InstrumentCapabilityError(
             "test-backend-ops --help did not advertise the baseline test/-o/-b/--output "
             "interface. Refusing to guess an invocation from unrecognised help output.")
@@ -2692,11 +2708,25 @@ class ExecutedT0EvidenceProvider:
                 notes=("non-measuring selected-instrument capability probe",))
             help_capture, help_ref = self._execute(
                 help_invocation, timeout_s=min(plan.timeout_s, 30.0), collected=collected)
-            if help_capture.exit_code != 0 or not help_capture.stdout.strip():
+            # `test-backend-ops --help` is an interface declaration, not a
+            # measurement.  Some supported builds print their complete usage
+            # banner and return non-zero for that flag.  The banner is the
+            # evidence we need, so validate its grammar below instead of
+            # treating that conventional exit status as a capability failure.
+            # An empty or unrecognised banner remains a hard refusal.
+            if (help_capture.timed_out or help_capture.signalled
+                    or help_capture.exit_code not in (0, 1)
+                    or not help_capture.stdout.strip()):
                 raise InstrumentCapabilityError(
                     "test-backend-ops capability probe did not return a readable help banner "
-                    f"(exit={help_capture.exit_code}, capture={help_ref})")
-            capabilities = parse_backend_ops_help(help_capture.stdout)
+                    f"(exit={help_capture.exit_code}, timed_out={help_capture.timed_out}, "
+                    f"signalled={help_capture.signalled}, capture={help_ref})")
+            try:
+                capabilities = parse_backend_ops_help(help_capture.stdout)
+            except InstrumentCapabilityError as exc:
+                raise InstrumentCapabilityError(
+                    "test-backend-ops capability probe returned output that is not a strict "
+                    f"help banner (exit={help_capture.exit_code}, capture={help_ref}): {exc}") from exc
         # Construction validates the captured capability statement but does not
         # run the suite.  It therefore belongs before claim acquisition: an
         # incompatible instrument is a tooling refusal, not a CPU measurement.
