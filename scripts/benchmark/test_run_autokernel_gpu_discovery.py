@@ -146,6 +146,24 @@ class TestGpuDiscoveryBuildIdentity(unittest.TestCase):
                     anchor_identity=gpu.build_identity(anchor),
                     candidate_identity=gpu.build_identity(candidate))
 
+    def test_source_patch_requires_matching_compile_frame_and_distinct_source(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            anchor = _build(root / "anchor", rocwmma="OFF", mfma="OFF").resolve()
+            candidate = _build(root / "candidate", rocwmma="OFF", mfma="OFF").resolve()
+            (candidate / "bin" / "llama-bench").write_bytes(b"source-candidate")
+            anchor_identity = gpu.build_identity(anchor)
+            candidate_identity = gpu.build_identity(candidate)
+            candidate_identity["source_commit"] = "1" * 40
+            factor = gpu.factor_spec(
+                factor="source_patch", anchor_build=anchor,
+                candidate_build=candidate, anchor_identity=anchor_identity,
+                candidate_identity=candidate_identity)
+        self.assertEqual(factor["name"], "source_patch")
+        self.assertEqual(factor["candidate"], "1" * 12)
+        self.assertTrue(factor["anchor_flash_attention"])
+        self.assertTrue(factor["candidate_flash_attention"])
+
 
 class TestGpuDiscoveryInferenceWindow(unittest.TestCase):
     def test_parser_exposes_distinct_decode_workload(self) -> None:

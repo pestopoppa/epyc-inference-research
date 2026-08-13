@@ -82,8 +82,17 @@ def artifacts(build: Path) -> dict:
 
 
 def build_identity(build: Path) -> dict:
+    source_commit = SOURCE_COMMIT
+    try:
+        resolved = subprocess.run(
+            ["git", "-C", str(build), "rev-parse", "HEAD"],
+            check=True, capture_output=True, text=True).stdout.strip()
+        if len(resolved) == 40:
+            source_commit = resolved
+    except (OSError, subprocess.CalledProcessError):
+        pass
     identity = {
-        "source_commit": SOURCE_COMMIT,
+        "source_commit": source_commit,
         "hip_graphs": cache_bool(build, "GGML_HIP_GRAPHS"),
         "rocwmma_fattn": cache_bool(build, "GGML_HIP_ROCWMMA_FATTN"),
         "mmq_mfma": cache_bool(build, "GGML_HIP_MMQ_MFMA"),
@@ -306,6 +315,22 @@ def factor_spec(*, factor: str, anchor_build: Path, candidate_build: Path,
             "name": "GGML_HIP_GRAPHS", "anchor": "ON", "candidate": "OFF",
             "anchor_flash_attention": True, "candidate_flash_attention": True,
         }
+    if factor == "source_patch":
+        for key in ("hip_graphs", "rocwmma_fattn", "mmq_mfma"):
+            if anchor_identity[key] != candidate_identity[key]:
+                raise RuntimeError(
+                    f"source patch arms must keep {key} compile setting identical")
+        if anchor_identity["artifacts"]["binary_sha256"] == candidate_identity["artifacts"]["binary_sha256"]:
+            raise RuntimeError("source patch arms must have distinct sealed binaries")
+        if anchor_identity["source_commit"] == candidate_identity["source_commit"]:
+            raise RuntimeError("source patch arms must have distinct source commits")
+        return {
+            "name": "source_patch",
+            "anchor": anchor_identity["source_commit"][:12],
+            "candidate": candidate_identity["source_commit"][:12],
+            "anchor_flash_attention": True,
+            "candidate_flash_attention": True,
+        }
     if factor in {"helper_threads", "helper_threads_12", "helper_threads_16",
                   "helper_threads_24", "batch", "batch_up", "ubatch", "ubatch_up",
                   "mmap", "op_offload", "split_row", "kv_offload", "poll_zero"}:
@@ -495,7 +520,7 @@ def run(args: argparse.Namespace) -> dict:
                       "n_prompt": sealed["prompt_tokens"],
                       "n_gen": sealed["generation_tokens"],
                       "model": str(model), "model_sha256": sha256_file(model),
-                      "source_commit": SOURCE_COMMIT, "cpu_list": CPU_LIST,
+                      "source_commit": candidate_identity["source_commit"], "cpu_list": CPU_LIST,
                       "device": "AMD Instinct MI210", "architecture": "gfx90a"},
             "sole_factor": sole_factor,
             "anchor_invocations": args.calls,
@@ -588,6 +613,7 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--output-dir", required=True)
     result.add_argument("--campaign-id", required=True)
     result.add_argument("--factor", choices=("mmq_mfma", "flash_attention", "rocwmma_fattn",
+                                             "source_patch",
                                              "hip_graphs", "helper_threads", "helper_threads_12",
                                              "helper_threads_16", "helper_threads_24", "batch",
                                              "batch_up", "ubatch", "ubatch_up", "mmap",
