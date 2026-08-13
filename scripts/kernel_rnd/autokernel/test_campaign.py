@@ -515,6 +515,10 @@ class TestTheDryRunComposesEndToEnd(unittest.TestCase):
             campaign.Pair(1, 100.0, 108.0, "anchor_first"),
             campaign.Pair(2, 100.0, 108.0, "candidate_first"),
         ))
+        ops._screening_report = {
+            "candidate_invocations": 3, "anchor_invocations": 0,
+            "non_promotable": True,
+        }
         result = campaign.run_campaign(spec(blocks=3, screening_only=True,
                                             screening_baseline=screening_bank()), ops)
         self.assertEqual(result.state, campaign.STATE_DECIDED)
@@ -523,6 +527,7 @@ class TestTheDryRunComposesEndToEnd(unittest.TestCase):
         self.assertNotIn("run_t0", ops.calls)
         self.assertNotIn("settle_after_t0", ops.calls)
         self.assertTrue(result.to_dict()["non_promotable"])
+        self.assertEqual(result.to_dict()["screening_report"]["anchor_invocations"], 0)
 
     def test_screening_refuses_more_than_three_blocks(self):
         with self.assertRaisesRegex(ValueError, "capped at 3"):

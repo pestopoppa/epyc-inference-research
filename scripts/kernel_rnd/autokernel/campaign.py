@@ -2787,6 +2787,7 @@ class HostOps:
         self._t0_capture_refs: tuple[str, ...] = ()
         self._post_t0_settlement: Optional[Mapping[str, Any]] = None
         self._microbench_run: Optional[microbench.MicrobenchRun] = None
+        self._screening_report: Optional[Mapping[str, Any]] = None
         self._t1_request: Optional[api.EvaluationRequest] = None
         self._storage_open: Optional[schemas.Check] = None
         self._storage_close: Optional[schemas.Check] = None
@@ -4851,6 +4852,9 @@ class CampaignResult:
     executed: bool = False
     #: Why the durable record could not be written, when one was asked for.
     journal_error: Optional[str] = None
+    #: Candidate-only discovery receipt. Present only for SCREENING_ONLY and
+    #: explicitly carries zero anchor invocations/non-promotable authority.
+    screening_report: Optional[Mapping[str, Any]] = None
 
     @property
     def ok(self) -> bool:
@@ -4906,6 +4910,8 @@ class CampaignResult:
             "screening_only": self.spec.screening_only,
             "non_promotable": self.spec.screening_only,
             "journal_error": self.journal_error,
+            "screening_report": (None if self.screening_report is None
+                                  else dict(self.screening_report)),
             "ok": self.ok,
             "grammar": "SEARCH RECORD, NOT A CLAIM",
         }
@@ -5099,6 +5105,7 @@ def _finish(spec: CampaignSpec, ops: Any, ledger: ResourceLedger, *, state: str,
         # object, so the record cannot disagree with the loop about whether the
         # host was touched.
         executed=bool(getattr(ops, "executes", True)),
+        screening_report=getattr(ops, "_screening_report", None),
         error="\n".join(x for x in (error, traceback_text) if x) or None)
 
     evaluation_writer = getattr(ops, "journal_evaluation", None)
