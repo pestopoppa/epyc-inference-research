@@ -54,6 +54,17 @@ def plan(root: Path) -> E.GpuSourceEvidencePlan:
     model = write_bound(root, "model.gguf", b"model bytes", "model")
     workload = write_bound(root, "workload.json", b"workload bytes", "workload")
     runtime = write_bound(root, "runtime.json", b"runtime bytes", "runtime_config")
+    materialization_body = {
+        "schema": "epyc.autokernel.gpu_source_materialization.v1",
+        "manifest_sha256": manifest.sha256,
+        "candidate_source_commit": candidate.source_commit,
+        "candidate_source_sha256": candidate.source_sha256,
+        "patch_applied": True,
+        "production_tree": False,
+    }
+    materialization = write_bound(
+        root, "materialization.json",
+        json.dumps(materialization_body, sort_keys=True).encode(), "materialization")
     correctness_tool = write_bound(root, "test-backend-ops", b"correctness tool", "executable")
     profiler = write_bound(root, "rocprof", b"profiler tool", "executable")
     correctness_tool.path.chmod(0o700)
@@ -66,13 +77,20 @@ def plan(root: Path) -> E.GpuSourceEvidencePlan:
         manifest_sha256=manifest.sha256, model_sha256=model.sha256,
         workload_sha256=workload.sha256, runtime_config_sha256=runtime.sha256,
         candidate=candidate, anchor=anchor,
-        correctness_argv=(str(correctness_tool.path), "--op", "MUL_MAT_ID"),
+        correctness_argv=(str(correctness_tool.path), "--op", "MUL_MAT_ID",
+                          "--binary", str(candidate_files.binary.path),
+                          "--model", str(model.path), "--workload", str(workload.path),
+                          "--config", str(runtime.path)),
         correctness_summary_pattern=r"(?P<passed>\d+)/(?P<total>\d+) tests passed",
         expected_correctness_cases=3,
         candidate_rocprof_argv=(str(profiler.path), "-i", str(timestamp_input.path),
-                                "--candidate", str(candidate_files.binary.path)),
+                                "--candidate", str(candidate_files.binary.path),
+                                "--model", str(model.path), "--workload", str(workload.path),
+                                "--config", str(runtime.path)),
         anchor_rocprof_argv=(str(profiler.path), "-i", str(timestamp_input.path),
-                             "--anchor", str(anchor_files.binary.path)),
+                             "--anchor", str(anchor_files.binary.path),
+                             "--model", str(model.path), "--workload", str(workload.path),
+                             "--config", str(runtime.path)),
         dispatch=E.DispatchContract(
             candidate_exact=(E.ExactDispatch(
                 "new_kernel", r"^new_kernel$", 2, 128, 64, 0, 2),),
@@ -85,11 +103,21 @@ def plan(root: Path) -> E.GpuSourceEvidencePlan:
             invariants=(E.InvariantDispatch("hot_invariant", r"^hot_kernel$"),),
         ),
         identity_files=E.EvidenceIdentityFiles(
-            candidate_files, anchor_files, manifest, model, workload, runtime),
+            candidate_files, anchor_files, manifest, model, workload, runtime,
+            materialization),
         policy=placeholder_policy,
         correctness_inputs=(correctness_tool, candidate_files.binary),
         candidate_rocprof_inputs=(profiler, timestamp_input, candidate_files.binary),
-        anchor_rocprof_inputs=(profiler, timestamp_input, anchor_files.binary))
+        anchor_rocprof_inputs=(profiler, timestamp_input, anchor_files.binary),
+        required_correctness_argv_paths=(candidate_files.binary.path, model.path,
+                                         workload.path, runtime.path),
+        required_candidate_rocprof_argv_paths=(candidate_files.binary.path, model.path,
+                                               workload.path, runtime.path),
+        required_anchor_rocprof_argv_paths=(anchor_files.binary.path, model.path,
+                                            workload.path, runtime.path),
+        execution_cwd=root,
+        execution_environment=(("HIP_VISIBLE_DEVICES", "0"),
+                               ("LD_LIBRARY_PATH", str(candidate_files.hip_library.path.parent))))
     policy_path = placeholder_policy.path
     policy_path.write_text(json.dumps(E._policy_payload(result), sort_keys=True))
     policy = E.BoundInputFile(
@@ -345,6 +373,35 @@ class GpuSourceEvidenceTests(unittest.TestCase):
                 self.assertEqual(executors.calls, [])
                 self.assertFalse((Path(directory) / "evidence").exists())
 
+    def test_unapplied_manifest_wrong_environment_and_cwd_refuse(self):
+        with tempfile.TemporaryDirectory() as directory:
+            current = plan(Path(directory) / "inputs")
+            materialization = current.identity_files.materialization.path
+            raw = json.loads(materialization.read_text())
+            raw["patch_applied"] = False
+            materialization.write_text(json.dumps(raw, sort_keys=True))
+            changed = replace(
+                current.identity_files.materialization,
+                sha256=hashlib.sha256(materialization.read_bytes()).hexdigest())
+            current = replace(current, identity_files=replace(
+                current.identity_files, materialization=changed))
+            policy = json.loads(current.policy.path.read_text())
+            policy["execution_environment"] = [list(x) for x in current.execution_environment]
+            current.policy.path.write_text(json.dumps(policy, sort_keys=True))
+            current = replace(current, policy=replace(
+                current.policy,
+                sha256=hashlib.sha256(current.policy.path.read_bytes()).hexdigest()))
+            with self.assertRaisesRegex(E.EvidenceProducerError, "manifest-applied"):
+                self.produce(directory, plan_=current)
+        with tempfile.TemporaryDirectory() as directory:
+            current = plan(Path(directory) / "inputs")
+            with self.assertRaisesRegex(E.EvidenceProducerError, "LD_LIBRARY_PATH"):
+                replace(current, execution_environment=(
+                    ("LD_LIBRARY_PATH", "/wrong/generation"),))
+            bad_cwd = Path(directory) / "missing"
+            with self.assertRaisesRegex(E.EvidenceProducerError, "cwd"):
+                replace(current, execution_cwd=bad_cwd)
+
     def test_shell_metacharacters_are_rejected_before_execution(self):
         with tempfile.TemporaryDirectory() as directory:
             current = plan(Path(directory) / "inputs")
@@ -358,7 +415,9 @@ class GpuSourceEvidenceTests(unittest.TestCase):
             invocation = E.CommandInvocation(
                 kind="correctness", arm="candidate", argv=("/bin/true",),
                 stdout_path=(root / "stdout").resolve(),
-                stderr_path=(root / "stderr").resolve())
+                stderr_path=(root / "stderr").resolve(),
+                working_directory=root.resolve(),
+                environment=(("LD_LIBRARY_PATH", "/test/lib"),))
 
             class Child:
                 pid = 9191
@@ -375,7 +434,7 @@ class GpuSourceEvidenceTests(unittest.TestCase):
                 observed_monotonic_ns=__import__("time").monotonic_ns(),
                 device_id="mi210_0", kfd_pids=(pid,), vram_bytes=4096)
             executor = E.SubprocessCommandExecutor(
-                residency_sampler=sampler, environment={"PATH": "/usr/bin"},
+                residency_sampler=sampler,
                 sample_interval_s=.00001, popen=popen)
             capture = executor(invocation)
             self.assertEqual(capture.argv, ("/bin/true",))
@@ -383,6 +442,44 @@ class GpuSourceEvidenceTests(unittest.TestCase):
             self.assertTrue(capture.samples)
             self.assertNotIn("shell", popen.call_args.kwargs)
             self.assertEqual(popen.call_args.args[0], ["/bin/true"])
+            self.assertEqual(popen.call_args.kwargs["cwd"], str(root.resolve()))
+            self.assertEqual(popen.call_args.kwargs["env"]["LD_LIBRARY_PATH"],
+                             "/test/lib")
+
+    def test_sampler_exception_terminates_then_kills_exact_child(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            invocation = E.CommandInvocation(
+                kind="correctness", arm="candidate", argv=("/bin/true",),
+                stdout_path=(root / "stdout").resolve(),
+                stderr_path=(root / "stderr").resolve(),
+                working_directory=root.resolve(),
+                environment=(("LD_LIBRARY_PATH", "/test/lib"),))
+
+            class Child:
+                pid = 9292
+                alive = True
+                terminated = False
+                killed = False
+                def poll(self): return None if self.alive else -9
+                def terminate(self): self.terminated = True
+                def kill(self): self.killed = True; self.alive = False
+                def wait(self, timeout=None):
+                    if self.alive and timeout is not None:
+                        raise __import__("subprocess").TimeoutExpired("fake", timeout)
+                    return -9
+
+            child = Child()
+            executor = E.SubprocessCommandExecutor(
+                residency_sampler=lambda _pid: (_ for _ in ()).throw(
+                    RuntimeError("sample failed")),
+                sample_interval_s=.00001,
+                popen=mock.Mock(return_value=child))
+            with self.assertRaisesRegex(RuntimeError, "sample failed"):
+                executor(invocation)
+            self.assertTrue(child.terminated)
+            self.assertTrue(child.killed)
+            self.assertIsNotNone(child.poll())
 
 
 if __name__ == "__main__":

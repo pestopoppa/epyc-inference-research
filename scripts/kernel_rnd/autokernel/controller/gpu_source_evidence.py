@@ -143,6 +143,8 @@ class CommandInvocation:
     stdout_path: Path
     stderr_path: Path
     timestamp_csv_path: Path | None = None
+    working_directory: Path | None = None
+    environment: tuple[tuple[str, str], ...] = ()
 
     def __post_init__(self) -> None:
         if self.kind not in {"correctness", "rocprof"}:
@@ -157,6 +159,19 @@ class CommandInvocation:
             raise EvidenceProducerError("rocprof invocation requires timestamp CSV output")
         if self.kind == "correctness" and self.timestamp_csv_path is not None:
             raise EvidenceProducerError("correctness invocation may not claim a timestamp CSV")
+        if (self.working_directory is None or not self.working_directory.is_absolute()
+                or not self.working_directory.is_dir() or self.working_directory.is_symlink()):
+            raise EvidenceProducerError("command working directory must be an absolute real directory")
+        if (not self.environment
+                or any(not isinstance(item, tuple) or len(item) != 2
+                       or not all(isinstance(part, str) for part in item)
+                       for item in self.environment)
+                or len(dict(self.environment)) != len(self.environment)
+                or any(not key or "\0" in key or "\0" in value
+                       for key, value in self.environment)):
+            raise EvidenceProducerError("command environment must be exact unique key/value pairs")
+        if "LD_LIBRARY_PATH" not in dict(self.environment):
+            raise EvidenceProducerError("command environment must bind LD_LIBRARY_PATH")
 
 
 class CommandExecutor(Protocol):
@@ -192,6 +207,7 @@ class EvidenceIdentityFiles:
     model: BoundInputFile
     workload: BoundInputFile
     runtime_config: BoundInputFile
+    materialization: BoundInputFile
 
 
 class SubprocessCommandExecutor:
@@ -203,12 +219,11 @@ class SubprocessCommandExecutor:
     """
 
     def __init__(self, *, residency_sampler: Callable[[int], GpuResidencySample],
-                 environment: Mapping[str, str], sample_interval_s: float = .02,
+                 sample_interval_s: float = .02,
                  popen: Callable[..., Any] = subprocess.Popen) -> None:
         if sample_interval_s <= 0 or not math.isfinite(sample_interval_s):
             raise EvidenceProducerError("sample interval must be finite and positive")
         self.residency_sampler = residency_sampler
-        self.environment = dict(environment)
         self.sample_interval_s = sample_interval_s
         self.popen = popen
 
@@ -216,20 +231,42 @@ class SubprocessCommandExecutor:
         started_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         started_ns = time.monotonic_ns()
         samples: list[GpuResidencySample] = []
+        child: Any | None = None
         with invocation.stdout_path.open("x", encoding="utf-8") as stdout, \
                 invocation.stderr_path.open("x", encoding="utf-8") as stderr:
-            child = self.popen(
-                list(invocation.argv), stdin=subprocess.DEVNULL, stdout=stdout,
-                stderr=stderr, env=self.environment, close_fds=True)
-            while child.poll() is None:
-                sample = self.residency_sampler(int(child.pid))
-                if not isinstance(sample, GpuResidencySample):
+            try:
+                child = self.popen(
+                    list(invocation.argv), stdin=subprocess.DEVNULL, stdout=stdout,
+                    stderr=stderr, env=dict(invocation.environment),
+                    cwd=str(invocation.working_directory), close_fds=True)
+                while child.poll() is None:
+                    sample = self.residency_sampler(int(child.pid))
+                    if not isinstance(sample, GpuResidencySample):
+                        raise EvidenceProducerError(
+                            "residency sampler returned an invalid sample")
+                    samples.append(sample)
+                    time.sleep(self.sample_interval_s)
+                exit_code = int(child.wait())
+            except BaseException:
+                if child is not None and child.poll() is None:
                     child.terminate()
-                    child.wait()
-                    raise EvidenceProducerError("residency sampler returned an invalid sample")
-                samples.append(sample)
-                time.sleep(self.sample_interval_s)
-            exit_code = int(child.wait())
+                    try:
+                        child.wait(timeout=10)
+                    except subprocess.TimeoutExpired:
+                        child.kill()
+                        child.wait(timeout=10)
+                    except TypeError:
+                        child.wait()
+                    if child.poll() is None:
+                        child.kill()
+                        try:
+                            child.wait(timeout=10)
+                        except TypeError:
+                            child.wait()
+                    if child.poll() is None:
+                        raise EvidenceProducerError(
+                            "captured child remained alive after teardown")
+                raise
             stdout.flush(); os.fsync(stdout.fileno())
             stderr.flush(); os.fsync(stderr.fileno())
         ended_ns = time.monotonic_ns()
@@ -331,6 +368,11 @@ class GpuSourceEvidencePlan:
     correctness_inputs: tuple[BoundInputFile, ...] = ()
     candidate_rocprof_inputs: tuple[BoundInputFile, ...] = ()
     anchor_rocprof_inputs: tuple[BoundInputFile, ...] = ()
+    required_correctness_argv_paths: tuple[Path, ...] = ()
+    required_candidate_rocprof_argv_paths: tuple[Path, ...] = ()
+    required_anchor_rocprof_argv_paths: tuple[Path, ...] = ()
+    execution_cwd: Path = Path("/")
+    execution_environment: tuple[tuple[str, str], ...] = ()
 
     def __post_init__(self) -> None:
         if (not isinstance(self.campaign_id, str) or not self.campaign_id
@@ -360,6 +402,15 @@ class GpuSourceEvidencePlan:
             raise EvidenceProducerError("plan requires typed file-backed identities")
         if not isinstance(self.policy, BoundInputFile):
             raise EvidenceProducerError("plan requires a sealed adapter policy")
+        if (not self.execution_cwd.is_absolute() or not self.execution_cwd.is_dir()
+                or self.execution_cwd.is_symlink()
+                or not self.execution_environment
+                or any(not isinstance(item, tuple) or len(item) != 2
+                       or not all(isinstance(part, str) for part in item)
+                       for item in self.execution_environment)
+                or len(dict(self.execution_environment)) != len(self.execution_environment)
+                or "LD_LIBRARY_PATH" not in dict(self.execution_environment)):
+            raise EvidenceProducerError("plan requires sealed cwd and LD_LIBRARY_PATH environment")
         for label, command, inputs in (
             ("correctness", self.correctness_argv, self.correctness_inputs),
             ("candidate rocprof", self.candidate_rocprof_argv,
@@ -389,6 +440,23 @@ class GpuSourceEvidencePlan:
                 raise EvidenceProducerError(f"{label} does not bind rocprof -i input")
             if str(binary) not in command:
                 raise EvidenceProducerError(f"{label} does not execute its bound target binary")
+        for label, command, required in (
+            ("correctness", self.correctness_argv,
+             self.required_correctness_argv_paths),
+            ("candidate rocprof", self.candidate_rocprof_argv,
+             self.required_candidate_rocprof_argv_paths),
+            ("anchor rocprof", self.anchor_rocprof_argv,
+             self.required_anchor_rocprof_argv_paths),
+        ):
+            if not required or any(not path.is_absolute() or str(path) not in command
+                                   for path in required):
+                raise EvidenceProducerError(
+                    f"{label} does not bind every required model/workload/config path")
+        library_dirs = {str(self.identity_files.candidate.hip_library.path.parent),
+                        str(self.identity_files.anchor.hip_library.path.parent)}
+        ld_paths = set(dict(self.execution_environment)["LD_LIBRARY_PATH"].split(":"))
+        if not library_dirs.issubset(ld_paths):
+            raise EvidenceProducerError("LD_LIBRARY_PATH does not bind both arm HIP libraries")
 
 
 def _bound_reference(value: BoundInputFile) -> dict[str, Any]:
@@ -422,7 +490,7 @@ def _identity_files_reference(value: EvidenceIdentityFiles) -> dict[str, Any]:
         "candidate": _build_files_reference(value.candidate),
         "anchor": _build_files_reference(value.anchor),
         **{key: _bound_reference(getattr(value, key)) for key in (
-            "manifest", "model", "workload", "runtime_config")},
+            "manifest", "model", "workload", "runtime_config", "materialization")},
     }
 
 
@@ -434,7 +502,8 @@ def _identity_files_from_dict(value: Mapping[str, Any]) -> EvidenceIdentityFiles
             manifest=_bound_from_dict(value["manifest"]),
             model=_bound_from_dict(value["model"]),
             workload=_bound_from_dict(value["workload"]),
-            runtime_config=_bound_from_dict(value["runtime_config"]))
+            runtime_config=_bound_from_dict(value["runtime_config"]),
+            materialization=_bound_from_dict(value["materialization"]))
     except (KeyError, TypeError) as exc:
         raise EvidenceProducerError("evidence identity files are malformed") from exc
 
@@ -494,6 +563,11 @@ def _policy_payload(plan: GpuSourceEvidencePlan) -> dict[str, Any]:
         "correctness_inputs": [_bound_reference(x) for x in plan.correctness_inputs],
         "candidate_rocprof_inputs": [_bound_reference(x) for x in plan.candidate_rocprof_inputs],
         "anchor_rocprof_inputs": [_bound_reference(x) for x in plan.anchor_rocprof_inputs],
+        "required_correctness_argv_paths": [str(x) for x in plan.required_correctness_argv_paths],
+        "required_candidate_rocprof_argv_paths": [str(x) for x in plan.required_candidate_rocprof_argv_paths],
+        "required_anchor_rocprof_argv_paths": [str(x) for x in plan.required_anchor_rocprof_argv_paths],
+        "execution_cwd": str(plan.execution_cwd),
+        "execution_environment": [list(item) for item in plan.execution_environment],
         "dispatch": _expectations(plan),
     }
 
@@ -511,6 +585,24 @@ def _verify_plan_files(plan: GpuSourceEvidencePlan) -> None:
         _verify_bound(item)
         if item.sha256 != digest:
             raise EvidenceProducerError(f"{label} file does not match declared identity")
+    _verify_bound(plan.identity_files.materialization)
+    try:
+        materialization = json.loads(
+            plan.identity_files.materialization.path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise EvidenceProducerError("source materialization receipt is not JSON") from exc
+    required_materialization = {
+        "schema": "epyc.autokernel.gpu_source_materialization.v1",
+        "manifest_sha256": plan.manifest_sha256,
+        "candidate_source_commit": plan.candidate.source_commit,
+        "candidate_source_sha256": plan.candidate.source_sha256,
+        "patch_applied": True,
+        "production_tree": False,
+    }
+    if any(materialization.get(key) != value
+           for key, value in required_materialization.items()):
+        raise EvidenceProducerError(
+            "source materialization does not prove manifest-applied experimental tree")
     for item in (plan.correctness_inputs + plan.candidate_rocprof_inputs
                  + plan.anchor_rocprof_inputs):
         _verify_bound(item)
@@ -723,7 +815,9 @@ def _produce_correctness(
     invocation = CommandInvocation(
         kind="correctness", arm="candidate", argv=plan.correctness_argv,
         stdout_path=(directory / "stdout.txt").resolve(),
-        stderr_path=(directory / "stderr.txt").resolve())
+        stderr_path=(directory / "stderr.txt").resolve(),
+        working_directory=plan.execution_cwd,
+        environment=plan.execution_environment)
     capture, opened, released, residency = _run_claimed(
         invocation, plan=plan, executor=executor, claim_acquirer=claim_acquirer,
         claim_verifier=claim_verifier, claim_journal=claim_journal,
@@ -748,6 +842,9 @@ def _produce_correctness(
         "command_input_files": [_bound_reference(x) for x in plan.correctness_inputs],
         "workload_sha256": plan.workload_sha256,
         "command_argv": list(plan.correctness_argv),
+        "command_cwd": str(plan.execution_cwd),
+        "command_environment_sha256": schemas.content_hash(
+            [list(item) for item in plan.execution_environment]),
         "exit_code": capture.exit_code,
         **outputs,
         "started_at": capture.started_at,
@@ -880,7 +977,9 @@ def _produce_attribution_arm(
         kind="rocprof", arm=arm, argv=argv,
         stdout_path=(directory / "stdout.txt").resolve(),
         stderr_path=(directory / "stderr.txt").resolve(),
-        timestamp_csv_path=(directory / "timestamps.csv").resolve())
+        timestamp_csv_path=(directory / "timestamps.csv").resolve(),
+        working_directory=plan.execution_cwd,
+        environment=plan.execution_environment)
     capture, opened, released, residency = _run_claimed(
         invocation, plan=plan, executor=executor, claim_acquirer=claim_acquirer,
         claim_verifier=claim_verifier, claim_journal=claim_journal,
@@ -912,6 +1011,9 @@ def _produce_attribution_arm(
         "workload_sha256": plan.workload_sha256,
         "runtime_config_sha256": plan.runtime_config_sha256,
         "command_argv": list(argv),
+        "command_cwd": str(plan.execution_cwd),
+        "command_environment_sha256": schemas.content_hash(
+            [list(item) for item in plan.execution_environment]),
         "exit_code": capture.exit_code,
         **outputs,
         "timestamp_reduction_sha256": schemas.content_hash(dispatches),
@@ -965,6 +1067,11 @@ def _produce_pair(
         "correctness_inputs": [_bound_reference(x) for x in plan.correctness_inputs],
         "candidate_rocprof_inputs": [_bound_reference(x) for x in plan.candidate_rocprof_inputs],
         "anchor_rocprof_inputs": [_bound_reference(x) for x in plan.anchor_rocprof_inputs],
+        "required_correctness_argv_paths": [str(x) for x in plan.required_correctness_argv_paths],
+        "required_candidate_rocprof_argv_paths": [str(x) for x in plan.required_candidate_rocprof_argv_paths],
+        "required_anchor_rocprof_argv_paths": [str(x) for x in plan.required_anchor_rocprof_argv_paths],
+        "execution_cwd": str(plan.execution_cwd),
+        "execution_environment": [list(item) for item in plan.execution_environment],
         "expectations": _expectations(plan),
         "candidate": _reference(candidate),
         "anchor": _reference(anchor),
@@ -998,6 +1105,9 @@ def _validate_attribution_body(body: Mapping[str, Any], *, plan: GpuSourceEviden
         "workload_sha256": plan.workload_sha256,
         "runtime_config_sha256": plan.runtime_config_sha256,
         "command_argv": list(argv), "exit_code": 0,
+        "command_cwd": str(plan.execution_cwd),
+        "command_environment_sha256": schemas.content_hash(
+            [list(item) for item in plan.execution_environment]),
         "identity_files": _identity_files_reference(plan.identity_files),
         "execution_policy": _bound_reference(plan.policy),
         "command_input_files": [_bound_reference(x) for x in (
@@ -1037,6 +1147,9 @@ def _validate_correctness_body(body: Mapping[str, Any], plan: GpuSourceEvidenceP
         "candidate_build_identity": asdict(plan.candidate),
         "workload_sha256": plan.workload_sha256,
         "command_argv": list(plan.correctness_argv), "exit_code": 0,
+        "command_cwd": str(plan.execution_cwd),
+        "command_environment_sha256": schemas.content_hash(
+            [list(item) for item in plan.execution_environment]),
         "identity_files": _identity_files_reference(plan.identity_files),
         "execution_policy": _bound_reference(plan.policy),
         "command_input_files": [_bound_reference(x) for x in plan.correctness_inputs],
@@ -1098,6 +1211,11 @@ def _plan_from_receipts(correctness: Mapping[str, Any], pair: Mapping[str, Any])
             correctness_inputs=tuple(_bound_from_dict(x) for x in pair_body["correctness_inputs"]),
             candidate_rocprof_inputs=tuple(_bound_from_dict(x) for x in pair_body["candidate_rocprof_inputs"]),
             anchor_rocprof_inputs=tuple(_bound_from_dict(x) for x in pair_body["anchor_rocprof_inputs"]),
+            required_correctness_argv_paths=tuple(Path(x) for x in pair_body["required_correctness_argv_paths"]),
+            required_candidate_rocprof_argv_paths=tuple(Path(x) for x in pair_body["required_candidate_rocprof_argv_paths"]),
+            required_anchor_rocprof_argv_paths=tuple(Path(x) for x in pair_body["required_anchor_rocprof_argv_paths"]),
+            execution_cwd=Path(pair_body["execution_cwd"]),
+            execution_environment=tuple(tuple(x) for x in pair_body["execution_environment"]),
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise EvidenceProducerError("sealed bundle cannot reconstruct its plan") from exc
