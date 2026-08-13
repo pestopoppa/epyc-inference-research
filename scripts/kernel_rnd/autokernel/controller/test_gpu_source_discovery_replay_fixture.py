@@ -13,6 +13,7 @@ FIXTURE = (
     / "fixtures"
     / "gpu_source_discovery_replay_v1.json"
 )
+PROOF_CONTRACT = FIXTURE.with_name("gpu_source_proof_contract_v1.json")
 
 
 def _screen_rows(trace: dict) -> list[dict]:
@@ -112,6 +113,34 @@ class ReplayFixtureTests(unittest.TestCase):
                     False,
                     (row.get("usable"), row.get("usable_for_exact_gate")),
                 )
+
+    def test_proof_contract_requires_two_arm_provenance_and_native_hashes(self) -> None:
+        contract = json.loads(PROOF_CONTRACT.read_text(encoding="utf-8"))
+        self.assertEqual(
+            contract["schema"],
+            "epyc.autokernel.gpu_source_proof_contract.v1",
+        )
+        self.assertTrue(contract["native_hash_rule"]["file_sha256_is_distinct"])
+        self.assertIn(
+            "anchor_build_identity",
+            contract["proof_bundle"]["required"],
+        )
+        self.assertIn(
+            "candidate_build_identity",
+            contract["proof_bundle"]["required"],
+        )
+        self.assertIn(
+            "candidate_attribution_receipt_sha256",
+            contract["proof_bundle"]["required"],
+        )
+        self.assertIn(
+            "anchor_attribution_receipt_sha256",
+            contract["proof_bundle"]["required"],
+        )
+        self.assertIn(
+            "caller-created dictionaries as proof",
+            contract["forbidden_shortcuts"],
+        )
 
 
 if __name__ == "__main__":

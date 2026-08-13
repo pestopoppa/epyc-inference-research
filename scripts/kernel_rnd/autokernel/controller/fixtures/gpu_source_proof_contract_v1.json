@@ -1,0 +1,160 @@
+{
+  "schema": "epyc.autokernel.gpu_source_proof_contract.v1",
+  "authority": "nonpromotable_candidate_only_discovery",
+  "purpose": "Typed boundary between a source build, governed correctness and attribution producers, and the GPU throughput screener.",
+  "native_hash_rule": {
+    "algorithm": "sha256",
+    "canonicalization": "schemas.content_hash",
+    "rule": "Remove the receipt's native hash field, canonicalize the remaining object, recompute, and require exact equality before reading any claim.",
+    "file_sha256_is_distinct": true
+  },
+  "build_identity": {
+    "required": [
+      "source_commit",
+      "source_tree_sha256",
+      "binary_sha256",
+      "libggml_hip_sha256",
+      "config_sha256",
+      "linkage_receipt_sha256"
+    ],
+    "two_arm_rule": "Anchor and candidate identities are both required and must differ only by the sealed source-patch manifest."
+  },
+  "correctness_plan": {
+    "required": [
+      "manifest_sha256",
+      "candidate_build_identity",
+      "command_argv",
+      "backend",
+      "operation",
+      "filter",
+      "expected_summary",
+      "exact_case_contract_sha256",
+      "workload_sha256"
+    ]
+  },
+  "correctness_receipt": {
+    "schema": "epyc.autokernel.targeted_correctness_receipt.v2",
+    "required": [
+      "status",
+      "result",
+      "authority",
+      "non_promotable",
+      "promotion_claim",
+      "manifest_sha256",
+      "candidate_build_identity",
+      "workload_sha256",
+      "command_argv",
+      "exit_code",
+      "stdout_sha256",
+      "stderr_sha256",
+      "summary",
+      "exact_case_ok",
+      "device_claim_open",
+      "device_claim_released",
+      "residency_witness",
+      "receipt_sha256"
+    ],
+    "acceptance": [
+      "status is complete and result is PASS",
+      "exit_code is zero and the exact expected case/count is rederived from stdout",
+      "open and release receipts share claim_id, campaign_id, device_id, holder PID/start ticks and boot ID",
+      "KFD PID and nonzero VRAM were sampled during the child execution interval",
+      "all plan and build identities match exactly"
+    ]
+  },
+  "attribution_plan": {
+    "required": [
+      "manifest_sha256",
+      "anchor_build_identity",
+      "candidate_build_identity",
+      "model_sha256",
+      "workload_sha256",
+      "runtime_config_sha256",
+      "anchor_command_argv",
+      "candidate_command_argv",
+      "candidate_exact_dispatches",
+      "candidate_forbidden_dispatches",
+      "anchor_exact_dispatches",
+      "anchor_forbidden_dispatches",
+      "invariant_hot_signatures"
+    ],
+    "dispatch_expectation_fields": [
+      "kernel_pattern",
+      "calls",
+      "grid",
+      "workgroup",
+      "lds_bytes",
+      "blocks_per_call"
+    ]
+  },
+  "attribution_receipt": {
+    "schema": "epyc.autokernel.gpu_kernel_attribution.v2",
+    "required_per_arm": [
+      "status",
+      "result",
+      "authority",
+      "non_promotable",
+      "promotion_claim",
+      "manifest_sha256",
+      "build_identity",
+      "model_sha256",
+      "workload_sha256",
+      "runtime_config_sha256",
+      "command_argv",
+      "exit_code",
+      "timestamps_input_sha256",
+      "timestamp_csv_sha256",
+      "stdout_sha256",
+      "stderr_sha256",
+      "dispatches",
+      "device_claim_open",
+      "device_claim_released",
+      "residency_witness",
+      "receipt_sha256"
+    ],
+    "acceptance": [
+      "both arms independently pass native hash, command, identity, claim and residency validation",
+      "candidate and anchor each satisfy exact and forbidden dispatch geometry",
+      "every invariant hot signature has equal call count and geometry in both arms",
+      "timestamp CSV is a regular non-symlink file whose bytes match timestamp_csv_sha256"
+    ]
+  },
+  "proof_bundle": {
+    "schema": "epyc.autokernel.gpu_source_proof_bundle.v1",
+    "required": [
+      "manifest_sha256",
+      "anchor_build_identity",
+      "candidate_build_identity",
+      "model_sha256",
+      "workload_sha256",
+      "runtime_config_sha256",
+      "correctness_receipt_file_sha256",
+      "correctness_receipt_sha256",
+      "candidate_attribution_file_sha256",
+      "candidate_attribution_receipt_sha256",
+      "anchor_attribution_file_sha256",
+      "anchor_attribution_receipt_sha256",
+      "authority",
+      "promotion_claim",
+      "bundle_sha256"
+    ],
+    "consumer_rule": "GpuSourceScreener must load and revalidate this bundle and every referenced receipt, then bind the same manifest/build/model/workload/config identities to run_autokernel_gpu_discovery arguments before any model call."
+  },
+  "producer_order": [
+    "materialize isolated source worktree",
+    "build and seal both arm identities",
+    "run governed targeted correctness producer",
+    "run governed candidate attribution producer",
+    "run governed anchor inverse-attribution producer",
+    "seal and revalidate proof bundle",
+    "run nonpromotable paired throughput discovery"
+  ],
+  "forbidden_shortcuts": [
+    "caller-created dictionaries as proof",
+    "truthy hash strings without recomputation",
+    "post-exit residency samples",
+    "one-arm dispatch evidence when an inverse is declared",
+    "dashboard projection as experiment classification authority",
+    "promotion from this contract"
+  ]
+}
