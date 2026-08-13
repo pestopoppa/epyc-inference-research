@@ -2264,7 +2264,7 @@ class TestExecuteRefusesAnOpsThatCannotFinishARun(unittest.TestCase):
         ops = campaign.HostOps(nominal_khz=2_900_000)
         ops._claim_binding = mock.Mock(microbench_claim=object())
         ops._build_state = {"tree": mock.Mock(path=mock.Mock(path=self.tempdir.name))}
-        ops._spawner = object()
+        ops._spawner = mock.Mock(run=mock.Mock())
         command = mock.Mock(binding=object(), receipt=object())
         anchor = mock.Mock(tool="llama-bench")
         schedule = mock.Mock()
@@ -2279,12 +2279,37 @@ class TestExecuteRefusesAnOpsThatCannotFinishARun(unittest.TestCase):
                 mock.patch.object(ops, "_completed_run_ledger"), \
                 mock.patch.object(campaign.microbench, "MicrobenchPlan", return_value=plan), \
                 mock.patch.object(campaign.microbench, "MicrobenchRunner") as runner_type, \
+                mock.patch.object(ops, "_require_inference_window_receipts") as receipts, \
                 mock.patch.object(campaign, "pairs_from_run", return_value=()) as pairs:
             runner_type.return_value.run.return_value = run
             self.assertEqual(ops.run_paired_blocks(built, object(), object()), ())
+        self.assertIsInstance(
+            runner_type.call_args.kwargs["spawner"],
+            campaign.inference_window.WindowedSpawner)
         plan.schedule.assert_called_once_with()
         schedule.orders.assert_called_once_with(built.blocks)
         pairs.assert_called_once_with(run)
+        receipts.assert_called_once_with(run)
+
+    def test_cpu_inference_window_receipts_are_structurally_required(self):
+        good = {
+            "schema": "epyc.autokernel.inference_call_window.v1",
+            "lock_path": str(campaign.inference_window.DEFAULT_LOCK_PATH),
+            "waited_s": 0.25,
+            "held_s": 1.5,
+            "scope": "model_load_and_inference_only",
+            "released": True,
+        }
+        run = mock.Mock(raw_vector=mock.Mock(return_value={
+            "blocks": [{"invocations": [{"spawn": {
+                "inference_window_receipt": good}}]}]}))
+        campaign.HostOps._require_inference_window_receipts(run)
+
+        unreleased = dict(good, released=False)
+        run.raw_vector.return_value["blocks"][0]["invocations"][0]["spawn"][
+            "inference_window_receipt"] = unreleased
+        with self.assertRaisesRegex(RuntimeError, "malformed or unreleased"):
+            campaign.HostOps._require_inference_window_receipts(run)
 
     def test_host_screening_returns_truthful_candidate_only_observations(self):
         model = Path(self.tempdir.name) / "screen.gguf"
@@ -2308,7 +2333,7 @@ class TestExecuteRefusesAnOpsThatCannotFinishARun(unittest.TestCase):
                      screening_baseline=bank)
         ops = campaign.HostOps(nominal_khz=2_900_000)
         ops._claim_binding = object()
-        ops._spawner = object()
+        ops._spawner = mock.Mock(run=mock.Mock())
         report = {
             "baseline_center": 100.0, "candidate_samples": [102.0, 99.0, 104.0],
             "relative_effects": [0.02, -0.01, 0.04], "median_relative": 0.02,
@@ -2841,6 +2866,33 @@ class TestTheClaimIsNeverHeldWithoutAReleaser(unittest.TestCase):
         with self._seams(schemas.PASS), \
                 mock.patch.object(campaign.device_claim, "acquire_device_claim", refuse):
             self.ops.acquire_claim(self.spec)
+
+    def test_cpu_campaign_uses_the_windowed_claim_role(self):
+        seen = []
+
+        def acquire(*args, **kwargs):
+            seen.append(kwargs)
+            return self.region
+
+        with self._seams(schemas.PASS), mock.patch.object(
+                campaign.cpu_region_claim, "acquire_cpu_region_claim", acquire):
+            self.ops.acquire_claim(self.spec)
+        self.assertEqual(
+            seen[0]["role"], campaign.inference_window.WINDOWED_CPU_ROLE)
+
+    def test_gpu_campaign_retains_the_ordinary_claim_role(self):
+        seen = []
+
+        def acquire(*args, **kwargs):
+            seen.append(kwargs)
+            return self.region
+
+        with self._seams(schemas.PASS), mock.patch.object(
+                campaign.cpu_region_claim, "acquire_cpu_region_claim", acquire), \
+                mock.patch.object(campaign.device_claim, "acquire_device_claim",
+                                  lambda device_id, **kwargs: FakeClaim(device_id)):
+            self.ops.acquire_claim(self.gpu_spec)
+        self.assertEqual(seen[0]["role"], "autokernel")
 
     def test_the_device_claim_declares_its_hold_window(self):
         """THE BITE. Without `max_hold_s` the device claim writes no `expires_at`.

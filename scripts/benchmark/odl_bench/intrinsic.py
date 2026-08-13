@@ -473,7 +473,16 @@ class DefaultChunker:
                 chunks.append(block)
             else:
                 chunks.extend(self._recursive_split(block, ["\n", " ", ""]))
-        return self._merge_small_chunks(chunks)
+        chunks = self._merge_small_chunks(chunks)
+        # Drop leading/trailing whitespace-only chunks: they sit at the text
+        # edges, so removing them cannot break the interior contiguity that
+        # find_chunks_start_and_end relies on (interior whitespace chunks
+        # were already merged into a neighbour above).
+        while chunks and not chunks[0].strip():
+            chunks.pop(0)
+        while chunks and not chunks[-1].strip():
+            chunks.pop()
+        return chunks
 
     def _merge_small_chunks(self, chunks: list[str]) -> list[str]:
         """Greedily merge adjacent chunks whose combined size fits the target.
@@ -508,7 +517,7 @@ class DefaultChunker:
         remaining = separators[1:]
         if separator == "":
             return self._hard_split(text)
-        pieces = [p for p in re.split(re.escape(separator), text) if p]
+        pieces = self._split_keep_separator(text, separator)
         final: list[str] = []
         for piece in pieces:
             if self.length_function(piece) > self.chunk_size:
@@ -516,6 +525,29 @@ class DefaultChunker:
             else:
                 final.append(piece)
         return final
+
+    @staticmethod
+    def _split_keep_separator(text: str, separator: str) -> list[str]:
+        """Split ``text`` on ``separator`` keeping the separator attached to
+        the FOLLOWING piece, so every returned piece is a contiguous slice of
+        ``text`` (concatenating the pieces reproduces ``text`` exactly).
+
+        ``re.split`` would drop the separators, turning adjacent pieces into
+        non-contiguous fragments; later merges of those fragments would no
+        longer be substrings of ``text``, and ``find_chunks_start_and_end``
+        (which locates each chunk inside the full text by exact match) would
+        raise ``ValueError`` on real documents. Keeping separators preserves
+        the substring invariant that BI/ICC/DCC depend on.
+        """
+        if not separator:
+            return [text] if text else []
+        pieces: list[str] = []
+        cursor = 0
+        for match in re.finditer(re.escape(separator), text):
+            pieces.append(text[cursor:match.start()])
+            cursor = match.start()
+        pieces.append(text[cursor:])
+        return [piece for piece in pieces if piece]
 
     def _hard_split(self, text: str) -> list[str]:
         chunks: list[str] = []
@@ -686,21 +718,39 @@ def score_prediction_dir(
         "Ekimetrics.SC": [], "Ekimetrics.BI": [], "Ekimetrics.ICC": [], "Ekimetrics.DCC": []
     }
     unavailable_detail: dict[str, str] = {}
+    skipped_docs = 0
+    skip_errors: list[str] = []
     for text in docs:
-        chunks = chunker.split_text(text)
-        rows = score_chunks(
-            chunks,
-            text,
-            engine=engine,
-            embedder=embedder,
-            min_tokens=min_tokens,
-            max_tokens=max_tokens,
-        )
+        try:
+            chunks = chunker.split_text(text)
+            rows = score_chunks(
+                chunks,
+                text,
+                engine=engine,
+                embedder=embedder,
+                min_tokens=min_tokens,
+                max_tokens=max_tokens,
+            )
+        except Exception as exc:  # noqa: BLE001 - a pathological doc never aborts the run
+            skipped_docs += 1
+            skip_errors.append(f"{type(exc).__name__}: {exc}")
+            continue
         for row in rows:
             if row.value is not None:
                 per_doc[row.metric_name].append(float(row.value))
             elif row.metric_name not in unavailable_detail:
                 unavailable_detail[row.metric_name] = row.detail
+
+    if skipped_docs:
+        sample = skip_errors[0][:120]
+        more = f" (+{len(skip_errors) - 1} more)" if len(skip_errors) > 1 else ""
+        skip_note = (
+            f"{len(docs)} prediction documents, {skipped_docs} skipped "
+            f"(document-level scoring error: {sample}{more})"
+        )
+        for name in ("Ekimetrics.SC", "Ekimetrics.BI", "Ekimetrics.ICC", "Ekimetrics.DCC"):
+            if name not in unavailable_detail:
+                unavailable_detail[name] = skip_note
 
     rows: list[MetricRow] = []
     for name in ("Ekimetrics.SC", "Ekimetrics.BI", "Ekimetrics.ICC", "Ekimetrics.DCC"):

@@ -5,6 +5,7 @@ from pathlib import Path
 import tempfile
 import time
 import unittest
+from dataclasses import dataclass
 
 from . import inference_window as window
 from . import cpu_region_claim
@@ -80,6 +81,32 @@ class InferenceCallWindowTests(unittest.TestCase):
             with window.InferenceCallWindow(path, timeout_s=0).hold():
                 pass
 
+    def test_windowed_spawner_attaches_a_released_per_call_receipt(self):
+        @dataclass(frozen=True)
+        class Result:
+            value: str
+            inference_window_receipt: dict | None = None
+
+        class Delegate:
+            spawner_id = "subprocess/v1"
+
+            def run(self, argv, env, *, timeout_s, cwd=None):
+                return Result("measured")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "window.lock"
+            result = window.WindowedSpawner(
+                Delegate(), window.InferenceCallWindow(path)).run(
+                    ["tool"], {}, timeout_s=3)
+        receipt = result.inference_window_receipt
+        self.assertEqual(receipt["schema"],
+                         "epyc.autokernel.inference_call_window.v1")
+        self.assertEqual(receipt["lock_path"], str(path))
+        self.assertEqual(receipt["scope"], "model_load_and_inference_only")
+        self.assertTrue(receipt["released"])
+        self.assertGreaterEqual(receipt["waited_s"], 0.0)
+        self.assertGreaterEqual(receipt["held_s"], 0.0)
+
     def test_gpu_helpers_can_borrow_only_windowed_live_control_coverage(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "regions"
@@ -99,6 +126,23 @@ class InferenceCallWindowTests(unittest.TestCase):
                 claim.release()
             with self.assertRaisesRegex(RuntimeError, "not held"):
                 borrowed.validate()
+
+    def test_gpu_helpers_can_borrow_windowed_strict_campaign_coverage(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "regions"
+            journal = cpu_region_claim.RegionClaimJournal(Path(tmp) / "claims.jsonl")
+            claim = cpu_region_claim.acquire_cpu_region_claim(
+                "0-95", purpose="AutoKernel campaign ak-decode / akc-decode",
+                campaign_id="ak-iqk-v9-decode-test", journal=journal,
+                role=window.WINDOWED_CPU_ROLE, timeout_s=0, max_hold_s=60,
+                lock_root=root)
+            try:
+                borrowed = window.borrow_windowed_cpu_coverage(
+                    "184-191", lock_root=root)
+                self.assertEqual(borrowed.campaign_id, "ak-iqk-v9-decode-test")
+                borrowed.validate()
+            finally:
+                claim.release()
 
     def test_legacy_autokernel_claim_is_never_borrowed(self):
         with tempfile.TemporaryDirectory() as tmp:

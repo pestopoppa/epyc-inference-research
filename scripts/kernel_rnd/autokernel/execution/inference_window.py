@@ -18,7 +18,7 @@ import json
 import os
 import time
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Callable, Iterator, Mapping, Sequence
 
@@ -138,8 +138,24 @@ class WindowedSpawner:
 
     def run(self, argv: Sequence[str], env: Mapping, *, timeout_s: float,
             cwd: str | None = None) -> Any:
-        with self._call_window.hold():
-            return self._delegate.run(argv, env, timeout_s=timeout_s, cwd=cwd)
+        with self._call_window.hold() as lease:
+            result = self._delegate.run(argv, env, timeout_s=timeout_s, cwd=cwd)
+        receipt = {
+            "schema": "epyc.autokernel.inference_call_window.v1",
+            "lock_path": str(lease.path),
+            "waited_s": lease.waited_s,
+            "held_s": max(0.0, self._call_window._monotonic()
+                          - lease.acquired_monotonic_s),
+            "scope": "model_load_and_inference_only",
+            "released": lease.held is False,
+        }
+        # SpawnResult is frozen, so attach the per-invocation proof by
+        # replacement.  Generic delegates used by narrow lock tests remain
+        # valid and simply return their own result shape unchanged.
+        try:
+            return replace(result, inference_window_receipt=receipt)
+        except (TypeError, ValueError):
+            return result
 
 
 class ReleaseUnderWindow:
@@ -245,16 +261,16 @@ def borrow_windowed_cpu_coverage(cpu_list: str, *, lock_root: Path | str | None 
             holder = payload.get("holder")
             identity = (payload.get("claim_id"), payload.get("campaign_id"),
                         holder.get("pid") if isinstance(holder, dict) else None)
+            purpose = str(payload.get("purpose", ""))
             if (payload.get("autokernel_schema")
                     != cpu_region_claim.CPU_REGION_CLAIM_SCHEMA
                     or payload.get("claim_role") != WINDOWED_CPU_ROLE
                     or payload.get("state") != cpu_region_claim.STATE_HELD
-                    or not str(payload.get("campaign_id", "")).startswith("ak-controls-")
-                    or not str(payload.get("purpose", "")).startswith(
-                        "AutoKernel five-control calibration block")
+                    or not str(payload.get("campaign_id", "")).startswith("ak-")
+                    or "AutoKernel" not in purpose
                     or region not in payload.get("regions", [])):
                 raise RuntimeError(
-                    f"{role_path} is not a borrowable window-aware live-controls claim")
+                    f"{role_path} is not a borrowable window-aware AutoKernel claim")
             if expected is None:
                 expected = identity
             elif identity != expected:

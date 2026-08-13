@@ -2051,6 +2051,7 @@ class SpawnResult:
     sandbox_teardown: Optional[dict] = None
     device_sampling_receipt: Optional[gpu_device_sampler.DeviceSamplingReceipt] = None
     scheduler_smt_receipt: Optional[dict] = None
+    inference_window_receipt: Optional[dict] = None
 
     def to_dict(self) -> dict:
         return {"argv": list(self.argv), "returncode": self.returncode,
@@ -2065,7 +2066,8 @@ class SpawnResult:
                 "device_sampling_receipt": (
                     None if self.device_sampling_receipt is None
                     else self.device_sampling_receipt.to_dict()),
-                "scheduler_smt_receipt": self.scheduler_smt_receipt}
+                "scheduler_smt_receipt": self.scheduler_smt_receipt,
+                "inference_window_receipt": self.inference_window_receipt}
 
 
 def _proc_cpu_ticks(cpus: Sequence[int]) -> dict[int, tuple[int, int]]:

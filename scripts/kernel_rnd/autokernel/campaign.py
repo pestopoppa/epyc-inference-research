@@ -169,7 +169,7 @@ from . import schemas, storage
 from .controller import do_not_repeat, hypotheses
 from .evaluator import api, correctness, devices, recipes
 from .execution import (chain, control_runner, cpu_region_claim, device_sampler,
-                        instrument_integrity, microbench, physical_bounds,
+                        inference_window, instrument_integrity, microbench, physical_bounds,
                         powercap_broker, provider, sandbox, screening_baseline,
                         t0_provider, worktree)
 from .resource import claim_witness, device_claim, preflight
@@ -294,6 +294,9 @@ MODULES_THE_DRIVER_USES: Mapping[str, str] = {
     "execution.instrument_integrity": "RVP-C6-1: candidate reward translation units "
                                       "must equal the reviewed measurement overlay before "
                                       "T0 or T1 can launch",
+    "execution.inference_window": "CPU and GPU candidate preparation may overlap, while "
+                                  "every actual model-load/inference call is serialized by "
+                                  "one recoverable host-wide mutex and receipts its wait/release",
     "execution.cpu_region_claim": "TODO-free: two A/A runs were destroyed by a legitimate "
                                   "co-tenant because we held no claim",
     "execution.device_sampler": "RVP-C3-4: a GPU result needs numeric power/clock/temperature "
@@ -3313,7 +3316,10 @@ class HostOps:
 
         def acquire(*, purpose: str) -> Any:
             return cpu_region_claim.acquire_cpu_region_claim(
-                spec.cpu_list, role="autokernel", purpose=purpose,
+                spec.cpu_list,
+                role=(inference_window.WINDOWED_CPU_ROLE
+                      if spec.backend == BACKEND_CPU else "autokernel"),
+                purpose=purpose,
                 campaign_id=spec.campaign_id, journal=journal,
                 timeout_s=600.0, max_hold_s=float(spec.max_hold_s))
 
@@ -4382,6 +4388,9 @@ class HostOps:
             sandbox_policy = self._candidate_sandbox_policy(spec)
             spawner = self._spawner or microbench.SubprocessSpawner(
                 workdir_root=sandbox_policy.writable_root, sandbox_policy=sandbox_policy)
+            if spec.backend == BACKEND_CPU:
+                spawner = inference_window.WindowedSpawner(
+                    spawner, inference_window.InferenceCallWindow(timeout_s=600.0))
             frame = {"recipe_id": spec.recipe_id, "backend": spec.backend,
                      "model_sha256": storage.hash_file(spec.model),
                      "instrument_commit": MEASUREMENT_COMMIT,
@@ -4440,23 +4449,78 @@ class HostOps:
                 f"has base imbalance {imbalance} across {spec.blocks} blocks; refusing before "
                 "measurement because interleaved order must be counterbalanced within one.")
         sandbox_policy = self._candidate_sandbox_policy(spec)
+        spawner = self._spawner or microbench.SubprocessSpawner(
+            workdir_root=sandbox_policy.writable_root,
+            sandbox_policy=sandbox_policy,
+            device_sampler=(
+                device_sampler.RocmSmiSampler(device_index=spec.device_index)
+                if spec.backend == BACKEND_GPU else None))
+        if spec.backend == BACKEND_CPU:
+            spawner = inference_window.WindowedSpawner(
+                spawner, inference_window.InferenceCallWindow(timeout_s=600.0))
         runner = microbench.MicrobenchRunner(
             claim=self._claim_binding.microbench_claim,
             policy=microbench.HostStatePolicy(
                 nominal_khz=self._nominal_khz,
                 require_load=False,
                 require_package_power=(spec.backend == BACKEND_CPU)),
-            spawner=self._spawner or microbench.SubprocessSpawner(
-                workdir_root=sandbox_policy.writable_root,
-                sandbox_policy=sandbox_policy,
-                device_sampler=(
-                    device_sampler.RocmSmiSampler(device_index=spec.device_index)
-                    if spec.backend == BACKEND_GPU else None)),
+            spawner=spawner,
             host_state=self._read_host_state,
             run_ledger=self._completed_run_ledger(spec))
         run = runner.run(plan)
         self._microbench_run = run
-        return pairs_from_run(run)
+        pairs = pairs_from_run(run)
+        if spec.backend == BACKEND_CPU:
+            self._require_inference_window_receipts(run)
+        return pairs
+
+    @staticmethod
+    def _require_inference_window_receipts(run: Any) -> None:
+        """Refuse a CPU result unless every model call proves lock release.
+
+        The host-wide region claim may be borrowed by GPU discovery only because
+        CPU inference is serialized at the much narrower call boundary.  That is
+        an evidence-bearing contract, not an implementation detail: a completed
+        strict run without one released receipt per invocation must never rank.
+        """
+        raw = run.raw_vector()
+        blocks = raw.get("blocks") if isinstance(raw, Mapping) else None
+        if not isinstance(blocks, list) or not blocks:
+            raise RuntimeError(
+                "completed CPU run has no blocks carrying inference-window receipts")
+        checked = 0
+        for block_index, block in enumerate(blocks):
+            invocations = block.get("invocations") if isinstance(block, Mapping) else None
+            if not isinstance(invocations, list) or not invocations:
+                raise RuntimeError(
+                    f"CPU block {block_index} has no inference-windowed invocations")
+            for invocation_index, invocation in enumerate(invocations):
+                spawn = (invocation.get("spawn")
+                         if isinstance(invocation, Mapping) else None)
+                receipt = (spawn.get("inference_window_receipt")
+                           if isinstance(spawn, Mapping) else None)
+                location = f"block {block_index} invocation {invocation_index}"
+                if not isinstance(receipt, Mapping):
+                    raise RuntimeError(
+                        f"CPU {location} lacks an inference-window receipt")
+                waited_s = receipt.get("waited_s")
+                held_s = receipt.get("held_s")
+                if (receipt.get("schema")
+                        != "epyc.autokernel.inference_call_window.v1"
+                        or receipt.get("lock_path")
+                        != str(inference_window.DEFAULT_LOCK_PATH)
+                        or receipt.get("scope") != "model_load_and_inference_only"
+                        or receipt.get("released") is not True
+                        or not isinstance(waited_s, (int, float))
+                        or not isfinite(waited_s) or waited_s < 0
+                        or not isinstance(held_s, (int, float))
+                        or not isfinite(held_s) or held_s < 0):
+                    raise RuntimeError(
+                        f"CPU {location} has a malformed or unreleased "
+                        "inference-window receipt")
+                checked += 1
+        if checked == 0:  # defensive: the non-empty checks above imply this.
+            raise RuntimeError("completed CPU run has no inference-window receipts")
 
     def _t1_evaluation_request(self, spec: CampaignSpec, *, command: Any,
                                anchor: api.AnchorIdentity) -> api.EvaluationRequest:

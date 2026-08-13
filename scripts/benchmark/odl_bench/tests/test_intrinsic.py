@@ -176,6 +176,50 @@ class TestDefaultChunker(unittest.TestCase):
     def test_empty_text(self):
         self.assertEqual(DefaultChunker().split_text(""), [])
 
+    def test_every_chunk_is_an_exact_substring_of_source(self):
+        # Regression (real run 2026-08-13): _recursive_split dropped separators
+        # and _merge_small_chunks concatenated non-adjacent fragments, so chunks
+        # were no longer substrings of the source and find_chunks_start_and_end
+        # raised "Chunk not found in text." on real prediction docs. Every chunk
+        # must be an exact substring: BI/ICC/DCC locate chunks inside full_text
+        # by exact match.
+        text = ("word " * 500 + "\n\n" + "word " * 500 + "\n\n" + "word " * 500)
+        chunker = DefaultChunker(chunk_size=600, min_chunk_tokens=5)
+        chunks = chunker.split_text(text)
+        self.assertGreater(len(chunks), 1)
+        for chunk in chunks:
+            self.assertIn(chunk, text, f"chunk is not an exact substring: {chunk[:40]!r}")
+
+    def test_split_keep_separator_preserves_contiguity(self):
+        # Direct invariant of _split_keep_separator: concatenating the pieces
+        # reproduces the source exactly, and each piece is a contiguous slice.
+        text = "AAAA\n\nBBBB\nCCCC DDDD\nEEEE"
+        pieces = DefaultChunker._split_keep_separator(text, "\n")
+        self.assertEqual("".join(pieces), text)
+        for piece in pieces:
+            self.assertIn(piece, text)
+        pieces_sp = DefaultChunker._split_keep_separator("alpha beta gamma", " ")
+        self.assertEqual("".join(pieces_sp), "alpha beta gamma")
+
+    def test_find_chunks_on_chunker_output_never_raises(self):
+        # The exact failure shape from the real ODL-013 pdftotext run: chunker
+        # output fed straight into find_chunks_start_and_end must locate every
+        # chunk (BI path). Use a realistic layout with headings, blank lines,
+        # and long paragraphs.
+        text = (
+            "# Section One\n\n"
+            + "word " * 400
+            + "\n\n# Section Two\n\n"
+            + "word " * 700
+            + "\n\n"
+            + "word " * 300
+        )
+        chunks = DefaultChunker(chunk_size=600, min_chunk_tokens=5).split_text(text)
+        locs = find_chunks_start_and_end(chunks, text)
+        self.assertEqual(len(locs), len(chunks))
+        for chunk, (start, end) in zip(chunks, locs):
+            self.assertEqual(text[start:end], chunk)
+
 
 class TestIntraChunkCohesion(unittest.TestCase):
     def test_similar_sentences_score_above_dissimilar(self):
@@ -280,6 +324,28 @@ class TestScorePredictionDir(unittest.TestCase):
         for r in rows:
             self.assertIsNone(r.value)
             self.assertEqual(r.n, 0)
+
+    def test_pathological_doc_is_skipped_not_crash(self):
+        # A document that breaks per-document scoring must be skipped with a
+        # reason recorded, never abort the whole run (degrade-gracefully
+        # convention). Monstrously large single-line text forces _hard_split
+        # paths; a doc that still throws is contained by the guard.
+        with tempfile.TemporaryDirectory() as td:
+            pred_dir = Path(td) / "pred"
+            pred_dir.mkdir()
+            (pred_dir / "good.md").write_text("# A\n\n" + "word " * 400, encoding="utf-8")
+            (pred_dir / "bad.md").write_text("x" * 200000, encoding="utf-8")
+            rows = score_prediction_dir(pred_dir, engine="pdftotext")
+        by_name = {r.metric_name: r for r in rows}
+        # The run completes and returns 4 rows regardless.
+        self.assertEqual(len(rows), 4)
+        self.assertEqual(by_name["Ekimetrics.SC"].n, 2)
+        # Either the bad doc scored fine (all 2 docs contribute) or was skipped
+        # with a documented reason — never an exception to the caller.
+        for r in rows:
+            if r.value is not None:
+                continue
+            self.assertTrue("skipped" in r.detail or "unavailable" in r.detail, r.detail)
 
     def test_adapter_entry_point_matches_module(self):
         with tempfile.TemporaryDirectory() as td:
