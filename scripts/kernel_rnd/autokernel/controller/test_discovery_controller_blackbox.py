@@ -293,6 +293,31 @@ class BlackBoxLaunchGate(unittest.TestCase):
                              item.source_manifest.patch_bundle_sha256)
             self.assertEqual(restored.source_manifest.patch_bytes, patch_bytes)
 
+    def test_actor_cannot_invent_assigned_campaign_or_base_identity(self):
+        patch_bytes = (
+            b"diff --git a/ggml/src/ggml.c b/ggml/src/ggml.c\n"
+            b"--- a/ggml/src/ggml.c\n+++ b/ggml/src/ggml.c\n@@ -1 +1 @@\n-x\n+y\n")
+        assignment = D.AuthoringAssignment("ak-assigned", "akp-assigned", "akc-assigned",
+                                           "0" * 40, "1" * 40)
+        manifest = {"schema": D.source_candidate.SCHEMA_SOURCE_PATCH,
+                    "campaign_id": assignment.campaign_id, "proposal_id": assignment.proposal_id,
+                    "candidate_id": assignment.candidate_id, "source_tree": "llama.cpp",
+                    "production_base_commit": assignment.production_base_commit,
+                    "instrument_commit": assignment.instrument_commit, "change_class": "fusion",
+                    "declared_files": ["ggml/src/ggml.c"],
+                    "declared_symbols": {"ggml/src/ggml.c": ["<file-scope>"]},
+                    "mechanism_id": "bounded", "patch_sha256": hashlib.sha256(patch_bytes).hexdigest(),
+                    "patch_encoding": "base64", "patch_base64": base64.b64encode(patch_bytes).decode("ascii")}
+        plan = {"hypothesis_id": "akh-assigned", "statement": "s", "falsifier": "f",
+                "regime": {}, "proposal": {"proposal_id": assignment.proposal_id},
+                "source_manifest_path": "source-patch.json"}
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); (root / "source-patch.json").write_text(json.dumps(manifest)); (root / "plan.json").write_text(json.dumps(plan))
+            self.assertEqual(D._load_plan(root / "plan.json", root, assignment=assignment).source_manifest.candidate_id, assignment.candidate_id)
+            manifest["candidate_id"] = "akc-invented"; (root / "source-patch.json").write_text(json.dumps(manifest))
+            with self.assertRaises(D.DiscoveryControllerError):
+                D._load_plan(root / "plan.json", root, assignment=assignment)
+
     def test_process_crash_before_runner_resumes_without_replanning(self):
         with tempfile.TemporaryDirectory() as temp, \
                 patch.object(D.source_candidate, "SourcePatchManifest", Manifest), \
