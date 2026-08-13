@@ -101,7 +101,13 @@ while read -r name arrow path rest; do
     "$EXPECT"/*) printf "  OK   %-28s -> %s\n" "$name" "$path" ;;
     *)           printf "  BAD  %-28s -> %s\n" "$name" "$path"; BAD=$((BAD+1)) ;;
   esac
-done < <(ldd "$BIN" 2>/dev/null)
+# Do not redirect ldd diagnostics through /dev/null.  AutoKernel runs this
+# verifier inside its Landlock sandbox, where the candidate is deliberately
+# denied write access to device files; shell redirection would otherwise fail
+# before ldd starts and manufacture the vacuous (zero-row) result this script
+# is meant to detect.  Any ldd diagnostic is useful evidence and the parser
+# ignores non-row text, so preserving it is both sandbox-safe and fail-closed.
+done < <(ldd "$BIN")
 
 echo
 echo "LD_LIBRARY_PATH order as the loader sees it:"
