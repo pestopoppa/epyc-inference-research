@@ -7,6 +7,8 @@ They are a launch gate: a red test means the live adapter must remain disabled.
 from __future__ import annotations
 
 import json
+import base64
+import hashlib
 from pathlib import Path
 import tempfile
 import unittest
@@ -108,6 +110,9 @@ class Screen:
             "result.json", H, self.effect, "candidate", H, H, H
         )
 
+    def reconcile(self, inflight):
+        return D.Recovery("safe_to_start")
+
 
 class ProcessCrash(BaseException):
     pass
@@ -137,6 +142,37 @@ class CrashAfterRunner(Screen):
         self.compute_calls += 1
         self.durable_result.write_text(json.dumps({"result_sha256": H}))
         raise ProcessCrash("after fake runner")
+
+    def reconcile(self, inflight):
+        if self.durable_result.exists():
+            return D.Recovery(
+                "sealed_result",
+                D.SealedScreen(
+                    "result.json", H, self.effect, "candidate", H, H, H
+                ),
+            )
+        return D.Recovery("safe_to_start")
+
+
+class AmbiguousRecovery(Screen):
+    def screen(self, item, authorization, lease):
+        self.calls += 1
+        if self.calls == 1:
+            raise ProcessCrash("unknown whether fake runner started")
+        return super().screen(item, authorization, lease)
+
+    def reconcile(self, inflight):
+        return None
+
+
+class RecoveredResult(Screen):
+    def reconcile(self, inflight):
+        return D.Recovery(
+            "sealed_result",
+            D.SealedScreen(
+                "result.json", H, self.effect, "candidate", H, H, H
+            ),
+        )
 
 
 class BlackBoxLaunchGate(unittest.TestCase):
@@ -191,6 +227,46 @@ class BlackBoxLaunchGate(unittest.TestCase):
                     screener=Screen(), lease=Lease((True,)),
                 )
 
+    def test_real_planner_manifest_identity_survives_pending_roundtrip(self):
+        patch_bytes = (
+            b"diff --git a/ggml/src/ggml.c b/ggml/src/ggml.c\n"
+            b"--- a/ggml/src/ggml.c\n+++ b/ggml/src/ggml.c\n"
+            b"@@ -1 +1 @@\n-x\n+y\n"
+        )
+        manifest = {
+            "schema": D.source_candidate.SCHEMA_SOURCE_PATCH,
+            "campaign_id": "ak-blackbox",
+            "proposal_id": "akp-blackbox",
+            "candidate_id": "akc-blackbox",
+            "source_tree": "llama.cpp",
+            "production_base_commit": "0" * 40,
+            "instrument_commit": "1" * 40,
+            "change_class": "fusion",
+            "declared_files": ["ggml/src/ggml.c"],
+            "declared_symbols": {"ggml/src/ggml.c": ["<file-scope>"]},
+            "mechanism_id": "blackbox",
+            "patch_sha256": hashlib.sha256(patch_bytes).hexdigest(),
+            "patch_encoding": "base64",
+            "patch_base64": base64.b64encode(patch_bytes).decode("ascii"),
+        }
+        plan = {
+            "hypothesis_id": "akh-blackbox",
+            "statement": "bounded source hypothesis",
+            "falsifier": "no throughput improvement",
+            "regime": {"backend": "gpu", "phase": "decode"},
+            "proposal": {"proposal_id": "akp-blackbox"},
+            "source_manifest_path": "source-patch.json",
+        }
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "source-patch.json").write_text(json.dumps(manifest))
+            (root / "plan.json").write_text(json.dumps(plan))
+            item = D._load_plan(root / "plan.json", root)
+            restored = D._restore_pending({"candidate": D._pending_item(item)})
+            self.assertEqual(restored.source_manifest_sha256,
+                             item.source_manifest.patch_bundle_sha256)
+            self.assertEqual(restored.source_manifest.patch_bytes, patch_bytes)
+
     def test_process_crash_before_runner_resumes_without_replanning(self):
         with tempfile.TemporaryDirectory() as temp, \
                 patch.object(D.source_candidate, "SourcePatchManifest", Manifest), \
@@ -231,6 +307,48 @@ class BlackBoxLaunchGate(unittest.TestCase):
             queue = root / "out" / "promotion-queue.jsonl"
             self.assertEqual(len(queue.read_text().splitlines()), 1)
 
+    def test_ambiguous_inflight_recovery_refuses_duplicate_compute(self):
+        with tempfile.TemporaryDirectory() as temp, \
+                patch.object(D.source_candidate, "SourcePatchManifest", Manifest), \
+                patch.object(D, "_write_projection"):
+            root = Path(temp)
+            planner, critic, screen = Planner(), Critic(), AmbiguousRecovery()
+            with self.assertRaises(ProcessCrash):
+                D.run_controller(
+                    self.config(root), planner=planner, critic=critic,
+                    screener=screen, lease=Lease((True,)),
+                )
+            with self.assertRaises(D.DiscoveryControllerError):
+                D.run_controller(
+                    self.config(root), planner=planner, critic=critic,
+                    screener=screen, lease=Lease((True,)),
+                )
+            self.assertEqual(screen.calls, 1)
+
+    def test_post_result_crash_records_dnr_attempt_exactly_once(self):
+        with tempfile.TemporaryDirectory() as temp, \
+                patch.object(D.source_candidate, "SourcePatchManifest", Manifest), \
+                patch.object(D, "_write_projection"):
+            root = Path(temp)
+            planner, critic, screen = Planner(), Critic(), RecoveredResult()
+            with patch.object(D, "_append_nomination", side_effect=ProcessCrash):
+                with self.assertRaises(ProcessCrash):
+                    D.run_controller(
+                        self.config(root), planner=planner, critic=critic,
+                        screener=screen, lease=Lease((True,)),
+                    )
+            completed = D.run_controller(
+                self.config(root), planner=planner, critic=critic,
+                screener=screen, lease=Lease((True,)),
+            )
+            self.assertTrue(completed["complete"])
+            tracked = D._tracker(D.DurableState(root / "out")).get("akh-blackbox")
+            self.assertEqual(len(tracked.attempts), 1)
+
+    def test_test_only_runtime_attestation_is_not_accepted_in_live_code(self):
+        with self.assertRaises(D.DiscoveryControllerError):
+            D._require_runtime({"wrapper_sha256": H})
+
     def test_pooled_classifier_handles_sign_conflict_and_subadditive_stack(self):
         self.assertEqual(D.classify_screen_series([0.01]), "candidate")
         self.assertEqual(
@@ -245,6 +363,12 @@ class BlackBoxLaunchGate(unittest.TestCase):
             ),
             "replicated_but_subadditive",
         )
+        for classification in (
+                "top_k_replicated_candidate", "replicated_but_subadditive"):
+            with self.subTest(classification=classification):
+                D.SealedScreen(
+                    "result.json", H, 0.01, classification, H, H, H
+                )
 
 
 if __name__ == "__main__":
