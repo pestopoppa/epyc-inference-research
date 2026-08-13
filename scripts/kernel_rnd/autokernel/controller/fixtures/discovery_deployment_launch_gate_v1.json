@@ -46,6 +46,50 @@
     {
       "id": "reward-path-identity",
       "accept": "anchor and candidate preserve identical benchmark executable, runner, parser, profiler, model, workload, runtime config, toolchain, and evaluation bytes; only the candidate kernel source/build identity and linked candidate kernel DSO may differ"
+    },
+    {
+      "id": "typed-registry-materialization",
+      "accept": "one typed registry value shape is accepted by both registry resolution and concrete materialization, and an end-to-end no-hardware dry launch exercises that exact public path"
+    },
+    {
+      "id": "sealed-actor-runtime",
+      "accept": "the live factory constructs both Codex actors from the digest-bound executable wrapper and exact allowlisted environment profile; arbitrary injected planner or critic objects cannot enter the live deployment entrypoint"
+    },
+    {
+      "id": "concrete-standalone-entrypoint",
+      "accept": "the deployed command needs only the sealed deployment path and dry-run selection; registry, actors, executors, journals, claims, and callbacks come from a static trusted factory rather than caller injection"
+    },
+    {
+      "id": "runner-policy-is-real",
+      "accept": "every lease, device, model-cap, overlap-mode, workload, and inference-window field checked by the factory is consumed by the actual runner rather than being an ignored Namespace attribute or module-global default"
+    },
+    {
+      "id": "evidence-plan-input-identity",
+      "accept": "the evidence plan binds the exact deployment model, workload, runtime config, policy, dispatch contract, device, per-arm environment, required argv paths, and byte digests before any correctness or profiler child starts"
+    },
+    {
+      "id": "canonical-production-snapshot",
+      "accept": "the production snapshot contains the complete required frozen source, executable, HIP library, build config, linkage, branch/head, and clean-tree identities; one arbitrary bound file cannot satisfy the snapshot contract"
+    },
+    {
+      "id": "autonomous-initial-context",
+      "accept": "the first planner turn receives a digest-bound workload and bounded source/hotspot/profile context plus source-scope constraints, so it can select an informed kernel hypothesis without hidden state"
+    },
+    {
+      "id": "measured-feedback-context",
+      "accept": "later planner turns receive a typed projection of measured effect, classification, evidence hashes, dispatch proof, correctness proof, and do-not-repeat disposition; opaque result hashes alone are insufficient"
+    },
+    {
+      "id": "planner-authorability",
+      "accept": "the actor prompt supplies bounded sealed source excerpts, the complete output schema/template, and controller-assigned campaign/proposal/candidate/base/instrument IDs; the model authors only hypothesis, bounded source change, falsifier, and diff, and its output round-trips through manifest and source-scope validation"
+    },
+    {
+      "id": "per-candidate-experiment-intent",
+      "accept": "deployment pins a versioned allowlisted correctness/dispatch template registry rather than one fixed dispatch contract; each planner candidate selects a typed template and bounded hotspot intent, the critic reviews it, manifest paths and symbols deterministically match it, and evidence resolves commands and geometry without accepting actor-authored argv or regex"
+    },
+    {
+      "id": "multi-hypothesis-template-sequence",
+      "accept": "one autonomous controller run can screen two sequential candidates selecting different sealed templates and hotspots, while each operation and resume checkpoint retains the exact selected template version and intent identity"
     }
   ]
 }

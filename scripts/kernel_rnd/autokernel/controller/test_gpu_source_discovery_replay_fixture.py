@@ -15,6 +15,7 @@ FIXTURE = (
 )
 PROOF_CONTRACT = FIXTURE.with_name("gpu_source_proof_contract_v1.json")
 LAUNCH_GATE = FIXTURE.with_name("discovery_controller_launch_gate_v1.json")
+DEPLOYMENT_GATE = FIXTURE.with_name("discovery_deployment_launch_gate_v1.json")
 
 
 def _screen_rows(trace: dict) -> list[dict]:
@@ -166,6 +167,41 @@ class ReplayFixtureTests(unittest.TestCase):
             gate["gate"],
             "all_required_cases_pass_before_any_live_adapter_is_accepted",
         )
+
+    def test_deployment_gate_names_every_live_trust_and_intelligence_boundary(self) -> None:
+        gate = json.loads(DEPLOYMENT_GATE.read_text(encoding="utf-8"))
+        self.assertEqual(
+            gate["schema"],
+            "epyc.autokernel.discovery_deployment_launch_gate.v1",
+        )
+        self.assertEqual(
+            {row["id"] for row in gate["requirements"]},
+            {
+                "wrapper-executable-identity",
+                "no-symlink-authority",
+                "sealed-input-separation",
+                "actual-small-model-binding",
+                "typed-lease-device-claim",
+                "environment-allowlist",
+                "typed-dispatch-contract",
+                "runner-argv-binding",
+                "single-config-authority",
+                "kernel-source-only-materialization",
+                "reward-path-identity",
+                "typed-registry-materialization",
+                "sealed-actor-runtime",
+                "concrete-standalone-entrypoint",
+                "runner-policy-is-real",
+                "evidence-plan-input-identity",
+                "canonical-production-snapshot",
+                "autonomous-initial-context",
+                "measured-feedback-context",
+                "planner-authorability",
+                "per-candidate-experiment-intent",
+                "multi-hypothesis-template-sequence",
+            },
+        )
+        self.assertFalse(gate["hardware_execution"])
 
 
 if __name__ == "__main__":
