@@ -289,6 +289,13 @@ class OfflineLaunchGate(unittest.TestCase):
         self.assertEqual(closure["anchor"]["soname_topology"],
                          closure["candidate"]["soname_topology"])
 
+    def test_source_patch_has_no_legacy_runtime_closure_fallback(self):
+        """Every source patch must supply one reward binary and two HIP dirs."""
+        source = inspect.getsource(gpu_runner.preflight)
+        self.assertNotIn('and getattr(args, "measurement_binary", None)', source)
+        self.assertIn("libggml-hip.so.0", source)
+        self.assertIn("non-HIP", source)
+
     def test_source_scope_rejects_reward_symbols_even_under_kernel_prefix(self):
         """A path prefix alone cannot authorize benchmark/reward manipulation."""
         manifest = mock.Mock(
