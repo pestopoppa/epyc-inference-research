@@ -229,6 +229,44 @@ class OfflineLaunchGate(unittest.TestCase):
         source = inspect.getsource(gpu_runner.run)
         self.assertNotIn('"mode": "hot_resident"', source)
 
+    def test_sealed_admission_corpus_is_context_and_state_provenance(self):
+        """Actors may cite examples, but their version/hash remain controller-owned."""
+        fields = C.ControllerConfig.__dataclass_fields__
+        self.assertIn("admission_corpus_version", fields)
+        self.assertIn("admission_corpus_sha256", fields)
+        context_source = inspect.getsource(C._context)
+        state_source = inspect.getsource(C.DurableState.save)
+        self.assertIn("admission_corpus_version", context_source)
+        self.assertIn("admission_corpus_sha256", context_source)
+        self.assertIn("admission_corpus_sha256", state_source)
+
+    def test_wrong_actor_overlap_recommendation_is_deterministically_downgraded(self):
+        """Negative examples are facts, not prose an actor can vote past."""
+        keys = {"facts", "missing", "mode", "rationale", "disqualifiers",
+                "counterfactual", "evidence"}
+        corpus = {
+            "version": "admission-corpus-v1", "sha256": "c" * 64,
+            "examples": [
+                {"facts": {"profile": "exact-reviewed-tg128"}, "missing": [],
+                 "mode": "cold_overlap", "rationale": "reviewed profile",
+                 "disqualifiers": [], "counterfactual": "higher cadence serializes",
+                 "evidence": ["sha256:" + "a" * 64]},
+                *[{"facts": {"case": case}, "missing": (["headroom"] if case == "unknown" else []),
+                   "mode": "cold_serialized", "rationale": case,
+                   "disqualifiers": [case], "counterfactual": "exact reviewed facts",
+                   "evidence": ["sha256:" + "b" * 64]}
+                  for case in ("high_cadence", "unknown", "large", "hot_mismatch", "foreign_kfd")],
+            ],
+        }
+        self.assertTrue(all(set(row) == keys for row in corpus["examples"]))
+        decide = getattr(gpu_runner, "host_transfer_admission")
+        for case in ("high_cadence", "unknown", "large", "hot_mismatch", "foreign_kfd"):
+            result = decide(admission_corpus=corpus, observed_case=case,
+                            actor_recommendation="cold_overlap")
+            with self.subTest(case=case):
+                self.assertIn(result["mode"], {"cold_serialized", "refused"})
+                self.assertNotEqual(result.get("authorized_by"), "actor")
+
     def test_initial_planner_context_contains_sealed_search_inputs(self):
         """Turn one must be authorable from sealed evidence, not a blank prompt."""
         with tempfile.TemporaryDirectory() as directory:
