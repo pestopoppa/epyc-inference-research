@@ -227,6 +227,13 @@ POST_T0_QUIET_BARRIER_S = 65.0
 POST_T0_QUIET_SAMPLES = 3
 POST_T0_QUIET_SAMPLE_INTERVAL_S = 5.0
 
+# A completed arm's build can remain in Linux's one-minute load EWMA after its
+# owned children are reaped.  The following arm must not treat that known,
+# already-finished work as a reason to abandon before T0; wait only until the
+# same declared build cap becomes true, then let `run_build` recheck at spawn.
+BUILD_LOAD_SETTLE_TIMEOUT_S = 65.0
+BUILD_LOAD_SETTLE_INTERVAL_S = 5.0
+
 
 # =============================================================================
 # The boundary. Enforced by test_campaign.TestTheBoundaryIsStructural.
@@ -2661,6 +2668,7 @@ class HostOps:
         self._claim_binding: Optional[Any] = None
         self._device_claims: list = []
         self._build_state: dict = {}
+        self._build_load_settlement: tuple[float, ...] = ()
         self._fingerprints: dict = {}
         self._t0_anchor_binding: Optional[Any] = None
         self._preflight_check: Optional[schemas.Check] = None
@@ -3268,6 +3276,31 @@ class HostOps:
 
     # -- 3. build ----------------------------------------------------------
 
+    def _settle_build_load(self, plan: worktree.BuildPlan) -> tuple[float, ...]:
+        """Wait out a predecessor arm's bounded load-average tail.
+
+        This is deliberately before configure and T0.  It neither reuses an
+        arm's build/T0 evidence nor relaxes the build cap: the generic builder
+        remains the final, immediate check at the subprocess boundary.
+        """
+        cap = plan.parallelism.load_average_cap
+        if cap is None:
+            return ()
+        attempts = int(BUILD_LOAD_SETTLE_TIMEOUT_S // BUILD_LOAD_SETTLE_INTERVAL_S) + 1
+        observed = []
+        for attempt in range(attempts):
+            load = os.getloadavg()[0]
+            observed.append(load)
+            if load <= cap:
+                return tuple(observed)
+            if attempt + 1 < attempts:
+                self._sleep(BUILD_LOAD_SETTLE_INTERVAL_S)
+        raise worktree.HostTooContended(
+            f"1-minute load average remained above the declared cap {cap:.2f} for "
+            f"{BUILD_LOAD_SETTLE_TIMEOUT_S:.0f}s before build: "
+            f"observed {observed[-1]:.2f}; refusing to start a "
+            f"{plan.parallelism.jobs}-way build")
+
     def build(self, spec: CampaignSpec, tree: Any) -> Any:
         if isinstance(tree, worktree.Worktree):
             snapshot_path = worktree.snapshot_worktree_path(
@@ -3291,9 +3324,11 @@ class HostOps:
             cmake="/usr/bin/cmake")
         log_path = os.path.join(spec.build_root, spec.campaign_id,
                                 f"{spec.candidate_id}.log")
+        self._build_load_settlement = self._settle_build_load(plan)
         result = worktree.run_build(plan, log_path=log_path)
         self._build_state = {"plan": plan, "result": result, "tree": snapshot,
-                             "mutation_tree": tree}
+                             "mutation_tree": tree,
+                             "load_settlement": self._build_load_settlement}
         return result
 
     # -- 4. T0 -------------------------------------------------------------

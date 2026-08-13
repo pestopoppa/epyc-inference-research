@@ -40,7 +40,7 @@ from unittest import mock
 from . import (campaign, journal as journal_module, schemas,
                source_prerequisite_package)
 from .evaluator import api, correctness
-from .execution import control_runner, microbench, physical_bounds, t0_provider
+from .execution import control_runner, microbench, physical_bounds, t0_provider, worktree
 from .resource import claim_witness
 from .test_schemas import _proposal as _proposal_fixture
 
@@ -3580,6 +3580,30 @@ class TestProspectiveEvaluationDurability(unittest.TestCase):
             schemas.Check(schemas.PASS, ()))
         mechanism = campaign.HostOps._parameter_intervention_gate((stale,))
         self.assertEqual(mechanism.check.outcome, schemas.COULD_NOT_CHECK)
+
+    def test_build_load_settlement_waits_out_a_predecessor_arm_tail(self):
+        """A paired control gets its own build/T0 after the prior arm's EWMA fades."""
+        sleeps = []
+        ops = campaign.HostOps(nominal_khz=1, sleep=sleeps.append)
+        plan = mock.Mock(parallelism=mock.Mock(load_average_cap=8.0, jobs=64))
+        with mock.patch("os.getloadavg", side_effect=((16.14, 0, 0),
+                                                       (11.0, 0, 0),
+                                                       (7.99, 0, 0))):
+            observed = ops._settle_build_load(plan)
+        self.assertEqual(observed, (16.14, 11.0, 7.99))
+        self.assertEqual(sleeps, [campaign.BUILD_LOAD_SETTLE_INTERVAL_S] * 2)
+
+    def test_build_load_settlement_still_refuses_sustained_contention(self):
+        """The settling path is not a relaxation of the declared build cap."""
+        sleeps = []
+        ops = campaign.HostOps(nominal_khz=1, sleep=sleeps.append)
+        plan = mock.Mock(parallelism=mock.Mock(load_average_cap=8.0, jobs=64))
+        attempts = int(campaign.BUILD_LOAD_SETTLE_TIMEOUT_S /
+                       campaign.BUILD_LOAD_SETTLE_INTERVAL_S) + 1
+        with mock.patch("os.getloadavg", return_value=(8.01, 0, 0)):
+            with self.assertRaisesRegex(worktree.HostTooContended, "remained above"):
+                ops._settle_build_load(plan)
+        self.assertEqual(len(sleeps), attempts - 1)
 
     def test_t0_failure_caches_evidence_without_materializing_a_candidate(self):
         ops = campaign.HostOps(nominal_khz=1)
