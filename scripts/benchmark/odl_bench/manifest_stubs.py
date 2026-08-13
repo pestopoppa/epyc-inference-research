@@ -14,6 +14,8 @@ Sources (orchestrator, read-only):
                          (opendataloader-pdf[hybrid] + sidecar :5002; docling-fast default)
   * PaddleOCR-VL-1.6  -> VL document parser (GGUF+mmproj, llama-mtmd CPU path);
                          OmniDocBench v1.6 SOTA reference engine (intake follow-up)
+  * Unlimited-OCR     -> DeepSeek-OCR-arch single-pass Markdown parser (GGUF+mmproj,
+                         llama-server build-v9-hip path)
 """
 
 from __future__ import annotations
@@ -105,6 +107,32 @@ def model_gated_stubs() -> list[ManifestEntryStub]:
             command=(
                 "python -m scripts.benchmark.odl_bench.adapter run-model "
                 "--engine paddleocr_vl_1_6 --gt <GT json> --image-root <GT image dir> "
+                "--run-dir $RUN_DIR --allow-inference --score"
+            ),
+            env={},
+            expected_artifacts=list(_EXPECTED),
+            reuses_deterministic_wiring=True,
+            notes=(
+                "Wave-3 producer consumes GT page images directly and emits <stem>.md. "
+                "INFERENCE; keep it explicit and quiet-window gated."
+            ),
+        ),
+        ManifestEntryStub(
+            entry_id="ODLB-W3-04-unlimited-ocr",
+            engine="unlimited_ocr",
+            description=(
+                "Unlimited-OCR (baidu, DeepSeek-OCR arch, Q5_K_M GGUF) single-pass "
+                "Markdown arm on GT page images via llama-server build-v9-hip."
+            ),
+            preconditions=[
+                "Unlimited-OCR Q5_K_M GGUF + F16 mmproj present; llama-server build-v9-hip up",
+                "Per-page GT page images mapped (no PDF routing needed — image-direct producer)",
+                "Operator approval for inference run + quiet window (B7 rider)",
+                "NOT wired into pdf_router today — needs a Wave-3 engine adapter (documented gap)",
+            ],
+            command=(
+                "python -m scripts.benchmark.odl_bench.adapter run-model "
+                "--engine unlimited_ocr --gt <GT json> --image-root <GT image dir> "
                 "--run-dir $RUN_DIR --allow-inference --score"
             ),
             env={},

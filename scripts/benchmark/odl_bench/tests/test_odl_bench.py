@@ -16,6 +16,7 @@ and is exercised against an in-test-generated born-digital PDF.
 
 from __future__ import annotations
 
+import base64
 import io
 import json
 import sys
@@ -28,7 +29,7 @@ _PKG_PARENT = Path(__file__).resolve().parents[2]  # .../scripts/benchmark
 if str(_PKG_PARENT) not in sys.path:
     sys.path.insert(0, str(_PKG_PARENT))
 
-from odl_bench import backends, paddleocr_vl, run_configs  # noqa: E402
+from odl_bench import backends, paddleocr_vl, run_configs, unlimited_ocr  # noqa: E402
 from odl_bench.adapter import OdlBenchAdapter  # noqa: E402
 from odl_bench.backends import (  # noqa: E402
     DETERMINISTIC_ENGINES,
@@ -46,6 +47,11 @@ from odl_bench.paddleocr_vl import (  # noqa: E402
     PaddleOcrVlProducer,
     build_server_argv,
     normalize_pipe_table_blocks,
+)
+from odl_bench.unlimited_ocr import (  # noqa: E402
+    UNLIMITED_OCR_ENGINE,
+    UnlimitedOcrConfig,
+    UnlimitedOcrProducer,
 )
 from odl_bench.schemas import (  # noqa: E402
     METRIC_READING_ORDER,
@@ -317,6 +323,39 @@ class TestModelGatedProducerGuards(unittest.TestCase):
                     allow_inference=False,
                 )
 
+    def test_model_gated_generation_rejects_unknown_engine(self):
+        """Registry dispatch: every known engine is accepted, unknowns are refused."""
+        adapter = OdlBenchAdapter(bench_root=BENCH_ROOT)
+        with tempfile.TemporaryDirectory() as td:
+            with self.assertRaises(ValueError):
+                adapter.generate_model_gated_predictions(
+                    "no_such_engine",
+                    DEMO_GT,
+                    Path(td) / "predictions",
+                    allow_inference=True,
+                )
+
+    def test_unlimited_ocr_registered_as_model_gated(self):
+        """unlimited_ocr is a registered model-gated engine: both entry points
+        refuse to run it without the explicit inference flag (permission check
+        fires before anything touches the producer)."""
+        adapter = OdlBenchAdapter(bench_root=BENCH_ROOT)
+        with tempfile.TemporaryDirectory() as td:
+            with self.assertRaises(PermissionError):
+                adapter.generate_model_gated_predictions(
+                    UNLIMITED_OCR_ENGINE,
+                    DEMO_GT,
+                    Path(td) / "predictions",
+                    allow_inference=False,
+                )
+            with self.assertRaises(PermissionError):
+                adapter.build_model_gated_row_set(
+                    DEMO_GT,
+                    Path(td) / "run",
+                    engine=UNLIMITED_OCR_ENGINE,
+                    allow_inference=False,
+                )
+
     def test_paddle_server_argv_uses_experimental_binary_and_projector(self):
         cfg = PaddleOcrVlConfig(
             binary=Path("/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server"),
@@ -469,6 +508,83 @@ class TestModelGatedProducerGuards(unittest.TestCase):
             self.assertIn("<td>Col A</td>", written)
             self.assertIn("Caption", written)
             self.assertIn("Tail", written)
+
+    def test_unlimited_ocr_end_to_end_via_adapter(self):
+        """Fake-proc walk of the unlimited_ocr lane through the adapter entry point.
+
+        No real subprocess/network: Popen/health/query/terminate are monkeypatched,
+        and the page image is a real in-test 1x1 PNG so gt_image_paths resolves it.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            image_dir = root / "images"
+            image_dir.mkdir()
+            (image_dir / "page1.png").write_bytes(
+                base64.b64decode(
+                    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ"
+                    "AAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+                )
+            )
+            gt = root / "gt.json"
+            gt.write_text(
+                json.dumps([{"page_info": {"image_path": "page1.png"}}]),
+                encoding="utf-8",
+            )
+            canned = "Unlimited OCR extracted markdown for page one"
+
+            class FakeProc:
+                pid = 123457
+                returncode = 0
+
+                def poll(self):
+                    return 0
+
+            originals = (
+                UnlimitedOcrProducer.validate_inputs,
+                unlimited_ocr.subprocess.Popen,
+                unlimited_ocr.wait_for_health,
+                unlimited_ocr.query_page,
+                unlimited_ocr.terminate,
+            )
+
+            try:
+                UnlimitedOcrProducer.validate_inputs = lambda self: None  # type: ignore[assignment]
+                unlimited_ocr.subprocess.Popen = lambda *a, **k: FakeProc()  # type: ignore[assignment]
+                unlimited_ocr.wait_for_health = lambda port, timeout_s: None  # type: ignore[assignment]
+                unlimited_ocr.query_page = lambda config, image_path: {  # type: ignore[assignment]
+                    "choices": [
+                        {"message": {"content": canned}, "finish_reason": "stop"}
+                    ],
+                    "usage": {"prompt_tokens": 12, "completion_tokens": 5},
+                    "timings": {"prompt_per_second": 200.0, "predicted_per_second": 80.0},
+                }
+                unlimited_ocr.terminate = lambda proc: {"dead": True}  # type: ignore[assignment]
+
+                adapter = OdlBenchAdapter(bench_root=BENCH_ROOT)
+                manifest = adapter.generate_model_gated_predictions(
+                    UNLIMITED_OCR_ENGINE,
+                    gt,
+                    root / "pred",
+                    image_root=image_dir,
+                    response_dir=root / "resp",
+                    allow_inference=True,
+                    unlimited_config=UnlimitedOcrConfig(),
+                )
+            finally:
+                (
+                    UnlimitedOcrProducer.validate_inputs,
+                    unlimited_ocr.subprocess.Popen,
+                    unlimited_ocr.wait_for_health,
+                    unlimited_ocr.query_page,
+                    unlimited_ocr.terminate,
+                ) = originals  # type: ignore[assignment]
+
+            self.assertEqual(manifest.engine, UNLIMITED_OCR_ENGINE)
+            self.assertEqual(manifest.kind, MODEL_GATED_KIND)
+            self.assertTrue(manifest.available)
+            self.assertEqual(len(manifest.artifacts), 1)
+            self.assertEqual((root / "pred" / "page1.md").read_text(), canned)
+            self.assertTrue((root / "resp" / "page1.response.json").exists())
 
 
 class TestAvailabilityAndCommand(unittest.TestCase):

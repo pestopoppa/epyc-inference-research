@@ -38,6 +38,15 @@ from .paddleocr_vl import (
     PaddleOcrVlConfig,
     PaddleOcrVlProducer,
 )
+from .unlimited_ocr import (
+    DEFAULT_BINARY as UNLIMITED_OCR_DEFAULT_BINARY,
+    DEFAULT_MMPROJ as UNLIMITED_OCR_DEFAULT_MMPROJ,
+    DEFAULT_MODEL as UNLIMITED_OCR_DEFAULT_MODEL,
+    UNLIMITED_OCR_ENGINE,
+    PROMPT_PROFILES as UNLIMITED_OCR_PROMPT_PROFILES,
+    UnlimitedOcrConfig,
+    UnlimitedOcrProducer,
+)
 from .schemas import (
     METRIC_READING_ORDER,
     METRIC_STRUCTURAL,
@@ -265,14 +274,21 @@ class OdlBenchAdapter:
         response_dir: str | Path | None = None,
         allow_inference: bool = False,
         paddle_config: PaddleOcrVlConfig | None = None,
+        unlimited_config: UnlimitedOcrConfig | None = None,
     ) -> EngineRunManifest:
-        if engine != PADDLEOCR_VL_ENGINE:
-            raise ValueError(f"unknown model-gated engine {engine!r}; known: {(PADDLEOCR_VL_ENGINE,)}")
+        if engine not in (PADDLEOCR_VL_ENGINE, UNLIMITED_OCR_ENGINE):
+            raise ValueError(
+                f"unknown model-gated engine {engine!r}; known: "
+                f"{sorted((PADDLEOCR_VL_ENGINE, UNLIMITED_OCR_ENGINE))}"
+            )
         if not allow_inference:
             raise PermissionError("model-gated producers require --allow-inference")
         out_dir = Path(out_dir)
         response_dir = Path(response_dir) if response_dir else out_dir.parent / f"{out_dir.name}_responses"
-        producer = PaddleOcrVlProducer(paddle_config or PaddleOcrVlConfig())
+        if engine == PADDLEOCR_VL_ENGINE:
+            producer = PaddleOcrVlProducer(paddle_config or PaddleOcrVlConfig())
+        else:
+            producer = UnlimitedOcrProducer(unlimited_config or UnlimitedOcrConfig())
         return producer.generate(
             gt_json=gt_json,
             image_root=image_root,
@@ -289,6 +305,7 @@ class OdlBenchAdapter:
         image_root: str | Path | None = None,
         allow_inference: bool = False,
         paddle_config: PaddleOcrVlConfig | None = None,
+        unlimited_config: UnlimitedOcrConfig | None = None,
         do_score: bool = False,
         bench_python: str | Path | None = None,
     ) -> DeterministicRowSet:
@@ -304,6 +321,7 @@ class OdlBenchAdapter:
             response_dir=response_dir,
             allow_inference=allow_inference,
             paddle_config=paddle_config,
+            unlimited_config=unlimited_config,
         )
         row_set.run_manifests.append(manifest)
         row_set.metric_rows.append(manifest.speed_row())
@@ -342,31 +360,38 @@ def _main(argv=None):
     p_run.add_argument("--bench-python", default=None)
 
     p_model = sub.add_parser("run-model", help="run an explicit model-gated prediction producer")
-    p_model.add_argument("--engine", required=True, choices=[PADDLEOCR_VL_ENGINE])
+    p_model.add_argument(
+        "--engine",
+        required=True,
+        choices=[PADDLEOCR_VL_ENGINE, UNLIMITED_OCR_ENGINE],
+    )
     p_model.add_argument("--gt", required=True, help="OmniDocBench GT json")
     p_model.add_argument("--image-root", default=None, help="directory containing GT page images")
     p_model.add_argument("--run-dir", required=True)
     p_model.add_argument("--score", action="store_true", help="also run harness scoring (bench venv)")
     p_model.add_argument("--bench-python", default=None)
     p_model.add_argument("--allow-inference", action="store_true")
-    p_model.add_argument("--binary", type=Path, default=PADDLEOCR_DEFAULT_BINARY)
-    p_model.add_argument("--model", type=Path, default=PADDLEOCR_DEFAULT_MODEL)
-    p_model.add_argument("--mmproj", type=Path, default=PADDLEOCR_DEFAULT_MMPROJ)
-    p_model.add_argument("--port", type=int, default=19330)
+    # Per-engine defaults (binary/model/mmproj paths, port, max_tokens differ between
+    # the PaddleOCR-VL and Unlimited-OCR lanes) are resolved in the handler below;
+    # argparse defaults stay None so the chosen engine's module defaults apply.
+    p_model.add_argument("--binary", type=Path, default=None, help="llama-server binary (per-engine default)")
+    p_model.add_argument("--model", type=Path, default=None, help="GGUF model (per-engine default)")
+    p_model.add_argument("--mmproj", type=Path, default=None, help="vision mmproj (per-engine default)")
+    p_model.add_argument("--port", type=int, default=None, help="server port (per-engine default)")
     p_model.add_argument("--context", type=int, default=8192)
     p_model.add_argument("--threads", type=int, default=24)
     p_model.add_argument("--parallel", type=int, default=1)
     p_model.add_argument("--device", default="ROCm0")
     p_model.add_argument("--gpu-layers", type=int, default=99)
-    p_model.add_argument("--max-tokens", type=int, default=2048)
+    p_model.add_argument("--max-tokens", type=int, default=None, help="per-engine default")
     p_model.add_argument("--startup-timeout", type=int, default=240)
     p_model.add_argument("--request-timeout", type=int, default=900)
     p_model.add_argument("--allow-dirty-host", action="store_true")
     p_model.add_argument(
         "--prompt-profile",
-        choices=sorted(PADDLEOCR_PROMPT_PROFILES),
+        choices=sorted(UNLIMITED_OCR_PROMPT_PROFILES),
         default="default",
-        help="PaddleOCR-VL extraction prompt profile",
+        help="model-gated extraction prompt profile (PaddleOCR-VL or Unlimited-OCR)",
     )
     p_model.add_argument("--prompt-file", type=Path, default=None, help="override prompt text from file")
 
@@ -451,22 +476,38 @@ def _main(argv=None):
         if not args.allow_inference:
             parser.error("run-model requires --allow-inference")
         adapter = OdlBenchAdapter()
+        if args.engine == UNLIMITED_OCR_ENGINE:
+            cfg_cls, prompt_profiles = UnlimitedOcrConfig, UNLIMITED_OCR_PROMPT_PROFILES
+            def_binary, def_model, def_mmproj = (
+                UNLIMITED_OCR_DEFAULT_BINARY,
+                UNLIMITED_OCR_DEFAULT_MODEL,
+                UNLIMITED_OCR_DEFAULT_MMPROJ,
+            )
+            def_port, def_max_tokens = 19331, 4096
+        else:
+            cfg_cls, prompt_profiles = PaddleOcrVlConfig, PADDLEOCR_PROMPT_PROFILES
+            def_binary, def_model, def_mmproj = (
+                PADDLEOCR_DEFAULT_BINARY,
+                PADDLEOCR_DEFAULT_MODEL,
+                PADDLEOCR_DEFAULT_MMPROJ,
+            )
+            def_port, def_max_tokens = 19330, 2048
         prompt = (
             args.prompt_file.read_text(encoding="utf-8")
             if args.prompt_file
-            else PADDLEOCR_PROMPT_PROFILES[args.prompt_profile]
+            else prompt_profiles[args.prompt_profile]
         )
-        cfg = PaddleOcrVlConfig(
-            binary=args.binary,
-            model=args.model,
-            mmproj=args.mmproj,
-            port=args.port,
+        cfg = cfg_cls(
+            binary=args.binary if args.binary is not None else def_binary,
+            model=args.model if args.model is not None else def_model,
+            mmproj=args.mmproj if args.mmproj is not None else def_mmproj,
+            port=args.port if args.port is not None else def_port,
             context=args.context,
             threads=args.threads,
             parallel=args.parallel,
             device=args.device,
             gpu_layers=args.gpu_layers,
-            max_tokens=args.max_tokens,
+            max_tokens=args.max_tokens if args.max_tokens is not None else def_max_tokens,
             startup_timeout_s=args.startup_timeout,
             request_timeout_s=args.request_timeout,
             prompt=prompt,
@@ -479,7 +520,8 @@ def _main(argv=None):
             engine=args.engine,
             image_root=args.image_root,
             allow_inference=args.allow_inference,
-            paddle_config=cfg,
+            paddle_config=cfg if args.engine == PADDLEOCR_VL_ENGINE else None,
+            unlimited_config=cfg if args.engine == UNLIMITED_OCR_ENGINE else None,
             do_score=args.score,
             bench_python=args.bench_python,
         )
