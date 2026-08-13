@@ -359,6 +359,15 @@ def prepare(raw: Mapping[str, Any]) -> dict[str, Any]:
     proposal["proposal_id"] = _text(
         raw["intervention_proposal_id"], "intervention_proposal_id")
     calibration = campaign.load_calibration_bundle(calibration_path)
+    # Preparation is the last entirely non-executing boundary before these
+    # immutable inputs become campaign roots.  Do not publish a pair which the
+    # campaign's accepted cell-local calibration will later refuse: that would
+    # leave apparently ready artifacts which can never be measured.
+    if not calibration.b_min_blocks <= blocks <= calibration.max_blocks:
+        raise PreparationError(
+            f"blocks={blocks} is outside the accepted calibration range "
+            f"[{calibration.b_min_blocks}, {calibration.max_blocks}] from "
+            f"{calibration.evidence_ref}")
     _rebind_provider_reference(proposal, calibration_path)
     violations = schemas.validate_proposal(proposal)
     if violations:

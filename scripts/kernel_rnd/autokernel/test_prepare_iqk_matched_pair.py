@@ -82,7 +82,7 @@ class MatchedPairPreparationTest(unittest.TestCase):
             "intervention_campaign_id": self.intervention["campaign_id"],
             "intervention_proposal_id": self.intervention["proposal_id"],
             "control_proposal_id": self.control["proposal_id"],
-            "blocks": 10, "reps": campaign.IQK_MATCHED_PAIR_REPS,
+            "blocks": 12, "reps": campaign.IQK_MATCHED_PAIR_REPS,
             "intervention": {
                 "campaign_id": self.intervention["campaign_id"],
                 "candidate_id": self.intervention_plan["candidate_id"],
@@ -144,6 +144,18 @@ class MatchedPairPreparationTest(unittest.TestCase):
         raw["reps"] = 5
         with self.assertRaisesRegex(P.PreparationError, "require reps=1"):
             P.prepare(raw)
+
+    def test_pair_refuses_blocks_outside_accepted_calibration_range(self):
+        for blocks in (11, 21):
+            with self.subTest(blocks=blocks):
+                raw = self.manifest()
+                raw["blocks"] = blocks
+                with self.assertRaisesRegex(
+                        P.PreparationError,
+                        r"blocks=.*outside the accepted calibration range \[12, 20\]"):
+                    P.prepare(raw)
+                self.assertFalse(Path(raw["intervention"]["output_dir"]).exists())
+                self.assertFalse(Path(raw["control"]["output_dir"]).exists())
 
     def test_provider_is_rebound_to_current_calibration_anchor(self):
         result = P.prepare(self.manifest())
