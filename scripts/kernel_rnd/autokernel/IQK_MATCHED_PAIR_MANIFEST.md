@@ -17,6 +17,11 @@ and `tg128` shape. Decode is intentionally bootstrap-only: its real terminal
 journal is projected into the held-out receipt used by a subsequent prefill
 pair; it cannot pre-bind the evidence it is intended to produce.
 
+For v2 the physical-envelope template must equal the calibration declaration's
+`physical_envelopes.aa_calibration` record except for the
+schedule-dependent `measurement_frame_sha256`, which the publisher re-derives.
+This prevents a pp512 work/shape envelope from being relabelled as tg128.
+
 Both arm objects name fresh campaign/candidate/capture/intervention identities,
 an independent native diagnostic source, the evidence stage, an optional
 proposal-bound held-out outcome, and a new output directory. Preparation

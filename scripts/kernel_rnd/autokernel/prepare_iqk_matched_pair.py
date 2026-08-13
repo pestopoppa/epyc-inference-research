@@ -201,6 +201,39 @@ def _matched_envelope(
     return physical_bounds.PhysicalEnvelope.from_mapping(raw)
 
 
+def _validate_calibration_envelope(
+        calibration_path: Path, template: physical_bounds.PhysicalEnvelope,
+        measurement_frame: Mapping[str, Any]) -> None:
+    """Require v2 physical facts from the selected calibration's exact cell.
+
+    The matched schedule changes the measurement-frame hash, but it does not
+    license changing the work derivation, delivered unit, physical ceilings or
+    shape.  Without this join, a copied pp512 envelope could be relabelled as
+    decode by replacing only its frame digest.
+    """
+    declaration = _load(
+        calibration_path / "campaign_declaration.json",
+        "calibration campaign declaration")
+    envelopes = declaration.get("physical_envelopes")
+    committed = envelopes.get("aa_calibration") if isinstance(envelopes, Mapping) else None
+    if not isinstance(committed, Mapping):
+        raise PreparationError(
+            "v2 calibration declaration lacks the committed-cell physical envelope")
+    try:
+        expected = physical_bounds.PhysicalEnvelope.from_mapping(committed)
+    except (TypeError, ValueError) as exc:
+        raise PreparationError(
+            f"calibration committed-cell physical envelope is invalid: {exc}") from exc
+    selected = template.to_dict()
+    declared = expected.to_dict()
+    selected.pop("measurement_frame_sha256", None)
+    declared.pop("measurement_frame_sha256", None)
+    if selected != declared:
+        raise PreparationError(
+            f"physical envelope template does not match the calibration's exact "
+            f"{measurement_frame['shape']} committed cell")
+
+
 def _rebind_provider_reference(
         proposal: dict[str, Any], calibration_path: Path) -> None:
     """Bind the proposal provider to the accepted calibration instrument.
@@ -457,6 +490,9 @@ def prepare(raw: Mapping[str, Any]) -> dict[str, Any]:
         proposal_id=control_proposal_id)
     template = physical_bounds.PhysicalEnvelope.from_mapping(
         _load(template_path, "physical envelope template"))
+    if schema == SCHEMA:
+        _validate_calibration_envelope(
+            calibration_path, template, measurement_frame)
     # The A/A control is intentionally uninstantiable without its typed control
     # plan. Derive the common frame once from the intervention, then change the
     # one licensed factor before constructing both final, fully governed specs.

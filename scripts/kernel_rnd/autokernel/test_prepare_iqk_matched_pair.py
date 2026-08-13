@@ -53,6 +53,11 @@ class MatchedPairPreparationTest(unittest.TestCase):
         self.envelope_path = self.root / "physical-envelope-template.json"
         self.envelope_path.write_text(
             json.dumps(envelope.to_dict()), encoding="utf-8")
+        declaration_path = self.calibration / "campaign_declaration.json"
+        declaration = json.loads(declaration_path.read_text(encoding="utf-8"))
+        declaration["physical_envelopes"] = {
+            "aa_calibration": envelope.to_dict()}
+        declaration_path.write_text(json.dumps(declaration), encoding="utf-8")
         intervention_factors = base.matched_factor_frame_for(
             "akm-iqk-20260812-0001", physical_envelope=envelope)
         control_factors = copy.deepcopy(intervention_factors)
@@ -158,6 +163,10 @@ class MatchedPairPreparationTest(unittest.TestCase):
                 spec.recipe_id, spec.bench_params),
             work_derivation_ref="fixture", hardware_peak_ref="fixture")
         self.envelope_path.write_text(json.dumps(envelope.to_dict()), encoding="utf-8")
+        declaration = json.loads(declaration_path.read_text(encoding="utf-8"))
+        declaration["physical_envelopes"] = {
+            "aa_calibration": envelope.to_dict()}
+        declaration_path.write_text(json.dumps(declaration), encoding="utf-8")
         raw_manifest = self.manifest()
         raw_manifest["measurement_frame"] = {
             "recipe_id": P.DECODE_RECIPE_ID, "n_gen": 128}
@@ -251,6 +260,14 @@ class MatchedPairPreparationTest(unittest.TestCase):
         summary["anchor_motion"]["raw_sha256"] = P.schemas.content_hash(anchor)
         summary_path.write_text(json.dumps(summary), encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "outside the A/A frame"):
+            P.prepare(raw)
+
+    def test_v2_pair_refuses_a_physical_envelope_from_another_cell(self):
+        raw = self.manifest()
+        envelope = json.loads(self.envelope_path.read_text(encoding="utf-8"))
+        envelope["shape_id"] = "stale-prefill-or-decode-cell"
+        self.envelope_path.write_text(json.dumps(envelope), encoding="utf-8")
+        with self.assertRaisesRegex(P.PreparationError, "exact pp512 committed cell"):
             P.prepare(raw)
 
     def test_pair_refuses_a_noncanonical_repetition_frame(self):

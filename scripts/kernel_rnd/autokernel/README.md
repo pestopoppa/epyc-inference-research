@@ -177,7 +177,9 @@ accepted for rehearsal but refused by `--execute`.
 matched CPU-IQK pair. V2 adds a closed `measurement_frame`: canonical pp512
 prefill or tg128 decode. The selected calibration must name that exact recipe;
 decode uses `n_gen=128` and cannot inherit a prefill bundle or an `n_prompt`
-frame. The distinct-regime decode pair is bootstrap-only because its completed
+frame. V2 also requires the physical-envelope template to match that bundle's
+declared committed cell, apart from the schedule-dependent frame hash. The
+distinct-regime decode pair is bootstrap-only because its completed
 journals are the source for the real held-out receipts. A later prefill pair may
 then use `heldout_bound` evidence. V1 manifests retain their historical pp512
 meaning. The producer derives the control proposal, all shared seeds, the
