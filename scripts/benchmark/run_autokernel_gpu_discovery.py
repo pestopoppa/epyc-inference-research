@@ -27,6 +27,7 @@ from scripts.benchmark import autokernel_progression
 
 SCHEMA_BANK = "epyc.autokernel.gpu_screening_baseline.v2"
 SCHEMA_RESULT = "epyc.autokernel.gpu_candidate_only_screen.v2"
+SCHEMA_LIVE_GOVERNANCE = "epyc.autokernel.gpu_discovery_live_governance.v1"
 SOURCE_COMMIT = "0db32c06e3e550065b78311a6031ef3dd2c4f27c"
 CPU_LIST = "184-191"
 DEVICE_ID = "mi210_0"
@@ -363,6 +364,12 @@ def preflight(args: argparse.Namespace) -> dict:
     candidate_build = Path(args.candidate_build).resolve()
     if not model.is_file():
         raise RuntimeError(f"model does not exist: {model}")
+    model_size_bytes = model.stat().st_size
+    if (args.allow_small_model_cpu_overlap
+            and model_size_bytes > SMALL_MODEL_OVERLAP_MAX_BYTES):
+        raise RuntimeError(
+            f"small-model CPU-overlap mode refuses {model_size_bytes} bytes; "
+            f"limit is {SMALL_MODEL_OVERLAP_MAX_BYTES}")
     anchor_identity = build_identity(anchor_build)
     candidate_identity = build_identity(candidate_build)
     factor = factor_spec(
@@ -378,6 +385,13 @@ def preflight(args: argparse.Namespace) -> dict:
         "authority": "nonpromotable_candidate_only_discovery",
         "model": str(model),
         "model_sha256": sha256_file(model),
+        "model_size_bytes": model_size_bytes,
+        "small_model_overlap_max_bytes": SMALL_MODEL_OVERLAP_MAX_BYTES,
+        "cpu_overlap_policy": ("allowed_discovery_noise"
+                               if args.allow_small_model_cpu_overlap
+                               else "shared_model_call_window"),
+        "promotion_claim": False,
+        "non_promotable": True,
         "anchor_build": str(anchor_build),
         "candidate_build": str(candidate_build),
         "anchor_identity": anchor_identity,
@@ -431,10 +445,30 @@ def run(args: argparse.Namespace) -> dict:
     gpu_journal = device_claim.ClaimJournal(args.device_claim_journal)
     gpu = None
     sampler = None
+    live_governance = None
+    live_governance_path = out / "live-governance.json"
     try:
         gpu = device_claim.acquire_device_claim(
             DEVICE_ID, purpose=purpose, campaign_id=args.campaign_id,
             journal=gpu_journal, timeout_s=0, max_hold_s=300)
+        live_governance = {
+            "schema": SCHEMA_LIVE_GOVERNANCE,
+            "status": "active",
+            "campaign_id": args.campaign_id,
+            "runner_pid": os.getpid(),
+            "authority": "nonpromotable_candidate_only_discovery",
+            "cpu_overlap_policy": sealed["cpu_overlap_policy"],
+            "model": sealed["model"],
+            "model_sha256": sealed["model_sha256"],
+            "model_size_bytes": sealed["model_size_bytes"],
+            "small_model_overlap_max_bytes": sealed["small_model_overlap_max_bytes"],
+            "promotion_claim": False,
+            "non_promotable": True,
+            "preflight_sha256": schemas.content_hash(sealed),
+            "device_claim_open": gpu.receipt().to_dict(),
+            "started_at": started_at,
+        }
+        atomic_json(live_governance_path, live_governance)
         sampler = device_sampler.RocmSmiSampler(device_index=0, interval_s=0.250).start()
         anchor_runs = [invoke(
             build=anchor_build, model=model, seed=args.seed + i,
@@ -536,7 +570,14 @@ def run(args: argparse.Namespace) -> dict:
         if sampler is not None:
             sampler.stop()
         if gpu is not None:
-            gpu.release()
+            released = gpu.release().to_dict()
+            if live_governance is not None:
+                atomic_json(live_governance_path, {
+                    **live_governance,
+                    "status": "released",
+                    "ended_at": utc_now(),
+                    "device_claim_released": released,
+                })
 
 
 def parser() -> argparse.ArgumentParser:

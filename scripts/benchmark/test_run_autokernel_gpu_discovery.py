@@ -35,11 +35,16 @@ class TestGpuDiscoveryBuildIdentity(unittest.TestCase):
             sealed = gpu.preflight(argparse.Namespace(
                 model=str(model), anchor_build=str(anchor),
                 candidate_build=str(candidate), factor="hip_graphs",
-                campaign_id="gpu-decode", calls=9, workload="decode_tg128"))
+                campaign_id="gpu-decode", calls=9, workload="decode_tg128",
+                allow_small_model_cpu_overlap=True))
         self.assertEqual(sealed["frame"], "tg128-ngl99")
         self.assertEqual(sealed["metric"], "decode_tokens_per_s")
         self.assertEqual((sealed["prompt_tokens"], sealed["generation_tokens"]),
                          (0, 128))
+        self.assertEqual(sealed["cpu_overlap_policy"], "allowed_discovery_noise")
+        self.assertFalse(sealed["promotion_claim"])
+        self.assertLessEqual(sealed["model_size_bytes"],
+                             sealed["small_model_overlap_max_bytes"])
 
     def test_seals_factor_binary_and_dsos(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
