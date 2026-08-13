@@ -234,11 +234,32 @@ class OfflineLaunchGate(unittest.TestCase):
         # implementation chooses distinct build-metadata-bearing binaries,
         # this gate must be replaced by an explicit normalized object/source
         # closure; arbitrary two-binary inequality is never sufficient.
-        self.assertEqual(candidate.binary.sha256, anchor.binary.sha256)
+        mismatched = {
+            role for role in ("source_identity", "binary", "hip_library",
+                              "config", "linkage")
+            if getattr(candidate, role).sha256 != getattr(anchor, role).sha256
+        }
+        self.assertEqual(mismatched, {"source_identity", "hip_library"})
         self.assertEqual(evidence_plan.workload_sha256,
                          evidence_plan.identity_files.workload.sha256)
         self.assertEqual(evidence_plan.runtime_config_sha256,
                          evidence_plan.identity_files.runtime_config.sha256)
+
+    def test_complete_runtime_closure_proves_each_arm_loaded_intended_hip(self):
+        """SONAME topology/targets close $ORIGIN fallback and DSO substitution."""
+        with tempfile.TemporaryDirectory() as directory:
+            evidence_plan = plan(Path(directory))
+        closure = getattr(evidence_plan, "runtime_closure", None)
+        self.assertIsInstance(closure, dict)
+        self.assertEqual(set(closure), {"anchor", "candidate", "common"})
+        self.assertEqual(closure["anchor"]["loaded_hip_sha256"],
+                         evidence_plan.anchor.hip_library_sha256)
+        self.assertEqual(closure["candidate"]["loaded_hip_sha256"],
+                         evidence_plan.candidate.hip_library_sha256)
+        self.assertEqual(closure["anchor"]["regular_target_hashes"],
+                         closure["candidate"]["regular_target_hashes"])
+        self.assertEqual(closure["anchor"]["soname_topology"],
+                         closure["candidate"]["soname_topology"])
 
     def test_source_scope_rejects_reward_symbols_even_under_kernel_prefix(self):
         """A path prefix alone cannot authorize benchmark/reward manipulation."""
