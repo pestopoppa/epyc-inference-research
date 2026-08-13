@@ -10,6 +10,7 @@ promotion.
 from __future__ import annotations
 
 import argparse
+import base64
 import fcntl
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
@@ -319,6 +320,30 @@ def _context(state: Mapping[str, Any], tracker: hypotheses.HypothesisTracker, tu
     return {"authority": AUTHORITY, "turn":turn, "roster":sealed_roster(), "prior_results":[row.get("result_sha256") for row in state["iterations"] if row.get("result_sha256")], "do_not_repeat":_memory_block(tracker,turn)}
 
 
+def _pending_item(item: PlannedCandidate) -> dict[str, Any]:
+    manifest = item.source_manifest
+    return {"hypothesis_id": item.hypothesis_id, "statement": item.statement,
+            "falsifier": item.falsifier, "regime": dict(item.regime),
+            "proposal": dict(item.proposal), "source_manifest_sha256": item.source_manifest_sha256,
+            "manifest": {"campaign_id":manifest.campaign_id,"proposal_id":manifest.proposal_id,
+                "candidate_id":manifest.candidate_id,"source_tree":manifest.source_tree,
+                "production_base_commit":manifest.production_base_commit,"instrument_commit":manifest.instrument_commit,
+                "change_class":manifest.change_class,"declared_files":list(manifest.declared_files),
+                "declared_symbols":{k:list(v) for k,v in manifest.declared_symbols.items()},
+                "mechanism_id":manifest.mechanism_id,"patch_sha256":manifest.patch_sha256,
+                "patch_base64":base64.b64encode(manifest.patch_bytes).decode("ascii")}}
+
+
+def _restore_pending(value: Mapping[str, Any]) -> PlannedCandidate:
+    raw=value.get("candidate")
+    if not isinstance(raw,Mapping) or not isinstance(raw.get("manifest"),Mapping): raise DiscoveryControllerError("pending candidate is missing sealed manifest")
+    m=raw["manifest"]
+    try:
+        manifest=source_candidate.SourcePatchManifest(campaign_id=m["campaign_id"],proposal_id=m["proposal_id"],candidate_id=m["candidate_id"],source_tree=m["source_tree"],production_base_commit=m["production_base_commit"],instrument_commit=m["instrument_commit"],change_class=m["change_class"],declared_files=tuple(m["declared_files"]),declared_symbols={k:tuple(v) for k,v in m["declared_symbols"].items()},mechanism_id=m["mechanism_id"],patch_sha256=m["patch_sha256"],patch_bytes=base64.b64decode(m["patch_base64"],validate=True))
+    except (KeyError,TypeError,ValueError,source_candidate.SourceCandidateError) as exc: raise DiscoveryControllerError("pending candidate manifest is invalid") from exc
+    return PlannedCandidate(hypothesis_id=raw["hypothesis_id"],statement=raw["statement"],falsifier=raw["falsifier"],regime=raw["regime"],proposal=raw["proposal"],source_manifest=manifest,source_manifest_sha256=raw["source_manifest_sha256"])
+
+
 def _append_nomination(root: Path, item: PlannedCandidate, result: SealedScreen, threshold: float) -> None:
     if result.effect_fraction < threshold: return
     path=root / "promotion-queue.jsonl"; lock=root / "promotion-queue.lock"; key=_sha({"result":result.result_sha256,"manifest":item.source_manifest_sha256})
@@ -366,22 +391,27 @@ def run_controller(config: ControllerConfig, *, planner: Planner, critic: Critic
         turn=state["next"]; context=_context(state,tracker,turn)
         with tempfile.TemporaryDirectory(prefix=f"ak-discovery-{turn}-", dir=config.output_root) as temp:
             workspace=Path(temp)
-            item=planner.plan(context=context,workspace=workspace)
-            review=critic.review(item,context=context,workspace=workspace)
-            row={"turn":turn,"hypothesis_id":item.hypothesis_id,"proposal_sha256":_sha(item.proposal),"source_manifest_sha256":item.source_manifest_sha256,"critic":asdict(review),"context_sha256":_sha(context)}
+            pending=state.get("pending")
+            if pending is not None:
+                item=_restore_pending(pending); authorization=hypotheses.ClaimAuthorization.from_dict(pending["authorization"]); row=dict(pending["row"]); review=Critique(**row["critic"])
+            else:
+                item=planner.plan(context=context,workspace=workspace)
+                review=critic.review(item,context=context,workspace=workspace)
+                row={"turn":turn,"hypothesis_id":item.hypothesis_id,"proposal_sha256":_sha(item.proposal),"source_manifest_sha256":item.source_manifest_sha256,"critic":asdict(review),"context_sha256":_sha(context)}
             if review.decision != "accept":
                 row["status"]="critic_"+review.decision; state["iterations"].append(row); state["next"]+=1; store.save(state,"critic_refused"); continue
-            _ensure_question(tracker,item)
-            ledger=do_not_repeat.compile_for_tracker(tracker)
-            try: authorization=tracker.authorize_claim(item.hypothesis_id,purpose="candidate_only_discovery",authorized_by="discovery_controller",ledger=ledger)
-            except hypotheses.HypothesisError as exc:
-                row.update(status="authorization_refused",reason=str(exc)); state["iterations"].append(row); state["next"]+=1; store.save(state,"authorization_refused"); continue
+            if pending is None:
+                _ensure_question(tracker,item)
+                ledger=do_not_repeat.compile_for_tracker(tracker)
+                try: authorization=tracker.authorize_claim(item.hypothesis_id,purpose="candidate_only_discovery",authorized_by="discovery_controller",ledger=ledger)
+                except hypotheses.HypothesisError as exc:
+                    row.update(status="authorization_refused",reason=str(exc)); state["iterations"].append(row); state["next"]+=1; store.save(state,"authorization_refused"); continue
             permit=lease.admit(item)
             if not bool(permit.get("admitted")):
                 # Waiting is durable but is not an experiment and cannot spend an
                 # iteration budget.  Planning/critique may continue elsewhere;
                 # this exact candidate is retried only after a new lease admits it.
-                row.update(status="waiting_resource",lease=dict(permit)); state["pending"]=row; store.save(state,"waiting_resource"); break
+                row.update(status="waiting_resource",lease=dict(permit)); state["pending"]={"row":row,"candidate":_pending_item(item),"authorization":authorization.to_dict()}; store.save(state,"waiting_resource"); break
             try: result=screener.screen(item,authorization,permit)
             except Exception as exc:
                 row.update(status="screen_refused",reason=f"{type(exc).__name__}: {exc}"); state["iterations"].append(row); state["next"]+=1; store.save(state,"screen_refused"); continue

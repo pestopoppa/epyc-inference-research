@@ -6,7 +6,8 @@ from unittest.mock import patch
 from . import discovery_controller as D
 
 H="a"*64
-class Manifest: pass
+class Manifest:
+ campaign_id="ak-test"; proposal_id="akp-test"; candidate_id="akc-test"; source_tree="llama.cpp"; production_base_commit="0"*40; instrument_commit="0"*40; change_class="source"; declared_files=("ggml/src/ggml.c",); declared_symbols={"ggml/src/ggml.c":("<file-scope>",)}; mechanism_id="test"; patch_sha256="0"*64; patch_bytes=b"diff --git a/ggml/src/ggml.c b/ggml/src/ggml.c\n@@ -1 +1 @@\n-x\n+y\n"
 class FakePlanner:
  def __init__(self): self.calls=[]
  def attest(self): return {**D.SOL,"runtime":{"real":"attested"}}
@@ -68,7 +69,7 @@ class Tests(unittest.TestCase):
    def admit(self,item): return {"admitted":False,"reason":"CPU window busy"}
   with tempfile.TemporaryDirectory() as t, patch.object(D.source_candidate,"SourcePatchManifest",Manifest), patch.object(D,"_write_projection"):
    r=D.run_controller(self.cfg(Path(t),1),planner=FakePlanner(),critic=FakeCritic(["accept"]),screener=FakeScreen([.1]),lease=Wait())
-   self.assertEqual(r["next"],1); self.assertEqual(r["pending"]["status"],"waiting_resource"); self.assertFalse(r["complete"])
+   self.assertEqual(r["next"],1); self.assertEqual(r["pending"]["row"]["status"],"waiting_resource"); self.assertFalse(r["complete"])
  def test_discovery_negative_records_attempt_without_resolving_hypothesis(self):
   with tempfile.TemporaryDirectory() as t, patch.object(D.source_candidate,"SourcePatchManifest",Manifest), patch.object(D,"_write_projection"):
    root=Path(t); p=FakePlanner(); screen=FakeScreen([-.01]); screen.values=iter([-.01])
