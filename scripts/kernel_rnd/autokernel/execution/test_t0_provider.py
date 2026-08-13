@@ -324,6 +324,28 @@ class BackendOpsConsoleParsing(unittest.TestCase):
         with self.assertRaisesRegex(t0.OutputParseError, "diagnostic names"):
             t0.parse_backend_ops_console(text)
 
+    def test_all_console_failure_prefixes_are_counted_as_failed_cases(self):
+        prefixes = (
+            "sentinel mismatch: sentinel-0",
+            "[MUL_MAT] NaN at index 7 (CPU=nan ref=0.0)",
+            "[MUL_MAT] inf sign mismatch: CPU=inf ref=-inf",
+            "[MUL_MAT] inf mismatch: CPU=inf ref=1.0",
+            "[MUL_MAT] ERR is invalid",
+            "VALUE TRANSFORM FAIL: unsupported input type",
+            "STATEFUL CONTRACT FAIL: input mutated",
+        )
+        for prefix in prefixes:
+            with self.subTest(prefix=prefix):
+                text = ("Testing 1 devices\n\nBackend 1/1: CPU\n" + prefix +
+                        "   MUL_MAT(type_a=f32,m=1,n=1,k=1): compare failed FAIL\n"
+                        "  0/1 tests passed\n  Backend CPU: FAIL\n"
+                        "0/1 backends passed\nFAIL\n")
+                run = t0.parse_backend_ops_console(text)
+                self.assertEqual(len(run.cases), 1)
+                self.assertEqual(run.cases[0].status, "fail")
+                self.assertEqual(run.cases[0].interleaved, prefix)
+                run.reconcile()
+
     def test_value_transform_receipt_and_v2_property_transform_are_structured(self):
         text = ("Testing 1 devices\n\nBackend 1/1: CPU\n"
                 "  SOFT_MAX(type=f32): AK_VALUE_V1 "

@@ -1520,9 +1520,10 @@ _CASE_RE = re.compile(r"^ {2}([A-Z][A-Z0-9_]*)\((.*)\):\s*(.*)$")
 # writes its diagnostic prefix before repeating the complete case identity.
 # This line is still one of the N cases counted by the footer and must be kept
 # as a failed case rather than left only in the later "Failing tests" list.
-_FAILED_CASE_RE = re.compile(
-    r"^\[([A-Z][A-Z0-9_]*)\] ERR = .+?\s+"
-    r"([A-Z][A-Z0-9_]*)\((.*)\): test failed\s+FAIL$")
+_PREFIXED_FAILED_CASE_RE = re.compile(
+    r"^(\S.*)\s{2,}([A-Z][A-Z0-9_]*)\((.*)\):\s*"
+    r"(?:compare|test) failed\s+FAIL$")
+_DIAGNOSTIC_OP_RE = re.compile(r"^\[([A-Z][A-Z0-9_]*)\]")
 _TESTS_PASSED_RE = re.compile(r"^ {2}(\d+)/(\d+) tests passed\s*$")
 _BACKENDS_PASSED_RE = re.compile(r"^(\d+)/(\d+) backends passed\s*$")
 _BACKEND_INIT_RE = re.compile(r"^Backend (\d+)/(\d+): (\S+)\s*$")
@@ -2033,15 +2034,17 @@ def parse_backend_ops_console(text: str) -> BackendOpsRun:
             skipped = True
             skip_reason = line.strip()
             continue
-        failed_case = _FAILED_CASE_RE.match(line)
+        failed_case = _PREFIXED_FAILED_CASE_RE.match(line)
         if failed_case and name is not None:
-            diagnostic_op, op, params = failed_case.groups()
-            if diagnostic_op != op:
+            diagnostic, op, params = failed_case.groups()
+            diagnostic = diagnostic.rstrip()
+            diagnostic_op = _DIAGNOSTIC_OP_RE.match(diagnostic)
+            if diagnostic_op is not None and diagnostic_op.group(1) != op:
                 raise OutputParseError(
-                    f"failed case diagnostic names {diagnostic_op!r} but its case names "
+                    f"failed case diagnostic names {diagnostic_op.group(1)!r} but its case names "
                     f"{op!r}: {line!r}")
             cases.append(_case_with_reference(
-                op=op, params=params, status="fail", interleaved=line))
+                op=op, params=params, status="fail", interleaved=diagnostic))
             continue
         case = _CASE_RE.match(line)
         if case and name is not None:
