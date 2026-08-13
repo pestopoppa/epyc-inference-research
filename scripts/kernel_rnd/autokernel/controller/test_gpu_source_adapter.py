@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import tempfile
 import unittest
 from unittest import mock
+import subprocess
 
 from .. import schemas
 from . import discovery_controller as D
@@ -45,6 +46,14 @@ class FakeDelegate:
 class GpuSourceAdapterTests(unittest.TestCase):
     def setup(self, directory: str, *, series=False):
         root = Path(directory).resolve()
+        production = root / "production"
+        production.mkdir()
+        subprocess.run(["git", "init", "-q", str(production)], check=True)
+        subprocess.run(["git", "-C", str(production), "config", "user.email", "test@example.invalid"], check=True)
+        subprocess.run(["git", "-C", str(production), "config", "user.name", "Test"], check=True)
+        (production / "README").write_text("frozen\n")
+        subprocess.run(["git", "-C", str(production), "add", "README"], check=True)
+        subprocess.run(["git", "-C", str(production), "commit", "-qm", "freeze"], check=True)
         evidence_plan = plan(root / "inputs")
         (root / "candidate-build").mkdir()
         (root / "anchor-build").mkdir()
@@ -60,11 +69,15 @@ class GpuSourceAdapterTests(unittest.TestCase):
             operations_root=(root / "operations").resolve(),
             build_source=lambda *_: build,
             plan_factory=lambda *_: evidence_plan,
-            args_factory=lambda *_: SimpleNamespace(screen=current),
+            args_factory=lambda *_: SimpleNamespace(
+                screen=current,
+                output_dir=str(root / "operations" / digest("operation") /
+                               "runner" / "screen")),
             correctness_executor=executors.correctness,
             rocprof_executor=executors.rocprof,
             claim_journal=object(), claim_acquirer=claims,
             claim_verifier=lambda _receipt: True, claim_timeout_s=0,
+            protected_roots=(production.resolve(),),
             receipt_series=(lambda _candidate, result: (prior, result))
                            if series else (lambda _candidate, result: (result,)))
         candidate = SimpleNamespace(source_manifest_sha256=evidence_plan.manifest_sha256)
@@ -84,10 +97,13 @@ class GpuSourceAdapterTests(unittest.TestCase):
             values = self.setup(directory, series=True)
             adapter, candidate, authorization, lease, inflight, current, executors = values
             with mock.patch.object(D, "GpuSourceScreener", FakeDelegate):
-                self.assertEqual(adapter.screen(candidate, authorization, lease), current)
+                screened = adapter.screen(candidate, authorization, lease)
+            self.assertEqual(screened.result_sha256, current.result_sha256)
+            if "series_key" in screened.__dataclass_fields__:
+                self.assertRegex(screened.series_key, r"^[0-9a-f]{64}$")
             recovered = adapter.reconcile(inflight)
             self.assertEqual(recovered.status, "sealed_result")
-            self.assertEqual(recovered.result, current)
+            self.assertEqual(recovered.result, screened)
             self.assertEqual(adapter.effects(lease["operation_key"]), (.08, .12))
             self.assertEqual(len(executors.calls), 3)
 
@@ -125,6 +141,34 @@ class GpuSourceAdapterTests(unittest.TestCase):
             with self.assertRaisesRegex(A.GpuSourceAdapterError, "reconcile"):
                 adapter.screen(candidate, authorization, lease)
             self.assertEqual(executors.calls, [])
+
+    def test_protected_tree_change_during_builder_refuses(self):
+        with tempfile.TemporaryDirectory() as directory:
+            adapter, candidate, authorization, lease, _inflight, _current, _ = self.setup(directory)
+            original = adapter.build_source
+            protected = adapter.protected_roots[0]
+            def mutating_builder(*args):
+                (protected / "README").write_text("mutated\n")
+                return original(*args)
+            adapter.build_source = mutating_builder
+            with mock.patch.object(D, "GpuSourceScreener", FakeDelegate):
+                with self.assertRaisesRegex(A.GpuSourceAdapterError, "protected production"):
+                    adapter.screen(candidate, authorization, lease)
+
+    def test_json_screen_normalizes_all_tuple_fields(self):
+        fields = {
+            "receipt_path": "/tmp/result", "result_sha256": digest("r"),
+            "effect_fraction": .1, "classification": "candidate",
+            "baseline_sha256": digest("b"), "source_proof_sha256": digest("s"),
+            "dispatch_proof_sha256": digest("d"),
+        }
+        if "component_series_keys" in D.SealedScreen.__dataclass_fields__:
+            fields["component_series_keys"] = (digest("component"),)
+        value = A._screen_dict(D.SealedScreen(**fields))
+        self.assertIsInstance(value["stages"], list)
+        if "component_series_keys" in value:
+            self.assertIsInstance(value["component_series_keys"], list)
+        schemas.content_hash(value)
 
 
 if __name__ == "__main__":
