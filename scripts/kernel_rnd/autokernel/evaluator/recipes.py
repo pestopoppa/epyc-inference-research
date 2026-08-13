@@ -768,9 +768,17 @@ class ToolBinding:
                       if self.external_build_root is not None else None)
         if build_root is not None:
             _require_abs_path(self.external_build_root, "binding.external_build_root")
-            if not build_root.name.startswith("build"):
+            # Standalone fixtures conventionally use ``build-*``.  Governed
+            # campaigns use the durable ``.../ak-build/<campaign>/<candidate>``
+            # layout, whose leaf is deliberately the candidate identity.
+            parts = build_root.parts
+            is_campaign_build = (
+                "ak-build" in parts
+                and parts.index("ak-build") + 2 < len(parts))
+            if not build_root.name.startswith("build") and not is_campaign_build:
                 raise RecipeBindingError(
-                    "binding.external_build_root must use a build-prefixed directory")
+                    "binding.external_build_root must use a build-prefixed directory "
+                    "or the canonical ak-build/<campaign>/<candidate> layout")
             for name, path in (("binary", binary), ("library_path", library_path)):
                 if build_root != path and build_root not in path.parents:
                     raise RecipeBindingError(
