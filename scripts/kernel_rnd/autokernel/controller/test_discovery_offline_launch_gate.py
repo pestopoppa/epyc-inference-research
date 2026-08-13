@@ -20,6 +20,7 @@ from . import discovery_deployment as D
 from . import discovery_deployment_factory as F
 from . import gpu_source_evidence as E
 from .test_discovery_controller_blackbox import Critic, Lease, Manifest, Planner
+from . import test_discovery_deployment as deployment_tests
 from .test_gpu_source_evidence import ClaimFactory, FakeExecutors, plan, write_bound
 
 
@@ -126,12 +127,53 @@ class OfflineLaunchGate(unittest.TestCase):
         self.assertNotIn("planner", parameters)
         self.assertNotIn("critic", parameters)
 
-    def test_configured_lock_is_the_actual_runner_lock(self):
-        """A configured non-default lock must own every model-call window."""
+    def test_overlap_mode_binds_distinct_configured_lock_and_small_model_receipt(self):
+        """Permitted CPU overlap remains capped, nonpromotable, and receipted."""
         parameters = inspect.signature(gpu_runner.invoke).parameters
         self.assertIn("inference_window_lock", parameters)
-        # The launch-gate integration test below supplies a held nondefault
-        # lock and proves _invoke_locked is not entered until it is released.
+        self.assertEqual(gpu_runner.SMALL_MODEL_OVERLAP_MAX_BYTES,
+                         512 * 1024 * 1024)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            model = root / "small.gguf"
+            model.write_bytes(b"small-model")
+            configured = root / "gpu-discovery.lock"
+            lease = mock.Mock(path=configured, waited_s=0)
+            window = mock.Mock()
+            window.hold.return_value.__enter__ = mock.Mock(return_value=lease)
+            window.hold.return_value.__exit__ = mock.Mock(return_value=False)
+            with mock.patch.object(gpu_runner.inference_window, "InferenceCallWindow",
+                                   return_value=window) as constructor, \
+                    mock.patch.object(gpu_runner.cpu_region_claim,
+                                      "inspect_region_claims",
+                                      return_value={"regions": {}}), \
+                    mock.patch.object(gpu_runner, "_invoke_locked",
+                                      return_value={"hip_residency_proved": True}):
+                receipt = gpu_runner.invoke(
+                    build=root, model=model, seed=1, baseline_vram=0,
+                    flash_attention=True, campaign_id="ak-offline",
+                    cpu_journal=object(), allow_small_model_cpu_overlap=True,
+                    inference_window_lock=configured)
+        constructor.assert_called_once_with(configured, timeout_s=600.0)
+        self.assertEqual(receipt["inference_call_window"]["lock_path"],
+                         str(configured))
+        overlap = receipt["cpu_coverage"]
+        self.assertEqual(overlap["cpu_overlap_policy"], "allowed_discovery_noise")
+        self.assertLessEqual(overlap["model_size_bytes"], 512 * 1024 * 1024)
+        self.assertFalse(overlap["promotion_claim"])
+        self.assertEqual(gpu_runner.DEVICE_ID, "mi210_0")
+
+    def test_deployment_refuses_overlap_cap_above_ratified_ceiling(self):
+        """A sealed config cannot expand allowed-noise overlap beyond 512 MiB."""
+        with tempfile.TemporaryDirectory() as directory:
+            helper = deployment_tests.DeploymentConfigTests()
+            path, raw = helper.config(Path(directory))
+            raw["gpu"]["small_model_max_bytes"] = 512 * 1024 * 1024 + 1
+            deployment_tests.seal(raw)
+            path.write_text(__import__("json").dumps(raw))
+            with self.assertRaises(D.DeploymentConfigError), \
+                    mock.patch.object(D, "_verify_production"):
+                D.load_deployment_config(path)
 
     def test_initial_planner_context_contains_sealed_search_inputs(self):
         """Turn one must be authorable from sealed evidence, not a blank prompt."""
