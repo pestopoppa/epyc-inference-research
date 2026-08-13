@@ -37,3 +37,26 @@ class TestGpuDiscoveryBuildIdentity(unittest.TestCase):
                 "GGML_HIP_ROCWMMA_FATTN:BOOL=ON\n", encoding="utf-8")
             with self.assertRaisesRegex(RuntimeError, "GGML_HIP_MMQ_MFMA"):
                 gpu.build_identity(build)
+
+    def test_flash_attention_factor_requires_one_r1m0_build(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            build = _build(Path(directory), rocwmma="ON", mfma="OFF").resolve()
+            identity = gpu.build_identity(build)
+            factor = gpu.factor_spec(
+                factor="flash_attention", anchor_build=build, candidate_build=build,
+                anchor_identity=identity, candidate_identity=identity)
+        self.assertEqual(factor["name"], "flash_attention")
+        self.assertFalse(factor["anchor_flash_attention"])
+        self.assertTrue(factor["candidate_flash_attention"])
+
+    def test_flash_attention_factor_refuses_distinct_builds(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            anchor = _build(root / "anchor", rocwmma="ON", mfma="OFF").resolve()
+            candidate = _build(root / "candidate", rocwmma="ON", mfma="OFF").resolve()
+            with self.assertRaisesRegex(RuntimeError, "one identical build path"):
+                gpu.factor_spec(
+                    factor="flash_attention", anchor_build=anchor,
+                    candidate_build=candidate,
+                    anchor_identity=gpu.build_identity(anchor),
+                    candidate_identity=gpu.build_identity(candidate))
