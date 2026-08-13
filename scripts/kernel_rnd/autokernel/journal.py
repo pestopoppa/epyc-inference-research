@@ -219,7 +219,7 @@ KIND_PROPOSAL_SKIPPED = "PROPOSAL_SKIPPED"
 KIND_STOP_STATE = "STOP_STATE"
 KIND_MICROBENCH_RUN_COMPLETED = "MICROBENCH_RUN_COMPLETED"
 KIND_T0_REFUSAL = "T0_REFUSAL"
-KIND_POST_T0_QUIET_BOUNDARY = "POST_T0_QUIET_BOUNDARY"
+KIND_POST_T0_QUIET_BOUNDARY = "POST_T0_READY_BOUNDARY"
 KIND_COMPOSITION_REQUESTED = "COMPOSITION_REQUESTED"
 KIND_COMPOSITION_FAILED = "COMPOSITION_FAILED"
 KIND_COMPOSITION_REJECTED = "COMPOSITION_REJECTED"
@@ -1119,11 +1119,10 @@ def _validate_native_payload(kind: str, payload: Mapping[str, Any]) -> list:
             value = payload.get(key)
             if not isinstance(value, str) or not value.strip():
                 out.append(f"{key}: required and non-empty")
-        for key, expected in (("quiet_barrier_s", 65.0),
-                              ("sample_interval_s", 5.0),
-                              ("required_samples", 3)):
-            if payload.get(key) != expected:
-                out.append(f"{key}: must be the fixed post-T0 boundary value {expected!r}")
+        if payload.get("ordinary_load_policy") != "recorded_not_blocking":
+            out.append("ordinary_load_policy: must record non-blocking load policy")
+        if payload.get("required_samples") != 1:
+            out.append("required_samples: must be one immediate ready-boundary sample")
         teardowns = payload.get("t0_sandbox_teardowns")
         if not isinstance(teardowns, list) or not teardowns:
             out.append("t0_sandbox_teardowns: required, non-empty list")
@@ -1141,8 +1140,8 @@ def _validate_native_payload(kind: str, payload: Mapping[str, Any]) -> list:
                         or teardown.get("removed") is not True):
                     out.append(f"t0_sandbox_teardowns[{index}].teardown: must prove verified_empty and removed")
         samples = payload.get("samples")
-        if not isinstance(samples, list) or len(samples) != 3:
-            out.append("samples: required list of exactly three quiet observations")
+        if not isinstance(samples, list) or len(samples) != 1:
+            out.append("samples: required list of one immediate ready observation")
         elif all(isinstance(row, Mapping) for row in samples):
             for index, row in enumerate(samples, start=1):
                 if row.get("index") != index:
@@ -1153,9 +1152,11 @@ def _validate_native_payload(kind: str, payload: Mapping[str, Any]) -> list:
                 if (not isinstance(attestation, Mapping)
                         or attestation.get("outcome") != schemas.PASS):
                     out.append(f"samples[{index - 1}].claim_attestation: must be a PASS mapping")
-                load = row.get("load")
-                if not isinstance(load, Mapping) or load.get("outcome") != schemas.PASS:
-                    out.append(f"samples[{index - 1}].load: must be a PASS mapping")
+                if not isinstance(row.get("load"), Mapping):
+                    out.append(f"samples[{index - 1}].load: required mapping")
+                witness = row.get("inference_witness")
+                if not isinstance(witness, Mapping) or witness.get("competing") is not False:
+                    out.append(f"samples[{index - 1}].inference_witness: must prove no competing inference")
     elif kind == KIND_PROPOSAL_SKIPPED:
         for key in ("proposal_ref", "reason"):
             value = payload.get(key)

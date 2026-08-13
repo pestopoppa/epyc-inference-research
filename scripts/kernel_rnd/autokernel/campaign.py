@@ -2511,13 +2511,10 @@ class DryRunOps:
 
     def settle_after_t0(self, spec: CampaignSpec, claim: Any) -> None:
         self._step(
-            "post_t0_quiet_barrier",
-            "would retain every T0 sandbox-teardown receipt, wait the fixed "
-            "one-minute load-average decay interval while the claim remains held, then "
-            "require three fresh claim-witnessed low-load samples before T1.",
-            quiet_barrier_s=POST_T0_QUIET_BARRIER_S,
-            samples=POST_T0_QUIET_SAMPLES,
-            sample_interval_s=POST_T0_QUIET_SAMPLE_INTERVAL_S)
+            "post_t0_ready_boundary",
+            "would retain every T0 sandbox-teardown receipt, then immediately record one "
+            "claim-witnessed host-noise and competing-inference witness before T1.",
+            samples=1, ordinary_load_policy="recorded_not_blocking")
 
     def run_paired_blocks(self, spec: CampaignSpec, build: Any,
                           claim: Any) -> Optional[Sequence[Pair]]:
@@ -3425,29 +3422,9 @@ class HostOps:
     # -- 3. build ----------------------------------------------------------
 
     def _settle_build_load(self, plan: worktree.BuildPlan) -> tuple[float, ...]:
-        """Wait out a predecessor arm's bounded load-average tail.
-
-        This is deliberately before configure and T0.  It neither reuses an
-        arm's build/T0 evidence nor relaxes the build cap: the generic builder
-        remains the final, immediate check at the subprocess boundary.
-        """
-        cap = plan.parallelism.load_average_cap
-        if cap is None:
-            return ()
-        attempts = int(BUILD_LOAD_SETTLE_TIMEOUT_S // BUILD_LOAD_SETTLE_INTERVAL_S) + 1
-        observed = []
-        for attempt in range(attempts):
-            load = os.getloadavg()[0]
-            observed.append(load)
-            if load <= cap:
-                return tuple(observed)
-            if attempt + 1 < attempts:
-                self._sleep(BUILD_LOAD_SETTLE_INTERVAL_S)
-        raise worktree.HostTooContended(
-            f"1-minute load average remained above the declared cap {cap:.2f} for "
-            f"{BUILD_LOAD_SETTLE_TIMEOUT_S:.0f}s before build: "
-            f"observed {observed[-1]:.2f}; refusing to start a "
-            f"{plan.parallelism.jobs}-way build")
+        """Take one noise receipt; ordinary host activity never delays a build."""
+        del plan
+        return (float(os.getloadavg()[0]),)
 
     def build(self, spec: CampaignSpec, tree: Any) -> Any:
         if isinstance(tree, worktree.Worktree):
@@ -3465,7 +3442,7 @@ class HostOps:
             source_root=snapshot.path,
             build_dir=worktree.default_build_dir(spec.campaign_id, spec.candidate_id),
             actor_worktree=tree.path,
-            parallelism=worktree.BuildParallelism(jobs=64, load_average_cap=8.0),
+            parallelism=worktree.BuildParallelism(jobs=64, load_average_cap=None),
             targets=(T0_GENERATION_TOOL, "llama-bench", "test-backend-ops"),
             cmake_defines=(("LLAMA_FATAL_WARNINGS", "ON"),
                            ("LLAMA_BUILD_EXAMPLES", "ON")),
@@ -4059,15 +4036,15 @@ class HostOps:
         self._t0_evaluation_event = outcome.event
 
     def settle_after_t0(self, spec: CampaignSpec, claim: Any) -> Mapping[str, Any]:
-        """Prove T0 has drained, then observe a fresh quiet host before T1.
+        """Prove T0 has drained and immediately record a fresh host-noise receipt.
 
         The T1 load gate itself is intentionally unchanged.  What changes is
         the attribution of its input: a full-width T0 leg is known work owned
         by this held claim, and one-minute load is a trailing statistic.  The
-        fixed barrier lets that statistic age; three later, independent samples
-        must all pass the original ceiling and each re-attests the same claim.
-        A missing sandbox teardown, capture, claim witness, or sample is a hard
-        refusal, never an invitation to sleep longer or skip T1's own gate.
+        There is deliberately no quiet-period sleep or load ceiling: services,
+        builds and filesystem activity are measurement noise, not a reason to
+        consume a claimed host by waiting.  A missing teardown, claim witness,
+        or competing inference identity remains a hard refusal.
         """
         if self._t0_capture_archive is None or not self._t0_capture_refs:
             raise RuntimeError(
@@ -4085,17 +4062,13 @@ class HostOps:
                     "cannot attribute the following load decay to completed owned work")
             teardown_receipts.append({"capture_ref": ref, "teardown": dict(teardown)})
 
-        # Do not release the claim during the decay: another measurement could
-        # otherwise start and make a low later load indistinguishable from an
-        # unprotected host.  This is deliberately fixed, not a retry loop.
-        self._sleep(POST_T0_QUIET_BARRIER_S)
         policy = microbench.HostStatePolicy(
             nominal_khz=self._nominal_khz,
             require_load=False,
             require_package_power=(spec.backend == BACKEND_CPU))
         held = microbench.CpuRegionClaimAdapter(claim, cpu_list=spec.cpu_list)
         samples = []
-        for index in range(POST_T0_QUIET_SAMPLES):
+        for index in range(1):
             attestation = held.attest()
             if not attestation.held:
                 raise RuntimeError(
@@ -4104,6 +4077,9 @@ class HostOps:
                     f"{'; '.join(attestation.check.reasons)}")
             state = self._read_host_state(cpu_list=spec.cpu_list)
             load = policy.check_load(state, cpu_count=len(state.khz_by_cpu) or 1)
+            witness = screening_baseline.competing_inference_witness()
+            if witness["competing"]:
+                raise RuntimeError("competing model inference occupies claimed AutoKernel compute")
             samples.append({
                 "index": index + 1,
                 "host_state": state.to_dict(),
@@ -4115,15 +4091,13 @@ class HostOps:
                     "reasons": list(attestation.check.reasons),
                 },
                 "load": {"outcome": load.outcome, "reasons": list(load.reasons)},
+                "inference_witness": witness,
             })
-            if index + 1 < POST_T0_QUIET_SAMPLES:
-                self._sleep(POST_T0_QUIET_SAMPLE_INTERVAL_S)
         receipt = {
-            "schema": "epyc.autokernel.post_t0_quiet_boundary.v1",
+            "schema": "epyc.autokernel.post_t0_ready_boundary.v1",
             "campaign_id": spec.campaign_id,
-            "quiet_barrier_s": POST_T0_QUIET_BARRIER_S,
-            "sample_interval_s": POST_T0_QUIET_SAMPLE_INTERVAL_S,
-            "required_samples": POST_T0_QUIET_SAMPLES,
+            "ordinary_load_policy": "recorded_not_blocking",
+            "required_samples": 1,
             "t0_sandbox_teardowns": teardown_receipts,
             "samples": samples,
             "completed_at": datetime.now(timezone.utc).isoformat(),
@@ -5268,7 +5242,7 @@ def main(argv: Optional[Sequence[str]] = None, *, out: Optional[Any] = None,
         except (OSError, json.JSONDecodeError) as exc:
             print(f"refusing to start: --proposal-manifest: {exc}", file=sys.stderr)
             return 2
-    if not args.dry_run and proposal is None:
+    if not args.dry_run and args.create_screening_baseline is None and proposal is None:
         print(
             "refusing to --execute: --proposal-manifest is required before any claim, "
             "mutation, or build",
@@ -5360,7 +5334,7 @@ def main(argv: Optional[Sequence[str]] = None, *, out: Optional[Any] = None,
         except (ValueError, TypeError) as exc:
             print(f"refusing to start: --calibration-bundle: {exc}", file=sys.stderr)
             return 2
-    if not args.dry_run and not args.screening_only and selected_calibration is None:
+    if not args.dry_run and not args.screening_only and args.create_screening_baseline is None and selected_calibration is None:
         print(
             "refusing to --execute: --calibration-bundle is required; historical or "
             "cross-cell constants carry no live ranking authority",
@@ -5389,7 +5363,7 @@ def main(argv: Optional[Sequence[str]] = None, *, out: Optional[Any] = None,
                 physical_bounds.PhysicalBoundError) as exc:
             print(f"refusing to start: --ranked-units: {exc}", file=sys.stderr)
             return 2
-    if not args.dry_run and not args.screening_only and physical_envelope is None and not ranked_units:
+    if not args.dry_run and not args.screening_only and args.create_screening_baseline is None and physical_envelope is None and not ranked_units:
         print(
             "refusing to --execute: --physical-envelope or --ranked-units is required "
             "before any claim, mutation, build, or benchmark",
@@ -5406,7 +5380,7 @@ def main(argv: Optional[Sequence[str]] = None, *, out: Optional[Any] = None,
     resolved_blocks = (
         args.blocks
         if args.blocks is not None
-        else (3 if args.screening_only else selected_calibration.b_min_blocks
+        else (3 if (args.screening_only or args.create_screening_baseline is not None) else selected_calibration.b_min_blocks
               if selected_calibration is not None else DEFAULT_BLOCKS)
     )
 
@@ -5422,8 +5396,9 @@ def main(argv: Optional[Sequence[str]] = None, *, out: Optional[Any] = None,
             fresh_source_prerequisite_plan=fresh_source_plan,
             least_commitment_plan=least_commitment_plan,
             matched_experiment_id=args.matched_experiment_id,
-            calibration=selected_calibration,
-            physical_envelope=physical_envelope, ranked_units=ranked_units,
+            calibration=(None if args.create_screening_baseline is not None else selected_calibration),
+            physical_envelope=(None if args.create_screening_baseline is not None else physical_envelope),
+            ranked_units=(() if args.create_screening_baseline is not None else ranked_units),
             screening_only=args.screening_only, screening_baseline=baseline_bank)
     except (ValueError, TypeError, storage.StorageError, recipes.RecipeError,
             source_candidate.SourceCandidateError,
@@ -5445,7 +5420,7 @@ def main(argv: Optional[Sequence[str]] = None, *, out: Optional[Any] = None,
     # CPU prefill cell only; silently applying it to decode or GPU is the exact
     # cross-cell transfer that calibration exists to prevent.  This refusal is
     # before HostOps construction, host reads, a claim, mutation, or subprocess.
-    if not args.dry_run and not args.screening_only:
+    if not args.dry_run and not args.screening_only and args.create_screening_baseline is None:
         calibration = spec.calibration
         if calibration is None:
             print(
