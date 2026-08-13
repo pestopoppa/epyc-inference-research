@@ -83,6 +83,7 @@ CONTROL_PROMPT_BY_LABEL = {
     "negative_committed_cell": PROMPT_TOKENS,
     "negative_wrong_cell": WRONG_PROMPT_TOKENS,
 }
+INSTRUMENT_BUILD_TARGETS = ("llama-cli", "llama-bench", "test-backend-ops")
 REQUIRED_HARDENING_RECEIPTS = (
     b"autokernel_hybrid_ab_complete",
     b"autokernel_thread_set_stable",
@@ -93,6 +94,25 @@ REQUIRED_HARDENING_RECEIPTS = (
 )
 BELIEF_RECEIPT_SCHEMA = "epyc.autokernel.live_control_beliefs.v1"
 BELIEF_PRODUCER_ID = "autokernel.execution.live_controls/v2"
+
+
+def _ensure_instrument_build() -> None:
+    """Materialize the complete read-only T0/T1 instrument before calibration."""
+    bindir = INSTRUMENT_ROOT / "build-v9-cpu" / "bin"
+    required = tuple(bindir / name for name in INSTRUMENT_BUILD_TARGETS)
+    if all(path.is_file() and os.access(path, os.X_OK) for path in required):
+        return
+    build_dir = INSTRUMENT_ROOT / "build-v9-cpu"
+    if not build_dir.is_dir():
+        raise RuntimeError(f"instrument build directory is missing: {build_dir}")
+    subprocess.run(
+        ["/usr/bin/cmake", "--build", str(build_dir), "--target",
+         *INSTRUMENT_BUILD_TARGETS, "-j", "64"],
+        cwd=str(INSTRUMENT_ROOT), check=True)
+    missing = [str(path) for path in required
+               if not path.is_file() or not os.access(path, os.X_OK)]
+    if missing:
+        raise RuntimeError("instrument build omitted required tools: " + ", ".join(missing))
 
 
 @dataclass(frozen=True)
@@ -1090,6 +1110,7 @@ def execute(output_root: Path, *, campaign_id: str,
     identity = LiveCampaignIdentity(
         campaign_id=campaign_id, evidence_ref=str(output_root))
     output_root.mkdir(parents=True, exist_ok=False)
+    _ensure_instrument_build()
     if _sha256_file(INSTRUMENT_BINARY) == "":  # pragma: no cover - explicit read gate
         raise RuntimeError("unreadable hardened measurement binary")
     candidate_binding = _copy_anchor_bundle(output_root)

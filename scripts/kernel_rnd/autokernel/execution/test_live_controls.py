@@ -13,6 +13,24 @@ from .. import schemas
 
 class InstrumentSelection(unittest.TestCase):
 
+    def test_missing_instrument_tools_are_built_as_complete_t0_set(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bindir = root / "build-v9-cpu" / "bin"
+            bindir.mkdir(parents=True)
+            def build(_argv, **_kwargs):
+                for name in live_controls.INSTRUMENT_BUILD_TARGETS:
+                    path = bindir / name
+                    path.touch()
+                    path.chmod(0o755)
+            with mock.patch.object(live_controls, "INSTRUMENT_ROOT", root), \
+                 mock.patch.object(live_controls.subprocess, "run", side_effect=build) as run:
+                live_controls._ensure_instrument_build()
+            run.assert_called_once_with(
+                ["/usr/bin/cmake", "--build", str(root / "build-v9-cpu"), "--target",
+                 "llama-cli", "llama-bench", "test-backend-ops", "-j", "64"],
+                cwd=str(root), check=True)
+
     def tearDown(self):
         importlib.reload(live_controls)
 
