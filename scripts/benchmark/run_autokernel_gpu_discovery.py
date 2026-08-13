@@ -18,7 +18,8 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from scripts.kernel_rnd.autokernel import schemas, storage
-from scripts.kernel_rnd.autokernel.execution import cpu_region_claim, device_sampler
+from scripts.kernel_rnd.autokernel.execution import (
+    cpu_region_claim, device_sampler, inference_window)
 from scripts.kernel_rnd.autokernel.resource import device_claim
 from scripts.benchmark import autokernel_gpu_discovery_beliefs as gpu_beliefs
 
@@ -30,6 +31,7 @@ CPU_LIST = "184-191"
 DEVICE_ID = "mi210_0"
 VRAM_USED = Path("/sys/class/drm/card2/device/mem_info_vram_used")
 KFD_PROCS = Path("/sys/class/kfd/kfd/proc")
+MODEL_CALL_WINDOW = inference_window.InferenceCallWindow(timeout_s=600.0)
 
 
 def utc_now() -> str:
@@ -95,7 +97,46 @@ def _kfd_pids() -> tuple[int, ...]:
 
 
 def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
-           flash_attention: bool) -> dict:
+           flash_attention: bool, campaign_id: str,
+           cpu_journal: cpu_region_claim.RegionClaimJournal) -> dict:
+    """Run one model load/measurement while excluding CPU model calls only."""
+    with MODEL_CALL_WINDOW.hold() as lease:
+        owned_claim = None
+        try:
+            try:
+                owned_claim = cpu_region_claim.acquire_cpu_region_claim(
+                    CPU_LIST, purpose="AutoKernel GPU model-call helper window",
+                    campaign_id=campaign_id, journal=cpu_journal,
+                    role="autokernel-gpu-discovery", timeout_s=0, max_hold_s=300)
+                coverage = owned_claim
+                coverage_receipt = {
+                    "schema": "epyc.autokernel.owned_cpu_coverage.v1",
+                    "borrowed": False,
+                    "claim": owned_claim.receipt().to_dict(),
+                }
+            except cpu_region_claim.CpuRegionClaimTimeout:
+                coverage = inference_window.borrow_windowed_cpu_coverage(CPU_LIST)
+                coverage_receipt = coverage.to_dict()
+            result = _invoke_locked(
+                build=build, model=model, seed=seed, baseline_vram=baseline_vram,
+                flash_attention=flash_attention)
+            if getattr(coverage, "borrowed", False):
+                coverage.validate()
+        finally:
+            if owned_claim is not None:
+                owned_claim.release()
+    result["inference_call_window"] = {
+        "schema": "epyc.autokernel.inference_call_window.v1",
+        "lock_path": str(lease.path),
+        "waited_s": lease.waited_s,
+        "scope": "model_load_and_inference_only",
+    }
+    result["cpu_coverage"] = coverage_receipt
+    return result
+
+
+def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
+                   flash_attention: bool) -> dict:
     binary = build / "bin" / "llama-bench"
     argv = ("taskset", "-c", CPU_LIST, "numactl", "--interleave=all", str(binary),
             "-m", str(model), "-p", "512", "-n", "0", "-r", "1", "-ngl", "99",
@@ -238,9 +279,6 @@ def run(args: argparse.Namespace) -> dict:
                f"{sole_factor['name']} {sole_factor['anchor']}->{sole_factor['candidate']}")
     cpu_journal = cpu_region_claim.RegionClaimJournal(args.cpu_claim_journal)
     gpu_journal = device_claim.ClaimJournal(args.device_claim_journal)
-    cpu = cpu_region_claim.acquire_cpu_region_claim(
-        CPU_LIST, purpose=purpose, campaign_id=args.campaign_id, journal=cpu_journal,
-        timeout_s=0, max_hold_s=300)
     gpu = None
     sampler = None
     try:
@@ -251,7 +289,8 @@ def run(args: argparse.Namespace) -> dict:
         anchor_runs = [invoke(
             build=anchor_build, model=model, seed=args.seed + i,
             baseline_vram=baseline_vram,
-            flash_attention=sealed["anchor_flash_attention"]) for i in range(3)]
+            flash_attention=sealed["anchor_flash_attention"],
+            campaign_id=args.campaign_id, cpu_journal=cpu_journal) for i in range(3)]
         bank_body = {
             "schema": SCHEMA_BANK, "campaign_id": args.campaign_id,
             "status": "complete", "started_at": started_at, "ended_at": utc_now(),
@@ -273,7 +312,8 @@ def run(args: argparse.Namespace) -> dict:
         candidate_runs = [invoke(
             build=candidate_build, model=model, seed=args.seed + 3 + i,
             baseline_vram=baseline_vram,
-            flash_attention=sealed["candidate_flash_attention"]) for i in range(3)]
+            flash_attention=sealed["candidate_flash_attention"],
+            campaign_id=args.campaign_id, cpu_journal=cpu_journal) for i in range(3)]
         center = sum(bank["anchor_samples"]) / 3
         values = [run["metric"] for run in candidate_runs]
         effects = [(value - center) / center for value in values]
@@ -295,7 +335,8 @@ def run(args: argparse.Namespace) -> dict:
             "candidate_runs": candidate_runs, "device_sampling": numeric,
             "hip_residency_proved": all(run["hip_residency_proved"]
                                          for run in anchor_runs + candidate_runs),
-            "cpu_claim_open": cpu.receipt().to_dict(),
+            "cpu_coverage_windows": [
+                run["cpu_coverage"] for run in anchor_runs + candidate_runs],
             "device_claim_open": gpu.receipt().to_dict(),
         }
         result = gpu_beliefs.attach_result_beliefs(
@@ -307,7 +348,6 @@ def run(args: argparse.Namespace) -> dict:
             sampler.stop()
         if gpu is not None:
             gpu.release()
-        cpu.release()
 
 
 def parser() -> argparse.ArgumentParser:

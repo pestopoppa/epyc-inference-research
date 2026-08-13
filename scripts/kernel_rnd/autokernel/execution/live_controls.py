@@ -30,8 +30,8 @@ from typing import Any, Callable, Mapping, Sequence
 from .. import campaign, schemas
 from ..evaluator import api, controls, recipes, statistics
 from ..resource import device_claim
-from . import (control_runner, cpu_region_claim, microbench, physical_bounds,
-               powercap_broker, sandbox, screening_baseline)
+from . import (control_runner, cpu_region_claim, inference_window, microbench,
+               physical_bounds, powercap_broker, sandbox, screening_baseline)
 
 # ``RECIPE_ID`` remains the process-local active cell for compatibility with
 # the recovery helpers below.  ``configure_recipe`` is called once by the CLI
@@ -1051,8 +1051,10 @@ def _measure(*, label: str, blocks: int, claim: object,
         policy=microbench.HostStatePolicy(
             nominal_khz=NOMINAL_KHZ, require_load=False,
             require_package_power=True),
-        spawner=microbench.SubprocessSpawner(
-            workdir_root=str(sandbox_root), sandbox_policy=sandbox_policy),
+        spawner=inference_window.WindowedSpawner(
+            microbench.SubprocessSpawner(
+                workdir_root=str(sandbox_root), sandbox_policy=sandbox_policy),
+            inference_window.InferenceCallWindow(timeout_s=600.0)),
         host_state=host_state)
     run = runner.run(plan)
     _write_json(output_root / "raw" / f"{label}.json", run.raw_vector())
@@ -1638,10 +1640,13 @@ def execute(output_root: Path, *, campaign_id: str, resume_existing: bool = Fals
     journal = cpu_region_claim.RegionClaimJournal(output_root / "region_claim.jsonl")
     materials = []
     anchor_motion = None
-    with cpu_region_claim.acquire_cpu_region_claim(
-            CPU_LIST, purpose="AutoKernel five-control calibration block",
-            campaign_id=identity.campaign_id, journal=journal, timeout_s=60.0,
-            max_hold_s=2 * 3600) as claim:
+    with inference_window.ReleaseUnderWindow(
+            cpu_region_claim.acquire_cpu_region_claim(
+                CPU_LIST, purpose="AutoKernel five-control calibration block",
+                campaign_id=identity.campaign_id, journal=journal,
+                role=inference_window.WINDOWED_CPU_ROLE, timeout_s=60.0,
+                max_hold_s=2 * 3600),
+            inference_window.InferenceCallWindow(timeout_s=600.0)) as claim:
         if resume is None:
             aa = _measure(
                 label="aa_calibration", blocks=CALIBRATION_BLOCKS, claim=claim,

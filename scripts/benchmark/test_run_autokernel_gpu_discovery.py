@@ -1,6 +1,7 @@
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 from scripts.benchmark import run_autokernel_gpu_discovery as gpu
 
@@ -87,3 +88,104 @@ class TestGpuDiscoveryBuildIdentity(unittest.TestCase):
                     candidate_build=candidate,
                     anchor_identity=gpu.build_identity(anchor),
                     candidate_identity=gpu.build_identity(candidate))
+
+
+class TestGpuDiscoveryInferenceWindow(unittest.TestCase):
+    def test_owned_cpu_coverage_exists_only_inside_model_call(self) -> None:
+        events = []
+
+        class Lease:
+            path = Path("/tmp/window")
+            waited_s = 0.125
+
+        class Held:
+            def __enter__(self):
+                events.append("window-open")
+                return Lease()
+
+            def __exit__(self, *_):
+                events.append("window-close")
+
+        class CallWindow:
+            def hold(self):
+                return Held()
+
+        class Receipt:
+            def to_dict(self):
+                return {"claim_id": "cpu-owned"}
+
+        class Claim:
+            def receipt(self):
+                return Receipt()
+
+            def release(self):
+                events.append("cpu-release")
+
+        def measured(**_kwargs):
+            events.append("model-call")
+            return {"metric": 1.0}
+
+        with mock.patch.object(gpu, "MODEL_CALL_WINDOW", CallWindow()), \
+             mock.patch.object(gpu.cpu_region_claim, "acquire_cpu_region_claim",
+                               return_value=Claim()), \
+             mock.patch.object(gpu, "_invoke_locked", side_effect=measured):
+            result = gpu.invoke(
+                build=Path("/build"), model=Path("/model"), seed=1,
+                baseline_vram=0, flash_attention=True,
+                campaign_id="ak-gpu-test", cpu_journal=mock.Mock())
+        self.assertEqual(events, ["window-open", "model-call", "cpu-release",
+                                  "window-close"])
+        self.assertFalse(result["cpu_coverage"]["borrowed"])
+
+    def test_contended_cpu_claim_borrows_only_inside_model_window(self) -> None:
+        events = []
+
+        class Lease:
+            path = Path("/tmp/window")
+            waited_s = 0.0
+
+        class Held:
+            def __enter__(self):
+                events.append("window-open")
+                return Lease()
+
+            def __exit__(self, *_):
+                events.append("window-close")
+
+        class CallWindow:
+            def hold(self):
+                return Held()
+
+        class Borrowed:
+            borrowed = True
+
+            def validate(self):
+                events.append("borrow-validate")
+
+            def to_dict(self):
+                return {"borrowed": True, "claim_id": "cpu-live-controls"}
+
+        def acquire(*_args, **_kwargs):
+            raise gpu.cpu_region_claim.CpuRegionClaimTimeout("held")
+
+        def borrow(_cpu_list):
+            events.append("borrow-open")
+            return Borrowed()
+
+        def measured(**_kwargs):
+            events.append("model-call")
+            return {"metric": 1.0}
+
+        with mock.patch.object(gpu, "MODEL_CALL_WINDOW", CallWindow()), \
+             mock.patch.object(gpu.cpu_region_claim, "acquire_cpu_region_claim",
+                               side_effect=acquire), \
+             mock.patch.object(gpu.inference_window, "borrow_windowed_cpu_coverage",
+                               side_effect=borrow), \
+             mock.patch.object(gpu, "_invoke_locked", side_effect=measured):
+            result = gpu.invoke(
+                build=Path("/build"), model=Path("/model"), seed=1,
+                baseline_vram=0, flash_attention=True,
+                campaign_id="ak-gpu-test", cpu_journal=mock.Mock())
+        self.assertEqual(events, ["window-open", "borrow-open", "model-call",
+                                  "borrow-validate", "window-close"])
+        self.assertTrue(result["cpu_coverage"]["borrowed"])
