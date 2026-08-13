@@ -82,6 +82,20 @@ def result_body(bank: dict) -> dict:
 
 
 class TestGpuDiscoveryBeliefs(unittest.TestCase):
+    def test_decode_frame_emits_decode_claimtuple_metrics(self) -> None:
+        body = baseline_body()
+        body["frame"]["recipe"] = "tg128-ngl99"
+        body["frame"]["metric"] = "decode_tokens_per_s"
+        bank = beliefs.attach_baseline_beliefs(body, producer_path=PRODUCER)
+        result = beliefs.attach_result_beliefs(
+            result_body(bank), bank=bank, producer_path=PRODUCER)
+        self.assertEqual(
+            bank["belief_measurements"][0]["metric"], "gpu_decode_tokens_per_s")
+        self.assertEqual(
+            result["belief_measurements"][1]["metric"],
+            "gpu_decode_relative_effect_vs_sealed_anchor")
+        self.assertIn("tg128", result["belief_measurements"][0]["measurement_id"])
+
     def test_baseline_and_candidate_rows_are_native_and_self_hashed(self) -> None:
         bank = beliefs.attach_baseline_beliefs(
             baseline_body(), producer_path=PRODUCER)

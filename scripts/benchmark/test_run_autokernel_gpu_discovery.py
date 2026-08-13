@@ -1,4 +1,5 @@
 from pathlib import Path
+import argparse
 import tempfile
 import unittest
 from unittest import mock
@@ -22,6 +23,24 @@ def _build(root: Path, *, rocwmma: str, mfma: str, graphs: str = "ON") -> Path:
 
 
 class TestGpuDiscoveryBuildIdentity(unittest.TestCase):
+    def test_decode_preflight_seals_tg128_shape_and_metric(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            anchor = _build(root / "anchor", rocwmma="ON", mfma="OFF",
+                            graphs="ON")
+            candidate = _build(root / "candidate", rocwmma="ON", mfma="OFF",
+                               graphs="OFF")
+            model = root / "model.gguf"
+            model.write_bytes(b"model")
+            sealed = gpu.preflight(argparse.Namespace(
+                model=str(model), anchor_build=str(anchor),
+                candidate_build=str(candidate), factor="hip_graphs",
+                campaign_id="gpu-decode", calls=9, workload="decode_tg128"))
+        self.assertEqual(sealed["frame"], "tg128-ngl99")
+        self.assertEqual(sealed["metric"], "decode_tokens_per_s")
+        self.assertEqual((sealed["prompt_tokens"], sealed["generation_tokens"]),
+                         (0, 128))
+
     def test_seals_factor_binary_and_dsos(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             identity = gpu.build_identity(
@@ -124,6 +143,14 @@ class TestGpuDiscoveryBuildIdentity(unittest.TestCase):
 
 
 class TestGpuDiscoveryInferenceWindow(unittest.TestCase):
+    def test_parser_exposes_distinct_decode_workload(self) -> None:
+        parsed = gpu.parser().parse_args([
+            "--anchor-build", "/anchor", "--candidate-build", "/candidate",
+            "--model", "/model", "--output-dir", "/out",
+            "--campaign-id", "gpu-decode", "--workload", "decode_tg128",
+        ])
+        self.assertEqual(parsed.workload, "decode_tg128")
+
     def test_small_model_overlap_records_claims_without_cpu_exclusivity(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             model = Path(directory) / "small.gguf"

@@ -19,7 +19,7 @@ from scripts.kernel_rnd.autokernel import schemas
 
 BANK_SCHEMA = "epyc.autokernel.gpu_screening_baseline.v2"
 RESULT_SCHEMA = "epyc.autokernel.gpu_candidate_only_screen.v2"
-PRODUCER_ID = "scripts.benchmark.run_autokernel_gpu_discovery/v3"
+PRODUCER_ID = "scripts.benchmark.run_autokernel_gpu_discovery/v4"
 PRODUCER_PATH = "scripts/benchmark/run_autokernel_gpu_discovery.py"
 AUTHORITY = "nonpromotable_candidate_only_discovery"
 ALLOWED_DISCOVERY_REPS = {3, 5, 9}
@@ -88,13 +88,16 @@ def _common(receipt: Mapping[str, Any], *, producer: Mapping[str, Any],
     if receipt.get("authority") != AUTHORITY:
         raise BeliefRefused("GPU discovery authority is not non-promotable")
     frame = _mapping(receipt.get("frame"), "frame")
+    recipe_metric = {
+        "pp512-ngl99": "prefill_tokens_per_s",
+        "tg128-ngl99": "decode_tokens_per_s",
+    }
     if (frame.get("backend") != "llama_gpu"
-            or frame.get("recipe") != "pp512-ngl99"
-            or frame.get("metric") != "prefill_tokens_per_s"
+            or recipe_metric.get(frame.get("recipe")) != frame.get("metric")
             or frame.get("metric_direction") != "higher_better"
             or frame.get("device") != "AMD Instinct MI210"
             or frame.get("architecture") != "gfx90a"):
-        raise BeliefRefused("GPU discovery frame is not the sealed MI210 pp512 frame")
+        raise BeliefRefused("GPU discovery frame is not a sealed MI210 discovery frame")
     factor = _mapping(receipt.get("sole_factor"), "sole_factor")
     if set(factor) != {"name", "anchor", "candidate"}:
         raise BeliefRefused("sole_factor must have exact name/anchor/candidate identity")
@@ -142,13 +145,16 @@ def attach_baseline_beliefs(receipt: Mapping[str, Any], *, producer_path: Path) 
     identity = _mapping(receipt.get("anchor_identity"), "anchor_identity")
     common.update({"arm": "anchor", "build_identity": dict(identity)})
     center = sum(samples) / len(samples)
+    recipe = receipt["frame"]["recipe"]
+    label = "pp512" if recipe == "pp512-ngl99" else "tg128"
+    metric = receipt["frame"]["metric"]
     result = dict(receipt)
     result["producer"] = producer
     result["belief_measurements"] = [_row(
-        measurement_id="gpu_discovery_anchor_pp512_median_tokens_per_s",
-        metric="gpu_prefill_tokens_per_s", value=median(samples), unit="tokens/s",
+        measurement_id=f"gpu_discovery_anchor_{label}_median_tokens_per_s",
+        metric=f"gpu_{metric}", value=median(samples), unit="tokens/s",
         category="BASELINE",
-        claim=("Non-promotable GPU discovery anchor observed median pp512 throughput "
+        claim=(f"Non-promotable GPU discovery anchor observed median {label} throughput "
                f"{median(samples):.9g} tokens/s"),
         reps_basis=f"scored:{reps} anchor-bank MI210 llama-bench invocations",
         extra={**common, "arithmetic_baseline_center": center},
@@ -220,18 +226,21 @@ def attach_result_beliefs(receipt: Mapping[str, Any], *, bank: Mapping[str, Any]
         "baseline_center": float(baseline_center),
         "hip_residency_proved": True,
     })
+    recipe = receipt["frame"]["recipe"]
+    label = "pp512" if recipe == "pp512-ngl99" else "tg128"
+    metric = receipt["frame"]["metric"]
     rows = [
         _row(
-            measurement_id="gpu_discovery_candidate_pp512_median_tokens_per_s",
-            metric="gpu_prefill_tokens_per_s", value=median(samples), unit="tokens/s",
+            measurement_id=f"gpu_discovery_candidate_{label}_median_tokens_per_s",
+            metric=f"gpu_{metric}", value=median(samples), unit="tokens/s",
             category="CANDIDATE",
-            claim=("Non-promotable GPU candidate discovery observed median pp512 throughput "
+            claim=(f"Non-promotable GPU candidate discovery observed median {label} throughput "
                    f"{median(samples):.9g} tokens/s"),
             reps_basis=f"scored:{reps} candidate-only MI210 llama-bench invocations",
             extra=common, protocol_id=RESULT_SCHEMA, reps=reps),
         _row(
-            measurement_id="gpu_discovery_candidate_pp512_median_relative_effect",
-            metric="gpu_prefill_relative_effect_vs_sealed_anchor",
+            measurement_id=f"gpu_discovery_candidate_{label}_median_relative_effect",
+            metric=f"gpu_{metric.removesuffix('_tokens_per_s')}_relative_effect_vs_sealed_anchor",
             value=median(effects), unit="fraction", category="CANDIDATE",
             claim=("Non-promotable GPU candidate discovery observed median relative effect "
                    f"{median(effects):.9g} versus its sealed anchor bank"),

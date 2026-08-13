@@ -131,12 +131,18 @@ def _gpu_screen(path: Path, receipt: dict[str, Any]) -> dict[str, Any] | None:
     elif stage == "screened_out":
         current_gate = "screened out by sign-consistent discovery result"
         next_action = "Retain as an abandoned strategy; revisit only with a new rationale."
+    frame = receipt.get("frame") or {}
+    recipe = frame.get("recipe", "pp512-ngl99")
+    workload = ("MI210 decode tg128" if recipe == "tg128-ngl99"
+                else "MI210 prefill pp512")
+    metric = frame.get("metric", "prefill_tokens_per_s")
+    short_workload = "decode tg128" if recipe == "tg128-ngl99" else "prefill pp512"
     return {
         "key": (f"gpu:{factor.get('name')}:{factor.get('anchor')}->"
-                f"{factor.get('candidate')}:prefill pp512"),
+                f"{factor.get('candidate')}:{short_workload}"),
         "lane": "GPU", "candidate": str(factor.get("name")),
         "transition": f"{factor.get('anchor', '—')} → {factor.get('candidate', '—')}",
-        "workload": "MI210 prefill pp512", "metric": "prefill_tokens_per_s",
+        "workload": workload, "metric": metric,
         "metric_direction": "higher_better",
         "effect_fraction": receipt["median_relative"],
         "evidence_tier": "screening", "stage": stage,

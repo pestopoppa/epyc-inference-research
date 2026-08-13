@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Six-call, non-promotable MI210 discovery screen over one sealed factor."""
+"""Fast non-promotable MI210 discovery over one factor and workload frame."""
 from __future__ import annotations
 
 import argparse
@@ -101,6 +101,7 @@ def _kfd_pids() -> tuple[int, ...]:
 
 def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
            flash_attention: bool, campaign_id: str,
+           prompt_tokens: int = 512, generation_tokens: int = 0,
            cpu_journal: cpu_region_claim.RegionClaimJournal,
            allow_small_model_cpu_overlap: bool = False,
            threads: int = 8, batch: int = 512, ubatch: int = 512,
@@ -127,7 +128,8 @@ def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
                 })
         result = _invoke_locked(
             build=build, model=model, seed=seed, baseline_vram=baseline_vram,
-            flash_attention=flash_attention, threads=threads, ubatch=ubatch,
+            flash_attention=flash_attention, prompt_tokens=prompt_tokens,
+            generation_tokens=generation_tokens, threads=threads, ubatch=ubatch,
             batch=batch, mmap=mmap, no_op_offload=no_op_offload,
             split_mode=split_mode, no_kv_offload=no_kv_offload, poll=poll)
         result["inference_call_window"] = None
@@ -160,7 +162,8 @@ def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
                 coverage_receipt = coverage.to_dict()
             result = _invoke_locked(
                 build=build, model=model, seed=seed, baseline_vram=baseline_vram,
-                flash_attention=flash_attention, threads=threads, ubatch=ubatch,
+                flash_attention=flash_attention, prompt_tokens=prompt_tokens,
+                generation_tokens=generation_tokens, threads=threads, ubatch=ubatch,
                 batch=batch, mmap=mmap, no_op_offload=no_op_offload,
                 split_mode=split_mode, no_kv_offload=no_kv_offload, poll=poll)
             if getattr(coverage, "borrowed", False):
@@ -179,13 +182,15 @@ def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
 
 
 def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
-                   flash_attention: bool, threads: int = 8, ubatch: int = 512,
+                   flash_attention: bool, prompt_tokens: int = 512,
+                   generation_tokens: int = 0, threads: int = 8, ubatch: int = 512,
                    batch: int = 512, mmap: bool = True,
                    no_op_offload: bool = False, split_mode: str = "layer",
                    no_kv_offload: bool = False, poll: int = 50) -> dict:
     binary = build / "bin" / "llama-bench"
     argv = ("taskset", "-c", CPU_LIST, "numactl", "--interleave=all", str(binary),
-            "-m", str(model), "-p", "512", "-n", "0", "-r", "1", "-ngl", "99",
+            "-m", str(model), "-p", str(prompt_tokens), "-n", str(generation_tokens),
+            "-r", "1", "-ngl", "99",
             "-fa", "on" if flash_attention else "off",
             "-t", str(threads), "-b", str(batch), "-ub", str(ubatch),
             "-mmp", "1" if mmap else "0",
@@ -233,9 +238,9 @@ def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
     if len(reported_commit) < 7 or not SOURCE_COMMIT.startswith(reported_commit):
         raise RuntimeError("GPU discovery binary does not report the sealed source commit")
     expected_flash = 1 if flash_attention else 0
-    if (row.get("n_prompt") != 512 or row.get("n_gen") != 0
+    if (row.get("n_prompt") != prompt_tokens or row.get("n_gen") != generation_tokens
             or row.get("flash_attn") != expected_flash):
-        raise RuntimeError("GPU discovery result differs from the sealed pp512 frame")
+        raise RuntimeError("GPU discovery result differs from the sealed workload frame")
     expected = {
         "n_threads": threads, "n_batch": batch, "n_ubatch": ubatch,
         "use_mmap": mmap, "no_op_offload": 1 if no_op_offload else 0,
@@ -363,6 +368,10 @@ def preflight(args: argparse.Namespace) -> dict:
     factor = factor_spec(
         factor=args.factor, anchor_build=anchor_build, candidate_build=candidate_build,
         anchor_identity=anchor_identity, candidate_identity=candidate_identity)
+    prompt_tokens, generation_tokens, recipe, metric = (
+        (512, 0, "pp512-ngl99", "prefill_tokens_per_s")
+        if args.workload == "prefill_pp512"
+        else (0, 128, "tg128-ngl99", "decode_tokens_per_s"))
     return {
         "schema": "epyc.autokernel.gpu_discovery_preflight.v1",
         "campaign_id": args.campaign_id,
@@ -392,7 +401,10 @@ def preflight(args: argparse.Namespace) -> dict:
         "candidate_no_kv_offload": factor.get("candidate_no_kv_offload", False),
         "anchor_poll": factor.get("anchor_poll", 50),
         "candidate_poll": factor.get("candidate_poll", 50),
-        "frame": "pp512-ngl99",
+        "prompt_tokens": prompt_tokens,
+        "generation_tokens": generation_tokens,
+        "frame": recipe,
+        "metric": metric,
         "invocations": {"anchor": args.calls, "candidate": args.calls},
         "inference_executed": False,
     }
@@ -428,6 +440,8 @@ def run(args: argparse.Namespace) -> dict:
             build=anchor_build, model=model, seed=args.seed + i,
             baseline_vram=baseline_vram,
             flash_attention=sealed["anchor_flash_attention"],
+            prompt_tokens=sealed["prompt_tokens"],
+            generation_tokens=sealed["generation_tokens"],
             threads=sealed["anchor_threads"], ubatch=sealed["anchor_ubatch"],
             batch=sealed["anchor_batch"],
             mmap=sealed["anchor_mmap"],
@@ -442,8 +456,10 @@ def run(args: argparse.Namespace) -> dict:
             "schema": SCHEMA_BANK, "campaign_id": args.campaign_id,
             "status": "complete", "started_at": started_at, "ended_at": utc_now(),
             "authority": "nonpromotable_candidate_only_discovery",
-            "frame": {"backend": "llama_gpu", "recipe": "pp512-ngl99",
-                      "metric": "prefill_tokens_per_s", "metric_direction": "higher_better",
+            "frame": {"backend": "llama_gpu", "recipe": sealed["frame"],
+                      "metric": sealed["metric"], "metric_direction": "higher_better",
+                      "n_prompt": sealed["prompt_tokens"],
+                      "n_gen": sealed["generation_tokens"],
                       "model": str(model), "model_sha256": sha256_file(model),
                       "source_commit": SOURCE_COMMIT, "cpu_list": CPU_LIST,
                       "device": "AMD Instinct MI210", "architecture": "gfx90a"},
@@ -461,6 +477,8 @@ def run(args: argparse.Namespace) -> dict:
             build=candidate_build, model=model, seed=args.seed + args.calls + i,
             baseline_vram=baseline_vram,
             flash_attention=sealed["candidate_flash_attention"],
+            prompt_tokens=sealed["prompt_tokens"],
+            generation_tokens=sealed["generation_tokens"],
             threads=sealed["candidate_threads"], ubatch=sealed["candidate_ubatch"],
             batch=sealed["candidate_batch"],
             mmap=sealed["candidate_mmap"],
@@ -539,6 +557,8 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--seed", type=int, default=8613)
     result.add_argument("--calls", type=int, choices=(3, 5, 9), default=3,
                         help="fresh invocations per arm (discovery evidence only)")
+    result.add_argument("--workload", choices=("prefill_pp512", "decode_tg128"),
+                        default="prefill_pp512")
     result.add_argument("--allow-small-model-cpu-overlap", action="store_true",
                         help="nonpromotable discovery only: treat CPU inference as noise "
                              "for models no larger than the sealed small-model limit")
