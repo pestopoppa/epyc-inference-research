@@ -433,9 +433,23 @@ def _describe_pid(proc: ProcSource, pid: int) -> dict:
     if argv:
         description["argv0"] = argv[0]
         description["argv0_basename"] = os.path.basename(argv[0])
+        description["cmdline"] = list(argv)
     if cgroup:
         description["cgroup"] = cgroup
     return description
+
+
+def describe_pid(pid: int, proc: Optional[ProcSource] = None) -> dict:
+    """Describe one already-identified PID without performing a pattern scan.
+
+    This is the public, read-only identity lookup for callers that already got
+    an exact PID from a claim or from :func:`interim_process_scan`.  It keeps
+    targeted ``/proc`` reads in this signalling-incapable module instead of
+    proliferating ad-hoc process readers.
+    """
+    if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0:
+        raise ValueError(f"pid must be a positive integer, got {pid!r}")
+    return _describe_pid(proc or ProcSource(), pid)
 
 
 # =============================================================================
@@ -1776,7 +1790,7 @@ __all__ = [
     "BASIS_CLAIM_WITNESS", "BASIS_INTERIM_PROCESS_SCAN", "BASIS_NONE", "BASES",
     "PreflightUnavailable", "PreflightNotSatisfied", "ConcurrentInferenceDetected",
     "PreflightIndeterminate",
-    "PreflightScope", "ProcSource", "OwnedScope", "read_own_scope",
+    "PreflightScope", "ProcSource", "OwnedScope", "read_own_scope", "describe_pid",
     "ClaimSources", "GpuClaimWitness", "GpuClaimReader", "RegionClaim", "LockHolders",
     "read_region_claims", "default_region_lock_dir",
     "MatchField", "Classification", "ProcessObservation", "ProcessScan",

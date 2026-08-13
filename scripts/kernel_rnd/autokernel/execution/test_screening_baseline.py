@@ -2,6 +2,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 from . import screening_baseline as bank
@@ -137,6 +138,106 @@ class ScreeningBaselineBankTest(unittest.TestCase):
              mock.patch.object(bank.preflight, "interim_process_scan", return_value=broken), \
              self.assertRaisesRegex(bank.BaselineBankError, "unreadable"):
             bank.competing_inference_witness()
+
+    def _governed_gpu_finding(self, *, mutations=None, child_ngl="99"):
+        root = Path(self._tmp.name) / "gpu-screen"
+        root.mkdir(exist_ok=True)
+        model = root / "small.gguf"
+        model.write_bytes(b"small model")
+        sealed = {
+            "schema": "epyc.autokernel.gpu_discovery_preflight.v1",
+            "campaign_id": "gpu-screen-1",
+            "cpu_overlap_policy": "allowed_discovery_noise",
+            "model": str(model),
+            "model_sha256": "model-sha",
+            "model_size_bytes": model.stat().st_size,
+            "small_model_overlap_max_bytes": 512 * 1024 * 1024,
+            "promotion_claim": False,
+            "inference_executed": False,
+        }
+        receipt = {
+            "schema": "epyc.autokernel.device_claim_receipt.v1",
+            "claim_id": "akd-test", "device_id": "mi210_0", "state": "held",
+            "holder_pid": 200, "holder_start_ticks": 222,
+            "campaign_id": "gpu-screen-1",
+            "purpose": "AutoKernel GPU candidate-only discovery test OFF->ON",
+        }
+        live = {
+            "schema": bank.GPU_DISCOVERY_LIVE_SCHEMA, "status": "active",
+            "campaign_id": "gpu-screen-1", "runner_pid": 200,
+            "authority": "nonpromotable_candidate_only_discovery",
+            "cpu_overlap_policy": "allowed_discovery_noise",
+            "model": str(model), "model_sha256": "model-sha",
+            "model_size_bytes": model.stat().st_size,
+            "small_model_overlap_max_bytes": 512 * 1024 * 1024,
+            "promotion_claim": False, "non_promotable": True,
+            "preflight_sha256": bank.schemas.content_hash(sealed),
+            "device_claim_open": receipt,
+        }
+        for target, key, value in mutations or ():
+            {"live": live, "sealed": sealed, "receipt": receipt}[target][key] = value
+        (root / "preflight.json").write_text(json.dumps(sealed), encoding="utf-8")
+        (root / "live-governance.json").write_text(json.dumps(live), encoding="utf-8")
+        finding = SimpleNamespace(
+            pid=100, starttime_ticks=111,
+            cmdline=("/build/llama-bench", "-m", str(model), "-ngl", child_ngl),
+            to_dict=lambda: {"pid": 100, "starttime_ticks": 111},
+        )
+        identities = {
+            100: {"pid": 100, "ppid": 200, "starttime_ticks": 111},
+            200: {"pid": 200, "starttime_ticks": 222,
+                  "cmdline": ["python3", "/repo/scripts/benchmark/"
+                              "run_autokernel_gpu_discovery.py",
+                              "--output-dir", str(root)]},
+        }
+        return finding, identities
+
+    def test_live_receipt_bound_small_mi210_discovery_is_allowed_noise(self):
+        finding, identities = self._governed_gpu_finding()
+        passed = bank.schemas.Check(bank.schemas.PASS)
+        with mock.patch.object(bank.preflight, "describe_pid",
+                               side_effect=lambda pid: identities[pid]), \
+             mock.patch.object(bank.device_claim, "check_device_claim_held",
+                               return_value=passed):
+            admission, reason = bank._gpu_discovery_noise_admission(finding)
+        self.assertEqual(reason, "")
+        self.assertEqual(admission["classification"], "allowed_discovery_noise")
+        self.assertFalse(admission["promotion_claim"])
+
+    def test_gpu_overlap_admission_fails_closed_on_adversarial_variants(self):
+        variants = (
+            ("released", [("live", "status", "released")], "99"),
+            ("promotion", [("live", "promotion_claim", True)], "99"),
+            ("large", [("live", "model_size_bytes", 512 * 1024 * 1024 + 1),
+                       ("sealed", "model_size_bytes", 512 * 1024 * 1024 + 1)], "99"),
+            ("wrong_device", [("receipt", "device_id", "other")], "99"),
+            ("cpu_inference", [], "0"),
+            ("tampered_preflight", [("sealed", "model_sha256", "tampered")], "99"),
+            ("wrong_runner", [("live", "runner_pid", 201)], "99"),
+        )
+        passed = bank.schemas.Check(bank.schemas.PASS)
+        for name, mutations, ngl in variants:
+            with self.subTest(name=name):
+                finding, identities = self._governed_gpu_finding(
+                    mutations=mutations, child_ngl=ngl)
+                with mock.patch.object(bank.preflight, "describe_pid",
+                                       side_effect=lambda pid: identities[pid]), \
+                     mock.patch.object(bank.device_claim, "check_device_claim_held",
+                                       return_value=passed):
+                    admission, reason = bank._gpu_discovery_noise_admission(finding)
+                self.assertIsNone(admission)
+                self.assertTrue(reason)
+
+    def test_gpu_overlap_admission_requires_live_device_claim(self):
+        finding, identities = self._governed_gpu_finding()
+        failed = bank.schemas.Check(bank.schemas.FAIL, ("claim released",))
+        with mock.patch.object(bank.preflight, "describe_pid",
+                               side_effect=lambda pid: identities[pid]), \
+             mock.patch.object(bank.device_claim, "check_device_claim_held",
+                               return_value=failed):
+            admission, reason = bank._gpu_discovery_noise_admission(finding)
+        self.assertIsNone(admission)
+        self.assertIn("not actively held", reason)
 
 
 if __name__ == "__main__":
