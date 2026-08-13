@@ -118,7 +118,7 @@ Something else moved production and every anchor you are about to take is wrong.
 The reward instrument is a separate reviewed source anchor:
 
 ```
-/mnt/raid0/llm/autokernel/worktrees/ak-final-direct-20260813  283b520b527a7b507d6cf05cd124a59f427f3629  experimental-v9-autokernel-t0-final-direct-20260813
+/mnt/raid0/llm/autokernel/worktrees/ak-final-q6k-20260813  f744cc220e722d1bda93783959471d44f8e118b0  experimental-v9-autokernel-t0-final-q6k-20260813
 ```
 
 That commit descends from the production v9 commit above. It is an
@@ -255,9 +255,9 @@ Everything from here to Step 8 happens **inside** this claim.
 ```python
 from autokernel.execution import worktree as WT
 
-repo = WT.GitRepo("/mnt/raid0/llm/autokernel/worktrees/ak-final-direct-20260813") # READ-ONLY by construction
-anchor = WT.resolve_anchor(repo, "experimental-v9-autokernel-t0-instrument-20260813",
-                           expected_commit="283b520b527a7b507d6cf05cd124a59f427f3629")
+repo = WT.GitRepo("/mnt/raid0/llm/autokernel/worktrees/ak-final-q6k-20260813") # READ-ONLY by construction
+anchor = WT.resolve_anchor(repo, "experimental-v9-autokernel-t0-final-q6k-20260813",
+                           expected_commit="f744cc220e722d1bda93783959471d44f8e118b0")
 wt, proof = WT.create_campaign_worktree(anchor, "ak-0001")   # /mnt/raid0/llm/llama.cpp-ak-0001
 assert proof.holds, proof.differences
 ```
