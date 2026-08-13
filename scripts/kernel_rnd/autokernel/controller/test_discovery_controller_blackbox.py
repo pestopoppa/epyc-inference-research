@@ -16,6 +16,7 @@ from scripts.kernel_rnd.autokernel.controller import discovery_controller as D
 
 
 H = "a" * 64
+RUNTIME={"kind":"docker_workspace_bind_only","docker_path":"/docker","docker_sha256":H,"image_id":"image","codex_native_sha256":H,"code_mode_host_sha256":H,"ca_certificate_sha256":H,"writable_host_binds":["/workspace"],"host_network_mode":"docker_bridge"}
 
 
 class Manifest:
@@ -48,7 +49,7 @@ class Planner:
         self.calls = 0
 
     def attest(self):
-        return {**D.SOL, "runtime": {"wrapper_sha256": H}}
+        return {**D.SOL, "runtime": RUNTIME}
 
     def plan(self, *, context, workspace):
         self.calls += 1
@@ -68,7 +69,7 @@ class Critic:
         self.calls = 0
 
     def attest(self):
-        return {**D.TERRA, "runtime": {"wrapper_sha256": H}}
+        return {**D.TERRA, "runtime": RUNTIME}
 
     def review(self, candidate, *, context, workspace):
         self.calls += 1
@@ -96,6 +97,8 @@ class Screen:
         return D.SealedScreen(
             "result.json", H, self.effect, "candidate", H, H, H
         )
+    def reconcile(self, inflight):
+        return D.Recovery("safe_to_start")
 
 
 class ProcessCrash(BaseException):
@@ -126,6 +129,10 @@ class CrashAfterRunner(Screen):
         self.compute_calls += 1
         self.durable_result.write_text(json.dumps({"result_sha256": H}))
         raise ProcessCrash("after fake runner")
+    def reconcile(self, inflight):
+        if self.durable_result.exists():
+            return D.Recovery("sealed_result", D.SealedScreen("result.json",H,self.effect,"candidate",H,H,H))
+        return D.Recovery("safe_to_start")
 
 
 class BlackBoxLaunchGate(unittest.TestCase):

@@ -68,9 +68,6 @@ def _require_roster(value: Mapping[str, Any]) -> None:
     if dict(value) != sealed_roster(): raise DiscoveryControllerError("runtime roster is not exact Sol planner + Terra critic, 0 Claude")
 
 def _require_runtime(value: Mapping[str, Any]) -> None:
-    # Unit-test adapters have no container boundary; their single wrapper digest
-    # is an explicitly narrow no-hardware attestation shape.
-    if set(value)=={"wrapper_sha256"} and isinstance(value["wrapper_sha256"],str) and HASH.fullmatch(value["wrapper_sha256"]): return
     required={"kind","docker_path","docker_sha256","image_id","codex_native_sha256","code_mode_host_sha256","ca_certificate_sha256","writable_host_binds","host_network_mode"}
     if set(value) != required or value.get("kind")!="docker_workspace_bind_only" or value.get("host_network_mode")!="docker_bridge" or value.get("writable_host_binds") != ["/workspace"] or not all(isinstance(value.get(k),str) and value[k] for k in required-{"writable_host_binds"}): raise DiscoveryControllerError("Codex runtime attestation is incomplete or unsealed")
 
@@ -124,7 +121,7 @@ class SealedScreen:
     stages: tuple[str, ...] = ("materialized", "built", "correctness", "attribution", "screen")
 
     def __post_init__(self) -> None:
-        if self.classification not in {"candidate", "screened_out", "inconclusive", "failed"}: raise DiscoveryControllerError("unknown screen class")
+        if self.classification not in {"candidate", "screened_out", "inconclusive", "failed", "top_k_replicated_candidate", "replicated_but_subadditive"}: raise DiscoveryControllerError("unknown screen class")
         if not isinstance(self.effect_fraction, (int, float)): raise DiscoveryControllerError("screen effect must be measured numeric evidence")
         if not self.candidate_only or self.promotion_claim: raise DiscoveryControllerError("discovery screen must remain nonpromotable")
         if tuple(self.stages) != ("materialized", "built", "correctness", "attribution", "screen"):
@@ -146,6 +143,15 @@ class Lease(Protocol):
 
 class Screener(Protocol):
     def screen(self, candidate: PlannedCandidate, authorization: hypotheses.ClaimAuthorization, lease: Mapping[str, Any]) -> SealedScreen: ...
+    def reconcile(self, inflight: Mapping[str, Any]) -> "Recovery": ...
+
+@dataclass(frozen=True)
+class Recovery:
+    status: str
+    result: SealedScreen | None = None
+    def __post_init__(self) -> None:
+        if self.status not in {"safe_to_start", "sealed_result", "ambiguous"}: raise DiscoveryControllerError("unknown recovery status")
+        if (self.status == "sealed_result") != isinstance(self.result, SealedScreen): raise DiscoveryControllerError("recovery result binding is invalid")
 
 
 class CodexPlanner:
@@ -194,7 +200,7 @@ def _load_plan(path: Path, root: Path) -> PlannedCandidate:
     except (OSError, ValueError) as exc:
         raise DiscoveryControllerError("source manifest escaped disposable workspace") from exc
     manifest = source_candidate.load_source_patch_manifest(manifest_path)
-    return PlannedCandidate(**value, source_manifest=manifest, source_manifest_sha256=hashlib.sha256(manifest_path.read_bytes()).hexdigest())
+    return PlannedCandidate(**value, source_manifest=manifest, source_manifest_sha256=manifest.patch_bundle_sha256)
 
 
 class CampaignScreener:
@@ -324,6 +330,13 @@ def _ensure_question(tracker: hypotheses.HypothesisTracker, item: PlannedCandida
     try: tracker.open_hypothesis(question)
     except hypotheses.HypothesisAlreadyTracked: pass
 
+def _record_attempt_once(tracker: hypotheses.HypothesisTracker, item: PlannedCandidate, proposal_id: str, result: SealedScreen) -> None:
+    ref=f"sha256:{result.result_sha256}"
+    for event in tracker.read().events:
+        attempt=event.payload.get("attempt") if event.kind==hypotheses.EVENT_ATTEMPTED else None
+        if isinstance(attempt,Mapping) and attempt.get("hypothesis_id")==item.hypothesis_id and ref in attempt.get("refs",[]): return
+    tracker.note_attempt(item.hypothesis_id,proposal_id=proposal_id,disposition=result.classification,bears_on_falsifier=True,note=f"sealed screen {result.result_sha256}; effect={result.effect_fraction:.9g}",refs=(ref,))
+
 
 def _context(state: Mapping[str, Any], tracker: hypotheses.HypothesisTracker, turn: int) -> dict[str, Any]:
     return {"authority": AUTHORITY, "turn":turn, "roster":sealed_roster(), "prior_results":[row.get("result_sha256") for row in state["iterations"] if row.get("result_sha256")], "do_not_repeat":_memory_block(tracker,turn)}
@@ -405,12 +418,16 @@ def run_controller(config: ControllerConfig, *, planner: Planner, critic: Critic
     tracker=_tracker(store)
     if state.get("inflight") is not None:
         inflight=state["inflight"]; item=_restore_pending({"candidate":inflight["candidate"]}); authorization=hypotheses.ClaimAuthorization.from_dict(inflight["authorization"]); permit=inflight["lease"]
-        reconcile=getattr(screener,"reconcile",None)
-        result=reconcile(inflight) if callable(reconcile) else None
-        if result is None: result=screener.screen(item,authorization,permit)
+        if isinstance(inflight.get("result"),Mapping): result=SealedScreen(**inflight["result"])
+        else:
+            reconcile=getattr(screener,"reconcile",None)
+            if not callable(reconcile): raise DiscoveryControllerError("inflight operation has no reconciliation adapter")
+            recovery=reconcile(inflight)
+            if not isinstance(recovery,Recovery) or recovery.status == "ambiguous": raise DiscoveryControllerError("inflight operation cannot be safely reconciled")
+            result=recovery.result if recovery.status == "sealed_result" else screener.screen(item,authorization,permit)
         if not isinstance(result,SealedScreen): raise DiscoveryControllerError("inflight recovery produced no sealed result")
         row=dict(inflight["row"]); row.update(status=result.classification,result_sha256=result.result_sha256,evidence={"baseline":result.baseline_sha256,"source":result.source_proof_sha256,"dispatch":result.dispatch_proof_sha256},effect_fraction=result.effect_fraction)
-        tracker.note_attempt(item.hypothesis_id,proposal_id=str(item.proposal.get("proposal_id",row["proposal_sha256"])),disposition=result.classification,bears_on_falsifier=True,note=f"sealed screen {result.result_sha256}",refs=(f"sha256:{result.result_sha256}",))
+        _record_attempt_once(tracker,item,str(item.proposal.get("proposal_id",row["proposal_sha256"])),result)
         state.pop("inflight",None); state.pop("pending",None); state["iterations"].append(row); state["next"]+=1; _append_nomination(config.output_root,item,result,config.nomination_threshold); _write_projection(config.output_root); store.save(state,"recovered_screen")
     while not state["complete"] and state["next"] <= config.max_iterations:
         turn=state["next"]; context=_context(state,tracker,turn)
@@ -443,10 +460,11 @@ def run_controller(config: ControllerConfig, *, planner: Planner, critic: Critic
             try: result=screener.screen(item,authorization,permit)
             except Exception as exc:
                 state.pop("inflight",None); row.update(status="screen_refused",reason=f"{type(exc).__name__}: {exc}"); state["iterations"].append(row); state["next"]+=1; store.save(state,"screen_refused"); continue
+            state["inflight"]["result"]=asdict(result); store.save(state,"post_screen_result")
             row.update(status=result.classification,result_sha256=result.result_sha256,evidence={"baseline":result.baseline_sha256,"source":result.source_proof_sha256,"dispatch":result.dispatch_proof_sha256},effect_fraction=result.effect_fraction)
             # Record the measured disposition before exposing it to the next
             # planner context.  This is the only source of repeat suppression.
-            tracker.note_attempt(item.hypothesis_id, proposal_id=str(item.proposal.get("proposal_id", row["proposal_sha256"])), disposition=result.classification, bears_on_falsifier=True, note=f"sealed screen {result.result_sha256}", refs=(f"sha256:{result.result_sha256}",))
+            _record_attempt_once(tracker,item,str(item.proposal.get("proposal_id",row["proposal_sha256"])),result)
             state.pop("inflight",None); state["iterations"].append(row); state["next"]+=1; _append_nomination(config.output_root,item,result,config.nomination_threshold); _write_projection(config.output_root); store.save(state,"screened")
     state["complete"]=state["next"]>config.max_iterations
     if state["complete"]: state.pop("pending",None)
