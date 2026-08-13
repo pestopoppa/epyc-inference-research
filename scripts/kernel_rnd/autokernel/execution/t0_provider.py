@@ -3652,6 +3652,34 @@ class ExecutedT0EvidenceProvider:
             projection_checks=self._plan.projection_checks,
         )
 
+    def dynamic_evidence_for(self, request: api.EvaluationRequest) -> correctness.DynamicT0Evidence:
+        """Collect only arm-specific runtime proof for a sealed parameter pair.
+
+        Deliberately does not invoke source/static/sanitizer/state probes.  It
+        still launches the backend suite, reference comparison, dispatch trace,
+        coherence/determinism, linkage and anti-reward probes for this arm.
+        """
+        if not isinstance(request, api.EvaluationRequest):
+            raise TypeError("request must be an api.EvaluationRequest")
+        collected = _Collected()
+        surface = self._change_surface()
+        op_suite = self.collect_op_suite(collected)
+        boundary = self.collect_boundary_shapes(collected)
+        dispatch = self.collect_dispatch_trace(collected)
+        linkage = self.collect_linkage(collected)
+        coherence = self.collect_coherence(collected)
+        determinism = self.collect_determinism(collected)
+        delivered = self._delivered_units(collected)
+        anti_reward = self.collect_anti_reward_hacking(delivered, collected)
+        self._notes = tuple(collected.notes)
+        self._refs = tuple(collected.refs)
+        return correctness.DynamicT0Evidence(
+            control_role=None, change_surface=surface, op_suite=op_suite,
+            reference=(self._plan.reference if self._plan.reference is not None
+                       else self._op_suite_reference), boundary_shapes=boundary,
+            dispatch_trace=dispatch, coherence=coherence, determinism=determinism,
+            linkage=linkage, anti_reward_hacking=anti_reward)
+
     @property
     def notes(self) -> tuple:
         """Collection notes from the last `evidence_for` call."""

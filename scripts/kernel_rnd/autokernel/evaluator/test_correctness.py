@@ -406,6 +406,24 @@ class TestCleanCandidatePasses(unittest.TestCase):
             with self.subTest(gate=gate.gate_id):
                 self.assertEqual(gate.check.outcome, S.PASS, gate.check.reasons)
 
+    def test_sealed_static_bundle_recomposes_only_fresh_runtime_evidence(self):
+        req = request()
+        full = run(req=req)
+        bundle = C.seal_static_t0_bundle(req, full)
+        restored = C.T0StaticBundle.from_dict(bundle.to_dict())
+        dynamic = C.DynamicT0Evidence(
+            control_role=None, change_surface=surface(), op_suite=op_suite(),
+            reference=reference(), boundary_shapes=boundary(), dispatch_trace=trace(),
+            coherence=coherence(), determinism=determinism(), linkage=linkage(),
+            anti_reward_hacking=anti_hack())
+        report = C.evaluate_t0_with_static_bundle(req, restored, dynamic, policy())
+        self.assertEqual(report.failed, ())
+        self.assertEqual(tuple(g.gate_id for g in report.gates), C.T0_GATE_IDS)
+        self.assertEqual({g.gate_id for g in restored.static_gates}, {
+            C.GID_SYMBOLS, C.GID_CLEAN_BUILD, C.GID_SEMANTIC_DIFF,
+            C.GID_SCHEMA_DIFF_POLICY, C.GID_STATIC_COMPILE, C.GID_ASAN,
+            C.GID_UBSAN, C.GID_STATE_SAFETY})
+
     def test_coherence_is_byte_identical_against_the_named_anchor(self):
         report = run()
         self.assertEqual(report.coherence.label, C.COHERENCE_BYTE_IDENTICAL)

@@ -100,6 +100,8 @@ in `SEAMS` at the bottom of this file.
 from __future__ import annotations
 
 import functools
+import hashlib
+import json
 import math
 import re
 from dataclasses import InitVar, dataclass
@@ -127,7 +129,7 @@ __all__ = [
     "OpSuiteEvidence", "PropertyMeasurement", "ReferenceComparison", "ReferenceEvidence",
     "BoundaryShapeEvidence", "DispatchTraceEvidence", "StateSafetyEvidence",
     "CoherenceEvidence", "DeterminismEvidence", "LinkageEvidence",
-    "AntiRewardHackingEvidence", "T0Evidence",
+    "AntiRewardHackingEvidence", "T0Evidence", "DynamicT0Evidence",
     "SOURCE_PREREQUISITE_IDS", "SourcePrerequisiteEvidence",
     # coherence
     "CoherenceVerdict", "compute_coherence",
@@ -143,7 +145,8 @@ __all__ = [
     "check_output_coherence", "check_determinism_class",
     "check_binary_and_linkage_identity", "check_anti_reward_hacking",
     # aggregation and seams
-    "T0Report", "evaluate_t0", "demote_anchor_requiring_passes", "T0EvidenceProvider",
+    "T0Report", "T0StaticBundle", "evaluate_t0", "seal_static_t0_bundle",
+    "evaluate_t0_with_static_bundle", "demote_anchor_requiring_passes", "T0EvidenceProvider",
     "StaticEvidenceProvider", "T0CorrectnessRunner", "audit_no_write_or_process_paths",
     "SEAMS",
 ]
@@ -1989,6 +1992,37 @@ class T0Evidence:
                 raise TypeError("evidence.projection_checks[].check must be a schemas.Check")
 
 
+@dataclass(frozen=True)
+class DynamicT0Evidence:
+    """The per-arm behavioural T0 surfaces which must never be cached.
+
+    A matched parameter pair can share only source/build/static proof.  These
+    fields exercise the selected runtime and are deliberately re-collected for
+    every arm, including an A/A control.
+    """
+    change_surface: ChangeSurface
+    op_suite: Optional[OpSuiteEvidence]
+    reference: _Maybe
+    boundary_shapes: _Maybe
+    dispatch_trace: Optional[DispatchTraceEvidence]
+    coherence: Optional[CoherenceEvidence]
+    determinism: Optional[DeterminismEvidence]
+    linkage: Optional[LinkageEvidence]
+    anti_reward_hacking: Optional[AntiRewardHackingEvidence]
+    control_role: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        # Use T0Evidence's strict type validation without accepting omitted
+        # static evidence as a passing result.
+        T0Evidence(control_role=self.control_role, change_surface=self.change_surface,
+                   symbols=None, build=None, diff=None, static_analysis=None,
+                   sanitizers=None, op_suite=self.op_suite, reference=self.reference,
+                   boundary_shapes=self.boundary_shapes, dispatch_trace=self.dispatch_trace,
+                   state_safety=None, coherence=self.coherence,
+                   determinism=self.determinism, linkage=self.linkage,
+                   anti_reward_hacking=self.anti_reward_hacking)
+
+
 # =============================================================================
 # Coherence — a COMPUTED verdict against an explicit anchor
 # =============================================================================
@@ -3613,6 +3647,144 @@ class T0Report:
             "failed": list(self.failed),
             "unevaluated": list(self.unevaluated),
         }
+
+
+# Only these gates may be sealed for a parameter-only matched pair.  The
+# complement contains a live runtime observation and must be re-run per arm.
+_STATIC_T0_GATE_IDS = frozenset((
+    GID_SYMBOLS, GID_CLEAN_BUILD, GID_SEMANTIC_DIFF, GID_SCHEMA_DIFF_POLICY,
+    GID_STATIC_COMPILE, GID_ASAN, GID_UBSAN, GID_STATE_SAFETY,
+))
+_DYNAMIC_T0_GATE_IDS = frozenset(T0_GATE_IDS) - _STATIC_T0_GATE_IDS
+assert _STATIC_T0_GATE_IDS | _DYNAMIC_T0_GATE_IDS == frozenset(T0_GATE_IDS)
+assert not (_STATIC_T0_GATE_IDS & _DYNAMIC_T0_GATE_IDS)
+
+
+@dataclass(frozen=True)
+class T0StaticBundle:
+    """Sealed static T0 proof reusable only within one exact source/build frame."""
+    source_sha256: str
+    binary_sha256: str
+    linkage_sha256: str
+    policy_ref: str
+    static_gates: tuple
+    actor_prediction_score: tuple
+    requires_human_code_review: bool
+    human_review_reasons: tuple
+
+    def __post_init__(self) -> None:
+        if not all(isinstance(value, str) and value for value in
+                   (self.source_sha256, self.binary_sha256, self.linkage_sha256,
+                    self.policy_ref)):
+            raise ValueError("static bundle requires non-empty sealed source/binary/linkage/policy")
+        ids = tuple(g.gate_id for g in self.static_gates)
+        if set(ids) != _STATIC_T0_GATE_IDS or len(ids) != len(set(ids)):
+            raise GateCoverageGap("static T0 bundle must carry exactly the static gate partition")
+        if any(g.check.outcome != schemas.PASS for g in self.static_gates):
+            raise ValueError("static T0 bundle refuses non-PASS proof")
+        if self.requires_human_code_review != bool(self.human_review_reasons):
+            raise ValueError("static bundle review marker must follow its reasons")
+
+    def to_dict(self) -> dict:
+        payload = {
+            "schema": "autokernel.t0-static-bundle/v1",
+            "source_sha256": self.source_sha256, "binary_sha256": self.binary_sha256,
+            "linkage_sha256": self.linkage_sha256, "policy_ref": self.policy_ref,
+            "static_gates": [gate.to_dict() for gate in self.static_gates],
+            "actor_prediction_score": [list(row) for row in self.actor_prediction_score],
+            "requires_human_code_review": self.requires_human_code_review,
+            "human_review_reasons": list(self.human_review_reasons),
+        }
+        # Gate measurements can contain nested tuples; JSON round-tripping is
+        # intentional here because the durable frame grammar admits lists only.
+        payload = json.loads(json.dumps(payload, sort_keys=True))
+        payload["frame_sha256"] = hashlib.sha256(
+            schemas.canonical_json(payload).encode("utf-8")).hexdigest()
+        return payload
+
+    @classmethod
+    def from_dict(cls, raw: Mapping[str, Any]) -> "T0StaticBundle":
+        if not isinstance(raw, Mapping) or raw.get("schema") != "autokernel.t0-static-bundle/v1":
+            raise ValueError("unrecognized static T0 bundle schema")
+        supplied = raw.get("frame_sha256")
+        payload = {key: value for key, value in raw.items() if key != "frame_sha256"}
+        expected = hashlib.sha256(schemas.canonical_json(payload).encode("utf-8")).hexdigest()
+        if supplied != expected:
+            raise ValueError("static T0 bundle frame SHA-256 mismatch")
+        def gate(item: Mapping[str, Any]) -> api.GateResult:
+            return api.GateResult(
+                gate_id=item["gate_id"], gate_class=item["gate_class"],
+                check=schemas.Check(item["outcome"], tuple(item.get("reasons", ()))),
+                requires_anchor=item.get("requires_anchor", False),
+                evidence_ref=item.get("evidence_ref"), notes=tuple(item.get("notes", ())),
+                measurements=tuple(item.get("measurements", ())))
+        return cls(source_sha256=raw["source_sha256"], binary_sha256=raw["binary_sha256"],
+                   linkage_sha256=raw["linkage_sha256"], policy_ref=raw["policy_ref"],
+                   static_gates=tuple(gate(item) for item in raw["static_gates"]),
+                   actor_prediction_score=tuple(tuple(row) for row in raw["actor_prediction_score"]),
+                   requires_human_code_review=raw["requires_human_code_review"],
+                   human_review_reasons=tuple(raw["human_review_reasons"]))
+
+
+def seal_static_t0_bundle(request: api.EvaluationRequest, report: T0Report) -> T0StaticBundle:
+    """Seal the shareable subset only after a complete, passing T0 report."""
+    if not isinstance(request, api.EvaluationRequest) or not isinstance(report, T0Report):
+        raise TypeError("seal_static_t0_bundle requires EvaluationRequest and T0Report")
+    if request.artifact.source_sha256 is None or request.artifact.binary_sha256 is None \
+            or request.artifact.linkage_sha256 is None:
+        raise ValueError("cannot seal a static bundle without source/binary/linkage hashes")
+    return T0StaticBundle(
+        source_sha256=request.artifact.source_sha256,
+        binary_sha256=request.artifact.binary_sha256,
+        linkage_sha256=request.artifact.linkage_sha256,
+        policy_ref=report.policy_ref,
+        static_gates=tuple(g for g in report.gates if g.gate_id in _STATIC_T0_GATE_IDS),
+        actor_prediction_score=report.actor_prediction_score,
+        requires_human_code_review=report.requires_human_code_review,
+        human_review_reasons=report.human_review_reasons)
+
+
+def evaluate_t0_with_static_bundle(request: api.EvaluationRequest, bundle: T0StaticBundle,
+                                   evidence: DynamicT0Evidence,
+                                   policy: T0Policy) -> T0Report:
+    """Recompose a complete report, re-running every dynamic T0 gate per arm."""
+    if not isinstance(request, api.EvaluationRequest) or not isinstance(bundle, T0StaticBundle) \
+            or not isinstance(evidence, DynamicT0Evidence) or not isinstance(policy, T0Policy):
+        raise TypeError("invalid matched-pair T0 recomposition inputs")
+    artifact = request.artifact
+    if (artifact.source_sha256, artifact.binary_sha256, artifact.linkage_sha256) != (
+            bundle.source_sha256, bundle.binary_sha256, bundle.linkage_sha256):
+        raise EvidenceAnchorMismatch(
+            "sealed static T0 bundle frame differs from this arm's source/binary/linkage")
+    if policy.policy_ref != bundle.policy_ref:
+        raise ValueError("sealed static T0 bundle policy differs from this arm")
+    surface = evidence.change_surface
+    gates = list(bundle.static_gates)
+    gates.append(check_backend_op_units(request, evidence.op_suite, surface, policy))
+    gates.append(check_exact_reference_comparison(request, evidence.reference, surface, policy))
+    gates.append(check_unseen_boundary_shapes(evidence.boundary_shapes, surface))
+    gates.append(check_affected_surface_reconciliation(evidence.dispatch_trace, surface))
+    gates.append(check_no_fallback_dispatch_proof(evidence.dispatch_trace))
+    coherence_gate, coherence = check_output_coherence(request, evidence.coherence, policy,
+                                                       evidence.determinism)
+    gates.append(coherence_gate)
+    determinism_gate, properties = check_determinism_class(request, evidence.determinism, policy)
+    gates.append(determinism_gate)
+    gates.append(check_binary_and_linkage_identity(request, evidence.linkage,
+                                                   evidence.control_role))
+    gates.append(check_anti_reward_hacking(evidence.anti_reward_hacking, evidence.control_role,
+                                           request.anchor))
+    by_id = {gate.gate_id: gate for gate in gates}
+    gates = [by_id[gate_id] for gate_id in T0_GATE_IDS]
+    gates, demoted = demote_anchor_requiring_passes(gates, anchor_bound=request.anchor is not None)
+    return T0Report(event_id=request.event_id, candidate_id=request.candidate_id, tier=request.tier,
+                    gates=tuple(gates), coherence=coherence,
+                    requires_human_code_review=bundle.requires_human_code_review,
+                    human_review_reasons=bundle.human_review_reasons,
+                    release_relevant_properties=tuple(properties),
+                    actor_prediction_score=surface.prediction_score(),
+                    anchor_bound=request.anchor is not None, demoted_gates=tuple(demoted),
+                    policy_ref=policy.policy_ref)
 
 
 def demote_anchor_requiring_passes(gates: Sequence[api.GateResult], *,

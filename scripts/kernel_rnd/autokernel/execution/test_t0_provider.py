@@ -2028,6 +2028,31 @@ class EndToEndT0Report(unittest.TestCase):
         self.assertEqual(report.outcome(correctness.GID_NO_FALLBACK), schemas.PASS)
         self.assertEqual(report.outcome(correctness.GID_ANTI_REWARD_HACKING), schemas.PASS)
 
+    def test_dynamic_collection_skips_static_probes_but_reexecutes_backend_suite(self):
+        anchor = anchor_capture(output_digests=(t0.sha256_text("Paris."),),
+                                output_lengths=(6,), determinism_class="bitwise_stable",
+                                delivered_units=32, oracle_ids=("oracle://anchor-v8",))
+        _, provider = self._build(
+            op_suite_text=recorded("recorded_t0_backend_ops_mandatory_ops.txt"), anchor=anchor)
+        request = evaluation_request(anchor=anchor.identity(),
+                                     determinism_class="bitwise_stable", repeats=2)
+        report = t0.parse_linkage_report(recorded("recorded_t0_linkage_pass.txt"))
+        commit, binary_sha, linkage_sha = t0._anchor_triple(provider.anchor_capture)
+        provider.collect_linkage = lambda collected: correctness.LinkageEvidence(
+            binary_sha256=request.artifact.binary_sha256,
+            linkage_sha256=request.artifact.linkage_sha256, anchor_source_commit=commit,
+            anchor_binary_sha256=binary_sha, anchor_linkage_sha256=linkage_sha,
+            resolved_libraries=tuple((row.soname, row.path, SHA_A) for row in report.rows),
+            expected_library_root=report.expected_root, verifier_id="recorded",
+            receipt_ref="akcap:linkage", produced_by="evaluator")
+        provider.collect_sanitizers = lambda _c: self.fail("static sanitizer probe reran")
+        provider.collect_static_analysis = lambda _c: self.fail("static analysis reran")
+        provider.collect_state_safety = lambda _c: self.fail("static state probe reran")
+        dynamic = provider.dynamic_evidence_for(request)
+        self.assertIsInstance(dynamic, correctness.DynamicT0Evidence)
+        self.assertIsNotNone(dynamic.op_suite)
+        self.assertIn("MUL_MAT", dynamic.op_suite.ops_exercised)
+
     def test_passing_op_suite_passes_its_gate(self):
         """Compliant-path control: the same pipeline with both ops exercised.
 
