@@ -1031,15 +1031,16 @@ PRODUCTION_REPO = "/mnt/raid0/llm/llama.cpp"
 PRODUCTION_BRANCH = "production-consolidated-v9"
 PRODUCTION_COMMIT = "0db32c06e3e550065b78311a6031ef3dd2c4f27c"
 
-#: Reviewed measurement source.  The hardened instrument commit is exactly one
-#: child of the frozen v9 serving commit: candidate worktrees start here so the
-#: evaluator-only llama-bench changes are present without modifying production.
+#: Reviewed measurement source.  The hardened instrument commit is a clean
+#: descendant of the frozen v9 serving commit: candidate worktrees start here
+#: so evaluator-only and correctness fixes are present without modifying
+#: production.
 #: Kernel proposals may change kernel sources but RVP-C6-1 requires all reward
 #: translation units to remain byte-identical to this commit.
 MEASUREMENT_REPO = "/mnt/raid0/llm/autokernel/worktrees/ak-iqk-t0-instrument-20260813"
 MEASUREMENT_BRANCH = "experimental-v9-autokernel-t0-instrument-20260813"
-MEASUREMENT_COMMIT = "65b35ff4e4d08e78c8c35a13353407866d25237d"
-MEASUREMENT_BUILD_ROOT = os.path.join(MEASUREMENT_REPO, "build-ak-t0-cpu-65b35ff4")
+MEASUREMENT_COMMIT = "f4adbd9d824f4cda87b82a9b90a82782bc71b674"
+MEASUREMENT_BUILD_ROOT = os.path.join(MEASUREMENT_REPO, "build-ak-t0-cpu-f4adbd9d")
 
 # ``llama-cli`` now starts an embedded HTTP server and talks to it over a
 # loopback socket. Candidate T0 is deliberately network-denied, so use the
@@ -2642,10 +2643,11 @@ class HostOps:
                     "measurement working tree is dirty; source pinning must name committed "
                     "bytes only",)), "measurement_instrument", hard=True)
             parents = measurement_repo.commit_parents(MEASUREMENT_COMMIT)
-            if parents != (production_anchor.commit,):
+            if not measurement_repo.is_ancestor(
+                    production_anchor.commit, MEASUREMENT_COMMIT):
                 fold(schemas.Check(schemas.FAIL, (
-                    f"measurement commit parents are {parents!r}; required the single "
-                    f"current production parent {(production_anchor.commit,)!r}",)),
+                    f"measurement commit parents are {parents!r}; required a commit "
+                    f"descending from current production {production_anchor.commit!r}",)),
                     "measurement_instrument", hard=True)
 
         fold(cpu_region_claim.verify_host_topology(), "topology")

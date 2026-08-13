@@ -419,7 +419,7 @@ class TestTheDryRunComposesEndToEnd(unittest.TestCase):
         self.assertEqual(live_controls.INSTRUMENT_BRANCH, campaign.MEASUREMENT_BRANCH)
         self.assertEqual(live_controls.INSTRUMENT_COMMIT, campaign.MEASUREMENT_COMMIT)
         self.assertEqual(campaign.MEASUREMENT_COMMIT,
-                         "65b35ff4e4d08e78c8c35a13353407866d25237d")
+                         "f4adbd9d824f4cda87b82a9b90a82782bc71b674")
 
     def test_the_ledger_released_everything(self):
         result, _ops, _text = self.compose()
@@ -2217,6 +2217,10 @@ class TestThePreflightIsWiredToSomethingThatExists(unittest.TestCase):
             @staticmethod
             def commit_parents(_commit):
                 return (campaign.PRODUCTION_COMMIT,)
+
+            @staticmethod
+            def is_ancestor(_ancestor, _descendant):
+                return True
 
         def resolved(_repo, branch, *, expected_commit):
             return mock.Mock(

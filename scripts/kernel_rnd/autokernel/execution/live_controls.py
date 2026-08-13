@@ -42,9 +42,9 @@ INSTRUMENT_ROOT = Path(os.environ.get(
     "/mnt/raid0/llm/autokernel/worktrees/ak-iqk-t0-instrument-20260813"))
 INSTRUMENT_BINARY = Path(os.environ.get(
     "AUTOKERNEL_INSTRUMENT_BINARY",
-    str(INSTRUMENT_ROOT / "build-ak-t0-cpu-65b35ff4/bin/llama-bench")))
+    str(INSTRUMENT_ROOT / "build-ak-t0-cpu-f4adbd9d/bin/llama-bench")))
 INSTRUMENT_BRANCH = "experimental-v9-autokernel-t0-instrument-20260813"
-INSTRUMENT_COMMIT = "65b35ff4e4d08e78c8c35a13353407866d25237d"
+INSTRUMENT_COMMIT = "f4adbd9d824f4cda87b82a9b90a82782bc71b674"
 MODEL = Path(
     "/mnt/raid0/llm/models/lmstudio-community/"
     "Qwen2.5-Coder-0.5B-GGUF/Qwen2.5-Coder-0.5B-Q4_K_M.gguf")

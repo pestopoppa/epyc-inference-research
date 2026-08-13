@@ -118,12 +118,12 @@ Something else moved production and every anchor you are about to take is wrong.
 The reward instrument is a separate reviewed source anchor:
 
 ```
-/mnt/raid0/llm/autokernel/worktrees/ak-iqk-t0-instrument-20260813  65b35ff4e4d08e78c8c35a13353407866d25237d  experimental-v9-autokernel-t0-instrument-20260813
+/mnt/raid0/llm/autokernel/worktrees/ak-iqk-t0-instrument-20260813  f4adbd9d824f4cda87b82a9b90a82782bc71b674  experimental-v9-autokernel-t0-instrument-20260813
 ```
 
-That commit has exactly one parent, the production v9 commit above. It is an
+That commit descends from the production v9 commit above. It is an
 experimental measurement instrument; serving remains frozen. The live preflight
-proves the branch, commit, clean source tree, and direct-parent edge.
+proves the branch, commit, clean source tree, and production-ancestry edge.
 
 ### 1.2 The host is yours to measure on
 
@@ -257,7 +257,7 @@ from autokernel.execution import worktree as WT
 
 repo = WT.GitRepo("/mnt/raid0/llm/autokernel/worktrees/ak-iqk-t0-instrument-20260813") # READ-ONLY by construction
 anchor = WT.resolve_anchor(repo, "experimental-v9-autokernel-t0-instrument-20260813",
-                           expected_commit="65b35ff4e4d08e78c8c35a13353407866d25237d")
+                           expected_commit="f4adbd9d824f4cda87b82a9b90a82782bc71b674")
 wt, proof = WT.create_campaign_worktree(anchor, "ak-0001")   # /mnt/raid0/llm/llama.cpp-ak-0001
 assert proof.holds, proof.differences
 ```

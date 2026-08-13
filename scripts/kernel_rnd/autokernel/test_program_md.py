@@ -263,6 +263,12 @@ class TestTheDocumentedCommandsAreTheRealCommands(unittest.TestCase):
             self.addCleanup(tempdir.cleanup)
             if "--proposal-manifest" in argv:
                 proposal = _proposal_fixture()
+                # The shared schema fixture intentionally predates the live
+                # instrument.  The documented command must still exercise the
+                # current campaign contract rather than fail on that fixture's
+                # historical source pin.
+                proposal["provider_reference"]["source_commit"] = (
+                    campaign.MEASUREMENT_COMMIT)
                 campaign_id = argv[argv.index("--campaign-id") + 1]
                 proposal["campaign_id"] = campaign_id
                 proposal["proposal_id"] = "akp-documented-command"
