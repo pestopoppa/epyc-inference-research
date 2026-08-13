@@ -6,6 +6,7 @@ accepted by strict T1 and cannot be converted into a candidate/archive record.
 from __future__ import annotations
 
 import json
+import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
@@ -15,7 +16,15 @@ from ..evaluator import recipes
 from . import microbench
 from ..resource import preflight
 
-SCHEMA = "epyc.autokernel.screening_baseline_bank.v2"
+SCHEMA = "epyc.autokernel.screening_baseline_bank.v3"
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 class BaselineBankError(ValueError):
@@ -28,12 +37,14 @@ class BaselineBank:
     anchor_samples: tuple[float, ...]
     sentinel_before: float
     anchor_command: Mapping[str, Any]
+    anchor_artifacts: Mapping[str, Any]
     sentinel_after: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
         body = {"schema": SCHEMA, "frame": dict(self.frame),
                 "anchor_samples": list(self.anchor_samples),
                 "anchor_command": dict(self.anchor_command),
+                "anchor_artifacts": dict(self.anchor_artifacts),
                 "sentinel_before": self.sentinel_before,
                 "sentinel_after": self.sentinel_after}
         return {**body, "baseline_sha256": schemas.content_hash(body)}
@@ -61,24 +72,27 @@ def load(path: str | Path) -> BaselineBank:
     raw = json.loads(Path(path).read_text(encoding="utf-8"))
     if not isinstance(raw, Mapping):
         raise BaselineBankError("baseline bank must be an object")
-    body = {key: raw.get(key) for key in ("schema", "frame", "anchor_samples", "anchor_command",
+    body = {key: raw.get(key) for key in ("schema", "frame", "anchor_samples", "anchor_command", "anchor_artifacts",
                                           "sentinel_before", "sentinel_after")}
     if raw.get("baseline_sha256") != schemas.content_hash(body) or body["schema"] != SCHEMA:
         raise BaselineBankError("baseline bank schema/hash is invalid")
     values = body["anchor_samples"]
     command = body["anchor_command"]
+    artifacts = body["anchor_artifacts"]
     if not isinstance(body["frame"], Mapping) or not isinstance(values, list) or len(values) < 2:
         raise BaselineBankError("baseline bank needs exact frame and >=2 anchor samples")
     if body["frame"].get("anchor_ggml_iqk") != "0" \
             or not isinstance(command, Mapping) \
             or command.get("arm") != "anchor" \
             or command.get("env", {}).get("GGML_IQK") != "0" \
-            or command.get("params", {}).get("ggml_iqk") != "0":
+            or command.get("params", {}).get("ggml_iqk") != "0" \
+            or not isinstance(artifacts, Mapping):
         raise BaselineBankError(
             "baseline bank must seal an anchor command with GGML_IQK=0")
     return BaselineBank(dict(body["frame"]), tuple(float(x) for x in values),
                         float(body["sentinel_before"]),
                         dict(command),
+                        dict(artifacts),
                         None if body["sentinel_after"] is None else float(body["sentinel_after"]))
 
 
@@ -92,7 +106,35 @@ def create(*, frame: Mapping[str, Any], anchor_command: Mapping[str, Any],
             or anchor_command.get("env", {}).get("GGML_IQK") != "0" \
             or anchor_command.get("params", {}).get("ggml_iqk") != "0":
         raise BaselineBankError("baseline creation requires a bound GGML_IQK=0 anchor")
-    return BaselineBank(dict(frame), samples, samples[-1], dict(anchor_command))
+    return BaselineBank(dict(frame), samples, samples[-1], dict(anchor_command),
+                        command_artifacts(anchor_command))
+
+
+def command_artifacts(command: Mapping[str, Any]) -> dict[str, Any]:
+    binding = command.get("binding", {})
+    binary = Path(str(binding.get("binary", "")))
+    library_root = Path(str(binding.get("library_path", "")))
+    if not binary.is_file() or not library_root.is_dir():
+        raise BaselineBankError("screening command artifact paths are unavailable")
+    libraries = {}
+    for path in sorted(library_root.glob("*.so*")):
+        if path.is_file():
+            libraries[path.name] = _sha256_file(path)
+    return {"binary_sha256": _sha256_file(binary), "libraries": libraries}
+
+
+def _semantic_command(command: Mapping[str, Any]) -> dict[str, Any]:
+    env = dict(command.get("env", {}))
+    env.pop("LD_LIBRARY_PATH", None)
+    env.pop("GGML_IQK", None)
+    params = dict(command.get("params", {}))
+    params.pop("ggml_iqk", None)
+    params.pop("autokernel_seed", None)
+    return {key: command.get(key) for key in (
+        "recipe_id", "registry_id", "backend", "phase", "cell_class",
+        "metric", "metric_direction", "tool", "recipe") } | {
+            "env": env, "params": params,
+        }
 
 
 def screen(*, bank: BaselineBank, frame: Mapping[str, Any], invoke_candidate,
@@ -112,21 +154,15 @@ def screen(*, bank: BaselineBank, frame: Mapping[str, Any], invoke_candidate,
             or candidate_command.get("params", {}).get("ggml_iqk") != "1":
         raise BaselineBankError(
             "screening candidate command must seal candidate GGML_IQK=1")
-    anchor_env = dict(bank.anchor_command.get("env", {}))
-    candidate_env = dict(candidate_command.get("env", {}))
-    # LD_LIBRARY_PATH is binding-specific by design (anchor vs isolated
-    # candidate build); every other recipe environment field must be identical
-    # except the sole intended GGML_IQK factor.
-    for env in (anchor_env, candidate_env):
-        env.pop("LD_LIBRARY_PATH", None)
-        env.pop("GGML_IQK", None)
-    anchor_params = dict(bank.anchor_command.get("params", {}))
-    candidate_params = dict(candidate_command.get("params", {}))
-    anchor_params.pop("ggml_iqk", None)
-    candidate_params.pop("ggml_iqk", None)
-    if anchor_env != candidate_env or anchor_params != candidate_params:
+    anchor_semantic = _semantic_command(bank.anchor_command)
+    candidate_semantic = _semantic_command(candidate_command)
+    candidate_artifacts = command_artifacts(candidate_command)
+    if anchor_semantic != candidate_semantic \
+            or dict(bank.anchor_artifacts) != candidate_artifacts:
         raise BaselineBankError(
-            "screening arm commands differ beyond the sole intended GGML_IQK factor")
+            "screening arm commands differ beyond the sole intended GGML_IQK factor: "
+            f"semantic_equal={anchor_semantic == candidate_semantic}, "
+            f"artifact_equal={dict(bank.anchor_artifacts) == candidate_artifacts}")
     samples = tuple(float(invoke_candidate()) for _ in range(3))
     report = bank.nominate(samples)
     report.update({"candidate_invocations": 3, "anchor_invocations": 0,

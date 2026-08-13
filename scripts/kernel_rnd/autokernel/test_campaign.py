@@ -69,7 +69,7 @@ def screening_bank() -> screening_baseline.BaselineBank:
     }, (100.0, 100.0), 100.0, {
         "arm": "anchor", "env": {"GGML_IQK": "0"},
         "params": {"ggml_iqk": "0"},
-    })
+    }, {})
 
 
 def proposal_manifest(campaign_id: str = "ak-test") -> dict:
@@ -543,7 +543,7 @@ class TestTheDryRunComposesEndToEnd(unittest.TestCase):
         bad = screening_baseline.BaselineBank(
             {"recipe_id": "wrong"}, (1.0, 1.0), 1.0,
             {"arm": "anchor", "env": {"GGML_IQK": "0"},
-             "params": {"ggml_iqk": "0"}})
+             "params": {"ggml_iqk": "0"}}, {})
         with self.assertRaisesRegex(Exception, "frame differs"):
             spec(blocks=3, screening_only=True, screening_baseline=bad)
 
@@ -2018,7 +2018,7 @@ class TestExecuteRefusesAnOpsThatCannotFinishARun(unittest.TestCase):
         bank = screening_baseline.BaselineBank(
             frame, (100.0, 100.0, 100.0), 100.0,
             {"arm": "anchor", "env": {"GGML_IQK": "0"},
-             "params": {"ggml_iqk": "0"}})
+             "params": {"ggml_iqk": "0"}}, {})
         built = spec(model=str(model), blocks=3, reps=1, screening_only=True,
                      screening_baseline=bank)
         ops = campaign.HostOps(nominal_khz=2_900_000)
