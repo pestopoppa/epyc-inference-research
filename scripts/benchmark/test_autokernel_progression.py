@@ -108,6 +108,28 @@ class ProgressionTest(unittest.TestCase):
             self.assertIn("5+5", candidate["confidence"])
             self.assertEqual(candidate["evidence"][0]["campaign_id"], "poll-s2")
 
+    def test_sign_consistent_negative_gpu_screen_is_abandoned(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            result = root / "screens" / "kv-offload" / "result.json"
+            result.parent.mkdir(parents=True)
+            result.write_text(json.dumps({
+                "schema": "epyc.autokernel.gpu_candidate_only_screen.v2",
+                "campaign_id": "kv-offload", "non_promotable": True,
+                "promotion_claim": False, "ok": True, "state": "decided",
+                "candidate_invocations": 3, "anchor_invocations": 3,
+                "hip_residency_proved": True, "median_relative": -.49,
+                "relative_effects": [-.51, -.49, -.47],
+                "cpu_overlap_policy": "allowed_discovery_noise",
+                "sole_factor": {"name": "kv_offload", "anchor": "ON",
+                                "candidate": "OFF"},
+            }))
+            doc = progression.build_progression(root)
+            candidate = doc["candidates"][0]
+            self.assertEqual(candidate["stage"], "screened_out")
+            self.assertEqual(doc["strategy"]["abandoned"], [candidate])
+            self.assertEqual(doc["strategy"]["pursued"], [])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -110,7 +110,8 @@ def _gpu_screen(path: Path, receipt: dict[str, Any]) -> dict[str, Any] | None:
         overlap_policy == "allowed_discovery_noise"
         and (sign_conflict or (effect_spread is not None and effect_spread >= 0.10))
     )
-    stage = "inconclusive" if noisy_overlap else "candidate"
+    stage = ("inconclusive" if noisy_overlap else
+             "screened_out" if receipt["median_relative"] <= 0 else "candidate")
     confidence = (f"directional / unquantified noise ({anchor_calls}+{candidate_calls} "
                   "calls; HIP resident)")
     current_gate = "correctness + strict matched confirmation"
@@ -127,6 +128,9 @@ def _gpu_screen(path: Path, receipt: dict[str, Any]) -> dict[str, Any] | None:
             "Retest under shared model-call windows; do not interpret the median as "
             "a negative conclusion."
         )
+    elif stage == "screened_out":
+        current_gate = "screened out by sign-consistent discovery result"
+        next_action = "Retain as an abandoned strategy; revisit only with a new rationale."
     return {
         "key": (f"gpu:{factor.get('name')}:{factor.get('anchor')}->"
                 f"{factor.get('candidate')}:prefill pp512"),
@@ -248,7 +252,7 @@ def build_progression(root: Path = DEFAULT_ROOT) -> dict[str, Any]:
             "pursued": [row for row in ordered if row["stage"] == "candidate"],
             "accepted": [row for row in ordered if row["stage"] == "strict_keep"],
             "abandoned": [row for row in ordered
-                          if row["stage"] in {"rejected", "inconclusive"}],
+                          if row["stage"] in {"rejected", "screened_out", "inconclusive"}],
         },
         "unexplored": unexplored,
     }
