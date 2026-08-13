@@ -30,6 +30,7 @@ SCHEMA_RESULT = "epyc.autokernel.gpu_candidate_only_screen.v2"
 SOURCE_COMMIT = "0db32c06e3e550065b78311a6031ef3dd2c4f27c"
 CPU_LIST = "184-191"
 DEVICE_ID = "mi210_0"
+SMALL_MODEL_OVERLAP_MAX_BYTES = 512 * 1024 * 1024
 VRAM_USED = Path("/sys/class/drm/card2/device/mem_info_vram_used")
 KFD_PROCS = Path("/sys/class/kfd/kfd/proc")
 MODEL_CALL_WINDOW = inference_window.InferenceCallWindow(timeout_s=600.0)
@@ -99,8 +100,40 @@ def _kfd_pids() -> tuple[int, ...]:
 
 def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
            flash_attention: bool, campaign_id: str,
-           cpu_journal: cpu_region_claim.RegionClaimJournal) -> dict:
+           cpu_journal: cpu_region_claim.RegionClaimJournal,
+           allow_small_model_cpu_overlap: bool = False) -> dict:
     """Run one model load/measurement while excluding CPU model calls only."""
+    if allow_small_model_cpu_overlap:
+        model_bytes = model.stat().st_size
+        if model_bytes > SMALL_MODEL_OVERLAP_MAX_BYTES:
+            raise RuntimeError(
+                f"small-model CPU-overlap mode refuses {model_bytes} bytes; "
+                f"limit is {SMALL_MODEL_OVERLAP_MAX_BYTES}")
+        claims = cpu_region_claim.inspect_region_claims()
+        concurrent = []
+        for region, entries in (claims.get("regions") or {}).items():
+            for entry in entries:
+                if not entry.get("held"):
+                    continue
+                concurrent.append({
+                    "region": region, "role": entry.get("role"),
+                    "holder_pids": entry.get("holder_pids") or [],
+                    "attribution": entry.get("attribution"),
+                })
+        result = _invoke_locked(
+            build=build, model=model, seed=seed, baseline_vram=baseline_vram,
+            flash_attention=flash_attention)
+        result["inference_call_window"] = None
+        result["cpu_coverage"] = {
+            "schema": "epyc.autokernel.discovery_cpu_overlap.v1",
+            "cpu_overlap_policy": "allowed_discovery_noise",
+            "cpu_exclusivity": False, "borrowed": False,
+            "model_size_bytes": model_bytes,
+            "small_model_threshold_bytes": SMALL_MODEL_OVERLAP_MAX_BYTES,
+            "concurrent_claims": concurrent,
+            "promotion_claim": False,
+        }
+        return result
     with MODEL_CALL_WINDOW.hold() as lease:
         owned_claim = None
         try:
@@ -291,7 +324,9 @@ def run(args: argparse.Namespace) -> dict:
             build=anchor_build, model=model, seed=args.seed + i,
             baseline_vram=baseline_vram,
             flash_attention=sealed["anchor_flash_attention"],
-            campaign_id=args.campaign_id, cpu_journal=cpu_journal) for i in range(3)]
+            campaign_id=args.campaign_id, cpu_journal=cpu_journal,
+            allow_small_model_cpu_overlap=args.allow_small_model_cpu_overlap)
+            for i in range(3)]
         bank_body = {
             "schema": SCHEMA_BANK, "campaign_id": args.campaign_id,
             "status": "complete", "started_at": started_at, "ended_at": utc_now(),
@@ -314,7 +349,9 @@ def run(args: argparse.Namespace) -> dict:
             build=candidate_build, model=model, seed=args.seed + 3 + i,
             baseline_vram=baseline_vram,
             flash_attention=sealed["candidate_flash_attention"],
-            campaign_id=args.campaign_id, cpu_journal=cpu_journal) for i in range(3)]
+            campaign_id=args.campaign_id, cpu_journal=cpu_journal,
+            allow_small_model_cpu_overlap=args.allow_small_model_cpu_overlap)
+            for i in range(3)]
         center = sum(bank["anchor_samples"]) / 3
         values = [run["metric"] for run in candidate_runs]
         effects = [(value - center) / center for value in values]
@@ -331,6 +368,12 @@ def run(args: argparse.Namespace) -> dict:
             "baseline_center": center, "candidate_samples": values,
             "relative_effects": effects, "median_relative": median(effects),
             "host_noise_policy": "ordinary_host_activity_recorded_not_blocking",
+            "cpu_overlap_policy": ("allowed_discovery_noise"
+                                   if args.allow_small_model_cpu_overlap
+                                   else "shared_model_call_window"),
+            "model_size_bytes": model.stat().st_size,
+            "small_model_overlap_max_bytes": SMALL_MODEL_OVERLAP_MAX_BYTES,
+            "promotion_claim": False,
             "frame": bank["frame"], "sole_factor": bank["sole_factor"],
             "candidate_identity": bank["candidate_identity"],
             "candidate_runs": candidate_runs, "device_sampling": numeric,
@@ -371,6 +414,9 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--preflight-only", action="store_true")
     result.add_argument("--preflight-output")
     result.add_argument("--seed", type=int, default=8613)
+    result.add_argument("--allow-small-model-cpu-overlap", action="store_true",
+                        help="nonpromotable discovery only: treat CPU inference as noise "
+                             "for models no larger than the sealed small-model limit")
     result.add_argument("--cpu-claim-journal", default="/mnt/raid0/llm/ak-claims/region.jsonl")
     result.add_argument("--device-claim-journal", default="/mnt/raid0/llm/ak-claims/device.jsonl")
     return result

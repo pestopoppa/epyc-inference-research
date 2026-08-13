@@ -91,6 +91,40 @@ class TestGpuDiscoveryBuildIdentity(unittest.TestCase):
 
 
 class TestGpuDiscoveryInferenceWindow(unittest.TestCase):
+    def test_small_model_overlap_records_claims_without_cpu_exclusivity(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            model = Path(directory) / "small.gguf"
+            model.write_bytes(b"model")
+            claims = {"regions": {"q0": [{"held": True, "role": "autokernel",
+                "holder_pids": [123], "attribution": {"campaign_id": "cpu-r4"}}]}}
+            with mock.patch.object(gpu.cpu_region_claim, "inspect_region_claims",
+                                   return_value=claims), \
+                 mock.patch.object(gpu, "_invoke_locked", return_value={"metric": 1.0}), \
+                 mock.patch.object(gpu.cpu_region_claim, "acquire_cpu_region_claim") as acquire:
+                result = gpu.invoke(
+                    build=Path("/build"), model=model, seed=1, baseline_vram=0,
+                    flash_attention=True, campaign_id="gpu-s2",
+                    cpu_journal=mock.Mock(), allow_small_model_cpu_overlap=True)
+        acquire.assert_not_called()
+        self.assertIsNone(result["inference_call_window"])
+        coverage = result["cpu_coverage"]
+        self.assertEqual(coverage["cpu_overlap_policy"], "allowed_discovery_noise")
+        self.assertFalse(coverage["cpu_exclusivity"])
+        self.assertFalse(coverage["promotion_claim"])
+        self.assertEqual(coverage["concurrent_claims"][0]["attribution"]["campaign_id"],
+                         "cpu-r4")
+
+    def test_small_model_overlap_refuses_assets_above_threshold(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            model = Path(directory) / "large.gguf"
+            model.write_bytes(b"x")
+            with mock.patch.object(gpu, "SMALL_MODEL_OVERLAP_MAX_BYTES", 0):
+                with self.assertRaisesRegex(RuntimeError, "small-model CPU-overlap"):
+                    gpu.invoke(build=Path("/build"), model=model, seed=1,
+                               baseline_vram=0, flash_attention=True,
+                               campaign_id="gpu-s2", cpu_journal=mock.Mock(),
+                               allow_small_model_cpu_overlap=True)
+
     def test_owned_cpu_coverage_exists_only_inside_model_call(self) -> None:
         events = []
 
