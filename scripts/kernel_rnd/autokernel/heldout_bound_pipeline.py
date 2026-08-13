@@ -316,6 +316,11 @@ def archive(preparation: Mapping[str, Any]) -> dict[str, Any]:
     _write_exclusive(report_path, report)
     result = {
         "schema": ARCHIVE_RESULT_SCHEMA, "live_authority": False,
+        "planner": {
+            "invoked": False,
+            "status": "roster_not_invoked_for_observe_only",
+            "roster": None,
+        },
         "projection": projected,
         "report": {"path": str(report_path), "sha256": pair._sha256(report_path)},
         "completion_rows": rows,

@@ -143,6 +143,11 @@ class HeldoutBoundPipelineTest(unittest.TestCase):
             archived = H.archive(result)
             report = json.loads(Path(archived["report"]["path"]).read_text())
             self.assertFalse(archived["live_authority"])
+            self.assertEqual(archived["planner"], {
+                "invoked": False,
+                "status": "roster_not_invoked_for_observe_only",
+                "roster": None,
+            })
             self.assertEqual(report["evidence_label"], "real")
             self.assertEqual(report["matched_validation"]["status"], "PASS")
         finally:
