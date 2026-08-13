@@ -14,6 +14,7 @@ FIXTURE = (
     / "gpu_source_discovery_replay_v1.json"
 )
 PROOF_CONTRACT = FIXTURE.with_name("gpu_source_proof_contract_v1.json")
+LAUNCH_GATE = FIXTURE.with_name("discovery_controller_launch_gate_v1.json")
 
 
 def _screen_rows(trace: dict) -> list[dict]:
@@ -140,6 +141,30 @@ class ReplayFixtureTests(unittest.TestCase):
         self.assertIn(
             "caller-created dictionaries as proof",
             contract["forbidden_shortcuts"],
+        )
+
+    def test_launch_gate_names_every_required_black_box_failure_mode(self) -> None:
+        gate = json.loads(LAUNCH_GATE.read_text(encoding="utf-8"))
+        self.assertEqual(
+            gate["schema"],
+            "epyc.autokernel.discovery_controller_launch_gate.v1",
+        )
+        self.assertEqual(
+            {case["id"] for case in gate["required_cases"]},
+            {
+                "pending_exact_resume",
+                "crash_before_runner",
+                "crash_after_runner",
+                "nomination_exactly_once",
+                "dnr_measured_outcomes",
+                "pooled_classifier",
+                "producer_tamper_matrix",
+                "concrete_adapter_factory",
+            },
+        )
+        self.assertEqual(
+            gate["gate"],
+            "all_required_cases_pass_before_any_live_adapter_is_accepted",
         )
 
 
