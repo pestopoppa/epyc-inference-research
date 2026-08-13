@@ -1778,7 +1778,9 @@ class CampaignSpec:
                     "boot_id": Path("/proc/sys/kernel/random/boot_id")
                     .read_text(encoding="utf-8").strip()}),
                 "anchor_ggml_iqk": self.anchor_param_overrides.get("ggml_iqk"),
-                "reps": self.reps, "n_prompt": self.n_prompt, "n_gen": self.n_gen,
+                "reps": self.reps,
+                "n_prompt": (self.n_prompt if self.recipe.phase == "prefill" else 0),
+                "n_gen": self.n_gen,
             })
         if self.calibration is not None \
                 and self.calibration.evaluation_authority is not None:
@@ -4101,7 +4103,9 @@ class HostOps:
                  "production_commit": PRODUCTION_COMMIT,
                  "boot_sha256": schemas.content_hash({"boot_id": boot_id}),
                  "anchor_ggml_iqk": spec.anchor_param_overrides.get("ggml_iqk"),
-                 "reps": spec.reps, "n_prompt": spec.n_prompt, "n_gen": spec.n_gen}
+                 "reps": spec.reps,
+                 "n_prompt": (spec.n_prompt if spec.recipe.phase == "prefill" else 0),
+                 "n_gen": spec.n_gen}
         witness = screening_baseline.competing_inference_witness()
         if witness["competing"]:
             raise RuntimeError("competing model inference occupies claimed screening compute")
@@ -4281,7 +4285,9 @@ class HostOps:
                      "production_commit": PRODUCTION_COMMIT,
                      "boot_sha256": schemas.content_hash({"boot_id": Path("/proc/sys/kernel/random/boot_id").read_text(encoding="utf-8").strip()}),
                      "anchor_ggml_iqk": spec.anchor_param_overrides.get("ggml_iqk"),
-                     "reps": spec.reps, "n_prompt": spec.n_prompt, "n_gen": spec.n_gen}
+                     "reps": spec.reps,
+                     "n_prompt": (spec.n_prompt if spec.recipe.phase == "prefill" else 0),
+                     "n_gen": spec.n_gen}
             witness = screening_baseline.competing_inference_witness()
             report = screening_baseline.screen(
                 bank=spec.screening_baseline, frame=frame,
