@@ -586,6 +586,86 @@ class TestModelGatedProducerGuards(unittest.TestCase):
             self.assertEqual((root / "pred" / "page1.md").read_text(), canned)
             self.assertTrue((root / "resp" / "page1.response.json").exists())
 
+    def test_unlimited_ocr_holds_and_releases_the_inference_call_window(self):
+        """R11 (2026-08-13): the model-resident interval must hold the shared
+        inference-call window (ak-claims/inference-call-window.lock) so a
+        large-model load squeezes between AutoKernel CPU calls. The receipt
+        proves the flock was acquired and released; the lock is verifiably
+        free after the run."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            image_dir = root / "images"
+            image_dir.mkdir()
+            (image_dir / "page1.png").write_bytes(
+                base64.b64decode(
+                    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ"
+                    "AAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+                )
+            )
+            gt = root / "gt.json"
+            gt.write_text(
+                json.dumps([{"page_info": {"image_path": "page1.png"}}]),
+                encoding="utf-8",
+            )
+            canned = "markdown from the windowed run"
+
+            class FakeProc:
+                pid = 123458
+                returncode = 0
+
+                def poll(self):
+                    return 0
+
+            originals = (
+                UnlimitedOcrProducer.validate_inputs,
+                unlimited_ocr.subprocess.Popen,
+                unlimited_ocr.wait_for_health,
+                unlimited_ocr.query_page,
+                unlimited_ocr.terminate,
+            )
+            try:
+                UnlimitedOcrProducer.validate_inputs = lambda self: None  # type: ignore[assignment]
+                unlimited_ocr.subprocess.Popen = lambda *a, **k: FakeProc()  # type: ignore[assignment]
+                unlimited_ocr.wait_for_health = lambda port, timeout_s: None  # type: ignore[assignment]
+                unlimited_ocr.query_page = lambda config, image_path: {  # type: ignore[assignment]
+                    "choices": [{"message": {"content": canned}, "finish_reason": "stop"}],
+                    "usage": {"prompt_tokens": 12, "completion_tokens": 5},
+                    "timings": {"prompt_per_second": 200.0, "predicted_per_second": 80.0},
+                }
+                unlimited_ocr.terminate = lambda proc: {"dead": True}  # type: ignore[assignment]
+
+                adapter = OdlBenchAdapter(bench_root=BENCH_ROOT)
+                manifest = adapter.generate_model_gated_predictions(
+                    UNLIMITED_OCR_ENGINE,
+                    gt,
+                    root / "pred",
+                    image_root=image_dir,
+                    response_dir=root / "resp",
+                    allow_inference=True,
+                    unlimited_config=UnlimitedOcrConfig(),
+                )
+            finally:
+                (
+                    UnlimitedOcrProducer.validate_inputs,
+                    unlimited_ocr.subprocess.Popen,
+                    unlimited_ocr.wait_for_health,
+                    unlimited_ocr.query_page,
+                    unlimited_ocr.terminate,
+                ) = originals  # type: ignore[assignment]
+
+            receipt = json.loads(
+                (root / "resp" / "inference_window.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(receipt["scope"], "model_load_and_inference_only")
+            self.assertIs(receipt["released"], True)
+            self.assertTrue(receipt["lock_path"].endswith("inference-call-window.lock"))
+            self.assertIn("window=held", manifest.detail)
+            # The flock is genuinely free again — a second acquire succeeds.
+            w = unlimited_ocr._inference_call_window()
+            with w.hold():
+                pass
+            self.assertTrue((root / "pred" / "page1.md").exists())
+
 
 class TestAvailabilityAndCommand(unittest.TestCase):
     def test_availability_report_shape(self):
