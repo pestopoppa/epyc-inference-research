@@ -56,6 +56,22 @@ class InstrumentSelection(unittest.TestCase):
             module = importlib.reload(live_controls)
         self.assertEqual(str(module.INSTRUMENT_BINARY), "/tmp/ak-build/bin/llama-bench")
 
+    def test_instrument_ancestry_accepts_descendants_and_fails_closed(self):
+        with mock.patch.object(live_controls.subprocess, "run", return_value=mock.Mock(
+                returncode=0, stderr="")) as run:
+            self.assertTrue(live_controls._commit_descends(
+                Path("/instrument"), ancestor="production", descendant="instrument"))
+        self.assertIn("merge-base", run.call_args.args[0])
+        with mock.patch.object(live_controls.subprocess, "run", return_value=mock.Mock(
+                returncode=1, stderr="")):
+            self.assertFalse(live_controls._commit_descends(
+                Path("/instrument"), ancestor="production", descendant="foreign"))
+        with mock.patch.object(live_controls.subprocess, "run", return_value=mock.Mock(
+                returncode=128, stderr="bad revision")):
+            with self.assertRaisesRegex(RuntimeError, "bad revision"):
+                live_controls._commit_descends(
+                    Path("/instrument"), ancestor="production", descendant="missing")
+
 
 class InstrumentCapability(unittest.TestCase):
 

@@ -669,6 +669,18 @@ def _build_belief_receipt(
     return payload
 
 
+def _commit_descends(repo: Path, *, ancestor: str, descendant: str) -> bool:
+    ancestry = subprocess.run(
+        ("git", "-C", str(repo), "merge-base", "--is-ancestor",
+         ancestor, descendant),
+        text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        check=False)
+    if ancestry.returncode not in (0, 1):
+        raise RuntimeError(
+            "measurement instrument ancestry query failed: " + ancestry.stderr.strip())
+    return ancestry.returncode == 0
+
+
 def _write_preflight(output_root: Path, *, instrument_sha: str, copy_sha: str,
                      host_state: Callable[..., microbench.HostState]) -> None:
     topology = cpu_region_claim.verify_host_topology()
@@ -694,6 +706,8 @@ def _write_preflight(output_root: Path, *, instrument_sha: str, copy_sha: str,
          INSTRUMENT_COMMIT),
         text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         check=True).stdout.split()[1:]
+    descends_production = _commit_descends(
+        INSTRUMENT_ROOT, ancestor=PRODUCTION_COMMIT, descendant=INSTRUMENT_COMMIT)
     state = host_state(cpu_list=CPU_LIST)
     host_policy = microbench.HostStatePolicy(
         nominal_khz=NOMINAL_KHZ, require_package_power=True)
@@ -707,11 +721,12 @@ def _write_preflight(output_root: Path, *, instrument_sha: str, copy_sha: str,
                 instrument_head == INSTRUMENT_COMMIT
                 and instrument_branch == INSTRUMENT_BRANCH
                 and not instrument_status
-                and instrument_parents == [PRODUCTION_COMMIT]
+                and descends_production
             ) else schemas.FAIL,
             (f"instrument head={instrument_head}, branch={instrument_branch}, "
-             f"dirty={bool(instrument_status)}, parents={instrument_parents}; required "
-             f"clean {INSTRUMENT_COMMIT} directly on {PRODUCTION_COMMIT}",))),
+             f"dirty={bool(instrument_status)}, parents={instrument_parents}, "
+             f"descends_production={descends_production}; required clean "
+             f"{INSTRUMENT_COMMIT} descended from {PRODUCTION_COMMIT}",))),
         "binary_copy": _check_payload(schemas.Check(
             schemas.PASS if instrument_sha == copy_sha else schemas.FAIL,
             (f"instrument and evidence-copy SHA-256 are {instrument_sha}",))),
