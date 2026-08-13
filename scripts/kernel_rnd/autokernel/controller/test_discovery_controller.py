@@ -56,11 +56,13 @@ class Tests(unittest.TestCase):
    raw={"schema":"epyc.autokernel.gpu_candidate_only_screen.v2","non_promotable":True,"promotion_claim":False,"hip_residency_proved":True,"result_sha256":H,"median_relative":.02,"baseline_sha256":H}
    (root/"screen"/"result.json").write_text(json.dumps(raw))
    run.side_effect=lambda _args: events.append("runner") or raw
-   proof=lambda path,kind: D.ProofReceipt(path,hashlib.sha256(path.read_bytes()).hexdigest(),kind)
-   screen=D.GpuSourceScreener(build_source=lambda *_: events.append("build") or build,source_proof=lambda *_: events.append("source") or proof(source_file,"source"),dispatch_proof=lambda *_: events.append("dispatch") or proof(dispatch_file,"dispatch"),args_factory=lambda *_:args)
+   source_hash=hashlib.sha256(source_file.read_bytes()).hexdigest(); dispatch_hash=hashlib.sha256(dispatch_file.read_bytes()).hexdigest()
+   identity=D.gpu_source_proofs.BuildIdentity(H,H,H); material={"manifest_sha256":H,"candidate":identity,"anchor":identity,"workload_sha256":H,"correctness":{"file_sha256":source_hash},"attribution":{"file_sha256":dispatch_hash}}
+   hashed={**material,"candidate":identity.__dict__,"anchor":identity.__dict__}; bundle=D.gpu_source_proofs.GpuSourceProofBundle(**material,bundle_sha256=D.gpu_source_proofs._hash(hashed))
+   screen=D.GpuSourceScreener(build_source=lambda *_: events.append("build") or build,proof_bundle=lambda *_: events.extend(["source","dispatch"]) or bundle,args_factory=lambda *_:args)
    with patch.object(D.autokernel_progression,"_gpu_screen",return_value={"stage":"candidate"}):
     got=screen.screen(item,object(),{})
-   self.assertEqual(events,["build","source","dispatch","runner"]); self.assertEqual(got.dispatch_proof_sha256,hashlib.sha256(dispatch_file.read_bytes()).hexdigest())
+   self.assertEqual(events,["build","source","dispatch","runner"]); self.assertEqual(got.dispatch_proof_sha256,dispatch_hash)
  def test_lease_wait_is_durable_without_spending_iteration(self):
   class Wait:
    def admit(self,item): return {"admitted":False,"reason":"CPU window busy"}

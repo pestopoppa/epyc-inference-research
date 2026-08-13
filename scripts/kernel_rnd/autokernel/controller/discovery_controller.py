@@ -248,17 +248,17 @@ class GpuSourceScreener:
     build identities and their own sealed paired receipt.
     """
     def __init__(self, *, build_source: Callable[[PlannedCandidate, hypotheses.ClaimAuthorization, Mapping[str, Any]], GpuSourceBuild],
-                 source_proof: Callable[[PlannedCandidate, GpuSourceBuild], ProofReceipt],
-                 dispatch_proof: Callable[[PlannedCandidate, GpuSourceBuild], ProofReceipt],
+                 proof_bundle: Callable[[PlannedCandidate, GpuSourceBuild], gpu_source_proofs.GpuSourceProofBundle],
                  args_factory: Callable[[PlannedCandidate, GpuSourceBuild, Mapping[str, Any]], Any]) -> None:
-        self.build_source, self.source_proof, self.dispatch_proof, self.args_factory = build_source, source_proof, dispatch_proof, args_factory
+        self.build_source, self.proof_bundle, self.args_factory = build_source, proof_bundle, args_factory
 
     def screen(self, candidate: PlannedCandidate, authorization: hypotheses.ClaimAuthorization, lease: Mapping[str, Any]) -> SealedScreen:
         build = self.build_source(candidate, authorization, lease)
-        source = self.source_proof(candidate, build)
-        if source.kind != "source": raise DiscoveryControllerError("source gate returned the wrong receipt kind")
-        dispatch = self.dispatch_proof(candidate, build)
-        if dispatch.kind != "dispatch": raise DiscoveryControllerError("dispatch gate returned the wrong receipt kind")
+        bundle = self.proof_bundle(candidate, build)
+        if not isinstance(bundle, gpu_source_proofs.GpuSourceProofBundle):
+            raise DiscoveryControllerError("GPU source gate did not return a validated proof bundle")
+        if bundle.manifest_sha256 != candidate.source_manifest_sha256:
+            raise DiscoveryControllerError("GPU proof bundle does not bind the candidate manifest")
         args = self.args_factory(candidate, build, lease)
         # The established runner owns KFD/VRAM, device claims, paired samples,
         # and its durable result.  This controller does not spawn a shell.
@@ -272,7 +272,7 @@ class GpuSourceScreener:
             raise DiscoveryControllerError("GPU runner returned an unsealed or non-resident discovery result")
         projection = autokernel_progression._gpu_screen(result_path, raw)
         if projection is None: raise DiscoveryControllerError("GPU result failed canonical progression validation")
-        return SealedScreen(receipt_path=str(result_path), result_sha256=str(raw["result_sha256"]), effect_fraction=float(raw["median_relative"]), classification=str(projection["stage"]), baseline_sha256=str(raw["baseline_sha256"]), source_proof_sha256=source.sha256, dispatch_proof_sha256=dispatch.sha256)
+        return SealedScreen(receipt_path=str(result_path), result_sha256=str(raw["result_sha256"]), effect_fraction=float(raw["median_relative"]), classification=str(projection["stage"]), baseline_sha256=str(raw["baseline_sha256"]), source_proof_sha256=bundle.correctness["file_sha256"], dispatch_proof_sha256=bundle.attribution["file_sha256"])
 
 
 @dataclass(frozen=True)
@@ -367,6 +367,9 @@ def run_controller(config: ControllerConfig, *, planner: Planner, critic: Critic
             except Exception as exc:
                 row.update(status="screen_refused",reason=f"{type(exc).__name__}: {exc}"); state["iterations"].append(row); state["next"]+=1; store.save(state,"screen_refused"); continue
             row.update(status=result.classification,result_sha256=result.result_sha256,evidence={"baseline":result.baseline_sha256,"source":result.source_proof_sha256,"dispatch":result.dispatch_proof_sha256},effect_fraction=result.effect_fraction)
+            # Record the measured disposition before exposing it to the next
+            # planner context.  This is the only source of repeat suppression.
+            tracker.note_attempt(item.hypothesis_id, proposal_id=str(item.proposal.get("proposal_id", row["proposal_sha256"])), disposition=result.classification, bears_on_falsifier=True, note=f"sealed screen {result.result_sha256}", refs=(f"sha256:{result.result_sha256}",))
             state["iterations"].append(row); state["next"]+=1; _append_nomination(config.output_root,item,result,config.nomination_threshold); _write_projection(config.output_root); store.save(state,"screened")
     state["complete"]=state["next"]>config.max_iterations
     if state["complete"]: state.pop("pending",None)

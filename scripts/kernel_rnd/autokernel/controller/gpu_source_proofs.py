@@ -21,6 +21,8 @@ def load_receipt(path:Path, *, schema:str)->dict:
  if not isinstance(value,dict) or value.get("schema")!=schema: raise ProofError("receipt schema mismatch")
  native=value.get("receipt_sha256") or value.get("result_sha256")
  if not isinstance(native,str) or not SHA.fullmatch(native): raise ProofError("receipt native hash missing")
+ if "receipt_sha256" in value and _hash({k:v for k,v in value.items() if k!="receipt_sha256"}) != native:
+  raise ProofError("receipt self-hash mismatch")
  return {"path":str(path.resolve()),"file_sha256":digest,"native_sha256":native,"body":value}
 def require_result_file(path:Path, returned:Mapping[str,Any])->dict:
  """The runner's return object is advisory; re-read the durable bytes."""
