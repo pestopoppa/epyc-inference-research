@@ -26,7 +26,7 @@ from . import run_configs
 from .schemas import MODEL_GATED_KIND, EngineRunManifest, PredictionArtifact
 
 PADDLEOCR_VL_ENGINE = "paddleocr_vl_1_6"
-EXPERIMENTAL_BIN_DIR = Path("/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin")
+EXPERIMENTAL_BIN_DIR = Path("/mnt/raid0/llm/llama.cpp-experimental/build-v9-hip/bin")
 DEFAULT_BINARY = EXPERIMENTAL_BIN_DIR / "llama-server"
 DEFAULT_MODEL = Path("/mnt/raid0/llm/models/PaddleOCR-VL-1.6-GGUF/PaddleOCR-VL-1.6-GGUF.gguf")
 DEFAULT_MMPROJ = Path(

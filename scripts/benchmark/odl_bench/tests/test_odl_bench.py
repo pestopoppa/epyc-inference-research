@@ -358,7 +358,7 @@ class TestModelGatedProducerGuards(unittest.TestCase):
 
     def test_paddle_server_argv_uses_experimental_binary_and_projector(self):
         cfg = PaddleOcrVlConfig(
-            binary=Path("/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server"),
+            binary=Path("/mnt/raid0/llm/llama.cpp-experimental/build-v9-hip/bin/llama-server"),
             model=Path("/tmp/paddle-model.gguf"),
             mmproj=Path("/tmp/paddle-mmproj.gguf"),
             port=19999,
