@@ -4375,13 +4375,37 @@ class HostOps:
         event_ids = tuple(event["event_id"] for event in events)
         event = events[-1] if events else None
         evaluator = self._t0_request.evaluator
-        status = "evaluating" if decision is not None and decision.keep else "rejected"
+        # `decide()` owns the precommitted paired-block rule, but it runs before
+        # the final T1 event is reduced after the window closes.  The evaluator
+        # can truthfully withhold the speed rank at that later boundary (for
+        # example, because final close evidence voids the window or the effect
+        # misses MDE).  A durable ``evaluating`` candidate is eligible for the
+        # completed-campaign adapter to bank, so a raw KEEP cannot be enough.
+        #
+        # Read the exact final T1 projection which the adapter consumes.  A
+        # missing field is not a historical default: it proves no rank was
+        # journaled, and therefore cannot preserve a candidate for banking.
+        t1_events = tuple(item for item in events
+                          if isinstance(item, Mapping) and item.get("tier") == "T1")
+        final_t1 = t1_events[-1] if t1_events else None
+        performance = (final_t1.get("performance")
+                       if isinstance(final_t1, Mapping) else None)
+        discipline = (performance.get("search_discipline")
+                      if isinstance(performance, Mapping) else None)
+        t1_speed_rank_admissible = (
+            discipline.get("speed_rank_admissible") is True
+            if isinstance(discipline, Mapping) else False)
+        keep_is_rankable = bool(decision is not None and decision.keep
+                                and t1_speed_rank_admissible)
+        status = "evaluating" if keep_is_rankable else "rejected"
         derived_tokens = (
             tuple(f"file:{path}" for path in self._source_application.actual_files)
             if self._source_application is not None else ("flag:GGML_IQK",))
         derived_verdicts = {
             "campaign_state": state,
             "accept_decision": None if decision is None else decision.to_dict(),
+            "final_t1_speed_rank_admissible": t1_speed_rank_admissible,
+            "keep_is_rankable": keep_is_rankable,
         }
         if spec.least_commitment_plan is not None:
             derived_verdicts["least_commitment"] = least_commitment_capture.materialize(

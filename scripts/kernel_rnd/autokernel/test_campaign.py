@@ -3590,6 +3590,64 @@ class TestProspectiveEvaluationDurability(unittest.TestCase):
         self.assertEqual(ops._cached_evaluation_events, (event,))
         self.assertIsNone(ops._cached_candidate_record)
 
+    def test_a_keep_with_unrankable_final_t1_is_durably_rejected(self):
+        """The post-close evaluator outranks a pre-close paired-block KEEP."""
+        ops = campaign.HostOps(nominal_khz=1)
+        ops._build_identity = mock.Mock()
+        ops._build_snapshot = mock.Mock()
+        ops._build_snapshot.head_commit.return_value = "f" * 40
+        ops._t0_request = mock.Mock()
+        ops._t0_request.evaluator = mock.Mock(
+            id="P-AK-SEARCH-1/v1", bundle_sha256="a" * 64,
+            runtime_source_label_ref="sha256:" + "b" * 64)
+        event = {
+            "event_id": "ake-final-t1-unrankable", "tier": "T1",
+            "resource_claim_receipt": "rcpt-fixture",
+            "host_receipt": "rcpt-host-fixture",
+            "claim_grammar": {"protocol_id": "P-AK-SEARCH-1/v1"},
+            "performance": {"search_discipline": {"speed_rank_admissible": False}},
+        }
+        decision = campaign.AcceptDecision(keep=True, reason="fixture KEEP", blocks=2)
+        with mock.patch.object(ops, "_evaluation_events", return_value=(event,)), \
+                mock.patch.object(campaign.candidate_record, "build_candidate_record",
+                                  return_value={}) as build:
+            ops.prepare_durable_records(
+                spec(proposal=iqk_parameter_proposal()),
+                state=campaign.STATE_DECIDED, decision=decision)
+        kwargs = build.call_args.kwargs
+        self.assertEqual(kwargs["status"], "rejected")
+        self.assertFalse(kwargs["derived_verdicts"]["final_t1_speed_rank_admissible"])
+        self.assertFalse(kwargs["derived_verdicts"]["keep_is_rankable"])
+
+    def test_a_keep_with_rankable_final_t1_remains_evaluating(self):
+        """CONTROL: a rankable final T1 preserves the candidate for banking."""
+        ops = campaign.HostOps(nominal_khz=1)
+        ops._build_identity = mock.Mock()
+        ops._build_snapshot = mock.Mock()
+        ops._build_snapshot.head_commit.return_value = "f" * 40
+        ops._t0_request = mock.Mock()
+        ops._t0_request.evaluator = mock.Mock(
+            id="P-AK-SEARCH-1/v1", bundle_sha256="a" * 64,
+            runtime_source_label_ref="sha256:" + "b" * 64)
+        event = {
+            "event_id": "ake-final-t1-rankable", "tier": "T1",
+            "resource_claim_receipt": "rcpt-fixture",
+            "host_receipt": "rcpt-host-fixture",
+            "claim_grammar": {"protocol_id": "P-AK-SEARCH-1/v1"},
+            "performance": {"search_discipline": {"speed_rank_admissible": True}},
+        }
+        decision = campaign.AcceptDecision(keep=True, reason="fixture KEEP", blocks=2)
+        with mock.patch.object(ops, "_evaluation_events", return_value=(event,)), \
+                mock.patch.object(campaign.candidate_record, "build_candidate_record",
+                                  return_value={}) as build:
+            ops.prepare_durable_records(
+                spec(proposal=iqk_parameter_proposal()),
+                state=campaign.STATE_DECIDED, decision=decision)
+        kwargs = build.call_args.kwargs
+        self.assertEqual(kwargs["status"], "evaluating")
+        self.assertTrue(kwargs["derived_verdicts"]["final_t1_speed_rank_admissible"])
+        self.assertTrue(kwargs["derived_verdicts"]["keep_is_rankable"])
+
     def test_t0_failure_writes_no_speed_and_evaluation_precedes_stop(self):
         ops = EvaluationSpyOps(t0=FAILING_T0)
         result = campaign.run_campaign(spec(), ops)
