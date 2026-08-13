@@ -22,6 +22,7 @@ from scripts.kernel_rnd.autokernel.execution import (
     cpu_region_claim, device_sampler, inference_window)
 from scripts.kernel_rnd.autokernel.resource import device_claim
 from scripts.benchmark import autokernel_gpu_discovery_beliefs as gpu_beliefs
+from scripts.benchmark import autokernel_progression
 
 
 SCHEMA_BANK = "epyc.autokernel.gpu_screening_baseline.v2"
@@ -342,6 +343,14 @@ def run(args: argparse.Namespace) -> dict:
         result = gpu_beliefs.attach_result_beliefs(
             result_body, bank=bank, producer_path=Path(__file__).resolve())
         atomic_json(out / "result.json", result)
+        # A derived operator view, kept separate from the strict terminal
+        # campaign contract.  The immutable result above is already durable, so
+        # an export failure must not erase or reclassify the measurement.
+        try:
+            autokernel_progression.export_progression()
+        except Exception as exc:
+            print(f"WARNING: GPU result is durable but progression export failed: "
+                  f"{type(exc).__name__}: {exc}", file=sys.stderr)
         return result
     finally:
         if sampler is not None:
