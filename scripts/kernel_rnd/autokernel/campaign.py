@@ -4043,9 +4043,13 @@ class HostOps:
         # do not misidentify the build directory as the source root.
         # Both arms execute out-of-tree build artifacts.  Their source identity
         # is the corresponding git checkout, never the build directory.
-        root = (MEASUREMENT_REPO if arm == "anchor"
+        reuse_parameter_anchor = (spec.screening_only and arm == "candidate"
+                                  and spec.proposal is not None
+                                  and spec.proposal["change_class"] == "parameter")
+        root = (MEASUREMENT_REPO if arm == "anchor" or reuse_parameter_anchor
                 else self._build_state["tree"].path.path)
-        artifact_root = (MEASUREMENT_BUILD_ROOT if arm == "anchor"
+        artifact_root = (MEASUREMENT_BUILD_ROOT
+                         if arm == "anchor" or reuse_parameter_anchor
                          else self._build_state["plan"].build_dir.path)
         bindir = os.path.join(artifact_root, "bin")
         binary = os.path.join(bindir, tool)

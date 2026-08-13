@@ -130,9 +130,12 @@ def _semantic_command(command: Mapping[str, Any]) -> dict[str, Any]:
     params = dict(command.get("params", {}))
     params.pop("ggml_iqk", None)
     params.pop("autokernel_seed", None)
+    recipe = command.get("recipe", {})
     return {key: command.get(key) for key in (
         "recipe_id", "registry_id", "backend", "phase", "cell_class",
-        "metric", "metric_direction", "tool", "recipe") } | {
+        "metric", "metric_direction", "tool") } | {
+            "recipe": {key: recipe.get(key) for key in (
+                "constructor_id", "constructor_sha256")},
             "env": env, "params": params,
         }
 
