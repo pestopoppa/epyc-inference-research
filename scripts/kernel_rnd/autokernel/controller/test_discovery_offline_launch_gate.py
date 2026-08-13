@@ -22,7 +22,6 @@ from . import discovery_deployment_factory as F
 from . import discovery_static_registry as S
 from . import gpu_source_evidence as E
 from .test_discovery_controller_blackbox import Critic, Lease, Manifest, Planner
-from . import test_discovery_deployment as deployment_tests
 from .test_gpu_source_evidence import ClaimFactory, FakeExecutors, plan, write_bound
 
 
@@ -152,12 +151,10 @@ class OfflineLaunchGate(unittest.TestCase):
         self.assertNotIn("planner", parameters)
         self.assertNotIn("critic", parameters)
 
-    def test_overlap_mode_binds_distinct_configured_lock_and_small_model_receipt(self):
-        """Permitted CPU overlap remains capped, nonpromotable, and receipted."""
+    def test_overlap_mode_receipts_bandwidth_duty_cycle_not_model_size(self):
+        """Overlap authority is rolling cold-load bytes, not a size threshold."""
         parameters = inspect.signature(gpu_runner.invoke).parameters
         self.assertIn("inference_window_lock", parameters)
-        self.assertEqual(gpu_runner.SMALL_MODEL_OVERLAP_MAX_BYTES,
-                         512 * 1024 * 1024)
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             model = root / "small.gguf"
@@ -176,21 +173,34 @@ class OfflineLaunchGate(unittest.TestCase):
         self.assertIsNone(receipt["inference_call_window"])
         overlap = receipt["cpu_coverage"]
         self.assertEqual(overlap["cpu_overlap_policy"], "allowed_discovery_noise")
-        self.assertLessEqual(overlap["model_size_bytes"], 512 * 1024 * 1024)
+        for key in ("cold_load_host_bytes", "rolling_interval_s",
+                    "host_bandwidth_bytes_per_s", "budget_fraction",
+                    "rolling_cold_load_bytes", "bandwidth_budget_bytes"):
+            self.assertIn(key, overlap)
+        self.assertLessEqual(overlap["rolling_cold_load_bytes"],
+                             overlap["budget_fraction"]
+                             * overlap["host_bandwidth_bytes_per_s"]
+                             * overlap["rolling_interval_s"])
         self.assertFalse(overlap["promotion_claim"])
         self.assertEqual(gpu_runner.DEVICE_ID, "mi210_0")
 
-    def test_deployment_refuses_overlap_cap_above_ratified_ceiling(self):
-        """A sealed config cannot expand allowed-noise overlap beyond 512 MiB."""
-        with tempfile.TemporaryDirectory() as directory:
-            helper = deployment_tests.DeploymentConfigTests()
-            path, raw = helper.config(Path(directory))
-            raw["gpu"]["small_model_max_bytes"] = 512 * 1024 * 1024 + 1
-            deployment_tests.seal(raw)
-            path.write_text(__import__("json").dumps(raw))
-            with self.assertRaises(D.DeploymentConfigError), \
-                    mock.patch.object(D, "_verify_production"):
-                D.load_deployment_config(path)
+    def test_overlap_budget_rejects_excessive_cadence(self):
+        """Several individually small loads can exhaust one rolling budget."""
+        budget = getattr(F, "BandwidthDutyCycleBudget", None)
+        self.assertIsNotNone(budget)
+        policy = budget(host_bandwidth_bytes_per_s=1000, rolling_interval_s=10,
+                        budget_fraction=.1)
+        self.assertTrue(policy.admit(cold_load_host_bytes=400, observed_at_s=1))
+        self.assertTrue(policy.admit(cold_load_host_bytes=400, observed_at_s=2))
+        self.assertFalse(policy.admit(cold_load_host_bytes=400, observed_at_s=3))
+
+    def test_large_load_serializes_only_load_then_reuses_hot_residency(self):
+        """Large loads release the CPU lock before repeated hot GPU calls."""
+        source = inspect.getsource(gpu_runner.run)
+        self.assertIn("load_phase_window", source)
+        self.assertIn("hot_gpu_residency", source)
+        self.assertIn("unexpected_reload", source)
+        self.assertIn("residency_changed", source)
 
     def test_initial_planner_context_contains_sealed_search_inputs(self):
         """Turn one must be authorable from sealed evidence, not a blank prompt."""
