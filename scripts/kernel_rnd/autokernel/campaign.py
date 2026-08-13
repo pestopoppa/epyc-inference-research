@@ -1777,6 +1777,7 @@ class CampaignSpec:
                 "boot_sha256": schemas.content_hash({
                     "boot_id": Path("/proc/sys/kernel/random/boot_id")
                     .read_text(encoding="utf-8").strip()}),
+                "anchor_ggml_iqk": self.anchor_param_overrides.get("ggml_iqk"),
                 "reps": self.reps, "n_prompt": self.n_prompt, "n_gen": self.n_gen,
             })
         if self.calibration is not None \
@@ -4076,12 +4077,13 @@ class HostOps:
                  "instrument_commit": MEASUREMENT_COMMIT,
                  "production_commit": PRODUCTION_COMMIT,
                  "boot_sha256": schemas.content_hash({"boot_id": boot_id}),
+                 "anchor_ggml_iqk": spec.anchor_param_overrides.get("ggml_iqk"),
                  "reps": spec.reps, "n_prompt": spec.n_prompt, "n_gen": spec.n_gen}
         witness = screening_baseline.competing_inference_witness()
         if witness["competing"]:
             raise RuntimeError("competing model inference occupies claimed screening compute")
         bank = screening_baseline.create(
-            frame=frame,
+            frame=frame, anchor_command=anchor.to_dict(),
             invoke_anchor=lambda: screening_baseline.invoke_command(
                 command=anchor, spawner=spawner), anchor_count=3)
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -4255,13 +4257,15 @@ class HostOps:
                      "instrument_commit": MEASUREMENT_COMMIT,
                      "production_commit": PRODUCTION_COMMIT,
                      "boot_sha256": schemas.content_hash({"boot_id": Path("/proc/sys/kernel/random/boot_id").read_text(encoding="utf-8").strip()}),
+                     "anchor_ggml_iqk": spec.anchor_param_overrides.get("ggml_iqk"),
                      "reps": spec.reps, "n_prompt": spec.n_prompt, "n_gen": spec.n_gen}
             witness = screening_baseline.competing_inference_witness()
             report = screening_baseline.screen(
                 bank=spec.screening_baseline, frame=frame,
                 invoke_candidate=lambda: screening_baseline.invoke_command(
                     command=candidate_cmd, spawner=spawner),
-                competing_inference=bool(witness["competing"]))
+                competing_inference=bool(witness["competing"]),
+                candidate_command=candidate_cmd.to_dict())
             report["inference_witness"] = witness
             self._screening_report = report
             center = float(report["baseline_center"])
@@ -5348,7 +5352,7 @@ def main(argv: Optional[Sequence[str]] = None, *, out: Optional[Any] = None,
         except (OSError, json.JSONDecodeError) as exc:
             print(f"refusing to start: --proposal-manifest: {exc}", file=sys.stderr)
             return 2
-    if not args.dry_run and args.create_screening_baseline is None and proposal is None:
+    if not args.dry_run and proposal is None:
         print(
             "refusing to --execute: --proposal-manifest is required before any claim, "
             "mutation, or build",

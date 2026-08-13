@@ -64,8 +64,12 @@ def screening_bank() -> screening_baseline.BaselineBank:
         "boot_sha256": schemas.content_hash({
             "boot_id": Path("/proc/sys/kernel/random/boot_id")
             .read_text(encoding="utf-8").strip()}),
+        "anchor_ggml_iqk": None,
         "reps": 5, "n_prompt": 512, "n_gen": 128,
-    }, (100.0, 100.0), 100.0)
+    }, (100.0, 100.0), 100.0, {
+        "arm": "anchor", "env": {"GGML_IQK": "0"},
+        "params": {"ggml_iqk": "0"},
+    })
 
 
 def proposal_manifest(campaign_id: str = "ak-test") -> dict:
@@ -536,7 +540,10 @@ class TestTheDryRunComposesEndToEnd(unittest.TestCase):
     def test_screening_requires_matching_reusable_baseline(self):
         with self.assertRaisesRegex(ValueError, "require an immutable"):
             spec(blocks=3, screening_only=True)
-        bad = screening_baseline.BaselineBank({"recipe_id": "wrong"}, (1.0, 1.0), 1.0)
+        bad = screening_baseline.BaselineBank(
+            {"recipe_id": "wrong"}, (1.0, 1.0), 1.0,
+            {"arm": "anchor", "env": {"GGML_IQK": "0"},
+             "params": {"ggml_iqk": "0"}})
         with self.assertRaisesRegex(Exception, "frame differs"):
             spec(blocks=3, screening_only=True, screening_baseline=bad)
 
@@ -546,6 +553,20 @@ class TestTheDryRunComposesEndToEnd(unittest.TestCase):
         check = campaign.HostOps().calibration_gate(built)
         self.assertEqual(check.outcome, schemas.PASS)
         self.assertIn("sealed baseline bank", " ".join(check.reasons))
+
+    def test_screening_loader_rejects_b1_without_anchor_parameter_receipt(self):
+        legacy = {
+            "schema": "epyc.autokernel.screening_baseline_bank.v1",
+            "frame": {"recipe_id": "t1b.llama_cpu.llama_bench_prefill.v1"},
+            "anchor_samples": [5528.0, 5529.0, 5527.0],
+            "sentinel_before": 5527.0, "sentinel_after": None,
+        }
+        legacy["baseline_sha256"] = schemas.content_hash(legacy)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "legacy-b1.json"
+            path.write_text(json.dumps(legacy), encoding="utf-8")
+            with self.assertRaisesRegex(Exception, "schema/hash"):
+                screening_baseline.load(path)
 
 
 # =============================================================================
@@ -1993,7 +2014,11 @@ class TestExecuteRefusesAnOpsThatCannotFinishARun(unittest.TestCase):
                 .read_text(encoding="utf-8").strip()}),
             "reps": 1, "n_prompt": 512, "n_gen": 128,
         }
-        bank = screening_baseline.BaselineBank(frame, (100.0, 100.0, 100.0), 100.0)
+        frame["anchor_ggml_iqk"] = None
+        bank = screening_baseline.BaselineBank(
+            frame, (100.0, 100.0, 100.0), 100.0,
+            {"arm": "anchor", "env": {"GGML_IQK": "0"},
+             "params": {"ggml_iqk": "0"}})
         built = spec(model=str(model), blocks=3, reps=1, screening_only=True,
                      screening_baseline=bank)
         ops = campaign.HostOps(nominal_khz=2_900_000)
