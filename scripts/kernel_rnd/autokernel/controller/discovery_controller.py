@@ -336,6 +336,19 @@ def _write_projection(root: Path) -> None:
     autokernel_progression.export_progression(root=root, output=root / "surface" / "kernel_progression.json")
 
 
+def classify_screen_series(effects: Sequence[float]) -> str:
+    """Discovery policy classifier; dashboard projection is not authority."""
+    if not effects or any(not isinstance(v, (int, float)) for v in effects):
+        raise DiscoveryControllerError("screen series must contain numeric measured effects")
+    if len(effects) == 1:
+        return "screened_out" if effects[0] <= 0 else "candidate"
+    if min(effects) < 0 < max(effects):
+        return "inconclusive"
+    if all(v > 0 for v in effects):
+        return "top_k_replicated_candidate"
+    return "screened_out"
+
+
 def run_controller(config: ControllerConfig, *, planner: Planner, critic: Critic, screener: Screener, lease: Lease) -> dict[str, Any]:
     planner_attestation, critic_attestation = dict(planner.attest()), dict(critic.attest())
     if ({k: planner_attestation.get(k) for k in SOL} != SOL

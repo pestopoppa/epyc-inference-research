@@ -74,3 +74,7 @@ class Tests(unittest.TestCase):
    root=Path(t); p=FakePlanner(); screen=FakeScreen([-.01]); screen.values=iter([-.01])
    D.run_controller(self.cfg(root,1),planner=p,critic=FakeCritic(["accept"]),screener=screen,lease=Lease())
    tracker=D._tracker(D.DurableState(root/"out")); self.assertTrue(tracker.state()["akh-test-1"].is_open)
+ def test_pooled_classifier_requires_replication_and_detects_sign_conflict(self):
+  self.assertEqual(D.classify_screen_series([.01]),"candidate")
+  self.assertEqual(D.classify_screen_series([.01,.02]),"top_k_replicated_candidate")
+  self.assertEqual(D.classify_screen_series([.01,-.01]),"inconclusive")
