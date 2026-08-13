@@ -128,7 +128,8 @@ def _gpu_screen(path: Path, receipt: dict[str, Any]) -> dict[str, Any] | None:
             "a negative conclusion."
         )
     return {
-        "key": f"gpu:{factor.get('name')}:prefill pp512",
+        "key": (f"gpu:{factor.get('name')}:{factor.get('anchor')}->"
+                f"{factor.get('candidate')}:prefill pp512"),
         "lane": "GPU", "candidate": str(factor.get("name")),
         "transition": f"{factor.get('anchor', '—')} → {factor.get('candidate', '—')}",
         "workload": "MI210 prefill pp512", "metric": "prefill_tokens_per_s",
