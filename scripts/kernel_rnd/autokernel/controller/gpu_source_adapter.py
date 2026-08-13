@@ -408,9 +408,11 @@ class GovernedGpuSourceAdapter:
         try:
             result = delegate.screen(candidate, authorization, lease)
         finally:
-            protected_after = _protected_snapshot(
-                self.protected_roots, self.protected_files)
-            del self._active_protected_snapshot
+            try:
+                protected_after = _protected_snapshot(
+                    self.protected_roots, self.protected_files)
+            finally:
+                del self._active_protected_snapshot
             if protected_after != protected_before:
                 raise GpuSourceAdapterError(
                     "GPU source screen changed protected production tree")
