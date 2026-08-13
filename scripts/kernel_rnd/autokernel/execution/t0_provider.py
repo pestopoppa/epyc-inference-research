@@ -2167,6 +2167,11 @@ def parse_compiler_diagnostics(text: str) -> tuple:
 
 _SPLIT_RE = re.compile(r"^## SPLIT #(\d+): (\S+) # (\d+) inputs")
 _NODE_RE = re.compile(r"^node #\s*(\d+) \(\s*(\S+)\s*\):\s+(\S+)\s+\(\s*\S+\s*\)\s+\[\s*(\S+)\s+(\S+)\s*\]")
+# ``common_log`` writes debug records as ``[M.ss.mmm.uuu] D <message>`` when
+# timestamps/prefixes are on (the CLI default), and plain ``D <message>`` when
+# timestamps are off.  GGML's scheduler emits one logical line per log call;
+# accept exactly those documented wrappers, then parse the scheduler grammar.
+_DEBUG_LOG_PREFIX_RE = re.compile(r"^(?:\[\d+\.\d{2}\.\d{3}\.\d{3}\]\s+)?D\s+")
 
 
 def parse_sched_trace(text: str) -> tuple:
@@ -2187,7 +2192,7 @@ def parse_sched_trace(text: str) -> tuple:
     nodes: list = []
     emitted = False
     for line in clean.splitlines():
-        stripped = line.strip()
+        stripped = _DEBUG_LOG_PREFIX_RE.sub("", line.strip(), count=1)
         match = _SPLIT_RE.match(stripped)
         if match:
             emitted = True

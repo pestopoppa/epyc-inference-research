@@ -719,6 +719,15 @@ class SanitizerAndDiagnosticParsing(unittest.TestCase):
         self.assertEqual(nodes[1][1], "MUL_MAT_ID")
         self.assertEqual(nodes[1][3], "ROCm0")
 
+    def test_sched_trace_accepts_the_cli_debug_log_prefix(self):
+        trace = ("[0.00.001.234] D ## SPLIT #0: CPU # 0 inputs\n"
+                 "[0.00.001.235] D node #  0 (   MUL_MAT): ffn_up-0 "
+                 "( 1MB) [ CPU 1.dst ] use=1,c=1:\n")
+        emitted, splits, nodes = t0.parse_sched_trace(trace)
+        self.assertTrue(emitted)
+        self.assertEqual(splits, ((0, "CPU", 0),))
+        self.assertEqual(nodes[0][1], "MUL_MAT")
+
     def test_sched_trace_without_the_marker_reports_no_instrumentation(self):
         emitted, splits, nodes = t0.parse_sched_trace("llama_perf_context_print: load time\n")
         self.assertFalse(emitted)
