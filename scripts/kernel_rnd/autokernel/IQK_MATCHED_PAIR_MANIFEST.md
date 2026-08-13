@@ -1,29 +1,36 @@
 # IQK matched-pair preparation manifest
 
-`epyc.autokernel.iqk_matched_pair_preparation.v1` is a campaign-input
-contract, not a record of a completed measurement.  Both arms must carry the
-question that authorizes the arm and the immutable store from which that
-question is resolved.  A manifest that omits either binding can produce
-capture plans which look complete but cannot be replayed through the
-hypothesis gate.
+`epyc.autokernel.iqk_matched_pair_preparation.v2` is a non-executing campaign
+input contract. It publishes two fresh campaign roots atomically and never
+builds, benchmarks, acquires a region, or mutates a journal.
 
-The `intervention` and `control` objects therefore require these additional
-fields:
+V2 adds the required closed `measurement_frame` object:
 
-| field | contract |
-|---|---|
-| `hypothesis_id` | non-empty `akh-…` identifier; it must resolve to exactly one entry in the store and its statement must equal the arm proposal's `hypothesis` | 
-| `hypothesis_store` | absolute path to an existing, non-symlink JSON operator-hypothesis store |
+| recipe | required work field | shape | evidence stage |
+|---|---|---|---|
+| `t1b.llama_cpu.llama_bench_prefill.v1` | `n_prompt: 512` | `pp512` | `bootstrap` or `heldout_bound` |
+| `t1b.llama_cpu.llama_bench_decode.v1` | `n_gen: 128` | `tg128` | `bootstrap` only |
 
-These fields are required independently for both arms.  The A/A control has a
-different generated proposal and must not inherit the intervention's
-authorization.  The preparation boundary should reject missing, relative,
-symlinked, or unreadable stores before creating either output directory.  The
-durable result should retain the IDs and store content digests (the latter are
-the source identity), so a later campaign invocation can prove which source
-authorized each arm.
+The calibration bundle must name the exact selected recipe and must license the
+declared block count. A decode proposal must target exactly the `decode` regime
+and `tg128` shape. Decode is intentionally bootstrap-only: its real terminal
+journal is projected into the held-out receipt used by a subsequent prefill
+pair; it cannot pre-bind the evidence it is intended to produce.
 
-The store path is an input locator only; preparation must not mutate the store
-or its ledger.  Resolution and falsifier checks remain the responsibility of
-the campaign/evidence-path gate, while this manifest schema prevents an
-unbound campaign input from being emitted in the first place.
+Both arm objects name fresh campaign/candidate/capture/intervention identities,
+an independent native diagnostic source, the evidence stage, an optional
+proposal-bound held-out outcome, and a new output directory. Preparation
+generates a campaign-local hypothesis store for each arm from its final proposal
+and binds the recipe-local regime and shape. The A/A control receives its own
+proposal and authorization question rather than inheriting the intervention's.
+
+The producer derives the shared schedule and T0 seeds, physical frame, provider
+identity, complete factor vocabulary, and control proposal. The two arms must
+differ only on `ggml_iqk`. Existing output paths, mismatched recipe calibration,
+noncanonical frames, or a decode `heldout_bound` request refuse before either
+output becomes visible.
+
+Legacy `epyc.autokernel.iqk_matched_pair_preparation.v1` manifests remain
+accepted with one exact meaning: the historical pp512 prefill frame. New
+manifests should use v2 so recipe selection is explicit and hash-bound in the
+result.

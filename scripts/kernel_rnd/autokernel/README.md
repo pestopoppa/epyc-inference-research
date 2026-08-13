@@ -173,11 +173,14 @@ the intervention under a new receipt id. A
 setting A/A control proposal to use identical arms. Architecture fixtures are
 accepted for rehearsal but refused by `--execute`.
 
-`prepare_iqk_matched_pair.py` is the single regeneration entry point for the
-final v2 pair. Its manifest names the intervention proposal, independent native
-diagnostic sources, real proposal-bound held-out receipts, calibration bundle,
-physical-envelope template, shared `akm-…` identity, and two new output
-directories. The producer derives the control proposal, all shared seeds, the
+`prepare_iqk_matched_pair.py` is the single regeneration entry point for a
+matched CPU-IQK pair. V2 adds a closed `measurement_frame`: canonical pp512
+prefill or tg128 decode. The selected calibration must name that exact recipe;
+decode uses `n_gen=128` and cannot inherit a prefill bundle or an `n_prompt`
+frame. The distinct-regime decode pair is bootstrap-only because its completed
+journals are the source for the real held-out receipts. A later prefill pair may
+then use `heldout_bound` evidence. V1 manifests retain their historical pp512
+meaning. The producer derives the control proposal, all shared seeds, the
 matched physical frame, and the complete factor vocabulary; it refuses unless
 `ggml_iqk` is the sole difference. Publication uses private staging, revalidates
 both durable post-rename paths, and rolls both new outputs back if either final

@@ -25,13 +25,24 @@ from . import least_commitment_heldout, schemas
 from .execution import physical_bounds
 
 
-SCHEMA = "epyc.autokernel.iqk_matched_pair_preparation.v1"
-RESULT_SCHEMA = "epyc.autokernel.iqk_matched_pair_preparation_result.v1"
+LEGACY_SCHEMA = "epyc.autokernel.iqk_matched_pair_preparation.v1"
+SCHEMA = "epyc.autokernel.iqk_matched_pair_preparation.v2"
+RESULT_SCHEMA = "epyc.autokernel.iqk_matched_pair_preparation_result.v2"
+PREFILL_RECIPE_ID = "t1b.llama_cpu.llama_bench_prefill.v1"
+DECODE_RECIPE_ID = "t1b.llama_cpu.llama_bench_decode.v1"
+CANONICAL_FRAMES = {
+    PREFILL_RECIPE_ID: {"n_prompt": 512, "shape": "pp512"},
+    DECODE_RECIPE_ID: {"n_gen": 128, "shape": "tg128"},
+}
 HYPOTHESIS_STORE_FILENAME = "hypotheses.json"
 HYPOTHESIS_STORE_SCHEMA = "epyc.autokernel.operator_hypotheses.v1"
 HYPOTHESIS_FALSIFIER = (
     "The accepted paired run fails a required integrity gate or its median "
     "relative prefill gain does not exceed the predeclared 3% contribution floor."
+)
+DECODE_HYPOTHESIS_FALSIFIER = (
+    "The accepted paired run fails a required integrity gate or its median "
+    "relative decode gain does not exceed the predeclared 3% contribution floor."
 )
 AA_CONTROL_FALSIFIER = (
     "The accepted A/A control exceeds the predeclared drift bound or fails "
@@ -48,6 +59,40 @@ IQK_MATCHED_PAIR_REPS = campaign.IQK_MATCHED_PAIR_REPS
 
 class PreparationError(ValueError):
     pass
+
+
+def _measurement_frame(raw: Mapping[str, Any]) -> dict[str, Any]:
+    """Load one closed canonical recipe frame, retaining v1 prefill inputs.
+
+    A v1 manifest predates recipe selection and therefore means exactly the
+    historical pp512 cell.  V2 makes the recipe and its work dimension
+    explicit.  In particular, decode cannot inherit ``n_prompt`` or a prefill
+    calibration merely because both recipes use the same llama-bench binary.
+    """
+    if raw.get("schema") == LEGACY_SCHEMA:
+        return {"recipe_id": PREFILL_RECIPE_ID, "n_prompt": 512,
+                "shape": "pp512"}
+    frame = raw.get("measurement_frame")
+    if not isinstance(frame, Mapping):
+        raise PreparationError("measurement_frame must be an object")
+    recipe_id = frame.get("recipe_id")
+    canonical = CANONICAL_FRAMES.get(recipe_id)
+    if canonical is None:
+        raise PreparationError(
+            "measurement_frame.recipe_id must name the canonical CPU prefill "
+            "or decode recipe")
+    expected = {"recipe_id", next(key for key in canonical if key != "shape")}
+    if set(frame) != expected:
+        raise PreparationError(
+            f"measurement_frame fields for {recipe_id} must be exactly "
+            f"{sorted(expected)}")
+    token_key = next(key for key in canonical if key != "shape")
+    if frame[token_key] != canonical[token_key]:
+        raise PreparationError(
+            f"measurement_frame.{token_key} must select the canonical "
+            f"{canonical['shape']} cell ({canonical[token_key]})")
+    return {"recipe_id": recipe_id, token_key: canonical[token_key],
+            "shape": canonical["shape"]}
 
 
 def _load(path: Path, label: str) -> dict[str, Any]:
@@ -268,19 +313,23 @@ def _build_plan(
 def _base_spec(
         *, proposal: Mapping[str, Any], branch: Mapping[str, Any], model: str,
         calibration: campaign.LeanCalibration, blocks: int, reps: int,
+        measurement_frame: Mapping[str, Any],
 ) -> campaign.CampaignSpec:
+    recipe_id = str(measurement_frame["recipe_id"])
     return campaign.CampaignSpec(
         campaign_id=str(branch["campaign_id"]),
         candidate_id=str(branch["candidate_id"]),
         candidate_ref="registered:ggml_iqk", model=model,
         backend=campaign.BACKEND_CPU,
-        recipe_id=campaign.HISTORICAL_CALIBRATED_RECIPE_ID,
+        recipe_id=recipe_id,
+        n_prompt=int(measurement_frame.get("n_prompt", 512)),
+        n_gen=int(measurement_frame.get("n_gen", 128)),
         blocks=blocks, reps=reps, proposal=proposal,
         calibration=calibration)
 
 
 def _hypothesis_store(*, proposal: Mapping[str, Any], candidate_id: str,
-                      role: str) -> dict[str, Any]:
+                      role: str, measurement_frame: Mapping[str, Any]) -> dict[str, Any]:
     """Build the campaign-local operator store required by ``--hypothesis``.
 
     Pair preparation owns fresh candidate identities, so the ordinal in the
@@ -298,14 +347,17 @@ def _hypothesis_store(*, proposal: Mapping[str, Any], candidate_id: str,
         "hypotheses": [{
             "author": "operator",
             "created_at": "2026-08-12T00:00:00+00:00",
-            "falsifier": (AA_CONTROL_FALSIFIER if role == "control"
-                           else HYPOTHESIS_FALSIFIER),
+            "falsifier": (
+                AA_CONTROL_FALSIFIER if role == "control" else
+                DECODE_HYPOTHESIS_FALSIFIER
+                if measurement_frame["recipe_id"] == DECODE_RECIPE_ID else
+                HYPOTHESIS_FALSIFIER),
             "hypothesis_id": hypothesis_id,
             "regime": {
                 "backend": "llama_cpu",
                 "model": "Qwen2.5-Coder-0.5B-Q4_K_M",
-                "recipe_id": "t1b.llama_cpu.llama_bench_prefill.v1",
-                "shape": "pp512",
+                "recipe_id": measurement_frame["recipe_id"],
+                "shape": measurement_frame["shape"],
             },
             "statement": proposal["hypothesis"],
         }],
@@ -313,14 +365,20 @@ def _hypothesis_store(*, proposal: Mapping[str, Any], candidate_id: str,
 
 
 def prepare(raw: Mapping[str, Any]) -> dict[str, Any]:
-    required = {
+    common_fields = {
         "schema", "matched_experiment_id", "model", "calibration_bundle",
         "physical_envelope_template", "intervention_proposal",
         "intervention_campaign_id", "intervention_proposal_id",
         "control_proposal_id", "intervention", "control", "blocks", "reps",
     }
-    if set(raw) != required or raw.get("schema") != SCHEMA:
-        raise PreparationError(f"manifest fields/schema must be exactly {sorted(required)}")
+    schema = raw.get("schema")
+    required = (common_fields if schema == LEGACY_SCHEMA
+                else common_fields | {"measurement_frame"})
+    if schema not in {LEGACY_SCHEMA, SCHEMA} or set(raw) != required:
+        raise PreparationError(
+            f"manifest fields/schema must be legacy {sorted(common_fields)} or "
+            f"v2 {sorted(common_fields | {'measurement_frame'})}")
+    measurement_frame = _measurement_frame(raw)
     matched_id = _text(raw["matched_experiment_id"], "matched_experiment_id")
     if not matched_id.startswith("akm-"):
         raise PreparationError("matched_experiment_id must start with 'akm-'")
@@ -359,6 +417,25 @@ def prepare(raw: Mapping[str, Any]) -> dict[str, Any]:
     proposal["proposal_id"] = _text(
         raw["intervention_proposal_id"], "intervention_proposal_id")
     calibration = campaign.load_calibration_bundle(calibration_path)
+    if calibration.recipe_id != measurement_frame["recipe_id"]:
+        raise PreparationError(
+            f"calibration recipe {calibration.recipe_id!r} does not match "
+            f"measurement frame {measurement_frame['recipe_id']!r}")
+    expected_regime = "decode" if measurement_frame["recipe_id"] == DECODE_RECIPE_ID \
+        else "prefill"
+    target = proposal.get("target")
+    if not isinstance(target, Mapping) or target.get("regimes") != [expected_regime]:
+        raise PreparationError(
+            f"intervention proposal must target exactly the {expected_regime!r} regime")
+    if measurement_frame["recipe_id"] == DECODE_RECIPE_ID:
+        if target.get("shapes") != [measurement_frame["shape"]]:
+            raise PreparationError(
+                "decode intervention proposal must target exactly shape 'tg128'")
+        if any(branch["evidence_stage"] != "bootstrap"
+               for branch in (intervention, control_branch)):
+            raise PreparationError(
+                "the distinct-regime decode pair must use bootstrap evidence; "
+                "it produces held-out receipts for a later target campaign")
     # Preparation is the last entirely non-executing boundary before these
     # immutable inputs become campaign roots.  Do not publish a pair which the
     # campaign's accepted cell-local calibration will later refuse: that would
@@ -385,7 +462,8 @@ def prepare(raw: Mapping[str, Any]) -> dict[str, Any]:
     # one licensed factor before constructing both final, fully governed specs.
     base = _base_spec(
         proposal=proposal, branch=intervention, model=model,
-        calibration=calibration, blocks=blocks, reps=reps)
+        calibration=calibration, blocks=blocks, reps=reps,
+        measurement_frame=measurement_frame)
     envelope = _matched_envelope(
         template, spec=base, matched_experiment_id=matched_id)
     intervention_factors = base.matched_factor_frame_for(
@@ -424,7 +502,8 @@ def prepare(raw: Mapping[str, Any]) -> dict[str, Any]:
                 staged[name] / HYPOTHESIS_STORE_FILENAME,
                 _hypothesis_store(
                     proposal=selected_proposal,
-                    candidate_id=str(branch["candidate_id"]), role=name))
+                    candidate_id=str(branch["candidate_id"]), role=name,
+                    measurement_frame=measurement_frame))
         plans = {
             "intervention": _build_plan(
                 proposal=proposal, branch=intervention, role="intervention",
@@ -461,7 +540,9 @@ def prepare(raw: Mapping[str, Any]) -> dict[str, Any]:
                 candidate_id=str(branch["candidate_id"]),
                 candidate_ref="registered:ggml_iqk", model=model,
                 backend=campaign.BACKEND_CPU,
-                recipe_id=campaign.HISTORICAL_CALIBRATED_RECIPE_ID,
+                recipe_id=str(measurement_frame["recipe_id"]),
+                n_prompt=int(measurement_frame.get("n_prompt", 512)),
+                n_gen=int(measurement_frame.get("n_gen", 128)),
                 blocks=blocks, reps=reps, proposal=selected_proposal,
                 calibration=calibration,
                 least_commitment_plan=parsed_plans[name],
@@ -472,6 +553,7 @@ def prepare(raw: Mapping[str, Any]) -> dict[str, Any]:
         result = {
             "schema": RESULT_SCHEMA,
             "matched_experiment_id": matched_id,
+            "measurement_frame": dict(measurement_frame),
             "sole_changed_factor": "ggml_iqk",
             "input_manifest_sha256": schemas.content_hash(raw),
             "producer_sha256": _sha256(Path(__file__).resolve()),

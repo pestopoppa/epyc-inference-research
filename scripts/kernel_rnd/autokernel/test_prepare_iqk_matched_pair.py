@@ -77,6 +77,8 @@ class MatchedPairPreparationTest(unittest.TestCase):
     def manifest(self) -> dict:
         return {
             "schema": P.SCHEMA,
+            "measurement_frame": {
+                "recipe_id": P.PREFILL_RECIPE_ID, "n_prompt": 512},
             "matched_experiment_id": "akm-iqk-20260812-0001",
             "model": str(self.model),
             "calibration_bundle": str(self.calibration),
@@ -107,6 +109,62 @@ class MatchedPairPreparationTest(unittest.TestCase):
                 "output_dir": str(self.root / "prepared-control"),
             },
         }
+
+    def _decode_manifest(self) -> dict:
+        """Retarget the fixture to the canonical held-out tg128 cell."""
+        declaration_path = self.calibration / "campaign_declaration.json"
+        declaration = json.loads(declaration_path.read_text(encoding="utf-8"))
+        declaration["recipe_id"] = P.DECODE_RECIPE_ID
+        declaration["calibration_frame"] = {
+            "recipe_id": P.DECODE_RECIPE_ID, "decode_tokens": 128,
+            "reps": campaign.IQK_MATCHED_PAIR_REPS,
+            "candidate_ggml_iqk": "0", "anchor_ggml_iqk": "0",
+        }
+        declaration_path.write_text(json.dumps(declaration), encoding="utf-8")
+        raw_path = self.calibration / "raw" / "anchor_motion_calibration.json"
+        raw = json.loads(raw_path.read_text(encoding="utf-8"))
+        raw["recipe_id"] = P.DECODE_RECIPE_ID
+        for arm in ("candidate_receipt", "anchor_receipt"):
+            raw[arm]["recipe_id"] = P.DECODE_RECIPE_ID
+            raw[arm]["params"].pop("n_prompt")
+            raw[arm]["params"]["n_gen"] = 128
+        raw_path.write_text(json.dumps(raw), encoding="utf-8")
+        summary_path = self.calibration / "summary.json"
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        summary["anchor_motion"]["raw_sha256"] = P.schemas.content_hash(raw)
+        summary_path.write_text(json.dumps(summary), encoding="utf-8")
+
+        proposal_record = json.loads(self.proposal_path.read_text(encoding="utf-8"))
+        proposal_record["target"]["regimes"] = ["decode"]
+        proposal_record["target"]["shapes"] = ["tg128"]
+        proposal_record["non_target"]["regimes"] = ["prefill"]
+        proposal_record["hypothesis"] = (
+            "On the frozen-v9 CPU decode tg128 cell, GGML_IQK=1 reproduces "
+            "the known IQK throughput win over GGML_IQK=0.")
+        self.proposal_path.write_text(json.dumps(proposal_record), encoding="utf-8")
+
+        loaded = campaign.load_calibration_bundle(self.calibration)
+        spec = campaign.CampaignSpec(
+            campaign_id=proposal_record["campaign_id"],
+            candidate_id="akc-decode-fixture", candidate_ref="registered:ggml_iqk",
+            model=str(self.model), proposal=proposal_record, calibration=loaded,
+            recipe_id=P.DECODE_RECIPE_ID, n_gen=128, blocks=12,
+            reps=campaign.IQK_MATCHED_PAIR_REPS)
+        envelope = physical_bounds.PhysicalEnvelope(
+            shape_id=spec.measurement_unit_id, delivered_unit="token",
+            flops_per_unit=1.0, bytes_per_unit=1.0,
+            peak_compute_flops_s=1e15, peak_memory_bytes_s=1e15,
+            measurement_frame_sha256=physical_bounds.measurement_frame_sha256(
+                spec.recipe_id, spec.bench_params),
+            work_derivation_ref="fixture", hardware_peak_ref="fixture")
+        self.envelope_path.write_text(json.dumps(envelope.to_dict()), encoding="utf-8")
+        raw_manifest = self.manifest()
+        raw_manifest["measurement_frame"] = {
+            "recipe_id": P.DECODE_RECIPE_ID, "n_gen": 128}
+        for branch in ("intervention", "control"):
+            raw_manifest[branch]["evidence_stage"] = "bootstrap"
+            raw_manifest[branch]["heldout_outcome"] = None
+        return raw_manifest
 
     def test_pair_is_complete_exactly_one_factor_and_non_executing(self):
         result = P.prepare(self.manifest())
@@ -141,6 +199,59 @@ class MatchedPairPreparationTest(unittest.TestCase):
             frames.append(raw["factors"])
         changed = [key for key in frames[0] if frames[0][key] != frames[1][key]]
         self.assertEqual(changed, ["ggml_iqk"])
+
+    def test_v1_manifest_retains_the_historical_prefill_default(self):
+        raw = self.manifest()
+        raw["schema"] = P.LEGACY_SCHEMA
+        raw.pop("measurement_frame")
+        result = P.prepare(raw)
+        self.assertEqual(result["measurement_frame"], {
+            "recipe_id": P.PREFILL_RECIPE_ID, "n_prompt": 512,
+            "shape": "pp512"})
+
+    def test_decode_pair_binds_tg128_and_bootstrap_evidence(self):
+        raw = self._decode_manifest()
+        result = P.prepare(raw)
+        self.assertEqual(result["measurement_frame"], {
+            "recipe_id": P.DECODE_RECIPE_ID, "n_gen": 128, "shape": "tg128"})
+        for role in ("intervention", "control"):
+            output = Path(result["outputs"][role]["path"])
+            plan_record = json.loads(
+                (output / "least-commitment-capture-plan.json").read_text())
+            self.assertEqual(plan_record["evidence_stage"], "bootstrap")
+            self.assertIsNone(plan_record["heldout_outcome_receipt"])
+            store = json.loads((output / "hypotheses.json").read_text())
+            regime = store["hypotheses"][0]["regime"]
+            self.assertEqual(regime["recipe_id"], P.DECODE_RECIPE_ID)
+            self.assertEqual(regime["shape"], "tg128")
+            if role == "intervention":
+                self.assertEqual(store["hypotheses"][0]["falsifier"],
+                                 P.DECODE_HYPOTHESIS_FALSIFIER)
+
+    def test_decode_pair_refuses_prefill_calibration_and_heldout_bound_stage(self):
+        raw = self.manifest()
+        raw["measurement_frame"] = {
+            "recipe_id": P.DECODE_RECIPE_ID, "n_gen": 128}
+        with self.assertRaisesRegex(P.PreparationError, "calibration recipe"):
+            P.prepare(raw)
+        raw = self._decode_manifest()
+        raw["control"]["evidence_stage"] = "heldout_bound"
+        raw["control"]["heldout_outcome"] = str(self._heldout(self.control_plan))
+        with self.assertRaisesRegex(P.PreparationError, "bootstrap evidence"):
+            P.prepare(raw)
+
+    def test_decode_pair_refuses_tampered_decode_calibration_frame(self):
+        raw = self._decode_manifest()
+        anchor_path = self.calibration / "raw" / "anchor_motion_calibration.json"
+        anchor = json.loads(anchor_path.read_text(encoding="utf-8"))
+        anchor["candidate_receipt"]["params"]["n_gen"] = 256
+        anchor_path.write_text(json.dumps(anchor), encoding="utf-8")
+        summary_path = self.calibration / "summary.json"
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        summary["anchor_motion"]["raw_sha256"] = P.schemas.content_hash(anchor)
+        summary_path.write_text(json.dumps(summary), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "outside the A/A frame"):
+            P.prepare(raw)
 
     def test_pair_refuses_a_noncanonical_repetition_frame(self):
         raw = self.manifest()
