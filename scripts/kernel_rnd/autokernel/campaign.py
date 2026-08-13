@@ -5375,7 +5375,9 @@ def main(argv: Optional[Sequence[str]] = None, *, out: Optional[Any] = None,
             print(f"refusing to start: --least-commitment-capture-plan: {exc}",
                   file=sys.stderr)
             return 2
-    if not args.dry_run and not args.screening_only and isinstance(proposal, Mapping) \
+    if not args.dry_run and not args.screening_only \
+            and args.create_screening_baseline is None \
+            and isinstance(proposal, Mapping) \
             and proposal.get("change_class") == "parameter" \
             and least_commitment_plan is None:
         print("refusing to --execute: IQK parameter campaigns require "
