@@ -5189,6 +5189,9 @@ def build_parser() -> argparse.ArgumentParser:
                              "post-T0 stabilization and cannot KEEP/archive/promote")
     parser.add_argument("--screening-baseline-bank", default=None, metavar="PATH",
                         help="sealed reusable anchor baseline required by --screening-only")
+    parser.add_argument("--create-screening-baseline", default=None, metavar="PATH",
+                        help="execute exactly three bound anchor calls and seal a fresh reusable "
+                             "non-promotable screening baseline bank at PATH")
     parser.add_argument("--recipe", dest="recipe_id", default=None,
                         choices=list(recipes.RECIPE_IDS) + [None],
                         help="codified recipe id (default: the canonical decode slice "
@@ -5306,6 +5309,10 @@ def main(argv: Optional[Sequence[str]] = None, *, out: Optional[Any] = None,
             return 2
     if args.screening_only and baseline_bank is None:
         print("refusing to start: --screening-only requires --screening-baseline-bank", file=sys.stderr)
+        return 2
+    if args.create_screening_baseline is not None and args.screening_only:
+        print("refusing to start: --create-screening-baseline and --screening-only are separate modes",
+              file=sys.stderr)
         return 2
     if not args.dry_run and least_commitment_plan is not None \
             and least_commitment_plan.raw["capture_mode"] != "measured":
@@ -5467,6 +5474,29 @@ def main(argv: Optional[Sequence[str]] = None, *, out: Optional[Any] = None,
             broker = powercap_broker.PowercapBroker()
             ops = HostOps(nominal_khz=args.nominal_khz,
                           host_state=broker.read_host_state)
+
+    if args.create_screening_baseline is not None:
+        if args.dry_run:
+            print("screening baseline creation DRY RUN: no claim, subprocess, or output file", file=detail_stream)
+            return 0
+        if not isinstance(ops, HostOps):
+            print("refusing to start: baseline creation requires concrete HostOps", file=sys.stderr)
+            return 2
+        pre = ops.preflight(spec)
+        if pre.outcome == schemas.FAIL:
+            print("refusing to start: baseline preflight: " + "; ".join(pre.reasons), file=sys.stderr)
+            return 2
+        claim = ops.acquire_claim(spec)
+        try:
+            receipt = ops.create_screening_baseline(spec, output=args.create_screening_baseline)
+        finally:
+            ops.release_claim(claim)
+            if broker is not None:
+                broker.close()
+        print(json.dumps(receipt, sort_keys=True) if args.as_json else
+              f"screening baseline sealed: {receipt['path']} ({receipt['baseline_sha256']})",
+              file=stream)
+        return 0
 
     # BEFORE the claim, and before the banner: source-changing campaigns still
     # have proposal-specific seams; the IQK
