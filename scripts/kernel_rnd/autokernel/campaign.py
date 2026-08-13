@@ -4275,6 +4275,29 @@ class HostOps:
         return replace(request, event_id=(
             f"ake-{request.campaign_id}-{request.candidate_id}-{suffix}-{digest[:16]}"))
 
+    @staticmethod
+    def _parameter_intervention_gate(
+            t0_gates: Sequence[api.GateResult]) -> api.GateResult:
+        """Bind a parameter T1 effect to T0's canonical real-path proof.
+
+        The T0 provider owns the gate's identity.  Do not reconstruct a
+        historical spelling here: that would turn a passing real-path proof
+        into an uncheckable T1 mechanism gate at the campaign/archive seam.
+        """
+        dispatch = next((gate for gate in t0_gates
+                         if gate.gate_id == correctness.GID_NO_FALLBACK), None)
+        check = (dispatch.check if dispatch is not None else schemas.Check(
+            schemas.COULD_NOT_CHECK,
+            ("T0 emitted no no-fallback dispatch identity",)))
+        return api.GateResult(
+            gate_id="t1.parameter_intervention_explained",
+            gate_class=api.GATE_MECHANISM,
+            check=check,
+            evidence_ref=None if dispatch is None else dispatch.evidence_ref,
+            notes=("the registered GGML_IQK arm-local intervention and its "
+                   "no-fallback real-path trace are bound to this T1 effect",),
+        )
+
     def _evaluation_events(self, spec: CampaignSpec) -> tuple:
         """Build T0 then T1 from retained executed evidence; never from display pairs."""
         events = []
@@ -4319,18 +4342,8 @@ class HostOps:
             t1_gates = list(self._t0_gate_results)
             if spec.proposal is not None \
                     and spec.proposal.get("change_class") == "parameter":
-                dispatch = next((gate for gate in self._t0_gate_results
-                                 if gate.gate_id == "no_fallback_dispatch_trace"), None)
-                check = (dispatch.check if dispatch is not None else schemas.Check(
-                    schemas.COULD_NOT_CHECK,
-                    ("T0 emitted no no-fallback dispatch identity",)))
-                t1_gates.append(api.GateResult(
-                    gate_id="t1.parameter_intervention_explained",
-                    gate_class=api.GATE_MECHANISM,
-                    check=check,
-                    notes=("the registered GGML_IQK arm-local intervention and its "
-                           "no-fallback real-path trace are bound to this T1 effect",),
-                ))
+                t1_gates.append(self._parameter_intervention_gate(
+                    self._t0_gate_results))
             outcome = api.TierDispatcher(gate_runners={
                 "T1": _RecordedGateRunner(t1_gates),
             }).dispatch(request, window, effect=effect)

@@ -10,6 +10,7 @@ from pathlib import Path
 
 from .. import journal as J
 from .. import schemas as S
+from ..evaluator import correctness
 from ..test_journal import _candidate, _event
 from ..test_schemas import _campaign, _proposal
 from . import champion
@@ -47,7 +48,7 @@ class CompletedCampaignAdapterTest(unittest.TestCase):
             "event_id": "ake-iqk-t0", "campaign_id": self.campaign_id,
             "candidate_id": self.candidate_id, "tier": "T0", "anchor_tier": "T0",
             "correctness": {"test_backend_ops": S.PASS},
-            "stability": {"no_fallback_dispatch_trace": S.PASS},
+            "stability": {correctness.GID_NO_FALLBACK: S.PASS},
             "mechanism": {},
         })
         t1 = copy.deepcopy(t0)

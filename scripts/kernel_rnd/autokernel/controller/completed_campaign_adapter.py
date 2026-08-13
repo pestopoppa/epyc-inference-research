@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import Any, Mapping
 
 from .. import least_commitment_receipts, schemas
+from ..evaluator import correctness
 from . import sequencer
 
 
@@ -88,7 +89,7 @@ def project(*, campaign_record: Mapping[str, Any], journal_root: str,
             raise CompletedCampaignAdapterError("banking requires passing T0 and T1 events")
         _require_speed_rank_admissible(t1)
         dispatch_gate = _required_passing_gate(
-            t0, "stability", "no_fallback_dispatch_trace")
+            t0, "stability", correctness.GID_NO_FALLBACK)
         mechanism_gate = _required_passing_gate(
             t1, "mechanism", "t1.parameter_intervention_explained")
         calibration = evidence.result.get("spec", {}).get("calibration")

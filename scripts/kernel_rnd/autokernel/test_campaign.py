@@ -39,6 +39,7 @@ from unittest import mock
 
 from . import (campaign, journal as journal_module, schemas,
                source_prerequisite_package)
+from .evaluator import api, correctness
 from .execution import control_runner, microbench, physical_bounds, t0_provider
 from .resource import claim_witness
 from .test_schemas import _proposal as _proposal_fixture
@@ -3562,6 +3563,23 @@ class TestTheGateIsTheSameGateInBothModes(_HypothesisGateCase):
 
 class TestProspectiveEvaluationDurability(unittest.TestCase):
     """An evaluated run writes evaluation evidence before terminal STOP_STATE."""
+
+    def test_parameter_t1_mechanism_reuses_canonical_t0_dispatch_gate(self):
+        """A real T0 dispatch proof must not be lost to a stale gate spelling."""
+        dispatch = api.GateResult(
+            correctness.GID_NO_FALLBACK, api.GATE_INTEGRITY,
+            schemas.Check(schemas.PASS, ()), evidence_ref="akcap:real-path")
+        mechanism = campaign.HostOps._parameter_intervention_gate((dispatch,))
+        self.assertEqual(mechanism.check.outcome, schemas.PASS)
+        self.assertEqual(mechanism.evidence_ref, "akcap:real-path")
+
+    def test_parameter_t1_mechanism_refuses_when_canonical_t0_dispatch_is_absent(self):
+        """An arbitrary legacy spelling cannot manufacture a real-path proof."""
+        stale = api.GateResult(
+            "no_fallback_dispatch_trace", api.GATE_INTEGRITY,
+            schemas.Check(schemas.PASS, ()))
+        mechanism = campaign.HostOps._parameter_intervention_gate((stale,))
+        self.assertEqual(mechanism.check.outcome, schemas.COULD_NOT_CHECK)
 
     def test_t0_failure_caches_evidence_without_materializing_a_candidate(self):
         ops = campaign.HostOps(nominal_khz=1)
