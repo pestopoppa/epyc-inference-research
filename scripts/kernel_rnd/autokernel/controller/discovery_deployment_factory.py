@@ -19,7 +19,8 @@ from . import gpu_source_evidence as evidence
 
 
 class DeploymentFactoryError(RuntimeError): pass
-_BLOCKED_ENV = frozenset({"LD_PRELOAD", "PYTHONPATH", "PYTHONHOME", "DYLD_INSERT_LIBRARIES"})
+_ALLOWED_ENV = frozenset({"PATH", "HOME", "CODEX_HOME", "HTTPS_PROXY", "HTTP_PROXY",
+                          "NO_PROXY", "SSL_CERT_FILE", "SSL_CERT_DIR"})
 
 
 @dataclass(frozen=True)
@@ -29,8 +30,8 @@ class EnvironmentProfile:
         if not self.values or any(not isinstance(key, str) or not key or not isinstance(value, str)
                                   for key, value in self.values.items()):
             raise DeploymentFactoryError("environment profile must be an exact string mapping")
-        if _BLOCKED_ENV.intersection(self.values):
-            raise DeploymentFactoryError("environment profile contains a loader injection key")
+        if set(self.values) - _ALLOWED_ENV:
+            raise DeploymentFactoryError("environment profile contains a non-allowlisted key")
 
 
 @dataclass(frozen=True)
@@ -39,11 +40,62 @@ class SourceBuilderBinding:
 
 @dataclass(frozen=True)
 class EvidencePlanBinding:
-    build: Callable[[controller.PlannedCandidate, controller.GpuSourceBuild], evidence.GpuSourceEvidencePlan]
+    build: Callable[[controller.PlannedCandidate, controller.GpuSourceBuild, "ExperimentTemplate"], evidence.GpuSourceEvidencePlan]
 
 @dataclass(frozen=True)
 class RunnerArgsBinding:
     build: Callable[[controller.PlannedCandidate, controller.GpuSourceBuild, Mapping[str, Any]], Any]
+
+
+@dataclass(frozen=True)
+class ExperimentTemplate:
+    """Reviewed intent selector; it owns test/dispatch semantics, never actors."""
+    template_id: str
+    target_surface: str
+    target_symbol: str
+    correctness_id: str
+    dispatch_id: str
+    dispatch: evidence.DispatchContract
+    allowed_files: frozenset[str]
+    allowed_symbols: Mapping[str, frozenset[str]]
+    semantics: Mapping[str, Any]
+
+    def __post_init__(self) -> None:
+        if not self.allowed_files or set(self.allowed_symbols) != set(self.allowed_files):
+            raise DeploymentFactoryError("experiment template requires exact reviewed files/symbols")
+        if any(Path(path).suffix not in _GPU_KERNEL_EXTENSIONS or not symbols
+               or "<file-scope>" in symbols for path, symbols in self.allowed_symbols.items()):
+            raise DeploymentFactoryError("experiment template includes an unsafe kernel scope")
+
+    def matches(self, intent: controller.GpuSourceExperimentIntent) -> bool:
+        return (self.template_id, self.target_surface, self.target_symbol,
+                self.correctness_id, self.dispatch_id) == (
+                    intent.template_id, intent.target_surface, intent.target_symbol,
+                    intent.correctness_id, intent.dispatch_id)
+
+
+@dataclass(frozen=True)
+class ExperimentTemplateRegistry:
+    version: str
+    registry_sha256: str
+    templates: Mapping[str, ExperimentTemplate]
+
+    def __post_init__(self) -> None:
+        if (not self.version or not isinstance(self.registry_sha256, str)
+                or len(self.registry_sha256) != 64
+                or any(ch not in "0123456789abcdef" for ch in self.registry_sha256)
+                or not self.templates or set(self.templates) != {
+                    template.template_id for template in self.templates.values()
+                    if isinstance(template, ExperimentTemplate)}):
+            raise DeploymentFactoryError("experiment template registry version/hash is invalid")
+
+    def resolve(self, intent: controller.GpuSourceExperimentIntent | None) -> ExperimentTemplate:
+        if intent is None:
+            raise DeploymentFactoryError("GPU source candidate lacks a typed experiment intent")
+        template = self.templates.get(intent.template_id)
+        if not isinstance(template, ExperimentTemplate) or not template.matches(intent):
+            raise DeploymentFactoryError("candidate intent is not an exact reviewed experiment template")
+        return template
 
 @dataclass(frozen=True)
 class InferenceWindowLeaseBinding:
@@ -88,20 +140,32 @@ def _require(value: object, type_: type, label: str) -> Any:
     if not isinstance(value, type_): raise DeploymentFactoryError(f"registry entry {label} has wrong typed binding")
     return value
 
-_FORBIDDEN_MUTATION_PREFIXES = ("tools/", "examples/", "scripts/", "tests/", "cmake/", "CMakeLists.txt")
-_ALLOWED_KERNEL_PREFIXES = ("ggml/src/", "ggml/include/", "ggml/src/ggml-hip/")
+_FORBIDDEN_MUTATION_PREFIXES = ("tools/", "examples/", "scripts/", "tests/", "cmake/",
+                                "CMakeLists.txt", "models/", "recipes/", "artifacts/",
+                                "benchmark/", "evaluator/", "profiler/")
+# The GPU source lane never lets a planner touch generic GGML dispatch, build
+# files, tests, or the reward path.  A reviewed HIP kernel surface is the one
+# narrowly scoped exception.
+_GPU_KERNEL_EXTENSIONS = frozenset({".cu", ".cuh", ".hip", ".hpp"})
 
-def _validate_source_scope(candidate: controller.PlannedCandidate) -> None:
+def _validate_source_scope(candidate: controller.PlannedCandidate,
+                           template: ExperimentTemplate | None = None) -> None:
     manifest = candidate.source_manifest
     if manifest.source_tree != "llama.cpp":
         raise DeploymentFactoryError("discovery source patch must target the allowlisted llama.cpp scope")
     for path in manifest.declared_files:
-        if path.startswith(_FORBIDDEN_MUTATION_PREFIXES) or not path.startswith(_ALLOWED_KERNEL_PREFIXES):
+        if (path.startswith(_FORBIDDEN_MUTATION_PREFIXES) or template is None
+                or path not in template.allowed_files
+                or Path(path).suffix not in _GPU_KERNEL_EXTENSIONS
+                or "CMake" in Path(path).name):
             raise DeploymentFactoryError("discovery patch may only modify allowlisted GGML kernel sources")
+        symbols = set(manifest.declared_symbols[path])
+        if ("<file-scope>" in symbols
+                or not symbols.issubset(template.allowed_symbols.get(path, frozenset()))):
+            raise DeploymentFactoryError("discovery patch symbols exceed the reviewed kernel template")
 
 
 def materialize(config: deployment.DiscoveryDeployment, registry: Mapping[str, Mapping[str, object]], *,
-                planner: controller.Planner, critic: controller.Critic,
                 correctness_executor: evidence.CommandExecutor, rocprof_executor: evidence.CommandExecutor,
                 claim_journal: device_claim.ClaimJournal,
                 claim_acquirer: Callable[..., Any] = device_claim.acquire_device_claim,
@@ -115,19 +179,45 @@ def materialize(config: deployment.DiscoveryDeployment, registry: Mapping[str, M
     runner = _require(resolved.runner_args, RunnerArgsBinding, "runner_args")
     lease_binding = _require(resolved.inference_window_lease, InferenceWindowLeaseBinding, "inference_window_lease")
     snapshot = _require(resolved.production_snapshot, ProductionSnapshotBinding, "production_snapshot")
-    if not isinstance(resolved.dispatch_contract, evidence.DispatchContract):
-        raise DeploymentFactoryError("registry dispatch contract must be typed")
+    templates = _require(resolved.experiment_template_registry, ExperimentTemplateRegistry,
+                         "experiment_template_registry")
+    if templates.registry_sha256 != config.experiment_template_registry_sha256:
+        raise DeploymentFactoryError("experiment template registry differs from sealed deployment digest")
     lease = lease_binding.make(config)
+    # Actors are not dependency-injected: a caller supplied object could attest
+    # any model.  The deployment wrapper digest/environment profile are the sole
+    # authority for the two exact Codex actor identities.
+    catalog = {key: {"template_id": template.template_id,
+                     "target_surface": template.target_surface,
+                     "target_symbol": template.target_symbol,
+                     "correctness_id": template.correctness_id,
+                     "dispatch_id": template.dispatch_id,
+                     "allowed_files": sorted(template.allowed_files),
+                     "allowed_symbols": {path: sorted(symbols)
+                                         for path, symbols in template.allowed_symbols.items()},
+                     "semantics": dict(template.semantics)}
+               for key, template in templates.templates.items()}
+    planner = controller.CodexPlanner(wrapper=config.actor_wrapper.path,
+                                      environment=env.values, template_catalog=catalog)
+    critic = controller.CodexCritic(wrapper=config.actor_wrapper.path,
+                                    environment=env.values, template_catalog=catalog)
 
     def build(candidate: controller.PlannedCandidate, authorization: Any, permit: Mapping[str, Any]):
         config.revalidate()
-        _validate_source_scope(candidate)
+        template = templates.resolve(candidate.experiment_intent)
+        _validate_source_scope(candidate, template)
+        candidate.source_manifest.bind(
+            proposal=candidate.proposal, campaign_id=candidate.source_manifest.campaign_id,
+            candidate_id=candidate.source_manifest.candidate_id,
+            production_base_commit=config.production_head,
+            instrument_commit=config.production_head)
         return source.build(candidate, authorization, permit)
     def plan(candidate: controller.PlannedCandidate, build_: controller.GpuSourceBuild):
         config.revalidate()
-        result = plans.build(candidate, build_)
-        if result.dispatch != resolved.dispatch_contract or result.model_sha256 != config.model.sha256:
-            raise DeploymentFactoryError("evidence plan does not bind configured model/dispatch contract")
+        template = templates.resolve(candidate.experiment_intent)
+        result = plans.build(candidate, build_, template)
+        if result.dispatch != template.dispatch or result.model_sha256 != config.model.sha256:
+            raise DeploymentFactoryError("evidence plan does not bind configured model/selected reviewed template")
         return result
     def args(candidate: controller.PlannedCandidate, build_: controller.GpuSourceBuild, permit: Mapping[str, Any]):
         config.revalidate()
@@ -156,11 +246,17 @@ def controller_config(config: deployment.DiscoveryDeployment, *, dry_run: bool =
     return controller.ControllerConfig(
         output_root=config.state_root, evidence_root=config.evidence_root,
         max_iterations=config.max_iterations,
-        nomination_threshold=config.nomination_threshold, dry_run=dry_run)
+        nomination_threshold=config.nomination_threshold, dry_run=dry_run,
+        planner_context=config.planner_context.value,
+        planner_context_sha256=config.planner_context.value["context_sha256"],
+        production_base_commit=config.production_head,
+        instrument_commit=config.production_head,
+        # The sealed deployment digest, not a caller argument, namespaces all
+        # controller/worktree/receipt identities across concurrent deployments.
+        campaign_id=f"ak-discovery-{config.config_sha256[:16]}")
 
 
 def deployment_main(argv: list[str] | None, *, registry: Mapping[str, Mapping[str, object]],
-                    planner: controller.Planner, critic: controller.Critic,
                     correctness_executor: evidence.CommandExecutor, rocprof_executor: evidence.CommandExecutor,
                     claim_journal: device_claim.ClaimJournal) -> int:
     """Dedicated launcher; refuses generic factory/CLI override authority."""
@@ -169,7 +265,7 @@ def deployment_main(argv: list[str] | None, *, registry: Mapping[str, Mapping[st
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
     config = deployment.load_deployment_config(Path(args.deployment))
-    adapters = materialize(config, registry, planner=planner, critic=critic,
+    adapters = materialize(config, registry,
                            correctness_executor=correctness_executor,
                            rocprof_executor=rocprof_executor,
                            claim_journal=claim_journal)

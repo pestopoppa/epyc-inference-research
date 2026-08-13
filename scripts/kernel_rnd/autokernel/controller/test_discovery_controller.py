@@ -32,10 +32,18 @@ class Tests(unittest.TestCase):
  def cfg(self,root,n=2): return D.ControllerConfig(root/"out",n)
  def test_exact_two_codex_no_claude(self):
   self.assertEqual(D.sealed_roster()["claude_members"],0); self.assertEqual([x["model"] for x in D.sealed_roster()["members"]],["gpt-5.6-sol","gpt-5.6-terra"])
+ def test_sealed_planner_context_is_visible_and_resume_mismatch_refuses(self):
+  with tempfile.TemporaryDirectory() as t, patch.object(D.source_candidate,"SourcePatchManifest",Manifest), patch.object(D,"_write_projection"):
+   root=Path(t); context={"hotspots":[{"symbol":"q5_hot"}],"context_sha256":H}
+   cfg=D.ControllerConfig(root/"out",1,dry_run=True,planner_context=context,planner_context_sha256=H)
+   p=FakePlanner(); D.run_controller(cfg,planner=p,critic=FakeCritic(["accept"]),screener=FakeScreen([.01]),lease=Lease())
+   self.assertEqual(p.calls[0]["planner_context"]["hotspots"][0]["symbol"],"q5_hot")
+   with self.assertRaises(D.DiscoveryControllerError):
+    D.run_controller(D.ControllerConfig(root/"out",1,dry_run=True,planner_context=context,planner_context_sha256=H[:-1]+"b"),planner=p,critic=FakeCritic(["accept"]),screener=FakeScreen([.01]),lease=Lease())
  def test_veto_blocks_compute_and_feedback_is_next_context(self):
   with tempfile.TemporaryDirectory() as t, patch.object(D.source_candidate,"SourcePatchManifest",Manifest), patch.object(D,"_write_projection"):
    p=FakePlanner(); s=FakeScreen([.04,.03,.04]); r=D.run_controller(self.cfg(Path(t),4),planner=p,critic=FakeCritic(["reject","accept","accept"]),screener=s,lease=Lease())
-   self.assertEqual([x["status"] for x in r["iterations"]],["critic_reject","candidate","top_k_replicated_candidate","top_k_replicated_candidate"]); self.assertEqual(s.calls,3); self.assertEqual(len(p.calls),3); self.assertIn(H[:-1]+"1",p.calls[2]["prior_results"]); self.assertIn(H[:-1]+"2",p.calls[2]["prior_results"])
+   self.assertEqual([x["status"] for x in r["iterations"]],["critic_reject","candidate","top_k_replicated_candidate","top_k_replicated_candidate"]); self.assertEqual(s.calls,3); self.assertEqual(len(p.calls),3); self.assertEqual([row["result_sha256"] for row in p.calls[2]["prior_results"]],[H[:-1]+"1",H[:-1]+"2"])
  def test_single_positive_screen_never_nominates(self):
   with tempfile.TemporaryDirectory() as t, patch.object(D.source_candidate,"SourcePatchManifest",Manifest), patch.object(D,"_write_projection"):
    root=Path(t); r=D.run_controller(self.cfg(root,1),planner=FakePlanner(),critic=FakeCritic(["accept"]),screener=FakeScreen([.04]),lease=Lease())

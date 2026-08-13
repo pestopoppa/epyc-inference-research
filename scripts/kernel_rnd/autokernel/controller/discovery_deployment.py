@@ -49,6 +49,12 @@ def _identifier(value: object, label: str) -> str:
     return value
 
 
+def _digest_identifier(value: object, label: str) -> str:
+    if not isinstance(value, str) or not SHA.fullmatch(value):
+        raise DeploymentConfigError(f"{label} must be a SHA-256 digest")
+    return value
+
+
 def _absolute(value: object, label: str) -> Path:
     if not isinstance(value, str):
         raise DeploymentConfigError(f"{label} must be an absolute path")
@@ -97,8 +103,73 @@ class ImmutableInput:
         _digest_file(self.path, self.sha256, label)
 
 
+PLANNER_CONTEXT_SCHEMA = "epyc.autokernel.discovery_planner_context.v1"
+_PLANNER_CONTEXT_LIMIT = 512 * 1024
+
+
+@dataclass(frozen=True)
+class PlannerContext:
+    """Small, sealed source/profile brief that is safe to hand to both actors."""
+    input: ImmutableInput
+    value: Mapping[str, Any]
+
+    def revalidate(self) -> None:
+        self.input.revalidate("planner_context")
+
+
+def _planner_context(value: object, *, model: ImmutableInput,
+                     workload: ImmutableInput, runtime_config: ImmutableInput) -> PlannerContext:
+    raw = _input(value, "planner_context")
+    if raw.path.stat().st_size > _PLANNER_CONTEXT_LIMIT:
+        raise DeploymentConfigError("planner_context exceeds its bounded actor input limit")
+    try:
+        body = json.loads(raw.path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise DeploymentConfigError("planner_context is not JSON") from exc
+    required = {"schema", "context_sha256", "model_sha256", "workload_sha256",
+                "runtime_config_sha256", "profile_receipts", "hotspots",
+                "source_constraints", "initial_strategies"}
+    if not isinstance(body, Mapping) or set(body) != required:
+        raise DeploymentConfigError("planner_context has an unknown or incomplete schema")
+    if body["schema"] != PLANNER_CONTEXT_SCHEMA:
+        raise DeploymentConfigError("planner_context schema mismatch")
+    expected = schemas.content_hash({key: item for key, item in body.items()
+                                     if key != "context_sha256"})
+    if body.get("context_sha256") != expected:
+        raise DeploymentConfigError("planner_context self-hash mismatch")
+    if (body.get("model_sha256"), body.get("workload_sha256"),
+            body.get("runtime_config_sha256")) != (model.sha256, workload.sha256,
+                                                      runtime_config.sha256):
+        raise DeploymentConfigError("planner_context is not bound to sealed model/workload/runtime")
+    receipts = body["profile_receipts"]
+    hotspots = body["hotspots"]
+    if (not isinstance(receipts, list) or len(receipts) > 64
+            or not all(isinstance(row, Mapping) and set(row) == {"path", "sha256"}
+                       and isinstance(row["path"], str) and SHA.fullmatch(str(row["sha256"]))
+                       for row in receipts)):
+        raise DeploymentConfigError("planner_context profile receipts are malformed")
+    if (not isinstance(hotspots, list) or len(hotspots) > 128
+            or not all(isinstance(row, Mapping) and set(row).issubset(
+                       {"surface", "symbol", "share", "note", "source_excerpt"})
+                       and {"surface", "symbol", "share"}.issubset(row)
+                       and isinstance(row["surface"], str) and isinstance(row["symbol"], str)
+                       and isinstance(row["share"], (int, float)) and not isinstance(row["share"], bool)
+                       and math.isfinite(float(row["share"]))
+                       and ("source_excerpt" not in row or (isinstance(row["source_excerpt"], str)
+                             and len(row["source_excerpt"]) <= 8192))
+                       for row in hotspots)):
+        raise DeploymentConfigError("planner_context hotspots are malformed or unbounded")
+    if (not isinstance(body["source_constraints"], Mapping)
+            or not isinstance(body["initial_strategies"], list)
+            or len(body["initial_strategies"]) > 64
+            or any(not isinstance(row, str) or not row for row in body["initial_strategies"])):
+        raise DeploymentConfigError("planner_context strategies/constraints are malformed")
+    return PlannerContext(input=raw, value=dict(body))
+
+
 @dataclass(frozen=True)
 class DiscoveryDeployment:
+    config_sha256: str
     production_path: Path
     production_head: str
     state_root: Path
@@ -116,10 +187,12 @@ class DiscoveryDeployment:
     workload: ImmutableInput
     runtime_config: ImmutableInput
     policy: ImmutableInput
+    planner_context: PlannerContext
     source_builder_id: str
     evidence_plan_id: str
     runner_args_id: str
-    dispatch_contract_id: str
+    experiment_template_registry_id: str
+    experiment_template_registry_sha256: str
     inference_window_lease_id: str
     production_snapshot_id: str
 
@@ -130,6 +203,7 @@ class DiscoveryDeployment:
         for label, value in (("model", self.model), ("workload", self.workload),
                              ("runtime_config", self.runtime_config), ("policy", self.policy)):
             value.revalidate(label)
+        self.planner_context.revalidate()
 
 
 @dataclass(frozen=True)
@@ -140,7 +214,7 @@ class ResolvedDeployment:
     source_builder: object
     evidence_plan: object
     runner_args: object
-    dispatch_contract: object
+    experiment_template_registry: object
     inference_window_lease: object
     production_snapshot: object
 
@@ -187,7 +261,7 @@ def load_deployment_config(path: Path) -> DiscoveryDeployment:
     except (OSError, json.JSONDecodeError) as exc:
         raise DeploymentConfigError("deployment configuration is not JSON") from exc
     top = _exact(raw, {"schema", "config_sha256", "production", "controller", "actors", "gpu",
-                       "immutable_inputs", "source_plan"}, "deployment configuration")
+                       "immutable_inputs", "planner_context", "source_plan"}, "deployment configuration")
     if top["schema"] != SCHEMA:
         raise DeploymentConfigError("deployment configuration schema mismatch")
     try:
@@ -246,34 +320,37 @@ def load_deployment_config(path: Path) -> DiscoveryDeployment:
         raise DeploymentConfigError("gpu.small_model_max_bytes is invalid")
     inputs = _exact(top["immutable_inputs"], {"model", "workload", "runtime_config", "policy"}, "immutable_inputs")
     source = _exact(top["source_plan"], {"source_builder_id", "evidence_plan_id",
-                                           "runner_args_id", "dispatch_contract_id",
+                                           "runner_args_id", "experiment_template_registry_id", "experiment_template_registry_sha256",
                                            "production_snapshot_id"}, "source_plan")
     model = _input(inputs["model"], "model")
     workload = _input(inputs["workload"], "workload")
     runtime_config = _input(inputs["runtime_config"], "runtime_config")
     policy = _input(inputs["policy"], "policy")
+    planner_context = _planner_context(top["planner_context"], model=model,
+                                       workload=workload, runtime_config=runtime_config)
     if model.path.stat().st_size > small:
         raise DeploymentConfigError("model exceeds configured small-model discovery limit")
     for label, input_ in (("actors.wrapper", actor_wrapper), ("model", model),
                           ("workload", workload), ("runtime_config", runtime_config),
-                          ("policy", policy)):
+                          ("policy", policy), ("planner_context", planner_context.input)):
         if any(_overlaps(input_.path, protected)
                for protected in (*roots.values(), production_path)):
             raise DeploymentConfigError(
                 f"{label} location overlaps a mutable output or frozen production tree")
     return DiscoveryDeployment(
-        production_path=production_path, production_head=production["head"],
+        config_sha256=top["config_sha256"], production_path=production_path, production_head=production["head"],
         state_root=roots["state_root"], evidence_root=roots["evidence_root"],
         operations_root=roots["operations_root"], max_iterations=max_iterations,
         nomination_threshold=float(threshold), actor_wrapper=actor_wrapper,
         environment_profile_id=environment_profile_id, device_id=device_id,
         claim_timeout_s=float(claim_timeout_s), inference_window_lock=window,
         small_model_max_bytes=small, model=model, workload=workload,
-        runtime_config=runtime_config, policy=policy,
+        runtime_config=runtime_config, policy=policy, planner_context=planner_context,
         source_builder_id=_identifier(source["source_builder_id"], "source_plan.source_builder_id"),
         evidence_plan_id=_identifier(source["evidence_plan_id"], "source_plan.evidence_plan_id"),
         runner_args_id=_identifier(source["runner_args_id"], "source_plan.runner_args_id"),
-        dispatch_contract_id=_identifier(source["dispatch_contract_id"], "source_plan.dispatch_contract_id"),
+        experiment_template_registry_id=_identifier(source["experiment_template_registry_id"], "source_plan.experiment_template_registry_id"),
+        experiment_template_registry_sha256=_digest_identifier(source["experiment_template_registry_sha256"], "source_plan.experiment_template_registry_sha256"),
         inference_window_lease_id=_identifier(gpu["inference_window_lease_id"], "gpu.inference_window_lease_id"),
         production_snapshot_id=_identifier(source["production_snapshot_id"], "source_plan.production_snapshot_id"),
     )
@@ -286,7 +363,7 @@ def resolve_registry(config: DiscoveryDeployment, registry: Mapping[str, Mapping
         "source_builder": config.source_builder_id,
         "evidence_plan": config.evidence_plan_id,
         "runner_args": config.runner_args_id,
-        "dispatch_contract": config.dispatch_contract_id,
+        "experiment_template_registry": config.experiment_template_registry_id,
         "inference_window_lease": config.inference_window_lease_id,
         "production_snapshot": config.production_snapshot_id,
     }
@@ -299,14 +376,11 @@ def resolve_registry(config: DiscoveryDeployment, registry: Mapping[str, Mapping
         if not isinstance(table, Mapping) or identifier not in table:
             raise DeploymentConfigError(f"registry has no {kind}:{identifier}")
         values[kind] = table[identifier]
-    if (not isinstance(values["environment_profile"], Mapping)
-            or not all(isinstance(key, str) and isinstance(value, str)
-                       for key, value in values["environment_profile"].items())
-            or not all(callable(values[kind]) for kind in ("source_builder", "evidence_plan", "runner_args", "inference_window_lease"))
-            or not isinstance(values["dispatch_contract"], Mapping)):
-        raise DeploymentConfigError("registry values do not satisfy the typed deployment contract")
+    # This module intentionally knows only identifiers and sealed input bytes.
+    # Concrete type checks belong to the producer-aware materializer; putting
+    # stale structural checks here made its typed registry unreachable.
     return ResolvedDeployment(config=config, **values)
 
 
-__all__ = ["SCHEMA", "DeploymentConfigError", "ImmutableInput", "DiscoveryDeployment",
+__all__ = ["SCHEMA", "PLANNER_CONTEXT_SCHEMA", "DeploymentConfigError", "ImmutableInput", "PlannerContext", "DiscoveryDeployment",
            "ResolvedDeployment", "load_deployment_config", "resolve_registry"]

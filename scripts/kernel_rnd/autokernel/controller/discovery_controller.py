@@ -85,6 +85,49 @@ def _text(value: object, label: str) -> str:
 
 
 @dataclass(frozen=True)
+class AuthoringAssignment:
+    """Controller-owned identity tuple; the actor may fill content, not authority."""
+    campaign_id: str
+    proposal_id: str
+    candidate_id: str
+    production_base_commit: str
+    instrument_commit: str
+
+    def __post_init__(self) -> None:
+        if (not self.campaign_id.startswith("ak-") or not self.proposal_id.startswith("akp-")
+                or not self.candidate_id.startswith("akc-")
+                or not all(isinstance(value, str) and len(value) == 40
+                           and all(ch in "0123456789abcdef" for ch in value)
+                           for value in (self.production_base_commit, self.instrument_commit))):
+            raise DiscoveryControllerError("invalid controller-owned authoring identity")
+
+    def to_dict(self) -> dict[str, str]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class GpuSourceExperimentIntent:
+    """Actor-selected *registry IDs*, never actor-selected commands or regexes."""
+    template_id: str
+    target_surface: str
+    target_symbol: str
+    correctness_id: str
+    dispatch_id: str
+
+    def __post_init__(self) -> None:
+        import re
+        identifier = re.compile(r"^[a-z][a-z0-9_.-]{0,127}$")
+        for label, value in (("template_id", self.template_id),
+                             ("correctness_id", self.correctness_id),
+                             ("dispatch_id", self.dispatch_id)):
+            if not isinstance(value, str) or not identifier.fullmatch(value):
+                raise DiscoveryControllerError(f"experiment intent {label} is not a registry id")
+        for label, value in (("target_surface", self.target_surface),
+                             ("target_symbol", self.target_symbol)):
+            _text(value, f"experiment intent {label}")
+
+
+@dataclass(frozen=True)
 class PlannedCandidate:
     hypothesis_id: str
     statement: str
@@ -93,6 +136,7 @@ class PlannedCandidate:
     proposal: Mapping[str, Any]
     source_manifest: source_candidate.SourcePatchManifest
     source_manifest_sha256: str
+    experiment_intent: GpuSourceExperimentIntent | None = None
 
     def __post_init__(self) -> None:
         _text(self.hypothesis_id, "hypothesis_id"); _text(self.statement, "statement"); _text(self.falsifier, "falsifier")
@@ -187,21 +231,65 @@ class Recovery:
 
 class CodexPlanner:
     """Concrete Sol actor. It may write only a plan and patch manifest in workspace."""
-    def __init__(self, *, wrapper: Path, environment: Mapping[str, str]) -> None: self.wrapper, self.environment = wrapper, dict(environment)
+    def __init__(self, *, wrapper: Path, environment: Mapping[str, str],
+                 template_catalog: Mapping[str, Any] | None = None) -> None:
+        self.wrapper, self.environment = wrapper, dict(environment)
+        self.template_catalog = json.loads(json.dumps(template_catalog or {}, sort_keys=True))
     def attest(self) -> Mapping[str, Any]: return {**SOL, "runtime": codex_container_actor.runtime_identity(self.wrapper)}
     def plan(self, *, context: Mapping[str, Any], workspace: Path) -> PlannedCandidate:
-        prompt = json.dumps({"role": SOL, "context": context, "output": "Write plan.json and source-patch.json in workspace. plan.json may only name hypothesis_id, statement, falsifier, regime, proposal, source_manifest_path; no commands or results."}, sort_keys=True)
+        # The model gets a bounded source/profile brief plus a machine contract;
+        # it never receives authority to select a campaign, base, executable,
+        # argv, profile parser, or evidence regex.
+        contract = {
+            "plan_json_keys": ["hypothesis_id", "statement", "falsifier", "regime",
+                               "proposal", "source_manifest_path", "experiment_intent"],
+            "experiment_intent_keys": ["template_id", "target_surface", "target_symbol",
+                                       "correctness_id", "dispatch_id"],
+            "source_manifest": "epyc.autokernel.source_patch.v1; use deployment-assigned ids/base/instrument only",
+            "proposal_requirements": ["proposal_id matches manifest", "change_class matches manifest",
+                                       "change.files_and_symbols exactly matches manifest declarations",
+                                       "change.estimated_diff_size is positive"],
+            "forbidden": ["commands", "argv", "environment", "measurement results",
+                          "campaign/base/instrument selection", "unbounded source reads"],
+        }
+        assignment = context.get("authoring_assignment")
+        if not isinstance(assignment, Mapping):
+            raise DiscoveryControllerError("planner context lacks controller-owned authoring assignment")
+        prompt = json.dumps({"role": SOL, "context": context,
+                             "experiment_template_catalog": self.template_catalog,
+                             "authoring_contract": contract,
+                             "output": "Write plan.json and source-patch.json in workspace."}, sort_keys=True)
         result = codex_container_actor.run_actor(wrapper=self.wrapper, workspace=workspace, model=SOL["model"], effort=SOL["effort"], prompt=prompt, environment=self.environment)
         if result.returncode: raise DiscoveryControllerError(f"Sol actor failed: {result.stderr[-400:]}")
-        return _load_plan(workspace / "plan.json", workspace)
+        return _load_plan(workspace / "plan.json", workspace,
+                          assignment=AuthoringAssignment(**assignment))
 
 
 class CodexCritic:
     """Concrete Terra actor. It can bind a veto but never alters the candidate."""
-    def __init__(self, *, wrapper: Path, environment: Mapping[str, str]) -> None: self.wrapper, self.environment = wrapper, dict(environment)
+    def __init__(self, *, wrapper: Path, environment: Mapping[str, str],
+                 template_catalog: Mapping[str, Any] | None = None) -> None:
+        self.wrapper, self.environment = wrapper, dict(environment)
+        self.template_catalog = json.loads(json.dumps(template_catalog or {}, sort_keys=True))
     def attest(self) -> Mapping[str, Any]: return {**TERRA, "runtime": codex_container_actor.runtime_identity(self.wrapper)}
     def review(self, candidate: PlannedCandidate, *, context: Mapping[str, Any], workspace: Path) -> Critique:
-        prompt = json.dumps({"role": TERRA, "context": context, "candidate": {"hypothesis_id": candidate.hypothesis_id, "statement": candidate.statement, "falsifier": candidate.falsifier, "proposal": candidate.proposal, "source_manifest_sha256": candidate.source_manifest_sha256}, "output": "Write critique.json with exactly decision=accept|reject|revise and reason."}, sort_keys=True)
+        manifest = candidate.source_manifest
+        if len(manifest.patch_text) > 65536:
+            raise DiscoveryControllerError("candidate patch exceeds bounded critic visibility")
+        prompt = json.dumps({"role": TERRA, "context": context,
+            "experiment_template_catalog": self.template_catalog, "candidate": {
+            "hypothesis_id": candidate.hypothesis_id, "statement": candidate.statement,
+            "falsifier": candidate.falsifier, "proposal": candidate.proposal,
+            "experiment_intent": asdict(candidate.experiment_intent) if candidate.experiment_intent else None,
+            "source_manifest_sha256": candidate.source_manifest_sha256,
+            "manifest": {"campaign_id": manifest.campaign_id, "proposal_id": manifest.proposal_id,
+                         "candidate_id": manifest.candidate_id,
+                         "production_base_commit": manifest.production_base_commit,
+                         "instrument_commit": manifest.instrument_commit,
+                         "declared_files": list(manifest.declared_files),
+                         "declared_symbols": {key: list(value) for key, value in manifest.declared_symbols.items()},
+                         "patch_sha256": manifest.patch_sha256, "patch_text": manifest.patch_text}},
+            "output": "Write critique.json with exactly decision=accept|reject|revise and reason."}, sort_keys=True)
         result = codex_container_actor.run_actor(wrapper=self.wrapper, workspace=workspace, model=TERRA["model"], effort=TERRA["effort"], prompt=prompt, environment=self.environment)
         if result.returncode: raise DiscoveryControllerError(f"Terra actor failed: {result.stderr[-400:]}")
         value = _read_object(workspace / "critique.json", workspace)
@@ -218,10 +306,17 @@ def _read_object(path: Path, root: Path) -> dict[str, Any]:
     return value
 
 
-def _load_plan(path: Path, root: Path) -> PlannedCandidate:
+def _load_plan(path: Path, root: Path, *, assignment: AuthoringAssignment | None = None) -> PlannedCandidate:
     value = _read_object(path, root)
-    allowed = {"hypothesis_id", "statement", "falsifier", "regime", "proposal", "source_manifest_path"}
-    if set(value) != allowed: raise DiscoveryControllerError("planner output schema mismatch")
+    allowed = {"hypothesis_id", "statement", "falsifier", "regime", "proposal", "source_manifest_path", "experiment_intent"}
+    if set(value) not in (allowed, allowed - {"experiment_intent"}): raise DiscoveryControllerError("planner output schema mismatch")
+    intent_raw = value.pop("experiment_intent", None)
+    if intent_raw is not None:
+        if not isinstance(intent_raw, Mapping) or set(intent_raw) != {"template_id", "target_surface", "target_symbol", "correctness_id", "dispatch_id"}:
+            raise DiscoveryControllerError("planner experiment intent schema mismatch")
+        intent = GpuSourceExperimentIntent(**intent_raw)
+    else:
+        intent = None
     raw_path = Path(_text(value.pop("source_manifest_path"), "source_manifest_path"))
     if raw_path.is_absolute() or ".." in raw_path.parts:
         raise DiscoveryControllerError("source manifest path must be a workspace-relative path")
@@ -231,7 +326,16 @@ def _load_plan(path: Path, root: Path) -> PlannedCandidate:
     except (OSError, ValueError) as exc:
         raise DiscoveryControllerError("source manifest escaped disposable workspace") from exc
     manifest = source_candidate.load_source_patch_manifest(manifest_path)
-    return PlannedCandidate(**value, source_manifest=manifest, source_manifest_sha256=manifest.patch_bundle_sha256)
+    if assignment is not None:
+        if (manifest.campaign_id, manifest.proposal_id, manifest.candidate_id,
+                manifest.production_base_commit, manifest.instrument_commit) != (
+                    assignment.campaign_id, assignment.proposal_id, assignment.candidate_id,
+                    assignment.production_base_commit, assignment.instrument_commit):
+            raise DiscoveryControllerError("actor attempted to invent campaign/base/instrument identity")
+        if value.get("proposal", {}).get("proposal_id") != assignment.proposal_id:
+            raise DiscoveryControllerError("actor proposal does not use controller-assigned proposal identity")
+    return PlannedCandidate(**value, source_manifest=manifest, source_manifest_sha256=manifest.patch_bundle_sha256,
+                            experiment_intent=intent)
 
 
 class CampaignScreener:
@@ -333,12 +437,27 @@ class ControllerConfig:
     # projection.  The controller state root is never silently treated as a
     # second evidence tree in live mode.
     evidence_root: Path | None = None
+    # Sealed deployment data, never planner-authored prose.  Keeping the hash
+    # separately makes a changed profile/source brief a durable-resume refusal.
+    planner_context: Mapping[str, Any] | None = None
+    planner_context_sha256: str | None = None
+    production_base_commit: str | None = None
+    instrument_commit: str | None = None
+    campaign_id: str = "ak-discovery"
     def __post_init__(self) -> None:
         if (not self.output_root.is_absolute() or not 1 <= self.max_iterations <= 1000
                 or isinstance(self.nomination_threshold, bool)
                 or not math.isfinite(float(self.nomination_threshold))
                 or self.nomination_threshold <= 0
-                or self.evidence_root is not None and not self.evidence_root.is_absolute()):
+                or self.evidence_root is not None and not self.evidence_root.is_absolute()
+                or (self.planner_context is None) != (self.planner_context_sha256 is None)
+                or self.planner_context_sha256 is not None and not HASH.fullmatch(self.planner_context_sha256)
+                or (self.production_base_commit is None) != (self.instrument_commit is None)
+                or self.production_base_commit is not None and not all(
+                    isinstance(value, str) and len(value) == 40
+                    and all(ch in "0123456789abcdef" for ch in value)
+                    for value in (self.production_base_commit, self.instrument_commit))
+                or not self.campaign_id.startswith("ak-")):
             raise DiscoveryControllerError("invalid controller config")
 
 
@@ -386,8 +505,27 @@ def _record_attempt_once(tracker: hypotheses.HypothesisTracker, item: PlannedCan
     tracker.note_attempt(item.hypothesis_id,proposal_id=proposal_id,disposition=result.classification,bears_on_falsifier=True,note=f"sealed screen {result.result_sha256}; effect={result.effect_fraction:.9g}",refs=(ref,))
 
 
-def _context(state: Mapping[str, Any], tracker: hypotheses.HypothesisTracker, turn: int) -> dict[str, Any]:
-    return {"authority": AUTHORITY, "turn":turn, "roster":sealed_roster(), "prior_results":[row.get("result_sha256") for row in state["iterations"] if row.get("result_sha256")], "do_not_repeat":_memory_block(tracker,turn)}
+def _context(state: Mapping[str, Any], tracker: hypotheses.HypothesisTracker, turn: int,
+             config: ControllerConfig) -> dict[str, Any]:
+    prior = []
+    for row in state["iterations"]:
+        if not isinstance(row.get("result_sha256"), str):
+            continue
+        prior.append({key: row.get(key) for key in (
+            "result_sha256", "status", "effect_fraction", "series_effect_fraction",
+            "source_manifest_sha256", "series_key", "evidence")})
+    assignment = None
+    if config.production_base_commit is not None:
+        assignment = AuthoringAssignment(
+            campaign_id=config.campaign_id, proposal_id=f"akp-discovery-{turn}",
+            candidate_id=f"akc-discovery-{turn}",
+            production_base_commit=config.production_base_commit,
+            instrument_commit=config.instrument_commit or config.production_base_commit).to_dict()
+    return {"authority": AUTHORITY, "turn":turn, "roster":sealed_roster(),
+            "planner_context": config.planner_context,
+            "planner_context_sha256": config.planner_context_sha256,
+            "authoring_assignment": assignment,
+            "prior_results": prior, "do_not_repeat":_memory_block(tracker,turn)}
 
 
 def _pending_item(item: PlannedCandidate) -> dict[str, Any]:
@@ -396,6 +534,7 @@ def _pending_item(item: PlannedCandidate) -> dict[str, Any]:
     return {"hypothesis_id": item.hypothesis_id, "statement": item.statement,
             "falsifier": item.falsifier, "regime": dict(item.regime),
             "proposal": dict(item.proposal), "source_manifest_sha256": item.source_manifest_sha256,
+            "experiment_intent": asdict(item.experiment_intent) if item.experiment_intent else None,
             "manifest": {"campaign_id":manifest.campaign_id,"proposal_id":manifest.proposal_id,
                 "candidate_id":manifest.candidate_id,"source_tree":manifest.source_tree,
                 "production_base_commit":manifest.production_base_commit,"instrument_commit":manifest.instrument_commit,
@@ -415,7 +554,10 @@ def _restore_pending(value: Mapping[str, Any]) -> PlannedCandidate:
     except (KeyError,TypeError,ValueError,source_candidate.SourceCandidateError) as exc: raise DiscoveryControllerError("pending candidate manifest is invalid") from exc
     raw_bytes=base64.b64decode(raw.get("manifest_raw_base64",""),validate=True)
     if hashlib.sha256(raw_bytes).hexdigest()!=raw.get("manifest_file_sha256") or manifest.patch_bundle_sha256!=raw.get("patch_bundle_sha256") or raw.get("source_manifest_sha256")!=manifest.patch_bundle_sha256: raise DiscoveryControllerError("pending manifest identity mismatch")
-    return PlannedCandidate(hypothesis_id=raw["hypothesis_id"],statement=raw["statement"],falsifier=raw["falsifier"],regime=raw["regime"],proposal=raw["proposal"],source_manifest=manifest,source_manifest_sha256=raw["source_manifest_sha256"])
+    intent = raw.get("experiment_intent")
+    if intent is not None and not isinstance(intent, Mapping):
+        raise DiscoveryControllerError("pending experiment intent is malformed")
+    return PlannedCandidate(hypothesis_id=raw["hypothesis_id"],statement=raw["statement"],falsifier=raw["falsifier"],regime=raw["regime"],proposal=raw["proposal"],source_manifest=manifest,source_manifest_sha256=raw["source_manifest_sha256"],experiment_intent=GpuSourceExperimentIntent(**intent) if intent else None)
 
 
 def _append_nomination(root: Path, item: PlannedCandidate, result: SealedScreen, threshold: float) -> None:
@@ -552,6 +694,11 @@ def run_controller(config: ControllerConfig, *, planner: Planner, critic: Critic
 
 def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic: Critic, screener: Screener, lease: Lease, store: DurableState) -> dict[str, Any]:
     state=store.load()
+    existing_context = state.get("planner_context_sha256")
+    if existing_context is not None and existing_context != config.planner_context_sha256:
+        raise DiscoveryControllerError("sealed planner context changed; durable discovery cannot resume")
+    if existing_context is None and config.planner_context_sha256 is not None:
+        state["planner_context_sha256"] = config.planner_context_sha256
     # A completed state is an acknowledged terminal checkpoint.  Re-entering it
     # must be a read, not another executor opportunity or a timestamp rewrite.
     if state["complete"]: return state
@@ -570,7 +717,7 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
         _record_attempt_once(tracker,item,str(item.proposal.get("proposal_id",row["proposal_sha256"])),result)
         state.pop("inflight",None); state.pop("pending",None); state["iterations"].append(row); state["next"]+=1; _schedule_replication(state,item=item,authorization=authorization,row=row,result=result,max_iterations=config.max_iterations); _append_nomination(config.output_root,item,result,config.nomination_threshold); _write_projection(config.evidence_root or config.output_root); store.save(state,"recovered_screen")
     while not state["complete"] and state["next"] <= config.max_iterations:
-        turn=state["next"]; context=_context(state,tracker,turn)
+        turn=state["next"]; context=_context(state,tracker,turn,config)
         with tempfile.TemporaryDirectory(prefix=f"ak-discovery-{turn}-", dir=config.output_root) as temp:
             workspace=Path(temp)
             pending=state.get("pending")
@@ -589,7 +736,11 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
             else:
                 item=planner.plan(context=context,workspace=workspace)
                 review=critic.review(item,context=context,workspace=workspace)
-                row={"turn":turn,"hypothesis_id":item.hypothesis_id,"proposal_sha256":_sha(item.proposal),"source_manifest_sha256":item.source_manifest_sha256,"critic":asdict(review),"context_sha256":_sha(context)}
+                row={"turn":turn,"hypothesis_id":item.hypothesis_id,"statement":item.statement,
+                     "falsifier":item.falsifier,"regime":dict(item.regime),
+                     "proposal_sha256":_sha(item.proposal),"source_manifest_sha256":item.source_manifest_sha256,
+                     "experiment_intent":asdict(item.experiment_intent) if item.experiment_intent else None,
+                     "critic":asdict(review),"context_sha256":_sha(context)}
             if review.decision != "accept":
                 row["status"]="critic_"+review.decision; state["iterations"].append(row); state["next"]+=1; store.save(state,"critic_refused"); continue
             if pending is None:

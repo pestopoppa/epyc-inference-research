@@ -189,7 +189,8 @@ class TestGpuDiscoveryInferenceWindow(unittest.TestCase):
                     flash_attention=True, campaign_id="gpu-s2",
                     cpu_journal=mock.Mock(), allow_small_model_cpu_overlap=True)
         acquire.assert_not_called()
-        self.assertIsNone(result["inference_call_window"])
+        self.assertEqual(result["inference_call_window"]["scope"],
+                         "model_load_and_inference_only")
         coverage = result["cpu_coverage"]
         self.assertEqual(coverage["cpu_overlap_policy"], "allowed_discovery_noise")
         self.assertFalse(coverage["cpu_exclusivity"])

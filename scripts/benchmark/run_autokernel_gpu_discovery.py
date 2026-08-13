@@ -118,9 +118,15 @@ def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
            threads: int = 8, batch: int = 512, ubatch: int = 512,
            mmap: bool = True, no_op_offload: bool = False,
            split_mode: str = "layer", no_kv_offload: bool = False,
-           poll: int = 50) -> dict:
+           poll: int = 50, inference_window_lock: Path | None = None) -> dict:
     """Run one model load/measurement while excluding CPU model calls only."""
-    if allow_small_model_cpu_overlap:
+    # This is a model-call lock, not a strict-calibration lock.  Discovery may
+    # overlap ordinary CPU noise, but its model load must still use the exact
+    # configured inference window so large loads never surprise a peer.
+    window = (inference_window.InferenceCallWindow(inference_window_lock, timeout_s=600.0)
+              if inference_window_lock is not None else MODEL_CALL_WINDOW)
+    with window.hold() as configured_lease:
+      if allow_small_model_cpu_overlap:
         model_bytes = model.stat().st_size
         if model_bytes > SMALL_MODEL_OVERLAP_MAX_BYTES:
             raise RuntimeError(
@@ -144,7 +150,10 @@ def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
             generation_tokens=generation_tokens, threads=threads, ubatch=ubatch,
             batch=batch, mmap=mmap, no_op_offload=no_op_offload,
             split_mode=split_mode, no_kv_offload=no_kv_offload, poll=poll)
-        result["inference_call_window"] = None
+        result["inference_call_window"] = {
+            "schema": "epyc.autokernel.inference_call_window.v1",
+            "lock_path": str(configured_lease.path), "waited_s": configured_lease.waited_s,
+            "scope": "model_load_and_inference_only"}
         result["cpu_coverage"] = {
             "schema": "epyc.autokernel.discovery_cpu_overlap.v1",
             "cpu_overlap_policy": "allowed_discovery_noise",
@@ -155,7 +164,7 @@ def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
             "promotion_claim": False,
         }
         return result
-    with MODEL_CALL_WINDOW.hold() as lease:
+      else:
         owned_claim = None
         try:
             try:
@@ -186,8 +195,8 @@ def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
                 owned_claim.release()
     result["inference_call_window"] = {
         "schema": "epyc.autokernel.inference_call_window.v1",
-        "lock_path": str(lease.path),
-        "waited_s": lease.waited_s,
+        "lock_path": str(configured_lease.path),
+        "waited_s": configured_lease.waited_s,
         "scope": "model_load_and_inference_only",
     }
     result["cpu_coverage"] = coverage_receipt
@@ -394,11 +403,18 @@ def preflight(args: argparse.Namespace) -> dict:
     if not model.is_file():
         raise RuntimeError(f"model does not exist: {model}")
     model_size_bytes = model.stat().st_size
+    admitted_cap = int(getattr(args, "small_model_max_bytes", SMALL_MODEL_OVERLAP_MAX_BYTES))
     if (args.allow_small_model_cpu_overlap
-            and model_size_bytes > SMALL_MODEL_OVERLAP_MAX_BYTES):
+            and model_size_bytes > admitted_cap):
         raise RuntimeError(
             f"small-model CPU-overlap mode refuses {model_size_bytes} bytes; "
-            f"limit is {SMALL_MODEL_OVERLAP_MAX_BYTES}")
+            f"limit is {admitted_cap}")
+    if getattr(args, "device_id", DEVICE_ID) != DEVICE_ID:
+        raise RuntimeError("GPU discovery device must be the admitted MI210")
+    configured_lock = getattr(args, "inference_window_lock", None)
+    lock = (Path(configured_lock) if configured_lock else MODEL_CALL_WINDOW.path).resolve()
+    if lock.is_symlink() or not lock.parent.is_dir():
+        raise RuntimeError("configured inference-window lock is unsafe")
     anchor_identity = build_identity(anchor_build)
     candidate_identity = build_identity(candidate_build)
     factor = factor_spec(
@@ -415,7 +431,9 @@ def preflight(args: argparse.Namespace) -> dict:
         "model": str(model),
         "model_sha256": sha256_file(model),
         "model_size_bytes": model_size_bytes,
-        "small_model_overlap_max_bytes": SMALL_MODEL_OVERLAP_MAX_BYTES,
+        "small_model_overlap_max_bytes": admitted_cap,
+        "device_id": DEVICE_ID,
+        "inference_window_lock": str(lock),
         "cpu_overlap_policy": ("allowed_discovery_noise"
                                if args.allow_small_model_cpu_overlap
                                else "shared_model_call_window"),
@@ -514,7 +532,8 @@ def run(args: argparse.Namespace) -> dict:
             no_kv_offload=sealed["anchor_no_kv_offload"],
             poll=sealed["anchor_poll"],
             campaign_id=args.campaign_id, cpu_journal=cpu_journal,
-            allow_small_model_cpu_overlap=args.allow_small_model_cpu_overlap)
+            allow_small_model_cpu_overlap=args.allow_small_model_cpu_overlap,
+            inference_window_lock=Path(sealed["inference_window_lock"]))
             for i in range(args.calls)]
         bank_body = {
             "schema": SCHEMA_BANK, "campaign_id": args.campaign_id,
@@ -552,7 +571,8 @@ def run(args: argparse.Namespace) -> dict:
             no_kv_offload=sealed["candidate_no_kv_offload"],
             poll=sealed["candidate_poll"],
             campaign_id=args.campaign_id, cpu_journal=cpu_journal,
-            allow_small_model_cpu_overlap=args.allow_small_model_cpu_overlap)
+            allow_small_model_cpu_overlap=args.allow_small_model_cpu_overlap,
+            inference_window_lock=Path(sealed["inference_window_lock"]))
             for i in range(args.calls)]
         center = sum(bank["anchor_samples"]) / len(bank["anchor_samples"])
         values = [run["metric"] for run in candidate_runs]
@@ -635,6 +655,10 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--allow-small-model-cpu-overlap", action="store_true",
                         help="nonpromotable discovery only: treat CPU inference as noise "
                              "for models no larger than the sealed small-model limit")
+    result.add_argument("--inference-window-lock")
+    result.add_argument("--small-model-max-bytes", type=int,
+                        default=SMALL_MODEL_OVERLAP_MAX_BYTES)
+    result.add_argument("--device-id", default=DEVICE_ID)
     result.add_argument("--cpu-claim-journal", default="/mnt/raid0/llm/ak-claims/region.jsonl")
     result.add_argument("--device-claim-journal", default="/mnt/raid0/llm/ak-claims/device.jsonl")
     return result

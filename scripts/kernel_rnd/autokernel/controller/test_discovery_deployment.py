@@ -33,6 +33,21 @@ class DeploymentConfigTests(unittest.TestCase):
             path = root / f"{label}.json"
             path.write_text(label, encoding="utf-8")
             inputs[label] = {"path": str(path), "sha256": digest(path)}
+        planner_context = {
+            "schema": D.PLANNER_CONTEXT_SCHEMA,
+            "model_sha256": inputs["model"]["sha256"],
+            "workload_sha256": inputs["workload"]["sha256"],
+            "runtime_config_sha256": inputs["runtime_config"]["sha256"],
+            "profile_receipts": [],
+            "hotspots": [{"surface": "ggml/src/ggml-hip", "symbol": "kernel", "share": .5,
+                           "source_excerpt": "__global__ void kernel() {}"}],
+            "source_constraints": {"allowed_roots": ["ggml/src/ggml-hip/"]},
+            "initial_strategies": ["one wave"],
+        }
+        planner_context["context_sha256"] = D.schemas.content_hash(
+            {key: item for key, item in planner_context.items() if key != "context_sha256"})
+        planner_path = root / "planner-context.json"
+        planner_path.write_text(json.dumps(planner_context), encoding="utf-8")
         value = {
             "schema": D.SCHEMA,
             "production": {"path": str(production), "head": "a" * 40},
@@ -50,10 +65,12 @@ class DeploymentConfigTests(unittest.TestCase):
                     "inference_window_lease_id": "mi210-window-v1",
                     "small_model_max_bytes": 500_000_000},
             "immutable_inputs": inputs,
+            "planner_context": {"path": str(planner_path), "sha256": digest(planner_path)},
             "source_plan": {"source_builder_id": "gpu-source-v1",
                             "evidence_plan_id": "q5-onewave-v1",
                             "runner_args_id": "qwen05b-tg128",
-                            "dispatch_contract_id": "q5-onewave-cdna2",
+                            "experiment_template_registry_id": "gpu-source-templates-v1",
+                            "experiment_template_registry_sha256": "d" * 64,
                             "production_snapshot_id": "llama-v9-artifacts"},
         }
         seal(value)
@@ -123,13 +140,13 @@ class DeploymentConfigTests(unittest.TestCase):
             config = self.load(path)
             sentinels = {key: object() for key in ("environment_profile", "source_builder",
                                                     "evidence_plan", "runner_args",
-                                                    "dispatch_contract")}
+                                                    "experiment_template_registry")}
             registry = {
                 "environment_profile": {"sealed-codex": {"PATH": "/usr/bin"}},
                 "source_builder": {"gpu-source-v1": lambda: sentinels["source_builder"]},
                 "evidence_plan": {"q5-onewave-v1": lambda: sentinels["evidence_plan"]},
                 "runner_args": {"qwen05b-tg128": lambda: sentinels["runner_args"]},
-                "dispatch_contract": {"q5-onewave-cdna2": {"id": sentinels["dispatch_contract"]}},
+                "experiment_template_registry": {"gpu-source-templates-v1": {"id": sentinels["experiment_template_registry"]}},
                 "inference_window_lease": {"mi210-window-v1": lambda: None},
                 "production_snapshot": {"llama-v9-artifacts": object()},
             }
@@ -189,7 +206,7 @@ class DeploymentConfigTests(unittest.TestCase):
                 "source_builder": {"gpu-source-v1": lambda: None},
                 "evidence_plan": {"q5-onewave-v1": lambda: None},
                 "runner_args": {"qwen05b-tg128": lambda: None},
-                "dispatch_contract": {"q5-onewave-cdna2": {}},
+                "experiment_template_registry": {"gpu-source-templates-v1": {}},
                 "inference_window_lease": {"mi210-window-v1": lambda: None},
                 "production_snapshot": {"llama-v9-artifacts": object()},
             }
