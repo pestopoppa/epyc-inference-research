@@ -18,6 +18,7 @@ import hashlib
 import importlib
 import inspect
 import json
+import math
 import os
 from pathlib import Path
 import statistics
@@ -136,7 +137,10 @@ class SealedScreen:
 
     def __post_init__(self) -> None:
         if self.classification not in {"candidate", "screened_out", "inconclusive", "failed", "top_k_replicated_candidate", "replicated_but_subadditive"}: raise DiscoveryControllerError("unknown screen class")
-        if not isinstance(self.effect_fraction, (int, float)): raise DiscoveryControllerError("screen effect must be measured numeric evidence")
+        if (isinstance(self.effect_fraction, bool)
+                or not isinstance(self.effect_fraction, (int, float))
+                or not math.isfinite(float(self.effect_fraction))):
+            raise DiscoveryControllerError("screen effect must be a finite measured number")
         if not self.candidate_only or self.promotion_claim: raise DiscoveryControllerError("discovery screen must remain nonpromotable")
         if tuple(self.stages) != ("materialized", "built", "correctness", "attribution", "screen"):
             raise DiscoveryControllerError("screen did not prove the required fail-closed stage order")
@@ -150,8 +154,11 @@ class SealedScreen:
             object.__setattr__(self, "component_series_keys", tuple(self.component_series_keys))
         if not isinstance(self.component_series_keys, tuple) or not all(HASH.fullmatch(value) for value in self.component_series_keys):
             raise DiscoveryControllerError("component series provenance must be sealed hashes")
-        if self.series_effect_fraction is not None and not isinstance(self.series_effect_fraction, (int, float)):
-            raise DiscoveryControllerError("pooled series effect must be numeric")
+        if (self.series_effect_fraction is not None
+                and (isinstance(self.series_effect_fraction, bool)
+                     or not isinstance(self.series_effect_fraction, (int, float))
+                     or not math.isfinite(float(self.series_effect_fraction)))):
+            raise DiscoveryControllerError("pooled series effect must be finite")
 
 
 class Planner(Protocol):
@@ -328,6 +335,8 @@ class ControllerConfig:
     evidence_root: Path | None = None
     def __post_init__(self) -> None:
         if (not self.output_root.is_absolute() or not 1 <= self.max_iterations <= 1000
+                or isinstance(self.nomination_threshold, bool)
+                or not math.isfinite(float(self.nomination_threshold))
                 or self.nomination_threshold <= 0
                 or self.evidence_root is not None and not self.evidence_root.is_absolute()):
             raise DiscoveryControllerError("invalid controller config")
@@ -434,7 +443,7 @@ def _write_projection(root: Path) -> None:
 
 def classify_screen_series(effects: Sequence[float], *, component_pooled_effects: Sequence[float] = ()) -> str:
     """Discovery policy classifier; dashboard projection is not authority."""
-    if not effects or any(not isinstance(v, (int, float)) for v in effects):
+    if not effects or any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(float(v)) for v in effects):
         raise DiscoveryControllerError("screen series must contain numeric measured effects")
     if len(effects) == 1:
         return "screened_out" if effects[0] <= 0 else "candidate"

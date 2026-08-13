@@ -105,6 +105,11 @@ class Tests(unittest.TestCase):
   self.assertEqual(D.classify_screen_series([.01,.02]),"top_k_replicated_candidate")
   self.assertEqual(D.classify_screen_series([.01,-.01]),"inconclusive")
   self.assertEqual(D.classify_screen_series([.01,.006],component_pooled_effects=[.02]),"replicated_but_subadditive")
+ def test_non_finite_or_boolean_effect_and_threshold_are_refused(self):
+  for value in (True, float("nan"), float("inf"), float("-inf")):
+   with self.subTest(value=value):
+    with self.assertRaises(D.DiscoveryControllerError): D.SealedScreen("receipt",H,value,"candidate",H,H,H)
+    with self.assertRaises(D.DiscoveryControllerError): D.ControllerConfig(Path("/tmp/controller"),1,nomination_threshold=value)
  def test_dry_run_authorizes_without_lease_or_screen(self):
   class ExplosiveLease:
    def admit(self,item): raise AssertionError("dry run may not ask for a compute lease")
