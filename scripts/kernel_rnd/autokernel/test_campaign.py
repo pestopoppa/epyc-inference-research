@@ -96,10 +96,50 @@ def write_calibration_bundle(root: Path, *,
         "recipe_id": campaign.HISTORICAL_CALIBRATED_RECIPE_ID,
         "contribution_floor": 0.03,
         "max_blocks_per_candidate": 20,
+        "calibration_frame": {
+            "recipe_id": campaign.HISTORICAL_CALIBRATED_RECIPE_ID,
+            "prompt_tokens": 512, "reps": campaign.IQK_MATCHED_PAIR_REPS,
+            "candidate_ggml_iqk": "0", "anchor_ggml_iqk": "0",
+        },
+        "anchor_motion_window_blocks": 12,
+        "anchor_motion_settling": {
+            "kind": "test-settling", "required_samples": 3,
+        },
         "source_sha256": source_sha,
     }
     (root / "campaign_declaration.json").write_text(
         json.dumps(declaration), encoding="utf-8")
+    raw = {
+        "recipe_id": campaign.HISTORICAL_CALIBRATED_RECIPE_ID,
+        "candidate_receipt": {"recipe_id": campaign.HISTORICAL_CALIBRATED_RECIPE_ID,
+                              "params": {"n_prompt": 512, "reps": 1, "ggml_iqk": "0"}},
+        "anchor_receipt": {"recipe_id": campaign.HISTORICAL_CALIBRATED_RECIPE_ID,
+                            "params": {"n_prompt": 512, "reps": 1, "ggml_iqk": "0"}},
+        "blocks": [
+            {"paired_block": [index, "test", "selection", "anchor_first", "base",
+                              None, "2026-08-13T00:00:00+00:00", [100.0 + index],
+                              [100.0 + index]]}
+            for index in range(12)
+        ],
+    }
+    raw_path = root / "raw" / "anchor_motion_calibration.json"
+    raw_path.parent.mkdir(exist_ok=True)
+    raw_path.write_text(json.dumps(raw), encoding="utf-8")
+    bound = campaign.drift_bound_from([100.0 + index for index in range(12)])
+    settling = {
+        "schema": "epyc.autokernel.anchor_motion_settling_receipt.v1",
+        "campaign_id": declaration["campaign_id"],
+        "settling": declaration["anchor_motion_settling"],
+        "samples": [
+            {"load": {"outcome": schemas.PASS},
+             "claim_attestation": {"outcome": schemas.PASS}}
+            for _ in range(3)
+        ],
+        "completed_at": "2026-08-13T00:00:00+00:00",
+    }
+    settling["receipt_sha256"] = schemas.content_hash(settling)
+    settling_path = root / "anchor_motion_settling.json"
+    settling_path.write_text(json.dumps(settling), encoding="utf-8")
     summary = {
         "campaign_id": declaration["campaign_id"],
         "state": "controls_complete",
@@ -116,6 +156,15 @@ def write_calibration_bundle(root: Path, *,
                 "accepted": True,
                 "mde": {"found": True, "value": 0.027408174371940427},
             }],
+        },
+        "anchor_motion": {
+            "schema": "epyc.autokernel.anchor_motion_window.v1",
+            "label": "anchor_motion_calibration", "window_blocks": 12,
+            "settling": declaration["anchor_motion_settling"],
+            "settling_receipt_ref": str(settling_path.resolve()),
+            "settling_receipt_sha256": settling["receipt_sha256"],
+            "raw_ref": str(raw_path.resolve()),
+            "raw_sha256": schemas.content_hash(raw), "bound": bound,
         },
     }
     (root / "summary.json").write_text(json.dumps(summary), encoding="utf-8")
@@ -1112,6 +1161,36 @@ class TestTheAcceptedCalibrationBindsTheLiveRule(unittest.TestCase):
             self.assertIn(campaign.HISTORICAL_CALIBRATED_RECIPE_ID, rendered)
             self.assertIn("over 12 pre-committed pairs", rendered)
             self.assertIn("median(relative) > 3.0000%", rendered)
+
+    def test_current_bundle_rederives_the_anchor_motion_bound_from_raw_window(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = write_calibration_bundle(Path(tmp) / "calibration")
+            loaded = campaign.load_calibration_bundle(bundle)
+            self.assertEqual(loaded.anchor_motion_window_blocks, 12)
+            self.assertEqual(loaded.anchor_motion_evidence_ref,
+                             str(bundle / "raw" / "anchor_motion_calibration.json"))
+            self.assertAlmostEqual(loaded.anchor_motion_bound, 0.01)
+            built = spec(blocks=12, calibration=loaded)
+            self.assertEqual(built.drift_bound, loaded.anchor_motion_bound)
+            self.assertNotEqual(built.drift_bound,
+                                campaign.DRIFT_BOUND_BY_METRIC[built.metric])
+
+    def test_current_bundle_refuses_a_tampered_anchor_motion_receipt(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = write_calibration_bundle(Path(tmp) / "calibration")
+            summary_path = bundle / "summary.json"
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            summary["anchor_motion"]["bound"] = 0.5
+            summary_path.write_text(json.dumps(summary), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "anchor-motion bound"):
+                campaign.load_calibration_bundle(bundle)
+
+    def test_window_authority_refuses_a_different_ranked_length(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = write_calibration_bundle(Path(tmp) / "calibration")
+            loaded = campaign.load_calibration_bundle(bundle)
+            with self.assertRaisesRegex(ValueError, "anchor-motion window"):
+                spec(blocks=13, calibration=loaded)
 
     def test_an_uncalibrated_cell_has_no_live_ranking_authority(self):
         built = spec(recipe_id="t1b.llama_cpu.llama_bench_decode.v1", blocks=12)

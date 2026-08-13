@@ -8,7 +8,7 @@ from unittest import mock
 
 from ..evaluator import statistics
 from . import live_controls
-from .. import schemas
+from .. import campaign, schemas
 
 
 class InstrumentSelection(unittest.TestCase):
@@ -155,6 +155,28 @@ class CalibrationFrame(unittest.TestCase):
             "anchor_ggml_iqk": "0",
         })
         self.assertEqual(declaration["source_sha256"], source["source_sha256"])
+
+    def test_declaration_precommits_a_non_ranked_campaign_length_anchor_window(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            identity = live_controls.LiveCampaignIdentity("ak-controls-anchor-window", str(root))
+            live_controls._write_declaration(
+                root, identity=identity, instrument_sha="1" * 64,
+                copy_sha="1" * 64, instrument_linkage="2" * 64,
+                copy_linkage="2" * 64, toolchain_manifest_sha256="3" * 64,
+                sealed_binding=live_controls.recipes.ToolBinding(
+                    binary="/sealed/llama-bench", source_root="/sealed",
+                    library_path="/sealed"))
+            declaration = json.loads(
+                (root / "campaign_declaration.json").read_text(encoding="utf-8"))
+        self.assertEqual(declaration["anchor_motion_window_blocks"], 15)
+        self.assertEqual(declaration["anchor_motion_settling"], {
+            "schema": "epyc.autokernel.anchor_motion_settling.v1",
+            "kind": "non_ranked_post_work_quiet",
+            "quiet_barrier_s": campaign.POST_T0_QUIET_BARRIER_S,
+            "required_samples": campaign.POST_T0_QUIET_SAMPLES,
+            "sample_interval_s": campaign.POST_T0_QUIET_SAMPLE_INTERVAL_S,
+        })
 
     def test_measurement_plan_carries_the_declared_baseline_frame(self):
         """The executor must not silently fall back to recipe defaults."""

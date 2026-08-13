@@ -57,6 +57,18 @@ NEUTRAL_BLOCKS = 60
 # apparently healthy noise pool whose anchor band cannot govern IQK-off runs.
 CALIBRATION_REPS = campaign.IQK_MATCHED_PAIR_REPS
 CALIBRATION_IQK = "0"
+# This is not a sixth ranked control. It is a fresh A/A trace over the exact
+# ranked T1 length, preceded by the same fixed post-work quiet boundary that a
+# campaign uses after T0. The trace licenses only campaigns of this length.
+ANCHOR_MOTION_WINDOW_BLOCKS = 15
+ANCHOR_MOTION_LABEL = "anchor_motion_calibration"
+ANCHOR_MOTION_SETTLING = {
+    "schema": "epyc.autokernel.anchor_motion_settling.v1",
+    "kind": "non_ranked_post_work_quiet",
+    "quiet_barrier_s": campaign.POST_T0_QUIET_BARRIER_S,
+    "required_samples": campaign.POST_T0_QUIET_SAMPLES,
+    "sample_interval_s": campaign.POST_T0_QUIET_SAMPLE_INTERVAL_S,
+}
 CONTROL_EXTENSION_ROUNDS = 1
 CONTROL_EXTENSION_BLOCKS = 5
 CONTRIBUTION_FLOOR = 0.03
@@ -86,6 +98,7 @@ CURRENT_SOURCE_CORRECTNESS_REASON = (
 CONTROL_PROMPT_BY_LABEL = {
     "aa_calibration": PROMPT_TOKENS,
     "neutral_calibration": PROMPT_TOKENS,
+    ANCHOR_MOTION_LABEL: PROMPT_TOKENS,
     "positive": PROMPT_TOKENS,
     "historical_win_replay": PROMPT_TOKENS,
     "negative_committed_cell": PROMPT_TOKENS,
@@ -98,6 +111,7 @@ CONTROL_PROMPT_BY_LABEL = {
 CONTROL_ARM_IQK = {
     "aa_calibration": (CALIBRATION_IQK, CALIBRATION_IQK),
     "neutral_calibration": (CALIBRATION_IQK, CALIBRATION_IQK),
+    ANCHOR_MOTION_LABEL: (CALIBRATION_IQK, CALIBRATION_IQK),
     "positive": ("1", CALIBRATION_IQK),
     "historical_win_replay": ("1", CALIBRATION_IQK),
     "negative_committed_cell": ("1", "1"),
@@ -374,6 +388,8 @@ def _write_declaration(output_root: Path, *, identity: LiveCampaignIdentity,
             "candidate_ggml_iqk": CALIBRATION_IQK,
             "anchor_ggml_iqk": CALIBRATION_IQK,
         },
+        "anchor_motion_window_blocks": ANCHOR_MOTION_WINDOW_BLOCKS,
+        "anchor_motion_settling": ANCHOR_MOTION_SETTLING,
         "contribution_floor": CONTRIBUTION_FLOOR,
         "max_candidates": 10,
         "max_blocks_per_candidate": 20,
@@ -1147,6 +1163,78 @@ def _compose_measured_controls(
         measured_at=measured_at, output_root=output_root, identity=identity)
 
 
+def _settle_anchor_motion_window(
+        output_root: Path, *, identity: LiveCampaignIdentity, claim: object,
+        host_state: Callable[..., microbench.HostState]) -> dict:
+    """Reproduce the campaign's post-T0 quiet boundary before a non-ranked trace.
+
+    Calibration does not run a candidate T0, so it must not pretend it has a
+    T0 teardown receipt.  What matters for anchor-motion comparability is the
+    fixed decay and independently claim-witnessed quiet samples immediately
+    before T1; this small, non-ranked stage records precisely those facts.
+    """
+    time.sleep(float(ANCHOR_MOTION_SETTLING["quiet_barrier_s"]))
+    policy = microbench.HostStatePolicy(
+        nominal_khz=NOMINAL_KHZ, require_package_power=True)
+    held = microbench.CpuRegionClaimAdapter(claim, cpu_list=CPU_LIST)
+    samples = []
+    for index in range(int(ANCHOR_MOTION_SETTLING["required_samples"])):
+        attestation = held.attest()
+        if not attestation.held:
+            raise RuntimeError(
+                f"anchor-motion settling sample {index + 1} has no held claim witness")
+        state = host_state(cpu_list=CPU_LIST)
+        load = policy.check_load(state, cpu_count=len(state.khz_by_cpu) or 1)
+        samples.append({
+            "index": index + 1, "host_state": state.to_dict(),
+            "claim_attestation": {
+                "claim_id": attestation.claim_id, "holder": attestation.holder,
+                "cpu_list": attestation.cpu_list, "observed_at": attestation.observed_at,
+                "outcome": attestation.check.outcome,
+                "reasons": list(attestation.check.reasons),
+            },
+            "load": {"outcome": load.outcome, "reasons": list(load.reasons)},
+        })
+        if load.outcome != schemas.PASS:
+            raise RuntimeError(
+                f"anchor-motion settling sample {index + 1} is not quiet: "
+                f"{'; '.join(load.reasons)}")
+        if index + 1 < int(ANCHOR_MOTION_SETTLING["required_samples"]):
+            time.sleep(float(ANCHOR_MOTION_SETTLING["sample_interval_s"]))
+    receipt = {
+        "schema": "epyc.autokernel.anchor_motion_settling_receipt.v1",
+        "campaign_id": identity.campaign_id, "settling": ANCHOR_MOTION_SETTLING,
+        "samples": samples, "completed_at": _utc_now(),
+    }
+    receipt["receipt_sha256"] = schemas.content_hash(receipt)
+    _write_json(output_root / "anchor_motion_settling.json", receipt)
+    return receipt
+
+
+def _anchor_motion_authority(
+        output_root: Path, *, material: LiveMaterial,
+        settling_receipt: Mapping[str, Any]) -> dict:
+    """Derive, rather than type, the current T1-window anchor movement bound."""
+    if material.label != ANCHOR_MOTION_LABEL:
+        raise ValueError("anchor-motion authority requires its dedicated non-ranked trace")
+    anchors = tuple(statistics.median(block.anchor_samples) for block in material.blocks)
+    if len(anchors) != ANCHOR_MOTION_WINDOW_BLOCKS:
+        raise ValueError("anchor-motion trace does not cover its declared campaign window")
+    raw_path = (output_root / "raw" / f"{ANCHOR_MOTION_LABEL}.json").resolve()
+    raw = _load_json(raw_path)
+    return {
+        "schema": "epyc.autokernel.anchor_motion_window.v1",
+        "label": ANCHOR_MOTION_LABEL,
+        "window_blocks": ANCHOR_MOTION_WINDOW_BLOCKS,
+        "settling": ANCHOR_MOTION_SETTLING,
+        "settling_receipt_ref": str(output_root / "anchor_motion_settling.json"),
+        "settling_receipt_sha256": settling_receipt["receipt_sha256"],
+        "raw_ref": str(raw_path), "raw_sha256": schemas.content_hash(raw),
+        "anchor_medians": list(anchors),
+        "bound": campaign.drift_bound_from(anchors),
+    }
+
+
 def execute(output_root: Path, *, campaign_id: str,
             host_state: Callable[..., microbench.HostState] =
             microbench.read_host_state) -> dict:
@@ -1183,6 +1271,7 @@ def execute(output_root: Path, *, campaign_id: str,
         linkage_sha256=instrument_linkage, tool="llama-bench")
     journal = cpu_region_claim.RegionClaimJournal(output_root / "region_claim.jsonl")
     materials = []
+    anchor_motion = None
     with cpu_region_claim.acquire_cpu_region_claim(
             CPU_LIST, purpose="AutoKernel five-control calibration block",
             campaign_id=identity.campaign_id, journal=journal, timeout_s=60.0,
@@ -1210,6 +1299,24 @@ def execute(output_root: Path, *, campaign_id: str,
         if solve.accepted:
             outputs = solve.require_accepted()
             n = outputs.b_min_blocks
+            if n > ANCHOR_MOTION_WINDOW_BLOCKS:
+                raise RuntimeError(
+                    f"accepted B_min={n} exceeds the predeclared anchor-motion window "
+                    f"of {ANCHOR_MOTION_WINDOW_BLOCKS}; this calibration cannot license "
+                    "the ranked campaign length")
+            settling_receipt = _settle_anchor_motion_window(
+                output_root, identity=identity, claim=claim, host_state=host_state)
+            anchor_motion_material = _measure(
+                label=ANCHOR_MOTION_LABEL, blocks=ANCHOR_MOTION_WINDOW_BLOCKS,
+                claim=claim, candidate_binding=candidate_binding,
+                anchor_binding=anchor_binding, anchor=anchor,
+                candidate_iqk=CONTROL_ARM_IQK[ANCHOR_MOTION_LABEL][0],
+                anchor_iqk=CONTROL_ARM_IQK[ANCHOR_MOTION_LABEL][1],
+                output_root=output_root, host_state=host_state, identity=identity)
+            materials.append(anchor_motion_material)
+            anchor_motion = _anchor_motion_authority(
+                output_root, material=anchor_motion_material,
+                settling_receipt=settling_receipt)
             control_blocks = rule.max_total_blocks(n)
             _wait_for_quiet()
             positive = _measure(
@@ -1261,6 +1368,7 @@ def execute(output_root: Path, *, campaign_id: str,
             "copied_binary_sha256": copy_sha,
             "binary_copy_exact": instrument_sha == copy_sha,
             "calibration": solve.to_dict(), "controls": None, "may_rank": False,
+            "anchor_motion": None,
         }
         _write_json(output_root / "summary.json", summary)
         return summary
@@ -1290,6 +1398,7 @@ def execute(output_root: Path, *, campaign_id: str,
         "copied_binary_sha256": copy_sha,
         "binary_copy_exact": instrument_sha == copy_sha,
         "calibration": solve.to_dict(), "controls": result.to_dict(),
+        "anchor_motion": anchor_motion,
         "may_rank": result.may_rank,
         "belief_receipt_sha256": (
             belief_receipt["receipt_sha256"] if belief_receipt else None),

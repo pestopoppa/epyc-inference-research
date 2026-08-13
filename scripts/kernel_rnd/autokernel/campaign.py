@@ -153,7 +153,7 @@ import time
 import traceback
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
-from math import ceil, isfinite
+from math import ceil, isclose, isfinite
 from pathlib import Path
 # The STDLIB median, deliberately. `evaluator.statistics` is NOT imported: its
 # e-process solved a harder problem than the measured 1.6–1.9% CV poses, and it
@@ -393,6 +393,12 @@ class LeanCalibration:
     measurement_commit: str
     evidence_ref: str
     evaluation_authority: Optional[control_runner.LiveEvaluationAuthority] = None
+    # A current calibration must also measure the anchor over the exact
+    # precommitted T1 window it licenses.  These remain optional for direct
+    # arithmetic fixtures; an executing campaign refuses their absence below.
+    anchor_motion_bound: Optional[float] = None
+    anchor_motion_window_blocks: Optional[int] = None
+    anchor_motion_evidence_ref: Optional[str] = None
 
     def to_dict(self) -> dict:
         return {
@@ -405,6 +411,9 @@ class LeanCalibration:
             "production_commit": self.production_commit,
             "measurement_commit": self.measurement_commit,
             "evidence_ref": self.evidence_ref,
+            "anchor_motion_bound": self.anchor_motion_bound,
+            "anchor_motion_window_blocks": self.anchor_motion_window_blocks,
+            "anchor_motion_evidence_ref": self.anchor_motion_evidence_ref,
         }
 
 
@@ -1159,6 +1168,94 @@ def load_calibration_bundle(path: os.PathLike[str] | str) -> LeanCalibration:
         raise ValueError("calibration B_min exceeds the declared candidate ceiling")
     if float(values["mde"]) > float(values["contribution_floor"]):
         raise ValueError("calibration MDE exceeds the declared contribution floor")
+    anchor_motion = summary.get("anchor_motion")
+    declared_motion_blocks = declaration.get("anchor_motion_window_blocks")
+    declared_settling = declaration.get("anchor_motion_settling")
+    if not isinstance(anchor_motion, Mapping):
+        raise ValueError(
+            "calibration bundle has no fresh campaign-length anchor-motion authority")
+    if anchor_motion.get("schema") != "epyc.autokernel.anchor_motion_window.v1":
+        raise ValueError("calibration anchor-motion authority has the wrong schema")
+    if (isinstance(declared_motion_blocks, bool)
+            or not isinstance(declared_motion_blocks, int)
+            or declared_motion_blocks < 2):
+        raise ValueError("calibration declaration has no valid anchor-motion window length")
+    if not isinstance(declared_settling, Mapping):
+        raise ValueError("calibration declaration has no anchor-motion settling contract")
+    if anchor_motion.get("window_blocks") != declared_motion_blocks:
+        raise ValueError("calibration anchor-motion window differs from its declaration")
+    if anchor_motion.get("settling") != declared_settling:
+        raise ValueError("calibration anchor-motion settling receipt differs from declaration")
+    settling_ref = anchor_motion.get("settling_receipt_ref")
+    expected_settling_path = (root / "anchor_motion_settling.json").resolve()
+    if settling_ref != str(expected_settling_path):
+        raise ValueError("calibration anchor-motion settling receipt has the wrong path")
+    try:
+        settling_receipt = json.loads(expected_settling_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"calibration anchor-motion settling receipt: {exc}") from exc
+    if not isinstance(settling_receipt, Mapping):
+        raise ValueError("calibration anchor-motion settling receipt must be an object")
+    unsigned_settling = dict(settling_receipt)
+    settling_sha = unsigned_settling.pop("receipt_sha256", None)
+    if settling_sha != schemas.content_hash(unsigned_settling) \
+            or anchor_motion.get("settling_receipt_sha256") != settling_sha \
+            or settling_receipt.get("settling") != declared_settling:
+        raise ValueError("calibration anchor-motion settling receipt does not verify")
+    settling_samples = settling_receipt.get("samples")
+    expected_samples = declared_settling.get("required_samples")
+    if not isinstance(settling_samples, list) or len(settling_samples) != expected_samples \
+            or any(not isinstance(sample, Mapping)
+                   or sample.get("load", {}).get("outcome") != schemas.PASS
+                   or sample.get("claim_attestation", {}).get("outcome") != schemas.PASS
+                   for sample in settling_samples):
+        raise ValueError("calibration anchor-motion settling receipt has no all-PASS samples")
+    raw_ref = anchor_motion.get("raw_ref")
+    label = anchor_motion.get("label")
+    if not isinstance(raw_ref, str) or not isinstance(label, str) or not label:
+        raise ValueError("calibration anchor-motion authority lacks a raw evidence reference")
+    raw_path = (root / "raw" / f"{label}.json").resolve()
+    if raw_path != (root / "raw" / f"{label}.json") or raw_ref != str(raw_path):
+        raise ValueError("calibration anchor-motion raw reference escapes or differs from bundle")
+    try:
+        raw_motion = json.loads(raw_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"calibration anchor-motion raw evidence: {exc}") from exc
+    if not isinstance(raw_motion, Mapping):
+        raise ValueError("calibration anchor-motion raw evidence must be an object")
+    if anchor_motion.get("raw_sha256") != schemas.content_hash(raw_motion):
+        raise ValueError("calibration anchor-motion raw evidence hash does not verify")
+    if raw_motion.get("recipe_id") != recipe_id:
+        raise ValueError("calibration anchor-motion raw evidence names another recipe")
+    candidate_receipt = raw_motion.get("candidate_receipt")
+    anchor_receipt = raw_motion.get("anchor_receipt")
+    frame = declaration.get("calibration_frame")
+    if not isinstance(frame, Mapping) or not isinstance(candidate_receipt, Mapping) \
+            or not isinstance(anchor_receipt, Mapping):
+        raise ValueError("calibration anchor-motion evidence lacks the declared A/A frame")
+    for receipt in (candidate_receipt, anchor_receipt):
+        params = receipt.get("params")
+        if not isinstance(params, Mapping) \
+                or params.get("n_prompt") != frame.get("prompt_tokens") \
+                or params.get("reps") != frame.get("reps") \
+                or params.get("ggml_iqk") != frame.get("anchor_ggml_iqk") \
+                or receipt.get("recipe_id") != recipe_id:
+            raise ValueError("calibration anchor-motion evidence is outside the A/A frame")
+    raw_blocks = raw_motion.get("blocks")
+    if not isinstance(raw_blocks, list) or len(raw_blocks) != declared_motion_blocks:
+        raise ValueError("calibration anchor-motion evidence does not span its declared window")
+    anchor_medians = []
+    for index, block in enumerate(raw_blocks):
+        paired = block.get("paired_block") if isinstance(block, Mapping) else None
+        if not isinstance(paired, list) or len(paired) != 9 or paired[0] != index \
+                or not isinstance(paired[7], list) or not paired[7]:
+            raise ValueError("calibration anchor-motion raw blocks are malformed")
+        anchor_medians.append(float(median(paired[7])))
+    measured_bound = drift_bound_from(anchor_medians)
+    bound = anchor_motion.get("bound")
+    if isinstance(bound, bool) or not isinstance(bound, (int, float)) or bound <= 0 \
+            or not isclose(float(bound), measured_bound, rel_tol=1e-12, abs_tol=1e-12):
+        raise ValueError("calibration anchor-motion bound does not re-derive from raw evidence")
     authority = None
     # Legacy/synthetic loader fixtures intentionally carry only the three files
     # above. They remain valid arithmetic fixtures, but cannot drive the live
@@ -1183,6 +1280,9 @@ def load_calibration_bundle(path: os.PathLike[str] | str) -> LeanCalibration:
         measurement_commit=MEASUREMENT_COMMIT,
         evidence_ref=str(root),
         evaluation_authority=authority,
+        anchor_motion_bound=float(bound),
+        anchor_motion_window_blocks=declared_motion_blocks,
+        anchor_motion_evidence_ref=raw_ref,
     )
 
 RANKED_UNITS_SCHEMA = "epyc.autokernel.ranked-units.v1"
@@ -1483,6 +1583,27 @@ class CampaignSpec:
             if self.calibration.production_commit != PRODUCTION_COMMIT \
                     or self.calibration.measurement_commit != MEASUREMENT_COMMIT:
                 raise ValueError("calibration identities do not match the live anchors")
+            # A current bundle's A/A dispersion and its anchor-motion control
+            # answer different questions.  The former sets power; the latter
+            # says whether this exact-length T1 window is attributable at all.
+            # Do not silently fall back to the old exploratory four-run bound.
+            motion = self.calibration.anchor_motion_bound
+            window = self.calibration.anchor_motion_window_blocks
+            if (motion is None) != (window is None):
+                raise ValueError(
+                    "calibration anchor-motion bound and window must be present together")
+            if motion is not None:
+                if isinstance(motion, bool) or not isinstance(motion, (int, float)) \
+                        or motion <= 0:
+                    raise ValueError(
+                        "live calibration lacks a positive fresh anchor-motion bound")
+                if isinstance(window, bool) or not isinstance(window, int) or window < 2:
+                    raise ValueError(
+                        "live calibration lacks a valid anchor-motion window length")
+                if self.blocks != window:
+                    raise ValueError(
+                        f"campaign blocks={self.blocks} differs from the calibration's "
+                        f"anchor-motion window of {window}; recalibrate this exact T1 length")
         if self.backend == BACKEND_GPU:
             if not self.devices:
                 raise ValueError(
@@ -1650,6 +1771,12 @@ class CampaignSpec:
 
     @property
     def drift_bound(self) -> float:
+        if self.calibration is not None \
+                and self.calibration.anchor_motion_bound is not None:
+            return float(self.calibration.anchor_motion_bound)
+        # Direct arithmetic and historical regression fixtures retain their
+        # fixed fixture bound. Executing campaigns must instead use the fresh
+        # bundle authority validated in __post_init__.
         return drift_bound_for_metric(self.metric)
 
     @property
@@ -1958,7 +2085,9 @@ class CampaignSpec:
             "measurement_commit": MEASUREMENT_COMMIT,
             "blocks_precommitted": self.blocks, "recipe_id": self.recipe_id,
             "metric": self.metric, "drift_bound": self.drift_bound,
-            "drift_bound_evidence": AA_EVIDENCE_REF,
+            "drift_bound_evidence": (
+                AA_EVIDENCE_REF if self.calibration is None
+                else self.calibration.anchor_motion_evidence_ref),
             "calibration": None if self.calibration is None else {
                 "contribution_floor": self.calibration.contribution_floor,
                 "b_min_blocks": self.calibration.b_min_blocks,
@@ -1966,6 +2095,11 @@ class CampaignSpec:
                 "noise_floor_phi": self.calibration.noise_floor_phi,
                 "mde": self.calibration.mde,
                 "evidence_ref": self.calibration.evidence_ref,
+                "anchor_motion_bound": self.calibration.anchor_motion_bound,
+                "anchor_motion_window_blocks": (
+                    self.calibration.anchor_motion_window_blocks),
+                "anchor_motion_evidence_ref": (
+                    self.calibration.anchor_motion_evidence_ref),
             },
             "model": self.model, "reps": self.reps, "n_gen": self.n_gen,
             "n_prompt": self.n_prompt,
