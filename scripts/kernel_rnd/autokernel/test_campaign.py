@@ -39,7 +39,7 @@ from unittest import mock
 
 from . import (campaign, journal as journal_module, schemas,
                source_prerequisite_package)
-from .execution import control_runner, physical_bounds
+from .execution import control_runner, microbench, physical_bounds, t0_provider
 from .resource import claim_witness
 from .test_schemas import _proposal as _proposal_fixture
 
@@ -275,6 +275,9 @@ class SpyOps:
         self._record("run_t0")
         return self._t0
 
+    def settle_after_t0(self, spec_, claim):
+        self._record("settle_after_t0")
+
     def run_paired_blocks(self, spec_, build, claim):
         self._record("run_paired_blocks")
         return self._pairs
@@ -329,7 +332,7 @@ class TestTheDryRunComposesEndToEnd(unittest.TestCase):
         self.assertEqual(
             ops.calls,
             ["preflight", "acquire_claim", "create_worktree", "apply_candidate",
-             "build", "t0", "paired_blocks", "keep_or_revert", "teardown_worktree",
+             "build", "t0", "post_t0_quiet_barrier", "paired_blocks", "keep_or_revert", "teardown_worktree",
              "release_claim", "prove_production_unchanged", "journal"])
 
     def test_the_dry_run_emits_no_speed_number(self):
@@ -438,7 +441,8 @@ class TestTheDryRunComposesEndToEnd(unittest.TestCase):
         spy = SpyOps(pairs=pairs_from_positions(TG128_OVER_TEN_POSITIONS,
                                                 candidate_factor=1.08, orders=BALANCED))
         campaign.run_campaign(spec(), spy)
-        rename = {"t0": "run_t0", "paired_blocks": "run_paired_blocks"}
+        rename = {"t0": "run_t0", "post_t0_quiet_barrier": "settle_after_t0",
+                  "paired_blocks": "run_paired_blocks"}
         self.assertEqual([rename.get(c, c) for c in dry.calls], spy.calls)
 
 
@@ -500,6 +504,86 @@ def _raising(exc, ops, name):
         ops.calls.append(name)
         raise exc
     return stage
+
+
+class TestPostT0QuietBoundary(unittest.TestCase):
+    """The T0→T1 boundary waits for attributable decay; it never weakens T1."""
+
+    @staticmethod
+    def _state(load1: float) -> microbench.HostState:
+        return microbench.HostState(
+            observed_at="2026-08-13T00:00:00Z", cpu_list="0-95",
+            khz_by_cpu=tuple((cpu, 3_000_000) for cpu in range(96)),
+            driver_min_khz=400_000, driver_max_khz=4_510_000,
+            load1=load1, source="fixture")
+
+    @staticmethod
+    def _capture(*, teardown: object) -> t0_provider.CompletedProcess:
+        return t0_provider.CompletedProcess(
+            argv=("fixture",), env=(), cwd="/tmp", exit_code=0, stdout="",
+            stderr="", duration_s=0.0, timed_out=False, signalled=False,
+            sandbox_receipt={"fixture": True}, sandbox_teardown=teardown)
+
+    def _ops(self, states, sleeps):
+        scripted = list(states)
+        return campaign.HostOps(
+            nominal_khz=3_000_000, sleep=sleeps.append,
+            host_state=lambda **_kw: scripted.pop(0))
+
+    def test_requires_all_teardowns_then_three_claim_witnessed_quiet_samples(self):
+        sleeps = []
+        states = [self._state(3.0) for _ in range(3)]
+        ops = self._ops(states, sleeps)
+        with tempfile.TemporaryDirectory() as directory:
+            sink = t0_provider.DirectoryCaptureSink(directory)
+            refs = tuple(sink.store(self._capture(
+                teardown={"verified_empty": True, "removed": True})) for _ in range(2))
+            ops._t0_capture_archive, ops._t0_capture_refs = sink, refs
+            attestation = microbench.ClaimAttestation(
+                claim_id="akclaim-fixture", holder="pid:test", cpu_list="0-95",
+                observed_at="2026-08-13T00:00:00Z", check=schemas.Check(schemas.PASS))
+            witness = mock.Mock()
+            witness.attest.return_value = attestation
+            with mock.patch.object(campaign.microbench, "CpuRegionClaimAdapter",
+                                   return_value=witness):
+                receipt = ops.settle_after_t0(spec(), object())
+        self.assertEqual(sleeps, [campaign.POST_T0_QUIET_BARRIER_S,
+                                  campaign.POST_T0_QUIET_SAMPLE_INTERVAL_S,
+                                  campaign.POST_T0_QUIET_SAMPLE_INTERVAL_S])
+        self.assertEqual(len(receipt["samples"]), 3)
+        self.assertEqual(witness.attest.call_count, 3)
+        self.assertTrue(all(row["load"]["outcome"] == schemas.PASS
+                            for row in receipt["samples"]))
+
+    def test_missing_teardown_refuses_before_waiting_or_t1(self):
+        sleeps = []
+        ops = self._ops([], sleeps)
+        with tempfile.TemporaryDirectory() as directory:
+            sink = t0_provider.DirectoryCaptureSink(directory)
+            ref = sink.store(self._capture(teardown=None))
+            ops._t0_capture_archive, ops._t0_capture_refs = sink, (ref,)
+            with self.assertRaisesRegex(RuntimeError, "verified removed sandbox"):
+                ops.settle_after_t0(spec(), object())
+        self.assertEqual(sleeps, [])
+
+    def test_one_high_sample_refuses_under_the_original_ceiling(self):
+        sleeps = []
+        ops = self._ops([self._state(3.0), self._state(25.0)], sleeps)
+        with tempfile.TemporaryDirectory() as directory:
+            sink = t0_provider.DirectoryCaptureSink(directory)
+            ref = sink.store(self._capture(
+                teardown={"verified_empty": True, "removed": True}))
+            ops._t0_capture_archive, ops._t0_capture_refs = sink, (ref,)
+            attestation = microbench.ClaimAttestation(
+                claim_id="akclaim-fixture", holder="pid:test", cpu_list="0-95",
+                observed_at="2026-08-13T00:00:00Z", check=schemas.Check(schemas.PASS))
+            witness = mock.Mock()
+            witness.attest.return_value = attestation
+            with mock.patch.object(campaign.microbench, "CpuRegionClaimAdapter",
+                                   return_value=witness), \
+                    self.assertRaisesRegex(RuntimeError, "unchanged contention gate"):
+                ops.settle_after_t0(spec(), object())
+        self.assertEqual(witness.attest.call_count, 2)
 
 
 class TestEveryFailurePathReleases(unittest.TestCase):
@@ -3146,7 +3230,7 @@ class TestNoHypothesisIsExploratoryAndSaysSo(_HypothesisGateCase):
         self.assertEqual(
             ops.calls,
             ["preflight", "acquire_claim", "create_worktree", "apply_candidate",
-             "build", "t0", "paired_blocks", "keep_or_revert", "teardown_worktree",
+             "build", "t0", "post_t0_quiet_barrier", "paired_blocks", "keep_or_revert", "teardown_worktree",
              "release_claim", "prove_production_unchanged", "journal"])
 
     def test_the_record_says_exploratory_rather_than_saying_nothing(self):

@@ -149,6 +149,7 @@ import hashlib
 import json
 import os
 import sys
+import time
 import traceback
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
@@ -215,6 +216,16 @@ __all__ = [
     "build_parser",
     "main",
 ]
+
+# T0 deliberately occupies the whole CPU claim.  Linux's one-minute load
+# average therefore remains high for a while after the final T0 child has been
+# contained and reaped.  T1's run-open contention gate must not reinterpret
+# that known, already-finished work as a foreign co-tenant.  This is a phase
+# boundary, not a relaxation: after the fixed decay interval we take three
+# independent low-load observations, each paired with a fresh claim witness.
+POST_T0_QUIET_BARRIER_S = 65.0
+POST_T0_QUIET_SAMPLES = 3
+POST_T0_QUIET_SAMPLE_INTERVAL_S = 5.0
 
 
 # =============================================================================
@@ -2096,6 +2107,7 @@ class CampaignOps(Protocol):
     def apply_candidate(self, spec: CampaignSpec, tree: Any) -> Any: ...
     def build(self, spec: CampaignSpec, tree: Any) -> Any: ...
     def run_t0(self, spec: CampaignSpec, build: Any) -> T0Outcome: ...
+    def settle_after_t0(self, spec: CampaignSpec, claim: Any) -> Any: ...
     def run_paired_blocks(self, spec: CampaignSpec, build: Any,
                           claim: Any) -> Optional[Sequence[Pair]]: ...
     def teardown_worktree(self, spec: CampaignSpec, tree: Any) -> Any: ...
@@ -2257,6 +2269,16 @@ class DryRunOps:
         return T0Outcome(all_pass=False, gates=(
             ("dry_run", schemas.COULD_NOT_CHECK,
              ("dry run: T0 was composed but not executed",)),))
+
+    def settle_after_t0(self, spec: CampaignSpec, claim: Any) -> None:
+        self._step(
+            "post_t0_quiet_barrier",
+            "would retain every T0 sandbox-teardown receipt, wait the fixed "
+            "one-minute load-average decay interval while the claim remains held, then "
+            "require three fresh claim-witnessed low-load samples before T1.",
+            quiet_barrier_s=POST_T0_QUIET_BARRIER_S,
+            samples=POST_T0_QUIET_SAMPLES,
+            sample_interval_s=POST_T0_QUIET_SAMPLE_INTERVAL_S)
 
     def run_paired_blocks(self, spec: CampaignSpec, build: Any,
                           claim: Any) -> Optional[Sequence[Pair]]:
@@ -2448,11 +2470,15 @@ class HostOps:
                  t0_evidence: Optional[Callable[..., Mapping[str, Any]]] = None,
                  nominal_khz: Optional[int] = None,
                  host_state: Optional[Callable[..., microbench.HostState]] = None,
-                 source_prerequisite_runner: Optional[Any] = None) -> None:
+                 source_prerequisite_runner: Optional[Any] = None,
+                 sleep: Callable[[float], None] = time.sleep) -> None:
         self._spawner = spawner
         self._t0_evidence = t0_evidence
         self._nominal_khz = nominal_khz
         self._read_host_state = host_state or microbench.read_host_state
+        if not callable(sleep):
+            raise TypeError("sleep must be callable")
+        self._sleep = sleep
         self._source_prerequisite_runner = source_prerequisite_runner
         self._claim_binding: Optional[Any] = None
         self._device_claims: list = []
@@ -2474,6 +2500,9 @@ class HostOps:
         self._t0_report: Optional[correctness.T0Report] = None
         self._t0_gate_results: tuple = ()
         self._t0_started = False
+        self._t0_capture_archive: Optional[t0_provider.DirectoryCaptureSink] = None
+        self._t0_capture_refs: tuple[str, ...] = ()
+        self._post_t0_settlement: Optional[Mapping[str, Any]] = None
         self._microbench_run: Optional[microbench.MicrobenchRun] = None
         self._t1_request: Optional[api.EvaluationRequest] = None
         self._storage_open: Optional[schemas.Check] = None
@@ -3425,6 +3454,7 @@ class HostOps:
             return self._stop_t0_early(
                 early_request, "t0.compile_artifact_diff", artifact_check)
         capture_sink = self._t0_capture_sink(spec)
+        self._t0_capture_archive = capture_sink
         anchor_capture = extra.pop("anchor_capture", None)
         if anchor_capture is None:
             anchor_plan = t0_provider.T0ExecutionPlan(
@@ -3512,6 +3542,11 @@ class HostOps:
         request = replace(provisional, determinism=measured_determinism)
         report = correctness.evaluate_t0(
             request, evidence, self._t0_evaluator_policy(spec))
+        # Retain every durable capture reference across BOTH T0 legs.  The
+        # quiet boundary below reads these exact bytes rather than assuming
+        # subprocess completion implies sandbox teardown.
+        self._t0_capture_refs = tuple(dict.fromkeys(
+            tuple(anchor_capture.capture_refs) + tuple(provider.capture_refs)))
         self._t0_request = request
         self._t0_report = report
         self._t0_gate_results = report.gates
@@ -3590,6 +3625,81 @@ class HostOps:
                                  params=spec.params_for_arm(arm), arm=arm)
 
     # -- 5. the paired blocks ---------------------------------------------
+
+    def settle_after_t0(self, spec: CampaignSpec, claim: Any) -> Mapping[str, Any]:
+        """Prove T0 has drained, then observe a fresh quiet host before T1.
+
+        The T1 load gate itself is intentionally unchanged.  What changes is
+        the attribution of its input: a full-width T0 leg is known work owned
+        by this held claim, and one-minute load is a trailing statistic.  The
+        fixed barrier lets that statistic age; three later, independent samples
+        must all pass the original ceiling and each re-attests the same claim.
+        A missing sandbox teardown, capture, claim witness, or sample is a hard
+        refusal, never an invitation to sleep longer or skip T1's own gate.
+        """
+        if self._t0_capture_archive is None or not self._t0_capture_refs:
+            raise RuntimeError(
+                "T0 passed without retained durable sandbox captures; cannot establish "
+                "the post-T0 quiet boundary before T1")
+        teardown_receipts = []
+        for ref in self._t0_capture_refs:
+            capture = self._t0_capture_archive.get(ref)
+            teardown = capture.sandbox_teardown
+            if not isinstance(teardown, Mapping) \
+                    or teardown.get("verified_empty") is not True \
+                    or teardown.get("removed") is not True:
+                raise RuntimeError(
+                    f"T0 capture {ref!r} lacks a verified removed sandbox cgroup; "
+                    "cannot attribute the following load decay to completed owned work")
+            teardown_receipts.append({"capture_ref": ref, "teardown": dict(teardown)})
+
+        # Do not release the claim during the decay: another measurement could
+        # otherwise start and make a low later load indistinguishable from an
+        # unprotected host.  This is deliberately fixed, not a retry loop.
+        self._sleep(POST_T0_QUIET_BARRIER_S)
+        policy = microbench.HostStatePolicy(
+            nominal_khz=self._nominal_khz,
+            require_package_power=(spec.backend == BACKEND_CPU))
+        held = microbench.CpuRegionClaimAdapter(claim, cpu_list=spec.cpu_list)
+        samples = []
+        for index in range(POST_T0_QUIET_SAMPLES):
+            attestation = held.attest()
+            if not attestation.held:
+                raise RuntimeError(
+                    f"post-T0 quiet sample {index + 1}/{POST_T0_QUIET_SAMPLES} has no "
+                    f"held claim witness: {attestation.check.outcome} — "
+                    f"{'; '.join(attestation.check.reasons)}")
+            state = self._read_host_state(cpu_list=spec.cpu_list)
+            load = policy.check_load(state, cpu_count=len(state.khz_by_cpu) or 1)
+            samples.append({
+                "index": index + 1,
+                "host_state": state.to_dict(),
+                "claim_attestation": {
+                    "claim_id": attestation.claim_id, "holder": attestation.holder,
+                    "cpu_list": attestation.cpu_list,
+                    "observed_at": attestation.observed_at,
+                    "outcome": attestation.check.outcome,
+                    "reasons": list(attestation.check.reasons),
+                },
+                "load": {"outcome": load.outcome, "reasons": list(load.reasons)},
+            })
+            if load.outcome != schemas.PASS:
+                raise RuntimeError(
+                    f"post-T0 quiet sample {index + 1}/{POST_T0_QUIET_SAMPLES} refuses "
+                    f"T1 under the unchanged contention gate: {load.outcome} — "
+                    f"{'; '.join(load.reasons)}")
+            if index + 1 < POST_T0_QUIET_SAMPLES:
+                self._sleep(POST_T0_QUIET_SAMPLE_INTERVAL_S)
+        receipt = {
+            "schema": "epyc.autokernel.post_t0_quiet_boundary.v1",
+            "quiet_barrier_s": POST_T0_QUIET_BARRIER_S,
+            "sample_interval_s": POST_T0_QUIET_SAMPLE_INTERVAL_S,
+            "required_samples": POST_T0_QUIET_SAMPLES,
+            "t0_sandbox_teardowns": teardown_receipts,
+            "samples": samples,
+        }
+        self._post_t0_settlement = receipt
+        return receipt
 
     def run_paired_blocks(self, spec: CampaignSpec, build: Any,
                           claim: Any) -> Optional[Sequence[Pair]]:
@@ -3833,6 +3943,7 @@ class HostOps:
         host_material = {
             "open": None if self._host_open is None else self._host_open.to_dict(),
             "close": None if self._host_close is None else self._host_close.to_dict(),
+            "post_t0_quiet_boundary": self._post_t0_settlement,
             "raw_evidence_ref": raw_evidence_ref,
         }
         host_ref = "sha256:" + schemas.content_hash(host_material)
@@ -4315,6 +4426,13 @@ def run_campaign(spec: CampaignSpec, ops: Any) -> CampaignResult:
             state = STATE_T0_FAILED
             return _finish(spec, ops, ledger, state=state, t0=t0, decision=None,
                            pairs=(), pre=pre, error=None, tree=tree)
+
+        settle = getattr(ops, "settle_after_t0", None)
+        if callable(settle):
+            # A T0 PASS is not yet a T1 run-open condition: its own full-width
+            # work remains in load1.  The concrete HostOps boundary preserves
+            # all teardown receipts and proves quietness under the held claim.
+            settle(spec, claim)
 
         observed = ops.run_paired_blocks(spec, build, claim)
         if observed is None:
