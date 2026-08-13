@@ -495,6 +495,24 @@ class TestTheDryRunComposesEndToEnd(unittest.TestCase):
                   "paired_blocks": "run_paired_blocks"}
         self.assertEqual([rename.get(c, c) for c in dry.calls], spy.calls)
 
+    def test_screening_is_bounded_nonpromotable_and_skips_t0_settling(self):
+        ops = SpyOps(pairs=(
+            campaign.Pair(0, 100.0, 108.0, "candidate_first"),
+            campaign.Pair(1, 100.0, 108.0, "anchor_first"),
+            campaign.Pair(2, 100.0, 108.0, "candidate_first"),
+        ))
+        result = campaign.run_campaign(spec(blocks=3, screening_only=True), ops)
+        self.assertEqual(result.state, campaign.STATE_DECIDED)
+        self.assertFalse(result.decision.keep)
+        self.assertIn("SCREENING_ONLY", result.decision.reason)
+        self.assertNotIn("run_t0", ops.calls)
+        self.assertNotIn("settle_after_t0", ops.calls)
+        self.assertTrue(result.to_dict()["non_promotable"])
+
+    def test_screening_refuses_more_than_three_blocks(self):
+        with self.assertRaisesRegex(ValueError, "capped at 3"):
+            spec(blocks=4, screening_only=True)
+
 
 # =============================================================================
 # 2. Dry run is the DEFAULT

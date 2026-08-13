@@ -927,6 +927,29 @@ def decide(pairs: Sequence[Pair], *, t0: T0Outcome, blocks_precommitted: int,
         **common)
 
 
+def screening_decision(pairs: Sequence[Pair], *, blocks_precommitted: int) -> AcceptDecision:
+    """Record a bounded discovery observation without acceptance authority.
+
+    This deliberately does not call :func:`decide`: screening has no executed
+    T0, no stabilization boundary, and fewer than calibration's rankable
+    blocks.  It may report a directional median, but `keep` is structurally
+    false so callers cannot confuse a cheap screen with a confirmation.
+    """
+    items = tuple(pairs)
+    if len(items) != blocks_precommitted or not all(isinstance(p, Pair) for p in items):
+        raise AcceptRuleMisuse("screening requires exactly its precommitted Pair blocks")
+    ordered = tuple(sorted(items, key=lambda p: p.block_index))
+    return AcceptDecision(
+        keep=False, blocks=len(ordered),
+        reason=("SCREENING_ONLY: bounded directional observation; no T0, no post-T0 "
+                "stabilization, no calibration-rank authority, and hard-forbidden "
+                "from KEEP/archive/promotion. A fresh confirmation campaign is required."),
+        min_delta=min(p.delta for p in ordered),
+        median_relative=float(median(tuple(p.relative for p in ordered))),
+        deltas=tuple(p.delta for p in ordered), relatives=tuple(p.relative for p in ordered),
+        anchors=tuple(p.anchor for p in ordered), orders=tuple(p.order for p in ordered))
+
+
 # =============================================================================
 # The falsifier-before-compute gate — `--hypothesis`
 # =============================================================================
@@ -1438,6 +1461,9 @@ class CampaignSpec:
     #: reach the durable record — `to_dict()` carries it, so "what did we spend
     #: the card on" and "what would have refuted it" are one lookup.
     authorization: Optional[Any] = None
+    #: Discovery-only measurement: bounded, explicitly non-promotable and
+    #: forbidden from producing candidate/archive authority.
+    screening_only: bool = False
     created_at: str = field(default_factory=_utc_now)
 
     def __post_init__(self) -> None:
@@ -1453,6 +1479,13 @@ class CampaignSpec:
         if isinstance(self.blocks, bool) or not isinstance(self.blocks, int) \
                 or self.blocks < 2:
             raise ValueError("blocks (the PRE-COMMITTED N) must be an int >= 2")
+        if not isinstance(self.screening_only, bool):
+            raise TypeError("screening_only must be bool")
+        if self.screening_only:
+            if self.blocks > 3:
+                raise ValueError("screening-only runs are capped at 3 paired blocks")
+            if self.least_commitment_plan is not None or self.matched_experiment_id is not None:
+                raise ValueError("screening-only runs cannot carry archive/held-out bindings")
         if not str(self.candidate_ref).strip():
             raise ValueError("candidate_ref must name the patch or branch under test")
         if self.authorization is not None:
@@ -4412,6 +4445,11 @@ class HostOps:
             return
         events = self._evaluation_events(spec)
         self._cached_evaluation_events = events
+        if spec.screening_only:
+            # A screen may journal its raw terminal observation, but no
+            # candidate record means no completed-campaign adapter, archive,
+            # champion, or promotion path can consume it.
+            return
         # Evaluation events are durable on every terminal path, but candidate
         # records and least-commitment verdicts are *decision-derived*.  An
         # error/refusal has no AcceptDecision, so trying to materialize it
@@ -4679,6 +4717,8 @@ class CampaignResult:
             "releases": [r.to_dict() for r in self.releases],
             "error": self.error,
             "executed": self.executed,
+            "screening_only": self.spec.screening_only,
+            "non_promotable": self.spec.screening_only,
             "journal_error": self.journal_error,
             "ok": self.ok,
             "grammar": "SEARCH RECORD, NOT A CLAIM",
@@ -4743,8 +4783,14 @@ def run_campaign(spec: CampaignSpec, ops: Any) -> CampaignResult:
         ops.apply_candidate(spec, tree)
         build = ops.build(spec, tree)
 
-        t0 = ops.run_t0(spec, build)
-        if executes and not t0.all_pass:
+        if spec.screening_only:
+            # Screening intentionally reuses the already-selected measurement
+            # build path but does not pay T0 or its post-work quiet boundary.
+            # The resulting observation is non-promotable by construction.
+            t0 = None
+        else:
+            t0 = ops.run_t0(spec, build)
+        if not spec.screening_only and executes and not t0.all_pass:
             # STOP. No speed number is computed at all. This is the ONE branch
             # a composition pass does not take, because in a composition pass
             # T0 was not executed and therefore did not fail — it produced
@@ -4756,14 +4802,14 @@ def run_campaign(spec: CampaignSpec, ops: Any) -> CampaignResult:
                            pairs=(), pre=pre, error=None, tree=tree)
 
         settle = getattr(ops, "settle_after_t0", None)
-        if callable(settle):
+        if not spec.screening_only and callable(settle):
             # A T0 PASS is not yet a T1 run-open condition: its own full-width
             # work remains in load1.  The concrete HostOps boundary preserves
             # all teardown receipts and proves quietness under the held claim.
             settle(spec, claim)
 
         admit_t1 = getattr(ops, "admit_t1_after_t0", None)
-        if executes and callable(admit_t1):
+        if not spec.screening_only and executes and callable(admit_t1):
             try:
                 admit_t1(spec, tree)
             except T0EvaluationAdmissionRefusal as exc:
@@ -4784,13 +4830,14 @@ def run_campaign(spec: CampaignSpec, ops: Any) -> CampaignResult:
                            pairs=(), pre=pre, error=None, tree=tree)
 
         pairs = tuple(observed)
-        decision = decide(
-            pairs, t0=t0, blocks_precommitted=spec.blocks,
-            drift_bound=spec.drift_bound,
-            contribution_floor=spec.contribution_floor,
-            calibration_evidence_ref=(
-                None if spec.calibration is None else spec.calibration.evidence_ref),
-        )
+        decision = (screening_decision(pairs, blocks_precommitted=spec.blocks)
+                    if spec.screening_only else decide(
+                        pairs, t0=t0, blocks_precommitted=spec.blocks,
+                        drift_bound=spec.drift_bound,
+                        contribution_floor=spec.contribution_floor,
+                        calibration_evidence_ref=(
+                            None if spec.calibration is None else spec.calibration.evidence_ref),
+                    ))
         state = STATE_DECIDED
         return _finish(spec, ops, ledger, state=state, t0=t0, decision=decision,
                        pairs=pairs, pre=pre, error=None, tree=tree)
@@ -4978,6 +5025,9 @@ def build_parser() -> argparse.ArgumentParser:
                              f"{DEFAULT_BLOCKS}). Fixed before the run: the "
                              f"accept rule refuses any other count, which is what makes "
                              f"optional stopping impossible rather than discouraged.")
+    parser.add_argument("--screening-only", action="store_true", default=False,
+                        help="max-three-block non-promotable discovery screen; skips T0 and "
+                             "post-T0 stabilization and cannot KEEP/archive/promote")
     parser.add_argument("--recipe", dest="recipe_id", default=None,
                         choices=list(recipes.RECIPE_IDS) + [None],
                         help="codified recipe id (default: the canonical decode slice "
@@ -5077,7 +5127,7 @@ def main(argv: Optional[Sequence[str]] = None, *, out: Optional[Any] = None,
             print(f"refusing to start: --least-commitment-capture-plan: {exc}",
                   file=sys.stderr)
             return 2
-    if not args.dry_run and isinstance(proposal, Mapping) \
+    if not args.dry_run and not args.screening_only and isinstance(proposal, Mapping) \
             and proposal.get("change_class") == "parameter" \
             and least_commitment_plan is None:
         print("refusing to --execute: IQK parameter campaigns require "
@@ -5131,7 +5181,7 @@ def main(argv: Optional[Sequence[str]] = None, *, out: Optional[Any] = None,
         except (ValueError, TypeError) as exc:
             print(f"refusing to start: --calibration-bundle: {exc}", file=sys.stderr)
             return 2
-    if not args.dry_run and selected_calibration is None:
+    if not args.dry_run and not args.screening_only and selected_calibration is None:
         print(
             "refusing to --execute: --calibration-bundle is required; historical or "
             "cross-cell constants carry no live ranking authority",
@@ -5160,7 +5210,7 @@ def main(argv: Optional[Sequence[str]] = None, *, out: Optional[Any] = None,
                 physical_bounds.PhysicalBoundError) as exc:
             print(f"refusing to start: --ranked-units: {exc}", file=sys.stderr)
             return 2
-    if not args.dry_run and physical_envelope is None and not ranked_units:
+    if not args.dry_run and not args.screening_only and physical_envelope is None and not ranked_units:
         print(
             "refusing to --execute: --physical-envelope or --ranked-units is required "
             "before any claim, mutation, build, or benchmark",
@@ -5177,7 +5227,7 @@ def main(argv: Optional[Sequence[str]] = None, *, out: Optional[Any] = None,
     resolved_blocks = (
         args.blocks
         if args.blocks is not None
-        else (selected_calibration.b_min_blocks
+        else (3 if args.screening_only else selected_calibration.b_min_blocks
               if selected_calibration is not None else DEFAULT_BLOCKS)
     )
 
@@ -5194,7 +5244,8 @@ def main(argv: Optional[Sequence[str]] = None, *, out: Optional[Any] = None,
             least_commitment_plan=least_commitment_plan,
             matched_experiment_id=args.matched_experiment_id,
             calibration=selected_calibration,
-            physical_envelope=physical_envelope, ranked_units=ranked_units)
+            physical_envelope=physical_envelope, ranked_units=ranked_units,
+            screening_only=args.screening_only)
     except (ValueError, TypeError, storage.StorageError, recipes.RecipeError,
             source_candidate.SourceCandidateError,
             source_prerequisite_package.SourcePrerequisitePackageError,
@@ -5215,7 +5266,7 @@ def main(argv: Optional[Sequence[str]] = None, *, out: Optional[Any] = None,
     # CPU prefill cell only; silently applying it to decode or GPU is the exact
     # cross-cell transfer that calibration exists to prevent.  This refusal is
     # before HostOps construction, host reads, a claim, mutation, or subprocess.
-    if not args.dry_run:
+    if not args.dry_run and not args.screening_only:
         calibration = spec.calibration
         if calibration is None:
             print(
@@ -5291,6 +5342,9 @@ def main(argv: Optional[Sequence[str]] = None, *, out: Optional[Any] = None,
              else "EXPLORATORY (no --hypothesis; this run resolves no question)"),
           file=detail_stream)
     print(f"  cell        {spec.recipe_id}  metric={spec.metric}", file=detail_stream)
+    if spec.screening_only:
+        print("  authority   SCREENING_ONLY / NON_PROMOTABLE: no T0, stabilization, "
+              "KEEP, archive, or promotion", file=detail_stream)
     if spec.calibration is None:
         print("  accept      UNCALIBRATED CELL — dry-run composition only; live ranking "
               "will refuse", file=detail_stream)
