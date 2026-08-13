@@ -2322,16 +2322,14 @@ def render_bench_commands(spec: CampaignSpec, *,
     tool = spec.recipe.tool
     for arm, root in (("anchor", MEASUREMENT_BUILD_ROOT),
                       ("candidate", spec.build_dir)):
-        # `ToolBinding.source_root` is the BUILD root, not the git worktree —
-        # `BuildPlan` puts the build directory OUTSIDE the worktree by
-        # construction (the clean-build gate FAILs a build dir inside the
-        # actor's tree), and `ToolBinding` requires the binary to resolve under
-        # its own source root so that no arm can pick up another tree's ggml.
-        # `bench_binding` in the reference composition binds it the same way.
+        # Rendering is a preview over placeholder roots; both the binary and
+        # library directory are intentionally under the binding source root.
+        # The live candidate path is bound as an external build in _construct,
+        # where the real build-prefixed root and receipt are available.
         bindir = os.path.join(root, "bin")
-        binding = recipes.ToolBinding.for_external_build(
+        binding = recipes.ToolBinding(
             binary=os.path.join(bindir, tool), source_root=root,
-            build_root=root, library_path=bindir)
+            library_path=bindir)
         payload = recipes.dry_run(spec.recipe_id, binding=binding,
                                   params=spec.params_for_arm(arm, params=params),
                                   arm=arm,
