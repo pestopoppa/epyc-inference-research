@@ -315,6 +315,14 @@ class DurableState:
     def save(self, state: dict[str, Any], phase: str) -> None:
         state["updated_at"]=_now(); state["state_sha256"]=_sha({k:v for k,v in state.items() if k!="state_sha256"}); _atomic(self.path,state)
         self.book.append(journal.KIND_STOP_STATE,{"state":f"discovery_{phase}","controller_state_sha256":state["state_sha256"]})
+    def run_lock(self):
+        self.root.mkdir(parents=True,exist_ok=True)
+        handle=(self.root / "controller.run.lock").open("a+")
+        try:
+            fcntl.flock(handle.fileno(),fcntl.LOCK_EX|fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            handle.close(); raise DiscoveryControllerError("another discovery controller owns this output root") from exc
+        return handle
 
 
 def _tracker(store: DurableState) -> hypotheses.HypothesisTracker:
@@ -401,6 +409,11 @@ def classify_screen_series(effects: Sequence[float], *, component_pooled_effects
         return "top_k_replicated_candidate"
     return "screened_out"
 
+def _classified_result(state: Mapping[str, Any], item: PlannedCandidate, result: SealedScreen) -> SealedScreen:
+    prior=[float(row["effect_fraction"]) for row in state["iterations"] if row.get("hypothesis_id")==item.hypothesis_id and isinstance(row.get("effect_fraction"),(int,float))]
+    classification=classify_screen_series(prior+[result.effect_fraction])
+    return SealedScreen(receipt_path=result.receipt_path,result_sha256=result.result_sha256,effect_fraction=result.effect_fraction,classification=classification,baseline_sha256=result.baseline_sha256,source_proof_sha256=result.source_proof_sha256,dispatch_proof_sha256=result.dispatch_proof_sha256,candidate_only=result.candidate_only,promotion_claim=result.promotion_claim,stages=result.stages)
+
 
 def run_controller(config: ControllerConfig, *, planner: Planner, critic: Critic, screener: Screener, lease: Lease) -> dict[str, Any]:
     planner_attestation, critic_attestation = dict(planner.attest()), dict(critic.attest())
@@ -411,7 +424,14 @@ def run_controller(config: ControllerConfig, *, planner: Planner, critic: Critic
         raise DiscoveryControllerError("actors did not attest the sealed Codex runtime identities")
     _require_runtime(planner_attestation["runtime"]); _require_runtime(critic_attestation["runtime"])
     _require_roster({"schema":"epyc.autokernel.discovery_roster.v2","members":[SOL,TERRA],"claude_members":0,"member_count":2})
-    store=DurableState(config.output_root); state=store.load()
+    store=DurableState(config.output_root); lock=store.run_lock()
+    try:
+        return _run_controller_locked(config,planner=planner,critic=critic,screener=screener,lease=lease,store=store)
+    finally:
+        fcntl.flock(lock.fileno(),fcntl.LOCK_UN); lock.close()
+
+def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic: Critic, screener: Screener, lease: Lease, store: DurableState) -> dict[str, Any]:
+    state=store.load()
     # A completed state is an acknowledged terminal checkpoint.  Re-entering it
     # must be a read, not another executor opportunity or a timestamp rewrite.
     if state["complete"]: return state
@@ -426,7 +446,7 @@ def run_controller(config: ControllerConfig, *, planner: Planner, critic: Critic
             if not isinstance(recovery,Recovery) or recovery.status == "ambiguous": raise DiscoveryControllerError("inflight operation cannot be safely reconciled")
             result=recovery.result if recovery.status == "sealed_result" else screener.screen(item,authorization,permit)
         if not isinstance(result,SealedScreen): raise DiscoveryControllerError("inflight recovery produced no sealed result")
-        row=dict(inflight["row"]); row.update(status=result.classification,result_sha256=result.result_sha256,evidence={"baseline":result.baseline_sha256,"source":result.source_proof_sha256,"dispatch":result.dispatch_proof_sha256},effect_fraction=result.effect_fraction)
+        result=_classified_result(state,item,result); row=dict(inflight["row"]); row.update(status=result.classification,result_sha256=result.result_sha256,evidence={"baseline":result.baseline_sha256,"source":result.source_proof_sha256,"dispatch":result.dispatch_proof_sha256},effect_fraction=result.effect_fraction)
         _record_attempt_once(tracker,item,str(item.proposal.get("proposal_id",row["proposal_sha256"])),result)
         state.pop("inflight",None); state.pop("pending",None); state["iterations"].append(row); state["next"]+=1; _append_nomination(config.output_root,item,result,config.nomination_threshold); _write_projection(config.output_root); store.save(state,"recovered_screen")
     while not state["complete"] and state["next"] <= config.max_iterations:
@@ -461,7 +481,7 @@ def run_controller(config: ControllerConfig, *, planner: Planner, critic: Critic
             except Exception as exc:
                 state.pop("inflight",None); row.update(status="screen_refused",reason=f"{type(exc).__name__}: {exc}"); state["iterations"].append(row); state["next"]+=1; store.save(state,"screen_refused"); continue
             state["inflight"]["result"]=asdict(result); store.save(state,"post_screen_result")
-            row.update(status=result.classification,result_sha256=result.result_sha256,evidence={"baseline":result.baseline_sha256,"source":result.source_proof_sha256,"dispatch":result.dispatch_proof_sha256},effect_fraction=result.effect_fraction)
+            result=_classified_result(state,item,result); row.update(status=result.classification,result_sha256=result.result_sha256,evidence={"baseline":result.baseline_sha256,"source":result.source_proof_sha256,"dispatch":result.dispatch_proof_sha256},effect_fraction=result.effect_fraction)
             # Record the measured disposition before exposing it to the next
             # planner context.  This is the only source of repeat suppression.
             _record_attempt_once(tracker,item,str(item.proposal.get("proposal_id",row["proposal_sha256"])),result)
