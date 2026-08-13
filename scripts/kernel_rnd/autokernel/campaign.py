@@ -1162,6 +1162,75 @@ MEASUREMENT_BUILD_ROOT = os.path.join(MEASUREMENT_REPO, "build-ak-t0-cpu-f744cc2
 T0_GENERATION_TOOL = "llama-completion"
 
 
+def _validate_calibration_raw_measurement(
+        raw: Mapping[str, Any], *, recipe_id: str,
+        frame: Mapping[str, Any], expected_blocks: int, label: str) -> None:
+    """Re-derive a raw control trace's declared fresh-pair aggregation.
+
+    The calibration summary and typed authority describe derived statistics.
+    This check independently binds those statistics to the physical block plan
+    and invocation count that produced them, so changing a declaration to five
+    pairs cannot make one-pair evidence look like an aggregated decode block.
+    """
+    frame_key, token_key, expected_pairs = \
+        control_runner.calibration_frame_contract(frame, recipe_id=recipe_id)
+    if raw.get("recipe_id") != recipe_id:
+        raise ValueError(f"calibration {label} raw evidence names another recipe")
+    for arm in ("candidate", "anchor"):
+        receipt = raw.get(f"{arm}_receipt")
+        params = receipt.get("params") if isinstance(receipt, Mapping) else None
+        if not isinstance(params, Mapping) \
+                or receipt.get("recipe_id") != recipe_id \
+                or params.get(token_key) != frame.get(frame_key) \
+                or params.get("reps") != frame.get("reps") \
+                or params.get("ggml_iqk") != frame.get(f"{arm}_ggml_iqk"):
+            raise ValueError(
+                f"calibration {label} {arm} receipt is outside the declared frame")
+    blocks = raw.get("blocks")
+    if not isinstance(blocks, list) or len(blocks) != expected_blocks:
+        raise ValueError(
+            f"calibration {label} evidence does not span its declared block count")
+    expected_samples = expected_pairs * int(frame["reps"])
+    for index, block in enumerate(blocks):
+        if not isinstance(block, Mapping) or block.get("complete") is not True \
+                or block.get("refusals") != []:
+            raise ValueError(f"calibration {label} block {index} is incomplete")
+        plan = block.get("plan")
+        invocations = block.get("invocations")
+        paired = block.get("paired_block")
+        if not isinstance(plan, Mapping) \
+                or plan.get("block_index") != index \
+                or plan.get("pairs") != expected_pairs \
+                or not isinstance(plan.get("arm_sequence"), list) \
+                or len(plan["arm_sequence"]) != 2 * expected_pairs \
+                or plan["arm_sequence"].count("anchor") != expected_pairs \
+                or plan["arm_sequence"].count("candidate") != expected_pairs:
+            raise ValueError(
+                f"calibration {label} block {index} has the wrong fresh-pair plan")
+        if not isinstance(invocations, list) or len(invocations) != 2 * expected_pairs:
+            raise ValueError(
+                f"calibration {label} block {index} has the wrong invocation count")
+        samples_by_arm = {"anchor": [], "candidate": []}
+        for position, invocation in enumerate(invocations):
+            if not isinstance(invocation, Mapping) \
+                    or invocation.get("position") != position \
+                    or invocation.get("arm") != plan["arm_sequence"][position] \
+                    or not isinstance(invocation.get("samples"), list) \
+                    or len(invocation["samples"]) != frame["reps"]:
+                raise ValueError(
+                    f"calibration {label} block {index} invocation {position} "
+                    "does not match its plan/repetition frame")
+            samples_by_arm[invocation["arm"]].extend(invocation["samples"])
+        if not isinstance(paired, list) or len(paired) != 9 or paired[0] != index \
+                or paired[7] != samples_by_arm["anchor"] \
+                or paired[8] != samples_by_arm["candidate"] \
+                or len(paired[7]) != expected_samples \
+                or len(paired[8]) != expected_samples:
+            raise ValueError(
+                f"calibration {label} block {index} does not preserve its raw "
+                "per-arm aggregation material")
+
+
 def load_calibration_bundle(path: os.PathLike[str] | str) -> LeanCalibration:
     """Load accepted live controls bound to the exact production/instrument pair.
 
@@ -1237,6 +1306,8 @@ def load_calibration_bundle(path: os.PathLike[str] | str) -> LeanCalibration:
     }
     if not isinstance(recipe_id, str) or recipe_id not in recipes.RECIPE_IDS:
         raise ValueError("calibration declaration names an unknown recipe")
+    frame = declaration.get("calibration_frame")
+    control_runner.calibration_frame_contract(frame, recipe_id=recipe_id)
     for name, value in values.items():
         if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
             raise ValueError(f"calibration {name} must be positive")
@@ -1346,29 +1417,17 @@ def load_calibration_bundle(path: os.PathLike[str] | str) -> LeanCalibration:
         raise ValueError("calibration anchor-motion raw evidence names another recipe")
     candidate_receipt = raw_motion.get("candidate_receipt")
     anchor_receipt = raw_motion.get("anchor_receipt")
-    frame = declaration.get("calibration_frame")
     if not isinstance(frame, Mapping) or not isinstance(candidate_receipt, Mapping) \
             or not isinstance(anchor_receipt, Mapping):
         raise ValueError("calibration anchor-motion evidence lacks the declared A/A frame")
-    token_key = "n_prompt" if recipes.get_recipe(recipe_id).phase == "prefill" else "n_gen"
-    frame_key = "prompt_tokens" if token_key == "n_prompt" else "decode_tokens"
-    for receipt in (candidate_receipt, anchor_receipt):
-        params = receipt.get("params")
-        if not isinstance(params, Mapping) \
-                or params.get(token_key) != frame.get(frame_key) \
-                or params.get("reps") != frame.get("reps") \
-                or params.get("ggml_iqk") != frame.get("anchor_ggml_iqk") \
-                or receipt.get("recipe_id") != recipe_id:
-            raise ValueError("calibration anchor-motion evidence is outside the A/A frame")
     raw_blocks = raw_motion.get("blocks")
-    if not isinstance(raw_blocks, list) or len(raw_blocks) != declared_motion_blocks:
-        raise ValueError("calibration anchor-motion evidence does not span its declared window")
+    _validate_calibration_raw_measurement(
+        raw_motion, recipe_id=recipe_id, frame=frame,
+        expected_blocks=declared_motion_blocks, label=label)
+    assert isinstance(raw_blocks, list)
     anchor_medians = []
     for index, block in enumerate(raw_blocks):
-        paired = block.get("paired_block") if isinstance(block, Mapping) else None
-        if not isinstance(paired, list) or len(paired) != 9 or paired[0] != index \
-                or not isinstance(paired[7], list) or not paired[7]:
-            raise ValueError("calibration anchor-motion raw blocks are malformed")
+        paired = block["paired_block"]
         anchor_medians.append(float(median(paired[7])))
     measured_bound = drift_bound_from(anchor_medians)
     bound = anchor_motion.get("bound")
@@ -1388,6 +1447,17 @@ def load_calibration_bundle(path: os.PathLike[str] | str) -> LeanCalibration:
                 or authority.calibration.noise_floor_phi != float(values["noise_floor_phi"]) \
                 or authority.mde != float(values["mde"]):
             raise ValueError("calibration summary disagrees with live evaluation authority")
+        for raw_label, count_key in (
+                ("aa_calibration", "calibration_blocks"),
+                ("neutral_calibration", "neutral_blocks")):
+            count = declaration.get(count_key)
+            if isinstance(count, bool) or not isinstance(count, int) or count < 1:
+                raise ValueError(
+                    f"calibration declaration has no valid {count_key}")
+            raw_control = read(f"raw/{raw_label}.json")
+            _validate_calibration_raw_measurement(
+                raw_control, recipe_id=recipe_id, frame=frame,
+                expected_blocks=count, label=raw_label)
     return LeanCalibration(
         recipe_id=recipe_id,
         contribution_floor=float(values["contribution_floor"]),
@@ -1791,16 +1861,19 @@ class CampaignSpec:
             # dispersion to the exact baseline arm rather than merely to a
             # similarly named recipe.
             if frame is not None:
+                frame_key, token_key, _pairs = \
+                    control_runner.calibration_frame_contract(
+                        frame, recipe_id=self.recipe_id)
                 actual = {
                     "recipe_id": self.recipe_id,
-                    "prompt_tokens": self.n_prompt,
+                    frame_key: getattr(self, token_key),
                     "reps": self.reps,
                     "anchor_ggml_iqk": self.anchor_param_overrides.get(
                         "ggml_iqk", recipes.CANONICAL_OMP_ENV["GGML_IQK"]),
                 }
                 expected = {
                     "recipe_id": frame["recipe_id"],
-                    "prompt_tokens": frame["prompt_tokens"],
+                    frame_key: frame[frame_key],
                     "reps": frame["reps"],
                     "anchor_ggml_iqk": frame["anchor_ggml_iqk"],
                 }
@@ -2078,6 +2151,19 @@ class CampaignSpec:
     def bench_params(self) -> dict:
         return self.bench_params_for(self.matched_experiment_id)
 
+    @property
+    def fresh_pairs_per_block(self) -> int:
+        """Physical fresh-process pairs contributing to one statistical block."""
+        authority = (None if self.calibration is None else
+                     self.calibration.evaluation_authority)
+        frame = None if authority is None else authority.calibration_frame
+        if frame is None:
+            return 1
+        _frame_key, _token_key, pairs = \
+            control_runner.calibration_frame_contract(
+                frame, recipe_id=self.recipe_id)
+        return pairs
+
     def bench_params_for(self, matched_experiment_id: Optional[str]) -> dict:
         """Derive benchmark parameters for a legacy or declared matched frame."""
         seed_material = (
@@ -2184,6 +2270,7 @@ class CampaignSpec:
             "model_sha256": storage.hash_file(model_path),
             "reps": self.reps,
             "blocks": self.blocks,
+            "fresh_pairs_per_block": self.fresh_pairs_per_block,
             "n_gen": self.n_gen,
             "n_prompt": self.n_prompt,
             "t0_ops": list(self.t0_ops),
@@ -2251,6 +2338,7 @@ class CampaignSpec:
             },
             "model": self.model, "reps": self.reps, "n_gen": self.n_gen,
             "n_prompt": self.n_prompt,
+            "fresh_pairs_per_block": self.fresh_pairs_per_block,
             "suite_seed": self.suite_seed,
             "schedule_seed": self.schedule_seed,
             "holdout_selection_seed": self.holdout_selection_seed,
@@ -2625,7 +2713,7 @@ class DryRunOps:
             "(anchor, candidate, anchor, candidate, ...). microbench.BlockPlan derives the "
             "arm sequence from the order and refuses a blocked design; the measured "
             "monotone drift is why.",
-            blocks=spec.blocks, pairs_per_block=1,
+            blocks=spec.blocks, pairs_per_block=spec.fresh_pairs_per_block,
             anchor_argv=rendered["anchor"]["argv"],
             candidate_argv=rendered["candidate"]["argv"],
             # BOTH envs, not one labelled `env`. They differ in exactly one key
@@ -3160,23 +3248,28 @@ class HostOps:
         self._host_open = state
         fold(check_host_uptime(getattr(state, "uptime_s", None)), "host_uptime")
         boosting = sum(1 for _cpu, khz in state.khz_by_cpu if khz >= BOOST_THRESHOLD_KHZ)
-        boost = check_boost_under_load(boosting_cores=boosting, load1=state.load1,
-                                       cpu_count=len(state.khz_by_cpu) or 1)
-        # COULD_NOT_CHECK here is the IDLE case and is expected before a run:
-        # it is folded, so it degrades the preflight rather than aborting it.
-        # Candidate-only discovery deliberately works through frequency/load
-        # noise.  Its exact-frame bank and explicit uncertainty label nominate
-        # work for later paired confirmation; they do not make a promotion
-        # claim from this point sample.
-        if not spec.screening_only:
-            fold(boost, "boost_under_load")
+        # Retain the point-in-time frequency/load snapshot as a non-gating
+        # diagnostic.  The 1-minute load average after a preceding matched arm
+        # is that arm's decaying self-load while the instantaneous frequencies
+        # below are from now-idle, parked cores.  Combining those two clocks
+        # made a healthy paired control look throttled.  Frequency and package
+        # power remain fail-closed under the campaign's own measured block
+        # load.  COULD_NOT_CHECK is executable below; FAIL remains reserved for
+        # checks whose observation window overlaps the phenomenon.
+        check_boost_under_load(
+            boosting_cores=boosting, load1=state.load1,
+            cpu_count=len(state.khz_by_cpu) or 1)
 
         policy = microbench.HostStatePolicy(
             nominal_khz=self._nominal_khz,
             require_load=False,
             require_package_power=(spec.backend == BACKEND_CPU))
-        if not spec.screening_only:
-            fold(policy.check_load(state, cpu_count=len(state.khz_by_cpu) or 1), "load")
+        # Ordinary host load is recorded noise under the ratified discovery
+        # policy.  Concurrent model inference is still rejected above by the
+        # claim/witness preflight; retain ``require_load=False``'s explicit
+        # diagnostic as executable COULD_NOT_CHECK instead of folding it into
+        # a campaign refusal.
+        policy.check_load(state, cpu_count=len(state.khz_by_cpu) or 1)
         if spec.backend == BACKEND_CPU:
             # A point reading is only an availability preflight.  Exact power
             # is derived later from each block's open/close counter interval.
@@ -3186,7 +3279,7 @@ class HostOps:
                  "package_power_available", hard=True)
 
         if outcome == schemas.PASS:
-            return schemas.Check(schemas.PASS, (
+            return schemas.Check(schemas.PASS, tuple(reasons) + (
                 f"host canonical for {spec.cpu_list}; frozen trees fingerprinted",))
         return schemas.Check(outcome, tuple(reasons))
 
@@ -4330,7 +4423,8 @@ class HostOps:
             anchor_param_overrides=spec.anchor_param_overrides,
             unit_param_overrides=spec.ranked_unit_param_overrides,
             anti_short_circuit_units=spec.anti_short_circuit_units,
-            base_blocks=spec.blocks, pairs_per_block=1,
+            base_blocks=spec.blocks,
+            pairs_per_block=spec.fresh_pairs_per_block,
             unit_ids=spec.ranked_unit_ids,
             physical_envelopes=spec.physical_envelopes,
             stratum=api.STRATUM_SELECTION)

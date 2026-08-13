@@ -81,7 +81,7 @@ from statistics import median
 from typing import Any, Mapping, Optional, Protocol, Sequence
 
 from .. import schemas
-from ..evaluator import api, controls
+from ..evaluator import api, controls, recipes
 from ..evaluator import statistics as ak_statistics
 
 __all__ = [
@@ -131,6 +131,51 @@ class LiveEvaluationAuthority:
     #: measured.  Per-run seeds are deliberately absent: they identify a run,
     #: not the cell whose noise the calibration licenses.
     calibration_frame: Optional[Mapping[str, Any]] = None
+
+
+def calibration_frame_contract(frame: Any, *, recipe_id: Any) -> tuple[str, str, int]:
+    """Validate the recipe-local calibration frame and return its aggregation.
+
+    The token axis is part of the recipe identity: a decode calibration binds
+    ``decode_tokens``/``n_gen`` and cannot be admitted through the historical
+    prefill-only ``prompt_tokens`` shape.  Decode may also predeclare multiple
+    fresh process pairs in one statistical block; prefill remains the original
+    one-pair block unless it is separately recalibrated under a new contract.
+    """
+    if not isinstance(recipe_id, str) or recipe_id not in recipes.RECIPE_IDS:
+        raise ValueError("live evaluation authority names an unknown recipe")
+    recipe = recipes.get_recipe(recipe_id)
+    token_key = "prompt_tokens" if recipe.phase == "prefill" else "decode_tokens"
+    param_key = "n_prompt" if recipe.phase == "prefill" else "n_gen"
+    base_keys = {
+        "recipe_id", token_key, "reps", "candidate_ggml_iqk",
+        "anchor_ggml_iqk",
+    }
+    expected_keys = (base_keys if recipe.phase == "prefill" else
+                     base_keys | {"fresh_pairs_per_block", "aggregation"})
+    if not isinstance(frame, Mapping) or set(frame) != expected_keys:
+        raise ValueError(
+            "live evaluation authority lacks the exact recipe-local "
+            "calibration_frame required to bind its A/A noise to a prospective "
+            "campaign")
+    if frame.get("recipe_id") != recipe_id \
+            or isinstance(frame.get(token_key), bool) \
+            or not isinstance(frame.get(token_key), int) \
+            or isinstance(frame.get("reps"), bool) \
+            or not isinstance(frame.get("reps"), int) \
+            or frame[token_key] < 1 or frame["reps"] < 1 \
+            or frame.get("candidate_ggml_iqk") not in ("0", "1") \
+            or frame.get("anchor_ggml_iqk") not in ("0", "1"):
+        raise ValueError("live evaluation authority has an invalid calibration_frame")
+    pairs = frame.get("fresh_pairs_per_block", 1)
+    if isinstance(pairs, bool) or not isinstance(pairs, int) or pairs < 1:
+        raise ValueError("calibration fresh_pairs_per_block must be a positive int")
+    if recipe.phase == "prefill":
+        if pairs != 1:
+            raise ValueError("prefill calibration remains a one-fresh-pair block")
+    elif frame.get("aggregation") != "median_per_arm":
+        raise ValueError("decode calibration aggregation must be median_per_arm")
+    return token_key, param_key, pairs
 
 
 def _recorded_check(value: Any, label: str) -> schemas.Check:
@@ -185,21 +230,7 @@ def load_live_evaluation_authority(path: str | Path) -> LiveEvaluationAuthority:
         raise ValueError("live evaluation authority requires the recorded five-control panel")
 
     frame = declaration.get("calibration_frame")
-    expected_frame_keys = {
-        "recipe_id", "prompt_tokens", "reps", "candidate_ggml_iqk",
-        "anchor_ggml_iqk",
-    }
-    if not isinstance(frame, Mapping) or set(frame) != expected_frame_keys:
-        raise ValueError(
-            "live evaluation authority lacks the exact calibration_frame required "
-            "to bind its A/A noise to a prospective campaign")
-    if frame.get("recipe_id") != declaration.get("recipe_id") \
-            or not isinstance(frame.get("prompt_tokens"), int) \
-            or not isinstance(frame.get("reps"), int) \
-            or frame["prompt_tokens"] < 1 or frame["reps"] < 1 \
-            or frame.get("candidate_ggml_iqk") not in ("0", "1") \
-            or frame.get("anchor_ggml_iqk") not in ("0", "1"):
-        raise ValueError("live evaluation authority has an invalid calibration_frame")
+    calibration_frame_contract(frame, recipe_id=declaration.get("recipe_id"))
 
     controls_obj = inputs.get("controls")
     if not isinstance(controls_obj, Mapping):

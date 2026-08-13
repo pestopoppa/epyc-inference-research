@@ -135,9 +135,23 @@ def write_calibration_bundle(root: Path, *,
         "anchor_receipt": {"recipe_id": campaign.HISTORICAL_CALIBRATED_RECIPE_ID,
                             "params": {"n_prompt": 512, "reps": 1, "ggml_iqk": "0"}},
         "blocks": [
-            {"paired_block": [index, "test", "selection", "anchor_first", "base",
-                              None, "2026-08-13T00:00:00+00:00", [100.0 + index],
-                              [100.0 + index]]}
+            {
+                "plan": {
+                    "block_index": index, "unit_id": "test",
+                    "stratum": "selection", "order": "anchor_first",
+                    "segment": "base", "extension_round": None, "pairs": 1,
+                    "arm_sequence": ["anchor", "candidate"],
+                },
+                "invocations": [
+                    {"position": 0, "arm": "anchor", "samples": [100.0 + index]},
+                    {"position": 1, "arm": "candidate", "samples": [100.0 + index]},
+                ],
+                "paired_block": [
+                    index, "test", "selection", "anchor_first", "base", None,
+                    "2026-08-13T00:00:00+00:00", [100.0 + index],
+                    [100.0 + index]],
+                "refusals": [], "complete": True,
+            }
             for index in range(12)
         ],
     }
@@ -208,6 +222,38 @@ def physical_envelope(model: str = MODEL, frame_params=None, **overrides
     )
     kwargs.update(overrides)
     return physical_bounds.PhysicalEnvelope(**kwargs)
+
+
+def typed_calibration(*, recipe_id: str, phase: str,
+                      calibration_frame: dict) -> campaign.LeanCalibration:
+    passed = schemas.Check(schemas.PASS)
+    controls = campaign.api.CampaignControls(
+        calibration_block_count=200, contribution_floor=0.03,
+        max_candidates=10, confirmation_admission_count=2,
+        max_blocks_per_candidate=20, storage_floor_bytes_free=1)
+    outputs = campaign.api.CalibrationOutputs(
+        backend="llama_cpu", phase=phase, cell_class="tiny_real_graph",
+        noise_floor_phi=0.03, b_min_blocks=10, alpha_sel=0.1,
+        alpha_conf=0.05, anchor_gate_band=(90.0, 110.0), accepted=True,
+        solve_order_recorded=campaign.api.CALIBRATION_SOLVE_ORDER,
+        samples_ref="raw/aa", e_process_construction_id=
+        "sign_martingale_predictable_lambda/v1")
+    authority = control_runner.LiveEvaluationAuthority(
+        campaign_controls=controls, calibration=outputs,
+        controls=campaign.api.ControlPanel(
+            positive=passed, neutral=passed, degraded_negative=passed,
+            aa=passed, historical_replay=passed), aa_cadence=passed,
+        control_definitions_immutable=passed,
+        construction_id="sign_martingale_predictable_lambda/v1",
+        stopping_rule_id="ak-stop-live-controls/v1", mde=0.02,
+        runtime_source_label_ref="sha256:test", evidence_ref="/durable/test",
+        calibration_frame=calibration_frame)
+    return campaign.LeanCalibration(
+        recipe_id=recipe_id, contribution_floor=0.03, b_min_blocks=10,
+        max_blocks=20, noise_floor_phi=0.03, mde=0.02,
+        production_commit=campaign.PRODUCTION_COMMIT,
+        measurement_commit=campaign.MEASUREMENT_COMMIT,
+        evidence_ref=authority.evidence_ref, evaluation_authority=authority)
 
 
 def ranked_units() -> tuple[campaign.RankedUnitSpec, ...]:
@@ -1241,6 +1287,97 @@ class TestTheDriftBoundIsDerivedFromTheMeasurement(unittest.TestCase):
 
 class TestTheAcceptedCalibrationBindsTheLiveRule(unittest.TestCase):
 
+    @staticmethod
+    def decode_calibration() -> campaign.LeanCalibration:
+        recipe_id = "t1b.llama_cpu.llama_bench_decode.v1"
+        return typed_calibration(
+            recipe_id=recipe_id, phase="decode",
+            calibration_frame={
+                "recipe_id": recipe_id, "decode_tokens": 128,
+                "reps": campaign.IQK_MATCHED_PAIR_REPS,
+                "candidate_ggml_iqk": "0", "anchor_ggml_iqk": "0",
+                "fresh_pairs_per_block": 5,
+                "aggregation": "median_per_arm",
+            })
+
+    def test_decode_calibration_binds_n_gen_and_five_fresh_pairs(self):
+        built = spec(
+            recipe_id="t1b.llama_cpu.llama_bench_decode.v1",
+            calibration=self.decode_calibration(), blocks=10, reps=1,
+            n_gen=128, proposal=iqk_parameter_proposal())
+        self.assertEqual(built.fresh_pairs_per_block, 5)
+        self.assertEqual(built.to_dict()["fresh_pairs_per_block"], 5)
+        with self.assertRaisesRegex(ValueError, "calibration_frame.*anchor recipe"):
+            spec(recipe_id=built.recipe_id, calibration=self.decode_calibration(),
+                 blocks=10, reps=1, n_gen=64,
+                 proposal=iqk_parameter_proposal())
+
+    def test_decode_dry_run_discloses_five_fresh_pairs_per_block(self):
+        built = spec(
+            recipe_id="t1b.llama_cpu.llama_bench_decode.v1",
+            calibration=self.decode_calibration(), blocks=10, reps=1,
+            n_gen=128, proposal=iqk_parameter_proposal())
+        ops = campaign.DryRunOps(out=io.StringIO())
+        ops.run_paired_blocks(built, object(), object())
+        step = ops.steps[-1]
+        self.assertEqual(step.detail["pairs_per_block"], 5)
+
+    def test_host_plan_consumes_authority_pair_count(self):
+        built = spec(
+            recipe_id="t1b.llama_cpu.llama_bench_decode.v1",
+            calibration=self.decode_calibration(), blocks=10, reps=1,
+            n_gen=128, proposal=iqk_parameter_proposal())
+        ops = campaign.HostOps(nominal_khz=1)
+        ops._claim_binding = mock.Mock(microbench_claim=object())
+        ops._build_state["tree"] = mock.Mock()
+        ops._build_state["tree"].path.path = "/tmp/not-executed"
+        command = mock.Mock(binding=object(), receipt=object())
+        anchor = mock.Mock(tool="llama-bench")
+        captured = {}
+
+        def capture_plan(**kwargs):
+            captured.update(kwargs)
+            raise RuntimeError("captured before any runner")
+
+        with mock.patch.object(ops, "_construct", return_value=command), \
+             mock.patch.object(ops, "_anchor_identity_for_bench", return_value=anchor), \
+             mock.patch.object(ops, "_t1_evaluation_request", return_value=object()), \
+             mock.patch.object(campaign.microbench, "MicrobenchPlan",
+                               side_effect=capture_plan):
+            with self.assertRaisesRegex(RuntimeError, "captured before any runner"):
+                ops.run_paired_blocks(built, object(), object())
+        self.assertEqual(captured["pairs_per_block"], 5)
+
+    def test_prefill_authority_remains_one_fresh_pair(self):
+        recipe_id = campaign.HISTORICAL_CALIBRATED_RECIPE_ID
+        calibration = typed_calibration(
+            recipe_id=recipe_id, phase="prefill",
+            calibration_frame={
+                "recipe_id": recipe_id, "prompt_tokens": 512, "reps": 1,
+                "candidate_ggml_iqk": "0", "anchor_ggml_iqk": "0",
+            })
+        built = spec(calibration=calibration, blocks=10, reps=1, n_prompt=512,
+                     proposal=iqk_parameter_proposal())
+        self.assertEqual(built.fresh_pairs_per_block, 1)
+
+    def test_decode_frame_refuses_prompt_axis_or_undeclared_aggregation(self):
+        recipe_id = "t1b.llama_cpu.llama_bench_decode.v1"
+        wrong_axis = {
+            "recipe_id": recipe_id, "prompt_tokens": 128, "reps": 1,
+            "candidate_ggml_iqk": "0", "anchor_ggml_iqk": "0",
+            "fresh_pairs_per_block": 5, "aggregation": "median_per_arm",
+        }
+        with self.assertRaisesRegex(ValueError, "recipe-local calibration_frame"):
+            control_runner.calibration_frame_contract(
+                wrong_axis, recipe_id=recipe_id)
+        wrong_aggregation = dict(wrong_axis)
+        wrong_aggregation.pop("prompt_tokens")
+        wrong_aggregation["decode_tokens"] = 128
+        wrong_aggregation["aggregation"] = "mean_per_arm"
+        with self.assertRaisesRegex(ValueError, "median_per_arm"):
+            control_runner.calibration_frame_contract(
+                wrong_aggregation, recipe_id=recipe_id)
+
     def test_live_calibration_frame_refuses_a_different_baseline_recipe(self):
         """A/A noise may license only the arm recipe it actually measured."""
         passed = schemas.Check(schemas.PASS)
@@ -1340,6 +1477,20 @@ class TestTheAcceptedCalibrationBindsTheLiveRule(unittest.TestCase):
             summary["anchor_motion"]["bound"] = 0.5
             summary_path.write_text(json.dumps(summary), encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "anchor-motion bound"):
+                campaign.load_calibration_bundle(bundle)
+
+    def test_calibration_ingestion_rederives_the_physical_pair_count(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = write_calibration_bundle(Path(tmp) / "calibration")
+            raw_path = bundle / "raw" / "anchor_motion_calibration.json"
+            raw = json.loads(raw_path.read_text(encoding="utf-8"))
+            raw["blocks"][0]["plan"]["pairs"] = 5
+            raw_path.write_text(json.dumps(raw), encoding="utf-8")
+            summary_path = bundle / "summary.json"
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            summary["anchor_motion"]["raw_sha256"] = schemas.content_hash(raw)
+            summary_path.write_text(json.dumps(summary), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "wrong fresh-pair plan"):
                 campaign.load_calibration_bundle(bundle)
 
     def test_window_authority_refuses_a_different_ranked_length(self):
@@ -2967,37 +3118,25 @@ class TestThePreflightIsWiredToSomethingThatExists(unittest.TestCase):
         self.assertIn("concurrent_inference", " ".join(check.reasons))
 
     def test_an_idle_host_is_still_startable(self):
-        """CONTROL, and it is the one that matters: the boost check's own
-        COULD_NOT_CHECK is the NORMAL reading before a run, and hardening the
-        concurrency layer must not resurrect the idle-frequency trap."""
+        """Parked pre-run cores are a recorded snapshot, not a T1 gate."""
         check = self._run(schemas.PASS, boosting=16, load1=3.3)
-        self.assertNotEqual(check.outcome, schemas.FAIL)
-        self.assertIn("IDLE", " ".join(check.reasons))
+        self.assertEqual(check.outcome, schemas.PASS)
 
-    def test_the_boost_gate_cannot_rule_in_a_preflight_and_the_run_proceeds(self):
-        """PINS A KNOWN LIMIT rather than asserting a property that cannot hold.
-
-        `LOADED_ENOUGH_TO_JUDGE_BOOST` and `HostStatePolicy.max_load_per_core`
-        are THE SAME NUMBER with opposite senses: below 0.25/core the boost
-        count is declared unevaluable, and above 0.25/core `check_load` refuses
-        the run outright. The only load at which the boost gate can PASS is
-        exactly 0.25/core. So a `HostOps` preflight never returns PASS, and the
-        `if outcome == PASS` branch at the end of it is unreachable.
-
-        That is not a fail-open — the run still proceeds, and the clock is
-        judged where it is valid — but it must be recorded rather than believed
-        away, and the preflight's record carries the reading either way.
-        """
-        quiet = self._run(schemas.PASS, boosting=16, load1=3.3)
-        self.assertEqual(quiet.outcome, schemas.COULD_NOT_CHECK)
-        self.assertEqual(campaign.LOADED_ENOUGH_TO_JUDGE_BOOST,
-                         campaign.microbench.HostStatePolicy().max_load_per_core)
+    def test_non_screen_strict_preflight_ignores_point_boost_and_load_verdicts(self):
+        """T1 judges frequency/power in-window; stale point clocks cannot refuse."""
+        rejected = schemas.Check(schemas.FAIL, ("synthetic point verdict",))
+        with mock.patch.object(campaign, "check_boost_under_load",
+                               return_value=rejected), \
+             mock.patch.object(campaign.microbench.HostStatePolicy, "check_load",
+                               return_value=rejected):
+            check = self._run(schemas.PASS, boosting=3, load1=96.0)
+        self.assertEqual(check.outcome, schemas.PASS)
+        self.assertNotIn("synthetic point verdict", " ".join(check.reasons))
 
     def test_a_loaded_host_is_recorded_not_refused_by_load_ceiling(self):
         """Ordinary host load is noise; claim/inference checks own contention."""
         check = self._run(schemas.PASS, boosting=90, load1=96.0)
-        self.assertNotEqual(check.outcome, schemas.FAIL)
-        self.assertIn("load", " ".join(check.reasons))
+        self.assertEqual(check.outcome, schemas.PASS)
 
     def test_a_cpu_campaign_refuses_before_claim_when_package_power_is_unreadable(self):
         patches = self._patched(schemas.PASS, boosting=16, load1=3.3)
