@@ -325,6 +325,27 @@ class OfflineLaunchGate(unittest.TestCase):
         self.assertIn('permit["operation_key"]', source)
         self.assertIn("operation_key", inspect.getsource(S.SharedRewardRuntime.materialize))
 
+    def test_empty_kfd_never_becomes_residency_from_aggregate_vram(self):
+        """A VRAM delta without the captured child KFD PID proves nothing."""
+        source = inspect.getsource(gpu_runner._invoke_locked)
+        self.assertIn("process.pid", source)
+        self.assertIn("owned_kfd_pids", source)
+        self.assertLess(source.index('if not any(sample["owned_kfd_pids"]'),
+                        source.index('"hip_residency_proved": True'))
+
+    def test_build_logs_are_operation_key_scoped_and_exclusive(self):
+        """S1/S2 cannot append to or overwrite one campaign-named build log."""
+        source = inspect.getsource(S.StaticGpuSourceBuilder.build)
+        self.assertIn("operation_key", source)
+        self.assertIn("exclusive", source)
+
+    def test_teardown_attempts_every_tree_and_seals_all_outcomes(self):
+        """One teardown failure cannot skip the remaining owned worktrees."""
+        source = inspect.getsource(S.StaticGpuSourceBuilder.build)
+        self.assertIn("teardown_outcomes", source)
+        self.assertIn("receipt_sha256", source)
+        self.assertIn("for", source[source.find("finally"):])
+
     def test_source_scope_rejects_reward_symbols_even_under_kernel_prefix(self):
         """A path prefix alone cannot authorize benchmark/reward manipulation."""
         manifest = mock.Mock(
