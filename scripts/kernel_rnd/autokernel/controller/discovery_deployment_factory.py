@@ -10,6 +10,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Callable, Mapping
 
 from ..execution import inference_window
@@ -68,6 +69,11 @@ class ExperimentTemplate:
         if any(Path(path).suffix not in _GPU_KERNEL_EXTENSIONS or not symbols
                or "<file-scope>" in symbols for path, symbols in self.allowed_symbols.items()):
             raise DeploymentFactoryError("experiment template includes an unsafe kernel scope")
+        object.__setattr__(self, "allowed_symbols", MappingProxyType(
+            {path: frozenset(symbols) for path, symbols in self.allowed_symbols.items()}))
+        object.__setattr__(self, "semantics", MappingProxyType(
+            json.loads(json.dumps(dict(self.semantics), sort_keys=True,
+                                  ensure_ascii=False, allow_nan=False))))
 
     def matches(self, intent: controller.GpuSourceExperimentIntent) -> bool:
         return (self.template_id, self.target_surface, self.target_symbol,
@@ -87,6 +93,8 @@ class ExperimentTemplateRegistry:
                     template.template_id for template in self.templates.values()
                     if isinstance(template, ExperimentTemplate)}):
             raise DeploymentFactoryError("experiment template registry version/hash is invalid")
+        frozen_templates = MappingProxyType(dict(self.templates))
+        object.__setattr__(self, "templates", frozen_templates)
         body = {"version": self.version, "templates": {
             key: {"template_id": value.template_id, "target_surface": value.target_surface,
                   "target_symbol": value.target_symbol, "correctness_id": value.correctness_id,
@@ -94,7 +102,11 @@ class ExperimentTemplateRegistry:
                   "allowed_files": sorted(value.allowed_files),
                   "allowed_symbols": {path: sorted(symbols) for path, symbols in value.allowed_symbols.items()},
                   "semantics": dict(value.semantics),
-                  "dispatch": repr(value.dispatch)}
+                  "dispatch": {"candidate_exact": [vars(row) for row in value.dispatch.candidate_exact],
+                               "anchor_exact": [vars(row) for row in value.dispatch.anchor_exact],
+                               "candidate_forbidden": [vars(row) for row in value.dispatch.candidate_forbidden],
+                               "anchor_forbidden": [vars(row) for row in value.dispatch.anchor_forbidden],
+                               "invariants": [vars(row) for row in value.dispatch.invariants]}}
             for key, value in sorted(self.templates.items())}}
         expected = hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":"),
                                             ensure_ascii=False, allow_nan=False).encode()).hexdigest()
@@ -233,11 +245,19 @@ def materialize(config: deployment.DiscoveryDeployment, registry: Mapping[str, M
         return result
     def args(candidate: controller.PlannedCandidate, build_: controller.GpuSourceBuild, permit: Mapping[str, Any]):
         config.revalidate()
+        if (build_.measurement_binary is None or build_.common_loader_dir is None
+                or build_.anchor_loader_dir is None or build_.candidate_loader_dir is None
+                or build_.reward_runtime_sha256 is None):
+            raise DeploymentFactoryError("source build lacks a sealed shared reward closure")
         result = runner.build(candidate, build_, permit)
         if (getattr(result, "factor", None) != "source_patch"
                 or str(getattr(result, "model", "")) != str(config.model.path)
                 or str(getattr(result, "anchor_build", "")) != str(build_.anchor_build)
                 or str(getattr(result, "candidate_build", "")) != str(build_.candidate_build)
+                or str(getattr(result, "measurement_binary", "")) != str(build_.measurement_binary)
+                or str(getattr(result, "common_loader_dir", "")) != str(build_.common_loader_dir)
+                or str(getattr(result, "anchor_loader_dir", "")) != str(build_.anchor_loader_dir)
+                or str(getattr(result, "candidate_loader_dir", "")) != str(build_.candidate_loader_dir)
                 or getattr(result, "promotion_claim", False) is not False
                 or str(getattr(result, "inference_window_lock", "")) != str(config.inference_window_lock)):
             raise DeploymentFactoryError("runner arguments do not bind source builds/model/window/discovery authority")

@@ -119,7 +119,8 @@ def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
            mmap: bool = True, no_op_offload: bool = False,
            split_mode: str = "layer", no_kv_offload: bool = False,
            poll: int = 50, inference_window_lock: Path | None = None,
-           reward_binary: Path | None = None, hip_library_dir: Path | None = None) -> dict:
+           reward_binary: Path | None = None, hip_library_dir: Path | None = None,
+           common_loader_dir: Path | None = None) -> dict:
     """Run one model load/measurement with the ratified discovery overlap policy."""
     if allow_small_model_cpu_overlap:
         model_bytes = model.stat().st_size
@@ -145,7 +146,7 @@ def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
             generation_tokens=generation_tokens, threads=threads, ubatch=ubatch,
             batch=batch, mmap=mmap, no_op_offload=no_op_offload,
             split_mode=split_mode, no_kv_offload=no_kv_offload, poll=poll,
-            reward_binary=reward_binary, hip_library_dir=hip_library_dir)
+            reward_binary=reward_binary, hip_library_dir=hip_library_dir, common_loader_dir=common_loader_dir)
         # Deliberately no shared CPU inference-window lock here.  The <=512MiB
         # policy treats CPU activity as discovery noise; it is not a strict
         # calibration claim and must not serialize small GPU exploration.
@@ -187,7 +188,7 @@ def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
                 generation_tokens=generation_tokens, threads=threads, ubatch=ubatch,
                 batch=batch, mmap=mmap, no_op_offload=no_op_offload,
                 split_mode=split_mode, no_kv_offload=no_kv_offload, poll=poll,
-                reward_binary=reward_binary, hip_library_dir=hip_library_dir)
+                reward_binary=reward_binary, hip_library_dir=hip_library_dir, common_loader_dir=common_loader_dir)
             if getattr(coverage, "borrowed", False):
                 coverage.validate()
         finally:
@@ -210,9 +211,11 @@ def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
                    batch: int = 512, mmap: bool = True,
                    no_op_offload: bool = False, split_mode: str = "layer",
                    no_kv_offload: bool = False, poll: int = 50,
-                   reward_binary: Path | None = None, hip_library_dir: Path | None = None) -> dict:
+                   reward_binary: Path | None = None, hip_library_dir: Path | None = None,
+                   common_loader_dir: Path | None = None) -> dict:
     binary = (reward_binary or build / "bin" / "llama-bench").resolve()
     loader_dir = (hip_library_dir or build / "bin").resolve()
+    common_dir = (common_loader_dir or binary.parent).resolve()
     if not binary.is_file() or not os.access(binary, os.X_OK):
         raise RuntimeError("sealed reward executable is not executable")
     if not loader_dir.is_dir() or not (loader_dir / "libggml-hip.so").is_file():
@@ -227,7 +230,10 @@ def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
             "-nkvo", "1" if no_kv_offload else "0",
             "--poll", str(poll),
             "--autokernel-harden", str(seed), "-o", "jsonl")
-    env = {**os.environ, "LD_LIBRARY_PATH": f"{loader_dir}:/opt/rocm/lib"}
+    if not common_dir.is_dir():
+        raise RuntimeError("sealed common reward loader directory is absent")
+    env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+           "LD_LIBRARY_PATH": f"{loader_dir}:{common_dir}:/opt/rocm/lib"}
     process = subprocess.Popen(argv, env=env, stdin=subprocess.DEVNULL,
                                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                text=True, start_new_session=True)
@@ -289,6 +295,7 @@ def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
             "reward_binary": str(binary), "reward_binary_sha256": sha256_file(binary),
             "hip_library": str(loader_dir / "libggml-hip.so"),
             "hip_library_sha256": sha256_file(loader_dir / "libggml-hip.so"),
+            "common_loader_dir": str(common_dir),
             "metric": float(row["avg_ts"]), "raw_row": row,
             "stderr_tail": stderr[-2000:], "residency": samples,
             "hip_residency_proved": True}
@@ -434,11 +441,15 @@ def preflight(args: argparse.Namespace) -> dict:
         if args.workload == "prefill_pp512"
         else (0, 128, "tg128-ngl99", "decode_tokens_per_s"))
     runtime_arms = None
-    if args.factor == "source_patch" and getattr(args, "measurement_binary", None):
+    if args.factor == "source_patch":
+        if not all(getattr(args, key, None) for key in
+                   ("measurement_binary", "common_loader_dir", "anchor_loader_dir", "candidate_loader_dir")):
+            raise RuntimeError("source patch requires a sealed shared reward runtime closure")
         measurement = Path(args.measurement_binary).resolve()
         anchor_loader = Path(args.anchor_loader_dir).resolve()
         candidate_loader = Path(args.candidate_loader_dir).resolve()
-        if (not measurement.is_file() or not os.access(measurement, os.X_OK)
+        common_loader = Path(args.common_loader_dir).resolve()
+        if (not measurement.is_file() or not os.access(measurement, os.X_OK) or not common_loader.is_dir()
                 or not all(path.is_dir() and (path / "libggml-hip.so").is_file()
                            for path in (anchor_loader, candidate_loader))):
             raise RuntimeError("source patch runtime closure is incomplete")
@@ -451,6 +462,7 @@ def preflight(args: argparse.Namespace) -> dict:
                         "measurement_binary_sha256": shared_sha,
                         "anchor_loader_dir": str(anchor_loader),
                         "candidate_loader_dir": str(candidate_loader),
+                        "common_loader_dir": str(common_loader),
                         "anchor_hip_sha256": anchor_hip,
                         "candidate_hip_sha256": candidate_hip,
                         "reward_closure": "shared_anchor_binary_per_arm_hip_dso"}
@@ -568,7 +580,9 @@ def run(args: argparse.Namespace) -> dict:
             reward_binary=(Path(sealed["runtime_arms"]["measurement_binary"])
                            if sealed["runtime_arms"] else None),
             hip_library_dir=(Path(sealed["runtime_arms"]["anchor_loader_dir"])
-                             if sealed["runtime_arms"] else None))
+                             if sealed["runtime_arms"] else None),
+            common_loader_dir=(Path(sealed["runtime_arms"]["common_loader_dir"])
+                               if sealed["runtime_arms"] else None))
             for i in range(args.calls)]
         bank_body = {
             "schema": SCHEMA_BANK, "campaign_id": args.campaign_id,
@@ -611,7 +625,9 @@ def run(args: argparse.Namespace) -> dict:
             reward_binary=(Path(sealed["runtime_arms"]["measurement_binary"])
                            if sealed["runtime_arms"] else None),
             hip_library_dir=(Path(sealed["runtime_arms"]["candidate_loader_dir"])
-                             if sealed["runtime_arms"] else None))
+                             if sealed["runtime_arms"] else None),
+            common_loader_dir=(Path(sealed["runtime_arms"]["common_loader_dir"])
+                               if sealed["runtime_arms"] else None))
             for i in range(args.calls)]
         center = sum(bank["anchor_samples"]) / len(bank["anchor_samples"])
         values = [run["metric"] for run in candidate_runs]
@@ -699,6 +715,7 @@ def parser() -> argparse.ArgumentParser:
                         default=SMALL_MODEL_OVERLAP_MAX_BYTES)
     result.add_argument("--device-id", default=DEVICE_ID)
     result.add_argument("--measurement-binary")
+    result.add_argument("--common-loader-dir")
     result.add_argument("--anchor-loader-dir")
     result.add_argument("--candidate-loader-dir")
     result.add_argument("--cpu-claim-journal", default="/mnt/raid0/llm/ak-claims/region.jsonl")

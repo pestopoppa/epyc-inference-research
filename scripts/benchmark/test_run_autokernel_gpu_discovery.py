@@ -38,7 +38,7 @@ class TestGpuDiscoveryBuildIdentity(unittest.TestCase):
                 args = argparse.Namespace(model=str(model), anchor_build=str(anchor), candidate_build=str(candidate),
                     factor="source_patch", campaign_id="gpu-source", calls=3, workload="prefill_pp512",
                     allow_small_model_cpu_overlap=True, measurement_binary=str(anchor / "bin" / "llama-bench"),
-                    anchor_loader_dir=str(anchor / "bin"), candidate_loader_dir=str(candidate / "bin"),
+                    common_loader_dir=str(anchor / "bin"), anchor_loader_dir=str(anchor / "bin"), candidate_loader_dir=str(candidate / "bin"),
                     small_model_max_bytes=gpu.SMALL_MODEL_OVERLAP_MAX_BYTES, device_id=gpu.DEVICE_ID,
                     inference_window_lock=None)
                 sealed = gpu.preflight(args)

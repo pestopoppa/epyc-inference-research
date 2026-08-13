@@ -369,12 +369,27 @@ class GpuSourceBuild:
     candidate_build: Path
     candidate_identity: gpu_source_proofs.BuildIdentity
     anchor_identity: gpu_source_proofs.BuildIdentity
+    measurement_binary: Path | None = None
+    common_loader_dir: Path | None = None
+    anchor_loader_dir: Path | None = None
+    candidate_loader_dir: Path | None = None
+    reward_runtime_sha256: str | None = None
     def __post_init__(self) -> None:
         for path in (self.anchor_build, self.candidate_build):
             if not path.is_absolute() or not path.is_dir():
                 raise DiscoveryControllerError("GPU source build paths must be existing absolute directories")
         if self.candidate_identity == self.anchor_identity:
             raise DiscoveryControllerError("source screen requires distinct sealed anchor and candidate build identities")
+        runtime = (self.measurement_binary, self.common_loader_dir, self.anchor_loader_dir,
+                   self.candidate_loader_dir, self.reward_runtime_sha256)
+        if any(value is not None for value in runtime):
+            if (not all(value is not None for value in runtime)
+                    or not isinstance(self.measurement_binary, Path) or not self.measurement_binary.is_file()
+                    or not isinstance(self.common_loader_dir, Path) or not self.common_loader_dir.is_dir()
+                    or not isinstance(self.anchor_loader_dir, Path) or not self.anchor_loader_dir.is_dir()
+                    or not isinstance(self.candidate_loader_dir, Path) or not self.candidate_loader_dir.is_dir()
+                    or not isinstance(self.reward_runtime_sha256, str) or not HASH.fullmatch(self.reward_runtime_sha256)):
+                raise DiscoveryControllerError("GPU source build has an incomplete shared reward closure")
 
 
 @dataclass(frozen=True)
