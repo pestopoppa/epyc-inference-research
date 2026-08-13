@@ -66,3 +66,30 @@ def load(path: str | Path) -> BaselineBank:
     return BaselineBank(dict(body["frame"]), tuple(float(x) for x in values),
                         float(body["sentinel_before"]),
                         None if body["sentinel_after"] is None else float(body["sentinel_after"]))
+
+
+def create(*, frame: Mapping[str, Any], invoke_anchor, anchor_count: int = 3) -> BaselineBank:
+    """Seal O(1) anchor invocations once for a whole discovery batch."""
+    if anchor_count < 2:
+        raise BaselineBankError("baseline bank needs at least two anchor invocations")
+    samples = tuple(float(invoke_anchor()) for _ in range(anchor_count))
+    return BaselineBank(dict(frame), samples, samples[-1])
+
+
+def screen(*, bank: BaselineBank, frame: Mapping[str, Any], invoke_candidate,
+           competing_inference: bool) -> dict[str, Any]:
+    """Three candidate-only calls; ordinary host load is intentionally not input.
+
+    The caller must provide the claim-scoped competing-inference witness. That
+    is the one discovery blocker; service/build/load noise is reflected in the
+    uncertainty label, not converted into a false refusal.
+    """
+    bank.admit(frame)
+    if competing_inference:
+        raise BaselineBankError("competing model inference occupies claimed screening compute")
+    samples = tuple(float(invoke_candidate()) for _ in range(3))
+    report = bank.nominate(samples)
+    report.update({"candidate_invocations": 3, "anchor_invocations": 0,
+                   "host_noise_policy": "recorded_not_blocking",
+                   "non_promotable": True})
+    return report

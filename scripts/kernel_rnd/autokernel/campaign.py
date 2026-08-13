@@ -310,8 +310,10 @@ MODULES_THE_DRIVER_USES: Mapping[str, str] = {
     "execution.provider": "provider roots are realpath-resolved and must not overlap "
                           "shared ROCm/system prefixes or frozen production trees",
     "execution.sandbox": "C6: code authored by the loop executes under Landlock, seccomp, "
-                         "non-root finite rlimits and an owned cgroup whose empty teardown "
-                         "is verified; an agent tool allowlist does not constrain a binary",
+                          "non-root finite rlimits and an owned cgroup whose empty teardown "
+                          "is verified; an agent tool allowlist does not constrain a binary",
+    "execution.screening_baseline": "amortized exact-frame anchor banks support noisy "
+                                    "candidate-only discovery but cannot grant rank authority",
     "execution.t0_provider": "the executed T0 evidence provider",
     "execution.worktree": "no candidate exists without it; production stays byte-identical",
     "resource.claim_witness": "a claim is witnessed, not asserted",
@@ -1267,10 +1269,12 @@ def load_calibration_bundle(path: os.PathLike[str] | str) -> LeanCalibration:
     if not isinstance(frame, Mapping) or not isinstance(candidate_receipt, Mapping) \
             or not isinstance(anchor_receipt, Mapping):
         raise ValueError("calibration anchor-motion evidence lacks the declared A/A frame")
+    token_key = "n_prompt" if recipes.get_recipe(recipe_id).phase == "prefill" else "n_gen"
+    frame_key = "prompt_tokens" if token_key == "n_prompt" else "decode_tokens"
     for receipt in (candidate_receipt, anchor_receipt):
         params = receipt.get("params")
         if not isinstance(params, Mapping) \
-                or params.get("n_prompt") != frame.get("prompt_tokens") \
+                or params.get(token_key) != frame.get(frame_key) \
                 or params.get("reps") != frame.get("reps") \
                 or params.get("ggml_iqk") != frame.get("anchor_ggml_iqk") \
                 or receipt.get("recipe_id") != recipe_id:

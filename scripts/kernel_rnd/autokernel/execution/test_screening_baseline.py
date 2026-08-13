@@ -37,6 +37,23 @@ class ScreeningBaselineBankTest(unittest.TestCase):
         self.assertEqual(report["nomination"], "top_k_candidate_only_not_a_keep")
         self.assertIn("nonpromotable", report["uncertainty"])
 
+    def test_bank_is_o1_anchors_and_each_screen_is_three_candidates_zero_anchors(self):
+        calls = {"anchor": 0, "candidate": 0}
+        def anchor(): calls["anchor"] += 1; return 100.0
+        value = bank.create(frame={"recipe": "decode"}, invoke_anchor=anchor)
+        for _ in range(7):
+            report = bank.screen(frame={"recipe": "decode"}, bank=value,
+                                 invoke_candidate=lambda: calls.__setitem__("candidate", calls["candidate"] + 1) or 101.0,
+                                 competing_inference=False)
+            self.assertEqual((report["candidate_invocations"], report["anchor_invocations"]), (3, 0))
+        self.assertEqual(calls, {"anchor": 3, "candidate": 21})
+
+    def test_only_competing_inference_blocks_screen(self):
+        value = bank.BaselineBank({"recipe": "decode"}, (100., 100.), 100.)
+        with self.assertRaisesRegex(bank.BaselineBankError, "competing model inference"):
+            bank.screen(bank=value, frame={"recipe": "decode"},
+                        invoke_candidate=lambda: 101., competing_inference=True)
+
 
 if __name__ == "__main__":
     unittest.main()
