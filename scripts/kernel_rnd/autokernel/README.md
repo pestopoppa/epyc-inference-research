@@ -179,6 +179,9 @@ prefill or tg128 decode. The selected calibration must name that exact recipe;
 decode uses `n_gen=128` and cannot inherit a prefill bundle or an `n_prompt`
 frame. V2 also requires the physical-envelope template to match that bundle's
 declared committed cell, apart from the schedule-dependent frame hash. The
+result carries a self-hashed conversion receipt mapping the calibration's
+`model:shape:aa_calibration` identity to the canonical campaign unit while
+preserving every physical fact. The
 distinct-regime decode pair is bootstrap-only because its completed
 journals are the source for the real held-out receipts. A later prefill pair may
 then use `heldout_bound` evidence. V1 manifests retain their historical pp512

@@ -20,7 +20,9 @@ class MatchedPairPreparationTest(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory(
             dir="/mnt/raid0/llm/autokernel")
         self.root = Path(self.temp.name).resolve()
-        self.model = self.root / "fixture.gguf"
+        # The production-shaped basename makes calibration-cell -> campaign-
+        # unit identity conversion exercise the same mapping as r42.
+        self.model = self.root / "Qwen2.5-Coder-0.5B-Q4_K_M.gguf"
         self.model.write_bytes(b"not-a-real-model; preparation hashes only\n")
         self.calibration = write_calibration_bundle(self.root / "calibration")
         self.intervention = proposal()
@@ -44,7 +46,8 @@ class MatchedPairPreparationTest(unittest.TestCase):
             blocks=12,
             reps=campaign.IQK_MATCHED_PAIR_REPS)
         envelope = physical_bounds.PhysicalEnvelope(
-            shape_id=base.measurement_unit_id, delivered_unit="token",
+            shape_id=f"{self.model.name}:pp512:aa_calibration",
+            delivered_unit="token",
             flops_per_unit=1.0, bytes_per_unit=1.0,
             peak_compute_flops_s=1e15, peak_memory_bytes_s=1e15,
             measurement_frame_sha256=physical_bounds.measurement_frame_sha256(
@@ -156,7 +159,8 @@ class MatchedPairPreparationTest(unittest.TestCase):
             recipe_id=P.DECODE_RECIPE_ID, n_gen=128, blocks=12,
             reps=campaign.IQK_MATCHED_PAIR_REPS)
         envelope = physical_bounds.PhysicalEnvelope(
-            shape_id=spec.measurement_unit_id, delivered_unit="token",
+            shape_id=f"{self.model.name}:tg128:aa_calibration",
+            delivered_unit="token",
             flops_per_unit=1.0, bytes_per_unit=1.0,
             peak_compute_flops_s=1e15, peak_memory_bytes_s=1e15,
             measurement_frame_sha256=physical_bounds.measurement_frame_sha256(
@@ -180,6 +184,17 @@ class MatchedPairPreparationTest(unittest.TestCase):
         self.assertEqual(result["sole_changed_factor"], "ggml_iqk")
         self.assertFalse(result["inference_started"])
         self.assertFalse(result["campaign_executed"])
+        conversion = result["physical_envelope_conversion"]
+        self.assertEqual(conversion["source_shape_id"],
+                         f"{self.model.name}:pp512:aa_calibration")
+        self.assertEqual(
+            conversion["destination_shape_id"],
+            f"{P.PREFILL_RECIPE_ID}:{self.model}")
+        self.assertEqual(conversion["converted_fields"],
+                         ["measurement_frame_sha256", "shape_id"])
+        unsigned = dict(conversion)
+        receipt_sha = unsigned.pop("receipt_sha256")
+        self.assertEqual(receipt_sha, P.schemas.content_hash(unsigned))
         frames = []
         for name in ("intervention", "control"):
             output = Path(result["outputs"][name]["path"])
@@ -205,6 +220,9 @@ class MatchedPairPreparationTest(unittest.TestCase):
             self.assertEqual(entry["falsifier"], expected_falsifier)
             raw = json.loads((output / "least-commitment-capture-plan.json").read_text())
             self.assertEqual(raw["schema"], C.SCHEMA)
+            physical = json.loads((output / "physical-envelope.json").read_text())
+            self.assertEqual(physical["shape_id"],
+                             f"{P.PREFILL_RECIPE_ID}:{self.model}")
             frames.append(raw["factors"])
         changed = [key for key in frames[0] if frames[0][key] != frames[1][key]]
         self.assertEqual(changed, ["ggml_iqk"])
@@ -213,6 +231,11 @@ class MatchedPairPreparationTest(unittest.TestCase):
         raw = self.manifest()
         raw["schema"] = P.LEGACY_SCHEMA
         raw.pop("measurement_frame")
+        # Legacy manifests never licensed the calibration-cell conversion;
+        # their template already carried the canonical campaign unit.
+        envelope = json.loads(self.envelope_path.read_text(encoding="utf-8"))
+        envelope["shape_id"] = f"{P.PREFILL_RECIPE_ID}:{self.model}"
+        self.envelope_path.write_text(json.dumps(envelope), encoding="utf-8")
         result = P.prepare(raw)
         self.assertEqual(result["measurement_frame"], {
             "recipe_id": P.PREFILL_RECIPE_ID, "n_prompt": 512,
@@ -233,6 +256,9 @@ class MatchedPairPreparationTest(unittest.TestCase):
             regime = store["hypotheses"][0]["regime"]
             self.assertEqual(regime["recipe_id"], P.DECODE_RECIPE_ID)
             self.assertEqual(regime["shape"], "tg128")
+            physical = json.loads((output / "physical-envelope.json").read_text())
+            self.assertEqual(physical["shape_id"],
+                             f"{P.DECODE_RECIPE_ID}:{self.model}")
             if role == "intervention":
                 self.assertEqual(store["hypotheses"][0]["falsifier"],
                                  P.DECODE_HYPOTHESIS_FALSIFIER)

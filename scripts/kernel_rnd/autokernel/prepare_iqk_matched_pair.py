@@ -194,16 +194,54 @@ def _branch(raw: Any, label: str) -> dict[str, Any]:
 def _matched_envelope(
         template: physical_bounds.PhysicalEnvelope, *,
         spec: campaign.CampaignSpec, matched_experiment_id: str,
-) -> physical_bounds.PhysicalEnvelope:
+        calibration_path: Path, template_path: Path,
+        calibration_cell_conversion: bool,
+) -> tuple[physical_bounds.PhysicalEnvelope, dict[str, Any]]:
+    """Convert a verified calibration-cell envelope to one campaign unit.
+
+    Calibration labels its raw control cell (for example
+    ``model.gguf:pp512:aa_calibration``), while CampaignSpec requires its
+    canonical ranked-unit identity (``recipe_id:/absolute/model``).  Only those
+    two identity fields are converted.  All physical facts remain byte-value
+    equal and the result carries a self-hashed conversion receipt.
+    """
     raw = template.to_dict()
+    source = dict(raw)
+    if not calibration_cell_conversion and raw["shape_id"] != spec.measurement_unit_id:
+        raise PreparationError(
+            "legacy physical envelope shape_id must already equal the canonical "
+            "campaign measurement unit")
+    raw["shape_id"] = spec.measurement_unit_id
     raw["measurement_frame_sha256"] = physical_bounds.measurement_frame_sha256(
         spec.recipe_id, spec.bench_params_for(matched_experiment_id))
-    return physical_bounds.PhysicalEnvelope.from_mapping(raw)
+    converted = physical_bounds.PhysicalEnvelope.from_mapping(raw)
+    invariant = dict(raw)
+    invariant.pop("shape_id")
+    invariant.pop("measurement_frame_sha256")
+    receipt: dict[str, Any] = {
+        "schema": "epyc.autokernel.physical_envelope_conversion.v1",
+        "calibration_bundle": str(calibration_path),
+        "source_template": str(template_path),
+        "source_file_sha256": _sha256(template_path),
+        "source_envelope_sha256": schemas.content_hash(source),
+        "source_shape_id": source["shape_id"],
+        "source_measurement_frame_sha256": source["measurement_frame_sha256"],
+        "destination_shape_id": converted.shape_id,
+        "destination_measurement_frame_sha256": converted.measurement_frame_sha256,
+        "recipe_id": spec.recipe_id,
+        "matched_experiment_id": matched_experiment_id,
+        "invariant_physical_facts_sha256": schemas.content_hash(invariant),
+        "converted_fields": [
+            name for name in ("measurement_frame_sha256", "shape_id")
+            if source[name] != raw[name]],
+    }
+    receipt["receipt_sha256"] = schemas.content_hash(receipt)
+    return converted, receipt
 
 
 def _validate_calibration_envelope(
         calibration_path: Path, template: physical_bounds.PhysicalEnvelope,
-        measurement_frame: Mapping[str, Any]) -> None:
+        measurement_frame: Mapping[str, Any], model: str) -> None:
     """Require v2 physical facts from the selected calibration's exact cell.
 
     The matched schedule changes the measurement-frame hash, but it does not
@@ -224,6 +262,12 @@ def _validate_calibration_envelope(
     except (TypeError, ValueError) as exc:
         raise PreparationError(
             f"calibration committed-cell physical envelope is invalid: {exc}") from exc
+    canonical_source_shape = (
+        f"{Path(model).name}:{measurement_frame['shape']}:aa_calibration")
+    if expected.shape_id != canonical_source_shape:
+        raise PreparationError(
+            "calibration committed-cell physical envelope has a noncanonical "
+            f"shape_id: {expected.shape_id!r} != {canonical_source_shape!r}")
     selected = template.to_dict()
     declared = expected.to_dict()
     selected.pop("measurement_frame_sha256", None)
@@ -492,7 +536,7 @@ def prepare(raw: Mapping[str, Any]) -> dict[str, Any]:
         _load(template_path, "physical envelope template"))
     if schema == SCHEMA:
         _validate_calibration_envelope(
-            calibration_path, template, measurement_frame)
+            calibration_path, template, measurement_frame, model)
     # The A/A control is intentionally uninstantiable without its typed control
     # plan. Derive the common frame once from the intervention, then change the
     # one licensed factor before constructing both final, fully governed specs.
@@ -500,8 +544,10 @@ def prepare(raw: Mapping[str, Any]) -> dict[str, Any]:
         proposal=proposal, branch=intervention, model=model,
         calibration=calibration, blocks=blocks, reps=reps,
         measurement_frame=measurement_frame)
-    envelope = _matched_envelope(
-        template, spec=base, matched_experiment_id=matched_id)
+    envelope, envelope_conversion = _matched_envelope(
+        template, spec=base, matched_experiment_id=matched_id,
+        calibration_path=calibration_path, template_path=template_path,
+        calibration_cell_conversion=schema == SCHEMA)
     intervention_factors = base.matched_factor_frame_for(
         matched_id, physical_envelope=envelope)
     control_factors = copy.deepcopy(intervention_factors)
@@ -591,6 +637,7 @@ def prepare(raw: Mapping[str, Any]) -> dict[str, Any]:
             "matched_experiment_id": matched_id,
             "measurement_frame": dict(measurement_frame),
             "sole_changed_factor": "ggml_iqk",
+            "physical_envelope_conversion": envelope_conversion,
             "input_manifest_sha256": schemas.content_hash(raw),
             "producer_sha256": _sha256(Path(__file__).resolve()),
             "input_sources": {

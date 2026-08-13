@@ -19,8 +19,12 @@ pair; it cannot pre-bind the evidence it is intended to produce.
 
 For v2 the physical-envelope template must equal the calibration declaration's
 `physical_envelopes.aa_calibration` record except for the
-schedule-dependent `measurement_frame_sha256`, which the publisher re-derives.
-This prevents a pp512 work/shape envelope from being relabelled as tg128.
+schedule-dependent `measurement_frame_sha256`. The calibration cell uses the
+canonical `model.gguf:{pp512|tg128}:aa_calibration` source shape. The publisher
+converts that identity to the campaign's canonical `recipe_id:/absolute/model`
+unit, preserves every physical fact, and records the source file/envelope
+hashes plus a self-hashed conversion receipt in the result. This prevents a
+pp512 work/shape envelope from being silently relabelled as tg128.
 
 Both arm objects name fresh campaign/candidate/capture/intervention identities,
 an independent native diagnostic source, the evidence stage, an optional
