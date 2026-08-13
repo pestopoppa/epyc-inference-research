@@ -3092,13 +3092,19 @@ class HostOps:
                                        cpu_count=len(state.khz_by_cpu) or 1)
         # COULD_NOT_CHECK here is the IDLE case and is expected before a run:
         # it is folded, so it degrades the preflight rather than aborting it.
-        fold(boost, "boost_under_load")
+        # Candidate-only discovery deliberately works through frequency/load
+        # noise.  Its exact-frame bank and explicit uncertainty label nominate
+        # work for later paired confirmation; they do not make a promotion
+        # claim from this point sample.
+        if not spec.screening_only:
+            fold(boost, "boost_under_load")
 
         policy = microbench.HostStatePolicy(
             nominal_khz=self._nominal_khz,
             require_load=False,
             require_package_power=(spec.backend == BACKEND_CPU))
-        fold(policy.check_load(state, cpu_count=len(state.khz_by_cpu) or 1), "load")
+        if not spec.screening_only:
+            fold(policy.check_load(state, cpu_count=len(state.khz_by_cpu) or 1), "load")
         if spec.backend == BACKEND_CPU:
             # A point reading is only an availability preflight.  Exact power
             # is derived later from each block's open/close counter interval.
