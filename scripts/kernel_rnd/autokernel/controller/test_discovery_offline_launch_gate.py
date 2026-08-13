@@ -173,26 +173,43 @@ class OfflineLaunchGate(unittest.TestCase):
         self.assertIsNone(receipt["inference_call_window"])
         overlap = receipt["cpu_coverage"]
         self.assertEqual(overlap["cpu_overlap_policy"], "allowed_discovery_noise")
-        for key in ("cold_load_host_bytes", "rolling_interval_s",
-                    "host_bandwidth_bytes_per_s", "budget_fraction",
-                    "rolling_cold_load_bytes", "bandwidth_budget_bytes"):
+        for key in ("policy_version", "mode", "inputs", "reason",
+                    "lock_interval", "residency_transition"):
             self.assertIn(key, overlap)
-        self.assertLessEqual(overlap["rolling_cold_load_bytes"],
-                             overlap["budget_fraction"]
-                             * overlap["host_bandwidth_bytes_per_s"]
-                             * overlap["rolling_interval_s"])
+        self.assertIn(overlap["mode"],
+                      {"hot_resident", "cold_overlap", "cold_serialized"})
         self.assertFalse(overlap["promotion_claim"])
         self.assertEqual(gpu_runner.DEVICE_ID, "mi210_0")
 
-    def test_overlap_budget_rejects_excessive_cadence(self):
-        """Several individually small loads can exhaust one rolling budget."""
-        budget = getattr(F, "BandwidthDutyCycleBudget", None)
-        self.assertIsNotNone(budget)
-        policy = budget(host_bandwidth_bytes_per_s=1000, rolling_interval_s=10,
-                        budget_fraction=.1)
-        self.assertTrue(policy.admit(cold_load_host_bytes=400, observed_at_s=1))
-        self.assertTrue(policy.admit(cold_load_host_bytes=400, observed_at_s=2))
-        self.assertFalse(policy.admit(cold_load_host_bytes=400, observed_at_s=3))
+    def test_three_mode_admission_defaults_unknown_or_excess_to_serialized(self):
+        """Overlap is earned by all predicates; missing data never guesses."""
+        decide = getattr(gpu_runner, "host_transfer_admission")
+        common = dict(interval_s=10, host_bandwidth_bytes_s=1000,
+                      conservative_fraction=.1, expected_identity_sha256="a" * 64)
+        overlap = decide(bytes_per_cold_load=400, cold_loads=2,
+                         site_policy_allows_overlap=True,
+                         observed_headroom_bytes_s=1000, hot_resident=False,
+                         resident_identity_sha256=None, **common)
+        excessive = decide(bytes_per_cold_load=400, cold_loads=3,
+                           site_policy_allows_overlap=True,
+                           observed_headroom_bytes_s=1000, hot_resident=False,
+                           resident_identity_sha256=None, **common)
+        unknown = decide(bytes_per_cold_load=None, cold_loads=None,
+                         site_policy_allows_overlap=None,
+                         observed_headroom_bytes_s=None, hot_resident=False,
+                         resident_identity_sha256=None, **common)
+        hot = decide(bytes_per_cold_load=0, cold_loads=0,
+                     site_policy_allows_overlap=None,
+                     observed_headroom_bytes_s=None, hot_resident=True,
+                     resident_identity_sha256="a" * 64, **common)
+        self.assertEqual(overlap["mode"], "cold_overlap")
+        self.assertEqual(excessive["mode"], "cold_serialized")
+        self.assertEqual(unknown["mode"], "cold_serialized")
+        self.assertEqual(hot["mode"], "hot_resident")
+        for row in (overlap, excessive, unknown, hot):
+            self.assertEqual(set(row), {"policy_version", "mode", "inputs",
+                                        "reason", "lock_interval",
+                                        "residency_transition"})
 
     def test_large_load_serializes_only_load_then_reuses_hot_residency(self):
         """Large loads release the CPU lock before repeated hot GPU calls."""
