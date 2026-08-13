@@ -14,6 +14,7 @@ from dataclasses import dataclass
 import hashlib
 import json
 import math
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -54,7 +55,14 @@ def _absolute(value: object, label: str) -> Path:
     path = Path(value)
     if not path.is_absolute() or ".." in path.parts:
         raise DeploymentConfigError(f"{label} must be an absolute path")
-    return path.resolve(strict=False)
+    absolute = path.absolute()
+    resolved = path.resolve(strict=False)
+    # `resolve()` before lstat turns a symlink into its target and makes the
+    # subsequent check meaningless.  Reject both a final symlink and any
+    # symlinked ancestor that changes the lexical authority boundary.
+    if path.is_symlink() or absolute != resolved:
+        raise DeploymentConfigError(f"{label} must not traverse a symlink")
+    return resolved
 
 
 def _under(path: Path, parent: Path) -> bool:
@@ -112,6 +120,8 @@ class DiscoveryDeployment:
     evidence_plan_id: str
     runner_args_id: str
     dispatch_contract_id: str
+    inference_window_lease_id: str
+    production_snapshot_id: str
 
     def revalidate(self) -> None:
         """Close the parse-to-start TOCTOU gap for every sealed file reference."""
@@ -131,6 +141,8 @@ class ResolvedDeployment:
     evidence_plan: object
     runner_args: object
     dispatch_contract: object
+    inference_window_lease: object
+    production_snapshot: object
 
 
 def _input(value: object, label: str) -> ImmutableInput:
@@ -212,9 +224,11 @@ def load_deployment_config(path: Path) -> DiscoveryDeployment:
         raise DeploymentConfigError("controller.nomination_threshold is invalid")
     actors = _exact(top["actors"], {"wrapper_path", "wrapper_sha256", "environment_profile_id"}, "actors")
     actor_wrapper = _input({"path": actors["wrapper_path"], "sha256": actors["wrapper_sha256"]}, "actors.wrapper")
+    if not os.access(actor_wrapper.path, os.X_OK):
+        raise DeploymentConfigError("actors.wrapper_path must be executable")
     environment_profile_id = _identifier(actors["environment_profile_id"], "actors.environment_profile_id")
     gpu = _exact(top["gpu"], {"device_id", "claim_timeout_s", "inference_window_lock",
-                                "small_model_max_bytes"}, "gpu")
+                                "inference_window_lease_id", "small_model_max_bytes"}, "gpu")
     device_id = _identifier(gpu["device_id"], "gpu.device_id")
     if device_id not in ALLOWED_DEVICE_IDS:
         raise DeploymentConfigError("gpu.device_id is not an admitted discovery device")
@@ -232,15 +246,21 @@ def load_deployment_config(path: Path) -> DiscoveryDeployment:
         raise DeploymentConfigError("gpu.small_model_max_bytes is invalid")
     inputs = _exact(top["immutable_inputs"], {"model", "workload", "runtime_config", "policy"}, "immutable_inputs")
     source = _exact(top["source_plan"], {"source_builder_id", "evidence_plan_id",
-                                           "runner_args_id", "dispatch_contract_id"}, "source_plan")
+                                           "runner_args_id", "dispatch_contract_id",
+                                           "production_snapshot_id"}, "source_plan")
     model = _input(inputs["model"], "model")
     workload = _input(inputs["workload"], "workload")
     runtime_config = _input(inputs["runtime_config"], "runtime_config")
     policy = _input(inputs["policy"], "policy")
     if model.path.stat().st_size > small:
         raise DeploymentConfigError("model exceeds configured small-model discovery limit")
-    if any(_overlaps(model.path, protected) for protected in (*roots.values(), production_path)):
-        raise DeploymentConfigError("model location overlaps a mutable output or frozen production tree")
+    for label, input_ in (("actors.wrapper", actor_wrapper), ("model", model),
+                          ("workload", workload), ("runtime_config", runtime_config),
+                          ("policy", policy)):
+        if any(_overlaps(input_.path, protected)
+               for protected in (*roots.values(), production_path)):
+            raise DeploymentConfigError(
+                f"{label} location overlaps a mutable output or frozen production tree")
     return DiscoveryDeployment(
         production_path=production_path, production_head=production["head"],
         state_root=roots["state_root"], evidence_root=roots["evidence_root"],
@@ -254,6 +274,8 @@ def load_deployment_config(path: Path) -> DiscoveryDeployment:
         evidence_plan_id=_identifier(source["evidence_plan_id"], "source_plan.evidence_plan_id"),
         runner_args_id=_identifier(source["runner_args_id"], "source_plan.runner_args_id"),
         dispatch_contract_id=_identifier(source["dispatch_contract_id"], "source_plan.dispatch_contract_id"),
+        inference_window_lease_id=_identifier(gpu["inference_window_lease_id"], "gpu.inference_window_lease_id"),
+        production_snapshot_id=_identifier(source["production_snapshot_id"], "source_plan.production_snapshot_id"),
     )
 
 
@@ -265,6 +287,8 @@ def resolve_registry(config: DiscoveryDeployment, registry: Mapping[str, Mapping
         "evidence_plan": config.evidence_plan_id,
         "runner_args": config.runner_args_id,
         "dispatch_contract": config.dispatch_contract_id,
+        "inference_window_lease": config.inference_window_lease_id,
+        "production_snapshot": config.production_snapshot_id,
     }
     if set(registry) != set(required):
         raise DeploymentConfigError("registry categories must exactly match the deployment contract")
@@ -278,7 +302,7 @@ def resolve_registry(config: DiscoveryDeployment, registry: Mapping[str, Mapping
     if (not isinstance(values["environment_profile"], Mapping)
             or not all(isinstance(key, str) and isinstance(value, str)
                        for key, value in values["environment_profile"].items())
-            or not all(callable(values[kind]) for kind in ("source_builder", "evidence_plan", "runner_args"))
+            or not all(callable(values[kind]) for kind in ("source_builder", "evidence_plan", "runner_args", "inference_window_lease"))
             or not isinstance(values["dispatch_contract"], Mapping)):
         raise DeploymentConfigError("registry values do not satisfy the typed deployment contract")
     return ResolvedDeployment(config=config, **values)

@@ -27,6 +27,7 @@ class DeploymentConfigTests(unittest.TestCase):
         (root / "locks").mkdir()
         wrapper = root / "codex-wrapper"
         wrapper.write_text("#!/bin/sh\n", encoding="utf-8")
+        wrapper.chmod(0o700)
         inputs = {}
         for label in ("model", "workload", "runtime_config", "policy"):
             path = root / f"{label}.json"
@@ -46,12 +47,14 @@ class DeploymentConfigTests(unittest.TestCase):
                        "environment_profile_id": "sealed-codex"},
             "gpu": {"device_id": "mi210_0", "claim_timeout_s": 30.0,
                     "inference_window_lock": str(root / "locks" / "window.lock"),
+                    "inference_window_lease_id": "mi210-window-v1",
                     "small_model_max_bytes": 500_000_000},
             "immutable_inputs": inputs,
             "source_plan": {"source_builder_id": "gpu-source-v1",
                             "evidence_plan_id": "q5-onewave-v1",
                             "runner_args_id": "qwen05b-tg128",
-                            "dispatch_contract_id": "q5-onewave-cdna2"},
+                            "dispatch_contract_id": "q5-onewave-cdna2",
+                            "production_snapshot_id": "llama-v9-artifacts"},
         }
         seal(value)
         path = root / "deployment.json"
@@ -127,6 +130,8 @@ class DeploymentConfigTests(unittest.TestCase):
                 "evidence_plan": {"q5-onewave-v1": lambda: sentinels["evidence_plan"]},
                 "runner_args": {"qwen05b-tg128": lambda: sentinels["runner_args"]},
                 "dispatch_contract": {"q5-onewave-cdna2": {"id": sentinels["dispatch_contract"]}},
+                "inference_window_lease": {"mi210-window-v1": lambda: None},
+                "production_snapshot": {"llama-v9-artifacts": object()},
             }
             with mock.patch.object(D, "_verify_production"):
                 bound = D.resolve_registry(config, registry)
@@ -185,6 +190,8 @@ class DeploymentConfigTests(unittest.TestCase):
                 "evidence_plan": {"q5-onewave-v1": lambda: None},
                 "runner_args": {"qwen05b-tg128": lambda: None},
                 "dispatch_contract": {"q5-onewave-cdna2": {}},
+                "inference_window_lease": {"mi210-window-v1": lambda: None},
+                "production_snapshot": {"llama-v9-artifacts": object()},
             }
             with mock.patch.object(D, "_verify_production"):
                 with self.assertRaises(D.DeploymentConfigError):
