@@ -114,6 +114,20 @@ class Screen:
         return D.Recovery("safe_to_start")
 
 
+class SeriesScreen(Screen):
+    def __init__(self, effects):
+        super().__init__()
+        self.effects = iter(effects)
+
+    def screen(self, item, authorization, lease):
+        self.calls += 1
+        self.items.append(item)
+        return D.SealedScreen(
+            "result.json", chr(96 + self.calls) * 64, next(self.effects),
+            "candidate", H, H, H,
+        )
+
+
 class ProcessCrash(BaseException):
     pass
 
@@ -348,6 +362,53 @@ class BlackBoxLaunchGate(unittest.TestCase):
     def test_test_only_runtime_attestation_is_not_accepted_in_live_code(self):
         with self.assertRaises(D.DiscoveryControllerError):
             D._require_runtime({"wrapper_sha256": H})
+
+    def test_controller_run_lock_refuses_a_second_owner_before_planning(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            store = D.DurableState(root / "out")
+            held = store.run_lock()
+            planner, critic = Planner(), Critic()
+            try:
+                with self.assertRaises(D.DiscoveryControllerError):
+                    D.run_controller(
+                        self.config(root), planner=planner, critic=critic,
+                        screener=Screen(), lease=Lease((True,)),
+                    )
+            finally:
+                held.close()
+            self.assertEqual(planner.calls, 0)
+            self.assertEqual(critic.calls, 0)
+
+    def test_pooled_classifier_never_combines_distinct_source_manifests(self):
+        class TwoPatchPlanner(Planner):
+            def plan(self, *, context, workspace):
+                self.calls += 1
+                digest = ("a" if self.calls == 1 else "b") * 64
+                return D.PlannedCandidate(
+                    "akh-shared-question",
+                    "one question with two different patches",
+                    "no throughput improvement",
+                    {"backend": "gpu", "phase": "decode"},
+                    {"proposal_id": f"akp-patch-{self.calls}"},
+                    Manifest(proposal_id=f"akp-patch-{self.calls}"),
+                    digest,
+                )
+
+        with tempfile.TemporaryDirectory() as temp, \
+                patch.object(D.source_candidate, "SourcePatchManifest", Manifest), \
+                patch.object(D, "_write_projection"):
+            root = Path(temp)
+            result = D.run_controller(
+                D.ControllerConfig(root / "out", max_iterations=2),
+                planner=TwoPatchPlanner(), critic=Critic(),
+                screener=SeriesScreen((0.01, 0.02)),
+                lease=Lease((True, True)),
+            )
+            self.assertEqual(
+                [row["status"] for row in result["iterations"]],
+                ["candidate", "candidate"],
+            )
 
     def test_pooled_classifier_handles_sign_conflict_and_subadditive_stack(self):
         self.assertEqual(D.classify_screen_series([0.01]), "candidate")
