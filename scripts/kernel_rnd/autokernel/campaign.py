@@ -1207,6 +1207,23 @@ def load_calibration_bundle(path: os.PathLike[str] | str) -> LeanCalibration:
     anchor_motion = summary.get("anchor_motion")
     declared_motion_blocks = declaration.get("anchor_motion_window_blocks")
     declared_settling = declaration.get("anchor_motion_settling")
+    declared_between_leg_policy = declaration.get("between_leg_policy")
+    amendment_path = root / "resume_amendment.json"
+    if amendment_path.is_file():
+        amendment = read("resume_amendment.json")
+        amendment_body = dict(amendment)
+        amendment_sha = amendment_body.pop("amendment_sha256", None)
+        if amendment_sha != schemas.content_hash(amendment_body) \
+                or amendment.get("schema") \
+                != "epyc.autokernel.live_control_resume_amendment.v1" \
+                or amendment.get("campaign_id") != declaration.get("campaign_id") \
+                or amendment.get("original_declaration_sha256") \
+                != schemas.content_hash(declaration) \
+                or amendment.get("replaced_field") != "anchor_motion_settling" \
+                or amendment.get("original_value") != declared_settling:
+            raise ValueError("calibration resume amendment does not verify")
+        declared_settling = amendment.get("replacement_value")
+        declared_between_leg_policy = amendment.get("added_between_leg_policy")
     if not isinstance(anchor_motion, Mapping):
         raise ValueError(
             "calibration bundle has no fresh campaign-length anchor-motion authority")
@@ -1240,11 +1257,35 @@ def load_calibration_bundle(path: os.PathLike[str] | str) -> LeanCalibration:
         raise ValueError("calibration anchor-motion settling receipt does not verify")
     settling_samples = settling_receipt.get("samples")
     expected_samples = declared_settling.get("required_samples")
-    if not isinstance(settling_samples, list) or len(settling_samples) != expected_samples \
-            or any(not isinstance(sample, Mapping)
-                   or sample.get("load", {}).get("outcome") != schemas.PASS
-                   or sample.get("claim_attestation", {}).get("outcome") != schemas.PASS
-                   for sample in settling_samples):
+    transition_v2 = declared_settling.get("schema") \
+        == "epyc.autokernel.anchor_motion_transition.v2"
+    if not isinstance(settling_samples, list) or len(settling_samples) != expected_samples:
+        raise ValueError("calibration anchor-motion transition has the wrong sample count")
+    if transition_v2:
+        if not isinstance(declared_between_leg_policy, Mapping):
+            raise ValueError("calibration transition has no between-leg policy")
+        for sample in settling_samples:
+            if not isinstance(sample, Mapping):
+                raise ValueError("calibration transition sample is not an object")
+            body = dict(sample)
+            observation_sha = body.pop("observation_sha256", None)
+            witness = sample.get("inference_witness")
+            if observation_sha != schemas.content_hash(body) \
+                    or sample.get("policy") != declared_between_leg_policy \
+                    or sample.get("ordinary_load", {}).get("disposition") \
+                    != "recorded_as_noise_not_a_gate" \
+                    or sample.get("claim_attestation", {}).get("outcome") \
+                    != schemas.PASS \
+                    or not isinstance(witness, Mapping) \
+                    or witness.get("competing") is not False \
+                    or sample.get("inference_witness_error") is not None:
+                raise ValueError(
+                    "calibration transition lacks a clean claim/inference witness")
+    elif any(not isinstance(sample, Mapping)
+             or sample.get("load", {}).get("outcome") != schemas.PASS
+             or sample.get("claim_attestation", {}).get("outcome") != schemas.PASS
+             for sample in settling_samples):
+        # Historical bundles retain their original quiet-settling semantics.
         raise ValueError("calibration anchor-motion settling receipt has no all-PASS samples")
     raw_ref = anchor_motion.get("raw_ref")
     label = anchor_motion.get("label")
@@ -1693,6 +1734,9 @@ class CampaignSpec:
                                  if self.model and Path(self.model).is_file() else None),
                 "instrument_commit": MEASUREMENT_COMMIT,
                 "production_commit": PRODUCTION_COMMIT,
+                "boot_sha256": schemas.content_hash({
+                    "boot_id": Path("/proc/sys/kernel/random/boot_id")
+                    .read_text(encoding="utf-8").strip()}),
                 "reps": self.reps, "n_prompt": self.n_prompt, "n_gen": self.n_gen,
             })
         if self.calibration is not None \

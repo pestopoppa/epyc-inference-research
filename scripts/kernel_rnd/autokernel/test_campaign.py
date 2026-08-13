@@ -61,6 +61,9 @@ def screening_bank() -> screening_baseline.BaselineBank:
         "model_sha256": None,
         "instrument_commit": campaign.MEASUREMENT_COMMIT,
         "production_commit": campaign.PRODUCTION_COMMIT,
+        "boot_sha256": schemas.content_hash({
+            "boot_id": Path("/proc/sys/kernel/random/boot_id")
+            .read_text(encoding="utf-8").strip()}),
         "reps": 5, "n_prompt": 512, "n_gen": 128,
     }, (100.0, 100.0), 100.0)
 
