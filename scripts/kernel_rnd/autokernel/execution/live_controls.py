@@ -39,12 +39,12 @@ PRODUCTION_ROOT = Path("/mnt/raid0/llm/llama.cpp")
 PRODUCTION_COMMIT = "0db32c06e3e550065b78311a6031ef3dd2c4f27c"
 INSTRUMENT_ROOT = Path(os.environ.get(
     "AUTOKERNEL_INSTRUMENT_ROOT",
-    "/mnt/raid0/llm/autokernel/worktrees/ak-iqk-t0-f4-squashed-20260813"))
+    "/mnt/raid0/llm/autokernel/worktrees/ak-final-direct-20260813"))
 INSTRUMENT_BINARY = Path(os.environ.get(
     "AUTOKERNEL_INSTRUMENT_BINARY",
-    str(INSTRUMENT_ROOT / "build-ak-t0-cpu-7aee6280/bin/llama-bench")))
-INSTRUMENT_BRANCH = "experimental-v9-autokernel-t0-f4-squashed-20260813"
-INSTRUMENT_COMMIT = "7aee62803b1180514ece1083dd7f46c58f7b51db"
+    str(INSTRUMENT_ROOT / "build-ak-t0-cpu-283b520b/bin/llama-bench")))
+INSTRUMENT_BRANCH = "experimental-v9-autokernel-t0-final-direct-20260813"
+INSTRUMENT_COMMIT = "283b520b527a7b507d6cf05cd124a59f427f3629"
 MODEL = Path(
     "/mnt/raid0/llm/models/lmstudio-community/"
     "Qwen2.5-Coder-0.5B-GGUF/Qwen2.5-Coder-0.5B-Q4_K_M.gguf")

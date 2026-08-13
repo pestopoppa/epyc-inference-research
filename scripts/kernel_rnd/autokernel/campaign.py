@@ -1037,10 +1037,10 @@ PRODUCTION_COMMIT = "0db32c06e3e550065b78311a6031ef3dd2c4f27c"
 #: production.
 #: Kernel proposals may change kernel sources but RVP-C6-1 requires all reward
 #: translation units to remain byte-identical to this commit.
-MEASUREMENT_REPO = "/mnt/raid0/llm/autokernel/worktrees/ak-iqk-t0-f4-squashed-20260813"
-MEASUREMENT_BRANCH = "experimental-v9-autokernel-t0-f4-squashed-20260813"
-MEASUREMENT_COMMIT = "7aee62803b1180514ece1083dd7f46c58f7b51db"
-MEASUREMENT_BUILD_ROOT = os.path.join(MEASUREMENT_REPO, "build-ak-t0-cpu-7aee6280")
+MEASUREMENT_REPO = "/mnt/raid0/llm/autokernel/worktrees/ak-final-direct-20260813"
+MEASUREMENT_BRANCH = "experimental-v9-autokernel-t0-final-direct-20260813"
+MEASUREMENT_COMMIT = "283b520b527a7b507d6cf05cd124a59f427f3629"
+MEASUREMENT_BUILD_ROOT = os.path.join(MEASUREMENT_REPO, "build-ak-t0-cpu-283b520b")
 
 # ``llama-cli`` now starts an embedded HTTP server and talks to it over a
 # loopback socket. Candidate T0 is deliberately network-denied, so use the
