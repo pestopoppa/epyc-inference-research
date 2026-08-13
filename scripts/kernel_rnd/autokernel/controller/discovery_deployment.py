@@ -1,0 +1,288 @@
+#!/usr/bin/env python3
+"""Declarative, registry-only configuration for GPU source discovery deployment.
+
+This boundary intentionally does *not* import the governed GPU producer.  It
+only reads a sealed deployment description and resolves a small set of opaque
+IDs against a registry constructed by trusted deployment code.  In particular,
+a configuration file cannot name a Python module, callable, argv, or environment
+variable.  The later integration factory is consequently the only place that
+can connect these already-validated values to executable adapters.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+import hashlib
+import json
+import math
+from pathlib import Path
+import re
+import subprocess
+from typing import Any, Mapping
+
+from .. import schemas
+
+
+SCHEMA = "epyc.autokernel.discovery_deployment.v1"
+FROZEN_PRODUCTION_PATH = Path("/mnt/raid0/llm/llama.cpp")
+FROZEN_PRODUCTION_HEAD = "0db32c06e3e550065b78311a6031ef3dd2c4f27c"
+FROZEN_PRODUCTION_BRANCH = "production-consolidated-v9"
+ALLOWED_DEVICE_IDS = frozenset({"mi210_0"})
+SHA = re.compile(r"^[0-9a-f]{64}$")
+GIT_SHA = re.compile(r"^[0-9a-f]{40}$")
+IDENTIFIER = re.compile(r"^[a-z][a-z0-9_.-]{0,127}$")
+
+
+class DeploymentConfigError(RuntimeError):
+    """The declarative deployment boundary refused an unsealed configuration."""
+
+
+def _exact(value: object, keys: set[str], label: str) -> Mapping[str, Any]:
+    if not isinstance(value, Mapping) or set(value) != keys:
+        raise DeploymentConfigError(f"{label} must contain exactly {sorted(keys)}")
+    return value
+
+
+def _identifier(value: object, label: str) -> str:
+    if not isinstance(value, str) or not IDENTIFIER.fullmatch(value):
+        raise DeploymentConfigError(f"{label} must be a registry identifier")
+    return value
+
+
+def _absolute(value: object, label: str) -> Path:
+    if not isinstance(value, str):
+        raise DeploymentConfigError(f"{label} must be an absolute path")
+    path = Path(value)
+    if not path.is_absolute() or ".." in path.parts:
+        raise DeploymentConfigError(f"{label} must be an absolute path")
+    return path.resolve(strict=False)
+
+
+def _under(path: Path, parent: Path) -> bool:
+    try:
+        path.relative_to(parent)
+    except ValueError:
+        return False
+    return True
+
+
+def _overlaps(left: Path, right: Path) -> bool:
+    return _under(left, right) or _under(right, left)
+
+
+def _digest_file(path: Path, expected: object, label: str) -> str:
+    if not isinstance(expected, str) or not SHA.fullmatch(expected):
+        raise DeploymentConfigError(f"{label} must carry a SHA-256 digest")
+    if path.is_symlink() or not path.is_file():
+        raise DeploymentConfigError(f"{label} must be a regular non-symlink file")
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    if digest != expected:
+        raise DeploymentConfigError(f"{label} bytes do not match declared digest")
+    return digest
+
+
+@dataclass(frozen=True)
+class ImmutableInput:
+    path: Path
+    sha256: str
+
+    def revalidate(self, label: str) -> None:
+        _digest_file(self.path, self.sha256, label)
+
+
+@dataclass(frozen=True)
+class DiscoveryDeployment:
+    production_path: Path
+    production_head: str
+    state_root: Path
+    evidence_root: Path
+    operations_root: Path
+    max_iterations: int
+    nomination_threshold: float
+    actor_wrapper: ImmutableInput
+    environment_profile_id: str
+    device_id: str
+    claim_timeout_s: float
+    inference_window_lock: Path
+    small_model_max_bytes: int
+    model: ImmutableInput
+    workload: ImmutableInput
+    runtime_config: ImmutableInput
+    policy: ImmutableInput
+    source_builder_id: str
+    evidence_plan_id: str
+    runner_args_id: str
+    dispatch_contract_id: str
+
+    def revalidate(self) -> None:
+        """Close the parse-to-start TOCTOU gap for every sealed file reference."""
+        _verify_production(self.production_path, self.production_head)
+        self.actor_wrapper.revalidate("actors.wrapper")
+        for label, value in (("model", self.model), ("workload", self.workload),
+                             ("runtime_config", self.runtime_config), ("policy", self.policy)):
+            value.revalidate(label)
+
+
+@dataclass(frozen=True)
+class ResolvedDeployment:
+    """Opaque trusted objects selected by immutable registry IDs only."""
+    config: DiscoveryDeployment
+    environment_profile: object
+    source_builder: object
+    evidence_plan: object
+    runner_args: object
+    dispatch_contract: object
+
+
+def _input(value: object, label: str) -> ImmutableInput:
+    raw = _exact(value, {"path", "sha256"}, label)
+    path = _absolute(raw["path"], f"{label}.path")
+    return ImmutableInput(path=path, sha256=_digest_file(path, raw["sha256"], label))
+
+
+def _verify_production(path: Path, declared_head: str) -> None:
+    expected = FROZEN_PRODUCTION_PATH.resolve(strict=True)
+    if path.resolve(strict=True) != expected or declared_head != FROZEN_PRODUCTION_HEAD:
+        raise DeploymentConfigError("production identity is not the exact frozen tree/head")
+    def git(*args: str) -> str:
+        completed = subprocess.run(("git", "-C", str(expected), *args),
+                                   check=False, capture_output=True, text=True)
+        if completed.returncode:
+            raise DeploymentConfigError("frozen production Git state could not be verified")
+        return completed.stdout.strip()
+    if git("rev-parse", "HEAD") != FROZEN_PRODUCTION_HEAD:
+        raise DeploymentConfigError("frozen production HEAD differs from declared freeze")
+    if git("branch", "--show-current") != FROZEN_PRODUCTION_BRANCH:
+        raise DeploymentConfigError("frozen production branch differs from declared freeze")
+    if git("status", "--porcelain"):
+        raise DeploymentConfigError("frozen production tree is dirty")
+
+
+def _validate_root(path: Path, label: str) -> Path:
+    parent = path.parent
+    if parent.is_symlink() or not parent.is_dir():
+        raise DeploymentConfigError(f"{label}.parent must be an existing regular directory")
+    if path.exists() and (path.is_symlink() or not path.is_dir()):
+        raise DeploymentConfigError(f"{label} must be an absent or regular directory")
+    return path.resolve(strict=False)
+
+
+def load_deployment_config(path: Path) -> DiscoveryDeployment:
+    """Load one sealed JSON configuration without expanding its authority."""
+    if path.is_symlink() or not path.is_file():
+        raise DeploymentConfigError("deployment configuration must be a regular file")
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise DeploymentConfigError("deployment configuration is not JSON") from exc
+    top = _exact(raw, {"schema", "config_sha256", "production", "controller", "actors", "gpu",
+                       "immutable_inputs", "source_plan"}, "deployment configuration")
+    if top["schema"] != SCHEMA:
+        raise DeploymentConfigError("deployment configuration schema mismatch")
+    try:
+        calculated_config_hash = schemas.content_hash(
+            {key: value for key, value in top.items() if key != "config_sha256"})
+    except (TypeError, ValueError) as exc:
+        raise DeploymentConfigError("deployment configuration is not canonicalizable") from exc
+    if (not isinstance(top["config_sha256"], str) or not SHA.fullmatch(top["config_sha256"])
+            or calculated_config_hash != top["config_sha256"]):
+        raise DeploymentConfigError("deployment configuration self-hash mismatch")
+    production = _exact(top["production"], {"path", "head"}, "production")
+    production_path = _absolute(production["path"], "production.path")
+    if production_path.is_symlink() or not production_path.is_dir():
+        raise DeploymentConfigError("production.path must be a regular directory")
+    if not isinstance(production["head"], str) or not GIT_SHA.fullmatch(production["head"]):
+        raise DeploymentConfigError("production.head must be an exact Git SHA")
+    _verify_production(production_path, production["head"])
+    controller = _exact(top["controller"], {"state_root", "evidence_root",
+                                               "operations_root", "max_iterations",
+                                               "nomination_threshold"}, "controller")
+    roots = {key: _validate_root(_absolute(controller[key], f"controller.{key}"), f"controller.{key}") for key in
+             ("state_root", "evidence_root", "operations_root")}
+    if any(_overlaps(left, right) for index, left in enumerate(roots.values())
+           for right in list(roots.values())[index + 1:]):
+        raise DeploymentConfigError("controller roots must not overlap")
+    if any(_overlaps(root, production_path) for root in roots.values()):
+        raise DeploymentConfigError("controller output roots must not enter frozen production")
+    max_iterations = controller["max_iterations"]
+    threshold = controller["nomination_threshold"]
+    if isinstance(max_iterations, bool) or not isinstance(max_iterations, int) or not 1 <= max_iterations <= 1000:
+        raise DeploymentConfigError("controller.max_iterations is invalid")
+    if (isinstance(threshold, bool) or not isinstance(threshold, (int, float))
+            or not math.isfinite(float(threshold)) or threshold <= 0):
+        raise DeploymentConfigError("controller.nomination_threshold is invalid")
+    actors = _exact(top["actors"], {"wrapper_path", "wrapper_sha256", "environment_profile_id"}, "actors")
+    actor_wrapper = _input({"path": actors["wrapper_path"], "sha256": actors["wrapper_sha256"]}, "actors.wrapper")
+    environment_profile_id = _identifier(actors["environment_profile_id"], "actors.environment_profile_id")
+    gpu = _exact(top["gpu"], {"device_id", "claim_timeout_s", "inference_window_lock",
+                                "small_model_max_bytes"}, "gpu")
+    device_id = _identifier(gpu["device_id"], "gpu.device_id")
+    if device_id not in ALLOWED_DEVICE_IDS:
+        raise DeploymentConfigError("gpu.device_id is not an admitted discovery device")
+    claim_timeout_s = gpu["claim_timeout_s"]
+    if (isinstance(claim_timeout_s, bool) or not isinstance(claim_timeout_s, (int, float))
+            or not math.isfinite(float(claim_timeout_s)) or claim_timeout_s < 0):
+        raise DeploymentConfigError("gpu.claim_timeout_s is invalid")
+    window = _absolute(gpu["inference_window_lock"], "gpu.inference_window_lock")
+    if window.parent.is_symlink() or not window.parent.is_dir() or (window.exists() and (window.is_symlink() or not window.is_file())):
+        raise DeploymentConfigError("gpu.inference_window_lock parent/file is invalid")
+    if _overlaps(window, production_path):
+        raise DeploymentConfigError("gpu.inference_window_lock must not enter frozen production")
+    small = gpu["small_model_max_bytes"]
+    if isinstance(small, bool) or not isinstance(small, int) or small < 1:
+        raise DeploymentConfigError("gpu.small_model_max_bytes is invalid")
+    inputs = _exact(top["immutable_inputs"], {"model", "workload", "runtime_config", "policy"}, "immutable_inputs")
+    source = _exact(top["source_plan"], {"source_builder_id", "evidence_plan_id",
+                                           "runner_args_id", "dispatch_contract_id"}, "source_plan")
+    model = _input(inputs["model"], "model")
+    workload = _input(inputs["workload"], "workload")
+    runtime_config = _input(inputs["runtime_config"], "runtime_config")
+    policy = _input(inputs["policy"], "policy")
+    if model.path.stat().st_size > small:
+        raise DeploymentConfigError("model exceeds configured small-model discovery limit")
+    if any(_overlaps(model.path, protected) for protected in (*roots.values(), production_path)):
+        raise DeploymentConfigError("model location overlaps a mutable output or frozen production tree")
+    return DiscoveryDeployment(
+        production_path=production_path, production_head=production["head"],
+        state_root=roots["state_root"], evidence_root=roots["evidence_root"],
+        operations_root=roots["operations_root"], max_iterations=max_iterations,
+        nomination_threshold=float(threshold), actor_wrapper=actor_wrapper,
+        environment_profile_id=environment_profile_id, device_id=device_id,
+        claim_timeout_s=float(claim_timeout_s), inference_window_lock=window,
+        small_model_max_bytes=small, model=model, workload=workload,
+        runtime_config=runtime_config, policy=policy,
+        source_builder_id=_identifier(source["source_builder_id"], "source_plan.source_builder_id"),
+        evidence_plan_id=_identifier(source["evidence_plan_id"], "source_plan.evidence_plan_id"),
+        runner_args_id=_identifier(source["runner_args_id"], "source_plan.runner_args_id"),
+        dispatch_contract_id=_identifier(source["dispatch_contract_id"], "source_plan.dispatch_contract_id"),
+    )
+
+
+def resolve_registry(config: DiscoveryDeployment, registry: Mapping[str, Mapping[str, object]]) -> ResolvedDeployment:
+    """Resolve IDs from trusted in-process registries; never import arbitrary code."""
+    required = {
+        "environment_profile": config.environment_profile_id,
+        "source_builder": config.source_builder_id,
+        "evidence_plan": config.evidence_plan_id,
+        "runner_args": config.runner_args_id,
+        "dispatch_contract": config.dispatch_contract_id,
+    }
+    if set(registry) != set(required):
+        raise DeploymentConfigError("registry categories must exactly match the deployment contract")
+    config.revalidate()
+    values: dict[str, object] = {}
+    for kind, identifier in required.items():
+        table = registry.get(kind)
+        if not isinstance(table, Mapping) or identifier not in table:
+            raise DeploymentConfigError(f"registry has no {kind}:{identifier}")
+        values[kind] = table[identifier]
+    if (not isinstance(values["environment_profile"], Mapping)
+            or not all(isinstance(key, str) and isinstance(value, str)
+                       for key, value in values["environment_profile"].items())
+            or not all(callable(values[kind]) for kind in ("source_builder", "evidence_plan", "runner_args"))
+            or not isinstance(values["dispatch_contract"], Mapping)):
+        raise DeploymentConfigError("registry values do not satisfy the typed deployment contract")
+    return ResolvedDeployment(config=config, **values)
+
+
+__all__ = ["SCHEMA", "DeploymentConfigError", "ImmutableInput", "DiscoveryDeployment",
+           "ResolvedDeployment", "load_deployment_config", "resolve_registry"]
