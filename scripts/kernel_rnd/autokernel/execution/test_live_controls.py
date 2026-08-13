@@ -236,6 +236,7 @@ class CalibrationFrame(unittest.TestCase):
         self.assertEqual(captured["anchor_param_overrides"], {"ggml_iqk": "0"})
         self.assertEqual(captured["candidate_binding"], binding)
         self.assertEqual(captured["anchor_binding"], binding)
+        self.assertEqual(captured["pairs_per_block"], 1)
 
     def test_decode_recipe_has_its_own_non_prefill_frame(self):
         """Decode calibration must never silently reuse pp512 inputs."""
@@ -292,6 +293,9 @@ class CalibrationFrame(unittest.TestCase):
             self.assertEqual(captured["params"]["n_gen"], 128)
             self.assertNotIn("n_prompt", captured["params"])
             self.assertIn(":tg128:", captured["unit_ids"][0])
+            self.assertEqual(
+                captured["pairs_per_block"],
+                live_controls.DECODE_FRESH_PAIRS_PER_BLOCK)
         finally:
             importlib.reload(live_controls)
 
@@ -318,6 +322,10 @@ class CalibrationFrame(unittest.TestCase):
             self.assertEqual(declaration["recipe_id"], live_controls.DECODE_RECIPE_ID)
             self.assertEqual(declaration["calibration_frame"]["decode_tokens"], 128)
             self.assertNotIn("prompt_tokens", declaration["calibration_frame"])
+            self.assertEqual(
+                declaration["calibration_frame"]["fresh_pairs_per_block"], 5)
+            self.assertEqual(
+                declaration["calibration_frame"]["aggregation"], "median_per_arm")
         finally:
             importlib.reload(live_controls)
 

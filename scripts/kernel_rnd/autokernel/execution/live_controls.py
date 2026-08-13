@@ -62,6 +62,17 @@ NEUTRAL_BLOCKS = 60
 # apparently healthy noise pool whose anchor band cannot govern IQK-off runs.
 CALIBRATION_REPS = campaign.IQK_MATCHED_PAIR_REPS
 CALIBRATION_IQK = "0"
+# A tg128 observation lasts only about 0.5 s after process startup on the
+# 0.5B calibration graph.  r2 showed that one such observation is bimodal even
+# when clock, package-power, order, and executable-identity checks all pass:
+# random individual arms fell roughly 10--18% below the main mode.  Increasing
+# llama-bench ``-r`` is not equivalent -- it reuses one process and aliases the
+# within-process P-state trajectory that the prefill calibration already
+# rejected.  Decode therefore defines one statistical block as the median of
+# five FRESH, alternating candidate/anchor pairs.  The ranked held-out decode
+# producer must consume this declared frame; this is aggregation, not a relaxed
+# gate or an exclusion of ordinary host noise.
+DECODE_FRESH_PAIRS_PER_BLOCK = 5
 # This is not a sixth ranked control. It is a fresh A/A trace over the exact
 # ranked T1 length. Ordinary host load is measured noise, never a reason to
 # sleep or refuse; only a read-only witnessed model-inference process blocks the
@@ -166,10 +177,20 @@ def _token_fields() -> dict[str, int | None]:
 
 def _calibration_frame() -> dict[str, object]:
     token_key = "prompt_tokens" if RECIPE_ID == PREFILL_RECIPE_ID else "decode_tokens"
-    return {"recipe_id": RECIPE_ID, token_key: PROMPT_TOKENS,
-            "reps": CALIBRATION_REPS,
-            "candidate_ggml_iqk": CALIBRATION_IQK,
-            "anchor_ggml_iqk": CALIBRATION_IQK}
+    frame = {"recipe_id": RECIPE_ID, token_key: PROMPT_TOKENS,
+             "reps": CALIBRATION_REPS,
+             "candidate_ggml_iqk": CALIBRATION_IQK,
+             "anchor_ggml_iqk": CALIBRATION_IQK}
+    if RECIPE_ID == DECODE_RECIPE_ID:
+        frame["fresh_pairs_per_block"] = DECODE_FRESH_PAIRS_PER_BLOCK
+        frame["aggregation"] = "median_per_arm"
+    return frame
+
+
+def _fresh_pairs_per_block() -> int:
+    """Return the predeclared independent-invocation aggregation frame."""
+    return (DECODE_FRESH_PAIRS_PER_BLOCK
+            if RECIPE_ID == DECODE_RECIPE_ID else 1)
 # The controls have intentionally different purposes, but every live control
 # uses the same repetition count as an executable campaign.  Only the positive
 # and historical controls exercise the IQK intervention; calibration itself
@@ -832,6 +853,7 @@ def _load_recorded_material(
             f"{path}: expected {expected_blocks} blocks, got "
             f"{len(block_rows) if isinstance(block_rows, list) else 'non-list'}")
     blocks = []
+    expected_pairs = _fresh_pairs_per_block()
     for index, block_row in enumerate(block_rows):
         if not isinstance(block_row, Mapping) or block_row.get("complete") is not True \
                 or block_row.get("refusals") != []:
@@ -841,6 +863,16 @@ def _load_recorded_material(
             raise ValueError(f"{path}: block index {block.block_index} != {index}")
         if block.unit_id != _unit_id(label=label, prompt=prompt):
             raise ValueError(f"{path}: block {index} carries the wrong unit id")
+        plan = block_row.get("plan")
+        invocations = block_row.get("invocations")
+        if not isinstance(plan, Mapping) or plan.get("pairs") != expected_pairs \
+                or not isinstance(invocations, list) \
+                or len(invocations) != 2 * expected_pairs \
+                or len(block.anchor_samples) != expected_pairs * reps \
+                or len(block.candidate_samples) != expected_pairs * reps:
+            raise ValueError(
+                f"{path}: block {index} does not match the declared "
+                f"{expected_pairs}-fresh-pair aggregation frame")
         blocks.append(block)
     schedule = raw.get("order_schedule")
     if not isinstance(schedule, Mapping) or schedule.get("orders") != [
@@ -1006,7 +1038,7 @@ def _measure(*, label: str, blocks: int, claim: object,
         anchor_instrument_root=str(INSTRUMENT_ROOT),
         candidate_param_overrides={"ggml_iqk": candidate_iqk},
         anchor_param_overrides={"ggml_iqk": anchor_iqk},
-        base_blocks=blocks, pairs_per_block=1,
+        base_blocks=blocks, pairs_per_block=_fresh_pairs_per_block(),
         unit_ids=(_unit_id(label=label, prompt=prompt),),
         physical_envelopes={
             _unit_id(label=label, prompt=prompt): envelope},
