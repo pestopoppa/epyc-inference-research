@@ -3605,6 +3605,13 @@ class TestProspectiveEvaluationDurability(unittest.TestCase):
                 ops._settle_build_load(plan)
         self.assertEqual(len(sleeps), attempts - 1)
 
+    def test_build_load_settlement_budget_covers_the_full_predecessor_ewma_tail(self):
+        """The bounded barrier is long enough to outlast r40's 65-second tail."""
+        self.assertEqual(campaign.BUILD_LOAD_SETTLE_TIMEOUT_S, 180.0)
+        self.assertGreater(
+            campaign.BUILD_LOAD_SETTLE_TIMEOUT_S,
+            campaign.POST_T0_QUIET_BARRIER_S)
+
     def test_t0_failure_caches_evidence_without_materializing_a_candidate(self):
         ops = campaign.HostOps(nominal_khz=1)
         event = {"event_id": "ake-t0-refusal-fixture"}

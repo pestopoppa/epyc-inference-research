@@ -231,7 +231,10 @@ POST_T0_QUIET_SAMPLE_INTERVAL_S = 5.0
 # owned children are reaped.  The following arm must not treat that known,
 # already-finished work as a reason to abandon before T0; wait only until the
 # same declared build cap becomes true, then let `run_build` recheck at spawn.
-BUILD_LOAD_SETTLE_TIMEOUT_S = 65.0
+# The one-minute EWMA can still exceed the cap after the first 65 seconds when
+# a full 64-way predecessor build has just completed.  Three minutes remains a
+# bounded, claim-held settling interval while covering that measured tail.
+BUILD_LOAD_SETTLE_TIMEOUT_S = 180.0
 BUILD_LOAD_SETTLE_INTERVAL_S = 5.0
 
 
