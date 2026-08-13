@@ -7,9 +7,14 @@ import hashlib
 import json
 import os
 import subprocess
+import sys
 import time
 from pathlib import Path
 from statistics import median
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 from scripts.kernel_rnd.autokernel import schemas, storage
 from scripts.kernel_rnd.autokernel.execution import cpu_region_claim, device_sampler
