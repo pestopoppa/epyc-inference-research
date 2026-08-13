@@ -436,6 +436,38 @@ class BlackBoxLaunchGate(unittest.TestCase):
             queue = root / "out" / "promotion-queue.jsonl"
             self.assertEqual(len(queue.read_text().splitlines()), 1)
 
+    def test_nomination_threshold_uses_pooled_series_effect(self):
+        cases = (
+            ((0.04, 0.02), True),
+            ((0.001, 0.04), False),
+        )
+        for effects, should_nominate in cases:
+            with self.subTest(effects=effects), tempfile.TemporaryDirectory() as temp, \
+                    patch.object(D.source_candidate, "SourcePatchManifest", Manifest), \
+                    patch.object(D, "_write_projection"):
+                root = Path(temp)
+                result = D.run_controller(
+                    D.ControllerConfig(
+                        root / "out", max_iterations=2,
+                        nomination_threshold=0.03,
+                    ),
+                    planner=Planner(), critic=Critic(),
+                    screener=SeriesScreen(effects),
+                    lease=Lease((True, True)),
+                )
+                self.assertEqual(
+                    result["iterations"][-1]["status"],
+                    "top_k_replicated_candidate",
+                )
+                queue = root / "out" / "promotion-queue.jsonl"
+                self.assertEqual(queue.exists(), should_nominate)
+                if should_nominate:
+                    nomination = json.loads(queue.read_text().strip())
+                    self.assertAlmostEqual(
+                        nomination["series_effect_fraction"],
+                        sum(effects) / len(effects),
+                    )
+
     def test_pooled_classifier_handles_sign_conflict_and_subadditive_stack(self):
         self.assertEqual(D.classify_screen_series([0.01]), "candidate")
         self.assertEqual(
