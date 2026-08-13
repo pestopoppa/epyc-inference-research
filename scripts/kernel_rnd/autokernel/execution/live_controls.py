@@ -979,7 +979,8 @@ class _BlockCheckpoint:
     """Append-only, hash-chained completed-block journal for one measured leg."""
 
     def __init__(self, output_root: Path, *, identity: LiveCampaignIdentity,
-                 label: str, plan: microbench.MicrobenchPlan) -> None:
+                 label: str, plan: microbench.MicrobenchPlan,
+                 imported_started_at: str | None = None) -> None:
         self.directory = output_root / "checkpoints" / label
         self.manifest_path = self.directory / "manifest.json"
         self.blocks_path = self.directory / "blocks.jsonl"
@@ -994,7 +995,7 @@ class _BlockCheckpoint:
             "label": label,
             "evidence_ref": identity.evidence_ref,
             "plan_identity": self.plan_identity,
-            "started_at": _utc_now(),
+            "started_at": imported_started_at or _utc_now(),
         }
         expected = {**manifest_body,
                     "manifest_sha256": schemas.content_hash(manifest_body)}
@@ -1010,7 +1011,9 @@ class _BlockCheckpoint:
                          if key != "manifest_sha256"}
             if not isinstance(started_at, str) or not started_at \
                     or stored_hash != schemas.content_hash(hash_body) \
-                    or stable != expected_stable:
+                    or stable != expected_stable \
+                    or (imported_started_at is not None
+                        and started_at != imported_started_at):
                 raise ValueError(
                     f"checkpoint manifest differs from the current campaign/frame: "
                     f"{self.manifest_path}")
@@ -1096,6 +1099,89 @@ class _BlockCheckpoint:
         finally:
             os.close(dirfd)
         self._entries.append(entry)
+
+
+def _preserve_interrupted_file(output_root: Path, path: Path, *, label: str) -> Path:
+    """Hard-link an interrupted artifact under its content hash before replacement."""
+    digest = _sha256_file(path)
+    directory = output_root / "interrupted"
+    directory.mkdir(mode=0o700, exist_ok=True)
+    preserved = directory / f"{label}.{digest}.json"
+    if preserved.exists():
+        if _sha256_file(preserved) != digest:
+            raise ValueError(f"interrupted evidence hash collision at {preserved}")
+    else:
+        os.link(path, preserved)
+        dirfd = os.open(directory, os.O_DIRECTORY)
+        try:
+            os.fsync(dirfd)
+        finally:
+            os.close(dirfd)
+    return preserved
+
+
+def _import_interrupted_raw(
+        output_root: Path, *, raw_path: Path, raw: Mapping[str, Any],
+        label: str, plan: microbench.MicrobenchPlan,
+        checkpoint: _BlockCheckpoint) -> None:
+    """Admit a legacy partial raw vector as a verified checkpoint prefix.
+
+    Pre-checkpoint runners durably wrote the whole partial vector only when a
+    leg refused.  Preserve those exact bytes, re-derive every complete leading
+    block against the current plan, and seed the hash chain.  The refused tail
+    is evidence, never a block that can be skipped.
+    """
+    expected_seed = hashlib.sha256(
+        f"{plan.campaign_seed}".encode("utf-8")).hexdigest()
+    top_checks = {
+        "schema": raw.get("schema") == "epyc.autokernel.microbench_raw_vector.v1",
+        "recipe_id": raw.get("recipe_id") == plan.recipe_id,
+        "candidate_id": raw.get("candidate_id") == plan.candidate_id,
+        "campaign_seed": raw.get("campaign_seed_sha256") == expected_seed,
+        "partial": raw.get("complete") is False,
+        "refused": isinstance(raw.get("refusals"), list) and bool(raw["refusals"]),
+        "claim_expiry": any(
+            "claim has expired" in str(reason) for reason in raw.get("refusals", [])),
+    }
+    failed = sorted(name for name, passed in top_checks.items() if not passed)
+    if failed:
+        raise ValueError(f"{raw_path}: interrupted receipt checks failed: {failed}")
+    rows = raw.get("blocks")
+    if not isinstance(rows, list) or not rows:
+        raise ValueError(f"{raw_path}: interrupted vector has no blocks")
+    plans = microbench.plan_blocks(
+        plan.schedule(), count=plan.blocks_to_run, pairs=plan.pairs_per_block,
+        unit_ids=plan.unit_ids, stratum=plan.stratum, segment=plan.segment,
+        extension_round=plan.extension_round)
+    complete_count = 0
+    recovered = []
+    for index, row in enumerate(rows):
+        if not isinstance(row, Mapping):
+            raise ValueError(f"{raw_path}: block {index} is not an object")
+        if row.get("complete") is True and row.get("refusals") == []:
+            if index != complete_count:
+                raise ValueError(f"{raw_path}: completed blocks are not a leading prefix")
+            recovered.append(microbench.replay_completed_block(
+                plans[index], row, plan=plan))
+            complete_count += 1
+            continue
+        if index != len(rows) - 1:
+            raise ValueError(f"{raw_path}: a refused block is not the final block")
+    if complete_count >= plan.blocks_to_run or len(rows) != complete_count + 1:
+        raise ValueError(f"{raw_path}: interrupted vector has no single refused tail")
+    recorded_orders = raw.get("order_schedule", {}).get("orders")
+    if recorded_orders != [block.order for block in plans]:
+        raise ValueError(f"{raw_path}: interrupted vector schedule does not re-derive")
+    if checkpoint.prefix:
+        if [row.to_dict() for row in checkpoint.prefix] \
+                != [row.to_dict() for row in recovered]:
+            raise ValueError(
+                f"{raw_path}: interrupted complete prefix differs from checkpoint chain")
+    else:
+        for row in recovered:
+            checkpoint.append(row)
+        checkpoint.prefix = tuple(recovered)
+    _preserve_interrupted_file(output_root, raw_path, label=f"raw-{label}")
 
 
 def _observe_between_legs(
@@ -1197,20 +1283,27 @@ def _measure(*, label: str, blocks: int, claim: object,
         stratum=api.STRATUM_SELECTION, timeout_s=300.0)
     raw_path = output_root / "raw" / f"{label}.json"
     checkpoint_dir = output_root / "checkpoints" / label
-    if raw_path.exists() and not checkpoint_dir.exists():
-        if not resume_existing:
-            raise ValueError(f"fresh execution refuses existing raw material: {raw_path}")
+    existing_raw = _load_json(raw_path) if raw_path.exists() else None
+    if existing_raw is not None and not resume_existing:
+        raise ValueError(f"fresh execution refuses existing raw material: {raw_path}")
+    if existing_raw is not None and existing_raw.get("complete") is True \
+            and not checkpoint_dir.exists():
         material, _raw = _load_recorded_material(
             output_root, identity=identity, label=label,
             expected_blocks=blocks, prompt=prompt,
             candidate_iqk=candidate_iqk, anchor_iqk=anchor_iqk)
         return material
     checkpoint = _BlockCheckpoint(
-        output_root, identity=identity, label=label, plan=plan)
+        output_root, identity=identity, label=label, plan=plan,
+        imported_started_at=(
+            existing_raw.get("started_at")
+            if (existing_raw is not None and not checkpoint_dir.exists()
+                and isinstance(existing_raw.get("started_at"), str)
+                and existing_raw.get("started_at")) else None))
     if checkpoint.prefix and not resume_existing:
         raise ValueError(
             f"fresh execution refuses existing checkpoint prefix for {label}")
-    if raw_path.exists():
+    if existing_raw is not None and existing_raw.get("complete") is True:
         material, raw = _load_recorded_material(
             output_root, identity=identity, label=label,
             expected_blocks=blocks, prompt=prompt,
@@ -1220,6 +1313,10 @@ def _measure(*, label: str, blocks: int, claim: object,
             raise ValueError(
                 f"completed raw vector {raw_path} differs from its checkpoint chain")
         return material
+    if existing_raw is not None:
+        _import_interrupted_raw(
+            output_root, raw_path=raw_path, raw=existing_raw, label=label,
+            plan=plan, checkpoint=checkpoint)
     sandbox_root = output_root / "candidate-sandbox"
     sandbox_root.mkdir(mode=0o700, exist_ok=True)
     sandbox_policy = sandbox.SandboxPolicy(writable_root=str(sandbox_root))
@@ -1548,6 +1645,17 @@ def _attest_anchor_motion_transition(
     loadavg. That value is recorded by ``_observe_between_legs`` but cannot
     block or delay this non-ranked anchor trace.
     """
+    receipt_path = output_root / "anchor_motion_settling.json"
+    if receipt_path.exists():
+        previous = _load_json(receipt_path)
+        body = dict(previous)
+        stored_hash = body.pop("receipt_sha256", None)
+        if previous.get("campaign_id") != identity.campaign_id \
+                or stored_hash != schemas.content_hash(body):
+            raise ValueError(
+                "existing anchor-motion transition receipt does not verify")
+        _preserve_interrupted_file(
+            output_root, receipt_path, label="anchor-motion-transition")
     samples = [
         _observe_between_legs(
             output_root, boundary="neutral_to_anchor_motion", claim=claim)
@@ -1559,7 +1667,7 @@ def _attest_anchor_motion_transition(
         "samples": samples, "completed_at": _utc_now(),
     }
     receipt["receipt_sha256"] = schemas.content_hash(receipt)
-    _write_json(output_root / "anchor_motion_settling.json", receipt)
+    _write_json(receipt_path, receipt)
     return receipt
 
 
@@ -1641,19 +1749,32 @@ def _validate_resume_existing(
     if present:
         raise ValueError(f"resume refuses terminal/post-calibration material: {present}")
     raw_files = sorted(path.name for path in (output_root / "raw").glob("*.json"))
-    allowed_raw_prefixes = (
-        [], ["aa_calibration.json"],
-        ["aa_calibration.json", "neutral_calibration.json"])
-    if raw_files not in allowed_raw_prefixes:
+    raw_by_name = {
+        name: _load_json(output_root / "raw" / name) for name in raw_files}
+    states = {
+        name: (row.get("complete") is True and row.get("refusals") == [])
+        for name, row in raw_by_name.items()
+    }
+    allowed_states = (
+        {},
+        {"aa_calibration.json": False},
+        {"aa_calibration.json": True},
+        {"aa_calibration.json": True, "neutral_calibration.json": False},
+        {"aa_calibration.json": True, "neutral_calibration.json": True},
+        {"aa_calibration.json": True, "neutral_calibration.json": True,
+         f"{ANCHOR_MOTION_LABEL}.json": False},
+    )
+    if states not in allowed_states:
         raise ValueError(
-            f"resume raw material is not a calibration prefix: {raw_files}")
+            f"resume raw material is not an admitted calibration/anchor prefix: {states}")
     checkpoint_labels = sorted(
         path.name for path in (output_root / "checkpoints").glob("*")
         if path.is_dir())
-    if any(label not in {"aa_calibration", "neutral_calibration"}
+    if any(label not in {"aa_calibration", "neutral_calibration",
+                         ANCHOR_MOTION_LABEL}
            for label in checkpoint_labels):
         raise ValueError(
-            f"resume checkpoint material extends beyond calibration: {checkpoint_labels}")
+            f"resume checkpoint material extends beyond anchor motion: {checkpoint_labels}")
     if "neutral_calibration" in checkpoint_labels \
             and "aa_calibration.json" not in raw_files:
         raise ValueError("neutral checkpoint exists before a completed AA raw vector")
@@ -1664,7 +1785,8 @@ def _validate_resume_existing(
     # the two immutable raw vectors byte-for-value.  Never accept a typed solve.
     calibration_path = output_root / "calibration.json"
     if calibration_path.exists():
-        if raw_files != ["aa_calibration.json", "neutral_calibration.json"]:
+        if states.get("aa_calibration.json") is not True \
+                or states.get("neutral_calibration.json") is not True:
             raise ValueError(
                 "resume calibration.json requires complete AA and neutral raw vectors")
         aa, _ = _load_recorded_material(
@@ -1956,7 +2078,8 @@ def execute(output_root: Path, *, campaign_id: str, resume_existing: bool = Fals
                 anchor_binding=anchor_binding, anchor=anchor,
                 candidate_iqk=CONTROL_ARM_IQK[ANCHOR_MOTION_LABEL][0],
                 anchor_iqk=CONTROL_ARM_IQK[ANCHOR_MOTION_LABEL][1],
-                output_root=output_root, host_state=host_state, identity=identity)
+                output_root=output_root, host_state=host_state, identity=identity,
+                resume_existing=resume is not None)
             materials.append(anchor_motion_material)
             anchor_motion = _anchor_motion_authority(
                 output_root, material=anchor_motion_material,

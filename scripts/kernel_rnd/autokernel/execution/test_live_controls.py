@@ -1,4 +1,5 @@
 import importlib
+import hashlib
 import io
 import json
 import os
@@ -608,7 +609,9 @@ class CalibrationBoundaryResume(unittest.TestCase):
             root = Path(tmp)
             (root / "raw").mkdir()
             for name in ("aa_calibration.json", "neutral_calibration.json"):
-                (root / "raw" / name).write_text("{}\n", encoding="utf-8")
+                (root / "raw" / name).write_text(
+                    json.dumps({"complete": True, "refusals": []}) + "\n",
+                    encoding="utf-8")
             expected = {"accepted": True, "derived": "fixture"}
             (root / "calibration.json").write_text(
                 json.dumps(expected) + "\n", encoding="utf-8")
@@ -630,7 +633,10 @@ class CalibrationBoundaryResume(unittest.TestCase):
                     live_controls, "_load_json",
                     side_effect=lambda path: (
                         expected if Path(path).name == "calibration.json"
-                        else (_ for _ in ()).throw(RuntimeError("boundary passed")))):
+                        else (json.loads(Path(path).read_text())
+                              if Path(path).parent.name == "raw"
+                              else (_ for _ in ()).throw(
+                                  RuntimeError("boundary passed"))))):
                 with self.assertRaisesRegex(RuntimeError, "boundary passed"):
                     live_controls._validate_resume_existing(root, identity=identity)
             self.assertEqual(load.call_count, 2)
@@ -640,7 +646,9 @@ class CalibrationBoundaryResume(unittest.TestCase):
             root = Path(tmp)
             (root / "raw").mkdir()
             for name in ("aa_calibration.json", "neutral_calibration.json"):
-                (root / "raw" / name).write_text("{}\n", encoding="utf-8")
+                (root / "raw" / name).write_text(
+                    json.dumps({"complete": True, "refusals": []}) + "\n",
+                    encoding="utf-8")
             (root / "calibration.json").write_text(
                 json.dumps({"accepted": False}) + "\n", encoding="utf-8")
             solve = mock.Mock()
@@ -655,6 +663,72 @@ class CalibrationBoundaryResume(unittest.TestCase):
                     return_value=(None, None, None, None, solve)):
                 with self.assertRaisesRegex(ValueError, "deterministic solve"):
                     live_controls._validate_resume_existing(root, identity=identity)
+
+    def test_legacy_expiry_tail_becomes_a_verified_preserved_checkpoint_prefix(self):
+        fixture = CalibrationBlockCheckpoint()
+        plan = fixture._plan(blocks=4)
+        plans = live_controls.microbench.plan_blocks(
+            plan.schedule(), count=plan.blocks_to_run,
+            pairs=plan.pairs_per_block, unit_ids=plan.unit_ids,
+            stratum=plan.stratum)
+        rows = [fixture._record(plans[index], plan).to_dict() for index in range(3)]
+        rows[-1]["complete"] = False
+        rows[-1]["refusals"] = [
+            "the claim has expired: claim passed its declared expiry"]
+        raw = {
+            "schema": "epyc.autokernel.microbench_raw_vector.v1",
+            "recipe_id": plan.recipe_id, "candidate_id": plan.candidate_id,
+            "campaign_seed_sha256": hashlib.sha256(
+                plan.campaign_seed.encode()).hexdigest(),
+            "complete": False, "refusals": list(rows[-1]["refusals"]),
+            "started_at": "2026-08-13T16:57:40+00:00",
+            "order_schedule": {"orders": [row.order for row in plans]},
+            "blocks": rows,
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            raw_path = root / "raw" / "anchor_motion_calibration.json"
+            raw_path.parent.mkdir()
+            live_controls._write_json(raw_path, raw)
+            original = raw_path.read_bytes()
+            checkpoint = live_controls._BlockCheckpoint(
+                root, identity=live_controls.LiveCampaignIdentity(
+                    "ak-controls-legacy-import", str(root)),
+                label="anchor_motion_calibration", plan=plan,
+                imported_started_at=raw["started_at"])
+            live_controls._import_interrupted_raw(
+                root, raw_path=raw_path, raw=raw,
+                label="anchor_motion_calibration", plan=plan,
+                checkpoint=checkpoint)
+            preserved = list((root / "interrupted").glob("raw-anchor_motion*.json"))
+            self.assertEqual(len(checkpoint.prefix), 2)
+            self.assertEqual(len(preserved), 1)
+            self.assertEqual(preserved[0].read_bytes(), original)
+
+    def test_previous_anchor_transition_is_preserved_before_new_resume_witness(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            identity = live_controls.LiveCampaignIdentity(
+                "ak-controls-transition-resume", str(root))
+            body = {
+                "schema": "epyc.autokernel.anchor_motion_transition_receipt.v2",
+                "campaign_id": identity.campaign_id,
+                "settling": live_controls.ANCHOR_MOTION_SETTLING,
+                "samples": [{"old": True}],
+                "completed_at": "2026-08-13T18:50:00+00:00",
+            }
+            old = {**body, "receipt_sha256": schemas.content_hash(body)}
+            live_controls._write_json(root / "anchor_motion_settling.json", old)
+            with mock.patch.object(
+                    live_controls, "_observe_between_legs",
+                    return_value={"new": True}):
+                current = live_controls._attest_anchor_motion_transition(
+                    root, identity=identity, claim=object())
+            preserved = list(
+                (root / "interrupted").glob("anchor-motion-transition.*.json"))
+            self.assertEqual(len(preserved), 1)
+            self.assertEqual(json.loads(preserved[0].read_text()), old)
+            self.assertEqual(current["samples"], [{"new": True}])
 
 
 class ProspectiveBeliefReceipt(unittest.TestCase):
