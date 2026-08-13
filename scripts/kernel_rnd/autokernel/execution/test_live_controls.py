@@ -43,7 +43,7 @@ class InstrumentSelection(unittest.TestCase):
         self.assertEqual(str(module.INSTRUMENT_ROOT), "/tmp/ak-clean-instrument")
         self.assertEqual(
             str(module.INSTRUMENT_BINARY),
-            "/tmp/ak-clean-instrument/build-ak-f4-final-make/bin/llama-bench")
+            "/tmp/ak-clean-instrument/build-ak-t0-cpu-7aee6280/bin/llama-bench")
 
     def test_binary_override_is_separate_and_explicit(self):
         with mock.patch.dict(os.environ, {
