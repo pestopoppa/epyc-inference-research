@@ -233,12 +233,15 @@ class CalibrationFrame(unittest.TestCase):
                     candidate_iqk="0", anchor_iqk="0", output_root=root,
                     host_state=mock.Mock(), identity=live_controls.LiveCampaignIdentity(
                         "ak-controls-frame-run", str(root)))
+                policy = runner.call_args.kwargs["policy"]
         self.assertEqual(captured["params"]["reps"], 1)
         self.assertEqual(captured["candidate_param_overrides"], {"ggml_iqk": "0"})
         self.assertEqual(captured["anchor_param_overrides"], {"ggml_iqk": "0"})
         self.assertEqual(captured["candidate_binding"], binding)
         self.assertEqual(captured["anchor_binding"], binding)
         self.assertEqual(captured["pairs_per_block"], 1)
+        self.assertFalse(policy.require_load)
+        self.assertTrue(policy.require_package_power)
 
     def test_decode_recipe_has_its_own_non_prefill_frame(self):
         """Decode calibration must never silently reuse pp512 inputs."""

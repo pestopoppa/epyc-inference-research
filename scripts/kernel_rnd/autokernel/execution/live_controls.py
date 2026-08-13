@@ -1049,7 +1049,8 @@ def _measure(*, label: str, blocks: int, claim: object,
     runner = microbench.MicrobenchRunner(
         claim=microbench.CpuRegionClaimAdapter(claim, cpu_list=CPU_LIST),
         policy=microbench.HostStatePolicy(
-            nominal_khz=NOMINAL_KHZ, require_package_power=True),
+            nominal_khz=NOMINAL_KHZ, require_load=False,
+            require_package_power=True),
         spawner=microbench.SubprocessSpawner(
             workdir_root=str(sandbox_root), sandbox_policy=sandbox_policy),
         host_state=host_state)
