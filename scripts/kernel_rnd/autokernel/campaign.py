@@ -3500,22 +3500,21 @@ class HostOps:
         # The source identity is always the git worktree/snapshot.  Candidate
         # build artifacts are intentionally outside it (clean-build gate), so
         # do not misidentify the build directory as the source root.
-        root = (MEASUREMENT_BUILD_ROOT if arm == "anchor"
+        # Both arms execute out-of-tree build artifacts.  Their source identity
+        # is the corresponding git checkout, never the build directory.
+        root = (MEASUREMENT_REPO if arm == "anchor"
                 else self._build_state["tree"].path.path)
         artifact_root = (MEASUREMENT_BUILD_ROOT if arm == "anchor"
                          else plan.build_dir.path)
         bindir = os.path.join(artifact_root, "bin")
         binary = os.path.join(bindir, tool)
-        if arm == "candidate":
-            # Candidate artifacts live in the clean build closure, outside the
-            # snapshot worktree.  Preserve both identities in the binding so
-            # execution cannot silently resolve libraries from another tree.
-            binding = recipes.ToolBinding.for_external_build(
-                binary=binary, source_root=root, build_root=plan.build_dir.path,
-                library_path=bindir)
-        else:
-            binding = recipes.ToolBinding(binary=binary, source_root=root,
-                                          library_path=bindir)
+        # Preserve both identities in the binding so execution cannot silently
+        # resolve libraries from another tree.  This applies to the anchor as
+        # well as the candidate: the anchor build is also external to its git
+        # checkout.
+        binding = recipes.ToolBinding.for_external_build(
+            binary=binary, source_root=root, build_root=artifact_root,
+            library_path=bindir)
         return recipes.construct(spec.recipe_id, binding=binding,
                                  params=spec.params_for_arm(arm), arm=arm)
 

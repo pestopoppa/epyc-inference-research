@@ -381,7 +381,7 @@ class TestTheDryRunComposesEndToEnd(unittest.TestCase):
         self.assertTrue(binding.source_root.endswith("snapshot"))
         self.assertTrue(binding.binary.endswith("build-clean/bin/llama-bench"))
 
-    def test_construct_anchor_keeps_ordinary_binding(self):
+    def test_construct_anchor_uses_git_source_and_external_build_binding(self):
         ops = campaign.HostOps.__new__(campaign.HostOps)
         ops._build_state = {"plan": mock.Mock(), "tree": mock.Mock(
             path=mock.Mock(path="/snapshot"))}
@@ -389,7 +389,11 @@ class TestTheDryRunComposesEndToEnd(unittest.TestCase):
         with mock.patch.object(campaign.recipes, "construct",
                                return_value=mock.sentinel.command) as construct:
             ops._construct(campaign_spec, arm="anchor")
-        self.assertIsNone(construct.call_args.kwargs["binding"].external_build_root)
+        binding = construct.call_args.kwargs["binding"]
+        self.assertEqual(binding.source_root, campaign.MEASUREMENT_REPO)
+        self.assertEqual(binding.external_build_root, campaign.MEASUREMENT_BUILD_ROOT)
+        self.assertTrue(binding.binary.startswith(campaign.MEASUREMENT_BUILD_ROOT + "/"))
+        self.assertTrue(binding.library_path.startswith(campaign.MEASUREMENT_BUILD_ROOT + "/"))
 
     def test_parameter_proposal_renders_the_iqk_difference_on_the_two_arms(self):
         rendered = campaign.render_bench_commands(
