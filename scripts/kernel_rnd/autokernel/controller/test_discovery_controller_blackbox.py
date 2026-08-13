@@ -16,6 +16,17 @@ from scripts.kernel_rnd.autokernel.controller import discovery_controller as D
 
 
 H = "a" * 64
+RUNTIME = {
+    "kind": "docker_workspace_bind_only",
+    "docker_path": "/docker",
+    "docker_sha256": H,
+    "image_id": "image",
+    "codex_native_sha256": H,
+    "code_mode_host_sha256": H,
+    "ca_certificate_sha256": H,
+    "writable_host_binds": ["/workspace"],
+    "host_network_mode": "docker_bridge",
+}
 
 
 class Manifest:
@@ -48,7 +59,7 @@ class Planner:
         self.calls = 0
 
     def attest(self):
-        return {**D.SOL, "runtime": {"wrapper_sha256": H}}
+        return {**D.SOL, "runtime": RUNTIME}
 
     def plan(self, *, context, workspace):
         self.calls += 1
@@ -68,7 +79,7 @@ class Critic:
         self.calls = 0
 
     def attest(self):
-        return {**D.TERRA, "runtime": {"wrapper_sha256": H}}
+        return {**D.TERRA, "runtime": RUNTIME}
 
     def review(self, candidate, *, context, workspace):
         self.calls += 1
