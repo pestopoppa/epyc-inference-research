@@ -1586,6 +1586,7 @@ class TestExecuteRefusesAnOpsThatCannotFinishARun(unittest.TestCase):
         # hide the exact runtime condition that the worktree API represents as
         # ``None``.
         tree.branch = None
+        tree.head_commit.return_value = "b" * 40
         tree.unified_diff_from_source.return_value = ""
         plan = mock.Mock()
         plan.build_dir.path = str(Path(self.tempdir.name) / "build")
@@ -1634,13 +1635,57 @@ class TestExecuteRefusesAnOpsThatCannotFinishARun(unittest.TestCase):
         self.assertEqual(
             symbol_adapter.call_args.kwargs["candidate_root"], tree.path.path)
         self.assertEqual(
-            diff_policy_evidence.call_args.kwargs["branch_name"], "detached")
+            diff_policy_evidence.call_args.kwargs["branch_name"], "detached@" + "b" * 40)
         surface = project.call_args.kwargs["change_surface"].surface
         self.assertTrue(surface.derived_touches_dispatch)
         self.assertFalse(surface.derived_touches_memory)
         self.assertFalse(surface.derived_touches_threading)
         self.assertFalse(surface.derived_touches_persistent_state)
         self.assertEqual(surface.derived_ops, built.t0_ops)
+
+    def test_parameter_t0_adapter_records_detached_snapshot_head_not_a_branch(self):
+        """T0 must support the clean detached snapshot it builds from.
+
+        A parameter arm has no source patch, but still builds from an immutable
+        snapshot worktree.  Such worktrees deliberately have ``branch is None``;
+        treating them as branch worktrees caused r16 to crash before T0.  The
+        provenance label must name the snapshot HEAD rather than invent a branch.
+        """
+        built = spec(proposal=iqk_parameter_proposal())
+        tree = mock.Mock()
+        tree.path.path = str(Path(self.tempdir.name) / "candidate")
+        tree.branch = None
+        tree.head_commit.return_value = "a" * 40
+        tree.unified_diff_from_source.return_value = ""
+        plan = mock.Mock()
+        plan.build_dir.path = str(Path(self.tempdir.name) / "build")
+        ops = campaign.HostOps(nominal_khz=2_900_000)
+        ops._build_state = {"tree": tree, "plan": plan}
+        anchor_capture = campaign.t0_provider.AnchorCapture(
+            source_commit=campaign.MEASUREMENT_COMMIT,
+            binary_sha256=schemas.content_hash({"tool": "llama-cli"}),
+            linkage_sha256=schemas.content_hash({"libs": "anchor"}))
+        ops._t0_anchor_binding = campaign.chain.bind_anchor(
+            anchor_capture, tool="llama-cli")
+        library_capture = campaign.t0_provider.AnchorCapture(
+            source_commit=campaign.MEASUREMENT_COMMIT,
+            binary_sha256=schemas.content_hash({"tool": "libggml.so.0"}),
+            linkage_sha256=anchor_capture.linkage_sha256)
+        projected = {"symbols": "projected-symbols", "diff": "projected-diff",
+                     "change_surface": "projected-surface", "projection_checks": ()}
+        with mock.patch.object(campaign.t0_provider, "capture_anchor_identity",
+                               return_value=library_capture), \
+                mock.patch.object(ops, "_construct", return_value=mock.Mock(env={
+                    "LD_LIBRARY_PATH": campaign.MEASUREMENT_BUILD_ROOT + "/bin"})), \
+                mock.patch.object(campaign.chain, "iqk_parameter_symbol_evidence"), \
+                mock.patch.object(campaign.chain, "diff_policy_evidence",
+                                  return_value=mock.Mock()) as diff_policy_evidence, \
+                mock.patch.object(campaign.chain, "t0_plan_evidence",
+                                  return_value=projected):
+            ops._parameter_t0_evidence(built, identity=object(), build_evidence=object())
+        self.assertEqual(diff_policy_evidence.call_args.kwargs["branch_name"],
+                         "detached@" + "a" * 40)
+        tree.head_commit.assert_called_once_with()
 
     def test_parameter_proposal_refuses_a_source_diff(self):
         class Tree:

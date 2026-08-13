@@ -3131,8 +3131,11 @@ class HostOps:
             # A clean build is intentionally made in a detached worktree at the
             # committed candidate snapshot.  The diff record's legacy
             # ``branch_name`` field still requires a non-empty provenance label,
-            # but a snapshot does not have (and must not invent) a branch.
-            branch_name=tree.branch.name if tree.branch else "detached",
+            # but a snapshot does not have (and must not invent) a branch.  Bind
+            # that label to the actual detached HEAD: a generic "detached" loses
+            # the source identity that T0 is supposed to preserve.
+            branch_name=(tree.branch.name if tree.branch else
+                         f"detached@{tree.head_commit()}"),
             commit_argv=(),
             record_schema_violations=())
 
