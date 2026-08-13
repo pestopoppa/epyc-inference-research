@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from dataclasses import replace
 import hashlib
 import tempfile
 import unittest
@@ -154,9 +155,25 @@ class SplitRuntimeVerifierTests(unittest.TestCase):
                 model_path=model, model_sha256=model_sha, device_id="mi210_0",
                 kfd_pid=124, boot_id="boot-a", process_start_ticks=458)
             V.validate_arm_pair(anchor, candidate)
-        self.assertTrue(anchor.same_resident_process(same))
-        self.assertFalse(anchor.same_resident_process(restarted))
-        self.assertEqual(anchor.to_dict()["schema"], V.RESIDENCY_SCHEMA)
+            self.assertTrue(anchor.same_resident_process(same))
+            self.assertFalse(anchor.same_resident_process(restarted))
+            self.assertEqual(anchor.to_dict()["schema"], V.RESIDENCY_SCHEMA)
+            with self.assertRaisesRegex(V.SplitRuntimeError, "self-hash mismatch"):
+                replace(anchor, identity_sha256="0" * 64)
+
+    def test_maps_refuse_post_verification_runtime_tamper(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "runtime"
+            _runtime(root)
+            manifest = V.verify_split_runtime(root, elf_reader=_fake_elf)
+            model = Path(directory) / "model.gguf"
+            model.write_bytes(b"model")
+            (manifest.common_dir / "libggml.so.0.16.0").write_bytes(b"tampered")
+            with self.assertRaisesRegex(V.SplitRuntimeError, "changed after verification"):
+                V.verify_runtime_maps(
+                    manifest, arm="anchor", maps_text=_maps(manifest, "anchor", model),
+                    model_path=model, model_sha256=_sha(model), device_id="mi210_0",
+                    kfd_pid=1, boot_id="boot", process_start_ticks=1)
 
     def test_maps_refuse_wrong_arm_and_unsealed_local_object(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
