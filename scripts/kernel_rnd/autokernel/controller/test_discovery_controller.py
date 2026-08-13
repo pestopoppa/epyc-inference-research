@@ -69,3 +69,8 @@ class Tests(unittest.TestCase):
   with tempfile.TemporaryDirectory() as t, patch.object(D.source_candidate,"SourcePatchManifest",Manifest), patch.object(D,"_write_projection"):
    r=D.run_controller(self.cfg(Path(t),1),planner=FakePlanner(),critic=FakeCritic(["accept"]),screener=FakeScreen([.1]),lease=Wait())
    self.assertEqual(r["next"],1); self.assertEqual(r["pending"]["status"],"waiting_resource"); self.assertFalse(r["complete"])
+ def test_discovery_negative_records_attempt_without_resolving_hypothesis(self):
+  with tempfile.TemporaryDirectory() as t, patch.object(D.source_candidate,"SourcePatchManifest",Manifest), patch.object(D,"_write_projection"):
+   root=Path(t); p=FakePlanner(); screen=FakeScreen([-.01]); screen.values=iter([-.01])
+   D.run_controller(self.cfg(root,1),planner=p,critic=FakeCritic(["accept"]),screener=screen,lease=Lease())
+   tracker=D._tracker(D.DurableState(root/"out")); self.assertTrue(tracker.state()["akh-test-1"].is_open)
