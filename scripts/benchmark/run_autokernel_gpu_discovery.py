@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
 import hashlib
 import json
 import os
@@ -31,7 +32,8 @@ SCHEMA_LIVE_GOVERNANCE = "epyc.autokernel.gpu_discovery_live_governance.v1"
 SOURCE_COMMIT = "0db32c06e3e550065b78311a6031ef3dd2c4f27c"
 CPU_LIST = "184-191"
 DEVICE_ID = "mi210_0"
-SMALL_MODEL_OVERLAP_MAX_BYTES = 512 * 1024 * 1024
+DEFAULT_HOST_BANDWIDTH_BYTES_S = 400 * 1000 * 1000 * 1000
+DEFAULT_HOST_TRANSFER_FRACTION = 0.01
 VRAM_USED = Path("/sys/class/drm/card2/device/mem_info_vram_used")
 KFD_PROCS = Path("/sys/class/kfd/kfd/proc")
 MODEL_CALL_WINDOW = inference_window.InferenceCallWindow(timeout_s=600.0)
@@ -109,6 +111,129 @@ def _kfd_pids() -> tuple[int, ...]:
         raise RuntimeError(f"KFD process inventory unreadable: {exc}") from exc
 
 
+class BandwidthDutyCycleBudget:
+    """Sealed cold-load host-transfer budget; size alone never decides overlap."""
+    def __init__(self, *, host_bandwidth_bytes_per_s: float,
+                 rolling_interval_s: float, budget_fraction: float) -> None:
+        if (host_bandwidth_bytes_per_s <= 0 or rolling_interval_s <= 0
+                or not 0 < budget_fraction <= 1):
+            raise RuntimeError("host-transfer duty-cycle budget is invalid")
+        self.host_bandwidth_bytes_per_s = float(host_bandwidth_bytes_per_s)
+        self.rolling_interval_s = float(rolling_interval_s)
+        self.budget_fraction = float(budget_fraction)
+
+    def admit(self, *, cold_load_host_bytes: int, observed_at_s: float,
+              prior_cold_load_bytes: int = 0) -> dict:
+        if (isinstance(cold_load_host_bytes, bool) or cold_load_host_bytes < 1
+                or isinstance(prior_cold_load_bytes, bool) or prior_cold_load_bytes < 0
+                or observed_at_s < 0):
+            raise RuntimeError("host-transfer load observation is invalid")
+        budget = self.host_bandwidth_bytes_per_s * self.rolling_interval_s * self.budget_fraction
+        rolling = prior_cold_load_bytes + cold_load_host_bytes
+        return {"schema": "epyc.autokernel.host_transfer_budget.v1",
+                "cold_load_host_bytes": cold_load_host_bytes,
+                "rolling_interval_s": self.rolling_interval_s,
+                "host_bandwidth_bytes_per_s": self.host_bandwidth_bytes_per_s,
+                "budget_fraction": self.budget_fraction,
+                "rolling_cold_load_bytes": rolling, "budget_bytes": budget,
+                "transfer_ratio": rolling / (self.host_bandwidth_bytes_per_s * self.rolling_interval_s),
+                "observed_at_s": observed_at_s, "admitted": rolling <= budget}
+
+
+@dataclass(frozen=True)
+class SiteLoadProfile:
+    """Reviewed, workload-specific cold-overlap authority; never planner input."""
+    policy_version: str
+    model_sha256: str
+    model_path: str
+    model_bytes: int
+    workload: str
+    calls_per_arm: int
+    device_id: str
+    worst_case_cold_loads: int
+    budget: BandwidthDutyCycleBudget
+
+    def decide(self, *, model: Path, workload: str, calls: int, device_id: str,
+               observed_headroom: bool) -> dict:
+        actual_sha = sha256_file(model)
+        exact = (actual_sha == self.model_sha256 and str(model.resolve()) == self.model_path
+                 and model.stat().st_size == self.model_bytes and workload == self.workload
+                 and calls == self.calls_per_arm and device_id == self.device_id)
+        transfer = self.budget.admit(cold_load_host_bytes=model.stat().st_size,
+            observed_at_s=time.monotonic(), prior_cold_load_bytes=model.stat().st_size
+            * max(0, self.worst_case_cold_loads - 1))
+        if exact and observed_headroom and transfer["admitted"]:
+            return {**transfer, "policy_version": self.policy_version, "mode": "cold_overlap",
+                    "reason": "exact reviewed site load profile", "lock_interval": None,
+                    "residency_transition": "cold_load_required"}
+        return {**transfer, "policy_version": self.policy_version, "mode": "cold_serialized",
+                "reason": "profile mismatch/missing headroom/transfer budget", "lock_interval": "load_only",
+                "residency_transition": "cold_load_required"}
+
+
+SITE_LOAD_PROFILES = {
+    "mi210-qwen05b-tg128-18-v1": SiteLoadProfile(
+        policy_version="mi210-qwen05b-tg128-18-v1",
+        model_sha256="f175ecace8c24336cbf9e22bd71ea032a16492bd264a3caab6dfa4cafe80ddd3",
+        model_path="/mnt/raid0/llm/models/lmstudio-community/Qwen2.5-Coder-0.5B-GGUF/Qwen2.5-Coder-0.5B-Q4_K_M.gguf",
+        model_bytes=397807840, workload="decode_tg128", calls_per_arm=9,
+        device_id=DEVICE_ID, worst_case_cold_loads=18,
+        budget=BandwidthDutyCycleBudget(host_bandwidth_bytes_per_s=DEFAULT_HOST_BANDWIDTH_BYTES_S,
+                                        rolling_interval_s=60.0, budget_fraction=.01)),
+}
+
+
+def decide_load_mode(*, hot_resident: bool, residency_identity_matches: bool,
+                     host_observation_available: bool, transfer: dict,
+                     dedicated_window_available: bool,
+                     policy_version: str = "site-host-transfer-v1") -> dict:
+    """Fail-closed three-mode load admission; planner text cannot select it."""
+    if not policy_version or not isinstance(transfer, dict):
+        raise RuntimeError("load admission policy input is malformed")
+    if hot_resident:
+        if not residency_identity_matches:
+            raise RuntimeError("hot resident declaration lacks exact model/runtime/residency identity")
+        return {"mode": "hot_resident", "policy_version": policy_version,
+                "reason": "exact resident model/runtime identity", "cpu_window_required": False}
+    if host_observation_available and transfer.get("admitted") is True:
+        return {"mode": "cold_overlap", "policy_version": policy_version,
+                "reason": "sealed host-transfer policy admitted declared cold load", "cpu_window_required": False}
+    if dedicated_window_available:
+        return {"mode": "cold_serialized", "policy_version": policy_version,
+                "reason": "unknown/over-budget host transfer serialized for load only", "cpu_window_required": True}
+    raise RuntimeError("cold GPU load cannot be admitted: no host observation budget or dedicated window")
+
+
+def host_transfer_admission(*, bytes_per_cold_load: int, cold_loads: int,
+                            interval_s: float, host_bandwidth_bytes_s: float,
+                            conservative_fraction: float,
+                            site_policy_allows_overlap: bool = True,
+                            observed_headroom: bool = True,
+                            hot_resident: bool = False,
+                            resident_identity: str | None = None,
+                            expected_identity: str | None = None) -> dict:
+    """Compatibility/public policy entry point with an explicit three-mode outcome."""
+    budget = BandwidthDutyCycleBudget(host_bandwidth_bytes_per_s=host_bandwidth_bytes_s,
+                                      rolling_interval_s=interval_s,
+                                      budget_fraction=conservative_fraction)
+    transfer = budget.admit(cold_load_host_bytes=bytes_per_cold_load, observed_at_s=time.monotonic(),
+                            prior_cold_load_bytes=bytes_per_cold_load * max(0, cold_loads - 1))
+    exact_hot = hot_resident and resident_identity is not None and resident_identity == expected_identity
+    if exact_hot:
+        decision = {"mode": "hot_resident", "reason": "exact resident identity", "lock_interval": None,
+                    "residency_transition": "reused"}
+    elif site_policy_allows_overlap and observed_headroom and transfer["admitted"]:
+        decision = {"mode": "cold_overlap", "reason": "site policy/headroom/duty-cycle admitted",
+                    "lock_interval": None, "residency_transition": "cold_load_required"}
+    else:
+        decision = {"mode": "cold_serialized", "reason": "missing/over-budget/unsafe overlap observation",
+                    "lock_interval": "load_only", "residency_transition": "cold_load_required"}
+    return {**transfer, "policy_version": "site-host-transfer-v1", "inputs": {
+        "site_policy_allows_overlap": site_policy_allows_overlap,
+        "observed_headroom": observed_headroom, "hot_resident": hot_resident,
+        "resident_identity": resident_identity, "expected_identity": expected_identity}, **decision}
+
+
 def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
            flash_attention: bool, campaign_id: str,
            expected_source_commit: str = SOURCE_COMMIT,
@@ -120,14 +245,25 @@ def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
            split_mode: str = "layer", no_kv_offload: bool = False,
            poll: int = 50, inference_window_lock: Path | None = None,
            reward_binary: Path | None = None, hip_library_dir: Path | None = None,
-           common_loader_dir: Path | None = None) -> dict:
+           common_loader_dir: Path | None = None,
+           host_transfer_interval_s: float = 60.0,
+           host_bandwidth_bytes_s: float = DEFAULT_HOST_BANDWIDTH_BYTES_S,
+           host_transfer_fraction: float = DEFAULT_HOST_TRANSFER_FRACTION,
+           cold_loads_in_interval: int = 1,
+           sealed_load_decision: dict | None = None) -> dict:
     """Run one model load/measurement with the ratified discovery overlap policy."""
+    if sealed_load_decision is not None:
+        if not isinstance(sealed_load_decision, dict) or sealed_load_decision.get("mode") not in {
+                "cold_overlap", "cold_serialized"}:
+            raise RuntimeError("nonpersistent runner requires a sealed cold load decision")
+        allow_small_model_cpu_overlap = sealed_load_decision["mode"] == "cold_overlap"
     if allow_small_model_cpu_overlap:
         model_bytes = model.stat().st_size
-        if model_bytes > SMALL_MODEL_OVERLAP_MAX_BYTES:
-            raise RuntimeError(
-                f"small-model CPU-overlap mode refuses {model_bytes} bytes; "
-                f"limit is {SMALL_MODEL_OVERLAP_MAX_BYTES}")
+        if sealed_load_decision is None:
+            raise RuntimeError("GPU overlap requires a preflight-sealed site load decision")
+        transfer = sealed_load_decision
+        if transfer["mode"] != "cold_overlap":
+            raise RuntimeError("GPU cold load was not admitted for overlap; use serialized load mode")
         claims = cpu_region_claim.inspect_region_claims()
         concurrent = []
         for region, entries in (claims.get("regions") or {}).items():
@@ -156,12 +292,15 @@ def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
             "cpu_overlap_policy": "allowed_discovery_noise",
             "cpu_exclusivity": False, "borrowed": False,
             "model_size_bytes": model_bytes,
-            "small_model_threshold_bytes": SMALL_MODEL_OVERLAP_MAX_BYTES,
+            "host_transfer": transfer,
+            "load_mode": "cold",
             "concurrent_claims": concurrent,
             "promotion_claim": False,
         }
         return result
-    # Non-overlap/large mode must use the sealed configured window.
+    # Non-overlap/large cold load must use the sealed configured window.  This
+    # process exits after one measurement, so it cannot claim a hot resident
+    # continuation; callers must explicitly re-admit every fresh load.
     window = (inference_window.InferenceCallWindow(inference_window_lock, timeout_s=600.0)
               if inference_window_lock is not None else MODEL_CALL_WINDOW)
     with window.hold() as configured_lease:
@@ -201,6 +340,9 @@ def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
         "scope": "model_load_and_inference_only",
     }
     result["cpu_coverage"] = coverage_receipt
+    result["load_mode"] = "cold_serialized"
+    if sealed_load_decision is not None:
+        result["site_load_decision"] = sealed_load_decision
     return result
 
 
@@ -220,7 +362,7 @@ def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
         raise RuntimeError("sealed reward executable is not executable")
     if not loader_dir.is_dir() or not (loader_dir / "libggml-hip.so").is_file():
         raise RuntimeError("sealed HIP loader directory lacks libggml-hip.so")
-    argv = ("taskset", "-c", CPU_LIST, "numactl", "--interleave=all", str(binary),
+    argv = ("/usr/bin/taskset", "-c", CPU_LIST, "/usr/bin/numactl", "--interleave=all", str(binary),
             "-m", str(model), "-p", str(prompt_tokens), "-n", str(generation_tokens),
             "-r", "1", "-ngl", "99",
             "-fa", "on" if flash_attention else "off",
@@ -232,7 +374,7 @@ def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
             "--autokernel-harden", str(seed), "-o", "jsonl")
     if not common_dir.is_dir():
         raise RuntimeError("sealed common reward loader directory is absent")
-    env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+    env = {"PATH": "/usr/bin:/bin",
            "LD_LIBRARY_PATH": f"{loader_dir}:{common_dir}:/opt/rocm/lib"}
     process = subprocess.Popen(argv, env=env, stdin=subprocess.DEVNULL,
                                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -417,14 +559,13 @@ def preflight(args: argparse.Namespace) -> dict:
     if not model.is_file():
         raise RuntimeError(f"model does not exist: {model}")
     model_size_bytes = model.stat().st_size
-    admitted_cap = int(getattr(args, "small_model_max_bytes", SMALL_MODEL_OVERLAP_MAX_BYTES))
-    if admitted_cap < 1 or admitted_cap > SMALL_MODEL_OVERLAP_MAX_BYTES:
-        raise RuntimeError("sealed small-model discovery cap must be within 1..512MiB")
-    if (args.allow_small_model_cpu_overlap
-            and model_size_bytes > admitted_cap):
-        raise RuntimeError(
-            f"small-model CPU-overlap mode refuses {model_size_bytes} bytes; "
-            f"limit is {admitted_cap}")
+    profile_id = getattr(args, "load_admission_profile_id", "mi210-qwen05b-tg128-18-v1")
+    profile = SITE_LOAD_PROFILES.get(profile_id)
+    if profile is None:
+        raise RuntimeError("unknown reviewed GPU load-admission profile")
+    transfer = profile.decide(model=model, workload=args.workload, calls=args.calls,
+                              device_id=getattr(args, "device_id", DEVICE_ID),
+                              observed_headroom=True)
     if getattr(args, "device_id", DEVICE_ID) != DEVICE_ID:
         raise RuntimeError("GPU discovery device must be the admitted MI210")
     configured_lock = getattr(args, "inference_window_lock", None)
@@ -449,13 +590,21 @@ def preflight(args: argparse.Namespace) -> dict:
         anchor_loader = Path(args.anchor_loader_dir).resolve()
         candidate_loader = Path(args.candidate_loader_dir).resolve()
         common_loader = Path(args.common_loader_dir).resolve()
+        def hip_object(path: Path) -> tuple[Path, str]:
+            link = path / "libggml-hip.so.0"
+            if (not (path / "libggml-hip.so").is_symlink() or not link.is_symlink()
+                    or (path / "libggml-hip.so").resolve(strict=True) != link.resolve(strict=True)):
+                raise RuntimeError("source patch HIP runtime lacks an exact .so/.so.0 topology")
+            resolved = link.resolve(strict=True)
+            if resolved.parent != path or resolved.is_symlink() or not resolved.is_file():
+                raise RuntimeError("source patch HIP SONAME resolves outside its arm runtime")
+            return resolved, sha256_file(resolved)
         if (not measurement.is_file() or not os.access(measurement, os.X_OK) or not common_loader.is_dir()
-                or not all(path.is_dir() and (path / "libggml-hip.so").is_file()
-                           for path in (anchor_loader, candidate_loader))):
+                or not all(path.is_dir() for path in (anchor_loader, candidate_loader))):
             raise RuntimeError("source patch runtime closure is incomplete")
         shared_sha = sha256_file(measurement)
-        anchor_hip = sha256_file(anchor_loader / "libggml-hip.so")
-        candidate_hip = sha256_file(candidate_loader / "libggml-hip.so")
+        _anchor_hip_object, anchor_hip = hip_object(anchor_loader)
+        _candidate_hip_object, candidate_hip = hip_object(candidate_loader)
         if anchor_hip == candidate_hip:
             raise RuntimeError("source patch runtime closure requires distinct HIP DSOs")
         runtime_arms = {"measurement_binary": str(measurement),
@@ -473,12 +622,12 @@ def preflight(args: argparse.Namespace) -> dict:
         "model": str(model),
         "model_sha256": sha256_file(model),
         "model_size_bytes": model_size_bytes,
-        "small_model_overlap_max_bytes": admitted_cap,
+        "host_transfer": transfer,
+        "load_admission_profile_id": profile_id,
         "device_id": DEVICE_ID,
         "inference_window_lock": str(lock),
-        "cpu_overlap_policy": ("allowed_discovery_noise"
-                               if args.allow_small_model_cpu_overlap
-                               else "shared_model_call_window"),
+        "cpu_overlap_policy": ("allowed_discovery_noise" if transfer["mode"] == "cold_overlap"
+                               else "cold_serialized_load_window"),
         "promotion_claim": False,
         "non_promotable": True,
         "anchor_build": str(anchor_build),
@@ -551,7 +700,7 @@ def run(args: argparse.Namespace) -> dict:
             "model": sealed["model"],
             "model_sha256": sealed["model_sha256"],
             "model_size_bytes": sealed["model_size_bytes"],
-            "small_model_overlap_max_bytes": sealed["small_model_overlap_max_bytes"],
+            "site_load_decision": sealed["host_transfer"],
             "promotion_claim": False,
             "non_promotable": True,
             "preflight_sha256": schemas.content_hash(sealed),
@@ -576,6 +725,7 @@ def run(args: argparse.Namespace) -> dict:
             poll=sealed["anchor_poll"],
             campaign_id=args.campaign_id, cpu_journal=cpu_journal,
             allow_small_model_cpu_overlap=args.allow_small_model_cpu_overlap,
+            sealed_load_decision=sealed["host_transfer"],
             inference_window_lock=Path(sealed["inference_window_lock"]),
             reward_binary=(Path(sealed["runtime_arms"]["measurement_binary"])
                            if sealed["runtime_arms"] else None),
@@ -621,6 +771,7 @@ def run(args: argparse.Namespace) -> dict:
             poll=sealed["candidate_poll"],
             campaign_id=args.campaign_id, cpu_journal=cpu_journal,
             allow_small_model_cpu_overlap=args.allow_small_model_cpu_overlap,
+            sealed_load_decision=sealed["host_transfer"],
             inference_window_lock=Path(sealed["inference_window_lock"]),
             reward_binary=(Path(sealed["runtime_arms"]["measurement_binary"])
                            if sealed["runtime_arms"] else None),
@@ -649,7 +800,7 @@ def run(args: argparse.Namespace) -> dict:
                                    if args.allow_small_model_cpu_overlap
                                    else "shared_model_call_window"),
             "model_size_bytes": model.stat().st_size,
-            "small_model_overlap_max_bytes": sealed["small_model_overlap_max_bytes"],
+            "site_load_decision": sealed["host_transfer"],
             "promotion_claim": False,
             "frame": bank["frame"], "sole_factor": bank["sole_factor"],
             "candidate_identity": bank["candidate_identity"],
@@ -708,11 +859,9 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--workload", choices=("prefill_pp512", "decode_tg128"),
                         default="prefill_pp512")
     result.add_argument("--allow-small-model-cpu-overlap", action="store_true",
-                        help="nonpromotable discovery only: treat CPU inference as noise "
-                             "for models no larger than the sealed small-model limit")
+                        help="nonpromotable discovery only: request policy-admitted cold-load overlap")
     result.add_argument("--inference-window-lock")
-    result.add_argument("--small-model-max-bytes", type=int,
-                        default=SMALL_MODEL_OVERLAP_MAX_BYTES)
+    result.add_argument("--load-admission-profile-id", default="mi210-qwen05b-tg128-18-v1")
     result.add_argument("--device-id", default=DEVICE_ID)
     result.add_argument("--measurement-binary")
     result.add_argument("--common-loader-dir")

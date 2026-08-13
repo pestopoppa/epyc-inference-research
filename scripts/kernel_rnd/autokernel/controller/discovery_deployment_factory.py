@@ -143,15 +143,13 @@ class GpuDiscoveryLease:
         self.config, self.mode = config, mode
     def admit(self, candidate: controller.PlannedCandidate) -> Mapping[str, Any]:
         self.config.revalidate()
-        try:
-            # Admission is non-blocking and does not retain a serializable fd.
-            # The registered runner arguments must bind this exact lock for the
-            # actual model call, where the producer's windowed runner owns it.
-            held = inference_window.InferenceCallWindow(
-                self.config.inference_window_lock, timeout_s=0).acquire()
-        except inference_window.InferenceWindowTimeout:
-            return {"admitted": False, "reason": "inference_window_busy", "mode": self.mode}
-        held.release()
+        # The ratified small-model discovery mode is explicitly allowed to
+        # overlap ordinary CPU inference.  The runner records that policy and
+        # enforces the sealed <=512MiB cap; acquiring the CPU model-call lock
+        # here would silently negate that authority.  Serialized deployments
+        # are rejected by InferenceWindowLeaseBinding before this point.
+        if self.mode != "allowed_discovery_noise":
+            raise DeploymentFactoryError("unsupported GPU discovery lease mode")
         return {"admitted": True, "mode": self.mode,
                 "device_id": self.config.device_id,
                 "inference_window_lock": str(self.config.inference_window_lock),

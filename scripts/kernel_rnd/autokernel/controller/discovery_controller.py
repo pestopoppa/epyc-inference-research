@@ -374,6 +374,11 @@ class GpuSourceBuild:
     anchor_loader_dir: Path | None = None
     candidate_loader_dir: Path | None = None
     reward_runtime_sha256: str | None = None
+    operation_key: str | None = None
+    materialization_receipt: Path | None = None
+    materialization_sha256: str | None = None
+    teardown_receipt: Path | None = None
+    teardown_sha256: str | None = None
     def __post_init__(self) -> None:
         for path in (self.anchor_build, self.candidate_build):
             if not path.is_absolute() or not path.is_dir():
@@ -390,6 +395,21 @@ class GpuSourceBuild:
                     or not isinstance(self.candidate_loader_dir, Path) or not self.candidate_loader_dir.is_dir()
                     or not isinstance(self.reward_runtime_sha256, str) or not HASH.fullmatch(self.reward_runtime_sha256)):
                 raise DiscoveryControllerError("GPU source build has an incomplete shared reward closure")
+        receipts = (self.operation_key, self.materialization_receipt, self.materialization_sha256,
+                    self.teardown_receipt, self.teardown_sha256)
+        if any(value is not None for value in receipts):
+            if (not all(value is not None for value in receipts)
+                    or not isinstance(self.operation_key, str) or not HASH.fullmatch(self.operation_key)
+                    or any(not isinstance(path, Path) or not path.is_absolute() or path.is_symlink()
+                           or not path.is_file() for path in (self.materialization_receipt, self.teardown_receipt))
+                    or any(not isinstance(value, str) or not HASH.fullmatch(value)
+                           for value in (self.materialization_sha256, self.teardown_sha256))):
+                raise DiscoveryControllerError("GPU source build has incomplete durable materialization receipts")
+            for path, expected in ((self.materialization_receipt, self.materialization_sha256),
+                                   (self.teardown_receipt, self.teardown_sha256)):
+                assert isinstance(path, Path) and isinstance(expected, str)
+                if hashlib.sha256(path.read_bytes()).hexdigest() != expected:
+                    raise DiscoveryControllerError("GPU source materialization receipt bytes changed")
 
 
 @dataclass(frozen=True)

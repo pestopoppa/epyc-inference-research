@@ -34,12 +34,17 @@ class TestGpuDiscoveryBuildIdentity(unittest.TestCase):
                 return mock.Mock(stdout=("a" * 40 if str(anchor) in argv else "b" * 40), returncode=0)
             with mock.patch.object(gpu.subprocess, "run", side_effect=git_commit):
                 model = root / "model.gguf"; model.write_bytes(b"model")
-                candidate_hip = candidate / "bin" / "libggml-hip.so"; candidate_hip.write_bytes(b"candidate-hip")
+                for build, payload in ((anchor, b"anchor-hip"), (candidate, b"candidate-hip")):
+                    directory = build / "bin"
+                    (directory / "libggml-hip.so").unlink()
+                    versioned = directory / "libggml-hip.so.0.16.0"; versioned.write_bytes(payload)
+                    (directory / "libggml-hip.so.0").symlink_to(versioned.name)
+                    (directory / "libggml-hip.so").symlink_to("libggml-hip.so.0")
                 args = argparse.Namespace(model=str(model), anchor_build=str(anchor), candidate_build=str(candidate),
                     factor="source_patch", campaign_id="gpu-source", calls=3, workload="prefill_pp512",
                     allow_small_model_cpu_overlap=True, measurement_binary=str(anchor / "bin" / "llama-bench"),
                     common_loader_dir=str(anchor / "bin"), anchor_loader_dir=str(anchor / "bin"), candidate_loader_dir=str(candidate / "bin"),
-                    small_model_max_bytes=gpu.SMALL_MODEL_OVERLAP_MAX_BYTES, device_id=gpu.DEVICE_ID,
+                    device_id=gpu.DEVICE_ID,
                     inference_window_lock=None)
                 sealed = gpu.preflight(args)
             self.assertEqual(sealed["runtime_arms"]["measurement_binary_sha256"],
@@ -47,14 +52,14 @@ class TestGpuDiscoveryBuildIdentity(unittest.TestCase):
             self.assertNotEqual(sealed["runtime_arms"]["anchor_hip_sha256"],
                                 sealed["runtime_arms"]["candidate_hip_sha256"])
 
-    def test_preflight_refuses_cap_above_ratified_overlap_limit(self) -> None:
+    def test_preflight_records_cold_serialization_for_over_budget_cadence(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); build = _build(root, rocwmma="ON", mfma="OFF"); model = root / "m"; model.write_bytes(b"x")
-            with self.assertRaisesRegex(RuntimeError, "512MiB"):
-                gpu.preflight(argparse.Namespace(model=str(model), anchor_build=str(build), candidate_build=str(build),
+            sealed = gpu.preflight(argparse.Namespace(model=str(model), anchor_build=str(build), candidate_build=str(build),
                     factor="flash_attention", campaign_id="gpu", calls=3, workload="prefill_pp512",
-                    allow_small_model_cpu_overlap=True, small_model_max_bytes=gpu.SMALL_MODEL_OVERLAP_MAX_BYTES + 1,
+                    allow_small_model_cpu_overlap=True,
                     device_id=gpu.DEVICE_ID, inference_window_lock=None))
+            self.assertEqual(sealed["host_transfer"]["mode"], "cold_serialized")
     def test_decode_preflight_seals_tg128_shape_and_metric(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -73,10 +78,9 @@ class TestGpuDiscoveryBuildIdentity(unittest.TestCase):
         self.assertEqual(sealed["metric"], "decode_tokens_per_s")
         self.assertEqual((sealed["prompt_tokens"], sealed["generation_tokens"]),
                          (0, 128))
-        self.assertEqual(sealed["cpu_overlap_policy"], "allowed_discovery_noise")
+        self.assertEqual(sealed["cpu_overlap_policy"], "cold_serialized_load_window")
         self.assertFalse(sealed["promotion_claim"])
-        self.assertLessEqual(sealed["model_size_bytes"],
-                             sealed["small_model_overlap_max_bytes"])
+        self.assertIn("host_transfer", sealed)
 
     def test_seals_factor_binary_and_dsos(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -198,6 +202,17 @@ class TestGpuDiscoveryBuildIdentity(unittest.TestCase):
 
 
 class TestGpuDiscoveryInferenceWindow(unittest.TestCase):
+    def test_three_mode_load_policy_fails_closed_to_serialized_or_refusal(self) -> None:
+        transfer = {"admitted": True}
+        self.assertEqual(gpu.decide_load_mode(hot_resident=True, residency_identity_matches=True,
+            host_observation_available=False, transfer=transfer, dedicated_window_available=False)["mode"], "hot_resident")
+        self.assertEqual(gpu.decide_load_mode(hot_resident=False, residency_identity_matches=False,
+            host_observation_available=True, transfer=transfer, dedicated_window_available=False)["mode"], "cold_overlap")
+        self.assertEqual(gpu.decide_load_mode(hot_resident=False, residency_identity_matches=False,
+            host_observation_available=False, transfer=transfer, dedicated_window_available=True)["mode"], "cold_serialized")
+        with self.assertRaisesRegex(RuntimeError, "cannot be admitted"):
+            gpu.decide_load_mode(hot_resident=False, residency_identity_matches=False,
+                host_observation_available=False, transfer={"admitted": False}, dedicated_window_available=False)
     def test_parser_exposes_distinct_decode_workload(self) -> None:
         parsed = gpu.parser().parse_args([
             "--anchor-build", "/anchor", "--candidate-build", "/candidate",
@@ -219,7 +234,8 @@ class TestGpuDiscoveryInferenceWindow(unittest.TestCase):
                 result = gpu.invoke(
                     build=Path("/build"), model=model, seed=1, baseline_vram=0,
                     flash_attention=True, campaign_id="gpu-s2",
-                    cpu_journal=mock.Mock(), allow_small_model_cpu_overlap=True)
+                    cpu_journal=mock.Mock(), allow_small_model_cpu_overlap=True,
+                    sealed_load_decision={"mode": "cold_overlap", "policy_version": "test"})
         acquire.assert_not_called()
         self.assertIsNone(result["inference_call_window"])
         coverage = result["cpu_coverage"]
@@ -229,16 +245,24 @@ class TestGpuDiscoveryInferenceWindow(unittest.TestCase):
         self.assertEqual(coverage["concurrent_claims"][0]["attribution"]["campaign_id"],
                          "cpu-r4")
 
-    def test_small_model_overlap_refuses_assets_above_threshold(self) -> None:
+    def test_overlap_without_sealed_profile_is_refused(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             model = Path(directory) / "large.gguf"
             model.write_bytes(b"x")
-            with mock.patch.object(gpu, "SMALL_MODEL_OVERLAP_MAX_BYTES", 0):
-                with self.assertRaisesRegex(RuntimeError, "small-model CPU-overlap"):
-                    gpu.invoke(build=Path("/build"), model=model, seed=1,
-                               baseline_vram=0, flash_attention=True,
-                               campaign_id="gpu-s2", cpu_journal=mock.Mock(),
-                               allow_small_model_cpu_overlap=True)
+            with self.assertRaisesRegex(RuntimeError, "preflight-sealed"):
+                gpu.invoke(build=Path("/build"), model=model, seed=1,
+                           baseline_vram=0, flash_attention=True,
+                           campaign_id="gpu-s2", cpu_journal=mock.Mock(),
+                           allow_small_model_cpu_overlap=True)
+
+    def test_transfer_budget_is_diagnostic_not_live_cli_authority(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            model = Path(directory) / "small.gguf"; model.write_bytes(b"x" * 100)
+            with mock.patch.object(gpu.cpu_region_claim, "inspect_region_claims", return_value={"regions": {}}), \
+                 mock.patch.object(gpu, "_invoke_locked", return_value={"metric": 1.0}):
+                decision = gpu.host_transfer_admission(bytes_per_cold_load=100, cold_loads=1,
+                    interval_s=1.0, host_bandwidth_bytes_s=1_000, conservative_fraction=.2)
+            self.assertEqual(decision["mode"], "cold_overlap")
 
     def test_owned_cpu_coverage_exists_only_inside_model_call(self) -> None:
         events = []

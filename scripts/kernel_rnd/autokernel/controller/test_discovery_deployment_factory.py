@@ -51,14 +51,15 @@ class DeploymentFactoryTests(unittest.TestCase):
                          (Path("/state"), Path("/evidence"), 2, .03, True, "a" * 64, "b" * 40))
         config.revalidate.assert_called_once()
 
-    def test_window_lease_refuses_busy_and_binds_discovery_metadata(self):
+    def test_window_lease_allows_small_discovery_noise_while_cpu_window_is_busy(self):
         config = mock.Mock(inference_window_lock="/lock", device_id="mi210_0",
                            model=mock.Mock(sha256="a" * 64), small_model_max_bytes=1)
         config.revalidate = mock.Mock()
         with mock.patch.object(F.inference_window.InferenceCallWindow, "acquire",
                                side_effect=F.inference_window.InferenceWindowTimeout("busy")):
-            denied = F.GpuDiscoveryLease(config=config, mode="allowed_discovery_noise").admit(mock.Mock())
-        self.assertFalse(denied["admitted"])
+            admitted = F.GpuDiscoveryLease(config=config, mode="allowed_discovery_noise").admit(mock.Mock())
+        self.assertTrue(admitted["admitted"])
+        self.assertEqual(admitted["mode"], "allowed_discovery_noise")
 
 
 if __name__ == "__main__":

@@ -331,7 +331,8 @@ def load_deployment_config(path: Path) -> DiscoveryDeployment:
     if _overlaps(window, production_path):
         raise DeploymentConfigError("gpu.inference_window_lock must not enter frozen production")
     small = gpu["small_model_max_bytes"]
-    if isinstance(small, bool) or not isinstance(small, int) or small < 1:
+    if (isinstance(small, bool) or not isinstance(small, int) or small < 1
+            or small > 512 * 1024 * 1024):
         raise DeploymentConfigError("gpu.small_model_max_bytes is invalid")
     inputs = _exact(top["immutable_inputs"], {"model", "workload", "runtime_config", "policy"}, "immutable_inputs")
     source = _exact(top["source_plan"], {"source_builder_id", "evidence_plan_id",
