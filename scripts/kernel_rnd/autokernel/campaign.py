@@ -3959,7 +3959,6 @@ class HostOps:
             suite_seed=spec.suite_seed)
 
     def _construct(self, spec: CampaignSpec, *, arm: str) -> Any:
-        plan = self._build_state["plan"]
         tool = spec.recipe.tool
         # The source identity is always the git worktree/snapshot.  Candidate
         # build artifacts are intentionally outside it (clean-build gate), so
@@ -3969,7 +3968,7 @@ class HostOps:
         root = (MEASUREMENT_REPO if arm == "anchor"
                 else self._build_state["tree"].path.path)
         artifact_root = (MEASUREMENT_BUILD_ROOT if arm == "anchor"
-                         else plan.build_dir.path)
+                         else self._build_state["plan"].build_dir.path)
         bindir = os.path.join(artifact_root, "bin")
         binary = os.path.join(bindir, tool)
         # Preserve both identities in the binding so execution cannot silently
@@ -3981,6 +3980,40 @@ class HostOps:
             library_path=bindir)
         return recipes.construct(spec.recipe_id, binding=binding,
                                  params=spec.params_for_arm(arm), arm=arm)
+
+    def create_screening_baseline(self, spec: CampaignSpec, *, output: str | Path) -> dict[str, Any]:
+        """Execute and seal exactly three bound anchor calls for a discovery batch."""
+        if self._claim_binding is None:
+            raise RuntimeError("screening baseline creation requires a held claim")
+        target = Path(output)
+        if target.exists():
+            raise RuntimeError(f"refusing to overwrite existing screening baseline {target}")
+        storage.assert_not_scratch(target, what="screening baseline bank")
+        anchor = self._construct(spec, arm="anchor")
+        policy = self._candidate_sandbox_policy(spec)
+        spawner = self._spawner or microbench.SubprocessSpawner(
+            workdir_root=policy.writable_root, sandbox_policy=policy)
+        boot_id = Path("/proc/sys/kernel/random/boot_id").read_text(encoding="utf-8").strip()
+        frame = {"recipe_id": spec.recipe_id, "backend": spec.backend,
+                 "model_sha256": storage.hash_file(spec.model),
+                 "instrument_commit": MEASUREMENT_COMMIT,
+                 "production_commit": PRODUCTION_COMMIT,
+                 "boot_sha256": schemas.content_hash({"boot_id": boot_id}),
+                 "reps": spec.reps, "n_prompt": spec.n_prompt, "n_gen": spec.n_gen}
+        witness = screening_baseline.competing_inference_witness()
+        if witness["competing"]:
+            raise RuntimeError("competing model inference occupies claimed screening compute")
+        bank = screening_baseline.create(
+            frame=frame,
+            invoke_anchor=lambda: screening_baseline.invoke_command(
+                command=anchor, spawner=spawner), anchor_count=3)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        temporary = target.with_suffix(target.suffix + ".tmp")
+        temporary.write_text(json.dumps(bank.to_dict(), sort_keys=True) + "\n", encoding="utf-8")
+        os.replace(temporary, target)
+        return {"path": str(target), "baseline_sha256": bank.to_dict()["baseline_sha256"],
+                "anchor_invocations": 3, "inference_witness": witness,
+                "non_promotable": True}
 
     # -- 5. the paired blocks ---------------------------------------------
 
@@ -4147,6 +4180,7 @@ class HostOps:
                      "model_sha256": storage.hash_file(spec.model),
                      "instrument_commit": MEASUREMENT_COMMIT,
                      "production_commit": PRODUCTION_COMMIT,
+                     "boot_sha256": schemas.content_hash({"boot_id": Path("/proc/sys/kernel/random/boot_id").read_text(encoding="utf-8").strip()}),
                      "reps": spec.reps, "n_prompt": spec.n_prompt, "n_gen": spec.n_gen}
             witness = screening_baseline.competing_inference_witness()
             report = screening_baseline.screen(
