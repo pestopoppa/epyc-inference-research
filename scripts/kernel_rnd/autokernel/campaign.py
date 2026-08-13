@@ -3111,6 +3111,23 @@ class HostOps:
             n_predict=32, seed=42, extra_argv=("-m", spec.model))
 
     @staticmethod
+    def _t0_capture_sink(spec: CampaignSpec) -> t0_provider.DirectoryCaptureSink:
+        """The durable archive behind every T0 ``akcap:`` evidence reference.
+
+        Capture before the first anchor generation: a model/containment failure
+        is the case where stdout, stderr, and the Landlock receipt are most
+        needed, and a sink installed only for the candidate loses half of the
+        comparison.  This directory is evaluator-owned beside the journal, not
+        inside the candidate's writable sandbox.
+        """
+        if not spec.journal_root:
+            raise RuntimeError("T0 capture archive needs the executing campaign journal root")
+        root = storage.assert_not_scratch(spec.journal_root, what="campaign journal root")
+        capture_root = os.path.join(root, "t0-captures")
+        os.makedirs(capture_root, mode=0o700, exist_ok=True)
+        return t0_provider.DirectoryCaptureSink(capture_root)
+
+    @staticmethod
     def _evaluator_identity(authority: control_runner.LiveEvaluationAuthority
                             ) -> api.EvaluatorIdentity:
         """Hash the exact prospective evaluator bundle used by this driver."""
@@ -3397,6 +3414,7 @@ class HostOps:
         if spec.backend == BACKEND_GPU and artifact_check.outcome != schemas.PASS:
             return self._stop_t0_early(
                 early_request, "t0.compile_artifact_diff", artifact_check)
+        capture_sink = self._t0_capture_sink(spec)
         anchor_capture = extra.pop("anchor_capture", None)
         if anchor_capture is None:
             anchor_plan = t0_provider.T0ExecutionPlan(
@@ -3419,6 +3437,7 @@ class HostOps:
                 runner=t0_provider.SubprocessRunner(
                     sandbox_policy=self._candidate_sandbox_policy(spec)),
                 claim=self._claim_binding.t0_claim,
+                sink=capture_sink,
                 generation_seeds=(42, 42),
                 oracle_ids=(f"oracle://{MEASUREMENT_BRANCH}",))
         t0_anchor = chain.bind_anchor(anchor_capture, tool="llama-cli")  # seam 3
@@ -3464,6 +3483,7 @@ class HostOps:
             runner=t0_provider.SubprocessRunner(
                 sandbox_policy=self._candidate_sandbox_policy(spec)),
             claim=self._claim_binding.t0_claim,
+            sink=capture_sink,
             anchor_capture=t0_anchor.capture)
         provisional = self._evaluation_request(
             spec, identity=identity, anchor_identity=t0_anchor.identity,

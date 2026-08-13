@@ -96,6 +96,7 @@ from __future__ import annotations
 
 import ast
 import hashlib
+import json
 import math
 import os
 import re
@@ -123,7 +124,7 @@ __all__ = [
     # claims
     "HeldClaim", "require_claim",
     # captures
-    "CaptureSink", "MemoryCaptureSink", "capture_ref",
+    "CaptureSink", "MemoryCaptureSink", "DirectoryCaptureSink", "capture_ref",
     # plan
     "CandidateBuild", "AnchorBuild", "ToolPaths", "BackendOpsCapabilities", "OpSuitePlan", "GenerationPlan",
     "HoldoutPlan", "T0ExecutionPlan",
@@ -973,6 +974,100 @@ class MemoryCaptureSink:
     @property
     def refs(self) -> tuple:
         return tuple(sorted(self._by_ref))
+
+
+class DirectoryCaptureSink:
+    """Durably retain exact T0 process captures under their evidence refs.
+
+    A T0 evidence record deliberately cites captures by content address, rather
+    than by an arbitrary writable path.  That only makes those references
+    replayable when the process stdout, stderr, and sandbox receipt are stored
+    under the same address.  The in-memory sink is appropriate for tests; a
+    live campaign must install this sink before either anchor or candidate work
+    begins, otherwise an early T0 failure leaves only an opaque ``akcap:`` ID.
+    """
+
+    _SCHEMA = "epyc.autokernel.t0_capture.v1"
+    _REF_RE = re.compile(r"^akcap:([0-9a-f]{32})$")
+
+    def __init__(self, root: str) -> None:
+        _req_abs(root, "capture_sink.root")
+        path = Path(root).resolve(strict=True)
+        if not path.is_dir():
+            raise CaptureUnavailable(f"capture sink root is not a directory: {path}")
+        self._root = path
+
+    def _path_for_ref(self, ref: str) -> Path:
+        match = self._REF_RE.fullmatch(ref)
+        if match is None:
+            raise CaptureUnavailable(f"invalid capture reference {ref!r}")
+        return self._root / f"{match.group(1)}.json"
+
+    @staticmethod
+    def _decode(document: Mapping[str, Any], ref: str) -> CompletedProcess:
+        if not isinstance(document, Mapping) \
+                or document.get("schema") != DirectoryCaptureSink._SCHEMA \
+                or document.get("capture_ref") != ref \
+                or not isinstance(document.get("capture"), Mapping):
+            raise CaptureUnavailable(f"capture archive entry {ref!r} is malformed")
+        raw = document["capture"]
+        try:
+            capture = CompletedProcess(
+                argv=tuple(raw["argv"]),
+                env=tuple(tuple(pair) for pair in raw["env"]),
+                cwd=raw["cwd"], exit_code=raw["exit_code"],
+                stdout=raw["stdout"], stderr=raw["stderr"],
+                duration_s=raw["duration_s"], timed_out=raw["timed_out"],
+                signalled=raw["signalled"], orphans=tuple(raw.get("orphans", ())),
+                sandbox_receipt=raw.get("sandbox_receipt"),
+                sandbox_teardown=raw.get("sandbox_teardown"))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise CaptureUnavailable(f"capture archive entry {ref!r} is malformed: {exc}") \
+                from exc
+        if capture_ref(capture) != ref:
+            raise CaptureUnavailable(
+                f"capture archive entry {ref!r} does not hash to its declared evidence ref")
+        return capture
+
+    def store(self, capture: CompletedProcess) -> str:
+        ref = capture_ref(capture)
+        path = self._path_for_ref(ref)
+        document = {"schema": self._SCHEMA, "capture_ref": ref,
+                    "capture": capture.to_dict()}
+        encoded = json.dumps(document, sort_keys=True, separators=(",", ":")) + "\n"
+        try:
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        except FileExistsError:
+            # Same short content address must never silently name different
+            # process material.  Verify it before treating the write as a
+            # deduplicated store.
+            existing = self.get(ref)
+            if existing.to_dict() != capture.to_dict():
+                raise CaptureUnavailable(
+                    f"capture ref collision at {path}: existing bytes differ from {ref}")
+            return ref
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                handle.write(encoded)
+                handle.flush()
+                os.fsync(handle.fileno())
+        except BaseException:
+            try:
+                path.unlink()
+            except OSError:
+                pass
+            raise
+        return ref
+
+    def get(self, ref: str) -> CompletedProcess:
+        path = self._path_for_ref(ref)
+        try:
+            with path.open(encoding="utf-8") as handle:
+                document = json.load(handle)
+        except (OSError, json.JSONDecodeError) as exc:
+            raise CaptureUnavailable(f"cannot read capture archive entry {ref!r}: {exc}") \
+                from exc
+        return self._decode(document, ref)
 
 
 # =============================================================================

@@ -30,6 +30,7 @@ only the pids they captured. They take under two seconds and touch no model.
 from __future__ import annotations
 
 import os
+import json
 import shutil
 import signal
 import subprocess
@@ -1080,6 +1081,31 @@ class SubprocessRunnerDiscipline(unittest.TestCase):
         two = capture(["/bin/true"], stdout="b")
         self.assertNotEqual(t0.capture_ref(one), t0.capture_ref(two))
         self.assertTrue(t0.capture_ref(one).startswith("akcap:"))
+
+    def test_directory_capture_sink_retains_stdout_stderr_and_sandbox_receipts(self):
+        """A failed live generation must remain diagnosable after T0 returns."""
+        with tempfile.TemporaryDirectory() as root:
+            capture_record = t0.CompletedProcess(
+                argv=("/bin/false",), env=(), cwd=root, exit_code=1,
+                stdout="", stderr="model load failed", duration_s=0.1,
+                timed_out=False, signalled=False,
+                sandbox_receipt={"schema": "sandbox", "pid": 17},
+                sandbox_teardown={"released": True})
+            sink = t0.DirectoryCaptureSink(root)
+            ref = sink.store(capture_record)
+            self.assertEqual(sink.get(ref), capture_record)
+            self.assertTrue((Path(root) / f"{ref.split(':', 1)[1]}.json").is_file())
+
+    def test_directory_capture_sink_rejects_tampered_evidence(self):
+        with tempfile.TemporaryDirectory() as root:
+            sink = t0.DirectoryCaptureSink(root)
+            ref = sink.store(capture(["/bin/true"], stdout="real output"))
+            path = Path(root) / f"{ref.split(':', 1)[1]}.json"
+            document = json.loads(path.read_text())
+            document["capture"]["stdout"] = "invented output"
+            path.write_text(json.dumps(document))
+            with self.assertRaises(t0.CaptureUnavailable):
+                sink.get(ref)
 
 
 class RecordedRunnerRefusal(unittest.TestCase):

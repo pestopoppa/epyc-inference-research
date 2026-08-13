@@ -1600,6 +1600,14 @@ class TestExecuteRefusesAnOpsThatCannotFinishARun(unittest.TestCase):
             binary="/tmp/llama-cli", library_path="/tmp", plan=plan, base_env=())
         self.assertEqual(invocation.argv[invocation.argv.index("-m") + 1], built.model)
 
+    def test_t0_capture_sink_is_durable_and_outside_candidate_sandbox(self):
+        with tempfile.TemporaryDirectory() as root:
+            with mock.patch.object(campaign.storage, "assert_not_scratch", return_value=root):
+                built = spec(journal_root=root)
+                sink = campaign.HostOps._t0_capture_sink(built)
+            self.assertEqual(Path(sink._root), Path(root, "t0-captures"))
+            self.assertNotIn("candidate-sandbox", str(sink._root))
+
     def test_parameter_t0_adapter_derives_the_nonbehavioural_gate_surfaces(self):
         built = spec(proposal=iqk_parameter_proposal())
         tree = mock.Mock()
