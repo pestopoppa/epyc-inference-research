@@ -57,8 +57,8 @@ class Tests(unittest.TestCase):
    (root/"screen"/"result.json").write_text(json.dumps(raw))
    run.side_effect=lambda _args: events.append("runner") or raw
    source_hash=hashlib.sha256(source_file.read_bytes()).hexdigest(); dispatch_hash=hashlib.sha256(dispatch_file.read_bytes()).hexdigest()
-   identity=D.gpu_source_proofs.BuildIdentity("commit-a",H,H,H,H,H); material={"manifest_sha256":H,"candidate":identity,"anchor":identity,"workload_sha256":H,"correctness":{"file_sha256":source_hash,"native_sha256":H},"attribution":{"file_sha256":dispatch_hash,"native_sha256":H}}
-   hashed={**material,"candidate":identity.__dict__,"anchor":identity.__dict__}; bundle=D.gpu_source_proofs.GpuSourceProofBundle(**material,bundle_sha256=D.gpu_source_proofs._hash(hashed))
+   candidate_identity=build.candidate_identity; anchor_identity=build.anchor_identity; material={"manifest_sha256":H,"candidate":candidate_identity,"anchor":anchor_identity,"workload_sha256":H,"correctness":{"file_sha256":source_hash,"native_sha256":H},"attribution":{"file_sha256":dispatch_hash,"native_sha256":H}}
+   hashed={**material,"candidate":candidate_identity.__dict__,"anchor":anchor_identity.__dict__}; bundle=D.gpu_source_proofs.GpuSourceProofBundle(**material,bundle_sha256=D.gpu_source_proofs._hash(hashed))
    screen=D.GpuSourceScreener(build_source=lambda *_: events.append("build") or build,proof_bundle=lambda *_: events.extend(["source","dispatch"]) or bundle,args_factory=lambda *_:args)
    with patch.object(D.autokernel_progression,"_gpu_screen",return_value={"stage":"candidate"}):
     got=screen.screen(item,object(),{})

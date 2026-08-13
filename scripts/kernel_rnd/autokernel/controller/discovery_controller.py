@@ -10,6 +10,7 @@ promotion.
 from __future__ import annotations
 
 import argparse
+import fcntl
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 import hashlib
@@ -259,6 +260,8 @@ class GpuSourceScreener:
             raise DiscoveryControllerError("GPU source gate did not return a validated proof bundle")
         if bundle.manifest_sha256 != candidate.source_manifest_sha256:
             raise DiscoveryControllerError("GPU proof bundle does not bind the candidate manifest")
+        if bundle.candidate != build.candidate_identity or bundle.anchor != build.anchor_identity:
+            raise DiscoveryControllerError("GPU proof bundle does not bind both sealed build identities")
         args = self.args_factory(candidate, build, lease)
         # The established runner owns KFD/VRAM, device claims, paired samples,
         # and its durable result.  This controller does not spawn a shell.
@@ -318,11 +321,14 @@ def _context(state: Mapping[str, Any], tracker: hypotheses.HypothesisTracker, tu
 
 def _append_nomination(root: Path, item: PlannedCandidate, result: SealedScreen, threshold: float) -> None:
     if result.effect_fraction < threshold: return
-    path=root / "promotion-queue.jsonl"; key=_sha({"result":result.result_sha256,"manifest":item.source_manifest_sha256})
-    existing=path.read_text() if path.exists() else ""
-    if key in existing: return
+    path=root / "promotion-queue.jsonl"; lock=root / "promotion-queue.lock"; key=_sha({"result":result.result_sha256,"manifest":item.source_manifest_sha256})
     row={"schema":"epyc.autokernel.discovery_nomination.v1","idempotency_key":key,"receipt_path":result.receipt_path,"result_sha256":result.result_sha256,"source_manifest_sha256":item.source_manifest_sha256,"effect_fraction":result.effect_fraction,"threshold":threshold,"promotion_claim":False,"operator_decision_required":True,"authority":AUTHORITY}
-    with path.open("a",encoding="utf-8") as f: f.write(json.dumps(row,sort_keys=True)+"\n"); f.flush(); os.fsync(f.fileno())
+    lock.parent.mkdir(parents=True,exist_ok=True)
+    with lock.open("a+") as guard:
+        fcntl.flock(guard.fileno(),fcntl.LOCK_EX)
+        existing=path.read_text() if path.exists() else ""
+        if key in existing: return
+        with path.open("a",encoding="utf-8") as f: f.write(json.dumps(row,sort_keys=True)+"\n"); f.flush(); os.fsync(f.fileno())
 
 
 def _write_projection(root: Path) -> None:
