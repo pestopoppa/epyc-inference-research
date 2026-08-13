@@ -2882,21 +2882,32 @@ class ExecutedT0EvidenceProvider:
         # A linkage report is tool-shaped, not build-shaped.  ``llama-cli``
         # normally reports libggml.so, libggml-base and libggml-cpu; asking
         # ldd about libggml.so itself reports only its direct base/cpu edges.
-        # Those are one build, but the *sets* differ.  The shared ABI root is
-        # libggml-base: fold its resolved path together with the verifier's
-        # expected root.  This proves the common ggml generation while neither
-        # treating a CLI-only dependency nor a direct-child-only dependency as
-        # a second build.  Backend/tool-specific rows stay in the full receipt
-        # and are still checked for confinement by the verifier.
-        base_rows = [row for row in report.rows
-                     if row.soname in {"libggml-base.so", "libggml-base.so.0"}]
-        if len(base_rows) != 1:
+        # The loader cannot list the object it was asked to inspect, so restore
+        # that one *measured target* when it is libggml.  Then hash the complete
+        # shared ggml closure, not merely libggml-base: accepting a changed
+        # libggml.so or libggml-cpu beside an unchanged base library would weaken
+        # the one-anchor guarantee.  Canonical paths make a symlink spelling of
+        # the same ELF object one identity, while a different resolved object
+        # still changes the digest.
+        ggml_paths = {
+            os.path.realpath(row.path)
+            for row in report.rows if row.soname.startswith("libggml")
+        }
+        if Path(report.binary).name.startswith("libggml"):
+            ggml_paths.add(os.path.realpath(report.binary))
+        base_paths = {
+            os.path.realpath(row.path)
+            for row in report.rows
+            if row.soname in {"libggml-base.so", "libggml-base.so.0"}
+        }
+        if not ggml_paths or len(base_paths) != 1:
             raise OutputParseError(
-                "the linkage verifier must report exactly one libggml-base row; "
-                "the common resolved ggml generation cannot be identified")
+                "the linkage verifier must report exactly one libggml-base row and at "
+                "least one resolved libggml object; the ggml generation cannot be "
+                "identified")
         return schemas.content_hash({
-            "expected_root": report.expected_root,
-            "resolved_ggml_base": [base_rows[0].soname, base_rows[0].path],
+            "expected_root": os.path.realpath(report.expected_root),
+            "resolved_ggml_paths": sorted(ggml_paths),
         })
 
     def collect_linkage(self, collected: _Collected):

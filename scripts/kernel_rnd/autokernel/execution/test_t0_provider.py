@@ -615,21 +615,32 @@ class LinkageParsing(unittest.TestCase):
     def test_linkage_digest_names_the_ggml_generation_not_tool_specific_libs(self):
         # The live linker table is deliberately asymmetric: llama-cli has a
         # direct libggml.so edge while inspecting libggml.so does not.  Both
-        # share the measured ABI root and therefore identify one build.
-        cli = t0.LinkageReport("llama-cli", "/anchor", (
+        # nevertheless name exactly the same complete ggml closure.
+        cli = t0.LinkageReport("/anchor/llama-cli", "/anchor", (
             t0.LinkageRow("libggml.so.0", "/anchor/libggml.so.0", True),
             t0.LinkageRow("libggml-base.so.0", "/anchor/libggml-base.so.0", True),
             t0.LinkageRow("libggml-cpu.so.0", "/anchor/libggml-cpu.so.0", True),
             t0.LinkageRow("libllama.so.0", "/anchor/libllama.so.0", True),
         ), schemas.PASS, ())
-        direct_child = t0.LinkageReport("libggml.so.0", "/anchor", (
+        direct_child = t0.LinkageReport("/anchor/libggml.so.0", "/anchor", (
             t0.LinkageRow("libggml-base.so.0", "/anchor/libggml-base.so.0", True),
             t0.LinkageRow("libggml-cpu.so.0", "/anchor/libggml-cpu.so.0", True),
         ), schemas.PASS, ())
         self.assertEqual(t0.ExecutedT0EvidenceProvider.linkage_digest(cli),
                          t0.ExecutedT0EvidenceProvider.linkage_digest(direct_child))
 
-    def test_linkage_digest_refuses_ambiguous_common_generation(self):
+    def test_linkage_digest_direct_libggml_still_detects_a_changed_child(self):
+        base = t0.LinkageRow("libggml-base.so.0", "/anchor/libggml-base.so.0", True)
+        direct = t0.LinkageReport("/anchor/libggml.so.0", "/anchor", (
+            base, t0.LinkageRow("libggml-cpu.so.0", "/anchor/libggml-cpu.so.0", True),
+        ), schemas.PASS, ())
+        changed = t0.LinkageReport("/anchor/libggml.so.0", "/anchor", (
+            base, t0.LinkageRow("libggml-cpu.so.0", "/other/libggml-cpu.so.0", False),
+        ), schemas.PASS, ())
+        self.assertNotEqual(t0.ExecutedT0EvidenceProvider.linkage_digest(direct),
+                            t0.ExecutedT0EvidenceProvider.linkage_digest(changed))
+
+    def test_linkage_digest_refuses_missing_ggml_generation(self):
         report = t0.LinkageReport("bad", "/anchor", (
             t0.LinkageRow("libggml.so.0", "/anchor/libggml.so.0", True),
         ), schemas.PASS, ())
