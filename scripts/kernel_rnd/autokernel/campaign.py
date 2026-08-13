@@ -3633,7 +3633,7 @@ class HostOps:
         # HERE — before the blocks are spent — rather than only after them. The
         # remedy is a fresh campaign seed, so the run is refused with the claim
         # still in hand and nothing measured.
-        drawn = plan.schedule.orders(spec.blocks)
+        drawn = plan.schedule().orders(spec.blocks)
         if len(set(drawn)) < 2:
             raise RuntimeError(
                 f"the order schedule for campaign seed {plan.campaign_seed!r} draws "

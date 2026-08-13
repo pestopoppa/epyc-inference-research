@@ -1520,6 +1520,34 @@ class TestExecuteRefusesAnOpsThatCannotFinishARun(unittest.TestCase):
         self.assertEqual(campaign.HostOps().unimplemented_seams(built),
                          ("nominal_khz",))
 
+    def test_host_paired_blocks_calls_the_plan_schedule_method_before_spending(self):
+        """A plan derives its schedule; it does not expose it as a field."""
+        built = spec(proposal=iqk_parameter_proposal())
+        ops = campaign.HostOps(nominal_khz=2_900_000)
+        ops._claim_binding = mock.Mock(microbench_claim=object())
+        ops._build_state = {"tree": mock.Mock(path=mock.Mock(path=self.tempdir.name))}
+        ops._spawner = object()
+        command = mock.Mock(binding=object(), receipt=object())
+        anchor = mock.Mock(tool="llama-bench")
+        schedule = mock.Mock()
+        schedule.orders.return_value = ("anchor_first", "candidate_first")
+        plan = mock.Mock(campaign_seed="schedule-method-regression")
+        plan.schedule.return_value = schedule
+        run = object()
+        with mock.patch.object(ops, "_construct", side_effect=(command, command)), \
+                mock.patch.object(ops, "_anchor_identity_for_bench", return_value=anchor), \
+                mock.patch.object(ops, "_t1_evaluation_request"), \
+                mock.patch.object(ops, "_candidate_sandbox_policy"), \
+                mock.patch.object(ops, "_completed_run_ledger"), \
+                mock.patch.object(campaign.microbench, "MicrobenchPlan", return_value=plan), \
+                mock.patch.object(campaign.microbench, "MicrobenchRunner") as runner_type, \
+                mock.patch.object(campaign, "pairs_from_run", return_value=()) as pairs:
+            runner_type.return_value.run.return_value = run
+            self.assertEqual(ops.run_paired_blocks(built, object(), object()), ())
+        plan.schedule.assert_called_once_with()
+        schedule.orders.assert_called_once_with(built.blocks)
+        pairs.assert_called_once_with(run)
+
     def test_parameter_proposal_rejects_source_prerequisite_package(self):
         package = mock.Mock(
             spec=source_prerequisite_package.SourcePrerequisitePackage)
