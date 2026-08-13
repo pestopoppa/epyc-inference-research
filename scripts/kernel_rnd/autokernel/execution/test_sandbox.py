@@ -481,6 +481,31 @@ class LiveRunnerWiringTest(unittest.TestCase):
                              int(Path(result.sandbox_receipt["cgroup_path"]).name.split("-")[1]))
             self.assertTrue(result.sandbox_teardown["verified_empty"])
 
+    def test_linkage_verifier_keeps_ldd_running_inside_the_t0_sandbox(self):
+        """The verifier may fail on /bin/true, but must inspect it rather than
+        fail opening its ``ldd`` stderr redirection under Landlock.
+
+        ``capture_anchor_identity`` is intentionally read-only and therefore
+        runs without containment.  ``capture_anchor`` shares its linkage
+        capture but is paired with behavioral T0 and runs under this runner's
+        write-confining policy.  Redirecting ``ldd`` stderr to ``/dev/null`` in
+        the shell made only the latter collect zero rows: Landlock denies that
+        shell write before ``ldd`` executes.  The verifier's intrinsic
+        non-vacuity result below proves ``ldd`` did run, without a model or
+        inference invocation.
+        """
+        script = (Path(__file__).resolve().parents[4] / "scripts" / "utils"
+                  / "verify_ggml_linkage.sh")
+        with tempfile.TemporaryDirectory(prefix="ak-c6-root-") as root:
+            policy = S.SandboxPolicy(root, token="linkagecheck1")
+            result = t0_provider.SubprocessRunner(sandbox_policy=policy).run(
+                ["/bin/bash", str(script), "/bin/true", "/bin"],
+                env={"PATH": os.environ["PATH"]}, cwd=root, timeout_s=5)
+            self.assertEqual(result.exit_code, 2)
+            self.assertIn("ggml/whisper/llama libraries inspected : 0", result.stdout)
+            self.assertNotIn("/dev/null: Permission denied", result.stderr)
+            self.assertTrue(result.sandbox_teardown["verified_empty"])
+
     def test_sandboxed_spawner_refuses_a_workdir_outside_its_write_tree(self):
         with tempfile.TemporaryDirectory(prefix="ak-c6-root-") as root, \
                 tempfile.TemporaryDirectory(prefix="ak-c6-other-") as other:
