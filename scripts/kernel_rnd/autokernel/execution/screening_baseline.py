@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from .. import schemas
+from ..evaluator import recipes
+from . import microbench
 
 SCHEMA = "epyc.autokernel.screening_baseline_bank.v1"
 
@@ -93,3 +95,20 @@ def screen(*, bank: BaselineBank, frame: Mapping[str, Any], invoke_candidate,
                    "host_noise_policy": "recorded_not_blocking",
                    "non_promotable": True})
     return report
+
+
+def invoke_command(*, command: recipes.ConstructedCommand, spawner: microbench.Spawner,
+                   timeout_s: float = 300.0) -> float:
+    """Run exactly one bound llama-bench command and reduce its own samples."""
+    env = microbench.assemble_env(command.env).env
+    spawned = spawner.run(command.argv, env, timeout_s=timeout_s)
+    if spawned.timed_out or spawned.returncode != 0:
+        raise BaselineBankError("screening invocation failed or timed out")
+    rows = microbench.parse_llama_bench_json(spawned.stdout)
+    if len(rows) != 1:
+        raise BaselineBankError("screening invocation must emit exactly one result row")
+    check = microbench.LlamaBenchExpectation.from_command(command).check_row(rows[0])
+    if check.outcome != schemas.PASS:
+        raise BaselineBankError("screening command/result frame mismatch: " + "; ".join(check.reasons))
+    values = rows[0].metric_samples
+    return sum(values) / len(values)

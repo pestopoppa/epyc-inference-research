@@ -4141,6 +4141,25 @@ class HostOps:
         if self._claim_binding is None:
             raise RuntimeError("run_paired_blocks was reached without a bound claim")
         candidate_cmd = self._construct(spec, arm="candidate")
+        if spec.screening_only:
+            assert spec.screening_baseline is not None
+            sandbox_policy = self._candidate_sandbox_policy(spec)
+            spawner = self._spawner or microbench.SubprocessSpawner(
+                workdir_root=sandbox_policy.writable_root, sandbox_policy=sandbox_policy)
+            frame = {"recipe_id": spec.recipe_id, "backend": spec.backend,
+                     "model_sha256": storage.hash_file(spec.model),
+                     "instrument_commit": MEASUREMENT_COMMIT,
+                     "production_commit": PRODUCTION_COMMIT,
+                     "reps": spec.reps, "n_prompt": spec.n_prompt, "n_gen": spec.n_gen}
+            report = screening_baseline.screen(
+                bank=spec.screening_baseline, frame=frame,
+                invoke_candidate=lambda: screening_baseline.invoke_command(
+                    command=candidate_cmd, spawner=spawner),
+                competing_inference=False)
+            self._screening_report = report
+            center = float(report["baseline_center"])
+            return tuple(Pair(index, center, value, "candidate_only")
+                         for index, value in enumerate(report["candidate_samples"]))
         anchor_cmd = self._construct(spec, arm="anchor")
         anchor_identity = self._anchor_identity_for_bench(spec)
         self._recipe_receipts[("T1", anchor_identity.tool or "llama-bench")] = \
