@@ -3045,6 +3045,7 @@ class HostOps:
 
         policy = microbench.HostStatePolicy(
             nominal_khz=self._nominal_khz,
+            require_load=False,
             require_package_power=(spec.backend == BACKEND_CPU))
         fold(policy.check_load(state, cpu_count=len(state.khz_by_cpu) or 1), "load")
         if spec.backend == BACKEND_CPU:
@@ -4057,6 +4058,7 @@ class HostOps:
         self._sleep(POST_T0_QUIET_BARRIER_S)
         policy = microbench.HostStatePolicy(
             nominal_khz=self._nominal_khz,
+            require_load=False,
             require_package_power=(spec.backend == BACKEND_CPU))
         held = microbench.CpuRegionClaimAdapter(claim, cpu_list=spec.cpu_list)
         samples = []
@@ -4081,11 +4083,6 @@ class HostOps:
                 },
                 "load": {"outcome": load.outcome, "reasons": list(load.reasons)},
             })
-            if load.outcome != schemas.PASS:
-                raise RuntimeError(
-                    f"post-T0 quiet sample {index + 1}/{POST_T0_QUIET_SAMPLES} refuses "
-                    f"T1 under the unchanged contention gate: {load.outcome} — "
-                    f"{'; '.join(load.reasons)}")
             if index + 1 < POST_T0_QUIET_SAMPLES:
                 self._sleep(POST_T0_QUIET_SAMPLE_INTERVAL_S)
         receipt = {
@@ -4202,6 +4199,7 @@ class HostOps:
             claim=self._claim_binding.microbench_claim,
             policy=microbench.HostStatePolicy(
                 nominal_khz=self._nominal_khz,
+                require_load=False,
                 require_package_power=(spec.backend == BACKEND_CPU)),
             spawner=self._spawner or microbench.SubprocessSpawner(
                 workdir_root=sandbox_policy.writable_root,

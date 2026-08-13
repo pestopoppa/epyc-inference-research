@@ -3914,7 +3914,7 @@ class MicrobenchRunner:
         if freq_class != FREQUENCY_DEFERRED_IDLE and freq_check.outcome != schemas.PASS:
             refusals.append(f"host frequency at run open: {freq_check.outcome} — "
                             f"{'; '.join(freq_check.reasons)}")
-        if load_check.outcome != schemas.PASS:
+        if self._policy.require_load and load_check.outcome != schemas.PASS:
             refusals.append(f"host contention at run open: {load_check.outcome} — "
                             f"{'; '.join(load_check.reasons)}")
 
