@@ -1591,6 +1591,15 @@ class TestExecuteRefusesAnOpsThatCannotFinishARun(unittest.TestCase):
         self.assertEqual(policy.determinism_min_runs, 2)
         self.assertEqual(policy.policy_ref, "ak-policy/v1")
 
+    def test_t0_generation_plan_binds_the_campaign_model(self):
+        """T0 cannot treat a model-less llama-cli invocation as a graph probe."""
+        built = spec()
+        plan = campaign.HostOps._t0_generation_plan(built)
+        self.assertEqual(plan.extra_argv, ("-m", built.model))
+        invocation = campaign.t0_provider.build_generation_invocation(
+            binary="/tmp/llama-cli", library_path="/tmp", plan=plan, base_env=())
+        self.assertEqual(invocation.argv[invocation.argv.index("-m") + 1], built.model)
+
     def test_parameter_t0_adapter_derives_the_nonbehavioural_gate_surfaces(self):
         built = spec(proposal=iqk_parameter_proposal())
         tree = mock.Mock()

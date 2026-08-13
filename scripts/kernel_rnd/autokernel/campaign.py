@@ -3096,6 +3096,21 @@ class HostOps:
             binary=os.path.join(bindir, tool), library_path=bindir)
 
     @staticmethod
+    def _t0_generation_plan(spec: CampaignSpec) -> t0_provider.GenerationPlan:
+        """The T0 graph/output probe, bound to this campaign's exact model.
+
+        ``llama-cli`` accepts a prompt without a model argument, then exits
+        before it can construct either a graph or generated output.  T0's
+        backend-op suite is independent of that invocation, so the resulting
+        failure can otherwise look like an empty candidate trace after a
+        successful operator test.  Keep the model in the typed plan rather
+        than relying on an ambient default or a build-local model path.
+        """
+        return t0_provider.GenerationPlan(
+            prompt="The capital of France is", prompt_ref="ak-prompt-001",
+            n_predict=32, seed=42, extra_argv=("-m", spec.model))
+
+    @staticmethod
     def _evaluator_identity(authority: control_runner.LiveEvaluationAuthority
                             ) -> api.EvaluatorIdentity:
         """Hash the exact prospective evaluator bundle used by this driver."""
@@ -3395,9 +3410,7 @@ class HostOps:
                 suite_seed=spec.suite_seed, capabilities=None),
                 dispatch=t0_provider.DispatchTracePlan(derived_surface=spec.t0_ops),
                 anchor=self._measurement_anchor_build("llama-cli"),
-                generation=t0_provider.GenerationPlan(
-                    prompt="The capital of France is", prompt_ref="ak-prompt-001",
-                    n_predict=32, seed=42),
+                generation=self._t0_generation_plan(spec),
                 backend=spec.backend,
                 base_env=tuple(sorted(self._construct(spec, arm="anchor").env.items())),
                 parameter_env=spec.t0_parameter_env_for_arm("anchor"))
@@ -3427,9 +3440,7 @@ class HostOps:
                 suite_source_sha256=identity.snapshot_sha256,
                 suite_seed=spec.suite_seed, capabilities=None),
             dispatch=t0_provider.DispatchTracePlan(derived_surface=spec.t0_ops),
-            generation=t0_provider.GenerationPlan(
-                prompt="The capital of France is", prompt_ref="ak-prompt-001",
-                n_predict=32, seed=42),
+            generation=self._t0_generation_plan(spec),
             holdout=(t0_provider.HoldoutPlan(
                 unseen_case_filter="type_a=(q4_K|iq4_xs)",
                 boundary_case_filter="n=1",
