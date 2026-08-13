@@ -79,8 +79,8 @@ def load(path: str | Path) -> BaselineBank:
     values = body["anchor_samples"]
     command = body["anchor_command"]
     artifacts = body["anchor_artifacts"]
-    if not isinstance(body["frame"], Mapping) or not isinstance(values, list) or len(values) < 2:
-        raise BaselineBankError("baseline bank needs exact frame and >=2 anchor samples")
+    if not isinstance(body["frame"], Mapping) or not isinstance(values, list) or len(values) != 3:
+        raise BaselineBankError("baseline bank needs exact frame and exactly three anchor samples")
     if body["frame"].get("anchor_ggml_iqk") != "0" \
             or not isinstance(command, Mapping) \
             or command.get("arm") != "anchor" \
@@ -99,8 +99,8 @@ def load(path: str | Path) -> BaselineBank:
 def create(*, frame: Mapping[str, Any], anchor_command: Mapping[str, Any],
            invoke_anchor, anchor_count: int = 3) -> BaselineBank:
     """Seal O(1) anchor invocations once for a whole discovery batch."""
-    if anchor_count < 2:
-        raise BaselineBankError("baseline bank needs at least two anchor invocations")
+    if anchor_count != 3:
+        raise BaselineBankError("baseline bank requires exactly three anchor invocations")
     samples = tuple(float(invoke_anchor()) for _ in range(anchor_count))
     if frame.get("anchor_ggml_iqk") != "0" \
             or anchor_command.get("env", {}).get("GGML_IQK") != "0" \
