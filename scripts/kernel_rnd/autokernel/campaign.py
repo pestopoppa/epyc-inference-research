@@ -170,7 +170,8 @@ from .controller import do_not_repeat, hypotheses
 from .evaluator import api, correctness, devices, recipes
 from .execution import (chain, control_runner, cpu_region_claim, device_sampler,
                         instrument_integrity, microbench, physical_bounds,
-                        powercap_broker, provider, sandbox, t0_provider, worktree)
+                        powercap_broker, provider, sandbox, screening_baseline,
+                        t0_provider, worktree)
 from .resource import claim_witness, device_claim, preflight
 
 __all__ = [
@@ -1464,6 +1465,7 @@ class CampaignSpec:
     #: Discovery-only measurement: bounded, explicitly non-promotable and
     #: forbidden from producing candidate/archive authority.
     screening_only: bool = False
+    screening_baseline: Optional[screening_baseline.BaselineBank] = None
     created_at: str = field(default_factory=_utc_now)
 
     def __post_init__(self) -> None:
@@ -1486,6 +1488,8 @@ class CampaignSpec:
                 raise ValueError("screening-only runs are capped at 3 paired blocks")
             if self.least_commitment_plan is not None or self.matched_experiment_id is not None:
                 raise ValueError("screening-only runs cannot carry archive/held-out bindings")
+            if not isinstance(self.screening_baseline, screening_baseline.BaselineBank):
+                raise ValueError("screening-only runs require an immutable screening baseline bank")
         if not str(self.candidate_ref).strip():
             raise ValueError("candidate_ref must name the patch or branch under test")
         if self.authorization is not None:
@@ -1677,6 +1681,16 @@ class CampaignSpec:
         # failure an hour into a claim window into a refusal at argument-parse
         # time (feedback_bench_max_opt_and_config_probe_first).
         render_bench_commands(self)
+        if self.screening_only:
+            assert self.screening_baseline is not None
+            self.screening_baseline.admit({
+                "recipe_id": self.recipe_id, "backend": self.backend,
+                "model_sha256": (storage.hash_file(self.model)
+                                 if self.model and Path(self.model).is_file() else None),
+                "instrument_commit": MEASUREMENT_COMMIT,
+                "production_commit": PRODUCTION_COMMIT,
+                "reps": self.reps, "n_prompt": self.n_prompt, "n_gen": self.n_gen,
+            })
         if self.calibration is not None \
                 and self.calibration.evaluation_authority is not None:
             frame = self.calibration.evaluation_authority.calibration_frame
@@ -5028,6 +5042,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--screening-only", action="store_true", default=False,
                         help="max-three-block non-promotable discovery screen; skips T0 and "
                              "post-T0 stabilization and cannot KEEP/archive/promote")
+    parser.add_argument("--screening-baseline-bank", default=None, metavar="PATH",
+                        help="sealed reusable anchor baseline required by --screening-only")
     parser.add_argument("--recipe", dest="recipe_id", default=None,
                         choices=list(recipes.RECIPE_IDS) + [None],
                         help="codified recipe id (default: the canonical decode slice "
@@ -5134,6 +5150,17 @@ def main(argv: Optional[Sequence[str]] = None, *, out: Optional[Any] = None,
               "--least-commitment-capture-plan before any claim, mutation, build, "
               "or benchmark; otherwise a clean result cannot enter AK-WM-2",
               file=sys.stderr)
+        return 2
+
+    baseline_bank = None
+    if args.screening_baseline_bank is not None:
+        try:
+            baseline_bank = screening_baseline.load(args.screening_baseline_bank)
+        except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+            print(f"refusing to start: --screening-baseline-bank: {exc}", file=sys.stderr)
+            return 2
+    if args.screening_only and baseline_bank is None:
+        print("refusing to start: --screening-only requires --screening-baseline-bank", file=sys.stderr)
         return 2
     if not args.dry_run and least_commitment_plan is not None \
             and least_commitment_plan.raw["capture_mode"] != "measured":
@@ -5245,7 +5272,7 @@ def main(argv: Optional[Sequence[str]] = None, *, out: Optional[Any] = None,
             matched_experiment_id=args.matched_experiment_id,
             calibration=selected_calibration,
             physical_envelope=physical_envelope, ranked_units=ranked_units,
-            screening_only=args.screening_only)
+            screening_only=args.screening_only, screening_baseline=baseline_bank)
     except (ValueError, TypeError, storage.StorageError, recipes.RecipeError,
             source_candidate.SourceCandidateError,
             source_prerequisite_package.SourcePrerequisitePackageError,

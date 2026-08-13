@@ -41,6 +41,7 @@ from . import (campaign, journal as journal_module, schemas,
                source_prerequisite_package)
 from .evaluator import api, correctness
 from .execution import control_runner, microbench, physical_bounds, t0_provider, worktree
+from .execution import screening_baseline
 from .resource import claim_witness
 from .test_schemas import _proposal as _proposal_fixture
 
@@ -52,6 +53,16 @@ def spec(**overrides) -> campaign.CampaignSpec:
                   candidate_ref="candidate.patch", model=MODEL)
     kwargs.update(overrides)
     return campaign.CampaignSpec(**kwargs)
+
+
+def screening_bank() -> screening_baseline.BaselineBank:
+    return screening_baseline.BaselineBank({
+        "recipe_id": "t1b.llama_cpu.llama_bench_prefill.v1", "backend": "llama_cpu",
+        "model_sha256": None,
+        "instrument_commit": campaign.MEASUREMENT_COMMIT,
+        "production_commit": campaign.PRODUCTION_COMMIT,
+        "reps": 5, "n_prompt": 512, "n_gen": 128,
+    }, (100.0, 100.0), 100.0)
 
 
 def proposal_manifest(campaign_id: str = "ak-test") -> dict:
@@ -501,7 +512,8 @@ class TestTheDryRunComposesEndToEnd(unittest.TestCase):
             campaign.Pair(1, 100.0, 108.0, "anchor_first"),
             campaign.Pair(2, 100.0, 108.0, "candidate_first"),
         ))
-        result = campaign.run_campaign(spec(blocks=3, screening_only=True), ops)
+        result = campaign.run_campaign(spec(blocks=3, screening_only=True,
+                                            screening_baseline=screening_bank()), ops)
         self.assertEqual(result.state, campaign.STATE_DECIDED)
         self.assertFalse(result.decision.keep)
         self.assertIn("SCREENING_ONLY", result.decision.reason)
@@ -511,7 +523,14 @@ class TestTheDryRunComposesEndToEnd(unittest.TestCase):
 
     def test_screening_refuses_more_than_three_blocks(self):
         with self.assertRaisesRegex(ValueError, "capped at 3"):
-            spec(blocks=4, screening_only=True)
+            spec(blocks=4, screening_only=True, screening_baseline=screening_bank())
+
+    def test_screening_requires_matching_reusable_baseline(self):
+        with self.assertRaisesRegex(ValueError, "require an immutable"):
+            spec(blocks=3, screening_only=True)
+        bad = screening_baseline.BaselineBank({"recipe_id": "wrong"}, (1.0, 1.0), 1.0)
+        with self.assertRaisesRegex(Exception, "frame differs"):
+            spec(blocks=3, screening_only=True, screening_baseline=bad)
 
 
 # =============================================================================
