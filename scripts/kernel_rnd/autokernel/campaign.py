@@ -2936,11 +2936,21 @@ class HostOps:
     @staticmethod
     def _evaluator_bundle_files() -> tuple[Path, ...]:
         """Return the complete driver-side evaluator closure to seal at start."""
-        return (
+        direct = (
             Path(__file__), Path(api.__file__), Path(correctness.__file__),
             Path(schemas.__file__), Path(recipes.__file__),
             Path(control_runner.__file__), Path(source_prerequisite_producer.__file__),
-        ) + source_prerequisite_package.evaluator_source_files()
+        )
+        # A module can be part of both the driver's direct evaluator and a
+        # nested authority's complete closure.  `correctness.py` is currently
+        # such a module: T0 imports it directly and the source-prerequisite
+        # reducer also binds it.  Form the union over the exact Path identities
+        # here so the seal remains complete without listing the same bytes
+        # twice.  Deliberately do *not* resolve paths while de-duplicating:
+        # lexical/symlink aliases still reach `_bind_evaluator_identity` as two
+        # entries and fail its duplicate/ambiguity guard closed.
+        return tuple(dict.fromkeys(
+            direct + source_prerequisite_package.evaluator_source_files()))
 
     def _bind_evaluator_identity(self, spec: CampaignSpec) -> api.EvaluatorIdentity:
         """Persist the loaded evaluator's start-time bytes before a claim.

@@ -1407,6 +1407,60 @@ class TestTheAcceptedCalibrationBindsTheLiveRule(unittest.TestCase):
             snap = root / "evaluator-bundle" / manifest["files"][0]["snapshot"]
             self.assertEqual(snap.read_text(encoding="utf-8"), "value = 'before'\n")
 
+    def test_current_evaluator_closure_unions_overlapping_authorities(self):
+        """The direct T0 and source-prerequisite closures share correctness.py."""
+        correctness_path = Path(correctness.__file__)
+        nested = source_prerequisite_package.evaluator_source_files()
+        self.assertIn(correctness_path, nested)
+
+        files = campaign.HostOps._evaluator_bundle_files()
+        self.assertIn(correctness_path, files)
+        self.assertEqual(files.count(correctness_path), 1)
+        self.assertEqual(len(files), len(set(files)))
+        for source in nested:
+            self.assertIn(source, files)
+
+    def test_evaluator_bundle_seal_still_refuses_uncanonicalized_duplicates(self):
+        """Only the authoritative closure union may remove exact overlap."""
+        passed = schemas.Check(schemas.PASS)
+        controls = campaign.api.CampaignControls(
+            calibration_block_count=20, contribution_floor=0.03,
+            max_candidates=10, confirmation_admission_count=2,
+            max_blocks_per_candidate=20, storage_floor_bytes_free=1)
+        outputs = campaign.api.CalibrationOutputs(
+            backend="llama_cpu", phase="prefill", cell_class="tiny_real_graph",
+            noise_floor_phi=0.03, b_min_blocks=10, alpha_sel=0.1,
+            alpha_conf=0.05, anchor_gate_band=(90.0, 110.0), accepted=True,
+            solve_order_recorded=campaign.api.CALIBRATION_SOLVE_ORDER,
+            samples_ref="raw/aa", e_process_construction_id=
+            "sign_martingale_predictable_lambda/v1")
+        authority = control_runner.LiveEvaluationAuthority(
+            campaign_controls=controls, calibration=outputs,
+            controls=campaign.api.ControlPanel(passed, passed, passed, passed, passed),
+            aa_cadence=passed, control_definitions_immutable=passed,
+            construction_id="test/v1", stopping_rule_id="test-stop/v1", mde=0.02,
+            runtime_source_label_ref="sha256:runtime-source", evidence_ref="/durable/test")
+        lean = campaign.LeanCalibration(
+            recipe_id=campaign.HISTORICAL_CALIBRATED_RECIPE_ID,
+            contribution_floor=0.03, b_min_blocks=10, max_blocks=20,
+            noise_floor_phi=0.03, mde=0.02,
+            production_commit=campaign.PRODUCTION_COMMIT,
+            measurement_commit=campaign.MEASUREMENT_COMMIT,
+            evidence_ref=authority.evidence_ref, evaluation_authority=authority)
+        durable_parent = Path(campaign.__file__).resolve().parents[3] / "data"
+        with tempfile.TemporaryDirectory(dir=durable_parent) as tmp:
+            root = Path(tmp)
+            source = root / "duplicate_evaluator.py"
+            source.write_text("value = 1\n", encoding="utf-8")
+            run_spec = spec(campaign_id="ak-evaluator-duplicate",
+                            journal_root=str(root), calibration=lean, blocks=10)
+            ops = campaign.HostOps(nominal_khz=1)
+            with mock.patch.object(campaign.HostOps, "_evaluator_bundle_files",
+                                   return_value=(source, source)):
+                with self.assertRaisesRegex(RuntimeError, "duplicate paths"):
+                    ops._bind_evaluator_identity(run_spec)
+            self.assertFalse((root / "evaluator-bundle").exists())
+
     def test_evaluator_bundle_seal_refuses_mutation_during_capture(self):
         """A race during the start-time seal remains a pre-claim integrity failure."""
         passed = schemas.Check(schemas.PASS)
