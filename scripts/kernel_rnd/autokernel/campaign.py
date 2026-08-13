@@ -3839,6 +3839,7 @@ class HostOps:
         plan = microbench.MicrobenchPlan(
             recipe_id=spec.recipe_id, candidate_id=spec.candidate_id,
             campaign_seed=spec.schedule_seed,
+            matched_experiment_id=spec.matched_experiment_id,
             candidate_binding=candidate_cmd.binding,
             anchor_binding=anchor_cmd.binding,
             anchor=anchor_identity,
@@ -3853,19 +3854,17 @@ class HostOps:
             unit_ids=spec.ranked_unit_ids,
             physical_envelopes=spec.physical_envelopes,
             stratum=api.STRATUM_SELECTION)
-        # The schedule is a per-block coin flip and a 5-0 draw is inadmissible
-        # (see `decide`). It is knowable from the plan alone, so it is checked
-        # HERE — before the blocks are spent — rather than only after them. The
-        # remedy is a fresh campaign seed, so the run is refused with the claim
-        # still in hand and nothing measured.
+        # The complete base segment is known before any block is spent, so its
+        # temporal-order counterbalance is a pre-spend invariant.  A 15-block
+        # matched pair must be 8/7, never a random 10/5 split that lets thermal
+        # drift favour one campaign arm.
         drawn = plan.schedule().orders(spec.blocks)
-        if len(set(drawn)) < 2:
+        imbalance = abs(2 * drawn.count(drawn[0]) - len(drawn))
+        if imbalance > 1:
             raise RuntimeError(
-                f"the order schedule for campaign seed {plan.campaign_seed!r} draws "
-                f"{drawn[0]!r} for all {spec.blocks} blocks. That is a sequential A/B, and "
-                "`decide()` refuses it after the fact; refusing it here costs no blocks. "
-                "Re-run under a fresh campaign seed (retry() reverses every element and "
-                "would produce the mirror-image degenerate draw).")
+                f"the order schedule for campaign key {plan.matched_experiment_id or plan.candidate_id!r} "
+                f"has base imbalance {imbalance} across {spec.blocks} blocks; refusing before "
+                "measurement because interleaved order must be counterbalanced within one.")
         sandbox_policy = self._candidate_sandbox_policy(spec)
         runner = microbench.MicrobenchRunner(
             claim=self._claim_binding.microbench_claim,

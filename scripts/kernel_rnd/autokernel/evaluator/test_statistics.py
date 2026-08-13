@@ -374,6 +374,15 @@ class TestOrderControl(unittest.TestCase):
                                         candidate_id="akc-1", base_blocks=5)
         self.assertEqual(sched.orders(5), sched.orders(12)[:5])
 
+    def test_fifteen_block_schedule_is_counterbalanced_within_one(self):
+        """A declared 15-block base cannot leave temporal order 10/5 or worse."""
+        sched = st.OrderSchedule.derive(campaign_seed=CAMPAIGN_SEED,
+                                        candidate_id="akm-iqk-0001", base_blocks=15)
+        orders = sched.orders(15)
+        self.assertLessEqual(
+            abs(orders.count(st.ORDER_ANCHOR_FIRST)
+                - orders.count(st.ORDER_CANDIDATE_FIRST)), 1)
+
     def test_extension_blocks_are_reversed_order(self):
         sched = st.OrderSchedule.derive(campaign_seed=CAMPAIGN_SEED,
                                         candidate_id="akc-1", base_blocks=5)

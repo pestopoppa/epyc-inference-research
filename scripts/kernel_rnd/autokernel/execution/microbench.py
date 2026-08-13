@@ -3043,6 +3043,10 @@ class MicrobenchPlan:
     base_blocks: int
     pairs_per_block: int
     unit_ids: tuple
+    #: Shared matched-experiment identity when two campaign records are the
+    #: intervention and A/A arms of one experiment.  It is an identity, not a
+    #: caller-declared order: ``schedule()`` derives the actual order from it.
+    matched_experiment_id: Optional[str] = None
     candidate_instrument_root: Optional[str] = None
     anchor_instrument_root: Optional[str] = None
     candidate_param_overrides: Mapping = field(default_factory=dict)
@@ -3065,6 +3069,12 @@ class MicrobenchPlan:
             value = getattr(self, name)
             if not isinstance(value, str) or not value.strip():
                 raise ValueError(f"plan.{name} must be a non-empty string")
+        if self.matched_experiment_id is not None:
+            if (not isinstance(self.matched_experiment_id, str)
+                    or not self.matched_experiment_id.startswith("akm-")
+                    or "\0" in self.matched_experiment_id):
+                raise ValueError(
+                    "plan.matched_experiment_id must be an akm- identity or None")
         for name in ("candidate_binding", "anchor_binding"):
             if not isinstance(getattr(self, name), recipes.ToolBinding):
                 raise TypeError(f"plan.{name} must be a recipes.ToolBinding")
@@ -3253,7 +3263,8 @@ class MicrobenchPlan:
         single place the "extended, not re-derived" decision lives.
         """
         return statistics.OrderSchedule.derive(
-            campaign_seed=self.campaign_seed, candidate_id=self.candidate_id,
+            campaign_seed=self.campaign_seed,
+            candidate_id=(self.matched_experiment_id or self.candidate_id),
             base_blocks=self.base_blocks, attempt=self.attempt)
 
     def params_for(self, arm: str, unit_id: Optional[str] = None) -> dict:
@@ -3911,9 +3922,9 @@ class MicrobenchRunner:
             return self._finish(plan, started_at, blocks, refusals, checks, scope,
                                 attestations, receipts, freq_classifications)
 
-        schedule = statistics.OrderSchedule.derive(
-            campaign_seed=plan.campaign_seed, candidate_id=plan.candidate_id,
-            base_blocks=plan.base_blocks, attempt=plan.attempt)
+        # This must use the plan's one derivation site: a matched intervention
+        # and A/A control share ``matched_experiment_id`` as their schedule key.
+        schedule = plan.schedule()
         # `count` is `blocks_to_run`, not `base_blocks`: on an extension round
         # the schedule still has the BASE segment's length (that is what makes
         # `order_for` reverse past it) while the number of blocks to produce is

@@ -349,6 +349,28 @@ class TestOrderComesFromTheCampaignSeed(unittest.TestCase):
         self.assertNotEqual(first.params["autokernel_seed"],
                             second.params["autokernel_seed"])
 
+    def test_matched_arms_share_one_balanced_schedule_key(self):
+        """Intervention and A/A have distinct candidates but one matched order."""
+        binding = BindingFixture(self)
+        intervention = make_plan(
+            binding, blocks=15, candidate_id="akc-iqk-intervention",
+            matched_experiment_id="akm-iqk-20260813-0037")
+        control = make_plan(
+            binding, blocks=15, candidate_id="akc-iqk-aa-control",
+            matched_experiment_id="akm-iqk-20260813-0037")
+        self.assertEqual(intervention.schedule().orders(15),
+                         control.schedule().orders(15))
+        orders = intervention.schedule().orders(15)
+        self.assertLessEqual(
+            abs(orders.count(statistics.ORDER_ANCHOR_FIRST)
+                - orders.count(statistics.ORDER_CANDIDATE_FIRST)), 1)
+
+    def test_legacy_unmatched_plan_remains_candidate_keyed(self):
+        binding = BindingFixture(self)
+        first = make_plan(binding, blocks=15)
+        second = replace(first, candidate_id="another-candidate")
+        self.assertNotEqual(first.schedule().orders(15), second.schedule().orders(15))
+
     def test_the_runner_surface_has_no_order_parameter(self):
         """Requirement 1: order must not be declarable anywhere in the public API.
 
@@ -1179,8 +1201,9 @@ def make_plan(binding: BindingFixture, *, blocks: int = 4, pairs: int = 1,
               **kwargs) -> M.MicrobenchPlan:
     params = kwargs.pop("params", default_params())
     unit_ids = kwargs.pop("unit_ids", ("unit-0",))
+    candidate_id = kwargs.pop("candidate_id", "cand-alpha")
     return M.MicrobenchPlan(
-        recipe_id=RECIPE_ID, candidate_id="cand-alpha",
+        recipe_id=RECIPE_ID, candidate_id=candidate_id,
         campaign_seed="campaign-seed-2026-08-03",
         candidate_binding=binding.candidate, anchor_binding=binding.anchor,
         anchor=anchor or anchor_identity(binding),

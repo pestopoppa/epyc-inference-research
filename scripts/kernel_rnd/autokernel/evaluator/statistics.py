@@ -591,10 +591,12 @@ def orient(effect: float, metric_direction: str) -> float:
 class OrderSchedule:
     """The order-randomization schedule, derived from the committed campaign seed.
 
-    Prefix-stable on purpose: the order of block *i* depends on *i* alone (and on
-    the campaign seed and the candidate), so adding extension blocks cannot
-    retroactively change the schedule of the base blocks and turn a conforming
-    run into a non-conforming one.
+    Base orders are a deterministic balanced permutation: for an odd base length
+    one arm has one extra first position, and for an even length both do.  The
+    identity that names the schedule is usually a candidate id, but a matched
+    intervention/control frame deliberately supplies its shared experiment id
+    instead.  Thus the two campaign journals bind the same schedule rather than
+    merely two schedules that happen to have the same seed.
 
     *"A retry is a fresh reset in reversed order"* (`bench-cpu.md:48-49`) —
     `retry()` flips every element and nothing else. The base DRAW deliberately
@@ -661,8 +663,26 @@ class OrderSchedule:
                              reversed_schedule=not self.reversed_schedule)
 
     def _base_order(self, index: int) -> str:
-        seed = derive_seed(self.campaign_seed, "order", self.candidate_id, index)
-        return ORDER_ANCHOR_FIRST if seed % 2 == 0 else ORDER_CANDIDATE_FIRST
+        """Return a seeded, exactly counterbalanced base order.
+
+        Ranking the fixed block positions by their per-position seed retains
+        unpredictable placement while assigning the first half (rounded up) to
+        one arm and the rest to the other.  A raw independent coin flip permits
+        a 10/5 or worse split in a 15-block campaign; that is needless temporal
+        confounding when the complete base cardinality is committed up front.
+        The `(seed, index)` ordering makes the construction total even in the
+        astronomically unlikely event of a hash-prefix collision.
+        """
+        if index < 0 or index >= self.base_blocks:
+            raise MaterialError("base order index is outside the base segment")
+        positions = sorted(
+            range(self.base_blocks),
+            key=lambda position: (
+                derive_seed(self.campaign_seed, "order", self.candidate_id, position),
+                position))
+        candidate_first = set(positions[:(self.base_blocks + 1) // 2])
+        return (ORDER_CANDIDATE_FIRST if index in candidate_first
+                else ORDER_ANCHOR_FIRST)
 
     @staticmethod
     def _flip(order: str) -> str:
