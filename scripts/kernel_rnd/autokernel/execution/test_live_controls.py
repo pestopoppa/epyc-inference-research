@@ -231,6 +231,50 @@ class CalibrationFrame(unittest.TestCase):
         finally:
             importlib.reload(live_controls)
 
+    def test_decode_measure_resolves_default_frame_at_execution_time(self):
+        """The execute path must not retain pp512 from function definition."""
+        class Run:
+            complete = True
+
+            @staticmethod
+            def raw_vector():
+                return {"fixture": True}
+
+        captured = {}
+        try:
+            live_controls.configure_recipe(live_controls.DECODE_RECIPE_ID)
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                binding = live_controls.recipes.ToolBinding(
+                    binary="/sealed/llama-bench", source_root="/sealed",
+                    library_path="/sealed")
+                anchor = live_controls.api.AnchorIdentity(
+                    source_commit="f" * 40, binary_sha256="1" * 64,
+                    linkage_sha256="2" * 64, tool="llama-bench")
+                with mock.patch.object(
+                        live_controls.microbench, "MicrobenchPlan",
+                        side_effect=lambda **kwargs: captured.update(kwargs) or object()), \
+                     mock.patch.object(
+                        live_controls.microbench, "CpuRegionClaimAdapter"), \
+                     mock.patch.object(
+                        live_controls.microbench, "MicrobenchRunner") as runner:
+                    runner.return_value.run.return_value = Run()
+                    # Deliberately omit ``prompt`` exactly as execute() does for
+                    # every committed-cell control.
+                    live_controls._measure(
+                        label="aa_calibration", blocks=1, claim=object(),
+                        candidate_binding=binding, anchor_binding=binding,
+                        anchor=anchor, candidate_iqk="0", anchor_iqk="0",
+                        output_root=root, host_state=mock.Mock(),
+                        identity=live_controls.LiveCampaignIdentity(
+                            "ak-controls-decode-run", str(root)))
+            self.assertEqual(captured["recipe_id"], live_controls.DECODE_RECIPE_ID)
+            self.assertEqual(captured["params"]["n_gen"], 128)
+            self.assertNotIn("n_prompt", captured["params"])
+            self.assertIn(":tg128:", captured["unit_ids"][0])
+        finally:
+            importlib.reload(live_controls)
+
     def test_parser_selects_decode_before_any_execution(self):
         args = live_controls.build_parser().parse_args([
             "--campaign-id", "ak-controls-v9-decode", "--output", "/tmp/ak-decode",

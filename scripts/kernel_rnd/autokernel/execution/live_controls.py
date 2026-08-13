@@ -867,11 +867,16 @@ def _wait_for_quiet(*, ceiling_per_core: float = 0.25,
 def _measure(*, label: str, blocks: int, claim: object,
              candidate_binding: recipes.ToolBinding,
              anchor_binding: recipes.ToolBinding,
-             anchor: api.AnchorIdentity, prompt: int = PROMPT_TOKENS,
+             anchor: api.AnchorIdentity, prompt: int | None = None,
              candidate_iqk: str, anchor_iqk: str,
              output_root: Path,
              host_state: Callable[..., microbench.HostState],
              identity: LiveCampaignIdentity) -> LiveMaterial:
+    # A Python default captures the object at function-definition time.  The
+    # CLI selects its recipe after argument parsing, so ``= PROMPT_TOKENS``
+    # here would retain pp512 even after ``configure_recipe`` selects tg128.
+    # Resolve the process-local recipe frame at call time instead.
+    prompt = PROMPT_TOKENS if prompt is None else prompt
     # An A/A vector measures process/path noise as well as binary bytes.  The
     # sealed copy is therefore BOTH arms whenever their declared factor values
     # are equal.  Only a real IQK intervention is allowed to retain the
@@ -880,9 +885,10 @@ def _measure(*, label: str, blocks: int, claim: object,
         anchor_binding = candidate_binding
     declared_prompt = CONTROL_PROMPT_BY_LABEL.get(label)
     if declared_prompt != prompt:
+        unit = "pp" if RECIPE_ID == PREFILL_RECIPE_ID else "tg"
         raise ValueError(
-            f"control {label!r} at pp{prompt} was not predeclared; expected "
-            f"{None if declared_prompt is None else f'pp{declared_prompt}'}")
+            f"control {label!r} at {unit}{prompt} was not predeclared; expected "
+            f"{None if declared_prompt is None else f'{unit}{declared_prompt}'}")
     envelope = _declared_physical_envelopes()[label]
     plan = microbench.MicrobenchPlan(
         recipe_id=RECIPE_ID, candidate_id=f"akc-control-{label}",
