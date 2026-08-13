@@ -2807,6 +2807,15 @@ class HostOps:
 
     def calibration_gate(self, spec: CampaignSpec) -> schemas.Check:
         """Refuse live ranking outside the accepted cell-local calibration."""
+        if spec.screening_only:
+            # CampaignSpec has already admitted the immutable bank against the
+            # exact boot/source/model/recipe frame.  A discovery screen ranks
+            # only for top-K nomination and is structurally non-promotable, so
+            # strict paired-T1 calibration authority is neither applicable nor
+            # required here.
+            return schemas.Check(schemas.PASS, (
+                "screening-only uses its exact-frame sealed baseline bank; "
+                "strict paired-T1 calibration is not selection authority",))
         calibration = spec.calibration
         if calibration is None:
             return schemas.Check(schemas.FAIL, (

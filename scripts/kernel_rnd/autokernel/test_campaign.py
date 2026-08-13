@@ -535,6 +535,13 @@ class TestTheDryRunComposesEndToEnd(unittest.TestCase):
         with self.assertRaisesRegex(Exception, "frame differs"):
             spec(blocks=3, screening_only=True, screening_baseline=bad)
 
+    def test_screening_bank_replaces_strict_calibration_authority(self):
+        built = spec(blocks=3, screening_only=True,
+                     screening_baseline=screening_bank())
+        check = campaign.HostOps().calibration_gate(built)
+        self.assertEqual(check.outcome, schemas.PASS)
+        self.assertIn("sealed baseline bank", " ".join(check.reasons))
+
 
 # =============================================================================
 # 2. Dry run is the DEFAULT
