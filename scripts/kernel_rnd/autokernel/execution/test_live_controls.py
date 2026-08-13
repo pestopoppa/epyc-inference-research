@@ -121,6 +121,71 @@ class CampaignIdentity(unittest.TestCase):
                     root, campaign_id="ak-controls-v9-terminal")
 
 
+class CalibrationFrame(unittest.TestCase):
+
+    def test_calibration_is_explicitly_iqk_off_at_campaign_repetition_count(self):
+        """A/A must govern the same off-baseline that campaigns compare."""
+        self.assertEqual(live_controls.CALIBRATION_REPS, 5)
+        self.assertEqual(live_controls.CONTROL_ARM_IQK["aa_calibration"], ("0", "0"))
+        self.assertEqual(
+            live_controls.CONTROL_ARM_IQK["neutral_calibration"], ("0", "0"))
+        self.assertEqual(
+            live_controls._params(prompt=live_controls.PROMPT_TOKENS)["reps"], 5)
+
+    def test_declaration_precommits_the_calibration_frame(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            identity = live_controls.LiveCampaignIdentity("ak-controls-frame", str(root))
+            live_controls._write_declaration(
+                root, identity=identity, instrument_sha="1" * 64,
+                copy_sha="1" * 64, instrument_linkage="2" * 64,
+                copy_linkage="2" * 64, toolchain_manifest_sha256="3" * 64)
+            declaration = json.loads(
+                (root / "campaign_declaration.json").read_text(encoding="utf-8"))
+        self.assertEqual(declaration["calibration_frame"], {
+            "recipe_id": live_controls.RECIPE_ID,
+            "prompt_tokens": live_controls.PROMPT_TOKENS,
+            "reps": 5,
+            "candidate_ggml_iqk": "0",
+            "anchor_ggml_iqk": "0",
+        })
+
+    def test_measurement_plan_carries_the_declared_baseline_frame(self):
+        """The executor must not silently fall back to recipe defaults."""
+        class Run:
+            complete = True
+
+            @staticmethod
+            def raw_vector():
+                return {"fixture": True}
+
+        captured = {}
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            binding = live_controls.recipes.ToolBinding(
+                binary="/tmp/llama-bench", source_root="/tmp", library_path="/tmp")
+            anchor = live_controls.api.AnchorIdentity(
+                source_commit="f" * 40, binary_sha256="1" * 64,
+                linkage_sha256="2" * 64, tool="llama-bench")
+            with mock.patch.object(
+                    live_controls.microbench, "MicrobenchPlan",
+                    side_effect=lambda **kwargs: captured.update(kwargs) or object()), \
+                 mock.patch.object(
+                    live_controls.microbench, "CpuRegionClaimAdapter"), \
+                 mock.patch.object(
+                    live_controls.microbench, "MicrobenchRunner") as runner:
+                runner.return_value.run.return_value = Run()
+                live_controls._measure(
+                    label="aa_calibration", blocks=1, claim=object(),
+                    candidate_binding=binding, anchor_binding=binding, anchor=anchor,
+                    candidate_iqk="0", anchor_iqk="0", output_root=root,
+                    host_state=mock.Mock(), identity=live_controls.LiveCampaignIdentity(
+                        "ak-controls-frame-run", str(root)))
+        self.assertEqual(captured["params"]["reps"], 5)
+        self.assertEqual(captured["candidate_param_overrides"], {"ggml_iqk": "0"})
+        self.assertEqual(captured["anchor_param_overrides"], {"ggml_iqk": "0"})
+
+
 class RecordedCompositionMaterial(unittest.TestCase):
 
     def test_canonical_paired_block_round_trips(self):

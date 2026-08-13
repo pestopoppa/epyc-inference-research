@@ -1035,6 +1035,46 @@ class TestTheDriftBoundIsDerivedFromTheMeasurement(unittest.TestCase):
 
 class TestTheAcceptedCalibrationBindsTheLiveRule(unittest.TestCase):
 
+    def test_live_calibration_frame_refuses_a_different_baseline_recipe(self):
+        """A/A noise may license only the arm recipe it actually measured."""
+        passed = schemas.Check(schemas.PASS)
+        controls = campaign.api.CampaignControls(
+            calibration_block_count=200, contribution_floor=0.03,
+            max_candidates=10, confirmation_admission_count=2,
+            max_blocks_per_candidate=20, storage_floor_bytes_free=1)
+        outputs = campaign.api.CalibrationOutputs(
+            backend="llama_cpu", phase="prefill", cell_class="tiny_real_graph",
+            noise_floor_phi=0.03, b_min_blocks=10, alpha_sel=0.1,
+            alpha_conf=0.05, anchor_gate_band=(90.0, 110.0), accepted=True,
+            solve_order_recorded=campaign.api.CALIBRATION_SOLVE_ORDER,
+            samples_ref="raw/aa", e_process_construction_id=
+            "sign_martingale_predictable_lambda/v1")
+        authority = control_runner.LiveEvaluationAuthority(
+            campaign_controls=controls, calibration=outputs,
+            controls=campaign.api.ControlPanel(
+                positive=passed, neutral=passed, degraded_negative=passed,
+                aa=passed, historical_replay=passed), aa_cadence=passed,
+            control_definitions_immutable=passed,
+            construction_id="sign_martingale_predictable_lambda/v1",
+            stopping_rule_id="ak-stop-live-controls/v1", mde=0.02,
+            runtime_source_label_ref="sha256:test", evidence_ref="/durable/test",
+            calibration_frame={
+                "recipe_id": campaign.HISTORICAL_CALIBRATED_RECIPE_ID,
+                "prompt_tokens": 512, "reps": 5,
+                "candidate_ggml_iqk": "0", "anchor_ggml_iqk": "0",
+            })
+        lean = campaign.LeanCalibration(
+            recipe_id=campaign.HISTORICAL_CALIBRATED_RECIPE_ID,
+            contribution_floor=0.03, b_min_blocks=10, max_blocks=20,
+            noise_floor_phi=0.03, mde=0.02,
+            production_commit=campaign.PRODUCTION_COMMIT,
+            measurement_commit=campaign.MEASUREMENT_COMMIT,
+            evidence_ref="/durable/test", evaluation_authority=authority)
+        valid = spec(proposal=iqk_parameter_proposal(), calibration=lean, reps=5)
+        self.assertEqual(valid.reps, 5)
+        with self.assertRaisesRegex(ValueError, "calibration_frame.*anchor recipe"):
+            spec(proposal=iqk_parameter_proposal(), calibration=lean, reps=1)
+
     def test_the_v8_constants_are_historical_regression_fixtures(self):
         repo = Path(campaign.__file__).resolve().parents[3]
         summary = json.loads((

@@ -50,6 +50,13 @@ MODEL = Path(
     "Qwen2.5-Coder-0.5B-GGUF/Qwen2.5-Coder-0.5B-Q4_K_M.gguf")
 CALIBRATION_BLOCKS = 200
 NEUTRAL_BLOCKS = 60
+# A calibration licenses a particular comparison frame, not merely a binary.
+# The IQK intervention compares enabled code against the disabled baseline and
+# campaign pairs use five llama-bench repetitions.  Keep the A/A calibration
+# in that baseline frame: calibrating IQK-on against itself would produce an
+# apparently healthy noise pool whose anchor band cannot govern IQK-off runs.
+CALIBRATION_REPS = 5
+CALIBRATION_IQK = "0"
 CONTROL_EXTENSION_ROUNDS = 1
 CONTROL_EXTENSION_BLOCKS = 5
 CONTRIBUTION_FLOOR = 0.03
@@ -83,6 +90,18 @@ CONTROL_PROMPT_BY_LABEL = {
     "historical_win_replay": PROMPT_TOKENS,
     "negative_committed_cell": PROMPT_TOKENS,
     "negative_wrong_cell": WRONG_PROMPT_TOKENS,
+}
+# The controls have intentionally different purposes, but every live control
+# uses the same repetition count as an executable campaign.  Only the positive
+# and historical controls exercise the IQK intervention; calibration itself
+# must remain A/A in the baseline anchor frame.
+CONTROL_ARM_IQK = {
+    "aa_calibration": (CALIBRATION_IQK, CALIBRATION_IQK),
+    "neutral_calibration": (CALIBRATION_IQK, CALIBRATION_IQK),
+    "positive": ("1", CALIBRATION_IQK),
+    "historical_win_replay": ("1", CALIBRATION_IQK),
+    "negative_committed_cell": ("1", "1"),
+    "negative_wrong_cell": ("1", "1"),
 }
 INSTRUMENT_BUILD_TARGETS = ("llama-completion", "llama-bench", "test-backend-ops")
 REQUIRED_HARDENING_RECEIPTS = (
@@ -340,6 +359,13 @@ def _write_declaration(output_root: Path, *, identity: LiveCampaignIdentity,
         "wrong_prompt_tokens": WRONG_PROMPT_TOKENS,
         "calibration_blocks": CALIBRATION_BLOCKS,
         "neutral_blocks": NEUTRAL_BLOCKS,
+        "calibration_frame": {
+            "recipe_id": RECIPE_ID,
+            "prompt_tokens": PROMPT_TOKENS,
+            "reps": CALIBRATION_REPS,
+            "candidate_ggml_iqk": CALIBRATION_IQK,
+            "anchor_ggml_iqk": CALIBRATION_IQK,
+        },
         "contribution_floor": CONTRIBUTION_FLOOR,
         "max_candidates": 10,
         "max_blocks_per_candidate": 20,
@@ -655,7 +681,7 @@ def _load_json(path: Path) -> Mapping[str, Any]:
 def _load_recorded_material(
         output_root: Path, *, identity: LiveCampaignIdentity, label: str,
         expected_blocks: int, prompt: int, candidate_iqk: str,
-        anchor_iqk: str) -> tuple[LiveMaterial, Mapping[str, Any]]:
+        anchor_iqk: str, reps: int = CALIBRATION_REPS) -> tuple[LiveMaterial, Mapping[str, Any]]:
     """Rebuild composition-only material from one fully attested raw vector."""
     path = output_root / "raw" / f"{label}.json"
     raw = _load_json(path)
@@ -702,7 +728,8 @@ def _load_recorded_material(
         receipt = raw.get(arm)
         params = receipt.get("params") if isinstance(receipt, Mapping) else None
         if not isinstance(params, Mapping) or params.get("ggml_iqk") != expected_iqk \
-                or params.get("n_prompt") != prompt or params.get("model") != str(MODEL):
+                or params.get("n_prompt") != prompt or params.get("reps") != reps \
+                or params.get("model") != str(MODEL):
             raise ValueError(f"{path}: {arm} does not match the declared arm parameters")
     run = _RecordedRun(
         blocks=tuple(blocks), started_at=str(raw.get("started_at")),
@@ -711,8 +738,10 @@ def _load_recorded_material(
     return LiveMaterial(label, run), raw
 
 
-def _params(*, prompt: int) -> dict:
-    return {"model": str(MODEL), "n_prompt": prompt, "reps": 1,
+def _params(*, prompt: int, reps: int = CALIBRATION_REPS) -> dict:
+    if isinstance(reps, bool) or not isinstance(reps, int) or reps < 1:
+        raise ValueError("live-control repetitions must be a positive integer")
+    return {"model": str(MODEL), "n_prompt": prompt, "reps": reps,
             "autokernel_seed": 2026081101,
             "output_format": "json"}
 
@@ -769,7 +798,7 @@ def _measure(*, label: str, blocks: int, claim: object,
              candidate_binding: recipes.ToolBinding,
              anchor_binding: recipes.ToolBinding,
              anchor: api.AnchorIdentity, prompt: int = PROMPT_TOKENS,
-             candidate_iqk: str = "1", anchor_iqk: str = "1",
+             candidate_iqk: str, anchor_iqk: str,
              output_root: Path,
              host_state: Callable[..., microbench.HostState],
              identity: LiveCampaignIdentity) -> LiveMaterial:
@@ -783,7 +812,7 @@ def _measure(*, label: str, blocks: int, claim: object,
         recipe_id=RECIPE_ID, candidate_id=f"akc-control-{label}",
         campaign_seed=f"{identity.campaign_seed}/{label}",
         candidate_binding=candidate_binding, anchor_binding=anchor_binding,
-        anchor=anchor, params=_params(prompt=prompt),
+        anchor=anchor, params=_params(prompt=prompt, reps=CALIBRATION_REPS),
         candidate_instrument_root=str(INSTRUMENT_ROOT),
         anchor_instrument_root=str(INSTRUMENT_ROOT),
         candidate_param_overrides={"ggml_iqk": candidate_iqk},
@@ -1146,14 +1175,18 @@ def execute(output_root: Path, *, campaign_id: str,
         aa = _measure(
             label="aa_calibration", blocks=CALIBRATION_BLOCKS, claim=claim,
             candidate_binding=candidate_binding, anchor_binding=anchor_binding,
-            anchor=anchor, output_root=output_root, host_state=host_state,
+            anchor=anchor, candidate_iqk=CONTROL_ARM_IQK["aa_calibration"][0],
+            anchor_iqk=CONTROL_ARM_IQK["aa_calibration"][1],
+            output_root=output_root, host_state=host_state,
             identity=identity)
         materials.append(aa)
         _wait_for_quiet()
         neutral = _measure(
             label="neutral_calibration", blocks=NEUTRAL_BLOCKS, claim=claim,
             candidate_binding=candidate_binding, anchor_binding=anchor_binding,
-            anchor=anchor, output_root=output_root, host_state=host_state,
+            anchor=anchor, candidate_iqk=CONTROL_ARM_IQK["neutral_calibration"][0],
+            anchor_iqk=CONTROL_ARM_IQK["neutral_calibration"][1],
+            output_root=output_root, host_state=host_state,
             identity=identity)
         materials.append(neutral)
         declared, rule, construction, split, solve = _campaign_inputs(
@@ -1167,28 +1200,36 @@ def execute(output_root: Path, *, campaign_id: str,
             positive = _measure(
                 label="positive", blocks=control_blocks, claim=claim,
                 candidate_binding=candidate_binding, anchor_binding=anchor_binding,
-                anchor=anchor, candidate_iqk="1", anchor_iqk="0",
+                anchor=anchor, candidate_iqk=CONTROL_ARM_IQK["positive"][0],
+                anchor_iqk=CONTROL_ARM_IQK["positive"][1],
                 output_root=output_root, host_state=host_state, identity=identity)
             materials.append(positive)
             _wait_for_quiet()
             historical = _measure(
                 label="historical_win_replay", blocks=control_blocks, claim=claim,
                 candidate_binding=candidate_binding, anchor_binding=anchor_binding,
-                anchor=anchor, candidate_iqk="1", anchor_iqk="0",
+                anchor=anchor, candidate_iqk=CONTROL_ARM_IQK["historical_win_replay"][0],
+                anchor_iqk=CONTROL_ARM_IQK["historical_win_replay"][1],
                 output_root=output_root, host_state=host_state, identity=identity)
             materials.append(historical)
             _wait_for_quiet()
             negative_anchor = _measure(
                 label="negative_committed_cell", blocks=control_blocks, claim=claim,
                 candidate_binding=candidate_binding, anchor_binding=anchor_binding,
-                anchor=anchor, prompt=PROMPT_TOKENS, output_root=output_root,
+                anchor=anchor, prompt=PROMPT_TOKENS,
+                candidate_iqk=CONTROL_ARM_IQK["negative_committed_cell"][0],
+                anchor_iqk=CONTROL_ARM_IQK["negative_committed_cell"][1],
+                output_root=output_root,
                 host_state=host_state, identity=identity)
             materials.append(negative_anchor)
             _wait_for_quiet()
             negative_wrong = _measure(
                 label="negative_wrong_cell", blocks=control_blocks, claim=claim,
                 candidate_binding=candidate_binding, anchor_binding=anchor_binding,
-                anchor=anchor, prompt=WRONG_PROMPT_TOKENS, output_root=output_root,
+                anchor=anchor, prompt=WRONG_PROMPT_TOKENS,
+                candidate_iqk=CONTROL_ARM_IQK["negative_wrong_cell"][0],
+                anchor_iqk=CONTROL_ARM_IQK["negative_wrong_cell"][1],
+                output_root=output_root,
                 host_state=host_state, identity=identity)
             materials.append(negative_wrong)
             ended = _utc_now()
@@ -1274,6 +1315,13 @@ def evaluate_existing(output_root: Path, *, campaign_id: str) -> dict:
         "calibration_blocks": declaration.get("calibration_blocks")
                               == CALIBRATION_BLOCKS,
         "neutral_blocks": declaration.get("neutral_blocks") == NEUTRAL_BLOCKS,
+        "calibration_frame": declaration.get("calibration_frame") == {
+            "recipe_id": RECIPE_ID,
+            "prompt_tokens": PROMPT_TOKENS,
+            "reps": CALIBRATION_REPS,
+            "candidate_ggml_iqk": CALIBRATION_IQK,
+            "anchor_ggml_iqk": CALIBRATION_IQK,
+        },
         "contribution_floor": declaration.get("contribution_floor")
                               == CONTRIBUTION_FLOOR,
     }
@@ -1332,11 +1380,11 @@ def evaluate_existing(output_root: Path, *, campaign_id: str) -> dict:
     aa, aa_raw = _load_recorded_material(
         output_root, identity=identity, label="aa_calibration",
         expected_blocks=CALIBRATION_BLOCKS, prompt=PROMPT_TOKENS,
-        candidate_iqk="1", anchor_iqk="1")
+        candidate_iqk=CALIBRATION_IQK, anchor_iqk=CALIBRATION_IQK)
     neutral, neutral_raw = _load_recorded_material(
         output_root, identity=identity, label="neutral_calibration",
         expected_blocks=NEUTRAL_BLOCKS, prompt=PROMPT_TOKENS,
-        candidate_iqk="1", anchor_iqk="1")
+        candidate_iqk=CALIBRATION_IQK, anchor_iqk=CALIBRATION_IQK)
     declared, rule, construction, split, solve = _campaign_inputs(
         aa, neutral, identity)
     stored_calibration = _load_json(output_root / "calibration.json")
@@ -1344,10 +1392,13 @@ def evaluate_existing(output_root: Path, *, campaign_id: str) -> dict:
         raise ValueError("stored calibration does not re-derive from the raw A/A pools")
     control_blocks = rule.max_total_blocks(solve.require_accepted().b_min_blocks)
     configs = (
-        ("positive", PROMPT_TOKENS, "1", "0"),
-        ("historical_win_replay", PROMPT_TOKENS, "1", "0"),
-        ("negative_committed_cell", PROMPT_TOKENS, "1", "1"),
-        ("negative_wrong_cell", WRONG_PROMPT_TOKENS, "1", "1"),
+        ("positive", PROMPT_TOKENS, *CONTROL_ARM_IQK["positive"]),
+        ("historical_win_replay", PROMPT_TOKENS,
+         *CONTROL_ARM_IQK["historical_win_replay"]),
+        ("negative_committed_cell", PROMPT_TOKENS,
+         *CONTROL_ARM_IQK["negative_committed_cell"]),
+        ("negative_wrong_cell", WRONG_PROMPT_TOKENS,
+         *CONTROL_ARM_IQK["negative_wrong_cell"]),
     )
     materials = {aa.label: aa, neutral.label: neutral}
     raw_by_label = {aa.label: aa_raw, neutral.label: neutral_raw}

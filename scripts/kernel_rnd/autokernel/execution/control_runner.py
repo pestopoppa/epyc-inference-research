@@ -127,6 +127,10 @@ class LiveEvaluationAuthority:
     mde: float
     runtime_source_label_ref: str
     evidence_ref: str
+    #: Stable arm/recipe facts for which the A/A dispersion was actually
+    #: measured.  Per-run seeds are deliberately absent: they identify a run,
+    #: not the cell whose noise the calibration licenses.
+    calibration_frame: Optional[Mapping[str, Any]] = None
 
 
 def _recorded_check(value: Any, label: str) -> schemas.Check:
@@ -156,6 +160,7 @@ def load_live_evaluation_authority(path: str | Path) -> LiveEvaluationAuthority:
             raise ValueError(f"live evaluation authority {name} must be an object")
         return value
 
+    declaration = read("campaign_declaration.json")
     calibration_record = read("calibration.json")
     sweep = read("control_sweep.json")
     source = read("runtime-source-label.json")
@@ -178,6 +183,23 @@ def load_live_evaluation_authority(path: str | Path) -> LiveEvaluationAuthority:
     panel = panel_result.get("panel")
     if not isinstance(panel, Mapping) or panel.get("marker") != "5/5":
         raise ValueError("live evaluation authority requires the recorded five-control panel")
+
+    frame = declaration.get("calibration_frame")
+    expected_frame_keys = {
+        "recipe_id", "prompt_tokens", "reps", "candidate_ggml_iqk",
+        "anchor_ggml_iqk",
+    }
+    if not isinstance(frame, Mapping) or set(frame) != expected_frame_keys:
+        raise ValueError(
+            "live evaluation authority lacks the exact calibration_frame required "
+            "to bind its A/A noise to a prospective campaign")
+    if frame.get("recipe_id") != declaration.get("recipe_id") \
+            or not isinstance(frame.get("prompt_tokens"), int) \
+            or not isinstance(frame.get("reps"), int) \
+            or frame["prompt_tokens"] < 1 or frame["reps"] < 1 \
+            or frame.get("candidate_ggml_iqk") not in ("0", "1") \
+            or frame.get("anchor_ggml_iqk") not in ("0", "1"):
+        raise ValueError("live evaluation authority has an invalid calibration_frame")
 
     controls_obj = inputs.get("controls")
     if not isinstance(controls_obj, Mapping):
@@ -234,6 +256,7 @@ def load_live_evaluation_authority(path: str | Path) -> LiveEvaluationAuthority:
         mde=float(accepted[0]["mde"]["value"]),
         runtime_source_label_ref=f"{root / 'runtime-source-label.json'}#sha256:{source_sha}",
         evidence_ref=str(root),
+        calibration_frame=dict(frame),
     )
 
 

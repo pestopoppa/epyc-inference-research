@@ -1508,6 +1508,32 @@ class CampaignSpec:
         # failure an hour into a claim window into a refusal at argument-parse
         # time (feedback_bench_max_opt_and_config_probe_first).
         render_bench_commands(self)
+        if self.calibration is not None \
+                and self.calibration.evaluation_authority is not None:
+            frame = self.calibration.evaluation_authority.calibration_frame
+            # Legacy/synthetic authorities intentionally lack this prospective
+            # binding.  A loaded live bundle cannot: its loader refuses a
+            # missing or malformed frame.  The comparison binds its A/A
+            # dispersion to the exact baseline arm rather than merely to a
+            # similarly named recipe.
+            if frame is not None:
+                actual = {
+                    "recipe_id": self.recipe_id,
+                    "prompt_tokens": self.n_prompt,
+                    "reps": self.reps,
+                    "anchor_ggml_iqk": self.anchor_param_overrides.get(
+                        "ggml_iqk", recipes.CANONICAL_OMP_ENV["GGML_IQK"]),
+                }
+                expected = {
+                    "recipe_id": frame["recipe_id"],
+                    "prompt_tokens": frame["prompt_tokens"],
+                    "reps": frame["reps"],
+                    "anchor_ggml_iqk": frame["anchor_ggml_iqk"],
+                }
+                if actual != expected:
+                    raise ValueError(
+                        "calibration_frame does not match this campaign's exact "
+                        f"anchor recipe: calibrated={expected}, requested={actual}")
         if self.physical_envelope is not None \
                 and self.physical_envelope.shape_id != self.measurement_unit_id:
             raise ValueError(
