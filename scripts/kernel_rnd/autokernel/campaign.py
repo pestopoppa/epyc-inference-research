@@ -3369,9 +3369,9 @@ class HostOps:
                 op_suite=t0_provider.OpSuitePlan(
                     backend_filter="CPU" if spec.backend == BACKEND_CPU
                     else recipes.GPU_VISIBLE_DEVICE_NAME,
-                    ops=spec.t0_ops, suite_id="test-backend-ops/v1",
-                    suite_source_sha256=identity.snapshot_sha256,
-                    suite_seed=spec.suite_seed),
+                ops=spec.t0_ops, suite_id="test-backend-ops/v1",
+                suite_source_sha256=identity.snapshot_sha256,
+                suite_seed=spec.suite_seed, capabilities=None),
                 dispatch=t0_provider.DispatchTracePlan(derived_surface=spec.t0_ops),
                 anchor=self._measurement_anchor_build("llama-cli"),
                 generation=t0_provider.GenerationPlan(
@@ -3404,7 +3404,7 @@ class HostOps:
                 ops=spec.t0_ops,
                 suite_id="test-backend-ops/v1",
                 suite_source_sha256=identity.snapshot_sha256,
-                suite_seed=spec.suite_seed),
+                suite_seed=spec.suite_seed, capabilities=None),
             dispatch=t0_provider.DispatchTracePlan(derived_surface=spec.t0_ops),
             generation=t0_provider.GenerationPlan(
                 prompt="The capital of France is", prompt_ref="ak-prompt-001",

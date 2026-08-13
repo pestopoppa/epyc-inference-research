@@ -115,7 +115,7 @@ from . import sandbox as process_sandbox
 __all__ = [
     # errors
     "ExecutionError", "ClaimNotHeld", "ProductionTreeRefusal", "CaptureUnavailable",
-    "OutputParseError", "AnchorCaptureIncomplete", "ProcessEscaped",
+    "OutputParseError", "InstrumentCapabilityError", "AnchorCaptureIncomplete", "ProcessEscaped",
     # identity
     "PROVIDER_ID", "PRODUCER", "SCHEMA_FOLLOWUPS", "SEAMS", "STATE_SAFETY_CANNOT_PASS",
     # process seam
@@ -125,11 +125,11 @@ __all__ = [
     # captures
     "CaptureSink", "MemoryCaptureSink", "capture_ref",
     # plan
-    "CandidateBuild", "AnchorBuild", "ToolPaths", "OpSuitePlan", "GenerationPlan",
+    "CandidateBuild", "AnchorBuild", "ToolPaths", "BackendOpsCapabilities", "OpSuitePlan", "GenerationPlan",
     "HoldoutPlan", "T0ExecutionPlan",
     # parsers
     "BackendOpsReference", "BackendOpsCase", "BackendOpsBackend", "BackendOpsRun",
-    "parse_backend_ops_console", "parse_backend_ops_csv",
+    "parse_backend_ops_console", "parse_backend_ops_csv", "parse_backend_ops_help",
     "LinkageRow", "LinkageReport", "parse_linkage_report",
     "parse_sanitizer_findings", "parse_compiler_diagnostics", "parse_sched_trace",
     "parse_delivered_tokens",
@@ -179,6 +179,10 @@ class OutputParseError(ExecutionError):
     the `feedback_filtered_log_masks_working_codepath` shape: the run looks
     clean because the reader could not read it.
     """
+
+
+class InstrumentCapabilityError(ExecutionError):
+    """The selected binary cannot make the structured T0 evidence required."""
 
 
 class AnchorCaptureIncomplete(ExecutionError):
@@ -1052,6 +1056,54 @@ class AnchorBuild:
 
 
 @dataclass(frozen=True)
+class BackendOpsCapabilities:
+    """Flags visibly advertised by the selected ``test-backend-ops --help``."""
+
+    supported_flags: frozenset[str]
+    source: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.supported_flags, frozenset):
+            raise TypeError("backend-op capabilities.supported_flags must be a frozenset")
+        for flag in self.supported_flags:
+            if not isinstance(flag, str) or not flag.startswith("--"):
+                raise ValueError("backend-op capabilities must contain long CLI flags")
+        _req_str(self.source, "backend-op capabilities.source")
+
+    def require(self, flags: Sequence[str]) -> None:
+        missing = tuple(flag for flag in flags if flag not in self.supported_flags)
+        if missing:
+            raise InstrumentCapabilityError(
+                "test-backend-ops does not advertise required AutoKernel evidence flag(s) "
+                f"{list(missing)} in {self.source}. Refusing to pass unknown flags: the tool "
+                "would print usage instead of a console frame, and a baseline suite cannot "
+                "substitute for the requested structured receipts.")
+
+
+_FULL_BACKEND_OPS_CAPABILITIES = BackendOpsCapabilities(
+    supported_flags=frozenset((
+        "--output", "--suite-seed", "--autokernel-properties",
+        "--autokernel-layouts", "--autokernel-value-transforms",
+        "--autokernel-stateful")),
+    source="declared complete AutoKernel test-backend-ops capability set")
+
+_BACKEND_OPS_HELP_FLAG_RE = re.compile(r"(?<![A-Za-z0-9_-])(--[A-Za-z][A-Za-z0-9-]*)")
+
+
+def parse_backend_ops_help(text: str) -> BackendOpsCapabilities:
+    """Parse only flags visibly advertised by a captured help banner."""
+    if not isinstance(text, str):
+        raise TypeError("test-backend-ops --help output must be a str")
+    flags = frozenset(_BACKEND_OPS_HELP_FLAG_RE.findall(_strip_ansi(text)))
+    if "--output" not in flags or "-o <op" not in text or "-b <backend" not in text:
+        raise InstrumentCapabilityError(
+            "test-backend-ops --help did not advertise the baseline test/-o/-b/--output "
+            "interface. Refusing to guess an invocation from unrecognised help output.")
+    return BackendOpsCapabilities(
+        supported_flags=flags, source="captured test-backend-ops --help")
+
+
+@dataclass(frozen=True)
 class OpSuitePlan:
     """`test-backend-ops` parameters. The backend filter is REQUIRED, and here is why.
 
@@ -1073,6 +1125,9 @@ class OpSuitePlan:
     stateful_probe: bool = False
     timeout_s: float = 1800.0
     parallel_workers: Optional[int] = None
+    # ``None`` makes a live provider capture selected-binary help pre-claim.
+    # The complete record is only for recorded test/replay fixtures.
+    capabilities: Optional[BackendOpsCapabilities] = _FULL_BACKEND_OPS_CAPABILITIES
 
     def __post_init__(self) -> None:
         _req_str(self.backend_filter, "op_suite.backend_filter")
@@ -1094,6 +1149,9 @@ class OpSuitePlan:
                 "op_suite layout, value-transform, and stateful probes must be separate passes")
         if self.parallel_workers is not None:
             _req_int(self.parallel_workers, "op_suite.parallel_workers", minimum=1)
+        if self.capabilities is not None and not isinstance(
+                self.capabilities, BackendOpsCapabilities):
+            raise TypeError("op_suite.capabilities must be BackendOpsCapabilities or None")
 
 
 @dataclass(frozen=True)
@@ -2371,7 +2429,9 @@ def build_backend_ops_invocation(*, binary: str, library_path: str, backend_filt
                                  output_format: str = "console",
                                  params_filter: Optional[str] = None,
                                  parallel_workers: Optional[int] = None,
-                                 cpu_prefix: bool = True) -> ConstructedInvocation:
+                                 cpu_prefix: bool = True,
+                                 capabilities: BackendOpsCapabilities = _FULL_BACKEND_OPS_CAPABILITIES
+                                 ) -> ConstructedInvocation:
     """`test-backend-ops test` — the CORRECTNESS mode. Not in the T1a registry.
 
     `recipes.py` registers `test-backend-ops perf` for T1a and nothing for T0:
@@ -2394,10 +2454,20 @@ def build_backend_ops_invocation(*, binary: str, library_path: str, backend_filt
     _req_bool(layout_probe, "backend_ops.layout_probe")
     _req_bool(value_transform_probe, "backend_ops.value_transform_probe")
     _req_bool(stateful_probe, "backend_ops.stateful_probe")
+    if not isinstance(capabilities, BackendOpsCapabilities):
+        raise TypeError("backend_ops.capabilities must be BackendOpsCapabilities")
     if sum((layout_probe, value_transform_probe, stateful_probe)) > 1:
         raise ValueError(
             "layout, value-transform, and stateful probes must be separate invocations")
     argv: list = list(recipes.CANONICAL_PREFIX) if cpu_prefix else []
+    required_flags = ["--suite-seed", "--autokernel-properties"]
+    if layout_probe:
+        required_flags.append("--autokernel-layouts")
+    if value_transform_probe:
+        required_flags.append("--autokernel-value-transforms")
+    if stateful_probe:
+        required_flags.append("--autokernel-stateful")
+    capabilities.require(required_flags)
     argv += [binary, "test", "-o", ",".join(ops), "-b", backend_filter]
     argv += ["--suite-seed", str(suite_seed), "--autokernel-properties"]
     if layout_probe:
@@ -2605,7 +2675,31 @@ class ExecutedT0EvidenceProvider:
         """
         plan = self._plan.op_suite
         self._op_suite_reference = None
-        require_claim(self._claim, what="the backend-op suite", cpu_list=self._pinned_cpus())
+        capabilities = plan.capabilities
+        if capabilities is None:
+            # This probe is deliberately before require_claim(): --help does not
+            # execute a backend-op case or pin the CPU region.  The captured
+            # banner is the durable evidence that the selected binary can (or
+            # cannot) make the structured T0 receipts the plan demands.
+            help_invocation = ConstructedInvocation(
+                constructor_id="ak.t0.backend_ops_help/v1",
+                argv=(self._plan.candidate.test_backend_ops, "--help"),
+                env=_launch_env(self._plan.candidate.library_path, self._plan.base_env),
+                receipt=_receipt(
+                    "ak.t0.backend_ops_help/v1",
+                    (self._plan.candidate.test_backend_ops, "--help"),
+                    _launch_env(self._plan.candidate.library_path, self._plan.base_env)),
+                notes=("non-measuring selected-instrument capability probe",))
+            help_capture, help_ref = self._execute(
+                help_invocation, timeout_s=min(plan.timeout_s, 30.0), collected=collected)
+            if help_capture.exit_code != 0 or not help_capture.stdout.strip():
+                raise InstrumentCapabilityError(
+                    "test-backend-ops capability probe did not return a readable help banner "
+                    f"(exit={help_capture.exit_code}, capture={help_ref})")
+            capabilities = parse_backend_ops_help(help_capture.stdout)
+        # Construction validates the captured capability statement but does not
+        # run the suite.  It therefore belongs before claim acquisition: an
+        # incompatible instrument is a tooling refusal, not a CPU measurement.
         invocation = build_backend_ops_invocation(
             binary=self._plan.candidate.test_backend_ops,
             library_path=self._plan.candidate.library_path,
@@ -2617,7 +2711,8 @@ class ExecutedT0EvidenceProvider:
             stateful_probe=plan.stateful_probe,
             parameter_env=self._plan.parameter_env,
             parallel_workers=plan.parallel_workers,
-            cpu_prefix=self._plan.backend == "llama_cpu")
+            cpu_prefix=self._plan.backend == "llama_cpu", capabilities=capabilities)
+        require_claim(self._claim, what="the backend-op suite", cpu_list=self._pinned_cpus())
         capture, ref = self._execute(invocation, timeout_s=plan.timeout_s, collected=collected)
         # stdout ONLY. The case grammar is a stdout construct; stderr carries
         # loader lines and, on a sanitizer build, diagnostics that land mid-line

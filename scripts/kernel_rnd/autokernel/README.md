@@ -1185,19 +1185,19 @@ What remains is not another hidden static plane:
   `epyc.autokernel.property_measurement.v1` row inside the evaluation event's
   `t0.backend_op_units` vector. Real rows still await a sealed experimental instrument
   and an authorized backend-op run.
-- The layout axis is a separate T0 pass rather than an implicit side effect of the value
-  suite. `OpSuitePlan.layout_probe` emits `--autokernel-layouts`; the tool selects only
-  cases with transpose, stride-gap, or offset inputs and emits a suite-seed-bound
-  `AK_LAYOUT_V1` receipt. The gate requires all three families and at least one case,
-  while an unsupported layout is a hard failure rather than `not_supported`. The
-  instrument compiles; no layout case has been executed in this session.
-- The value axis is independently selected by `OpSuitePlan.value_transform_probe` and
-  refuses to coexist with the layout flag. Each packed floating case runs identity, x3,
-  x0.01, and negate against the same shape with fail-any semantics; a passing receipt must
-  show all four completed. Property residuals carry the input-transform coordinate through
-  the evaluation event and Vidya projection. The experimental target compiles, but no
-  transform case has run in this session.
-- The recurrent-state axis is independently selected by `OpSuitePlan.stateful_probe`.
+- The layout axis is receipt-gated, not an implicit side effect of the value suite.
+  A live campaign captures the selected `test-backend-ops --help` before taking its CPU
+  claim and refuses unless that exact binary advertises `--suite-seed`,
+  `--autokernel-properties`, and `--autokernel-layouts`; it never turns an unknown flag's
+  usage banner into a parser failure. The gate requires all three families and at least one
+  case, while an unsupported layout is a hard failure rather than `not_supported`.
+- The value axis requires the same pre-claim capability check plus
+  `--autokernel-value-transforms`, and it refuses to coexist with the layout flag. Each
+  packed floating case runs identity, x3, x0.01, and negate against the same shape with
+  fail-any semantics; a passing receipt must show all four completed. Property residuals
+  carry the input-transform coordinate through the evaluation event and Vidya projection.
+- The recurrent-state axis requires the same pre-claim capability check plus
+  `--autokernel-stateful`.
   Each emitted `SSM_SCAN`, `SSM_CONV`, cache-backed `FLASH_ATTN_EXT`, or
   `GATED_DELTA_NET` case must carry `AK_STATE_V1` proof that its explicit state inputs
   began byte-identical across candidate/reference runs, remained byte-identical to their

@@ -494,6 +494,21 @@ class BackendOpsCsvParsing(unittest.TestCase):
         self.assertEqual(run.exercised_ops(), ("ARANGE",))
         self.assertEqual(run.cases_by_op(), (("ARANGE", 2, 2),))
 
+
+class BackendOpsCapabilityParsing(unittest.TestCase):
+
+    def test_help_binds_only_advertised_flags(self):
+        help_text = ("Usage: test-backend-ops [mode] [-o <op,..>] [-b <backend>] "
+                     "[--output <console|sql|csv>] [-j <n>]\n")
+        capabilities = t0.parse_backend_ops_help(help_text)
+        self.assertEqual(capabilities.supported_flags, frozenset(("--output",)))
+        with self.assertRaises(t0.InstrumentCapabilityError):
+            capabilities.require(("--autokernel-properties",))
+
+    def test_help_without_baseline_contract_refuses(self):
+        with self.assertRaises(t0.InstrumentCapabilityError):
+            t0.parse_backend_ops_help("Usage: unrelated-tool --output\n")
+
     def test_current_csv_keeps_reference_receipt_out_of_error_message(self):
         receipt = ("AK_REF_V1 metric=test_backend_ops_error/v1 observed=0 "
                    "tolerance=1e-07 comparisons=2 oracle=ggml_cpu_reference/v1")
@@ -1110,6 +1125,11 @@ def _console_capture(provider_plan, text, *, ops=None, params_filter=None):
     return capture(inv.argv, stdout=text, exit_code=0)
 
 
+def _help_capture(provider_plan, text, *, exit_code=0):
+    return capture((provider_plan.candidate.test_backend_ops, "--help"),
+                   stdout=text, exit_code=exit_code)
+
+
 def _linkage_capture(provider_plan, text, *, binary=None, library_path=None, exit_code=0):
     binary = binary or provider_plan.candidate.binary
     library_path = library_path or provider_plan.candidate.library_path
@@ -1121,6 +1141,17 @@ def _linkage_capture(provider_plan, text, *, binary=None, library_path=None, exi
 
 
 class OpSuiteCollection(unittest.TestCase):
+
+    def test_live_capability_probe_refuses_before_the_cpu_claim_on_baseline_binary(self):
+        plan = execution_plan(op_suite=op_suite_plan(capabilities=None))
+        help_text = ("Usage: test-backend-ops [mode] [-o <op,..>] [-b <backend>] "
+                     "[--output <console|sql|csv>] [-j <n>]\n")
+        claim = FakeClaim(held=False)
+        provider = t0.ExecutedT0EvidenceProvider(
+            plan=plan, runner=t0.RecordedProcessRunner([_help_capture(plan, help_text)]),
+            claim=claim)
+        with self.assertRaisesRegex(t0.InstrumentCapabilityError, "--suite-seed"):
+            provider.collect_op_suite(t0._Collected())
 
     def test_stateful_pass_binds_all_four_ops_and_the_suite_seed(self):
         ops = ("SSM_SCAN", "SSM_CONV", "FLASH_ATTN_EXT", "GATED_DELTA_NET")
