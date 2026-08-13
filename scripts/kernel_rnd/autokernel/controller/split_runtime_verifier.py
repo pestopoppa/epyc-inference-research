@@ -330,6 +330,33 @@ class HotResidencyIdentity:
     mapped_local_sha256: Mapping[str, str]
     identity_sha256: str
 
+    def __post_init__(self) -> None:
+        if (self.arm not in {"anchor", "candidate"}
+                or not all(SHA256_RE.fullmatch(value) for value in (
+                    self.runtime_manifest_sha256, self.reward_binary_sha256,
+                    self.hip_library_sha256, self.model_sha256,
+                    self.identity_sha256))
+                or not self.model_path.is_absolute() or not self.model_path.is_file()
+                or not self.device_id or self.kfd_pid <= 0 or not self.boot_id
+                or self.process_start_ticks <= 0
+                or not self.mapped_local_sha256
+                or any(not Path(path).is_absolute() or not SHA256_RE.fullmatch(digest)
+                       for path, digest in self.mapped_local_sha256.items())):
+            raise SplitRuntimeError("hot residency identity is malformed")
+        frozen = MappingProxyType(dict(self.mapped_local_sha256))
+        object.__setattr__(self, "mapped_local_sha256", frozen)
+        body = {"schema": MAPS_SCHEMA,
+                "runtime_manifest_sha256": self.runtime_manifest_sha256,
+                "arm": self.arm,
+                "reward_binary_sha256": self.reward_binary_sha256,
+                "hip_library_sha256": self.hip_library_sha256,
+                "model_path": str(self.model_path), "model_sha256": self.model_sha256,
+                "device_id": self.device_id, "kfd_pid": self.kfd_pid,
+                "boot_id": self.boot_id, "process_start_ticks": self.process_start_ticks,
+                "mapped_local_sha256": dict(frozen)}
+        if _content_hash(body) != self.identity_sha256:
+            raise SplitRuntimeError("hot residency identity self-hash mismatch")
+
     def same_resident_process(self, other: "HotResidencyIdentity") -> bool:
         return all(getattr(self, field) == getattr(other, field) for field in (
             "runtime_manifest_sha256", "arm", "reward_binary_sha256",
@@ -386,8 +413,22 @@ def verify_runtime_maps(manifest: SplitRuntimeManifest, *, arm: str, maps_text: 
     if local != allowed_local:
         raise SplitRuntimeError("runtime maps contain an unsealed local object")
     mapped = {str(path): _sha(path) for path in sorted(local)}
+    expected_common_hashes: dict[str, str] = {}
+    for record in manifest.common_files:
+        if record.kind != "file" or record.sha256 is None:
+            continue
+        resolved = (manifest.common_dir / record.name).resolve(strict=True)
+        expected_common_hashes[str(resolved)] = record.sha256
+    actual_common_hashes = {path: digest for path, digest in mapped.items()
+                            if Path(path) != expected_hip}
+    if actual_common_hashes != expected_common_hashes:
+        raise SplitRuntimeError("mapped common closure bytes changed after verification")
     reward_sha = _sha(manifest.reward_binary)
     hip_sha = _sha(expected_hip)
+    expected_hip_sha = (manifest.anchor_hip_sha256 if arm == "anchor"
+                        else manifest.candidate_hip_sha256)
+    if hip_sha != expected_hip_sha:
+        raise SplitRuntimeError("mapped HIP DSO changed after verification")
     body = {"schema": MAPS_SCHEMA,
             "runtime_manifest_sha256": manifest.manifest_sha256, "arm": arm,
             "reward_binary_sha256": reward_sha, "hip_library_sha256": hip_sha,
