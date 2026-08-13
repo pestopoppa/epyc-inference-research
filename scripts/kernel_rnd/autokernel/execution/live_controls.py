@@ -2055,6 +2055,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         "model": str(MODEL),
         "calibration_blocks": CALIBRATION_BLOCKS,
         "neutral_blocks": NEUTRAL_BLOCKS,
+        "calibration_frame": _calibration_frame(),
+        "calibration_fresh_invocations": (
+            2 * _fresh_pairs_per_block()
+            * (CALIBRATION_BLOCKS + NEUTRAL_BLOCKS)),
         "contribution_floor": CONTRIBUTION_FLOOR,
         "output": str(args.output), "execute": args.execute,
         "resume_existing": args.resume_existing,

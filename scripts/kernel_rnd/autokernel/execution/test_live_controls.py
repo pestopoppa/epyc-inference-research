@@ -1,9 +1,11 @@
 import importlib
+import io
 import json
 import os
 from pathlib import Path
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from unittest import mock
 
 from ..evaluator import statistics
@@ -328,6 +330,20 @@ class CalibrationFrame(unittest.TestCase):
                 declaration["calibration_frame"]["aggregation"], "median_per_arm")
         finally:
             importlib.reload(live_controls)
+
+    def test_decode_dry_run_discloses_fresh_invocation_cost(self):
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            result = live_controls.main([
+                "--campaign-id", "ak-controls-decode-dry",
+                "--output", "/durable/decode-dry",
+                "--recipe", live_controls.DECODE_RECIPE_ID,
+            ])
+        plan = json.loads(stdout.getvalue())
+        self.assertEqual(result, 0)
+        self.assertEqual(plan["calibration_frame"]["fresh_pairs_per_block"], 5)
+        self.assertEqual(plan["calibration_frame"]["reps"], 1)
+        self.assertEqual(plan["calibration_fresh_invocations"], 2600)
 
 
 class BetweenLegPolicy(unittest.TestCase):
