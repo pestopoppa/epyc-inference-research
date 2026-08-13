@@ -613,6 +613,20 @@ class TestTheDryRunComposesEndToEnd(unittest.TestCase):
         with self.assertRaisesRegex(Exception, "frame differs"):
             spec(blocks=3, screening_only=True, screening_baseline=bad)
 
+    def test_decode_screening_frame_is_tg128_not_a_phantom_prompt(self):
+        base = screening_bank()
+        decode_bank = screening_baseline.BaselineBank(
+            {**base.frame,
+             "recipe_id": "t1b.llama_cpu.llama_bench_decode.v1",
+             "n_prompt": 0, "n_gen": 128},
+            base.anchor_samples, base.sentinel_before,
+            base.anchor_command, base.anchor_artifacts)
+        built = spec(
+            recipe_id="t1b.llama_cpu.llama_bench_decode.v1", blocks=3,
+            screening_only=True, screening_baseline=decode_bank)
+        self.assertEqual(built.screening_baseline.frame["n_prompt"], 0)
+        self.assertEqual(built.screening_baseline.frame["n_gen"], 128)
+
     def test_screening_bank_replaces_strict_calibration_authority(self):
         built = spec(blocks=3, screening_only=True,
                      screening_baseline=screening_bank())
