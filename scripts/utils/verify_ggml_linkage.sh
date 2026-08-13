@@ -105,7 +105,7 @@ done < <(ldd "$BIN" 2>/dev/null)
 
 echo
 echo "LD_LIBRARY_PATH order as the loader sees it:"
-echo "$LD_LIBRARY_PATH" | tr ':' '\n' | nl -ba | sed 's/^/    /'
+echo "${LD_LIBRARY_PATH:-}" | tr ':' '\n' | nl -ba | sed 's/^/    /'
 
 # THE NON-VACUITY GATE, before any verdict. It runs BEFORE the BAD check on
 # purpose: "0 of 0 libraries resolved outside the tree" is not a weaker pass, it is
