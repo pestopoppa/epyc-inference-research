@@ -27,6 +27,7 @@ class DeploymentConfigTests(unittest.TestCase):
         (root / "locks").mkdir()
         wrapper = root / "codex-wrapper"
         wrapper.write_text("#!/bin/sh\n", encoding="utf-8")
+        wrapper.chmod(0o755)
         inputs = {}
         for label in ("model", "workload", "runtime_config", "policy"):
             path = root / f"{label}.json"
@@ -61,6 +62,18 @@ class DeploymentConfigTests(unittest.TestCase):
     def load(self, path: Path):
         with mock.patch.object(D, "_verify_production"):
             return D.load_deployment_config(path)
+
+    def registry(self, *, environment=None, dispatch=None):
+        return {
+            "environment_profile": {
+                "sealed-codex": environment if environment is not None
+                else {"PATH": "/usr/bin"}},
+            "source_builder": {"gpu-source-v1": lambda: None},
+            "evidence_plan": {"q5-onewave-v1": lambda: None},
+            "runner_args": {"qwen05b-tg128": lambda: None},
+            "dispatch_contract": {
+                "q5-onewave-cdna2": dispatch if dispatch is not None else {}},
+        }
 
     def test_loads_digest_bound_declarative_config(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -203,6 +216,84 @@ class DeploymentConfigTests(unittest.TestCase):
                     mock.patch.object(D.subprocess, "run", side_effect=lambda *a, **k: SimpleNamespace(returncode=0, stdout=next(replies))):
                 with self.assertRaises(D.DeploymentConfigError):
                     D._verify_production(production, D.FROZEN_PRODUCTION_HEAD)
+
+    def test_actor_wrapper_must_be_executable_not_only_digest_bound(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path, raw = self.config(Path(temp))
+            wrapper = Path(raw["actors"]["wrapper_path"])
+            wrapper.chmod(0o644)
+            with self.assertRaises(D.DeploymentConfigError):
+                self.load(path)
+
+    def test_sealed_inputs_refuse_symlink_and_symlinked_ancestor_before_resolve(self):
+        for ancestor in (False, True):
+            with self.subTest(ancestor=ancestor), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                path, raw = self.config(root)
+                target = root / "actual-model"
+                target.write_bytes(b"model")
+                if ancestor:
+                    real_parent = root / "real-inputs"
+                    real_parent.mkdir()
+                    target = real_parent / "model"
+                    target.write_bytes(b"model")
+                    alias = root / "input-alias"
+                    alias.symlink_to(real_parent, target_is_directory=True)
+                    configured = alias / "model"
+                else:
+                    configured = root / "model-link"
+                    configured.symlink_to(target)
+                raw["immutable_inputs"]["model"] = {
+                    "path": str(configured), "sha256": digest(target)}
+                seal(raw)
+                path.write_text(json.dumps(raw), encoding="utf-8")
+                with self.assertRaises(D.DeploymentConfigError):
+                    self.load(path)
+
+    def test_every_sealed_input_and_wrapper_refuses_output_or_production_overlap(self):
+        cases = (
+            ("workload", "operations_root"),
+            ("runtime_config", "state_root"),
+            ("policy", "evidence_root"),
+        )
+        for label, root_key in cases:
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                path, raw = self.config(root)
+                output = Path(raw["controller"][root_key])
+                output.mkdir()
+                moved = output / f"{label}.json"
+                moved.write_text(label, encoding="utf-8")
+                raw["immutable_inputs"][label] = {
+                    "path": str(moved), "sha256": digest(moved)}
+                seal(raw)
+                path.write_text(json.dumps(raw), encoding="utf-8")
+                with self.assertRaises(D.DeploymentConfigError):
+                    self.load(path)
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            path, raw = self.config(root)
+            evidence = Path(raw["controller"]["evidence_root"])
+            evidence.mkdir()
+            wrapper = evidence / "codex-wrapper"
+            wrapper.write_text("#!/bin/sh\n", encoding="utf-8")
+            wrapper.chmod(0o755)
+            raw["actors"].update(
+                wrapper_path=str(wrapper), wrapper_sha256=digest(wrapper))
+            seal(raw)
+            path.write_text(json.dumps(raw), encoding="utf-8")
+            with self.assertRaises(D.DeploymentConfigError):
+                self.load(path)
+
+    def test_environment_registry_refuses_loader_injection_keys(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path, _ = self.config(Path(temp))
+            config = self.load(path)
+            registry = self.registry(environment={
+                "PATH": "/usr/bin", "LD_PRELOAD": "/tmp/inject.so"})
+            with mock.patch.object(D, "_verify_production"):
+                with self.assertRaises(D.DeploymentConfigError):
+                    D.resolve_registry(config, registry)
 
 
 if __name__ == "__main__":
