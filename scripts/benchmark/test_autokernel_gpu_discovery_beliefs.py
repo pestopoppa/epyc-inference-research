@@ -97,6 +97,7 @@ class TestGpuDiscoveryBeliefs(unittest.TestCase):
         self.assertEqual(len(result["belief_measurements"]), 2)
         self.assertEqual(bank["belief_measurements"][0]["value"], 101.0)
         self.assertEqual(result["belief_measurements"][0]["value"], 111.0)
+        self.assertEqual(result["baseline_anchor_samples"], [100.0, 102.0, 101.0])
         self.assertTrue(math.isclose(
             result["belief_measurements"][1]["value"], 10 / 101,
             rel_tol=1e-12, abs_tol=1e-12))

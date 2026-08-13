@@ -206,6 +206,7 @@ def attach_result_beliefs(receipt: Mapping[str, Any], *, bank: Mapping[str, Any]
         "build_identity": dict(_mapping(receipt.get("candidate_identity"),
                                         "candidate_identity")),
         "baseline_sha256": bank_sha,
+        "baseline_anchor_samples": bank_samples,
         "baseline_center": float(baseline_center),
         "hip_residency_proved": True,
     })
@@ -227,6 +228,7 @@ def attach_result_beliefs(receipt: Mapping[str, Any], *, bank: Mapping[str, Any]
             extra={**common, "relative_effects": effects}, protocol_id=RESULT_SCHEMA),
     ]
     result = dict(receipt)
+    result["baseline_anchor_samples"] = bank_samples
     result["producer"] = producer
     result["belief_measurements"] = rows
     result["result_sha256"] = schemas.content_hash(result)
