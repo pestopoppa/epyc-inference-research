@@ -124,7 +124,8 @@ def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int) -> dict:
     row = rows[0]
     if row.get("backends") != "ROCm" or row.get("gpu_info") != "AMD Instinct MI210":
         raise RuntimeError("GPU discovery invocation did not report MI210 ROCm execution")
-    if not str(row.get("build_commit", "")).startswith(SOURCE_COMMIT[:10]):
+    reported_commit = str(row.get("build_commit", ""))
+    if len(reported_commit) < 7 or not SOURCE_COMMIT.startswith(reported_commit):
         raise RuntimeError("GPU discovery binary does not report the sealed source commit")
     if row.get("n_prompt") != 512 or row.get("n_gen") != 0 or row.get("flash_attn") != 1:
         raise RuntimeError("GPU discovery result differs from the sealed pp512/-fa-on frame")
