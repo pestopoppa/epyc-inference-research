@@ -9,6 +9,14 @@ append-only journal.  The receipt retains the source record hash, journal event
 id, pointer, and value hash so the existing archive builder can verify the
 result without trusting this process's working memory.
 
+A control that terminally refused during preflight may be replaced without
+rerunning its already-completed intervention.  The optional ``control_retry_of``
+identity is compiled into a typed lineage receipt only when the original
+journal proves that no claim, T0, microbenchmark, pair, or decision occurred and
+the replacement preserves the exact prospective control contract.  The
+intervention must still name the original control proposal; the lineage is the
+only admitted alias to the fresh completed proposal.
+
 The current campaign record does not yet carry all AP-WM-1 diagnostic and
 held-out-outcome values.  That is a refusal, not an invitation to synthesize
 them.  This projector becomes runnable as soon as those values are journaled by
@@ -18,23 +26,28 @@ result alone.
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import json
 import math
 import os
+import re
 import shutil
 import tempfile
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 try:
     from . import journal, least_commitment_archive_builder as builder
+    from . import least_commitment_capture as capture
     from . import offline_least_commitment as protocol, schemas
     from .evaluator import recipes
 except ImportError:  # direct script execution
     import journal
     import least_commitment_archive_builder as builder
+    import least_commitment_capture as capture
     import offline_least_commitment as protocol
     import schemas
     from evaluator import recipes
@@ -43,6 +56,7 @@ except ImportError:  # direct script execution
 PLAN_SCHEMA = "epyc.autokernel.least_commitment_receipt_projection.v1"
 PROJECTION_SCHEMA = "epyc.autokernel.least_commitment_receipt_projection_result.v1"
 AUTHORITY = "observe_only_journal_projection"
+CONTROL_RETRY_SCHEMA = "epyc.autokernel.preflight_control_retry_lineage.v1"
 _PLAN_FIELDS = frozenset({
     "schema", "archive_id", "created_at", "candidate_frame_id_binding",
     "diagnostic_directions", "outcome_weights", "rows", "plan_sha256",
@@ -54,6 +68,14 @@ _ROW_FIELDS = frozenset({
     "matched_experiment_id_binding", "factor_bindings",
     "diagnostic_bindings", "recoding_bindings", "outcome_bindings",
     "matched_control_id",
+})
+_RETRY_INPUT_FIELDS = frozenset({
+    "schema", "journal_root", "campaign_id", "proposal_id",
+    "completion_event_id",
+})
+_RETRY_RECEIPT_FIELDS = frozenset({
+    "schema", "authority", "original", "replacement", "semantic_contract_sha256",
+    "claim_journal_observation",
 })
 _BINDING_FIELDS = frozenset({"record", "pointer", "record_sha256"})
 _OUTCOMES = frozenset({
@@ -169,6 +191,7 @@ def _resolve_pointer(document: Any, pointer: str, label: str) -> Any:
 
 @dataclass(frozen=True)
 class CompletedEvidence:
+    journal_root: Path
     campaign_id: str
     proposal_id: str
     completion_event_id: str
@@ -270,6 +293,7 @@ def _load_completed_evidence(row: Mapping[str, Any]) -> CompletedEvidence:
     ):
         _reject_nonreal(value, label)
     return CompletedEvidence(
+        journal_root=root,
         campaign_id=campaign_id, proposal_id=proposal_id,
         completion_event_id=completion_id, proposal=completed.proposal,
         result=completed.result, candidate=candidate_entry.payload,
@@ -282,6 +306,340 @@ def _load_completed_evidence(row: Mapping[str, Any]) -> CompletedEvidence:
                for key, value in evaluation_event_ids.items()},
         },
     )
+
+
+def _read_json_bound(path: Path, expected_sha256: str, label: str) -> Mapping[str, Any]:
+    if not path.is_absolute():
+        raise ReceiptProjectionError(f"{label}: path must be absolute")
+    try:
+        observed = _file_sha256(path)
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ReceiptProjectionError(f"{label}: cannot read bound JSON: {exc}") from exc
+    if observed != expected_sha256:
+        raise ReceiptProjectionError(
+            f"{label}: SHA-256 {observed} != journal-bound {expected_sha256}")
+    if not isinstance(value, Mapping):
+        raise ReceiptProjectionError(f"{label}: expected a JSON object")
+    return value
+
+
+def _control_proposal_semantics(proposal: Mapping[str, Any], label: str) -> Mapping[str, Any]:
+    """Strip only retry identities from an exact generated A/A control proposal."""
+    value = copy.deepcopy(dict(proposal))
+    surface = value.get("change", {}).get("parameter_surface")
+    if not isinstance(surface, Mapping) or surface.get("candidate") != surface.get("anchor"):
+        raise ReceiptProjectionError(f"{label}: proposal is not an exact A/A control")
+    hypothesis = value.get("hypothesis")
+    if not isinstance(hypothesis, str) or re.fullmatch(
+            r"Matched A/A control for [A-Za-z0-9][A-Za-z0-9._:-]*", hypothesis) is None:
+        raise ReceiptProjectionError(
+            f"{label}: control hypothesis is not the generated matched A/A form")
+    value["hypothesis"] = "Matched A/A control for <retry-source>"
+    value.pop("campaign_id", None)
+    value.pop("proposal_id", None)
+    return value
+
+
+def _diagnostic_source_semantics(binding: Any, *, proposal: Mapping[str, Any],
+                                 label: str) -> str:
+    if not isinstance(binding, Mapping) or set(binding) != {"path", "receipt_id", "sha256"}:
+        raise ReceiptProjectionError(f"{label}: malformed diagnostic source binding")
+    path = Path(_need_text(binding.get("path"), f"{label}.path"))
+    expected_sha = _need_text(binding.get("sha256"), f"{label}.sha256")
+    source = _read_json_bound(path, expected_sha, label)
+    if source.get("proposal_sha256") != _content_hash(proposal):
+        raise ReceiptProjectionError(f"{label}: diagnostic source names another proposal")
+    if source.get("receipt_id") != binding.get("receipt_id"):
+        raise ReceiptProjectionError(f"{label}: diagnostic receipt identity differs")
+    semantic = copy.deepcopy(dict(source))
+    semantic.pop("proposal_sha256", None)
+    semantic.pop("receipt_id", None)
+    return _content_hash(semantic)
+
+
+def _control_capture_semantics(*, root: Path, proposal: Mapping[str, Any],
+                               result: Mapping[str, Any], label: str) -> Mapping[str, Any]:
+    spec = result.get("spec")
+    if not isinstance(spec, Mapping):
+        raise ReceiptProjectionError(f"{label}: terminal result has no spec")
+    expected_sha = _need_text(
+        spec.get("least_commitment_capture_plan_sha256"),
+        f"{label}.least_commitment_capture_plan_sha256")
+    path = (root / "least-commitment-capture-plan.json").resolve()
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ReceiptProjectionError(
+            f"{label}: cannot read capture plan: {exc}") from exc
+    if not isinstance(raw, Mapping):
+        raise ReceiptProjectionError(f"{label}: capture plan is not a JSON object")
+    if raw.get("schema") != capture.SCHEMA or capture.plan_sha256(raw) != expected_sha:
+        raise ReceiptProjectionError(f"{label}: capture plan schema/hash is invalid")
+    if raw.get("campaign_id") != result.get("campaign_id") \
+            or raw.get("proposal_id") != proposal.get("proposal_id") \
+            or raw.get("candidate_id") != result.get("candidate_id"):
+        raise ReceiptProjectionError(f"{label}: capture plan identity differs from its journal")
+    if raw.get("role") != "control" or raw.get("matched_control_proposal_id") is not None:
+        raise ReceiptProjectionError(f"{label}: capture plan is not an unpaired control arm")
+    if raw.get("capture_mode") != "measured" or raw.get("evidence_stage") != "bootstrap" \
+            or raw.get("heldout_outcome_receipt") is not None:
+        raise ReceiptProjectionError(
+            f"{label}: preflight retry lineage is limited to measured bootstrap controls")
+    try:
+        capture.from_mapping(
+            raw, proposal=proposal, campaign_id=result["campaign_id"],
+            candidate_id=result["candidate_id"])
+    except capture.CapturePlanError as exc:
+        raise ReceiptProjectionError(f"{label}: invalid capture plan: {exc}") from exc
+
+    value = copy.deepcopy(dict(raw))
+    for key in ("capture_id", "campaign_id", "candidate_id", "proposal_id", "plan_sha256"):
+        value.pop(key, None)
+    factors = value.get("factors")
+    if not isinstance(factors, Mapping):
+        raise ReceiptProjectionError(f"{label}: factors are absent")
+    factors = copy.deepcopy(dict(factors))
+    if factors.get("backend") != "llama_cpu" or factors.get("devices") != []:
+        raise ReceiptProjectionError(
+            f"{label}: preflight control retry is limited to CPU-only campaigns")
+    # The pre-r44 prefill producer omitted this key when its governed value was
+    # one.  The live runner used one pair per block; spelling the same default
+    # explicitly is an identity migration, not an empirical change.
+    factors.setdefault("fresh_pairs_per_block", 1)
+    if factors["fresh_pairs_per_block"] != 1:
+        raise ReceiptProjectionError(
+            f"{label}: retry changes fresh_pairs_per_block from the governed default")
+    value["factors"] = factors
+    bindings = value.get("diagnostic_source_receipts")
+    if not isinstance(bindings, Mapping) or set(bindings) != set(capture.DIAGNOSTICS):
+        raise ReceiptProjectionError(f"{label}: diagnostic source bindings are incomplete")
+    value["diagnostic_source_receipts"] = {
+        name: _diagnostic_source_semantics(
+            bindings[name], proposal=proposal,
+            label=f"{label}.diagnostic_source_receipts.{name}")
+        for name in sorted(capture.DIAGNOSTICS)
+    }
+    return {
+        "proposal": _control_proposal_semantics(proposal, label),
+        "capture_plan": value,
+    }
+
+
+def _scan_claim_absence(path_text: Any, campaign_id: str, label: str) -> dict[str, Any]:
+    path = Path(_need_text(path_text, f"{label}.claim_journal_path"))
+    if not path.is_absolute():
+        raise ReceiptProjectionError(f"{label}: claim journal path must be absolute")
+    try:
+        body = path.read_bytes()
+    except OSError as exc:
+        raise ReceiptProjectionError(f"{label}: cannot read claim journal: {exc}") from exc
+    matches = []
+    for line_no, line in enumerate(body.splitlines(), 1):
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise ReceiptProjectionError(
+                f"{label}: malformed claim journal line {line_no}: {exc}") from exc
+        receipt = row.get("detail", {}).get("receipt") if isinstance(row, Mapping) else None
+        if isinstance(receipt, Mapping) and receipt.get("campaign_id") == campaign_id:
+            matches.append(row.get("record_id"))
+    if matches:
+        raise ReceiptProjectionError(
+            f"{label}: original preflight-refused campaign acquired a resource claim")
+    return {
+        "path": str(path), "scanned_bytes": len(body),
+        "scanned_sha256": hashlib.sha256(body).hexdigest(),
+        "matching_claim_record_ids": [],
+    }
+
+
+def _validate_claim_observation(observation: Any, campaign_id: str, label: str) -> None:
+    if not isinstance(observation, Mapping) or set(observation) != {
+            "path", "scanned_bytes", "scanned_sha256", "matching_claim_record_ids"}:
+        raise ReceiptProjectionError(f"{label}: malformed claim-journal observation")
+    path = Path(_need_text(observation.get("path"), f"{label}.path"))
+    scanned_bytes = observation.get("scanned_bytes")
+    if isinstance(scanned_bytes, bool) or not isinstance(scanned_bytes, int) \
+            or scanned_bytes < 0:
+        raise ReceiptProjectionError(f"{label}.scanned_bytes is invalid")
+    if observation.get("matching_claim_record_ids") != []:
+        raise ReceiptProjectionError(f"{label}: observation does not prove claim absence")
+    try:
+        body = path.read_bytes()
+    except OSError as exc:
+        raise ReceiptProjectionError(f"{label}: cannot reread claim journal: {exc}") from exc
+    if len(body) < scanned_bytes or hashlib.sha256(body[:scanned_bytes]).hexdigest() \
+            != observation.get("scanned_sha256"):
+        raise ReceiptProjectionError(f"{label}: observed claim-journal prefix changed")
+    # New unrelated appends do not stale a lineage receipt, but a later record
+    # that names the supposedly claim-free original campaign invalidates it.
+    for line_no, line in enumerate(body.splitlines(), 1):
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise ReceiptProjectionError(
+                f"{label}: malformed claim journal line {line_no}: {exc}") from exc
+        receipt = row.get("detail", {}).get("receipt") if isinstance(row, Mapping) else None
+        if isinstance(receipt, Mapping) and receipt.get("campaign_id") == campaign_id:
+            raise ReceiptProjectionError(
+                f"{label}: original preflight-refused campaign acquired a resource claim")
+
+
+def _compile_control_retry_lineage(raw: Any, replacement: CompletedEvidence) -> dict[str, Any]:
+    """Bind one no-compute preflight refusal to an exact completed control retry."""
+    if not isinstance(raw, Mapping) or set(raw) != _RETRY_INPUT_FIELDS \
+            or raw.get("schema") != CONTROL_RETRY_SCHEMA:
+        raise ReceiptProjectionError(
+            f"control_retry_of fields/schema must be exactly {sorted(_RETRY_INPUT_FIELDS)}")
+    root = Path(_need_text(raw.get("journal_root"), "control_retry_of.journal_root"))
+    if not root.is_absolute():
+        raise ReceiptProjectionError("control_retry_of.journal_root must be absolute")
+    campaign_id = _need_text(raw.get("campaign_id"), "control_retry_of.campaign_id")
+    proposal_id = _need_text(raw.get("proposal_id"), "control_retry_of.proposal_id")
+    completion_id = _need_text(
+        raw.get("completion_event_id"), "control_retry_of.completion_event_id")
+    if campaign_id == replacement.campaign_id or proposal_id == replacement.proposal_id:
+        raise ReceiptProjectionError("control retry must use fresh campaign and proposal ids")
+    book = journal.Journal(str(root), campaign_id=campaign_id)
+    report = book.scan()
+    if report.torn_tail is not None:
+        raise ReceiptProjectionError("original retry journal has an unacknowledged torn tail")
+    entries = list(report.entries)
+    if len(entries) != 2 or [entry.kind for entry in entries] != [
+            journal.KIND_PROPOSAL_RECORDED, journal.KIND_STOP_STATE]:
+        raise ReceiptProjectionError(
+            "original retry journal must contain only proposal and preflight refusal; "
+            "compute or claim-boundary activity was recorded")
+    consistency = journal.check_view_consistency(entries, journal.rebuild_views(entries))
+    if consistency.outcome != schemas.PASS:
+        raise ReceiptProjectionError("original retry journal views are inconsistent")
+    proposal_entry, terminal_entry = entries
+    if proposal_entry.record_id != proposal_id or terminal_entry.event_id != completion_id:
+        raise ReceiptProjectionError("original retry journal identity does not resolve exactly")
+    terminal = terminal_entry.payload
+    result = terminal.get("result") if isinstance(terminal, Mapping) else None
+    if not isinstance(result, Mapping):
+        raise ReceiptProjectionError("original retry terminal carries no result")
+    no_compute = {
+        "terminal_state": terminal.get("state") == result.get("state") == "preflight_refused",
+        "campaign": result.get("campaign_id") == campaign_id,
+        "executed_command": result.get("executed") is True,
+        "no_pairs": result.get("pairs") == [],
+        "no_steps": result.get("steps") == [],
+        "no_releases": result.get("releases") == [],
+        "no_t0": result.get("t0") is None,
+        "no_decision": result.get("decision") is None,
+        "preflight_failed": isinstance(result.get("preflight"), Mapping)
+                            and result["preflight"].get("outcome") == schemas.FAIL,
+        "production": isinstance(result.get("production_unchanged"), Mapping)
+                      and result["production_unchanged"].get("outcome") == schemas.PASS,
+    }
+    failed = sorted(key for key, passed in no_compute.items() if not passed)
+    if failed:
+        raise ReceiptProjectionError(
+            f"original retry terminal is not a no-compute preflight refusal: {failed}")
+    original_semantics = _control_capture_semantics(
+        root=root, proposal=proposal_entry.payload, result=result, label="original control")
+    replacement_semantics = _control_capture_semantics(
+        root=replacement.journal_root, proposal=replacement.proposal,
+        result=replacement.result, label="replacement control")
+    if original_semantics != replacement_semantics:
+        raise ReceiptProjectionError(
+            "control retry changes source/frame/factor/schedule/control semantics")
+    replacement_entries = journal.Journal(
+        str(replacement.journal_root), campaign_id=replacement.campaign_id).read_all()
+    replacement_proposals = [
+        entry for entry in replacement_entries
+        if entry.kind == journal.KIND_PROPOSAL_RECORDED
+        and entry.record_id == replacement.proposal_id]
+    if len(replacement_proposals) != 1:
+        raise ReceiptProjectionError("replacement proposal event does not resolve exactly")
+    try:
+        original_finished = datetime.fromisoformat(
+            terminal_entry.written_at.replace("Z", "+00:00"))
+        retry_started = datetime.fromisoformat(
+            replacement_proposals[0].written_at.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ReceiptProjectionError("retry journal timestamps are invalid") from exc
+    if original_finished > retry_started:
+        raise ReceiptProjectionError("replacement predates the original preflight refusal")
+    claim_observation = _scan_claim_absence(
+        original_semantics["capture_plan"]["factors"].get("claim_journal_path"),
+        campaign_id, "original control")
+    semantic_sha = _content_hash(original_semantics)
+    return {
+        "schema": CONTROL_RETRY_SCHEMA,
+        "authority": AUTHORITY,
+        "original": {
+            "journal_root": str(root), "campaign_id": campaign_id,
+            "proposal_id": proposal_id,
+            "proposal_event_id": proposal_entry.event_id,
+            "proposal_sha256": _content_hash(proposal_entry.payload),
+            "completion_event_id": completion_id,
+            "terminal_sha256": _content_hash(terminal),
+            "capture_plan_sha256": result["spec"][
+                "least_commitment_capture_plan_sha256"],
+        },
+        "replacement": {
+            "journal_root": str(replacement.journal_root),
+            "campaign_id": replacement.campaign_id,
+            "proposal_id": replacement.proposal_id,
+            "proposal_sha256": _content_hash(replacement.proposal),
+            "completion_event_id": replacement.completion_event_id,
+            "campaign_result_sha256": _content_hash(replacement.result),
+            "capture_plan_sha256": replacement.result["spec"][
+                "least_commitment_capture_plan_sha256"],
+        },
+        "semantic_contract_sha256": semantic_sha,
+        "claim_journal_observation": claim_observation,
+    }
+
+
+def _validate_control_retry_lineage(receipt: Any, replacement: CompletedEvidence) -> dict:
+    if not isinstance(receipt, Mapping) or set(receipt) != _RETRY_RECEIPT_FIELDS \
+            or receipt.get("schema") != CONTROL_RETRY_SCHEMA \
+            or receipt.get("authority") != AUTHORITY:
+        raise ReceiptProjectionError("control_retry_lineage receipt fields/schema differ")
+    original = receipt.get("original")
+    if not isinstance(original, Mapping):
+        raise ReceiptProjectionError("control_retry_lineage.original is absent")
+    source = {key: original.get(key) for key in _RETRY_INPUT_FIELDS if key != "schema"}
+    source["schema"] = CONTROL_RETRY_SCHEMA
+    observed = _compile_control_retry_lineage(source, replacement)
+    _validate_claim_observation(
+        receipt.get("claim_journal_observation"), original.get("campaign_id"),
+        "control_retry_lineage.claim_journal_observation")
+    # The global claim journal is append-only and shared.  Its sealed prefix is
+    # the proof; unrelated records appended after assembly do not stale it.
+    observed["claim_journal_observation"] = receipt.get("claim_journal_observation")
+    if observed != receipt:
+        raise ReceiptProjectionError("control_retry_lineage receipt is stale or tampered")
+    return observed
+
+
+def _require_planned_control_join(*, intervention_block: Mapping[str, Any],
+                                  control_block: Mapping[str, Any],
+                                  intervention_proposal_id: str,
+                                  control_proposal_id: str,
+                                  retry_lineage: Mapping[str, Any] | None) -> None:
+    if intervention_block.get("role") != "intervention" \
+            or control_block.get("role") != "control" \
+            or control_block.get("matched_control_proposal_id") is not None:
+        raise ReceiptProjectionError(
+            f"{intervention_proposal_id}: matched rows are not "
+            "intervention/control capture roles")
+    planned_control_id = intervention_block.get("matched_control_proposal_id")
+    expected_control_id = (retry_lineage["original"]["proposal_id"]
+                           if retry_lineage is not None else control_proposal_id)
+    if planned_control_id != expected_control_id:
+        raise ReceiptProjectionError(
+            f"{intervention_proposal_id}: intervention capture planned control "
+            f"{planned_control_id!r}, not {expected_control_id!r}")
 
 
 def _binding(binding: Any, evidence: CompletedEvidence, label: str) -> tuple[Any, dict]:
@@ -344,10 +702,13 @@ def _factor_value(value: Any, label: str) -> Any:
 
 
 def _project_row(row: Mapping[str, Any]) -> dict[str, Any]:
-    if not isinstance(row, Mapping) or set(row) != _ROW_FIELDS:
+    row_fields = set(row) if isinstance(row, Mapping) else set()
+    if not isinstance(row, Mapping) or row_fields not in (
+            set(_ROW_FIELDS), set(_ROW_FIELDS) | {"control_retry_lineage"}):
         got = sorted(row) if isinstance(row, Mapping) else type(row).__name__
         raise ReceiptProjectionError(
-            f"row fields must be exactly {sorted(_ROW_FIELDS)}; got {got}")
+            f"row fields must be {sorted(_ROW_FIELDS)} with only the optional "
+            f"control_retry_lineage extension; got {got}")
     evidence = _load_completed_evidence(row)
     contract = evidence.proposal["representation_contract"]
     frame = contract["frame_sha256"]
@@ -437,6 +798,10 @@ def _project_row(row: Mapping[str, Any]) -> dict[str, Any]:
             **scalar_sources, "outcome": outcome_sources,
         },
     }
+    retry_lineage = None
+    if "control_retry_lineage" in row:
+        retry_lineage = _validate_control_retry_lineage(
+            row["control_retry_lineage"], evidence)
     return {
         "evidence": evidence, "diagnostic": diagnostic, "outcome": outcome,
         "factors": factors, "factor_sources": factor_sources,
@@ -445,6 +810,7 @@ def _project_row(row: Mapping[str, Any]) -> dict[str, Any]:
                 "diagnostic_semantics_sha256"),
             "least_commitment.diagnostic_semantics_sha256"),
         "matched_control_id": row.get("matched_control_id"),
+        "control_retry_lineage": retry_lineage,
     }
 
 
@@ -470,9 +836,11 @@ def assemble_plan(*, archive_id: str, created_at: str,
     for index, row in enumerate(completed_rows):
         allowed = {"journal_root", "campaign_id", "proposal_id",
                    "completion_event_id", "matched_control_id"}
-        if not isinstance(row, Mapping) or set(row) != allowed:
+        if not isinstance(row, Mapping) or set(row) not in (
+                allowed, allowed | {"control_retry_of"}):
             raise ReceiptProjectionError(
-                f"completed_rows[{index}] fields must be exactly {sorted(allowed)}")
+                f"completed_rows[{index}] fields must be {sorted(allowed)} with only "
+                "the optional control_retry_of extension")
         evidence = _load_completed_evidence(row)
         block = evidence.candidate.get("derived_verdicts", {}).get("least_commitment")
         if not isinstance(block, Mapping) or block.get("schema") \
@@ -495,7 +863,7 @@ def assemble_plan(*, archive_id: str, created_at: str,
         if not factor_names:
             raise ReceiptProjectionError(
                 f"{evidence.proposal_id}: least-commitment factors are absent")
-        compiled.append({
+        compiled_row = {
             "journal_root": row["journal_root"],
             "campaign_id": row["campaign_id"],
             "proposal_id": row["proposal_id"],
@@ -522,7 +890,14 @@ def assemble_plan(*, archive_id: str, created_at: str,
             "outcome_bindings": {
                 key: binding(f"{prefix}/outcome/{key}") for key in _OUTCOMES},
             "matched_control_id": row["matched_control_id"],
-        })
+        }
+        if "control_retry_of" in row:
+            if row["matched_control_id"] is not None:
+                raise ReceiptProjectionError(
+                    f"{evidence.proposal_id}: only a control row may carry control_retry_of")
+            compiled_row["control_retry_lineage"] = _compile_control_retry_lineage(
+                row["control_retry_of"], evidence)
+        compiled.append(compiled_row)
     plan = {
         "schema": PLAN_SCHEMA,
         "archive_id": _need_text(archive_id, "archive_id"),
@@ -628,6 +1003,15 @@ def project(plan: Mapping[str, Any], output_dir: Path) -> dict[str, Any]:
             raise ReceiptProjectionError(
                 f"{proposal_id}: matched_control_id does not resolve to another row")
         control = by_id[control_id]
+        intervention_block = item["evidence"].candidate[
+            "derived_verdicts"]["least_commitment"]
+        control_block = control["evidence"].candidate[
+            "derived_verdicts"]["least_commitment"]
+        retry_lineage = control["control_retry_lineage"]
+        _require_planned_control_join(
+            intervention_block=intervention_block, control_block=control_block,
+            intervention_proposal_id=proposal_id,
+            control_proposal_id=control_id, retry_lineage=retry_lineage)
         if item["diagnostic_semantics_sha256"] \
                 == control["diagnostic_semantics_sha256"]:
             raise ReceiptProjectionError(
@@ -667,6 +1051,7 @@ def project(plan: Mapping[str, Any], output_dir: Path) -> dict[str, Any]:
             "matched_experiment_id": intervention_outcome[
                 "matched_experiment_id"],
             "capture_mode": "measured", "authority": AUTHORITY,
+            "control_retry_lineage": retry_lineage,
             "source_provenance": {
                 "intervention_factors": item["factor_sources"],
                 "control_factors": control["factor_sources"],

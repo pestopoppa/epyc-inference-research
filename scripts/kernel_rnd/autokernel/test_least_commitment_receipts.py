@@ -14,6 +14,7 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 from . import journal as J
@@ -24,6 +25,8 @@ from . import offline_least_commitment as L
 from . import schemas as S
 from .controller import hypotheses as H
 from .test_journal import _candidate, _event
+from .test_least_commitment_capture import plan as _capture_plan
+from .test_least_commitment_capture import proposal as _capture_proposal
 from .test_schemas import _proposal
 
 
@@ -124,6 +127,9 @@ class ReceiptProjectionTest(unittest.TestCase):
         least_commitment = {
             "schema": C.BLOCK_SCHEMA,
             "capture_mode": "measured",
+            "role": "control" if arm == "0" else "intervention",
+            "matched_control_proposal_id": (
+                None if arm == "0" else f"akp-20260812-{ordinal - 1:04d}"),
             "matched_experiment_id": "akm-iqk-20260812-0001",
             "candidate_frame_id": "candidate-frame-real-v1",
             "regime": "prefill",
@@ -245,6 +251,200 @@ class ReceiptProjectionTest(unittest.TestCase):
     def _rehash(self):
         self.plan["plan_sha256"] = P._plan_hash(self.plan)
 
+    def _retry_control(self, *, ordinal: int, suffix: str,
+                       proposal_mutation=None) -> tuple[dict, dict]:
+        """Create one valid bootstrap control plan and clean completed journal."""
+        intervention = _capture_proposal()
+        intervention.update({
+            "campaign_id": f"ak-retry-intervention-{suffix}",
+            "proposal_id": f"akp-retry-intervention-{ordinal:04d}",
+        })
+        control = C.make_iqk_control_proposal(
+            intervention, campaign_id=f"ak-retry-control-{suffix}",
+            proposal_id=f"akp-retry-control-{ordinal:04d}")
+        if proposal_mutation is not None:
+            proposal_mutation(control)
+        candidate_id = f"akc-retry-control-{ordinal:04d}"
+        raw = _capture_plan(control, role="control", matched_control=None)
+        raw.update({
+            "capture_id": f"aklc-retry-control-{ordinal:04d}",
+            "campaign_id": control["campaign_id"],
+            "proposal_id": control["proposal_id"],
+            "candidate_id": candidate_id,
+            "evidence_stage": "bootstrap",
+            "heldout_outcome_receipt": None,
+            "outcome_reducers": dict(C.BOOTSTRAP_OUTCOME_REDUCERS),
+        })
+        claim_path = self.root / "shared-retry-claims.jsonl"
+        claim_path.touch()
+        raw["factors"]["claim_journal_path"] = str(claim_path)
+        raw["factors"]["fresh_pairs_per_block"] = 1
+        raw["plan_sha256"] = C.plan_sha256(raw)
+        parsed = C.from_mapping(
+            raw, proposal=control, campaign_id=control["campaign_id"],
+            candidate_id=candidate_id)
+        block = C.materialize(
+            parsed,
+            decision=SimpleNamespace(
+                keep=False, median_relative=0.001, contribution_floor=0.03),
+            calibration=SimpleNamespace(noise_floor_phi=0.01),
+            executed_factors=parsed.raw["factors"])
+        # The receipt projector requires a held-out-bound campaign later in the
+        # full workflow.  These tests exercise only retry identity admission.
+        root = self.root / suffix
+        root.mkdir(parents=True)
+        (root / "least-commitment-capture-plan.json").write_text(
+            json.dumps(raw), encoding="utf-8")
+        book = J.Journal(str(root), campaign_id=control["campaign_id"])
+        book.initialize()
+        book.append(J.KIND_PROPOSAL_RECORDED, control)
+        hypothesis_id = f"akh-retry-control-{ordinal:04d}"
+        tracker = H.HypothesisTracker(
+            journal_=book, root=str(root), campaign_id=control["campaign_id"])
+        tracker.open_hypothesis(H.Hypothesis(
+            hypothesis_id=hypothesis_id, statement=control["hypothesis"],
+            falsifier="The A/A retry exceeds its predeclared noise floor.",
+            origin=H.ORIGIN_CONTROLLER, author="retry-lineage-test",
+            regime={"recipe_id": "t1b.llama_cpu.llama_bench_prefill.v1"},
+        ))
+        authorization = tracker.authorize_claim(
+            hypothesis_id, purpose="exercise preflight retry lineage",
+            authorized_by="retry-lineage-test", ledger=_EmptyDoNotRepeat())
+        evaluation_id = f"ake-retry-control-{ordinal:04d}"
+        evaluation = _event(f"retry-{ordinal:04d}")
+        evaluation.update({
+            "event_id": evaluation_id, "campaign_id": control["campaign_id"],
+            "candidate_id": candidate_id,
+        })
+        evaluation["device_state"]["source"] = "rocm-smi"
+        evaluation["device_state"]["receipt_ref"] = "retry-device-state"
+        candidate = _candidate(f"retry-{ordinal:04d}", status="rejected")
+        candidate.update({
+            "candidate_id": candidate_id, "campaign_id": control["campaign_id"],
+            "proposal_id": control["proposal_id"],
+            "evaluation_event_ids": [evaluation_id],
+            "derived_verdicts": {"least_commitment": block},
+        })
+        book.append(J.KIND_EVALUATION_EVENT, evaluation)
+        book.append(J.KIND_CANDIDATE_RECORDED, candidate)
+        terminal = book.append(J.KIND_STOP_STATE, {
+            "state": "decided", "result": {
+                "state": "decided", "campaign_id": control["campaign_id"],
+                "candidate_id": candidate_id, "executed": True, "ok": True,
+                "spec": {
+                    "recipe_id": "t1b.llama_cpu.llama_bench_prefill.v1",
+                    "least_commitment_capture_plan_sha256": raw["plan_sha256"],
+                    "hypothesis": {
+                        "bound": True, "hypothesis_id": hypothesis_id,
+                        "authorization": authorization.to_dict(),
+                    },
+                    "proposal": {
+                        "schema": control["schema"],
+                        "proposal_id": control["proposal_id"],
+                        "representation_frame_sha256": control[
+                            "representation_contract"]["frame_sha256"],
+                    },
+                },
+                "decision": {"keep": False, "median_relative": 0.001},
+                "production_unchanged": {"outcome": S.PASS},
+                "releases": [{"claim": "cpu", "released": True}],
+                "pairs": [{"block_index": 0, "candidate": 1.0, "anchor": 1.0}],
+            },
+        })
+        return ({
+            "journal_root": str(root), "campaign_id": control["campaign_id"],
+            "proposal_id": control["proposal_id"],
+            "completion_event_id": terminal.event_id, "matched_control_id": None,
+        }, {"proposal": control, "plan": raw})
+
+    def _preflight_source(self, replacement_material: dict, *, suffix: str,
+                          compute_started: bool = False,
+                          claim_started: bool = False) -> dict:
+        replacement_proposal = replacement_material["proposal"]
+        replacement_plan = replacement_material["plan"]
+        intervention = _capture_proposal()
+        intervention.update({
+            "campaign_id": f"ak-retry-source-intervention-{suffix}",
+            "proposal_id": f"akp-retry-source-intervention-{suffix}",
+        })
+        proposal = C.make_iqk_control_proposal(
+            intervention, campaign_id=f"ak-retry-source-{suffix}",
+            proposal_id=f"akp-retry-source-{suffix}")
+        # The generated proposals differ only in their fresh retry identities.
+        # Preserve every substantive field from the replacement.
+        proposal = copy.deepcopy(replacement_proposal)
+        proposal["campaign_id"] = f"ak-retry-source-{suffix}"
+        proposal["proposal_id"] = f"akp-retry-source-{suffix}"
+        proposal["hypothesis"] = (
+            f"Matched A/A control for akp-retry-source-intervention-{suffix}")
+        candidate_id = f"akc-retry-source-{suffix}"
+        raw = copy.deepcopy(replacement_plan)
+        raw.update({
+            "capture_id": f"aklc-retry-source-{suffix}",
+            "campaign_id": proposal["campaign_id"],
+            "proposal_id": proposal["proposal_id"],
+            "candidate_id": candidate_id,
+        })
+        raw["factors"].pop("fresh_pairs_per_block", None)
+        # Rebind prospective sources to the source proposal; their quotient
+        # semantics remain byte-for-byte identical after identity stripping.
+        source_path = self.root / f"{suffix}-diagnostic-source.json"
+        sample = json.loads(Path(next(iter(
+            raw["diagnostic_source_receipts"].values()))["path"]).read_text())
+        sample["receipt_id"] = f"aklc-source-retry-{suffix}"
+        sample["proposal_sha256"] = S.content_hash(proposal)
+        source_path.write_text(json.dumps(sample), encoding="utf-8")
+        binding = C.source_binding(source_path)
+        raw["diagnostic_source_receipts"] = {
+            name: dict(binding) for name in C.DIAGNOSTICS}
+        raw["plan_sha256"] = C.plan_sha256(raw)
+        C.from_mapping(
+            raw, proposal=proposal, campaign_id=proposal["campaign_id"],
+            candidate_id=candidate_id)
+
+        root = self.root / f"source-{suffix}"
+        root.mkdir()
+        (root / "least-commitment-capture-plan.json").write_text(
+            json.dumps(raw), encoding="utf-8")
+        claim_path = Path(raw["factors"]["claim_journal_path"])
+        if claim_started:
+            claim_path.write_text(json.dumps({
+                "record_id": "akclaim-started",
+                "detail": {"receipt": {"campaign_id": proposal["campaign_id"]}},
+            }) + "\n", encoding="utf-8")
+        book = J.Journal(str(root), campaign_id=proposal["campaign_id"])
+        book.initialize()
+        book.append(J.KIND_PROPOSAL_RECORDED, proposal)
+        if compute_started:
+            evaluation = _event(f"retry-started-{suffix}")
+            evaluation.update({
+                "event_id": f"ake-retry-started-{suffix}",
+                "campaign_id": proposal["campaign_id"],
+                "candidate_id": candidate_id,
+            })
+            evaluation["device_state"]["source"] = "rocm-smi"
+            evaluation["device_state"]["receipt_ref"] = "retry-started-device-state"
+            book.append(J.KIND_EVALUATION_EVENT, evaluation)
+        terminal = book.append(J.KIND_STOP_STATE, {
+            "state": "preflight_refused", "result": {
+                "state": "preflight_refused", "campaign_id": proposal["campaign_id"],
+                "candidate_id": candidate_id, "executed": True, "ok": True,
+                "spec": {
+                    "least_commitment_capture_plan_sha256": raw["plan_sha256"],
+                    "claim_journal_path": str(claim_path),
+                },
+                "decision": None, "pairs": [], "steps": [], "releases": [],
+                "t0": None, "preflight": {"outcome": S.FAIL},
+                "production_unchanged": {"outcome": S.PASS},
+            },
+        })
+        return {
+            "schema": P.CONTROL_RETRY_SCHEMA, "journal_root": str(root),
+            "campaign_id": proposal["campaign_id"],
+            "proposal_id": proposal["proposal_id"],
+            "completion_event_id": terminal.event_id,
+        }
+
     def test_projects_three_real_receipt_families_and_feeds_builder(self):
         output = self.root / "projected"
         result = P.project(self.plan, output)
@@ -327,6 +527,90 @@ class ReceiptProjectionTest(unittest.TestCase):
         self.assertTrue(all(
             set(row["diagnostic_bindings"]) == set(L.DIAGNOSTICS)
             for row in compiled["rows"]))
+
+    def test_preflight_control_retry_compiles_typed_lineage(self):
+        _, material = self._retry_control(ordinal=19, suffix="retry-template")
+        original = self._preflight_source(material, suffix="retry-original")
+        replacement_row, _ = self._retry_control(
+            ordinal=20, suffix="retry-replacement")
+        evidence = P._load_completed_evidence(replacement_row)
+        receipt = P._compile_control_retry_lineage(original, evidence)
+        self.assertEqual(receipt["schema"], P.CONTROL_RETRY_SCHEMA)
+        self.assertEqual(receipt["original"]["proposal_id"], original["proposal_id"])
+        self.assertEqual(
+            receipt["replacement"]["proposal_id"], replacement_row["proposal_id"])
+        self.assertEqual(receipt["claim_journal_observation"][
+            "matching_claim_record_ids"], [])
+        self.assertEqual(P._validate_control_retry_lineage(receipt, evidence), receipt)
+
+    def test_retry_lineage_refuses_semantic_mismatch(self):
+        source_row, source_material = self._retry_control(
+            ordinal=21, suffix="retry-source-material")
+        del source_row  # only its valid prospective material is needed
+        original = self._preflight_source(
+            source_material, suffix="retry-mismatch-original")
+        replacement_row, _ = self._retry_control(
+            ordinal=22, suffix="retry-mismatch-replacement",
+            proposal_mutation=lambda value: value["target"]["shapes"].append("pp1024"))
+        evidence = P._load_completed_evidence(replacement_row)
+        with self.assertRaisesRegex(P.ReceiptProjectionError, "changes source/frame/factor"):
+            P._compile_control_retry_lineage(original, evidence)
+
+    def test_retry_lineage_refuses_tampered_receipt(self):
+        _, material = self._retry_control(
+            ordinal=22, suffix="retry-tamper-template")
+        original = self._preflight_source(material, suffix="retry-tamper-original")
+        replacement_row, _ = self._retry_control(
+            ordinal=23, suffix="retry-tamper-replacement")
+        evidence = P._load_completed_evidence(replacement_row)
+        receipt = P._compile_control_retry_lineage(original, evidence)
+        receipt["semantic_contract_sha256"] = "0" * 64
+        with self.assertRaisesRegex(P.ReceiptProjectionError, "stale or tampered"):
+            P._validate_control_retry_lineage(receipt, evidence)
+
+    def test_retry_lineage_refuses_compute_started_original(self):
+        _, material = self._retry_control(
+            ordinal=23, suffix="retry-compute-template")
+        original = self._preflight_source(
+            material, suffix="retry-compute-original", compute_started=True)
+        replacement_row, _ = self._retry_control(
+            ordinal=24, suffix="retry-compute-replacement")
+        evidence = P._load_completed_evidence(replacement_row)
+        with self.assertRaisesRegex(P.ReceiptProjectionError, "compute or claim-boundary"):
+            P._compile_control_retry_lineage(original, evidence)
+
+    def test_retry_lineage_refuses_claim_started_original(self):
+        _, material = self._retry_control(
+            ordinal=24, suffix="retry-claim-template")
+        original = self._preflight_source(
+            material, suffix="retry-claim-original", claim_started=True)
+        replacement_row, _ = self._retry_control(
+            ordinal=25, suffix="retry-claim-replacement")
+        evidence = P._load_completed_evidence(replacement_row)
+        with self.assertRaisesRegex(P.ReceiptProjectionError, "acquired a resource claim"):
+            P._compile_control_retry_lineage(original, evidence)
+
+    def test_retry_join_resolves_predeclared_original_to_completed_replacement(self):
+        lineage = {"original": {"proposal_id": "akp-control-original"}}
+        P._require_planned_control_join(
+            intervention_block={
+                "role": "intervention",
+                "matched_control_proposal_id": "akp-control-original"},
+            control_block={
+                "role": "control", "matched_control_proposal_id": None},
+            intervention_proposal_id="akp-intervention",
+            control_proposal_id="akp-control-replacement",
+            retry_lineage=lineage)
+        with self.assertRaisesRegex(P.ReceiptProjectionError, "planned control"):
+            P._require_planned_control_join(
+                intervention_block={
+                    "role": "intervention",
+                    "matched_control_proposal_id": "akp-unrelated"},
+                control_block={
+                    "role": "control", "matched_control_proposal_id": None},
+                intervention_proposal_id="akp-intervention",
+                control_proposal_id="akp-control-replacement",
+                retry_lineage=lineage)
 
     def test_missing_journaled_diagnostic_fails_closed(self):
         self.plan["rows"][1]["diagnostic_bindings"]["novelty"]["pointer"] += "-absent"
