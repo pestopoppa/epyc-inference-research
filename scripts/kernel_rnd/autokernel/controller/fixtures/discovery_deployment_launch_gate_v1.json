@@ -38,6 +38,14 @@
     {
       "id": "single-config-authority",
       "accept": "live launch derives state_root, evidence_root, operations_root, max_iterations, nomination_threshold, device, model cap, and lock from the sealed deployment; duplicate CLI values are absent or exact-compared and refused on any mismatch"
+    },
+    {
+      "id": "kernel-source-only-materialization",
+      "accept": "materializer rejects a SourcePatchManifest before mutation/build unless every changed path and declared symbol is in the explicit kernel-source allowlist; tools/llama-bench, benchmark/result parsers, CMake/toolchains, evaluators/profilers, tests, models, runtime configs, recipes, and measurement artifacts are forbidden"
+    },
+    {
+      "id": "reward-path-identity",
+      "accept": "anchor and candidate preserve identical benchmark executable, runner, parser, profiler, model, workload, runtime config, toolchain, and evaluation bytes; only the candidate kernel source/build identity and linked candidate kernel DSO may differ"
     }
   ]
 }
