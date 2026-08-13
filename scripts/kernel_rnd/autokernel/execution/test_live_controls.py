@@ -73,6 +73,19 @@ class InstrumentCapability(unittest.TestCase):
         self.assertEqual(check.outcome, "FAIL")
         self.assertIn("autokernel_device_sync_mode", check.reasons[0])
 
+    def test_resume_linkage_identity_ignores_only_aslr_addresses(self):
+        before = ("\tlibfoo.so => /sealed/libfoo.so (0x00007f000000)\n"
+                  "\t/lib64/ld-linux-x86-64.so.2 (0x00007f100000)\n")
+        after = ("\tlibfoo.so => /sealed/libfoo.so (0x00006a000000)\n"
+                 "\t/lib64/ld-linux-x86-64.so.2 (0x00006a100000)\n")
+        changed = after.replace("/sealed/libfoo.so", "/other/libfoo.so")
+        self.assertEqual(
+            live_controls._normalized_linkage(before),
+            live_controls._normalized_linkage(after))
+        self.assertNotEqual(
+            live_controls._normalized_linkage(before),
+            live_controls._normalized_linkage(changed))
+
 
 class CampaignIdentity(unittest.TestCase):
 
@@ -104,6 +117,14 @@ class CampaignIdentity(unittest.TestCase):
                 "--campaign-id", "ak-controls-v9-parser",
                 "--output", "/tmp/ak-controls-v9-parser",
                 "--execute", "--evaluate-existing",
+            ])
+
+    def test_parser_makes_resume_and_fresh_execution_exclusive(self):
+        with self.assertRaises(SystemExit):
+            live_controls.build_parser().parse_args([
+                "--campaign-id", "ak-controls-v9-parser",
+                "--output", "/tmp/ak-controls-v9-parser",
+                "--execute", "--resume-existing",
             ])
 
     def test_current_source_claim_names_v9_and_exact_commit(self):
@@ -170,13 +191,12 @@ class CalibrationFrame(unittest.TestCase):
             declaration = json.loads(
                 (root / "campaign_declaration.json").read_text(encoding="utf-8"))
         self.assertEqual(declaration["anchor_motion_window_blocks"], 15)
-        self.assertEqual(declaration["anchor_motion_settling"], {
-            "schema": "epyc.autokernel.anchor_motion_settling.v1",
-            "kind": "non_ranked_post_work_quiet",
-            "quiet_barrier_s": campaign.POST_T0_QUIET_BARRIER_S,
-            "required_samples": campaign.POST_T0_QUIET_SAMPLES,
-            "sample_interval_s": campaign.POST_T0_QUIET_SAMPLE_INTERVAL_S,
-        })
+        self.assertEqual(
+            declaration["anchor_motion_settling"],
+            live_controls.ANCHOR_MOTION_SETTLING)
+        self.assertEqual(
+            declaration["between_leg_policy"],
+            live_controls.BETWEEN_LEG_POLICY)
 
     def test_measurement_plan_carries_the_declared_baseline_frame(self):
         """The executor must not silently fall back to recipe defaults."""
@@ -300,6 +320,76 @@ class CalibrationFrame(unittest.TestCase):
             self.assertNotIn("prompt_tokens", declaration["calibration_frame"])
         finally:
             importlib.reload(live_controls)
+
+
+class BetweenLegPolicy(unittest.TestCase):
+
+    @staticmethod
+    def _attestation():
+        return live_controls.microbench.ClaimAttestation(
+            claim_id="akclaim-test", holder="test-holder",
+            cpu_list=live_controls.CPU_LIST,
+            observed_at="2026-08-13T00:00:00+00:00",
+            check=schemas.Check(schemas.PASS))
+
+    def test_high_ordinary_load_is_recorded_and_does_not_block(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            adapter = mock.Mock()
+            adapter.attest.return_value = self._attestation()
+            original_read_text = Path.read_text
+
+            def read_text(path, *args, **kwargs):
+                if str(path) == "/proc/loadavg":
+                    return "999.00 999.00 999.00 1/1 1\n"
+                return original_read_text(path, *args, **kwargs)
+
+            with mock.patch.object(
+                    live_controls.microbench, "CpuRegionClaimAdapter",
+                    return_value=adapter), \
+                 mock.patch.object(
+                    live_controls.screening_baseline, "competing_inference_witness",
+                    return_value={
+                        "basis": "interim_inference_executable_scan",
+                        "competing": False, "findings": [],
+                        "ordinary_processes_ignored": True,
+                    }), \
+                 mock.patch.object(Path, "read_text", autospec=True,
+                                   side_effect=read_text):
+                receipt = live_controls._observe_between_legs(
+                    root, boundary="aa_to_neutral", claim=object())
+            self.assertEqual(receipt["ordinary_load"]["load1"], 999.0)
+            self.assertEqual(
+                receipt["ordinary_load"]["disposition"],
+                "recorded_as_noise_not_a_gate")
+            self.assertFalse(receipt["inference_witness"]["competing"])
+
+    def test_competing_llama_is_recorded_and_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            adapter = mock.Mock()
+            adapter.attest.return_value = self._attestation()
+            with mock.patch.object(
+                    live_controls.microbench, "CpuRegionClaimAdapter",
+                    return_value=adapter), \
+                 mock.patch.object(
+                    live_controls.screening_baseline, "competing_inference_witness",
+                    return_value={
+                        "basis": "interim_inference_executable_scan",
+                        "competing": True,
+                        "findings": [{"argv0_basename": "llama-server"}],
+                        "ordinary_processes_ignored": True,
+                    }):
+                with self.assertRaisesRegex(RuntimeError, "competing model inference"):
+                    live_controls._observe_between_legs(
+                        root, boundary="aa_to_neutral", claim=object())
+            records = [json.loads(line) for line in (
+                root / "between_leg_observations.jsonl").read_text().splitlines()]
+            self.assertEqual(len(records), 1)
+            self.assertTrue(records[0]["inference_witness"]["competing"])
+            body = dict(records[0])
+            self.assertEqual(
+                body.pop("observation_sha256"), schemas.content_hash(body))
 
 
 class RecordedCompositionMaterial(unittest.TestCase):

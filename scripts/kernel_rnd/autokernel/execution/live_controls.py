@@ -22,7 +22,6 @@ import re
 import shutil
 import subprocess
 import tempfile
-import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -30,8 +29,9 @@ from typing import Any, Callable, Mapping, Sequence
 
 from .. import campaign, schemas
 from ..evaluator import api, controls, recipes, statistics
+from ..resource import device_claim
 from . import (control_runner, cpu_region_claim, microbench, physical_bounds,
-               powercap_broker, sandbox)
+               powercap_broker, sandbox, screening_baseline)
 
 # ``RECIPE_ID`` remains the process-local active cell for compatibility with
 # the recovery helpers below.  ``configure_recipe`` is called once by the CLI
@@ -63,17 +63,33 @@ NEUTRAL_BLOCKS = 60
 CALIBRATION_REPS = campaign.IQK_MATCHED_PAIR_REPS
 CALIBRATION_IQK = "0"
 # This is not a sixth ranked control. It is a fresh A/A trace over the exact
-# ranked T1 length, preceded by the same fixed post-work quiet boundary that a
-# campaign uses after T0. The trace licenses only campaigns of this length.
+# ranked T1 length. Ordinary host load is measured noise, never a reason to
+# sleep or refuse; only a read-only witnessed model-inference process blocks the
+# transition into a new leg. The trace licenses only campaigns of this length.
 ANCHOR_MOTION_WINDOW_BLOCKS = 15
 ANCHOR_MOTION_LABEL = "anchor_motion_calibration"
-ANCHOR_MOTION_SETTLING = {
+LEGACY_ANCHOR_MOTION_SETTLING = {
     "schema": "epyc.autokernel.anchor_motion_settling.v1",
     "kind": "non_ranked_post_work_quiet",
     "quiet_barrier_s": campaign.POST_T0_QUIET_BARRIER_S,
     "required_samples": campaign.POST_T0_QUIET_SAMPLES,
     "sample_interval_s": campaign.POST_T0_QUIET_SAMPLE_INTERVAL_S,
 }
+BETWEEN_LEG_POLICY = {
+    "schema": "epyc.autokernel.between_leg_policy.v1",
+    "ordinary_load": "recorded_as_measurement_noise_never_waited_or_refused",
+    "blocking_condition": "witnessed_competing_model_inference_only",
+    "inference_witness": "interim_inference_executable_scan",
+}
+ANCHOR_MOTION_SETTLING = {
+    "schema": "epyc.autokernel.anchor_motion_transition.v2",
+    "kind": "claim_held_inference_exclusion",
+    "required_samples": 1,
+    "ordinary_load_policy": BETWEEN_LEG_POLICY["ordinary_load"],
+    "inference_witness": BETWEEN_LEG_POLICY["inference_witness"],
+}
+RESUME_AMENDMENT_SCHEMA = "epyc.autokernel.live_control_resume_amendment.v1"
+RESUME_RECEIPT_SCHEMA = "epyc.autokernel.live_control_resume_receipt.v1"
 CONTROL_EXTENSION_ROUNDS = 1
 CONTROL_EXTENSION_BLOCKS = 5
 CONTRIBUTION_FLOOR = 0.03
@@ -361,6 +377,19 @@ def _linkage(binary: Path, library_path: Path) -> tuple[str, str]:
     return hashlib.sha256(text.encode("utf-8")).hexdigest(), text
 
 
+def _normalized_linkage(text: str) -> tuple[str, ...]:
+    """Return the stable DSO-resolution identity from ASLR-bearing ``ldd``.
+
+    The persisted raw output remains hash-bound. A later validation cannot
+    reproduce its virtual addresses, so equality across invocations must strip
+    only the terminal loader address while retaining every soname and path.
+    """
+    return tuple(
+        re.sub(r"\s+\(0x[0-9a-fA-F]+\)$", "", line.rstrip())
+        for line in text.splitlines()
+    )
+
+
 def _check_payload(check: schemas.Check) -> dict:
     return {"outcome": check.outcome, "reasons": list(check.reasons)}
 
@@ -433,6 +462,7 @@ def _write_declaration(output_root: Path, *, identity: LiveCampaignIdentity,
         "calibration_frame": _calibration_frame(),
         "anchor_motion_window_blocks": ANCHOR_MOTION_WINDOW_BLOCKS,
         "anchor_motion_settling": ANCHOR_MOTION_SETTLING,
+        "between_leg_policy": BETWEEN_LEG_POLICY,
         "contribution_floor": CONTRIBUTION_FLOOR,
         "max_candidates": 10,
         "max_blocks_per_candidate": 20,
@@ -678,10 +708,37 @@ def _write_preflight(output_root: Path, *, instrument_sha: str, copy_sha: str,
 def _write_host_receipt(output_root: Path, materials: Sequence[LiveMaterial],
                         claim_receipt: cpu_region_claim.RegionClaimReceipt,
                         identity: LiveCampaignIdentity) -> None:
+    observations = []
+    observation_path = output_root / "between_leg_observations.jsonl"
+    if observation_path.is_file():
+        for lineno, line in enumerate(
+                observation_path.read_text(encoding="utf-8").splitlines(), 1):
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError as exc:
+                raise ValueError(
+                    f"{observation_path}:{lineno}: malformed observation: {exc}") from exc
+            body = dict(record)
+            digest = body.pop("observation_sha256", None)
+            if digest != schemas.content_hash(body):
+                raise ValueError(
+                    f"{observation_path}:{lineno}: observation hash does not verify")
+            witness = record.get("inference_witness")
+            if record.get("claim_attestation", {}).get("outcome") != schemas.PASS \
+                    or not isinstance(witness, Mapping) or witness.get("competing") is not False:
+                raise ValueError(
+                    f"{observation_path}:{lineno}: boundary was not cleanly admitted")
+            observations.append(record)
+    resume_receipt = (None if not (output_root / "resume_receipt.json").is_file()
+                      else _load_json(output_root / "resume_receipt.json"))
     _write_json(output_root / "host.json", {
-        "schema": "epyc.autokernel.live_control_host_receipt.v1",
+        "schema": "epyc.autokernel.live_control_host_receipt.v2",
         "measured_at": _utc_now(),
         "claim_receipt": claim_receipt.to_dict(),
+        "between_leg_policy": BETWEEN_LEG_POLICY,
+        "between_leg_observations": observations,
+        "between_leg_observations_sha256": _sha256_file(observation_path),
+        "resume_receipt": resume_receipt,
         "legs": [{
             "label": material.label,
             "started_at": material.run.started_at,
@@ -843,25 +900,75 @@ def _declared_physical_envelopes() -> dict:
     }
 
 
-def _wait_for_quiet(*, ceiling_per_core: float = 0.25,
-                    timeout_s: float = 300.0) -> None:
-    """Let this process's prior leg age out of the one-minute load average.
+def _append_observation(output_root: Path, record: Mapping[str, Any]) -> None:
+    """Append and fsync one between-leg observation before proceeding."""
+    path = output_root / "between_leg_observations.jsonl"
+    payload = (schemas.canonical_json(record) + "\n").encode("utf-8")
+    descriptor = os.open(
+        path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, "O_CLOEXEC", 0),
+        0o644)
+    try:
+        if os.write(descriptor, payload) != len(payload):
+            raise OSError(f"short write while appending {path}")
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
 
-    The q0-q3 claim stays held throughout.  Starting the next independent run
-    immediately would make its run-open contention gate attribute the preceding
-    run's exponentially decaying load to a co-tenant.
+
+def _observe_between_legs(
+        output_root: Path, *, boundary: str, claim: object) -> dict[str, Any]:
+    """Record ordinary load and refuse only witnessed competing inference.
+
+    Load average is a lagging signal which includes this campaign's completed
+    leg. It is useful context for interpreting noisy exploratory measurements,
+    but never a wait/refusal input. Claim integrity and the read-only inference
+    identity scan remain hard gates.
     """
-    deadline = time.monotonic() + timeout_s
-    claimed_cores = len(cpu_region_claim.parse_cpu_list(CPU_LIST))
-    while True:
+    held = microbench.CpuRegionClaimAdapter(claim, cpu_list=CPU_LIST).attest()
+    load1 = None
+    load_error = None
+    try:
         load1 = float(Path("/proc/loadavg").read_text(encoding="utf-8").split()[0])
-        if load1 / claimed_cores <= ceiling_per_core:
-            return
-        if time.monotonic() >= deadline:
-            raise RuntimeError(
-                f"host did not return below {ceiling_per_core}/core inside "
-                f"{timeout_s}s (load1={load1:.2f})")
-        time.sleep(5.0)
+    except (OSError, ValueError, IndexError) as exc:
+        load_error = f"{type(exc).__name__}: {exc}"
+    witness_error = None
+    try:
+        witness = screening_baseline.competing_inference_witness()
+    except screening_baseline.BaselineBankError as exc:
+        witness = None
+        witness_error = str(exc)
+    body: dict[str, Any] = {
+        "schema": "epyc.autokernel.between_leg_observation.v1",
+        "campaign_boundary": boundary,
+        "observed_at": _utc_now(),
+        "policy": BETWEEN_LEG_POLICY,
+        "ordinary_load": {
+            "load1": load1, "read_error": load_error,
+            "disposition": "recorded_as_noise_not_a_gate",
+        },
+        "claim_attestation": {
+            "claim_id": held.claim_id, "holder": held.holder,
+            "cpu_list": held.cpu_list, "observed_at": held.observed_at,
+            "outcome": held.check.outcome,
+            "reasons": list(held.check.reasons),
+        },
+        "inference_witness": witness,
+        "inference_witness_error": witness_error,
+    }
+    record = {**body, "observation_sha256": schemas.content_hash(body)}
+    _append_observation(output_root, record)
+    if held.check.outcome != schemas.PASS:
+        raise RuntimeError(
+            f"between-leg boundary {boundary!r} lost its CPU claim: "
+            f"{'; '.join(held.check.reasons)}")
+    if witness is None:
+        raise RuntimeError(
+            f"between-leg boundary {boundary!r} could not witness inference identity: "
+            f"{witness_error}")
+    if witness["competing"]:
+        raise RuntimeError(
+            f"between-leg boundary {boundary!r} witnessed competing model inference")
+    return record
 
 
 def _measure(*, label: str, blocks: int, claim: object,
@@ -1217,46 +1324,22 @@ def _compose_measured_controls(
         measured_at=measured_at, output_root=output_root, identity=identity)
 
 
-def _settle_anchor_motion_window(
-        output_root: Path, *, identity: LiveCampaignIdentity, claim: object,
-        host_state: Callable[..., microbench.HostState]) -> dict:
-    """Reproduce the campaign's post-T0 quiet boundary before a non-ranked trace.
+def _attest_anchor_motion_transition(
+        output_root: Path, *, identity: LiveCampaignIdentity,
+        claim: object) -> dict:
+    """Witness the claim and absence of competing inference without waiting.
 
-    Calibration does not run a candidate T0, so it must not pretend it has a
-    T0 teardown receipt.  What matters for anchor-motion comparability is the
-    fixed decay and independently claim-witnessed quiet samples immediately
-    before T1; this small, non-ranked stage records precisely those facts.
+    The immediately preceding neutral leg is expected to remain visible in
+    loadavg. That value is recorded by ``_observe_between_legs`` but cannot
+    block or delay this non-ranked anchor trace.
     """
-    time.sleep(float(ANCHOR_MOTION_SETTLING["quiet_barrier_s"]))
-    policy = microbench.HostStatePolicy(
-        nominal_khz=NOMINAL_KHZ, require_package_power=True)
-    held = microbench.CpuRegionClaimAdapter(claim, cpu_list=CPU_LIST)
-    samples = []
-    for index in range(int(ANCHOR_MOTION_SETTLING["required_samples"])):
-        attestation = held.attest()
-        if not attestation.held:
-            raise RuntimeError(
-                f"anchor-motion settling sample {index + 1} has no held claim witness")
-        state = host_state(cpu_list=CPU_LIST)
-        load = policy.check_load(state, cpu_count=len(state.khz_by_cpu) or 1)
-        samples.append({
-            "index": index + 1, "host_state": state.to_dict(),
-            "claim_attestation": {
-                "claim_id": attestation.claim_id, "holder": attestation.holder,
-                "cpu_list": attestation.cpu_list, "observed_at": attestation.observed_at,
-                "outcome": attestation.check.outcome,
-                "reasons": list(attestation.check.reasons),
-            },
-            "load": {"outcome": load.outcome, "reasons": list(load.reasons)},
-        })
-        if load.outcome != schemas.PASS:
-            raise RuntimeError(
-                f"anchor-motion settling sample {index + 1} is not quiet: "
-                f"{'; '.join(load.reasons)}")
-        if index + 1 < int(ANCHOR_MOTION_SETTLING["required_samples"]):
-            time.sleep(float(ANCHOR_MOTION_SETTLING["sample_interval_s"]))
+    samples = [
+        _observe_between_legs(
+            output_root, boundary="neutral_to_anchor_motion", claim=claim)
+        for _index in range(int(ANCHOR_MOTION_SETTLING["required_samples"]))
+    ]
     receipt = {
-        "schema": "epyc.autokernel.anchor_motion_settling_receipt.v1",
+        "schema": "epyc.autokernel.anchor_motion_transition_receipt.v2",
         "campaign_id": identity.campaign_id, "settling": ANCHOR_MOTION_SETTLING,
         "samples": samples, "completed_at": _utc_now(),
     }
@@ -1289,37 +1372,233 @@ def _anchor_motion_authority(
     }
 
 
-def execute(output_root: Path, *, campaign_id: str,
+def _resume_amendment(
+        output_root: Path, *, identity: LiveCampaignIdentity,
+        declaration: Mapping[str, Any]) -> dict[str, Any] | None:
+    """Bind the pre-policy r2 declaration to the operator's new transition rule.
+
+    The original declaration is immutable. A narrow, self-hashed amendment may
+    replace only the obsolete load-wait settling field and add the inference-
+    identity policy. Fresh declarations already carry the current fields and
+    need no amendment.
+    """
+    original = declaration.get("anchor_motion_settling")
+    if original == ANCHOR_MOTION_SETTLING \
+            and declaration.get("between_leg_policy") == BETWEEN_LEG_POLICY:
+        return None
+    if original != LEGACY_ANCHOR_MOTION_SETTLING \
+            or declaration.get("between_leg_policy") is not None:
+        raise ValueError(
+            "resume refuses a declaration outside the one legacy load-wait policy")
+    body = {
+        "schema": RESUME_AMENDMENT_SCHEMA,
+        "campaign_id": identity.campaign_id,
+        "original_declaration_sha256": schemas.content_hash(declaration),
+        "replaced_field": "anchor_motion_settling",
+        "original_value": LEGACY_ANCHOR_MOTION_SETTLING,
+        "replacement_value": ANCHOR_MOTION_SETTLING,
+        "added_between_leg_policy": BETWEEN_LEG_POLICY,
+        "authority": "operator_policy_20260813_ordinary_load_is_measurement_noise",
+    }
+    amendment = {**body, "amendment_sha256": schemas.content_hash(body)}
+    path = output_root / "resume_amendment.json"
+    if path.exists():
+        if _load_json(path) != amendment:
+            raise ValueError("existing resume amendment differs from the exact policy bridge")
+    return amendment
+
+
+def _validate_resume_existing(
+        output_root: Path, *, identity: LiveCampaignIdentity,
+) -> dict[str, Any]:
+    """Admit exactly one completed AA leg from a dead, interrupted claimant."""
+    if not output_root.is_dir() or output_root.is_symlink():
+        raise ValueError("--resume-existing requires an existing non-symlink directory")
+    forbidden = (
+        "summary.json", "control_sweep.json", "calibration.json", "host.json",
+        "claim_receipt.json", "resume_receipt.json")
+    present = [name for name in forbidden if (output_root / name).exists()]
+    if present:
+        raise ValueError(f"resume refuses material beyond the AA-only boundary: {present}")
+    raw_files = sorted(path.name for path in (output_root / "raw").glob("*.json"))
+    if raw_files != ["aa_calibration.json"]:
+        raise ValueError(
+            f"resume requires exactly raw/aa_calibration.json; found {raw_files}")
+
+    declaration = _load_json(output_root / "campaign_declaration.json")
+    checks = {
+        "schema": declaration.get("schema")
+                  == "epyc.autokernel.live_control_campaign_declaration.v1",
+        "campaign_id": declaration.get("campaign_id") == identity.campaign_id,
+        "campaign_seed": declaration.get("campaign_seed_sha256") == hashlib.sha256(
+            identity.campaign_seed.encode("utf-8")).hexdigest(),
+        "window_id": declaration.get("window_id") == identity.window_id,
+        "recipe_id": declaration.get("recipe_id") == RECIPE_ID,
+        "cpu_list": declaration.get("cpu_list") == CPU_LIST,
+        "model": declaration.get("model") == str(MODEL),
+        "model_sha256": declaration.get("model_sha256") == _sha256_file(MODEL),
+        "token_fields": all(
+            declaration.get(key) == value for key, value in _token_fields().items()),
+        "calibration_blocks": declaration.get("calibration_blocks")
+                              == CALIBRATION_BLOCKS,
+        "neutral_blocks": declaration.get("neutral_blocks") == NEUTRAL_BLOCKS,
+        "calibration_frame": declaration.get("calibration_frame")
+                             == _calibration_frame(),
+        "physical_envelopes": declaration.get("physical_envelopes") == {
+            label: envelope.to_dict()
+            for label, envelope in sorted(_declared_physical_envelopes().items())},
+    }
+    failed = sorted(name for name, passed in checks.items() if not passed)
+    if failed:
+        raise ValueError(f"resume declaration checks failed: {failed}")
+    amendment = _resume_amendment(
+        output_root, identity=identity, declaration=declaration)
+
+    runtime = _load_json(output_root / "runtime-source-label.json")
+    runtime_body = {key: value for key, value in runtime.items()
+                    if key != "source_sha256"}
+    source_sha = runtime.get("source_sha256")
+    if source_sha != schemas.content_hash(runtime_body) \
+            or declaration.get("source_sha256") != source_sha:
+        raise ValueError("resume runtime source label does not verify")
+    if runtime.get("production_source_commit") != PRODUCTION_COMMIT \
+            or runtime.get("measurement_instrument_commit") != INSTRUMENT_COMMIT \
+            or runtime.get("binary_copy_exact") is not True:
+        raise ValueError("resume runtime identities differ from the live instrument")
+    copied_binary = output_root / "anchor_binary_copy" / "llama-bench"
+    if _sha256_file(copied_binary) != runtime.get("copied_binary_sha256") \
+            or _sha256_file(INSTRUMENT_BINARY) != runtime.get("measurement_binary_sha256"):
+        raise ValueError("resume measurement or copied binary hash differs")
+    copy_linkage, copy_text = _linkage(copied_binary, copied_binary.parent)
+    instrument_linkage, instrument_text = _linkage(
+        INSTRUMENT_BINARY, INSTRUMENT_BINARY.parent)
+    recorded_copy_text = (output_root / "linkage.copy.txt").read_text(encoding="utf-8")
+    recorded_instrument_text = (output_root / "linkage.instrument.txt").read_text(
+        encoding="utf-8")
+    if _sha256_file(output_root / "linkage.copy.txt") \
+            != runtime.get("copied_linkage_sha256") \
+            or _sha256_file(output_root / "linkage.instrument.txt") \
+            != runtime.get("measurement_linkage_sha256") \
+            or _normalized_linkage(copy_text) != _normalized_linkage(recorded_copy_text) \
+            or _normalized_linkage(instrument_text) \
+            != _normalized_linkage(recorded_instrument_text):
+        raise ValueError("resume linkage evidence differs from the recorded runtime")
+    if _build_toolchain_manifest(output_root) \
+            != runtime.get("measurement_toolchain_manifest_sha256"):
+        raise ValueError("resume toolchain identity differs from the recorded runtime")
+    preflight = _load_json(output_root / "preflight.json")
+    preflight_checks = preflight.get("checks")
+    if not isinstance(preflight_checks, Mapping) or not preflight_checks \
+            or any(not isinstance(check, Mapping)
+                   or check.get("outcome") != schemas.PASS
+                   for check in preflight_checks.values()):
+        raise ValueError("resume preflight is absent or not all-PASS")
+
+    journal = cpu_region_claim.RegionClaimJournal(output_root / "region_claim.jsonl")
+    records = journal.read_all()
+    acquired = [record for record in records if record.get("kind") == "claim_acquired"]
+    if len(acquired) != 1 or any(record.get("kind") == "claim_released"
+                                 for record in records):
+        raise ValueError("resume requires one interrupted acquisition and no release")
+    previous_payload = acquired[0].get("detail", {}).get("receipt")
+    previous = cpu_region_claim.RegionClaimReceipt.from_dict(previous_payload)
+    if previous.campaign_id != identity.campaign_id or previous.cpu_list != CPU_LIST:
+        raise ValueError("resume previous claim belongs to another campaign or footprint")
+    liveness = device_claim.assess_holder_liveness({
+        "pid": previous.holder_pid, "start_ticks": previous.holder_start_ticks,
+        "boot_id": previous.holder_boot_id, "host": previous.host,
+    })
+    if liveness.state != device_claim.DEAD:
+        raise ValueError(
+            f"resume previous claimant is not provably dead: {liveness.state}: "
+            f"{liveness.reason}")
+
+    aa, aa_raw = _load_recorded_material(
+        output_root, identity=identity, label="aa_calibration",
+        expected_blocks=CALIBRATION_BLOCKS, prompt=PROMPT_TOKENS,
+        candidate_iqk=CALIBRATION_IQK, anchor_iqk=CALIBRATION_IQK)
+    attestations = aa_raw.get("claim_attestations")
+    if not isinstance(attestations, list) or not attestations \
+            or any(not isinstance(row, Mapping)
+                   or row.get("claim_id") != previous.claim_id
+                   or row.get("cpu_list") != CPU_LIST
+                   or row.get("outcome") != schemas.PASS
+                   for row in attestations):
+        raise ValueError("resume AA raw vector is not fully bound to the dead held claim")
+    expected_binding = runtime.get("aa_sealed_binding")
+    arm_receipts = (aa_raw.get("candidate_receipt"), aa_raw.get("anchor_receipt"))
+    if not isinstance(expected_binding, Mapping) \
+            or any(not isinstance(receipt, Mapping) for receipt in arm_receipts) \
+            or any({key: receipt.get(key) for key in ("binary_path", "library_path")}
+                   != expected_binding for receipt in arm_receipts):
+        raise ValueError("resume AA arms do not use the sealed A/A binding")
+    candidate_binding = recipes.ToolBinding(
+        binary=str(copied_binary), source_root=str(output_root),
+        library_path=str(copied_binary.parent))
+    # Validation above is intentionally read-only. Persist the narrow policy
+    # bridge only after every immutable input, completed AA receipt and dead
+    # claimant check succeeds.
+    if amendment is not None and not (output_root / "resume_amendment.json").exists():
+        _write_json(output_root / "resume_amendment.json", amendment)
+    return {
+        "declaration": declaration, "amendment": amendment,
+        "runtime": runtime, "source_sha": source_sha,
+        "instrument_sha": runtime["measurement_binary_sha256"],
+        "copy_sha": runtime["copied_binary_sha256"],
+        "instrument_linkage": instrument_linkage,
+        "copy_linkage": copy_linkage,
+        "candidate_binding": candidate_binding,
+        "anchor_binding": recipes.ToolBinding(
+            binary=str(INSTRUMENT_BINARY), source_root=str(INSTRUMENT_ROOT),
+            library_path=str(INSTRUMENT_BINARY.parent)),
+        "aa": aa, "aa_raw_sha256": _sha256_file(
+            output_root / "raw" / "aa_calibration.json"),
+        "previous_claim": previous, "previous_liveness": liveness,
+    }
+
+
+def execute(output_root: Path, *, campaign_id: str, resume_existing: bool = False,
             host_state: Callable[..., microbench.HostState] =
             microbench.read_host_state) -> dict:
     output_root = output_root.resolve()
     identity = LiveCampaignIdentity(
         campaign_id=campaign_id, evidence_ref=str(output_root))
-    output_root.mkdir(parents=True, exist_ok=False)
-    _ensure_instrument_build()
-    if _sha256_file(INSTRUMENT_BINARY) == "":  # pragma: no cover - explicit read gate
-        raise RuntimeError("unreadable hardened measurement binary")
-    candidate_binding = _copy_anchor_bundle(output_root)
-    anchor_binding = recipes.ToolBinding(
-        binary=str(INSTRUMENT_BINARY), source_root=str(INSTRUMENT_ROOT),
-        library_path=str(INSTRUMENT_BINARY.parent))
-    instrument_linkage, instrument_ldd = _linkage(
-        INSTRUMENT_BINARY, INSTRUMENT_BINARY.parent)
-    copy_linkage, copy_ldd = _linkage(
-        Path(candidate_binding.binary), Path(candidate_binding.library_path))
-    (output_root / "linkage.instrument.txt").write_text(
-        instrument_ldd, encoding="utf-8")
-    (output_root / "linkage.copy.txt").write_text(copy_ldd, encoding="utf-8")
-    instrument_sha = _sha256_file(INSTRUMENT_BINARY)
-    copy_sha = _sha256_file(Path(candidate_binding.binary))
-    source_sha = _write_declaration(
-        output_root, identity=identity,
-        instrument_sha=instrument_sha, copy_sha=copy_sha,
-        instrument_linkage=instrument_linkage, copy_linkage=copy_linkage,
-        toolchain_manifest_sha256=_build_toolchain_manifest(output_root),
-        sealed_binding=candidate_binding)
-    _write_preflight(output_root, instrument_sha=instrument_sha, copy_sha=copy_sha,
-                     host_state=host_state)
+    resume = (_validate_resume_existing(output_root, identity=identity)
+              if resume_existing else None)
+    if resume is None:
+        output_root.mkdir(parents=True, exist_ok=False)
+        _ensure_instrument_build()
+        if _sha256_file(INSTRUMENT_BINARY) == "":  # pragma: no cover - explicit read gate
+            raise RuntimeError("unreadable hardened measurement binary")
+        candidate_binding = _copy_anchor_bundle(output_root)
+        anchor_binding = recipes.ToolBinding(
+            binary=str(INSTRUMENT_BINARY), source_root=str(INSTRUMENT_ROOT),
+            library_path=str(INSTRUMENT_BINARY.parent))
+        instrument_linkage, instrument_ldd = _linkage(
+            INSTRUMENT_BINARY, INSTRUMENT_BINARY.parent)
+        copy_linkage, copy_ldd = _linkage(
+            Path(candidate_binding.binary), Path(candidate_binding.library_path))
+        (output_root / "linkage.instrument.txt").write_text(
+            instrument_ldd, encoding="utf-8")
+        (output_root / "linkage.copy.txt").write_text(copy_ldd, encoding="utf-8")
+        instrument_sha = _sha256_file(INSTRUMENT_BINARY)
+        copy_sha = _sha256_file(Path(candidate_binding.binary))
+        source_sha = _write_declaration(
+            output_root, identity=identity,
+            instrument_sha=instrument_sha, copy_sha=copy_sha,
+            instrument_linkage=instrument_linkage, copy_linkage=copy_linkage,
+            toolchain_manifest_sha256=_build_toolchain_manifest(output_root),
+            sealed_binding=candidate_binding)
+        _write_preflight(output_root, instrument_sha=instrument_sha, copy_sha=copy_sha,
+                         host_state=host_state)
+    else:
+        candidate_binding = resume["candidate_binding"]
+        anchor_binding = resume["anchor_binding"]
+        instrument_linkage = resume["instrument_linkage"]
+        copy_linkage = resume["copy_linkage"]
+        instrument_sha = resume["instrument_sha"]
+        copy_sha = resume["copy_sha"]
+        source_sha = resume["source_sha"]
     anchor = api.AnchorIdentity(
         source_commit=INSTRUMENT_COMMIT, binary_sha256=instrument_sha,
         linkage_sha256=instrument_linkage, tool="llama-bench")
@@ -1330,15 +1609,46 @@ def execute(output_root: Path, *, campaign_id: str,
             CPU_LIST, purpose="AutoKernel five-control calibration block",
             campaign_id=identity.campaign_id, journal=journal, timeout_s=60.0,
             max_hold_s=2 * 3600) as claim:
-        aa = _measure(
-            label="aa_calibration", blocks=CALIBRATION_BLOCKS, claim=claim,
-            candidate_binding=candidate_binding, anchor_binding=anchor_binding,
-            anchor=anchor, candidate_iqk=CONTROL_ARM_IQK["aa_calibration"][0],
-            anchor_iqk=CONTROL_ARM_IQK["aa_calibration"][1],
-            output_root=output_root, host_state=host_state,
-            identity=identity)
+        if resume is None:
+            aa = _measure(
+                label="aa_calibration", blocks=CALIBRATION_BLOCKS, claim=claim,
+                candidate_binding=candidate_binding, anchor_binding=anchor_binding,
+                anchor=anchor, candidate_iqk=CONTROL_ARM_IQK["aa_calibration"][0],
+                anchor_iqk=CONTROL_ARM_IQK["aa_calibration"][1],
+                output_root=output_root, host_state=host_state,
+                identity=identity)
+            boundary = "aa_to_neutral"
+        else:
+            aa = resume["aa"]
+            new_claim = claim.receipt().to_dict()
+            body = {
+                "schema": RESUME_RECEIPT_SCHEMA,
+                "campaign_id": identity.campaign_id,
+                "resumed_at": _utc_now(),
+                "resume_point": "after_completed_aa_before_neutral",
+                "aa_raw_sha256": resume["aa_raw_sha256"],
+                "previous_claim": resume["previous_claim"].to_dict(),
+                "previous_claim_liveness": {
+                    "state": resume["previous_liveness"].state,
+                    "reason": resume["previous_liveness"].reason,
+                },
+                "new_claim": new_claim,
+                "declaration_sha256": schemas.content_hash(resume["declaration"]),
+                "runtime_source_sha256": resume["source_sha"],
+                "toolchain_manifest_sha256": resume["runtime"][
+                    "measurement_toolchain_manifest_sha256"],
+                "policy_amendment_sha256": (
+                    None if resume["amendment"] is None else
+                    resume["amendment"]["amendment_sha256"]),
+                "inference_executed_by_resume_validation": False,
+            }
+            resume_receipt = {**body, "receipt_sha256": schemas.content_hash(body)}
+            journal.append("campaign_resumed", claim.plan.scope_id, {
+                "resume_receipt": resume_receipt})
+            _write_json(output_root / "resume_receipt.json", resume_receipt)
+            boundary = "resume_after_aa_to_neutral"
         materials.append(aa)
-        _wait_for_quiet()
+        _observe_between_legs(output_root, boundary=boundary, claim=claim)
         neutral = _measure(
             label="neutral_calibration", blocks=NEUTRAL_BLOCKS, claim=claim,
             candidate_binding=candidate_binding, anchor_binding=anchor_binding,
@@ -1358,8 +1668,8 @@ def execute(output_root: Path, *, campaign_id: str,
                     f"accepted B_min={n} exceeds the predeclared anchor-motion window "
                     f"of {ANCHOR_MOTION_WINDOW_BLOCKS}; this calibration cannot license "
                     "the ranked campaign length")
-            settling_receipt = _settle_anchor_motion_window(
-                output_root, identity=identity, claim=claim, host_state=host_state)
+            settling_receipt = _attest_anchor_motion_transition(
+                output_root, identity=identity, claim=claim)
             anchor_motion_material = _measure(
                 label=ANCHOR_MOTION_LABEL, blocks=ANCHOR_MOTION_WINDOW_BLOCKS,
                 claim=claim, candidate_binding=candidate_binding,
@@ -1372,7 +1682,8 @@ def execute(output_root: Path, *, campaign_id: str,
                 output_root, material=anchor_motion_material,
                 settling_receipt=settling_receipt)
             control_blocks = rule.max_total_blocks(n)
-            _wait_for_quiet()
+            _observe_between_legs(
+                output_root, boundary="anchor_motion_to_positive", claim=claim)
             positive = _measure(
                 label="positive", blocks=control_blocks, claim=claim,
                 candidate_binding=candidate_binding, anchor_binding=anchor_binding,
@@ -1380,7 +1691,8 @@ def execute(output_root: Path, *, campaign_id: str,
                 anchor_iqk=CONTROL_ARM_IQK["positive"][1],
                 output_root=output_root, host_state=host_state, identity=identity)
             materials.append(positive)
-            _wait_for_quiet()
+            _observe_between_legs(
+                output_root, boundary="positive_to_historical", claim=claim)
             historical = _measure(
                 label="historical_win_replay", blocks=control_blocks, claim=claim,
                 candidate_binding=candidate_binding, anchor_binding=anchor_binding,
@@ -1388,7 +1700,8 @@ def execute(output_root: Path, *, campaign_id: str,
                 anchor_iqk=CONTROL_ARM_IQK["historical_win_replay"][1],
                 output_root=output_root, host_state=host_state, identity=identity)
             materials.append(historical)
-            _wait_for_quiet()
+            _observe_between_legs(
+                output_root, boundary="historical_to_negative_committed", claim=claim)
             negative_anchor = _measure(
                 label="negative_committed_cell", blocks=control_blocks, claim=claim,
                 candidate_binding=candidate_binding, anchor_binding=anchor_binding,
@@ -1398,7 +1711,8 @@ def execute(output_root: Path, *, campaign_id: str,
                 output_root=output_root,
                 host_state=host_state, identity=identity)
             materials.append(negative_anchor)
-            _wait_for_quiet()
+            _observe_between_legs(
+                output_root, boundary="negative_committed_to_negative_wrong", claim=claim)
             negative_wrong = _measure(
                 label="negative_wrong_cell", blocks=control_blocks, claim=claim,
                 candidate_binding=candidate_binding, anchor_binding=anchor_binding,
@@ -1688,6 +2002,9 @@ def build_parser() -> argparse.ArgumentParser:
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--execute", action="store_true")
     mode.add_argument(
+        "--resume-existing", action="store_true",
+        help="strictly resume one completed AA leg from a provably dead claimant")
+    mode.add_argument(
         "--evaluate-existing", action="store_true",
         help="compose already-completed receipt-bound raw vectors; runs no inference")
     parser.add_argument("--i-hold-the-host", action="store_true")
@@ -1708,13 +2025,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         "neutral_blocks": NEUTRAL_BLOCKS,
         "contribution_floor": CONTRIBUTION_FLOOR,
         "output": str(args.output), "execute": args.execute,
+        "resume_existing": args.resume_existing,
         "evaluate_existing": args.evaluate_existing,
     }
-    if not args.execute and not args.evaluate_existing:
+    if not args.execute and not args.resume_existing and not args.evaluate_existing:
         print(json.dumps(plan, indent=2, sort_keys=True))
         return 0
-    if args.execute and not args.i_hold_the_host:
-        raise SystemExit("--execute requires --i-hold-the-host")
+    if (args.execute or args.resume_existing) and not args.i_hold_the_host:
+        raise SystemExit("--execute/--resume-existing requires --i-hold-the-host")
     if args.evaluate_existing:
         summary = evaluate_existing(
             args.output.resolve(), campaign_id=args.campaign_id)
@@ -1722,6 +2040,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         with powercap_broker.PowercapBroker() as broker:
             summary = execute(
                 args.output.resolve(), campaign_id=args.campaign_id,
+                resume_existing=args.resume_existing,
                 host_state=broker.read_host_state)
     print(json.dumps({
         "campaign_id": summary["campaign_id"],
