@@ -9,6 +9,7 @@ import os
 import subprocess
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from statistics import median
 
@@ -19,6 +20,7 @@ if str(REPO_ROOT) not in sys.path:
 from scripts.kernel_rnd.autokernel import schemas, storage
 from scripts.kernel_rnd.autokernel.execution import cpu_region_claim, device_sampler
 from scripts.kernel_rnd.autokernel.resource import device_claim
+from scripts.benchmark import autokernel_gpu_discovery_beliefs as gpu_beliefs
 
 
 SCHEMA_BANK = "epyc.autokernel.gpu_screening_baseline.v2"
@@ -28,6 +30,10 @@ CPU_LIST = "184-191"
 DEVICE_ID = "mi210_0"
 VRAM_USED = Path("/sys/class/drm/card2/device/mem_info_vram_used")
 KFD_PROCS = Path("/sys/class/kfd/kfd/proc")
+
+
+def utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def sha256_file(path: Path) -> str:
@@ -215,6 +221,7 @@ def preflight(args: argparse.Namespace) -> dict:
 
 def run(args: argparse.Namespace) -> dict:
     sealed = preflight(args)
+    started_at = utc_now()
     out = Path(storage.assert_not_scratch(args.output_dir, what="GPU discovery output"))
     out.mkdir(parents=True, exist_ok=False)
     atomic_json(out / "preflight.json", sealed)
@@ -247,6 +254,7 @@ def run(args: argparse.Namespace) -> dict:
             flash_attention=sealed["anchor_flash_attention"]) for i in range(3)]
         bank_body = {
             "schema": SCHEMA_BANK, "campaign_id": args.campaign_id,
+            "status": "complete", "started_at": started_at, "ended_at": utc_now(),
             "authority": "nonpromotable_candidate_only_discovery",
             "frame": {"backend": "llama_gpu", "recipe": "pp512-ngl99",
                       "metric": "prefill_tokens_per_s", "metric_direction": "higher_better",
@@ -259,7 +267,8 @@ def run(args: argparse.Namespace) -> dict:
             "anchor_samples": [run["metric"] for run in anchor_runs],
             "anchor_runs": anchor_runs,
         }
-        bank = {**bank_body, "baseline_sha256": schemas.content_hash(bank_body)}
+        bank = gpu_beliefs.attach_baseline_beliefs(
+            bank_body, producer_path=Path(__file__).resolve())
         atomic_json(out / "baseline-bank.json", bank)
         candidate_runs = [invoke(
             build=candidate_build, model=model, seed=args.seed + 3 + i,
@@ -272,6 +281,8 @@ def run(args: argparse.Namespace) -> dict:
         sampler = None
         result_body = {
             "schema": SCHEMA_RESULT, "campaign_id": args.campaign_id,
+            "status": "complete", "started_at": started_at, "ended_at": utc_now(),
+            "authority": "nonpromotable_candidate_only_discovery",
             "state": "decided", "ok": True, "non_promotable": True,
             "nomination": "top_k_candidate_only_not_a_keep",
             "baseline_sha256": bank["baseline_sha256"],
@@ -279,14 +290,16 @@ def run(args: argparse.Namespace) -> dict:
             "baseline_center": center, "candidate_samples": values,
             "relative_effects": effects, "median_relative": median(effects),
             "host_noise_policy": "ordinary_host_activity_recorded_not_blocking",
-            "sole_factor": bank["sole_factor"],
+            "frame": bank["frame"], "sole_factor": bank["sole_factor"],
+            "candidate_identity": bank["candidate_identity"],
             "candidate_runs": candidate_runs, "device_sampling": numeric,
             "hip_residency_proved": all(run["hip_residency_proved"]
                                          for run in anchor_runs + candidate_runs),
             "cpu_claim_open": cpu.receipt().to_dict(),
             "device_claim_open": gpu.receipt().to_dict(),
         }
-        result = {**result_body, "result_sha256": schemas.content_hash(result_body)}
+        result = gpu_beliefs.attach_result_beliefs(
+            result_body, bank=bank, producer_path=Path(__file__).resolve())
         atomic_json(out / "result.json", result)
         return result
     finally:
