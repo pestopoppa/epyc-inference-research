@@ -529,6 +529,11 @@ class TestTheDryRunComposesEndToEnd(unittest.TestCase):
         self.assertEqual(payload["anchor"]["expected_commit"], campaign.PRODUCTION_COMMIT)
         self.assertEqual(payload["measurement_instrument"]["expected_commit"],
                          campaign.MEASUREMENT_COMMIT)
+        self.assertEqual(campaign.MEASUREMENT_REPO,
+                         "/mnt/raid0/llm/autokernel/worktrees/ak-iq3-mmid-guard-r2-20260813")
+        self.assertEqual(campaign.MEASUREMENT_BUILD_ROOT,
+                         campaign.MEASUREMENT_REPO +
+                         "/build-ak-iq3-mmid-guard-r2-894ec4dc")
         self.assertNotEqual(payload["anchor"]["repo"],
                             payload["measurement_instrument"]["repo"])
         from .execution import live_controls
@@ -536,7 +541,7 @@ class TestTheDryRunComposesEndToEnd(unittest.TestCase):
         self.assertEqual(live_controls.INSTRUMENT_BRANCH, campaign.MEASUREMENT_BRANCH)
         self.assertEqual(live_controls.INSTRUMENT_COMMIT, campaign.MEASUREMENT_COMMIT)
         self.assertEqual(campaign.MEASUREMENT_COMMIT,
-                         "f744cc220e722d1bda93783959471d44f8e118b0")
+                         "894ec4dc55c829b11b663a46bc9b089d861b73a4")
 
     def test_the_ledger_released_everything(self):
         result, _ops, _text = self.compose()
@@ -1444,6 +1449,14 @@ class TestTheAcceptedCalibrationBindsTheLiveRule(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "stale|absent"):
             campaign.load_calibration_bundle(
                 repo / campaign.HISTORICAL_CALIBRATION_EVIDENCE_REF)
+
+    def test_r4_f744_decode_authority_is_rejected_after_iq3_instrument_bump(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = write_calibration_bundle(
+                Path(tmp) / "ak-controls-v9-f744cc220-decode-20260813-r4",
+                measurement_commit="f744cc220e722d1bda93783959471d44f8e118b0")
+            with self.assertRaisesRegex(ValueError, "measurement instrument is stale"):
+                campaign.load_calibration_bundle(bundle)
 
     def test_a_current_bundle_supplies_the_cli_recipe_floor_and_b_min(self):
         with tempfile.TemporaryDirectory() as tmp:

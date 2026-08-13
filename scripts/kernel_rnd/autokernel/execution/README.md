@@ -136,8 +136,13 @@ Something else moved production and every anchor you are about to take is wrong.
 The reward instrument is a separate reviewed source anchor:
 
 ```
-/mnt/raid0/llm/autokernel/worktrees/ak-final-q6k-20260813  f744cc220e722d1bda93783959471d44f8e118b0  experimental-v9-autokernel-t0-final-q6k-20260813
+/mnt/raid0/llm/autokernel/worktrees/ak-iq3-mmid-guard-r2-20260813  894ec4dc55c829b11b663a46bc9b089d861b73a4  experimental-v9-autokernel-iq3-mmid-guard-r2-20260813
 ```
+
+This is an instrument-era boundary. The accepted decode r4 bundle is bound to
+the superseded `f744cc220e722d1bda93783959471d44f8e118b0` instrument and cannot
+authorize ranking under `894ec4dc55c829b11b663a46bc9b089d861b73a4`; start a fresh
+decode r5 calibration and do not resume or import r4 blocks.
 
 That commit descends from the production v9 commit above. It is an
 experimental measurement instrument; serving remains frozen. The live preflight
@@ -273,9 +278,9 @@ Everything from here to Step 8 happens **inside** this claim.
 ```python
 from autokernel.execution import worktree as WT
 
-repo = WT.GitRepo("/mnt/raid0/llm/autokernel/worktrees/ak-final-q6k-20260813") # READ-ONLY by construction
-anchor = WT.resolve_anchor(repo, "experimental-v9-autokernel-t0-final-q6k-20260813",
-                           expected_commit="f744cc220e722d1bda93783959471d44f8e118b0")
+repo = WT.GitRepo("/mnt/raid0/llm/autokernel/worktrees/ak-iq3-mmid-guard-r2-20260813") # READ-ONLY by construction
+anchor = WT.resolve_anchor(repo, "experimental-v9-autokernel-iq3-mmid-guard-r2-20260813",
+                           expected_commit="894ec4dc55c829b11b663a46bc9b089d861b73a4")
 wt, proof = WT.create_campaign_worktree(anchor, "ak-0001")   # /mnt/raid0/llm/llama.cpp-ak-0001
 assert proof.holds, proof.differences
 ```
