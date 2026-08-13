@@ -19,7 +19,8 @@ from . import discovery_controller as C
 from . import discovery_deployment as D
 from . import discovery_deployment_factory as F
 from . import gpu_source_evidence as E
-from .test_gpu_source_evidence import plan
+from .test_discovery_controller_blackbox import Critic, Manifest, Planner
+from .test_gpu_source_evidence import ClaimFactory, FakeExecutors, plan, write_bound
 
 
 class OfflineLaunchGate(unittest.TestCase):
@@ -51,6 +52,8 @@ class OfflineLaunchGate(unittest.TestCase):
             (root / "production").mkdir()
             config = self._config(root)
             evidence_plan = plan(root / "inputs")
+            protected = write_bound(root / "production", "frozen-hip.so",
+                                    b"frozen hip", "hip_library")
             registry = {
                 "environment_profile": {"sealed-codex": F.EnvironmentProfile({"PATH": "/usr/bin"})},
                 "source_builder": {"source": F.SourceBuilderBinding(mock.Mock())},
@@ -59,7 +62,7 @@ class OfflineLaunchGate(unittest.TestCase):
                 "dispatch_contract": {"dispatch": evidence_plan.dispatch},
                 "inference_window_lease": {"lease": F.InferenceWindowLeaseBinding()},
                 "production_snapshot": {"production": F.ProductionSnapshotBinding(
-                    (evidence_plan.identity_files.anchor.binary,))},
+                    (protected,))},
             }
             # This call is the real public registry boundary.  It currently
             # rejects the factory's own typed bindings as non-callable/non-maps.
@@ -70,6 +73,20 @@ class OfflineLaunchGate(unittest.TestCase):
                     self.fail(f"factory's own typed registry is unresolvable: {exc}")
             self.assertIsInstance(resolved.environment_profile, F.EnvironmentProfile)
             self.assertIsInstance(resolved.dispatch_contract, E.DispatchContract)
+            executors, claims = FakeExecutors(), ClaimFactory()
+            with mock.patch.object(D.DiscoveryDeployment, "revalidate"):
+                adapters = F.materialize(
+                    config, registry, planner=Planner(), critic=Critic(),
+                    correctness_executor=executors.correctness,
+                    rocprof_executor=executors.rocprof, claim_journal=object(),
+                    claim_acquirer=claims, claim_verifier=lambda _receipt: True)
+                with mock.patch.object(C.source_candidate, "SourcePatchManifest", Manifest), \
+                        mock.patch.object(C, "_write_projection"):
+                    result = C.run_controller(F.controller_config(config, dry_run=True),
+                                              **adapters)
+            self.assertTrue(result["complete"])
+            self.assertEqual(executors.calls, [])
+            self.assertEqual(claims.claims, [])
 
     def test_deployment_entrypoint_needs_only_sealed_config(self):
         """The executable launcher may not require Python-injected authority."""
@@ -84,9 +101,10 @@ class OfflineLaunchGate(unittest.TestCase):
 
     def test_configured_lock_is_the_actual_runner_lock(self):
         """A configured non-default lock must own every model-call window."""
-        source = inspect.getsource(gpu_runner)
-        self.assertNotIn("MODEL_CALL_WINDOW =", source)
-        self.assertIn("inference_window_lock", inspect.signature(gpu_runner.run).parameters)
+        parameters = inspect.signature(gpu_runner.invoke).parameters
+        self.assertIn("inference_window_lock", parameters)
+        # The launch-gate integration test below supplies a held nondefault
+        # lock and proves _invoke_locked is not entered until it is released.
 
     def test_initial_planner_context_contains_sealed_search_inputs(self):
         """Turn one must be authorable from sealed evidence, not a blank prompt."""
@@ -135,8 +153,11 @@ class OfflineLaunchGate(unittest.TestCase):
             evidence_plan = plan(Path(directory))
         candidate = evidence_plan.identity_files.candidate
         anchor = evidence_plan.identity_files.anchor
-        # The benchmark executable is a reward-producing instrument.  It must
-        # not change with the candidate kernel source.
+        # Preferred closure: the same measurement executable is used with an
+        # arm-specific HIP DSO selected by isolated LD_LIBRARY_PATH.  If the
+        # implementation chooses distinct build-metadata-bearing binaries,
+        # this gate must be replaced by an explicit normalized object/source
+        # closure; arbitrary two-binary inequality is never sufficient.
         self.assertEqual(candidate.binary.sha256, anchor.binary.sha256)
         self.assertEqual(evidence_plan.workload_sha256,
                          evidence_plan.identity_files.workload.sha256)
