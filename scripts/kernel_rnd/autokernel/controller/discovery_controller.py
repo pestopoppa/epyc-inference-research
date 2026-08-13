@@ -217,14 +217,14 @@ class GpuSourceBuild:
     """A completed isolated build, returned only by a typed source-build seam."""
     anchor_build: Path
     candidate_build: Path
-    source_sha256: str
-    binary_sha256: str
+    candidate_identity: gpu_source_proofs.BuildIdentity
+    anchor_identity: gpu_source_proofs.BuildIdentity
     def __post_init__(self) -> None:
         for path in (self.anchor_build, self.candidate_build):
             if not path.is_absolute() or not path.is_dir():
                 raise DiscoveryControllerError("GPU source build paths must be existing absolute directories")
-        for value in (self.source_sha256, self.binary_sha256):
-            if not HASH.fullmatch(value): raise DiscoveryControllerError("GPU build identity hash is invalid")
+        if self.candidate_identity == self.anchor_identity:
+            raise DiscoveryControllerError("source screen requires distinct sealed anchor and candidate build identities")
 
 
 @dataclass(frozen=True)
