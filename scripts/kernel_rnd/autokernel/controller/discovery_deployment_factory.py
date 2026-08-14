@@ -190,6 +190,10 @@ class GpuDiscoveryLease:
         profile = profiles[0]
         actual_bytes = self.config.model.path.stat().st_size
         request = gpu_load_admission.AdmissionRequest(
+            effective_context_sha256=schemas.content_hash({
+                "planner_context_sha256": self.config.planner_context.value["context_sha256"],
+                "admission_policy_sha256": corpus.policy_sha256,
+                "admission_policy_version": corpus.version}),
             model_path=str(self.config.model.path), model_sha256=self.config.model.sha256,
             model_bytes=actual_bytes, workload=profile.workload,
             calls_per_arm=profile.calls_per_arm, device_id=self.config.device_id,

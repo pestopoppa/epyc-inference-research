@@ -67,7 +67,9 @@ class DeploymentFactoryTests(unittest.TestCase):
                                       cold_load_host_bytes=4, worst_case_loads_per_interval=18)
             config = mock.Mock(inference_window_lock="/lock", device_id="mi210_0",
                                model=SimpleNamespace(path=model, sha256="a" * 64),
-                               admission_policy=SimpleNamespace(corpus=SimpleNamespace(profiles=(profile,))))
+                               admission_policy=SimpleNamespace(corpus=SimpleNamespace(
+                                   profiles=(profile,), policy_sha256="b" * 64, version="test-v2")),
+                               planner_context=SimpleNamespace(value={"context_sha256": "c" * 64}))
             config.revalidate = mock.Mock()
             decision = SimpleNamespace(mode="cold_serialized", to_dict=lambda: {"decision_sha256": "d" * 64})
             with mock.patch.object(F.gpu_load_admission, "arbitrate", return_value=decision), \
