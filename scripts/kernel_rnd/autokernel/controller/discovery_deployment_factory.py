@@ -207,13 +207,14 @@ class StaticDeploymentGraph:
 _STATIC_IDS = MappingProxyType({
     "environment_profile": "sealed-codex",
     "source_builder": "gpu-source-v1",
-    "evidence_plan": "q5-onewave-v1",
+    "evidence_plan": "reviewed-gpu-source-evidence-v1",
     "runner_args": "qwen05b-tg128",
     "experiment_template_registry": "gpu-source-templates-v1",
     "inference_window_lease": "mi210-window-v1",
     "production_snapshot": "llama-v9-artifacts",
 })
-_LOAD_PROFILE_ID = "mi210-qwen05b-tg128-18-v1"
+_LOAD_PROFILE_ID = "mi210-qwen05b-tg128-fallback-only-v1"
+_FALLBACK_ONLY_HEADROOM_SENTINEL = 1 << 60
 _ROCPROF_V1 = Path(
     "/mnt/raid0/llm/autokernel/tools/rocprof6.2-extracted/opt/rocm-6.2.0/bin/rocprof")
 _ROCPROF_V1_SHA256 = "585e3e6034e3c0bd9e591f0aa72f6156686680911a0b47ed4ece3c9a8372a4b2"
@@ -291,31 +292,54 @@ def initialize_static_deployment_bundle(root: Path) -> Path:
         "schema": "epyc.autokernel.discovery_runtime.v1", "architecture": "gfx90a",
         "gpu_layers": 99, "flash_attention": True, "hip_graphs": True,
         "cpu_list": "184-191", "threads": 8, "promotion_claim": False})
-    evidence_sha = source_plan.sha256
+    _fallback_path, fallback_sha = _json_artifact(
+        config_dir / "admission-fallback.json", {
+            "schema": "epyc.autokernel.gpu_load_admission_fallback.v1",
+            "authority": "fallback_only",
+            "default_mode": "cold_serialized",
+            "overlap_authority": False,
+            "telemetry_source": None,
+            "headroom_profile_evidence": None,
+            "minimum_headroom_bytes_per_s": None,
+            "sentinel_value": _FALLBACK_ONLY_HEADROOM_SENTINEL,
+            "sentinel_semantics": (
+                "deny guard required by the v2 profile shape; not a measured or "
+                "reviewed bandwidth threshold"),
+            "replacement_requirement": (
+                "a new digest-bound site profile and genuine fresh telemetry source "
+                "must be reviewed before cold_overlap can be enabled")})
     profile = {
         "profile_id": _LOAD_PROFILE_ID, "model_path": str(model.path),
         "model_sha256": model.sha256, "model_bytes": model.path.stat().st_size,
         "workload": "decode_tg128", "calls_per_arm": 9, "device_id": "mi210_0",
         "cold_load_host_bytes": model.path.stat().st_size,
         "worst_case_loads_per_interval": 18,
-        "minimum_headroom_bytes_per_s": 4_000_000_000,
-        "telemetry_max_age_ms": 5000, "evidence_sha256": evidence_sha}
+        "minimum_headroom_bytes_per_s": _FALLBACK_ONLY_HEADROOM_SENTINEL,
+        "telemetry_max_age_ms": 5000, "evidence_sha256": fallback_sha}
     policy = {"schema": gpu_load_admission.POLICY_SCHEMA,
-              "version": "mi210-discovery-admission-v1", "profiles": [profile],
+              "version": "mi210-discovery-fallback-only-v1", "profiles": [profile],
               "examples": [
-                  {"id": "qwen05b-fresh-headroom", "polarity": "positive",
-                   "facts": {"profile_id": _LOAD_PROFILE_ID, "telemetry_observed": True},
+                  {"id": "illustrative-future-fresh-headroom", "polarity": "positive",
+                   "facts": {"profile_id": _LOAD_PROFILE_ID, "illustrative_only": True,
+                             "genuine_fresh_telemetry": True,
+                             "independently_reviewed_profile": True},
                    "missing": [], "mode": "cold_overlap",
-                   "rationale": "fresh measured headroom and exact reviewed profile permit overlap",
-                   "disqualifiers": [], "counterfactual": "serialize when telemetry is absent or stale",
-                   "evidence": [f"sha256:{evidence_sha}"]},
+                   "rationale": (
+                       "illustrative only: a future digest-bound site profile plus genuine "
+                       "fresh telemetry could authorize overlap; this bundle does not"),
+                   "disqualifiers": [],
+                   "counterfactual": "this fallback bundle always supplies no telemetry and serializes",
+                   "evidence": [f"sha256:{fallback_sha}"]},
                   {"id": "qwen05b-unknown-headroom", "polarity": "negative",
-                   "facts": {"profile_id": _LOAD_PROFILE_ID, "telemetry_observed": False},
+                   "facts": {"profile_id": _LOAD_PROFILE_ID, "illustrative_only": True,
+                             "telemetry_observed": False},
                    "missing": ["fresh_headroom_telemetry"], "mode": "cold_serialized",
-                   "rationale": "unknown bandwidth state cannot authorize overlap",
-                   "disqualifiers": ["telemetry_missing"],
-                   "counterfactual": "fresh sufficient telemetry could admit overlap",
-                   "evidence": [f"sha256:{evidence_sha}"]}]}
+                   "rationale": "fallback-only bundle has no bandwidth authority and must serialize",
+                   "disqualifiers": ["telemetry_missing", "fallback_only_profile"],
+                   "counterfactual": (
+                       "replace this bundle with reviewed site evidence and a genuine fresh "
+                       "telemetry source before overlap is eligible"),
+                   "evidence": [f"sha256:{fallback_sha}"]}]}
     policy["policy_sha256"] = schemas.content_hash(policy)
     policy_path, policy_sha = _json_artifact(config_dir / "admission-policy.json", policy)
     # Only project shares stated exactly by the reviewed attribution receipt.  The
@@ -933,9 +957,9 @@ class GpuDiscoveryLease:
             calls_per_arm=profile.calls_per_arm, device_id=self.config.device_id,
             cold_load_host_bytes=profile.cold_load_host_bytes,
             worst_case_loads_per_interval=profile.worst_case_loads_per_interval,
-            # This generic binding deliberately has no mutable telemetry source.
-            # The static site adapter can provide one; absence deterministically
-            # downgrades to serialized load rather than inventing headroom.
+            # This deployment is explicitly fallback-only and deliberately has
+            # no telemetry authority.  Enabling overlap requires a new reviewed
+            # policy/binding, not an ambient or caller-supplied observation.
             telemetry_observed=False, telemetry_age_ms=None,
             observed_headroom_bytes_per_s=None, telemetry_receipt_sha256=None)
         advisory = None
