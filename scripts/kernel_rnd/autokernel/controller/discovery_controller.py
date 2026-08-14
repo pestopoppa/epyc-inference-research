@@ -279,10 +279,28 @@ class Recovery:
 class CodexPlanner:
     """Concrete Sol actor. It may write only a plan and patch manifest in workspace."""
     def __init__(self, *, wrapper: Path, environment: Mapping[str, str],
-                 template_catalog: Mapping[str, Any] | None = None) -> None:
+                 template_catalog: Mapping[str, Any] | None = None,
+                 wrapper_sha256: str | None = None,
+                 runtime_identity: Mapping[str, Any] | None = None,
+                 actor_launcher_sha256: str | None = None) -> None:
         self.wrapper, self.environment = wrapper, dict(environment)
         self.template_catalog = json.loads(json.dumps(template_catalog or {}, sort_keys=True))
-    def attest(self) -> Mapping[str, Any]: return {**SOL, "runtime": codex_container_actor.runtime_identity(self.wrapper)}
+        self.wrapper_sha256 = wrapper_sha256
+        self.runtime_identity = None if runtime_identity is None else dict(runtime_identity)
+        self.actor_launcher_sha256 = actor_launcher_sha256
+    def _runtime(self) -> Mapping[str, Any]:
+        if self.wrapper_sha256 is not None:
+            if self.wrapper.is_symlink() or not self.wrapper.is_file() or hashlib.sha256(self.wrapper.read_bytes()).hexdigest() != self.wrapper_sha256:
+                raise DiscoveryControllerError("sealed Codex planner wrapper bytes changed")
+        current = codex_container_actor.runtime_identity(self.wrapper)
+        if self.runtime_identity is not None and current != self.runtime_identity:
+            raise DiscoveryControllerError("sealed Codex planner runtime identity changed")
+        if (self.actor_launcher_sha256 is not None
+                and hashlib.sha256(Path(codex_container_actor.__file__).resolve().read_bytes()).hexdigest()
+                != self.actor_launcher_sha256):
+            raise DiscoveryControllerError("sealed Codex planner launcher/argv policy changed")
+        return current
+    def attest(self) -> Mapping[str, Any]: return {**SOL, "runtime": self._runtime()}
     def plan(self, *, context: Mapping[str, Any], workspace: Path) -> PlannedCandidate:
         # The model gets a bounded source/profile brief plus a machine contract;
         # it never receives authority to select a campaign, base, executable,
@@ -308,7 +326,11 @@ class CodexPlanner:
                              "experiment_template_catalog": self.template_catalog,
                              "authoring_contract": contract,
                              "output": "Write plan.json and source-patch.json in workspace."}, sort_keys=True)
-        result = codex_container_actor.run_actor(wrapper=self.wrapper, workspace=workspace, model=SOL["model"], effort=SOL["effort"], prompt=prompt, environment=self.environment)
+        self._runtime()
+        result = codex_container_actor.run_actor(wrapper=self.wrapper, workspace=workspace, model=SOL["model"], effort=SOL["effort"], prompt=prompt, environment=self.environment,
+            expected_wrapper_sha256=self.wrapper_sha256,
+            expected_runtime_identity=self.runtime_identity,
+            expected_launcher_sha256=self.actor_launcher_sha256)
         if result.returncode: raise DiscoveryControllerError(f"Sol actor failed: {result.stderr[-400:]}")
         return _load_plan(workspace / "plan.json", workspace,
                           assignment=AuthoringAssignment(**assignment))
@@ -317,10 +339,28 @@ class CodexPlanner:
 class CodexCritic:
     """Concrete Terra actor. It can bind a veto but never alters the candidate."""
     def __init__(self, *, wrapper: Path, environment: Mapping[str, str],
-                 template_catalog: Mapping[str, Any] | None = None) -> None:
+                 template_catalog: Mapping[str, Any] | None = None,
+                 wrapper_sha256: str | None = None,
+                 runtime_identity: Mapping[str, Any] | None = None,
+                 actor_launcher_sha256: str | None = None) -> None:
         self.wrapper, self.environment = wrapper, dict(environment)
         self.template_catalog = json.loads(json.dumps(template_catalog or {}, sort_keys=True))
-    def attest(self) -> Mapping[str, Any]: return {**TERRA, "runtime": codex_container_actor.runtime_identity(self.wrapper)}
+        self.wrapper_sha256 = wrapper_sha256
+        self.runtime_identity = None if runtime_identity is None else dict(runtime_identity)
+        self.actor_launcher_sha256 = actor_launcher_sha256
+    def _runtime(self) -> Mapping[str, Any]:
+        if self.wrapper_sha256 is not None:
+            if self.wrapper.is_symlink() or not self.wrapper.is_file() or hashlib.sha256(self.wrapper.read_bytes()).hexdigest() != self.wrapper_sha256:
+                raise DiscoveryControllerError("sealed Codex critic wrapper bytes changed")
+        current = codex_container_actor.runtime_identity(self.wrapper)
+        if self.runtime_identity is not None and current != self.runtime_identity:
+            raise DiscoveryControllerError("sealed Codex critic runtime identity changed")
+        if (self.actor_launcher_sha256 is not None
+                and hashlib.sha256(Path(codex_container_actor.__file__).resolve().read_bytes()).hexdigest()
+                != self.actor_launcher_sha256):
+            raise DiscoveryControllerError("sealed Codex critic launcher/argv policy changed")
+        return current
+    def attest(self) -> Mapping[str, Any]: return {**TERRA, "runtime": self._runtime()}
     def review(self, candidate: PlannedCandidate, *, context: Mapping[str, Any], workspace: Path) -> Critique:
         manifest = candidate.source_manifest
         if len(manifest.patch_text) > 65536:
@@ -339,7 +379,11 @@ class CodexCritic:
                          "declared_symbols": {key: list(value) for key, value in manifest.declared_symbols.items()},
                          "patch_sha256": manifest.patch_sha256, "patch_text": manifest.patch_text}},
             "output": "Write critique.json with exactly decision=accept|reject|revise and reason."}, sort_keys=True)
-        result = codex_container_actor.run_actor(wrapper=self.wrapper, workspace=workspace, model=TERRA["model"], effort=TERRA["effort"], prompt=prompt, environment=self.environment)
+        self._runtime()
+        result = codex_container_actor.run_actor(wrapper=self.wrapper, workspace=workspace, model=TERRA["model"], effort=TERRA["effort"], prompt=prompt, environment=self.environment,
+            expected_wrapper_sha256=self.wrapper_sha256,
+            expected_runtime_identity=self.runtime_identity,
+            expected_launcher_sha256=self.actor_launcher_sha256)
         if result.returncode: raise DiscoveryControllerError(f"Terra actor failed: {result.stderr[-400:]}")
         value = _read_object(workspace / "critique.json", workspace)
         if set(value) != {"decision", "reason"}: raise DiscoveryControllerError("critic output schema mismatch")

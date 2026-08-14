@@ -7,8 +7,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import argparse
+import base64
 import hashlib
 import json
+import os
 import re
 from pathlib import Path
 from types import MappingProxyType
@@ -22,6 +24,9 @@ from . import discovery_deployment as deployment
 from . import gpu_source_adapter
 from . import gpu_source_evidence as evidence
 from . import gpu_load_admission
+from . import gpu_residency_sampler
+from . import codex_container_actor
+from . import discovery_static_registry
 
 
 class DeploymentFactoryError(RuntimeError): pass
@@ -174,6 +179,329 @@ class ProductionSnapshotBinding:
             raise DeploymentFactoryError("production snapshot must contain typed frozen artifacts")
 
 
+@dataclass(frozen=True)
+class StaticDeploymentGraph:
+    """Fully constructed trusted graph plus its durable validation receipt."""
+    config: deployment.DiscoveryDeployment
+    adapters: Mapping[str, Any]
+    registry_ids: Mapping[str, str]
+    graph_receipt: Path
+    graph_sha256: str
+
+
+_STATIC_IDS = MappingProxyType({
+    "environment_profile": "sealed-codex",
+    "source_builder": "gpu-source-v1",
+    "evidence_plan": "q5-onewave-v1",
+    "runner_args": "qwen05b-tg128",
+    "experiment_template_registry": "gpu-source-templates-v1",
+    "inference_window_lease": "mi210-window-v1",
+    "production_snapshot": "llama-v9-artifacts",
+})
+_LOAD_PROFILE_ID = "mi210-qwen05b-tg128-18-v1"
+_SAFE_ACTOR_ENVIRONMENT = MappingProxyType({
+    "PATH": "/usr/local/bin:/usr/bin:/bin",
+    "HOME": "/home/node",
+    "CODEX_HOME": "/home/node/.codex",
+    "SSL_CERT_FILE": "/etc/ssl/certs/ca-certificates.crt",
+})
+
+
+def _digest_regular(path: Path, label: str) -> str:
+    if path.is_symlink() or not path.is_file():
+        raise DeploymentFactoryError(f"{label} must be a regular non-symlink file")
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _bound(path: Path, role: str) -> evidence.BoundInputFile:
+    path = path.resolve(strict=True)
+    return evidence.BoundInputFile(role=role, path=path,
+                                   sha256=_digest_regular(path, role))
+
+
+def _template_registry() -> ExperimentTemplateRegistry:
+    families = (
+        ("cuda-fattn-v1", "ggml/src/ggml-cuda/fattn.cuh",
+         "ggml_cuda_flash_attn_ext", ("ggml_cuda_flash_attn_ext",
+          "ggml_cuda_flash_attn_ext_supported", "ggml_cuda_flash_attn_ext_get_alloc_size"),
+         ("fattn", "flash_attn")),
+        ("cuda-mmvq-v1", "ggml/src/ggml-cuda/mmvq.cu",
+         "ggml_cuda_op_mul_mat_vec_q", ("ggml_cuda_op_mul_mat_vec_q",
+          "ggml_cuda_mul_mat_vec_q", "mul_mat_vec_q_switch_type",
+          "mul_mat_vec_q_switch_ncols_dst", "mul_mat_vec_q_moe_launch",
+          "mul_mat_vec_q_switch_fusion", "mul_mat_vec_q8_0_prefetch_launch"),
+         ("mmvq", "mul_mat_vec")),
+        ("cuda-rope-v1", "ggml/src/ggml-cuda/rope.cu",
+         "ggml_cuda_op_rope_impl", ("ggml_cuda_op_rope_impl", "ggml_cuda_op_rope",
+          "ggml_cuda_op_rope_back", "ggml_cuda_op_rope_fused", "rope_norm",
+          "rope_neox", "rope_multi", "rope_vision", "rope_norm_cuda",
+          "rope_neox_cuda", "rope_multi_cuda", "rope_vision_cuda"),
+         ("rope",)),
+        ("cuda-norm-v1", "ggml/src/ggml-cuda/norm.cu",
+         "ggml_cuda_op_rms_norm", ("ggml_cuda_op_norm", "ggml_cuda_op_group_norm",
+          "ggml_cuda_op_rms_norm", "ggml_cuda_op_rms_norm_fused",
+          "ggml_cuda_op_rms_norm_fused_add", "ggml_cuda_op_rms_norm_back",
+          "ggml_cuda_op_l2_norm", "norm_f32", "group_norm_f32", "rms_norm_f32",
+          "rms_norm_back_f32", "l2_norm_f32", "norm_f32_cuda",
+          "group_norm_f32_cuda", "rms_norm_f32_cuda", "rms_norm_mul_f32_cuda",
+          "rms_norm_back_f32_cuda", "l2_norm_f32_cuda"),
+         ("norm", "rms_norm", "group_norm", "l2_norm")),
+    )
+    templates = {}
+    for template_id, path, symbol, symbols, prefixes in families:
+        family_pattern = "^(?:" + "|".join(re.escape(prefix) for prefix in prefixes) + ").*$"
+        templates[template_id] = ExperimentTemplate(
+            template_id=template_id, target_surface="gpu_decode", target_symbol=symbol,
+            correctness_id="backend-ops-hip-v1", dispatch_id="decode-tg128-rocprof-v1",
+            dispatch=evidence.DispatchContract(
+                candidate_exact=(evidence.ExactDispatch(
+                    f"{template_id}.candidate-family", family_pattern, 1, 64, 64, 0, 1),),
+                anchor_exact=(evidence.ExactDispatch(
+                    f"{template_id}.anchor-family", family_pattern, 1, 64, 64, 0, 1),)),
+            allowed_files=frozenset({path}),
+            allowed_symbols={path: frozenset(symbols)},
+            semantics={"workload": "decode_tg128", "calls_per_arm": 9,
+                       "load_admission_profile_id": _LOAD_PROFILE_ID,
+                       "dispatch_bounds": {"calls": [1, 4096], "grid": [64, 1048576],
+                                           "workgroup": [64, 1024], "lds_bytes": [0, 131072],
+                                           "kernel_prefixes": list(prefixes)}})
+    provisional = object.__new__(ExperimentTemplateRegistry)
+    object.__setattr__(provisional, "version", "gpu-source-templates-v1")
+    object.__setattr__(provisional, "templates", MappingProxyType(templates))
+    body = {"version": "gpu-source-templates-v1", "templates": {
+        key: {"template_id": value.template_id, "target_surface": value.target_surface,
+              "target_symbol": value.target_symbol, "correctness_id": value.correctness_id,
+              "dispatch_id": value.dispatch_id, "allowed_files": sorted(value.allowed_files),
+              "allowed_symbols": {path: sorted(symbols) for path, symbols in value.allowed_symbols.items()},
+              "semantics": dict(value.semantics),
+              "dispatch": {"candidate_exact": [vars(row) for row in value.dispatch.candidate_exact],
+                           "anchor_exact": [vars(row) for row in value.dispatch.anchor_exact],
+                           "candidate_forbidden": [vars(row) for row in value.dispatch.candidate_forbidden],
+                           "anchor_forbidden": [vars(row) for row in value.dispatch.anchor_forbidden],
+                           "invariants": [vars(row) for row in value.dispatch.invariants]}}
+        for key, value in sorted(templates.items())}}
+    digest = hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":"),
+                                       ensure_ascii=False, allow_nan=False).encode()).hexdigest()
+    return ExperimentTemplateRegistry("gpu-source-templates-v1", digest, templates)
+
+
+def static_template_registry_sha256() -> str:
+    """Public value for authoring a sealed config; it grants no constructor authority."""
+    return _template_registry().registry_sha256
+
+
+def _manifest_file(config: deployment.DiscoveryDeployment,
+                   candidate: controller.PlannedCandidate,
+                   build: controller.GpuSourceBuild) -> evidence.BoundInputFile:
+    manifest = candidate.source_manifest
+    value = {"schema": "epyc.autokernel.source_patch.v1",
+             "campaign_id": manifest.campaign_id, "proposal_id": manifest.proposal_id,
+             "candidate_id": manifest.candidate_id, "source_tree": manifest.source_tree,
+             "production_base_commit": manifest.production_base_commit,
+             "instrument_commit": manifest.instrument_commit,
+             "change_class": manifest.change_class,
+             "declared_files": list(manifest.declared_files),
+             "declared_symbols": {path: list(manifest.declared_symbols[path])
+                                  for path in manifest.declared_files},
+             "mechanism_id": manifest.mechanism_id, "patch_sha256": manifest.patch_sha256,
+             "patch_encoding": "base64",
+             "patch_base64": base64.b64encode(manifest.patch_bytes).decode("ascii")}
+    raw = schemas.canonical_bytes(value)
+    if hashlib.sha256(raw).hexdigest() != candidate.source_manifest_sha256:
+        raise DeploymentFactoryError("candidate manifest canonical carrier hash mismatch")
+    assert build.operation_key is not None
+    path = config.operations_root / "materialization" / build.operation_key / "source-manifest.json"
+    if path.exists():
+        if path.is_symlink() or path.read_bytes() != raw:
+            raise DeploymentFactoryError("source manifest carrier already exists with different bytes")
+    else:
+        path.write_bytes(raw)
+    return evidence.BoundInputFile("manifest", path.resolve(), candidate.source_manifest_sha256)
+
+
+def _build_identity_files(raw: Mapping[str, Any], arm: str,
+                          identity: Any) -> evidence.BuildIdentityFiles:
+    carriers = raw.get("identity_files")
+    row = carriers.get(arm) if isinstance(carriers, Mapping) else None
+    names = ("source_identity", "binary", "hip_library", "config", "linkage")
+    if not isinstance(row, Mapping) or set(row) != set(names):
+        # BuildIdentity's semantic source/linkage hashes are not file hashes in
+        # the current builder.  Never manufacture a carrier whose bytes merely
+        # describe those hashes: that would invent evidence authority.
+        raise DeploymentFactoryError(
+            "source build lacks semantic BuildIdentity file carriers; refusing evidence plan")
+    result = {}
+    for name in names:
+        item = row[name]
+        if not isinstance(item, Mapping) or set(item) != {"path", "sha256"}:
+            raise DeploymentFactoryError("BuildIdentity carrier is malformed")
+        path = Path(str(item["path"]))
+        bound = evidence.BoundInputFile(name, path.resolve(strict=True), str(item["sha256"]))
+        if _digest_regular(bound.path, f"{arm} {name}") != bound.sha256:
+            raise DeploymentFactoryError("BuildIdentity carrier bytes changed")
+        result[name] = bound
+    files = evidence.BuildIdentityFiles(**result)
+    expected = {name: getattr(identity, f"{name}_sha256" if name != "source_identity" else "source_sha256")
+                for name in names}
+    if any(getattr(files, name).sha256 != digest for name, digest in expected.items()):
+        raise DeploymentFactoryError("BuildIdentity carrier is not semantically bound")
+    return files
+
+
+def _evidence_binding(config: deployment.DiscoveryDeployment) -> EvidencePlanBinding:
+    def build(candidate: controller.PlannedCandidate, build_: controller.GpuSourceBuild,
+              template: ExperimentTemplate) -> evidence.GpuSourceEvidencePlan:
+        if build_.materialization_receipt is None or build_.operation_key is None:
+            raise DeploymentFactoryError("source build lacks materialization identity")
+        raw = json.loads(build_.materialization_receipt.read_text(encoding="utf-8"))
+        candidate_files = _build_identity_files(raw, "candidate", build_.candidate_identity)
+        anchor_files = _build_identity_files(raw, "anchor", build_.anchor_identity)
+        # A profiler executable/input policy will be added only by a reviewed
+        # checked-in constructor.  The host currently has no rocprof launcher;
+        # failing here is safer than treating an arbitrary config path as one.
+        raise DeploymentFactoryError(
+            "checked-in rocprof command policy is unavailable; refusing evidence execution")
+    return EvidencePlanBinding(build=build)
+
+
+def _runner_binding(config: deployment.DiscoveryDeployment) -> RunnerArgsBinding:
+    def build(_candidate: controller.PlannedCandidate, build_: controller.GpuSourceBuild,
+              permit: Mapping[str, Any]) -> Any:
+        operation_key = permit.get("operation_key")
+        repetition = permit.get("repetition")
+        if operation_key != build_.operation_key or repetition not in {1, 2}:
+            raise DeploymentFactoryError("runner operation identity differs from sealed build")
+        output = config.operations_root / str(operation_key) / "runner" / f"s{repetition}"
+        argv = ["--anchor-build", str(build_.anchor_build), "--candidate-build", str(build_.candidate_build),
+                "--model", str(config.model.path), "--output-dir", str(output),
+                "--campaign-id", f"ak-discovery-{config.config_sha256[:16]}",
+                "--factor", "source_patch", "--calls", "9", "--workload", "decode_tg128",
+                "--allow-small-model-cpu-overlap", "--inference-window-lock", str(config.inference_window_lock),
+                "--load-admission-profile-id", _LOAD_PROFILE_ID, "--device-id", config.device_id,
+                "--measurement-binary", str(build_.measurement_binary),
+                "--common-loader-dir", str(build_.common_loader_dir),
+                "--anchor-loader-dir", str(build_.anchor_loader_dir),
+                "--candidate-loader-dir", str(build_.candidate_loader_dir),
+                "--cpu-claim-journal", str(config.operations_root / "claims" / "cpu.jsonl"),
+                "--device-claim-journal", str(config.operations_root / "claims" / "device.jsonl")]
+        return controller.gpu_discovery.parser().parse_args(argv)
+    return RunnerArgsBinding(build=build)
+
+
+def _static_registry(config: deployment.DiscoveryDeployment,
+                     templates: ExperimentTemplateRegistry) -> Mapping[str, Mapping[str, object]]:
+    if config.experiment_template_registry_sha256 != templates.registry_sha256:
+        raise DeploymentFactoryError("deployment does not bind the checked-in template registry")
+    selected = {"environment_profile": config.environment_profile_id,
+                "source_builder": config.source_builder_id, "evidence_plan": config.evidence_plan_id,
+                "runner_args": config.runner_args_id,
+                "experiment_template_registry": config.experiment_template_registry_id,
+                "inference_window_lease": config.inference_window_lease_id,
+                "production_snapshot": config.production_snapshot_id}
+    if selected != dict(_STATIC_IDS):
+        raise DeploymentFactoryError("deployment selected a non-allowlisted constructor ID")
+    site = controller.gpu_discovery.SITE_LOAD_PROFILES[_LOAD_PROFILE_ID]
+    if (site.model_sha256 != config.model.sha256
+            or site.model_path != str(config.model.path)
+            or site.model_bytes != config.model.path.stat().st_size
+            or site.device_id != config.device_id):
+        raise DeploymentFactoryError("configured model/device differs from checked-in admission profile")
+    profiles = config.admission_policy.value.get("profiles")
+    if not isinstance(profiles, list) or not any(
+            isinstance(row, Mapping) and row.get("id") == _LOAD_PROFILE_ID for row in profiles):
+        raise DeploymentFactoryError("sealed admission corpus omits the checked-in load profile")
+    environment = EnvironmentProfile(_SAFE_ACTOR_ENVIRONMENT)
+    source_builder = discovery_static_registry.StaticGpuSourceBuilder(
+        production_path=config.production_path,
+        production_branch=deployment.FROZEN_PRODUCTION_BRANCH,
+        operations_root=config.operations_root,
+        build_root=config.operations_root / "build",
+        cmake_defines=(("GGML_HIP", "ON"), ("AMDGPU_TARGETS", "gfx90a"),
+                       ("GGML_NATIVE", "OFF")))
+    snapshot_paths = (config.production_path / "CMakeLists.txt",
+                      config.production_path / "ggml/src/ggml-cuda/unary.cu",
+                      config.production_path / "ggml/src/ggml-cuda/mmvq.cu")
+    snapshot = ProductionSnapshotBinding(tuple(
+        _bound(path, f"production:{path.relative_to(config.production_path)}")
+        for path in snapshot_paths))
+    return MappingProxyType({
+        "environment_profile": MappingProxyType({_STATIC_IDS["environment_profile"]: environment}),
+        "source_builder": MappingProxyType({_STATIC_IDS["source_builder"]:
+                                               SourceBuilderBinding(source_builder.build)}),
+        "evidence_plan": MappingProxyType({_STATIC_IDS["evidence_plan"]: _evidence_binding(config)}),
+        "runner_args": MappingProxyType({_STATIC_IDS["runner_args"]: _runner_binding(config)}),
+        "experiment_template_registry": MappingProxyType({_STATIC_IDS["experiment_template_registry"]: templates}),
+        "inference_window_lease": MappingProxyType({_STATIC_IDS["inference_window_lease"]: InferenceWindowLeaseBinding()}),
+        "production_snapshot": MappingProxyType({_STATIC_IDS["production_snapshot"]: snapshot}),
+    })
+
+
+def _seal_graph_receipt(config: deployment.DiscoveryDeployment,
+                        runtime: Mapping[str, Any], templates: ExperimentTemplateRegistry) -> tuple[Path, str]:
+    launcher_path = Path(codex_container_actor.__file__).resolve(strict=True)
+    launcher_sha256 = _digest_regular(launcher_path, "Codex actor launcher")
+    body = {"schema": "epyc.autokernel.static_discovery_graph.v1",
+            "authority": "nonpromotable_candidate_only_discovery", "promotion_claim": False,
+            "inference_executed": False, "config_sha256": config.config_sha256,
+            "registry_ids": dict(_STATIC_IDS), "template_registry_sha256": templates.registry_sha256,
+            "admission_policy_sha256": config.admission_policy.value["policy_sha256"],
+            "load_admission_profile_id": _LOAD_PROFILE_ID,
+            "actor_wrapper": {"path": str(config.actor_wrapper.path),
+                              "sha256": config.actor_wrapper.sha256},
+            "actor_runtime": dict(runtime),
+            "actor_cells": [dict(controller.SOL), dict(controller.TERRA)],
+            "actor_argv_authority": {"module": str(launcher_path),
+                                     "module_sha256": launcher_sha256,
+                                     "constructor": "codex_container_actor.build_docker_argv",
+                                     "image_id": codex_container_actor.CONTAINER_IMAGE_ID},
+            "environment_profile": dict(_SAFE_ACTOR_ENVIRONMENT),
+            "device_id": config.device_id,
+            "claim_journal": str(config.operations_root / "claims" / "device.jsonl")}
+    body["graph_sha256"] = schemas.content_hash(body)
+    path = config.state_root / "deployment-graph.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    encoded = (json.dumps(body, sort_keys=True, indent=2) + "\n").encode()
+    if path.exists():
+        if path.is_symlink() or path.read_bytes() != encoded:
+            raise DeploymentFactoryError("durable deployment graph differs from current sealed graph")
+    else:
+        temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+        with temporary.open("xb") as handle:
+            handle.write(encoded); handle.flush(); os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    return path.resolve(), str(body["graph_sha256"])
+
+
+def build_static_deployment_graph(config: deployment.DiscoveryDeployment) -> StaticDeploymentGraph:
+    """Construct the sole live graph.  No registry/executor object is accepted."""
+    config.revalidate()
+    templates = _template_registry()
+    registry = _static_registry(config, templates)
+    runtime = codex_container_actor.runtime_identity(config.actor_wrapper.path)
+    launcher_sha256 = _digest_regular(Path(codex_container_actor.__file__).resolve(),
+                                      "Codex actor launcher")
+    sampler = gpu_residency_sampler.Mi210ResidencySampler()
+    executor = evidence.SubprocessCommandExecutor(residency_sampler=sampler)
+    journal = device_claim.ClaimJournal(config.operations_root / "claims" / "device.jsonl")
+    adapters = materialize(config, registry, correctness_executor=executor,
+                           rocprof_executor=executor, claim_journal=journal)
+    # Replace generic actor instances with byte/runtime-pinned equivalents.
+    catalog = adapters["planner"].template_catalog
+    adapters = dict(adapters)
+    adapters["planner"] = controller.CodexPlanner(
+        wrapper=config.actor_wrapper.path, environment=_SAFE_ACTOR_ENVIRONMENT,
+        template_catalog=catalog, wrapper_sha256=config.actor_wrapper.sha256,
+        runtime_identity=runtime, actor_launcher_sha256=launcher_sha256)
+    adapters["critic"] = controller.CodexCritic(
+        wrapper=config.actor_wrapper.path, environment=_SAFE_ACTOR_ENVIRONMENT,
+        template_catalog=catalog, wrapper_sha256=config.actor_wrapper.sha256,
+        runtime_identity=runtime, actor_launcher_sha256=launcher_sha256)
+    receipt, digest = _seal_graph_receipt(config, runtime, templates)
+    return StaticDeploymentGraph(config=config, adapters=MappingProxyType(adapters),
+                                 registry_ids=_STATIC_IDS, graph_receipt=receipt,
+                                 graph_sha256=digest)
+
+
 class GpuDiscoveryLease:
     """Typed admission seam; actual runner calls must receive the same lock path."""
     def __init__(self, *, config: deployment.DiscoveryDeployment, mode: str) -> None:
@@ -314,7 +642,8 @@ def materialize(config: deployment.DiscoveryDeployment, registry: Mapping[str, M
             instrument_commit=config.instrument_commit)
         template = templates.resolve(candidate.experiment_intent)
         result = plans.build(candidate, build_, template)
-        if result.dispatch != template.dispatch or result.model_sha256 != config.model.sha256:
+        expected_dispatch = template.bind_dispatch(candidate.experiment_intent)
+        if result.dispatch != expected_dispatch or result.model_sha256 != config.model.sha256:
             raise DeploymentFactoryError("evidence plan does not bind configured model/selected reviewed template")
         return result
     def args(candidate: controller.PlannedCandidate, build_: controller.GpuSourceBuild, permit: Mapping[str, Any]):
@@ -399,18 +728,29 @@ def controller_config(config: deployment.DiscoveryDeployment, *, dry_run: bool =
         campaign_id=f"ak-discovery-{config.config_sha256[:16]}")
 
 
-def deployment_main(argv: list[str] | None, *, registry: Mapping[str, Mapping[str, object]],
-                    correctness_executor: evidence.CommandExecutor, rocprof_executor: evidence.CommandExecutor,
-                    claim_journal: device_claim.ClaimJournal) -> int:
-    """Dedicated launcher; refuses generic factory/CLI override authority."""
+def deployment_main(argv: list[str] | None = None) -> int:
+    """Config-only launcher; no caller can inject a registry or executor."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--deployment", required=True)
-    parser.add_argument("--dry-run", action="store_true")
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument("--validate-only", action="store_true")
+    modes.add_argument("--dry-run", action="store_true",
+                       help="alias for validate-only; never calls an actor or hardware")
     args = parser.parse_args(argv)
     config = deployment.load_deployment_config(Path(args.deployment))
-    adapters = materialize(config, registry,
-                           correctness_executor=correctness_executor,
-                           rocprof_executor=rocprof_executor,
-                           claim_journal=claim_journal)
-    controller.run_controller(controller_config(config, dry_run=args.dry_run), **adapters)
+    graph = build_static_deployment_graph(config)
+    if args.validate_only or args.dry_run:
+        print(json.dumps({"status": "validated", "inference_executed": False,
+                          "graph_receipt": str(graph.graph_receipt),
+                          "graph_sha256": graph.graph_sha256}, sort_keys=True))
+        return 0
+    controller.run_controller(controller_config(config), **dict(graph.adapters))
     return 0
+
+
+def main() -> int:
+    return deployment_main()
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
