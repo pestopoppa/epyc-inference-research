@@ -79,6 +79,9 @@ def _sha256(data: bytes) -> str:
 
 def _symbol_from_context(context: str) -> str:
     normalized = context.strip()
+    if (_PLAIN_ID.fullmatch(normalized) is not None
+            and normalized not in _CONTROL_WORDS):
+        return normalized
     matches = list(_FUNC.finditer(normalized))
     if matches:
         return matches[-1].group("name")

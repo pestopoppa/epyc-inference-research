@@ -65,6 +65,15 @@ class SourceCase(unittest.TestCase):
         _hunks, symbols = S.hunk_identities(patch)
         self.assertEqual(symbols, (S.FILE_SCOPE,))
 
+    def test_exact_bare_hunk_symbol_is_accepted_but_control_word_is_not(self):
+        prefix = "diff --git a/a.cu b/a.cu\n--- a/a.cu\n+++ b/a.cu\n"
+        _hunks, symbols = S.hunk_identities(
+            prefix + "@@ -1,1 +1,1 @@ reviewed_kernel\n-old\n+new\n")
+        self.assertEqual(symbols, ("reviewed_kernel",))
+        _hunks, symbols = S.hunk_identities(
+            prefix + "@@ -1,1 +1,1 @@ while\n-old\n+new\n")
+        self.assertEqual(symbols, (S.FILE_SCOPE,))
+
     def test_hunk_body_function_overrides_stale_preceding_function_header(self):
         patch_bytes = (
             b"diff --git a/ggml/src/ggml-cuda/vecdotq.cuh b/ggml/src/ggml-cuda/vecdotq.cuh\n"
