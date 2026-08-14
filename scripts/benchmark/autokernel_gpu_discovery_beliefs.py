@@ -135,11 +135,12 @@ def attach_baseline_beliefs(receipt: Mapping[str, Any], *, producer_path: Path) 
         raise BeliefRefused("anchor_invocations must be one of 3, 5, or 9")
     samples = _samples(receipt.get("anchor_samples"), "anchor_samples", expected=reps)
     runs = receipt.get("anchor_runs")
-    if not isinstance(runs, list) or len(runs) != reps \
-            or any(not isinstance(run, dict) or run.get("metric") != sample
-                   or run.get("hip_residency_proved") is not True
-                   for run, sample in zip(runs, samples)):
-        raise BeliefRefused("anchor runs do not bind the three resident samples")
+    if (not isinstance(runs, list) or len(runs) != 1
+            or not isinstance(runs[0], dict)
+            or runs[0].get("samples") != samples
+            or runs[0].get("sample_count") != reps
+            or runs[0].get("hip_residency_proved") is not True):
+        raise BeliefRefused("anchor process does not bind the native raw sample vector")
     producer = _producer(producer_path)
     common = _common(receipt, producer=producer, samples=samples)
     identity = _mapping(receipt.get("anchor_identity"), "anchor_identity")
@@ -156,7 +157,7 @@ def attach_baseline_beliefs(receipt: Mapping[str, Any], *, producer_path: Path) 
         category="BASELINE",
         claim=(f"Non-promotable GPU discovery anchor observed median {label} throughput "
                f"{median(samples):.9g} tokens/s"),
-        reps_basis=f"scored:{reps} anchor-bank MI210 llama-bench invocations",
+        reps_basis=f"scored:{reps} anchor-bank MI210 llama-bench native repetitions",
         extra={**common, "arithmetic_baseline_center": center},
         protocol_id=BANK_SCHEMA, reps=reps)]
     result["baseline_sha256"] = schemas.content_hash(result)
@@ -183,11 +184,12 @@ def attach_result_beliefs(receipt: Mapping[str, Any], *, bank: Mapping[str, Any]
     samples = _samples(receipt.get("candidate_samples"), "candidate_samples",
                        expected=reps)
     runs = receipt.get("candidate_runs")
-    if not isinstance(runs, list) or len(runs) != reps \
-            or any(not isinstance(run, dict) or run.get("metric") != sample
-                   or run.get("hip_residency_proved") is not True
-                   for run, sample in zip(runs, samples)):
-        raise BeliefRefused("candidate runs do not bind the three resident samples")
+    if (not isinstance(runs, list) or len(runs) != 1
+            or not isinstance(runs[0], dict)
+            or runs[0].get("samples") != samples
+            or runs[0].get("sample_count") != reps
+            or runs[0].get("hip_residency_proved") is not True):
+        raise BeliefRefused("candidate process does not bind the native raw sample vector")
     baseline_center = receipt.get("baseline_center")
     if isinstance(baseline_center, bool) or not isinstance(baseline_center, (int, float)) \
             or not math.isfinite(baseline_center) or baseline_center <= 0:

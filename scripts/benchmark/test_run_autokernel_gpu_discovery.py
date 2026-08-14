@@ -40,6 +40,24 @@ def _bind_admission(args: argparse.Namespace, *, mode: str = "cold_serialized") 
     return args
 
 
+def _readiness(model: Path, *, arm: str = "anchor") -> gpu.LoadReadinessPolicy:
+    body = {
+        "schema": "epyc.autokernel.gpu_load_readiness_policy.v1",
+        "runtime_root": "/sealed/runtime",
+        "runtime_manifest_sha256": "d" * 64,
+        "runtime_arm": arm,
+        "model_path": str(model.resolve()),
+        "model_sha256": gpu.sha256_file(model),
+        "device_id": gpu.DEVICE_ID,
+    }
+    return gpu.LoadReadinessPolicy(
+        schema=body["schema"], runtime_root=Path(body["runtime_root"]),
+        runtime_manifest_sha256=body["runtime_manifest_sha256"],
+        runtime_arm=arm, model_path=model.resolve(),
+        model_sha256=body["model_sha256"], device_id=gpu.DEVICE_ID,
+        policy_sha256=schemas.content_hash(body))
+
+
 def _build(root: Path, *, rocwmma: str, mfma: str, graphs: str = "ON") -> Path:
     build = root / f"build-{rocwmma}-{mfma}"
     bindir = build / "bin"
@@ -300,18 +318,17 @@ class TestGpuDiscoveryInferenceWindow(unittest.TestCase):
         class Lease:
             path = Path("/tmp/window")
             waited_s = 0.125
+            held = True
 
-        class Held:
-            def __enter__(self):
-                events.append("window-open")
-                return Lease()
-
-            def __exit__(self, *_):
-                events.append("window-close")
+            def release(self):
+                if self.held:
+                    events.append("window-close")
+                    self.held = False
 
         class CallWindow:
-            def hold(self):
-                return Held()
+            def acquire(self):
+                events.append("window-open")
+                return Lease()
 
         class Receipt:
             def to_dict(self):
@@ -324,7 +341,7 @@ class TestGpuDiscoveryInferenceWindow(unittest.TestCase):
             def release(self):
                 events.append("cpu-release")
 
-        def measured(**_kwargs):
+        def measured(**kwargs):
             events.append("model-call")
             return {"metric": 1.0}
 
@@ -338,7 +355,8 @@ class TestGpuDiscoveryInferenceWindow(unittest.TestCase):
                 build=Path("/build"), model=model, seed=1,
                 baseline_vram=0, flash_attention=True,
                 campaign_id="ak-gpu-test", cpu_journal=mock.Mock(),
-                sealed_load_decision=_admission(model))
+                sealed_load_decision=_admission(model), runtime_arm="anchor",
+                load_readiness_policy=_readiness(model))
         self.assertEqual(events, ["window-open", "model-call", "cpu-release",
                                   "window-close"])
         self.assertFalse(result["cpu_coverage"]["borrowed"])
@@ -349,18 +367,17 @@ class TestGpuDiscoveryInferenceWindow(unittest.TestCase):
         class Lease:
             path = Path("/tmp/window")
             waited_s = 0.0
+            held = True
 
-        class Held:
-            def __enter__(self):
-                events.append("window-open")
-                return Lease()
-
-            def __exit__(self, *_):
-                events.append("window-close")
+            def release(self):
+                if self.held:
+                    events.append("window-close")
+                    self.held = False
 
         class CallWindow:
-            def hold(self):
-                return Held()
+            def acquire(self):
+                events.append("window-open")
+                return Lease()
 
         class Borrowed:
             borrowed = True
@@ -378,7 +395,7 @@ class TestGpuDiscoveryInferenceWindow(unittest.TestCase):
             events.append("borrow-open")
             return Borrowed()
 
-        def measured(**_kwargs):
+        def measured(**kwargs):
             events.append("model-call")
             return {"metric": 1.0}
 
@@ -394,7 +411,167 @@ class TestGpuDiscoveryInferenceWindow(unittest.TestCase):
                 build=Path("/build"), model=model, seed=1,
                 baseline_vram=0, flash_attention=True,
                 campaign_id="ak-gpu-test", cpu_journal=mock.Mock(),
-                sealed_load_decision=_admission(model))
+                sealed_load_decision=_admission(model), runtime_arm="anchor",
+                load_readiness_policy=_readiness(model))
         self.assertEqual(events, ["window-open", "borrow-open", "model-call",
                                   "borrow-validate", "window-close"])
         self.assertTrue(result["cpu_coverage"]["borrowed"])
+
+
+class TestGpuDiscoveryBatchedSubprocess(unittest.TestCase):
+    class _Process:
+        pid = 991
+
+        def __init__(self, stdout: str, *, running_polls: int = 1):
+            self._stdout = stdout
+            self._running_polls = running_polls
+            self._polls = 0
+            self.returncode = 0
+            self.terminated = False
+            self.waited = False
+
+        def poll(self):
+            self._polls += 1
+            return None if self._polls <= self._running_polls else self.returncode
+
+        def communicate(self, timeout):
+            self.returncode = 0
+            return self._stdout, ""
+
+        def terminate(self):
+            self.terminated = True
+            self.returncode = -15
+
+        def wait(self, timeout):
+            self.waited = True
+            return self.returncode
+
+    @staticmethod
+    def _row(samples: list[float]) -> str:
+        return __import__("json").dumps({
+            "backends": "ROCm", "gpu_info": "AMD Instinct MI210",
+            "build_commit": "0db32c0", "n_prompt": 512, "n_gen": 0,
+            "flash_attn": 1, "n_threads": 8, "n_batch": 512, "n_ubatch": 512,
+            "use_mmap": True, "no_op_offload": 0, "split_mode": "layer",
+            "no_kv_offload": False, "poll": 50, "avg_ts": sum(samples) / len(samples),
+            "samples_ts": samples,
+        }) + "\n"
+
+    def test_one_process_collects_exactly_nine_native_samples(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            build = _build(Path(directory), rocwmma="ON", mfma="OFF")
+            model = Path(directory) / "model.gguf"; model.write_bytes(b"model")
+            process = self._Process(self._row([100.0 + i for i in range(9)]))
+            seen = []
+            result = gpu._invoke_locked(
+                build=build, model=model, seed=8613, baseline_vram=0,
+                flash_attention=True, expected_source_commit=gpu.SOURCE_COMMIT,
+                repetitions=9,
+                process_factory=lambda argv, **kwargs: (seen.append((argv, kwargs)) or process),
+                kfd_pid_provider=lambda: (123,), vram_reader=lambda: 64,
+                pgid_provider=lambda pid: process.pid, sleep=lambda _: None)
+        self.assertEqual(seen[0][0][seen[0][0].index("-r") + 1], "9")
+        self.assertEqual(result["samples"], [100.0 + i for i in range(9)])
+        self.assertEqual(result["sample_count"], 9)
+        self.assertEqual(result["metric"], 104.0)
+        self.assertEqual(result["raw_row"]["samples_ts"], result["samples"])
+
+    def test_serialized_readiness_does_not_unlock_on_maps_without_instrument_barrier(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            build = _build(Path(directory), rocwmma="ON", mfma="OFF")
+            model = Path(directory) / "model.gguf"; model.write_bytes(b"model")
+            policy = _readiness(model)
+            process = self._Process(self._row([1.0] * 9))
+            identity = {
+                "schema": "epyc.autokernel.split_reward_runtime_maps.v1",
+                "runtime_manifest_sha256": "d" * 64, "arm": "anchor",
+                "model_path": str(model.resolve()), "model_sha256": gpu.sha256_file(model),
+                "device_id": gpu.DEVICE_ID, "identity_sha256": "e" * 64,
+            }
+            with mock.patch.object(gpu, "_runtime_maps_identity", return_value=identity):
+                result = gpu._invoke_locked(
+                    build=build, model=model, seed=8613, baseline_vram=0,
+                    flash_attention=True, expected_source_commit=gpu.SOURCE_COMMIT,
+                    repetitions=9, runtime_arm="anchor", readiness_policy=policy,
+                    common_loader_dir=build / "bin", hip_library_dir=build / "bin",
+                    process_factory=lambda *_args, **_kwargs: process,
+                    kfd_pid_provider=lambda: (123,), vram_reader=lambda: 64,
+                    pgid_provider=lambda _pid: process.pid, sleep=lambda _: None)
+        self.assertEqual(result["runtime_maps_identity"], identity)
+
+    def test_serialized_invoke_holds_claim_and_lock_through_batched_process_without_barrier(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            build = _build(Path(directory), rocwmma="ON", mfma="OFF")
+            model = Path(directory) / "model.gguf"; model.write_bytes(b"model")
+            policy = _readiness(model)
+            process = self._Process(self._row([1.0] * 9))
+            events = []
+
+            class Lease:
+                path = Path("/tmp/autokernel-test-window")
+                waited_s = 0.01
+                held = True
+
+                def release(self):
+                    if self.held:
+                        events.append("lock-release")
+                        self.held = False
+
+            class Window:
+                def acquire(self):
+                    events.append("lock-acquire")
+                    return Lease()
+
+            class Claim:
+                def receipt(self):
+                    return mock.Mock(to_dict=lambda: {"claim_id": "cpu-test"})
+
+                def release(self):
+                    events.append("claim-release")
+
+            identity = {
+                "schema": "epyc.autokernel.split_reward_runtime_maps.v1",
+                "runtime_manifest_sha256": "d" * 64, "arm": "anchor",
+                "model_path": str(model.resolve()), "model_sha256": gpu.sha256_file(model),
+                "device_id": gpu.DEVICE_ID, "identity_sha256": "e" * 64,
+            }
+            def factory(*_args, **_kwargs):
+                events.append("spawn")
+                return process
+            def maps(**_kwargs):
+                events.append("maps-witness")
+                return identity
+            with mock.patch.object(gpu, "MODEL_CALL_WINDOW", Window()), \
+                 mock.patch.object(gpu.cpu_region_claim, "acquire_cpu_region_claim",
+                                   return_value=Claim()), \
+                 mock.patch.object(gpu, "_runtime_maps_identity", side_effect=maps):
+                result = gpu.invoke(
+                    build=build, model=model, seed=8613, baseline_vram=0,
+                    flash_attention=True, campaign_id="ak-gpu-test", cpu_journal=mock.Mock(),
+                    sealed_load_decision=_admission(model), repetitions=9,
+                    runtime_arm="anchor", load_readiness_policy=policy,
+                    reward_binary=build / "bin" / "llama-bench",
+                    hip_library_dir=build / "bin", common_loader_dir=build / "bin",
+                    process_factory=factory, kfd_pid_provider=lambda: (123,),
+                    vram_reader=lambda: 64, pgid_provider=lambda _pid: process.pid,
+                    sleep=lambda _: None)
+        self.assertEqual(events, ["lock-acquire", "spawn", "maps-witness",
+                                  "claim-release", "lock-release"])
+        self.assertEqual(result["load_readiness_transition"]["status"],
+                         "instrument_barrier_unavailable_held_through_process")
+        self.assertTrue(result["inference_call_window"]["released"])
+
+    def test_bad_native_sample_vector_refuses_without_leaking_live_child(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            build = _build(Path(directory), rocwmma="ON", mfma="OFF")
+            model = Path(directory) / "model.gguf"; model.write_bytes(b"model")
+            process = self._Process(self._row([1.0] * 8))
+            with self.assertRaisesRegex(RuntimeError, "exactly 9 finite raw samples"):
+                gpu._invoke_locked(
+                    build=build, model=model, seed=8613, baseline_vram=0,
+                    flash_attention=True, expected_source_commit=gpu.SOURCE_COMMIT,
+                    repetitions=9, process_factory=lambda *_args, **_kwargs: process,
+                    kfd_pid_provider=lambda: (123,), vram_reader=lambda: 64,
+                    pgid_provider=lambda _pid: process.pid, sleep=lambda _: None)
+        self.assertFalse(process.terminated)
+        self.assertEqual(process.returncode, 0)

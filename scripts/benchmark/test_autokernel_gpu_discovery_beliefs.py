@@ -36,9 +36,10 @@ def frame() -> dict:
 
 
 def runs(samples: list[float]) -> list[dict]:
-    return [{"metric": sample, "hip_residency_proved": True,
-             "raw_row": {"avg_ts": sample}, "residency": [{"owned_kfd_pids": [1]}]}
-            for sample in samples]
+    return [{"metric": sum(samples) / len(samples), "samples": samples,
+             "sample_count": len(samples), "hip_residency_proved": True,
+             "raw_row": {"avg_ts": sum(samples) / len(samples), "samples_ts": samples},
+             "residency": [{"owned_kfd_pids": [1]}]}]
 
 
 def baseline_body() -> dict:
@@ -168,8 +169,8 @@ class TestGpuDiscoveryBeliefs(unittest.TestCase):
 
     def test_refuses_missing_gpu_residency_and_authority_upgrade(self) -> None:
         bad = baseline_body()
-        bad["anchor_runs"][1]["hip_residency_proved"] = False
-        with self.assertRaisesRegex(beliefs.BeliefRefused, "resident samples"):
+        bad["anchor_runs"][0]["hip_residency_proved"] = False
+        with self.assertRaisesRegex(beliefs.BeliefRefused, "native raw sample"):
             beliefs.attach_baseline_beliefs(bad, producer_path=PRODUCER)
 
         bad = baseline_body()
