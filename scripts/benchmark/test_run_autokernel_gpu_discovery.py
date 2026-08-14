@@ -110,6 +110,19 @@ class TestGpuDiscoveryBuildIdentity(unittest.TestCase):
                     factor="flash_attention", campaign_id="gpu", calls=3, workload="prefill_pp512",
                     device_id=gpu.DEVICE_ID, inference_window_lock=None)))
             self.assertEqual(sealed["host_transfer"]["mode"], "cold_serialized")
+
+    def test_preflight_refuses_unsealed_ready_continue_instrument(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); build = _build(root, rocwmma="ON", mfma="OFF")
+            model = root / "m"; model.write_bytes(b"x")
+            args = _bind_admission(argparse.Namespace(
+                model=str(model), anchor_build=str(build), candidate_build=str(build),
+                factor="flash_attention", campaign_id="gpu", calls=3,
+                workload="prefill_pp512", device_id=gpu.DEVICE_ID,
+                inference_window_lock=None, instrument_ready_continue_v1=True,
+                instrument_ready_continue_commit="wrong"))
+            with self.assertRaisesRegex(RuntimeError, "sealed d9fdc17bd"):
+                gpu.preflight(args)
     def test_decode_preflight_seals_tg128_shape_and_metric(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -575,3 +588,86 @@ class TestGpuDiscoveryBatchedSubprocess(unittest.TestCase):
                     pgid_provider=lambda _pid: process.pid, sleep=lambda _: None)
         self.assertFalse(process.terminated)
         self.assertEqual(process.returncode, 0)
+
+    def test_governed_ready_continue_binds_pid_seed_reps_and_releases_before_continue(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            build = _build(root, rocwmma="ON", mfma="OFF")
+            model = root / "model.gguf"; model.write_bytes(b"model")
+            policy = _readiness(model)
+            decision = _admission(model)
+            handshake = gpu.ReadyContinueHandshake.create(
+                root=root / "barrier", decision=decision, policy=policy,
+                arm="anchor", seed=8613, repetitions=9)
+            process = self._Process(self._row([1.0] * 9))
+            identity = {
+                "schema": "epyc.autokernel.split_reward_runtime_maps.v1",
+                "runtime_manifest_sha256": "d" * 64, "arm": "anchor",
+                "model_path": str(model.resolve()), "model_sha256": gpu.sha256_file(model),
+                "device_id": gpu.DEVICE_ID, "identity_sha256": "e" * 64,
+            }
+            events = []
+            def factory(argv, **_kwargs):
+                self.assertIn("--autokernel-ready-file", argv)
+                self.assertIn("--autokernel-continue-file", argv)
+                self.assertIn("--autokernel-ready-token", argv)
+                handshake.ready_path.write_text(
+                    f"{handshake.schema} {process.pid} 8613 9 {handshake.token}\n",
+                    encoding="ascii")
+                return process
+            def release(witness):
+                self.assertFalse(handshake.continue_path.exists())
+                self.assertEqual(witness["ready"]["pid"], process.pid)
+                self.assertEqual(witness["ready"]["seed"], 8613)
+                self.assertEqual(witness["ready"]["repetitions"], 9)
+                events.append("lock-released")
+            with mock.patch.object(gpu, "_runtime_maps_identity", return_value=identity):
+                result = gpu._invoke_locked(
+                    build=build, model=model, seed=8613, baseline_vram=0,
+                    flash_attention=True, expected_source_commit=gpu.SOURCE_COMMIT,
+                    repetitions=9, runtime_arm="anchor", readiness_policy=policy,
+                    ready_continue_handshake=handshake, on_load_ready=release,
+                    common_loader_dir=build / "bin", hip_library_dir=build / "bin",
+                    process_factory=factory, kfd_pid_provider=lambda: (123,),
+                    vram_reader=lambda: 64, pgid_provider=lambda _pid: process.pid,
+                    sleep=lambda _: None)
+            self.assertEqual(events, ["lock-released"])
+            self.assertEqual(handshake.continue_path.read_text(encoding="ascii"),
+                             handshake.token + "\n")
+            self.assertEqual(result["load_readiness_witness"]["ready"]["token"], handshake.token)
+            self.assertEqual(handshake.cleanup(), {"ready_removed": True, "continue_removed": True})
+
+    def test_tampered_ready_receipt_terminates_child_before_any_continue(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            build = _build(root, rocwmma="ON", mfma="OFF")
+            model = root / "model.gguf"; model.write_bytes(b"model")
+            policy = _readiness(model)
+            handshake = gpu.ReadyContinueHandshake.create(
+                root=root / "barrier", decision=_admission(model), policy=policy,
+                arm="anchor", seed=8613, repetitions=9)
+            process = self._Process(self._row([1.0] * 9))
+            identity = {
+                "schema": "epyc.autokernel.split_reward_runtime_maps.v1",
+                "runtime_manifest_sha256": "d" * 64, "arm": "anchor",
+                "model_path": str(model.resolve()), "model_sha256": gpu.sha256_file(model),
+                "device_id": gpu.DEVICE_ID, "identity_sha256": "e" * 64,
+            }
+            def factory(*_args, **_kwargs):
+                handshake.ready_path.write_text(
+                    f"{handshake.schema} 0 8613 9 {handshake.token}\n", encoding="ascii")
+                return process
+            with mock.patch.object(gpu, "_runtime_maps_identity", return_value=identity), \
+                 self.assertRaisesRegex(RuntimeError, "PID/seed/repetitions/token"):
+                gpu._invoke_locked(
+                    build=build, model=model, seed=8613, baseline_vram=0,
+                    flash_attention=True, expected_source_commit=gpu.SOURCE_COMMIT,
+                    repetitions=9, runtime_arm="anchor", readiness_policy=policy,
+                    ready_continue_handshake=handshake, on_load_ready=lambda _w: None,
+                    common_loader_dir=build / "bin", hip_library_dir=build / "bin",
+                    process_factory=factory, kfd_pid_provider=lambda: (123,),
+                    vram_reader=lambda: 64, pgid_provider=lambda _pid: process.pid,
+                    sleep=lambda _: None)
+            self.assertIsNotNone(process.returncode)
+            self.assertFalse(handshake.continue_path.exists())
+            handshake.cleanup()
