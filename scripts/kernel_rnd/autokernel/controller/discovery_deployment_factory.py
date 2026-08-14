@@ -343,44 +343,27 @@ def _manifest_file(config: deployment.DiscoveryDeployment,
     return evidence.BoundInputFile("manifest", path.resolve(), candidate.source_manifest_sha256)
 
 
-def _build_identity_files(raw: Mapping[str, Any], arm: str,
-                          identity: Any) -> evidence.BuildIdentityFiles:
-    carriers = raw.get("identity_files")
-    row = carriers.get(arm) if isinstance(carriers, Mapping) else None
-    names = ("source_identity", "binary", "hip_library", "config", "linkage")
-    if not isinstance(row, Mapping) or set(row) != set(names):
-        # BuildIdentity's semantic source/linkage hashes are not file hashes in
-        # the current builder.  Never manufacture a carrier whose bytes merely
-        # describe those hashes: that would invent evidence authority.
-        raise DeploymentFactoryError(
-            "source build lacks semantic BuildIdentity file carriers; refusing evidence plan")
-    result = {}
-    for name in names:
-        item = row[name]
-        if not isinstance(item, Mapping) or set(item) != {"path", "sha256"}:
-            raise DeploymentFactoryError("BuildIdentity carrier is malformed")
-        path = Path(str(item["path"]))
-        bound = evidence.BoundInputFile(name, path.resolve(strict=True), str(item["sha256"]))
-        if _digest_regular(bound.path, f"{arm} {name}") != bound.sha256:
-            raise DeploymentFactoryError("BuildIdentity carrier bytes changed")
-        result[name] = bound
-    files = evidence.BuildIdentityFiles(**result)
-    expected = {name: getattr(identity, f"{name}_sha256" if name != "source_identity" else "source_sha256")
-                for name in names}
-    if any(getattr(files, name).sha256 != digest for name, digest in expected.items()):
-        raise DeploymentFactoryError("BuildIdentity carrier is not semantically bound")
-    return files
-
-
 def _evidence_binding(config: deployment.DiscoveryDeployment) -> EvidencePlanBinding:
     profiler, timestamp_input = _rocprof_v1_policy(config)
     def build(candidate: controller.PlannedCandidate, build_: controller.GpuSourceBuild,
               template: ExperimentTemplate) -> evidence.GpuSourceEvidencePlan:
         if build_.materialization_receipt is None or build_.operation_key is None:
             raise DeploymentFactoryError("source build lacks materialization identity")
-        raw = json.loads(build_.materialization_receipt.read_text(encoding="utf-8"))
-        candidate_files = _build_identity_files(raw, "candidate", build_.candidate_identity)
-        anchor_files = _build_identity_files(raw, "anchor", build_.anchor_identity)
+        identities = discovery_static_registry.evidence_identity_files_for_build(
+            build_, manifest=_manifest_file(config, candidate, build_),
+            model=evidence.BoundInputFile("model", config.model.path, config.model.sha256),
+            workload=evidence.BoundInputFile("workload", config.workload.path,
+                                             config.workload.sha256),
+            runtime_config=evidence.BoundInputFile(
+                "runtime_config", config.runtime_config.path, config.runtime_config.sha256))
+        if identities.shared_runtime is None:
+            raise DeploymentFactoryError("source evidence lacks a shared reward runtime")
+        # Revalidate the profiler and timestamp carriers at the same binding
+        # boundary as the source/runtime carriers.
+        if (_digest_regular(profiler.path, "rocprof-v1") != profiler.sha256
+                or _digest_regular(timestamp_input.path, "rocprof-v1 input")
+                != timestamp_input.sha256):
+            raise DeploymentFactoryError("rocprof-v1 policy changed before evidence binding")
         # The exact rocprof-v1 executable and input bytes are already resolved
         # and re-hashed above.  The remaining refusal is narrower: the current
         # builder checkpoint does not yet carry an exact reviewed correctness
@@ -507,7 +490,9 @@ def build_static_deployment_graph(config: deployment.DiscoveryDeployment) -> Sta
     launcher_sha256 = _digest_regular(Path(codex_container_actor.__file__).resolve(),
                                       "Codex actor launcher")
     sampler = gpu_residency_sampler.Mi210ResidencySampler()
-    executor = evidence.SubprocessCommandExecutor(residency_sampler=sampler)
+    executor = evidence.SubprocessCommandExecutor(
+        residency_sampler=sampler,
+        runtime_maps_sampler=discovery_static_registry.runtime_maps_sampler())
     journal = device_claim.ClaimJournal(config.operations_root / "claims" / "device.jsonl")
     adapters = materialize(config, registry, correctness_executor=executor,
                            rocprof_executor=executor, claim_journal=journal)

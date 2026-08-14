@@ -214,11 +214,7 @@ def _planner_context(value: object, *, model: ImmutableInput,
 class DiscoveryDeployment:
     config_sha256: str
     production_path: Path
-    production_branch: str
     production_head: str
-    instrument_path: Path
-    instrument_branch: str
-    instrument_commit: str
     state_root: Path
     evidence_root: Path
     operations_root: Path
@@ -245,9 +241,7 @@ class DiscoveryDeployment:
 
     def revalidate(self) -> None:
         """Close the parse-to-start TOCTOU gap for every sealed file reference."""
-        _verify_production(self.production_path, self.production_branch, self.production_head)
-        _verify_instrument(self.instrument_path, self.production_head,
-                           self.instrument_branch, self.instrument_commit)
+        _verify_production(self.production_path, self.production_head)
         self.actor_wrapper.revalidate("actors.wrapper")
         for label, value in (("model", self.model), ("workload", self.workload),
                              ("runtime_config", self.runtime_config), ("policy", self.policy)):
@@ -275,11 +269,10 @@ def _input(value: object, label: str) -> ImmutableInput:
     return ImmutableInput(path=path, sha256=_digest_file(path, raw["sha256"], label))
 
 
-def _verify_production(path: Path, declared_branch: str, declared_head: str) -> None:
+def _verify_production(path: Path, declared_head: str) -> None:
     expected = FROZEN_PRODUCTION_PATH.resolve(strict=True)
-    if (path.resolve(strict=True) != expected or declared_head != FROZEN_PRODUCTION_HEAD
-            or declared_branch != FROZEN_PRODUCTION_BRANCH):
-        raise DeploymentConfigError("production identity is not the exact frozen tree/branch/head")
+    if path.resolve(strict=True) != expected or declared_head != FROZEN_PRODUCTION_HEAD:
+        raise DeploymentConfigError("production identity is not the exact frozen tree/head")
     def git(*args: str) -> str:
         completed = subprocess.run(("git", "-C", str(expected), *args),
                                    check=False, capture_output=True, text=True)
@@ -290,36 +283,11 @@ def _verify_production(path: Path, declared_branch: str, declared_head: str) -> 
         raise DeploymentConfigError("frozen production HEAD differs from declared freeze")
     if git("branch", "--show-current") != FROZEN_PRODUCTION_BRANCH:
         raise DeploymentConfigError("frozen production branch differs from declared freeze")
-    # The shared production checkout may contain pre-existing untracked local
-    # tooling.  It is not authority for experiments and must not be deleted or
-    # prettified here.  Tracked/index changes, however, invalidate the freeze.
+    # Production immutability is the tracked/index contract enforced by the
+    # canonical session verifier.  Local untracked analysis metadata is not in
+    # the commit and cannot enter the fresh commit-addressed worktrees.
     if git("status", "--porcelain", "--untracked-files=no"):
-        raise DeploymentConfigError("frozen production tree has tracked changes")
-
-
-def _verify_instrument(path: Path, production_head: str, instrument_branch: str,
-                       instrument_commit: str) -> None:
-    if not isinstance(instrument_branch, str) or not IDENTIFIER.fullmatch(instrument_branch):
-        raise DeploymentConfigError("instrument branch must be an exact identifier")
-    if not isinstance(instrument_commit, str) or not GIT_SHA.fullmatch(instrument_commit):
-        raise DeploymentConfigError("instrument commit must be an exact Git SHA")
-    if path.is_symlink() or not path.is_dir():
-        raise DeploymentConfigError("instrument.repo_path must be a regular Git checkout")
-    # The measurement instrument is an explicitly approved descendant in a
-    # separate experimental repository.  Its checked-out worktree may be dirty;
-    # authority is the sealed branch object, never that checkout state.
-    check = subprocess.run(("git", "-C", str(path), "merge-base", "--is-ancestor",
-                            production_head, instrument_commit), stdin=subprocess.DEVNULL,
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                           check=False)
-    if check.returncode != 0:
-        raise DeploymentConfigError("instrument commit is not a production descendant")
-    resolved = subprocess.run(("git", "-C", str(path), "rev-parse",
-                               f"refs/heads/{instrument_branch}"),
-                              stdin=subprocess.DEVNULL, capture_output=True, text=True,
-                              check=False)
-    if resolved.returncode or resolved.stdout.strip() != instrument_commit:
-        raise DeploymentConfigError("instrument branch does not resolve to the sealed instrument commit")
+        raise DeploymentConfigError("frozen production tracked/index state is dirty")
 
 
 def _validate_root(path: Path, label: str) -> Path:
@@ -339,7 +307,7 @@ def load_deployment_config(path: Path) -> DiscoveryDeployment:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise DeploymentConfigError("deployment configuration is not JSON") from exc
-    top = _exact(raw, {"schema", "config_sha256", "production", "instrument", "controller", "actors", "gpu",
+    top = _exact(raw, {"schema", "config_sha256", "production", "controller", "actors", "gpu",
                        "immutable_inputs", "planner_context", "source_plan"}, "deployment configuration")
     if top["schema"] != SCHEMA:
         raise DeploymentConfigError("deployment configuration schema mismatch")
@@ -351,22 +319,13 @@ def load_deployment_config(path: Path) -> DiscoveryDeployment:
     if (not isinstance(top["config_sha256"], str) or not SHA.fullmatch(top["config_sha256"])
             or calculated_config_hash != top["config_sha256"]):
         raise DeploymentConfigError("deployment configuration self-hash mismatch")
-    production = _exact(top["production"], {"path", "branch", "head"}, "production")
-    instrument = _exact(top["instrument"], {"repo_path", "branch", "commit",
-                                               "production_ancestor"}, "instrument")
+    production = _exact(top["production"], {"path", "head"}, "production")
     production_path = _absolute(production["path"], "production.path")
     if production_path.is_symlink() or not production_path.is_dir():
         raise DeploymentConfigError("production.path must be a regular directory")
     if not isinstance(production["head"], str) or not GIT_SHA.fullmatch(production["head"]):
         raise DeploymentConfigError("production.head must be an exact Git SHA")
-    if instrument["production_ancestor"] != production["head"]:
-        raise DeploymentConfigError("instrument.production_ancestor must equal frozen production head")
-    instrument_path = _absolute(instrument["repo_path"], "instrument.repo_path")
-    if _overlaps(instrument_path, production_path):
-        raise DeploymentConfigError("instrument.repo_path must be separate from frozen production")
-    _verify_production(production_path, production["branch"], production["head"])
-    _verify_instrument(instrument_path, production["head"], instrument["branch"],
-                       instrument["commit"])
+    _verify_production(production_path, production["head"])
     controller = _exact(top["controller"], {"state_root", "evidence_root",
                                                "operations_root", "max_iterations",
                                                "nomination_threshold"}, "controller")
@@ -375,9 +334,8 @@ def load_deployment_config(path: Path) -> DiscoveryDeployment:
     if any(_overlaps(left, right) for index, left in enumerate(roots.values())
            for right in list(roots.values())[index + 1:]):
         raise DeploymentConfigError("controller roots must not overlap")
-    if any(_overlaps(root, protected) for root in roots.values()
-           for protected in (production_path, instrument_path)):
-        raise DeploymentConfigError("controller output roots must not enter production or instrument repositories")
+    if any(_overlaps(root, production_path) for root in roots.values()):
+        raise DeploymentConfigError("controller output roots must not enter frozen production")
     max_iterations = controller["max_iterations"]
     threshold = controller["nomination_threshold"]
     if isinstance(max_iterations, bool) or not isinstance(max_iterations, int) or not 1 <= max_iterations <= 1000:
@@ -419,14 +377,11 @@ def load_deployment_config(path: Path) -> DiscoveryDeployment:
                           ("workload", workload), ("runtime_config", runtime_config),
                           ("admission_policy", admission_policy_input), ("planner_context", planner_context.input)):
         if any(_overlaps(input_.path, protected)
-               for protected in (*roots.values(), production_path, instrument_path)):
+               for protected in (*roots.values(), production_path)):
             raise DeploymentConfigError(
                 f"{label} location overlaps a mutable output or frozen production tree")
     return DiscoveryDeployment(
-        config_sha256=top["config_sha256"], production_path=production_path,
-        production_branch=production["branch"], production_head=production["head"],
-        instrument_path=instrument_path, instrument_branch=instrument["branch"],
-        instrument_commit=instrument["commit"],
+        config_sha256=top["config_sha256"], production_path=production_path, production_head=production["head"],
         state_root=roots["state_root"], evidence_root=roots["evidence_root"],
         operations_root=roots["operations_root"], max_iterations=max_iterations,
         nomination_threshold=float(threshold), actor_wrapper=actor_wrapper,
