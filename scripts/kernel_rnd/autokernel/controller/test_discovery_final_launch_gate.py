@@ -15,9 +15,14 @@ import stat
 import subprocess
 import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
+from unittest import mock
 
 from .. import schemas
+from . import discovery_controller as controller
+from . import discovery_deployment_factory as factory
+from . import test_discovery_controller_blackbox as blackbox
 
 
 COMBINED_SHA = "164b8751f18008d69597489ffd6f12039f60c821"
@@ -181,6 +186,85 @@ class ImmutablePublicBundleGate(unittest.TestCase):
         self.assertFalse(batched["early_unlock_enabled"])
         self.assertEqual(batched["safe_fallback"], "full_process_cold_serialized_lock")
         self.assertEqual(batched["trust_limit"], "cooperative_same_uid_not_launch_authority")
+
+
+class DeviceContentionGate(unittest.TestCase):
+    def _lease_config(self, root: Path) -> SimpleNamespace:
+        model = root / "model.gguf"
+        model.write_bytes(b"hardware-free model identity")
+        model_sha = _sha(model.read_bytes())
+        profile = SimpleNamespace(
+            model_path=str(model.resolve()), model_sha256=model_sha,
+            device_id="mi210_0", workload="decode_tg128", calls_per_arm=9,
+            cold_load_host_bytes=model.stat().st_size,
+            worst_case_loads_per_interval=2,
+        )
+        corpus = SimpleNamespace(
+            profiles=(profile,), policy_sha256="a" * 64, version="gate-v1",
+        )
+        config = SimpleNamespace(
+            device_id="mi210_0", model=SimpleNamespace(path=model.resolve(), sha256=model_sha),
+            admission_policy=SimpleNamespace(corpus=corpus),
+            planner_context=SimpleNamespace(value={"context_sha256": "b" * 64}),
+            operations_root=(root / "operations").resolve(), claim_timeout_s=0.0,
+            inference_window_lock=(root / "window.lock").resolve(),
+            revalidate=mock.Mock(),
+        )
+        return config
+
+    def test_busy_real_device_claim_is_wait_not_admitted_or_ambiguous(self) -> None:
+        """Ordinary contention must be classified before any build/evidence intent."""
+        with tempfile.TemporaryDirectory(prefix="autokernel-contention-gate-") as temporary:
+            config = self._lease_config(Path(temporary))
+            decision = SimpleNamespace(
+                mode="cold_serialized", to_dict=lambda: {"decision_sha256": "c" * 64},
+            )
+            busy = factory.device_claim.DeviceClaimTimeout("held by another session")
+            with mock.patch.object(factory.gpu_load_admission, "arbitrate", return_value=decision), \
+                    mock.patch.object(factory.device_claim, "acquire_device_claim",
+                                      side_effect=busy) as acquire:
+                permit = factory.GpuDiscoveryLease(
+                    config=config, mode="allowed_discovery_noise"
+                ).admit(SimpleNamespace(experiment_intent=None))
+        acquire.assert_called_once()
+        self.assertFalse(permit["admitted"])
+        self.assertEqual(permit["device_id"], "mi210_0")
+        self.assertEqual(permit["reason"], "device_busy")
+
+    def test_busy_pending_retry_spends_no_more_planning_build_or_iteration(self) -> None:
+        """A durable WAIT resumes the byte-identical candidate once admission succeeds."""
+        with tempfile.TemporaryDirectory(prefix="autokernel-pending-gate-") as temporary, \
+                mock.patch.object(controller.source_candidate, "SourcePatchManifest",
+                                  blackbox.Manifest), \
+                mock.patch.object(controller, "_write_projection"):
+            root = Path(temporary)
+            planner, critic, screener = (
+                blackbox.Planner(), blackbox.Critic(), blackbox.Screen()
+            )
+            lease = blackbox.Lease((False, False, True))
+            config = controller.ControllerConfig(root / "out", max_iterations=1)
+            first = controller.run_controller(
+                config, planner=planner, critic=critic, screener=screener, lease=lease
+            )
+            second = controller.run_controller(
+                config, planner=planner, critic=critic, screener=screener, lease=lease
+            )
+            self.assertEqual(first["pending"]["row"]["status"], "waiting_resource")
+            self.assertEqual(second["pending"]["candidate"], first["pending"]["candidate"])
+            self.assertEqual(first["next"], 1)
+            self.assertEqual(second["next"], 1)
+            self.assertEqual(first["iterations"], [])
+            self.assertEqual(second["iterations"], [])
+            self.assertEqual((planner.calls, critic.calls, screener.calls), (1, 1, 0))
+            final = controller.run_controller(
+                config, planner=planner, critic=critic, screener=screener, lease=lease
+            )
+            self.assertTrue(final["complete"])
+            self.assertEqual((planner.calls, critic.calls, screener.calls), (1, 1, 1))
+            self.assertEqual(
+                screener.items[0].source_manifest.patch_bytes,
+                blackbox.Manifest().patch_bytes,
+            )
 
 
 if __name__ == "__main__":
