@@ -24,6 +24,7 @@ from scripts.kernel_rnd.autokernel.execution import (
 from scripts.kernel_rnd.autokernel.resource import device_claim
 from scripts.benchmark import autokernel_gpu_discovery_beliefs as gpu_beliefs
 from scripts.benchmark import autokernel_progression
+from scripts.kernel_rnd.autokernel.controller import split_runtime_verifier
 
 
 SCHEMA_BANK = "epyc.autokernel.gpu_screening_baseline.v2"
@@ -109,6 +110,31 @@ def _kfd_pids() -> tuple[int, ...]:
                             if path.name.isdigit()))
     except OSError as exc:
         raise RuntimeError(f"KFD process inventory unreadable: {exc}") from exc
+
+
+def _start_ticks(pid: int, *, proc_root: Path = Path("/proc")) -> int:
+    try:
+        tail = (proc_root / str(pid) / "stat").read_text(encoding="utf-8").rsplit(")", 1)[1].split()
+        return int(tail[19])  # proc stat field 22 after pid+comm
+    except (OSError, IndexError, ValueError) as exc:
+        raise RuntimeError("captured GPU child start ticks are unavailable") from exc
+
+
+def _runtime_maps_identity(*, runtime_root: Path, arm: str, model: Path,
+                           kfd_pid: int, proc_root: Path = Path("/proc"),
+                           boot_id_path: Path = Path("/proc/sys/kernel/random/boot_id")) -> dict:
+    """Prove actual loader mapping while the governed arm is resident."""
+    try:
+        manifest = split_runtime_verifier.verify_split_runtime(runtime_root)
+        maps = (proc_root / str(kfd_pid) / "maps").read_text(encoding="utf-8")
+        identity = split_runtime_verifier.verify_runtime_maps(
+            manifest, arm=arm, maps_text=maps, model_path=model,
+            model_sha256=sha256_file(model), device_id=DEVICE_ID, kfd_pid=kfd_pid,
+            boot_id=boot_id_path.read_text(encoding="utf-8").strip(),
+            process_start_ticks=_start_ticks(kfd_pid, proc_root=proc_root))
+    except (OSError, split_runtime_verifier.SplitRuntimeError) as exc:
+        raise RuntimeError(f"runtime loader-map proof refused: {exc}") from exc
+    return identity.to_dict()
 
 
 class BandwidthDutyCycleBudget:
@@ -246,6 +272,7 @@ def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
            poll: int = 50, inference_window_lock: Path | None = None,
            reward_binary: Path | None = None, hip_library_dir: Path | None = None,
            common_loader_dir: Path | None = None,
+           runtime_arm: str | None = None,
            host_transfer_interval_s: float = 60.0,
            host_bandwidth_bytes_s: float = DEFAULT_HOST_BANDWIDTH_BYTES_S,
            host_transfer_fraction: float = DEFAULT_HOST_TRANSFER_FRACTION,
@@ -282,7 +309,8 @@ def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
             generation_tokens=generation_tokens, threads=threads, ubatch=ubatch,
             batch=batch, mmap=mmap, no_op_offload=no_op_offload,
             split_mode=split_mode, no_kv_offload=no_kv_offload, poll=poll,
-            reward_binary=reward_binary, hip_library_dir=hip_library_dir, common_loader_dir=common_loader_dir)
+            reward_binary=reward_binary, hip_library_dir=hip_library_dir, common_loader_dir=common_loader_dir,
+            runtime_arm=runtime_arm)
         # Deliberately no shared CPU inference-window lock here.  The <=512MiB
         # policy treats CPU activity as discovery noise; it is not a strict
         # calibration claim and must not serialize small GPU exploration.
@@ -327,7 +355,8 @@ def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
                 generation_tokens=generation_tokens, threads=threads, ubatch=ubatch,
                 batch=batch, mmap=mmap, no_op_offload=no_op_offload,
                 split_mode=split_mode, no_kv_offload=no_kv_offload, poll=poll,
-                reward_binary=reward_binary, hip_library_dir=hip_library_dir, common_loader_dir=common_loader_dir)
+                reward_binary=reward_binary, hip_library_dir=hip_library_dir, common_loader_dir=common_loader_dir,
+                runtime_arm=runtime_arm)
             if getattr(coverage, "borrowed", False):
                 coverage.validate()
         finally:
@@ -354,7 +383,7 @@ def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
                    no_op_offload: bool = False, split_mode: str = "layer",
                    no_kv_offload: bool = False, poll: int = 50,
                    reward_binary: Path | None = None, hip_library_dir: Path | None = None,
-                   common_loader_dir: Path | None = None) -> dict:
+                   common_loader_dir: Path | None = None, runtime_arm: str | None = None) -> dict:
     binary = (reward_binary or build / "bin" / "llama-bench").resolve()
     loader_dir = (hip_library_dir or build / "bin").resolve()
     common_dir = (common_loader_dir or binary.parent).resolve()
@@ -380,6 +409,7 @@ def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
                                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                text=True, start_new_session=True)
     samples = []
+    maps_identity = None
     while process.poll() is None:
         kfd = _kfd_pids()
         try:
@@ -401,6 +431,11 @@ def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
             raise RuntimeError(f"foreign KFD inference overlapped discovery: {foreign}")
         samples.append({"offset_s": time.monotonic(), "kfd_pids": list(kfd),
                         "owned_kfd_pids": owned, "vram_used_bytes": vram})
+        if (maps_identity is None and runtime_arm is not None and owned
+                and vram > baseline_vram and common_loader_dir is not None
+                and hip_library_dir is not None):
+            maps_identity = _runtime_maps_identity(runtime_root=common_loader_dir.parent,
+                arm=runtime_arm, model=model, kfd_pid=owned[0])
         time.sleep(0.05)
     stdout, stderr = process.communicate(timeout=10)
     if process.returncode != 0:
@@ -433,6 +468,8 @@ def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
         raise RuntimeError("GPU discovery window has no owned KFD residency sample")
     if max(sample["vram_used_bytes"] for sample in samples) <= baseline_vram:
         raise RuntimeError("GPU discovery window has no positive VRAM residency delta")
+    if runtime_arm is not None and maps_identity is None:
+        raise RuntimeError("GPU discovery window lacks sealed runtime loader-map identity")
     return {"argv": list(argv), "env": {"LD_LIBRARY_PATH": env["LD_LIBRARY_PATH"]},
             "reward_binary": str(binary), "reward_binary_sha256": sha256_file(binary),
             "hip_library": str(loader_dir / "libggml-hip.so"),
@@ -440,6 +477,7 @@ def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
             "common_loader_dir": str(common_dir),
             "metric": float(row["avg_ts"]), "raw_row": row,
             "stderr_tail": stderr[-2000:], "residency": samples,
+            "runtime_maps_identity": maps_identity,
             "hip_residency_proved": True}
 
 
@@ -732,7 +770,8 @@ def run(args: argparse.Namespace) -> dict:
             hip_library_dir=(Path(sealed["runtime_arms"]["anchor_loader_dir"])
                              if sealed["runtime_arms"] else None),
             common_loader_dir=(Path(sealed["runtime_arms"]["common_loader_dir"])
-                               if sealed["runtime_arms"] else None))
+                               if sealed["runtime_arms"] else None),
+            runtime_arm=("anchor" if sealed["runtime_arms"] else None))
             for i in range(args.calls)]
         bank_body = {
             "schema": SCHEMA_BANK, "campaign_id": args.campaign_id,
@@ -778,7 +817,8 @@ def run(args: argparse.Namespace) -> dict:
             hip_library_dir=(Path(sealed["runtime_arms"]["candidate_loader_dir"])
                              if sealed["runtime_arms"] else None),
             common_loader_dir=(Path(sealed["runtime_arms"]["common_loader_dir"])
-                               if sealed["runtime_arms"] else None))
+                               if sealed["runtime_arms"] else None),
+            runtime_arm=("candidate" if sealed["runtime_arms"] else None))
             for i in range(args.calls)]
         center = sum(bank["anchor_samples"]) / len(bank["anchor_samples"])
         values = [run["metric"] for run in candidate_runs]

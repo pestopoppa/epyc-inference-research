@@ -197,7 +197,6 @@ class DiscoveryDeployment:
     device_id: str
     claim_timeout_s: float
     inference_window_lock: Path
-    small_model_max_bytes: int
     model: ImmutableInput
     workload: ImmutableInput
     runtime_config: ImmutableInput
@@ -317,7 +316,7 @@ def load_deployment_config(path: Path) -> DiscoveryDeployment:
         raise DeploymentConfigError("actors.wrapper_path must be executable")
     environment_profile_id = _identifier(actors["environment_profile_id"], "actors.environment_profile_id")
     gpu = _exact(top["gpu"], {"device_id", "claim_timeout_s", "inference_window_lock",
-                                "inference_window_lease_id", "small_model_max_bytes"}, "gpu")
+                                "inference_window_lease_id"}, "gpu")
     device_id = _identifier(gpu["device_id"], "gpu.device_id")
     if device_id not in ALLOWED_DEVICE_IDS:
         raise DeploymentConfigError("gpu.device_id is not an admitted discovery device")
@@ -330,10 +329,6 @@ def load_deployment_config(path: Path) -> DiscoveryDeployment:
         raise DeploymentConfigError("gpu.inference_window_lock parent/file is invalid")
     if _overlaps(window, production_path):
         raise DeploymentConfigError("gpu.inference_window_lock must not enter frozen production")
-    small = gpu["small_model_max_bytes"]
-    if (isinstance(small, bool) or not isinstance(small, int) or small < 1
-            or small > 512 * 1024 * 1024):
-        raise DeploymentConfigError("gpu.small_model_max_bytes is invalid")
     inputs = _exact(top["immutable_inputs"], {"model", "workload", "runtime_config", "policy"}, "immutable_inputs")
     source = _exact(top["source_plan"], {"source_builder_id", "evidence_plan_id",
                                            "runner_args_id", "experiment_template_registry_id", "experiment_template_registry_sha256",
@@ -344,8 +339,6 @@ def load_deployment_config(path: Path) -> DiscoveryDeployment:
     policy = _input(inputs["policy"], "policy")
     planner_context = _planner_context(top["planner_context"], model=model,
                                        workload=workload, runtime_config=runtime_config)
-    if model.path.stat().st_size > small:
-        raise DeploymentConfigError("model exceeds configured small-model discovery limit")
     for label, input_ in (("actors.wrapper", actor_wrapper), ("model", model),
                           ("workload", workload), ("runtime_config", runtime_config),
                           ("policy", policy), ("planner_context", planner_context.input)):
@@ -360,7 +353,7 @@ def load_deployment_config(path: Path) -> DiscoveryDeployment:
         nomination_threshold=float(threshold), actor_wrapper=actor_wrapper,
         environment_profile_id=environment_profile_id, device_id=device_id,
         claim_timeout_s=float(claim_timeout_s), inference_window_lock=window,
-        small_model_max_bytes=small, model=model, workload=workload,
+        model=model, workload=workload,
         runtime_config=runtime_config, policy=policy, planner_context=planner_context,
         source_builder_id=_identifier(source["source_builder_id"], "source_plan.source_builder_id"),
         evidence_plan_id=_identifier(source["evidence_plan_id"], "source_plan.evidence_plan_id"),

@@ -611,6 +611,12 @@ def _verify_plan_files(plan: GpuSourceEvidencePlan) -> None:
             plan.identity_files.materialization.path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise EvidenceProducerError("source materialization receipt is not JSON") from exc
+    # Older governed fixtures predate the canonical builder receipt.  Only the
+    # new concrete-builder schema is admitted without a self hash fallback.
+    if materialization.get("schema") == "epyc.autokernel.gpu_source_materialization.v1":
+        if (materialization.get("receipt_sha256") != schemas.content_hash(
+                {key: value for key, value in materialization.items() if key != "receipt_sha256"})):
+            raise EvidenceProducerError("source materialization receipt self-hash mismatch")
     required_materialization = {
         "schema": "epyc.autokernel.gpu_source_materialization.v1",
         "manifest_sha256": plan.manifest_sha256,

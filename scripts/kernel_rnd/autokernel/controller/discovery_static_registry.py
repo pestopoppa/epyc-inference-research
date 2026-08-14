@@ -267,6 +267,7 @@ class StaticGpuSourceBuilder:
         snapshots: list[worktree.Worktree] = []
         operation_dir = self.operations_root / "materialization" / operation_key
         operation_dir.mkdir(parents=True, exist_ok=True)
+        completed: dict[str, Any] | None = None
         try:
             applied = source_candidate.apply_source_candidate(candidate.source_manifest,
                                                                proposal=candidate.proposal, actor=actor)
@@ -311,12 +312,12 @@ class StaticGpuSourceBuilder:
                 anchor_build=Path(by_id["akc-anchor"][1].path),
                 candidate_build=Path(by_id[candidate.source_manifest.candidate_id][1].path))
             materialization = {
-                "schema": "epyc.autokernel.source_materialization.v1",
+                "schema": "epyc.autokernel.gpu_source_materialization.v1",
                 "authority": "nonpromotable_candidate_only_discovery",
                 "operation_key": operation_key,
                 "actor_worktree": actor.to_dict(),
                 "actor_proof": actor_proof.to_dict(),
-                "manifest_patch_bundle_sha256": candidate.source_manifest.patch_bundle_sha256,
+                "manifest_sha256": candidate.source_manifest.patch_bundle_sha256,
                 "applied": {
                     "candidate_commit": applied.candidate_commit,
                     "actual_files": list(applied.actual_files),
@@ -327,7 +328,10 @@ class StaticGpuSourceBuilder:
                     "diff_sha256": hashlib.sha256(applied.diff_text.encode()).hexdigest(),
                 },
                 "anchor_commit": anchor.commit,
-                "candidate_commit": applied.candidate_commit,
+                "candidate_source_commit": applied.candidate_commit,
+                "candidate_source_sha256": candidate_identity.source_sha256,
+                "patch_applied": True,
+                "production_tree": False,
                 "builds": {ident: result.to_dict() for ident, _snapshot, _build, result in results},
                 "anchor_identity": vars(anchor_identity),
                 "candidate_identity": vars(candidate_identity),
@@ -338,15 +342,18 @@ class StaticGpuSourceBuilder:
             materialization["receipt_sha256"] = schemas.content_hash(materialization)
             materialization_path = operation_dir / "materialization.json"
             materialization_path.write_text(json.dumps(materialization, sort_keys=True) + "\n", encoding="utf-8")
-            return controller.GpuSourceBuild(anchor_build=Path(by_id["akc-anchor"][1].path),
-                                             candidate_build=Path(by_id[candidate.source_manifest.candidate_id][1].path),
-                                             candidate_identity=candidate_identity,
-                                             anchor_identity=anchor_identity,
-                                             measurement_binary=runtime.measurement_binary,
-                                             common_loader_dir=runtime.common_loader_dir,
-                                             anchor_loader_dir=runtime.anchor_loader_dir,
-                                             candidate_loader_dir=runtime.candidate_loader_dir,
-                                             reward_runtime_sha256=_digest(runtime.receipt_path))
+            completed = {
+                "anchor_build": Path(by_id["akc-anchor"][1].path),
+                "candidate_build": Path(by_id[candidate.source_manifest.candidate_id][1].path),
+                "candidate_identity": candidate_identity, "anchor_identity": anchor_identity,
+                "measurement_binary": runtime.measurement_binary,
+                "common_loader_dir": runtime.common_loader_dir,
+                "anchor_loader_dir": runtime.anchor_loader_dir,
+                "candidate_loader_dir": runtime.candidate_loader_dir,
+                "reward_runtime_sha256": _digest(runtime.receipt_path),
+                "operation_key": operation_key, "materialization_receipt": materialization_path,
+                "materialization_sha256": _digest(materialization_path),
+            }
         finally:
             receipts = []
             teardown_errors: list[str] = []
@@ -367,3 +374,7 @@ class StaticGpuSourceBuilder:
             receipt_path.write_text(json.dumps(teardown, sort_keys=True) + "\n", encoding="utf-8")
             if teardown_errors:
                 raise StaticRegistryError("one or more governed worktrees could not be torn down")
+        if completed is None:  # defensive: the originating build exception was re-raised by finally
+            raise StaticRegistryError("static source build did not produce a complete result")
+        return controller.GpuSourceBuild(**completed, teardown_receipt=receipt_path,
+                                         teardown_sha256=_digest(receipt_path))

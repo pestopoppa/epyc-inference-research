@@ -62,6 +62,7 @@ def plan(root: Path) -> E.GpuSourceEvidencePlan:
         "patch_applied": True,
         "production_tree": False,
     }
+    materialization_body["receipt_sha256"] = E.schemas.content_hash(materialization_body)
     materialization = write_bound(
         root, "materialization.json",
         json.dumps(materialization_body, sort_keys=True).encode(), "materialization")
@@ -392,6 +393,8 @@ class GpuSourceEvidenceTests(unittest.TestCase):
             materialization = current.identity_files.materialization.path
             raw = json.loads(materialization.read_text())
             raw["patch_applied"] = False
+            raw["receipt_sha256"] = E.schemas.content_hash(
+                {key: value for key, value in raw.items() if key != "receipt_sha256"})
             materialization.write_text(json.dumps(raw, sort_keys=True))
             changed = replace(
                 current.identity_files.materialization,

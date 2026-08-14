@@ -53,7 +53,7 @@ class DeploymentFactoryTests(unittest.TestCase):
 
     def test_window_lease_allows_small_discovery_noise_while_cpu_window_is_busy(self):
         config = mock.Mock(inference_window_lock="/lock", device_id="mi210_0",
-                           model=mock.Mock(sha256="a" * 64), small_model_max_bytes=1)
+                           model=mock.Mock(sha256="a" * 64))
         config.revalidate = mock.Mock()
         with mock.patch.object(F.inference_window.InferenceCallWindow, "acquire",
                                side_effect=F.inference_window.InferenceWindowTimeout("busy")):

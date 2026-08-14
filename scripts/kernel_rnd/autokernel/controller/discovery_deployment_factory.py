@@ -154,7 +154,6 @@ class GpuDiscoveryLease:
                 "device_id": self.config.device_id,
                 "inference_window_lock": str(self.config.inference_window_lock),
                 "model_sha256": self.config.model.sha256,
-                "small_model_max_bytes": self.config.small_model_max_bytes,
                 "promotion_claim": False}
 
 
@@ -245,8 +244,10 @@ def materialize(config: deployment.DiscoveryDeployment, registry: Mapping[str, M
         config.revalidate()
         if (build_.measurement_binary is None or build_.common_loader_dir is None
                 or build_.anchor_loader_dir is None or build_.candidate_loader_dir is None
-                or build_.reward_runtime_sha256 is None):
-            raise DeploymentFactoryError("source build lacks a sealed shared reward closure")
+                or build_.reward_runtime_sha256 is None or build_.operation_key is None
+                or build_.materialization_receipt is None or build_.materialization_sha256 is None
+                or build_.teardown_receipt is None or build_.teardown_sha256 is None):
+            raise DeploymentFactoryError("source build lacks sealed runtime/materialization/teardown receipts")
         result = runner.build(candidate, build_, permit)
         if (getattr(result, "factor", None) != "source_patch"
                 or str(getattr(result, "model", "")) != str(config.model.path)

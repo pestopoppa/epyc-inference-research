@@ -395,18 +395,16 @@ class GpuSourceBuild:
                     or not isinstance(self.candidate_loader_dir, Path) or not self.candidate_loader_dir.is_dir()
                     or not isinstance(self.reward_runtime_sha256, str) or not HASH.fullmatch(self.reward_runtime_sha256)):
                 raise DiscoveryControllerError("GPU source build has an incomplete shared reward closure")
-        receipts = (self.operation_key, self.materialization_receipt, self.materialization_sha256,
-                    self.teardown_receipt, self.teardown_sha256)
-        if any(value is not None for value in receipts):
-            if (not all(value is not None for value in receipts)
-                    or not isinstance(self.operation_key, str) or not HASH.fullmatch(self.operation_key)
-                    or any(not isinstance(path, Path) or not path.is_absolute() or path.is_symlink()
-                           or not path.is_file() for path in (self.materialization_receipt, self.teardown_receipt))
-                    or any(not isinstance(value, str) or not HASH.fullmatch(value)
-                           for value in (self.materialization_sha256, self.teardown_sha256))):
-                raise DiscoveryControllerError("GPU source build has incomplete durable materialization receipts")
-            for path, expected in ((self.materialization_receipt, self.materialization_sha256),
-                                   (self.teardown_receipt, self.teardown_sha256)):
+        if self.operation_key is not None and (not isinstance(self.operation_key, str) or not HASH.fullmatch(self.operation_key)):
+            raise DiscoveryControllerError("GPU source build operation key is invalid")
+        for path, expected, label in ((self.materialization_receipt, self.materialization_sha256, "materialization"),
+                                      (self.teardown_receipt, self.teardown_sha256, "teardown")):
+            if (path is None) != (expected is None):
+                raise DiscoveryControllerError(f"GPU source build has incomplete {label} receipt")
+            if path is not None:
+                if (not isinstance(path, Path) or not path.is_absolute() or path.is_symlink()
+                        or not path.is_file() or not isinstance(expected, str) or not HASH.fullmatch(expected)):
+                    raise DiscoveryControllerError(f"GPU source build has invalid {label} receipt")
                 assert isinstance(path, Path) and isinstance(expected, str)
                 if hashlib.sha256(path.read_bytes()).hexdigest() != expected:
                     raise DiscoveryControllerError("GPU source materialization receipt bytes changed")
@@ -550,7 +548,9 @@ def _context(state: Mapping[str, Any], tracker: hypotheses.HypothesisTracker, tu
             continue
         prior.append({key: row.get(key) for key in (
             "result_sha256", "status", "effect_fraction", "series_effect_fraction",
-            "source_manifest_sha256", "series_key", "evidence")})
+            "source_manifest_sha256", "series_key", "evidence", "statement",
+            "falsifier", "experiment_intent", "mechanism_id", "target_surface",
+            "target_symbol")})
     assignment = None
     if config.production_base_commit is not None:
         assignment = AuthoringAssignment(
@@ -782,6 +782,9 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                      "falsifier":item.falsifier,"regime":dict(item.regime),
                      "proposal_sha256":_sha(item.proposal),"source_manifest_sha256":item.source_manifest_sha256,
                      "experiment_intent":asdict(item.experiment_intent) if item.experiment_intent else None,
+                     "mechanism_id":item.source_manifest.mechanism_id,
+                     "target_surface":item.experiment_intent.target_surface if item.experiment_intent else None,
+                     "target_symbol":item.experiment_intent.target_symbol if item.experiment_intent else None,
                      "critic":asdict(review),"context_sha256":_sha(context)}
             if review.decision != "accept":
                 row["status"]="critic_"+review.decision; state["iterations"].append(row); state["next"]+=1; store.save(state,"critic_refused"); continue

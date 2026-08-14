@@ -66,8 +66,7 @@ class DeploymentConfigTests(unittest.TestCase):
                        "environment_profile_id": "sealed-codex"},
             "gpu": {"device_id": "mi210_0", "claim_timeout_s": 30.0,
                     "inference_window_lock": str(root / "locks" / "window.lock"),
-                    "inference_window_lease_id": "mi210-window-v1",
-                    "small_model_max_bytes": 500_000_000},
+                    "inference_window_lease_id": "mi210-window-v1"},
             "immutable_inputs": inputs,
             "planner_context": {"path": str(planner_path), "sha256": digest(planner_path)},
             "source_plan": {"source_builder_id": "gpu-source-v1",
@@ -192,14 +191,6 @@ class DeploymentConfigTests(unittest.TestCase):
             root = Path(temp)
             path, raw = self.config(root)
             Path(raw["actors"]["wrapper_path"]).write_text("changed", encoding="utf-8")
-            with self.assertRaises(D.DeploymentConfigError):
-                self.load(path)
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp)
-            path, raw = self.config(root)
-            raw["gpu"]["small_model_max_bytes"] = 1
-            seal(raw)
-            path.write_text(json.dumps(raw), encoding="utf-8")
             with self.assertRaises(D.DeploymentConfigError):
                 self.load(path)
         with tempfile.TemporaryDirectory() as temp:
