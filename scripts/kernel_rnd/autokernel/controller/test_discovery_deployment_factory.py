@@ -303,6 +303,11 @@ class DeploymentFactoryTests(unittest.TestCase):
                              config.critic_wrapper.sha256)
             self.assertEqual(receipt["actor_cells"],
                              [dict(C.SOL), dict(C.FABLE5_CRITIC)])
+            self.assertIn("discovery_telemetry", receipt["execution_modules"])
+            self.assertEqual(
+                receipt["execution_modules"]["discovery_telemetry"]["sha256"],
+                F._digest_regular(Path(F.discovery_telemetry.__file__).resolve(),
+                                  "discovery_telemetry"))
             self.assertTrue(receipt["critic_auth_source"]["validated"])
             self.assertFalse(receipt["critic_auth_source"]["secret_digest_persisted"])
             self.assertNotIn("sha256", receipt["critic_auth_source"])
