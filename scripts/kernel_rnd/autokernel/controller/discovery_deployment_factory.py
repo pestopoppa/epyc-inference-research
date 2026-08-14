@@ -9,6 +9,7 @@ from dataclasses import dataclass
 import argparse
 import hashlib
 import json
+import re
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Callable, Mapping
@@ -80,6 +81,35 @@ class ExperimentTemplate:
                 self.correctness_id, self.dispatch_id) == (
                     intent.template_id, intent.target_surface, intent.target_symbol,
                     intent.correctness_id, intent.dispatch_id)
+
+    def bind_dispatch(self, intent: controller.GpuSourceExperimentIntent) -> evidence.DispatchContract:
+        """Derive an internal escaped matcher from planner literals and reviewed bounds."""
+        if not self.matches(intent):
+            raise DeploymentFactoryError("dispatch intent does not select this reviewed template")
+        expected = intent.expected_dispatch
+        bounds = self.semantics.get("dispatch_bounds", {})
+        if not isinstance(bounds, Mapping):
+            raise DeploymentFactoryError("template dispatch bounds are malformed")
+        for key, value in (("calls", expected.calls), ("grid", expected.grid),
+                           ("workgroup", expected.workgroup), ("lds_bytes", expected.lds_bytes)):
+            limit = bounds.get(key)
+            if (not isinstance(limit, list) or len(limit) != 2
+                    or not all(isinstance(item, int) for item in limit)
+                    or not limit[0] <= value <= limit[1]):
+                raise DeploymentFactoryError(f"planner dispatch {key} exceeds reviewed template bounds")
+        blocks = bounds.get("blocks_per_call")
+        if not isinstance(blocks, int) or blocks < 1:
+            raise DeploymentFactoryError("template lacks reviewed blocks-per-call")
+        candidate = evidence.ExactDispatch(
+            signature=f"{self.dispatch_id}.candidate",
+            kernel_pattern="^" + re.escape(expected.kernel_name) + "$",
+            calls=expected.calls, grid=expected.grid, workgroup=expected.workgroup,
+            lds_bytes=expected.lds_bytes, blocks_per_call=blocks)
+        return evidence.DispatchContract(candidate_exact=(candidate,),
+            anchor_exact=self.dispatch.anchor_exact,
+            candidate_forbidden=self.dispatch.candidate_forbidden,
+            anchor_forbidden=self.dispatch.anchor_forbidden,
+            invariants=self.dispatch.invariants)
 
 
 @dataclass(frozen=True)
