@@ -429,7 +429,7 @@ def initialize_static_deployment_bundle(root: Path) -> Path:
                    "Treat prior RoPE64 and Q4_K one-wave results as DNR/top-K context, not promotion evidence."]}
     context["context_sha256"] = schemas.content_hash(context)
     context_path, context_sha = _json_artifact(config_dir / "planner-context.json", context)
-    for directory in (root / "state", root / "evidence", root / "operations"):
+    for directory in (root / "state", root / "evidence", root / "operations", root / "builds"):
         if directory.exists() and (directory.is_symlink() or not directory.is_dir()):
             raise DeploymentFactoryError("bundle output root is not a regular directory")
     value = {"schema": deployment.SCHEMA,
@@ -442,6 +442,7 @@ def initialize_static_deployment_bundle(root: Path) -> Path:
              "controller": {"state_root": str(root / "state"),
                             "evidence_root": str(root / "evidence"),
                             "operations_root": str(root / "operations"),
+                            "build_root": str(root / "builds"),
                             "max_iterations": 100, "nomination_threshold": .03},
              "actors": {"wrapper_path": str(wrapper.path), "wrapper_sha256": wrapper.sha256,
                         "environment_profile_id": _STATIC_IDS["environment_profile"]},
@@ -941,7 +942,7 @@ def _static_registry(config: deployment.DiscoveryDeployment,
         production_branch=deployment.FROZEN_PRODUCTION_BRANCH,
         instrument_path=config.instrument_path,
         operations_root=config.operations_root,
-        build_root=config.operations_root / "build",
+        build_root=config.build_root,
         cmake_defines=(("GGML_HIP", "ON"), ("AMDGPU_TARGETS", "gfx90a"),
                        ("GGML_NATIVE", "OFF")))
     snapshot_files, snapshot_semantics = _production_runtime_snapshot(config.production_path)
@@ -1005,6 +1006,12 @@ def _seal_graph_receipt(config: deployment.DiscoveryDeployment,
             "instrument_target_equality": {"path": str(target_equality[0]),
                                            "sha256": target_equality[1]},
             "production_runtime_snapshot_sha256": production_runtime_sha256,
+            "mutable_roots": {
+                "state": str(config.state_root),
+                "evidence": str(config.evidence_root),
+                "operations": str(config.operations_root),
+                "build": str(config.build_root),
+            },
             "device_id": config.device_id,
             "claim_journal": str(config.operations_root / "claims" / "device.jsonl")}
     body["graph_sha256"] = schemas.content_hash(body)
