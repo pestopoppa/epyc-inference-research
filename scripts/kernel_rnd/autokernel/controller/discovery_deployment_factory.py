@@ -31,6 +31,7 @@ from . import gpu_source_evidence as evidence
 from . import gpu_load_admission
 from . import gpu_residency_sampler
 from . import codex_container_actor
+from . import claude_fable5_critic_actor
 from . import discovery_static_registry
 from . import gpu_source_proofs
 from scripts.benchmark import autokernel_gpu_discovery_beliefs
@@ -236,6 +237,7 @@ def _execution_module_identity() -> dict[str, dict[str, str]]:
         "device_claim": Path(device_claim.__file__).resolve(strict=True),
         "device_sampler": Path(device_sampler.__file__).resolve(strict=True),
         "gpu_residency_sampler": Path(gpu_residency_sampler.__file__).resolve(strict=True),
+        "claude_fable5_critic_actor": Path(claude_fable5_critic_actor.__file__).resolve(strict=True),
     }
     return {name: {"path": str(path), "sha256": _digest_regular(path, name)}
             for name, path in modules.items()}
@@ -298,6 +300,10 @@ _SAFE_ACTOR_ENVIRONMENT = MappingProxyType({
     "CODEX_HOME": "/home/node/.codex",
     "SSL_CERT_FILE": "/etc/ssl/certs/ca-certificates.crt",
 })
+_SAFE_CRITIC_ENVIRONMENT = MappingProxyType({
+    "PATH": "/usr/local/bin:/usr/bin:/bin",
+    "SSL_CERT_FILE": "/etc/ssl/certs/ca-certificates.crt",
+})
 _SITE_MODEL = Path(
     "/mnt/raid0/llm/models/lmstudio-community/Qwen2.5-Coder-0.5B-GGUF/"
     "Qwen2.5-Coder-0.5B-Q4_K_M.gguf")
@@ -305,12 +311,30 @@ _SITE_SOURCE_PLAN = Path("/mnt/raid0/llm/autokernel/surface/gpu_decode_source_pl
 _SITE_WINDOW_LOCK = Path("/mnt/raid0/llm/tmp/model-call.lock")
 _SITE_ACTOR_WRAPPER = Path(
     "/usr/local/share/npm-global/lib/node_modules/@openai/codex/bin/codex.js")
+_SITE_CRITIC_WRAPPER = Path("/home/node/.local/share/claude/versions/2.1.231")
+_SITE_CLAUDE_AUTH_ROOT = Path("/home/node/.claude")
 
 
 def _digest_regular(path: Path, label: str) -> str:
     if path.is_symlink() or not path.is_file():
         raise DeploymentFactoryError(f"{label} must be a regular non-symlink file")
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _validate_critic_auth_source() -> Mapping[str, Any]:
+    """Validate the fixed private carrier without persisting secret bytes/hashes."""
+    claude_fable5_critic_actor._credentials(_SITE_CLAUDE_AUTH_ROOT)
+    carrier = _SITE_CLAUDE_AUTH_ROOT / ".credentials.json"
+    status = carrier.stat()
+    return MappingProxyType({
+        "policy": claude_fable5_critic_actor.AUTH_STAGING_POLICY,
+        "source_root": str(_SITE_CLAUDE_AUTH_ROOT),
+        "carrier": carrier.name,
+        "owner_uid": status.st_uid,
+        "mode": format(status.st_mode & 0o777, "04o"),
+        "secret_digest_persisted": False,
+        "validated": True,
+    })
 
 
 def _atomic_bytes(path: Path, raw: bytes) -> None:
@@ -343,6 +367,8 @@ def initialize_static_deployment_bundle(root: Path) -> Path:
     source_plan = _bound(_SITE_SOURCE_PLAN, "reviewed_source_plan")
     wrapper_path = _SITE_ACTOR_WRAPPER.resolve(strict=True)
     wrapper = _bound(wrapper_path, "actor_wrapper")
+    critic_path = _SITE_CRITIC_WRAPPER.resolve(strict=True)
+    critic = _bound(critic_path, "critic_wrapper")
     workload_path, workload_sha = _json_artifact(config_dir / "workload.json", {
         "schema": "epyc.autokernel.discovery_workload.v1", "workload": "decode_tg128",
         "prompt_tokens": 0, "generation_tokens": 128, "calls_per_arm": 9,
@@ -450,6 +476,7 @@ def initialize_static_deployment_bundle(root: Path) -> Path:
                             "build_root": str(root / "builds"),
                             "max_iterations": 100, "nomination_threshold": .03},
              "actors": {"wrapper_path": str(wrapper.path), "wrapper_sha256": wrapper.sha256,
+                        "critic_path": str(critic.path), "critic_sha256": critic.sha256,
                         "environment_profile_id": _STATIC_IDS["environment_profile"]},
              "gpu": {"device_id": "mi210_0", "claim_timeout_s": 0,
                      "inference_window_lock": str(_SITE_WINDOW_LOCK),
@@ -967,29 +994,45 @@ def _static_registry(config: deployment.DiscoveryDeployment,
 
 
 def _seal_graph_receipt(config: deployment.DiscoveryDeployment,
-                        runtime: Mapping[str, Any], templates: ExperimentTemplateRegistry,
+                        planner_runtime: Mapping[str, Any],
+                        critic_runtime: Mapping[str, Any],
+                        templates: ExperimentTemplateRegistry,
                         target_equality: tuple[Path, str],
                         instrument_review: tuple[Path, str],
                         execution_modules: Mapping[str, Mapping[str, str]],
-                        production_runtime_sha256: str) -> tuple[Path, str]:
-    launcher_path = Path(codex_container_actor.__file__).resolve(strict=True)
-    launcher_sha256 = _digest_regular(launcher_path, "Codex actor launcher")
-    body = {"schema": "epyc.autokernel.static_discovery_graph.v1",
+                        production_runtime_sha256: str,
+                        critic_auth: Mapping[str, Any]) -> tuple[Path, str]:
+    planner_launcher = Path(codex_container_actor.__file__).resolve(strict=True)
+    critic_launcher = Path(claude_fable5_critic_actor.__file__).resolve(strict=True)
+    body = {"schema": "epyc.autokernel.static_discovery_graph.v2",
             "authority": "nonpromotable_candidate_only_discovery", "promotion_claim": False,
             "inference_executed": False, "config_sha256": config.config_sha256,
             "registry_ids": dict(_STATIC_IDS), "template_registry_sha256": templates.registry_sha256,
             "admission_policy_sha256": config.admission_policy.value["policy_sha256"],
             "load_admission_profile_id": _LOAD_PROFILE_ID,
-            "actor_wrapper": {"path": str(config.actor_wrapper.path),
-                              "sha256": config.actor_wrapper.sha256},
-            "actor_runtime": dict(runtime),
-            "actor_cells": [dict(controller.SOL), dict(controller.TERRA)],
-            "actor_argv_authority": {"module": str(launcher_path),
-                                     "module_sha256": launcher_sha256,
-                                     "constructor": "codex_container_actor.build_docker_argv",
-                                     "image_id": codex_container_actor.CONTAINER_IMAGE_ID},
+            "actor_wrappers": {
+                "planner": {"path": str(config.actor_wrapper.path),
+                            "sha256": config.actor_wrapper.sha256},
+                "critic": {"path": str(config.critic_wrapper.path),
+                           "sha256": config.critic_wrapper.sha256}},
+            "actor_runtimes": {"planner": dict(planner_runtime),
+                               "critic": dict(critic_runtime)},
+            "actor_cells": [dict(controller.SOL), dict(controller.FABLE5_CRITIC)],
+            "actor_argv_authority": {
+                "planner": {"module": str(planner_launcher),
+                            "module_sha256": _digest_regular(
+                                planner_launcher, "Codex actor launcher"),
+                            "constructor": "codex_container_actor.build_docker_argv",
+                            "image_id": codex_container_actor.CONTAINER_IMAGE_ID},
+                "critic": {"module": str(critic_launcher),
+                           "module_sha256": _digest_regular(
+                               critic_launcher, "Claude critic launcher"),
+                           "constructor": "claude_fable5_critic_actor.build_argv",
+                           "tools": [], "permission_mode": "plan"}},
+            "critic_auth_source": dict(critic_auth),
             "execution_modules": dict(execution_modules),
-            "environment_profile": dict(_SAFE_ACTOR_ENVIRONMENT),
+            "environment_profiles": {"planner": dict(_SAFE_ACTOR_ENVIRONMENT),
+                                     "critic": dict(_SAFE_CRITIC_ENVIRONMENT)},
             "source_authority": {
                 "production_base_path": str(config.production_path),
                 "production_base_commit": config.production_head,
@@ -1055,9 +1098,15 @@ def build_static_deployment_graph(config: deployment.DiscoveryDeployment) -> Sta
     production_snapshot = _require(
         registry["production_snapshot"][_STATIC_IDS["production_snapshot"]],
         ProductionSnapshotBinding, "production_snapshot")
-    runtime = codex_container_actor.runtime_identity(config.actor_wrapper.path)
-    launcher_sha256 = _digest_regular(Path(codex_container_actor.__file__).resolve(),
-                                      "Codex actor launcher")
+    planner_runtime = codex_container_actor.runtime_identity(config.actor_wrapper.path)
+    critic_runtime = claude_fable5_critic_actor.runtime_identity(
+        config.critic_wrapper.path)
+    critic_auth = _validate_critic_auth_source()
+    planner_launcher_sha256 = _digest_regular(
+        Path(codex_container_actor.__file__).resolve(), "Codex actor launcher")
+    critic_launcher_sha256 = _digest_regular(
+        Path(claude_fable5_critic_actor.__file__).resolve(),
+        "Claude critic launcher")
     sampler = gpu_residency_sampler.Mi210ResidencySampler()
     executor = evidence.SubprocessCommandExecutor(
         residency_sampler=sampler,
@@ -1072,15 +1121,19 @@ def build_static_deployment_graph(config: deployment.DiscoveryDeployment) -> Sta
     adapters["planner"] = controller.CodexPlanner(
         wrapper=config.actor_wrapper.path, environment=_SAFE_ACTOR_ENVIRONMENT,
         template_catalog=catalog, wrapper_sha256=config.actor_wrapper.sha256,
-        runtime_identity=runtime, actor_launcher_sha256=launcher_sha256)
-    adapters["critic"] = controller.CodexCritic(
-        wrapper=config.actor_wrapper.path, environment=_SAFE_ACTOR_ENVIRONMENT,
-        template_catalog=catalog, wrapper_sha256=config.actor_wrapper.sha256,
-        runtime_identity=runtime, actor_launcher_sha256=launcher_sha256)
+        runtime_identity=planner_runtime,
+        actor_launcher_sha256=planner_launcher_sha256)
+    adapters["critic"] = controller.ClaudeCritic(
+        wrapper=config.critic_wrapper.path, environment=_SAFE_CRITIC_ENVIRONMENT,
+        template_catalog=catalog, wrapper_sha256=config.critic_wrapper.sha256,
+        runtime_identity=critic_runtime,
+        actor_launcher_sha256=critic_launcher_sha256)
     receipt, digest = _seal_graph_receipt(
-        config, runtime, templates, target_equality, instrument_review,
+        config, planner_runtime, critic_runtime, templates,
+        target_equality, instrument_review,
         execution_modules,
-        production_snapshot.runtime_semantics_sha256)
+        production_snapshot.runtime_semantics_sha256,
+        critic_auth)
     return StaticDeploymentGraph(config=config, adapters=MappingProxyType(adapters),
                                  registry_ids=_STATIC_IDS, graph_receipt=receipt,
                                  graph_sha256=digest)
@@ -1399,7 +1452,7 @@ def materialize(config: deployment.DiscoveryDeployment, registry: Mapping[str, M
         claim_verifier=claim_verifier)
     # Actors are not dependency-injected: a caller supplied object could attest
     # any model.  The deployment wrapper digest/environment profile are the sole
-    # authority for the two exact Codex actor identities.
+    # authority for the exact Sol planner and Fable 5 critic identities.
     catalog = {key: {"template_id": template.template_id,
                      "target_surface": template.target_surface,
                      "target_symbol": template.target_symbol,
@@ -1410,10 +1463,25 @@ def materialize(config: deployment.DiscoveryDeployment, registry: Mapping[str, M
                                          for path, symbols in template.allowed_symbols.items()},
                      "semantics": dict(template.semantics)}
                for key, template in templates.templates.items()}
-    planner = controller.CodexPlanner(wrapper=config.actor_wrapper.path,
-                                      environment=env.values, template_catalog=catalog)
-    critic = controller.CodexCritic(wrapper=config.actor_wrapper.path,
-                                    environment=env.values, template_catalog=catalog)
+    planner_runtime = codex_container_actor.runtime_identity(config.actor_wrapper.path)
+    critic_runtime = claude_fable5_critic_actor.runtime_identity(
+        config.critic_wrapper.path)
+    _validate_critic_auth_source()
+    planner = controller.CodexPlanner(
+        wrapper=config.actor_wrapper.path, environment=env.values,
+        template_catalog=catalog, wrapper_sha256=config.actor_wrapper.sha256,
+        runtime_identity=planner_runtime,
+        actor_launcher_sha256=_digest_regular(
+            Path(codex_container_actor.__file__).resolve(),
+            "Codex actor launcher"))
+    critic = controller.ClaudeCritic(wrapper=config.critic_wrapper.path,
+                                     environment=_SAFE_CRITIC_ENVIRONMENT,
+                                     template_catalog=catalog,
+                                     wrapper_sha256=config.critic_wrapper.sha256,
+                                     runtime_identity=critic_runtime,
+                                     actor_launcher_sha256=_digest_regular(
+                                         Path(claude_fable5_critic_actor.__file__).resolve(),
+                                         "Claude critic launcher"))
 
     def build(candidate: controller.PlannedCandidate, authorization: Any, permit: Mapping[str, Any]):
         config.revalidate()

@@ -32,6 +32,9 @@ class DeploymentConfigTests(unittest.TestCase):
         wrapper = root / "codex-wrapper"
         wrapper.write_text("#!/bin/sh\n", encoding="utf-8")
         wrapper.chmod(0o700)
+        critic = root / "claude-fable5"
+        critic.write_text("#!/bin/sh\n", encoding="utf-8")
+        critic.chmod(0o700)
         inputs = {}
         for label in ("model", "workload", "runtime_config", "admission_policy"):
             path = root / f"{label}.json"
@@ -91,6 +94,7 @@ class DeploymentConfigTests(unittest.TestCase):
                 "nomination_threshold": 0.03,
             },
             "actors": {"wrapper_path": str(wrapper), "wrapper_sha256": digest(wrapper),
+                       "critic_path": str(critic), "critic_sha256": digest(critic),
                        "environment_profile_id": "sealed-codex"},
             "gpu": {"device_id": "mi210_0", "claim_timeout_s": 30.0,
                     "inference_window_lock": str(root / "locks" / "window.lock"),
@@ -235,6 +239,12 @@ class DeploymentConfigTests(unittest.TestCase):
             with self.assertRaises(D.DeploymentConfigError):
                 self.load(path)
         with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            path, raw = self.config(root)
+            Path(raw["actors"]["critic_path"]).write_text("changed", encoding="utf-8")
+            with self.assertRaises(D.DeploymentConfigError):
+                self.load(path)
+        with tempfile.TemporaryDirectory() as temp:
             path, _ = self.config(Path(temp))
             config = self.load(path)
             config.model.path.write_text("mutated after parsing", encoding="utf-8")
@@ -250,6 +260,14 @@ class DeploymentConfigTests(unittest.TestCase):
             with mock.patch.object(D, "_verify_production"):
                 with self.assertRaises(D.DeploymentConfigError):
                     D.resolve_registry(config, registry)
+        with tempfile.TemporaryDirectory() as temp:
+            path, _ = self.config(Path(temp))
+            config = self.load(path)
+            config.critic_wrapper.path.write_text("mutated after parsing", encoding="utf-8")
+            with mock.patch.object(D, "_verify_production"), \
+                    mock.patch.object(D, "_verify_instrument"), \
+                    self.assertRaises(D.DeploymentConfigError):
+                config.revalidate()
 
     def test_frozen_production_verifier_requires_head_branch_and_clean_tree(self):
         with tempfile.TemporaryDirectory() as temp:

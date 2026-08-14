@@ -43,6 +43,9 @@ class DeploymentFactoryTests(unittest.TestCase):
         wrapper.parent.mkdir(parents=True)
         wrapper.write_text("#!/bin/sh\nexit 77\n", encoding="utf-8")
         wrapper.chmod(0o700)
+        critic_wrapper = root / "claude-fable5"
+        critic_wrapper.write_text("#!/bin/sh\nexit 77\n", encoding="utf-8")
+        critic_wrapper.chmod(0o700)
         native = package / F.codex_container_actor.CODEX_NATIVE_RELATIVE
         native.parent.mkdir(parents=True)
         native.write_bytes(b"native")
@@ -83,7 +86,8 @@ class DeploymentFactoryTests(unittest.TestCase):
             evidence_root=evidence.resolve(), operations_root=operations.resolve(),
             build_root=builds.resolve(),
             max_iterations=2, nomination_threshold=.03,
-            actor_wrapper=immutable(wrapper), environment_profile_id="sealed-codex",
+            actor_wrapper=immutable(wrapper), critic_wrapper=immutable(critic_wrapper),
+            environment_profile_id="sealed-codex",
             device_id="mi210_0", claim_timeout_s=0.0,
             inference_window_lock=(locks / "window.lock").resolve(),
             model=immutable(model), workload=immutable(workload), runtime_config=immutable(runtime),
@@ -143,6 +147,7 @@ class DeploymentFactoryTests(unittest.TestCase):
                     mock.patch.object(F, "_instrument_review_receipt",
                                       return_value=(root / "instrument.json", "i" * 64)), \
                     mock.patch.object(F.codex_container_actor, "run_actor", side_effect=forbidden), \
+                    mock.patch.object(F.claude_fable5_critic_actor, "run_critic", side_effect=forbidden), \
                     mock.patch.object(F.controller.gpu_discovery, "run", side_effect=forbidden), \
                     mock.patch.object(F.controller, "run_controller", side_effect=forbidden), \
                     mock.patch.object(F.evidence.SubprocessCommandExecutor, "__call__",
@@ -156,10 +161,20 @@ class DeploymentFactoryTests(unittest.TestCase):
             receipt = json.loads(Path(payload["graph_receipt"]).read_text(encoding="utf-8"))
             self.assertFalse(receipt["inference_executed"])
             self.assertEqual(receipt["registry_ids"], dict(F._STATIC_IDS))
-            self.assertEqual(receipt["actor_wrapper"]["sha256"], config.actor_wrapper.sha256)
-            self.assertEqual(receipt["actor_cells"], [dict(C.SOL), dict(C.TERRA)])
-            self.assertNotIn("LD_LIBRARY_PATH", receipt["environment_profile"])
-            self.assertNotIn("PYTHONPATH", receipt["environment_profile"])
+            self.assertEqual(receipt["actor_wrappers"]["planner"]["sha256"],
+                             config.actor_wrapper.sha256)
+            self.assertEqual(receipt["actor_wrappers"]["critic"]["sha256"],
+                             config.critic_wrapper.sha256)
+            self.assertEqual(receipt["actor_cells"],
+                             [dict(C.SOL), dict(C.FABLE5_CRITIC)])
+            self.assertTrue(receipt["critic_auth_source"]["validated"])
+            self.assertFalse(receipt["critic_auth_source"]["secret_digest_persisted"])
+            self.assertNotIn("sha256", receipt["critic_auth_source"])
+            for profile in receipt["environment_profiles"].values():
+                self.assertNotIn("LD_LIBRARY_PATH", profile)
+                self.assertNotIn("PYTHONPATH", profile)
+            self.assertNotIn("HOME", receipt["environment_profiles"]["critic"])
+            self.assertNotIn("CODEX_HOME", receipt["environment_profiles"]["critic"])
 
     def test_static_graph_refuses_unknown_constructor_id(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -184,6 +199,9 @@ class DeploymentFactoryTests(unittest.TestCase):
                     mock.patch.object(F, "_instrument_review_receipt",
                                       return_value=(Path(temporary) / "instrument.json", "i" * 64)):
                 graph = F.build_static_deployment_graph(config)
+                config.critic_wrapper.path.write_bytes(b"mutated Claude CLI")
+                with self.assertRaises(C.DiscoveryControllerError):
+                    graph.adapters["critic"].attest()
                 native, _host = F.codex_container_actor._codex_native_assets(
                     config.actor_wrapper.path)
                 native.write_bytes(b"mutated native")
@@ -195,6 +213,18 @@ class DeploymentFactoryTests(unittest.TestCase):
             with self.subTest(key=key):
                 with self.assertRaises(F.DeploymentFactoryError):
                     F.EnvironmentProfile({"PATH": "/usr/bin", key: "bad"})
+
+    def test_validate_only_auth_check_refuses_without_persisting_secret_identity(self):
+        with mock.patch.object(
+                F.claude_fable5_critic_actor, "_credentials",
+                side_effect=F.claude_fable5_critic_actor.ClaudeFable5CriticError(
+                    "unsafe credential")), self.assertRaisesRegex(
+                        F.claude_fable5_critic_actor.ClaudeFable5CriticError,
+                        "unsafe credential"):
+            F._validate_critic_auth_source()
+        receipt = F._validate_critic_auth_source()
+        self.assertFalse(receipt["secret_digest_persisted"])
+        self.assertFalse(any("sha" in key for key in receipt))
 
     def test_source_scope_refuses_reward_and_toolchain_mutations(self):
         class Manifest:
@@ -381,7 +411,10 @@ class DeploymentFactoryTests(unittest.TestCase):
                     protected, (bound,), {}, F.schemas.content_hash({})))
             config = mock.Mock(
                 config_sha256="d" * 64, experiment_template_registry_sha256="e" * 64,
-                actor_wrapper=SimpleNamespace(path=Path("/sealed/codex-wrapper")),
+                actor_wrapper=SimpleNamespace(path=Path("/sealed/codex-wrapper"),
+                                              sha256="a" * 64),
+                critic_wrapper=SimpleNamespace(path=Path("/sealed/claude-fable5"),
+                                               sha256="b" * 64),
                 production_path=protected, instrument_path=protected,
                 claim_timeout_s=0.0, instrument_branch="measurement-instrument")
             config.revalidate = mock.Mock()
@@ -398,7 +431,11 @@ class DeploymentFactoryTests(unittest.TestCase):
                  mock.patch.object(F, "_production_runtime_snapshot",
                                    return_value=((bound,), {})), \
                  mock.patch.object(F.controller, "build_controller_adapters",
-                                   side_effect=lambda **kwargs: kwargs):
+                                   side_effect=lambda **kwargs: kwargs), \
+                 mock.patch.object(F.codex_container_actor, "runtime_identity",
+                                   return_value={}), \
+                 mock.patch.object(F.claude_fable5_critic_actor, "runtime_identity",
+                                   return_value={}):
                 F.materialize(config, {}, correctness_executor=mock.Mock(),
                               rocprof_executor=mock.Mock(), claim_journal=mock.Mock())
                 build = adapters["build_source"]

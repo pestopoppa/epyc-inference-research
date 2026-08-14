@@ -2,13 +2,16 @@
 from __future__ import annotations
 import argparse, hashlib, json, tempfile, unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 from . import discovery_controller as D
 
 H="a"*64
 RUNTIME={"kind":"docker_workspace_bind_only","docker_path":"/docker","docker_sha256":H,"image_id":"image","codex_native_sha256":H,"code_mode_host_sha256":H,"ca_certificate_sha256":H,"writable_host_binds":["/workspace"],"host_network_mode":"docker_bridge"}
+CLAUDE_RUNTIME={"kind":"claude_cli_structured_critic","provider":"claude","model":"claude-fable-5","effort":"high","wrapper_path":"/sealed/claude","wrapper_sha256":H,"argv_policy_sha256":H,"auth_staging_policy":"ephemeral_0600_copy_no_secret_receipt"}
 class Manifest:
  campaign_id="ak-test"; proposal_id="akp-test"; candidate_id="akc-test"; source_tree="llama.cpp"; production_base_commit="0"*40; instrument_commit="0"*40; change_class="fusion"; declared_files=("ggml/src/ggml.c",); declared_symbols={"ggml/src/ggml.c":("<file-scope>",)}; mechanism_id="test"; patch_sha256="0"*64; patch_bundle_sha256=H; patch_bytes=b"diff --git a/ggml/src/ggml.c b/ggml/src/ggml.c\n--- a/ggml/src/ggml.c\n+++ b/ggml/src/ggml.c\n@@ -1 +1 @@\n-x\n+y\n"
+ patch_text=patch_bytes.decode("utf-8")
  def __init__(self, **values):
   for key, value in values.items(): setattr(self,key,value)
 class FakePlanner:
@@ -18,7 +21,7 @@ class FakePlanner:
   self.calls.append(context); return D.PlannedCandidate("akh-test-"+str(len(self.calls)),"one-wave reduces cross-wave LDS","no speed improvement invalidates it",{"backend":"gpu","phase":"decode","mechanism":"one_wave"},{"id":"p"+str(len(self.calls))},Manifest(),H)
 class FakeCritic:
  def __init__(self,decisions): self.decisions=iter(decisions)
- def attest(self): return {**D.TERRA,"runtime":RUNTIME}
+ def attest(self): return {**D.FABLE5_CRITIC,"runtime":CLAUDE_RUNTIME}
  def review(self,*args,**kw): return D.Critique(next(self.decisions),"bounded gate")
 class Lease:
  def admit(self,item,*,operation_key): return {"admitted":True,"mode":"allowed_discovery_noise","operation_key":operation_key}
@@ -38,8 +41,16 @@ class Tests(unittest.TestCase):
     D.BoundedDispatchExpectation(name,1,1,1,0)
   with self.assertRaises(D.DiscoveryControllerError): D.BoundedDispatchExpectation("kernel",1,1,4097,0)
  def cfg(self,root,n=2): return D.ControllerConfig(root/"out",n)
- def test_exact_two_codex_no_claude(self):
-  self.assertEqual(D.sealed_roster()["claude_members"],0); self.assertEqual([x["model"] for x in D.sealed_roster()["members"]],["gpt-5.6-sol","gpt-5.6-terra"])
+ def test_exact_sol_planner_and_fable5_critic(self):
+  self.assertEqual(D.sealed_roster()["claude_members"],1); self.assertEqual([x["model"] for x in D.sealed_roster()["members"]],["gpt-5.6-sol","claude-fable-5"])
+ def test_legacy_terra_roster_state_refuses_resume(self):
+  with tempfile.TemporaryDirectory() as t:
+   store=D.DurableState(Path(t))
+   legacy={"schema":"epyc.autokernel.discovery_controller.v2","authority":D.AUTHORITY,
+           "roster":{"schema":"epyc.autokernel.discovery_roster.v2","members":[D.SOL,{"provider":"codex","model":"gpt-5.6-terra","effort":"high","role":"critic"}],"claude_members":0,"member_count":2},
+           "iterations":[],"next":1,"complete":False}
+   D._atomic(store.path,legacy)
+   with self.assertRaises(D.DiscoveryControllerError): store.load()
  def test_sealed_planner_context_is_visible_and_resume_mismatch_refuses(self):
   with tempfile.TemporaryDirectory() as t, patch.object(D.source_candidate,"SourcePatchManifest",Manifest), patch.object(D,"_write_projection"):
    root=Path(t); context={"hotspots":[{"symbol":"q5_hot"}],"context_sha256":H}
@@ -63,6 +74,41 @@ class Tests(unittest.TestCase):
   with tempfile.TemporaryDirectory() as t, patch.object(D.source_candidate,"SourcePatchManifest",Manifest), patch.object(D,"_write_projection"):
    p=FakePlanner(); s=FakeScreen([.04,.03,.04]); r=D.run_controller(self.cfg(Path(t),4),planner=p,critic=FakeCritic(["reject","accept","accept"]),screener=s,lease=Lease())
    self.assertEqual([x["status"] for x in r["iterations"]],["critic_reject","candidate","top_k_replicated_candidate","top_k_replicated_candidate"]); self.assertEqual(s.calls,3); self.assertEqual(len(p.calls),3); self.assertEqual([row["result_sha256"] for row in p.calls[2]["prior_results"]],[H[:-1]+"1",H[:-1]+"2"])
+ def test_fable_veto_precedes_lease_and_screen(self):
+  class ExplosiveLease:
+   def admit(self,*args,**kwargs): raise AssertionError("critic veto must precede lease")
+  with tempfile.TemporaryDirectory() as t, patch.object(D.source_candidate,"SourcePatchManifest",Manifest), patch.object(D,"_write_projection"):
+   screen=FakeScreen([.1]); result=D.run_controller(self.cfg(Path(t),1),planner=FakePlanner(),critic=FakeCritic(["reject"]),screener=screen,lease=ExplosiveLease())
+   self.assertEqual(result["iterations"][0]["status"],"critic_reject"); self.assertEqual(screen.calls,0)
+ def test_fable_critic_sees_full_patch_and_binds_all_authority_digests(self):
+  with tempfile.TemporaryDirectory() as t:
+   root=Path(t); wrapper=root/"claude"; wrapper.write_bytes(b"claude"); wrapper.chmod(0o700)
+   catalog={"fattn":{"allowed_files":["ggml/src/ggml-cuda/fattn.cu"]}}
+   critic=D.ClaudeCritic(wrapper=wrapper,environment={"PATH":"/usr/bin"},template_catalog=catalog,
+       wrapper_sha256=hashlib.sha256(wrapper.read_bytes()).hexdigest(),runtime_identity=CLAUDE_RUNTIME)
+   with patch.object(D.source_candidate,"SourcePatchManifest",Manifest):
+    candidate=D.PlannedCandidate("akh-fable","statement","falsifier",{"backend":"gpu"},{"proposal_id":"akp-test"},Manifest(),H)
+   context={"turn":1,"planner_context_sha256":H}
+   captured={}
+   def run_critic(**kwargs):
+    captured.update(kwargs); return SimpleNamespace(decision="accept",reason="bounded")
+   with patch.object(D.claude_fable5_critic_actor,"runtime_identity",return_value=CLAUDE_RUNTIME), \
+        patch.object(D.claude_fable5_critic_actor,"run_critic",side_effect=run_critic):
+    self.assertEqual(critic.review(candidate,context=context,workspace=root).decision,"accept")
+   body=json.loads(captured["prompt"])
+   self.assertEqual(body["candidate"]["manifest"]["patch_text"],Manifest.patch_bytes.decode())
+   self.assertEqual(captured["bindings"],body["required_output_bindings"])
+   self.assertEqual(set(captured["bindings"]),{"proposal_sha256","source_manifest_sha256","candidate_patch_sha256","context_sha256","template_catalog_sha256"})
+ def test_fable_critic_refuses_patch_above_full_visibility_limit(self):
+  with tempfile.TemporaryDirectory() as t:
+   root=Path(t); wrapper=root/"claude"; wrapper.write_bytes(b"claude")
+   manifest=Manifest(patch_text="x"*65537,patch_bytes=b"x"*65537)
+   with patch.object(D.source_candidate,"SourcePatchManifest",Manifest):
+    candidate=D.PlannedCandidate("akh-fable","statement","falsifier",{}, {"proposal_id":"akp-test"},manifest,H)
+   critic=D.ClaudeCritic(wrapper=wrapper,environment={"PATH":"/usr/bin"})
+   with self.assertRaisesRegex(D.DiscoveryControllerError,"bounded critic visibility"), \
+        patch.object(D.claude_fable5_critic_actor,"run_critic",side_effect=AssertionError("no actor")):
+    critic.review(candidate,context={},workspace=root)
  def test_single_positive_screen_never_nominates(self):
   with tempfile.TemporaryDirectory() as t, patch.object(D.source_candidate,"SourcePatchManifest",Manifest), patch.object(D,"_write_projection"):
    root=Path(t); r=D.run_controller(self.cfg(root,1),planner=FakePlanner(),critic=FakeCritic(["accept"]),screener=FakeScreen([.04]),lease=Lease())

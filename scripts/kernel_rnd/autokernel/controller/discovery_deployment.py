@@ -24,7 +24,7 @@ from .. import schemas
 from . import gpu_load_admission
 
 
-SCHEMA = "epyc.autokernel.discovery_deployment.v1"
+SCHEMA = "epyc.autokernel.discovery_deployment.v2"
 FROZEN_PRODUCTION_PATH = Path("/mnt/raid0/llm/llama.cpp")
 FROZEN_PRODUCTION_HEAD = "0db32c06e3e550065b78311a6031ef3dd2c4f27c"
 FROZEN_PRODUCTION_BRANCH = "production-consolidated-v9"
@@ -226,6 +226,7 @@ class DiscoveryDeployment:
     max_iterations: int
     nomination_threshold: float
     actor_wrapper: ImmutableInput
+    critic_wrapper: ImmutableInput
     environment_profile_id: str
     device_id: str
     claim_timeout_s: float
@@ -250,6 +251,7 @@ class DiscoveryDeployment:
         _verify_instrument(self.instrument_path, self.production_head,
                            self.instrument_branch, self.instrument_commit)
         self.actor_wrapper.revalidate("actors.wrapper")
+        self.critic_wrapper.revalidate("actors.critic")
         for label, value in (("model", self.model), ("workload", self.workload),
                              ("runtime_config", self.runtime_config), ("policy", self.policy)):
             value.revalidate(label)
@@ -393,10 +395,15 @@ def load_deployment_config(path: Path) -> DiscoveryDeployment:
     if (isinstance(threshold, bool) or not isinstance(threshold, (int, float))
             or not math.isfinite(float(threshold)) or threshold <= 0):
         raise DeploymentConfigError("controller.nomination_threshold is invalid")
-    actors = _exact(top["actors"], {"wrapper_path", "wrapper_sha256", "environment_profile_id"}, "actors")
+    actors = _exact(top["actors"], {"wrapper_path", "wrapper_sha256",
+                                      "critic_path", "critic_sha256",
+                                      "environment_profile_id"}, "actors")
     actor_wrapper = _input({"path": actors["wrapper_path"], "sha256": actors["wrapper_sha256"]}, "actors.wrapper")
     if not os.access(actor_wrapper.path, os.X_OK):
         raise DeploymentConfigError("actors.wrapper_path must be executable")
+    critic_wrapper = _input({"path": actors["critic_path"], "sha256": actors["critic_sha256"]}, "actors.critic")
+    if not os.access(critic_wrapper.path, os.X_OK):
+        raise DeploymentConfigError("actors.critic_path must be executable")
     environment_profile_id = _identifier(actors["environment_profile_id"], "actors.environment_profile_id")
     gpu = _exact(top["gpu"], {"device_id", "claim_timeout_s", "inference_window_lock",
                                 "inference_window_lease_id"}, "gpu")
@@ -423,7 +430,8 @@ def load_deployment_config(path: Path) -> DiscoveryDeployment:
     admission_policy = _admission_policy(admission_policy_input, model=model, workload=workload)
     planner_context = _planner_context(top["planner_context"], model=model,
                                        workload=workload, runtime_config=runtime_config)
-    for label, input_ in (("actors.wrapper", actor_wrapper), ("model", model),
+    for label, input_ in (("actors.wrapper", actor_wrapper), ("actors.critic", critic_wrapper),
+                          ("model", model),
                           ("workload", workload), ("runtime_config", runtime_config),
                           ("admission_policy", admission_policy_input), ("planner_context", planner_context.input)):
         if any(_overlaps(input_.path, protected)
@@ -439,6 +447,7 @@ def load_deployment_config(path: Path) -> DiscoveryDeployment:
         operations_root=roots["operations_root"], build_root=roots["build_root"],
         max_iterations=max_iterations,
         nomination_threshold=float(threshold), actor_wrapper=actor_wrapper,
+        critic_wrapper=critic_wrapper,
         environment_profile_id=environment_profile_id, device_id=device_id,
         claim_timeout_s=float(claim_timeout_s), inference_window_lock=window,
         model=model, workload=workload, admission_policy=admission_policy,

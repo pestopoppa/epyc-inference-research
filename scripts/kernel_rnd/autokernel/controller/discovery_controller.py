@@ -28,16 +28,17 @@ import tempfile
 from typing import Any, Callable, Mapping, Protocol, Sequence
 
 from .. import campaign, journal, source_candidate
-from . import codex_container_actor, do_not_repeat, hypotheses
+from . import claude_fable5_critic_actor, codex_container_actor, do_not_repeat, hypotheses
 from . import gpu_source_proofs
 from scripts.benchmark import autokernel_progression
 from scripts.benchmark import run_autokernel_gpu_discovery as gpu_discovery
 
-SCHEMA = "epyc.autokernel.discovery_controller.v2"
+SCHEMA = "epyc.autokernel.discovery_controller.v3"
+ROSTER_SCHEMA = "epyc.autokernel.discovery_roster.v3"
 AUTHORITY = "nonpromotable_candidate_only_discovery"
 HASH = __import__("re").compile(r"^[0-9a-f]{64}$")
 SOL = {"provider": "codex", "model": "gpt-5.6-sol", "effort": "high", "role": "planner"}
-TERRA = {"provider": "codex", "model": "gpt-5.6-terra", "effort": "high", "role": "critic"}
+FABLE5_CRITIC = {"provider": "claude", "model": "claude-fable-5", "effort": "high", "role": "critic"}
 
 
 class DiscoveryControllerError(RuntimeError): pass
@@ -151,15 +152,30 @@ def _atomic(path: Path, value: Mapping[str, Any]) -> None:
 
 
 def sealed_roster() -> dict[str, Any]:
-    return {"schema": "epyc.autokernel.discovery_roster.v2", "members": [SOL, TERRA], "claude_members": 0, "member_count": 2}
+    return {"schema": ROSTER_SCHEMA, "members": [SOL, FABLE5_CRITIC], "claude_members": 1, "member_count": 2}
 
 
 def _require_roster(value: Mapping[str, Any]) -> None:
-    if dict(value) != sealed_roster(): raise DiscoveryControllerError("runtime roster is not exact Sol planner + Terra critic, 0 Claude")
+    if dict(value) != sealed_roster(): raise DiscoveryControllerError("runtime roster is not exact Sol planner + Claude Fable 5 critic")
 
 def _require_runtime(value: Mapping[str, Any]) -> None:
     required={"kind","docker_path","docker_sha256","image_id","codex_native_sha256","code_mode_host_sha256","ca_certificate_sha256","writable_host_binds","host_network_mode"}
     if set(value) != required or value.get("kind")!="docker_workspace_bind_only" or value.get("host_network_mode")!="docker_bridge" or value.get("writable_host_binds") != ["/workspace"] or not all(isinstance(value.get(k),str) and value[k] for k in required-{"writable_host_binds"}): raise DiscoveryControllerError("Codex runtime attestation is incomplete or unsealed")
+
+
+def _require_claude_runtime(value: Mapping[str, Any]) -> None:
+    """Require a non-secret, byte-bound Fable 5 CLI runtime receipt."""
+    required = {"kind", "provider", "model", "effort", "wrapper_path",
+                "wrapper_sha256", "argv_policy_sha256", "auth_staging_policy"}
+    if (set(value) != required
+            or value.get("kind") != "claude_cli_structured_critic"
+            or value.get("provider") != FABLE5_CRITIC["provider"]
+            or value.get("model") != FABLE5_CRITIC["model"]
+            or value.get("effort") != FABLE5_CRITIC["effort"]
+            or value.get("auth_staging_policy") != "ephemeral_0600_copy_no_secret_receipt"
+            or not all(isinstance(value.get(key), str) and value[key]
+                       for key in required - {"auth_staging_policy"})):
+        raise DiscoveryControllerError("Claude critic runtime attestation is incomplete or unsealed")
 
 
 def _text(value: object, label: str) -> str:
@@ -430,36 +446,45 @@ class CodexPlanner:
                           assignment=AuthoringAssignment(**assignment))
 
 
-class CodexCritic:
-    """Concrete Terra actor. It can bind a veto but never alters the candidate."""
+class ClaudeCritic:
+    """Concrete Fable 5 critic. It can bind a veto but never alters the candidate."""
     def __init__(self, *, wrapper: Path, environment: Mapping[str, str],
                  template_catalog: Mapping[str, Any] | None = None,
                  wrapper_sha256: str | None = None,
                  runtime_identity: Mapping[str, Any] | None = None,
-                 actor_launcher_sha256: str | None = None) -> None:
+                 actor_launcher_sha256: str | None = None,
+                 auth_root: Path = Path("/home/node/.claude")) -> None:
         self.wrapper, self.environment = wrapper, dict(environment)
         self.template_catalog = json.loads(json.dumps(template_catalog or {}, sort_keys=True))
         self.wrapper_sha256 = wrapper_sha256
         self.runtime_identity = None if runtime_identity is None else dict(runtime_identity)
         self.actor_launcher_sha256 = actor_launcher_sha256
+        self.auth_root = auth_root
     def _runtime(self) -> Mapping[str, Any]:
         if self.wrapper_sha256 is not None:
             if self.wrapper.is_symlink() or not self.wrapper.is_file() or hashlib.sha256(self.wrapper.read_bytes()).hexdigest() != self.wrapper_sha256:
-                raise DiscoveryControllerError("sealed Codex critic wrapper bytes changed")
-        current = codex_container_actor.runtime_identity(self.wrapper)
+                raise DiscoveryControllerError("sealed Claude critic wrapper bytes changed")
+        current = claude_fable5_critic_actor.runtime_identity(self.wrapper)
         if self.runtime_identity is not None and current != self.runtime_identity:
-            raise DiscoveryControllerError("sealed Codex critic runtime identity changed")
+            raise DiscoveryControllerError("sealed Claude critic runtime identity changed")
         if (self.actor_launcher_sha256 is not None
-                and hashlib.sha256(Path(codex_container_actor.__file__).resolve().read_bytes()).hexdigest()
+                and hashlib.sha256(Path(claude_fable5_critic_actor.__file__).resolve().read_bytes()).hexdigest()
                 != self.actor_launcher_sha256):
-            raise DiscoveryControllerError("sealed Codex critic launcher/argv policy changed")
+            raise DiscoveryControllerError("sealed Claude critic launcher/argv policy changed")
         return current
-    def attest(self) -> Mapping[str, Any]: return {**TERRA, "runtime": self._runtime()}
+    def attest(self) -> Mapping[str, Any]: return {**FABLE5_CRITIC, "runtime": self._runtime()}
     def review(self, candidate: PlannedCandidate, *, context: Mapping[str, Any], workspace: Path) -> Critique:
         manifest = candidate.source_manifest
-        if len(manifest.patch_text) > 65536:
+        if len(manifest.patch_text.encode("utf-8")) > 65536:
             raise DiscoveryControllerError("candidate patch exceeds bounded critic visibility")
-        prompt = json.dumps({"role": TERRA, "context": context,
+        bindings = {
+            "proposal_sha256": _sha(candidate.proposal),
+            "source_manifest_sha256": candidate.source_manifest_sha256,
+            "candidate_patch_sha256": manifest.patch_sha256,
+            "context_sha256": _sha(context),
+            "template_catalog_sha256": _sha(self.template_catalog),
+        }
+        prompt = json.dumps({"role": FABLE5_CRITIC, "context": context,
             "experiment_template_catalog": self.template_catalog, "candidate": {
             "hypothesis_id": candidate.hypothesis_id, "statement": candidate.statement,
             "falsifier": candidate.falsifier, "proposal": candidate.proposal,
@@ -472,16 +497,17 @@ class CodexCritic:
                          "declared_files": list(manifest.declared_files),
                          "declared_symbols": {key: list(value) for key, value in manifest.declared_symbols.items()},
                          "patch_sha256": manifest.patch_sha256, "patch_text": manifest.patch_text}},
-            "output": "Write critique.json with exactly decision=accept|reject|revise and reason."}, sort_keys=True)
+            "required_output_bindings": bindings,
+            "output": "Return only the strict structured critique; do not edit files or use tools."}, sort_keys=True)
         self._runtime()
-        result = codex_container_actor.run_actor(wrapper=self.wrapper, workspace=workspace, model=TERRA["model"], effort=TERRA["effort"], prompt=prompt, environment=self.environment,
+        result = claude_fable5_critic_actor.run_critic(
+            wrapper=self.wrapper, workspace=workspace, prompt=prompt,
+            bindings=bindings, environment=self.environment,
+            auth_root=self.auth_root,
             expected_wrapper_sha256=self.wrapper_sha256,
             expected_runtime_identity=self.runtime_identity,
             expected_launcher_sha256=self.actor_launcher_sha256)
-        if result.returncode: raise DiscoveryControllerError(f"Terra actor failed: {result.stderr[-400:]}")
-        value = _read_object(workspace / "critique.json", workspace)
-        if set(value) != {"decision", "reason"}: raise DiscoveryControllerError("critic output schema mismatch")
-        return Critique(**value)
+        return Critique(result.decision, result.reason)
 
 
 def _read_object(path: Path, root: Path) -> dict[str, Any]:
@@ -998,12 +1024,13 @@ def _schedule_replication(state: dict[str, Any], *, item: PlannedCandidate,
 def run_controller(config: ControllerConfig, *, planner: Planner, critic: Critic, screener: Screener, lease: Lease) -> dict[str, Any]:
     planner_attestation, critic_attestation = dict(planner.attest()), dict(critic.attest())
     if ({k: planner_attestation.get(k) for k in SOL} != SOL
-            or {k: critic_attestation.get(k) for k in TERRA} != TERRA
+            or {k: critic_attestation.get(k) for k in FABLE5_CRITIC} != FABLE5_CRITIC
             or not isinstance(planner_attestation.get("runtime"), Mapping)
             or not isinstance(critic_attestation.get("runtime"), Mapping)):
-        raise DiscoveryControllerError("actors did not attest the sealed Codex runtime identities")
-    _require_runtime(planner_attestation["runtime"]); _require_runtime(critic_attestation["runtime"])
-    _require_roster({"schema":"epyc.autokernel.discovery_roster.v2","members":[SOL,TERRA],"claude_members":0,"member_count":2})
+        raise DiscoveryControllerError("actors did not attest the sealed planner/critic runtime identities")
+    _require_runtime(planner_attestation["runtime"])
+    _require_claude_runtime(critic_attestation["runtime"])
+    _require_roster(sealed_roster())
     store=DurableState(config.output_root); lock=store.run_lock()
     try:
         return _run_controller_locked(config,planner=planner,critic=critic,screener=screener,lease=lease,store=store)
