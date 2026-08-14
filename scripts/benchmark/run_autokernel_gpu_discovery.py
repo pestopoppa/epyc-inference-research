@@ -226,6 +226,110 @@ class LoadReadinessPolicy:
             raise RuntimeError("serialized load readiness witness does not bind the sealed runtime/model")
 
 
+@dataclass(frozen=True)
+class ReadyContinueHandshake:
+    """One sealed, opt-in pre-measurement barrier for the governed instrument."""
+
+    schema: str
+    decision_sha256: str
+    readiness_policy_sha256: str
+    arm: str
+    seed: int
+    repetitions: int
+    token: str
+    ready_path: Path
+    continue_path: Path
+
+    @classmethod
+    def create(cls, *, root: Path, decision: Mapping[str, Any],
+               policy: LoadReadinessPolicy, arm: str, seed: int,
+               repetitions: int) -> "ReadyContinueHandshake":
+        if (not isinstance(decision.get("decision_sha256"), str)
+                or len(decision["decision_sha256"]) != 64
+                or arm != policy.runtime_arm or repetitions < 1):
+            raise RuntimeError("ready/continue handshake lacks sealed decision authority")
+        target = root.resolve()
+        if not target.is_absolute() or target.is_symlink():
+            raise RuntimeError("ready/continue handshake root is unsafe")
+        target.mkdir(mode=0o700, parents=True, exist_ok=False)
+        marker = {
+            "schema": "epyc.autokernel.ready_continue.v1",
+            "decision_sha256": decision["decision_sha256"],
+            "readiness_policy_sha256": policy.policy_sha256,
+            "arm": arm, "seed": seed, "repetitions": repetitions,
+        }
+        token = schemas.content_hash(marker)
+        return cls(schema=marker["schema"], decision_sha256=marker["decision_sha256"],
+                   readiness_policy_sha256=marker["readiness_policy_sha256"],
+                   arm=arm, seed=seed, repetitions=repetitions, token=token,
+                   ready_path=target / "ready", continue_path=target / "continue")
+
+    def __post_init__(self) -> None:
+        if (self.schema != "epyc.autokernel.ready_continue.v1" or self.arm not in {"anchor", "candidate"}
+                or self.seed < 0 or self.repetitions < 1 or len(self.token) != 64
+                or len(self.decision_sha256) != 64 or len(self.readiness_policy_sha256) != 64
+                or not self.ready_path.is_absolute() or not self.continue_path.is_absolute()
+                or self.ready_path.parent != self.continue_path.parent):
+            raise RuntimeError("ready/continue handshake is malformed")
+
+    def argv(self) -> tuple[str, ...]:
+        return ("--autokernel-ready-file", str(self.ready_path),
+                "--autokernel-continue-file", str(self.continue_path),
+                "--autokernel-ready-token", self.token,
+                "--autokernel-ready-timeout-ms", "600000")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"schema": self.schema, "decision_sha256": self.decision_sha256,
+                "readiness_policy_sha256": self.readiness_policy_sha256,
+                "arm": self.arm, "seed": self.seed, "repetitions": self.repetitions,
+                "token": self.token, "ready_path": str(self.ready_path),
+                "continue_path": str(self.continue_path)}
+
+    def validate_ready(self, *, pid: int) -> dict[str, Any]:
+        try:
+            stat = self.ready_path.lstat()
+            raw = self.ready_path.read_text(encoding="ascii")
+        except OSError as exc:
+            raise RuntimeError("governed instrument ready receipt is unavailable") from exc
+        if self.ready_path.is_symlink() or not self.ready_path.is_file() or stat.st_size > 512:
+            raise RuntimeError("governed instrument ready receipt is unsafe")
+        fields = raw.split()
+        expected = [self.schema, str(pid), str(self.seed), str(self.repetitions), self.token]
+        if fields != expected or raw != " ".join(expected) + "\n":
+            raise RuntimeError("governed instrument ready receipt does not bind PID/seed/repetitions/token")
+        return {"schema": self.schema, "pid": pid, "seed": self.seed,
+                "repetitions": self.repetitions, "token": self.token,
+                "ready_path": str(self.ready_path), "continue_path": str(self.continue_path)}
+
+    def continue_after_release(self) -> None:
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        try:
+            fd = os.open(self.continue_path, flags, 0o600)
+        except OSError as exc:
+            raise RuntimeError("cannot create governed instrument continue receipt") from exc
+        try:
+            payload = (self.token + "\n").encode("ascii")
+            if os.write(fd, payload) != len(payload):
+                raise RuntimeError("governed instrument continue receipt write was incomplete")
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+
+    def cleanup(self) -> dict[str, bool]:
+        result = {"ready_removed": False, "continue_removed": False}
+        for key, path in (("ready_removed", self.ready_path),
+                          ("continue_removed", self.continue_path)):
+            try:
+                if path.exists() and not path.is_symlink() and path.is_file():
+                    path.unlink()
+                    result[key] = True
+            except OSError as exc:
+                raise RuntimeError(f"governed instrument handshake cleanup failed: {path}") from exc
+        return result
+
+
 class BandwidthDutyCycleBudget:
     """Sealed cold-load host-transfer budget; size alone never decides overlap."""
     def __init__(self, *, host_bandwidth_bytes_per_s: float,
@@ -368,6 +472,7 @@ def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
            sealed_load_decision: dict | None = None,
            repetitions: int = 1,
            load_readiness_policy: LoadReadinessPolicy | None = None,
+           ready_continue_handshake: ReadyContinueHandshake | None = None,
            process_factory: Callable[..., Any] | None = None,
            kfd_pid_provider: Callable[[], tuple[int, ...]] | None = None,
            vram_reader: Callable[[], int] | None = None,
@@ -437,6 +542,13 @@ def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
             or load_readiness_policy.model_sha256 != sha256_file(model)
             or load_readiness_policy.runtime_arm != runtime_arm):
         raise RuntimeError("serialized load readiness policy does not bind this arm/model")
+    if ready_continue_handshake is not None and (
+            load_readiness_policy is None
+            or ready_continue_handshake.arm != runtime_arm
+            or ready_continue_handshake.seed != seed
+            or ready_continue_handshake.repetitions != repetitions
+            or ready_continue_handshake.readiness_policy_sha256 != load_readiness_policy.policy_sha256):
+        raise RuntimeError("ready/continue handshake does not bind this serialized arm")
     window = (inference_window.InferenceCallWindow(inference_window_lock, timeout_s=600.0)
               if inference_window_lock is not None else MODEL_CALL_WINDOW)
     configured_lease = window.acquire()
@@ -451,6 +563,25 @@ def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
         "readiness_policy": (None if load_readiness_policy is None
                              else load_readiness_policy.to_dict()),
     }
+
+    def release_for_ready(witness: Mapping[str, Any]) -> None:
+        nonlocal owned_claim, transition
+        if getattr(coverage, "borrowed", False):
+            coverage.validate()
+        elif owned_claim is not None:
+            owned_claim.release()
+            owned_claim = None
+        configured_lease.release()
+        transition = {
+            "schema": "epyc.autokernel.gpu_load_readiness_transition.v1",
+            "status": "ready_witnessed_lock_released_before_continue",
+            "lock_released_before_measurement": True,
+            "lock_path": str(configured_lease.path),
+            "waited_s": configured_lease.waited_s,
+            "witness": dict(witness),
+            "readiness_policy": load_readiness_policy.to_dict(),
+            "handshake": ready_continue_handshake.to_dict(),
+        }
 
     try:
         try:
@@ -476,10 +607,13 @@ def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
             split_mode=split_mode, no_kv_offload=no_kv_offload, poll=poll,
             reward_binary=reward_binary, hip_library_dir=hip_library_dir,
             common_loader_dir=common_loader_dir, runtime_arm=runtime_arm,
-            repetitions=repetitions, process_factory=process_factory,
+            repetitions=repetitions, readiness_policy=load_readiness_policy,
+            ready_continue_handshake=ready_continue_handshake,
+            on_load_ready=(release_for_ready if ready_continue_handshake is not None else None),
+            process_factory=process_factory,
             kfd_pid_provider=kfd_pid_provider, vram_reader=vram_reader,
             pgid_provider=pgid_provider, sleep=sleep)
-        if getattr(coverage, "borrowed", False):
+        if getattr(coverage, "borrowed", False) and configured_lease.held:
             coverage.validate()
     finally:
         if owned_claim is not None:
@@ -488,6 +622,9 @@ def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
             finally:
                 owned_claim = None
         configured_lease.release()
+        if ready_continue_handshake is not None:
+            cleanup = ready_continue_handshake.cleanup()
+            transition = {**transition, "handshake_cleanup": cleanup}
     result["inference_call_window"] = {
         "schema": "epyc.autokernel.inference_call_window.v1",
         "lock_path": str(configured_lease.path),
@@ -514,6 +651,7 @@ def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
                    common_loader_dir: Path | None = None, runtime_arm: str | None = None,
                    repetitions: int = 1,
                    readiness_policy: LoadReadinessPolicy | None = None,
+                   ready_continue_handshake: ReadyContinueHandshake | None = None,
                    on_load_ready: Callable[[Mapping[str, Any]], None] | None = None,
                    process_factory: Callable[..., Any] | None = None,
                    kfd_pid_provider: Callable[[], tuple[int, ...]] | None = None,
@@ -528,6 +666,10 @@ def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
             or sha256_file(model) != readiness_policy.model_sha256
             or common_loader_dir is None or hip_library_dir is None):
         raise RuntimeError("serialized readiness policy lacks its exact runtime/model closure")
+    if (ready_continue_handshake is None) != (on_load_ready is None):
+        raise RuntimeError("ready/continue handshake and release callback must be paired")
+    if ready_continue_handshake is not None and readiness_policy is None:
+        raise RuntimeError("ready/continue handshake requires a typed readiness policy")
     binary = (reward_binary or build / "bin" / "llama-bench").resolve()
     loader_dir = (hip_library_dir or build / "bin").resolve()
     common_dir = (common_loader_dir or binary.parent).resolve()
@@ -544,7 +686,9 @@ def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
             "-nopo", "1" if no_op_offload else "0", "-sm", split_mode,
             "-nkvo", "1" if no_kv_offload else "0",
             "--poll", str(poll),
-            "--autokernel-harden", str(seed), "-o", "jsonl")
+            "--autokernel-harden", str(seed),
+            *(ready_continue_handshake.argv() if ready_continue_handshake else ()),
+            "-o", "jsonl")
     if not common_dir.is_dir():
         raise RuntimeError("sealed common reward loader directory is absent")
     env = {"PATH": "/usr/bin:/bin",
@@ -566,6 +710,7 @@ def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
                       text=True, start_new_session=True)
     samples = []
     maps_identity = None
+    readiness_witness = None
     try:
       while process.poll() is None:
         kfd = kfd_provider()
@@ -589,6 +734,21 @@ def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
                 and hip_library_dir is not None):
             maps_identity = _runtime_maps_identity(runtime_root=common_loader_dir.parent,
                 arm=runtime_arm, model=model, kfd_pid=owned[0])
+        if ready_continue_handshake is not None and readiness_witness is None:
+            if len(owned) == 1 and vram > baseline_vram and maps_identity is not None:
+                assert readiness_policy is not None and on_load_ready is not None
+                readiness_policy.validate_witness(maps_identity)
+                ready = ready_continue_handshake.validate_ready(pid=process.pid)
+                readiness_witness = {
+                    "ready": ready, "owned_kfd_pids": list(owned),
+                    "vram_used_bytes": vram, "baseline_vram_bytes": baseline_vram,
+                    "runtime_maps_identity": maps_identity,
+                    "sample_offset_s": samples[-1]["offset_s"],
+                }
+                # Ordering is the contract: lock/claim release is complete
+                # before the token that permits the first timed sample exists.
+                on_load_ready(readiness_witness)
+                ready_continue_handshake.continue_after_release()
         pause(0.05)
       stdout, stderr = process.communicate(timeout=10)
     except BaseException:
@@ -641,6 +801,8 @@ def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
         raise RuntimeError("GPU discovery window has no positive VRAM residency delta")
     if runtime_arm is not None and maps_identity is None:
         raise RuntimeError("GPU discovery window lacks sealed runtime loader-map identity")
+    if ready_continue_handshake is not None and readiness_witness is None:
+        raise RuntimeError("governed instrument exited without ready before measurement")
     return {"argv": list(argv), "env": {"LD_LIBRARY_PATH": env["LD_LIBRARY_PATH"]},
             "reward_binary": str(binary), "reward_binary_sha256": sha256_file(binary),
             "hip_library": str(loader_dir / "libggml-hip.so"),
@@ -650,6 +812,7 @@ def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
             "sample_count": repetitions, "seed": seed, "raw_row": row,
             "stderr_tail": stderr[-2000:], "residency": samples,
             "runtime_maps_identity": maps_identity,
+            "load_readiness_witness": readiness_witness,
             "hip_residency_proved": True}
 
 
@@ -841,6 +1004,12 @@ def preflight(args: argparse.Namespace) -> dict:
                         "anchor_hip_sha256": anchor_hip,
                         "candidate_hip_sha256": candidate_hip,
                         "reward_closure": "shared_anchor_binary_per_arm_hip_dso"}
+    requested_handshake = getattr(args, "instrument_ready_continue_v1", False)
+    instrument_commit = getattr(args, "instrument_ready_continue_commit", None)
+    if requested_handshake and (
+            not isinstance(instrument_commit, str)
+            or instrument_commit != "d9fdc17bd" or runtime_arms is None):
+        raise RuntimeError("ready/continue requires the sealed d9fdc17bd shared-runtime instrument")
     return {
         "schema": "epyc.autokernel.gpu_discovery_preflight.v1",
         "campaign_id": args.campaign_id,
@@ -889,6 +1058,8 @@ def preflight(args: argparse.Namespace) -> dict:
             "required": transfer["mode"] == "cold_serialized",
             "proof": "owned_kfd+positive_vram+exact_split_runtime_maps",
             "available": runtime_arms is not None,
+            "ready_continue": {"enabled": bool(requested_handshake),
+                               "instrument_commit": instrument_commit},
         },
     }
 
@@ -924,6 +1095,16 @@ def run(args: argparse.Namespace) -> dict:
         sealed=sealed, arm="anchor", model=model)
     candidate_readiness = _readiness_policy_for_arm(
         sealed=sealed, arm="candidate", model=model)
+    handshake_enabled = bool(sealed["serialized_readiness"]["ready_continue"]["enabled"])
+    anchor_handshake = (ReadyContinueHandshake.create(
+        root=out / "ready-continue-anchor", decision=sealed["host_transfer"],
+        policy=anchor_readiness, arm="anchor", seed=args.seed, repetitions=args.calls)
+        if handshake_enabled and anchor_readiness is not None else None)
+    candidate_handshake = (ReadyContinueHandshake.create(
+        root=out / "ready-continue-candidate", decision=sealed["host_transfer"],
+        policy=candidate_readiness, arm="candidate", seed=args.seed + args.calls,
+        repetitions=args.calls)
+        if handshake_enabled and candidate_readiness is not None else None)
     if _kfd_pids():
         raise RuntimeError("MI210 already has KFD users")
     baseline_vram = int(VRAM_USED.read_text(encoding="utf-8").strip())
@@ -982,7 +1163,8 @@ def run(args: argparse.Namespace) -> dict:
             common_loader_dir=(Path(sealed["runtime_arms"]["common_loader_dir"])
                                if sealed["runtime_arms"] else None),
             runtime_arm=("anchor" if sealed["runtime_arms"] else None),
-            repetitions=args.calls, load_readiness_policy=anchor_readiness)
+            repetitions=args.calls, load_readiness_policy=anchor_readiness,
+            ready_continue_handshake=anchor_handshake)
             for _ in range(1)]
         bank_body = {
             "schema": SCHEMA_BANK, "campaign_id": args.campaign_id,
@@ -1030,7 +1212,8 @@ def run(args: argparse.Namespace) -> dict:
             common_loader_dir=(Path(sealed["runtime_arms"]["common_loader_dir"])
                                if sealed["runtime_arms"] else None),
             runtime_arm=("candidate" if sealed["runtime_arms"] else None),
-            repetitions=args.calls, load_readiness_policy=candidate_readiness)
+            repetitions=args.calls, load_readiness_policy=candidate_readiness,
+            ready_continue_handshake=candidate_handshake)
             for _ in range(1)]
         center = sum(bank["anchor_samples"]) / len(bank["anchor_samples"])
         values = [sample for run in candidate_runs for sample in run["samples"]]
@@ -1115,6 +1298,8 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--common-loader-dir")
     result.add_argument("--anchor-loader-dir")
     result.add_argument("--candidate-loader-dir")
+    result.add_argument("--instrument-ready-continue-v1", action="store_true")
+    result.add_argument("--instrument-ready-continue-commit")
     result.add_argument("--cpu-claim-journal", default="/mnt/raid0/llm/ak-claims/region.jsonl")
     result.add_argument("--device-claim-journal", default="/mnt/raid0/llm/ak-claims/device.jsonl")
     return result
