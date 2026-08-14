@@ -311,6 +311,16 @@ class CodexPlanner:
             "experiment_intent_keys": ["template_id", "target_surface", "target_symbol",
                                        "correctness_id", "dispatch_id", "expected_dispatch",
                                        "load_mode_recommendation"],
+            "load_mode_recommendation_keys": ["mode", "rationale", "example_ids"],
+            "load_mode_recommendation_semantics": (
+                "optional advisory only; it may request safer serialization but cannot author "
+                "telemetry, profile facts, bytes, commands, or resource authority"),
+            "load_mode_recommendation_modes": ["cold_overlap", "cold_serialized",
+                                                "hot_resident"],
+            "load_mode_example_ids": sorted({
+                str(example.get("id")) for example in
+                context.get("admission_policy", {}).get("examples", [])
+                if isinstance(example, Mapping) and isinstance(example.get("id"), str)}),
             "expected_dispatch_keys": ["kernel_name", "calls", "grid", "workgroup", "lds_bytes"],
             "source_manifest": "epyc.autokernel.source_patch.v1; use deployment-assigned ids/base/instrument only",
             "proposal_requirements": ["proposal_id matches manifest", "change_class matches manifest",

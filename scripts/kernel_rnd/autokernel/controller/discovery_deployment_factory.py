@@ -221,6 +221,10 @@ _ROCPROF_V1_INPUT = b"pmc:\n\ngpu:\nrange:\nkernel:\n"
 _ROCPROF_V1_PREFIX = ("--tool-version", "1", "--timestamp", "on",
                        "--ctx-wait", "on", "--heartbeat", "30", "-i")
 _CORRECTNESS_SUITE_SEED = 2026081301
+_INSTRUMENT_PATH = Path("/mnt/raid0/llm/llama.cpp-experimental")
+_INSTRUMENT_BRANCH = "experimental-v9-autokernel-iq3-mmid-guard-r2-20260813"
+_INSTRUMENT_COMMIT = "894ec4dc55c829b11b663a46bc9b089d861b73a4"
+_INSTRUMENT_DIFF_SHA256 = "5f62f3ae6b79d0c1882ec71db164049bfb517310e33aa1bad1c71455a4d56e8c"
 _INSTRUMENT_TEST_SOURCE_SHA256 = "6acd4bf95594d5797a54c912630ec56d3e89fcb3a3a43ca96f95152d77589db4"
 _TARGET_SOURCE_SHA256 = MappingProxyType({
     "ggml/src/ggml-cuda/fattn.cu": "f6a61657387c153e88bde036e25684b512c7cf078b1d17c7e3b2d31ee73f28d3",
@@ -234,12 +238,151 @@ _SAFE_ACTOR_ENVIRONMENT = MappingProxyType({
     "CODEX_HOME": "/home/node/.codex",
     "SSL_CERT_FILE": "/etc/ssl/certs/ca-certificates.crt",
 })
+_SITE_MODEL = Path(
+    "/mnt/raid0/llm/models/lmstudio-community/Qwen2.5-Coder-0.5B-GGUF/"
+    "Qwen2.5-Coder-0.5B-Q4_K_M.gguf")
+_SITE_SOURCE_PLAN = Path("/mnt/raid0/llm/autokernel/surface/gpu_decode_source_plan.json")
+_SITE_WINDOW_LOCK = Path("/mnt/raid0/llm/tmp/model-call.lock")
+_SITE_ACTOR_WRAPPER = Path(
+    "/usr/local/share/npm-global/lib/node_modules/@openai/codex/bin/codex.js")
 
 
 def _digest_regular(path: Path, label: str) -> str:
     if path.is_symlink() or not path.is_file():
         raise DeploymentFactoryError(f"{label} must be a regular non-symlink file")
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _atomic_bytes(path: Path, raw: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        if path.is_symlink() or path.read_bytes() != raw:
+            raise DeploymentFactoryError(f"bundle artifact already differs: {path}")
+        return
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    with temporary.open("xb") as handle:
+        handle.write(raw); handle.flush(); os.fsync(handle.fileno())
+    os.replace(temporary, path)
+
+
+def _json_artifact(path: Path, value: Mapping[str, Any]) -> tuple[Path, str]:
+    raw = (json.dumps(dict(value), sort_keys=True, indent=2) + "\n").encode()
+    _atomic_bytes(path, raw)
+    return path.resolve(), hashlib.sha256(raw).hexdigest()
+
+
+def initialize_static_deployment_bundle(root: Path) -> Path:
+    """Emit the one reviewed site bundle; no caller supplies code or argv authority."""
+    if not root.is_absolute() or root.is_symlink() or ".." in root.parts:
+        raise DeploymentFactoryError("bundle root must be an absolute non-symlink path")
+    root.mkdir(parents=True, exist_ok=True)
+    config_dir = root / "config"
+    for directory in (config_dir, root / "locks"):
+        directory.mkdir(parents=True, exist_ok=True)
+    model = _bound(_SITE_MODEL, "model")
+    source_plan = _bound(_SITE_SOURCE_PLAN, "reviewed_source_plan")
+    wrapper_path = _SITE_ACTOR_WRAPPER.resolve(strict=True)
+    wrapper = _bound(wrapper_path, "actor_wrapper")
+    workload_path, workload_sha = _json_artifact(config_dir / "workload.json", {
+        "schema": "epyc.autokernel.discovery_workload.v1", "workload": "decode_tg128",
+        "prompt_tokens": 0, "generation_tokens": 128, "calls_per_arm": 9,
+        "device_id": "mi210_0", "promotion_claim": False})
+    runtime_path, runtime_sha = _json_artifact(config_dir / "runtime.json", {
+        "schema": "epyc.autokernel.discovery_runtime.v1", "architecture": "gfx90a",
+        "gpu_layers": 99, "flash_attention": True, "hip_graphs": True,
+        "cpu_list": "184-191", "threads": 8, "promotion_claim": False})
+    evidence_sha = source_plan.sha256
+    profile = {
+        "profile_id": _LOAD_PROFILE_ID, "model_path": str(model.path),
+        "model_sha256": model.sha256, "model_bytes": model.path.stat().st_size,
+        "workload": "decode_tg128", "calls_per_arm": 9, "device_id": "mi210_0",
+        "cold_load_host_bytes": model.path.stat().st_size,
+        "worst_case_loads_per_interval": 18,
+        "minimum_headroom_bytes_per_s": 4_000_000_000,
+        "telemetry_max_age_ms": 5000, "evidence_sha256": evidence_sha}
+    policy = {"schema": gpu_load_admission.POLICY_SCHEMA,
+              "version": "mi210-discovery-admission-v1", "profiles": [profile],
+              "examples": [
+                  {"id": "qwen05b-fresh-headroom", "polarity": "positive",
+                   "facts": {"profile_id": _LOAD_PROFILE_ID, "telemetry_observed": True},
+                   "missing": [], "mode": "cold_overlap",
+                   "rationale": "fresh measured headroom and exact reviewed profile permit overlap",
+                   "disqualifiers": [], "counterfactual": "serialize when telemetry is absent or stale",
+                   "evidence": [f"sha256:{evidence_sha}"]},
+                  {"id": "qwen05b-unknown-headroom", "polarity": "negative",
+                   "facts": {"profile_id": _LOAD_PROFILE_ID, "telemetry_observed": False},
+                   "missing": ["fresh_headroom_telemetry"], "mode": "cold_serialized",
+                   "rationale": "unknown bandwidth state cannot authorize overlap",
+                   "disqualifiers": ["telemetry_missing"],
+                   "counterfactual": "fresh sufficient telemetry could admit overlap",
+                   "evidence": [f"sha256:{evidence_sha}"]}]}
+    policy["policy_sha256"] = schemas.content_hash(policy)
+    policy_path, policy_sha = _json_artifact(config_dir / "admission-policy.json", policy)
+    source_rows = (
+        ("fattn", "ggml_cuda_get_best_fattn_kernel", .10, "ggml/src/ggml-cuda/fattn.cu"),
+        ("mmvq", "ggml_cuda_op_mul_mat_vec_q", .274297, "ggml/src/ggml-cuda/mmvq.cu"),
+        ("rope", "ggml_cuda_op_rope_impl", .05, "ggml/src/ggml-cuda/rope.cu"),
+        ("norm", "ggml_cuda_op_rms_norm", .1074, "ggml/src/ggml-cuda/norm.cu"))
+    hotspots = []
+    for surface, symbol, share, relative in source_rows:
+        path = deployment.FROZEN_PRODUCTION_PATH / relative
+        text_body = path.read_text(encoding="utf-8")
+        line = next((line.strip() for line in text_body.splitlines() if symbol in line), None)
+        if not line:
+            raise DeploymentFactoryError(f"reviewed planner symbol disappeared: {symbol}")
+        hotspots.append({"surface": surface, "symbol": symbol, "share": share,
+                         "source_path": str(path), "source_sha256": _digest_regular(path, relative),
+                         "source_excerpt": line,
+                         "source_excerpt_sha256": hashlib.sha256(line.encode()).hexdigest(),
+                         "note": "projected verified source/hotspot fact; no resource authority"})
+    context = {"schema": deployment.PLANNER_CONTEXT_SCHEMA,
+               "model_sha256": model.sha256, "workload_sha256": workload_sha,
+               "runtime_config_sha256": runtime_sha,
+               "profile_receipts": [{"path": str(source_plan.path), "sha256": source_plan.sha256}],
+               "hotspots": hotspots,
+               "source_constraints": {"template_registry": "gpu-source-templates-v1",
+                                      "one_reviewed_file_per_candidate": True,
+                                      "excluded_source_plan_fields": ["planner_posture", "current_execution",
+                                                                       "max_overlap_bytes", "overlap_policy"]},
+               "initial_strategies": [
+                   "Do not repeat retired fattn single-column, Q5 four-wave, Q8 vec4, or RMS128 variants.",
+                   "Explore a new literal dispatch-bound hypothesis in one reviewed template.",
+                   "Treat prior RoPE64 and Q4_K one-wave results as DNR/top-K context, not promotion evidence."]}
+    context["context_sha256"] = schemas.content_hash(context)
+    context_path, context_sha = _json_artifact(config_dir / "planner-context.json", context)
+    for directory in (root / "state", root / "evidence", root / "operations"):
+        if directory.exists() and (directory.is_symlink() or not directory.is_dir()):
+            raise DeploymentFactoryError("bundle output root is not a regular directory")
+    value = {"schema": deployment.SCHEMA,
+             "production": {"path": str(deployment.FROZEN_PRODUCTION_PATH),
+                            "branch": deployment.FROZEN_PRODUCTION_BRANCH,
+                            "head": deployment.FROZEN_PRODUCTION_HEAD},
+             "instrument": {"repo_path": str(_INSTRUMENT_PATH), "branch": _INSTRUMENT_BRANCH,
+                            "commit": _INSTRUMENT_COMMIT,
+                            "production_ancestor": deployment.FROZEN_PRODUCTION_HEAD},
+             "controller": {"state_root": str(root / "state"),
+                            "evidence_root": str(root / "evidence"),
+                            "operations_root": str(root / "operations"),
+                            "max_iterations": 100, "nomination_threshold": .03},
+             "actors": {"wrapper_path": str(wrapper.path), "wrapper_sha256": wrapper.sha256,
+                        "environment_profile_id": _STATIC_IDS["environment_profile"]},
+             "gpu": {"device_id": "mi210_0", "claim_timeout_s": 0,
+                     "inference_window_lock": str(_SITE_WINDOW_LOCK),
+                     "inference_window_lease_id": _STATIC_IDS["inference_window_lease"]},
+             "immutable_inputs": {"model": {"path": str(model.path), "sha256": model.sha256},
+                                  "workload": {"path": str(workload_path), "sha256": workload_sha},
+                                  "runtime_config": {"path": str(runtime_path), "sha256": runtime_sha},
+                                  "admission_policy": {"path": str(policy_path), "sha256": policy_sha}},
+             "planner_context": {"path": str(context_path), "sha256": context_sha},
+             "source_plan": {"source_builder_id": _STATIC_IDS["source_builder"],
+                             "evidence_plan_id": _STATIC_IDS["evidence_plan"],
+                             "runner_args_id": _STATIC_IDS["runner_args"],
+                             "experiment_template_registry_id": _STATIC_IDS["experiment_template_registry"],
+                             "experiment_template_registry_sha256": static_template_registry_sha256(),
+                             "production_snapshot_id": _STATIC_IDS["production_snapshot"]}}
+    value["config_sha256"] = schemas.content_hash(value)
+    deployment_path, _ = _json_artifact(config_dir / "deployment.json", value)
+    return deployment_path
 
 
 def _bound(path: Path, role: str) -> evidence.BoundInputFile:
@@ -369,7 +512,7 @@ def _template_registry() -> ExperimentTemplateRegistry:
                        "correctness_op": correctness_op,
                        "expected_correctness_cases": cases,
                        "suite_seed": _CORRECTNESS_SUITE_SEED,
-                       "test_source_commit": deployment.MEASUREMENT_INSTRUMENT_HEAD,
+                       "test_source_commit": _INSTRUMENT_COMMIT,
                        "test_source_sha256": _INSTRUMENT_TEST_SOURCE_SHA256,
                        "production_instrument_target_sha256": _TARGET_SOURCE_SHA256[path],
                        "manual_replay_traces": list(replays),
@@ -405,7 +548,7 @@ def _target_source_equality_receipt(config: deployment.DiscoveryDeployment) -> t
             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         instrument_bytes = subprocess.run(
             ("git", "-C", str(config.instrument_path), "show",
-             f"{config.instrument_head}:{relative}"), check=False,
+             f"{config.instrument_commit}:{relative}"), check=False,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         production_sha = hashlib.sha256(production_bytes.stdout).hexdigest()
         instrument_sha = hashlib.sha256(instrument_bytes.stdout).hexdigest()
@@ -417,7 +560,7 @@ def _target_source_equality_receipt(config: deployment.DiscoveryDeployment) -> t
                           "instrument_blob_sha256": instrument_sha, "equal": True}
     body = {"schema": "epyc.autokernel.instrument_target_equality.v1",
             "production_commit": config.production_head,
-            "instrument_commit": config.instrument_head, "targets": rows}
+            "instrument_commit": config.instrument_commit, "targets": rows}
     body["receipt_sha256"] = schemas.content_hash(body)
     raw = (json.dumps(body, sort_keys=True, indent=2) + "\n").encode()
     path = config.state_root / "instrument-target-equality.json"
@@ -657,7 +800,6 @@ def _static_registry(config: deployment.DiscoveryDeployment,
         production_path=config.production_path,
         production_branch=deployment.FROZEN_PRODUCTION_BRANCH,
         instrument_path=config.instrument_path,
-        instrument_branch=config.instrument_branch,
         operations_root=config.operations_root,
         build_root=config.operations_root / "build",
         cmake_defines=(("GGML_HIP", "ON"), ("AMDGPU_TARGETS", "gfx90a"),
@@ -704,8 +846,8 @@ def _seal_graph_receipt(config: deployment.DiscoveryDeployment,
                 "production_base_commit": config.production_head,
                 "instrument_repo_path": str(config.instrument_path),
                 "instrument_branch": config.instrument_branch,
-                "instrument_commit": config.instrument_head,
-                "instrument_diff_sha256": deployment.MEASUREMENT_INSTRUMENT_DIFF_SHA256,
+                "instrument_commit": config.instrument_commit,
+                "instrument_diff_sha256": _INSTRUMENT_DIFF_SHA256,
                 "instrument_test_source_sha256": _INSTRUMENT_TEST_SOURCE_SHA256},
             "instrument_target_equality": {"path": str(target_equality[0]),
                                            "sha256": target_equality[1]},
@@ -998,12 +1140,22 @@ def controller_config(config: deployment.DiscoveryDeployment, *, dry_run: bool =
 def deployment_main(argv: list[str] | None = None) -> int:
     """Config-only launcher; no caller can inject a registry or executor."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--deployment", required=True)
+    authority = parser.add_mutually_exclusive_group(required=True)
+    authority.add_argument("--deployment")
+    authority.add_argument("--initialize-bundle",
+                           help="emit the fixed-site sealed deployment bundle")
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument("--validate-only", action="store_true")
     modes.add_argument("--dry-run", action="store_true",
                        help="alias for validate-only; never calls an actor or hardware")
     args = parser.parse_args(argv)
+    if args.initialize_bundle:
+        if args.validate_only or args.dry_run:
+            parser.error("bundle initialization does not accept execution flags")
+        result = initialize_static_deployment_bundle(Path(args.initialize_bundle))
+        print(json.dumps({"status": "initialized", "inference_executed": False,
+                          "deployment": str(result)}, sort_keys=True))
+        return 0
     config = deployment.load_deployment_config(Path(args.deployment))
     graph = build_static_deployment_graph(config)
     if args.validate_only or args.dry_run:

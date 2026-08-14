@@ -74,10 +74,11 @@ class DeploymentFactoryTests(unittest.TestCase):
         registry_sha = F.static_template_registry_sha256()
         config = SimpleNamespace(
             config_sha256="c" * 64, production_path=production.resolve(),
+            production_branch=F.deployment.FROZEN_PRODUCTION_BRANCH,
             production_head="0" * 40,
-            instrument_path=F.deployment.MEASUREMENT_INSTRUMENT_PATH,
-            instrument_head=F.deployment.MEASUREMENT_INSTRUMENT_HEAD,
-            instrument_branch=F.deployment.MEASUREMENT_INSTRUMENT_BRANCH,
+            instrument_path=F._INSTRUMENT_PATH,
+            instrument_commit=F._INSTRUMENT_COMMIT,
+            instrument_branch=F._INSTRUMENT_BRANCH,
             state_root=state.resolve(),
             evidence_root=evidence.resolve(), operations_root=operations.resolve(),
             max_iterations=2, nomination_threshold=.03,
