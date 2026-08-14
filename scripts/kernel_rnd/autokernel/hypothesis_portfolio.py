@@ -64,6 +64,7 @@ GIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
 RFC3339_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$")
 TEMPLATE_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]*-v[1-9][0-9]*$")
+ROUTE_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]*-v[1-9][0-9]*\.anchor\.[0-9]+$")
 
 _TOP_KEYS = frozenset({
     "schema", "corpus_id", "generated_at", "promotion_authority",
@@ -114,7 +115,7 @@ _DISPATCH_KEYS = frozenset({
     "aggregation", "selection", "evidence_ref",
 })
 _SIGNATURE_KEYS = frozenset({
-    "kernel_literal", "calls", "grid", "workgroup", "lds_bytes",
+    "route_id", "kernel_literal", "calls", "grid", "workgroup", "lds_bytes",
 })
 _MECHANISM_KEYS = frozenset({"facets", "fingerprint_sha256"})
 _INTERACTION_KEYS = frozenset({"with", "kind", "rationale"})
@@ -551,6 +552,12 @@ def _validate_hypotheses(
                 for s_index, signature in enumerate(carrier):
                     s_label = f"{a_label}.{carrier_name}[{s_index}]"
                     _exact_keys(signature, _SIGNATURE_KEYS, s_label)
+                    if not isinstance(signature["route_id"], str) or not ROUTE_ID_RE.fullmatch(
+                            signature["route_id"]):
+                        raise PortfolioError(f"{s_label}.route_id is invalid")
+                    route_template = signature["route_id"].rsplit(".anchor.", 1)[0]
+                    if route_template not in bundle_template_ids:
+                        raise PortfolioError(f"{s_label}.route_id names an unknown template")
                     _text(signature["kernel_literal"], f"{s_label}.kernel_literal")
                     for key in ("calls", "grid", "workgroup", "lds_bytes"):
                         value = signature[key]
@@ -558,7 +565,7 @@ def _validate_hypotheses(
                                 or value < (1 if key == "calls" else 0)):
                             raise PortfolioError(f"{s_label}.{key} is invalid")
                     identity = tuple(signature[key] for key in (
-                        "kernel_literal", "grid", "workgroup", "lds_bytes"))
+                        "route_id", "grid", "workgroup", "lds_bytes"))
                     if identity in seen_signatures:
                         raise PortfolioError(f"{a_label} duplicates an exact dispatch signature")
                     seen_signatures.add(identity)
@@ -582,6 +589,10 @@ def _validate_hypotheses(
         if anchor_frames != target_frames:
             raise PortfolioError(f"{label} needs one dispatch anchor per exact target frame")
         _validate_mechanism(row["mechanism"], f"{label}.mechanism")
+        facets = row["mechanism"]["facets"]
+        if (set(target["source_files"]) != set(facets["files"])
+                or set(target["source_symbols"]) != set(facets["symbols"])):
+            raise PortfolioError(f"{label} target surface differs from fingerprinted mechanism")
         falsifiers = _text_list(row["falsifiers"], f"{label}.falsifiers")
         if primary_falsifier not in falsifiers:
             raise PortfolioError(f"{label}.primary_falsifier must be one declared falsifier")
@@ -894,9 +905,10 @@ def load(path: os.PathLike[str] | str) -> Portfolio:
 def verify_evidence_files(portfolio: Portfolio, evidence_ids: Iterable[str] | None = None) -> None:
     """Verify selected evidence paths against the bytes bound in the corpus.
 
-    This is explicit because loading the checked-in strategy corpus must remain
-    portable and side-effect free.  A deployment input compiler can call this before
-    sealing its bounded projection.
+    This verifies carrier path identity and bytes, not claims derived from those bytes.
+    Each extraction method needs a deterministic source-specific recomputer/test (or a
+    separately sealed derived receipt). Loading the checked-in strategy corpus remains
+    portable and side-effect free; deployment can call this before sealing a projection.
     """
     rows = {row["evidence_id"]: row for row in portfolio.body["evidence"]}
     selected = set(rows if evidence_ids is None else evidence_ids)
@@ -935,8 +947,8 @@ def validate_template_authorability(
         files: set[str] = set()
         symbols: set[str] = set()
         change_classes: set[str] = set()
-        dispatch_signatures: set[tuple[int, int, int, int]] = set()
-        excluded_signatures: set[tuple[int, int, int, int]] = set()
+        dispatch_signatures: set[tuple[str, int, int, int, int]] = set()
+        excluded_signatures: set[tuple[str, int, int, int, int]] = set()
         for template_id in templates:
             surface = surfaces[template_id]
             if set(surface) != {
@@ -955,16 +967,19 @@ def validate_template_authorability(
                     raise PortfolioError(f"template {template_id} {carrier_name} is malformed")
                 for signature in carrier:
                     if not isinstance(signature, Mapping) or set(signature) != {
-                            "calls", "grid", "workgroup", "lds_bytes"}:
+                            "route_id", "calls", "grid", "workgroup", "lds_bytes"}:
                         raise PortfolioError(
                             f"template {template_id} {carrier_name} has malformed signature")
-                    identity = tuple(signature[key] for key in (
+                    route_id = signature["route_id"]
+                    geometry = tuple(signature[key] for key in (
                         "calls", "grid", "workgroup", "lds_bytes"))
-                    if any(not isinstance(value, int) or isinstance(value, bool) or value < 0
-                           for value in identity):
+                    if (not isinstance(route_id, str) or not ROUTE_ID_RE.fullmatch(route_id)
+                            or not route_id.startswith(f"{template_id}.anchor.")
+                            or any(not isinstance(value, int) or isinstance(value, bool)
+                                   or value < 0 for value in geometry)):
                         raise PortfolioError(
                             f"template {template_id} {carrier_name} has invalid geometry")
-                    target.add(identity)
+                    target.add((route_id, *geometry))
         if not set(row["target"]["source_files"]).issubset(files):
             raise PortfolioError(f"{row['hypothesis_id']} target files exceed template authority")
         if not set(row["target"]["source_symbols"]).issubset(symbols):
@@ -975,11 +990,13 @@ def validate_template_authorability(
             anchor for anchor in row["dispatch_anchors"]
             if anchor["frame_id"] == portfolio.body["current_bundle"]["frame_id"])
         record_dispatch = {
-            tuple(signature[key] for key in ("calls", "grid", "workgroup", "lds_bytes"))
+            tuple(signature[key] for key in (
+                "route_id", "calls", "grid", "workgroup", "lds_bytes"))
             for signature in current_anchor["signatures"]
         }
         record_excluded = {
-            tuple(signature[key] for key in ("calls", "grid", "workgroup", "lds_bytes"))
+            tuple(signature[key] for key in (
+                "route_id", "calls", "grid", "workgroup", "lds_bytes"))
             for signature in current_anchor["excluded_signatures"]
         }
         if record_dispatch != dispatch_signatures or record_excluded != excluded_signatures:
@@ -1023,7 +1040,7 @@ def main(argv: list[str] | None = None) -> int:
         "hypotheses": len(portfolio.hypotheses),
         "eligible": len(portfolio.eligible_hypotheses()),
         "do_not_repeat": len(portfolio.do_not_repeat),
-        "evidence_verified": verify_evidence,
+        "evidence_carriers_verified": verify_evidence,
     }, sort_keys=True))
     return 0
 

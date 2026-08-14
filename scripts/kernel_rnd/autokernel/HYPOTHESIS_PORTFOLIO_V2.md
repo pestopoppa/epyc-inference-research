@@ -29,6 +29,12 @@ JSON keys and ambiguous or mutable authority carriers.
    authority.
 8. Validate the corpus and every evidence carrier before sealing it into deployment.
 
+`--verify-evidence` verifies carrier path identity and SHA-256 bytes only. It does not
+rederive numeric claims from those bytes. Every new hotspot `extraction.method` and
+selector must ship a deterministic source-specific recomputer plus adversarial test, or
+reference a separately self-hashed derived receipt. Carrier verification must never be
+reported as claim verification.
+
 ```bash
 python3 -m scripts.kernel_rnd.autokernel.hypothesis_portfolio \
   validate scripts/kernel_rnd/autokernel/discovery_hypothesis_portfolio_v2.json \
@@ -46,9 +52,11 @@ evidence; interactions; portability; priority; expected value; implementation; s
 rules; current-bundle eligibility; lifecycle; numeric decision policy; and epistemic
 grade/confidence/limitations.
 
-Dispatch anchors preserve all selected exact rows as `signatures` with kernel literal,
-calls, grid, workgroup and LDS. `excluded_signatures` makes nearby routes explicitly
-out of scope. `total_calls` must equal selected signature calls. A family aggregate
+Dispatch anchors preserve all selected exact rows as `signatures` with the exact
+deployment-derived `route_id` (`<template>.anchor.<index>`), a human kernel literal,
+calls, grid, workgroup and LDS. The route ID prevents equal geometries for different
+kernels or quant types from aliasing. `excluded_signatures` makes nearby routes
+explicitly out of scope. `total_calls` must equal selected signature calls. A family aggregate
 cannot invent one geometry; `not_applicable` carries neither signatures nor calls.
 
 Epistemic grades distinguish design priors, graphs-off routing profiles, dirty

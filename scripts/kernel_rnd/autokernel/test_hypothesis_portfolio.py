@@ -71,6 +71,12 @@ class HypothesisPortfolioTest(unittest.TestCase):
         with self.assertRaisesRegex(P.PortfolioError, "fingerprint"):
             P.validate(body)
 
+    def test_target_surface_cannot_diverge_from_fingerprinted_mechanism(self):
+        body = self.body()
+        body["hypotheses"][0]["target"]["source_symbols"] = ["different_symbol"]
+        with self.assertRaisesRegex(P.PortfolioError, "target surface"):
+            P.validate(body)
+
     def test_unknown_evidence_reference_is_refused(self):
         body = self.body()
         body["hypotheses"][0]["evidence_refs"] = ["ev-does-not-exist"]
@@ -257,6 +263,13 @@ class HypothesisPortfolioTest(unittest.TestCase):
              for row in q5["excluded_signatures"]},
             {(129, 57344, 128, 512)},
         )
+        self.assertEqual(
+            {row["route_id"] for row in q5["signatures"]},
+            {"cuda-vecdotq-v1.anchor.0", "cuda-vecdotq-v1.anchor.1",
+             "cuda-vecdotq-v1.anchor.2"},
+        )
+        self.assertEqual(q5["excluded_signatures"][0]["route_id"],
+                         "cuda-vecdotq-v1.anchor.3")
         q8 = portfolio.hypothesis(
             "akh-v2-q8-quantizer-new-mechanism")["dispatch_anchors"][0]
         self.assertEqual(
@@ -267,24 +280,27 @@ class HypothesisPortfolioTest(unittest.TestCase):
 
     def test_deployment_template_authorability_cross_check(self):
         portfolio = P.load(P.DEFAULT_PORTFOLIO)
-        def geometry(*rows):
-            return [dict(zip(("calls", "grid", "workgroup", "lds_bytes"), row))
-                    for row in rows]
+        def geometry(template_id, first_index, *rows):
+            return [dict(
+                route_id=f"{template_id}.anchor.{first_index + offset}",
+                **dict(zip(("calls", "grid", "workgroup", "lds_bytes"), row)),
+            ) for offset, row in enumerate(rows)]
         surfaces = {
             "cuda-vecdotq-v1": {
                 "source_files": ["ggml/src/ggml-cuda/vecdotq.cuh"],
                 "source_symbols": ["vec_dot_q5_0_q8_1", "vec_dot_q5_0_q8_1_impl"],
                 "change_classes": ["arithmetic"],
-                "dispatch_signatures": geometry(
+                "dispatch_signatures": geometry("cuda-vecdotq-v1", 0,
                     (6063, 57344, 128, 1024), (4644, 8192, 128, 1024),
                     (3096, 311296, 128, 1024)),
-                "excluded_signatures": geometry((129, 57344, 128, 512)),
+                "excluded_signatures": geometry(
+                    "cuda-vecdotq-v1", 3, (129, 57344, 128, 512)),
             },
             "cuda-quantize-q8-v1": {
                 "source_files": ["ggml/src/ggml-cuda/quantize.cu"],
                 "source_symbols": ["quantize_q8_1"],
                 "change_classes": ["arithmetic"],
-                "dispatch_signatures": geometry(
+                "dispatch_signatures": geometry("cuda-quantize-q8-v1", 0,
                     (15609, 1024, 256, 0), (3096, 5120, 256, 0)),
                 "excluded_signatures": [],
             },
@@ -292,14 +308,16 @@ class HypothesisPortfolioTest(unittest.TestCase):
                 "source_files": ["ggml/src/ggml-cuda/fattn-tile.cuh"],
                 "source_symbols": ["launch_fattn_tile_switch_ncols2"],
                 "change_classes": ["dispatcher"],
-                "dispatch_signatures": geometry((3096, 7168, 64, 5120)),
+                "dispatch_signatures": geometry(
+                    "cuda-fattn-tile-v1", 0, (3096, 7168, 64, 5120)),
                 "excluded_signatures": [],
             },
             "cuda-norm-v2": {
                 "source_files": ["ggml/src/ggml-cuda/norm.cu"],
                 "source_symbols": ["rms_norm_f32"],
                 "change_classes": ["arithmetic"],
-                "dispatch_signatures": geometry((6321, 256, 256, 512)),
+                "dispatch_signatures": geometry(
+                    "cuda-norm-v2", 0, (6321, 256, 256, 512)),
                 "excluded_signatures": [],
             },
         }
@@ -310,7 +328,12 @@ class HypothesisPortfolioTest(unittest.TestCase):
                 portfolio, "gpu-source-templates-v2", surfaces)
         surfaces["cuda-norm-v2"]["source_symbols"] = ["rms_norm_f32"]
         surfaces["cuda-norm-v2"]["dispatch_signatures"] = geometry(
-            (6321, 999, 256, 512))
+            "cuda-norm-v2", 0, (6321, 999, 256, 512))
+        with self.assertRaisesRegex(P.PortfolioError, "dispatch geometry"):
+            P.validate_template_authorability(
+                portfolio, "gpu-source-templates-v2", surfaces)
+        surfaces["cuda-norm-v2"]["dispatch_signatures"] = geometry(
+            "cuda-norm-v2", 1, (6321, 256, 256, 512))
         with self.assertRaisesRegex(P.PortfolioError, "dispatch geometry"):
             P.validate_template_authorability(
                 portfolio, "gpu-source-templates-v2", surfaces)

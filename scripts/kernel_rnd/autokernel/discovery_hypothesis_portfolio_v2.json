@@ -712,7 +712,8 @@
               "calls": 1548,
               "grid": 114688,
               "workgroup": 128,
-              "lds_bytes": 512
+              "lds_bytes": 512,
+              "route_id": "cuda-vecdotq-v1.anchor.4"
             }
           ],
           "total_calls": 1548,
@@ -922,21 +923,24 @@
               "calls": 6063,
               "grid": 57344,
               "workgroup": 128,
-              "lds_bytes": 1024
+              "lds_bytes": 1024,
+              "route_id": "cuda-vecdotq-v1.anchor.0"
             },
             {
               "kernel_literal": "mul_mat_vec_q<(ggml_type)6,1,true,true>;grid=8192",
               "calls": 4644,
               "grid": 8192,
               "workgroup": 128,
-              "lds_bytes": 1024
+              "lds_bytes": 1024,
+              "route_id": "cuda-vecdotq-v1.anchor.1"
             },
             {
               "kernel_literal": "mul_mat_vec_q<(ggml_type)6,1,true,true>;grid=311296",
               "calls": 3096,
               "grid": 311296,
               "workgroup": 128,
-              "lds_bytes": 1024
+              "lds_bytes": 1024,
+              "route_id": "cuda-vecdotq-v1.anchor.2"
             }
           ],
           "total_calls": 13803,
@@ -949,7 +953,8 @@
               "calls": 129,
               "grid": 57344,
               "workgroup": 128,
-              "lds_bytes": 512
+              "lds_bytes": 512,
+              "route_id": "cuda-vecdotq-v1.anchor.3"
             }
           ]
         }
@@ -1124,21 +1129,24 @@
               "calls": 6063,
               "grid": 57344,
               "workgroup": 128,
-              "lds_bytes": 1024
+              "lds_bytes": 1024,
+              "route_id": "cuda-mmvq-v2.anchor.0"
             },
             {
               "kernel_literal": "mul_mat_vec_q<(ggml_type)6,1,true,true>;grid=8192",
               "calls": 4644,
               "grid": 8192,
               "workgroup": 128,
-              "lds_bytes": 1024
+              "lds_bytes": 1024,
+              "route_id": "cuda-mmvq-v2.anchor.1"
             },
             {
               "kernel_literal": "mul_mat_vec_q<(ggml_type)6,1,true,true>;grid=311296",
               "calls": 3096,
               "grid": 311296,
               "workgroup": 128,
-              "lds_bytes": 1024
+              "lds_bytes": 1024,
+              "route_id": "cuda-mmvq-v2.anchor.2"
             }
           ],
           "total_calls": 13803,
@@ -1151,7 +1159,8 @@
               "calls": 129,
               "grid": 57344,
               "workgroup": 128,
-              "lds_bytes": 512
+              "lds_bytes": 512,
+              "route_id": "cuda-mmvq-v2.anchor.3"
             }
           ]
         }
@@ -1325,14 +1334,16 @@
               "calls": 15609,
               "grid": 1024,
               "workgroup": 256,
-              "lds_bytes": 0
+              "lds_bytes": 0,
+              "route_id": "cuda-quantize-q8-v1.anchor.0"
             },
             {
               "kernel_literal": "quantize_q8_1;grid=5120",
               "calls": 3096,
               "grid": 5120,
               "workgroup": 256,
-              "lds_bytes": 0
+              "lds_bytes": 0,
+              "route_id": "cuda-quantize-q8-v1.anchor.1"
             }
           ],
           "total_calls": 18705,
@@ -1722,7 +1733,8 @@
               "calls": 3096,
               "grid": 7168,
               "workgroup": 64,
-              "lds_bytes": 5120
+              "lds_bytes": 5120,
+              "route_id": "cuda-fattn-tile-v1.anchor.0"
             }
           ],
           "total_calls": 3096,
@@ -1916,7 +1928,8 @@
               "calls": 6321,
               "grid": 256,
               "workgroup": 256,
-              "lds_bytes": 512
+              "lds_bytes": 512,
+              "route_id": "cuda-norm-v2.anchor.0"
             }
           ],
           "total_calls": 6321,
@@ -2491,18 +2504,20 @@
           "frame_id": "frame-current-qwen05b-q4km-tg128",
           "signatures": [
             {
-              "kernel_literal": "rope_neox<true,false,float,float>",
+              "kernel_literal": "rope_neox<true,false,float,__half>",
               "calls": 3096,
               "grid": 512,
               "workgroup": 256,
-              "lds_bytes": 0
+              "lds_bytes": 0,
+              "route_id": "cuda-rope-v2.anchor.0"
             },
             {
-              "kernel_literal": "rope_neox<true,false,float,__half>",
+              "kernel_literal": "rope_neox<true,false,float,float>",
               "calls": 3096,
               "grid": 3584,
               "workgroup": 256,
-              "lds_bytes": 0
+              "lds_bytes": 0,
+              "route_id": "cuda-rope-v2.anchor.1"
             }
           ],
           "total_calls": 6192,
@@ -2879,7 +2894,8 @@
               "calls": 3096,
               "grid": 256,
               "workgroup": 256,
-              "lds_bytes": 0
+              "lds_bytes": 0,
+              "route_id": "cuda-set-rows-v1.anchor.0"
             }
           ],
           "total_calls": 3096,
