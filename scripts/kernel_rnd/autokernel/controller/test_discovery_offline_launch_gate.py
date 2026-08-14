@@ -551,6 +551,18 @@ class OfflineLaunchGate(unittest.TestCase):
         for directory in (anchor_build, candidate_build, actor_root,
                           anchor_root, candidate_root):
             directory.mkdir(parents=True)
+        (anchor_root / "kernel.cpp").write_text("int anchor_kernel = 1;\n")
+        (candidate_root / "kernel.cpp").write_text("int candidate_kernel = 2;\n")
+        for arm, build in (("anchor", anchor_build),
+                           ("candidate", candidate_build)):
+            bindir = build / "bin"; bindir.mkdir()
+            (build / "CMakeCache.txt").write_text(f"ARM={arm}\n")
+            bench = bindir / "llama-bench"
+            bench.write_bytes(f"bench-{arm}".encode()); bench.chmod(0o755)
+            hip_real = bindir / "libggml-hip.so.0.16.0"
+            hip_real.write_bytes(f"hip-{arm}".encode())
+            (bindir / "libggml-hip.so.0").symlink_to(hip_real.name)
+            (bindir / "libggml-hip.so").symlink_to("libggml-hip.so.0")
         source_plan = plan(root / "plan-inputs")
         actor = SimpleNamespace(
             path=SimpleNamespace(path=str(actor_root)),
@@ -586,6 +598,13 @@ class OfflineLaunchGate(unittest.TestCase):
         for directory in (common, anchor_hip, candidate_hip):
             directory.mkdir(parents=True)
         binary = common / "llama-bench"; binary.write_bytes(b"reward")
+        binary.chmod(0o755)
+        for arm, directory in (("anchor", anchor_hip),
+                               ("candidate", candidate_hip)):
+            real = directory / "libggml-hip.so.0.16.0"
+            real.write_bytes(f"runtime-hip-{arm}".encode())
+            (directory / "libggml-hip.so.0").symlink_to(real.name)
+            (directory / "libggml-hip.so").symlink_to("libggml-hip.so.0")
         runtime_receipt = reward / "reward-runtime.json"
         runtime_receipt.write_text('{"sealed":true}\n')
         runtime = SimpleNamespace(
@@ -611,8 +630,6 @@ class OfflineLaunchGate(unittest.TestCase):
                                   side_effect=lambda *_args, **_kwargs: next(build_dirs)), \
                 mock.patch.object(S.worktree, "BuildPlan", side_effect=lambda **kwargs: kwargs), \
                 mock.patch.object(S.worktree, "run_build", return_value=result), \
-                mock.patch.object(S, "_identity",
-                                  side_effect=(source_plan.anchor, source_plan.candidate)), \
                 mock.patch.object(S.SharedRewardRuntime, "materialize",
                                   return_value=runtime), \
                 mock.patch.object(S.worktree, "teardown_worktree",
@@ -664,9 +681,9 @@ class OfflineLaunchGate(unittest.TestCase):
             carrier_body = {
                 "schema": "epyc.autokernel.source_tree_identity.v1",
                 "source_commit": "c" * 40,
-                "provenance": {"root": str(source.resolve()),
-                               "exclusions": [".git"]},
-                "tree_manifest": tree.to_dict(),
+                "root_provenance": str(source.resolve()),
+                "exclusions": [".git"],
+                "tree": tree.to_dict(),
             }
             carrier_body["receipt_sha256"] = C._sha(carrier_body)
             carrier = root / "source-identity.json"
@@ -688,11 +705,10 @@ class OfflineLaunchGate(unittest.TestCase):
 
             mutations = {
                 "commit": lambda body: body.__setitem__("source_commit", "d" * 40),
-                "provenance": lambda body: body["provenance"].__setitem__(
-                    "root", str((root / "other").resolve())),
-                "exclusions": lambda body: body["provenance"].__setitem__(
-                    "exclusions", []),
-                "entry manifest": lambda body: body["tree_manifest"]["entries"][0].__setitem__(1, "f" * 64),
+                "provenance": lambda body: body.__setitem__(
+                    "root_provenance", str((root / "other").resolve())),
+                "exclusions": lambda body: body.__setitem__("exclusions", []),
+                "entry manifest": lambda body: body["tree"]["entries"][0].__setitem__(1, "f" * 64),
                 "self hash": lambda body: body.__setitem__("receipt_sha256", "0" * 64),
             }
             for label, mutate in mutations.items():
@@ -725,7 +741,8 @@ class OfflineLaunchGate(unittest.TestCase):
             self.assertEqual(set(carriers), {"anchor", "candidate"})
             for arm, reference in carriers.items():
                 with self.subTest(arm=arm):
-                    self.assertEqual(set(reference), {"path", "sha256"})
+                    self.assertEqual(set(reference), {"role", "path", "sha256"})
+                    self.assertEqual(reference["role"], "source_identity")
                     path = Path(reference["path"])
                     self.assertTrue(path.is_absolute() and path.is_file()
                                     and not path.is_symlink())
