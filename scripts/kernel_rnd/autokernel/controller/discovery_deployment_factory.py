@@ -199,6 +199,12 @@ _STATIC_IDS = MappingProxyType({
     "production_snapshot": "llama-v9-artifacts",
 })
 _LOAD_PROFILE_ID = "mi210-qwen05b-tg128-18-v1"
+_ROCPROF_V1 = Path(
+    "/mnt/raid0/llm/autokernel/tools/rocprof6.2-extracted/opt/rocm-6.2.0/bin/rocprof")
+_ROCPROF_V1_SHA256 = "585e3e6034e3c0bd9e591f0aa72f6156686680911a0b47ed4ece3c9a8372a4b2"
+_ROCPROF_V1_INPUT = b"pmc:\n\ngpu:\nrange:\nkernel:\n"
+_ROCPROF_V1_PREFIX = ("--tool-version", "1", "--timestamp", "on",
+                       "--ctx-wait", "on", "--heartbeat", "30", "-i")
 _SAFE_ACTOR_ENVIRONMENT = MappingProxyType({
     "PATH": "/usr/local/bin:/usr/bin:/bin",
     "HOME": "/home/node",
@@ -217,6 +223,24 @@ def _bound(path: Path, role: str) -> evidence.BoundInputFile:
     path = path.resolve(strict=True)
     return evidence.BoundInputFile(role=role, path=path,
                                    sha256=_digest_regular(path, role))
+
+
+def _rocprof_v1_policy(config: deployment.DiscoveryDeployment) -> tuple[
+        evidence.BoundInputFile, evidence.BoundInputFile]:
+    profiler = _bound(_ROCPROF_V1, "executable")
+    if profiler.sha256 != _ROCPROF_V1_SHA256:
+        raise DeploymentFactoryError("fixed rocprof-v1 executable digest changed")
+    root = config.operations_root / "config"
+    root.mkdir(parents=True, exist_ok=True)
+    policy_path = root / "rocprof-v1-timestamps.txt"
+    if policy_path.exists():
+        if policy_path.is_symlink() or policy_path.read_bytes() != _ROCPROF_V1_INPUT:
+            raise DeploymentFactoryError("rocprof-v1 input policy differs from checked-in bytes")
+    else:
+        policy_path.write_bytes(_ROCPROF_V1_INPUT)
+    return profiler, evidence.BoundInputFile(
+        "timestamp_input", policy_path.resolve(),
+        hashlib.sha256(_ROCPROF_V1_INPUT).hexdigest())
 
 
 def _template_registry() -> ExperimentTemplateRegistry:
@@ -349,6 +373,7 @@ def _build_identity_files(raw: Mapping[str, Any], arm: str,
 
 
 def _evidence_binding(config: deployment.DiscoveryDeployment) -> EvidencePlanBinding:
+    profiler, timestamp_input = _rocprof_v1_policy(config)
     def build(candidate: controller.PlannedCandidate, build_: controller.GpuSourceBuild,
               template: ExperimentTemplate) -> evidence.GpuSourceEvidencePlan:
         if build_.materialization_receipt is None or build_.operation_key is None:
@@ -356,11 +381,12 @@ def _evidence_binding(config: deployment.DiscoveryDeployment) -> EvidencePlanBin
         raw = json.loads(build_.materialization_receipt.read_text(encoding="utf-8"))
         candidate_files = _build_identity_files(raw, "candidate", build_.candidate_identity)
         anchor_files = _build_identity_files(raw, "anchor", build_.anchor_identity)
-        # A profiler executable/input policy will be added only by a reviewed
-        # checked-in constructor.  The host currently has no rocprof launcher;
-        # failing here is safer than treating an arbitrary config path as one.
+        # The exact rocprof-v1 executable and input bytes are already resolved
+        # and re-hashed above.  The remaining refusal is narrower: the current
+        # builder checkpoint does not yet carry an exact reviewed correctness
+        # argv/case-count binding for each source family.
         raise DeploymentFactoryError(
-            "checked-in rocprof command policy is unavailable; refusing evidence execution")
+            "checked-in exact correctness command policy is unavailable; refusing evidence execution")
     return EvidencePlanBinding(build=build)
 
 
