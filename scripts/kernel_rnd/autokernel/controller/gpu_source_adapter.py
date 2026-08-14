@@ -15,6 +15,7 @@ import json
 import os
 from pathlib import Path
 import re
+import stat
 import subprocess
 from typing import Any, Callable, Mapping, Sequence
 
@@ -220,56 +221,172 @@ def _is_resumable_wait_root(root: Path, identity: Mapping[str, Any]) -> bool:
     return True
 
 
+def _git_snapshot_bytes(root: Path, args: Sequence[str], label: str) -> bytes:
+    completed = subprocess.run(
+        ["git", "-C", str(root), *args], stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+    if completed.returncode:
+        raise GpuSourceAdapterError(f"protected root {label} is unreadable")
+    return completed.stdout
+
+
+def _diff_binding(content: bytes) -> dict[str, Any]:
+    """Bind exact diff bytes as well as their digest; never normalize a patch."""
+    return {"bytes": content, "size": len(content),
+            "sha256": hashlib.sha256(content).hexdigest()}
+
+
+def _regular_binding(path: Path, relative: str) -> dict[str, Any]:
+    flags = os.O_RDONLY | os.O_CLOEXEC
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        fd = os.open(path, flags)
+    except OSError as exc:
+        raise GpuSourceAdapterError("protected root has unsafe untracked entry") from exc
+    try:
+        before = os.fstat(fd)
+        if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
+            raise GpuSourceAdapterError(
+                "protected root has special or hardlinked untracked entry")
+        digest = hashlib.sha256()
+        size = 0
+        while True:
+            block = os.read(fd, 1024 * 1024)
+            if not block:
+                break
+            digest.update(block)
+            size += len(block)
+        after = os.fstat(fd)
+        identity = lambda row: (row.st_dev, row.st_ino, row.st_mode, row.st_nlink,
+                                row.st_size, row.st_mtime_ns, row.st_ctime_ns)
+        if identity(before) != identity(after) or size != after.st_size:
+            raise GpuSourceAdapterError(
+                "protected root untracked entry changed while hashing")
+        return {"path": relative, "kind": "file",
+                "mode": stat.S_IMODE(after.st_mode), "size": size,
+                "sha256": digest.hexdigest()}
+    finally:
+        os.close(fd)
+
+
+def _untracked_tree_rows(root: Path, entry: Path) -> list[dict[str, Any]]:
+    """Recursively bind one untracked/ignored entry without following anything."""
+    rows: list[dict[str, Any]] = []
+
+    def relative(path: Path) -> str:
+        try:
+            value = path.relative_to(root).as_posix()
+            value.encode("utf-8", "strict")
+        except (ValueError, UnicodeError) as exc:
+            raise GpuSourceAdapterError(
+                "protected root untracked path is not normalized beneath root") from exc
+        if not value or value.startswith("../") or "/../" in value:
+            raise GpuSourceAdapterError(
+                "protected root untracked path escaped its root")
+        return value
+
+    def visit(path: Path) -> None:
+        try:
+            before = path.stat(follow_symlinks=False)
+        except OSError as exc:
+            raise GpuSourceAdapterError(
+                "protected root untracked entry is unreadable") from exc
+        name = relative(path)
+        if stat.S_ISLNK(before.st_mode):
+            raise GpuSourceAdapterError("protected root has untracked symlink")
+        if stat.S_ISREG(before.st_mode):
+            rows.append(_regular_binding(path, name))
+            return
+        if not stat.S_ISDIR(before.st_mode):
+            raise GpuSourceAdapterError("protected root has special untracked entry")
+        rows.append({"path": name, "kind": "directory",
+                     "mode": stat.S_IMODE(before.st_mode)})
+        try:
+            children = sorted(path.iterdir(), key=lambda item: item.name.encode("utf-8"))
+        except (OSError, UnicodeError) as exc:
+            raise GpuSourceAdapterError(
+                "protected root untracked directory is unreadable") from exc
+        for child in children:
+            visit(child)
+        after = path.stat(follow_symlinks=False)
+        before_identity = (before.st_dev, before.st_ino, before.st_mode,
+                           before.st_mtime_ns, before.st_ctime_ns)
+        after_identity = (after.st_dev, after.st_ino, after.st_mode,
+                          after.st_mtime_ns, after.st_ctime_ns)
+        if before_identity != after_identity:
+            raise GpuSourceAdapterError(
+                "protected root untracked directory changed while hashing")
+
+    visit(entry)
+    return rows
+
+
+def _untracked_binding(root: Path) -> dict[str, Any]:
+    # Normal porcelain reports one root for an untracked directory (including a
+    # nested repository/worktree) instead of asking Git to understand its
+    # contents. This binds Git's exact visible untracked state; ignored build
+    # outputs remain outside protected source authority.
+    names: set[str] = set()
+    raw = _git_snapshot_bytes(
+        root, ("status", "--porcelain=v1", "-z", "--untracked-files=normal"),
+        "untracked inventory")
+    for item in raw.split(b"\0"):
+        if not item.startswith(b"?? "):
+            continue
+        try:
+            names.add(item[3:].decode("utf-8", "strict").rstrip("/"))
+        except UnicodeDecodeError as exc:
+            raise GpuSourceAdapterError(
+                "protected root has a non-UTF-8 untracked path") from exc
+    selected: list[str] = []
+    for name in sorted(names, key=lambda value: (len(Path(value).parts), value)):
+        lexical = Path(name)
+        if lexical.is_absolute() or not name or ".." in lexical.parts:
+            raise GpuSourceAdapterError("protected root untracked path escaped its root")
+        if any(lexical.is_relative_to(Path(parent)) for parent in selected):
+            continue
+        selected.append(name)
+    rows: list[dict[str, Any]] = []
+    for name in selected:
+        entry = root / name
+        # Resolve the parent only. Resolving the entry would follow the very
+        # symlink the scanner must reject.
+        try:
+            entry.parent.resolve(strict=True).relative_to(root)
+        except (OSError, ValueError) as exc:
+            raise GpuSourceAdapterError("protected root untracked path escaped its root") from exc
+        rows.extend(_untracked_tree_rows(root, entry))
+    return {"roots": selected, "items": rows,
+            "sha256": schemas.content_hash({"roots": selected, "items": rows})}
+
+
 def _protected_snapshot(paths: Sequence[Path],
                         files: Sequence[evidence.BoundInputFile]) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for raw in paths:
-        path = raw.resolve()
-        if not path.is_dir() or path.is_symlink():
+        if raw.is_symlink():
             raise GpuSourceAdapterError("protected root is not a real directory")
-        tracked = subprocess.run(
-            ["git", "-C", str(path), "status", "--porcelain=v1", "--untracked-files=no"],
-            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE, text=True, check=False)
-        full = subprocess.run(
-            ["git", "-C", str(path), "status", "--porcelain=v1", "--untracked-files=all"],
-            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE, text=True, check=False)
-        branch = subprocess.run(
-            ["git", "-C", str(path), "branch", "--show-current"],
-            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE, text=True, check=False)
-        head = subprocess.run(
-            ["git", "-C", str(path), "rev-parse", "HEAD"],
-            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE, text=True, check=False)
-        if tracked.returncode or full.returncode or branch.returncode or head.returncode:
-            raise GpuSourceAdapterError("protected root git identity is unreadable")
-        if tracked.stdout:
-            raise GpuSourceAdapterError("protected root has tracked/index changes")
-        untracked = subprocess.run(
-            ["git", "-C", str(path), "ls-files", "--others", "--exclude-standard", "-z"],
-            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE, check=False)
-        if untracked.returncode:
-            raise GpuSourceAdapterError("protected root untracked inventory is unreadable")
-        untracked_items: list[tuple[str, str]] = []
-        for raw_name in untracked.stdout.split(b"\0"):
-            if not raw_name:
-                continue
-            name = raw_name.decode("utf-8", "strict")
-            item = (path / name).resolve(strict=True)
-            if item.is_symlink() or not item.is_file() or not item.is_relative_to(path):
-                raise GpuSourceAdapterError("protected root has unsafe untracked sidecar")
-            untracked_items.append((name, hashlib.sha256(item.read_bytes()).hexdigest()))
+        path = raw.resolve()
+        if not path.is_dir():
+            raise GpuSourceAdapterError("protected root is not a real directory")
+        head = _git_snapshot_bytes(path, ("rev-parse", "HEAD"), "HEAD").decode().strip()
+        branch = _git_snapshot_bytes(
+            path, ("branch", "--show-current"), "branch").decode().strip()
+        worktree_diff = _git_snapshot_bytes(
+            path, ("diff", "--binary", "--no-ext-diff", "--no-textconv", "--"),
+            "working diff")
+        index_diff = _git_snapshot_bytes(
+            path, ("diff", "--cached", "--binary", "--no-ext-diff",
+                   "--no-textconv", "--"), "index diff")
         result[str(path)] = {
-            "head": head.stdout.strip(),
-            "branch": branch.stdout.strip(),
-            "tracked_status_sha256": hashlib.sha256(tracked.stdout.encode()).hexdigest(),
-            # Untracked sidecars are tolerated only when they remain exactly
-            # unchanged over the governed operation.
-            "full_status_sha256": hashlib.sha256(full.stdout.encode()).hexdigest(),
-            "untracked_content_sha256": schemas.content_hash({"items": [list(row) for row in untracked_items]}),
+            "head": head, "branch": branch,
+            # Preexisting tracked/index dirt is state, not a cleanliness veto.
+            # Exact diff bytes prevent a hash-only snapshot from concealing what
+            # was actually compared before and after the governed operation.
+            "working_diff": _diff_binding(worktree_diff),
+            "index_diff": _diff_binding(index_diff),
+            "untracked": _untracked_binding(path),
         }
     file_rows: dict[str, Any] = {}
     for item in files:

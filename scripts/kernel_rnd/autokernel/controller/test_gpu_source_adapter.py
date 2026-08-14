@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 from types import SimpleNamespace
 import tempfile
@@ -379,7 +380,9 @@ class GpuSourceAdapterTests(unittest.TestCase):
                 return original(*args)
             adapter.build_source = mutating_builder
             with mock.patch.object(D, "GpuSourceScreener", FakeDelegate):
-                with self.assertRaisesRegex(A.GpuSourceAdapterError, "protected (production tree|root)"):
+                with self.assertRaisesRegex(
+                        A.GpuSourceAdapterError,
+                        "protected (production (tree|artifacts)|root)"):
                     adapter.screen(candidate, authorization, lease)
             self.assertFalse(hasattr(adapter, "_active_protected_snapshot"))
 
@@ -390,6 +393,87 @@ class GpuSourceAdapterTests(unittest.TestCase):
             (protected / ".gitnexusignore").write_text("preexisting\n")
             with mock.patch.object(D, "GpuSourceScreener", FakeDelegate):
                 adapter.screen(candidate, authorization, lease)
+
+    def test_preexisting_tracked_worktree_and_index_dirt_is_bound_not_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            adapter, candidate, authorization, lease, _inflight, _current, _ = self.setup(directory)
+            protected = adapter.protected_roots[0]
+            (protected / "TRACKED").write_text("clean\n")
+            subprocess.run(["git", "-C", str(protected), "add", "TRACKED"], check=True)
+            subprocess.run(["git", "-C", str(protected), "commit", "-qm", "tracked"], check=True)
+            (protected / "TRACKED").write_text("preexisting worktree dirt\n")
+            (protected / "STAGED").write_text("preexisting index dirt\n")
+            subprocess.run(["git", "-C", str(protected), "add", "STAGED"], check=True)
+            before = A._protected_snapshot(adapter.protected_roots, adapter.protected_files)
+            root_row = before[str(protected)]
+            self.assertGreater(root_row["working_diff"]["size"], 0)
+            self.assertGreater(root_row["index_diff"]["size"], 0)
+            with mock.patch.object(D, "GpuSourceScreener", FakeDelegate):
+                adapter.screen(candidate, authorization, lease)
+
+    def test_nested_untracked_directory_is_bound_and_mutation_refuses(self):
+        with tempfile.TemporaryDirectory() as directory:
+            adapter, candidate, authorization, lease, _inflight, _current, _ = self.setup(directory)
+            protected = adapter.protected_roots[0]
+            nested = protected / "tools/math-tools/external/eigen/src"
+            nested.mkdir(parents=True)
+            (nested / "kernel.cc").write_bytes(b"preexisting\x00bytes")
+            os.chmod(nested / "kernel.cc", 0o640)
+            before = A._protected_snapshot(adapter.protected_roots, adapter.protected_files)
+            paths = [row["path"] for row in before[str(protected)]["untracked"]["items"]]
+            self.assertIn("tools/math-tools/external/eigen/src/kernel.cc", paths)
+            original = adapter.build_source
+
+            def mutating_builder(*args):
+                (nested / "kernel.cc").write_bytes(b"changed")
+                return original(*args)
+
+            adapter.build_source = mutating_builder
+            with mock.patch.object(D, "GpuSourceScreener", FakeDelegate), \
+                    self.assertRaisesRegex(A.GpuSourceAdapterError,
+                                           "protected production tree"):
+                adapter.screen(candidate, authorization, lease)
+
+    def test_preexisting_index_dirt_changed_during_builder_refuses(self):
+        with tempfile.TemporaryDirectory() as directory:
+            adapter, candidate, authorization, lease, _inflight, _current, _ = self.setup(directory)
+            protected = adapter.protected_roots[0]
+            staged = protected / "STAGED"
+            staged.write_text("preexisting\n")
+            subprocess.run(["git", "-C", str(protected), "add", "STAGED"], check=True)
+            original = adapter.build_source
+
+            def mutating_builder(*args):
+                staged.write_text("tampered\n")
+                subprocess.run(["git", "-C", str(protected), "add", "STAGED"], check=True)
+                return original(*args)
+
+            adapter.build_source = mutating_builder
+            with mock.patch.object(D, "GpuSourceScreener", FakeDelegate), \
+                    self.assertRaisesRegex(A.GpuSourceAdapterError,
+                                           "protected production tree"):
+                adapter.screen(candidate, authorization, lease)
+
+    def test_untracked_symlink_special_and_hardlink_are_rejected(self):
+        cases = ("symlink", "fifo", "hardlink")
+        for case in cases:
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as directory:
+                adapter, *_ = self.setup(directory)
+                protected = adapter.protected_roots[0]
+                nested = protected / "untracked"
+                nested.mkdir()
+                source = nested / "source"
+                source.write_text("content")
+                if case == "symlink":
+                    (nested / "unsafe").symlink_to(protected / "README")
+                elif case == "fifo":
+                    os.mkfifo(nested / "unsafe")
+                else:
+                    os.link(source, nested / "unsafe")
+                with self.assertRaisesRegex(
+                        A.GpuSourceAdapterError, "(symlink|special|hardlinked)"):
+                    A._protected_snapshot(adapter.protected_roots,
+                                          adapter.protected_files)
             # A new operation with a sidecar mutation is still a protected-root
             # mutation even though untracked sidecars are not a cleanliness veto.
             adapter, candidate, authorization, lease, _inflight, _current, _ = self.setup(directory)
