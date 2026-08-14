@@ -289,7 +289,7 @@ def materialize(config: deployment.DiscoveryDeployment, registry: Mapping[str, M
             proposal=candidate.proposal, campaign_id=candidate.source_manifest.campaign_id,
             candidate_id=candidate.source_manifest.candidate_id,
             production_base_commit=config.production_head,
-            instrument_commit=config.production_head)
+            instrument_commit=config.instrument_commit)
         return source.build(candidate, authorization, permit)
     def plan(candidate: controller.PlannedCandidate, build_: controller.GpuSourceBuild):
         config.revalidate()
@@ -345,7 +345,7 @@ def controller_config(config: deployment.DiscoveryDeployment, *, dry_run: bool =
             "admission_policy_sha256": config.admission_policy.corpus.policy_sha256,
             "admission_policy_version": config.admission_policy.corpus.version}),
         production_base_commit=config.production_head,
-        instrument_commit=config.production_head,
+        instrument_commit=config.instrument_commit,
         experiment_template_registry_sha256=config.experiment_template_registry_sha256,
         admission_corpus_sha256=config.admission_policy.value["policy_sha256"],
         admission_corpus_version=config.admission_policy.corpus.version,

@@ -76,7 +76,8 @@ class DeploymentConfigTests(unittest.TestCase):
         planner_path.write_text(json.dumps(planner_context), encoding="utf-8")
         value = {
             "schema": D.SCHEMA,
-            "production": {"path": str(production), "head": "a" * 40},
+            "production": {"path": str(production), "head": "a" * 40,
+                           "instrument_commit": "b" * 40},
             "controller": {
                 "state_root": str(root / "state"),
                 "evidence_root": str(root / "evidence"),
@@ -105,6 +106,7 @@ class DeploymentConfigTests(unittest.TestCase):
 
     def load(self, path: Path):
         with mock.patch.object(D, "_verify_production"), \
+                mock.patch.object(D, "_verify_instrument"), \
                 mock.patch.object(D, "FROZEN_PRODUCTION_PATH", path.parent / "production"):
             return D.load_deployment_config(path)
 
@@ -176,16 +178,16 @@ class DeploymentConfigTests(unittest.TestCase):
                 "inference_window_lease": {"mi210-window-v1": lambda: None},
                 "production_snapshot": {"llama-v9-artifacts": object()},
             }
-            with mock.patch.object(D, "_verify_production"):
+            with mock.patch.object(D, "_verify_production"), mock.patch.object(D, "_verify_instrument"):
                 bound = D.resolve_registry(config, registry)
             self.assertIs(bound.evidence_plan, registry["evidence_plan"]["q5-onewave-v1"])
             del registry["runner_args"]["qwen05b-tg128"]
-            with mock.patch.object(D, "_verify_production"):
+            with mock.patch.object(D, "_verify_production"), mock.patch.object(D, "_verify_instrument"):
                 with self.assertRaises(D.DeploymentConfigError):
                     D.resolve_registry(config, registry)
             registry["runner_args"]["qwen05b-tg128"] = lambda: None
             registry["unexpected"] = {}
-            with mock.patch.object(D, "_verify_production"):
+            with mock.patch.object(D, "_verify_production"), mock.patch.object(D, "_verify_instrument"):
                 with self.assertRaises(D.DeploymentConfigError):
                     D.resolve_registry(config, registry)
 

@@ -42,6 +42,7 @@ class DeploymentFactoryTests(unittest.TestCase):
         config = mock.Mock(state_root=Path("/state"), evidence_root=Path("/evidence"),
                            max_iterations=2, nomination_threshold=.03,
                            planner_context=mock.Mock(value=context), production_head="b" * 40,
+                           instrument_commit="c" * 40,
                            config_sha256="c" * 64,
                            experiment_template_registry_sha256="d" * 64)
         config.admission_policy = SimpleNamespace(

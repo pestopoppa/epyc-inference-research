@@ -437,8 +437,15 @@ class StaticGpuSourceBuilder:
         operation_key = _permit.get("operation_key")
         if not isinstance(operation_key, str) or len(operation_key) != 64:
             raise StaticRegistryError("static builder requires the sealed controller operation key")
-        anchor = worktree.resolve_anchor(self.production_path, self.production_branch,
-                                         expected_commit=candidate.source_manifest.production_base_commit)
+        frozen_anchor = worktree.resolve_anchor(self.production_path, self.production_branch,
+                                                expected_commit=candidate.source_manifest.production_base_commit)
+        # The actor and all clean snapshots start at the approved instrument
+        # descendant, while the immutable production anchor remains separately
+        # proven as the manifest's production base.
+        anchor = worktree.Anchor(repo=frozen_anchor.repo, branch=frozen_anchor.branch,
+                                 commit=candidate.source_manifest.instrument_commit,
+                                 resolved_at=frozen_anchor.resolved_at,
+                                 fingerprint=frozen_anchor.fingerprint)
         campaign_root = self.operations_root / "worktrees" / operation_key
         build_root = self.build_root / operation_key
         campaign_root.mkdir(parents=True, exist_ok=True); build_root.mkdir(parents=True, exist_ok=True)
@@ -450,7 +457,8 @@ class StaticGpuSourceBuilder:
         completed: dict[str, Any] | None = None
         try:
             actor, actor_proof = worktree.create_campaign_worktree(
-                anchor, candidate.source_manifest.campaign_id, root=campaign_root)
+                anchor, candidate.source_manifest.campaign_id, root=campaign_root,
+                require_current_tip=False)
             applied = source_candidate.apply_source_candidate(candidate.source_manifest,
                                                                proposal=candidate.proposal, actor=actor)
             anchor_snapshot, _ = worktree.create_snapshot_worktree(

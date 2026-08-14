@@ -215,6 +215,7 @@ class DiscoveryDeployment:
     config_sha256: str
     production_path: Path
     production_head: str
+    instrument_commit: str
     state_root: Path
     evidence_root: Path
     operations_root: Path
@@ -242,6 +243,7 @@ class DiscoveryDeployment:
     def revalidate(self) -> None:
         """Close the parse-to-start TOCTOU gap for every sealed file reference."""
         _verify_production(self.production_path, self.production_head)
+        _verify_instrument(self.production_path, self.production_head, self.instrument_commit)
         self.actor_wrapper.revalidate("actors.wrapper")
         for label, value in (("model", self.model), ("workload", self.workload),
                              ("runtime_config", self.runtime_config), ("policy", self.policy)):
@@ -287,6 +289,20 @@ def _verify_production(path: Path, declared_head: str) -> None:
         raise DeploymentConfigError("frozen production tree is dirty")
 
 
+def _verify_instrument(path: Path, production_head: str, instrument_commit: str) -> None:
+    if not isinstance(instrument_commit, str) or not GIT_SHA.fullmatch(instrument_commit):
+        raise DeploymentConfigError("instrument commit must be an exact Git SHA")
+    # The measurement instrument is an explicitly approved descendant, never a
+    # mutating checkout/build of frozen production.  Git object reachability is
+    # checked without altering the frozen worktree/index/branch.
+    check = subprocess.run(("git", "-C", str(path), "merge-base", "--is-ancestor",
+                            production_head, instrument_commit), stdin=subprocess.DEVNULL,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                           check=False)
+    if check.returncode != 0:
+        raise DeploymentConfigError("instrument commit is not a production descendant")
+
+
 def _validate_root(path: Path, label: str) -> Path:
     parent = path.parent
     if parent.is_symlink() or not parent.is_dir():
@@ -316,13 +332,14 @@ def load_deployment_config(path: Path) -> DiscoveryDeployment:
     if (not isinstance(top["config_sha256"], str) or not SHA.fullmatch(top["config_sha256"])
             or calculated_config_hash != top["config_sha256"]):
         raise DeploymentConfigError("deployment configuration self-hash mismatch")
-    production = _exact(top["production"], {"path", "head"}, "production")
+    production = _exact(top["production"], {"path", "head", "instrument_commit"}, "production")
     production_path = _absolute(production["path"], "production.path")
     if production_path.is_symlink() or not production_path.is_dir():
         raise DeploymentConfigError("production.path must be a regular directory")
     if not isinstance(production["head"], str) or not GIT_SHA.fullmatch(production["head"]):
         raise DeploymentConfigError("production.head must be an exact Git SHA")
     _verify_production(production_path, production["head"])
+    _verify_instrument(production_path, production["head"], production["instrument_commit"])
     controller = _exact(top["controller"], {"state_root", "evidence_root",
                                                "operations_root", "max_iterations",
                                                "nomination_threshold"}, "controller")
@@ -379,6 +396,7 @@ def load_deployment_config(path: Path) -> DiscoveryDeployment:
                 f"{label} location overlaps a mutable output or frozen production tree")
     return DiscoveryDeployment(
         config_sha256=top["config_sha256"], production_path=production_path, production_head=production["head"],
+        instrument_commit=production["instrument_commit"],
         state_root=roots["state_root"], evidence_root=roots["evidence_root"],
         operations_root=roots["operations_root"], max_iterations=max_iterations,
         nomination_threshold=float(threshold), actor_wrapper=actor_wrapper,
