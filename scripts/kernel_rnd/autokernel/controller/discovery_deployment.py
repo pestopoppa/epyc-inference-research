@@ -222,6 +222,7 @@ class DiscoveryDeployment:
     state_root: Path
     evidence_root: Path
     operations_root: Path
+    build_root: Path
     max_iterations: int
     nomination_threshold: float
     actor_wrapper: ImmutableInput
@@ -375,10 +376,10 @@ def load_deployment_config(path: Path) -> DiscoveryDeployment:
     _verify_instrument(instrument_path, production["head"], instrument["branch"],
                        instrument["commit"])
     controller = _exact(top["controller"], {"state_root", "evidence_root",
-                                               "operations_root", "max_iterations",
+                                               "operations_root", "build_root", "max_iterations",
                                                "nomination_threshold"}, "controller")
     roots = {key: _validate_root(_absolute(controller[key], f"controller.{key}"), f"controller.{key}") for key in
-             ("state_root", "evidence_root", "operations_root")}
+             ("state_root", "evidence_root", "operations_root", "build_root")}
     if any(_overlaps(left, right) for index, left in enumerate(roots.values())
            for right in list(roots.values())[index + 1:]):
         raise DeploymentConfigError("controller roots must not overlap")
@@ -435,7 +436,8 @@ def load_deployment_config(path: Path) -> DiscoveryDeployment:
         instrument_path=instrument_path, instrument_branch=instrument["branch"],
         instrument_commit=instrument["commit"],
         state_root=roots["state_root"], evidence_root=roots["evidence_root"],
-        operations_root=roots["operations_root"], max_iterations=max_iterations,
+        operations_root=roots["operations_root"], build_root=roots["build_root"],
+        max_iterations=max_iterations,
         nomination_threshold=float(threshold), actor_wrapper=actor_wrapper,
         environment_profile_id=environment_profile_id, device_id=device_id,
         claim_timeout_s=float(claim_timeout_s), inference_window_lock=window,

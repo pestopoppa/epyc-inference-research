@@ -65,8 +65,8 @@ class DeploymentFactoryTests(unittest.TestCase):
         policy.write_text("{}", encoding="utf-8")
         planner = root / "planner.json"
         planner.write_text("{}", encoding="utf-8")
-        state, evidence, operations, locks = (root / name for name in
-                                               ("state", "evidence", "operations", "locks"))
+        state, evidence, operations, builds, locks = (root / name for name in
+                                               ("state", "evidence", "operations", "builds", "locks"))
         for path in (state.parent, locks):
             path.mkdir(parents=True, exist_ok=True)
         immutable = lambda path: SimpleNamespace(
@@ -81,6 +81,7 @@ class DeploymentFactoryTests(unittest.TestCase):
             instrument_branch=F._INSTRUMENT_BRANCH,
             state_root=state.resolve(),
             evidence_root=evidence.resolve(), operations_root=operations.resolve(),
+            build_root=builds.resolve(),
             max_iterations=2, nomination_threshold=.03,
             actor_wrapper=immutable(wrapper), environment_profile_id="sealed-codex",
             device_id="mi210_0", claim_timeout_s=0.0,
@@ -318,6 +319,37 @@ class DeploymentFactoryTests(unittest.TestCase):
                 adapters["args_factory"](
                     candidate, mock.Mock(operation_key="1" * 64),
                     {"operation_key": "2" * 64})
+
+    def test_generated_bundle_materializes_nonoverlapping_builder_contract(self):
+        """The public bundle must reach the real static contract without a build."""
+        with tempfile.TemporaryDirectory() as directory:
+            bundle_root = Path(directory).resolve()
+            deployment_path = F.initialize_static_deployment_bundle(bundle_root)
+            config = F.deployment.load_deployment_config(deployment_path)
+            registry = F._static_registry(config, F._template_registry())
+            binding = registry["source_builder"][F._STATIC_IDS["source_builder"]]
+            self.assertIsInstance(binding, F.SourceBuilderBinding)
+            builder = binding.build.__self__
+            manifest = SimpleNamespace(
+                production_base_commit=config.production_head,
+                instrument_commit=config.instrument_commit,
+                declared_files=("ggml/src/ggml-cuda/fattn.cu",),
+                patch_bundle_sha256="a" * 64,
+                patch_sha256="b" * 64)
+            candidate = SimpleNamespace(
+                source_manifest=manifest,
+                proposal={"proposal_id": "akp-static-build-root",
+                          "change_class": "dispatch"})
+            contract, _environment = builder._contract(candidate, {
+                "instrument_branch": config.instrument_branch,
+                "deployment_config_sha256": config.config_sha256,
+            })
+            self.assertEqual(Path(contract["operations_root"]), config.operations_root)
+            self.assertEqual(Path(contract["build_root"]), config.build_root)
+            self.assertEqual(config.build_root, bundle_root / "builds")
+            self.assertNotEqual(config.build_root, config.operations_root)
+            self.assertFalse(config.build_root.is_relative_to(config.operations_root))
+            self.assertFalse(config.operations_root.is_relative_to(config.build_root))
 
 
 if __name__ == "__main__":

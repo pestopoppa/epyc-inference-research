@@ -86,6 +86,7 @@ class DeploymentConfigTests(unittest.TestCase):
                 "state_root": str(root / "state"),
                 "evidence_root": str(root / "evidence"),
                 "operations_root": str(root / "operations"),
+                "build_root": str(root / "builds"),
                 "max_iterations": 2,
                 "nomination_threshold": 0.03,
             },
@@ -121,6 +122,7 @@ class DeploymentConfigTests(unittest.TestCase):
             self.assertEqual(loaded.device_id, "mi210_0")
             self.assertEqual(loaded.source_builder_id, "gpu-source-v1")
             self.assertEqual(loaded.nomination_threshold, 0.03)
+            self.assertEqual(loaded.build_root, (Path(temp) / "builds").resolve())
 
     def test_rejects_untrusted_code_command_and_environment_keys(self):
         for section, key, value in (
@@ -145,6 +147,15 @@ class DeploymentConfigTests(unittest.TestCase):
             seal(raw)
             path.write_text(json.dumps(raw), encoding="utf-8")
             with self.assertRaises(D.DeploymentConfigError):
+                self.load(path)
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            path, raw = self.config(root)
+            (root / "operations").mkdir()
+            raw["controller"]["build_root"] = str(root / "operations" / "build")
+            seal(raw)
+            path.write_text(json.dumps(raw), encoding="utf-8")
+            with self.assertRaisesRegex(D.DeploymentConfigError, "roots must not overlap"):
                 self.load(path)
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
