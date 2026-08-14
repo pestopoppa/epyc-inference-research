@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import signal
+import stat
 import tempfile
 import textwrap
 import unittest
@@ -66,6 +67,8 @@ class ClaudeFable5CriticActorTests(unittest.TestCase):
             config = Path(os.environ['CLAUDE_CONFIG_DIR'])
             observed = {{
                 'argv': argv,
+                'wrapper_path': sys.argv[0],
+                'wrapper_mode': stat_mode(Path(sys.argv[0])),
                 'config_mode': stat_mode(config),
                 'credentials_mode': stat_mode(config / '.credentials.json'),
                 'state': json.loads((config / '.claude.json').read_text()),
@@ -155,6 +158,9 @@ class ClaudeFable5CriticActorTests(unittest.TestCase):
         self.assertEqual(result.binding_map(), BINDINGS)
         self.assertEqual(observed["config_mode"], "0o700")
         self.assertEqual(observed["credentials_mode"], "0o600")
+        self.assertEqual(observed["wrapper_mode"], "0o500")
+        self.assertEqual(Path(observed["wrapper_path"]).name, "claude")
+        self.assertNotEqual(observed["wrapper_path"], str(wrapper))
         self.assertEqual(observed["state"], {"hasCompletedOnboarding": True})
         self.assertEqual(observed["mcp"], {"mcpServers": {}})
         self.assertTrue(observed["credential_present"])
@@ -279,8 +285,96 @@ class ClaudeFable5CriticActorTests(unittest.TestCase):
                 C._run_process(
                     argv=("/bin/false",), cwd=Path("/tmp"), environment={},
                     prompt="x", timeout_seconds=1, terminate_grace_seconds=1,
+                    capture_root=Path("/tmp"),
                 )
         self.assertIsInstance(raised.exception.__cause__, KeyboardInterrupt)
+
+    def test_original_wrapper_replacement_cannot_change_executed_bytes(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace, auth = self._layout(temporary)
+            wrapper = self._success_wrapper(Path(temporary))
+            expected_sha = hashlib.sha256(wrapper.read_bytes()).hexdigest()
+            payload = {
+                "decision": "accept", "reason": "exact staged bytes",
+                **BINDINGS,
+            }
+            envelope = json.dumps({"structured_output": payload})
+            observed: dict[str, object] = {}
+
+            def replace_before_exec(**kwargs: object) -> tuple[int, str, str]:
+                argv = kwargs["argv"]
+                assert isinstance(argv, tuple)
+                staged = Path(argv[0])
+                observed["staged"] = staged
+                observed["digest"] = hashlib.sha256(staged.read_bytes()).hexdigest()
+                observed["mode"] = stat.S_IMODE(staged.stat().st_mode)
+                wrapper.write_text("#!/usr/bin/env python3\nraise SystemExit(99)\n")
+                wrapper.chmod(0o700)
+                return 0, envelope, ""
+
+            with mock.patch.object(C, "_run_process", side_effect=replace_before_exec):
+                with self.assertRaisesRegex(
+                        C.ClaudeFable5CriticError, "changed during execution"):
+                    C.run_critic(
+                        wrapper=wrapper, workspace=workspace, prompt="review",
+                        bindings=BINDINGS,
+                        environment={"HOME": temporary}, auth_root=auth,
+                    )
+            self.assertNotEqual(observed["staged"], wrapper)
+            self.assertEqual(observed["digest"], expected_sha)
+            self.assertEqual(observed["mode"], 0o500)
+
+    def test_launcher_mutation_during_staging_refuses_before_process(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace, auth = self._layout(temporary)
+            wrapper = self._success_wrapper(Path(temporary))
+            launcher_sha = C._launcher_sha256()
+            with mock.patch.object(
+                    C, "_launcher_sha256",
+                    side_effect=(launcher_sha, "0" * 64)), mock.patch.object(
+                        C, "_run_process") as run:
+                with self.assertRaisesRegex(
+                        C.ClaudeFable5CriticError, "changed during staging"):
+                    C.run_critic(
+                        wrapper=wrapper, workspace=workspace, prompt="review",
+                        bindings=BINDINGS,
+                        environment={"HOME": temporary}, auth_root=auth,
+                    )
+            run.assert_not_called()
+
+    def test_launcher_is_rechecked_immediately_at_popen_boundary(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace, auth = self._layout(temporary)
+            wrapper = self._success_wrapper(Path(temporary))
+            launcher_sha = C._launcher_sha256()
+            with mock.patch.object(
+                    C, "_launcher_sha256",
+                    side_effect=(launcher_sha, launcher_sha, "0" * 64)), \
+                    mock.patch.object(C.subprocess, "Popen") as popen:
+                with self.assertRaisesRegex(
+                        C.ClaudeFable5CriticError, "spawn boundary"):
+                    C.run_critic(
+                        wrapper=wrapper, workspace=workspace, prompt="review",
+                        bindings=BINDINGS,
+                        environment={"HOME": temporary}, auth_root=auth,
+                    )
+            popen.assert_not_called()
+
+    def test_output_files_are_hard_capped(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            wrapper = self._wrapper(
+                root,
+                f"import sys\nsys.stdout.write('x' * {C.MAX_STDOUT_BYTES + 8192})\n",
+            )
+            returncode, stdout, _stderr = C._run_process(
+                argv=(str(wrapper),), cwd=root,
+                environment={"PATH": os.environ["PATH"]}, prompt="x",
+                timeout_seconds=5, terminate_grace_seconds=1,
+                capture_root=root,
+            )
+            self.assertNotEqual(returncode, 0)
+            self.assertLessEqual(len(stdout.encode()), C.MAX_STDOUT_BYTES)
 
     def test_runtime_and_launcher_tamper_refuse(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
