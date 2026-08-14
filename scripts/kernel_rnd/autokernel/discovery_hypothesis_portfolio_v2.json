@@ -1,7 +1,7 @@
 {
   "schema": "epyc.autokernel.discovery_hypothesis_portfolio.v2",
   "corpus_id": "gpu-decode-v9-20260814",
-  "generated_at": "2026-08-14T10:30:00Z",
+  "generated_at": "2026-08-14T13:00:00Z",
   "promotion_authority": false,
   "current_bundle": {
     "bundle_id": "gpu-source-templates-v2-qwen05b-tg128",
@@ -152,6 +152,31 @@
       "claims": [
         "Hash-bound snapshot of current hard constraints and closed families",
         "Carries G15, G17, G18, MFMA, prior-art, and reentry conditions"
+      ]
+    },
+    {
+      "evidence_id": "ev-fable5-mi210-lever-matrix",
+      "path": "/workspace/handoffs/active/fable5-window2-findings-05c-mi210-lever-category-matrix.md",
+      "sha256": "2f6cb30655b4cf01998249fc57619a9e080ae45ba3f22e95eda29bd8bbc179bb",
+      "authority": "governance_snapshot",
+      "temporal_status": "current_v9",
+      "claims": [
+        "The L1-MoE lever forcing low-batch expert work from MMVQ to MMQ regressed B2 by 30 percent, B4 by 21 percent, and B8 by 10.5 percent; the default CDNA threshold of 8 was already optimal",
+        "The measured A3B/A4B result does not close the unmeasured 256-expert ultra-sparse hypothesis",
+        "The L6 Q8_0 SoA-repack lever is conditional on high TCC_EA_RDREQ_32B sub-line amplification and was not warranted in the measured healthy-coalescing frame",
+        "The L21 Q4_K dequant-efficiency lever remains an open batch-one latency hypothesis"
+      ]
+    },
+    {
+      "evidence_id": "ev-fable5-mi210-roofline",
+      "path": "/workspace/handoffs/active/fable5-window2-findings-05-intake-sweep-and-roofline.md",
+      "sha256": "08de87ef44a14de4420432bd04aad5f7e3c3f41639578e9e7f4a7f35dea64357",
+      "authority": "governance_snapshot",
+      "temporal_status": "current_v9",
+      "claims": [
+        "Batch-one Q4_K measured about 34 percent of the bandwidth roofline versus 50 percent for Q8_0 and 62.5 percent for fp16",
+        "The proposed L21 hypothesis is an LDS-staged Q4_K MMQ dequant-GEMV rewrite with lower VGPR pressure, limited to batch-one latency roles",
+        "Exact PMC confirmation of VALU or issue pressure rather than HBM saturation is a required pre-authoring gate"
       ]
     }
   ],
@@ -3582,6 +3607,541 @@
           "Retirement is scoped to the measured large-model frames and standalone tuning."
         ]
       }
+    },
+    {
+      "hypothesis_id": "akh-v2-q4k-mmq-dequant-gemv",
+      "title": "L21 Q4_K MMQ dequant-GEMV rewrite",
+      "status": "needs-template",
+      "statement": "For a batch-one Q4_K latency role such as a GPU drafter or interactive path, an LDS-staged MMQ dequant-GEMV kernel with lower VGPR pressure can recover part of the measured Q4_K roofline gap; this parent question is distinct from the existing branchless and one-wave MMVQ mechanisms.",
+      "target": {
+        "frame_ids": [
+          "frame-v9-qwen35b-q4km-tg128"
+        ],
+        "source_files": [
+          "ggml/src/ggml-cuda/mmq.cu",
+          "ggml/src/ggml-cuda/mmq.cuh"
+        ],
+        "source_symbols": [
+          "ggml_cuda_mmq_load_tiles_q4_K",
+          "mul_mat_q_process_tile"
+        ],
+        "template_intent": "cuda-mmq-q4k-v1"
+      },
+      "dispatch_anchors": [
+        {
+          "frame_id": "frame-v9-qwen35b-q4km-tg128",
+          "signatures": [],
+          "total_calls": null,
+          "aggregation": "not_applicable",
+          "selection": "The profile establishes the Q4_K family ceiling but does not bind an exact batch-one MMQ Q4_K dispatch or PMC pressure signature.",
+          "evidence_ref": "ev-fable5-mi210-roofline",
+          "excluded_signatures": []
+        }
+      ],
+      "mechanism": {
+        "facets": {
+          "mechanism": "q4_k_mmq_dequant_gemv_lds_vgpr_rewrite",
+          "ops": [
+            "mul_mat_q"
+          ],
+          "files": [
+            "ggml/src/ggml-cuda/mmq.cu",
+            "ggml/src/ggml-cuda/mmq.cuh"
+          ],
+          "symbols": [
+            "ggml_cuda_mmq_load_tiles_q4_K",
+            "mul_mat_q_process_tile"
+          ],
+          "change_class": "arithmetic"
+        },
+        "fingerprint_sha256": "5b7c8abe2bb6ebbf932350c7ae213c71ca4b276358ba7f5613142c1801dc750c"
+      },
+      "falsifiers": [
+        "Exact batch-one Q4_K MMQ profiling shows HBM saturation rather than VALU, issue, or VGPR pressure",
+        "The exact latency role does not dispatch the Q4_K MMQ path",
+        "A correctness-preserving candidate fails to improve paired whole-model batch-one latency"
+      ],
+      "evidence_refs": [
+        "ev-v9-qwen35b-q4km-profile",
+        "ev-fable5-mi210-lever-matrix",
+        "ev-fable5-mi210-roofline"
+      ],
+      "interactions": [
+        {
+          "with": "akh-v2-q4k-branchless-scale-min",
+          "kind": "shared_bottleneck",
+          "rationale": "Both address Q4_K dequant cost, but L21 targets the MMQ tile path while branchless scale/min targets MMVQ vec-dot control flow."
+        },
+        {
+          "with": "akh-v2-q4k-onewave-incumbent",
+          "kind": "shared_bottleneck",
+          "rationale": "Both address batch-one Q4_K latency, but L21 is an MMQ dequant/VGPR rewrite rather than an MMVQ wave-count change."
+        }
+      ],
+      "portability": {
+        "level": "low",
+        "source_frames": [
+          "frame-v9-qwen35b-q4km-tg128"
+        ],
+        "target_frames": [
+          "frame-v9-qwen35b-q4km-tg128"
+        ],
+        "constraints": [
+          "Batch-one latency roles only",
+          "Q4_K MMQ route only",
+          "gfx90a CDNA2 LDS and VGPR behavior"
+        ],
+        "required_validation": [
+          "Exact Q4_K MMQ dispatch proof",
+          "PMC evidence of VALU, issue, or VGPR pressure rather than HBM saturation",
+          "New sealed MMQ Q4_K template",
+          "Correctness and paired graphs-on whole-model replay"
+        ]
+      },
+      "priority": {
+        "rank": 16,
+        "tier": "P1",
+        "device_time_share_pct_range": [
+          3.8994,
+          24.1445
+        ],
+        "rationale": "The Q4_K family is material on the 35B frame, but the exact MMQ batch-one pressure mechanism has not yet passed its pre-authoring profile gate."
+      },
+      "expected_value": {
+        "metric": "decode_tokens_per_s",
+        "direction": "higher_better",
+        "expected_relative_gain_pct_range": [
+          0.0,
+          43.0
+        ],
+        "device_time_ceiling_pct": 24.1445,
+        "basis": "The handoff measures a roughly 28 pp Q4_K-to-fp16 roofline gap and estimates recovery from about 33% toward 45–50%, with about 43% throughput upside only if the exact batch-one MMQ path is dequant-pressure-bound; the measured family share remains the whole-model ceiling.",
+        "device_time_ceiling_frame_id": "frame-v9-qwen35b-q4km-tg128",
+        "current_bundle_plausible_gain_ceiling_pct": null
+      },
+      "implementation": {
+        "cost": "high",
+        "risk": "high",
+        "notes": [
+          "New MMQ Q4_K kernel mechanism rather than a replay of MMVQ branchless or one-wave work",
+          "LDS staging and VGPR allocation are architecture-sensitive",
+          "Quality and correctness must be gated before throughput credit"
+        ]
+      },
+      "stop_rule": [
+        "Stop before source work if exact PMC evidence shows HBM saturation",
+        "Stop if the exact latency role does not dispatch Q4_K MMQ",
+        "Retire on any correctness mismatch or non-positive paired batch-one result",
+        "Do not credit branchless MMVQ or one-wave MMVQ results as evidence for this mechanism"
+      ],
+      "current_bundle_eligibility": {
+        "eligible": false,
+        "template_ids": [],
+        "blocking_conditions": [
+          "No exact batch-one Q4_K MMQ PMC characterization is bound",
+          "No sealed MMQ Q4_K source template exists",
+          "The current small-model bundle routes the measured Q4_K subset through MMVQ, not this proposed parent mechanism"
+        ],
+        "reason": "Retain as an explicit L21 parent question, but admit no candidate until dispatch, pressure, and source-authorability gates pass."
+      },
+      "record_version": 1,
+      "provenance": {
+        "introduced_at": "2026-08-14T13:00:00Z",
+        "introduced_by": "autokernel-portfolio-memory-integrator",
+        "origin": "fable5-window2-findings-l21-formalization",
+        "note": "Restores the exact L21 MMQ dequant-GEMV question from fable5-window2-findings without conflating it with narrower Q4_K MMVQ mechanisms.",
+        "supersedes": null
+      },
+      "primary_falsifier": "Exact batch-one Q4_K MMQ profiling shows HBM saturation rather than VALU, issue, or VGPR pressure",
+      "regime": {
+        "backend": "hip",
+        "phase": "decode",
+        "batch": 1,
+        "architecture": "gfx90a",
+        "model_or_frame": "frame-v9-qwen35b-q4km-tg128-latency-role",
+        "quant": "Q4_K_M",
+        "shape": "q4-k-mmq-dequant-gemv",
+        "measurement_graphs": false,
+        "target_runtime_graphs": true
+      },
+      "lifecycle": {
+        "maturity": "characterized",
+        "next_action": "Bind an exact batch-one Q4_K MMQ PMC profile and only then author a sealed cuda-mmq-q4k template if the pressure gate passes",
+        "candidate_identity": null,
+        "diagnostic_identity": null
+      },
+      "decision_policy": {
+        "metric": "decode_tokens_per_s",
+        "frame_id": "frame-v9-qwen35b-q4km-tg128",
+        "continuation_floor_pct": 1.0,
+        "nomination_floor_pct": 2.0,
+        "required_replications": 3,
+        "sign_policy": "all_positive",
+        "conflict_policy": "retain_inconclusive",
+        "max_distinct_candidates": 3,
+        "terminal_rule": "retire",
+        "effect_unit": "relative_percent",
+        "min_replication_effect_pct": 0.5,
+        "max_replication_spread_pct": 2.0
+      },
+      "epistemic": {
+        "grade": "profile_routing",
+        "confidence": "low",
+        "limitations": [
+          "The roughly 28 pp roofline gap is measured, but the proposed 45–50% MMQ recovery is not yet isolated by exact PMC evidence.",
+          "The 43-percent figure is a conditional estimate, not a candidate result.",
+          "No authored candidate or template exists."
+        ]
+      }
+    },
+    {
+      "hypothesis_id": "akh-v2-ultra-sparse-moe-mmid",
+      "title": "Ultra-sparse 256-expert MoE mmid threshold",
+      "status": "needs-template",
+      "statement": "A representative ultra-sparse 256-of-8 MoE may have a different MMVQ-versus-MMQ mmid crossover than the falsified A3B/A4B low-batch regime.",
+      "target": {
+        "frame_ids": [
+          "frame-v9-qwen35b-q8-tg128"
+        ],
+        "source_files": [
+          "ggml/src/ggml-cuda/mmvq.cu"
+        ],
+        "source_symbols": [
+          "get_mmvq_mmid_max_batch_cdna"
+        ],
+        "template_intent": "cuda-mmvq-mmid-dispatch-v1"
+      },
+      "dispatch_anchors": [
+        {
+          "frame_id": "frame-v9-qwen35b-q8-tg128",
+          "signatures": [],
+          "total_calls": null,
+          "aggregation": "not_applicable",
+          "selection": "The A3B frame is retained only as the measured non-transfer source; no 256-expert dispatch geometry or call count is asserted.",
+          "evidence_ref": "ev-fable5-mi210-lever-matrix",
+          "excluded_signatures": []
+        }
+      ],
+      "mechanism": {
+        "facets": {
+          "mechanism": "ultra_sparse_moe_mmid_threshold_specialization",
+          "ops": [
+            "mul_mat_id"
+          ],
+          "files": [
+            "ggml/src/ggml-cuda/mmvq.cu"
+          ],
+          "symbols": [
+            "get_mmvq_mmid_max_batch_cdna"
+          ],
+          "change_class": "moe_scheduling"
+        },
+        "fingerprint_sha256": "7cec6f2b23b141e953097cb545a8508b3bc7d00530fc2a12b63908ffb527fb90"
+      },
+      "falsifiers": [
+        "A representative 256-expert routing histogram and exact dispatch profile show the same sparse low-batch utilization as A3B/A4B",
+        "The representative ultra-sparse frame does not dispatch mul_mat_id through the CDNA mmid threshold",
+        "A predeclared threshold sweep has no positive whole-model effect"
+      ],
+      "evidence_refs": [
+        "ev-fable5-mi210-lever-matrix"
+      ],
+      "interactions": [
+        {
+          "with": "akh-v2-moe-gather-layout",
+          "kind": "shared_bottleneck",
+          "rationale": "At 256 experts, routing skew and gather/scatter can determine whether changing the mmid crossover has any useful surface."
+        }
+      ],
+      "portability": {
+        "level": "low",
+        "source_frames": [
+          "frame-v9-qwen35b-q8-tg128"
+        ],
+        "target_frames": [
+          "frame-v9-qwen35b-q8-tg128"
+        ],
+        "constraints": [
+          "The bound A3B frame is negative-transfer context, not a representative execution target",
+          "Admission requires 256 total experts and 8 active experts",
+          "No A3B/A4B result may be transferred as an ultra-sparse outcome"
+        ],
+        "required_validation": [
+          "Add a hash-bound representative ultra-sparse frame before source work",
+          "Capture expert-token histogram and exact MMVQ/MMQ routing",
+          "Predeclare a threshold sweep and whole-model stop rule",
+          "Add a sealed mmid dispatcher template"
+        ]
+      },
+      "priority": {
+        "rank": 17,
+        "tier": "P2",
+        "device_time_share_pct_range": [
+          0.0,
+          0.0
+        ],
+        "rationale": "The residual is explicitly preserved, but no representative ultra-sparse frame exists from which to estimate a device-time ceiling."
+      },
+      "expected_value": {
+        "metric": "decode_tokens_per_s",
+        "direction": "higher_better",
+        "expected_relative_gain_pct_range": [
+          0.0,
+          10.0
+        ],
+        "device_time_ceiling_pct": 0.0,
+        "basis": "Zero is the evidence-bound ceiling in the currently represented frames, not an estimate of ultra-sparse upside; the handoff records only that 256-expert sparsity may change the crossover.",
+        "device_time_ceiling_frame_id": "frame-v9-qwen35b-q8-tg128",
+        "current_bundle_plausible_gain_ceiling_pct": null
+      },
+      "implementation": {
+        "cost": "medium",
+        "risk": "high",
+        "notes": [
+          "Characterization precedes any threshold edit",
+          "Exact expert sparsity and token histogram are load-bearing",
+          "The A3B/A4B negative is a hard boundary, not a starting candidate"
+        ]
+      },
+      "stop_rule": [
+        "Stop before source work unless an exact 256-expert, eight-active-expert frame is bound",
+        "Stop if routing and utilization reproduce the A3B/A4B sparse low-batch mechanism",
+        "Retire after a non-positive predeclared threshold sweep",
+        "Never reopen the A3B/A4B low-batch mechanism through this residual record"
+      ],
+      "current_bundle_eligibility": {
+        "eligible": false,
+        "template_ids": [],
+        "blocking_conditions": [
+          "No representative 256-expert frame exists in the corpus",
+          "No expert-token histogram or exact dispatch profile is bound",
+          "No sealed mmid dispatcher template exists"
+        ],
+        "reason": "Preserved as a regime-specific residual only; it cannot spend a candidate slot until a representative ultra-sparse frame is added."
+      },
+      "record_version": 1,
+      "provenance": {
+        "introduced_at": "2026-08-14T13:00:00Z",
+        "introduced_by": "autokernel-portfolio-memory-integrator",
+        "origin": "fable5-window2-findings-l1-moe-residual-formalization",
+        "note": "Separates the unmeasured 256-expert residual from the measured A3B/A4B hard negative recorded in fable5-window2-findings.",
+        "supersedes": null
+      },
+      "primary_falsifier": "A representative 256-expert routing histogram and exact dispatch profile show the same sparse low-batch utilization as A3B/A4B",
+      "regime": {
+        "backend": "hip",
+        "phase": "decode",
+        "batch": "low-batch-exact-range-pending-frame",
+        "architecture": "gfx90a",
+        "model_or_frame": "uninstantiated-256-expert-eight-active-moe",
+        "quant": "exact-quant-pending-frame",
+        "shape": "ultra-sparse-mul-mat-id-mmid",
+        "measurement_graphs": false,
+        "target_runtime_graphs": true
+      },
+      "lifecycle": {
+        "maturity": "design_prior",
+        "next_action": "Bind a representative 256-expert frame and routing histogram; do not author or measure a candidate before that admission gate",
+        "candidate_identity": null,
+        "diagnostic_identity": null
+      },
+      "decision_policy": {
+        "metric": "decode_tokens_per_s",
+        "frame_id": "frame-v9-qwen35b-q8-tg128",
+        "continuation_floor_pct": 1.0,
+        "nomination_floor_pct": 2.0,
+        "required_replications": 3,
+        "sign_policy": "all_positive",
+        "conflict_policy": "retain_inconclusive",
+        "max_distinct_candidates": 2,
+        "terminal_rule": "retire",
+        "effect_unit": "relative_percent",
+        "min_replication_effect_pct": 0.5,
+        "max_replication_spread_pct": 2.0
+      },
+      "epistemic": {
+        "grade": "design_prior",
+        "confidence": "low",
+        "limitations": [
+          "No representative ultra-sparse model frame, route, or device-time share is bound.",
+          "The only measured mmid result is the non-transferable A3B/A4B negative.",
+          "The current frame reference exists solely to preserve the transfer boundary."
+        ]
+      }
+    },
+    {
+      "hypothesis_id": "akh-v2-q8-soa-repack-conditional",
+      "title": "L6 conditional Q8_0 SoA weight repack",
+      "status": "needs-template",
+      "statement": "Repack Q8_0 weights into a structure-of-arrays layout only when a representative exact frame proves costly cache-line or sub-line memory amplification; healthy coalescing keeps the mechanism on hold.",
+      "target": {
+        "frame_ids": [
+          "frame-v9-qwen35b-q8-tg128"
+        ],
+        "source_files": [
+          "ggml/src/ggml-cuda/mmq.cuh"
+        ],
+        "source_symbols": [
+          "ggml_cuda_mmq_load_tiles_q8_0"
+        ],
+        "template_intent": "cuda-mmq-q8-soa-layout-v1"
+      },
+      "dispatch_anchors": [
+        {
+          "frame_id": "frame-v9-qwen35b-q8-tg128",
+          "signatures": [],
+          "total_calls": null,
+          "aggregation": "not_applicable",
+          "selection": "The Q8 family profile does not bind TCC sub-line counters or a specific MMQ load geometry, so no authorable dispatch signature is asserted.",
+          "evidence_ref": "ev-fable5-mi210-lever-matrix",
+          "excluded_signatures": []
+        }
+      ],
+      "mechanism": {
+        "facets": {
+          "mechanism": "q8_0_weight_soa_repack_for_subline_coalescing",
+          "ops": [
+            "mul_mat_q"
+          ],
+          "files": [
+            "ggml/src/ggml-cuda/mmq.cuh"
+          ],
+          "symbols": [
+            "ggml_cuda_mmq_load_tiles_q8_0"
+          ],
+          "change_class": "layout"
+        },
+        "fingerprint_sha256": "f93f486c37170606d36b6a5209d3e117bf5bfe7c24530f022f492d1fe4c92ec1"
+      },
+      "falsifiers": [
+        "TCC_EA_RDREQ_32B shows no material sub-line amplification on the exact target frame",
+        "The repack conversion or address-generation cost offsets load-transaction savings",
+        "Whole-model throughput does not improve after a measured reduction in sub-line reads"
+      ],
+      "evidence_refs": [
+        "ev-v9-qwen35b-q8-profile",
+        "ev-fable5-mi210-lever-matrix"
+      ],
+      "interactions": [
+        {
+          "with": "akh-v2-copy-layout-elimination",
+          "kind": "shared_bottleneck",
+          "rationale": "Both are layout questions, but L6 changes Q8_0 weight-block organization while copy elimination changes producer-consumer tensors."
+        }
+      ],
+      "portability": {
+        "level": "low",
+        "source_frames": [
+          "frame-v9-qwen35b-q8-tg128"
+        ],
+        "target_frames": [
+          "frame-v9-qwen35b-q8-tg128"
+        ],
+        "constraints": [
+          "Q8_0 MMQ load path only",
+          "gfx90a memory-transaction behavior",
+          "Admission is counter-gated rather than model-size-gated"
+        ],
+        "required_validation": [
+          "Exact in-window TCC_EA_RDREQ_32B sub-line amplification profile",
+          "Sealed source and any format-conversion authority",
+          "Load-transaction reduction plus paired whole-model replay"
+        ]
+      },
+      "priority": {
+        "rank": 18,
+        "tier": "P3",
+        "device_time_share_pct_range": [
+          0.0,
+          42.376
+        ],
+        "rationale": "The Q8 family is large, but current handoff evidence says coalescing was healthy; admission depends on a new counter-confirmed frame."
+      },
+      "expected_value": {
+        "metric": "decode_tokens_per_s",
+        "direction": "higher_better",
+        "expected_relative_gain_pct_range": [
+          0.0,
+          3.0
+        ],
+        "device_time_ceiling_pct": 42.376,
+        "basis": "The ceiling is the broad Q8 MMVQ family share, not evidence of SoA upside; measured healthy coalescing currently assigns zero admissible candidate value.",
+        "device_time_ceiling_frame_id": "frame-v9-qwen35b-q8-tg128",
+        "current_bundle_plausible_gain_ceiling_pct": null
+      },
+      "implementation": {
+        "cost": "high",
+        "risk": "high",
+        "notes": [
+          "May require persistent format or load-layout changes beyond one kernel body",
+          "Must prove the observed transaction problem before source work",
+          "Do not infer eligibility from model size or Q8 family share alone"
+        ]
+      },
+      "stop_rule": [
+        "Hold without source work while TCC sub-line amplification is absent or unknown",
+        "Stop if format conversion or address-generation overhead consumes the transaction saving",
+        "Retire the exact frame on non-positive paired whole-model reward despite improved counters"
+      ],
+      "current_bundle_eligibility": {
+        "eligible": false,
+        "template_ids": [],
+        "blocking_conditions": [
+          "Existing evidence reports healthy coalescing rather than high sub-line amplification",
+          "No exact TCC_EA_RDREQ_32B admission receipt is bound",
+          "No sealed Q8 SoA layout template or conversion authority exists"
+        ],
+        "reason": "Remain on hold while coalescing is healthy; do not admit the mechanism until an exact frame proves cache-line or sub-line amplification."
+      },
+      "record_version": 1,
+      "provenance": {
+        "introduced_at": "2026-08-14T13:00:00Z",
+        "introduced_by": "autokernel-portfolio-memory-integrator",
+        "origin": "fable5-window2-findings-l6-formalization",
+        "note": "Preserves the L6 record from fable5-window2-findings as a counter-gated conditional rather than an active or universally retired Q8 optimization.",
+        "supersedes": null
+      },
+      "primary_falsifier": "TCC_EA_RDREQ_32B shows no material sub-line amplification on the exact target frame",
+      "regime": {
+        "backend": "hip",
+        "phase": "decode",
+        "batch": 1,
+        "architecture": "gfx90a",
+        "model_or_frame": "frame-v9-qwen35b-q8-tg128",
+        "quant": "Q8_0",
+        "shape": "mmq-q8-weight-load-layout",
+        "measurement_graphs": false,
+        "target_runtime_graphs": true
+      },
+      "lifecycle": {
+        "maturity": "characterized",
+        "next_action": "Remain on hold; on a new representative frame, bind in-window TCC sub-line counters before considering source authoring",
+        "candidate_identity": null,
+        "diagnostic_identity": null
+      },
+      "decision_policy": {
+        "metric": "decode_tokens_per_s",
+        "frame_id": "frame-v9-qwen35b-q8-tg128",
+        "continuation_floor_pct": 0.5,
+        "nomination_floor_pct": 1.0,
+        "required_replications": 3,
+        "sign_policy": "all_positive",
+        "conflict_policy": "retain_inconclusive",
+        "max_distinct_candidates": 2,
+        "terminal_rule": "retire",
+        "effect_unit": "relative_percent",
+        "min_replication_effect_pct": 0.25,
+        "max_replication_spread_pct": 1.0
+      },
+      "epistemic": {
+        "grade": "profile_routing",
+        "confidence": "medium",
+        "limitations": [
+          "The measured dense-Q8 frame reported healthy coalescing, but its raw counter carrier is summarized through the handoff.",
+          "The current Q8 frame lacks an exact SoA admission-counter receipt.",
+          "No source candidate exists."
+        ]
+      }
     }
   ],
   "do_not_repeat": [
@@ -4397,6 +4957,57 @@
         "supersedes": null
       },
       "classification": "prior_art_already_present"
+    },
+    {
+      "dnr_id": "dnr-l1-moe-mmid-a3b-a4b-low-batch",
+      "title": "L1-MoE A3B/A4B low-batch mmid threshold",
+      "enforcement": "hard_refusal_exact_mechanism_and_regime",
+      "statement": "Do not lower the CDNA mmid threshold to force A3B/A4B low-batch expert work from MMVQ to MMQ; the default threshold = 8 was already optimal.",
+      "mechanism": {
+        "facets": {
+          "mechanism": "force_moe_mmid_to_mmq_below_default_threshold",
+          "ops": [
+            "mul_mat_id"
+          ],
+          "files": [
+            "ggml/src/ggml-cuda/mmvq.cu"
+          ],
+          "symbols": [
+            "get_mmvq_mmid_max_batch_cdna"
+          ],
+          "change_class": "moe_scheduling"
+        },
+        "fingerprint_sha256": "d86aa1c2b5f5fdb2fa45b253efd82c8b8e375f4990519b8d0a97960a6f3c6854"
+      },
+      "regime": {
+        "backend": "hip",
+        "phase": "decode",
+        "batch": "2-8",
+        "architecture": "gfx90a",
+        "model_or_frame": "A3B-A4B-low-batch-MoE",
+        "quant": "Q8_0",
+        "shape": "sparse-expert-mul-mat-id-mmid-threshold",
+        "measurement_graphs": false,
+        "target_runtime_graphs": true
+      },
+      "falsifier_result": "Forcing low-batch experts to MMQ inverted the dense result: B2 -30%, B4 -21%, B8 -10.5%; controls B>=16 ±0.4%; default threshold = 8 already optimal.",
+      "evidence_refs": [
+        "ev-fable5-mi210-lever-matrix"
+      ],
+      "reentry_conditions": [
+        "A representative ultra-sparse 256-expert regime, tracked separately as akh-v2-ultra-sparse-moe-mmid",
+        "A different architecture or an exact expert-token shape outside batch 2 through 8",
+        "A materially different scheduling mechanism that does not force sparse low-batch experts into wasteful MMQ tiles"
+      ],
+      "record_version": 1,
+      "provenance": {
+        "introduced_at": "2026-08-14T13:00:00Z",
+        "introduced_by": "autokernel-portfolio-memory-integrator",
+        "origin": "fable5-window2-findings-l1-moe-negative-formalization",
+        "note": "Hard-scopes the measured negative from fable5-window2-findings while preserving the unmeasured ultra-sparse residual under a distinct hypothesis identity.",
+        "supersedes": null
+      },
+      "classification": "measured_negative"
     }
   ]
 }
