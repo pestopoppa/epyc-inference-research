@@ -400,15 +400,22 @@ class VetoAndResumeGate(unittest.TestCase):
         self.assertIsNotNone(fable_actor, "Fable critic launcher module is absent")
 
     @staticmethod
-    def _manifest() -> SimpleNamespace:
-        return SimpleNamespace(
+    def _manifest():
+        patch_bytes = (
+            b"diff --git a/ggml/src/ggml-cuda/fattn.cu "
+            b"b/ggml/src/ggml-cuda/fattn.cu\n"
+            b"--- a/ggml/src/ggml-cuda/fattn.cu\n"
+            b"+++ b/ggml/src/ggml-cuda/fattn.cu\n"
+            b"@@ -1 +1 @@\n-old\n+new\n"
+        )
+        return controller.source_candidate.SourcePatchManifest(
             campaign_id="ak-veto", proposal_id="akp-veto", candidate_id="akc-veto",
             source_tree="llama.cpp", production_base_commit="0" * 40,
-            instrument_commit="1" * 40, change_class="source",
+            instrument_commit="1" * 40, change_class="fusion",
             declared_files=("ggml/src/ggml-cuda/fattn.cu",),
-            declared_symbols={"ggml/src/ggml-cuda/fattn.cu": ("fattn_kernel",)},
-            mechanism_id="veto", patch_sha256="0" * 64,
-            patch_bundle_sha256=HASH, patch_bytes=b"patch",
+            declared_symbols={"ggml/src/ggml-cuda/fattn.cu": ("<file-scope>",)},
+            mechanism_id="veto", patch_sha256=_sha(patch_bytes),
+            patch_bytes=patch_bytes,
         )
 
     def _planner(self):
@@ -422,7 +429,8 @@ class VetoAndResumeGate(unittest.TestCase):
                 inner_self.calls += 1
                 return controller.PlannedCandidate(
                     "akh-veto", "bounded", "no effect", {"backend": "gpu"},
-                    {"proposal_id": "akp-veto"}, manifest, HASH,
+                    {"proposal_id": "akp-veto"}, manifest,
+                    manifest.patch_bundle_sha256,
                 )
         return Planner()
 
