@@ -102,8 +102,10 @@ def _symbol_from_hunk(context: str, body: Sequence[str]) -> str:
     header_symbol = _symbol_from_context(context)
     body_symbols: list[str] = []
     for line in body:
-        if not line or line[0] not in {" ", "-"}:
-            continue
+        # Only leading unchanged source can identify the declaration whose
+        # body the hunk enters.  Later context may begin the *next* function.
+        if not line or line[0] != " ":
+            break
         normalized = line[1:].strip()
         match = _TRUNCATED_FUNC.search(normalized)
         if match is None or match.group("name") in _CONTROL_WORDS:

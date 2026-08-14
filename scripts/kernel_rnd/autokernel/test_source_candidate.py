@@ -89,6 +89,21 @@ class SourceCase(unittest.TestCase):
             patch_bytes=patch_bytes)
         _hunks, symbols = S.hunk_identities(manifest.patch_text)
         self.assertEqual(symbols, ("vec_dot_q5_0_q8_1_impl",))
+
+    def test_trailing_next_function_cannot_override_hunk_header(self):
+        patch = (
+            "diff --git a/ggml/src/ggml-cuda/vecdotq.cuh b/ggml/src/ggml-cuda/vecdotq.cuh\n"
+            "--- a/ggml/src/ggml-cuda/vecdotq.cuh\n"
+            "+++ b/ggml/src/ggml-cuda/vecdotq.cuh\n"
+            "@@ -764,4 +764,4 @@ static float vec_dot_q5_0_q8_1(\n"
+            "-old_impl\n"
+            "+new_impl\n"
+            " }\n"
+            " static float vec_dot_q5_1_q8_1(\n"
+        )
+        _hunks, symbols = S.hunk_identities(patch)
+        self.assertEqual(symbols, ("vec_dot_q5_0_q8_1",))
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(prefix="ak-source-candidate-")
         self.addCleanup(self.tmp.cleanup)
