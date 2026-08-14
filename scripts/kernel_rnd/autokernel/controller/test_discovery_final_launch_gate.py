@@ -25,17 +25,17 @@ from . import discovery_deployment_factory as factory
 from . import test_discovery_controller_blackbox as blackbox
 
 
-COMBINED_SHA = "164b8751f18008d69597489ffd6f12039f60c821"
-GRAPH_SHA = "9421cf2f3d6166ffe4022203f5497a27ac65f4d5c734c1bca158608169495a25"
+COMBINED_SHA = "eac3ae7c0fab14160520f10d20b4330fe5c573e6"
+GRAPH_SHA = "6592b478314572d4fc508c6397a6568286b5e5efe336f9b7c265196970752740"
 PRODUCTION_SHA = "0db32c06e3e550065b78311a6031ef3dd2c4f27c"
 INSTRUMENT_SHA = "81bf32f11b4a421880e8f25faec3e4ba872363f0"
 INSTRUMENT_DIFF_SHA = "3cf9178fcc00e8c1d3dfc0bfd6086edbff6a6eb6ac528aa4d88b23843b5599c2"
 INSTRUMENT_BRANCH = "codex/autokernel-ready-continue-instrument-20260814"
 PUBLIC_ROOT = Path(
-    "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-combined-final-v1"
+    "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-final-eac3ae7c-v1"
 )
 COMBINED_ROOT = Path(
-    "/mnt/raid0/llm/autokernel/worktrees/autokernel-static-batched-integration-20260814"
+    "/mnt/raid0/llm/autokernel/worktrees/autokernel-final-integration-20260814"
 )
 PRODUCTION_ROOT = Path("/mnt/raid0/llm/llama.cpp")
 INSTRUMENT_ROOT = Path("/mnt/raid0/llm/llama.cpp-experimental")
@@ -180,12 +180,28 @@ class ImmutablePublicBundleGate(unittest.TestCase):
         )
 
     def test_batching_is_one_process_nine_samples_with_serialized_fallback(self) -> None:
-        batched = self._graph()["batched_runner"]
+        graph = self._graph()
+        batched = graph["batched_runner"]
         self.assertEqual(batched["processes_per_arm"], 1)
         self.assertEqual(batched["calls_per_arm"], 9)
         self.assertFalse(batched["early_unlock_enabled"])
         self.assertEqual(batched["safe_fallback"], "full_process_cold_serialized_lock")
         self.assertEqual(batched["trust_limit"], "cooperative_same_uid_not_launch_authority")
+
+        reservation = graph["device_reservation"]
+        self.assertEqual(
+            reservation["busy_disposition"],
+            "durable_pending_exact_candidate_no_iteration",
+        )
+        self.assertEqual(
+            reservation["inner_claim_mode"],
+            "borrowed_logical_phase_no_physical_release",
+        )
+        self.assertFalse(reservation["nested_physical_acquisitions"])
+        self.assertEqual(
+            reservation["physical_release_authority"],
+            "adapter_terminal_reservation_release",
+        )
 
 
 class DeviceContentionGate(unittest.TestCase):
@@ -200,7 +216,8 @@ class DeviceContentionGate(unittest.TestCase):
             worst_case_loads_per_interval=2,
         )
         corpus = SimpleNamespace(
-            profiles=(profile,), policy_sha256="a" * 64, version="gate-v1",
+            profiles=(profile,), examples=(), policy_sha256="a" * 64,
+            version="gate-v1",
         )
         config = SimpleNamespace(
             device_id="mi210_0", model=SimpleNamespace(path=model.resolve(), sha256=model_sha),
@@ -220,12 +237,19 @@ class DeviceContentionGate(unittest.TestCase):
                 mode="cold_serialized", to_dict=lambda: {"decision_sha256": "c" * 64},
             )
             busy = factory.device_claim.DeviceClaimTimeout("held by another session")
-            with mock.patch.object(factory.gpu_load_admission, "arbitrate", return_value=decision), \
-                    mock.patch.object(factory.device_claim, "acquire_device_claim",
-                                      side_effect=busy) as acquire:
+            acquire = mock.Mock(side_effect=busy)
+            with mock.patch.object(factory.gpu_load_admission, "arbitrate", return_value=decision):
                 permit = factory.GpuDiscoveryLease(
-                    config=config, mode="allowed_discovery_noise"
-                ).admit(SimpleNamespace(experiment_intent=None))
+                    config=config, mode="allowed_discovery_noise",
+                    claim_journal=mock.Mock(), claim_acquirer=acquire,
+                    claim_verifier=lambda _receipt: True,
+                ).admit(
+                    SimpleNamespace(
+                        experiment_intent=None,
+                        source_manifest=SimpleNamespace(campaign_id="ak-final-gate"),
+                    ),
+                    operation_key="d" * 64,
+                )
         acquire.assert_called_once()
         self.assertFalse(permit["admitted"])
         self.assertEqual(permit["device_id"], "mi210_0")
@@ -265,6 +289,110 @@ class DeviceContentionGate(unittest.TestCase):
                 screener.items[0].source_manifest.patch_bytes,
                 blackbox.Manifest().patch_bytes,
             )
+
+    def test_crash_recovery_reacquires_or_waits_without_replanning(self) -> None:
+        """Lost in-memory reservations demote to WAIT and keep the exact candidate."""
+        with tempfile.TemporaryDirectory(prefix="autokernel-crash-wait-gate-") as temporary, \
+                mock.patch.object(controller.source_candidate, "SourcePatchManifest",
+                                  blackbox.Manifest), \
+                mock.patch.object(controller, "_write_projection"):
+            root = Path(temporary)
+            planner, critic = blackbox.Planner(), blackbox.Critic()
+            screener = blackbox.CrashBeforeRunner()
+            lease = blackbox.Lease((True, False, True))
+            config = controller.ControllerConfig(root / "out", max_iterations=1)
+            with self.assertRaises(blackbox.ProcessCrash):
+                controller.run_controller(
+                    config, planner=planner, critic=critic,
+                    screener=screener, lease=lease,
+                )
+            waiting = controller.run_controller(
+                config, planner=planner, critic=critic,
+                screener=screener, lease=lease,
+            )
+            self.assertEqual(waiting["pending"]["row"]["status"], "waiting_resource")
+            self.assertEqual(waiting["iterations"], [])
+            self.assertEqual((planner.calls, critic.calls, screener.entries), (1, 1, 1))
+            final = controller.run_controller(
+                config, planner=planner, critic=critic,
+                screener=screener, lease=lease,
+            )
+            self.assertTrue(final["complete"])
+            self.assertEqual((planner.calls, critic.calls, screener.entries), (1, 1, 2))
+            self.assertEqual(
+                screener.items[0].source_manifest.patch_bytes,
+                blackbox.Manifest().patch_bytes,
+            )
+
+    def test_probe_outer_and_borrowed_phases_have_one_physical_release_each(self) -> None:
+        """Logical proof/runner phases never create or release another physical claim."""
+        with tempfile.TemporaryDirectory(prefix="autokernel-claim-gate-") as temporary:
+            config = self._lease_config(Path(temporary))
+            events: list[str] = []
+            claims = []
+
+            class PhysicalClaim:
+                def __init__(self, label: str, purpose: str, campaign_id: str) -> None:
+                    self.label = label
+                    self.held = True
+                    self.release_calls = 0
+                    self.opened = factory.device_claim.ClaimReceipt(
+                        claim_id=f"akd-{label}", device_id="mi210_0",
+                        lock_path="/hardware-free-claim", state="held",
+                        holder_pid=1, holder_start_ticks=1,
+                        holder_boot_id="boot", host="host", holder_label="gate",
+                        purpose=purpose, campaign_id=campaign_id, acquired_at="now",
+                    )
+
+                def receipt(self):
+                    return self.opened
+
+                def release(self):
+                    self.release_calls += 1
+                    self.held = False
+                    events.append(f"{self.label}_release")
+                    return factory.replace(self.opened, released_at="done")
+
+            def acquire(_device, *, purpose, campaign_id, **_kwargs):
+                label = "probe" if "probe" in purpose else "outer"
+                events.append(f"{label}_acquire")
+                claim = PhysicalClaim(label, purpose, campaign_id)
+                claims.append(claim)
+                return claim
+
+            lease = factory.GpuDiscoveryLease(
+                config=config, mode="allowed_discovery_noise",
+                claim_journal=mock.Mock(), claim_acquirer=acquire,
+                claim_verifier=lambda _receipt: True,
+            )
+            candidate = SimpleNamespace(
+                experiment_intent=None,
+                source_manifest=SimpleNamespace(campaign_id="ak-final-gate"),
+            )
+            decision = SimpleNamespace(
+                mode="cold_serialized", to_dict=lambda: {"decision_sha256": "c" * 64},
+            )
+            operation_key = "e" * 64
+            with mock.patch.object(factory.gpu_load_admission, "arbitrate", return_value=decision):
+                permit = lease.admit(candidate, operation_key=operation_key)
+            self.assertTrue(permit["admitted"])
+            outer = lease.reserve(operation_key)
+            self.assertEqual(outer["claim_id"], "akd-outer")
+            for phase in ("proof", "runner"):
+                borrowed = lease.borrower(operation_key)(
+                    "mi210_0", campaign_id="ak-final-gate", purpose=phase,
+                )
+                phase_end = borrowed.release()
+                self.assertEqual(phase_end["outer_claim_id"], "akd-outer")
+                self.assertFalse(phase_end["physical_release"])
+                self.assertNotIn("released_at", phase_end)
+                self.assertTrue(claims[1].held)
+            released = lease.release(operation_key)
+            self.assertEqual(released["claim_id"], "akd-outer")
+            self.assertEqual(events, [
+                "probe_acquire", "probe_release", "outer_acquire", "outer_release",
+            ])
+            self.assertEqual([claim.release_calls for claim in claims], [1, 1])
 
 
 if __name__ == "__main__":
