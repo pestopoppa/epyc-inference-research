@@ -523,6 +523,39 @@ def _parse_result(stdout: str, bindings: Mapping[str, str]) -> dict[str, str]:
     return {key: str(payload[key]) for key in RESULT_KEYS}
 
 
+def _failure_summary(stdout: str, stderr: str) -> str:
+    """Return bounded, secret-free process failure metadata."""
+    lowered = (stdout + "\n" + stderr).lower()
+    categories = (
+        ("usage_limit", ("usage limit", "rate limit", "credit balance", "quota")),
+        ("authentication", ("authentication", "oauth", "unauthorized", "forbidden")),
+        ("network", ("network", "connection", "timed out", "unreachable")),
+        ("model_unavailable", ("model", "unavailable", "not found")),
+        ("schema", ("json schema", "structured output", "validation")),
+    )
+    category = next((name for name, needles in categories
+                     if any(needle in lowered for needle in needles)), "unknown")
+    keys: list[str] = []
+    is_error: object = None
+    subtype: object = None
+    try:
+        envelope = json.loads(stdout)
+    except (json.JSONDecodeError, TypeError):
+        envelope = None
+    if isinstance(envelope, dict):
+        keys = sorted(str(key) for key in envelope)
+        is_error = envelope.get("is_error")
+        candidate = envelope.get("subtype")
+        if isinstance(candidate, str) and re.fullmatch(r"[A-Za-z0-9_.:-]{1,80}", candidate):
+            subtype = candidate
+    return (
+        f"category={category}; stdout_bytes={len(stdout.encode('utf-8'))}; "
+        f"stdout_sha256={_sha256_bytes(stdout.encode('utf-8'))}; "
+        f"stderr_bytes={len(stderr.encode('utf-8'))}; "
+        f"stderr_sha256={_sha256_bytes(stderr.encode('utf-8'))}; "
+        f"envelope_keys={keys}; is_error={is_error!r}; subtype={subtype!r}")
+
+
 def run_critic(
     *, wrapper: Path, workspace: Path, prompt: str,
     bindings: Mapping[str, str], environment: Mapping[str, str],
@@ -605,9 +638,9 @@ def run_critic(
             raise ClaudeFable5CriticError(
                 "staged Claude executable changed during execution")
         if returncode != 0:
-            tail = stderr[-400:].replace("\n", " ")
             raise ClaudeFable5CriticError(
-                f"Claude Fable 5 critic failed with status {returncode}: {tail}")
+                f"Claude Fable 5 critic failed with status {returncode}: "
+                f"{_failure_summary(stdout, stderr)}")
         payload = _parse_result(stdout, exact_bindings)
         return CriticResult(
             **payload,

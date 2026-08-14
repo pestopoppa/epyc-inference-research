@@ -203,6 +203,19 @@ class ClaudeFable5CriticActorTests(unittest.TestCase):
                         timeout_seconds=5,
                     )
 
+    def test_nonzero_failure_summary_is_classified_without_error_text(self) -> None:
+        secret = "operator-secret-error-detail"
+        stdout = json.dumps({
+            "type": "result", "subtype": "error_during_execution",
+            "is_error": True, "result": f"Usage limit reached: {secret}",
+        })
+        summary = C._failure_summary(stdout, "")
+        self.assertIn("category=usage_limit", summary)
+        self.assertIn("subtype='error_during_execution'", summary)
+        self.assertIn("envelope_keys=['is_error', 'result', 'subtype', 'type']", summary)
+        self.assertNotIn(secret, summary)
+        self.assertNotIn("Usage limit reached", summary)
+
     def test_unsafe_auth_mode_and_symlink_refuse_before_spawn(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             workspace, auth = self._layout(temporary)
