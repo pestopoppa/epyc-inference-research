@@ -172,7 +172,8 @@ def _require_claude_runtime(value: Mapping[str, Any]) -> None:
             or value.get("provider") != FABLE5_CRITIC["provider"]
             or value.get("model") != FABLE5_CRITIC["model"]
             or value.get("effort") != FABLE5_CRITIC["effort"]
-            or value.get("auth_staging_policy") != "ephemeral_0600_copy_no_secret_receipt"
+            or value.get("auth_staging_policy")
+            != claude_fable5_critic_actor.AUTH_STAGING_POLICY
             or not all(isinstance(value.get(key), str) and value[key]
                        for key in required - {"auth_staging_policy"})):
         raise DiscoveryControllerError("Claude critic runtime attestation is incomplete or unsealed")
