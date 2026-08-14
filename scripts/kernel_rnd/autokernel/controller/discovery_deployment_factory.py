@@ -320,6 +320,11 @@ def materialize(config: deployment.DiscoveryDeployment, registry: Mapping[str, M
         return result
     def args(candidate: controller.PlannedCandidate, build_: controller.GpuSourceBuild, permit: Mapping[str, Any]):
         config.revalidate()
+        operation_key = permit.get("operation_key")
+        if (not isinstance(operation_key, str)
+                or build_.operation_key != operation_key):
+            raise DeploymentFactoryError(
+                "source build operation identity differs from the controller permit")
         if (build_.measurement_binary is None or build_.common_loader_dir is None
                 or build_.anchor_loader_dir is None or build_.candidate_loader_dir is None
                 or build_.reward_runtime_sha256 is None or build_.operation_key is None
