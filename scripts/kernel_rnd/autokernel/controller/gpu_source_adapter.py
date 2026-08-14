@@ -265,7 +265,15 @@ def _source_frame(operation_root: Path, result: controller.SealedScreen) -> tupl
         "runtime_config_sha256": pair["runtime_config_sha256"],
         "candidate_build_identity": pair["candidate_build_identity"],
         "anchor_build_identity": pair["anchor_build_identity"],
-        "baseline_sha256": result.baseline_sha256,
+        # Baseline receipts contain fresh samples/timestamps.  They remain
+        # evidence on each result but cannot define progression identity, or
+        # S2 would never pool with S1.
+        "baseline_frame": pair.get("baseline_frame", {
+            "anchor_build_identity": pair["anchor_build_identity"],
+            "model_sha256": pair["model_sha256"],
+            "workload_sha256": pair["workload_sha256"],
+            "runtime_config_sha256": pair["runtime_config_sha256"],
+        }),
     })
     return series_key, bundle
 
