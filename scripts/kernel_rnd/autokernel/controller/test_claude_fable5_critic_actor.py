@@ -360,6 +360,25 @@ class ClaudeFable5CriticActorTests(unittest.TestCase):
                     )
             popen.assert_not_called()
 
+    def test_staged_executable_is_rechecked_at_popen_boundary(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace, auth = self._layout(temporary)
+            wrapper = self._success_wrapper(Path(temporary))
+            wrapper_sha = hashlib.sha256(wrapper.read_bytes()).hexdigest()
+            with mock.patch.object(
+                    C, "_executable_sha256",
+                    side_effect=(wrapper_sha, "0" * 64)), \
+                    mock.patch.object(C.subprocess, "Popen") as popen:
+                with self.assertRaisesRegex(
+                        C.ClaudeFable5CriticError,
+                        "staged Claude executable changed.*spawn boundary"):
+                    C.run_critic(
+                        wrapper=wrapper, workspace=workspace, prompt="review",
+                        bindings=BINDINGS,
+                        environment={"HOME": temporary}, auth_root=auth,
+                    )
+            popen.assert_not_called()
+
     def test_output_files_are_hard_capped(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

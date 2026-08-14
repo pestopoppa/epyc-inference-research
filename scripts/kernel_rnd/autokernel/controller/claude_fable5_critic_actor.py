@@ -197,6 +197,10 @@ def _launcher_sha256() -> str:
     return _sha256_bytes(_read_regular(Path(__file__).resolve()))
 
 
+def _executable_sha256(path: Path) -> str:
+    return _wrapper_identity(path)[1]
+
+
 def _validated_bindings(bindings: Mapping[str, str]) -> dict[str, str]:
     if not isinstance(bindings, Mapping) or set(bindings) != set(BINDING_KEYS):
         raise ClaudeFable5CriticError(
@@ -439,13 +443,19 @@ def _run_process(*, argv: Sequence[str], cwd: Path, environment: Mapping[str, st
                  prompt: str, timeout_seconds: float,
                  terminate_grace_seconds: float,
                  capture_root: Path,
-                 expected_launcher_sha256: str | None = None) -> tuple[int, str, str]:
+                 expected_launcher_sha256: str | None = None,
+                 expected_executable_sha256: str | None = None) -> tuple[int, str, str]:
     with tempfile.TemporaryFile(mode="w+b", dir=capture_root) as stdout_file, \
             tempfile.TemporaryFile(mode="w+b", dir=capture_root) as stderr_file:
         if (expected_launcher_sha256 is not None
                 and _launcher_sha256() != expected_launcher_sha256):
             raise ClaudeFable5CriticError(
                 "Claude launcher bytes changed at the process spawn boundary")
+        if (expected_executable_sha256 is not None
+                and _executable_sha256(Path(argv[0]))
+                != expected_executable_sha256):
+            raise ClaudeFable5CriticError(
+                "staged Claude executable changed at the process spawn boundary")
         try:
             process = subprocess.Popen(
                 tuple(argv), cwd=cwd, env=dict(environment), stdin=subprocess.PIPE,
@@ -569,6 +579,9 @@ def run_critic(
             wrapper_content=wrapper_content) as stage:
         argv = build_argv(
             wrapper=stage.wrapper, config_dir=stage.config, bindings=exact_bindings)
+        if _executable_sha256(stage.wrapper) != wrapper_sha256:
+            raise ClaudeFable5CriticError(
+                "staged Claude executable does not match attested wrapper bytes")
         # Reopen every public byte authority immediately before process creation.
         if runtime_identity(wrapper) != current_runtime:
             raise ClaudeFable5CriticError("Claude runtime identity changed during staging")
@@ -582,11 +595,15 @@ def run_critic(
             terminate_grace_seconds=float(terminate_grace_seconds),
             capture_root=stage.runtime,
             expected_launcher_sha256=launcher_sha256,
+            expected_executable_sha256=wrapper_sha256,
         )
         if runtime_identity(wrapper) != current_runtime:
             raise ClaudeFable5CriticError("Claude runtime identity changed during execution")
         if _launcher_sha256() != launcher_sha256:
             raise ClaudeFable5CriticError("Claude launcher bytes changed during execution")
+        if _executable_sha256(stage.wrapper) != wrapper_sha256:
+            raise ClaudeFable5CriticError(
+                "staged Claude executable changed during execution")
         if returncode != 0:
             tail = stderr[-400:].replace("\n", " ")
             raise ClaudeFable5CriticError(
