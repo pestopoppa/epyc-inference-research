@@ -19,6 +19,7 @@ from types import SimpleNamespace
 import unittest
 from unittest import mock
 
+from scripts.benchmark import run_autokernel_gpu_discovery as gpu_runner
 from .. import schemas
 from . import discovery_controller as controller
 from . import discovery_deployment_factory as factory
@@ -26,13 +27,13 @@ from . import test_discovery_controller_blackbox as blackbox
 
 
 COMBINED_SHA = "eac3ae7c0fab14160520f10d20b4330fe5c573e6"
-GRAPH_SHA = "6592b478314572d4fc508c6397a6568286b5e5efe336f9b7c265196970752740"
+GRAPH_SHA = "29bab54b190ae4979685290021799480ea7b61744fd1977c230cc830bd24f60b"
 PRODUCTION_SHA = "0db32c06e3e550065b78311a6031ef3dd2c4f27c"
 INSTRUMENT_SHA = "81bf32f11b4a421880e8f25faec3e4ba872363f0"
 INSTRUMENT_DIFF_SHA = "3cf9178fcc00e8c1d3dfc0bfd6086edbff6a6eb6ac528aa4d88b23843b5599c2"
 INSTRUMENT_BRANCH = "codex/autokernel-ready-continue-instrument-20260814"
 PUBLIC_ROOT = Path(
-    "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-final-eac3ae7c-v1"
+    "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-reservation-final-v1"
 )
 COMBINED_ROOT = Path(
     "/mnt/raid0/llm/autokernel/worktrees/autokernel-final-integration-20260814"
@@ -393,6 +394,66 @@ class DeviceContentionGate(unittest.TestCase):
                 "probe_acquire", "probe_release", "outer_acquire", "outer_release",
             ])
             self.assertEqual([claim.release_calls for claim in claims], [1, 1])
+
+
+class BatchedSupervisorGate(unittest.TestCase):
+    def test_real_launch_path_uses_private_regular_files_not_pipes(self) -> None:
+        """Exercise the real-launch branch with a fully mocked, hardware-free child."""
+        with tempfile.TemporaryDirectory(prefix="autokernel-output-gate-") as temporary:
+            root = Path(temporary)
+            binary = root / "build/bin/llama-bench"
+            binary.parent.mkdir(parents=True)
+            binary.write_bytes(b"mock executable")
+            binary.chmod(0o700)
+            (binary.parent / "libggml-hip.so").write_bytes(b"mock hip")
+            model = root / "model.gguf"
+            model.write_bytes(b"mock model")
+            row = {
+                "backends": "ROCm", "gpu_info": "AMD Instinct MI210",
+                "build_commit": "mocked", "n_prompt": 512, "n_gen": 0,
+                "flash_attn": 1, "n_threads": 8, "n_batch": 512,
+                "n_ubatch": 512, "use_mmap": True, "no_op_offload": 0,
+                "split_mode": "layer", "no_kv_offload": False, "poll": 50,
+                "avg_ts": 104.0, "samples_ts": [100.0 + index for index in range(9)],
+            }
+            observed: dict[str, bool] = {}
+
+            class Child:
+                pid = 61234
+                returncode = None
+                polls = 0
+
+                def poll(self):
+                    self.polls += 1
+                    if self.polls == 1:
+                        return None
+                    self.returncode = 0
+                    return 0
+
+            child = Child()
+
+            def popen(_argv, **kwargs):
+                for label in ("stdout", "stderr"):
+                    carrier = kwargs[label]
+                    metadata = os.fstat(carrier.fileno())
+                    observed[label] = stat.S_ISREG(metadata.st_mode) and metadata.st_nlink == 1
+                    self.assertIsNot(carrier, subprocess.PIPE)
+                kwargs["stdout"].write(json.dumps(row) + "\n")
+                return child
+
+            with mock.patch.object(gpu_runner.subprocess, "Popen", side_effect=popen):
+                result = gpu_runner._invoke_locked(
+                    build=root / "build", model=model, seed=8613,
+                    baseline_vram=0, flash_attention=True, repetitions=9,
+                    expected_source_commit=None,
+                    reward_binary=binary, hip_library_dir=binary.parent,
+                    common_loader_dir=binary.parent, supervisor_root=root / "supervisor",
+                    kfd_pid_provider=lambda: (child.pid,), vram_reader=lambda: 64,
+                    pgid_provider=lambda _pid: child.pid, sleep=lambda _seconds: None,
+                )
+            self.assertEqual(observed, {"stdout": True, "stderr": True})
+            self.assertEqual(result["sample_count"], 9)
+            self.assertTrue(result["supervisor"]["temporary_output_cleaned"])
 
 
 if __name__ == "__main__":
