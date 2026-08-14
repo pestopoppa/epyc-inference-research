@@ -6,6 +6,7 @@ import inspect
 import io
 import json
 import os
+import shutil
 import unittest
 from unittest import mock
 from pathlib import Path
@@ -30,6 +31,13 @@ class DeploymentFactoryTests(unittest.TestCase):
                          "ggml/src/ggml-cuda/mmvq.cu"):
             path = production / relative
             path.write_text(f"sealed {relative}\n", encoding="utf-8")
+        for flavor in ("build", "build-hip"):
+            binary_dir = production / flavor / "bin"
+            binary_dir.mkdir(parents=True)
+            for name in ("llama-server", "llama-bench"):
+                shutil.copyfile("/bin/true", binary_dir / name)
+            if flavor == "build-hip":
+                shutil.copyfile("/bin/true", binary_dir / "libggml-hip.so.0")
         package = root / "codex-package"
         wrapper = package / "bin/codex.js"
         wrapper.parent.mkdir(parents=True)
@@ -66,7 +74,11 @@ class DeploymentFactoryTests(unittest.TestCase):
         registry_sha = F.static_template_registry_sha256()
         config = SimpleNamespace(
             config_sha256="c" * 64, production_path=production.resolve(),
-            production_head="0" * 40, state_root=state.resolve(),
+            production_head="0" * 40,
+            instrument_path=F.deployment.MEASUREMENT_INSTRUMENT_PATH,
+            instrument_head=F.deployment.MEASUREMENT_INSTRUMENT_HEAD,
+            instrument_branch=F.deployment.MEASUREMENT_INSTRUMENT_BRANCH,
+            state_root=state.resolve(),
             evidence_root=evidence.resolve(), operations_root=operations.resolve(),
             max_iterations=2, nomination_threshold=.03,
             actor_wrapper=immutable(wrapper), environment_profile_id="sealed-codex",
@@ -74,8 +86,11 @@ class DeploymentFactoryTests(unittest.TestCase):
             inference_window_lock=(locks / "window.lock").resolve(),
             model=immutable(model), workload=immutable(workload), runtime_config=immutable(runtime),
             policy=immutable(policy),
-            admission_policy=SimpleNamespace(value={"policy_sha256": "a" * 64,
-                "profiles": [{"id": F._LOAD_PROFILE_ID}], "examples": []}),
+            admission_policy=SimpleNamespace(value={"policy_sha256": "a" * 64},
+                corpus=SimpleNamespace(profiles=(SimpleNamespace(
+                    model_sha256=hashlib.sha256(model.read_bytes()).hexdigest(),
+                    model_path=str(model.resolve()), model_bytes=model.stat().st_size,
+                    workload="decode_tg128", calls_per_arm=9, device_id="mi210_0"),))),
             planner_context=SimpleNamespace(value={"context_sha256": "b" * 64}),
             source_builder_id="gpu-source-v1", evidence_plan_id="q5-onewave-v1",
             runner_args_id="qwen05b-tg128",
@@ -110,6 +125,8 @@ class DeploymentFactoryTests(unittest.TestCase):
                                     {F._LOAD_PROFILE_ID: site}, clear=True), \
                     mock.patch.object(F.codex_container_actor, "DOCKER_EXECUTABLE", str(docker)), \
                     mock.patch.object(F.codex_container_actor, "CA_CERTIFICATE_PATH", ca), \
+                    mock.patch.object(F, "_target_source_equality_receipt",
+                                      return_value=(root / "equality.json", "e" * 64)), \
                     mock.patch.object(F.codex_container_actor, "run_actor", side_effect=forbidden), \
                     mock.patch.object(F.controller.gpu_discovery, "run", side_effect=forbidden), \
                     mock.patch.object(F.controller, "run_controller", side_effect=forbidden), \
@@ -146,7 +163,9 @@ class DeploymentFactoryTests(unittest.TestCase):
             with mock.patch.dict(F.controller.gpu_discovery.SITE_LOAD_PROFILES,
                                  {F._LOAD_PROFILE_ID: site}, clear=True), \
                     mock.patch.object(F.codex_container_actor, "DOCKER_EXECUTABLE", str(docker)), \
-                    mock.patch.object(F.codex_container_actor, "CA_CERTIFICATE_PATH", ca):
+                    mock.patch.object(F.codex_container_actor, "CA_CERTIFICATE_PATH", ca), \
+                    mock.patch.object(F, "_target_source_equality_receipt",
+                                      return_value=(Path(temporary) / "equality.json", "e" * 64)):
                 graph = F.build_static_deployment_graph(config)
                 native, _host = F.codex_container_actor._codex_native_assets(
                     config.actor_wrapper.path)

@@ -5,13 +5,14 @@ bridge from those IDs to typed, registered Python construction seams.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import argparse
 import base64
 import hashlib
 import json
 import os
 import re
+import subprocess
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Callable, Mapping
@@ -173,10 +174,24 @@ class InferenceWindowLeaseBinding:
 
 @dataclass(frozen=True)
 class ProductionSnapshotBinding:
+    root: Path
     files: tuple[evidence.BoundInputFile, ...]
+    runtime_semantics: Mapping[str, Any]
+    runtime_semantics_sha256: str
     def __post_init__(self) -> None:
-        if not self.files or not all(isinstance(item, evidence.BoundInputFile) for item in self.files):
+        if (not self.root.is_absolute() or not self.files
+                or not all(isinstance(item, evidence.BoundInputFile) for item in self.files)):
             raise DeploymentFactoryError("production snapshot must contain typed frozen artifacts")
+        frozen = json.loads(json.dumps(dict(self.runtime_semantics), sort_keys=True))
+        if schemas.content_hash(frozen) != self.runtime_semantics_sha256:
+            raise DeploymentFactoryError("production runtime closure semantic hash mismatch")
+        object.__setattr__(self, "runtime_semantics", MappingProxyType(frozen))
+
+    def revalidate(self) -> None:
+        current = _production_runtime_snapshot(self.root)[1]
+        if (current != dict(self.runtime_semantics)
+                or schemas.content_hash(current) != self.runtime_semantics_sha256):
+            raise DeploymentFactoryError("frozen production runtime closure changed")
 
 
 @dataclass(frozen=True)
@@ -205,6 +220,14 @@ _ROCPROF_V1_SHA256 = "585e3e6034e3c0bd9e591f0aa72f6156686680911a0b47ed4ece3c9a83
 _ROCPROF_V1_INPUT = b"pmc:\n\ngpu:\nrange:\nkernel:\n"
 _ROCPROF_V1_PREFIX = ("--tool-version", "1", "--timestamp", "on",
                        "--ctx-wait", "on", "--heartbeat", "30", "-i")
+_CORRECTNESS_SUITE_SEED = 2026081301
+_INSTRUMENT_TEST_SOURCE_SHA256 = "6acd4bf95594d5797a54c912630ec56d3e89fcb3a3a43ca96f95152d77589db4"
+_TARGET_SOURCE_SHA256 = MappingProxyType({
+    "ggml/src/ggml-cuda/fattn.cu": "f6a61657387c153e88bde036e25684b512c7cf078b1d17c7e3b2d31ee73f28d3",
+    "ggml/src/ggml-cuda/mmvq.cu": "15d25d71c945de19e8efc9fbfc6b7e5e66f33bc7635f9dc648d9e1f231ba409e",
+    "ggml/src/ggml-cuda/rope.cu": "8286f7b57bb76ab490e05d42cb8262ad886b85a8fdaaef63d6538b7ff06940b2",
+    "ggml/src/ggml-cuda/norm.cu": "37e670ad50f8b0c3fb9acaaba54ad520b143b0e73994de5c10f8635e334ff0cd",
+})
 _SAFE_ACTOR_ENVIRONMENT = MappingProxyType({
     "PATH": "/usr/local/bin:/usr/bin:/bin",
     "HOME": "/home/node",
@@ -223,6 +246,51 @@ def _bound(path: Path, role: str) -> evidence.BoundInputFile:
     path = path.resolve(strict=True)
     return evidence.BoundInputFile(role=role, path=path,
                                    sha256=_digest_regular(path, role))
+
+
+def _production_runtime_snapshot(root: Path) -> tuple[tuple[evidence.BoundInputFile, ...], dict[str, Any]]:
+    """Bind CPU/HIP server+bench and their complete local runtime topology."""
+    files: dict[Path, evidence.BoundInputFile] = {}
+    semantics: dict[str, Any] = {"production_head": deployment.FROZEN_PRODUCTION_HEAD,
+                                 "closures": {}}
+    for flavor, required in (("build", frozenset()), ("build-hip", frozenset({"libggml-hip.so.0"}))):
+        directory = root / flavor / "bin"
+        todo = [directory / "llama-server", directory / "llama-bench",
+                *(directory / name for name in sorted(required))]
+        topology: dict[str, Any] = {}
+        seen_names: set[str] = set()
+        while todo:
+            lexical = todo.pop()
+            if lexical.name in seen_names:
+                continue
+            seen_names.add(lexical.name)
+            if not lexical.exists():
+                raise DeploymentFactoryError(f"production runtime closure lacks {lexical}")
+            resolved = lexical.resolve(strict=True)
+            files.setdefault(resolved, _bound(resolved, f"production-runtime:{flavor}:{lexical.name}"))
+            completed = subprocess.run(("/usr/bin/readelf", "-dW", str(resolved)),
+                                       check=False, stdin=subprocess.DEVNULL,
+                                       capture_output=True, text=True)
+            if completed.returncode:
+                raise DeploymentFactoryError(f"cannot inspect production runtime object {resolved}")
+            needed = sorted(re.findall(r"Shared library: \[(.+?)\]", completed.stdout))
+            local = []
+            for name in needed:
+                target = directory / name
+                if target.exists():
+                    local.append(name); todo.append(target)
+            topology[lexical.name] = {
+                "resolved_name": resolved.name,
+                "sha256": hashlib.sha256(resolved.read_bytes()).hexdigest(),
+                "needed_local": local,
+                "symlink": os.readlink(lexical) if lexical.is_symlink() else None}
+        if not required.issubset(seen_names):
+            raise DeploymentFactoryError(f"{flavor} production runtime lacks its reviewed backend")
+        semantics["closures"][flavor] = {
+            "configuration": "cpu" if flavor == "build" else "rocm-gfx90a",
+            "entrypoints": ["llama-bench", "llama-server"],
+            "topology": topology}
+    return tuple(files[path] for path in sorted(files)), semantics
 
 
 def _rocprof_v1_policy(config: deployment.DiscoveryDeployment) -> tuple[
@@ -245,22 +313,32 @@ def _rocprof_v1_policy(config: deployment.DiscoveryDeployment) -> tuple[
 
 def _template_registry() -> ExperimentTemplateRegistry:
     families = (
-        ("cuda-fattn-v1", "ggml/src/ggml-cuda/fattn.cuh",
-         "ggml_cuda_flash_attn_ext", ("ggml_cuda_flash_attn_ext",
-          "ggml_cuda_flash_attn_ext_supported", "ggml_cuda_flash_attn_ext_get_alloc_size"),
-         ("fattn", "flash_attn")),
+        ("cuda-fattn-v1", "ggml/src/ggml-cuda/fattn.cu",
+         "ggml_cuda_get_best_fattn_kernel", ("ggml_cuda_get_best_fattn_kernel",
+          "ggml_cuda_flash_attn_ext", "ggml_cuda_flash_attn_ext_vec",
+          "ggml_cuda_flash_attn_ext_mma_f16", "ggml_cuda_flash_attn_ext_supported",
+          "ggml_cuda_flash_attn_ext_get_alloc_size"),
+         ("fattn", "flash_attn"), "FLASH_ATTN_EXT", 2868,
+         ({"trace": "VEC selector", "file": "ggml/src/ggml-cuda/fattn.cu",
+           "symbol": "ggml_cuda_get_best_fattn_kernel"},
+          {"trace": "TILE geometry", "file": "ggml/src/ggml-cuda/fattn.cu",
+           "symbol": "ggml_cuda_get_best_fattn_kernel"})),
         ("cuda-mmvq-v1", "ggml/src/ggml-cuda/mmvq.cu",
          "ggml_cuda_op_mul_mat_vec_q", ("ggml_cuda_op_mul_mat_vec_q",
           "ggml_cuda_mul_mat_vec_q", "mul_mat_vec_q_switch_type",
           "mul_mat_vec_q_switch_ncols_dst", "mul_mat_vec_q_moe_launch",
           "mul_mat_vec_q_switch_fusion", "mul_mat_vec_q8_0_prefetch_launch"),
-         ("mmvq", "mul_mat_vec")),
+         ("mmvq", "mul_mat_vec"), "MUL_MAT", 1139,
+         tuple({"trace": f"{quant} dispatch", "file": "ggml/src/ggml-cuda/mmvq.cu",
+                "symbol": "mul_mat_vec_q_switch_type"} for quant in ("Q4", "Q5", "Q6"))),
         ("cuda-rope-v1", "ggml/src/ggml-cuda/rope.cu",
          "ggml_cuda_op_rope_impl", ("ggml_cuda_op_rope_impl", "ggml_cuda_op_rope",
           "ggml_cuda_op_rope_back", "ggml_cuda_op_rope_fused", "rope_norm",
           "rope_neox", "rope_multi", "rope_vision", "rope_norm_cuda",
           "rope_neox_cuda", "rope_multi_cuda", "rope_vision_cuda"),
-         ("rope",)),
+         ("rope",), "ROPE", 428,
+         ({"trace": "ROPE dispatch", "file": "ggml/src/ggml-cuda/rope.cu",
+           "symbol": "ggml_cuda_op_rope_impl"},)),
         ("cuda-norm-v1", "ggml/src/ggml-cuda/norm.cu",
          "ggml_cuda_op_rms_norm", ("ggml_cuda_op_norm", "ggml_cuda_op_group_norm",
           "ggml_cuda_op_rms_norm", "ggml_cuda_op_rms_norm_fused",
@@ -269,10 +347,12 @@ def _template_registry() -> ExperimentTemplateRegistry:
           "rms_norm_back_f32", "l2_norm_f32", "norm_f32_cuda",
           "group_norm_f32_cuda", "rms_norm_f32_cuda", "rms_norm_mul_f32_cuda",
           "rms_norm_back_f32_cuda", "l2_norm_f32_cuda"),
-         ("norm", "rms_norm", "group_norm", "l2_norm")),
+         ("norm", "rms_norm", "group_norm", "l2_norm"), "RMS_NORM", 21,
+         ({"trace": "RMS_NORM dispatch", "file": "ggml/src/ggml-cuda/norm.cu",
+           "symbol": "ggml_cuda_op_rms_norm"},)),
     )
     templates = {}
-    for template_id, path, symbol, symbols, prefixes in families:
+    for template_id, path, symbol, symbols, prefixes, correctness_op, cases, replays in families:
         family_pattern = "^(?:" + "|".join(re.escape(prefix) for prefix in prefixes) + ").*$"
         templates[template_id] = ExperimentTemplate(
             template_id=template_id, target_surface="gpu_decode", target_symbol=symbol,
@@ -286,6 +366,13 @@ def _template_registry() -> ExperimentTemplateRegistry:
             allowed_symbols={path: frozenset(symbols)},
             semantics={"workload": "decode_tg128", "calls_per_arm": 9,
                        "load_admission_profile_id": _LOAD_PROFILE_ID,
+                       "correctness_op": correctness_op,
+                       "expected_correctness_cases": cases,
+                       "suite_seed": _CORRECTNESS_SUITE_SEED,
+                       "test_source_commit": deployment.MEASUREMENT_INSTRUMENT_HEAD,
+                       "test_source_sha256": _INSTRUMENT_TEST_SOURCE_SHA256,
+                       "production_instrument_target_sha256": _TARGET_SOURCE_SHA256[path],
+                       "manual_replay_traces": list(replays),
                        "dispatch_bounds": {"calls": [1, 4096], "grid": [64, 1048576],
                                            "workgroup": [64, 1024], "lds_bytes": [0, 131072],
                                            "kernel_prefixes": list(prefixes)}})
@@ -307,6 +394,40 @@ def _template_registry() -> ExperimentTemplateRegistry:
     digest = hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":"),
                                        ensure_ascii=False, allow_nan=False).encode()).hexdigest()
     return ExperimentTemplateRegistry("gpu-source-templates-v1", digest, templates)
+
+
+def _target_source_equality_receipt(config: deployment.DiscoveryDeployment) -> tuple[Path, str]:
+    rows = {}
+    for relative, expected in sorted(_TARGET_SOURCE_SHA256.items()):
+        production_bytes = subprocess.run(
+            ("git", "-C", str(config.production_path), "show",
+             f"{config.production_head}:{relative}"), check=False,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        instrument_bytes = subprocess.run(
+            ("git", "-C", str(config.instrument_path), "show",
+             f"{config.instrument_head}:{relative}"), check=False,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        production_sha = hashlib.sha256(production_bytes.stdout).hexdigest()
+        instrument_sha = hashlib.sha256(instrument_bytes.stdout).hexdigest()
+        if (production_bytes.returncode or instrument_bytes.returncode
+                or production_sha != expected or instrument_sha != expected):
+            raise DeploymentFactoryError(
+                f"production/instrument reviewed target differs: {relative}")
+        rows[relative] = {"production_blob_sha256": production_sha,
+                          "instrument_blob_sha256": instrument_sha, "equal": True}
+    body = {"schema": "epyc.autokernel.instrument_target_equality.v1",
+            "production_commit": config.production_head,
+            "instrument_commit": config.instrument_head, "targets": rows}
+    body["receipt_sha256"] = schemas.content_hash(body)
+    raw = (json.dumps(body, sort_keys=True, indent=2) + "\n").encode()
+    path = config.state_root / "instrument-target-equality.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        if path.is_symlink() or path.read_bytes() != raw:
+            raise DeploymentFactoryError("instrument target equality receipt changed")
+    else:
+        path.write_bytes(raw)
+    return path.resolve(), hashlib.sha256(raw).hexdigest()
 
 
 def static_template_registry_sha256() -> str:
@@ -364,12 +485,102 @@ def _evidence_binding(config: deployment.DiscoveryDeployment) -> EvidencePlanBin
                 or _digest_regular(timestamp_input.path, "rocprof-v1 input")
                 != timestamp_input.sha256):
             raise DeploymentFactoryError("rocprof-v1 policy changed before evidence binding")
-        # The exact rocprof-v1 executable and input bytes are already resolved
-        # and re-hashed above.  The remaining refusal is narrower: the current
-        # builder checkpoint does not yet carry an exact reviewed correctness
-        # argv/case-count binding for each source family.
-        raise DeploymentFactoryError(
-            "checked-in exact correctness command policy is unavailable; refusing evidence execution")
+        correctness_tool = _bound(
+            build_.candidate_build / "bin" / "test-backend-ops", "executable")
+        # The reviewed instrument, not the planner, owns deterministic-suite
+        # capability.  Check the built tool before spending a device claim.
+        capability = subprocess.run((str(correctness_tool.path), "--help"),
+                                    check=False, stdin=subprocess.DEVNULL,
+                                    capture_output=True, text=True, env={
+                                        "HIP_VISIBLE_DEVICES": "0",
+                                        "LD_LIBRARY_PATH": (
+                                            f"{identities.candidate.hip_library.path.parent}:"
+                                            "/opt/rocm/lib"),
+                                        "PATH": "/opt/rocm/bin:/usr/bin:/bin",
+                                        "ROCM_PATH": "/opt/rocm"})
+        if (capability.returncode != 0
+                or "--suite-seed <u64>" not in capability.stdout):
+            raise DeploymentFactoryError(
+                "candidate correctness tool lacks reviewed deterministic suite support")
+        semantics = template.semantics
+        op = semantics.get("correctness_op")
+        cases = semantics.get("expected_correctness_cases")
+        seed = semantics.get("suite_seed")
+        if (not isinstance(op, str) or not isinstance(cases, int)
+                or not isinstance(seed, int)):
+            raise DeploymentFactoryError("template correctness semantics are malformed")
+        correctness_argv = (
+            str(correctness_tool.path), "test", "-o", op, "-b", "ROCm0", "-j", "1",
+            "--suite-seed", str(seed))
+        shared = identities.shared_runtime
+        reward_binary = shared.measurement_binary
+        profile_argv = (
+            str(profiler.path), *_ROCPROF_V1_PREFIX, str(timestamp_input.path),
+            "-o", evidence.ROCPROF_TIMESTAMP_OUTPUT,
+            "/usr/bin/taskset", "-c", "184-191", str(reward_binary.path),
+            "-m", str(config.model.path), "-p", "0", "-n", "128", "-r", "1",
+            "-ngl", "99", "-fa", "on", "-t", "8")
+        profiler_prefix = _ROCPROF_V1.parents[1]
+        common_environment = (
+            ("GGML_CUDA_DISABLE_GRAPHS", "1"), ("HIP_VISIBLE_DEVICES", "0"),
+            ("PATH", f"{profiler_prefix / 'bin'}:/opt/rocm/bin:/usr/bin:/bin"),
+            ("ROCM_PATH", "/opt/rocm"),
+            ("ROCP_METRICS", str(profiler_prefix / "lib/rocprofiler/metrics.xml")))
+        def profile_environment(hip: evidence.BoundInputFile) -> tuple[tuple[str, str], ...]:
+            return tuple(sorted((*common_environment, ("LD_LIBRARY_PATH",
+                f"{hip.path.parent}:{reward_binary.path.parent}:{profiler_prefix / 'lib'}:/opt/rocm/lib"))))
+        placeholder = evidence.BoundInputFile(
+            "execution_policy",
+            (config.operations_root / "materialization" / build_.operation_key
+             / "evidence-policy.json").resolve(), "0" * 64)
+        provisional = evidence.GpuSourceEvidencePlan(
+            campaign_id=candidate.source_manifest.campaign_id,
+            device_id=config.device_id,
+            manifest_sha256=candidate.source_manifest_sha256,
+            model_sha256=config.model.sha256,
+            workload_sha256=config.workload.sha256,
+            runtime_config_sha256=config.runtime_config.sha256,
+            candidate=build_.candidate_identity, anchor=build_.anchor_identity,
+            correctness_argv=correctness_argv,
+            correctness_summary_pattern=(
+                rf"(?s)(?P<passed>\d+)/(?P<total>\d+) tests passed.*"
+                rf"Backend ROCm0: .*OK.*1/1 backends passed"),
+            expected_correctness_cases=cases,
+            candidate_rocprof_argv=profile_argv, anchor_rocprof_argv=profile_argv,
+            dispatch=template.bind_dispatch(candidate.experiment_intent),
+            identity_files=identities, policy=placeholder,
+            correctness_inputs=(correctness_tool, identities.candidate.binary,
+                                identities.candidate.config, identities.candidate.linkage),
+            candidate_rocprof_inputs=(profiler, timestamp_input, reward_binary,
+                                      identities.model, identities.workload,
+                                      identities.runtime_config),
+            anchor_rocprof_inputs=(profiler, timestamp_input, reward_binary,
+                                   identities.model, identities.workload,
+                                   identities.runtime_config),
+            required_correctness_argv_paths=(correctness_tool.path,),
+            required_candidate_rocprof_argv_paths=(reward_binary.path, identities.model.path),
+            required_anchor_rocprof_argv_paths=(reward_binary.path, identities.model.path),
+            execution_cwd=build_.candidate_build.resolve(strict=True),
+            correctness_environment=tuple(sorted((
+                ("GGML_CUDA_DISABLE_GRAPHS", "1"), ("HIP_VISIBLE_DEVICES", "0"),
+                ("LD_LIBRARY_PATH",
+                 f"{identities.candidate.hip_library.path.parent}:/opt/rocm/lib"),
+                ("PATH", "/opt/rocm/bin:/usr/bin:/bin"), ("ROCM_PATH", "/opt/rocm")))),
+            candidate_rocprof_environment=profile_environment(shared.candidate_hip_library),
+            anchor_rocprof_environment=profile_environment(shared.anchor_hip_library),
+            shared_runtime=shared)
+        policy_path = placeholder.path
+        raw = json.dumps(evidence._policy_payload(provisional), sort_keys=True,
+                         separators=(",", ":")).encode()
+        if policy_path.exists():
+            if policy_path.is_symlink() or policy_path.read_bytes() != raw:
+                raise DeploymentFactoryError("sealed evidence policy changed for operation")
+        else:
+            policy_path.write_bytes(raw)
+        policy = evidence.BoundInputFile(
+            "execution_policy", policy_path,
+            hashlib.sha256(raw).hexdigest())
+        return replace(provisional, policy=policy)
     return EvidencePlanBinding(build=build)
 
 
@@ -381,12 +592,36 @@ def _runner_binding(config: deployment.DiscoveryDeployment) -> RunnerArgsBinding
         if operation_key != build_.operation_key or repetition not in {1, 2}:
             raise DeploymentFactoryError("runner operation identity differs from sealed build")
         output = config.operations_root / str(operation_key) / "runner" / f"s{repetition}"
+        decision = permit.get("load_admission")
+        if not isinstance(decision, Mapping):
+            raise DeploymentFactoryError("runner permit lacks sealed load-admission decision")
+        corpus = config.admission_policy.corpus
+        effective = schemas.content_hash({
+            "planner_context_sha256": config.planner_context.value["context_sha256"],
+            "admission_policy_sha256": corpus.policy_sha256,
+            "admission_policy_version": corpus.version})
+        gpu_load_admission.validate_decision_receipt(
+            decision, expected_policy_version=corpus.version,
+            expected_policy_sha256=corpus.policy_sha256,
+            expected_policy_file_sha256=corpus.file_sha256,
+            expected_effective_context_sha256=effective)
+        decision_path = output / "load-admission-decision.json"
+        decision_path.parent.mkdir(parents=True, exist_ok=True)
+        decision_raw = (json.dumps(dict(decision), sort_keys=True, indent=2) + "\n").encode()
+        if decision_path.exists():
+            if decision_path.is_symlink() or decision_path.read_bytes() != decision_raw:
+                raise DeploymentFactoryError("runner load-admission carrier changed")
+        else:
+            decision_path.write_bytes(decision_raw)
         argv = ["--anchor-build", str(build_.anchor_build), "--candidate-build", str(build_.candidate_build),
                 "--model", str(config.model.path), "--output-dir", str(output),
                 "--campaign-id", f"ak-discovery-{config.config_sha256[:16]}",
                 "--factor", "source_patch", "--calls", "9", "--workload", "decode_tg128",
-                "--allow-small-model-cpu-overlap", "--inference-window-lock", str(config.inference_window_lock),
-                "--load-admission-profile-id", _LOAD_PROFILE_ID, "--device-id", config.device_id,
+                "--inference-window-lock", str(config.inference_window_lock),
+                "--load-admission-decision", str(decision_path),
+                "--load-admission-policy", str(config.admission_policy.input.path),
+                "--load-admission-policy-sha256", config.admission_policy.input.sha256,
+                "--effective-context-sha256", effective, "--device-id", config.device_id,
                 "--measurement-binary", str(build_.measurement_binary),
                 "--common-loader-dir", str(build_.common_loader_dir),
                 "--anchor-loader-dir", str(build_.anchor_loader_dir),
@@ -409,30 +644,28 @@ def _static_registry(config: deployment.DiscoveryDeployment,
                 "production_snapshot": config.production_snapshot_id}
     if selected != dict(_STATIC_IDS):
         raise DeploymentFactoryError("deployment selected a non-allowlisted constructor ID")
-    site = controller.gpu_discovery.SITE_LOAD_PROFILES[_LOAD_PROFILE_ID]
-    if (site.model_sha256 != config.model.sha256
-            or site.model_path != str(config.model.path)
-            or site.model_bytes != config.model.path.stat().st_size
-            or site.device_id != config.device_id):
-        raise DeploymentFactoryError("configured model/device differs from checked-in admission profile")
-    profiles = config.admission_policy.value.get("profiles")
-    if not isinstance(profiles, list) or not any(
-            isinstance(row, Mapping) and row.get("id") == _LOAD_PROFILE_ID for row in profiles):
-        raise DeploymentFactoryError("sealed admission corpus omits the checked-in load profile")
+    profiles = [profile for profile in config.admission_policy.corpus.profiles
+                if (profile.model_sha256 == config.model.sha256
+                    and profile.model_path == str(config.model.path)
+                    and profile.model_bytes == config.model.path.stat().st_size
+                    and profile.workload == "decode_tg128" and profile.calls_per_arm == 9
+                    and profile.device_id == config.device_id)]
+    if len(profiles) != 1:
+        raise DeploymentFactoryError("sealed admission corpus lacks one exact runner profile")
     environment = EnvironmentProfile(_SAFE_ACTOR_ENVIRONMENT)
     source_builder = discovery_static_registry.StaticGpuSourceBuilder(
         production_path=config.production_path,
         production_branch=deployment.FROZEN_PRODUCTION_BRANCH,
+        instrument_path=config.instrument_path,
+        instrument_branch=config.instrument_branch,
         operations_root=config.operations_root,
         build_root=config.operations_root / "build",
         cmake_defines=(("GGML_HIP", "ON"), ("AMDGPU_TARGETS", "gfx90a"),
                        ("GGML_NATIVE", "OFF")))
-    snapshot_paths = (config.production_path / "CMakeLists.txt",
-                      config.production_path / "ggml/src/ggml-cuda/unary.cu",
-                      config.production_path / "ggml/src/ggml-cuda/mmvq.cu")
-    snapshot = ProductionSnapshotBinding(tuple(
-        _bound(path, f"production:{path.relative_to(config.production_path)}")
-        for path in snapshot_paths))
+    snapshot_files, snapshot_semantics = _production_runtime_snapshot(config.production_path)
+    snapshot = ProductionSnapshotBinding(
+        config.production_path, snapshot_files, snapshot_semantics,
+        schemas.content_hash(snapshot_semantics))
     return MappingProxyType({
         "environment_profile": MappingProxyType({_STATIC_IDS["environment_profile"]: environment}),
         "source_builder": MappingProxyType({_STATIC_IDS["source_builder"]:
@@ -446,7 +679,9 @@ def _static_registry(config: deployment.DiscoveryDeployment,
 
 
 def _seal_graph_receipt(config: deployment.DiscoveryDeployment,
-                        runtime: Mapping[str, Any], templates: ExperimentTemplateRegistry) -> tuple[Path, str]:
+                        runtime: Mapping[str, Any], templates: ExperimentTemplateRegistry,
+                        target_equality: tuple[Path, str],
+                        production_runtime_sha256: str) -> tuple[Path, str]:
     launcher_path = Path(codex_container_actor.__file__).resolve(strict=True)
     launcher_sha256 = _digest_regular(launcher_path, "Codex actor launcher")
     body = {"schema": "epyc.autokernel.static_discovery_graph.v1",
@@ -464,6 +699,17 @@ def _seal_graph_receipt(config: deployment.DiscoveryDeployment,
                                      "constructor": "codex_container_actor.build_docker_argv",
                                      "image_id": codex_container_actor.CONTAINER_IMAGE_ID},
             "environment_profile": dict(_SAFE_ACTOR_ENVIRONMENT),
+            "source_authority": {
+                "production_base_path": str(config.production_path),
+                "production_base_commit": config.production_head,
+                "instrument_repo_path": str(config.instrument_path),
+                "instrument_branch": config.instrument_branch,
+                "instrument_commit": config.instrument_head,
+                "instrument_diff_sha256": deployment.MEASUREMENT_INSTRUMENT_DIFF_SHA256,
+                "instrument_test_source_sha256": _INSTRUMENT_TEST_SOURCE_SHA256},
+            "instrument_target_equality": {"path": str(target_equality[0]),
+                                           "sha256": target_equality[1]},
+            "production_runtime_snapshot_sha256": production_runtime_sha256,
             "device_id": config.device_id,
             "claim_journal": str(config.operations_root / "claims" / "device.jsonl")}
     body["graph_sha256"] = schemas.content_hash(body)
@@ -484,8 +730,12 @@ def _seal_graph_receipt(config: deployment.DiscoveryDeployment,
 def build_static_deployment_graph(config: deployment.DiscoveryDeployment) -> StaticDeploymentGraph:
     """Construct the sole live graph.  No registry/executor object is accepted."""
     config.revalidate()
+    target_equality = _target_source_equality_receipt(config)
     templates = _template_registry()
     registry = _static_registry(config, templates)
+    production_snapshot = _require(
+        registry["production_snapshot"][_STATIC_IDS["production_snapshot"]],
+        ProductionSnapshotBinding, "production_snapshot")
     runtime = codex_container_actor.runtime_identity(config.actor_wrapper.path)
     launcher_sha256 = _digest_regular(Path(codex_container_actor.__file__).resolve(),
                                       "Codex actor launcher")
@@ -507,7 +757,9 @@ def build_static_deployment_graph(config: deployment.DiscoveryDeployment) -> Sta
         wrapper=config.actor_wrapper.path, environment=_SAFE_ACTOR_ENVIRONMENT,
         template_catalog=catalog, wrapper_sha256=config.actor_wrapper.sha256,
         runtime_identity=runtime, actor_launcher_sha256=launcher_sha256)
-    receipt, digest = _seal_graph_receipt(config, runtime, templates)
+    receipt, digest = _seal_graph_receipt(
+        config, runtime, templates, target_equality,
+        production_snapshot.runtime_semantics_sha256)
     return StaticDeploymentGraph(config=config, adapters=MappingProxyType(adapters),
                                  registry_ids=_STATIC_IDS, graph_receipt=receipt,
                                  graph_sha256=digest)
@@ -579,6 +831,9 @@ def _validate_source_scope(candidate: controller.PlannedCandidate,
     manifest = candidate.source_manifest
     if manifest.source_tree != "llama.cpp":
         raise DeploymentFactoryError("discovery source patch must target the allowlisted llama.cpp scope")
+    if template is None or len(manifest.declared_files) != 1:
+        raise DeploymentFactoryError(
+            "discovery intent must select one exact reviewed file")
     for path in manifest.declared_files:
         if (path.startswith(_FORBIDDEN_MUTATION_PREFIXES) or template is None
                 or path not in template.allowed_files
@@ -638,6 +893,7 @@ def materialize(config: deployment.DiscoveryDeployment, registry: Mapping[str, M
             production_base_commit=config.production_head,
             instrument_commit=config.instrument_commit)
         permit = {**permit, "instrument_branch": config.instrument_branch}
+        snapshot.revalidate()
         return source.build(candidate, authorization, permit)
     def plan(candidate: controller.PlannedCandidate, build_: controller.GpuSourceBuild):
         config.revalidate()
