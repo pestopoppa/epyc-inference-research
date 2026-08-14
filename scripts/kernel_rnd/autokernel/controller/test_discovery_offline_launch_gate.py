@@ -544,11 +544,13 @@ class OfflineLaunchGate(unittest.TestCase):
         anchor = SimpleNamespace(commit="a" * 40)
         manifest = SimpleNamespace(
             campaign_id="ak-builder-blackbox", candidate_id="akc-builder",
-            production_base_commit=anchor.commit, patch_bundle_sha256="b" * 64)
+            production_base_commit=anchor.commit,
+            patch_bundle_sha256=source_plan.manifest_sha256)
         candidate = SimpleNamespace(source_manifest=manifest,
                                     proposal={"proposal_id": "akp-builder"})
         applied = SimpleNamespace(
-            candidate_commit="c" * 40, diff_text="diff --git a/x b/x\n",
+            candidate_commit=source_plan.candidate.source_commit,
+            diff_text="diff --git a/x b/x\n",
             actual_files=("ggml/src/ggml-hip/kernel.cpp",),
             actual_hunk_ids=("h1",), actual_symbols=("kernel",),
             commit_argv=("git", "commit"), mutation_receipt={"ok": True})
