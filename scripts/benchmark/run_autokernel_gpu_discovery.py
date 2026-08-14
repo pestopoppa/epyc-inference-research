@@ -6,6 +6,7 @@ import argparse
 from dataclasses import dataclass
 import hashlib
 import json
+import math
 import os
 import subprocess
 import sys
@@ -13,6 +14,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from statistics import median
+from typing import Any, Callable, Mapping
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
@@ -136,6 +138,92 @@ def _runtime_maps_identity(*, runtime_root: Path, arm: str, model: Path,
     except (OSError, split_runtime_verifier.SplitRuntimeError) as exc:
         raise RuntimeError(f"runtime loader-map proof refused: {exc}") from exc
     return identity.to_dict()
+
+
+@dataclass(frozen=True)
+class LoadReadinessPolicy:
+    """Typed authority for releasing a serialized cold-load window.
+
+    A cold serialized arm may not release the shared CPU window merely because
+    a child started or because VRAM happened to rise.  This policy binds the
+    exact split-runtime closure, model and arm that must be witnessed in the
+    child's maps while it owns KFD residency.  There is intentionally no
+    fallback for a normal build without a split-runtime maps authority.
+    """
+
+    schema: str
+    runtime_root: Path
+    runtime_manifest_sha256: str
+    runtime_arm: str
+    model_path: Path
+    model_sha256: str
+    device_id: str
+    policy_sha256: str
+
+    @classmethod
+    def from_split_runtime(cls, *, runtime_root: Path, runtime_arm: str,
+                           model: Path, device_id: str = DEVICE_ID
+                           ) -> "LoadReadinessPolicy":
+        if runtime_arm not in {"anchor", "candidate"}:
+            raise RuntimeError("serialized cold load requires an exact runtime arm")
+        root = runtime_root.resolve(strict=True)
+        model_path = model.resolve(strict=True)
+        manifest = split_runtime_verifier.verify_split_runtime(root)
+        body = {
+            "schema": "epyc.autokernel.gpu_load_readiness_policy.v1",
+            "runtime_root": str(root),
+            "runtime_manifest_sha256": manifest.manifest_sha256,
+            "runtime_arm": runtime_arm,
+            "model_path": str(model_path),
+            "model_sha256": sha256_file(model_path),
+            "device_id": device_id,
+        }
+        return cls(
+            schema=body["schema"], runtime_root=root,
+            runtime_manifest_sha256=body["runtime_manifest_sha256"],
+            runtime_arm=runtime_arm, model_path=model_path,
+            model_sha256=body["model_sha256"], device_id=device_id,
+            policy_sha256=schemas.content_hash(body))
+
+    def __post_init__(self) -> None:
+        body = self.to_dict(include_hash=False)
+        if (self.schema != "epyc.autokernel.gpu_load_readiness_policy.v1"
+                or self.runtime_arm not in {"anchor", "candidate"}
+                or self.device_id != DEVICE_ID
+                or not self.runtime_root.is_absolute() or not self.model_path.is_absolute()
+                or len(self.runtime_manifest_sha256) != 64
+                or len(self.model_sha256) != 64
+                or self.policy_sha256 != schemas.content_hash(body)):
+            raise RuntimeError("serialized load readiness policy is malformed")
+
+    def to_dict(self, *, include_hash: bool = True) -> dict[str, str]:
+        body = {
+            "schema": self.schema,
+            "runtime_root": str(self.runtime_root),
+            "runtime_manifest_sha256": self.runtime_manifest_sha256,
+            "runtime_arm": self.runtime_arm,
+            "model_path": str(self.model_path),
+            "model_sha256": self.model_sha256,
+            "device_id": self.device_id,
+        }
+        if include_hash:
+            body["policy_sha256"] = self.policy_sha256
+        return body
+
+    def validate_witness(self, witness: Mapping[str, Any]) -> None:
+        if not isinstance(witness, Mapping):
+            raise RuntimeError("serialized load readiness witness is absent")
+        expected = {
+            "schema": split_runtime_verifier.MAPS_SCHEMA,
+            "runtime_manifest_sha256": self.runtime_manifest_sha256,
+            "arm": self.runtime_arm,
+            "model_path": str(self.model_path),
+            "model_sha256": self.model_sha256,
+            "device_id": self.device_id,
+        }
+        observed = {key: witness.get(key) for key in expected}
+        if observed != expected or not isinstance(witness.get("identity_sha256"), str):
+            raise RuntimeError("serialized load readiness witness does not bind the sealed runtime/model")
 
 
 class BandwidthDutyCycleBudget:
@@ -277,8 +365,17 @@ def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
            host_bandwidth_bytes_s: float = DEFAULT_HOST_BANDWIDTH_BYTES_S,
            host_transfer_fraction: float = DEFAULT_HOST_TRANSFER_FRACTION,
            cold_loads_in_interval: int = 1,
-           sealed_load_decision: dict | None = None) -> dict:
-    """Run one model load/measurement with the ratified discovery overlap policy."""
+           sealed_load_decision: dict | None = None,
+           repetitions: int = 1,
+           load_readiness_policy: LoadReadinessPolicy | None = None,
+           process_factory: Callable[..., Any] | None = None,
+           kfd_pid_provider: Callable[[], tuple[int, ...]] | None = None,
+           vram_reader: Callable[[], int] | None = None,
+           pgid_provider: Callable[[int], int] | None = None,
+           sleep: Callable[[float], None] | None = None) -> dict:
+    """Run one cold load and all sealed repetitions for one discovery arm."""
+    if isinstance(repetitions, bool) or not isinstance(repetitions, int) or repetitions < 1:
+        raise RuntimeError("GPU discovery repetitions must be a positive integer")
     if (not isinstance(sealed_load_decision, dict)
             or sealed_load_decision.get("mode") not in {"cold_overlap", "cold_serialized"}):
         raise RuntimeError("nonpersistent runner requires a sealed cold load decision")
@@ -308,7 +405,9 @@ def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
             batch=batch, mmap=mmap, no_op_offload=no_op_offload,
             split_mode=split_mode, no_kv_offload=no_kv_offload, poll=poll,
             reward_binary=reward_binary, hip_library_dir=hip_library_dir, common_loader_dir=common_loader_dir,
-            runtime_arm=runtime_arm)
+            runtime_arm=runtime_arm, repetitions=repetitions,
+            process_factory=process_factory, kfd_pid_provider=kfd_pid_provider,
+            vram_reader=vram_reader, pgid_provider=pgid_provider, sleep=sleep)
         # Deliberately no shared CPU inference-window lock here.  The sealed
         # admission receipt, not model size or caller flags, admits this noise.
         result["inference_call_window"] = None
@@ -322,53 +421,85 @@ def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
             "concurrent_claims": concurrent,
             "promotion_claim": False,
         }
+        result["load_admission_decision"] = sealed_load_decision
+        result["load_readiness_transition"] = {
+            "schema": "epyc.autokernel.gpu_load_readiness_transition.v1",
+            "status": "not_required_cold_overlap",
+            "lock_released_before_measurement": True,
+        }
         return result
-    # Non-overlap/large cold load must use the sealed configured window.  This
-    # process exits after one measurement, so it cannot claim a hot resident
-    # continuation; callers must explicitly re-admit every fresh load.
+    # JSONL is emitted only after llama-bench completes its repetitions.  It
+    # cannot prove a point *before* the first timed sample, so absent an
+    # explicit instrument ready/continue barrier we conservatively retain the
+    # serialized lock for the complete one-load batched process.
+    if load_readiness_policy is not None and (
+            load_readiness_policy.model_path != model.resolve()
+            or load_readiness_policy.model_sha256 != sha256_file(model)
+            or load_readiness_policy.runtime_arm != runtime_arm):
+        raise RuntimeError("serialized load readiness policy does not bind this arm/model")
     window = (inference_window.InferenceCallWindow(inference_window_lock, timeout_s=600.0)
               if inference_window_lock is not None else MODEL_CALL_WINDOW)
-    with window.hold() as configured_lease:
-        owned_claim = None
+    configured_lease = window.acquire()
+    owned_claim = None
+    coverage: Any = None
+    coverage_receipt: dict[str, Any] | None = None
+    transition: dict[str, Any] = {
+        "schema": "epyc.autokernel.gpu_load_readiness_transition.v1",
+        "status": "instrument_barrier_unavailable_held_through_process",
+        "lock_released_before_measurement": False,
+        "required_instrument_capability": "autokernel-ready-continue-v1",
+        "readiness_policy": (None if load_readiness_policy is None
+                             else load_readiness_policy.to_dict()),
+    }
+
+    try:
         try:
+            owned_claim = cpu_region_claim.acquire_cpu_region_claim(
+                CPU_LIST, purpose="AutoKernel GPU cold-load helper window",
+                campaign_id=campaign_id, journal=cpu_journal,
+                role="autokernel-gpu-discovery", timeout_s=0, max_hold_s=300)
+            coverage = owned_claim
+            coverage_receipt = {
+                "schema": "epyc.autokernel.owned_cpu_coverage.v1",
+                "borrowed": False,
+                "claim": owned_claim.receipt().to_dict(),
+            }
+        except cpu_region_claim.CpuRegionClaimTimeout:
+            coverage = inference_window.borrow_windowed_cpu_coverage(CPU_LIST)
+            coverage_receipt = coverage.to_dict()
+        result = _invoke_locked(
+            build=build, model=model, seed=seed, baseline_vram=baseline_vram,
+            expected_source_commit=expected_source_commit,
+            flash_attention=flash_attention, prompt_tokens=prompt_tokens,
+            generation_tokens=generation_tokens, threads=threads, ubatch=ubatch,
+            batch=batch, mmap=mmap, no_op_offload=no_op_offload,
+            split_mode=split_mode, no_kv_offload=no_kv_offload, poll=poll,
+            reward_binary=reward_binary, hip_library_dir=hip_library_dir,
+            common_loader_dir=common_loader_dir, runtime_arm=runtime_arm,
+            repetitions=repetitions, process_factory=process_factory,
+            kfd_pid_provider=kfd_pid_provider, vram_reader=vram_reader,
+            pgid_provider=pgid_provider, sleep=sleep)
+        if getattr(coverage, "borrowed", False):
+            coverage.validate()
+    finally:
+        if owned_claim is not None:
             try:
-                owned_claim = cpu_region_claim.acquire_cpu_region_claim(
-                    CPU_LIST, purpose="AutoKernel GPU model-call helper window",
-                    campaign_id=campaign_id, journal=cpu_journal,
-                    role="autokernel-gpu-discovery", timeout_s=0, max_hold_s=300)
-                coverage = owned_claim
-                coverage_receipt = {
-                    "schema": "epyc.autokernel.owned_cpu_coverage.v1",
-                    "borrowed": False,
-                    "claim": owned_claim.receipt().to_dict(),
-                }
-            except cpu_region_claim.CpuRegionClaimTimeout:
-                coverage = inference_window.borrow_windowed_cpu_coverage(CPU_LIST)
-                coverage_receipt = coverage.to_dict()
-            result = _invoke_locked(
-                build=build, model=model, seed=seed, baseline_vram=baseline_vram,
-                expected_source_commit=expected_source_commit,
-                flash_attention=flash_attention, prompt_tokens=prompt_tokens,
-                generation_tokens=generation_tokens, threads=threads, ubatch=ubatch,
-                batch=batch, mmap=mmap, no_op_offload=no_op_offload,
-                split_mode=split_mode, no_kv_offload=no_kv_offload, poll=poll,
-                reward_binary=reward_binary, hip_library_dir=hip_library_dir, common_loader_dir=common_loader_dir,
-                runtime_arm=runtime_arm)
-            if getattr(coverage, "borrowed", False):
-                coverage.validate()
-        finally:
-            if owned_claim is not None:
                 owned_claim.release()
+            finally:
+                owned_claim = None
+        configured_lease.release()
     result["inference_call_window"] = {
         "schema": "epyc.autokernel.inference_call_window.v1",
         "lock_path": str(configured_lease.path),
         "waited_s": configured_lease.waited_s,
-        "scope": "model_load_and_inference_only",
+        "scope": "one_load_and_all_batched_measurements_no_ready_barrier",
+        "released": configured_lease.held is False,
     }
-    result["cpu_coverage"] = coverage_receipt
+    result["cpu_coverage"] = coverage_receipt or {}
     result["load_mode"] = "cold_serialized"
-    if sealed_load_decision is not None:
-        result["site_load_decision"] = sealed_load_decision
+    result["site_load_decision"] = sealed_load_decision
+    result["load_admission_decision"] = sealed_load_decision
+    result["load_readiness_transition"] = transition
     return result
 
 
@@ -380,7 +511,23 @@ def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
                    no_op_offload: bool = False, split_mode: str = "layer",
                    no_kv_offload: bool = False, poll: int = 50,
                    reward_binary: Path | None = None, hip_library_dir: Path | None = None,
-                   common_loader_dir: Path | None = None, runtime_arm: str | None = None) -> dict:
+                   common_loader_dir: Path | None = None, runtime_arm: str | None = None,
+                   repetitions: int = 1,
+                   readiness_policy: LoadReadinessPolicy | None = None,
+                   on_load_ready: Callable[[Mapping[str, Any]], None] | None = None,
+                   process_factory: Callable[..., Any] | None = None,
+                   kfd_pid_provider: Callable[[], tuple[int, ...]] | None = None,
+                   vram_reader: Callable[[], int] | None = None,
+                   pgid_provider: Callable[[int], int] | None = None,
+                   sleep: Callable[[float], None] | None = None) -> dict:
+    if isinstance(repetitions, bool) or not isinstance(repetitions, int) or repetitions < 1:
+        raise RuntimeError("GPU discovery repetitions must be a positive integer")
+    if readiness_policy is not None and (
+            runtime_arm != readiness_policy.runtime_arm
+            or model.resolve() != readiness_policy.model_path
+            or sha256_file(model) != readiness_policy.model_sha256
+            or common_loader_dir is None or hip_library_dir is None):
+        raise RuntimeError("serialized readiness policy lacks its exact runtime/model closure")
     binary = (reward_binary or build / "bin" / "llama-bench").resolve()
     loader_dir = (hip_library_dir or build / "bin").resolve()
     common_dir = (common_loader_dir or binary.parent).resolve()
@@ -390,7 +537,7 @@ def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
         raise RuntimeError("sealed HIP loader directory lacks libggml-hip.so")
     argv = ("/usr/bin/taskset", "-c", CPU_LIST, "/usr/bin/numactl", "--interleave=all", str(binary),
             "-m", str(model), "-p", str(prompt_tokens), "-n", str(generation_tokens),
-            "-r", "1", "-ngl", "99",
+            "-r", str(repetitions), "-ngl", "99",
             "-fa", "on" if flash_attention else "off",
             "-t", str(threads), "-b", str(batch), "-ub", str(ubatch),
             "-mmp", "1" if mmap else "0",
@@ -402,29 +549,38 @@ def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
         raise RuntimeError("sealed common reward loader directory is absent")
     env = {"PATH": "/usr/bin:/bin",
            "LD_LIBRARY_PATH": f"{loader_dir}:{common_dir}:/opt/rocm/lib"}
-    process = subprocess.Popen(argv, env=env, stdin=subprocess.DEVNULL,
-                               stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                               text=True, start_new_session=True)
+    factory = subprocess.Popen if process_factory is None else process_factory
+    kfd_provider = _kfd_pids if kfd_pid_provider is None else kfd_pid_provider
+    pgid = os.getpgid if pgid_provider is None else pgid_provider
+    pause = time.sleep if sleep is None else sleep
+    def read_vram() -> int:
+        if vram_reader is not None:
+            return vram_reader()
+        try:
+            return int(VRAM_USED.read_text(encoding="utf-8").strip())
+        except (OSError, ValueError) as exc:
+            raise RuntimeError(f"VRAM residency counter unreadable: {exc}") from exc
+
+    process = factory(argv, env=env, stdin=subprocess.DEVNULL,
+                      stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                      text=True, start_new_session=True)
     samples = []
     maps_identity = None
-    while process.poll() is None:
-        kfd = _kfd_pids()
+    try:
+      while process.poll() is None:
+        kfd = kfd_provider()
         try:
-            vram = int(VRAM_USED.read_text(encoding="utf-8").strip())
-        except (OSError, ValueError) as exc:
-            process.terminate()
-            process.wait(timeout=10)
-            raise RuntimeError(f"VRAM residency counter unreadable: {exc}") from exc
+            vram = read_vram()
+        except BaseException:
+            raise
         owned = []
         foreign = []
         for pid in kfd:
             try:
-                (owned if os.getpgid(pid) == process.pid else foreign).append(pid)
+                (owned if pgid(pid) == process.pid else foreign).append(pid)
             except (ProcessLookupError, PermissionError):
                 continue
         if foreign:
-            process.terminate()
-            process.wait(timeout=10)
             raise RuntimeError(f"foreign KFD inference overlapped discovery: {foreign}")
         samples.append({"offset_s": time.monotonic(), "kfd_pids": list(kfd),
                         "owned_kfd_pids": owned, "vram_used_bytes": vram})
@@ -433,14 +589,32 @@ def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
                 and hip_library_dir is not None):
             maps_identity = _runtime_maps_identity(runtime_root=common_loader_dir.parent,
                 arm=runtime_arm, model=model, kfd_pid=owned[0])
-        time.sleep(0.05)
-    stdout, stderr = process.communicate(timeout=10)
+        pause(0.05)
+      stdout, stderr = process.communicate(timeout=10)
+    except BaseException:
+        try:
+            if process.poll() is None:
+                process.terminate()
+                process.wait(timeout=10)
+        except BaseException:
+            pass
+        raise
     if process.returncode != 0:
         raise RuntimeError(f"GPU discovery invocation exited {process.returncode}: {stderr[-2000:]}")
     rows = [json.loads(line) for line in stdout.splitlines() if line.strip()]
     if len(rows) != 1:
         raise RuntimeError(f"GPU discovery invocation emitted {len(rows)} rows")
     row = rows[0]
+    raw_samples = row.get("samples_ts")
+    if (not isinstance(raw_samples, list) or len(raw_samples) != repetitions
+            or any(isinstance(value, bool) or not isinstance(value, (int, float))
+                   or not math.isfinite(float(value)) for value in raw_samples)):
+        raise RuntimeError(
+            f"GPU discovery invocation requires exactly {repetitions} finite raw samples")
+    metric = row.get("avg_ts")
+    if (isinstance(metric, bool) or not isinstance(metric, (int, float))
+            or not math.isfinite(float(metric))):
+        raise RuntimeError("GPU discovery invocation emitted a non-finite reward metric")
     if row.get("backends") != "ROCm" or row.get("gpu_info") != "AMD Instinct MI210":
         raise RuntimeError("GPU discovery invocation did not report MI210 ROCm execution")
     reported_commit = str(row.get("build_commit", ""))
@@ -472,7 +646,8 @@ def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
             "hip_library": str(loader_dir / "libggml-hip.so"),
             "hip_library_sha256": sha256_file(loader_dir / "libggml-hip.so"),
             "common_loader_dir": str(common_dir),
-            "metric": float(row["avg_ts"]), "raw_row": row,
+            "metric": float(metric), "samples": [float(value) for value in raw_samples],
+            "sample_count": repetitions, "seed": seed, "raw_row": row,
             "stderr_tail": stderr[-2000:], "residency": samples,
             "runtime_maps_identity": maps_identity,
             "hip_residency_proved": True}
@@ -710,7 +885,27 @@ def preflight(args: argparse.Namespace) -> dict:
         "invocations": {"anchor": args.calls, "candidate": args.calls},
         "inference_executed": False,
         "runtime_arms": runtime_arms,
+        "serialized_readiness": {
+            "required": transfer["mode"] == "cold_serialized",
+            "proof": "owned_kfd+positive_vram+exact_split_runtime_maps",
+            "available": runtime_arms is not None,
+        },
     }
+
+
+def _readiness_policy_for_arm(*, sealed: Mapping[str, Any], arm: str,
+                              model: Path) -> LoadReadinessPolicy | None:
+    """Materialize the only authority permitted to release a cold-load lock."""
+    runtime_arms = sealed.get("runtime_arms")
+    if runtime_arms is None:
+        return None
+    if not isinstance(runtime_arms, Mapping):
+        raise RuntimeError("sealed shared runtime closure is malformed")
+    common = runtime_arms.get("common_loader_dir")
+    if not isinstance(common, str):
+        raise RuntimeError("sealed shared runtime closure lacks its common loader")
+    return LoadReadinessPolicy.from_split_runtime(
+        runtime_root=Path(common).resolve().parent, runtime_arm=arm, model=model)
 
 
 def run(args: argparse.Namespace) -> dict:
@@ -725,6 +920,10 @@ def run(args: argparse.Namespace) -> dict:
     anchor_identity = sealed["anchor_identity"]
     candidate_identity = sealed["candidate_identity"]
     sole_factor = sealed["sole_factor"]
+    anchor_readiness = _readiness_policy_for_arm(
+        sealed=sealed, arm="anchor", model=model)
+    candidate_readiness = _readiness_policy_for_arm(
+        sealed=sealed, arm="candidate", model=model)
     if _kfd_pids():
         raise RuntimeError("MI210 already has KFD users")
     baseline_vram = int(VRAM_USED.read_text(encoding="utf-8").strip())
@@ -760,7 +959,7 @@ def run(args: argparse.Namespace) -> dict:
         atomic_json(live_governance_path, live_governance)
         sampler = device_sampler.RocmSmiSampler(device_index=0, interval_s=0.250).start()
         anchor_runs = [invoke(
-            build=anchor_build, model=model, seed=args.seed + i,
+            build=anchor_build, model=model, seed=args.seed,
             expected_source_commit=(None if sealed["runtime_arms"] else anchor_identity["source_commit"]),
             baseline_vram=baseline_vram,
             flash_attention=sealed["anchor_flash_attention"],
@@ -782,8 +981,9 @@ def run(args: argparse.Namespace) -> dict:
                              if sealed["runtime_arms"] else None),
             common_loader_dir=(Path(sealed["runtime_arms"]["common_loader_dir"])
                                if sealed["runtime_arms"] else None),
-            runtime_arm=("anchor" if sealed["runtime_arms"] else None))
-            for i in range(args.calls)]
+            runtime_arm=("anchor" if sealed["runtime_arms"] else None),
+            repetitions=args.calls, load_readiness_policy=anchor_readiness)
+            for _ in range(1)]
         bank_body = {
             "schema": SCHEMA_BANK, "campaign_id": args.campaign_id,
             "status": "complete", "started_at": started_at, "ended_at": utc_now(),
@@ -799,14 +999,15 @@ def run(args: argparse.Namespace) -> dict:
             "anchor_invocations": args.calls,
             "anchor_identity": anchor_identity,
             "candidate_identity": candidate_identity,
-            "anchor_samples": [run["metric"] for run in anchor_runs],
+            "anchor_processes": 1,
+            "anchor_samples": [sample for run in anchor_runs for sample in run["samples"]],
             "anchor_runs": anchor_runs,
         }
         bank = gpu_beliefs.attach_baseline_beliefs(
             bank_body, producer_path=Path(__file__).resolve())
         atomic_json(out / "baseline-bank.json", bank)
         candidate_runs = [invoke(
-            build=candidate_build, model=model, seed=args.seed + args.calls + i,
+            build=candidate_build, model=model, seed=args.seed + args.calls,
             expected_source_commit=(None if sealed["runtime_arms"] else candidate_identity["source_commit"]),
             baseline_vram=baseline_vram,
             flash_attention=sealed["candidate_flash_attention"],
@@ -828,10 +1029,11 @@ def run(args: argparse.Namespace) -> dict:
                              if sealed["runtime_arms"] else None),
             common_loader_dir=(Path(sealed["runtime_arms"]["common_loader_dir"])
                                if sealed["runtime_arms"] else None),
-            runtime_arm=("candidate" if sealed["runtime_arms"] else None))
-            for i in range(args.calls)]
+            runtime_arm=("candidate" if sealed["runtime_arms"] else None),
+            repetitions=args.calls, load_readiness_policy=candidate_readiness)
+            for _ in range(1)]
         center = sum(bank["anchor_samples"]) / len(bank["anchor_samples"])
-        values = [run["metric"] for run in candidate_runs]
+        values = [sample for run in candidate_runs for sample in run["samples"]]
         effects = [(value - center) / center for value in values]
         numeric = sampler.stop().to_dict()
         sampler = None
@@ -843,6 +1045,7 @@ def run(args: argparse.Namespace) -> dict:
             "nomination": "top_k_candidate_only_not_a_keep",
             "baseline_sha256": bank["baseline_sha256"],
             "anchor_invocations": args.calls, "candidate_invocations": args.calls,
+            "anchor_processes": 1, "candidate_processes": 1,
             "baseline_center": center, "candidate_samples": values,
             "relative_effects": effects, "median_relative": median(effects),
             "host_noise_policy": "ordinary_host_activity_recorded_not_blocking",
