@@ -252,6 +252,21 @@ class StaticGpuSourceBuilder:
     build_root: Path
     cmake_defines: tuple[tuple[str, str], ...]
 
+    def _sealed_cmake_defines(self) -> tuple[tuple[str, str], ...]:
+        required = {
+            "CMAKE_BUILD_RPATH_USE_ORIGIN": "ON",
+            "CMAKE_BUILD_RPATH": "$ORIGIN;/opt/rocm/lib",
+            "CMAKE_INSTALL_RPATH": "$ORIGIN;/opt/rocm/lib",
+        }
+        supplied = dict(self.cmake_defines)
+        if len(supplied) != len(self.cmake_defines):
+            raise StaticRegistryError("duplicate CMake definitions are not a sealed build contract")
+        for key, value in required.items():
+            if key in supplied and supplied[key] != value:
+                raise StaticRegistryError(f"source build may not override sealed {key}")
+            supplied[key] = value
+        return tuple(sorted(supplied.items()))
+
     def build(self, candidate: controller.PlannedCandidate, _authorization: Any,
               _permit: Mapping[str, Any]) -> controller.GpuSourceBuild:
         operation_key = _permit.get("operation_key")
@@ -291,7 +306,7 @@ class StaticGpuSourceBuilder:
                                                        root=build_root)
                 plans.append((ident, snapshot, build_dir, worktree.BuildPlan(
                     source_root=snapshot.path, build_dir=build_dir, actor_worktree=actor.path,
-                    parallelism=parallel, targets=("llama-bench", "test-backend-ops"), cmake_defines=self.cmake_defines)))
+                    parallelism=parallel, targets=("llama-bench", "test-backend-ops"), cmake_defines=self._sealed_cmake_defines())))
             results = []
             for ident, snapshot, build_dir, plan in plans:
                 log = (self.operations_root / "build-logs" / operation_key
