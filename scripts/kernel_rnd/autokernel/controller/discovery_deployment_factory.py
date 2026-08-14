@@ -1625,7 +1625,13 @@ class GpuDiscoveryLease:
 
     @staticmethod
     def _passed(value: object) -> bool:
-        return value is True or getattr(value, "status", None) == schemas.PASS
+        if isinstance(value, bool):
+            return value
+        passed = getattr(value, "passed", None)
+        if isinstance(passed, bool):
+            return passed
+        return (getattr(value, "outcome", None) == schemas.PASS
+                or getattr(value, "status", None) == schemas.PASS)
 
     def _claim(self, operation_key: str, *, purpose: str, max_hold_s: float) -> Any:
         if not isinstance(operation_key, str) or not controller.HASH.fullmatch(operation_key):

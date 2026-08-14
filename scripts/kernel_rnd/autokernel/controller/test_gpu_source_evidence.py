@@ -310,6 +310,12 @@ def runtime_maps_for(current: E.GpuSourceEvidencePlan, arm: str) -> dict:
 
 
 class GpuSourceEvidenceTests(unittest.TestCase):
+    def test_claim_checker_uses_schema_check_outcome(self):
+        self.assertTrue(E._check_result_passed(E.schemas.Check(E.schemas.PASS)))
+        self.assertFalse(E._check_result_passed(E.schemas.Check(E.schemas.FAIL)))
+        self.assertFalse(E._check_result_passed(
+            E.schemas.Check(E.schemas.COULD_NOT_CHECK)))
+
     @staticmethod
     def _dispatch(kernel: str, grid: int, workgroup: int, lds: int) -> dict:
         return {"kernel": kernel, "grid": grid, "workgroup": workgroup,

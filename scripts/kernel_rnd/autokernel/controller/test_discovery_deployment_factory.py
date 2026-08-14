@@ -436,7 +436,7 @@ class DeploymentFactoryTests(unittest.TestCase):
                 admitted = F.GpuDiscoveryLease(
                     config=config, mode="allowed_discovery_noise", claim_journal=mock.Mock(),
                     claim_acquirer=lambda *_args, **_kwargs: Claim(),
-                    claim_verifier=lambda _receipt: True).admit(
+                    claim_verifier=lambda _receipt: F.schemas.Check(F.schemas.PASS)).admit(
                         mock.Mock(source_manifest=mock.Mock(campaign_id="ak-test")),
                         operation_key="e" * 64)
         self.assertTrue(admitted["admitted"])

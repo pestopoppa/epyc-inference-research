@@ -899,7 +899,11 @@ def _receipt_dict(value: object, label: str) -> dict[str, Any]:
 def _check_result_passed(value: object) -> bool:
     if isinstance(value, bool):
         return value
-    return getattr(value, "status", None) == schemas.PASS
+    passed = getattr(value, "passed", None)
+    if isinstance(passed, bool):
+        return passed
+    return (getattr(value, "outcome", None) == schemas.PASS
+            or getattr(value, "status", None) == schemas.PASS)
 
 
 def _default_claim_verifier(receipt: Mapping[str, Any]) -> bool:
