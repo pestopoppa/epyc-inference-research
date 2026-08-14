@@ -34,6 +34,7 @@ from . import gpu_load_admission
 from . import gpu_residency_sampler
 from . import codex_container_actor
 from . import claude_fable5_critic_actor
+from . import discovery_telemetry
 from . import discovery_static_registry
 from . import gpu_source_proofs
 from scripts.benchmark import autokernel_gpu_discovery_beliefs
@@ -234,6 +235,7 @@ def _execution_module_identity() -> dict[str, dict[str, str]]:
     modules = {
         "deployment_factory": Path(__file__).resolve(strict=True),
         "discovery_controller": Path(controller.__file__).resolve(strict=True),
+        "discovery_telemetry": Path(discovery_telemetry.__file__).resolve(strict=True),
         "gpu_discovery_runner": Path(controller.gpu_discovery.__file__).resolve(strict=True),
         "gpu_source_adapter": Path(gpu_source_adapter.__file__).resolve(strict=True),
         "discovery_static_registry": Path(discovery_static_registry.__file__).resolve(strict=True),
@@ -1574,19 +1576,22 @@ def build_static_deployment_graph(config: deployment.DiscoveryDeployment) -> Sta
                            runner_attest=_module_attestor(execution_modules))
     # Replace generic actor instances with byte/runtime-pinned equivalents.
     catalog = adapters["planner"].template_catalog
+    telemetry = discovery_telemetry.DiscoveryTelemetry(config.operations_root / "live")
     adapters = dict(adapters)
     adapters["planner"] = controller.CodexPlanner(
         wrapper=config.actor_wrapper.path, environment=_SAFE_ACTOR_ENVIRONMENT,
         template_catalog=catalog, reviewed_sources=source_package,
         wrapper_sha256=config.actor_wrapper.sha256,
         runtime_identity=planner_runtime,
-        actor_launcher_sha256=planner_launcher_sha256)
+        actor_launcher_sha256=planner_launcher_sha256,
+        telemetry=telemetry)
     adapters["critic"] = controller.ClaudeCritic(
         wrapper=config.critic_wrapper.path, environment=_SAFE_CRITIC_ENVIRONMENT,
         template_catalog=catalog, reviewed_sources=source_package,
         wrapper_sha256=config.critic_wrapper.sha256,
         runtime_identity=critic_runtime,
-        actor_launcher_sha256=critic_launcher_sha256)
+        actor_launcher_sha256=critic_launcher_sha256,
+        telemetry=telemetry)
     receipt, digest = _seal_graph_receipt(
         config, planner_runtime, critic_runtime, templates,
         target_equality, instrument_review,
