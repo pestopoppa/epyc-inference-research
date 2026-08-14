@@ -33,6 +33,133 @@ class FakeScreen:
  def reconcile(self,inflight): return D.Recovery("safe_to_start")
 
 class Tests(unittest.TestCase):
+ def portfolio_record(self, *, hypothesis_id="akh-portfolio-q8", rank=2,
+                      eligible=True, budget=2):
+  return {"hypothesis_id":hypothesis_id,"statement":"reduce exact q8 activation overhead",
+          "primary_falsifier":"replicated decode gain is below the sealed floor",
+          "falsifiers":["replicated decode gain is below the sealed floor"],
+          "regime":{"frame_id":"qwen05","architecture":"gfx90a","phase":"decode"},
+          "target":{"source_files":["ggml/src/ggml-cuda/quantize.cu"],
+                    "source_symbols":["quantize_q8_1"],
+                    "template_intent":"cuda-quantize-q8-v1"},
+          "mechanism":{"fingerprint_sha256":H},
+          "priority":{"rank":rank},
+          "current_bundle_eligibility":{"eligible":eligible,
+               "template_ids":["cuda-quantize-q8-v1"] if eligible else []},
+          "decision_policy":{"frame_id":"qwen05","continuation_floor_pct":0.4,
+               "nomination_floor_pct":0.8,"required_replications":2,
+               "sign_policy":"all_positive","conflict_policy":"retain_inconclusive",
+               "max_distinct_candidates":budget,"terminal_rule":"retire",
+               "metric":"decode_tokens_per_s","effect_unit":"relative_percent",
+               "min_replication_effect_pct":0.0,"max_replication_spread_pct":1.0}}
+ def portfolio_config(self, root, records):
+  return D.ControllerConfig(root,3,dry_run=True,
+      hypothesis_portfolio={"hypotheses":records,"frames":[],"do_not_repeat":[]},
+      hypothesis_portfolio_sha256="f"*64)
+ def portfolio_candidate(self, binding, *, hypothesis_id=None, mechanism_id=None,
+                         regime=None):
+  path=binding["target_file"]; symbols=tuple(binding["target_symbols"])
+  patch=(f"diff --git a/{path} b/{path}\n--- a/{path}\n+++ b/{path}\n"
+         f"@@ -1 +1 @@ {symbols[0]}()\n-x\n+y\n").encode()
+  manifest=D.source_candidate.SourcePatchManifest(
+      campaign_id="ak-test",proposal_id="akp-test",candidate_id="akc-test",
+      source_tree="llama.cpp",production_base_commit="0"*40,
+      instrument_commit="1"*40,change_class="dispatcher",declared_files=(path,),
+      declared_symbols={path:symbols},
+      mechanism_id=mechanism_id or binding["mechanism_id"],
+      patch_sha256=hashlib.sha256(patch).hexdigest(),patch_bytes=patch)
+  intent=D.GpuSourceExperimentIntent(binding["template_id"],"gpu_decode",symbols[0],
+      "backend-ops-hip-v1","decode-tg128-rocprof-v1",
+      (D.BoundedDispatchExpectation("quantize_q8_1",18705,1024,256,0),))
+  return D.PlannedCandidate(hypothesis_id or binding["hypothesis_id"],
+      binding["statement"],binding["falsifier"],regime or binding["regime"],
+      {"proposal_id":"akp-test"},manifest,manifest.patch_bundle_sha256,intent)
+ def test_portfolio_scheduler_owns_rank_budget_and_exact_candidate_binding(self):
+  with tempfile.TemporaryDirectory() as t:
+   config=self.portfolio_config(Path(t),[
+       self.portfolio_record(hypothesis_id="akh-lower",rank=2,budget=1),
+       self.portfolio_record(hypothesis_id="akh-first",rank=1,budget=1)])
+   state={"iterations":[]}
+   first=D._select_portfolio_binding(state,config)
+   self.assertEqual(first["hypothesis_id"],"akh-first")
+   D._validate_portfolio_candidate(self.portfolio_candidate(first),first,
+                                    config.hypothesis_portfolio)
+   state["iterations"].append({"portfolio_hypothesis_id":"akh-first",
+                               "source_manifest_sha256":"1"*64})
+   second=D._select_portfolio_binding(state,config)
+   self.assertEqual(second["hypothesis_id"],"akh-lower")
+   with self.assertRaisesRegex(D.DiscoveryControllerError,"controller-owned"):
+    D._validate_portfolio_candidate(
+        self.portfolio_candidate(second,hypothesis_id="akh-invented"),second,
+        config.hypothesis_portfolio)
+ def test_portfolio_exact_dnr_match_refuses_before_selected_binding(self):
+  with tempfile.TemporaryDirectory() as t:
+   record=self.portfolio_record(); config=self.portfolio_config(Path(t),[record])
+   binding=D._select_portfolio_binding({"iterations":[]},config)
+   dnr={"mechanism":{"fingerprint_sha256":"e"*64},"regime":{"phase":"decode"}}
+   portfolio={**config.hypothesis_portfolio,"do_not_repeat":[dnr]}
+   with self.assertRaisesRegex(D.DiscoveryControllerError,"DNR"):
+    D._validate_portfolio_candidate(
+        self.portfolio_candidate(binding,mechanism_id="e"*64,
+                                 regime={"phase":"decode"}),binding,portfolio)
+ def test_portfolio_decision_floor_retains_one_percent_and_refuses_weak_conflicted_nonfinite(self):
+  policy=self.portfolio_record()["decision_policy"]
+  self.assertEqual(D.classify_screen_series(
+      [.01,.011],continuation_floor=.004,nomination_floor=.008,
+      required_replications=2),"top_k_replicated_candidate")
+  self.assertEqual(D.classify_screen_series(
+      [.003],continuation_floor=.004,nomination_floor=.008,
+      required_replications=2),"screened_out")
+  self.assertEqual(D.classify_screen_series(
+      [.01,-.001],continuation_floor=.004,nomination_floor=.008,
+      required_replications=2),"inconclusive")
+  self.assertEqual(D.classify_screen_series(
+      [.01,.012],continuation_floor=.004,nomination_floor=.008,
+      min_replication_effect=.005,max_replication_spread=.001,
+      required_replications=2),"inconclusive")
+  self.assertEqual(D.classify_screen_series(
+      [.01,.003],continuation_floor=.004,nomination_floor=.008,
+      min_replication_effect=.005,max_replication_spread=.02,
+      required_replications=2),"screened_out")
+  with self.assertRaises(D.DiscoveryControllerError):
+   D.classify_screen_series([float("nan"),.01],continuation_floor=.004,
+                            nomination_floor=.008,required_replications=2)
+  self.assertAlmostEqual(D._decision_floor(policy,"nomination_floor_pct",.03),.008)
+ def test_empty_eligible_portfolio_stops_without_planner_review_or_compute(self):
+  class NeverPlanner(FakePlanner):
+   def plan(self,**_kwargs): raise AssertionError("empty portfolio reached planner")
+  class NeverCritic(FakeCritic):
+   def review(self,*_args,**_kwargs): raise AssertionError("empty portfolio reached critic")
+  with tempfile.TemporaryDirectory() as t:
+   config=self.portfolio_config(Path(t),[self.portfolio_record(eligible=False)])
+   result=D.run_controller(config,planner=NeverPlanner(),critic=NeverCritic([]),
+                           screener=FakeScreen([.01]),lease=Lease())
+  self.assertTrue(result["complete"])
+  self.assertEqual(result["terminal_reason"],"portfolio_exhausted")
+  self.assertEqual(result["iterations"],[])
+ def test_off_assignment_plan_refuses_before_fable_lease_or_screen(self):
+  class Planner(FakePlanner):
+   def __init__(self,candidate): super().__init__(); self.candidate=candidate
+   def plan(self,**_kwargs): self.calls.append(_kwargs); return self.candidate
+  class Critic(FakeCritic):
+   def __init__(self): super().__init__(["accept"]); self.calls=0
+   def review(self,*_args,**_kwargs): self.calls+=1; return D.Critique("accept","bad")
+  class Never:
+   calls=0
+   def __getattr__(self,_name):
+    def called(*_args,**_kwargs): self.calls+=1; raise AssertionError("compute reached")
+    return called
+  with tempfile.TemporaryDirectory() as t:
+   config=self.portfolio_config(Path(t),[self.portfolio_record()])
+   binding=D._select_portfolio_binding({"iterations":[]},config)
+   planner=Planner(self.portfolio_candidate(binding,hypothesis_id="akh-off-assignment"))
+   critic=Critic(); lease=Never(); screen=Never()
+   result=D.run_controller(config,planner=planner,critic=critic,
+                           screener=screen,lease=lease)
+  self.assertEqual(critic.calls,0)
+  self.assertEqual(lease.calls,0); self.assertEqual(screen.calls,0)
+  self.assertTrue(result["complete"])
+  self.assertEqual(result["iterations"][0]["status"],"portfolio_refused")
  def source_package(self):
   content=b"void reviewed_kernel() {}\n"; digest=hashlib.sha256(content).hexdigest()
   body={"schema":"epyc.autokernel.reviewed_source_package.v1","instrument_commit":"1"*40,
@@ -88,6 +215,39 @@ class Tests(unittest.TestCase):
    self.assertEqual(captured["reviewed_source_package"]["package_sha256"],package.package_sha256)
    self.assertEqual(captured["authoring_contract"]["expected_dispatch"],"array of 1..8 exact objects")
    self.assertEqual(captured["structural_example_only"]["source-patch.json"]["patch_encoding"],"base64")
+ def test_fable_context_binds_selected_reviewed_source_preimage(self):
+  content=b"template <typename T>\nvoid quantize_q8_1(T * x) {\n    x[0] = T{};\n}\n"
+  digest=hashlib.sha256(content).hexdigest()
+  package_body={"schema":"epyc.autokernel.reviewed_source_package.v1",
+      "instrument_commit":"1"*40,
+      "files":[{"relative_path":"ggml/src/ggml-cuda/quantize.cu",
+                "sha256":digest,
+                "workspace_path":"reviewed-source/ggml/src/ggml-cuda/quantize.cu"}]}
+  package=D.ReviewedSourcePackage("1"*40,(D.ReviewedSourceFile(
+      "ggml/src/ggml-cuda/quantize.cu",digest,content),),D._sha(package_body))
+  with tempfile.TemporaryDirectory() as t:
+   root=Path(t); wrapper=root/"claude"; wrapper.write_bytes(b"claude"); wrapper.chmod(0o700)
+   binding=D._portfolio_binding(self.portfolio_config(root,[self.portfolio_record()]),
+                                self.portfolio_record())
+   candidate=self.portfolio_candidate(binding)
+   captured={}
+   def critic_call(**kwargs):
+    captured.update(kwargs)
+    return SimpleNamespace(decision="accept",reason="source-visible")
+   critic=D.ClaudeCritic(wrapper=wrapper,environment={"PATH":"/usr/bin"},
+                         reviewed_sources=package)
+   with patch.object(D.claude_fable5_critic_actor,"runtime_identity",
+                     return_value=CLAUDE_RUNTIME), \
+        patch.object(D.claude_fable5_critic_actor,"run_critic",
+                     side_effect=critic_call):
+    result=critic.review(candidate,context={"sealed":"context"},workspace=root)
+  self.assertEqual(result.decision,"accept")
+  prompt=json.loads(captured["prompt"])
+  source=prompt["context"]["selected_source_preimage"]
+  self.assertEqual(source["source_sha256"],digest)
+  self.assertIn("quantize_q8_1",source["excerpts"][0]["text"])
+  self.assertEqual(captured["bindings"]["context_sha256"],
+                   D._sha(prompt["context"]))
  def test_reviewed_source_package_refuses_symlinked_parent(self):
   package=self.source_package()
   with tempfile.TemporaryDirectory() as t:

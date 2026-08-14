@@ -33,7 +33,7 @@ from . import gpu_source_proofs
 from scripts.benchmark import autokernel_progression
 from scripts.benchmark import run_autokernel_gpu_discovery as gpu_discovery
 
-SCHEMA = "epyc.autokernel.discovery_controller.v4"
+SCHEMA = "epyc.autokernel.discovery_controller.v5"
 ROSTER_SCHEMA = "epyc.autokernel.discovery_roster.v3"
 AUTHORITY = "nonpromotable_candidate_only_discovery"
 HASH = __import__("re").compile(r"^[0-9a-f]{64}$")
@@ -191,6 +191,7 @@ class AuthoringAssignment:
     candidate_id: str
     production_base_commit: str
     instrument_commit: str
+    portfolio_binding: Mapping[str, Any] | None = None
 
     def __post_init__(self) -> None:
         if (not self.campaign_id.startswith("ak-") or not self.proposal_id.startswith("akp-")
@@ -199,8 +200,27 @@ class AuthoringAssignment:
                            and all(ch in "0123456789abcdef" for ch in value)
                            for value in (self.production_base_commit, self.instrument_commit))):
             raise DiscoveryControllerError("invalid controller-owned authoring identity")
+        if self.portfolio_binding is not None:
+            required = {"portfolio_sha256", "record_sha256", "hypothesis_id",
+                        "statement", "falsifier", "mechanism_id", "regime",
+                        "target_file", "target_symbols", "template_id",
+                        "decision_policy"}
+            value = self.portfolio_binding
+            if (not isinstance(value, Mapping) or set(value) != required
+                    or not HASH.fullmatch(str(value.get("portfolio_sha256")))
+                    or not HASH.fullmatch(str(value.get("record_sha256")))
+                    or not all(isinstance(value.get(key), str) and value[key]
+                               for key in ("hypothesis_id", "statement", "falsifier",
+                                           "mechanism_id", "target_file", "template_id"))
+                    or not isinstance(value.get("regime"), Mapping)
+                    or not isinstance(value.get("target_symbols"), (list, tuple))
+                    or not value["target_symbols"]
+                    or not all(isinstance(item, str) and item
+                               for item in value["target_symbols"])
+                    or not isinstance(value.get("decision_policy"), Mapping)):
+                raise DiscoveryControllerError("invalid controller-owned portfolio binding")
 
-    def to_dict(self) -> dict[str, str]:
+    def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
 
@@ -490,6 +510,45 @@ class ReviewedSourcePackage:
         self.revalidate_materialized(workspace)
         return manifest
 
+    def critic_context(self, relative_path: str,
+                       symbols: Sequence[str]) -> Mapping[str, Any]:
+        matches = [item for item in self.files if item.relative_path == relative_path]
+        if len(matches) != 1 or not symbols:
+            raise DiscoveryControllerError("critic source preimage is outside reviewed package")
+        item = matches[0]
+        try:
+            lines = item.content.decode("utf-8", "strict").splitlines(keepends=True)
+        except UnicodeDecodeError as exc:
+            raise DiscoveryControllerError("critic source preimage is not UTF-8") from exc
+        ranges: list[tuple[int, int]] = []
+        for symbol in symbols:
+            indexes = [index for index, line in enumerate(lines) if symbol in line]
+            if not indexes:
+                raise DiscoveryControllerError(
+                    f"critic source preimage lacks selected symbol: {symbol}")
+            index = indexes[0]
+            ranges.append((max(0, index - 24), min(len(lines), index + 25)))
+        merged: list[tuple[int, int]] = []
+        for start, end in sorted(ranges):
+            if merged and start <= merged[-1][1]:
+                merged[-1] = (merged[-1][0], max(end, merged[-1][1]))
+            else:
+                merged.append((start, end))
+        excerpts = []
+        total = 0
+        for start, end in merged:
+            text = "".join(lines[start:end])
+            total += len(text.encode("utf-8"))
+            excerpts.append({"line_start": start + 1, "line_end": end,
+                             "text": text,
+                             "sha256": hashlib.sha256(text.encode()).hexdigest()})
+        if total > 65536:
+            raise DiscoveryControllerError("critic source preimage excerpt exceeds bound")
+        value = {"schema": "epyc.autokernel.critic_source_preimage.v1",
+                 "relative_path": relative_path, "source_sha256": item.sha256,
+                 "symbols": list(symbols), "excerpts": excerpts}
+        return {**value, "context_sha256": _sha(value)}
+
 
 class CodexPlanner:
     """Concrete Sol actor. It may write only a plan and patch manifest in workspace."""
@@ -565,18 +624,41 @@ class CodexPlanner:
         assignment = context.get("authoring_assignment")
         if not isinstance(assignment, Mapping):
             raise DiscoveryControllerError("planner context lacks controller-owned authoring assignment")
-        example_patch = ("diff --git a/ggml/src/ggml-cuda/example.cu "
-                         "b/ggml/src/ggml-cuda/example.cu\n--- a/ggml/src/ggml-cuda/example.cu\n"
-                         "+++ b/ggml/src/ggml-cuda/example.cu\n@@ -1 +1 @@ example_symbol()\n-old\n+new\n")
+        binding = assignment.get("portfolio_binding")
+        if binding is not None:
+            AuthoringAssignment(**assignment)
+            example_file = binding["target_file"]
+            example_symbol = binding["target_symbols"][0]
+            example_symbols = list(binding["target_symbols"])
+            example_hypothesis = binding["hypothesis_id"]
+            example_statement = binding["statement"]
+            example_falsifier = binding["falsifier"]
+            example_regime = binding["regime"]
+            example_template = binding["template_id"]
+            example_mechanism = binding["mechanism_id"]
+        else:
+            example_file = "ggml/src/ggml-cuda/example.cu"
+            example_symbol = "example_symbol"
+            example_symbols = [example_symbol]
+            example_hypothesis = "akh-example"
+            example_statement = "bounded hypothesis"
+            example_falsifier = "an exact non-improvement falsifies it"
+            example_regime = {"phase": "decode"}
+            example_template = "replace-with-reviewed-id"
+            example_mechanism = "bounded-example"
+        example_patch = (f"diff --git a/{example_file} b/{example_file}\n"
+                         f"--- a/{example_file}\n+++ b/{example_file}\n"
+                         f"@@ -1 +1 @@ {example_symbol}()\n-old\n+new\n")
         example = {
-            "plan.json": {"hypothesis_id": "akh-example", "statement": "bounded hypothesis",
-                "falsifier": "an exact non-improvement falsifies it", "regime": {"phase": "decode"},
+            "plan.json": {"hypothesis_id": example_hypothesis,
+                "statement": example_statement,
+                "falsifier": example_falsifier, "regime": example_regime,
                 "proposal": {"proposal_id": assignment["proposal_id"], "change_class": "dispatcher",
-                    "change": {"files_and_symbols": ["ggml/src/ggml-cuda/example.cu:example_symbol"],
+                    "change": {"files_and_symbols": {example_file: example_symbols},
                                "estimated_diff_size": 2}},
                 "source_manifest_path": "source-patch.json",
-                "experiment_intent": {"template_id": "replace-with-reviewed-id",
-                    "target_surface": "gpu_decode", "target_symbol": "replace-with-reviewed-symbol",
+                "experiment_intent": {"template_id": example_template,
+                    "target_surface": "gpu_decode", "target_symbol": example_symbol,
                     "correctness_id": "backend-ops-hip-v1",
                     "dispatch_id": "decode-tg128-rocprof-v1",
                     "expected_dispatch": [{"kernel_name": "exact rocprof demangled literal",
@@ -586,9 +668,9 @@ class CodexPlanner:
                 "candidate_id": assignment["candidate_id"], "source_tree": "llama.cpp",
                 "production_base_commit": assignment["production_base_commit"],
                 "instrument_commit": assignment["instrument_commit"], "change_class": "dispatcher",
-                "declared_files": ["ggml/src/ggml-cuda/example.cu"],
-                "declared_symbols": {"ggml/src/ggml-cuda/example.cu": ["example_symbol"]},
-                "mechanism_id": "bounded-example",
+                "declared_files": [example_file],
+                "declared_symbols": {example_file: example_symbols},
+                "mechanism_id": example_mechanism,
                 "patch_sha256": hashlib.sha256(example_patch.encode()).hexdigest(),
                 "patch_encoding": "base64",
                 "patch_base64": base64.b64encode(example_patch.encode()).decode("ascii")}}
@@ -596,6 +678,7 @@ class CodexPlanner:
                              "experiment_template_catalog": self.template_catalog,
                              "reviewed_source_package": source_package,
                              "authoring_contract": contract,
+                             "controller_owned_portfolio_binding": binding,
                              "structural_example_only": example,
                              "output": "Write plan.json and source-patch.json in workspace."}, sort_keys=True)
         self._runtime()
@@ -614,12 +697,14 @@ class ClaudeCritic:
     """Concrete Fable 5 critic. It can bind a veto but never alters the candidate."""
     def __init__(self, *, wrapper: Path, environment: Mapping[str, str],
                  template_catalog: Mapping[str, Any] | None = None,
+                 reviewed_sources: ReviewedSourcePackage | None = None,
                  wrapper_sha256: str | None = None,
                  runtime_identity: Mapping[str, Any] | None = None,
                  actor_launcher_sha256: str | None = None,
                  auth_root: Path = Path("/home/node/.claude")) -> None:
         self.wrapper, self.environment = wrapper, dict(environment)
         self.template_catalog = json.loads(json.dumps(template_catalog or {}, sort_keys=True))
+        self.reviewed_sources = reviewed_sources
         self.wrapper_sha256 = wrapper_sha256
         self.runtime_identity = None if runtime_identity is None else dict(runtime_identity)
         self.actor_launcher_sha256 = actor_launcher_sha256
@@ -641,14 +726,22 @@ class ClaudeCritic:
         manifest = candidate.source_manifest
         if len(manifest.patch_text.encode("utf-8")) > 65536:
             raise DiscoveryControllerError("candidate patch exceeds bounded critic visibility")
+        source_context = None
+        if self.reviewed_sources is not None:
+            if len(manifest.declared_files) != 1:
+                raise DiscoveryControllerError("critic requires one exact reviewed source preimage")
+            relative = manifest.declared_files[0]
+            source_context = self.reviewed_sources.critic_context(
+                relative, manifest.declared_symbols[relative])
+        critic_context = {**context, "selected_source_preimage": source_context}
         bindings = {
             "proposal_sha256": _sha(candidate.proposal),
             "source_manifest_sha256": candidate.source_manifest_sha256,
             "candidate_patch_sha256": manifest.patch_sha256,
-            "context_sha256": _sha(context),
+            "context_sha256": _sha(critic_context),
             "template_catalog_sha256": _sha(self.template_catalog),
         }
-        prompt = json.dumps({"role": FABLE5_CRITIC, "context": context,
+        prompt = json.dumps({"role": FABLE5_CRITIC, "context": critic_context,
             "experiment_template_catalog": self.template_catalog, "candidate": {
             "hypothesis_id": candidate.hypothesis_id, "statement": candidate.statement,
             "falsifier": candidate.falsifier, "proposal": candidate.proposal,
@@ -925,6 +1018,8 @@ class ControllerConfig:
     # well as the hashes separately carried below.  Durable state records this
     # one canonical identity so a resume cannot silently switch checkout roots.
     deployment_identity_sha256: str | None = None
+    hypothesis_portfolio: Mapping[str, Any] | None = None
+    hypothesis_portfolio_sha256: str | None = None
     def __post_init__(self) -> None:
         if (not self.output_root.is_absolute() or not 1 <= self.max_iterations <= 1000
                 or isinstance(self.nomination_threshold, bool)
@@ -945,6 +1040,11 @@ class ControllerConfig:
             raise DiscoveryControllerError("invalid controller config")
         if self.deployment_identity_sha256 is not None and not HASH.fullmatch(self.deployment_identity_sha256):
             raise DiscoveryControllerError("invalid sealed deployment identity")
+        if ((self.hypothesis_portfolio is None) !=
+                (self.hypothesis_portfolio_sha256 is None)
+                or self.hypothesis_portfolio_sha256 is not None
+                and not HASH.fullmatch(self.hypothesis_portfolio_sha256)):
+            raise DiscoveryControllerError("invalid sealed hypothesis portfolio authority")
         sealed = (self.planner_context_sha256, self.production_base_commit,
                   self.instrument_commit, self.experiment_template_registry_sha256,
                   self.admission_corpus_sha256, self.admission_corpus_version,
@@ -998,8 +1098,128 @@ def _record_attempt_once(tracker: hypotheses.HypothesisTracker, item: PlannedCan
     tracker.note_attempt(item.hypothesis_id,proposal_id=proposal_id,disposition=result.classification,bears_on_falsifier=True,note=f"sealed screen {result.result_sha256}; effect={result.effect_fraction:.9g}",refs=(ref,))
 
 
+def _portfolio_binding(config: ControllerConfig,
+                       record: Mapping[str, Any]) -> dict[str, Any]:
+    """Project one eligible scientific question into exact actor authority."""
+    if config.hypothesis_portfolio is None or config.hypothesis_portfolio_sha256 is None:
+        raise DiscoveryControllerError("controller lacks a sealed hypothesis portfolio")
+    target = record.get("target")
+    eligibility = record.get("current_bundle_eligibility")
+    mechanism = record.get("mechanism")
+    policy = record.get("decision_policy")
+    falsifiers = record.get("falsifiers")
+    if (not isinstance(target, Mapping) or not isinstance(eligibility, Mapping)
+            or eligibility.get("eligible") is not True
+            or not isinstance(mechanism, Mapping)
+            or not isinstance(policy, Mapping)
+            or not isinstance(falsifiers, list) or not falsifiers
+            or record.get("primary_falsifier") not in falsifiers
+            or not isinstance(record.get("regime"), Mapping)):
+        raise DiscoveryControllerError("eligible portfolio record is incomplete")
+    files = target.get("source_files")
+    symbols = target.get("source_symbols")
+    templates = eligibility.get("template_ids")
+    policy_keys = {"metric", "frame_id", "effect_unit", "continuation_floor_pct",
+                   "nomination_floor_pct", "min_replication_effect_pct",
+                   "required_replications", "max_replication_spread_pct",
+                   "sign_policy", "conflict_policy", "max_distinct_candidates",
+                   "terminal_rule"}
+    if (not isinstance(files, list) or len(files) != 1
+            or not isinstance(symbols, list) or not symbols
+            or not all(isinstance(value, str) and value for value in files + symbols)
+            or not isinstance(templates, list) or len(templates) != 1
+            or target.get("template_intent") != templates[0]
+            or not HASH.fullmatch(str(mechanism.get("fingerprint_sha256")))
+            or not isinstance(policy.get("max_distinct_candidates"), int)
+            or isinstance(policy.get("max_distinct_candidates"), bool)
+            or not 1 <= policy["max_distinct_candidates"] <= 8
+            or set(policy) != policy_keys
+            or policy.get("effect_unit") != "relative_percent"
+            or policy.get("required_replications") != 2
+            or policy.get("sign_policy") != "all_positive"
+            or policy.get("conflict_policy") not in {"retire", "retain_inconclusive"}
+            or policy.get("terminal_rule") not in {"retire", "retain_inconclusive",
+                                                    "needs_review"}):
+        raise DiscoveryControllerError(
+            "eligible portfolio record is not expressible by one exact reviewed template")
+    binding = {
+        "portfolio_sha256": config.hypothesis_portfolio_sha256,
+        "record_sha256": _sha(record),
+        "hypothesis_id": record.get("hypothesis_id"),
+        "statement": record.get("statement"),
+        "falsifier": record["primary_falsifier"],
+        "mechanism_id": mechanism["fingerprint_sha256"],
+        "regime": dict(record["regime"]),
+        "target_file": files[0],
+        "target_symbols": list(symbols),
+        "template_id": templates[0],
+        "decision_policy": dict(policy),
+    }
+    AuthoringAssignment(
+        campaign_id="ak-portfolio-validation", proposal_id="akp-portfolio-validation",
+        candidate_id="akc-portfolio-validation", production_base_commit="0" * 40,
+        instrument_commit="0" * 40, portfolio_binding=binding)
+    return binding
+
+
+def _select_portfolio_binding(state: Mapping[str, Any],
+                              config: ControllerConfig) -> dict[str, Any] | None:
+    if config.hypothesis_portfolio is None:
+        return None
+    records = config.hypothesis_portfolio.get("hypotheses")
+    if not isinstance(records, list):
+        raise DiscoveryControllerError("hypothesis portfolio lacks records")
+    eligible = [row for row in records if isinstance(row, Mapping)
+                and isinstance(row.get("current_bundle_eligibility"), Mapping)
+                and row["current_bundle_eligibility"].get("eligible") is True]
+    try:
+        eligible.sort(key=lambda row: (int(row["priority"]["rank"]),
+                                       str(row["hypothesis_id"])))
+    except (KeyError, TypeError, ValueError) as exc:
+        raise DiscoveryControllerError("eligible portfolio priority is malformed") from exc
+    for record in eligible:
+        binding = _portfolio_binding(config, record)
+        if binding["hypothesis_id"] in state.get("portfolio_terminals", {}):
+            continue
+        attempts = {row.get("source_manifest_sha256") for row in state["iterations"]
+                    if row.get("portfolio_hypothesis_id") == binding["hypothesis_id"]
+                    and isinstance(row.get("source_manifest_sha256"), str)}
+        if len(attempts) < binding["decision_policy"]["max_distinct_candidates"]:
+            return binding
+    return None
+
+
+def _validate_portfolio_candidate(item: PlannedCandidate, binding: Mapping[str, Any],
+                                  portfolio: Mapping[str, Any]) -> None:
+    """Refuse any actor attempt to rename or expand a reviewed question."""
+    for dnr in portfolio.get("do_not_repeat", ()):
+        if not isinstance(dnr, Mapping):
+            raise DiscoveryControllerError("portfolio DNR record is malformed")
+        mechanism = dnr.get("mechanism")
+        if (isinstance(mechanism, Mapping)
+                and item.source_manifest.mechanism_id == mechanism.get("fingerprint_sha256")
+                and dict(item.regime) == dnr.get("regime")):
+            raise DiscoveryControllerError("candidate exactly repeats a sealed DNR mechanism/regime")
+    intent = item.experiment_intent
+    manifest = item.source_manifest
+    if (item.hypothesis_id != binding["hypothesis_id"]
+            or item.statement != binding["statement"]
+            or item.falsifier != binding["falsifier"]
+            or dict(item.regime) != dict(binding["regime"])
+            or manifest.mechanism_id != binding["mechanism_id"]
+            or tuple(manifest.declared_files) != (binding["target_file"],)
+            or set(manifest.declared_symbols.get(binding["target_file"], ())) !=
+               set(binding["target_symbols"])
+            or intent is None
+            or intent.template_id != binding["template_id"]
+            or intent.target_symbol not in binding["target_symbols"]):
+        raise DiscoveryControllerError(
+            "planner candidate differs from its controller-owned portfolio assignment")
+
+
 def _context(state: Mapping[str, Any], tracker: hypotheses.HypothesisTracker, turn: int,
-             config: ControllerConfig) -> dict[str, Any]:
+             config: ControllerConfig,
+             portfolio_binding: Mapping[str, Any] | None = None) -> dict[str, Any]:
     prior = []
     for row in state["iterations"]:
         if not isinstance(row.get("result_sha256"), str):
@@ -1015,13 +1235,15 @@ def _context(state: Mapping[str, Any], tracker: hypotheses.HypothesisTracker, tu
             campaign_id=config.campaign_id, proposal_id=f"akp-discovery-{turn}",
             candidate_id=f"akc-discovery-{turn}",
             production_base_commit=config.production_base_commit,
-            instrument_commit=config.instrument_commit or config.production_base_commit).to_dict()
+            instrument_commit=config.instrument_commit or config.production_base_commit,
+            portfolio_binding=portfolio_binding).to_dict()
     return {"authority": AUTHORITY, "turn":turn, "roster":sealed_roster(),
             "planner_context": config.planner_context,
             "planner_context_sha256": config.planner_context_sha256,
             "admission_corpus_sha256": config.admission_corpus_sha256,
             "admission_corpus_version": config.admission_corpus_version,
             "deployment_identity_sha256": config.deployment_identity_sha256,
+            "hypothesis_portfolio_sha256": config.hypothesis_portfolio_sha256,
             "authoring_assignment": assignment,
             "prior_results": prior, "do_not_repeat":_memory_block(tracker,turn)}
 
@@ -1072,7 +1294,31 @@ def _restore_pending(value: Mapping[str, Any]) -> PlannedCandidate:
     return PlannedCandidate(hypothesis_id=raw["hypothesis_id"],statement=raw["statement"],falsifier=raw["falsifier"],regime=raw["regime"],proposal=raw["proposal"],source_manifest=manifest,source_manifest_sha256=raw["source_manifest_sha256"],experiment_intent=GpuSourceExperimentIntent(**intent) if intent else None)
 
 
-def _append_nomination(root: Path, item: PlannedCandidate, result: SealedScreen, threshold: float) -> None:
+def _decision_floor(policy: Mapping[str, Any] | None, key: str,
+                    fallback: float) -> float:
+    if policy is None:
+        return fallback
+    value = policy.get(key)
+    if (isinstance(value, bool) or not isinstance(value, (int, float))
+            or not math.isfinite(float(value)) or not 0 <= float(value) <= 100):
+        raise DiscoveryControllerError("portfolio decision policy has an invalid numeric floor")
+    return float(value) / 100.0
+
+
+def _required_replications(policy: Mapping[str, Any] | None) -> int:
+    if policy is None:
+        return 2
+    value = policy.get("required_replications")
+    if (isinstance(value, bool) or not isinstance(value, int)
+            or not 2 <= value <= 8
+            or policy.get("sign_policy") not in {"all_positive", "median_positive"}
+            or policy.get("conflict_policy") not in {"retire", "retain_inconclusive"}):
+        raise DiscoveryControllerError("portfolio replication policy is malformed")
+    return value
+
+
+def _append_nomination(root: Path, item: PlannedCandidate, result: SealedScreen,
+                       threshold: float) -> None:
     # A single screen is discovery evidence, never a nomination.  Only a
     # replicated series that retained a positive pooled classification may be
     # placed in the operator queue.
@@ -1095,22 +1341,44 @@ def _write_projection(root: Path) -> None:
     autokernel_progression.export_progression(root=root, output=root / "surface" / "kernel_progression.json")
 
 
-def classify_screen_series(effects: Sequence[float], *, component_pooled_effects: Sequence[float] = ()) -> str:
+def classify_screen_series(effects: Sequence[float], *,
+                           component_pooled_effects: Sequence[float] = (),
+                           continuation_floor: float = 0.0,
+                           nomination_floor: float = 0.0,
+                           min_replication_effect: float = 0.0,
+                           max_replication_spread: float = 0.10,
+                           required_replications: int = 2) -> str:
     """Discovery policy classifier; dashboard projection is not authority."""
     if not effects or any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(float(v)) for v in effects):
         raise DiscoveryControllerError("screen series must contain numeric measured effects")
+    if (any(isinstance(value, bool) or not isinstance(value, (int, float))
+            or not math.isfinite(float(value)) or not 0 <= float(value) <= 1
+            for value in (continuation_floor, nomination_floor,
+                          min_replication_effect, max_replication_spread))
+            or isinstance(required_replications, bool)
+            or not isinstance(required_replications, int)
+            or not 2 <= required_replications <= 8
+            or nomination_floor < continuation_floor):
+        raise DiscoveryControllerError("screen series decision policy is malformed")
     if len(effects) == 1:
-        return "screened_out" if effects[0] <= 0 else "candidate"
+        return ("candidate" if effects[0] > 0
+                and effects[0] >= continuation_floor else "screened_out")
     if min(effects) < 0 < max(effects):
         return "inconclusive"
     # A materially divergent pair is no more rankable than opposite signs.
     # This is the discovery lane's 10 percentage-point spread rule, not a
     # calibration gate; it requests a retest rather than declaring a failure.
-    if max(effects) - min(effects) >= 0.10:
+    if max(effects) - min(effects) > max_replication_spread:
         return "inconclusive"
-    if all(v > 0 for v in effects) and component_pooled_effects and (sum(effects) / len(effects)) < max(component_pooled_effects):
+    if len(effects) < required_replications:
+        return ("candidate" if all(v > 0 and v >= continuation_floor for v in effects)
+                else "screened_out")
+    pooled = float(statistics.median(effects))
+    if any(value < min_replication_effect for value in effects):
+        return "screened_out"
+    if all(v > 0 for v in effects) and component_pooled_effects and pooled < max(component_pooled_effects):
         return "replicated_but_subadditive"
-    if all(v > 0 for v in effects):
+    if all(v > 0 for v in effects) and pooled >= nomination_floor:
         return "top_k_replicated_candidate"
     return "screened_out"
 
@@ -1136,7 +1404,9 @@ def _pooled_component_effects(state: Mapping[str, Any], component_keys: Sequence
             values.append(sum(effects) / len(effects))
     return values
 
-def _classified_result(state: Mapping[str, Any], item: PlannedCandidate, result: SealedScreen) -> SealedScreen:
+def _classified_result(state: Mapping[str, Any], item: PlannedCandidate,
+                       result: SealedScreen,
+                       decision_policy: Mapping[str, Any] | None = None) -> SealedScreen:
     series_key = _screen_series_key(item, result)
     prior = [float(row["effect_fraction"]) for row in state["iterations"]
              if row.get("series_key") == series_key
@@ -1152,6 +1422,15 @@ def _classified_result(state: Mapping[str, Any], item: PlannedCandidate, result:
     classification = classify_screen_series(
         effects,
         component_pooled_effects=_pooled_component_effects(state, components),
+        continuation_floor=_decision_floor(
+            decision_policy, "continuation_floor_pct", 0.0),
+        nomination_floor=_decision_floor(
+            decision_policy, "nomination_floor_pct", 0.0),
+        min_replication_effect=_decision_floor(
+            decision_policy, "min_replication_effect_pct", 0.0),
+        max_replication_spread=_decision_floor(
+            decision_policy, "max_replication_spread_pct", 0.10),
+        required_replications=_required_replications(decision_policy),
     )
     return SealedScreen(receipt_path=result.receipt_path,result_sha256=result.result_sha256,effect_fraction=result.effect_fraction,classification=classification,baseline_sha256=result.baseline_sha256,source_proof_sha256=result.source_proof_sha256,dispatch_proof_sha256=result.dispatch_proof_sha256,candidate_only=result.candidate_only,promotion_claim=result.promotion_claim,stages=result.stages,series_key=series_key,component_series_keys=components,series_effect_fraction=float(statistics.median(effects)))
 
@@ -1187,6 +1466,35 @@ def _schedule_replication(state: dict[str, Any], *, item: PlannedCandidate,
         "confirmation": True,
         "parent_authorization": authorization.to_dict(),
     }
+
+
+def _apply_portfolio_outcome(state: dict[str, Any], row: dict[str, Any]) -> None:
+    policy = row.get("portfolio_decision_policy")
+    hypothesis_id = row.get("portfolio_hypothesis_id")
+    if not isinstance(policy, Mapping) or not isinstance(hypothesis_id, str):
+        return
+    terminals = state.setdefault("portfolio_terminals", {})
+    status = row.get("status")
+    if status == "top_k_replicated_candidate":
+        terminals[hypothesis_id] = {"disposition": "nominated",
+                                    "policy": dict(policy)}
+        row["portfolio_disposition"] = "nominated"
+        return
+    if status == "inconclusive":
+        conflict = policy["conflict_policy"]
+        row["portfolio_disposition"] = conflict
+        if conflict == "retire":
+            terminals[hypothesis_id] = {"disposition": "retire_conflict",
+                                        "policy": dict(policy)}
+            return
+    attempts = {item.get("source_manifest_sha256") for item in state["iterations"]
+                if item.get("portfolio_hypothesis_id") == hypothesis_id
+                and isinstance(item.get("source_manifest_sha256"), str)}
+    if len(attempts) >= policy["max_distinct_candidates"]:
+        disposition = policy["terminal_rule"]
+        terminals[hypothesis_id] = {"disposition": disposition,
+                                    "policy": dict(policy)}
+        row["portfolio_disposition"] = disposition
 
 
 def run_controller(config: ControllerConfig, *, planner: Planner, critic: Critic, screener: Screener, lease: Lease) -> dict[str, Any]:
@@ -1236,6 +1544,12 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
         raise DiscoveryControllerError("sealed admission corpus version changed; durable discovery cannot resume")
     if existing_corpus_version is None and config.admission_corpus_version is not None:
         state["admission_corpus_version"] = config.admission_corpus_version
+    existing_portfolio = state.get("hypothesis_portfolio_sha256")
+    if existing_portfolio is not None and existing_portfolio != config.hypothesis_portfolio_sha256:
+        raise DiscoveryControllerError(
+            "sealed hypothesis portfolio changed; durable discovery cannot resume")
+    if existing_portfolio is None and config.hypothesis_portfolio_sha256 is not None:
+        state["hypothesis_portfolio_sha256"] = config.hypothesis_portfolio_sha256
     # A completed state is an acknowledged terminal checkpoint.  Re-entering it
     # must be a read, not another executor opportunity or a timestamp rewrite.
     if state["complete"]: return state
@@ -1287,14 +1601,25 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                     store.save(state,"waiting_resource")
                     return state
         if not isinstance(result,SealedScreen): raise DiscoveryControllerError("inflight recovery produced no sealed result")
-        result=_classified_result(state,item,result); row=dict(inflight["row"]); row.update(status=result.classification,result_sha256=result.result_sha256,evidence={"baseline":result.baseline_sha256,"source":result.source_proof_sha256,"dispatch":result.dispatch_proof_sha256},effect_fraction=result.effect_fraction,series_effect_fraction=result.series_effect_fraction,series_key=result.series_key,component_series_keys=list(result.component_series_keys))
+        row=dict(inflight["row"]); policy=row.get("portfolio_decision_policy")
+        result=_classified_result(state,item,result,policy); row.update(status=result.classification,result_sha256=result.result_sha256,evidence={"baseline":result.baseline_sha256,"source":result.source_proof_sha256,"dispatch":result.dispatch_proof_sha256},effect_fraction=result.effect_fraction,series_effect_fraction=result.series_effect_fraction,series_key=result.series_key,component_series_keys=list(result.component_series_keys))
         _record_attempt_once(tracker,item,str(item.proposal.get("proposal_id",row["proposal_sha256"])),result)
-        state.pop("inflight",None); state.pop("pending",None); state["iterations"].append(row); state["next"]+=1; _schedule_replication(state,item=item,authorization=authorization,row=row,result=result,max_iterations=config.max_iterations); _append_nomination(config.output_root,item,result,config.nomination_threshold); _write_projection(config.evidence_root or config.output_root); store.save(state,"recovered_screen")
+        state.pop("inflight",None); state.pop("pending",None); state["iterations"].append(row); _apply_portfolio_outcome(state,row); state["next"]+=1; _schedule_replication(state,item=item,authorization=authorization,row=row,result=result,max_iterations=config.max_iterations); _append_nomination(config.output_root,item,result,_decision_floor(policy,"nomination_floor_pct",config.nomination_threshold)); _write_projection(config.evidence_root or config.output_root); store.save(state,"recovered_screen")
     while not state["complete"] and state["next"] <= config.max_iterations:
-        turn=state["next"]; context=_context(state,tracker,turn,config)
+        turn=state["next"]
+        pending=state.get("pending")
+        portfolio_binding = (pending.get("row", {}).get("portfolio_binding")
+                             if pending is not None else
+                             _select_portfolio_binding(state, config))
+        if (pending is None and config.hypothesis_portfolio is not None
+                and portfolio_binding is None):
+            state["complete"] = True
+            state["terminal_reason"] = "portfolio_exhausted"
+            store.save(state, "portfolio_exhausted")
+            break
+        context=_context(state,tracker,turn,config,portfolio_binding)
         with tempfile.TemporaryDirectory(prefix=f"ak-discovery-{turn}-", dir=config.output_root) as temp:
             workspace=Path(temp)
-            pending=state.get("pending")
             if pending is not None:
                 item=_restore_pending(pending); row=dict(pending["row"]); review=Critique(**row["critic"])
                 if "authorization" in pending:
@@ -1309,7 +1634,6 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                     raise DiscoveryControllerError("pending candidate lacks a sealed authorization")
             else:
                 item=planner.plan(context=context,workspace=workspace)
-                review=critic.review(item,context=context,workspace=workspace)
                 row={"turn":turn,"hypothesis_id":item.hypothesis_id,"statement":item.statement,
                      "falsifier":item.falsifier,"regime":dict(item.regime),
                      "proposal_sha256":_sha(item.proposal),"source_manifest_sha256":item.source_manifest_sha256,
@@ -1317,22 +1641,41 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                      "mechanism_id":item.source_manifest.mechanism_id,
                      "target_surface":item.experiment_intent.target_surface if item.experiment_intent else None,
                      "target_symbol":item.experiment_intent.target_symbol if item.experiment_intent else None,
-                     "critic":asdict(review),"context_sha256":_sha(context)}
+                     "context_sha256":_sha(context)}
+                if portfolio_binding is not None:
+                    row.update(portfolio_hypothesis_id=portfolio_binding["hypothesis_id"],
+                               portfolio_binding=dict(portfolio_binding),
+                               portfolio_record_sha256=portfolio_binding["record_sha256"],
+                               portfolio_decision_policy=dict(
+                                   portfolio_binding["decision_policy"]))
+                    try:
+                        _validate_portfolio_candidate(
+                            item, portfolio_binding,
+                            config.hypothesis_portfolio or {})
+                    except DiscoveryControllerError as exc:
+                        row.update(status="portfolio_refused", reason=str(exc))
+                        state["iterations"].append(row); state["next"] += 1
+                        state["complete"] = True
+                        state["terminal_reason"] = "portfolio_actor_contract_refused"
+                        store.save(state, "portfolio_refused")
+                        break
+                review=critic.review(item,context=context,workspace=workspace)
+                row["critic"]=asdict(review)
             if review.decision != "accept":
-                row["status"]="critic_"+review.decision; state["iterations"].append(row); state["next"]+=1; store.save(state,"critic_refused"); continue
+                row["status"]="critic_"+review.decision; state["iterations"].append(row); _apply_portfolio_outcome(state,row); state["next"]+=1; store.save(state,"critic_refused"); continue
             if pending is None:
                 _ensure_question(tracker,item)
                 ledger=do_not_repeat.compile_for_tracker(tracker)
                 try: authorization=tracker.authorize_claim(item.hypothesis_id,purpose="candidate_only_discovery",authorized_by="discovery_controller",ledger=ledger)
                 except hypotheses.HypothesisError as exc:
-                    row.update(status="authorization_refused",reason=str(exc)); state["iterations"].append(row); state["next"]+=1; store.save(state,"authorization_refused"); continue
+                    row.update(status="authorization_refused",reason=str(exc)); state["iterations"].append(row); _apply_portfolio_outcome(state,row); state["next"]+=1; store.save(state,"authorization_refused"); continue
             if config.dry_run:
                 # The dry-run still proves exact Sol/Terra actor attestation,
                 # plan schema, critic binding, and DNR authorization.  It
                 # deliberately never asks for a resource lease or starts a
                 # source build, correctness, attribution, or model call.
                 row.update(status="dry_run_authorized", authorization=authorization.to_dict())
-                state.pop("pending", None); state["iterations"].append(row); state["next"] += 1
+                state.pop("pending", None); state["iterations"].append(row); _apply_portfolio_outcome(state,row); state["next"] += 1
                 store.save(state, "dry_run_authorized")
                 continue
             repetition=2 if pending and pending.get("confirmation") else 1
@@ -1361,7 +1704,7 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                 store.save(state,"waiting_resource")
                 break
             except PrecomputeScreenRefusal as exc:
-                state.pop("inflight",None); row.update(status="screen_refused",reason=f"{type(exc).__name__}: {exc}"); state["iterations"].append(row); state["next"]+=1; store.save(state,"screen_refused"); continue
+                state.pop("inflight",None); row.update(status="screen_refused",reason=f"{type(exc).__name__}: {exc}"); state["iterations"].append(row); _apply_portfolio_outcome(state,row); state["next"]+=1; store.save(state,"screen_refused"); continue
             except Exception as exc:
                 # The durable start intent has been written.  An ordinary
                 # exception may follow a build, claim, or model invocation, so
@@ -1371,12 +1714,13 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                 store.save(state,"screen_ambiguous")
                 raise
             state["inflight"]["result"]=asdict(result); store.save(state,"post_screen_result")
-            result=_classified_result(state,item,result); row.update(status=result.classification,result_sha256=result.result_sha256,evidence={"baseline":result.baseline_sha256,"source":result.source_proof_sha256,"dispatch":result.dispatch_proof_sha256},effect_fraction=result.effect_fraction,series_effect_fraction=result.series_effect_fraction,series_key=result.series_key,component_series_keys=list(result.component_series_keys))
+            policy=row.get("portfolio_decision_policy")
+            result=_classified_result(state,item,result,policy); row.update(status=result.classification,result_sha256=result.result_sha256,evidence={"baseline":result.baseline_sha256,"source":result.source_proof_sha256,"dispatch":result.dispatch_proof_sha256},effect_fraction=result.effect_fraction,series_effect_fraction=result.series_effect_fraction,series_key=result.series_key,component_series_keys=list(result.component_series_keys))
             # Record the measured disposition before exposing it to the next
             # planner context.  This is the only source of repeat suppression.
             _record_attempt_once(tracker,item,str(item.proposal.get("proposal_id",row["proposal_sha256"])),result)
-            state.pop("inflight",None); state.pop("pending",None); state["iterations"].append(row); state["next"]+=1; _schedule_replication(state,item=item,authorization=authorization,row=row,result=result,max_iterations=config.max_iterations); _append_nomination(config.output_root,item,result,config.nomination_threshold); _write_projection(config.evidence_root or config.output_root); store.save(state,"screened")
-    state["complete"]=state["next"]>config.max_iterations
+            state.pop("inflight",None); state.pop("pending",None); state["iterations"].append(row); _apply_portfolio_outcome(state,row); state["next"]+=1; _schedule_replication(state,item=item,authorization=authorization,row=row,result=result,max_iterations=config.max_iterations); _append_nomination(config.output_root,item,result,_decision_floor(policy,"nomination_floor_pct",config.nomination_threshold)); _write_projection(config.evidence_root or config.output_root); store.save(state,"screened")
+    state["complete"]=bool(state.get("complete")) or state["next"]>config.max_iterations
     if state["complete"]: state.pop("pending",None)
     store.save(state,"complete" if state["complete"] else "paused"); return state
 

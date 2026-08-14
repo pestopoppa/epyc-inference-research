@@ -1310,7 +1310,8 @@ def build_static_deployment_graph(config: deployment.DiscoveryDeployment) -> Sta
         actor_launcher_sha256=planner_launcher_sha256)
     adapters["critic"] = controller.ClaudeCritic(
         wrapper=config.critic_wrapper.path, environment=_SAFE_CRITIC_ENVIRONMENT,
-        template_catalog=catalog, wrapper_sha256=config.critic_wrapper.sha256,
+        template_catalog=catalog, reviewed_sources=source_package,
+        wrapper_sha256=config.critic_wrapper.sha256,
         runtime_identity=critic_runtime,
         actor_launcher_sha256=critic_launcher_sha256)
     receipt, digest = _seal_graph_receipt(
@@ -1673,6 +1674,7 @@ def materialize(config: deployment.DiscoveryDeployment, registry: Mapping[str, M
     critic = controller.ClaudeCritic(wrapper=config.critic_wrapper.path,
                                      environment=_SAFE_CRITIC_ENVIRONMENT,
                                      template_catalog=catalog,
+                                     reviewed_sources=source_package,
                                      wrapper_sha256=config.critic_wrapper.sha256,
                                      runtime_identity=critic_runtime,
                                      actor_launcher_sha256=_digest_regular(
