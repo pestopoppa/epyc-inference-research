@@ -60,6 +60,13 @@ class DeploymentFactoryTests(unittest.TestCase):
         self.assertEqual(vecdot.semantics["expected_correctness_cases"], 1139)
         self.assertTrue(any("vec_dot_q5_0_q8_1" in symbol
                             for symbol in vecdot.allowed_symbols[next(iter(vecdot.allowed_files))]))
+        self.assertEqual(vecdot.semantics["planner_target_exclusions"], [{
+            "kernel_pattern": vecdot.dispatch.anchor_exact[3].kernel_pattern,
+            "calls": 129, "grid": 57344, "workgroup": 128,
+            "lds_bytes": 512,
+            "reason": "Q5 false/true tail is not the reviewed true/true dequant route"}])
+        q5_true = vecdot.dispatch.anchor_exact[:3]
+        self.assertEqual(sum(row.calls for row in q5_true), 13_803)
 
     def test_balanced_arm_schedule_is_seeded_and_s2_exactly_reverses_s1(self):
         first_seed, first = F._arm_order_schedule(

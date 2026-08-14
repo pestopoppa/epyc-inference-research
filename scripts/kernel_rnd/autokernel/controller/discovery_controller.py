@@ -27,7 +27,7 @@ import stat
 import tempfile
 from typing import Any, Callable, Mapping, Protocol, Sequence
 
-from .. import campaign, journal, source_candidate
+from .. import campaign, journal, schemas, source_candidate
 from . import claude_fable5_critic_actor, codex_container_actor, do_not_repeat, hypotheses
 from . import gpu_source_proofs
 from scripts.benchmark import autokernel_progression
@@ -204,14 +204,15 @@ class AuthoringAssignment:
             required = {"portfolio_sha256", "record_sha256", "hypothesis_id",
                         "statement", "falsifier", "mechanism_id", "regime",
                         "target_file", "target_symbols", "template_id",
-                        "decision_policy"}
+                        "change_class", "decision_policy"}
             value = self.portfolio_binding
             if (not isinstance(value, Mapping) or set(value) != required
                     or not HASH.fullmatch(str(value.get("portfolio_sha256")))
                     or not HASH.fullmatch(str(value.get("record_sha256")))
                     or not all(isinstance(value.get(key), str) and value[key]
                                for key in ("hypothesis_id", "statement", "falsifier",
-                                           "mechanism_id", "target_file", "template_id"))
+                                           "mechanism_id", "target_file", "template_id",
+                                           "change_class"))
                     or not isinstance(value.get("regime"), Mapping)
                     or not isinstance(value.get("target_symbols"), (list, tuple))
                     or not value["target_symbols"]
@@ -636,6 +637,7 @@ class CodexPlanner:
             example_regime = binding["regime"]
             example_template = binding["template_id"]
             example_mechanism = binding["mechanism_id"]
+            example_change_class = binding["change_class"]
         else:
             example_file = "ggml/src/ggml-cuda/example.cu"
             example_symbol = "example_symbol"
@@ -646,6 +648,7 @@ class CodexPlanner:
             example_regime = {"phase": "decode"}
             example_template = "replace-with-reviewed-id"
             example_mechanism = "bounded-example"
+            example_change_class = "dispatcher"
         example_patch = (f"diff --git a/{example_file} b/{example_file}\n"
                          f"--- a/{example_file}\n+++ b/{example_file}\n"
                          f"@@ -1 +1 @@ {example_symbol}()\n-old\n+new\n")
@@ -653,7 +656,7 @@ class CodexPlanner:
             "plan.json": {"hypothesis_id": example_hypothesis,
                 "statement": example_statement,
                 "falsifier": example_falsifier, "regime": example_regime,
-                "proposal": {"proposal_id": assignment["proposal_id"], "change_class": "dispatcher",
+                "proposal": {"proposal_id": assignment["proposal_id"], "change_class": example_change_class,
                     "change": {"files_and_symbols": {example_file: example_symbols},
                                "estimated_diff_size": 2}},
                 "source_manifest_path": "source-patch.json",
@@ -667,7 +670,7 @@ class CodexPlanner:
                 "campaign_id": assignment["campaign_id"], "proposal_id": assignment["proposal_id"],
                 "candidate_id": assignment["candidate_id"], "source_tree": "llama.cpp",
                 "production_base_commit": assignment["production_base_commit"],
-                "instrument_commit": assignment["instrument_commit"], "change_class": "dispatcher",
+                "instrument_commit": assignment["instrument_commit"], "change_class": example_change_class,
                 "declared_files": [example_file],
                 "declared_symbols": {example_file: example_symbols},
                 "mechanism_id": example_mechanism,
@@ -1124,12 +1127,16 @@ def _portfolio_binding(config: ControllerConfig,
                    "required_replications", "max_replication_spread_pct",
                    "sign_policy", "conflict_policy", "max_distinct_candidates",
                    "terminal_rule"}
+    facets = mechanism.get("facets") if isinstance(mechanism, Mapping) else None
     if (not isinstance(files, list) or len(files) != 1
             or not isinstance(symbols, list) or not symbols
             or not all(isinstance(value, str) and value for value in files + symbols)
             or not isinstance(templates, list) or len(templates) != 1
             or target.get("template_intent") != templates[0]
             or not HASH.fullmatch(str(mechanism.get("fingerprint_sha256")))
+            or not isinstance(facets, Mapping)
+            or facets.get("change_class") not in schemas.CHANGE_CLASSES
+            or facets.get("change_class") == "parameter"
             or not isinstance(policy.get("max_distinct_candidates"), int)
             or isinstance(policy.get("max_distinct_candidates"), bool)
             or not 1 <= policy["max_distinct_candidates"] <= 8
@@ -1149,6 +1156,7 @@ def _portfolio_binding(config: ControllerConfig,
         "statement": record.get("statement"),
         "falsifier": record["primary_falsifier"],
         "mechanism_id": mechanism["fingerprint_sha256"],
+        "change_class": facets["change_class"],
         "regime": dict(record["regime"]),
         "target_file": files[0],
         "target_symbols": list(symbols),
@@ -1207,6 +1215,8 @@ def _validate_portfolio_candidate(item: PlannedCandidate, binding: Mapping[str, 
             or item.falsifier != binding["falsifier"]
             or dict(item.regime) != dict(binding["regime"])
             or manifest.mechanism_id != binding["mechanism_id"]
+            or manifest.change_class != binding["change_class"]
+            or item.proposal.get("change_class") != binding["change_class"]
             or tuple(manifest.declared_files) != (binding["target_file"],)
             or set(manifest.declared_symbols.get(binding["target_file"], ())) !=
                set(binding["target_symbols"])

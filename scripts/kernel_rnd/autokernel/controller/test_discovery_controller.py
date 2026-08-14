@@ -42,7 +42,8 @@ class Tests(unittest.TestCase):
           "target":{"source_files":["ggml/src/ggml-cuda/quantize.cu"],
                     "source_symbols":["quantize_q8_1"],
                     "template_intent":"cuda-quantize-q8-v1"},
-          "mechanism":{"fingerprint_sha256":H},
+          "mechanism":{"fingerprint_sha256":H,
+                       "facets":{"change_class":"arithmetic"}},
           "priority":{"rank":rank},
           "current_bundle_eligibility":{"eligible":eligible,
                "template_ids":["cuda-quantize-q8-v1"] if eligible else []},
@@ -64,7 +65,7 @@ class Tests(unittest.TestCase):
   manifest=D.source_candidate.SourcePatchManifest(
       campaign_id="ak-test",proposal_id="akp-test",candidate_id="akc-test",
       source_tree="llama.cpp",production_base_commit="0"*40,
-      instrument_commit="1"*40,change_class="dispatcher",declared_files=(path,),
+      instrument_commit="1"*40,change_class=binding["change_class"],declared_files=(path,),
       declared_symbols={path:symbols},
       mechanism_id=mechanism_id or binding["mechanism_id"],
       patch_sha256=hashlib.sha256(patch).hexdigest(),patch_bytes=patch)
@@ -73,7 +74,8 @@ class Tests(unittest.TestCase):
       (D.BoundedDispatchExpectation("quantize_q8_1",18705,1024,256,0),))
   return D.PlannedCandidate(hypothesis_id or binding["hypothesis_id"],
       binding["statement"],binding["falsifier"],regime or binding["regime"],
-      {"proposal_id":"akp-test"},manifest,manifest.patch_bundle_sha256,intent)
+      {"proposal_id":"akp-test","change_class":binding["change_class"]},
+      manifest,manifest.patch_bundle_sha256,intent)
  def test_portfolio_scheduler_owns_rank_budget_and_exact_candidate_binding(self):
   with tempfile.TemporaryDirectory() as t:
    config=self.portfolio_config(Path(t),[

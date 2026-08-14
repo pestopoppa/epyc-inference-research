@@ -688,7 +688,11 @@ def _template_registry() -> ExperimentTemplateRegistry:
             "vec_dot_iq3_s_q8_1", "vec_dot_iq1_s_q8_1", "vec_dot_iq1_m_q8_1",
             "vec_dot_iq4_nl_q8_1", "vec_dot_iq4_xs_q8_1"),
          "markers": ("mul_mat_vec_q<",), "op": "MUL_MAT", "cases": 1139,
-         "anchor": mmvq_anchor, "replays": ()},
+         "anchor": mmvq_anchor, "replays": (),
+         "planner_target_exclusions": ({
+             "kernel_pattern": mmvq_anchor[3][0], "calls": 129,
+             "grid": 57344, "workgroup": 128, "lds_bytes": 512,
+             "reason": "Q5 false/true tail is not the reviewed true/true dequant route"},)},
         {"id": "cuda-quantize-q8-v1", "path": "ggml/src/ggml-cuda/quantize.cu",
          "primary": "quantize_q8_1",
          "symbols": ("quantize_q8_1", "quantize_mmq_nvfp4", "quantize_mmq_mxfp4",
@@ -752,6 +756,8 @@ def _template_registry() -> ExperimentTemplateRegistry:
                            "timestamp_csv": str(_PROFILE_TRACE_CSV),
                            "timestamp_csv_sha256": _PROFILE_TRACE_CSV_SHA256},
                        "manual_replay_traces": [dict(row, file=path) for row in family["replays"]],
+                       "planner_target_exclusions": list(
+                           family.get("planner_target_exclusions", ())),
                        "dispatch_bounds": {"calls": [1, 20000], "grid": [64, 16777216],
                                            "workgroup": [64, 1024], "lds_bytes": [0, 131072],
                                            "kernel_name_fragments": list(family["markers"])}})
