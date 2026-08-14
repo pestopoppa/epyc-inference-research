@@ -66,4 +66,4 @@ class Mi210ResidencySampler:
                 kfd_pids=(child_pid,), vram_bytes=0)
         return evidence.GpuResidencySample(observed_monotonic_ns=time.monotonic_ns(),
                                            device_id=self.DEVICE_ID, kfd_pids=owned,
-                                           vram_bytes=vram)
+                                           vram_bytes=vram, launcher_pid=child_pid)

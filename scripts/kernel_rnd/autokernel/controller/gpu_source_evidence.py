@@ -96,6 +96,7 @@ class GpuResidencySample:
     device_id: str
     kfd_pids: tuple[int, ...]
     vram_bytes: int
+    launcher_pid: int | None = None
 
     def __post_init__(self) -> None:
         if (not isinstance(self.observed_monotonic_ns, int)
@@ -104,6 +105,8 @@ class GpuResidencySample:
                 or not self.kfd_pids
                 or any(isinstance(pid, bool) or not isinstance(pid, int) or pid < 1
                        for pid in self.kfd_pids)
+                or (self.launcher_pid is not None and (isinstance(self.launcher_pid, bool)
+                    or not isinstance(self.launcher_pid, int) or self.launcher_pid < 1))
                 or isinstance(self.vram_bytes, bool)
                 or not isinstance(self.vram_bytes, int) or self.vram_bytes < 0):
             raise EvidenceProducerError("invalid KFD/VRAM sample")
@@ -711,7 +714,8 @@ def _validate_residency_witness(value: object, *, device_id: str, label: str) ->
         except (KeyError, TypeError, ValueError) as exc:
             raise EvidenceProducerError(f"{label} residency sample is malformed") from exc
         if (sample.get("device_id") != device_id or not started <= observed <= ended
-                or not isinstance(pids, list) or child_pid not in pids or vram <= 0):
+                or not isinstance(pids, list) or not pids or vram <= 0
+                or (child_pid not in pids and sample.get("launcher_pid") != child_pid)):
             raise EvidenceProducerError(f"{label} residency sample missed child lifetime")
         valid.append(sample)
     if (claimed_count != len(valid) or claimed_max != max(int(x["vram_bytes"])
@@ -723,7 +727,9 @@ def _residency(capture: ExecutionCapture, device_id: str) -> dict[str, Any]:
     samples = [sample for sample in capture.samples
                if capture.started_monotonic_ns <= sample.observed_monotonic_ns
                <= capture.ended_monotonic_ns and sample.device_id == device_id
-               and capture.child_pid in sample.kfd_pids and sample.vram_bytes > 0]
+               and (capture.child_pid in sample.kfd_pids
+                    or sample.launcher_pid == capture.child_pid)
+               and sample.vram_bytes > 0]
     if not samples:
         raise EvidenceProducerError("no KFD+nonzero-VRAM sample overlapped the child execution")
     return {

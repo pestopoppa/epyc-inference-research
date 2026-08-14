@@ -20,6 +20,7 @@ class Mi210ResidencySamplerTests(unittest.TestCase):
             vram = root / "vram"; vram.write_text("99\n")
             result = Mi210ResidencySampler(kfd_root=kfd, vram_path=vram, proc_root=proc)(7)
             self.assertEqual(result.kfd_pids, (42,)); self.assertEqual(result.vram_bytes, 99)
+            self.assertEqual(result.launcher_pid, 7)
 
     def test_foreign_kfd_refuses(self):
         with tempfile.TemporaryDirectory() as directory:
