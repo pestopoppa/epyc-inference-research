@@ -8,9 +8,11 @@ import hashlib
 import json
 import math
 import os
+import signal
 import stat
 import subprocess
 import sys
+import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -675,9 +677,13 @@ def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
                    kfd_pid_provider: Callable[[], tuple[int, ...]] | None = None,
                    vram_reader: Callable[[], int] | None = None,
                    pgid_provider: Callable[[int], int] | None = None,
-                   sleep: Callable[[float], None] | None = None) -> dict:
+                   sleep: Callable[[float], None] | None = None,
+                   max_runtime_s: float = 1800.0) -> dict:
     if isinstance(repetitions, bool) or not isinstance(repetitions, int) or repetitions < 1:
         raise RuntimeError("GPU discovery repetitions must be a positive integer")
+    if (isinstance(max_runtime_s, bool) or not isinstance(max_runtime_s, (int, float))
+            or not math.isfinite(float(max_runtime_s)) or not 1 <= max_runtime_s <= 3600):
+        raise RuntimeError("GPU discovery supervisor deadline is outside reviewed bounds")
     if readiness_policy is not None and (
             runtime_arm != readiness_policy.runtime_arm
             or model.resolve() != readiness_policy.model_path
@@ -723,14 +729,54 @@ def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
         except (OSError, ValueError) as exc:
             raise RuntimeError(f"VRAM residency counter unreadable: {exc}") from exc
 
+    # Real children write to regular files, not PIPEs: llama-bench may emit
+    # enough diagnostics to fill a pipe while the supervisor is sampling KFD,
+    # which would deadlock the process and retain the shared inference lock.
+    output_context = tempfile.TemporaryDirectory(prefix="autokernel-gpu-arm-")
+    output_root = Path(output_context.name)
+    stdout_path, stderr_path = output_root / "stdout", output_root / "stderr"
+    stdout_handle = stdout_path.open("w+", encoding="utf-8")
+    stderr_handle = stderr_path.open("w+", encoding="utf-8")
+    real_process = process_factory is None
     process = factory(argv, env=env, stdin=subprocess.DEVNULL,
-                      stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                      stdout=(stdout_handle if real_process else subprocess.PIPE),
+                      stderr=(stderr_handle if real_process else subprocess.PIPE),
                       text=True, start_new_session=True)
     samples = []
     maps_identity = None
     readiness_witness = None
+    supervisor_started = time.monotonic()
+    teardown: dict[str, Any] = {"required": False, "term_sent": False,
+                                "kill_sent": False, "death_proved": False}
+    stdout = stderr = ""
+    def stop_child() -> None:
+        teardown["required"] = True
+        if process.poll() is not None:
+            teardown["death_proved"] = True
+            return
+        try:
+            if real_process:
+                if os.getpgid(process.pid) != process.pid:
+                    raise RuntimeError("GPU discovery child does not own its sealed process group")
+                os.killpg(process.pid, signal.SIGTERM)
+            else:
+                process.terminate()
+            teardown["term_sent"] = True
+            process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            if real_process:
+                os.killpg(process.pid, signal.SIGKILL)
+            else:
+                process.kill()
+            teardown["kill_sent"] = True
+            process.wait(timeout=10)
+        if process.returncode is None:
+            raise RuntimeError("GPU discovery child remained alive after TERM/KILL teardown")
+        teardown["death_proved"] = True
     try:
       while process.poll() is None:
+        if time.monotonic() - supervisor_started > max_runtime_s:
+            raise RuntimeError("GPU discovery supervisor deadline exceeded")
         kfd = kfd_provider()
         try:
             vram = read_vram()
@@ -768,15 +814,22 @@ def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
                 on_load_ready(readiness_witness)
                 ready_continue_handshake.continue_after_release()
         pause(0.05)
-      stdout, stderr = process.communicate(timeout=10)
-    except BaseException:
+      if real_process:
+          stdout_handle.flush(); stderr_handle.flush()
+          stdout_handle.seek(0); stderr_handle.seek(0)
+          stdout, stderr = stdout_handle.read(), stderr_handle.read()
+      else:
+          stdout, stderr = process.communicate(timeout=10)
+    except BaseException as original:
         try:
-            if process.poll() is None:
-                process.terminate()
-                process.wait(timeout=10)
-        except BaseException:
-            pass
+            stop_child()
+        except BaseException as teardown_error:
+            raise RuntimeError(
+                f"GPU discovery teardown failed after {type(original).__name__}: {teardown_error}") from original
         raise
+    finally:
+        stdout_handle.close(); stderr_handle.close()
+        output_context.cleanup()
     if process.returncode != 0:
         raise RuntimeError(f"GPU discovery invocation exited {process.returncode}: {stderr[-2000:]}")
     rows = [json.loads(line) for line in stdout.splitlines() if line.strip()]
@@ -829,6 +882,11 @@ def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
             "metric": float(metric), "samples": [float(value) for value in raw_samples],
             "sample_count": repetitions, "seed": seed, "raw_row": row,
             "stderr_tail": stderr[-2000:], "residency": samples,
+            "supervisor": {"deadline_s": float(max_runtime_s),
+                           "elapsed_s": time.monotonic() - supervisor_started,
+                           "stdout_sha256": hashlib.sha256(stdout.encode()).hexdigest(),
+                           "stderr_sha256": hashlib.sha256(stderr.encode()).hexdigest(),
+                           "teardown": teardown},
             "runtime_maps_identity": maps_identity,
             "load_readiness_witness": readiness_witness,
             "hip_residency_proved": True}
@@ -1283,8 +1341,13 @@ def run(args: argparse.Namespace) -> dict:
                   f"{type(exc).__name__}: {exc}", file=sys.stderr)
         return result
     finally:
+        primary_active = sys.exc_info()[0] is not None
+        sampler_error: BaseException | None = None
         if sampler is not None:
-            sampler.stop()
+            try:
+                sampler.stop()
+            except BaseException as exc:
+                sampler_error = exc
         if gpu is not None:
             released = gpu.release().to_dict()
             if live_governance is not None:
@@ -1294,6 +1357,8 @@ def run(args: argparse.Namespace) -> dict:
                     "ended_at": utc_now(),
                     "device_claim_released": released,
                 })
+        if sampler_error is not None and not primary_active:
+            raise sampler_error
 
 
 def parser() -> argparse.ArgumentParser:

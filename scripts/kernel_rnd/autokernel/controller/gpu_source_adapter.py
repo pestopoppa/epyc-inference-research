@@ -326,6 +326,7 @@ class GovernedGpuSourceAdapter:
                                   controller.SealedScreen], Sequence[controller.SealedScreen]],
         protected_roots: Sequence[Path],
         protected_files: Sequence[evidence.BoundInputFile],
+        runner_attest: Callable[[], None] = lambda: None,
     ) -> None:
         if not operations_root.is_absolute():
             raise GpuSourceAdapterError("operations_root must be absolute")
@@ -333,6 +334,7 @@ class GovernedGpuSourceAdapter:
         self.build_source = build_source
         self.plan_factory = plan_factory
         self.args_factory = args_factory
+        self.runner_attest = runner_attest
         self.correctness_executor = correctness_executor
         self.rocprof_executor = rocprof_executor
         self.claim_journal = claim_journal
@@ -360,6 +362,7 @@ class GovernedGpuSourceAdapter:
     def _proof_bundle(self, operation_root: Path) -> Callable[..., gpu_source_proofs.GpuSourceProofBundle]:
         def produce(candidate: controller.PlannedCandidate,
                     build: controller.GpuSourceBuild) -> gpu_source_proofs.GpuSourceProofBundle:
+            self.runner_attest()
             plan = self.plan_factory(candidate, build)
             if (not isinstance(plan, evidence.GpuSourceEvidencePlan)
                     or plan.manifest_sha256 != candidate.source_manifest_sha256
@@ -375,6 +378,7 @@ class GovernedGpuSourceAdapter:
                         continue
                     raise GpuSourceAdapterError(
                         "GPU source evidence may not use a protected production tree")
+            self.runner_attest()
             return evidence.produce_gpu_source_evidence(
                 output_root=operation_root / "proof", plan=plan,
                 correctness_executor=self.correctness_executor,
@@ -438,7 +442,7 @@ class GovernedGpuSourceAdapter:
         delegate = controller.GpuSourceScreener(
             build_source=self._build_guarded,
             proof_bundle=self._proof_bundle(operation_root),
-            args_factory=contained_args)
+            args_factory=contained_args, runner_attest=self.runner_attest)
         try:
             result = delegate.screen(candidate, authorization, lease)
         finally:
@@ -598,6 +602,7 @@ def build_governed_gpu_source_adapter(
                     = lambda _candidate, current: (current,),
     protected_roots: Sequence[Path] = (),
     protected_files: Sequence[evidence.BoundInputFile] = (),
+    runner_attest: Callable[[], None] = lambda: None,
 ) -> GovernedGpuSourceAdapter:
     """Build the concrete controller adapter without executing any command."""
     return GovernedGpuSourceAdapter(
@@ -607,7 +612,8 @@ def build_governed_gpu_source_adapter(
         rocprof_executor=rocprof_executor, claim_journal=claim_journal,
         claim_acquirer=claim_acquirer, claim_verifier=claim_verifier,
         claim_timeout_s=claim_timeout_s, receipt_series=receipt_series,
-        protected_roots=protected_roots, protected_files=protected_files)
+        protected_roots=protected_roots, protected_files=protected_files,
+        runner_attest=runner_attest)
 
 
 __all__ = [

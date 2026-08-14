@@ -33,14 +33,17 @@ def screen_receipt(path: Path, effect: float, label: str) -> D.SealedScreen:
 
 
 class FakeDelegate:
-    def __init__(self, *, build_source, proof_bundle, args_factory):
+    def __init__(self, *, build_source, proof_bundle, args_factory,
+                 runner_attest=lambda: None):
         self.build_source = build_source
         self.proof_bundle = proof_bundle
         self.args_factory = args_factory
+        self.runner_attest = runner_attest
 
     def screen(self, candidate, authorization, lease):
         build = self.build_source(candidate, authorization, lease)
         self.proof_bundle(candidate, build)
+        self.runner_attest()
         return self.args_factory(candidate, build, lease).screen
 
 

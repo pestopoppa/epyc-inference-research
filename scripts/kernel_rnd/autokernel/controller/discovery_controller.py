@@ -557,8 +557,10 @@ class GpuSourceScreener:
     """
     def __init__(self, *, build_source: Callable[[PlannedCandidate, hypotheses.ClaimAuthorization, Mapping[str, Any]], GpuSourceBuild],
                  proof_bundle: Callable[[PlannedCandidate, GpuSourceBuild], gpu_source_proofs.GpuSourceProofBundle],
-                 args_factory: Callable[[PlannedCandidate, GpuSourceBuild, Mapping[str, Any]], Any]) -> None:
+                 args_factory: Callable[[PlannedCandidate, GpuSourceBuild, Mapping[str, Any]], Any],
+                 runner_attest: Callable[[], None] = lambda: None) -> None:
         self.build_source, self.proof_bundle, self.args_factory = build_source, proof_bundle, args_factory
+        self.runner_attest = runner_attest
 
     def screen(self, candidate: PlannedCandidate, authorization: hypotheses.ClaimAuthorization, lease: Mapping[str, Any]) -> SealedScreen:
         build = self.build_source(candidate, authorization, lease)
@@ -574,6 +576,9 @@ class GpuSourceScreener:
         # and its durable result.  This controller does not spawn a shell.
         if getattr(args, "factor", None) != "source_patch" or Path(getattr(args, "anchor_build", "")).resolve() != build.anchor_build or Path(getattr(args, "candidate_build", "")).resolve() != build.candidate_build:
             raise DiscoveryControllerError("GPU source runner arguments are not bound to the typed build")
+        # Immediately-before-call byte attestation prevents a validated graph
+        # from silently executing a changed controller/factory/runner module.
+        self.runner_attest()
         raw = gpu_discovery.run(args)
         result_path = Path(args.output_dir).resolve() / "result.json"
         durable = gpu_source_proofs.require_result_file(result_path, raw)["body"]

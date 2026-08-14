@@ -114,6 +114,16 @@ class DeploymentFactoryTests(unittest.TestCase):
         self.assertNotIn("executor", str(signature))
         self.assertNotIn("journal", str(signature))
 
+    def test_execution_module_attestor_refuses_any_live_byte_drift(self):
+        sealed = {"runner": {"path": "/sealed/runner.py", "sha256": "a" * 64}}
+        attest = F._module_attestor(sealed)
+        with mock.patch.object(F, "_execution_module_identity", return_value=sealed):
+            attest()
+        changed = {"runner": {"path": "/sealed/runner.py", "sha256": "b" * 64}}
+        with mock.patch.object(F, "_execution_module_identity", return_value=changed), \
+             self.assertRaisesRegex(F.DeploymentFactoryError, "module bytes changed"):
+            attest()
+
     def test_validate_only_materializes_static_graph_without_actor_or_hardware(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -271,7 +281,8 @@ class DeploymentFactoryTests(unittest.TestCase):
                 runner_args=F.RunnerArgsBinding(mock.Mock()),
                 experiment_template_registry=templates,
                 inference_window_lease=F.InferenceWindowLeaseBinding(),
-                production_snapshot=F.ProductionSnapshotBinding((bound,)))
+                production_snapshot=F.ProductionSnapshotBinding(
+                    protected, (bound,), {}, F.schemas.content_hash({})))
             config = mock.Mock(
                 config_sha256="d" * 64, experiment_template_registry_sha256="e" * 64,
                 actor_wrapper=SimpleNamespace(path=Path("/sealed/codex-wrapper")),
@@ -288,6 +299,8 @@ class DeploymentFactoryTests(unittest.TestCase):
                  mock.patch.object(F, "_validate_source_scope"), \
                  mock.patch.object(F.gpu_source_adapter, "build_governed_gpu_source_adapter",
                                    side_effect=adapter_factory), \
+                 mock.patch.object(F, "_production_runtime_snapshot",
+                                   return_value=((bound,), {})), \
                  mock.patch.object(F.controller, "build_controller_adapters",
                                    side_effect=lambda **kwargs: kwargs):
                 F.materialize(config, {}, correctness_executor=mock.Mock(),

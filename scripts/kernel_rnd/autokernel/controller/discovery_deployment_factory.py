@@ -18,7 +18,7 @@ from types import MappingProxyType
 from typing import Any, Callable, Mapping
 
 from .. import schemas
-from ..execution import inference_window
+from ..execution import inference_window, device_sampler
 from ..resource import device_claim
 from . import discovery_controller as controller
 from . import discovery_deployment as deployment
@@ -28,6 +28,8 @@ from . import gpu_load_admission
 from . import gpu_residency_sampler
 from . import codex_container_actor
 from . import discovery_static_registry
+from . import gpu_source_proofs
+from scripts.benchmark import autokernel_gpu_discovery_beliefs
 
 
 class DeploymentFactoryError(RuntimeError): pass
@@ -202,6 +204,32 @@ class StaticDeploymentGraph:
     registry_ids: Mapping[str, str]
     graph_receipt: Path
     graph_sha256: str
+
+
+def _execution_module_identity() -> dict[str, dict[str, str]]:
+    modules = {
+        "deployment_factory": Path(__file__).resolve(strict=True),
+        "discovery_controller": Path(controller.__file__).resolve(strict=True),
+        "gpu_discovery_runner": Path(controller.gpu_discovery.__file__).resolve(strict=True),
+        "gpu_source_adapter": Path(gpu_source_adapter.__file__).resolve(strict=True),
+        "discovery_static_registry": Path(discovery_static_registry.__file__).resolve(strict=True),
+        "gpu_source_evidence": Path(evidence.__file__).resolve(strict=True),
+        "gpu_source_proofs": Path(gpu_source_proofs.__file__).resolve(strict=True),
+        "gpu_discovery_beliefs": Path(autokernel_gpu_discovery_beliefs.__file__).resolve(strict=True),
+        "device_claim": Path(device_claim.__file__).resolve(strict=True),
+        "device_sampler": Path(device_sampler.__file__).resolve(strict=True),
+        "gpu_residency_sampler": Path(gpu_residency_sampler.__file__).resolve(strict=True),
+    }
+    return {name: {"path": str(path), "sha256": _digest_regular(path, name)}
+            for name, path in modules.items()}
+
+
+def _module_attestor(expected: Mapping[str, Mapping[str, str]]) -> Callable[[], None]:
+    sealed = json.loads(json.dumps(dict(expected), sort_keys=True))
+    def attest() -> None:
+        if _execution_module_identity() != sealed:
+            raise DeploymentFactoryError("live execution module bytes changed after graph validation")
+    return attest
 
 
 _STATIC_IDS = MappingProxyType({
@@ -869,10 +897,6 @@ def _runner_binding(config: deployment.DiscoveryDeployment) -> RunnerArgsBinding
                 "--common-loader-dir", str(build_.common_loader_dir),
                 "--anchor-loader-dir", str(build_.anchor_loader_dir),
                 "--candidate-loader-dir", str(build_.candidate_loader_dir),
-                "--instrument-ready-continue-v1",
-                "--instrument-ready-continue-commit", _INSTRUMENT_COMMIT,
-                "--instrument-ready-continue-contract-sha256",
-                _READY_CONTINUE_CONTRACT_SHA256,
                 "--cpu-claim-journal", str(config.operations_root / "claims" / "cpu.jsonl"),
                 "--device-claim-journal", str(config.operations_root / "claims" / "device.jsonl")]
         return controller.gpu_discovery.parser().parse_args(argv)
@@ -928,6 +952,7 @@ def _seal_graph_receipt(config: deployment.DiscoveryDeployment,
                         runtime: Mapping[str, Any], templates: ExperimentTemplateRegistry,
                         target_equality: tuple[Path, str],
                         instrument_review: tuple[Path, str],
+                        execution_modules: Mapping[str, Mapping[str, str]],
                         production_runtime_sha256: str) -> tuple[Path, str]:
     launcher_path = Path(codex_container_actor.__file__).resolve(strict=True)
     launcher_sha256 = _digest_regular(launcher_path, "Codex actor launcher")
@@ -945,6 +970,7 @@ def _seal_graph_receipt(config: deployment.DiscoveryDeployment,
                                      "module_sha256": launcher_sha256,
                                      "constructor": "codex_container_actor.build_docker_argv",
                                      "image_id": codex_container_actor.CONTAINER_IMAGE_ID},
+            "execution_modules": dict(execution_modules),
             "environment_profile": dict(_SAFE_ACTOR_ENVIRONMENT),
             "source_authority": {
                 "production_base_path": str(config.production_path),
@@ -961,6 +987,8 @@ def _seal_graph_receipt(config: deployment.DiscoveryDeployment,
                                "ready_continue_schema": "epyc.autokernel.ready_continue.v1",
                                "instrument_commit": _INSTRUMENT_COMMIT,
                                "contract_source_sha256": _READY_CONTINUE_CONTRACT_SHA256,
+                               "early_unlock_enabled": False,
+                               "trust_limit": "cooperative_same_uid_not_launch_authority",
                                "safe_fallback": "full_process_cold_serialized_lock"},
             "instrument_target_equality": {"path": str(target_equality[0]),
                                            "sha256": target_equality[1]},
@@ -987,6 +1015,7 @@ def build_static_deployment_graph(config: deployment.DiscoveryDeployment) -> Sta
     config.revalidate()
     target_equality = _target_source_equality_receipt(config)
     instrument_review = _instrument_review_receipt(config)
+    execution_modules = _execution_module_identity()
     templates = _template_registry()
     registry = _static_registry(config, templates)
     production_snapshot = _require(
@@ -1001,7 +1030,8 @@ def build_static_deployment_graph(config: deployment.DiscoveryDeployment) -> Sta
         runtime_maps_sampler=discovery_static_registry.runtime_maps_sampler())
     journal = device_claim.ClaimJournal(config.operations_root / "claims" / "device.jsonl")
     adapters = materialize(config, registry, correctness_executor=executor,
-                           rocprof_executor=executor, claim_journal=journal)
+                           rocprof_executor=executor, claim_journal=journal,
+                           runner_attest=_module_attestor(execution_modules))
     # Replace generic actor instances with byte/runtime-pinned equivalents.
     catalog = adapters["planner"].template_catalog
     adapters = dict(adapters)
@@ -1015,6 +1045,7 @@ def build_static_deployment_graph(config: deployment.DiscoveryDeployment) -> Sta
         runtime_identity=runtime, actor_launcher_sha256=launcher_sha256)
     receipt, digest = _seal_graph_receipt(
         config, runtime, templates, target_equality, instrument_review,
+        execution_modules,
         production_snapshot.runtime_semantics_sha256)
     return StaticDeploymentGraph(config=config, adapters=MappingProxyType(adapters),
                                  registry_ids=_STATIC_IDS, graph_receipt=receipt,
@@ -1107,6 +1138,7 @@ def materialize(config: deployment.DiscoveryDeployment, registry: Mapping[str, M
                 claim_journal: device_claim.ClaimJournal,
                 claim_acquirer: Callable[..., Any] = device_claim.acquire_device_claim,
                 claim_verifier: Callable[[Mapping[str, Any]], object] = device_claim.check_device_claim_held,
+                runner_attest: Callable[[], None] = lambda: None,
                 receipt_series: Callable[[controller.PlannedCandidate, controller.SealedScreen], tuple[controller.SealedScreen, ...]] = lambda _candidate, current: (current,)
                 ) -> dict[str, Any]:
     resolved = deployment.resolve_registry(config, registry)
@@ -1141,6 +1173,7 @@ def materialize(config: deployment.DiscoveryDeployment, registry: Mapping[str, M
 
     def build(candidate: controller.PlannedCandidate, authorization: Any, permit: Mapping[str, Any]):
         config.revalidate()
+        runner_attest()
         template = templates.resolve(candidate.experiment_intent)
         _validate_source_scope(candidate, template)
         candidate.source_manifest.bind(
@@ -1154,6 +1187,7 @@ def materialize(config: deployment.DiscoveryDeployment, registry: Mapping[str, M
         return source.build(candidate, authorization, permit)
     def plan(candidate: controller.PlannedCandidate, build_: controller.GpuSourceBuild):
         config.revalidate()
+        runner_attest()
         # Re-open the builder receipt at every evidence boundary.  In
         # particular an S2/cache path must not inherit S1's root authority.
         from . import discovery_static_registry
@@ -1172,6 +1206,7 @@ def materialize(config: deployment.DiscoveryDeployment, registry: Mapping[str, M
         return result
     def args(candidate: controller.PlannedCandidate, build_: controller.GpuSourceBuild, permit: Mapping[str, Any]):
         config.revalidate()
+        runner_attest()
         if (build_.measurement_binary is None or build_.common_loader_dir is None
                 or build_.anchor_loader_dir is None or build_.candidate_loader_dir is None
                 or build_.reward_runtime_sha256 is None or build_.operation_key is None
@@ -1224,7 +1259,8 @@ def materialize(config: deployment.DiscoveryDeployment, registry: Mapping[str, M
         rocprof_executor=rocprof_executor, claim_journal=claim_journal,
         claim_acquirer=claim_acquirer, claim_verifier=claim_verifier,
         claim_timeout_s=config.claim_timeout_s, receipt_series=receipt_series,
-        protected_roots=(config.production_path, config.instrument_path), protected_files=snapshot.files)
+        protected_roots=(config.production_path, config.instrument_path),
+        protected_files=snapshot.files, runner_attest=runner_attest)
     return controller.build_controller_adapters(planner=planner, critic=critic, screener=screener, lease=lease)
 
 

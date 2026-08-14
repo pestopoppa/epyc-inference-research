@@ -442,6 +442,7 @@ class TestGpuDiscoveryBatchedSubprocess(unittest.TestCase):
             self._polls = 0
             self.returncode = 0
             self.terminated = False
+            self.killed = False
             self.waited = False
 
         def poll(self):
@@ -459,6 +460,10 @@ class TestGpuDiscoveryBatchedSubprocess(unittest.TestCase):
         def wait(self, timeout):
             self.waited = True
             return self.returncode
+
+        def kill(self):
+            self.killed = True
+            self.returncode = -9
 
     @staticmethod
     def _row(samples: list[float]) -> str:
@@ -700,3 +705,75 @@ class TestGpuDiscoveryBatchedSubprocess(unittest.TestCase):
             self.assertTrue(process.waited)
             self.assertFalse(handshake.continue_path.exists())
             handshake.cleanup()
+
+    def test_supervisor_deadline_terminates_and_proves_child_dead(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            build = _build(Path(directory), rocwmma="ON", mfma="OFF")
+            model = Path(directory) / "model.gguf"; model.write_bytes(b"model")
+            process = self._Process(self._row([1.0] * 9), running_polls=100)
+            with mock.patch.object(gpu.time, "monotonic", side_effect=(0.0, 2.0)), \
+                 self.assertRaisesRegex(RuntimeError, "supervisor deadline exceeded"):
+                gpu._invoke_locked(
+                    build=build, model=model, seed=8613, baseline_vram=0,
+                    flash_attention=True, repetitions=9, max_runtime_s=1,
+                    process_factory=lambda *_args, **_kwargs: process,
+                    kfd_pid_provider=lambda: (), vram_reader=lambda: 0,
+                    pgid_provider=lambda _pid: process.pid, sleep=lambda _: None)
+        self.assertTrue(process.terminated)
+        self.assertTrue(process.waited)
+        self.assertIsNotNone(process.returncode)
+
+
+class TestGpuDiscoveryRunCleanup(unittest.TestCase):
+    def test_sampler_stop_failure_never_prevents_device_claim_release(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            model = root / "model"; model.write_bytes(b"model")
+            vram = root / "vram"; vram.write_text("0", encoding="ascii")
+            out = root / "out"
+            build = root / "build"; build.mkdir()
+            identity = {"source_commit": "a" * 40}
+            sealed = {
+                "model": str(model), "model_sha256": gpu.sha256_file(model),
+                "model_size_bytes": model.stat().st_size,
+                "anchor_build": str(build), "candidate_build": str(build),
+                "anchor_identity": identity, "candidate_identity": identity,
+                "sole_factor": {"name": "source_patch", "anchor": "a", "candidate": "b"},
+                "serialized_readiness": {"ready_continue": {"enabled": False}},
+                "host_transfer": {"mode": "cold_serialized"},
+                "cpu_overlap_policy": "cold_serialized_load_window",
+                "runtime_arms": None, "inference_window_lock": str(root / "lock"),
+                "anchor_flash_attention": True, "candidate_flash_attention": True,
+                "prompt_tokens": 0, "generation_tokens": 128,
+                "anchor_threads": 8, "candidate_threads": 8,
+                "anchor_ubatch": 512, "candidate_ubatch": 512,
+                "anchor_batch": 512, "candidate_batch": 512,
+                "anchor_mmap": True, "candidate_mmap": True,
+                "anchor_no_op_offload": False, "candidate_no_op_offload": False,
+                "anchor_split_mode": "layer", "candidate_split_mode": "layer",
+                "anchor_no_kv_offload": False, "candidate_no_kv_offload": False,
+                "anchor_poll": 50, "candidate_poll": 50,
+                "frame": "tg128-ngl99", "metric": "decode_tokens_per_s",
+            }
+            claim = mock.Mock()
+            claim.receipt.return_value.to_dict.return_value = {"claim": "open"}
+            claim.release.return_value.to_dict.return_value = {"released": True}
+            sampler = mock.Mock()
+            sampler.start.return_value = sampler
+            sampler.stop.side_effect = RuntimeError("sampler stop failed")
+            args = argparse.Namespace(
+                output_dir=str(out), cpu_claim_journal=str(root / "cpu.jsonl"),
+                device_claim_journal=str(root / "gpu.jsonl"),
+                campaign_id="cleanup-test", seed=8613, calls=9)
+            with mock.patch.object(gpu, "preflight", return_value=sealed), \
+                 mock.patch.object(gpu.storage, "assert_not_scratch", return_value=out), \
+                 mock.patch.object(gpu, "_readiness_policy_for_arm", return_value=None), \
+                 mock.patch.object(gpu, "_kfd_pids", return_value=()), \
+                 mock.patch.object(gpu, "VRAM_USED", vram), \
+                 mock.patch.object(gpu.device_claim, "acquire_device_claim", return_value=claim), \
+                 mock.patch.object(gpu.device_sampler, "RocmSmiSampler", return_value=sampler), \
+                 mock.patch.object(gpu, "invoke", side_effect=RuntimeError("primary failure")), \
+                 self.assertRaisesRegex(RuntimeError, "primary failure"):
+                gpu.run(args)
+            claim.release.assert_called_once_with()
+            sampler.stop.assert_called_once_with()
