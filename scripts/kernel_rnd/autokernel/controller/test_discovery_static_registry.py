@@ -3,14 +3,20 @@ from __future__ import annotations
 import json
 import hashlib
 import subprocess
+from dataclasses import replace
 from pathlib import Path
 import tempfile
+import threading
+import time
 import unittest
 from unittest import mock
 
 from .discovery_static_registry import (SharedRewardRuntime, StaticRegistryError,
                                         runtime_maps_sampler, evidence_identity_files_for_build,
-                                        _instrument_authority, _verify_selected_gpu_blobs)
+                                        StaticGpuSourceBuilder, _instrument_authority,
+                                        _verify_selected_gpu_blobs, _sealed_write,
+                                        _build_environment_and_toolchain)
+from .. import source_candidate
 from . import discovery_controller as C
 from . import gpu_source_evidence as E
 from . import gpu_source_proofs as P
@@ -228,3 +234,268 @@ class SharedRewardRuntimeTests(unittest.TestCase):
             E._verify_build_files(files.anchor, anchor, "anchor")
             E._verify_build_files(files.candidate, candidate, "candidate")
             self.assertEqual(files.shared_runtime.measurement_binary.path, reward)
+
+
+class _FakeBuildResult:
+    def __init__(self, plan, log: Path) -> None:
+        self.plan = plan
+        self.log_path = str(log.resolve())
+        self.log_sha256 = sha(log.read_bytes())
+        self.succeeded = True
+        self.log_disagrees_with_exit_code = False
+        self.facts = mock.Mock(built_targets=("llama-bench", "test-backend-ops"))
+
+    def to_dict(self):
+        return {
+            "plan": self.plan.to_dict(), "log_path": self.log_path,
+            "log_sha256": self.log_sha256, "succeeded": True,
+            "log_disagrees_with_exit_code": False, "exit_code": 0,
+            "facts": {"built_targets": ["llama-bench", "test-backend-ops"]},
+        }
+
+
+class _FakeSplitRuntime:
+    def __init__(self, root: Path) -> None:
+        self.root = root.resolve()
+
+    def to_dict(self):
+        return {"schema": "epyc.autokernel.split_reward_runtime.v1",
+                "root": str(self.root), "fixture": "hardware-free"}
+
+
+class StaticBuildCacheTests(unittest.TestCase):
+    """No-HIP tests for S1/S2 build identity reuse and fail-closed recovery."""
+
+    def git(self, repo: Path, *argv: str) -> str:
+        result = subprocess.run(("git", "-C", str(repo), *argv), capture_output=True,
+                                text=True, check=True)
+        return result.stdout.strip()
+
+    def fixture(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        root = Path(temporary.name).resolve()
+        production = root / "production"
+        subprocess.run(("git", "init", "-q", "-b", "production-test", str(production)),
+                       check=True)
+        self.git(production, "config", "user.email", "test@example.invalid")
+        self.git(production, "config", "user.name", "Test")
+        source = production / "ggml/src/ggml-cuda/fattn.cu"
+        source.parent.mkdir(parents=True)
+        source.write_text("int kernel() {\n    return 1;\n}\n")
+        self.git(production, "add", ".")
+        self.git(production, "commit", "-qm", "production")
+        production_commit = self.git(production, "rev-parse", "HEAD")
+        instrument = root / "instrument"
+        subprocess.run(("git", "clone", "-q", str(production), str(instrument)), check=True)
+        self.git(instrument, "config", "user.email", "test@example.invalid")
+        self.git(instrument, "config", "user.name", "Test")
+        self.git(instrument, "checkout", "-qb", "measurement-instrument")
+        (instrument / "instrument.txt").write_text("seeded correctness instrument\n")
+        self.git(instrument, "add", "instrument.txt")
+        self.git(instrument, "commit", "-qm", "instrument")
+        instrument_commit = self.git(instrument, "rev-parse", "HEAD")
+        patch_bytes = (
+            b"diff --git a/ggml/src/ggml-cuda/fattn.cu b/ggml/src/ggml-cuda/fattn.cu\n"
+            b"--- a/ggml/src/ggml-cuda/fattn.cu\n"
+            b"+++ b/ggml/src/ggml-cuda/fattn.cu\n"
+            b"@@ -1,3 +1,3 @@\n"
+            b" int kernel() {\n"
+            b"-    return 1;\n"
+            b"+    return 2;\n"
+            b" }\n")
+        path = "ggml/src/ggml-cuda/fattn.cu"
+        manifest = source_candidate.SourcePatchManifest(
+            campaign_id="ak-cache-test", proposal_id="akp-cache-test",
+            candidate_id="akc-cache-test", source_tree="llama.cpp",
+            production_base_commit=production_commit, instrument_commit=instrument_commit,
+            change_class="arithmetic", declared_files=(path,),
+            declared_symbols={path: ("<file-scope>",)}, mechanism_id="cache-test",
+            patch_sha256=sha(patch_bytes), patch_bytes=patch_bytes)
+        proposal = {"proposal_id": "akp-cache-test", "change_class": "arithmetic",
+                    "change": {"files_and_symbols": [f"{path}:<file-scope>"],
+                               "estimated_diff_size": 4}}
+        candidate = C.PlannedCandidate(
+            "akh-cache-test", "reuse one sealed candidate build",
+            "identity drift invalidates reuse", {}, proposal, manifest,
+            manifest.patch_bundle_sha256)
+        operations = root / "operations"; operations.mkdir()
+        build_root = root / "build"; build_root.mkdir()
+        builder = StaticGpuSourceBuilder(
+            production_path=production, production_branch="production-test",
+            instrument_path=instrument, operations_root=operations,
+            build_root=build_root, cmake_defines=(("GGML_HIP", "ON"),))
+        calls = []
+
+        def run_build(plan, *, log_path, **_kwargs):
+            calls.append(str(plan.build_dir.path))
+            build = Path(plan.build_dir.path); bindir = build / "bin"
+            bindir.mkdir(parents=True)
+            for name in ("llama-bench", "libllama-bench-impl.so", "libllama-common.so",
+                         "libllama.so", "libggml.so", "libggml-cpu.so", "libggml-base.so",
+                         "test-backend-ops"):
+                (bindir / name).write_bytes(f"shared-{name}".encode())
+            (bindir / "llama-bench").chmod(0o755)
+            hip = b"candidate-hip" if "akc-cache-test" in str(build) else b"anchor-hip"
+            versioned = bindir / "libggml-hip.so.0.16.0"; versioned.write_bytes(hip)
+            (bindir / "libggml-hip.so.0").symlink_to(versioned.name)
+            (bindir / "libggml-hip.so").symlink_to("libggml-hip.so.0")
+            (build / "CMakeCache.txt").write_text("sealed cache fixture\n")
+            log = Path(log_path); log.write_text("hardware-free build fixture\n")
+            return _FakeBuildResult(plan, log)
+
+        permit = {"operation_key": "1" * 64,
+                  "instrument_branch": "measurement-instrument",
+                  "deployment_config_sha256": "d" * 64}
+        production_before = (self.git(production, "rev-parse", "HEAD"),
+                             self.git(production, "status", "--porcelain"),
+                             source.read_bytes())
+        return mock.Mock(root=root, production=production, instrument=instrument,
+                         instrument_commit=instrument_commit, source=source,
+                         production_before=production_before, builder=builder,
+                         candidate=candidate, permit=permit, calls=calls,
+                         run_build=run_build)
+
+    @staticmethod
+    def split_verifier(root: Path):
+        return _FakeSplitRuntime(Path(root))
+
+    def invoke(self, fixture, permit=None):
+        with mock.patch(
+                "scripts.kernel_rnd.autokernel.controller.discovery_static_registry.worktree.run_build",
+                side_effect=fixture.run_build), mock.patch(
+                "scripts.kernel_rnd.autokernel.controller.discovery_static_registry.split_runtime_verifier.verify_split_runtime",
+                side_effect=self.split_verifier):
+            return fixture.builder.build(
+                fixture.candidate, object(), permit or fixture.permit)
+
+    def test_s1_s2_distinct_operation_keys_reuse_exact_build_once(self):
+        fixture = self.fixture()
+        uncached_calls = []
+        original = StaticGpuSourceBuilder._build_uncached
+        def counted(builder, *args, **kwargs):
+            uncached_calls.append(builder)
+            return original(builder, *args, **kwargs)
+        with mock.patch.object(StaticGpuSourceBuilder, "_build_uncached", new=counted):
+            first = self.invoke(fixture)
+            second = self.invoke(fixture, {**fixture.permit, "operation_key": "2" * 64})
+        self.assertEqual(first.operation_key, fixture.permit["operation_key"])
+        self.assertEqual(second.operation_key, "2" * 64)
+        self.assertEqual(first, replace(second, operation_key=first.operation_key))
+        self.assertEqual(len(uncached_calls), 1, "S1/S2 invoke the build executor once")
+        self.assertEqual(len(fixture.calls), 2, "one anchor/candidate pair-build transaction")
+        self.assertEqual(first.build_key, second.build_key)
+        self.assertNotEqual(first.build_key, fixture.permit["operation_key"])
+        self.assertEqual(
+            (self.git(fixture.production, "rev-parse", "HEAD"),
+             self.git(fixture.production, "status", "--porcelain"),
+             fixture.source.read_bytes()), fixture.production_before)
+
+    def test_artifact_receipt_and_ref_tamper_refuse_without_rebuild(self):
+        cases = ("artifact", "receipt", "ref", "missing-ref")
+        for case in cases:
+            with self.subTest(case=case):
+                fixture = self.fixture(); build = self.invoke(fixture)
+                calls = len(fixture.calls)
+                if case == "artifact":
+                    (build.candidate_build / "bin/llama-bench").write_bytes(b"tampered")
+                elif case == "receipt":
+                    build.materialization_receipt.write_text(
+                        build.materialization_receipt.read_text() + " ")
+                else:
+                    ref = next((fixture.root / "operations/build-cache/refs").iterdir())
+                    if case == "ref":
+                        ref.write_text(ref.read_text().replace('"build_key":"', '"build_key":"0'))
+                    else:
+                        ref.unlink()
+                with self.assertRaises((StaticRegistryError, E.EvidenceProducerError)):
+                    self.invoke(fixture, {**fixture.permit, "operation_key": "3" * 64})
+                self.assertEqual(len(fixture.calls), calls)
+
+    def test_instrument_ref_movement_refuses_without_rebuild(self):
+        fixture = self.fixture(); self.invoke(fixture); calls = len(fixture.calls)
+        (fixture.instrument / "instrument.txt").write_text("moved ref\n")
+        self.git(fixture.instrument, "commit", "-am", "move instrument", "-q")
+        with self.assertRaisesRegex(StaticRegistryError, "instrument branch"):
+            self.invoke(fixture, {**fixture.permit, "operation_key": "4" * 64})
+        self.assertEqual(len(fixture.calls), calls)
+
+    def test_changed_toolchain_fail_closes_existing_request_instead_of_rebuilding(self):
+        fixture = self.fixture(); self.invoke(fixture); calls = len(fixture.calls)
+        environment, toolchain = _build_environment_and_toolchain()
+        changed = json.loads(json.dumps(toolchain))
+        changed["programs"]["cmake"]["sha256"] = "0" * 64
+        changed["toolchain_sha256"] = E.schemas.content_hash(
+            {key: value for key, value in changed.items() if key != "toolchain_sha256"})
+        with mock.patch(
+                "scripts.kernel_rnd.autokernel.controller.discovery_static_registry._build_environment_and_toolchain",
+                return_value=(environment, changed)), self.assertRaisesRegex(
+                    StaticRegistryError, "ref differs"):
+            self.invoke(fixture, {**fixture.permit, "operation_key": "a" * 64})
+        self.assertEqual(len(fixture.calls), calls)
+
+    def test_crash_after_intent_is_classified_incomplete_and_never_rebuilt(self):
+        fixture = self.fixture()
+        with mock.patch.object(StaticGpuSourceBuilder, "_build_uncached",
+                               side_effect=KeyboardInterrupt("simulated crash")):
+            with self.assertRaises(KeyboardInterrupt):
+                fixture.builder.build(fixture.candidate, object(), fixture.permit)
+        with self.assertRaisesRegex(StaticRegistryError, "incomplete"):
+            self.invoke(fixture, {**fixture.permit, "operation_key": "5" * 64})
+        self.assertEqual(fixture.calls, [])
+
+    def test_failed_terminal_and_dangling_ref_are_never_rebuilt(self):
+        fixture = self.fixture()
+        with mock.patch.object(StaticGpuSourceBuilder, "_build_uncached",
+                               side_effect=RuntimeError("simulated build failure")):
+            with self.assertRaises(RuntimeError):
+                fixture.builder.build(fixture.candidate, object(), fixture.permit)
+        with self.assertRaisesRegex(StaticRegistryError, "terminal but not reusable"):
+            self.invoke(fixture, {**fixture.permit, "operation_key": "8" * 64})
+        self.assertEqual(fixture.calls, [])
+
+        other = self.fixture()
+        contract, _environment = other.builder._contract(other.candidate, other.permit)
+        request_key = other.builder._request_key(contract)
+        cache = other.root / "operations/build-cache"
+        refs = cache / "refs"; refs.mkdir(parents=True)
+        (cache / "entries").mkdir(); (cache / "locks").mkdir()
+        _sealed_write(refs / f"{request_key}.json", {
+            "schema": "epyc.autokernel.gpu_source_build_ref.v1",
+            "builder_schema": "epyc.autokernel.static_gpu_source_builder.v2",
+            "request_key": request_key, "build_key": contract["build_key"],
+            "promotion_claim": False})
+        with self.assertRaisesRegex(StaticRegistryError, "without its cache transaction"):
+            self.invoke(other, {**other.permit, "operation_key": "9" * 64})
+        self.assertEqual(other.calls, [])
+
+    def test_concurrent_repetitions_are_serialized_to_one_pair_build(self):
+        fixture = self.fixture(); entered = threading.Event()
+        original = fixture.run_build
+        def delayed(*args, **kwargs):
+            entered.set(); time.sleep(.05)
+            return original(*args, **kwargs)
+        fixture.run_build = delayed
+        results = []; errors = []
+        def invoke(key: str):
+            try:
+                results.append(fixture.builder.build(
+                    fixture.candidate, object(),
+                    {**fixture.permit, "operation_key": key * 64}))
+            except BaseException as exc:
+                errors.append(exc)
+        with mock.patch(
+                "scripts.kernel_rnd.autokernel.controller.discovery_static_registry.worktree.run_build",
+                side_effect=fixture.run_build), mock.patch(
+                "scripts.kernel_rnd.autokernel.controller.discovery_static_registry.split_runtime_verifier.verify_split_runtime",
+                side_effect=self.split_verifier):
+            first = threading.Thread(target=invoke, args=("6",))
+            second = threading.Thread(target=invoke, args=("7",))
+            first.start(); entered.wait(5); second.start()
+            first.join(15); second.join(15)
+        self.assertFalse(first.is_alive() or second.is_alive())
+        self.assertEqual(errors, [])
+        self.assertEqual(len(results), 2)
+        self.assertNotEqual(results[0].operation_key, results[1].operation_key)
+        self.assertEqual(results[0], replace(results[1], operation_key=results[0].operation_key))
+        self.assertEqual(len(fixture.calls), 2)
