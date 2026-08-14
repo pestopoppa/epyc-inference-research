@@ -253,7 +253,7 @@ class OfflineLaunchGate(unittest.TestCase):
         self.assertIn("admission_corpus_sha256", fields)
         self.assertIn("effective_planner_context_sha256", fields)
         context_source = inspect.getsource(C._context)
-        state_source = inspect.getsource(C.DurableState.save)
+        state_source = inspect.getsource(C.run_controller)
         self.assertIn("admission_corpus_version", context_source)
         self.assertIn("admission_corpus_sha256", context_source)
         self.assertIn("effective_planner_context_sha256", context_source)
@@ -664,8 +664,11 @@ class OfflineLaunchGate(unittest.TestCase):
             carrier_body = {
                 "schema": "epyc.autokernel.source_tree_identity.v1",
                 "source_commit": "c" * 40,
-                "tree": tree.to_dict(),
+                "provenance": {"root": str(source.resolve()),
+                               "exclusions": [".git"]},
+                "tree_manifest": tree.to_dict(),
             }
+            carrier_body["receipt_sha256"] = C._sha(carrier_body)
             carrier = root / "source-identity.json"
             carrier.write_text(json.dumps(carrier_body, sort_keys=True))
             carrier_sha = hashlib.sha256(carrier.read_bytes()).hexdigest()
@@ -683,16 +686,51 @@ class OfflineLaunchGate(unittest.TestCase):
             except E.EvidenceProducerError as exc:
                 self.fail(f"valid source-tree receipt was rejected: {exc}")
 
-            tampered = json.loads(carrier.read_text())
-            tampered["tree"]["entries"][0][1] = "f" * 64
-            carrier.write_text(json.dumps(tampered, sort_keys=True))
-            tampered_files = replace(
-                files, source_identity=E.BoundInputFile(
-                    "source_identity", carrier.resolve(),
-                    hashlib.sha256(carrier.read_bytes()).hexdigest()))
-            with self.assertRaisesRegex(E.EvidenceProducerError,
-                                        "tree|manifest|source"):
-                E._verify_build_files(tampered_files, identity, "candidate")
+            mutations = {
+                "commit": lambda body: body.__setitem__("source_commit", "d" * 40),
+                "provenance": lambda body: body["provenance"].__setitem__(
+                    "root", str((root / "other").resolve())),
+                "exclusions": lambda body: body["provenance"].__setitem__(
+                    "exclusions", []),
+                "entry manifest": lambda body: body["tree_manifest"]["entries"][0].__setitem__(1, "f" * 64),
+                "self hash": lambda body: body.__setitem__("receipt_sha256", "0" * 64),
+            }
+            for label, mutate in mutations.items():
+                tampered = json.loads(json.dumps(carrier_body))
+                mutate(tampered)
+                # For all but the self-hash case, simulate an attacker who also
+                # rewrites the outer carrier binding. Inner semantic authority
+                # still has to refuse independently.
+                if label != "self hash":
+                    tampered["receipt_sha256"] = C._sha(
+                        {key: value for key, value in tampered.items()
+                         if key != "receipt_sha256"})
+                carrier.write_text(json.dumps(tampered, sort_keys=True))
+                tampered_files = replace(
+                    files, source_identity=E.BoundInputFile(
+                        "source_identity", carrier.resolve(),
+                        hashlib.sha256(carrier.read_bytes()).hexdigest()))
+                with self.subTest(tamper=label), self.assertRaisesRegex(
+                        E.EvidenceProducerError, "tree|manifest|source|receipt|provenance"):
+                    E._verify_build_files(tampered_files, identity, "candidate")
+
+    def test_materialization_binds_both_source_identity_carriers(self):
+        """Materialization names and hashes anchor/candidate source receipts."""
+        with tempfile.TemporaryDirectory() as directory:
+            _built, _plan, operation_dir = self._static_builder_result(Path(directory))
+            materialization = json.loads(
+                (operation_dir / "materialization.json").read_text())
+            carriers = materialization.get("source_identity_receipts")
+            self.assertIsInstance(carriers, dict)
+            self.assertEqual(set(carriers), {"anchor", "candidate"})
+            for arm, reference in carriers.items():
+                with self.subTest(arm=arm):
+                    self.assertEqual(set(reference), {"path", "sha256"})
+                    path = Path(reference["path"])
+                    self.assertTrue(path.is_absolute() and path.is_file()
+                                    and not path.is_symlink())
+                    self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(),
+                                     reference["sha256"])
 
     def test_shared_reward_runtime_accepts_real_shaped_elf_without_injected_verifier(self):
         """Real ELF RUNPATH/SONAME closure passes the production verifier seam."""
@@ -789,8 +827,7 @@ class OfflineLaunchGate(unittest.TestCase):
         first = key({**base, "baseline_sha256": "b" * 64})
         second = key({**base, "baseline_sha256": "c" * 64})
         changed = key({**base, "baseline_sha256": "d" * 64,
-                       "baseline_frame": {**base["baseline_frame"],
-                                          "workload_sha256": "e" * 64}})
+                       "workload_sha256": "e" * 64})
         self.assertEqual(first, second)
         self.assertNotEqual(first, changed)
 
