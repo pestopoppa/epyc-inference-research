@@ -318,10 +318,11 @@ def initialize_static_deployment_bundle(root: Path) -> Path:
                    "evidence": [f"sha256:{evidence_sha}"]}]}
     policy["policy_sha256"] = schemas.content_hash(policy)
     policy_path, policy_sha = _json_artifact(config_dir / "admission-policy.json", policy)
+    # Only project shares stated exactly by the reviewed attribution receipt.  The
+    # source plan records useful fattn/RoPE outcomes, but does not assign either
+    # one an exact device-time share that can safely enter planner authority.
     source_rows = (
-        ("fattn", "ggml_cuda_get_best_fattn_kernel", .10, "ggml/src/ggml-cuda/fattn.cu"),
         ("mmvq", "ggml_cuda_op_mul_mat_vec_q", .274297, "ggml/src/ggml-cuda/mmvq.cu"),
-        ("rope", "ggml_cuda_op_rope_impl", .05, "ggml/src/ggml-cuda/rope.cu"),
         ("norm", "ggml_cuda_op_rms_norm", .1074, "ggml/src/ggml-cuda/norm.cu"))
     hotspots = []
     for surface, symbol, share, relative in source_rows:
