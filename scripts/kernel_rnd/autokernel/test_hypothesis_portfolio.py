@@ -347,6 +347,65 @@ class HypothesisPortfolioTest(unittest.TestCase):
                                0.4115)
         self.assertFalse(row["current_bundle_eligibility"]["eligible"])
 
+    def test_fable_handoff_memory_is_lossless_and_ineligible(self):
+        portfolio = P.load(P.DEFAULT_PORTFOLIO)
+        evidence = {row["evidence_id"]: row for row in portfolio.body["evidence"]}
+        self.assertEqual(
+            evidence["ev-fable5-mi210-lever-matrix"]["sha256"],
+            "2f6cb30655b4cf01998249fc57619a9e080ae45ba3f22e95eda29bd8bbc179bb",
+        )
+        self.assertEqual(
+            evidence["ev-fable5-mi210-roofline"]["sha256"],
+            "08de87ef44a14de4420432bd04aad5f7e3c3f41639578e9e7f4a7f35dea64357",
+        )
+
+        dnr = portfolio.dnr_record("dnr-l1-moe-mmid-a3b-a4b-low-batch")
+        self.assertEqual(dnr["classification"], "measured_negative")
+        self.assertEqual(dnr["regime"]["batch"], "2-8")
+        self.assertIn("B2 -30%, B4 -21%, B8 -10.5%", dnr["falsifier_result"])
+        self.assertIn("B>=16 ±0.4%", dnr["falsifier_result"])
+        self.assertTrue(any("akh-v2-ultra-sparse-moe-mmid" in condition
+                            for condition in dnr["reentry_conditions"]))
+
+        ultra = portfolio.hypothesis("akh-v2-ultra-sparse-moe-mmid")
+        self.assertEqual(ultra["status"], "needs-template")
+        self.assertFalse(ultra["current_bundle_eligibility"]["eligible"])
+        self.assertIn("256-expert", " ".join(
+            ultra["current_bundle_eligibility"]["blocking_conditions"]))
+        self.assertEqual(ultra["dispatch_anchors"][0]["aggregation"],
+                         "not_applicable")
+        self.assertNotEqual(ultra["mechanism"]["fingerprint_sha256"],
+                            dnr["mechanism"]["fingerprint_sha256"])
+
+        soa = portfolio.hypothesis("akh-v2-q8-soa-repack-conditional")
+        self.assertEqual(soa["status"], "needs-template")
+        self.assertFalse(soa["current_bundle_eligibility"]["eligible"])
+        self.assertIn("TCC_EA_RDREQ_32B", soa["primary_falsifier"])
+        self.assertIn("healthy coalescing", soa["current_bundle_eligibility"]["reason"]
+                      + " " + " ".join(
+                          soa["current_bundle_eligibility"]["blocking_conditions"]))
+
+        l21 = portfolio.hypothesis("akh-v2-q4k-mmq-dequant-gemv")
+        self.assertEqual(l21["status"], "needs-template")
+        self.assertFalse(l21["current_bundle_eligibility"]["eligible"])
+        self.assertEqual(set(l21["target"]["source_files"]), {
+            "ggml/src/ggml-cuda/mmq.cu", "ggml/src/ggml-cuda/mmq.cuh"})
+        self.assertIn("28 pp", l21["expected_value"]["basis"])
+        self.assertIn("45–50%", l21["expected_value"]["basis"])
+        self.assertEqual(
+            {row["with"] for row in l21["interactions"]},
+            {"akh-v2-q4k-branchless-scale-min", "akh-v2-q4k-onewave-incumbent"},
+        )
+        q4_children = [
+            portfolio.hypothesis("akh-v2-q4k-branchless-scale-min"),
+            portfolio.hypothesis("akh-v2-q4k-onewave-incumbent"),
+        ]
+        self.assertTrue(all(
+            row["mechanism"]["fingerprint_sha256"]
+            != l21["mechanism"]["fingerprint_sha256"]
+            for row in q4_children
+        ))
+
     def test_provenance_cycle_primary_falsifier_and_attempt_budget_are_refused(self):
         body = self.body()
         first, second = body["hypotheses"][:2]
@@ -420,8 +479,8 @@ class HypothesisPortfolioTest(unittest.TestCase):
         with redirect_stdout(stdout):
             self.assertEqual(P.main(["validate", str(P.DEFAULT_PORTFOLIO)]), 0)
         result = json.loads(stdout.getvalue())
-        self.assertEqual(result["hypotheses"], 15)
-        self.assertEqual(result["do_not_repeat"], 16)
+        self.assertEqual(result["hypotheses"], 18)
+        self.assertEqual(result["do_not_repeat"], 17)
         self.assertEqual(result["eligible"], 4)
         stdout = StringIO()
         with redirect_stdout(stdout):
@@ -429,7 +488,7 @@ class HypothesisPortfolioTest(unittest.TestCase):
         summary = json.loads(stdout.getvalue())
         self.assertEqual(summary["sha256"], result["sha256"])
         self.assertEqual(len(summary["eligible_records"]), 4)
-        self.assertEqual(len(summary["do_not_repeat"]), 16)
+        self.assertEqual(len(summary["do_not_repeat"]), 17)
 
     def test_duplicate_json_key_is_refused(self):
         with tempfile.TemporaryDirectory() as temp:
