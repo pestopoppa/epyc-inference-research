@@ -97,9 +97,14 @@ class ExperimentTemplate:
                     or not all(isinstance(item, int) for item in limit)
                     or not limit[0] <= value <= limit[1]):
                 raise DeploymentFactoryError(f"planner dispatch {key} exceeds reviewed template bounds")
-        blocks = bounds.get("blocks_per_call")
-        if not isinstance(blocks, int) or blocks < 1:
-            raise DeploymentFactoryError("template lacks reviewed blocks-per-call")
+        prefixes = bounds.get("kernel_prefixes")
+        if (not isinstance(prefixes, list) or not prefixes
+                or not all(isinstance(value, str) and value for value in prefixes)
+                or not any(expected.kernel_name.startswith(prefix) for prefix in prefixes)):
+            raise DeploymentFactoryError("planner kernel literal is outside reviewed template families")
+        if expected.grid % expected.workgroup:
+            raise DeploymentFactoryError("planner dispatch grid must be an exact workgroup multiple")
+        blocks = expected.grid // expected.workgroup
         candidate = evidence.ExactDispatch(
             signature=f"{self.dispatch_id}.candidate",
             kernel_pattern="^" + re.escape(expected.kernel_name) + "$",
