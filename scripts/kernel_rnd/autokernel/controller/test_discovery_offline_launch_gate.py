@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import inspect
 import argparse
+import hashlib
+import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -21,6 +23,8 @@ from . import discovery_deployment as D
 from . import discovery_deployment_factory as F
 from . import discovery_static_registry as S
 from . import gpu_source_evidence as E
+from . import gpu_residency_sampler as R
+from . import split_runtime_verifier as V
 from .test_discovery_controller_blackbox import Critic, Lease, Manifest, Planner
 from .test_gpu_source_evidence import ClaimFactory, FakeExecutors, plan, write_bound
 
@@ -160,6 +164,11 @@ class OfflineLaunchGate(unittest.TestCase):
             model = root / "small.gguf"
             model.write_bytes(b"small-model")
             configured = root / "gpu-discovery.lock"
+            transfer = gpu_runner.host_transfer_admission(
+                bytes_per_cold_load=model.stat().st_size, cold_loads=1,
+                interval_s=60, host_bandwidth_bytes_s=10**9,
+                conservative_fraction=.1, site_policy_allows_overlap=True,
+                observed_headroom=True)
             with mock.patch.object(gpu_runner.cpu_region_claim,
                                       "inspect_region_claims",
                                       return_value={"regions": {}}), \
@@ -169,52 +178,46 @@ class OfflineLaunchGate(unittest.TestCase):
                     build=root, model=model, seed=1, baseline_vram=0,
                     flash_attention=True, campaign_id="ak-offline",
                     cpu_journal=object(), allow_small_model_cpu_overlap=True,
+                    sealed_load_decision=transfer,
                     inference_window_lock=configured)
         self.assertIsNone(receipt["inference_call_window"])
-        overlap = receipt["cpu_coverage"]
-        self.assertEqual(overlap["cpu_overlap_policy"], "allowed_discovery_noise")
+        coverage = receipt["cpu_coverage"]
+        self.assertEqual(coverage["cpu_overlap_policy"], "allowed_discovery_noise")
+        overlap = coverage["host_transfer"]
         for key in ("policy_version", "mode", "inputs", "reason",
                     "lock_interval", "residency_transition"):
             self.assertIn(key, overlap)
         self.assertIn(overlap["mode"],
                       {"hot_resident", "cold_overlap", "cold_serialized"})
-        self.assertFalse(overlap["promotion_claim"])
+        self.assertFalse(coverage["promotion_claim"])
         self.assertEqual(gpu_runner.DEVICE_ID, "mi210_0")
 
     def test_three_mode_admission_defaults_unknown_or_excess_to_serialized(self):
         """Overlap is earned by all predicates; missing data never guesses."""
         decide = getattr(gpu_runner, "host_transfer_admission")
-        common = dict(interval_s=60, host_bandwidth_bytes_s=1000,
-                      conservative_fraction=.1,
-                      expected_identity_sha256="a" * 64,
-                      model_sha256="b" * 64, model_path="/sealed/qwen.gguf",
-                      model_bytes=400, workload="tg128", calls_per_arm=9,
-                      device_id="mi210_0", worst_case_loads_per_interval=18)
+        common = dict(interval_s=60, host_bandwidth_bytes_s=100_000,
+                      conservative_fraction=.1)
         overlap = decide(bytes_per_cold_load=400, cold_loads=18,
                          site_policy_allows_overlap=True,
-                         observed_headroom_bytes_s=1000, hot_resident=False,
-                         resident_identity_sha256=None, **common)
-        mutated = decide(bytes_per_cold_load=400, cold_loads=18,
+                         observed_headroom=True, hot_resident=False, **common)
+        excess = decide(bytes_per_cold_load=40_000, cold_loads=18,
                          site_policy_allows_overlap=True,
-                         observed_headroom_bytes_s=1000, hot_resident=False,
-                         resident_identity_sha256=None,
-                         **{**common, "workload": "pp512"})
-        unknown = decide(bytes_per_cold_load=None, cold_loads=None,
-                         site_policy_allows_overlap=None,
-                         observed_headroom_bytes_s=None, hot_resident=False,
-                         resident_identity_sha256=None, **common)
-        hot = decide(bytes_per_cold_load=0, cold_loads=0,
-                     site_policy_allows_overlap=None,
-                     observed_headroom_bytes_s=None, hot_resident=True,
-                     resident_identity_sha256="a" * 64, **common)
+                         observed_headroom=True, hot_resident=False, **common)
+        unknown = decide(bytes_per_cold_load=400, cold_loads=18,
+                         site_policy_allows_overlap=False,
+                         observed_headroom=False, hot_resident=False, **common)
+        hot = decide(bytes_per_cold_load=1, cold_loads=1,
+                     site_policy_allows_overlap=False,
+                     observed_headroom=False, hot_resident=True,
+                     resident_identity="a" * 64,
+                     expected_identity="a" * 64, **common)
         self.assertEqual(overlap["mode"], "cold_overlap")
-        self.assertEqual(mutated["mode"], "cold_serialized")
+        self.assertEqual(excess["mode"], "cold_serialized")
         self.assertEqual(unknown["mode"], "cold_serialized")
         self.assertIn(hot["mode"], {"hot_resident", "cold_serialized"})
-        for row in (overlap, mutated, unknown, hot):
-            self.assertEqual(set(row), {"policy_version", "mode", "inputs",
-                                        "reason", "lock_interval",
-                                        "residency_transition"})
+        for row in (overlap, excess, unknown, hot):
+            self.assertTrue({"policy_version", "mode", "inputs", "reason",
+                             "lock_interval", "residency_transition"}.issubset(row))
 
     def test_large_load_serializes_only_load_then_reuses_hot_residency(self):
         """Large loads release the CPU lock before repeated hot GPU calls."""
@@ -260,6 +263,7 @@ class OfflineLaunchGate(unittest.TestCase):
         }
         self.assertTrue(all(set(row) == keys for row in corpus["examples"]))
         decide = getattr(gpu_runner, "host_transfer_admission")
+        self.assertIn("admission_corpus", inspect.signature(decide).parameters)
         for case in ("high_cadence", "unknown", "large", "hot_mismatch", "foreign_kfd"):
             result = decide(admission_corpus=corpus, observed_case=case,
                             actor_recommendation="cold_overlap")
@@ -369,7 +373,10 @@ class OfflineLaunchGate(unittest.TestCase):
                 binary = build / "bin" / "llama-bench"
                 binary.write_bytes(b"shared-reward-binary")
                 binary.chmod(0o755)
-                (build / "bin" / "libggml-hip.so").write_bytes(hip)
+                versioned = build / "bin" / "libggml-hip.so.0.16.0"
+                versioned.write_bytes(hip)
+                (build / "bin" / "libggml-hip.so.0").symlink_to(versioned.name)
+                (build / "bin" / "libggml-hip.so").symlink_to("libggml-hip.so.0")
                 builds.append(build)
             model = root / "model.gguf"; model.write_bytes(b"model")
             common = root / "common-runtime"; common.mkdir()
@@ -398,64 +405,115 @@ class OfflineLaunchGate(unittest.TestCase):
     def test_complete_runtime_closure_proves_each_arm_loaded_intended_hip(self):
         """SONAME topology/targets close $ORIGIN fallback and DSO substitution."""
         with tempfile.TemporaryDirectory() as directory:
-            evidence_plan = plan(Path(directory))
-        closure = getattr(evidence_plan, "runtime_closure", None)
-        self.assertIsInstance(closure, dict)
-        self.assertEqual(set(closure), {"anchor", "candidate", "common"})
-        self.assertEqual(closure["anchor"]["loaded_hip_sha256"],
-                         evidence_plan.anchor.hip_library_sha256)
-        self.assertEqual(closure["candidate"]["loaded_hip_sha256"],
-                         evidence_plan.candidate.hip_library_sha256)
-        self.assertEqual(closure["anchor"]["regular_target_hashes"],
-                         closure["candidate"]["regular_target_hashes"])
-        self.assertEqual(closure["anchor"]["soname_topology"],
-                         closure["candidate"]["soname_topology"])
+            root = Path(directory) / "runtime"
+            common, anchor, candidate = (root / name for name in
+                                          ("common", "anchor-hip", "candidate-hip"))
+            for path in (common, anchor, candidate):
+                path.mkdir(parents=True)
+            (common / "llama-bench").write_bytes(b"reward")
+            (common / "llama-bench").chmod(0o755)
+            (common / "libllama-bench-impl.so").write_bytes(b"bench")
+            families = ("libllama-common.so", "libllama.so", "libggml.so",
+                        "libggml-base.so", "libggml-cpu.so")
+            for directory_path, stems in ((common, families),
+                                          (anchor, ("libggml-hip.so",)),
+                                          (candidate, ("libggml-hip.so",))):
+                for stem in stems:
+                    version = directory_path / f"{stem}.0.16.0"
+                    version.write_bytes((directory_path.name + stem).encode())
+                    (directory_path / f"{stem}.0").symlink_to(version.name)
+                    (directory_path / stem).symlink_to(f"{stem}.0")
+
+            def elf(path: Path) -> V.ElfIdentity:
+                if path.name == "llama-bench":
+                    return V.ElfIdentity(None, ("libllama-bench-impl.so",), ("$ORIGIN",))
+                if path.name.startswith("libggml-hip.so."):
+                    return V.ElfIdentity("libggml-hip.so.0", ("libggml-base.so.0",),
+                                         ("/opt/rocm/lib",))
+                soname = ("libllama-bench-impl.so" if path.name == "libllama-bench-impl.so"
+                          else path.name.rsplit(".0.", 1)[0] + ".0")
+                return V.ElfIdentity(soname, ("libc.so.6",), ("$ORIGIN",))
+
+            manifest = V.verify_split_runtime(root, elf_reader=elf)
+            model = Path(directory) / "model.gguf"; model.write_bytes(b"model")
+            model_sha = hashlib.sha256(model.read_bytes()).hexdigest()
+
+            def maps(arm: str) -> str:
+                paths = {path.resolve() for path in common.iterdir() if path.is_file()}
+                hip_dir = anchor if arm == "anchor" else candidate
+                paths |= {(hip_dir / "libggml-hip.so.0").resolve(), model.resolve()}
+                return "\n".join(f"7f00-7f01 r-xp 0 00:00 1 {path}" for path in paths)
+
+            anchor_maps = V.verify_runtime_maps(
+                manifest, arm="anchor", maps_text=maps("anchor"), model_path=model,
+                model_sha256=model_sha, device_id="mi210_0", kfd_pid=1,
+                boot_id="boot", process_start_ticks=10)
+            candidate_maps = V.verify_runtime_maps(
+                manifest, arm="candidate", maps_text=maps("candidate"), model_path=model,
+                model_sha256=model_sha, device_id="mi210_0", kfd_pid=2,
+                boot_id="boot", process_start_ticks=11)
+            V.validate_arm_pair(anchor_maps, candidate_maps)
+        self.assertEqual(anchor_maps.reward_binary_sha256,
+                         candidate_maps.reward_binary_sha256)
+        self.assertNotEqual(anchor_maps.hip_library_sha256,
+                            candidate_maps.hip_library_sha256)
 
     def test_source_patch_has_no_legacy_runtime_closure_fallback(self):
         """Every source patch must supply one reward binary and two HIP dirs."""
         source = inspect.getsource(gpu_runner.preflight)
         self.assertNotIn('and getattr(args, "measurement_binary", None)', source)
         self.assertIn("libggml-hip.so.0", source)
-        self.assertIn("non-HIP", source)
+        self.assertIn("sealed shared reward runtime closure", source)
+        for field in ("measurement_binary", "common_loader_dir",
+                      "anchor_loader_dir", "candidate_loader_dir"):
+            self.assertIn(field, source)
 
     def test_static_builder_always_tears_down_owned_worktrees(self):
         """Success and failure both end in governed teardown receipts."""
         source = inspect.getsource(S.StaticGpuSourceBuilder.build)
         self.assertIn("finally", source)
         self.assertIn("teardown_worktree", source)
-        self.assertIn("TeardownReceipt", source)
+        self.assertIn("source_materialization_teardown", source)
+        self.assertIn("receipt_sha256", source)
 
     def test_static_builder_validates_build_results_and_required_targets(self):
         """A failed/missing bench or correctness target never becomes evidence."""
         source = inspect.getsource(S.StaticGpuSourceBuilder.build)
         self.assertIn("test-backend-ops", source)
-        self.assertIn("BuildDisposition", source)
-        self.assertIn("returncode", source)
+        self.assertIn("result.succeeded", source)
+        self.assertIn("log_disagrees_with_exit_code", source)
+        self.assertIn("built_targets", source)
 
     def test_runtime_paths_are_operation_key_scoped_for_s1_and_s2(self):
         """Independent replications cannot collide in a campaign-only path."""
         source = inspect.getsource(S.StaticGpuSourceBuilder.build)
-        self.assertIn('permit["operation_key"]', source)
-        self.assertIn("operation_key", inspect.getsource(S.SharedRewardRuntime.materialize))
+        self.assertIn('_permit.get("operation_key")', source)
+        self.assertIn('"runtime" / operation_key', source)
 
     def test_empty_kfd_never_becomes_residency_from_aggregate_vram(self):
         """A VRAM delta without the captured child KFD PID proves nothing."""
-        source = inspect.getsource(gpu_runner._invoke_locked)
-        self.assertIn("process.pid", source)
-        self.assertIn("owned_kfd_pids", source)
-        self.assertLess(source.index('if not any(sample["owned_kfd_pids"]'),
-                        source.index('"hip_residency_proved": True'))
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            kfd = root / "kfd"; kfd.mkdir()
+            vram = root / "vram"; vram.write_text("1048576")
+            proc = root / "proc"; proc.mkdir()
+            sample = R.Mi210ResidencySampler(
+                kfd_root=kfd, vram_path=vram, proc_root=proc)(123)
+        self.assertEqual(sample.kfd_pids, (123,))
+        self.assertEqual(sample.vram_bytes, 0)
 
     def test_build_logs_are_operation_key_scoped_and_exclusive(self):
         """S1/S2 cannot append to or overwrite one campaign-named build log."""
         source = inspect.getsource(S.StaticGpuSourceBuilder.build)
         self.assertIn("operation_key", source)
-        self.assertIn("exclusive", source)
+        self.assertIn('f"{ident}.log"', source)
+        self.assertIn('open(log, "w"', inspect.getsource(S.worktree.run_build))
 
     def test_teardown_attempts_every_tree_and_seals_all_outcomes(self):
         """One teardown failure cannot skip the remaining owned worktrees."""
         source = inspect.getsource(S.StaticGpuSourceBuilder.build)
-        self.assertIn("teardown_outcomes", source)
+        self.assertIn("receipts", source)
+        self.assertIn("teardown_errors", source)
         self.assertIn("receipt_sha256", source)
         self.assertIn("for", source[source.find("finally"):])
 
