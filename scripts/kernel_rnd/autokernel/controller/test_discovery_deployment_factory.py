@@ -41,7 +41,9 @@ class DeploymentFactoryTests(unittest.TestCase):
         context = {"context_sha256": "a" * 64}
         config = mock.Mock(state_root=Path("/state"), evidence_root=Path("/evidence"),
                            max_iterations=2, nomination_threshold=.03,
-                           planner_context=mock.Mock(value=context), production_head="b" * 40,
+                           planner_context=mock.Mock(value=context), production_branch="production-consolidated-v9",
+                           production_head="b" * 40,
+                           instrument_branch="measurement-instrument",
                            instrument_commit="c" * 40,
                            config_sha256="c" * 64,
                            experiment_template_registry_sha256="d" * 64)
@@ -56,7 +58,9 @@ class DeploymentFactoryTests(unittest.TestCase):
                          (Path("/state"), Path("/evidence"), 2, .03, True,
                           F.schemas.content_hash({"planner_context_sha256": "a" * 64,
                                                   "admission_policy_sha256": "e" * 64,
-                                                  "admission_policy_version": "test-v2"}), "b" * 40))
+                                                  "admission_policy_version": "test-v2",
+                                                  "deployment_identity_sha256": "c" * 64}), "b" * 40))
+        self.assertEqual(result.deployment_identity_sha256, "c" * 64)
         config.revalidate.assert_called_once()
 
     def test_window_lease_uses_sealed_arbiter_and_never_probes_cpu_lock(self):

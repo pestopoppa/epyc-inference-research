@@ -47,6 +47,17 @@ class Tests(unittest.TestCase):
    self.assertEqual(p.calls[0]["planner_context"]["hotspots"][0]["symbol"],"q5_hot")
    with self.assertRaises(D.DiscoveryControllerError):
     D.run_controller(D.ControllerConfig(root/"out",1,dry_run=True,planner_context=context,planner_context_sha256=H[:-1]+"b"),planner=p,critic=FakeCritic(["accept"]),screener=FakeScreen([.01]),lease=Lease())
+ def test_sealed_deployment_identity_is_durable_resume_authority(self):
+  with tempfile.TemporaryDirectory() as t, patch.object(D.source_candidate,"SourcePatchManifest",Manifest), patch.object(D,"_write_projection"):
+   root=Path(t)
+   context={"context_sha256":H}
+   def make_config(identity): return D.ControllerConfig(root/"out",1,dry_run=True,planner_context=context,planner_context_sha256=H,
+       production_base_commit="0"*40,instrument_commit="1"*40,experiment_template_registry_sha256="2"*64,
+       admission_corpus_sha256="3"*64,admission_corpus_version="test-v1",deployment_identity_sha256=identity)
+   cfg=make_config(H)
+   D.run_controller(cfg,planner=FakePlanner(),critic=FakeCritic(["accept"]),screener=FakeScreen([.01]),lease=Lease())
+   with self.assertRaises(D.DiscoveryControllerError):
+    D.run_controller(make_config(H[:-1]+"b"),planner=FakePlanner(),critic=FakeCritic(["accept"]),screener=FakeScreen([.01]),lease=Lease())
  def test_veto_blocks_compute_and_feedback_is_next_context(self):
   with tempfile.TemporaryDirectory() as t, patch.object(D.source_candidate,"SourcePatchManifest",Manifest), patch.object(D,"_write_projection"):
    p=FakePlanner(); s=FakeScreen([.04,.03,.04]); r=D.run_controller(self.cfg(Path(t),4),planner=p,critic=FakeCritic(["reject","accept","accept"]),screener=s,lease=Lease())

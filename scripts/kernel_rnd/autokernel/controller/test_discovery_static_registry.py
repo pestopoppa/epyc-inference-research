@@ -2,13 +2,15 @@ from __future__ import annotations
 
 import json
 import hashlib
+import subprocess
 from pathlib import Path
 import tempfile
 import unittest
 from unittest import mock
 
 from .discovery_static_registry import (SharedRewardRuntime, StaticRegistryError,
-                                        runtime_maps_sampler, evidence_identity_files_for_build)
+                                        runtime_maps_sampler, evidence_identity_files_for_build,
+                                        _instrument_authority, _verify_selected_gpu_blobs)
 from . import discovery_controller as C
 from . import gpu_source_evidence as E
 from . import gpu_source_proofs as P
@@ -38,6 +40,60 @@ def _bin(root: Path, *, hip: bytes) -> Path:
 
 
 class SharedRewardRuntimeTests(unittest.TestCase):
+    def test_instrument_authority_is_a_separate_branch_object_not_production_fingerprint(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory) / "experimental"; repo.mkdir()
+            def git(*args: str) -> str:
+                result = subprocess.run(("git", "-C", str(repo), *args), capture_output=True,
+                                        text=True, check=True)
+                return result.stdout.strip()
+            git("init", "-q"); git("config", "user.email", "test@example.invalid")
+            git("config", "user.name", "Test")
+            (repo / "source").write_text("production\n"); git("add", "source")
+            git("commit", "-qm", "production")
+            production = git("rev-parse", "HEAD")
+            git("checkout", "-qb", "measurement-instrument")
+            (repo / "source").write_text("instrument\n"); git("commit", "-am", "instrument", "-q")
+            instrument = git("rev-parse", "HEAD")
+            authority = _instrument_authority(
+                instrument_path=repo, production_commit=production,
+                instrument_branch="measurement-instrument", instrument_commit=instrument)
+            self.assertEqual(authority["production_base_commit"], production)
+            self.assertEqual(authority["instrument_commit"], instrument)
+            self.assertNotEqual(authority["instrument_tree"], git("rev-parse", f"{production}^{{tree}}"))
+            (repo / "source").write_text("moved\n"); git("commit", "-am", "moved", "-q")
+            with self.assertRaises(StaticRegistryError):
+                _instrument_authority(instrument_path=repo, production_commit=production,
+                                      instrument_branch="measurement-instrument", instrument_commit=instrument)
+
+    def test_selected_gpu_source_must_match_frozen_production_blob(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); production_repo = root / "production"; instrument_repo = root / "instrument"
+            subprocess.run(("git", "init", "-q", str(production_repo)), check=True)
+            subprocess.run(("git", "-C", str(production_repo), "config", "user.email", "test@example.invalid"), check=True)
+            subprocess.run(("git", "-C", str(production_repo), "config", "user.name", "Test"), check=True)
+            source = production_repo / "ggml/src/ggml-cuda/fattn.cu"; source.parent.mkdir(parents=True)
+            source.write_text("kernel base\n"); subprocess.run(("git", "-C", str(production_repo), "add", "."), check=True)
+            subprocess.run(("git", "-C", str(production_repo), "commit", "-qm", "base"), check=True)
+            base = subprocess.run(("git", "-C", str(production_repo), "rev-parse", "HEAD"), capture_output=True, text=True, check=True).stdout.strip()
+            subprocess.run(("git", "clone", "-q", str(production_repo), str(instrument_repo)), check=True)
+            subprocess.run(("git", "-C", str(instrument_repo), "checkout", "-qb", "measurement-instrument"), check=True)
+            (instrument_repo / "README").write_text("instrument only\n")
+            subprocess.run(("git", "-C", str(instrument_repo), "add", "README"), check=True)
+            subprocess.run(("git", "-C", str(instrument_repo), "commit", "-qm", "instrument"), check=True)
+            instrument = subprocess.run(("git", "-C", str(instrument_repo), "rev-parse", "HEAD"), capture_output=True, text=True, check=True).stdout.strip()
+            blobs = _verify_selected_gpu_blobs(production_path=production_repo, production_commit=base,
+                                               instrument_path=instrument_repo, instrument_commit=instrument,
+                                               paths=("ggml/src/ggml-cuda/fattn.cu",))
+            self.assertEqual(blobs["ggml/src/ggml-cuda/fattn.cu"], sha(b"kernel base\n"))
+            (instrument_repo / "ggml/src/ggml-cuda/fattn.cu").write_text("drift\n")
+            subprocess.run(("git", "-C", str(instrument_repo), "commit", "-am", "drift", "-q"), check=True)
+            drift = subprocess.run(("git", "-C", str(instrument_repo), "rev-parse", "HEAD"), capture_output=True, text=True, check=True).stdout.strip()
+            with self.assertRaises(StaticRegistryError):
+                _verify_selected_gpu_blobs(production_path=production_repo, production_commit=base,
+                                           instrument_path=instrument_repo, instrument_commit=drift,
+                                           paths=("ggml/src/ggml-cuda/fattn.cu",))
+
     def test_complete_common_reward_and_arm_only_hip_topology(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); anchor = _bin(root / "anchor", hip=b"anchor")

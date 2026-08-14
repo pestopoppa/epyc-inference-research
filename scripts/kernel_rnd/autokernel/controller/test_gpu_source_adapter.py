@@ -48,7 +48,7 @@ class GpuSourceAdapterTests(unittest.TestCase):
     def setup(self, directory: str, *, series=False):
         root = Path(directory).resolve()
         production = root / "production"
-        production.mkdir()
+        production.mkdir(parents=True)
         subprocess.run(["git", "init", "-q", str(production)], check=True)
         subprocess.run(["git", "-C", str(production), "config", "user.email", "test@example.invalid"], check=True)
         subprocess.run(["git", "-C", str(production), "config", "user.name", "Test"], check=True)
@@ -149,7 +149,7 @@ class GpuSourceAdapterTests(unittest.TestCase):
 
     def test_protected_tree_change_during_builder_refuses(self):
         with tempfile.TemporaryDirectory() as directory:
-            adapter, candidate, authorization, lease, _inflight, _current, _ = self.setup(directory)
+            adapter, candidate, authorization, lease, _inflight, _current, _ = self.setup(str(Path(directory) / "one"))
             original = adapter.build_source
             protected = adapter.protected_roots[0]
             def mutating_builder(*args):
@@ -157,9 +157,30 @@ class GpuSourceAdapterTests(unittest.TestCase):
                 return original(*args)
             adapter.build_source = mutating_builder
             with mock.patch.object(D, "GpuSourceScreener", FakeDelegate):
-                with self.assertRaisesRegex(A.GpuSourceAdapterError, "protected production artifacts"):
+                with self.assertRaisesRegex(A.GpuSourceAdapterError, "protected (production tree|root)"):
                     adapter.screen(candidate, authorization, lease)
             self.assertFalse(hasattr(adapter, "_active_protected_snapshot"))
+
+    def test_preexisting_untracked_sidecar_is_tolerated_but_changed_sidecar_refuses(self):
+        with tempfile.TemporaryDirectory() as directory:
+            adapter, candidate, authorization, lease, _inflight, _current, _ = self.setup(str(Path(directory) / "two"))
+            protected = adapter.protected_roots[0]
+            (protected / ".gitnexusignore").write_text("preexisting\n")
+            with mock.patch.object(D, "GpuSourceScreener", FakeDelegate):
+                adapter.screen(candidate, authorization, lease)
+            # A new operation with a sidecar mutation is still a protected-root
+            # mutation even though untracked sidecars are not a cleanliness veto.
+            adapter, candidate, authorization, lease, _inflight, _current, _ = self.setup(directory)
+            protected = adapter.protected_roots[0]
+            (protected / ".gitnexusignore").write_text("preexisting\n")
+            original = adapter.build_source
+            def sidecar_builder(*args):
+                (protected / ".gitnexusignore").write_text("changed\n")
+                return original(*args)
+            adapter.build_source = sidecar_builder
+            with mock.patch.object(D, "GpuSourceScreener", FakeDelegate), \
+                 self.assertRaisesRegex(A.GpuSourceAdapterError, "protected production tree"):
+                adapter.screen(candidate, authorization, lease)
 
     def test_json_screen_normalizes_all_tuple_fields(self):
         fields = {

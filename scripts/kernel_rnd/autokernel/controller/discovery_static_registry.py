@@ -86,6 +86,82 @@ def _bound(path: Path, role: str) -> dict[str, str]:
     return {"role": role, "path": str(path.resolve()), "sha256": _digest(path)}
 
 
+def _instrument_authority(*, instrument_path: Path, production_commit: str,
+                          instrument_branch: str, instrument_commit: str) -> dict[str, str]:
+    """Prove the instrument ref and its *object tree*, without checking it out.
+
+    ``Anchor.fingerprint`` deliberately protects the frozen checkout from the
+    worktree operations below.  It is not an identity for a descendant commit:
+    the frozen checkout remains at the production commit.  This separate
+    listing digest binds the exact approved instrument object that snapshots
+    and builds start from.
+    """
+    root = instrument_path.resolve(strict=True)
+    def git(*argv: str, binary: bool = False) -> str | bytes:
+        result = subprocess.run(("git", "-C", str(root), *argv),
+                                stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, check=False)
+        if result.returncode:
+            raise StaticRegistryError(
+                f"could not verify sealed measurement instrument Git object: {' '.join(argv)}")
+        return result.stdout if binary else result.stdout.decode("utf-8", "strict").strip()
+    branch_commit = git("rev-parse", f"refs/heads/{instrument_branch}")
+    if branch_commit != instrument_commit:
+        raise StaticRegistryError("instrument branch no longer resolves to its sealed commit")
+    # Both the commit object and the tree must exist locally.  Listing every
+    # tracked entry gives a SHA-256 fingerprint independent from the frozen
+    # checkout's TreeFingerprint and is stable across worktree locations.
+    git("cat-file", "-e", f"{instrument_commit}^{{commit}}")
+    tree = git("rev-parse", f"{instrument_commit}^{{tree}}")
+    listing = git("ls-tree", "-r", "-z", "--full-tree", instrument_commit, binary=True)
+    assert isinstance(listing, bytes)
+    ancestor = subprocess.run(("git", "-C", str(root), "merge-base", "--is-ancestor",
+                               production_commit, instrument_commit), stdin=subprocess.DEVNULL,
+                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+    if ancestor.returncode:
+        raise StaticRegistryError("instrument commit is not a descendant of frozen production")
+    body = {"schema": "epyc.autokernel.measurement_instrument_authority.v1",
+            "production_base_commit": production_commit,
+            "instrument_branch": instrument_branch,
+            "instrument_commit": instrument_commit,
+            "instrument_tree": tree,
+            "tree_listing_sha256": hashlib.sha256(listing).hexdigest()}
+    body["authority_sha256"] = schemas.content_hash(body)
+    return body
+
+
+def _verify_selected_gpu_blobs(*, production_path: Path, production_commit: str,
+                               instrument_path: Path, instrument_commit: str,
+                               paths: tuple[str, ...]) -> dict[str, str]:
+    """Prove a planner-visible GPU patch has the same base in both eras.
+
+    The instrument adds deterministic measurement support but is not permitted
+    to silently change a source surface the planner was briefed from frozen
+    production.  A reviewed divergent template would need a separate explicit
+    authority mechanism; none is admitted by this builder today.
+    """
+    if not paths:
+        raise StaticRegistryError("selected GPU source scope is empty")
+    result: dict[str, str] = {}
+    for path in paths:
+        if not path.startswith("ggml/src/ggml-cuda/"):
+            raise StaticRegistryError("static builder only admits reviewed GPU kernel files")
+        def blob(repo: Path, commit: str) -> bytes:
+            call = subprocess.run(("git", "-C", str(repo), "show", f"{commit}:{path}"),
+                                  stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                  stderr=subprocess.PIPE, check=False)
+            if call.returncode:
+                raise StaticRegistryError(f"selected GPU path lacks sealed base blob: {path}")
+            return call.stdout
+        production = blob(production_path.resolve(strict=True), production_commit)
+        instrument = blob(instrument_path.resolve(strict=True), instrument_commit)
+        if production != instrument:
+            raise StaticRegistryError(
+                f"instrument GPU source diverges from frozen production for {path}; explicit review required")
+        result[path] = hashlib.sha256(production).hexdigest()
+    return result
+
+
 def _boot_id(proc_root: Path) -> str:
     value = (proc_root / "sys/kernel/random/boot_id").read_text(encoding="utf-8").strip()
     if not value:
@@ -213,6 +289,41 @@ def evidence_identity_files_for_build(
         materialization=evidence.BoundInputFile("materialization", build.materialization_receipt,
                                                  build.materialization_sha256),
         shared_runtime=shared)
+
+
+def verify_build_authority(build: controller.GpuSourceBuild, *, production_path: Path,
+                           production_branch: str, production_commit: str,
+                           instrument_path: Path, instrument_branch: str,
+                           instrument_commit: str) -> None:
+    """Revalidate both roots against a durable build receipt before evidence.
+
+    Evidence may be produced long after snapshots were torn down (including an
+    S2/cache reuse), so the authority must be re-established from the receipt
+    and current Git refs rather than trusted from a prior builder invocation.
+    """
+    if build.materialization_receipt is None or build.materialization_sha256 is None:
+        raise StaticRegistryError("build authority requires a materialization receipt")
+    if _digest(build.materialization_receipt) != build.materialization_sha256:
+        raise StaticRegistryError("materialization receipt carrier changed")
+    try:
+        materialization = json.loads(build.materialization_receipt.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise StaticRegistryError("materialization authority receipt is not JSON") from exc
+    if materialization.get("receipt_sha256") != schemas.content_hash(
+            {key: value for key, value in materialization.items() if key != "receipt_sha256"}):
+        raise StaticRegistryError("materialization authority receipt self-hash mismatch")
+    expected_production = {"path": str(production_path.resolve(strict=True)),
+                           "branch": production_branch, "commit": production_commit}
+    if materialization.get("production_base_authority") != expected_production:
+        raise StaticRegistryError("materialization production authority differs from deployment")
+    expected_instrument = _instrument_authority(
+        instrument_path=instrument_path, production_commit=production_commit,
+        instrument_branch=instrument_branch, instrument_commit=instrument_commit)
+    if materialization.get("instrument_authority") != expected_instrument:
+        raise StaticRegistryError("materialization instrument authority differs from deployment")
+    if (build.anchor_identity.source_commit != instrument_commit
+            or materialization.get("anchor_commit") != instrument_commit):
+        raise StaticRegistryError("build anchor does not originate from the sealed instrument")
 
 
 def _source_tree_receipt(*, path: Path, root: Path, commit: str) -> tuple[Path, str]:
@@ -413,6 +524,7 @@ class StaticGpuSourceBuilder:
     """Fresh production descendants, source mutation, clean snapshots, and builds."""
     production_path: Path
     production_branch: str
+    instrument_path: Path
     operations_root: Path
     build_root: Path
     cmake_defines: tuple[tuple[str, str], ...]
@@ -437,15 +549,26 @@ class StaticGpuSourceBuilder:
         operation_key = _permit.get("operation_key")
         if not isinstance(operation_key, str) or len(operation_key) != 64:
             raise StaticRegistryError("static builder requires the sealed controller operation key")
-        frozen_anchor = worktree.resolve_anchor(self.production_path, self.production_branch,
-                                                expected_commit=candidate.source_manifest.production_base_commit)
-        # The actor and all clean snapshots start at the approved instrument
-        # descendant, while the immutable production anchor remains separately
-        # proven as the manifest's production base.
-        anchor = worktree.Anchor(repo=frozen_anchor.repo, branch=frozen_anchor.branch,
-                                 commit=candidate.source_manifest.instrument_commit,
-                                 resolved_at=frozen_anchor.resolved_at,
-                                 fingerprint=frozen_anchor.fingerprint)
+        # Production remains verification-only.  Every mutable worktree is
+        # created from the independently sealed experimental instrument repo.
+        if self.instrument_path.resolve(strict=True) == self.production_path.resolve(strict=True):
+            raise StaticRegistryError("instrument repository must be separate from frozen production")
+        instrument_branch = _permit.get("instrument_branch")
+        if not isinstance(instrument_branch, str) or not instrument_branch:
+            raise StaticRegistryError("static source builder requires a sealed instrument branch")
+        anchor = worktree.resolve_anchor(self.instrument_path, instrument_branch,
+                                         expected_commit=candidate.source_manifest.instrument_commit)
+        instrument_authority = _instrument_authority(
+            instrument_path=self.instrument_path,
+            production_commit=candidate.source_manifest.production_base_commit,
+            instrument_branch=instrument_branch,
+            instrument_commit=candidate.source_manifest.instrument_commit)
+        selected_gpu_blobs = _verify_selected_gpu_blobs(
+            production_path=self.production_path,
+            production_commit=candidate.source_manifest.production_base_commit,
+            instrument_path=self.instrument_path,
+            instrument_commit=candidate.source_manifest.instrument_commit,
+            paths=candidate.source_manifest.declared_files)
         campaign_root = self.operations_root / "worktrees" / operation_key
         build_root = self.build_root / operation_key
         campaign_root.mkdir(parents=True, exist_ok=True); build_root.mkdir(parents=True, exist_ok=True)
@@ -457,17 +580,16 @@ class StaticGpuSourceBuilder:
         completed: dict[str, Any] | None = None
         try:
             actor, actor_proof = worktree.create_campaign_worktree(
-                anchor, candidate.source_manifest.campaign_id, root=campaign_root,
-                require_current_tip=False)
+                anchor, candidate.source_manifest.campaign_id, root=campaign_root)
             applied = source_candidate.apply_source_candidate(candidate.source_manifest,
                                                                proposal=candidate.proposal, actor=actor)
             anchor_snapshot, _ = worktree.create_snapshot_worktree(
-                self.production_path, anchor.commit,
+                self.instrument_path, anchor.commit,
                 worktree.snapshot_worktree_path(candidate.source_manifest.campaign_id,
                                                 "akc-anchor", root=campaign_root))
             snapshots.append(anchor_snapshot)
             candidate_snapshot, _ = worktree.create_snapshot_worktree(
-                self.production_path, applied.candidate_commit,
+                self.instrument_path, applied.candidate_commit,
                 worktree.snapshot_worktree_path(candidate.source_manifest.campaign_id,
                                                 candidate.source_manifest.candidate_id, root=campaign_root))
             snapshots.append(candidate_snapshot)
@@ -533,6 +655,16 @@ class StaticGpuSourceBuilder:
                 root=self.operations_root / "runtime" / operation_key,
                 anchor_build=Path(by_id["akc-anchor"][1].path),
                 candidate_build=Path(by_id[candidate.source_manifest.candidate_id][1].path))
+            # `create_*worktree` independently proves the experimental checkout
+            # was unchanged around each operation.  Re-read the sealed branch
+            # object as well, so a ref move cannot be hidden between actor
+            # creation and durable evidence materialization.
+            if _instrument_authority(
+                    instrument_path=self.instrument_path,
+                    production_commit=candidate.source_manifest.production_base_commit,
+                    instrument_branch=instrument_branch,
+                    instrument_commit=candidate.source_manifest.instrument_commit) != instrument_authority:
+                raise StaticRegistryError("instrument authority changed during source materialization")
             materialization = {
                 "schema": "epyc.autokernel.gpu_source_materialization.v1",
                 "authority": "nonpromotable_candidate_only_discovery",
@@ -540,6 +672,13 @@ class StaticGpuSourceBuilder:
                 "actor_worktree": actor.to_dict(),
                 "actor_proof": actor_proof.to_dict(),
                 "manifest_sha256": candidate.source_manifest.patch_bundle_sha256,
+                "production_base_authority": {
+                    "path": str(self.production_path.resolve(strict=True)),
+                    "branch": self.production_branch,
+                    "commit": candidate.source_manifest.production_base_commit,
+                },
+                "instrument_authority": instrument_authority,
+                "selected_gpu_base_blobs": selected_gpu_blobs,
                 "applied": {
                     "candidate_commit": applied.candidate_commit,
                     "actual_files": list(applied.actual_files),

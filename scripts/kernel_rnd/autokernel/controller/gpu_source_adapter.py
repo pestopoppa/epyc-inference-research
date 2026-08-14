@@ -173,20 +173,49 @@ def _protected_snapshot(paths: Sequence[Path],
         path = raw.resolve()
         if not path.is_dir() or path.is_symlink():
             raise GpuSourceAdapterError("protected root is not a real directory")
-        completed = subprocess.run(
+        tracked = subprocess.run(
+            ["git", "-C", str(path), "status", "--porcelain=v1", "--untracked-files=no"],
+            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, text=True, check=False)
+        full = subprocess.run(
             ["git", "-C", str(path), "status", "--porcelain=v1", "--untracked-files=all"],
+            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, text=True, check=False)
+        branch = subprocess.run(
+            ["git", "-C", str(path), "branch", "--show-current"],
             stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
             stderr=subprocess.PIPE, text=True, check=False)
         head = subprocess.run(
             ["git", "-C", str(path), "rev-parse", "HEAD"],
             stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
             stderr=subprocess.PIPE, text=True, check=False)
-        if completed.returncode or head.returncode:
+        if tracked.returncode or full.returncode or branch.returncode or head.returncode:
             raise GpuSourceAdapterError("protected root git identity is unreadable")
+        if tracked.stdout:
+            raise GpuSourceAdapterError("protected root has tracked/index changes")
+        untracked = subprocess.run(
+            ["git", "-C", str(path), "ls-files", "--others", "--exclude-standard", "-z"],
+            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, check=False)
+        if untracked.returncode:
+            raise GpuSourceAdapterError("protected root untracked inventory is unreadable")
+        untracked_items: list[tuple[str, str]] = []
+        for raw_name in untracked.stdout.split(b"\0"):
+            if not raw_name:
+                continue
+            name = raw_name.decode("utf-8", "strict")
+            item = (path / name).resolve(strict=True)
+            if item.is_symlink() or not item.is_file() or not item.is_relative_to(path):
+                raise GpuSourceAdapterError("protected root has unsafe untracked sidecar")
+            untracked_items.append((name, hashlib.sha256(item.read_bytes()).hexdigest()))
         result[str(path)] = {
             "head": head.stdout.strip(),
-            "status_sha256": hashlib.sha256(completed.stdout.encode()).hexdigest(),
-            "clean": completed.stdout == "",
+            "branch": branch.stdout.strip(),
+            "tracked_status_sha256": hashlib.sha256(tracked.stdout.encode()).hexdigest(),
+            # Untracked sidecars are tolerated only when they remain exactly
+            # unchanged over the governed operation.
+            "full_status_sha256": hashlib.sha256(full.stdout.encode()).hexdigest(),
+            "untracked_content_sha256": schemas.content_hash({"items": [list(row) for row in untracked_items]}),
         }
     file_rows: dict[str, Any] = {}
     for item in files:
@@ -405,9 +434,6 @@ class GovernedGpuSourceAdapter:
 
         protected_before = _protected_snapshot(
             self.protected_roots, self.protected_files)
-        if not all(row["clean"] for key, row in protected_before.items()
-                   if key != "protected_files"):
-            raise GpuSourceAdapterError("protected production tree is dirty before screen")
         self._active_protected_snapshot = protected_before
         delegate = controller.GpuSourceScreener(
             build_source=self._build_guarded,

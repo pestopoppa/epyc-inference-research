@@ -24,6 +24,8 @@ class DeploymentConfigTests(unittest.TestCase):
     def config(self, root: Path) -> tuple[Path, dict]:
         production = root / "production"
         production.mkdir()
+        instrument = root / "instrument"
+        instrument.mkdir()
         source = production / "ggml.cu"
         source.write_text("__global__ void kernel() {}\n", encoding="utf-8")
         (root / "locks").mkdir()
@@ -76,8 +78,10 @@ class DeploymentConfigTests(unittest.TestCase):
         planner_path.write_text(json.dumps(planner_context), encoding="utf-8")
         value = {
             "schema": D.SCHEMA,
-            "production": {"path": str(production), "head": "a" * 40,
-                           "instrument_commit": "b" * 40},
+            "production": {"path": str(production), "branch": "production-consolidated-v9",
+                           "head": "a" * 40},
+            "instrument": {"repo_path": str(instrument), "branch": "measurement-instrument",
+                           "commit": "b" * 40, "production_ancestor": "a" * 40},
             "controller": {
                 "state_root": str(root / "state"),
                 "evidence_root": str(root / "evidence"),
@@ -241,12 +245,12 @@ class DeploymentConfigTests(unittest.TestCase):
             replies = iter((D.FROZEN_PRODUCTION_HEAD + "\n", D.FROZEN_PRODUCTION_BRANCH + "\n", ""))
             with mock.patch.object(D, "FROZEN_PRODUCTION_PATH", production), \
                     mock.patch.object(D.subprocess, "run", side_effect=lambda *a, **k: SimpleNamespace(returncode=0, stdout=next(replies))):
-                D._verify_production(production, D.FROZEN_PRODUCTION_HEAD)
+                D._verify_production(production, D.FROZEN_PRODUCTION_BRANCH, D.FROZEN_PRODUCTION_HEAD)
             replies = iter((D.FROZEN_PRODUCTION_HEAD + "\n", D.FROZEN_PRODUCTION_BRANCH + "\n", "M file\n"))
             with mock.patch.object(D, "FROZEN_PRODUCTION_PATH", production), \
                     mock.patch.object(D.subprocess, "run", side_effect=lambda *a, **k: SimpleNamespace(returncode=0, stdout=next(replies))):
                 with self.assertRaises(D.DeploymentConfigError):
-                    D._verify_production(production, D.FROZEN_PRODUCTION_HEAD)
+                    D._verify_production(production, D.FROZEN_PRODUCTION_BRANCH, D.FROZEN_PRODUCTION_HEAD)
 
 
 if __name__ == "__main__":

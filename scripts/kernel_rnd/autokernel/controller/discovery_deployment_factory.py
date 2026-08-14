@@ -204,7 +204,15 @@ class GpuDiscoveryLease:
             # downgrades to serialized load rather than inventing headroom.
             telemetry_observed=False, telemetry_age_ms=None,
             observed_headroom_bytes_per_s=None, telemetry_receipt_sha256=None)
-        decision = gpu_load_admission.arbitrate(corpus, request)
+        advisory = None
+        intent = candidate.experiment_intent
+        if isinstance(intent, controller.GpuSourceExperimentIntent) and intent.load_mode_recommendation is not None:
+            recommendation = intent.load_mode_recommendation
+            known_examples = {row.example_id for row in getattr(corpus, "examples", ())}
+            if not set(recommendation.example_ids).issubset(known_examples):
+                raise DeploymentFactoryError("planner load-mode advisory cites an unknown sealed policy example")
+            advisory = recommendation.mode
+        decision = gpu_load_admission.arbitrate(corpus, request, actor_recommendation=advisory)
         if decision.mode == "hot_resident":
             raise DeploymentFactoryError("nonpersistent source discovery runner cannot claim hot residency")
         return {"admitted": True, "mode": decision.mode,
@@ -290,9 +298,20 @@ def materialize(config: deployment.DiscoveryDeployment, registry: Mapping[str, M
             candidate_id=candidate.source_manifest.candidate_id,
             production_base_commit=config.production_head,
             instrument_commit=config.instrument_commit)
+        permit = {**permit, "instrument_branch": config.instrument_branch}
         return source.build(candidate, authorization, permit)
     def plan(candidate: controller.PlannedCandidate, build_: controller.GpuSourceBuild):
         config.revalidate()
+        # Re-open the builder receipt at every evidence boundary.  In
+        # particular an S2/cache path must not inherit S1's root authority.
+        from . import discovery_static_registry
+        discovery_static_registry.verify_build_authority(
+            build_, production_path=config.production_path,
+            production_branch=config.production_branch,
+            production_commit=config.production_head,
+            instrument_path=config.instrument_path,
+            instrument_branch=config.instrument_branch,
+            instrument_commit=config.instrument_commit)
         template = templates.resolve(candidate.experiment_intent)
         result = plans.build(candidate, build_, template)
         if result.dispatch != template.dispatch or result.model_sha256 != config.model.sha256:
@@ -309,6 +328,29 @@ def materialize(config: deployment.DiscoveryDeployment, registry: Mapping[str, M
                 or build_.teardown_receipt is None or build_.teardown_sha256 is None):
             raise DeploymentFactoryError("source build lacks sealed runtime/materialization/teardown receipts")
         result = runner.build(candidate, build_, permit)
+        decision = permit.get("load_admission")
+        if not isinstance(decision, Mapping):
+            raise DeploymentFactoryError("runner invocation lacks the sealed lease admission decision")
+        decision = dict(decision)
+        expected_admission = {
+            "load_admission_decision": decision,
+            "load_admission_policy_version": config.admission_policy.corpus.version,
+            "load_admission_policy_sha256": config.admission_policy.corpus.policy_sha256,
+            "load_admission_policy_file_sha256": config.admission_policy.corpus.file_sha256,
+            "load_admission_effective_context_sha256": decision.get("effective_context_sha256"),
+        }
+        # A trusted static runner binding may construct an argparse.Namespace or
+        # another mutable typed args holder, but it never gets to choose the
+        # admission frame.  Refuse pre-filled mismatches and install the exact
+        # lease receipt for the runner's preflight validator.
+        for key, value in expected_admission.items():
+            existing = getattr(result, key, None)
+            if existing is not None and existing != value:
+                raise DeploymentFactoryError(f"runner arguments attempted to override {key}")
+            try:
+                setattr(result, key, value)
+            except (AttributeError, TypeError) as exc:
+                raise DeploymentFactoryError("runner arguments cannot carry sealed load admission") from exc
         if (getattr(result, "factor", None) != "source_patch"
                 or str(getattr(result, "model", "")) != str(config.model.path)
                 or str(getattr(result, "anchor_build", "")) != str(build_.anchor_build)
@@ -318,7 +360,8 @@ def materialize(config: deployment.DiscoveryDeployment, registry: Mapping[str, M
                 or str(getattr(result, "anchor_loader_dir", "")) != str(build_.anchor_loader_dir)
                 or str(getattr(result, "candidate_loader_dir", "")) != str(build_.candidate_loader_dir)
                 or getattr(result, "promotion_claim", False) is not False
-                or str(getattr(result, "inference_window_lock", "")) != str(config.inference_window_lock)):
+                or str(getattr(result, "inference_window_lock", "")) != str(config.inference_window_lock)
+                or getattr(result, "load_admission_decision", None) != decision):
             raise DeploymentFactoryError("runner arguments do not bind source builds/model/window/discovery authority")
         return result
     screener = gpu_source_adapter.build_governed_gpu_source_adapter(
@@ -327,7 +370,7 @@ def materialize(config: deployment.DiscoveryDeployment, registry: Mapping[str, M
         rocprof_executor=rocprof_executor, claim_journal=claim_journal,
         claim_acquirer=claim_acquirer, claim_verifier=claim_verifier,
         claim_timeout_s=config.claim_timeout_s, receipt_series=receipt_series,
-        protected_roots=(config.production_path,), protected_files=snapshot.files)
+        protected_roots=(config.production_path, config.instrument_path), protected_files=snapshot.files)
     return controller.build_controller_adapters(planner=planner, critic=critic, screener=screener, lease=lease)
 
 
@@ -343,12 +386,14 @@ def controller_config(config: deployment.DiscoveryDeployment, *, dry_run: bool =
         planner_context_sha256=schemas.content_hash({
             "planner_context_sha256": config.planner_context.value["context_sha256"],
             "admission_policy_sha256": config.admission_policy.corpus.policy_sha256,
-            "admission_policy_version": config.admission_policy.corpus.version}),
+            "admission_policy_version": config.admission_policy.corpus.version,
+            "deployment_identity_sha256": config.config_sha256}),
         production_base_commit=config.production_head,
         instrument_commit=config.instrument_commit,
         experiment_template_registry_sha256=config.experiment_template_registry_sha256,
         admission_corpus_sha256=config.admission_policy.value["policy_sha256"],
         admission_corpus_version=config.admission_policy.corpus.version,
+        deployment_identity_sha256=config.config_sha256,
         # The sealed deployment digest, not a caller argument, namespaces all
         # controller/worktree/receipt identities across concurrent deployments.
         campaign_id=f"ak-discovery-{config.config_sha256[:16]}")

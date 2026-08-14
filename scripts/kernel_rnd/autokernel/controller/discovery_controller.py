@@ -128,6 +128,24 @@ class BoundedDispatchExpectation:
 
 
 @dataclass(frozen=True)
+class LoadModeRecommendation:
+    mode: str
+    rationale: str
+    example_ids: tuple[str, ...]
+    def __post_init__(self) -> None:
+        identifier = re.compile(r"^[a-z][a-z0-9_.-]{0,127}$")
+        if (self.mode not in {"cold_overlap", "cold_serialized", "hot_resident"}
+                or not isinstance(self.rationale, str) or not self.rationale.strip()
+                or len(self.rationale) > 1024 or not isinstance(self.example_ids, tuple)
+                or not self.example_ids or len(self.example_ids) > 8
+                or len(set(self.example_ids)) != len(self.example_ids)
+                or any(not isinstance(item, str) or not identifier.fullmatch(item)
+                       for item in self.example_ids)):
+            raise DiscoveryControllerError("load-mode recommendation is malformed or unbounded")
+        object.__setattr__(self, "rationale", self.rationale.strip())
+
+
+@dataclass(frozen=True)
 class GpuSourceExperimentIntent:
     """Actor-selected *registry IDs*, never actor-selected commands or regexes."""
     template_id: str
@@ -136,6 +154,7 @@ class GpuSourceExperimentIntent:
     correctness_id: str
     dispatch_id: str
     expected_dispatch: BoundedDispatchExpectation
+    load_mode_recommendation: LoadModeRecommendation | None = None
 
     def __post_init__(self) -> None:
         import re
@@ -150,6 +169,9 @@ class GpuSourceExperimentIntent:
             _text(value, f"experiment intent {label}")
         if not isinstance(self.expected_dispatch, BoundedDispatchExpectation):
             raise DiscoveryControllerError("experiment intent requires bounded literal dispatch expectation")
+        if self.load_mode_recommendation is not None and not isinstance(
+                self.load_mode_recommendation, LoadModeRecommendation):
+            raise DiscoveryControllerError("load-mode recommendation must be typed and immutable")
 
 
 @dataclass(frozen=True)
@@ -269,7 +291,8 @@ class CodexPlanner:
             "plan_json_keys": ["hypothesis_id", "statement", "falsifier", "regime",
                                "proposal", "source_manifest_path", "experiment_intent"],
             "experiment_intent_keys": ["template_id", "target_surface", "target_symbol",
-                                       "correctness_id", "dispatch_id", "expected_dispatch"],
+                                       "correctness_id", "dispatch_id", "expected_dispatch",
+                                       "load_mode_recommendation"],
             "expected_dispatch_keys": ["kernel_name", "calls", "grid", "workgroup", "lds_bytes"],
             "source_manifest": "epyc.autokernel.source_patch.v1; use deployment-assigned ids/base/instrument only",
             "proposal_requirements": ["proposal_id matches manifest", "change_class matches manifest",
@@ -338,13 +361,22 @@ def _load_plan(path: Path, root: Path, *, assignment: AuthoringAssignment | None
     if set(value) not in (allowed, allowed - {"experiment_intent"}): raise DiscoveryControllerError("planner output schema mismatch")
     intent_raw = value.pop("experiment_intent", None)
     if intent_raw is not None:
-        if not isinstance(intent_raw, Mapping) or set(intent_raw) != {"template_id", "target_surface", "target_symbol", "correctness_id", "dispatch_id", "expected_dispatch"}:
+        allowed_intent = {"template_id", "target_surface", "target_symbol", "correctness_id", "dispatch_id", "expected_dispatch", "load_mode_recommendation"}
+        if not isinstance(intent_raw, Mapping) or set(intent_raw) not in (allowed_intent, allowed_intent - {"load_mode_recommendation"}):
             raise DiscoveryControllerError("planner experiment intent schema mismatch")
         expected = intent_raw["expected_dispatch"]
         if not isinstance(expected, Mapping) or set(expected) != {"kernel_name", "calls", "grid", "workgroup", "lds_bytes"}:
             raise DiscoveryControllerError("planner bounded dispatch schema mismatch")
+        recommendation = intent_raw.get("load_mode_recommendation")
+        if recommendation is not None:
+            if not isinstance(recommendation, Mapping) or set(recommendation) != {"mode", "rationale", "example_ids"}:
+                raise DiscoveryControllerError("planner load-mode recommendation schema mismatch")
+            recommendation = LoadModeRecommendation(
+                mode=recommendation["mode"], rationale=recommendation["rationale"],
+                example_ids=tuple(recommendation["example_ids"]))
         intent = GpuSourceExperimentIntent(**{**intent_raw,
-            "expected_dispatch": BoundedDispatchExpectation(**expected)})
+            "expected_dispatch": BoundedDispatchExpectation(**expected),
+            "load_mode_recommendation": recommendation})
     else:
         intent = None
     raw_path = Path(_text(value.pop("source_manifest_path"), "source_manifest_path"))
@@ -516,6 +548,10 @@ class ControllerConfig:
     experiment_template_registry_sha256: str | None = None
     admission_corpus_sha256: str | None = None
     admission_corpus_version: str | None = None
+    # The sealed deployment file is the authority for repository paths/refs as
+    # well as the hashes separately carried below.  Durable state records this
+    # one canonical identity so a resume cannot silently switch checkout roots.
+    deployment_identity_sha256: str | None = None
     def __post_init__(self) -> None:
         if (not self.output_root.is_absolute() or not 1 <= self.max_iterations <= 1000
                 or isinstance(self.nomination_threshold, bool)
@@ -534,6 +570,15 @@ class ControllerConfig:
                 or self.admission_corpus_sha256 is not None and not HASH.fullmatch(self.admission_corpus_sha256)
                 or self.admission_corpus_version is not None and not re.fullmatch(r"[a-z][a-z0-9_.-]{0,127}", self.admission_corpus_version)):
             raise DiscoveryControllerError("invalid controller config")
+        if self.deployment_identity_sha256 is not None and not HASH.fullmatch(self.deployment_identity_sha256):
+            raise DiscoveryControllerError("invalid sealed deployment identity")
+        sealed = (self.planner_context_sha256, self.production_base_commit,
+                  self.instrument_commit, self.experiment_template_registry_sha256,
+                  self.admission_corpus_sha256, self.admission_corpus_version,
+                  self.deployment_identity_sha256)
+        if (not self.dry_run and any(value is not None for value in sealed)
+                and not all(value is not None for value in sealed)):
+            raise DiscoveryControllerError("live sealed controller configuration has incomplete deployment authority")
 
 
 class DurableState:
@@ -603,6 +648,7 @@ def _context(state: Mapping[str, Any], tracker: hypotheses.HypothesisTracker, tu
             "planner_context_sha256": config.planner_context_sha256,
             "admission_corpus_sha256": config.admission_corpus_sha256,
             "admission_corpus_version": config.admission_corpus_version,
+            "deployment_identity_sha256": config.deployment_identity_sha256,
             "authoring_assignment": assignment,
             "prior_results": prior, "do_not_repeat":_memory_block(tracker,turn)}
 
@@ -640,7 +686,15 @@ def _restore_pending(value: Mapping[str, Any]) -> PlannedCandidate:
         expected = intent.get("expected_dispatch")
         if not isinstance(expected, Mapping):
             raise DiscoveryControllerError("pending bounded dispatch is malformed")
-        intent = {**intent, "expected_dispatch": BoundedDispatchExpectation(**expected)}
+        recommendation = intent.get("load_mode_recommendation")
+        if recommendation is not None:
+            if not isinstance(recommendation, Mapping):
+                raise DiscoveryControllerError("pending load-mode recommendation is malformed")
+            recommendation = LoadModeRecommendation(
+                mode=recommendation.get("mode"), rationale=recommendation.get("rationale"),
+                example_ids=tuple(recommendation.get("example_ids", ())))
+        intent = {**intent, "expected_dispatch": BoundedDispatchExpectation(**expected),
+                  "load_mode_recommendation": recommendation}
     return PlannedCandidate(hypothesis_id=raw["hypothesis_id"],statement=raw["statement"],falsifier=raw["falsifier"],regime=raw["regime"],proposal=raw["proposal"],source_manifest=manifest,source_manifest_sha256=raw["source_manifest_sha256"],experiment_intent=GpuSourceExperimentIntent(**intent) if intent else None)
 
 
@@ -778,6 +832,15 @@ def run_controller(config: ControllerConfig, *, planner: Planner, critic: Critic
 
 def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic: Critic, screener: Screener, lease: Lease, store: DurableState) -> dict[str, Any]:
     state=store.load()
+    existing_deployment = state.get("deployment_identity_sha256")
+    if (existing_deployment is None and config.deployment_identity_sha256 is not None
+            and (state.get("iterations") or state.get("pending") is not None
+                 or state.get("inflight") is not None)):
+        raise DiscoveryControllerError("legacy durable state lacks deployment identity; refusing resume")
+    if existing_deployment is not None and existing_deployment != config.deployment_identity_sha256:
+        raise DiscoveryControllerError("sealed deployment identity changed; durable discovery cannot resume")
+    if existing_deployment is None and config.deployment_identity_sha256 is not None:
+        state["deployment_identity_sha256"] = config.deployment_identity_sha256
     existing_context = state.get("planner_context_sha256")
     if existing_context is not None and existing_context != config.planner_context_sha256:
         raise DiscoveryControllerError("sealed planner context changed; durable discovery cannot resume")

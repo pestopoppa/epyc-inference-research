@@ -5,6 +5,39 @@ import unittest
 from unittest import mock
 
 from scripts.benchmark import run_autokernel_gpu_discovery as gpu
+from scripts.kernel_rnd.autokernel import schemas
+
+
+def _admission(model: Path, *, workload: str = "prefill_pp512", calls: int = 3,
+               mode: str = "cold_serialized") -> dict:
+    """A self-hashed lease decision; tests never use a runner-side profile."""
+    request = {"effective_context_sha256": "c" * 64, "model_path": str(model.resolve()),
+               "model_sha256": gpu.sha256_file(model), "model_bytes": model.stat().st_size,
+               "workload": workload, "calls_per_arm": calls, "device_id": gpu.DEVICE_ID,
+               "cold_load_host_bytes": model.stat().st_size,
+               "worst_case_loads_per_interval": calls * 2, "telemetry_observed": False,
+               "telemetry_age_ms": None, "observed_headroom_bytes_per_s": None,
+               "telemetry_receipt_sha256": None, "foreign_kfd_pids": [],
+               "runtime_manifest_sha256": None, "runtime_arm": None,
+               "hot_residency_identity_sha256": None, "expected_hot_identity_sha256": None,
+               "hot_revalidation_identity_sha256": None}
+    body = {"schema": "epyc.autokernel.gpu_load_admission_decision.v1",
+            "policy_version": "test-v1", "policy_sha256": "a" * 64,
+            "policy_file_sha256": "b" * 64, "effective_context_sha256": "c" * 64,
+            "request": request, "profile": None, "actor_recommendation": None,
+            "mode": mode, "reason": "test sealed decision", "disqualifiers": [],
+            "promotion_claim": False}
+    return {**body, "decision_sha256": schemas.content_hash(body)}
+
+
+def _bind_admission(args: argparse.Namespace, *, mode: str = "cold_serialized") -> argparse.Namespace:
+    decision = _admission(Path(args.model), workload=args.workload, calls=args.calls, mode=mode)
+    args.load_admission_decision = decision
+    args.load_admission_policy_version = "test-v1"
+    args.load_admission_policy_sha256 = "a" * 64
+    args.load_admission_policy_file_sha256 = "b" * 64
+    args.load_admission_effective_context_sha256 = "c" * 64
+    return args
 
 
 def _build(root: Path, *, rocwmma: str, mfma: str, graphs: str = "ON") -> Path:
@@ -40,12 +73,12 @@ class TestGpuDiscoveryBuildIdentity(unittest.TestCase):
                     versioned = directory / "libggml-hip.so.0.16.0"; versioned.write_bytes(payload)
                     (directory / "libggml-hip.so.0").symlink_to(versioned.name)
                     (directory / "libggml-hip.so").symlink_to("libggml-hip.so.0")
-                args = argparse.Namespace(model=str(model), anchor_build=str(anchor), candidate_build=str(candidate),
+                args = _bind_admission(argparse.Namespace(model=str(model), anchor_build=str(anchor), candidate_build=str(candidate),
                     factor="source_patch", campaign_id="gpu-source", calls=3, workload="prefill_pp512",
-                    allow_small_model_cpu_overlap=True, measurement_binary=str(anchor / "bin" / "llama-bench"),
+                    measurement_binary=str(anchor / "bin" / "llama-bench"),
                     common_loader_dir=str(anchor / "bin"), anchor_loader_dir=str(anchor / "bin"), candidate_loader_dir=str(candidate / "bin"),
                     device_id=gpu.DEVICE_ID,
-                    inference_window_lock=None)
+                    inference_window_lock=None), mode="cold_overlap")
                 sealed = gpu.preflight(args)
             self.assertEqual(sealed["runtime_arms"]["measurement_binary_sha256"],
                              gpu.sha256_file(anchor / "bin" / "llama-bench"))
@@ -55,10 +88,9 @@ class TestGpuDiscoveryBuildIdentity(unittest.TestCase):
     def test_preflight_records_cold_serialization_for_over_budget_cadence(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); build = _build(root, rocwmma="ON", mfma="OFF"); model = root / "m"; model.write_bytes(b"x")
-            sealed = gpu.preflight(argparse.Namespace(model=str(model), anchor_build=str(build), candidate_build=str(build),
+            sealed = gpu.preflight(_bind_admission(argparse.Namespace(model=str(model), anchor_build=str(build), candidate_build=str(build),
                     factor="flash_attention", campaign_id="gpu", calls=3, workload="prefill_pp512",
-                    allow_small_model_cpu_overlap=True,
-                    device_id=gpu.DEVICE_ID, inference_window_lock=None))
+                    device_id=gpu.DEVICE_ID, inference_window_lock=None)))
             self.assertEqual(sealed["host_transfer"]["mode"], "cold_serialized")
     def test_decode_preflight_seals_tg128_shape_and_metric(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -69,11 +101,11 @@ class TestGpuDiscoveryBuildIdentity(unittest.TestCase):
                                graphs="OFF")
             model = root / "model.gguf"
             model.write_bytes(b"model")
-            sealed = gpu.preflight(argparse.Namespace(
+            sealed = gpu.preflight(_bind_admission(argparse.Namespace(
                 model=str(model), anchor_build=str(anchor),
                 candidate_build=str(candidate), factor="hip_graphs",
                 campaign_id="gpu-decode", calls=9, workload="decode_tg128",
-                allow_small_model_cpu_overlap=True))
+                device_id=gpu.DEVICE_ID, inference_window_lock=None)))
         self.assertEqual(sealed["frame"], "tg128-ngl99")
         self.assertEqual(sealed["metric"], "decode_tokens_per_s")
         self.assertEqual((sealed["prompt_tokens"], sealed["generation_tokens"]),
@@ -234,8 +266,7 @@ class TestGpuDiscoveryInferenceWindow(unittest.TestCase):
                 result = gpu.invoke(
                     build=Path("/build"), model=model, seed=1, baseline_vram=0,
                     flash_attention=True, campaign_id="gpu-s2",
-                    cpu_journal=mock.Mock(), allow_small_model_cpu_overlap=True,
-                    sealed_load_decision={"mode": "cold_overlap", "policy_version": "test"})
+                    cpu_journal=mock.Mock(), sealed_load_decision=_admission(model, mode="cold_overlap"))
         acquire.assert_not_called()
         self.assertIsNone(result["inference_call_window"])
         coverage = result["cpu_coverage"]
@@ -249,11 +280,10 @@ class TestGpuDiscoveryInferenceWindow(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             model = Path(directory) / "large.gguf"
             model.write_bytes(b"x")
-            with self.assertRaisesRegex(RuntimeError, "preflight-sealed"):
+            with self.assertRaisesRegex(RuntimeError, "sealed cold load"):
                 gpu.invoke(build=Path("/build"), model=model, seed=1,
                            baseline_vram=0, flash_attention=True,
-                           campaign_id="gpu-s2", cpu_journal=mock.Mock(),
-                           allow_small_model_cpu_overlap=True)
+                           campaign_id="gpu-s2", cpu_journal=mock.Mock())
 
     def test_transfer_budget_is_diagnostic_not_live_cli_authority(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -298,14 +328,17 @@ class TestGpuDiscoveryInferenceWindow(unittest.TestCase):
             events.append("model-call")
             return {"metric": 1.0}
 
-        with mock.patch.object(gpu, "MODEL_CALL_WINDOW", CallWindow()), \
+        with tempfile.TemporaryDirectory() as directory, \
+             mock.patch.object(gpu, "MODEL_CALL_WINDOW", CallWindow()), \
              mock.patch.object(gpu.cpu_region_claim, "acquire_cpu_region_claim",
                                return_value=Claim()), \
              mock.patch.object(gpu, "_invoke_locked", side_effect=measured):
+            model = Path(directory) / "model"; model.write_bytes(b"model")
             result = gpu.invoke(
-                build=Path("/build"), model=Path("/model"), seed=1,
+                build=Path("/build"), model=model, seed=1,
                 baseline_vram=0, flash_attention=True,
-                campaign_id="ak-gpu-test", cpu_journal=mock.Mock())
+                campaign_id="ak-gpu-test", cpu_journal=mock.Mock(),
+                sealed_load_decision=_admission(model))
         self.assertEqual(events, ["window-open", "model-call", "cpu-release",
                                   "window-close"])
         self.assertFalse(result["cpu_coverage"]["borrowed"])
@@ -349,16 +382,19 @@ class TestGpuDiscoveryInferenceWindow(unittest.TestCase):
             events.append("model-call")
             return {"metric": 1.0}
 
-        with mock.patch.object(gpu, "MODEL_CALL_WINDOW", CallWindow()), \
+        with tempfile.TemporaryDirectory() as directory, \
+             mock.patch.object(gpu, "MODEL_CALL_WINDOW", CallWindow()), \
              mock.patch.object(gpu.cpu_region_claim, "acquire_cpu_region_claim",
                                side_effect=acquire), \
              mock.patch.object(gpu.inference_window, "borrow_windowed_cpu_coverage",
                                side_effect=borrow), \
              mock.patch.object(gpu, "_invoke_locked", side_effect=measured):
+            model = Path(directory) / "model"; model.write_bytes(b"model")
             result = gpu.invoke(
-                build=Path("/build"), model=Path("/model"), seed=1,
+                build=Path("/build"), model=model, seed=1,
                 baseline_vram=0, flash_attention=True,
-                campaign_id="ak-gpu-test", cpu_journal=mock.Mock())
+                campaign_id="ak-gpu-test", cpu_journal=mock.Mock(),
+                sealed_load_decision=_admission(model))
         self.assertEqual(events, ["window-open", "borrow-open", "model-call",
                                   "borrow-validate", "window-close"])
         self.assertTrue(result["cpu_coverage"]["borrowed"])

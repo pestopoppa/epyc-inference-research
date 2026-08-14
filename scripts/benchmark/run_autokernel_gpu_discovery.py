@@ -25,6 +25,7 @@ from scripts.kernel_rnd.autokernel.resource import device_claim
 from scripts.benchmark import autokernel_gpu_discovery_beliefs as gpu_beliefs
 from scripts.benchmark import autokernel_progression
 from scripts.kernel_rnd.autokernel.controller import split_runtime_verifier
+from scripts.kernel_rnd.autokernel.controller import gpu_load_admission
 
 
 SCHEMA_BANK = "epyc.autokernel.gpu_screening_baseline.v2"
@@ -265,7 +266,6 @@ def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
            expected_source_commit: str = SOURCE_COMMIT,
            prompt_tokens: int = 512, generation_tokens: int = 0,
            cpu_journal: cpu_region_claim.RegionClaimJournal,
-           allow_small_model_cpu_overlap: bool = False,
            threads: int = 8, batch: int = 512, ubatch: int = 512,
            mmap: bool = True, no_op_offload: bool = False,
            split_mode: str = "layer", no_kv_offload: bool = False,
@@ -279,12 +279,10 @@ def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
            cold_loads_in_interval: int = 1,
            sealed_load_decision: dict | None = None) -> dict:
     """Run one model load/measurement with the ratified discovery overlap policy."""
-    if sealed_load_decision is not None:
-        if not isinstance(sealed_load_decision, dict) or sealed_load_decision.get("mode") not in {
-                "cold_overlap", "cold_serialized"}:
-            raise RuntimeError("nonpersistent runner requires a sealed cold load decision")
-        allow_small_model_cpu_overlap = sealed_load_decision["mode"] == "cold_overlap"
-    if allow_small_model_cpu_overlap:
+    if (not isinstance(sealed_load_decision, dict)
+            or sealed_load_decision.get("mode") not in {"cold_overlap", "cold_serialized"}):
+        raise RuntimeError("nonpersistent runner requires a sealed cold load decision")
+    if sealed_load_decision["mode"] == "cold_overlap":
         model_bytes = model.stat().st_size
         if sealed_load_decision is None:
             raise RuntimeError("GPU overlap requires a preflight-sealed site load decision")
@@ -311,9 +309,8 @@ def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
             split_mode=split_mode, no_kv_offload=no_kv_offload, poll=poll,
             reward_binary=reward_binary, hip_library_dir=hip_library_dir, common_loader_dir=common_loader_dir,
             runtime_arm=runtime_arm)
-        # Deliberately no shared CPU inference-window lock here.  The <=512MiB
-        # policy treats CPU activity as discovery noise; it is not a strict
-        # calibration claim and must not serialize small GPU exploration.
+        # Deliberately no shared CPU inference-window lock here.  The sealed
+        # admission receipt, not model size or caller flags, admits this noise.
         result["inference_call_window"] = None
         result["cpu_coverage"] = {
             "schema": "epyc.autokernel.discovery_cpu_overlap.v1",
@@ -597,13 +594,29 @@ def preflight(args: argparse.Namespace) -> dict:
     if not model.is_file():
         raise RuntimeError(f"model does not exist: {model}")
     model_size_bytes = model.stat().st_size
-    profile_id = getattr(args, "load_admission_profile_id", "mi210-qwen05b-tg128-18-v1")
-    profile = SITE_LOAD_PROFILES.get(profile_id)
-    if profile is None:
-        raise RuntimeError("unknown reviewed GPU load-admission profile")
-    transfer = profile.decide(model=model, workload=args.workload, calls=args.calls,
-                              device_id=getattr(args, "device_id", DEVICE_ID),
-                              observed_headroom=True)
+    # Admission is computed once by the sealed deployment lease.  This runner
+    # is deliberately only a consumer: it never accepts a CLI profile, a size
+    # threshold, or fabricated host headroom as an overlap authority.
+    transfer = getattr(args, "load_admission_decision", None)
+    if not isinstance(transfer, dict):
+        raise RuntimeError("GPU discovery runner requires a sealed load-admission decision")
+    try:
+        gpu_load_admission.validate_decision_receipt(
+            transfer,
+            expected_policy_version=getattr(args, "load_admission_policy_version"),
+            expected_policy_sha256=getattr(args, "load_admission_policy_sha256"),
+            expected_policy_file_sha256=getattr(args, "load_admission_policy_file_sha256"),
+            expected_effective_context_sha256=getattr(args, "load_admission_effective_context_sha256"))
+    except gpu_load_admission.AdmissionPolicyError as exc:
+        raise RuntimeError(f"sealed load-admission decision refused: {exc}") from exc
+    request = transfer.get("request")
+    if (not isinstance(request, dict) or request.get("model_path") != str(model)
+            or request.get("model_sha256") != sha256_file(model)
+            or request.get("model_bytes") != model_size_bytes
+            or request.get("workload") != args.workload
+            or request.get("calls_per_arm") != args.calls
+            or request.get("device_id") != getattr(args, "device_id", DEVICE_ID)):
+        raise RuntimeError("sealed load-admission decision does not bind this runner frame")
     if getattr(args, "device_id", DEVICE_ID) != DEVICE_ID:
         raise RuntimeError("GPU discovery device must be the admitted MI210")
     configured_lock = getattr(args, "inference_window_lock", None)
@@ -661,7 +674,6 @@ def preflight(args: argparse.Namespace) -> dict:
         "model_sha256": sha256_file(model),
         "model_size_bytes": model_size_bytes,
         "host_transfer": transfer,
-        "load_admission_profile_id": profile_id,
         "device_id": DEVICE_ID,
         "inference_window_lock": str(lock),
         "cpu_overlap_policy": ("allowed_discovery_noise" if transfer["mode"] == "cold_overlap"
@@ -762,7 +774,6 @@ def run(args: argparse.Namespace) -> dict:
             no_kv_offload=sealed["anchor_no_kv_offload"],
             poll=sealed["anchor_poll"],
             campaign_id=args.campaign_id, cpu_journal=cpu_journal,
-            allow_small_model_cpu_overlap=args.allow_small_model_cpu_overlap,
             sealed_load_decision=sealed["host_transfer"],
             inference_window_lock=Path(sealed["inference_window_lock"]),
             reward_binary=(Path(sealed["runtime_arms"]["measurement_binary"])
@@ -809,7 +820,6 @@ def run(args: argparse.Namespace) -> dict:
             no_kv_offload=sealed["candidate_no_kv_offload"],
             poll=sealed["candidate_poll"],
             campaign_id=args.campaign_id, cpu_journal=cpu_journal,
-            allow_small_model_cpu_overlap=args.allow_small_model_cpu_overlap,
             sealed_load_decision=sealed["host_transfer"],
             inference_window_lock=Path(sealed["inference_window_lock"]),
             reward_binary=(Path(sealed["runtime_arms"]["measurement_binary"])
@@ -836,9 +846,7 @@ def run(args: argparse.Namespace) -> dict:
             "baseline_center": center, "candidate_samples": values,
             "relative_effects": effects, "median_relative": median(effects),
             "host_noise_policy": "ordinary_host_activity_recorded_not_blocking",
-            "cpu_overlap_policy": ("allowed_discovery_noise"
-                                   if args.allow_small_model_cpu_overlap
-                                   else "shared_model_call_window"),
+            "cpu_overlap_policy": sealed["cpu_overlap_policy"],
             "model_size_bytes": model.stat().st_size,
             "site_load_decision": sealed["host_transfer"],
             "promotion_claim": False,
@@ -898,10 +906,7 @@ def parser() -> argparse.ArgumentParser:
                         help="fresh invocations per arm (discovery evidence only)")
     result.add_argument("--workload", choices=("prefill_pp512", "decode_tg128"),
                         default="prefill_pp512")
-    result.add_argument("--allow-small-model-cpu-overlap", action="store_true",
-                        help="nonpromotable discovery only: request policy-admitted cold-load overlap")
     result.add_argument("--inference-window-lock")
-    result.add_argument("--load-admission-profile-id", default="mi210-qwen05b-tg128-18-v1")
     result.add_argument("--device-id", default=DEVICE_ID)
     result.add_argument("--measurement-binary")
     result.add_argument("--common-loader-dir")
