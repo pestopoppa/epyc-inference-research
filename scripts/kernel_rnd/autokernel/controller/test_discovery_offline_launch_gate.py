@@ -62,7 +62,35 @@ class OfflineLaunchGate(unittest.TestCase):
             context_path, __import__("hashlib").sha256(context_path.read_bytes()).hexdigest())
         admission_value = {
             "schema": D.ADMISSION_POLICY_SCHEMA, "version": "test-v1",
-            "profiles": [], "examples": [],
+            "profiles": [{
+                "profile_id": "offline-mi210-tg128",
+                "model_path": str(inputs["model"].path),
+                "model_sha256": inputs["model"].sha256,
+                "model_bytes": inputs["model"].path.stat().st_size,
+                "workload": "tg128", "calls_per_arm": 9,
+                "device_id": "mi210_0",
+                "cold_load_host_bytes": inputs["model"].path.stat().st_size,
+                "worst_case_loads_per_interval": 18,
+                "minimum_headroom_bytes_per_s": 1_000_000,
+                "telemetry_max_age_ms": 2_000,
+                "evidence_sha256": "b" * 64,
+            }],
+            "examples": [{
+                "id": "offline-positive", "polarity": "positive",
+                "facts": {"profile_id": "offline-mi210-tg128"},
+                "missing": [], "mode": "cold_overlap",
+                "rationale": "reviewed exact profile",
+                "disqualifiers": [], "counterfactual": "serialize on mismatch",
+                "evidence": ["sha256:" + "c" * 64],
+            }, {
+                "id": "offline-negative", "polarity": "negative",
+                "facts": {"profile_id": "offline-mi210-tg128"},
+                "missing": ["headroom"], "mode": "cold_serialized",
+                "rationale": "missing observation",
+                "disqualifiers": ["telemetry_missing"],
+                "counterfactual": "supply current telemetry",
+                "evidence": ["sha256:" + "d" * 64],
+            }],
         }
         admission_value["policy_sha256"] = C._sha(admission_value)
         admission_path = (root / "admission-policy.json").resolve()
@@ -79,7 +107,10 @@ class OfflineLaunchGate(unittest.TestCase):
             claim_timeout_s=0, inference_window_lock=(root / "window.lock").resolve(),
             model=inputs["model"],
             workload=inputs["workload"], runtime_config=inputs["runtime"], policy=inputs["policy"],
-            admission_policy=D.AdmissionPolicy(admission_input, admission_value),
+            admission_policy=D.AdmissionPolicy(
+                admission_input, admission_value,
+                D.gpu_load_admission.load_policy_corpus(
+                    admission_path, expected_file_sha256=admission_input.sha256)),
             planner_context=D.PlannerContext(context_input, context_value),
             source_builder_id="source", evidence_plan_id="evidence", runner_args_id="runner",
             experiment_template_registry_id="templates",
@@ -251,37 +282,87 @@ class OfflineLaunchGate(unittest.TestCase):
         fields = C.ControllerConfig.__dataclass_fields__
         self.assertIn("admission_corpus_version", fields)
         self.assertIn("admission_corpus_sha256", fields)
+        self.assertIn("admission_corpus_file_sha256", fields)
         self.assertIn("effective_planner_context_sha256", fields)
         context_source = inspect.getsource(C._context)
         state_source = inspect.getsource(C.run_controller)
         self.assertIn("admission_corpus_version", context_source)
         self.assertIn("admission_corpus_sha256", context_source)
+        self.assertIn("admission_corpus_file_sha256", context_source)
         self.assertIn("effective_planner_context_sha256", context_source)
         self.assertIn("admission_corpus_version", state_source)
         self.assertIn("admission_corpus_sha256", state_source)
+        self.assertIn("admission_corpus_file_sha256", state_source)
         self.assertIn("effective_planner_context_sha256", state_source)
+
+    def test_production_and_measurement_instrument_are_distinct_authorities(self):
+        """Frozen production is provenance; the 894 descendant is the instrument."""
+        deployment_fields = D.DiscoveryDeployment.__dataclass_fields__
+        for field in ("instrument_path", "instrument_branch", "instrument_head"):
+            self.assertIn(field, deployment_fields)
+        builder_fields = S.StaticGpuSourceBuilder.__dataclass_fields__
+        self.assertIn("instrument_path", builder_fields)
+        self.assertIn("instrument_branch", builder_fields)
+        build_source = inspect.getsource(S.StaticGpuSourceBuilder.build)
+        self.assertIn("self.instrument_path", build_source)
+        self.assertNotIn("create_snapshot_worktree(\n                self.production_path",
+                         build_source)
+        factory_source = inspect.getsource(F.materialize)
+        self.assertIn("instrument_head", factory_source)
+        self.assertNotIn("instrument_commit=config.production_head", factory_source)
+
+    def test_instrument_exact_ref_and_production_ancestry_are_verified(self):
+        """Wrong path/ref/movement or a non-descendant instrument must refuse."""
+        verifier = getattr(D, "_verify_instrument", None)
+        self.assertTrue(callable(verifier))
+        source = inspect.getsource(verifier)
+        for token in ("merge-base", "--is-ancestor", "rev-parse", "status"):
+            self.assertIn(token, source)
+        self.assertIn("894ec4dc55c829b11b663a46bc9b089d861b73a4", source)
+        self.assertIn("/mnt/raid0/llm/llama.cpp-experimental", source)
+
+    def test_production_untracked_sidecars_do_not_authorize_or_block_build(self):
+        """Tracked freeze/artifact mutation refuses; untracked host sidecars are inert."""
+        with tempfile.TemporaryDirectory() as directory:
+            production = Path(directory).resolve()
+            responses = iter((
+                (0, D.FROZEN_PRODUCTION_HEAD + "\n"),
+                (0, D.FROZEN_PRODUCTION_BRANCH + "\n"),
+                (0, "?? local-host-sidecar\n"),
+            ))
+            def run(*_args, **_kwargs):
+                rc, stdout = next(responses)
+                return SimpleNamespace(returncode=rc, stdout=stdout, stderr="")
+            with mock.patch.object(D, "FROZEN_PRODUCTION_PATH", production), \
+                    mock.patch.object(D.subprocess, "run", side_effect=run):
+                try:
+                    D._verify_production(production, D.FROZEN_PRODUCTION_HEAD)
+                except D.DeploymentConfigError as exc:
+                    self.fail(f"untracked host sidecar incorrectly invalidated freeze: {exc}")
+
+    def test_s2_reuses_exact_sealed_build_package_and_refuses_tamper(self):
+        """Replication reruns evidence, not source materialization or compilation."""
+        pending_source = inspect.getsource(C._schedule_replication)
+        self.assertIn("sealed_build", pending_source)
+        adapter_source = inspect.getsource(A.GovernedGpuSourceAdapter)
+        self.assertIn("sealed_build_sha256", adapter_source)
+        self.assertIn("revalidate", adapter_source)
+
+    def test_candidate_and_correctness_bind_distinct_instrument_era(self):
+        """Manifest/proposal bind 0db+894; correctness binds candidate+suite seed."""
+        factory_source = inspect.getsource(F.materialize)
+        self.assertIn("production_base_commit=config.production_head", factory_source)
+        self.assertIn("instrument_commit=config.instrument_head", factory_source)
+        plan_fields = E.GpuSourceEvidencePlan.__dataclass_fields__
+        self.assertIn("correctness_suite_seed", plan_fields)
+        post_init = inspect.getsource(E.GpuSourceEvidencePlan.__post_init__)
+        self.assertIn("correctness_suite_seed", post_init)
+        self.assertIn("candidate", post_init)
 
     def test_wrong_actor_overlap_recommendation_is_deterministically_downgraded(self):
         """Negative examples are facts, not prose an actor can vote past."""
         with tempfile.TemporaryDirectory() as directory:
             config = self._config(Path(directory))
-            keys = {"id", "facts", "missing", "recommended_mode", "rationale",
-                    "disqualifiers", "counterfactual", "evidence"}
-            examples = [
-                {"id": case, "facts": {"case": case},
-                 "missing": (["headroom"] if case == "unknown" else []),
-                 "recommended_mode": "cold_serialized", "rationale": case,
-                 "disqualifiers": [case], "counterfactual": "exact reviewed facts",
-                 "evidence": ["sha256:" + "b" * 64]}
-                for case in ("high_cadence", "unknown", "large",
-                             "hot_mismatch", "foreign_kfd")]
-            self.assertTrue(all(set(row) == keys for row in examples))
-            corpus = {**config.admission_policy.value, "examples": examples}
-            corpus["policy_sha256"] = C._sha(
-                {key: value for key, value in corpus.items()
-                 if key != "policy_sha256"})
-            policy = replace(config.admission_policy, value=corpus)
-            config = replace(config, admission_policy=policy)
             lease = F.GpuDiscoveryLease(config=config,
                                         mode="allowed_discovery_noise")
             for case in ("high_cadence", "unknown", "large",
@@ -292,8 +373,50 @@ class OfflineLaunchGate(unittest.TestCase):
                 with self.subTest(case=case), \
                         mock.patch.object(D.DiscoveryDeployment, "revalidate"):
                     result = lease.admit(candidate)
-                    self.assertIn(result["mode"], {"cold_serialized", "refused"})
+                    self.assertEqual(result["mode"], "cold_serialized")
+                    self.assertEqual(result["load_admission"]["actor_recommendation"],
+                                     None)
                     self.assertNotEqual(result.get("authorized_by"), "actor")
+
+    def test_resume_refuses_policy_or_effective_context_authority_change(self):
+        """Version/content/file/context are four independent durable identities."""
+        required = {"admission_corpus_version", "admission_corpus_sha256",
+                    "admission_corpus_file_sha256",
+                    "effective_planner_context_sha256"}
+        fields = set(C.ControllerConfig.__dataclass_fields__)
+        self.assertTrue(required <= fields,
+                        f"controller config lacks resume authorities: {required - fields}")
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.object(C.source_candidate,
+                                  "SourcePatchManifest", Manifest), \
+                mock.patch.object(C, "_write_projection"):
+            root = Path(directory)
+            values = dict(
+                output_root=(root / "state").resolve(), max_iterations=1,
+                dry_run=True, planner_context={"sealed": True},
+                planner_context_sha256="1" * 64,
+                effective_planner_context_sha256="2" * 64,
+                admission_corpus_version="site-v1",
+                admission_corpus_sha256="3" * 64,
+                admission_corpus_file_sha256="4" * 64,
+                production_base_commit="0" * 40,
+                instrument_commit="8" * 40,
+                experiment_template_registry_sha256="5" * 64)
+            config = C.ControllerConfig(**values)
+            C.run_controller(config, planner=Planner(), critic=Critic(),
+                             screener=mock.Mock(), lease=Lease((True,)))
+            for field, changed in (
+                ("admission_corpus_version", "site-v2"),
+                ("admission_corpus_sha256", "6" * 64),
+                ("admission_corpus_file_sha256", "7" * 64),
+                ("effective_planner_context_sha256", "9" * 64),
+            ):
+                with self.subTest(field=field), self.assertRaisesRegex(
+                        C.DiscoveryControllerError, "changed|resume"):
+                    C.run_controller(
+                        replace(config, **{field: changed}),
+                        planner=Planner(), critic=Critic(),
+                        screener=mock.Mock(), lease=Lease((True,)))
 
     def test_planner_can_author_distinct_literal_dispatch_expectations(self):
         """One template supports genuine hypotheses without actor-authored regex/argv."""
@@ -656,20 +779,22 @@ class OfflineLaunchGate(unittest.TestCase):
         """The native builder receipt must be directly consumable as evidence."""
         with tempfile.TemporaryDirectory() as directory:
             built, evidence_plan, operation_dir = self._static_builder_result(Path(directory))
-            receipt = (operation_dir / "materialization.json").resolve()
-            bound = E.BoundInputFile(
-                "materialization", receipt,
-                hashlib.sha256(receipt.read_bytes()).hexdigest())
-            identities = replace(evidence_plan.identity_files, materialization=bound)
-            candidate = replace(evidence_plan.candidate,
-                                source_commit=built.candidate_identity.source_commit,
-                                source_sha256=built.candidate_identity.source_sha256)
-            projected = replace(evidence_plan, candidate=candidate,
-                                identity_files=identities)
             try:
-                E._verify_plan_files(projected)
-            except E.EvidenceProducerError as exc:
-                self.fail(f"builder receipt is incompatible with evidence validator: {exc}")
+                identities = S.evidence_identity_files_for_build(
+                    built, manifest=evidence_plan.identity_files.manifest,
+                    model=evidence_plan.identity_files.model,
+                    workload=evidence_plan.identity_files.workload,
+                    runtime_config=evidence_plan.identity_files.runtime_config)
+                E._verify_build_files(identities.anchor,
+                                      built.anchor_identity, "anchor")
+                E._verify_build_files(identities.candidate,
+                                      built.candidate_identity, "candidate")
+            except (E.EvidenceProducerError, S.StaticRegistryError) as exc:
+                self.fail(f"builder receipt is incompatible with evidence bridge: {exc}")
+            self.assertEqual(identities.materialization.path,
+                             (operation_dir / "materialization.json").resolve())
+            self.assertEqual(identities.shared_runtime.measurement_binary.path,
+                             built.measurement_binary)
 
     def test_source_tree_receipt_separates_carrier_and_tree_hashes(self):
         """The JSON carrier hashes bytes; nested entries recompute tree identity."""
@@ -808,14 +933,101 @@ class OfflineLaunchGate(unittest.TestCase):
                 self.fail(f"descendant KFD ownership was rejected: {exc}")
         self.assertEqual(reduced["kfd_pids"], [200])
 
+    def test_runtime_maps_refuses_multi_owned_kfd_min_pid_selection(self):
+        """Two owned KFD descendants cannot be collapsed to arbitrary min(PID)."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            proc = root / "proc"; proc.mkdir()
+            (proc / "sys/kernel/random").mkdir(parents=True)
+            (proc / "sys/kernel/random/boot_id").write_text("boot-a\n")
+            for pid in (200, 300):
+                (proc / str(pid)).mkdir()
+                # starttime (field 22) is tail index 19 after the command name.
+                (proc / str(pid) / "stat").write_text(
+                    f"{pid} (worker) S 100 " + "0 " * 17 + f"{pid * 10}\n")
+                (proc / str(pid) / "maps").write_text(
+                    f"00400000-00401000 r-xp 00000000 00:00 0 /owned/{pid}\n")
+            invocation = SimpleNamespace(runtime_maps_context={
+                "arm": "candidate",
+                "shared_runtime": {"runtime_receipt": {
+                    "path": str((root / "runtime.json").resolve())}},
+                "model": {"path": str((root / "model.gguf").resolve())},
+                "model_sha256": "a" * 64, "device_id": "mi210_0",
+            })
+            (root / "model.gguf").write_bytes(b"model")
+            (root / "runtime").mkdir()
+            (root / "runtime.json").write_text(json.dumps({
+                "split_runtime_manifest": {"root": str(root / "runtime")}}))
+            sample = E.GpuResidencySample(
+                observed_monotonic_ns=1, device_id="mi210_0",
+                kfd_pids=(200, 300), vram_bytes=4096, launcher_pid=100)
+            manifest = mock.Mock()
+            with mock.patch.object(S.split_runtime_verifier,
+                                   "verify_split_runtime", return_value=manifest), \
+                    mock.patch.object(S.split_runtime_verifier,
+                                      "verify_runtime_maps") as verify:
+                verify.return_value = SimpleNamespace(
+                    to_dict=lambda: {"kfd_pid": verify.call_args.kwargs["kfd_pid"]})
+                with self.assertRaisesRegex(
+                        S.StaticRegistryError, "exactly one owned KFD"):
+                    S.runtime_maps_sampler(proc_root=proc)(
+                        invocation, 100, sample)
+                self.assertEqual(
+                    {call.kwargs["kfd_pid"] for call in verify.call_args_list},
+                    {200, 300})
+
+    def test_runtime_maps_rechecks_exact_kfd_launcher_ancestry(self):
+        """A caller-provided KFD tuple cannot bypass child ancestry validation."""
+        source = inspect.getsource(S.runtime_maps_sampler)
+        self.assertIn("launcher_pid", source)
+        self.assertIn("_belongs", source)
+
+    def test_executor_maps_callback_only_in_owned_positive_vram_window(self):
+        """Pre-dispatch/zero-VRAM observations cannot mint mapped identity."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            invocation = E.CommandInvocation(
+                kind="rocprof", arm="candidate", argv=("/bin/true",),
+                stdout_path=(root / "stdout").resolve(),
+                stderr_path=(root / "stderr").resolve(),
+                timestamp_csv_path=(root / "timestamps.csv").resolve(),
+                working_directory=root.resolve(),
+                environment=(("LD_LIBRARY_PATH", "/sealed/runtime"),),
+                runtime_maps_required=True,
+                runtime_maps_context={"sealed": "context"})
+            class Child:
+                pid = 9393
+                polls = 0
+                def poll(self):
+                    self.polls += 1
+                    return None if self.polls <= 2 else 0
+                def wait(self): return 0
+            samples = iter((
+                E.GpuResidencySample(1, "mi210_0", (9393,), 0,
+                                     launcher_pid=9393),
+                E.GpuResidencySample(2, "mi210_0", (9393,), 4096,
+                                     launcher_pid=9393),
+            ))
+            maps = mock.Mock(return_value={"schema": "typed-maps"})
+            capture = E.SubprocessCommandExecutor(
+                residency_sampler=lambda _pid: next(samples),
+                runtime_maps_sampler=maps, sample_interval_s=.00001,
+                popen=mock.Mock(return_value=Child()))(invocation)
+        self.assertEqual(len(capture.samples), 2)
+        maps.assert_called_once()
+        self.assertEqual(maps.call_args.args[2].vram_bytes, 4096)
+
     def test_evidence_plan_uses_shared_reward_binary_with_per_arm_hip_dirs(self):
         """Attribution swaps only the HIP arm, never its reward executable."""
-        fields = E.GpuSourceEvidencePlan.__dataclass_fields__
-        self.assertIn("measurement_binary", fields)
-        self.assertIn("common_loader_dir", fields)
-        self.assertIn("anchor_loader_dir", fields)
-        self.assertIn("candidate_loader_dir", fields)
-        self.assertIn("runtime_manifest_sha256", fields)
+        fields = E.EvidenceIdentityFiles.__dataclass_fields__
+        self.assertIn("shared_runtime", fields)
+        runtime = E.SharedRewardRuntimeFiles.__dataclass_fields__
+        self.assertEqual(set(runtime), {
+            "measurement_binary", "runtime_receipt",
+            "anchor_hip_library", "candidate_hip_library"})
+        source = inspect.getsource(E.GpuSourceEvidencePlan.__post_init__)
+        self.assertIn("_normalized_rocprof_argv", source)
+        self.assertIn("sealed split reward closure", source)
 
     def test_series_key_ignores_fresh_baseline_receipt_but_binds_frame(self):
         """S1/S2 pool across fresh baselines only when immutable frame is exact."""
