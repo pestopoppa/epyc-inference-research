@@ -389,6 +389,38 @@ class GpuSourceEvidenceTests(unittest.TestCase):
             self.assertEqual(pair["candidate_runtime_maps_identity"]["arm"], "candidate")
             self.assertEqual(pair["anchor_runtime_maps_identity"]["arm"], "anchor")
 
+    def test_shared_reward_injects_only_producer_owned_distinct_rocprof_output_paths(self):
+        with tempfile.TemporaryDirectory() as directory:
+            current = plan(Path(directory) / "inputs", shared_reward=True)
+            argv = current.candidate_rocprof_argv + ("-o", E.ROCPROF_TIMESTAMP_OUTPUT)
+            current = replace(current, candidate_rocprof_argv=argv, anchor_rocprof_argv=argv)
+            current.policy.path.write_text(json.dumps(E._policy_payload(current), sort_keys=True))
+            current = replace(current, policy=replace(
+                current.policy, sha256=hashlib.sha256(current.policy.path.read_bytes()).hexdigest()))
+            runtime_body = json.loads(current.shared_runtime.runtime_receipt.path.read_text())
+            split = runtime_body["split_runtime_manifest"]
+            class VerifiedRuntime:
+                reward_binary = current.shared_runtime.measurement_binary.path
+                anchor_hip_dir = current.shared_runtime.anchor_hip_library.path.parent
+                candidate_hip_dir = current.shared_runtime.candidate_hip_library.path.parent
+                def to_dict(self): return split
+            with mock.patch.object(E.split_runtime_verifier, "verify_split_runtime",
+                                   return_value=VerifiedRuntime()):
+                _bundle, executors, _claims = self.produce(
+                    directory, plan_=current,
+                    executors=FakeExecutors(runtime_maps={
+                        "candidate": runtime_maps_for(current, "candidate"),
+                        "anchor": runtime_maps_for(current, "anchor")}))
+            candidate_argv, anchor_argv = executors.calls[1][2], executors.calls[2][2]
+            self.assertNotEqual(candidate_argv, anchor_argv)
+            self.assertEqual(
+                E._receipt_rocprof_template({"command_argv": candidate_argv,
+                                              "timestamp_csv_path": str(Path(directory) / "evidence" / "attribution-candidate" / "timestamps.csv")}),
+                E._receipt_rocprof_template({"command_argv": anchor_argv,
+                                              "timestamp_csv_path": str(Path(directory) / "evidence" / "attribution-anchor" / "timestamps.csv")}))
+            self.assertIn(str(Path(directory) / "evidence" / "attribution-candidate" / "timestamps.csv"), candidate_argv)
+            self.assertIn(str(Path(directory) / "evidence" / "attribution-anchor" / "timestamps.csv"), anchor_argv)
+
     def test_tampered_file_is_rejected_by_recursive_bundle_loader(self):
         with tempfile.TemporaryDirectory() as directory:
             self.produce(directory)

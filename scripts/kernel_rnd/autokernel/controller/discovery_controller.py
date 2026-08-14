@@ -21,6 +21,7 @@ import json
 import math
 import os
 from pathlib import Path
+import re
 import statistics
 import tempfile
 from typing import Any, Callable, Mapping, Protocol, Sequence
@@ -514,6 +515,7 @@ class ControllerConfig:
     campaign_id: str = "ak-discovery"
     experiment_template_registry_sha256: str | None = None
     admission_corpus_sha256: str | None = None
+    admission_corpus_version: str | None = None
     def __post_init__(self) -> None:
         if (not self.output_root.is_absolute() or not 1 <= self.max_iterations <= 1000
                 or isinstance(self.nomination_threshold, bool)
@@ -529,7 +531,8 @@ class ControllerConfig:
                     for value in (self.production_base_commit, self.instrument_commit))
                 or not self.campaign_id.startswith("ak-")
                 or self.experiment_template_registry_sha256 is not None and not HASH.fullmatch(self.experiment_template_registry_sha256)
-                or self.admission_corpus_sha256 is not None and not HASH.fullmatch(self.admission_corpus_sha256)):
+                or self.admission_corpus_sha256 is not None and not HASH.fullmatch(self.admission_corpus_sha256)
+                or self.admission_corpus_version is not None and not re.fullmatch(r"[a-z][a-z0-9_.-]{0,127}", self.admission_corpus_version)):
             raise DiscoveryControllerError("invalid controller config")
 
 
@@ -599,6 +602,7 @@ def _context(state: Mapping[str, Any], tracker: hypotheses.HypothesisTracker, tu
             "planner_context": config.planner_context,
             "planner_context_sha256": config.planner_context_sha256,
             "admission_corpus_sha256": config.admission_corpus_sha256,
+            "admission_corpus_version": config.admission_corpus_version,
             "authoring_assignment": assignment,
             "prior_results": prior, "do_not_repeat":_memory_block(tracker,turn)}
 
@@ -789,6 +793,11 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
         raise DiscoveryControllerError("sealed admission corpus changed; durable discovery cannot resume")
     if existing_corpus is None and config.admission_corpus_sha256 is not None:
         state["admission_corpus_sha256"] = config.admission_corpus_sha256
+    existing_corpus_version = state.get("admission_corpus_version")
+    if existing_corpus_version is not None and existing_corpus_version != config.admission_corpus_version:
+        raise DiscoveryControllerError("sealed admission corpus version changed; durable discovery cannot resume")
+    if existing_corpus_version is None and config.admission_corpus_version is not None:
+        state["admission_corpus_version"] = config.admission_corpus_version
     # A completed state is an acknowledged terminal checkpoint.  Re-entering it
     # must be a read, not another executor opportunity or a timestamp rewrite.
     if state["complete"]: return state

@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 from unittest import mock
 from pathlib import Path
+from types import SimpleNamespace
 
 from . import discovery_deployment_factory as F
 from . import discovery_controller as C
@@ -43,25 +44,39 @@ class DeploymentFactoryTests(unittest.TestCase):
                            planner_context=mock.Mock(value=context), production_head="b" * 40,
                            config_sha256="c" * 64,
                            experiment_template_registry_sha256="d" * 64)
-        config.admission_policy = mock.Mock(value={"policy_sha256": "e" * 64,
-                                                    "examples": [], "profiles": []})
+        config.admission_policy = SimpleNamespace(
+            value={"policy_sha256": "e" * 64, "examples": [], "profiles": []},
+            corpus=SimpleNamespace(policy_sha256="e" * 64, version="test-v2"))
         config.revalidate = mock.Mock()
         result = F.controller_config(config, dry_run=True)
         self.assertEqual((result.output_root, result.evidence_root,
                           result.max_iterations, result.nomination_threshold,
                           result.dry_run, result.planner_context_sha256, result.production_base_commit),
-                         (Path("/state"), Path("/evidence"), 2, .03, True, "a" * 64, "b" * 40))
+                         (Path("/state"), Path("/evidence"), 2, .03, True,
+                          F.schemas.content_hash({"planner_context_sha256": "a" * 64,
+                                                  "admission_policy_sha256": "e" * 64,
+                                                  "admission_policy_version": "test-v2"}), "b" * 40))
         config.revalidate.assert_called_once()
 
-    def test_window_lease_allows_small_discovery_noise_while_cpu_window_is_busy(self):
-        config = mock.Mock(inference_window_lock="/lock", device_id="mi210_0",
-                           model=mock.Mock(sha256="a" * 64))
-        config.revalidate = mock.Mock()
-        with mock.patch.object(F.inference_window.InferenceCallWindow, "acquire",
-                               side_effect=F.inference_window.InferenceWindowTimeout("busy")):
-            admitted = F.GpuDiscoveryLease(config=config, mode="allowed_discovery_noise").admit(mock.Mock())
+    def test_window_lease_uses_sealed_arbiter_and_never_probes_cpu_lock(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            model = Path(directory) / "model"; model.write_bytes(b"model")
+            profile = SimpleNamespace(model_path=str(model), model_sha256="a" * 64,
+                                      device_id="mi210_0", workload="tg128", calls_per_arm=9,
+                                      cold_load_host_bytes=4, worst_case_loads_per_interval=18)
+            config = mock.Mock(inference_window_lock="/lock", device_id="mi210_0",
+                               model=SimpleNamespace(path=model, sha256="a" * 64),
+                               admission_policy=SimpleNamespace(corpus=SimpleNamespace(profiles=(profile,))))
+            config.revalidate = mock.Mock()
+            decision = SimpleNamespace(mode="cold_serialized", to_dict=lambda: {"decision_sha256": "d" * 64})
+            with mock.patch.object(F.gpu_load_admission, "arbitrate", return_value=decision), \
+                 mock.patch.object(F.inference_window.InferenceCallWindow, "acquire",
+                                   side_effect=AssertionError("lease must not invent a CPU lock probe")):
+                admitted = F.GpuDiscoveryLease(config=config, mode="allowed_discovery_noise").admit(mock.Mock())
         self.assertTrue(admitted["admitted"])
-        self.assertEqual(admitted["mode"], "allowed_discovery_noise")
+        self.assertEqual(admitted["mode"], "cold_serialized")
+        self.assertEqual(admitted["load_admission"], {"decision_sha256": "d" * 64})
 
 
 if __name__ == "__main__":

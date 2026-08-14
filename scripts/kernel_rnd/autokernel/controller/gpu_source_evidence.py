@@ -34,6 +34,7 @@ PAIR_SCHEMA = "epyc.autokernel.gpu_kernel_attribution_pair.v1"
 SEALED_BUNDLE_SCHEMA = "epyc.autokernel.gpu_source_evidence_bundle.v1"
 SHA = re.compile(r"^[0-9a-f]{64}$")
 SOURCE_TREE_SCHEMA = "epyc.autokernel.source_tree_identity.v1"
+ROCPROF_TIMESTAMP_OUTPUT = "{TIMESTAMP_CSV}"
 
 
 class EvidenceProducerError(RuntimeError):
@@ -536,8 +537,8 @@ class GpuSourceEvidencePlan:
             if (runtime.candidate_hip_library.sha256 != self.candidate.hip_library_sha256
                     or runtime.anchor_hip_library.sha256 != self.anchor.hip_library_sha256):
                 raise EvidenceProducerError("shared reward HIP arms do not bind build identities")
-            if self.candidate_rocprof_argv != self.anchor_rocprof_argv:
-                raise EvidenceProducerError("source rocprof arms must execute one shared reward argv")
+            if _normalized_rocprof_argv(self.candidate_rocprof_argv) != _normalized_rocprof_argv(self.anchor_rocprof_argv):
+                raise EvidenceProducerError("source rocprof arms differ beyond their bound timestamp output")
             for environment, hip in ((self.candidate_rocprof_environment,
                                       runtime.candidate_hip_library),
                                      (self.anchor_rocprof_environment,
@@ -546,6 +547,51 @@ class GpuSourceEvidencePlan:
                 if (len(ld_paths) < 2 or ld_paths[0] != str(hip.path.parent)
                         or ld_paths[1] != str(runtime.measurement_binary.path.parent)):
                     raise EvidenceProducerError("source rocprof arm does not use sealed split reward closure")
+
+
+def _normalized_rocprof_argv(argv: tuple[str, ...]) -> tuple[str, ...]:
+    """Normalize only the producer-owned rocprof ``-o`` output placeholder.
+
+    The plan cannot name a per-operation output directory.  It may use this
+    exact token once; the producer substitutes a fresh contained CSV path and
+    records the resulting argv.  No other arm-specific argv variation is
+    admissible for source-patch reward attribution.
+    """
+    result = list(argv)
+    if "-o" not in result:
+        return tuple(result)
+    index = result.index("-o")
+    if index + 1 >= len(result) or result[index + 1] != ROCPROF_TIMESTAMP_OUTPUT:
+        raise EvidenceProducerError("rocprof -o must use the sealed timestamp output token")
+    if result.count("-o") != 1 or result.count(ROCPROF_TIMESTAMP_OUTPUT) != 1:
+        raise EvidenceProducerError("rocprof command has ambiguous timestamp output authority")
+    result[index + 1] = ROCPROF_TIMESTAMP_OUTPUT
+    return tuple(result)
+
+
+def _materialize_rocprof_argv(argv: tuple[str, ...], output: Path) -> tuple[str, ...]:
+    if ROCPROF_TIMESTAMP_OUTPUT not in argv:
+        return argv
+    if not output.is_absolute():
+        raise EvidenceProducerError("rocprof output substitution requires an absolute path")
+    return tuple(str(output) if item == ROCPROF_TIMESTAMP_OUTPUT else item for item in argv)
+
+
+def _receipt_rocprof_template(body: Mapping[str, Any]) -> tuple[str, ...]:
+    """Recover the sole producer-owned output placeholder from a receipt."""
+    try:
+        argv = list(body["command_argv"])
+        output = str(body["timestamp_csv_path"])
+    except (KeyError, TypeError) as exc:
+        raise EvidenceProducerError("attribution receipt lacks command/output binding") from exc
+    if "-o" not in argv:
+        return tuple(argv)
+    index = argv.index("-o")
+    if (argv.count("-o") != 1 or index + 1 >= len(argv)
+            or argv[index + 1] != output):
+        raise EvidenceProducerError("attribution receipt has unbound rocprof output argv")
+    argv[index + 1] = ROCPROF_TIMESTAMP_OUTPUT
+    return tuple(argv)
 
 
 def _bound_reference(value: BoundInputFile) -> dict[str, Any]:
@@ -1191,18 +1237,21 @@ def _produce_attribution_arm(
     claim_timeout_s: float,
 ) -> Mapping[str, Any]:
     directory = root / f"attribution-{arm}"
-    argv = plan.candidate_rocprof_argv if arm == "candidate" else plan.anchor_rocprof_argv
+    argv_template = (plan.candidate_rocprof_argv if arm == "candidate"
+                     else plan.anchor_rocprof_argv)
     identity = plan.candidate if arm == "candidate" else plan.anchor
     exact = plan.dispatch.candidate_exact if arm == "candidate" else plan.dispatch.anchor_exact
     forbidden = (plan.dispatch.candidate_forbidden if arm == "candidate"
                  else plan.dispatch.anchor_forbidden)
     inputs = (plan.candidate_rocprof_inputs if arm == "candidate"
               else plan.anchor_rocprof_inputs)
+    output_csv = (directory / "timestamps.csv").resolve()
+    argv = _materialize_rocprof_argv(argv_template, output_csv)
     invocation = CommandInvocation(
         kind="rocprof", arm=arm, argv=argv,
         stdout_path=(directory / "stdout.txt").resolve(),
         stderr_path=(directory / "stderr.txt").resolve(),
-        timestamp_csv_path=(directory / "timestamps.csv").resolve(),
+        timestamp_csv_path=output_csv,
         working_directory=plan.execution_cwd,
         environment=(plan.candidate_rocprof_environment if arm == "candidate"
                      else plan.anchor_rocprof_environment),
@@ -1343,7 +1392,13 @@ def _reload_reference(reference: Mapping[str, Any], *, schema: str) -> Mapping[s
 def _validate_attribution_body(body: Mapping[str, Any], *, plan: GpuSourceEvidencePlan,
                                arm: str) -> None:
     identity = plan.candidate if arm == "candidate" else plan.anchor
-    argv = plan.candidate_rocprof_argv if arm == "candidate" else plan.anchor_rocprof_argv
+    argv_template = (plan.candidate_rocprof_argv if arm == "candidate"
+                     else plan.anchor_rocprof_argv)
+    try:
+        argv = _materialize_rocprof_argv(argv_template,
+                                         Path(str(body["timestamp_csv_path"])))
+    except (KeyError, TypeError) as exc:
+        raise EvidenceProducerError(f"{arm} attribution receipt lacks timestamp output") from exc
     expected = {
         "schema": ATTRIBUTION_SCHEMA, "authority": AUTHORITY,
         "non_promotable": True, "promotion_claim": False,
@@ -1504,8 +1559,8 @@ def _plan_from_receipts(correctness: Mapping[str, Any], pair: Mapping[str, Any])
             correctness_argv=tuple(correct_body["command_argv"]),
             correctness_summary_pattern=str(correct_body["correctness_summary_pattern"]),
             expected_correctness_cases=int(correct_body["expected_cases"]),
-            candidate_rocprof_argv=tuple(candidate_body["command_argv"]),
-            anchor_rocprof_argv=tuple(anchor_body["command_argv"]),
+            candidate_rocprof_argv=_receipt_rocprof_template(candidate_body),
+            anchor_rocprof_argv=_receipt_rocprof_template(anchor_body),
             dispatch=_contract_from_dict(pair_body["expectations"]),
             identity_files=_identity_files_from_dict(pair_body["identity_files"]),
             shared_runtime=_identity_files_from_dict(pair_body["identity_files"]).shared_runtime,

@@ -83,10 +83,12 @@ class SharedRewardRuntimeTests(unittest.TestCase):
             proc = root / "proc"; (proc / "sys/kernel/random").mkdir(parents=True)
             (proc / "sys/kernel/random/boot_id").write_text("boot-test\n")
             pid = 123
-            (proc / str(pid)).mkdir()
-            (proc / str(pid) / "maps").write_text("fake mapped objects\n")
+            for current in (122, pid):
+                (proc / str(current)).mkdir()
+                (proc / str(current) / "maps").write_text("fake mapped objects\n")
+                (proc / str(current) / "stat").write_text(
+                    f"{current} (rocprof) R " + " ".join(["0"] * 18 + ["77"]))
             # field 22 (starttime) is tail index 19 after the closing comm paren.
-            (proc / str(pid) / "stat").write_text("123 (rocprof) R " + " ".join(["0"] * 18 + ["77"]))
             model = root / "model.gguf"; model.write_bytes(b"model")
             runtime_dir = root / "runtime"; runtime_dir.mkdir()
             runtime_receipt = root / "runtime.json"
@@ -94,11 +96,15 @@ class SharedRewardRuntimeTests(unittest.TestCase):
             invocation = mock.Mock(runtime_maps_context={
                 "arm": "candidate", "shared_runtime": {"runtime_receipt": {"path": str(runtime_receipt)}},
                 "model": {"path": str(model)}, "model_sha256": "a" * 64, "device_id": "mi210_0"})
-            residency = mock.Mock(kfd_pids=(pid,))
+            residency = mock.Mock(kfd_pids=(122, pid))
             manifest = mock.Mock()
             identity = mock.Mock(to_dict=lambda: {"identity_sha256": "b" * 64})
+            def verify_side_effect(*_args, **kwargs):
+                if kwargs["kfd_pid"] == 122:
+                    raise __import__("scripts.kernel_rnd.autokernel.controller.split_runtime_verifier", fromlist=["SplitRuntimeError"]).SplitRuntimeError("wrapper")
+                return identity
             with mock.patch("scripts.kernel_rnd.autokernel.controller.discovery_static_registry.split_runtime_verifier.verify_split_runtime", return_value=manifest), \
-                 mock.patch("scripts.kernel_rnd.autokernel.controller.discovery_static_registry.split_runtime_verifier.verify_runtime_maps", return_value=identity) as verify:
+                 mock.patch("scripts.kernel_rnd.autokernel.controller.discovery_static_registry.split_runtime_verifier.verify_runtime_maps", side_effect=verify_side_effect) as verify:
                 result = runtime_maps_sampler(proc_root=proc)(invocation, 99, residency)
             self.assertEqual(result, {"identity_sha256": "b" * 64})
             self.assertEqual(verify.call_args.kwargs["kfd_pid"], pid)

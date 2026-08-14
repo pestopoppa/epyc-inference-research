@@ -161,8 +161,8 @@ class PolicyExample:
             raise AdmissionPolicyError("example polarity must be positive or negative")
         if self.mode not in MODES:
             raise AdmissionPolicyError("example mode is invalid")
-        if self.polarity == "positive" and self.mode != "cold_overlap":
-            raise AdmissionPolicyError("positive example must describe reviewed overlap")
+        if self.polarity == "positive" and self.mode not in {"cold_overlap", "hot_resident"}:
+            raise AdmissionPolicyError("positive example must describe reviewed overlap or future hot reuse")
         if self.polarity == "negative" and self.mode != "cold_serialized":
             raise AdmissionPolicyError("negative example must fail closed to serialization")
         if not isinstance(self.facts, Mapping) or not self.facts:

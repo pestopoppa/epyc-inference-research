@@ -133,13 +133,22 @@ def runtime_maps_sampler(*, proc_root: Path = Path("/proc")) -> evidence.Runtime
         except (KeyError, OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
             raise StaticRegistryError("runtime maps callback cannot load sealed context") from exc
         manifest = split_runtime_verifier.verify_split_runtime(runtime_root)
-        kfd_pid = min(residency.kfd_pids)
-        maps = (root / str(kfd_pid) / "maps").read_text(encoding="utf-8")
-        identity = split_runtime_verifier.verify_runtime_maps(
-            manifest, arm=str(arm), maps_text=maps, model_path=model_path,
-            model_sha256=model_sha, device_id=device_id, kfd_pid=kfd_pid,
-            boot_id=_boot_id(root), process_start_ticks=_start_ticks(root, kfd_pid))
-        return identity.to_dict()
+        identities = []
+        for kfd_pid in sorted(set(residency.kfd_pids)):
+            try:
+                maps = (root / str(kfd_pid) / "maps").read_text(encoding="utf-8")
+                identities.append(split_runtime_verifier.verify_runtime_maps(
+                    manifest, arm=str(arm), maps_text=maps, model_path=model_path,
+                    model_sha256=model_sha, device_id=device_id, kfd_pid=kfd_pid,
+                    boot_id=_boot_id(root), process_start_ticks=_start_ticks(root, kfd_pid)))
+            except (OSError, ValueError, split_runtime_verifier.SplitRuntimeError):
+                # rocprof and helper wrappers can be KFD clients themselves;
+                # only the uniquely proven full reward/model closure is valid.
+                continue
+        if len(identities) != 1:
+            raise StaticRegistryError(
+                "runtime maps must prove exactly one owned KFD process for the sealed arm")
+        return identities[0].to_dict()
     return sample
 
 

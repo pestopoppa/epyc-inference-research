@@ -21,6 +21,7 @@ import subprocess
 from typing import Any, Mapping
 
 from .. import schemas
+from . import gpu_load_admission
 
 
 SCHEMA = "epyc.autokernel.discovery_deployment.v1"
@@ -104,7 +105,7 @@ class ImmutableInput:
 
 
 PLANNER_CONTEXT_SCHEMA = "epyc.autokernel.discovery_planner_context.v1"
-ADMISSION_POLICY_SCHEMA = "epyc.autokernel.gpu_load_admission_policy.v1"
+ADMISSION_POLICY_SCHEMA = gpu_load_admission.POLICY_SCHEMA
 _PLANNER_CONTEXT_LIMIT = 512 * 1024
 
 
@@ -122,29 +123,26 @@ class PlannerContext:
 class AdmissionPolicy:
     input: ImmutableInput
     value: Mapping[str, Any]
+    corpus: gpu_load_admission.PolicyCorpus
 
     def revalidate(self) -> None:
         self.input.revalidate("admission_policy")
+        refreshed = gpu_load_admission.load_policy_corpus(
+            self.input.path, expected_file_sha256=self.input.sha256)
+        if refreshed.policy_sha256 != self.corpus.policy_sha256:
+            raise DeploymentConfigError("admission policy semantic identity changed")
 
 
 def _admission_policy(raw: ImmutableInput, *, model: ImmutableInput,
                       workload: ImmutableInput) -> AdmissionPolicy:
     try:
-        body = json.loads(raw.path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise DeploymentConfigError("admission policy is not JSON") from exc
-    required = {"schema", "version", "policy_sha256", "profiles", "examples"}
-    if not isinstance(body, Mapping) or set(body) != required or body.get("schema") != ADMISSION_POLICY_SCHEMA:
-        raise DeploymentConfigError("admission policy schema mismatch")
-    if body.get("policy_sha256") != schemas.content_hash({k: v for k, v in body.items() if k != "policy_sha256"}):
-        raise DeploymentConfigError("admission policy self-hash mismatch")
-    if not isinstance(body.get("profiles"), list) or not isinstance(body.get("examples"), list):
-        raise DeploymentConfigError("admission policy profiles/examples are malformed")
-    for example in body["examples"]:
-        keys = {"id", "facts", "missing", "recommended_mode", "rationale", "disqualifiers", "counterfactual", "evidence"}
-        if not isinstance(example, Mapping) or set(example) != keys or example["recommended_mode"] not in {"cold_overlap", "cold_serialized", "hot_resident", "refuse"}:
-            raise DeploymentConfigError("admission policy example is malformed")
-    return AdmissionPolicy(input=raw, value=dict(body))
+        corpus = gpu_load_admission.load_policy_corpus(
+            raw.path, expected_file_sha256=raw.sha256)
+    except gpu_load_admission.AdmissionPolicyError as exc:
+        raise DeploymentConfigError("admission policy schema/content mismatch") from exc
+    if not any(profile.model_sha256 == model.sha256 for profile in corpus.profiles):
+        raise DeploymentConfigError("admission policy does not bind the sealed model")
+    return AdmissionPolicy(input=raw, value=corpus.sealed, corpus=corpus)
 
 
 def _planner_context(value: object, *, model: ImmutableInput,
@@ -361,20 +359,20 @@ def load_deployment_config(path: Path) -> DiscoveryDeployment:
         raise DeploymentConfigError("gpu.inference_window_lock parent/file is invalid")
     if _overlaps(window, production_path):
         raise DeploymentConfigError("gpu.inference_window_lock must not enter frozen production")
-    inputs = _exact(top["immutable_inputs"], {"model", "workload", "runtime_config", "policy"}, "immutable_inputs")
+    inputs = _exact(top["immutable_inputs"], {"model", "workload", "runtime_config", "admission_policy"}, "immutable_inputs")
     source = _exact(top["source_plan"], {"source_builder_id", "evidence_plan_id",
                                            "runner_args_id", "experiment_template_registry_id", "experiment_template_registry_sha256",
                                            "production_snapshot_id"}, "source_plan")
     model = _input(inputs["model"], "model")
     workload = _input(inputs["workload"], "workload")
     runtime_config = _input(inputs["runtime_config"], "runtime_config")
-    policy = _input(inputs["policy"], "policy")
-    admission_policy = _admission_policy(policy, model=model, workload=workload)
+    admission_policy_input = _input(inputs["admission_policy"], "admission_policy")
+    admission_policy = _admission_policy(admission_policy_input, model=model, workload=workload)
     planner_context = _planner_context(top["planner_context"], model=model,
                                        workload=workload, runtime_config=runtime_config)
     for label, input_ in (("actors.wrapper", actor_wrapper), ("model", model),
                           ("workload", workload), ("runtime_config", runtime_config),
-                          ("policy", policy), ("planner_context", planner_context.input)):
+                          ("admission_policy", admission_policy_input), ("planner_context", planner_context.input)):
         if any(_overlaps(input_.path, protected)
                for protected in (*roots.values(), production_path)):
             raise DeploymentConfigError(
@@ -387,7 +385,7 @@ def load_deployment_config(path: Path) -> DiscoveryDeployment:
         environment_profile_id=environment_profile_id, device_id=device_id,
         claim_timeout_s=float(claim_timeout_s), inference_window_lock=window,
         model=model, workload=workload, admission_policy=admission_policy,
-        runtime_config=runtime_config, policy=policy, planner_context=planner_context,
+        runtime_config=runtime_config, policy=admission_policy_input, planner_context=planner_context,
         source_builder_id=_identifier(source["source_builder_id"], "source_plan.source_builder_id"),
         evidence_plan_id=_identifier(source["evidence_plan_id"], "source_plan.evidence_plan_id"),
         runner_args_id=_identifier(source["runner_args_id"], "source_plan.runner_args_id"),

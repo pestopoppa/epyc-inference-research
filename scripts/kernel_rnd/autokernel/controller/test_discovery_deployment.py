@@ -31,16 +31,32 @@ class DeploymentConfigTests(unittest.TestCase):
         wrapper.write_text("#!/bin/sh\n", encoding="utf-8")
         wrapper.chmod(0o700)
         inputs = {}
-        for label in ("model", "workload", "runtime_config", "policy"):
+        for label in ("model", "workload", "runtime_config", "admission_policy"):
             path = root / f"{label}.json"
             path.write_text(label, encoding="utf-8")
             inputs[label] = {"path": str(path), "sha256": digest(path)}
-        policy_body = {"schema": D.ADMISSION_POLICY_SCHEMA, "version": "test-v1",
-                       "profiles": [], "examples": []}
+        policy_body = {"schema": D.ADMISSION_POLICY_SCHEMA, "version": "test-v2",
+                       "profiles": [{
+                           "profile_id": "test-profile", "model_path": str(Path(inputs["model"]["path"])),
+                           "model_sha256": inputs["model"]["sha256"],
+                           "model_bytes": Path(inputs["model"]["path"]).stat().st_size,
+                           "workload": "tg128", "calls_per_arm": 9, "device_id": "mi210_0",
+                           "cold_load_host_bytes": 128, "worst_case_loads_per_interval": 18,
+                           "minimum_headroom_bytes_per_s": 1, "telemetry_max_age_ms": 1000,
+                           "evidence_sha256": "a" * 64}],
+                       "examples": [
+                           {"id": "overlap", "polarity": "positive", "facts": {"profile_id": "test-profile"},
+                            "missing": [], "mode": "cold_overlap", "rationale": "reviewed",
+                            "disqualifiers": [], "counterfactual": "telemetry missing",
+                            "evidence": ["sha256:" + "b" * 64]},
+                           {"id": "serialize", "polarity": "negative", "facts": {"profile_id": "test-profile"},
+                            "missing": ["telemetry"], "mode": "cold_serialized", "rationale": "safe",
+                            "disqualifiers": ["telemetry_missing"], "counterfactual": "headroom observed",
+                            "evidence": ["sha256:" + "c" * 64]}]}
         policy_body["policy_sha256"] = D.schemas.content_hash(policy_body)
-        policy_path = Path(inputs["policy"]["path"])
+        policy_path = Path(inputs["admission_policy"]["path"])
         policy_path.write_text(json.dumps(policy_body), encoding="utf-8")
-        inputs["policy"]["sha256"] = digest(policy_path)
+        inputs["admission_policy"]["sha256"] = digest(policy_path)
         planner_context = {
             "schema": D.PLANNER_CONTEXT_SCHEMA,
             "model_sha256": inputs["model"]["sha256"],

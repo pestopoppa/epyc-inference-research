@@ -14,12 +14,14 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Callable, Mapping
 
+from .. import schemas
 from ..execution import inference_window
 from ..resource import device_claim
 from . import discovery_controller as controller
 from . import discovery_deployment as deployment
 from . import gpu_source_adapter
 from . import gpu_source_evidence as evidence
+from . import gpu_load_admission
 
 
 class DeploymentFactoryError(RuntimeError): pass
@@ -178,17 +180,34 @@ class GpuDiscoveryLease:
         self.config, self.mode = config, mode
     def admit(self, candidate: controller.PlannedCandidate) -> Mapping[str, Any]:
         self.config.revalidate()
-        # The ratified small-model discovery mode is explicitly allowed to
-        # overlap ordinary CPU inference.  The runner records that policy and
-        # enforces the sealed <=512MiB cap; acquiring the CPU model-call lock
-        # here would silently negate that authority.  Serialized deployments
-        # are rejected by InferenceWindowLeaseBinding before this point.
-        if self.mode != "allowed_discovery_noise":
-            raise DeploymentFactoryError("unsupported GPU discovery lease mode")
-        return {"admitted": True, "mode": self.mode,
+        corpus = self.config.admission_policy.corpus
+        profiles = [profile for profile in corpus.profiles
+                    if (profile.model_path == str(self.config.model.path)
+                        and profile.model_sha256 == self.config.model.sha256
+                        and profile.device_id == self.config.device_id)]
+        if len(profiles) != 1:
+            raise DeploymentFactoryError("sealed admission policy has no unique configured model profile")
+        profile = profiles[0]
+        actual_bytes = self.config.model.path.stat().st_size
+        request = gpu_load_admission.AdmissionRequest(
+            model_path=str(self.config.model.path), model_sha256=self.config.model.sha256,
+            model_bytes=actual_bytes, workload=profile.workload,
+            calls_per_arm=profile.calls_per_arm, device_id=self.config.device_id,
+            cold_load_host_bytes=profile.cold_load_host_bytes,
+            worst_case_loads_per_interval=profile.worst_case_loads_per_interval,
+            # This generic binding deliberately has no mutable telemetry source.
+            # The static site adapter can provide one; absence deterministically
+            # downgrades to serialized load rather than inventing headroom.
+            telemetry_observed=False, telemetry_age_ms=None,
+            observed_headroom_bytes_per_s=None, telemetry_receipt_sha256=None)
+        decision = gpu_load_admission.arbitrate(corpus, request)
+        if decision.mode == "hot_resident":
+            raise DeploymentFactoryError("nonpersistent source discovery runner cannot claim hot residency")
+        return {"admitted": True, "mode": decision.mode,
                 "device_id": self.config.device_id,
                 "inference_window_lock": str(self.config.inference_window_lock),
                 "model_sha256": self.config.model.sha256,
+                "load_admission": decision.to_dict(),
                 "promotion_claim": False}
 
 
@@ -317,11 +336,15 @@ def controller_config(config: deployment.DiscoveryDeployment, *, dry_run: bool =
         nomination_threshold=config.nomination_threshold, dry_run=dry_run,
         planner_context={**config.planner_context.value,
                          "admission_policy": config.admission_policy.value},
-        planner_context_sha256=config.planner_context.value["context_sha256"],
+        planner_context_sha256=schemas.content_hash({
+            "planner_context_sha256": config.planner_context.value["context_sha256"],
+            "admission_policy_sha256": config.admission_policy.corpus.policy_sha256,
+            "admission_policy_version": config.admission_policy.corpus.version}),
         production_base_commit=config.production_head,
         instrument_commit=config.production_head,
         experiment_template_registry_sha256=config.experiment_template_registry_sha256,
         admission_corpus_sha256=config.admission_policy.value["policy_sha256"],
+        admission_corpus_version=config.admission_policy.corpus.version,
         # The sealed deployment digest, not a caller argument, namespaces all
         # controller/worktree/receipt identities across concurrent deployments.
         campaign_id=f"ak-discovery-{config.config_sha256[:16]}")
