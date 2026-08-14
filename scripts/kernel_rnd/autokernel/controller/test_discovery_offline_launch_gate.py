@@ -11,8 +11,11 @@ import inspect
 import argparse
 import hashlib
 import json
+from dataclasses import replace
 from pathlib import Path
+import subprocess
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest import mock
 
@@ -516,6 +519,183 @@ class OfflineLaunchGate(unittest.TestCase):
         self.assertIn("teardown_errors", source)
         self.assertIn("receipt_sha256", source)
         self.assertIn("for", source[source.find("finally"):])
+
+    def _static_builder_result(self, root: Path):
+        """Execute the real builder orchestration with hardware-free typed seams."""
+        anchor_build, candidate_build = root / "anchor-build", root / "candidate-build"
+        actor_root, anchor_root, candidate_root = (root / name for name in
+                                                    ("actor", "anchor-tree", "candidate-tree"))
+        for directory in (anchor_build, candidate_build, actor_root,
+                          anchor_root, candidate_root):
+            directory.mkdir(parents=True)
+        source_plan = plan(root / "plan-inputs")
+        actor = SimpleNamespace(
+            path=SimpleNamespace(path=str(actor_root)),
+            to_dict=lambda: {"path": str(actor_root)})
+        actor_proof = SimpleNamespace(to_dict=lambda: {"sealed": True})
+        anchor_snapshot = SimpleNamespace(
+            path=SimpleNamespace(path=str(anchor_root)),
+            to_dict=lambda: {"path": str(anchor_root)})
+        candidate_snapshot = SimpleNamespace(
+            path=SimpleNamespace(path=str(candidate_root)),
+            to_dict=lambda: {"path": str(candidate_root)})
+        anchor = SimpleNamespace(commit="a" * 40)
+        manifest = SimpleNamespace(
+            campaign_id="ak-builder-blackbox", candidate_id="akc-builder",
+            production_base_commit=anchor.commit, patch_bundle_sha256="b" * 64)
+        candidate = SimpleNamespace(source_manifest=manifest,
+                                    proposal={"proposal_id": "akp-builder"})
+        applied = SimpleNamespace(
+            candidate_commit="c" * 40, diff_text="diff --git a/x b/x\n",
+            actual_files=("ggml/src/ggml-hip/kernel.cpp",),
+            actual_hunk_ids=("h1",), actual_symbols=("kernel",),
+            commit_argv=("git", "commit"), mutation_receipt={"ok": True})
+        facts = SimpleNamespace(built_targets=("llama-bench", "test-backend-ops"))
+        result = SimpleNamespace(
+            succeeded=True, log_disagrees_with_exit_code=False, facts=facts,
+            to_dict=lambda: {"succeeded": True,
+                             "facts": {"built_targets": list(facts.built_targets)}})
+        reward = root / "reward-runtime"
+        common, anchor_hip, candidate_hip = (reward / name for name in
+                                              ("common", "anchor-hip", "candidate-hip"))
+        for directory in (common, anchor_hip, candidate_hip):
+            directory.mkdir(parents=True)
+        binary = common / "llama-bench"; binary.write_bytes(b"reward")
+        runtime_receipt = reward / "reward-runtime.json"
+        runtime_receipt.write_text('{"sealed":true}\n')
+        runtime = SimpleNamespace(
+            measurement_binary=binary, common_loader_dir=common,
+            anchor_loader_dir=anchor_hip, candidate_loader_dir=candidate_hip,
+            receipt_path=runtime_receipt)
+        build_dirs = iter((SimpleNamespace(path=str(anchor_build)),
+                           SimpleNamespace(path=str(candidate_build))))
+        snapshots = iter(((anchor_snapshot, object()),
+                          (candidate_snapshot, object())))
+        builder = S.StaticGpuSourceBuilder(
+            production_path=(root / "production").resolve(),
+            production_branch="production", operations_root=(root / "ops").resolve(),
+            build_root=(root / "builds").resolve(), cmake_defines=())
+        with mock.patch.object(S.worktree, "resolve_anchor", return_value=anchor), \
+                mock.patch.object(S.worktree, "create_campaign_worktree",
+                                  return_value=(actor, actor_proof)), \
+                mock.patch.object(S.source_candidate, "apply_source_candidate",
+                                  return_value=applied), \
+                mock.patch.object(S.worktree, "create_snapshot_worktree",
+                                  side_effect=lambda *_args, **_kwargs: next(snapshots)), \
+                mock.patch.object(S.worktree, "default_build_dir",
+                                  side_effect=lambda *_args, **_kwargs: next(build_dirs)), \
+                mock.patch.object(S.worktree, "BuildPlan", side_effect=lambda **kwargs: kwargs), \
+                mock.patch.object(S.worktree, "run_build", return_value=result), \
+                mock.patch.object(S, "_identity",
+                                  side_effect=(source_plan.anchor, source_plan.candidate)), \
+                mock.patch.object(S.SharedRewardRuntime, "materialize",
+                                  return_value=runtime), \
+                mock.patch.object(S.worktree, "teardown_worktree",
+                                  side_effect=lambda tree: SimpleNamespace(
+                                      to_dict=lambda: {"path": tree.path.path,
+                                                       "removed": True})):
+            built = builder.build(candidate, object(), {"operation_key": "d" * 64})
+        operation_dir = root / "ops" / "materialization" / ("d" * 64)
+        return built, source_plan, operation_dir
+
+    def test_static_builder_receipts_cross_gpu_source_build_boundary(self):
+        """Builder output carries the exact operation/materialize/teardown seals."""
+        with tempfile.TemporaryDirectory() as directory:
+            built, _plan, operation_dir = self._static_builder_result(Path(directory))
+        self.assertEqual(built.operation_key, "d" * 64)
+        self.assertEqual(built.materialization_receipt,
+                         (operation_dir / "materialization.json").resolve())
+        self.assertEqual(built.teardown_receipt,
+                         (operation_dir / "teardown.json").resolve())
+        self.assertRegex(built.materialization_sha256 or "", r"^[0-9a-f]{64}$")
+        self.assertRegex(built.teardown_sha256 or "", r"^[0-9a-f]{64}$")
+
+    def test_static_builder_materialization_is_accepted_by_evidence_validator(self):
+        """The native builder receipt must be directly consumable as evidence."""
+        with tempfile.TemporaryDirectory() as directory:
+            built, evidence_plan, operation_dir = self._static_builder_result(Path(directory))
+            receipt = (operation_dir / "materialization.json").resolve()
+            bound = E.BoundInputFile(
+                "materialization", receipt,
+                hashlib.sha256(receipt.read_bytes()).hexdigest())
+            identities = replace(evidence_plan.identity_files, materialization=bound)
+            candidate = replace(evidence_plan.candidate,
+                                source_commit=built.candidate_identity.source_commit,
+                                source_sha256=built.candidate_identity.source_sha256)
+            projected = replace(evidence_plan, candidate=candidate,
+                                identity_files=identities)
+            try:
+                E._verify_plan_files(projected)
+            except E.EvidenceProducerError as exc:
+                self.fail(f"builder receipt is incompatible with evidence validator: {exc}")
+
+    def test_shared_reward_runtime_accepts_real_shaped_elf_without_injected_verifier(self):
+        """Real ELF RUNPATH/SONAME closure passes the production verifier seam."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            builds = []
+            for arm in ("anchor", "candidate"):
+                bindir = root / arm / "bin"; bindir.mkdir(parents=True)
+                source = root / f"{arm}.c"
+                source.write_text(
+                    f"#include <stdlib.h>\nint arm_{arm}(void) {{ return getenv(\"X\") != 0; }}\n")
+                for stem in ("libllama-common.so", "libllama.so", "libggml.so",
+                             "libggml-base.so", "libggml-cpu.so"):
+                    version = bindir / f"{stem}.0.16.0"
+                    subprocess.run(("cc", "-shared", "-fPIC", str(source),
+                                    f"-Wl,-soname,{stem}.0", "-o", str(version)), check=True)
+                    (bindir / f"{stem}.0").symlink_to(version.name)
+                    (bindir / stem).symlink_to(f"{stem}.0")
+                hip = bindir / "libggml-hip.so.0.16.0"
+                subprocess.run(("cc", "-shared", "-fPIC", str(source),
+                                "-Wl,-soname,libggml-hip.so.0", "-o", str(hip)), check=True)
+                (bindir / "libggml-hip.so.0").symlink_to(hip.name)
+                (bindir / "libggml-hip.so").symlink_to("libggml-hip.so.0")
+                bench_impl_source = root / f"bench-{arm}.c"
+                bench_impl_source.write_text(
+                    "#include <stdlib.h>\nint bench_impl(void) { return getenv(\"X\") != 0; }\n")
+                subprocess.run(("cc", "-shared", "-fPIC", str(bench_impl_source),
+                                "-Wl,-soname,libllama-bench-impl.so", "-o",
+                                str(bindir / "libllama-bench-impl.so")), check=True)
+                main = root / f"main-{arm}.c"
+                main.write_text("extern int bench_impl(void); int main(void) { return bench_impl(); }\n")
+                subprocess.run(("cc", str(main), str(bindir / "libllama-bench-impl.so"),
+                                "-Wl,-rpath,$ORIGIN", "-o", str(bindir / "llama-bench")), check=True)
+                builds.append(root / arm)
+            runtime = S.SharedRewardRuntime.materialize(
+                root=root / "runtime", anchor_build=builds[0],
+                candidate_build=builds[1])
+            self.assertTrue(runtime.receipt_path.is_file())
+
+    def test_descendant_kfd_pid_is_a_valid_child_lifetime_witness(self):
+        """rocprof descendants, not only its direct PID, own the KFD queue."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); kfd = root / "kfd"; kfd.mkdir()
+            proc = root / "proc"; proc.mkdir(); vram = root / "vram"
+            (kfd / "200").mkdir(); (proc / "200").mkdir()
+            (proc / "200" / "stat").write_text("200 (worker) S 100 0 0 0\n")
+            vram.write_text("4096")
+            sample = R.Mi210ResidencySampler(
+                kfd_root=kfd, vram_path=vram, proc_root=proc)(100)
+            capture = E.ExecutionCapture(
+                argv=("/bin/true",), exit_code=0, child_pid=100,
+                started_at="start", ended_at="end", started_monotonic_ns=1,
+                ended_monotonic_ns=10,
+                samples=(replace(sample, observed_monotonic_ns=5),))
+            try:
+                reduced = E._residency(capture, "mi210_0")
+            except E.EvidenceProducerError as exc:
+                self.fail(f"descendant KFD ownership was rejected: {exc}")
+        self.assertEqual(reduced["kfd_pids"], [200])
+
+    def test_evidence_plan_uses_shared_reward_binary_with_per_arm_hip_dirs(self):
+        """Attribution swaps only the HIP arm, never its reward executable."""
+        fields = E.GpuSourceEvidencePlan.__dataclass_fields__
+        self.assertIn("measurement_binary", fields)
+        self.assertIn("common_loader_dir", fields)
+        self.assertIn("anchor_loader_dir", fields)
+        self.assertIn("candidate_loader_dir", fields)
+        self.assertIn("runtime_manifest_sha256", fields)
 
     def test_source_scope_rejects_reward_symbols_even_under_kernel_prefix(self):
         """A path prefix alone cannot authorize benchmark/reward manipulation."""
