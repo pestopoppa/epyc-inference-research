@@ -25,6 +25,7 @@ from typing import Any, Callable, Mapping, Protocol, Sequence
 from .. import schemas
 from ..resource import device_claim
 from . import gpu_source_proofs as proofs
+from . import split_runtime_verifier
 
 AUTHORITY = "nonpromotable_candidate_only_discovery"
 CORRECTNESS_SCHEMA = "epyc.autokernel.targeted_correctness_receipt.v2"
@@ -32,6 +33,7 @@ ATTRIBUTION_SCHEMA = "epyc.autokernel.gpu_kernel_attribution.v2"
 PAIR_SCHEMA = "epyc.autokernel.gpu_kernel_attribution_pair.v1"
 SEALED_BUNDLE_SCHEMA = "epyc.autokernel.gpu_source_evidence_bundle.v1"
 SHA = re.compile(r"^[0-9a-f]{64}$")
+SOURCE_TREE_SCHEMA = "epyc.autokernel.source_tree_identity.v1"
 
 
 class EvidenceProducerError(RuntimeError):
@@ -124,6 +126,7 @@ class ExecutionCapture:
     started_monotonic_ns: int
     ended_monotonic_ns: int
     samples: tuple[GpuResidencySample, ...]
+    runtime_maps_identity: Mapping[str, Any] | None = None
 
     def __post_init__(self) -> None:
         _argv(self.argv, "captured argv")
@@ -148,6 +151,8 @@ class CommandInvocation:
     timestamp_csv_path: Path | None = None
     working_directory: Path | None = None
     environment: tuple[tuple[str, str], ...] = ()
+    runtime_maps_required: bool = False
+    runtime_maps_context: Mapping[str, Any] | None = None
 
     def __post_init__(self) -> None:
         if self.kind not in {"correctness", "rocprof"}:
@@ -175,6 +180,9 @@ class CommandInvocation:
             raise EvidenceProducerError("command environment must be exact unique key/value pairs")
         if "LD_LIBRARY_PATH" not in dict(self.environment):
             raise EvidenceProducerError("command environment must bind LD_LIBRARY_PATH")
+        if self.runtime_maps_required and (self.kind != "rocprof"
+                                           or not isinstance(self.runtime_maps_context, Mapping)):
+            raise EvidenceProducerError("runtime maps are only valid for a bound rocprof arm")
 
 
 class CommandExecutor(Protocol):
@@ -203,6 +211,20 @@ class BuildIdentityFiles:
 
 
 @dataclass(frozen=True)
+class SharedRewardRuntimeFiles:
+    """File-backed source-patch reward closure.
+
+    Correctness intentionally uses the candidate build's diagnostic binary.
+    Throughput/rocprof instead execute this one shared reward binary and select
+    exactly one arm through the first loader path.
+    """
+    measurement_binary: BoundInputFile
+    runtime_receipt: BoundInputFile
+    anchor_hip_library: BoundInputFile
+    candidate_hip_library: BoundInputFile
+
+
+@dataclass(frozen=True)
 class EvidenceIdentityFiles:
     candidate: BuildIdentityFiles
     anchor: BuildIdentityFiles
@@ -211,6 +233,10 @@ class EvidenceIdentityFiles:
     workload: BoundInputFile
     runtime_config: BoundInputFile
     materialization: BoundInputFile
+    shared_runtime: SharedRewardRuntimeFiles | None = None
+
+
+RuntimeMapsSampler = Callable[[CommandInvocation, int, GpuResidencySample], Mapping[str, Any]]
 
 
 class SubprocessCommandExecutor:
@@ -222,11 +248,13 @@ class SubprocessCommandExecutor:
     """
 
     def __init__(self, *, residency_sampler: Callable[[int], GpuResidencySample],
+                 runtime_maps_sampler: RuntimeMapsSampler | None = None,
                  sample_interval_s: float = .02,
                  popen: Callable[..., Any] = subprocess.Popen) -> None:
         if sample_interval_s <= 0 or not math.isfinite(sample_interval_s):
             raise EvidenceProducerError("sample interval must be finite and positive")
         self.residency_sampler = residency_sampler
+        self.runtime_maps_sampler = runtime_maps_sampler
         self.sample_interval_s = sample_interval_s
         self.popen = popen
 
@@ -234,6 +262,7 @@ class SubprocessCommandExecutor:
         started_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         started_ns = time.monotonic_ns()
         samples: list[GpuResidencySample] = []
+        runtime_maps_identity: Mapping[str, Any] | None = None
         child: Any | None = None
         with invocation.stdout_path.open("x", encoding="utf-8") as stdout, \
                 invocation.stderr_path.open("x", encoding="utf-8") as stderr:
@@ -248,6 +277,17 @@ class SubprocessCommandExecutor:
                         raise EvidenceProducerError(
                             "residency sampler returned an invalid sample")
                     samples.append(sample)
+                    if (invocation.runtime_maps_required and runtime_maps_identity is None
+                            and sample.vram_bytes > 0
+                            and (int(child.pid) in sample.kfd_pids
+                                 or sample.launcher_pid == int(child.pid))):
+                        if self.runtime_maps_sampler is None:
+                            raise EvidenceProducerError(
+                                "shared reward invocation has no in-window maps sampler")
+                        runtime_maps_identity = self.runtime_maps_sampler(
+                            invocation, int(child.pid), sample)
+                        if not isinstance(runtime_maps_identity, Mapping):
+                            raise EvidenceProducerError("runtime maps sampler returned no typed identity")
                     time.sleep(self.sample_interval_s)
                 exit_code = int(child.wait())
             except BaseException:
@@ -278,7 +318,7 @@ class SubprocessCommandExecutor:
             argv=invocation.argv, exit_code=exit_code, child_pid=int(child.pid),
             started_at=started_at, ended_at=ended_at,
             started_monotonic_ns=started_ns, ended_monotonic_ns=ended_ns,
-            samples=tuple(samples))
+            samples=tuple(samples), runtime_maps_identity=runtime_maps_identity)
 
 
 @dataclass(frozen=True)
@@ -378,6 +418,7 @@ class GpuSourceEvidencePlan:
     correctness_environment: tuple[tuple[str, str], ...] = ()
     candidate_rocprof_environment: tuple[tuple[str, str], ...] = ()
     anchor_rocprof_environment: tuple[tuple[str, str], ...] = ()
+    shared_runtime: SharedRewardRuntimeFiles | None = None
 
     def __post_init__(self) -> None:
         if (not isinstance(self.campaign_id, str) or not self.campaign_id
@@ -424,6 +465,8 @@ class GpuSourceEvidencePlan:
                     or "LD_LIBRARY_PATH" not in dict(environment)):
                 raise EvidenceProducerError(
                     f"plan requires sealed {label} LD_LIBRARY_PATH environment")
+        if self.shared_runtime != self.identity_files.shared_runtime:
+            raise EvidenceProducerError("shared reward runtime must be carried by the typed identity files")
         for label, command, inputs in (
             ("correctness", self.correctness_argv, self.correctness_inputs),
             ("candidate rocprof", self.candidate_rocprof_argv,
@@ -440,9 +483,13 @@ class GpuSourceEvidencePlan:
                 raise EvidenceProducerError(f"{label} executable is not policy-bound")
         for label, command, inputs, binary in (
             ("candidate rocprof", self.candidate_rocprof_argv,
-             self.candidate_rocprof_inputs, self.identity_files.candidate.binary.path),
+             self.candidate_rocprof_inputs,
+             (self.shared_runtime.measurement_binary.path if self.shared_runtime
+              else self.identity_files.candidate.binary.path)),
             ("anchor rocprof", self.anchor_rocprof_argv,
-             self.anchor_rocprof_inputs, self.identity_files.anchor.binary.path),
+             self.anchor_rocprof_inputs,
+             (self.shared_runtime.measurement_binary.path if self.shared_runtime
+              else self.identity_files.anchor.binary.path)),
         ):
             timestamps = [item for item in inputs if item.role == "timestamp_input"]
             if len(timestamps) != 1:
@@ -465,10 +512,16 @@ class GpuSourceEvidencePlan:
                                    for path in required):
                 raise EvidenceProducerError(
                     f"{label} does not bind every required model/workload/config path")
-        candidate_dir = str(self.identity_files.candidate.hip_library.path.parent)
-        anchor_dir = str(self.identity_files.anchor.hip_library.path.parent)
+        candidate_dir = str((self.shared_runtime.candidate_hip_library.path.parent
+                             if self.shared_runtime else
+                             self.identity_files.candidate.hip_library.path.parent))
+        anchor_dir = str((self.shared_runtime.anchor_hip_library.path.parent
+                          if self.shared_runtime else
+                          self.identity_files.anchor.hip_library.path.parent))
+        correctness_candidate_dir = str(self.identity_files.candidate.hip_library.path.parent)
         for label, environment, required, forbidden in (
-            ("correctness", self.correctness_environment, candidate_dir, anchor_dir),
+            ("correctness", self.correctness_environment, correctness_candidate_dir,
+             str(self.identity_files.anchor.hip_library.path.parent)),
             ("candidate rocprof", self.candidate_rocprof_environment,
              candidate_dir, anchor_dir),
             ("anchor rocprof", self.anchor_rocprof_environment,
@@ -478,10 +531,33 @@ class GpuSourceEvidencePlan:
             if not ld_paths or ld_paths[0] != required or forbidden in ld_paths:
                 raise EvidenceProducerError(
                     f"{label} LD_LIBRARY_PATH does not exclusively pin its arm")
+        if self.shared_runtime:
+            runtime = self.shared_runtime
+            if (runtime.candidate_hip_library.sha256 != self.candidate.hip_library_sha256
+                    or runtime.anchor_hip_library.sha256 != self.anchor.hip_library_sha256):
+                raise EvidenceProducerError("shared reward HIP arms do not bind build identities")
+            if self.candidate_rocprof_argv != self.anchor_rocprof_argv:
+                raise EvidenceProducerError("source rocprof arms must execute one shared reward argv")
+            for environment, hip in ((self.candidate_rocprof_environment,
+                                      runtime.candidate_hip_library),
+                                     (self.anchor_rocprof_environment,
+                                      runtime.anchor_hip_library)):
+                ld_paths = dict(environment)["LD_LIBRARY_PATH"].split(":")
+                if (len(ld_paths) < 2 or ld_paths[0] != str(hip.path.parent)
+                        or ld_paths[1] != str(runtime.measurement_binary.path.parent)):
+                    raise EvidenceProducerError("source rocprof arm does not use sealed split reward closure")
 
 
 def _bound_reference(value: BoundInputFile) -> dict[str, Any]:
     return {"role": value.role, "path": str(value.path), "sha256": value.sha256}
+
+
+def _shared_runtime_reference(value: SharedRewardRuntimeFiles | None) -> dict[str, Any] | None:
+    if value is None:
+        return None
+    return {key: _bound_reference(getattr(value, key)) for key in (
+        "measurement_binary", "runtime_receipt", "anchor_hip_library",
+        "candidate_hip_library")}
 
 
 def _bound_from_dict(value: Mapping[str, Any]) -> BoundInputFile:
@@ -507,12 +583,18 @@ def _build_files_from_dict(value: Mapping[str, Any]) -> BuildIdentityFiles:
 
 
 def _identity_files_reference(value: EvidenceIdentityFiles) -> dict[str, Any]:
-    return {
+    result = {
         "candidate": _build_files_reference(value.candidate),
         "anchor": _build_files_reference(value.anchor),
         **{key: _bound_reference(getattr(value, key)) for key in (
             "manifest", "model", "workload", "runtime_config", "materialization")},
     }
+    if value.shared_runtime is not None:
+        result["shared_runtime"] = {
+            key: _bound_reference(getattr(value.shared_runtime, key)) for key in (
+                "measurement_binary", "runtime_receipt", "anchor_hip_library",
+                "candidate_hip_library")}
+    return result
 
 
 def _identity_files_from_dict(value: Mapping[str, Any]) -> EvidenceIdentityFiles:
@@ -524,7 +606,12 @@ def _identity_files_from_dict(value: Mapping[str, Any]) -> EvidenceIdentityFiles
             model=_bound_from_dict(value["model"]),
             workload=_bound_from_dict(value["workload"]),
             runtime_config=_bound_from_dict(value["runtime_config"]),
-            materialization=_bound_from_dict(value["materialization"]))
+            materialization=_bound_from_dict(value["materialization"]),
+            shared_runtime=(None if value.get("shared_runtime") is None else
+                            SharedRewardRuntimeFiles(**{
+                                key: _bound_from_dict(value["shared_runtime"][key])
+                                for key in ("measurement_binary", "runtime_receipt",
+                                            "anchor_hip_library", "candidate_hip_library")})))
     except (KeyError, TypeError) as exc:
         raise EvidenceProducerError("evidence identity files are malformed") from exc
 
@@ -548,7 +635,6 @@ def _verify_executable(command: Sequence[str], inputs: Sequence[BoundInputFile],
 def _verify_build_files(files: BuildIdentityFiles,
                         identity: proofs.BuildIdentity, arm: str) -> None:
     expected = {
-        "source_identity": identity.source_sha256,
         "binary": identity.binary_sha256,
         "hip_library": identity.hip_library_sha256,
         "config": identity.config_sha256,
@@ -559,12 +645,64 @@ def _verify_build_files(files: BuildIdentityFiles,
         _verify_bound(item)
         if item.sha256 != digest:
             raise EvidenceProducerError(f"{arm} {name} does not match build identity")
+    _verify_source_tree_identity(files.source_identity, identity, arm)
+
+
+def _verify_source_tree_identity(carrier: BoundInputFile,
+                                 identity: proofs.BuildIdentity, arm: str) -> None:
+    """Validate the durable carrier for a source *tree* digest.
+
+    A tree digest is intentionally not the digest of this JSON receipt.  The
+    bound-input hash protects the carrier bytes; the receipt's complete,
+    self-hashed TreeDigest manifest proves the commit/tree identity after its
+    worktree has been torn down.
+    """
+    _verify_bound(carrier)
     try:
-        source = json.loads(files.source_identity.path.read_text(encoding="utf-8"))
+        source = json.loads(carrier.path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
-        raise EvidenceProducerError(f"{arm} source identity is not JSON") from exc
-    if not isinstance(source, Mapping) or source.get("source_commit") != identity.source_commit:
-        raise EvidenceProducerError(f"{arm} source commit is not file-backed")
+        raise EvidenceProducerError(f"{arm} source tree identity is not JSON") from exc
+    if not isinstance(source, Mapping):
+        raise EvidenceProducerError(f"{arm} source tree identity is malformed")
+    body = {key: value for key, value in source.items() if key != "receipt_sha256"}
+    if source.get("receipt_sha256") != schemas.content_hash(body):
+        raise EvidenceProducerError(f"{arm} source tree identity self-hash mismatch")
+    if (source.get("schema") != SOURCE_TREE_SCHEMA
+            or source.get("source_commit") != identity.source_commit
+            or not isinstance(source.get("root_provenance"), str)
+            or not Path(source["root_provenance"]).is_absolute()
+            or source.get("exclusions") != [".git"]):
+        raise EvidenceProducerError(f"{arm} source tree receipt provenance mismatch")
+    tree = source.get("tree")
+    if not isinstance(tree, Mapping) or tree.get("listing_is_complete") is not True:
+        raise EvidenceProducerError(f"{arm} source tree receipt lacks complete listing")
+    try:
+        claimed_sha = _hash(str(tree["sha256"]), "tree SHA-256")
+        file_count = tree["file_count"]
+        total_bytes = tree["total_bytes"]
+        entries = tree["entries"]
+    except (KeyError, TypeError, ValueError) as exc:
+        raise EvidenceProducerError(f"{arm} source tree receipt is malformed") from exc
+    if (isinstance(file_count, bool) or not isinstance(file_count, int) or file_count < 0
+            or isinstance(total_bytes, bool) or not isinstance(total_bytes, int) or total_bytes < 0
+            or not isinstance(entries, list) or len(entries) != file_count):
+        raise EvidenceProducerError(f"{arm} source tree totals/listing disagree")
+    normalized: list[tuple[str, str, str]] = []
+    for entry in entries:
+        if (not isinstance(entry, list) or len(entry) != 3
+                or entry[0] not in {"100644", "100755", "120000"}
+                or not isinstance(entry[1], str) or not SHA.fullmatch(entry[1])
+                or not isinstance(entry[2], str) or not entry[2]
+                or Path(entry[2]).is_absolute() or ".." in Path(entry[2]).parts):
+            raise EvidenceProducerError(f"{arm} source tree entry is malformed")
+        normalized.append((entry[0], entry[1], entry[2]))
+    if normalized != sorted(normalized, key=lambda row: row[2]) or len({row[2] for row in normalized}) != len(normalized):
+        raise EvidenceProducerError(f"{arm} source tree listing is not canonical")
+    manifest_sha = hashlib.sha256(
+        "".join(f"{mode}\t{digest}\t{path}\n" for mode, digest, path in normalized)
+        .encode("utf-8")).hexdigest()
+    if claimed_sha != manifest_sha or claimed_sha != identity.source_sha256:
+        raise EvidenceProducerError(f"{arm} source tree SHA is not file-backed")
 
 
 def _policy_payload(plan: GpuSourceEvidencePlan) -> dict[str, Any]:
@@ -591,6 +729,7 @@ def _policy_payload(plan: GpuSourceEvidencePlan) -> dict[str, Any]:
         "correctness_environment": [list(item) for item in plan.correctness_environment],
         "candidate_rocprof_environment": [list(item) for item in plan.candidate_rocprof_environment],
         "anchor_rocprof_environment": [list(item) for item in plan.anchor_rocprof_environment],
+        "shared_runtime": _shared_runtime_reference(plan.shared_runtime),
         "dispatch": _expectations(plan),
     }
 
@@ -632,6 +771,8 @@ def _verify_plan_files(plan: GpuSourceEvidencePlan) -> None:
            for key, value in required_materialization.items()):
         raise EvidenceProducerError(
             "source materialization does not prove manifest-applied experimental tree")
+    if plan.shared_runtime is not None:
+        _verify_shared_runtime(plan.shared_runtime, plan=plan)
     for item in (plan.correctness_inputs + plan.candidate_rocprof_inputs
                  + plan.anchor_rocprof_inputs):
         _verify_bound(item)
@@ -647,6 +788,57 @@ def _verify_plan_files(plan: GpuSourceEvidencePlan) -> None:
         raise EvidenceProducerError("sealed adapter policy is not JSON") from exc
     if policy != _policy_payload(plan):
         raise EvidenceProducerError("sealed adapter policy differs from execution plan")
+
+
+def _verify_shared_runtime(runtime: SharedRewardRuntimeFiles,
+                           *, plan: GpuSourceEvidencePlan) -> None:
+    for item in (runtime.measurement_binary, runtime.runtime_receipt,
+                 runtime.anchor_hip_library, runtime.candidate_hip_library):
+        _verify_bound(item)
+    try:
+        body = json.loads(runtime.runtime_receipt.path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise EvidenceProducerError("shared reward runtime receipt is not JSON") from exc
+    if not isinstance(body, Mapping):
+        raise EvidenceProducerError("shared reward runtime receipt is malformed")
+    payload = {key: value for key, value in body.items() if key != "receipt_sha256"}
+    if body.get("receipt_sha256") != schemas.content_hash(payload):
+        raise EvidenceProducerError("shared reward runtime receipt self-hash mismatch")
+    expected = {
+        "schema": "epyc.autokernel.shared_reward_runtime.v1",
+        "authority": AUTHORITY,
+        "promotion_claim": False,
+        "measurement_binary_sha256": runtime.measurement_binary.sha256,
+        "anchor_hip_sha256": runtime.anchor_hip_library.sha256,
+        "candidate_hip_sha256": runtime.candidate_hip_library.sha256,
+    }
+    if any(body.get(key) != value for key, value in expected.items()):
+        raise EvidenceProducerError("shared reward runtime receipt identity mismatch")
+    split = body.get("split_runtime_manifest")
+    if not isinstance(split, Mapping) or split.get("schema") != split_runtime_verifier.SCHEMA:
+        raise EvidenceProducerError("shared reward runtime lacks a sealed split-runtime manifest")
+    try:
+        root = Path(str(split["root"])).resolve(strict=True)
+        verified = split_runtime_verifier.verify_split_runtime(root)
+    except (KeyError, OSError, split_runtime_verifier.SplitRuntimeError) as exc:
+        raise EvidenceProducerError("shared reward split runtime cannot be revalidated") from exc
+    if split != verified.to_dict():
+        raise EvidenceProducerError("shared reward split runtime changed after sealing")
+    expected_paths = {
+        "measurement": verified.reward_binary.resolve(strict=True),
+        "anchor": (verified.anchor_hip_dir / "libggml-hip.so.0").resolve(strict=True),
+        "candidate": (verified.candidate_hip_dir / "libggml-hip.so.0").resolve(strict=True),
+    }
+    actual_paths = {
+        "measurement": runtime.measurement_binary.path.resolve(strict=True),
+        "anchor": runtime.anchor_hip_library.path.resolve(strict=True),
+        "candidate": runtime.candidate_hip_library.path.resolve(strict=True),
+    }
+    if actual_paths != expected_paths:
+        raise EvidenceProducerError("shared reward carriers do not select verified runtime objects")
+    if (runtime.anchor_hip_library.sha256 != plan.anchor.hip_library_sha256
+            or runtime.candidate_hip_library.sha256 != plan.candidate.hip_library_sha256):
+        raise EvidenceProducerError("shared reward runtime does not match arm build HIP identities")
 
 
 def _receipt_dict(value: object, label: str) -> dict[str, Any]:
@@ -870,6 +1062,7 @@ def _produce_correctness(
         "manifest_sha256": plan.manifest_sha256,
         "candidate_build_identity": asdict(plan.candidate),
         "identity_files": _identity_files_reference(plan.identity_files),
+        "shared_runtime": _shared_runtime_reference(plan.shared_runtime),
         "execution_policy": _bound_reference(plan.policy),
         "command_input_files": [_bound_reference(x) for x in plan.correctness_inputs],
         "workload_sha256": plan.workload_sha256,
@@ -1012,7 +1205,12 @@ def _produce_attribution_arm(
         timestamp_csv_path=(directory / "timestamps.csv").resolve(),
         working_directory=plan.execution_cwd,
         environment=(plan.candidate_rocprof_environment if arm == "candidate"
-                     else plan.anchor_rocprof_environment))
+                     else plan.anchor_rocprof_environment),
+        runtime_maps_required=plan.shared_runtime is not None,
+        runtime_maps_context=(None if plan.shared_runtime is None else {
+            "arm": arm, "shared_runtime": _shared_runtime_reference(plan.shared_runtime),
+            "model": _bound_reference(plan.identity_files.model),
+            "model_sha256": plan.model_sha256, "device_id": plan.device_id}))
     capture, opened, released, residency = _run_claimed(
         invocation, plan=plan, executor=executor, claim_acquirer=claim_acquirer,
         claim_verifier=claim_verifier, claim_journal=claim_journal,
@@ -1025,6 +1223,8 @@ def _produce_attribution_arm(
     reduction = _reduce_arm(
         dispatches, exact=exact, forbidden=forbidden,
         invariants=plan.dispatch.invariants)
+    runtime_maps = _validated_runtime_maps_identity(
+        capture, plan=plan, arm=arm, residency=residency)
     body = {
         "schema": ATTRIBUTION_SCHEMA,
         "authority": AUTHORITY,
@@ -1038,6 +1238,7 @@ def _produce_attribution_arm(
         "manifest_sha256": plan.manifest_sha256,
         "build_identity": asdict(identity),
         "identity_files": _identity_files_reference(plan.identity_files),
+        "shared_runtime": _shared_runtime_reference(plan.shared_runtime),
         "execution_policy": _bound_reference(plan.policy),
         "command_input_files": [_bound_reference(x) for x in inputs],
         "model_sha256": plan.model_sha256,
@@ -1061,6 +1262,7 @@ def _produce_attribution_arm(
         "device_claim_open": opened,
         "device_claim_released": released,
         "residency_witness": residency,
+        "runtime_maps_identity": runtime_maps,
     }
     return _seal(directory / "receipt.json", body)
 
@@ -1086,6 +1288,13 @@ def _produce_pair(
     candidate_body, anchor_body = candidate["body"], anchor["body"]
     if candidate_body["invariant_signatures"] != anchor_body["invariant_signatures"]:
         raise EvidenceProducerError("candidate changed an invariant hot signature")
+    if plan.shared_runtime is not None:
+        candidate_maps = candidate_body.get("runtime_maps_identity")
+        anchor_maps = anchor_body.get("runtime_maps_identity")
+        if not isinstance(candidate_maps, Mapping) or not isinstance(anchor_maps, Mapping):
+            raise EvidenceProducerError("shared reward attribution lacks in-window loader-map identities")
+        if candidate_maps.get("runtime_manifest_sha256") != anchor_maps.get("runtime_manifest_sha256"):
+            raise EvidenceProducerError("source arms did not map one shared runtime closure")
     body = {
         "schema": PAIR_SCHEMA,
         "authority": AUTHORITY,
@@ -1098,6 +1307,7 @@ def _produce_pair(
         "candidate_build_identity": asdict(plan.candidate),
         "anchor_build_identity": asdict(plan.anchor),
         "identity_files": _identity_files_reference(plan.identity_files),
+        "shared_runtime": _shared_runtime_reference(plan.shared_runtime),
         "execution_policy": _bound_reference(plan.policy),
         "correctness_inputs": [_bound_reference(x) for x in plan.correctness_inputs],
         "candidate_rocprof_inputs": [_bound_reference(x) for x in plan.candidate_rocprof_inputs],
@@ -1114,6 +1324,8 @@ def _produce_pair(
         "anchor": _reference(anchor),
         "invariant_signatures": candidate_body["invariant_signatures"],
         "inverse_attribution_proved": True,
+        "candidate_runtime_maps_identity": candidate_body.get("runtime_maps_identity"),
+        "anchor_runtime_maps_identity": anchor_body.get("runtime_maps_identity"),
     }
     return _seal(root / "attribution-pair.json", body)
 
@@ -1148,6 +1360,7 @@ def _validate_attribution_body(body: Mapping[str, Any], *, plan: GpuSourceEviden
                 plan.candidate_rocprof_environment if arm == "candidate"
                 else plan.anchor_rocprof_environment)]),
         "identity_files": _identity_files_reference(plan.identity_files),
+        "shared_runtime": _shared_runtime_reference(plan.shared_runtime),
         "execution_policy": _bound_reference(plan.policy),
         "command_input_files": [_bound_reference(x) for x in (
             plan.candidate_rocprof_inputs if arm == "candidate"
@@ -1175,6 +1388,54 @@ def _validate_attribution_body(body: Mapping[str, Any], *, plan: GpuSourceEviden
         raise EvidenceProducerError(f"{arm} dispatch derivation mismatch")
     _validate_residency_witness(
         body.get("residency_witness"), device_id=plan.device_id, label=arm)
+    if plan.shared_runtime is not None:
+        _validate_runtime_maps_receipt(body.get("runtime_maps_identity"), plan=plan, arm=arm,
+                                       residency=body.get("residency_witness"))
+
+
+def _validated_runtime_maps_identity(capture: ExecutionCapture, *, plan: GpuSourceEvidencePlan,
+                                     arm: str, residency: Mapping[str, Any]) -> dict[str, Any] | None:
+    if plan.shared_runtime is None:
+        return None
+    return _validate_runtime_maps_receipt(capture.runtime_maps_identity, plan=plan,
+                                          arm=arm, residency=residency)
+
+
+def _validate_runtime_maps_receipt(value: object, *, plan: GpuSourceEvidencePlan,
+                                   arm: str, residency: object) -> dict[str, Any]:
+    """Bind a verifier-produced in-window /proc/maps identity to an arm receipt."""
+    if not isinstance(value, Mapping) or not isinstance(residency, Mapping):
+        raise EvidenceProducerError(f"{arm} source attribution lacks a runtime maps identity")
+    try:
+        typed = split_runtime_verifier.HotResidencyIdentity(
+            runtime_manifest_sha256=str(value["runtime_manifest_sha256"]),
+            arm=str(value["arm"]), reward_binary_sha256=str(value["reward_binary_sha256"]),
+            hip_library_sha256=str(value["hip_library_sha256"]),
+            model_path=Path(str(value["model_path"])), model_sha256=str(value["model_sha256"]),
+            device_id=str(value["device_id"]), kfd_pid=int(value["kfd_pid"]),
+            boot_id=str(value["boot_id"]), process_start_ticks=int(value["process_start_ticks"]),
+            mapped_local_sha256=dict(value["mapped_local_sha256"]),
+            identity_sha256=str(value["identity_sha256"]))
+    except (KeyError, TypeError, ValueError, split_runtime_verifier.SplitRuntimeError) as exc:
+        raise EvidenceProducerError(f"{arm} runtime maps identity is malformed") from exc
+    runtime = plan.shared_runtime
+    assert runtime is not None
+    try:
+        runtime_body = json.loads(runtime.runtime_receipt.path.read_text(encoding="utf-8"))
+        manifest_sha = str(runtime_body["split_runtime_manifest"]["manifest_sha256"])
+        kfd_pids = {int(pid) for pid in residency["kfd_pids"]}
+    except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise EvidenceProducerError(f"{arm} runtime maps context is malformed") from exc
+    expected_hip = (runtime.candidate_hip_library.sha256 if arm == "candidate"
+                    else runtime.anchor_hip_library.sha256)
+    if (typed.runtime_manifest_sha256 != manifest_sha or typed.arm != arm
+            or typed.reward_binary_sha256 != runtime.measurement_binary.sha256
+            or typed.hip_library_sha256 != expected_hip
+            or typed.model_path != plan.identity_files.model.path
+            or typed.model_sha256 != plan.model_sha256
+            or typed.device_id != plan.device_id or typed.kfd_pid not in kfd_pids):
+        raise EvidenceProducerError(f"{arm} runtime maps identity does not bind the sealed arm/run")
+    return typed.to_dict()
 
 
 def _validate_correctness_body(body: Mapping[str, Any], plan: GpuSourceEvidencePlan) -> None:
@@ -1190,6 +1451,7 @@ def _validate_correctness_body(body: Mapping[str, Any], plan: GpuSourceEvidenceP
         "command_environment_sha256": schemas.content_hash(
             [list(item) for item in plan.correctness_environment]),
         "identity_files": _identity_files_reference(plan.identity_files),
+        "shared_runtime": _shared_runtime_reference(plan.shared_runtime),
         "execution_policy": _bound_reference(plan.policy),
         "command_input_files": [_bound_reference(x) for x in plan.correctness_inputs],
         "correctness_summary_pattern": plan.correctness_summary_pattern,
@@ -1246,6 +1508,7 @@ def _plan_from_receipts(correctness: Mapping[str, Any], pair: Mapping[str, Any])
             anchor_rocprof_argv=tuple(anchor_body["command_argv"]),
             dispatch=_contract_from_dict(pair_body["expectations"]),
             identity_files=_identity_files_from_dict(pair_body["identity_files"]),
+            shared_runtime=_identity_files_from_dict(pair_body["identity_files"]).shared_runtime,
             policy=_bound_from_dict(pair_body["execution_policy"]),
             correctness_inputs=tuple(_bound_from_dict(x) for x in pair_body["correctness_inputs"]),
             candidate_rocprof_inputs=tuple(_bound_from_dict(x) for x in pair_body["candidate_rocprof_inputs"]),

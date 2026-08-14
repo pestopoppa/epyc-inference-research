@@ -281,6 +281,8 @@ def materialize(config: deployment.DiscoveryDeployment, registry: Mapping[str, M
                 or build_.anchor_loader_dir is None or build_.candidate_loader_dir is None
                 or build_.reward_runtime_sha256 is None or build_.operation_key is None
                 or build_.materialization_receipt is None or build_.materialization_sha256 is None
+                or build_.anchor_source_tree_receipt is None or build_.anchor_source_tree_sha256 is None
+                or build_.candidate_source_tree_receipt is None or build_.candidate_source_tree_sha256 is None
                 or build_.teardown_receipt is None or build_.teardown_sha256 is None):
             raise DeploymentFactoryError("source build lacks sealed runtime/materialization/teardown receipts")
         result = runner.build(candidate, build_, permit)

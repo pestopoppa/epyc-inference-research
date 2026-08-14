@@ -20,6 +20,7 @@ from .. import schemas
 from ..evaluator import integrity
 from ..execution import worktree
 from . import discovery_controller as controller
+from . import gpu_source_evidence as evidence
 from . import gpu_source_proofs
 from . import split_runtime_verifier
 
@@ -55,14 +56,169 @@ def _identity(*, root: Path, commit: str, build: Path) -> gpu_source_proofs.Buil
     cache = build / "CMakeCache.txt"
     tree = integrity.hash_source_tree(root, exclude_dir_names=(".git",)).sha256
     hip_real = _resolved_regular(hip)
-    topology = {name: os.readlink(build / "bin" / name)
-                for name in ("libggml-hip.so", "libggml-hip.so.0")
-                if (build / "bin" / name).is_symlink()}
-    linkage = hashlib.sha256(json.dumps({"binary": _digest(binary), "hip": _digest(hip_real),
-                                         "topology": topology}, sort_keys=True).encode()).hexdigest()
+    linkage = _linkage_sha(build)
     return gpu_source_proofs.BuildIdentity(
         source_commit=commit, source_sha256=tree, binary_sha256=_digest(binary),
         hip_library_sha256=_digest(hip_real), config_sha256=_digest(cache), linkage_sha256=linkage)
+
+
+def _linkage_body(build: Path) -> dict[str, object]:
+    binary = build / "bin" / "llama-bench"
+    hip = _resolved_regular(build / "bin" / _HIP)
+    topology = {name: os.readlink(build / "bin" / name)
+                for name in ("libggml-hip.so", "libggml-hip.so.0")
+                if (build / "bin" / name).is_symlink()}
+    return {"binary": _digest(binary), "hip": _digest(hip), "topology": topology}
+
+
+def _linkage_sha(build: Path) -> str:
+    return hashlib.sha256(json.dumps(_linkage_body(build), sort_keys=True,
+                                     separators=(",", ":")).encode()).hexdigest()
+
+
+def _write_linkage_carrier(path: Path, build: Path) -> tuple[Path, str]:
+    raw = json.dumps(_linkage_body(build), sort_keys=True, separators=(",", ":")).encode()
+    path.write_bytes(raw)
+    return path, hashlib.sha256(raw).hexdigest()
+
+
+def _bound(path: Path, role: str) -> dict[str, str]:
+    return {"role": role, "path": str(path.resolve()), "sha256": _digest(path)}
+
+
+def _boot_id(proc_root: Path) -> str:
+    value = (proc_root / "sys/kernel/random/boot_id").read_text(encoding="utf-8").strip()
+    if not value:
+        raise StaticRegistryError("kernel boot identity is unavailable")
+    return value
+
+
+def _start_ticks(proc_root: Path, pid: int) -> int:
+    # /proc/<pid>/stat's second field may contain spaces/parens.  The final
+    # right-paren unambiguously starts fields 3..; starttime is field 22.
+    raw = (proc_root / str(pid) / "stat").read_text(encoding="utf-8")
+    tail = raw.rsplit(")", 1)[1].split()
+    ticks = int(tail[19])
+    if ticks < 1:
+        raise StaticRegistryError("owned KFD process has invalid start ticks")
+    return ticks
+
+
+def runtime_maps_sampler(*, proc_root: Path = Path("/proc")) -> evidence.RuntimeMapsSampler:
+    """Return the production callback used while rocprof's owned KFD PID lives.
+
+    The invocation's context is constructed by the evidence producer, not the
+    planner.  We rebuild the split closure from disk at the sampling instant and
+    bind the exact KFD descendant/starttick to its maps image.
+    """
+    root = proc_root.resolve()
+    def sample(invocation: evidence.CommandInvocation, launcher_pid: int,
+               residency: evidence.GpuResidencySample) -> Mapping[str, Any]:
+        context = invocation.runtime_maps_context
+        if not isinstance(context, Mapping):
+            raise StaticRegistryError("runtime maps callback lacks sealed invocation context")
+        arm = context.get("arm")
+        shared = context.get("shared_runtime")
+        model = context.get("model")
+        if (arm not in {"anchor", "candidate"} or not isinstance(shared, Mapping)
+                or not isinstance(model, Mapping)):
+            raise StaticRegistryError("runtime maps callback context is malformed")
+        try:
+            receipt = Path(str(shared["runtime_receipt"]["path"])).resolve(strict=True)
+            runtime_body = json.loads(receipt.read_text(encoding="utf-8"))
+            runtime_root = Path(str(runtime_body["split_runtime_manifest"]["root"])).resolve(strict=True)
+            model_path = Path(str(model["path"])).resolve(strict=True)
+            model_sha = str(context["model_sha256"])
+            device_id = str(context["device_id"])
+        except (KeyError, OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+            raise StaticRegistryError("runtime maps callback cannot load sealed context") from exc
+        manifest = split_runtime_verifier.verify_split_runtime(runtime_root)
+        kfd_pid = min(residency.kfd_pids)
+        maps = (root / str(kfd_pid) / "maps").read_text(encoding="utf-8")
+        identity = split_runtime_verifier.verify_runtime_maps(
+            manifest, arm=str(arm), maps_text=maps, model_path=model_path,
+            model_sha256=model_sha, device_id=device_id, kfd_pid=kfd_pid,
+            boot_id=_boot_id(root), process_start_ticks=_start_ticks(root, kfd_pid))
+        return identity.to_dict()
+    return sample
+
+
+def evidence_identity_files_for_build(
+    build: controller.GpuSourceBuild, *, manifest: evidence.BoundInputFile,
+    model: evidence.BoundInputFile, workload: evidence.BoundInputFile,
+    runtime_config: evidence.BoundInputFile,
+) -> evidence.EvidenceIdentityFiles:
+    """Reconstruct every evidence carrier only from the sealed materialization.
+
+    This intentionally refuses caller-supplied source paths.  Snapshot trees
+    have already been torn down; their complete source TreeDigest receipts are
+    the durable identity.
+    """
+    required = (build.materialization_receipt, build.materialization_sha256,
+                build.anchor_source_tree_receipt, build.anchor_source_tree_sha256,
+                build.candidate_source_tree_receipt, build.candidate_source_tree_sha256,
+                build.measurement_binary, build.reward_runtime_sha256)
+    if any(value is None for value in required):
+        raise StaticRegistryError("source build lacks durable materialization/source/runtime receipts")
+    assert build.materialization_receipt is not None and build.materialization_sha256 is not None
+    if _digest(build.materialization_receipt) != build.materialization_sha256:
+        raise StaticRegistryError("materialization carrier changed after build")
+    try:
+        body = json.loads(build.materialization_receipt.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise StaticRegistryError("materialization receipt is not JSON") from exc
+    if body.get("receipt_sha256") != schemas.content_hash(
+            {key: value for key, value in body.items() if key != "receipt_sha256"}):
+        raise StaticRegistryError("materialization receipt self-hash mismatch")
+    if (body.get("schema") != "epyc.autokernel.gpu_source_materialization.v1"
+            or body.get("candidate_identity") != vars(build.candidate_identity)
+            or body.get("anchor_identity") != vars(build.anchor_identity)):
+        raise StaticRegistryError("materialization does not bind returned build identities")
+    refs = body.get("build_identity_files")
+    if not isinstance(refs, Mapping) or set(refs) != {"anchor", "candidate"}:
+        raise StaticRegistryError("materialization lacks sealed build identity carriers")
+    def files(arm: str, identity: gpu_source_proofs.BuildIdentity) -> evidence.BuildIdentityFiles:
+        row = refs[arm]
+        if not isinstance(row, Mapping):
+            raise StaticRegistryError("materialization build identity carrier is malformed")
+        expected = ("source_identity", "binary", "hip_library", "config", "linkage")
+        if set(row) != set(expected):
+            raise StaticRegistryError("materialization carrier keys are incomplete")
+        values = {key: evidence._bound_from_dict(row[key]) for key in expected}
+        result = evidence.BuildIdentityFiles(**values)
+        evidence._verify_build_files(result, identity, arm)
+        return result
+    shared_row = body.get("shared_runtime")
+    if not isinstance(shared_row, Mapping):
+        raise StaticRegistryError("materialization lacks shared reward runtime carriers")
+    shared = evidence.SharedRewardRuntimeFiles(**{
+        key: evidence._bound_from_dict(shared_row[key]) for key in (
+            "measurement_binary", "runtime_receipt", "anchor_hip_library",
+            "candidate_hip_library")})
+    if shared.measurement_binary.path != build.measurement_binary:
+        raise StaticRegistryError("materialization reward binary differs from returned build")
+    return evidence.EvidenceIdentityFiles(
+        candidate=files("candidate", build.candidate_identity),
+        anchor=files("anchor", build.anchor_identity), manifest=manifest, model=model,
+        workload=workload, runtime_config=runtime_config,
+        materialization=evidence.BoundInputFile("materialization", build.materialization_receipt,
+                                                 build.materialization_sha256),
+        shared_runtime=shared)
+
+
+def _source_tree_receipt(*, path: Path, root: Path, commit: str) -> tuple[Path, str]:
+    """Persist a complete, self-hashed TreeDigest before teardown."""
+    tree = integrity.hash_source_tree(root, exclude_dir_names=(".git",))
+    body = {
+        "schema": "epyc.autokernel.source_tree_identity.v1",
+        "source_commit": commit,
+        "root_provenance": str(root.resolve()),
+        "exclusions": [".git"],
+        "tree": tree.to_dict(),
+    }
+    body["receipt_sha256"] = schemas.content_hash(body)
+    path.write_text(json.dumps(body, sort_keys=True) + "\n", encoding="utf-8")
+    return path, _digest(path)
 
 
 def _copy_regular(source: Path, target: Path) -> None:
@@ -235,7 +391,7 @@ class SharedRewardRuntime:
                 "candidate_hip_sha256": _digest((loaders["candidate"] / "libggml-hip.so.0").resolve()),
                 "split_runtime_manifest": verified.to_dict(),
                 "promotion_claim": False}
-        body["receipt_sha256"] = hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        body["receipt_sha256"] = schemas.content_hash(body)
         receipt = root / "reward-runtime.json"
         receipt.write_text(json.dumps(body, sort_keys=True) + "\n", encoding="utf-8")
         return cls(root=root, measurement_binary=common / "llama-bench", common_loader_dir=common,
@@ -324,6 +480,38 @@ class StaticGpuSourceBuilder:
                                         build=Path(by_id["akc-anchor"][1].path))
             candidate_identity = _identity(root=candidate_root, commit=applied.candidate_commit,
                                            build=Path(by_id[candidate.source_manifest.candidate_id][1].path))
+            anchor_source_receipt, anchor_source_sha = _source_tree_receipt(
+                path=operation_dir / "anchor-source-tree.json", root=anchor_root,
+                commit=anchor.commit)
+            candidate_source_receipt, candidate_source_sha = _source_tree_receipt(
+                path=operation_dir / "candidate-source-tree.json", root=candidate_root,
+                commit=applied.candidate_commit)
+            if (anchor_source_sha == anchor_identity.source_sha256
+                    or candidate_source_sha == candidate_identity.source_sha256):
+                raise StaticRegistryError("source tree carrier must not be mistaken for tree digest")
+            anchor_linkage, anchor_linkage_sha = _write_linkage_carrier(
+                operation_dir / "anchor-linkage.json", Path(by_id["akc-anchor"][1].path))
+            candidate_linkage, candidate_linkage_sha = _write_linkage_carrier(
+                operation_dir / "candidate-linkage.json",
+                Path(by_id[candidate.source_manifest.candidate_id][1].path))
+            if (anchor_linkage_sha != anchor_identity.linkage_sha256
+                    or candidate_linkage_sha != candidate_identity.linkage_sha256):
+                raise StaticRegistryError("linkage carrier does not reproduce build identity")
+            def identity_files(*, arm: str, build_dir: Path, source_receipt: Path) -> dict[str, dict[str, str]]:
+                return {
+                    "source_identity": _bound(source_receipt, "source_identity"),
+                    "binary": _bound(build_dir / "bin" / "llama-bench", "binary"),
+                    "hip_library": _bound(_resolved_regular(build_dir / "bin" / _HIP), "hip_library"),
+                    "config": _bound(build_dir / "CMakeCache.txt", "config"),
+                    "linkage": _bound(anchor_linkage if arm == "anchor" else candidate_linkage,
+                                      "linkage"),
+                }
+            anchor_files = identity_files(
+                arm="anchor", build_dir=Path(by_id["akc-anchor"][1].path),
+                source_receipt=anchor_source_receipt)
+            candidate_files = identity_files(
+                arm="candidate", build_dir=Path(by_id[candidate.source_manifest.candidate_id][1].path),
+                source_receipt=candidate_source_receipt)
             runtime = SharedRewardRuntime.materialize(
                 root=self.operations_root / "runtime" / operation_key,
                 anchor_build=Path(by_id["akc-anchor"][1].path),
@@ -352,6 +540,25 @@ class StaticGpuSourceBuilder:
                 "builds": {ident: result.to_dict() for ident, _snapshot, _build, result in results},
                 "anchor_identity": vars(anchor_identity),
                 "candidate_identity": vars(candidate_identity),
+                "anchor_source_tree_receipt": str(anchor_source_receipt),
+                "anchor_source_tree_receipt_sha256": anchor_source_sha,
+                "candidate_source_tree_receipt": str(candidate_source_receipt),
+                "candidate_source_tree_receipt_sha256": candidate_source_sha,
+                "source_identity_receipts": {
+                    "anchor": _bound(anchor_source_receipt, "source_identity"),
+                    "candidate": _bound(candidate_source_receipt, "source_identity"),
+                },
+                "build_identity_files": {"anchor": anchor_files, "candidate": candidate_files},
+                "shared_runtime": {
+                    "measurement_binary": _bound(runtime.measurement_binary, "reward_binary"),
+                    "runtime_receipt": _bound(runtime.receipt_path, "runtime_receipt"),
+                    "anchor_hip_library": _bound(
+                        (runtime.anchor_loader_dir / "libggml-hip.so.0").resolve(strict=True),
+                        "runtime_hip"),
+                    "candidate_hip_library": _bound(
+                        (runtime.candidate_loader_dir / "libggml-hip.so.0").resolve(strict=True),
+                        "runtime_hip"),
+                },
                 "reward_runtime_receipt": str(runtime.receipt_path),
                 "reward_runtime_sha256": _digest(runtime.receipt_path),
                 "promotion_claim": False,
@@ -370,6 +577,10 @@ class StaticGpuSourceBuilder:
                 "reward_runtime_sha256": _digest(runtime.receipt_path),
                 "operation_key": operation_key, "materialization_receipt": materialization_path,
                 "materialization_sha256": _digest(materialization_path),
+                "anchor_source_tree_receipt": anchor_source_receipt,
+                "anchor_source_tree_sha256": anchor_source_sha,
+                "candidate_source_tree_receipt": candidate_source_receipt,
+                "candidate_source_tree_sha256": candidate_source_sha,
             }
         finally:
             receipts = []

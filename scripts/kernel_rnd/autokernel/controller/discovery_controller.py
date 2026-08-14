@@ -406,6 +406,10 @@ class GpuSourceBuild:
     operation_key: str | None = None
     materialization_receipt: Path | None = None
     materialization_sha256: str | None = None
+    anchor_source_tree_receipt: Path | None = None
+    anchor_source_tree_sha256: str | None = None
+    candidate_source_tree_receipt: Path | None = None
+    candidate_source_tree_sha256: str | None = None
     teardown_receipt: Path | None = None
     teardown_sha256: str | None = None
     def __post_init__(self) -> None:
@@ -427,6 +431,8 @@ class GpuSourceBuild:
         if self.operation_key is not None and (not isinstance(self.operation_key, str) or not HASH.fullmatch(self.operation_key)):
             raise DiscoveryControllerError("GPU source build operation key is invalid")
         for path, expected, label in ((self.materialization_receipt, self.materialization_sha256, "materialization"),
+                                      (self.anchor_source_tree_receipt, self.anchor_source_tree_sha256, "anchor source tree"),
+                                      (self.candidate_source_tree_receipt, self.candidate_source_tree_sha256, "candidate source tree"),
                                       (self.teardown_receipt, self.teardown_sha256, "teardown")):
             if (path is None) != (expected is None):
                 raise DiscoveryControllerError(f"GPU source build has incomplete {label} receipt")
@@ -436,7 +442,7 @@ class GpuSourceBuild:
                     raise DiscoveryControllerError(f"GPU source build has invalid {label} receipt")
                 assert isinstance(path, Path) and isinstance(expected, str)
                 if hashlib.sha256(path.read_bytes()).hexdigest() != expected:
-                    raise DiscoveryControllerError("GPU source materialization receipt bytes changed")
+                    raise DiscoveryControllerError(f"GPU source {label} receipt bytes changed")
 
 
 @dataclass(frozen=True)

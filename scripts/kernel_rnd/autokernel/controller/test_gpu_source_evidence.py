@@ -31,22 +31,35 @@ def write_bound(root: Path, name: str, content: bytes, role: str) -> E.BoundInpu
 
 
 def build_files(root: Path, label: str) -> tuple[P.BuildIdentity, E.BuildIdentityFiles]:
+    entries = [["100644", digest(f"{label}-tree-entry"), "ggml/src/ggml-cuda/fattn.cu"]]
+    tree_sha = hashlib.sha256(
+        "".join(f"{mode}\t{entry_sha}\t{path}\n" for mode, entry_sha, path in entries)
+        .encode("utf-8")).hexdigest()
+    source_body = {
+        "schema": E.SOURCE_TREE_SCHEMA,
+        "source_commit": f"commit-{label}",
+        "root_provenance": str((root / "snapshot").resolve()),
+        "exclusions": [".git"],
+        "tree": {"sha256": tree_sha, "file_count": len(entries), "total_bytes": 1,
+                 "entries": entries, "listing_is_complete": True},
+    }
+    source_body["receipt_sha256"] = E.schemas.content_hash(source_body)
     source = write_bound(
         root, f"{label}-source.json",
-        json.dumps({"source_commit": f"commit-{label}"}, sort_keys=True).encode(),
+        json.dumps(source_body, sort_keys=True).encode(),
         "source_identity")
     binary = write_bound(root, f"{label}-binary", f"binary-{label}".encode(), "binary")
     hip = write_bound(root, f"{label}-hip.so", f"hip-{label}".encode(), "hip_library")
     config = write_bound(root, f"{label}-config.json", f"config-{label}".encode(), "config")
     linkage = write_bound(root, f"{label}-linkage.json", f"linkage-{label}".encode(), "linkage")
     return (P.BuildIdentity(
-        source_commit=f"commit-{label}", source_sha256=source.sha256,
+        source_commit=f"commit-{label}", source_sha256=tree_sha,
         binary_sha256=binary.sha256, hip_library_sha256=hip.sha256,
         config_sha256=config.sha256, linkage_sha256=linkage.sha256),
         E.BuildIdentityFiles(source, binary, hip, config, linkage))
 
 
-def plan(root: Path) -> E.GpuSourceEvidencePlan:
+def plan(root: Path, *, shared_reward: bool = False) -> E.GpuSourceEvidencePlan:
     root = root.resolve(); root.mkdir(parents=True, exist_ok=True)
     candidate, candidate_files = build_files(root / "candidate", "candidate")
     anchor, anchor_files = build_files(root / "anchor", "anchor")
@@ -72,6 +85,40 @@ def plan(root: Path) -> E.GpuSourceEvidencePlan:
     profiler.path.chmod(0o700)
     timestamp_input = write_bound(root, "timestamps.xml", b"timestamp policy", "timestamp_input")
     placeholder_policy = E.BoundInputFile("execution_policy", (root / "policy.json").resolve(), "0" * 64)
+    shared = None
+    if shared_reward:
+        common = (root / "shared-runtime" / "common").resolve()
+        anchor_overlay = (root / "shared-runtime" / "anchor-hip").resolve()
+        candidate_overlay = (root / "shared-runtime" / "candidate-hip").resolve()
+        for directory in (common, anchor_overlay, candidate_overlay):
+            directory.mkdir(parents=True, exist_ok=True)
+        reward = write_bound(common, "llama-bench", b"shared reward", "reward_binary")
+        reward.path.chmod(0o700)
+        anchor_hip = write_bound(anchor_overlay, "libggml-hip.so.0", b"hip-anchor", "runtime_hip")
+        candidate_hip = write_bound(candidate_overlay, "libggml-hip.so.0", b"hip-candidate", "runtime_hip")
+        # The diagnostic correctness binary remains in the complete candidate
+        # build closure.  Its original HIP DSO has the same bytes as its arm
+        # overlay; the overlay is only for the shared reward executable.
+        assert candidate.hip_library_sha256 == candidate_hip.sha256
+        assert anchor.hip_library_sha256 == anchor_hip.sha256
+        runtime_body = {
+            "schema": "epyc.autokernel.shared_reward_runtime.v1",
+            "authority": E.AUTHORITY, "promotion_claim": False,
+            "measurement_binary_sha256": reward.sha256,
+            "anchor_hip_sha256": anchor_hip.sha256,
+            "candidate_hip_sha256": candidate_hip.sha256,
+            "split_runtime_manifest": {
+                "schema": "epyc.autokernel.split_reward_runtime.v1",
+                "root": str((root / "shared-runtime").resolve()),
+                "manifest_sha256": digest("shared-runtime-manifest"),
+            },
+        }
+        runtime_body["receipt_sha256"] = E.schemas.content_hash(runtime_body)
+        runtime_receipt = write_bound(root / "shared-runtime", "reward-runtime.json",
+                                      json.dumps(runtime_body, sort_keys=True).encode(), "runtime_receipt")
+        shared = E.SharedRewardRuntimeFiles(
+            measurement_binary=reward, runtime_receipt=runtime_receipt,
+            anchor_hip_library=anchor_hip, candidate_hip_library=candidate_hip)
     result = E.GpuSourceEvidencePlan(
         campaign_id="ak-gpu-source-evidence-test",
         device_id="mi210_0",
@@ -85,11 +132,11 @@ def plan(root: Path) -> E.GpuSourceEvidencePlan:
         correctness_summary_pattern=r"(?P<passed>\d+)/(?P<total>\d+) tests passed",
         expected_correctness_cases=3,
         candidate_rocprof_argv=(str(profiler.path), "-i", str(timestamp_input.path),
-                                "--candidate", str(candidate_files.binary.path),
+                                "--candidate", str(shared.measurement_binary.path if shared else candidate_files.binary.path),
                                 "--model", str(model.path), "--workload", str(workload.path),
                                 "--config", str(runtime.path)),
         anchor_rocprof_argv=(str(profiler.path), "-i", str(timestamp_input.path),
-                             "--anchor", str(anchor_files.binary.path),
+                             "--candidate", str(shared.measurement_binary.path if shared else anchor_files.binary.path),
                              "--model", str(model.path), "--workload", str(workload.path),
                              "--config", str(runtime.path)),
         dispatch=E.DispatchContract(
@@ -105,24 +152,27 @@ def plan(root: Path) -> E.GpuSourceEvidencePlan:
         ),
         identity_files=E.EvidenceIdentityFiles(
             candidate_files, anchor_files, manifest, model, workload, runtime,
-            materialization),
+            materialization, shared),
         policy=placeholder_policy,
         correctness_inputs=(correctness_tool, candidate_files.binary),
-        candidate_rocprof_inputs=(profiler, timestamp_input, candidate_files.binary),
-        anchor_rocprof_inputs=(profiler, timestamp_input, anchor_files.binary),
+        candidate_rocprof_inputs=(profiler, timestamp_input,
+                                  shared.measurement_binary if shared else candidate_files.binary),
+        anchor_rocprof_inputs=(profiler, timestamp_input,
+                               shared.measurement_binary if shared else anchor_files.binary),
         required_correctness_argv_paths=(candidate_files.binary.path, model.path,
                                          workload.path, runtime.path),
-        required_candidate_rocprof_argv_paths=(candidate_files.binary.path, model.path,
+        required_candidate_rocprof_argv_paths=((shared.measurement_binary.path if shared else candidate_files.binary.path), model.path,
                                                workload.path, runtime.path),
-        required_anchor_rocprof_argv_paths=(anchor_files.binary.path, model.path,
+        required_anchor_rocprof_argv_paths=((shared.measurement_binary.path if shared else anchor_files.binary.path), model.path,
                                             workload.path, runtime.path),
         execution_cwd=root,
         correctness_environment=(("HIP_VISIBLE_DEVICES", "0"),
                                  ("LD_LIBRARY_PATH", str(candidate_files.hip_library.path.parent))),
         candidate_rocprof_environment=(("HIP_VISIBLE_DEVICES", "0"),
-                                       ("LD_LIBRARY_PATH", str(candidate_files.hip_library.path.parent))),
+                                       ("LD_LIBRARY_PATH", (str(shared.candidate_hip_library.path.parent) + ":" + str(shared.measurement_binary.path.parent)) if shared else str(candidate_files.hip_library.path.parent))),
         anchor_rocprof_environment=(("HIP_VISIBLE_DEVICES", "0"),
-                                    ("LD_LIBRARY_PATH", str(anchor_files.hip_library.path.parent))))
+                                    ("LD_LIBRARY_PATH", (str(shared.anchor_hip_library.path.parent) + ":" + str(shared.measurement_binary.path.parent)) if shared else str(anchor_files.hip_library.path.parent))),
+        shared_runtime=shared)
     policy_path = placeholder_policy.path
     policy_path.write_text(json.dumps(E._policy_payload(result), sort_keys=True))
     policy = E.BoundInputFile(
@@ -193,7 +243,7 @@ def csv_text(arm: str, *, inverse_bad=False, invariant_changed=False,
 class FakeExecutors:
     def __init__(self, *, correctness_exit=0, correctness_summary="3/3 tests passed",
                  non_overlap=False, inverse_bad=False, invariant_changed=False,
-                 forbidden=False, rocprof_exit=0):
+                 forbidden=False, rocprof_exit=0, runtime_maps=None):
         self.calls = []
         self.correctness_exit = correctness_exit
         self.correctness_summary = correctness_summary
@@ -202,6 +252,7 @@ class FakeExecutors:
         self.invariant_changed = invariant_changed
         self.forbidden = forbidden
         self.rocprof_exit = rocprof_exit
+        self.runtime_maps = runtime_maps or {}
 
     def correctness(self, invocation):
         self.calls.append((invocation.kind, invocation.arm, invocation.argv,
@@ -230,7 +281,32 @@ class FakeExecutors:
             started_monotonic_ns=100, ended_monotonic_ns=200,
             samples=(E.GpuResidencySample(
                 observed_monotonic_ns=timestamp, device_id="mi210_0",
-                kfd_pids=(1234,), vram_bytes=4096),))
+                kfd_pids=(1234,), vram_bytes=4096),),
+            runtime_maps_identity=self.runtime_maps.get(invocation.arm))
+
+
+def runtime_maps_for(current: E.GpuSourceEvidencePlan, arm: str) -> dict:
+    assert current.shared_runtime is not None
+    runtime_body = json.loads(current.shared_runtime.runtime_receipt.path.read_text())
+    hip = (current.shared_runtime.candidate_hip_library if arm == "candidate"
+           else current.shared_runtime.anchor_hip_library)
+    body = {
+        "runtime_manifest_sha256": runtime_body["split_runtime_manifest"]["manifest_sha256"],
+        "arm": arm,
+        "reward_binary_sha256": current.shared_runtime.measurement_binary.sha256,
+        "hip_library_sha256": hip.sha256,
+        "model_path": str(current.identity_files.model.path),
+        "model_sha256": current.model_sha256,
+        "device_id": current.device_id, "kfd_pid": 1234,
+        "boot_id": "boot-test", "process_start_ticks": 99,
+        "mapped_local_sha256": {
+            str(current.shared_runtime.measurement_binary.path): current.shared_runtime.measurement_binary.sha256,
+            str(hip.path): hip.sha256,
+        },
+    }
+    body["identity_sha256"] = E.split_runtime_verifier._content_hash(
+        {"schema": E.split_runtime_verifier.MAPS_SCHEMA, **body})
+    return {"schema": E.split_runtime_verifier.RESIDENCY_SCHEMA, **body}
 
 
 class GpuSourceEvidenceTests(unittest.TestCase):
@@ -284,6 +360,34 @@ class GpuSourceEvidenceTests(unittest.TestCase):
                 "attribution-anchor/stdout.txt", "attribution-anchor/stderr.txt",
                 "attribution-anchor/timestamps.csv"):
                 self.assertTrue((root / relative).is_file())
+
+    def test_shared_reward_rocprof_uses_one_binary_with_separate_hashed_hip_arms(self):
+        with tempfile.TemporaryDirectory() as directory:
+            current = plan(Path(directory) / "inputs", shared_reward=True)
+            runtime_body = json.loads(current.shared_runtime.runtime_receipt.path.read_text())
+            split = runtime_body["split_runtime_manifest"]
+            class VerifiedRuntime:
+                reward_binary = current.shared_runtime.measurement_binary.path
+                anchor_hip_dir = current.shared_runtime.anchor_hip_library.path.parent
+                candidate_hip_dir = current.shared_runtime.candidate_hip_library.path.parent
+                def to_dict(self): return split
+            with mock.patch.object(E.split_runtime_verifier, "verify_split_runtime",
+                                   return_value=VerifiedRuntime()):
+                bundle, executors, _claims = self.produce(
+                    directory, plan_=current,
+                    executors=FakeExecutors(runtime_maps={
+                        "candidate": runtime_maps_for(current, "candidate"),
+                        "anchor": runtime_maps_for(current, "anchor")}))
+            self.assertEqual(executors.calls[1][2], executors.calls[2][2])
+            self.assertIn(str(current.shared_runtime.measurement_binary.path), executors.calls[1][2])
+            self.assertNotEqual(dict(executors.calls[1][3])["LD_LIBRARY_PATH"],
+                                dict(executors.calls[2][3])["LD_LIBRARY_PATH"])
+            pair = json.loads((Path(directory) / "evidence" / "attribution-pair.json").read_text())
+            self.assertEqual(pair["shared_runtime"], E._shared_runtime_reference(current.shared_runtime))
+            self.assertEqual(bundle.candidate.hip_library_sha256,
+                             current.shared_runtime.candidate_hip_library.sha256)
+            self.assertEqual(pair["candidate_runtime_maps_identity"]["arm"], "candidate")
+            self.assertEqual(pair["anchor_runtime_maps_identity"]["arm"], "anchor")
 
     def test_tampered_file_is_rejected_by_recursive_bundle_loader(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -387,6 +491,30 @@ class GpuSourceEvidenceTests(unittest.TestCase):
                 self.assertEqual(executors.calls, [])
                 self.assertFalse((Path(directory) / "evidence").exists())
 
+    def test_source_tree_receipt_requires_complete_self_hashed_tree_manifest(self):
+        with tempfile.TemporaryDirectory() as directory:
+            current = plan(Path(directory) / "inputs")
+            source = current.identity_files.candidate.source_identity.path
+            body = json.loads(source.read_text())
+            body["tree"]["entries"][0][2] = "../measurement-reward-hack"
+            body["receipt_sha256"] = E.schemas.content_hash(
+                {key: value for key, value in body.items() if key != "receipt_sha256"})
+            source.write_text(json.dumps(body, sort_keys=True))
+            carrier = replace(current.identity_files.candidate.source_identity,
+                              sha256=hashlib.sha256(source.read_bytes()).hexdigest())
+            current = replace(current, identity_files=replace(
+                current.identity_files,
+                candidate=replace(current.identity_files.candidate,
+                                  source_identity=carrier)))
+            policy = json.loads(current.policy.path.read_text())
+            policy["identity_files"] = E._identity_files_reference(current.identity_files)
+            current.policy.path.write_text(json.dumps(policy, sort_keys=True))
+            current = replace(current, policy=replace(
+                current.policy,
+                sha256=hashlib.sha256(current.policy.path.read_bytes()).hexdigest()))
+            with self.assertRaisesRegex(E.EvidenceProducerError, "source tree entry"):
+                self.produce(directory, plan_=current)
+
     def test_unapplied_manifest_wrong_environment_and_cwd_refuse(self):
         with tempfile.TemporaryDirectory() as directory:
             current = plan(Path(directory) / "inputs")
@@ -463,6 +591,54 @@ class GpuSourceEvidenceTests(unittest.TestCase):
             self.assertEqual(popen.call_args.kwargs["cwd"], str(root.resolve()))
             self.assertEqual(popen.call_args.kwargs["env"]["LD_LIBRARY_PATH"],
                              "/test/lib")
+
+    def test_direct_executor_captures_maps_only_during_owned_resident_rocprof_call(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            invocation = E.CommandInvocation(
+                kind="rocprof", arm="candidate", argv=("/bin/true",),
+                stdout_path=(root / "stdout").resolve(), stderr_path=(root / "stderr").resolve(),
+                timestamp_csv_path=(root / "timestamps.csv").resolve(),
+                working_directory=root.resolve(), environment=(("LD_LIBRARY_PATH", "/test/lib"),),
+                runtime_maps_required=True, runtime_maps_context={"sealed": "context"})
+            class Child:
+                pid = 9393; polls = 0
+                def poll(self): self.polls += 1; return None if self.polls == 1 else 0
+                def wait(self): return 0
+            seen = []
+            def maps(call, child_pid, sample):
+                seen.append((call.arm, child_pid, sample.kfd_pids, call.runtime_maps_context))
+                return {"maps": "captured"}
+            executor = E.SubprocessCommandExecutor(
+                residency_sampler=lambda pid: E.GpuResidencySample(
+                    observed_monotonic_ns=__import__("time").monotonic_ns(), device_id="mi210_0",
+                    kfd_pids=(pid,), vram_bytes=4096), runtime_maps_sampler=maps,
+                sample_interval_s=.00001, popen=mock.Mock(return_value=Child()))
+            capture = executor(invocation)
+            self.assertEqual(capture.runtime_maps_identity, {"maps": "captured"})
+            self.assertEqual(seen, [("candidate", 9393, (9393,), {"sealed": "context"})])
+
+    def test_shared_rocprof_without_production_maps_callback_refuses(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            invocation = E.CommandInvocation(
+                kind="rocprof", arm="candidate", argv=("/bin/true",),
+                stdout_path=(root / "stdout").resolve(), stderr_path=(root / "stderr").resolve(),
+                timestamp_csv_path=(root / "timestamps.csv").resolve(),
+                working_directory=root.resolve(), environment=(("LD_LIBRARY_PATH", "/test/lib"),),
+                runtime_maps_required=True, runtime_maps_context={"sealed": "context"})
+            class Child:
+                pid = 9494; polls = 0
+                def poll(self): self.polls += 1; return None if self.polls == 1 else 0
+                def wait(self, timeout=None): return 0
+                def terminate(self): return None
+            executor = E.SubprocessCommandExecutor(
+                residency_sampler=lambda pid: E.GpuResidencySample(
+                    observed_monotonic_ns=__import__("time").monotonic_ns(), device_id="mi210_0",
+                    kfd_pids=(pid,), vram_bytes=4096), sample_interval_s=.00001,
+                popen=mock.Mock(return_value=Child()))
+            with self.assertRaisesRegex(E.EvidenceProducerError, "maps sampler"):
+                executor(invocation)
 
     def test_sampler_exception_terminates_then_kills_exact_child(self):
         with tempfile.TemporaryDirectory() as directory:
