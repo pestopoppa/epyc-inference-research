@@ -261,7 +261,7 @@ _STATIC_IDS = MappingProxyType({
     "source_builder": "gpu-source-v1",
     "evidence_plan": "reviewed-gpu-source-evidence-v1",
     "runner_args": "qwen05b-tg128",
-    "experiment_template_registry": "gpu-source-templates-v1",
+    "experiment_template_registry": "gpu-source-templates-v2",
     "inference_window_lease": "mi210-window-v1",
     "production_snapshot": "llama-v9-artifacts",
 })

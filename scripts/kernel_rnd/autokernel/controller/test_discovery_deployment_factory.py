@@ -149,7 +149,7 @@ class DeploymentFactoryTests(unittest.TestCase):
             source_builder_id="gpu-source-v1",
             evidence_plan_id="reviewed-gpu-source-evidence-v1",
             runner_args_id="qwen05b-tg128",
-            experiment_template_registry_id="gpu-source-templates-v1",
+            experiment_template_registry_id="gpu-source-templates-v2",
             experiment_template_registry_sha256=registry_sha,
             inference_window_lease_id="mi210-window-v1",
             production_snapshot_id="llama-v9-artifacts", revalidate=mock.Mock())
