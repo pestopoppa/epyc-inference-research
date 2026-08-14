@@ -1,0 +1,4386 @@
+{
+  "schema": "epyc.autokernel.discovery_hypothesis_portfolio.v2",
+  "corpus_id": "gpu-decode-v9-20260814",
+  "generated_at": "2026-08-14T10:30:00Z",
+  "promotion_authority": false,
+  "current_bundle": {
+    "bundle_id": "gpu-source-templates-v2-qwen05b-tg128",
+    "frame_id": "frame-current-qwen05b-q4km-tg128",
+    "template_catalog_version": "gpu-source-templates-v2",
+    "template_ids": [
+      "cuda-fattn-common-v1",
+      "cuda-fattn-tile-entry-v1",
+      "cuda-fattn-tile-v1",
+      "cuda-fattn-v2",
+      "cuda-mmvq-v2",
+      "cuda-norm-v2",
+      "cuda-quantize-q8-v1",
+      "cuda-rope-v2",
+      "cuda-set-rows-v1",
+      "cuda-vecdotq-v1"
+    ],
+    "eligibility_semantics": "Eligible means the exact current workload dispatches the target and one sealed single-file template can express it; it grants neither compute nor promotion authority."
+  },
+  "evidence": [
+    {
+      "evidence_id": "ev-source-plan-v1",
+      "path": "/mnt/raid0/llm/autokernel/surface/gpu_decode_source_plan.json",
+      "sha256": "f620cde44dcfa252350fcc801af0df10fb7f617acf0bc446f4d96ac0e9baebe5",
+      "authority": "candidate_only",
+      "temporal_status": "current_v9",
+      "claims": [
+        "Ten source experiments on the exact current small-model frame",
+        "Candidate-only outcomes and DNR scope; never promotion evidence"
+      ]
+    },
+    {
+      "evidence_id": "ev-strategy-summary-v1",
+      "path": "/mnt/raid0/llm/autokernel/surface/gpu_decode_strategy_summary.json",
+      "sha256": "04ad089de5073c3968d3b82a808a1e9e803cf6dc89f135d6b44e64dd7830e176",
+      "authority": "presentation_projection",
+      "temporal_status": "current_v9",
+      "claims": [
+        "Runtime screen projection for the current frame",
+        "Graphs-on and flash-attention-on are incumbent configuration facts"
+      ]
+    },
+    {
+      "evidence_id": "ev-current-qwen05-profile",
+      "path": "/mnt/raid0/llm/autokernel/screens/ak-gpu-qwen05b-tg128-rocprof-attribution-20260813/receipt.json",
+      "sha256": "20742be4a69abf5bb70c228660ff0629bf416ed4452c4f69b9765ef74a933cd8",
+      "authority": "governed_diagnostic",
+      "temporal_status": "current_v9",
+      "claims": [
+        "Exact current-bundle source-pivot dispatch and device-time attribution",
+        "Non-promotable one-frame diagnostic"
+      ]
+    },
+    {
+      "evidence_id": "ev-v9-qwen122b-iq2-profile",
+      "path": "/mnt/raid0/llm/autokernel/probes/rvp-c4-4a-122b-decode-20260812T192651Z/receipt.json",
+      "sha256": "c7f3f5a243310021e022715b403fe0668b47145440bda00ee43ac6d84e14bed3",
+      "authority": "governed_diagnostic",
+      "temporal_status": "current_v9",
+      "claims": [
+        "Frozen-v9 122B IQ2 decode family and exact-kernel device attribution",
+        "One-repetition routing evidence, not a speedup claim"
+      ]
+    },
+    {
+      "evidence_id": "ev-v9-qwen35b-q8-profile",
+      "path": "/mnt/raid0/llm/autokernel/probes/rvp-c4-4a-35b-q8-decode-20260812T194500Z/receipt.json",
+      "sha256": "0ca812e34c8c7c939c9b9d5eac90941dcad603236a7fbed85ade3c839316d2ce",
+      "authority": "governed_diagnostic",
+      "temporal_status": "current_v9",
+      "claims": [
+        "Frozen-v9 35B Q8 decode family and exact-kernel device attribution",
+        "One-repetition routing evidence, not a speedup claim"
+      ]
+    },
+    {
+      "evidence_id": "ev-v9-qwen35b-q4km-profile",
+      "path": "/mnt/raid0/llm/autokernel/probes/rvp-c4-4a-35b-q4km-decode-20260812T201000Z/receipt.json",
+      "sha256": "459e7bfd3eb0aa3357544569ffec92f082d55a89e525eaf16cff5e37dc9a82f6",
+      "authority": "governed_diagnostic",
+      "temporal_status": "current_v9",
+      "claims": [
+        "Frozen-v9 35B Q4_K_M decode family and exact-kernel device attribution",
+        "Type-12 MMVQ accounts for 24.1445 percent of summed device time"
+      ]
+    },
+    {
+      "evidence_id": "ev-q5-onewave-correctness-targeted",
+      "path": "/mnt/raid0/llm/autokernel/screens/ak-gpu-q5-onewave-correctness-targeted-20260813-s1/receipt.json",
+      "sha256": "94f6dad89c7f8cdf8beec43c73783c57f5dcae1a9c4c38f91006dcfd6e385747",
+      "authority": "candidate_only",
+      "temporal_status": "current_v9",
+      "claims": [
+        "Targeted Q5_0 one-wave correctness receipt",
+        "No attribution or throughput claim"
+      ]
+    },
+    {
+      "evidence_id": "ev-q5-onewave-correctness-full",
+      "path": "/mnt/raid0/llm/autokernel/screens/ak-gpu-q5-onewave-correctness-full-20260813-s1/receipt.json",
+      "sha256": "8b7dc07643f79255193978417d3d2705506ab0793b2b89473259e5912bcadccb",
+      "authority": "candidate_only",
+      "temporal_status": "current_v9",
+      "claims": [
+        "Full Q5_0 one-wave correctness receipt",
+        "No attribution or throughput claim"
+      ]
+    },
+    {
+      "evidence_id": "ev-q4k-branchless-dirty-r3",
+      "path": "/mnt/raid0/llm/autokernel/probes/inf37-q4k-branchless-scales-20260811/diagnostic-paired-r3/receipt.json",
+      "sha256": "de4241bd26b77f5dac7df746d165034b67e6f8105133daf0359142a97dd35d5d",
+      "authority": "dirty_diagnostic",
+      "temporal_status": "current_v9_dirty_diagnostic",
+      "claims": [
+        "Five of five representative correctness cases passed",
+        "Median kernel duration fell 10.554 percent in a dirty diagnostic; clean replay required"
+      ]
+    },
+    {
+      "evidence_id": "ev-prefetch-v9-r2",
+      "path": "/mnt/raid0/llm/autokernel/probes/ak-gpu-prefetch-v9-20260811-r2/receipt.json",
+      "sha256": "7b173cafcccb8a99319bf93a80fd13a2e94a400afab2bf03355363f9521ab17f",
+      "authority": "governed_diagnostic",
+      "temporal_status": "current_v9",
+      "claims": [
+        "Governed 20-block current-v9 async-prefetch replay median was 0.936 percent",
+        "Below the predeclared two-percent floor"
+      ]
+    },
+    {
+      "evidence_id": "ev-prefetch-v9-r1-independent",
+      "path": "/mnt/raid0/llm/autokernel/probes/ak-gpu-prefetch-v9-20260812-r1/receipt.json",
+      "sha256": "7321f2a640a7cc0b3169544867e26e3102a3efe3ebd5b0ebc732e154398339b0",
+      "authority": "governed_diagnostic",
+      "temporal_status": "current_v9",
+      "claims": [
+        "Independent 20-block current-v9 replay median was 1.2442303249 percent",
+        "Positive but below the predeclared two-percent floor"
+      ]
+    },
+    {
+      "evidence_id": "ev-research-loop-snapshot",
+      "path": "/workspace/handoffs/active/autokernel-research-loop.md",
+      "sha256": "9eb44c2f26c919e89045a1143899bfa98b30d2ae07a3177ce6dbac263e634a4a",
+      "authority": "governance_snapshot",
+      "temporal_status": "current_v9",
+      "claims": [
+        "Hash-bound snapshot of current hard constraints and closed families",
+        "Carries G15, G17, G18, MFMA, prior-art, and reentry conditions"
+      ]
+    }
+  ],
+  "frames": [
+    {
+      "frame_id": "frame-current-qwen05b-q4km-tg128",
+      "kind": "current_bundle",
+      "temporal_status": "current_v9",
+      "production_commit": "0db32c06e3e550065b78311a6031ef3dd2c4f27c",
+      "device": "AMD Instinct MI210",
+      "architecture": "gfx90a",
+      "model": "Qwen2.5-Coder-0.5B",
+      "quant": "Q4_K_M",
+      "phase": "decode",
+      "batch": 1,
+      "generated_tokens": 128,
+      "measurement_graphs": false,
+      "target_runtime_graphs": true,
+      "flash_attention": true,
+      "authority": "Graphs-off profiler attribution is routing and device-time-ceiling evidence only; it cannot establish graphs-on whole-model reward direction.",
+      "evidence_refs": [
+        "ev-source-plan-v1",
+        "ev-strategy-summary-v1",
+        "ev-current-qwen05-profile"
+      ],
+      "hotspots": [
+        {
+          "family": "q5_0_mmvq_main",
+          "device_time_share_pct": 27.42969404468003,
+          "calls": 13803,
+          "note": "Exact type-6 true/true main-path subset; excludes the 129-call false/true tail and overlaps the MMVQ aggregate.",
+          "evidence_ref": "ev-current-qwen05-profile",
+          "extraction": {
+            "method": "rocprof_exact_kernel_reducer_v1",
+            "selector": "exact_kernel_type=6;flags=true,true;subset_of=mmvq",
+            "source_artifact_sha256": "a11bc20a03dfd5ca157990c1766ebbb5edb70a5c036d73d85d806e4f39a222a8"
+          }
+        },
+        {
+          "family": "quantize_q8_1",
+          "device_time_share_pct": 21.228166775013964,
+          "calls": 18705,
+          "note": "Exact activation quantizer family.",
+          "evidence_ref": "ev-current-qwen05-profile",
+          "extraction": {
+            "method": "rocprof_exact_kernel_reducer_v1",
+            "selector": "kernel_family=quantize_q8_1",
+            "source_artifact_sha256": "a11bc20a03dfd5ca157990c1766ebbb5edb70a5c036d73d85d806e4f39a222a8"
+          }
+        },
+        {
+          "family": "rmsnorm",
+          "device_time_share_pct": 10.734949639102124,
+          "calls": 6321,
+          "note": "Exact RMSNorm family.",
+          "evidence_ref": "ev-current-qwen05-profile",
+          "extraction": {
+            "method": "rocprof_exact_kernel_reducer_v1",
+            "selector": "kernel_family=rms_norm",
+            "source_artifact_sha256": "a11bc20a03dfd5ca157990c1766ebbb5edb70a5c036d73d85d806e4f39a222a8"
+          }
+        },
+        {
+          "family": "flash_attention_tile",
+          "device_time_share_pct": 8.536375294887034,
+          "calls": 3096,
+          "note": "Exact tiled attention body.",
+          "evidence_ref": "ev-current-qwen05-profile",
+          "extraction": {
+            "method": "rocprof_exact_kernel_reducer_v1",
+            "selector": "kernel_family=flash_attn_tile",
+            "source_artifact_sha256": "a11bc20a03dfd5ca157990c1766ebbb5edb70a5c036d73d85d806e4f39a222a8"
+          }
+        },
+        {
+          "family": "rope",
+          "device_time_share_pct": 8.61269905295275,
+          "calls": 6192,
+          "note": "Exact RoPE family.",
+          "evidence_ref": "ev-current-qwen05-profile",
+          "extraction": {
+            "method": "rocprof_exact_kernel_reducer_v1",
+            "selector": "kernel_family=rope",
+            "source_artifact_sha256": "a11bc20a03dfd5ca157990c1766ebbb5edb70a5c036d73d85d806e4f39a222a8"
+          }
+        },
+        {
+          "family": "q4_k_mmvq",
+          "device_time_share_pct": 3.8994134849336506,
+          "calls": 1548,
+          "note": "Exact type-12 subset; overlaps the MMVQ aggregate and must not be summed with it.",
+          "evidence_ref": "ev-current-qwen05-profile",
+          "extraction": {
+            "method": "rocprof_exact_kernel_reducer_v1",
+            "selector": "exact_kernel_type=12;subset_of=mmvq",
+            "source_artifact_sha256": "a11bc20a03dfd5ca157990c1766ebbb5edb70a5c036d73d85d806e4f39a222a8"
+          }
+        },
+        {
+          "family": "mmvq",
+          "device_time_share_pct": 42.8732444134,
+          "calls": 18705,
+          "note": "Family aggregate; overlaps q5_0_mmvq and q4_k_mmvq subsets and is not additive with them.",
+          "evidence_ref": "ev-current-qwen05-profile",
+          "extraction": {
+            "method": "rocprof_family_classifier_v1",
+            "selector": "attribution_family=mmvq",
+            "source_artifact_sha256": "a11bc20a03dfd5ca157990c1766ebbb5edb70a5c036d73d85d806e4f39a222a8"
+          }
+        },
+        {
+          "family": "fattn_combine",
+          "device_time_share_pct": 3.719734811288374,
+          "calls": 3096,
+          "note": "Exact attention combine family; distinct from flash_attention_tile.",
+          "evidence_ref": "ev-current-qwen05-profile",
+          "extraction": {
+            "method": "rocprof_exact_kernel_reducer_v1",
+            "selector": "kernel_family=fattn_combine",
+            "source_artifact_sha256": "a11bc20a03dfd5ca157990c1766ebbb5edb70a5c036d73d85d806e4f39a222a8"
+          }
+        },
+        {
+          "family": "set_rows",
+          "device_time_share_pct": 3.5214881479081854,
+          "calls": 3096,
+          "note": "Exact set-rows family.",
+          "evidence_ref": "ev-current-qwen05-profile",
+          "extraction": {
+            "method": "rocprof_exact_kernel_reducer_v1",
+            "selector": "kernel_family=set_rows",
+            "source_artifact_sha256": "a11bc20a03dfd5ca157990c1766ebbb5edb70a5c036d73d85d806e4f39a222a8"
+          }
+        },
+        {
+          "family": "q5_0_mmvq_tail",
+          "device_time_share_pct": 0.23284038879474223,
+          "calls": 129,
+          "note": "Exact type-6 false/true tail route; distinct from the 13,803-call main subset and overlapping the MMVQ aggregate.",
+          "evidence_ref": "ev-current-qwen05-profile",
+          "extraction": {
+            "method": "rocprof_exact_kernel_reducer_v1",
+            "selector": "exact_kernel_type=6;flags=false,true;subset_of=mmvq",
+            "source_artifact_sha256": "a11bc20a03dfd5ca157990c1766ebbb5edb70a5c036d73d85d806e4f39a222a8"
+          }
+        }
+      ],
+      "model_path": "/mnt/raid0/llm/models/lmstudio-community/Qwen2.5-Coder-0.5B-GGUF/Qwen2.5-Coder-0.5B-Q4_K_M.gguf",
+      "model_sha256": "f175ecace8c24336cbf9e22bd71ea032a16492bd264a3caab6dfa4cafe80ddd3",
+      "measurement_binary_sha256": "1d340789751a2243b812a0d188913c07edfcc78d467d504877c159136bcf64a9",
+      "measurement_source_commit": null,
+      "limitations": [
+        "Attribution receipt binds binary bytes but does not bind a source commit; current-v9 is a routing label, not proof of frozen production source identity."
+      ]
+    },
+    {
+      "frame_id": "frame-v9-qwen122b-iq2-tg128",
+      "kind": "large_model",
+      "temporal_status": "current_v9",
+      "production_commit": "0db32c06e3e550065b78311a6031ef3dd2c4f27c",
+      "device": "AMD Instinct MI210",
+      "architecture": "gfx90a",
+      "model": "Qwen3.5-122B-A10B",
+      "quant": "UD-IQ2_M",
+      "phase": "decode",
+      "batch": 1,
+      "generated_tokens": 128,
+      "measurement_graphs": false,
+      "target_runtime_graphs": true,
+      "flash_attention": true,
+      "authority": "Graphs-off profiler attribution is routing and device-time-ceiling evidence only; it cannot establish graphs-on whole-model reward direction.",
+      "evidence_refs": [
+        "ev-v9-qwen122b-iq2-profile"
+      ],
+      "hotspots": [
+        {
+          "family": "mmvq",
+          "device_time_share_pct": 59.95240770683877,
+          "calls": 66693,
+          "note": "Dominated by type-16, type-18, and type-13 variants",
+          "evidence_ref": "ev-v9-qwen122b-iq2-profile",
+          "extraction": {
+            "method": "rocprof_family_classifier_v1",
+            "selector": "attribution_family=mmvq",
+            "source_artifact_sha256": "e7fd3481d8c978463831391ef19c9c640907a774e34fd393c95edcc5c53e01fa"
+          }
+        },
+        {
+          "family": "quantize",
+          "device_time_share_pct": 8.008390620571234,
+          "calls": 45021,
+          "note": "Activation quantization",
+          "evidence_ref": "ev-v9-qwen122b-iq2-profile",
+          "extraction": {
+            "method": "rocprof_family_classifier_v1",
+            "selector": "attribution_family=quantize",
+            "source_artifact_sha256": "e7fd3481d8c978463831391ef19c9c640907a774e34fd393c95edcc5c53e01fa"
+          }
+        },
+        {
+          "family": "rmsnorm",
+          "device_time_share_pct": 4.365484746047916,
+          "calls": 20253,
+          "note": "Reduction and normalization",
+          "evidence_ref": "ev-v9-qwen122b-iq2-profile",
+          "extraction": {
+            "method": "rocprof_family_classifier_v1",
+            "selector": "attribution_family=rmsnorm",
+            "source_artifact_sha256": "e7fd3481d8c978463831391ef19c9c640907a774e34fd393c95edcc5c53e01fa"
+          }
+        },
+        {
+          "family": "flash_attention",
+          "device_time_share_pct": 3.1457687639156573,
+          "calls": 1548,
+          "note": "High per-call duration",
+          "evidence_ref": "ev-v9-qwen122b-iq2-profile",
+          "extraction": {
+            "method": "rocprof_family_classifier_v1",
+            "selector": "attribution_family=flash_attention",
+            "source_artifact_sha256": "e7fd3481d8c978463831391ef19c9c640907a774e34fd393c95edcc5c53e01fa"
+          }
+        },
+        {
+          "family": "moe_topk",
+          "device_time_share_pct": 3.071594508434085,
+          "calls": 6192,
+          "note": "Already fused prior-art route",
+          "evidence_ref": "ev-v9-qwen122b-iq2-profile",
+          "extraction": {
+            "method": "rocprof_exact_kernel_reducer_v1",
+            "selector": "kernel_literal_regex=topk_moe_cuda",
+            "source_artifact_sha256": "e7fd3481d8c978463831391ef19c9c640907a774e34fd393c95edcc5c53e01fa"
+          }
+        },
+        {
+          "family": "get_rows",
+          "device_time_share_pct": 2.8796097109933747,
+          "calls": 9417,
+          "note": "MoE gather component",
+          "evidence_ref": "ev-v9-qwen122b-iq2-profile",
+          "extraction": {
+            "method": "rocprof_exact_kernel_reducer_v1",
+            "selector": "kernel_literal_regex=k_get_rows_float<float, float>",
+            "source_artifact_sha256": "e7fd3481d8c978463831391ef19c9c640907a774e34fd393c95edcc5c53e01fa"
+          }
+        },
+        {
+          "family": "copy",
+          "device_time_share_pct": 2.3186722140085307,
+          "calls": 10836,
+          "note": "Fragmented copy family",
+          "evidence_ref": "ev-v9-qwen122b-iq2-profile",
+          "extraction": {
+            "method": "rocprof_family_classifier_v1",
+            "selector": "attribution_family=copy",
+            "source_artifact_sha256": "e7fd3481d8c978463831391ef19c9c640907a774e34fd393c95edcc5c53e01fa"
+          }
+        },
+        {
+          "family": "gdn",
+          "device_time_share_pct": 1.8620126177802725,
+          "calls": 4644,
+          "note": "Low standalone ceiling",
+          "evidence_ref": "ev-v9-qwen122b-iq2-profile",
+          "extraction": {
+            "method": "rocprof_family_classifier_v1",
+            "selector": "attribution_family=gdn",
+            "source_artifact_sha256": "e7fd3481d8c978463831391ef19c9c640907a774e34fd393c95edcc5c53e01fa"
+          }
+        }
+      ],
+      "model_path": "/mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-IQ2_M/Qwen3.5-122B-A10B-UD-IQ2_M.gguf",
+      "model_sha256": "744dd2373bb4616def73cdd97eb3401dc7c64027762a3f178b1de00d42f2e9cd",
+      "measurement_binary_sha256": "8b0d97665411388b6aae2569aafc0d30b21d235d061cada2b9afbeb16a8d02f6",
+      "measurement_source_commit": "0db32c06e",
+      "limitations": [
+        "Receipt reports a nine-character source-commit prefix; production_commit records the separately governed full v9 identity."
+      ]
+    },
+    {
+      "frame_id": "frame-v9-qwen35b-q8-tg128",
+      "kind": "large_model",
+      "temporal_status": "current_v9",
+      "production_commit": "0db32c06e3e550065b78311a6031ef3dd2c4f27c",
+      "device": "AMD Instinct MI210",
+      "architecture": "gfx90a",
+      "model": "Qwen3.6-35B-A3B-MTP",
+      "quant": "Q8_0",
+      "phase": "decode",
+      "batch": 1,
+      "generated_tokens": 128,
+      "measurement_graphs": false,
+      "target_runtime_graphs": true,
+      "flash_attention": true,
+      "authority": "Graphs-off profiler attribution is routing and device-time-ceiling evidence only; it cannot establish graphs-on whole-model reward direction.",
+      "evidence_refs": [
+        "ev-v9-qwen35b-q8-profile"
+      ],
+      "hotspots": [
+        {
+          "family": "mmvq",
+          "device_time_share_pct": 42.37596141351933,
+          "calls": 55599,
+          "note": "Quantized matrix-vector family",
+          "evidence_ref": "ev-v9-qwen35b-q8-profile",
+          "extraction": {
+            "method": "rocprof_family_classifier_v1",
+            "selector": "attribution_family=mmvq",
+            "source_artifact_sha256": "670819fbd7b33094bba4a8904667196d6eccade78296c8d0a632aa3fd29d18dd"
+          }
+        },
+        {
+          "family": "quantize",
+          "device_time_share_pct": 12.981999009045825,
+          "calls": 45279,
+          "note": "Activation quantization",
+          "evidence_ref": "ev-v9-qwen35b-q8-profile",
+          "extraction": {
+            "method": "rocprof_family_classifier_v1",
+            "selector": "attribution_family=quantize",
+            "source_artifact_sha256": "670819fbd7b33094bba4a8904667196d6eccade78296c8d0a632aa3fd29d18dd"
+          }
+        },
+        {
+          "family": "rmsnorm",
+          "device_time_share_pct": 6.220147622430132,
+          "calls": 16899,
+          "note": "Reduction and normalization",
+          "evidence_ref": "ev-v9-qwen35b-q8-profile",
+          "extraction": {
+            "method": "rocprof_family_classifier_v1",
+            "selector": "attribution_family=rmsnorm",
+            "source_artifact_sha256": "670819fbd7b33094bba4a8904667196d6eccade78296c8d0a632aa3fd29d18dd"
+          }
+        },
+        {
+          "family": "flash_attention",
+          "device_time_share_pct": 5.514268000847963,
+          "calls": 1290,
+          "note": "High per-call duration",
+          "evidence_ref": "ev-v9-qwen35b-q8-profile",
+          "extraction": {
+            "method": "rocprof_family_classifier_v1",
+            "selector": "attribution_family=flash_attention",
+            "source_artifact_sha256": "670819fbd7b33094bba4a8904667196d6eccade78296c8d0a632aa3fd29d18dd"
+          }
+        },
+        {
+          "family": "moe_topk",
+          "device_time_share_pct": 5.124614710537439,
+          "calls": 5160,
+          "note": "Already fused prior-art route",
+          "evidence_ref": "ev-v9-qwen35b-q8-profile",
+          "extraction": {
+            "method": "rocprof_exact_kernel_reducer_v1",
+            "selector": "kernel_literal_regex=topk_moe_cuda",
+            "source_artifact_sha256": "670819fbd7b33094bba4a8904667196d6eccade78296c8d0a632aa3fd29d18dd"
+          }
+        },
+        {
+          "family": "get_rows",
+          "device_time_share_pct": 3.3693501429832793,
+          "calls": 7869,
+          "note": "MoE gather component",
+          "evidence_ref": "ev-v9-qwen35b-q8-profile",
+          "extraction": {
+            "method": "rocprof_exact_kernel_reducer_v1",
+            "selector": "kernel_literal_regex=k_get_rows_float<float, float>",
+            "source_artifact_sha256": "670819fbd7b33094bba4a8904667196d6eccade78296c8d0a632aa3fd29d18dd"
+          }
+        },
+        {
+          "family": "copy",
+          "device_time_share_pct": 2.735893553073011,
+          "calls": 9030,
+          "note": "Fragmented copy family",
+          "evidence_ref": "ev-v9-qwen35b-q8-profile",
+          "extraction": {
+            "method": "rocprof_family_classifier_v1",
+            "selector": "attribution_family=copy",
+            "source_artifact_sha256": "670819fbd7b33094bba4a8904667196d6eccade78296c8d0a632aa3fd29d18dd"
+          }
+        },
+        {
+          "family": "gdn",
+          "device_time_share_pct": 1.7677832415391268,
+          "calls": 3870,
+          "note": "Low standalone ceiling",
+          "evidence_ref": "ev-v9-qwen35b-q8-profile",
+          "extraction": {
+            "method": "rocprof_family_classifier_v1",
+            "selector": "attribution_family=gdn",
+            "source_artifact_sha256": "670819fbd7b33094bba4a8904667196d6eccade78296c8d0a632aa3fd29d18dd"
+          }
+        }
+      ],
+      "model_path": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+      "model_sha256": "c1283d8b80c3e38b2735ddbc9766d3b3126f44d6c484be419d4e101d09a76131",
+      "measurement_binary_sha256": "8b0d97665411388b6aae2569aafc0d30b21d235d061cada2b9afbeb16a8d02f6",
+      "measurement_source_commit": "0db32c06e",
+      "limitations": [
+        "Receipt reports a nine-character source-commit prefix; production_commit records the separately governed full v9 identity."
+      ]
+    },
+    {
+      "frame_id": "frame-v9-qwen35b-q4km-tg128",
+      "kind": "large_model",
+      "temporal_status": "current_v9",
+      "production_commit": "0db32c06e3e550065b78311a6031ef3dd2c4f27c",
+      "device": "AMD Instinct MI210",
+      "architecture": "gfx90a",
+      "model": "Qwen3.5-35B-A3B",
+      "quant": "Q4_K_M",
+      "phase": "decode",
+      "batch": 1,
+      "generated_tokens": 128,
+      "measurement_graphs": false,
+      "target_runtime_graphs": true,
+      "flash_attention": true,
+      "authority": "Graphs-off profiler attribution is routing and device-time-ceiling evidence only; it cannot establish graphs-on whole-model reward direction.",
+      "evidence_refs": [
+        "ev-v9-qwen35b-q4km-profile"
+      ],
+      "hotspots": [
+        {
+          "family": "mmvq",
+          "device_time_share_pct": 46.09839259615977,
+          "calls": 60759,
+          "note": "Type-12 Q4_K variants alone are 24.1445 percent",
+          "evidence_ref": "ev-v9-qwen35b-q4km-profile",
+          "extraction": {
+            "method": "rocprof_family_classifier_v1",
+            "selector": "attribution_family=mmvq",
+            "source_artifact_sha256": "6a3571de4bb4d2a1d3267369c99e8b7141618a70cadcae50d980a660af9234f4"
+          }
+        },
+        {
+          "family": "quantize",
+          "device_time_share_pct": 10.605771839869718,
+          "calls": 40119,
+          "note": "Activation quantization",
+          "evidence_ref": "ev-v9-qwen35b-q4km-profile",
+          "extraction": {
+            "method": "rocprof_family_classifier_v1",
+            "selector": "attribution_family=quantize",
+            "source_artifact_sha256": "6a3571de4bb4d2a1d3267369c99e8b7141618a70cadcae50d980a660af9234f4"
+          }
+        },
+        {
+          "family": "rmsnorm",
+          "device_time_share_pct": 5.734588532071842,
+          "calls": 16899,
+          "note": "Reduction and normalization",
+          "evidence_ref": "ev-v9-qwen35b-q4km-profile",
+          "extraction": {
+            "method": "rocprof_family_classifier_v1",
+            "selector": "attribution_family=rmsnorm",
+            "source_artifact_sha256": "6a3571de4bb4d2a1d3267369c99e8b7141618a70cadcae50d980a660af9234f4"
+          }
+        },
+        {
+          "family": "flash_attention",
+          "device_time_share_pct": 5.253894365571314,
+          "calls": 1290,
+          "note": "High per-call duration",
+          "evidence_ref": "ev-v9-qwen35b-q4km-profile",
+          "extraction": {
+            "method": "rocprof_family_classifier_v1",
+            "selector": "attribution_family=flash_attention",
+            "source_artifact_sha256": "6a3571de4bb4d2a1d3267369c99e8b7141618a70cadcae50d980a660af9234f4"
+          }
+        },
+        {
+          "family": "moe_topk",
+          "device_time_share_pct": 5.150717479395271,
+          "calls": 5160,
+          "note": "Already fused prior-art route",
+          "evidence_ref": "ev-v9-qwen35b-q4km-profile",
+          "extraction": {
+            "method": "rocprof_exact_kernel_reducer_v1",
+            "selector": "kernel_literal_regex=topk_moe_cuda",
+            "source_artifact_sha256": "6a3571de4bb4d2a1d3267369c99e8b7141618a70cadcae50d980a660af9234f4"
+          }
+        },
+        {
+          "family": "get_rows",
+          "device_time_share_pct": 3.149021312563626,
+          "calls": 7869,
+          "note": "MoE gather component",
+          "evidence_ref": "ev-v9-qwen35b-q4km-profile",
+          "extraction": {
+            "method": "rocprof_exact_kernel_reducer_v1",
+            "selector": "kernel_literal_regex=k_get_rows_float<float, float>",
+            "source_artifact_sha256": "6a3571de4bb4d2a1d3267369c99e8b7141618a70cadcae50d980a660af9234f4"
+          }
+        },
+        {
+          "family": "copy",
+          "device_time_share_pct": 2.8384062448969787,
+          "calls": 9030,
+          "note": "Fragmented copy family",
+          "evidence_ref": "ev-v9-qwen35b-q4km-profile",
+          "extraction": {
+            "method": "rocprof_family_classifier_v1",
+            "selector": "attribution_family=copy",
+            "source_artifact_sha256": "6a3571de4bb4d2a1d3267369c99e8b7141618a70cadcae50d980a660af9234f4"
+          }
+        },
+        {
+          "family": "gdn",
+          "device_time_share_pct": 1.6450862779001394,
+          "calls": 3870,
+          "note": "Low standalone ceiling",
+          "evidence_ref": "ev-v9-qwen35b-q4km-profile",
+          "extraction": {
+            "method": "rocprof_family_classifier_v1",
+            "selector": "attribution_family=gdn",
+            "source_artifact_sha256": "6a3571de4bb4d2a1d3267369c99e8b7141618a70cadcae50d980a660af9234f4"
+          }
+        }
+      ],
+      "model_path": "/mnt/raid0/llm/models/unsloth/Qwen3.5-35B-A3B-GGUF/Qwen3.5-35B-A3B-UD-Q4_K_M.gguf",
+      "model_sha256": "223138866b87b12e68ffb43a1d45afb572921e9cd4c594e6a736df94c5130466",
+      "measurement_binary_sha256": "8b0d97665411388b6aae2569aafc0d30b21d235d061cada2b9afbeb16a8d02f6",
+      "measurement_source_commit": "0db32c06e",
+      "limitations": [
+        "Receipt bench.model_type says Q8_0 while the sealed model path and model SHA identify Q4_K_M; path and SHA are authoritative.",
+        "Receipt reports a nine-character source-commit prefix; production_commit records the separately governed full v9 identity."
+      ]
+    }
+  ],
+  "hypotheses": [
+    {
+      "hypothesis_id": "akh-v2-q4k-branchless-scale-min",
+      "title": "Clean Q4_K branchless scale/min control flow",
+      "status": "queued",
+      "statement": "A clean branchless scale/min decode in the Q4_K MMVQ path preserves the dirty diagnostic's exec-mask benefit and improves whole-model decode.",
+      "target": {
+        "frame_ids": [
+          "frame-current-qwen05b-q4km-tg128",
+          "frame-v9-qwen35b-q4km-tg128"
+        ],
+        "source_files": [
+          "ggml/src/ggml-cuda/vecdotq.cuh"
+        ],
+        "source_symbols": [
+          "vec_dot_q4_K_q8_1"
+        ],
+        "template_intent": "cuda-vecdotq-v1"
+      },
+      "dispatch_anchors": [
+        {
+          "frame_id": "frame-current-qwen05b-q4km-tg128",
+          "signatures": [
+            {
+              "kernel_literal": "mul_mat_vec_q<type=12>",
+              "calls": 1548,
+              "grid": 114688,
+              "workgroup": 128,
+              "lds_bytes": 512
+            }
+          ],
+          "total_calls": 1548,
+          "aggregation": "exact_signatures",
+          "selection": "Single exact sealed current-catalog signature.",
+          "evidence_ref": "ev-current-qwen05-profile",
+          "excluded_signatures": []
+        },
+        {
+          "frame_id": "frame-v9-qwen35b-q4km-tg128",
+          "signatures": [],
+          "total_calls": null,
+          "aggregation": "not_applicable",
+          "selection": "No dispatch signature is available or applicable; characterization must precede candidate work.",
+          "evidence_ref": "ev-v9-qwen35b-q4km-profile",
+          "excluded_signatures": []
+        }
+      ],
+      "mechanism": {
+        "facets": {
+          "mechanism": "branchless_scale_min_control_flow",
+          "ops": [
+            "mul_mat_vec_q"
+          ],
+          "files": [
+            "ggml/src/ggml-cuda/vecdotq.cuh"
+          ],
+          "symbols": [
+            "vec_dot_q4_K_q8_1"
+          ],
+          "change_class": "control_flow"
+        },
+        "fingerprint_sha256": "3657b770d508453ee9dfda3bbd9bb4f6535ab11196b6c1759c3771af259aac5b"
+      },
+      "falsifiers": [
+        "Representative correctness differs from frozen v9",
+        "Clean exact-kernel median does not improve",
+        "Whole-model decode improvement is absent or work moves into another family"
+      ],
+      "evidence_refs": [
+        "ev-v9-qwen35b-q4km-profile",
+        "ev-q4k-branchless-dirty-r3",
+        "ev-research-loop-snapshot",
+        "ev-current-qwen05-profile"
+      ],
+      "interactions": [
+        {
+          "with": "akh-v2-q4k-onewave-incumbent",
+          "kind": "causal_overlap",
+          "rationale": "Both modify Q4_K MMVQ and cannot be credited additively."
+        }
+      ],
+      "portability": {
+        "level": "medium",
+        "source_frames": [
+          "frame-current-qwen05b-q4km-tg128",
+          "frame-v9-qwen35b-q4km-tg128"
+        ],
+        "target_frames": [
+          "frame-current-qwen05b-q4km-tg128",
+          "frame-v9-qwen35b-q4km-tg128"
+        ],
+        "constraints": [
+          "Q4_K type-12 route only",
+          "gfx90a batch-one decode"
+        ],
+        "required_validation": [
+          "Clean committed source",
+          "Full correctness suite",
+          "Exact dispatch and paired whole-model replay"
+        ]
+      },
+      "priority": {
+        "rank": 1,
+        "tier": "P0",
+        "device_time_share_pct_range": [
+          3.8994,
+          24.1445
+        ],
+        "rationale": "Only ranked lead with a positive mechanism-specific diagnostic on a large-frame dominant family."
+      },
+      "expected_value": {
+        "metric": "decode_tokens_per_s",
+        "direction": "higher_better",
+        "expected_relative_gain_pct_range": [
+          0.5,
+          3.0
+        ],
+        "device_time_ceiling_pct": 24.1445,
+        "basis": "The 24.1445 percent device-time ceiling is the separate graphs-off 35B Q4_K_M family share. Current type-12 share is 3.899413 percent, so applying the dirty 10.554 percent kernel delta yields only about 0.4115 percent current whole-token Amdahl ceiling; neither establishes graphs-on reward.",
+        "device_time_ceiling_frame_id": "frame-v9-qwen35b-q4km-tg128",
+        "current_bundle_plausible_gain_ceiling_pct": 0.4115
+      },
+      "implementation": {
+        "cost": "low",
+        "risk": "medium",
+        "notes": [
+          "One source file",
+          "Semantics-sensitive scale/min decoding",
+          "Clean commit and full correctness required"
+        ]
+      },
+      "stop_rule": [
+        "Stop on any correctness mismatch",
+        "Retire if clean exact-kernel median is non-positive",
+        "Retire if whole-model paired median is non-positive"
+      ],
+      "current_bundle_eligibility": {
+        "eligible": false,
+        "template_ids": [
+          "cuda-vecdotq-v1"
+        ],
+        "blocking_conditions": [
+          "Current exact type-12 share is 3.8994 percent, so the dirty 10.554 percent kernel delta has only about 0.41 percent whole-token Amdahl ceiling",
+          "Dirty bytes are diagnostic only; clean replay against a sealed base is required"
+        ],
+        "reason": "Source authorability exists, but current-bundle economics and dirty provenance do not justify a planner slot; target the 35B Q4_K_M graphs-on frame."
+      },
+      "record_version": 1,
+      "provenance": {
+        "introduced_at": "2026-08-14T12:00:00Z",
+        "introduced_by": "autokernel-strategy-integrator",
+        "origin": "manual-discovery-flow-formalization",
+        "note": "Initial evidence-bound v2 corpus record.",
+        "supersedes": null
+      },
+      "primary_falsifier": "Representative correctness differs from frozen v9",
+      "regime": {
+        "backend": "hip",
+        "phase": "decode",
+        "batch": 1,
+        "architecture": "gfx90a",
+        "model_or_frame": "frame-v9-qwen35b-q4km-tg128",
+        "quant": "Q4_K_M",
+        "shape": "type12-mmvq",
+        "measurement_graphs": false,
+        "target_runtime_graphs": true
+      },
+      "lifecycle": {
+        "maturity": "dirty_diagnostic",
+        "next_action": "Cleanly author the branchless mechanism against a sealed base, then run exact-kernel correctness and a graphs-on 35B whole-token screen",
+        "candidate_identity": null,
+        "diagnostic_identity": {
+          "binary_diff_sha256": "ec761ac51743cfbad38901eb4cb40faf5a7ad8e561e096d03d002ae1eb0a5eab",
+          "authority": "dirty_mechanism_only_no_candidate_authority"
+        }
+      },
+      "decision_policy": {
+        "metric": "decode_tokens_per_s",
+        "frame_id": "frame-v9-qwen35b-q4km-tg128",
+        "continuation_floor_pct": 0.25,
+        "nomination_floor_pct": 0.5,
+        "required_replications": 2,
+        "sign_policy": "all_positive",
+        "conflict_policy": "retain_inconclusive",
+        "max_distinct_candidates": 1,
+        "terminal_rule": "retire",
+        "effect_unit": "relative_percent",
+        "min_replication_effect_pct": 0.125,
+        "max_replication_spread_pct": 1.0
+      },
+      "epistemic": {
+        "grade": "dirty_diagnostic",
+        "confidence": "medium",
+        "limitations": [
+          "Positive exact-kernel delta came from dirty bytes and is not candidate or replay authority.",
+          "Current-frame whole-token Amdahl ceiling is only about 0.41 percent."
+        ]
+      }
+    },
+    {
+      "hypothesis_id": "akh-v2-q5-type-specific-dequant",
+      "title": "Current Q5_0 type-specific dequant and data reuse",
+      "status": "queued",
+      "statement": "A Q5_0-specific packed-load, scale/unpack, control-flow, or data-reuse mechanism can reduce the current frame type-6 MMVQ band without changing wave count.",
+      "primary_falsifier": "Exact type-6 kernel duration does not improve under correctness-preserving replay",
+      "regime": {
+        "backend": "hip",
+        "phase": "decode",
+        "batch": 1,
+        "architecture": "gfx90a",
+        "model_or_frame": "frame-current-qwen05b-q4km-tg128",
+        "quant": "Q5_0",
+        "shape": "type6-mmvq",
+        "measurement_graphs": false,
+        "target_runtime_graphs": true
+      },
+      "target": {
+        "frame_ids": [
+          "frame-current-qwen05b-q4km-tg128"
+        ],
+        "source_files": [
+          "ggml/src/ggml-cuda/vecdotq.cuh"
+        ],
+        "source_symbols": [
+          "vec_dot_q5_0_q8_1",
+          "vec_dot_q5_0_q8_1_impl"
+        ],
+        "template_intent": "cuda-vecdotq-v1"
+      },
+      "dispatch_anchors": [
+        {
+          "frame_id": "frame-current-qwen05b-q4km-tg128",
+          "signatures": [
+            {
+              "kernel_literal": "mul_mat_vec_q<(ggml_type)6,1,true,true>;grid=57344",
+              "calls": 6063,
+              "grid": 57344,
+              "workgroup": 128,
+              "lds_bytes": 1024
+            },
+            {
+              "kernel_literal": "mul_mat_vec_q<(ggml_type)6,1,true,true>;grid=8192",
+              "calls": 4644,
+              "grid": 8192,
+              "workgroup": 128,
+              "lds_bytes": 1024
+            },
+            {
+              "kernel_literal": "mul_mat_vec_q<(ggml_type)6,1,true,true>;grid=311296",
+              "calls": 3096,
+              "grid": 311296,
+              "workgroup": 128,
+              "lds_bytes": 1024
+            }
+          ],
+          "total_calls": 13803,
+          "aggregation": "exact_signatures",
+          "selection": "The three exact true/true main-path rows are selected; the 129-call false/true tail is explicitly excluded and cannot be silently added.",
+          "evidence_ref": "ev-current-qwen05-profile",
+          "excluded_signatures": [
+            {
+              "kernel_literal": "mul_mat_vec_q<(ggml_type)6,1,false,true>",
+              "calls": 129,
+              "grid": 57344,
+              "workgroup": 128,
+              "lds_bytes": 512
+            }
+          ]
+        }
+      ],
+      "mechanism": {
+        "facets": {
+          "mechanism": "q5_0_type_specific_dequant_or_reuse",
+          "ops": [
+            "mul_mat_vec_q"
+          ],
+          "files": [
+            "ggml/src/ggml-cuda/vecdotq.cuh"
+          ],
+          "symbols": [
+            "vec_dot_q5_0_q8_1",
+            "vec_dot_q5_0_q8_1_impl"
+          ],
+          "change_class": "arithmetic"
+        },
+        "fingerprint_sha256": "de29841bf1a6f628b0b49e14960f1d048eaa6a9718692f1154033f8f8bf9e162"
+      },
+      "falsifiers": [
+        "Exact type-6 kernel duration does not improve under correctness-preserving replay",
+        "Whole-model graphs-on direction is non-positive",
+        "Proposal changes generic wave count or repeats the retired four-wave mechanism"
+      ],
+      "evidence_refs": [
+        "ev-current-qwen05-profile",
+        "ev-source-plan-v1"
+      ],
+      "interactions": [
+        {
+          "with": "akh-v2-q5-onewave-preauthored",
+          "kind": "shared_bottleneck",
+          "rationale": "Both target type-6 MMVQ but this record excludes wave-count changes and remains scientifically distinct."
+        }
+      ],
+      "portability": {
+        "level": "exact_frame",
+        "source_frames": [
+          "frame-current-qwen05b-q4km-tg128"
+        ],
+        "target_frames": [
+          "frame-current-qwen05b-q4km-tg128"
+        ],
+        "constraints": [
+          "Exact Q5_0 type-6 dispatch only",
+          "No generic wave-count mutation"
+        ],
+        "required_validation": [
+          "Representative correctness",
+          "Exact-kernel attribution",
+          "Graphs-on whole-model paired screen"
+        ]
+      },
+      "priority": {
+        "rank": 2,
+        "tier": "P0",
+        "device_time_share_pct_range": [
+          27.42969404468003,
+          27.42969404468003
+        ],
+        "rationale": "Highest-value current-bundle eligible family-specific question."
+      },
+      "expected_value": {
+        "metric": "decode_tokens_per_s",
+        "direction": "higher_better",
+        "expected_relative_gain_pct_range": [
+          0.5,
+          3.0
+        ],
+        "device_time_ceiling_pct": 27.42969404468003,
+        "basis": "The selected three true/true rows total 13,803 calls and 27.429694 percent graphs-off device time. The 129-call false/true tail is an explicit excluded signature; routing and ceiling do not establish graphs-on reward.",
+        "device_time_ceiling_frame_id": "frame-current-qwen05b-q4km-tg128",
+        "current_bundle_plausible_gain_ceiling_pct": 27.42969404468003
+      },
+      "implementation": {
+        "cost": "medium",
+        "risk": "medium",
+        "notes": [
+          "Avoid the four-wave DNR",
+          "Keep changes inside sealed vecdotq authority"
+        ]
+      },
+      "stop_rule": [
+        "Reject generic wave-count changes",
+        "Stop on correctness mismatch",
+        "Retire after the declared candidate budget without exact-kernel and graphs-on whole-model gain"
+      ],
+      "current_bundle_eligibility": {
+        "eligible": true,
+        "template_ids": [
+          "cuda-vecdotq-v1"
+        ],
+        "blocking_conditions": [],
+        "reason": "Exact current route, source symbols, and sealed vecdotq template are available."
+      },
+      "lifecycle": {
+        "maturity": "characterized",
+        "next_action": "Plan the first Q5_0-specific non-wave-count mechanism",
+        "candidate_identity": null,
+        "diagnostic_identity": null
+      },
+      "decision_policy": {
+        "metric": "decode_tokens_per_s",
+        "frame_id": "frame-current-qwen05b-q4km-tg128",
+        "continuation_floor_pct": 0.25,
+        "nomination_floor_pct": 0.5,
+        "required_replications": 2,
+        "sign_policy": "all_positive",
+        "conflict_policy": "retain_inconclusive",
+        "max_distinct_candidates": 3,
+        "terminal_rule": "retire",
+        "effect_unit": "relative_percent",
+        "min_replication_effect_pct": 0.125,
+        "max_replication_spread_pct": 1.0
+      },
+      "epistemic": {
+        "grade": "profile_routing",
+        "confidence": "high",
+        "limitations": [
+          "Graphs-off attribution establishes routing and ceiling only; no candidate reward is claimed."
+        ]
+      },
+      "record_version": 1,
+      "provenance": {
+        "introduced_at": "2026-08-14T12:00:00Z",
+        "introduced_by": "autokernel-strategy-integrator",
+        "origin": "current-frame-profiler-audit",
+        "note": "Added as the highest-value current-bundle scientific question, distinct from one-wave continuation.",
+        "supersedes": null
+      }
+    },
+    {
+      "hypothesis_id": "akh-v2-q5-onewave-preauthored",
+      "title": "Q5_0 one-wave correctness-validated continuation",
+      "status": "queued",
+      "statement": "The sealed eb26918 Q5_0 one-wave candidate has passed targeted and full correctness and must continue directly to attribution and whole-model screening without re-authoring.",
+      "primary_falsifier": "Exact attribution fails to show a positive type-6 kernel delta",
+      "regime": {
+        "backend": "hip",
+        "phase": "decode",
+        "batch": 1,
+        "architecture": "gfx90a",
+        "model_or_frame": "frame-current-qwen05b-q4km-tg128",
+        "quant": "Q5_0",
+        "shape": "type6-mmvq",
+        "measurement_graphs": false,
+        "target_runtime_graphs": true
+      },
+      "target": {
+        "frame_ids": [
+          "frame-current-qwen05b-q4km-tg128"
+        ],
+        "source_files": [
+          "ggml/src/ggml-cuda/mmvq.cu"
+        ],
+        "source_symbols": [
+          "mmvq_parameter_table_id",
+          "get_device_table_id",
+          "calc_nwarps",
+          "calc_rows_per_block"
+        ],
+        "template_intent": "preauthored-candidate-direct-continuation-v1"
+      },
+      "dispatch_anchors": [
+        {
+          "frame_id": "frame-current-qwen05b-q4km-tg128",
+          "signatures": [
+            {
+              "kernel_literal": "mul_mat_vec_q<(ggml_type)6,1,true,true>;grid=57344",
+              "calls": 6063,
+              "grid": 57344,
+              "workgroup": 128,
+              "lds_bytes": 1024
+            },
+            {
+              "kernel_literal": "mul_mat_vec_q<(ggml_type)6,1,true,true>;grid=8192",
+              "calls": 4644,
+              "grid": 8192,
+              "workgroup": 128,
+              "lds_bytes": 1024
+            },
+            {
+              "kernel_literal": "mul_mat_vec_q<(ggml_type)6,1,true,true>;grid=311296",
+              "calls": 3096,
+              "grid": 311296,
+              "workgroup": 128,
+              "lds_bytes": 1024
+            }
+          ],
+          "total_calls": 13803,
+          "aggregation": "exact_signatures",
+          "selection": "The three exact true/true main-path rows are selected; the 129-call false/true tail is explicitly excluded and cannot be silently added.",
+          "evidence_ref": "ev-current-qwen05-profile",
+          "excluded_signatures": [
+            {
+              "kernel_literal": "mul_mat_vec_q<(ggml_type)6,1,false,true>",
+              "calls": 129,
+              "grid": 57344,
+              "workgroup": 128,
+              "lds_bytes": 512
+            }
+          ]
+        }
+      ],
+      "mechanism": {
+        "facets": {
+          "mechanism": "q5_0_one_wave_per_output_block",
+          "ops": [
+            "mul_mat_vec_q"
+          ],
+          "files": [
+            "ggml/src/ggml-cuda/mmvq.cu"
+          ],
+          "symbols": [
+            "mmvq_parameter_table_id",
+            "get_device_table_id",
+            "calc_nwarps",
+            "calc_rows_per_block"
+          ],
+          "change_class": "launch_geometry"
+        },
+        "fingerprint_sha256": "09544955549ee65a6fe6462cbf92315ceb9d6f54fe8c9a0f1d3ce9e7d0a4238e"
+      },
+      "falsifiers": [
+        "Exact attribution fails to show a positive type-6 kernel delta",
+        "Graphs-on whole-model decode direction is non-positive",
+        "A replay does not reproduce the sealed patch bytes against its exact parent"
+      ],
+      "evidence_refs": [
+        "ev-current-qwen05-profile",
+        "ev-q5-onewave-correctness-targeted",
+        "ev-q5-onewave-correctness-full"
+      ],
+      "interactions": [
+        {
+          "with": "akh-v2-q5-type-specific-dequant",
+          "kind": "shared_bottleneck",
+          "rationale": "Both target type-6 MMVQ, but this is a sealed wave-count continuation and must not consume a planner attempt."
+        }
+      ],
+      "portability": {
+        "level": "exact_frame",
+        "source_frames": [
+          "frame-current-qwen05b-q4km-tg128"
+        ],
+        "target_frames": [
+          "frame-current-qwen05b-q4km-tg128"
+        ],
+        "constraints": [
+          "Exact Q5_0 type-6 dispatch only",
+          "No generic wave-count mutation"
+        ],
+        "required_validation": [
+          "Representative correctness",
+          "Exact-kernel attribution",
+          "Graphs-on whole-model paired screen"
+        ]
+      },
+      "priority": {
+        "rank": 3,
+        "tier": "P0",
+        "device_time_share_pct_range": [
+          27.42969404468003,
+          27.42969404468003
+        ],
+        "rationale": "Correctness-validated work is closer to measurement, but planner eligibility would discard its maturity."
+      },
+      "expected_value": {
+        "metric": "decode_tokens_per_s",
+        "direction": "higher_better",
+        "expected_relative_gain_pct_range": [
+          0.5,
+          3.0
+        ],
+        "device_time_ceiling_pct": 27.42969404468003,
+        "basis": "The selected three true/true rows total 13,803 calls and 27.429694 percent graphs-off device time. The 129-call false/true tail is an explicit excluded signature; routing and ceiling do not establish graphs-on reward.",
+        "device_time_ceiling_frame_id": "frame-current-qwen05b-q4km-tg128",
+        "current_bundle_plausible_gain_ceiling_pct": 27.42969404468003
+      },
+      "implementation": {
+        "cost": "medium",
+        "risk": "medium",
+        "notes": [
+          "Avoid the four-wave DNR",
+          "Keep changes inside sealed vecdotq authority"
+        ]
+      },
+      "stop_rule": [
+        "Reject generic wave-count changes",
+        "Stop on correctness mismatch",
+        "Retire after the declared candidate budget without exact-kernel and graphs-on whole-model gain"
+      ],
+      "current_bundle_eligibility": {
+        "eligible": false,
+        "template_ids": [],
+        "blocking_conditions": [
+          "Targeted and full correctness are already complete; re-authoring or replanning is refused because it would repeat correctness work and discard sealed candidate identity",
+          "Controller lacks a sealed preauthored-candidate continuation path",
+          "Current cuda-mmvq-v2 authority does not cover the exact enum/table/geometry symbols touched by the sealed patch"
+        ],
+        "reason": "Continue the exact correctness-validated candidate only through a dedicated sealed continuation carrier; current planner/template authority refuses replanning, re-authoring, repeated correctness, or implied source coverage."
+      },
+      "lifecycle": {
+        "maturity": "correctness_validated",
+        "next_action": "Dispatch exact type-6 attribution, then graphs-on whole-model screen using the sealed candidate; never re-author",
+        "candidate_identity": {
+          "candidate_id": "ak-candidate-q5-onewave-eb26918fa",
+          "source_commit": "eb26918fa82f8aef3ab72f1e3263bd8fecde62e7",
+          "candidate_patch_sha256": "f4cc49cd11cdfd93a2d5d2e00e653f503b6a16ce675bfb12c034fbbfae3e7a77",
+          "authority": "sealed_patch"
+        },
+        "diagnostic_identity": null
+      },
+      "decision_policy": {
+        "metric": "decode_tokens_per_s",
+        "frame_id": "frame-current-qwen05b-q4km-tg128",
+        "continuation_floor_pct": 0.25,
+        "nomination_floor_pct": 0.5,
+        "required_replications": 2,
+        "sign_policy": "all_positive",
+        "conflict_policy": "retain_inconclusive",
+        "max_distinct_candidates": 1,
+        "terminal_rule": "retire",
+        "effect_unit": "relative_percent",
+        "min_replication_effect_pct": 0.125,
+        "max_replication_spread_pct": 1.0
+      },
+      "epistemic": {
+        "grade": "correctness_only",
+        "confidence": "high",
+        "limitations": [
+          "Targeted and full correctness receipts do not contain attribution or throughput evidence.",
+          "Full commit and binary patch identity are repo-resolved provenance, not fields claimed by the correctness receipts."
+        ]
+      },
+      "record_version": 1,
+      "provenance": {
+        "introduced_at": "2026-08-14T12:00:00Z",
+        "introduced_by": "autokernel-strategy-integrator",
+        "origin": "sealed-q5-correctness-receipts",
+        "note": "Preserves the preauthored candidate as direct continuation work rather than a planner question.",
+        "supersedes": null
+      }
+    },
+    {
+      "hypothesis_id": "akh-v2-q8-quantizer-new-mechanism",
+      "title": "New Q8_1 activation-quantizer mechanism",
+      "status": "queued",
+      "statement": "A mechanism other than the retired vec4 rewrite or exact workgroup-128 replay can reduce activation quantization cost across current and large decode frames.",
+      "target": {
+        "frame_ids": [
+          "frame-current-qwen05b-q4km-tg128",
+          "frame-v9-qwen122b-iq2-tg128",
+          "frame-v9-qwen35b-q8-tg128",
+          "frame-v9-qwen35b-q4km-tg128"
+        ],
+        "source_files": [
+          "ggml/src/ggml-cuda/quantize.cu"
+        ],
+        "source_symbols": [
+          "quantize_q8_1"
+        ],
+        "template_intent": "cuda-quantize-q8-v1"
+      },
+      "dispatch_anchors": [
+        {
+          "frame_id": "frame-current-qwen05b-q4km-tg128",
+          "signatures": [
+            {
+              "kernel_literal": "quantize_q8_1;grid=1024",
+              "calls": 15609,
+              "grid": 1024,
+              "workgroup": 256,
+              "lds_bytes": 0
+            },
+            {
+              "kernel_literal": "quantize_q8_1;grid=5120",
+              "calls": 3096,
+              "grid": 5120,
+              "workgroup": 256,
+              "lds_bytes": 0
+            }
+          ],
+          "total_calls": 18705,
+          "aggregation": "exact_signatures",
+          "selection": "All exact sealed current-catalog signatures for this target route.",
+          "evidence_ref": "ev-current-qwen05-profile",
+          "excluded_signatures": []
+        },
+        {
+          "frame_id": "frame-v9-qwen122b-iq2-tg128",
+          "signatures": [],
+          "total_calls": 45021,
+          "aggregation": "family_aggregate",
+          "selection": "Receipt-derived family aggregate; no single grid/geometry is asserted.",
+          "evidence_ref": "ev-v9-qwen122b-iq2-profile",
+          "excluded_signatures": []
+        },
+        {
+          "frame_id": "frame-v9-qwen35b-q8-tg128",
+          "signatures": [],
+          "total_calls": 45279,
+          "aggregation": "family_aggregate",
+          "selection": "Receipt-derived family aggregate; no single grid/geometry is asserted.",
+          "evidence_ref": "ev-v9-qwen35b-q8-profile",
+          "excluded_signatures": []
+        },
+        {
+          "frame_id": "frame-v9-qwen35b-q4km-tg128",
+          "signatures": [],
+          "total_calls": 40119,
+          "aggregation": "family_aggregate",
+          "selection": "Receipt-derived family aggregate; no single grid/geometry is asserted.",
+          "evidence_ref": "ev-v9-qwen35b-q4km-profile",
+          "excluded_signatures": []
+        }
+      ],
+      "mechanism": {
+        "facets": {
+          "mechanism": "q8_1_quantizer_schedule_or_fusion",
+          "ops": [
+            "quantize_q8_1"
+          ],
+          "files": [
+            "ggml/src/ggml-cuda/quantize.cu"
+          ],
+          "symbols": [
+            "quantize_q8_1"
+          ],
+          "change_class": "arithmetic"
+        },
+        "fingerprint_sha256": "c635f1702880b81d7ae462f82b7175d44b101daecd6f19afc7de9d854df32851"
+      },
+      "falsifiers": [
+        "Exact quantizer duration does not improve",
+        "Whole-model replay is flat after attribution",
+        "The proposal reproduces vec4 or workgroup-128 mechanics without a new discriminator"
+      ],
+      "evidence_refs": [
+        "ev-current-qwen05-profile",
+        "ev-v9-qwen122b-iq2-profile",
+        "ev-v9-qwen35b-q8-profile",
+        "ev-v9-qwen35b-q4km-profile",
+        "ev-source-plan-v1"
+      ],
+      "interactions": [
+        {
+          "with": "akh-v2-lowbit-type-specialized-mmvq",
+          "kind": "shared_bottleneck",
+          "rationale": "Quantizer output feeds MMVQ; causal accounting must prevent double credit."
+        }
+      ],
+      "portability": {
+        "level": "high",
+        "source_frames": [
+          "frame-current-qwen05b-q4km-tg128",
+          "frame-v9-qwen122b-iq2-tg128",
+          "frame-v9-qwen35b-q8-tg128",
+          "frame-v9-qwen35b-q4km-tg128"
+        ],
+        "target_frames": [
+          "frame-current-qwen05b-q4km-tg128",
+          "frame-v9-qwen122b-iq2-tg128",
+          "frame-v9-qwen35b-q8-tg128",
+          "frame-v9-qwen35b-q4km-tg128"
+        ],
+        "constraints": [
+          "Preserve Q8_1 numeric contract",
+          "Exclude retired geometry"
+        ],
+        "required_validation": [
+          "New quantize.cu template",
+          "Full MUL_MAT correctness",
+          "Exact quantizer attribution"
+        ]
+      },
+      "priority": {
+        "rank": 4,
+        "tier": "P0",
+        "device_time_share_pct_range": [
+          8.0084,
+          21.2282
+        ],
+        "rationale": "Second-largest consistent measured family, but the two obvious geometry changes failed."
+      },
+      "expected_value": {
+        "metric": "decode_tokens_per_s",
+        "direction": "higher_better",
+        "expected_relative_gain_pct_range": [
+          0.5,
+          4.0
+        ],
+        "device_time_ceiling_pct": 21.2282,
+        "basis": "Measured across four exact frames; expected value excludes retired vec4 and workgroup-128 mechanics.",
+        "device_time_ceiling_frame_id": "frame-current-qwen05b-q4km-tg128",
+        "current_bundle_plausible_gain_ceiling_pct": 21.2282
+      },
+      "implementation": {
+        "cost": "medium",
+        "risk": "medium",
+        "notes": [
+          "New quantize source template",
+          "Numeric reduction contract is load-bearing",
+          "Producer-consumer fusion may need wider authority"
+        ]
+      },
+      "stop_rule": [
+        "Reject any proposal matching the vec4 or workgroup-128 DNR fingerprint",
+        "Stop on any MUL_MAT correctness mismatch",
+        "Retire if exact kernel and whole-model directions disagree after replication"
+      ],
+      "current_bundle_eligibility": {
+        "eligible": true,
+        "template_ids": [
+          "cuda-quantize-q8-v1"
+        ],
+        "blocking_conditions": [],
+        "reason": "Exact current frame, dispatch anchor, and sealed quantize source template are available; retired vec4 and workgroup-128 fingerprints remain hard exclusions."
+      },
+      "record_version": 1,
+      "provenance": {
+        "introduced_at": "2026-08-14T12:00:00Z",
+        "introduced_by": "autokernel-strategy-integrator",
+        "origin": "manual-discovery-flow-formalization",
+        "note": "Initial evidence-bound v2 corpus record.",
+        "supersedes": null
+      },
+      "primary_falsifier": "Exact quantizer duration does not improve",
+      "regime": {
+        "backend": "hip",
+        "phase": "decode",
+        "batch": 1,
+        "architecture": "gfx90a",
+        "model_or_frame": "frame-current-qwen05b-q4km-tg128",
+        "quant": "Q4_K_M",
+        "shape": "q8_1-activation-quantization",
+        "measurement_graphs": false,
+        "target_runtime_graphs": true
+      },
+      "lifecycle": {
+        "maturity": "characterized",
+        "next_action": "Plan one non-vec4, non-workgroup128 quantizer mechanism against the exact current anchor",
+        "candidate_identity": null,
+        "diagnostic_identity": null
+      },
+      "decision_policy": {
+        "metric": "decode_tokens_per_s",
+        "frame_id": "frame-current-qwen05b-q4km-tg128",
+        "continuation_floor_pct": 0.25,
+        "nomination_floor_pct": 0.5,
+        "required_replications": 2,
+        "sign_policy": "all_positive",
+        "conflict_policy": "retain_inconclusive",
+        "max_distinct_candidates": 3,
+        "terminal_rule": "retire",
+        "effect_unit": "relative_percent",
+        "min_replication_effect_pct": 0.125,
+        "max_replication_spread_pct": 1.0
+      },
+      "epistemic": {
+        "grade": "profile_routing",
+        "confidence": "high",
+        "limitations": [
+          "Graphs-off attribution supplies routing and ceiling only.",
+          "Prior failures exclude two exact mechanisms, not the whole quantizer family."
+        ]
+      }
+    },
+    {
+      "hypothesis_id": "akh-v2-lowbit-type-specialized-mmvq",
+      "title": "Large-model type-specialized low-bit MMVQ",
+      "status": "queued",
+      "statement": "Type-specific unpack, lane mapping, or control-flow changes in the exact IQ2/IQ3 MMVQ variants can reduce the dominant 122B decode device-time band without MFMA.",
+      "target": {
+        "frame_ids": [
+          "frame-v9-qwen122b-iq2-tg128"
+        ],
+        "source_files": [
+          "ggml/src/ggml-cuda/vecdotq.cuh"
+        ],
+        "source_symbols": [
+          "vec_dot_iq2_xxs_q8_1",
+          "vec_dot_iq3_xxs_q8_1"
+        ],
+        "template_intent": "cuda-vecdotq-v1"
+      },
+      "dispatch_anchors": [
+        {
+          "frame_id": "frame-v9-qwen122b-iq2-tg128",
+          "signatures": [],
+          "total_calls": 66693,
+          "aggregation": "family_aggregate",
+          "selection": "Receipt-derived family aggregate; no single grid/geometry is asserted.",
+          "evidence_ref": "ev-v9-qwen122b-iq2-profile",
+          "excluded_signatures": []
+        }
+      ],
+      "mechanism": {
+        "facets": {
+          "mechanism": "type_specialized_lowbit_unpack",
+          "ops": [
+            "mul_mat_vec_q"
+          ],
+          "files": [
+            "ggml/src/ggml-cuda/vecdotq.cuh"
+          ],
+          "symbols": [
+            "vec_dot_iq2_xxs_q8_1",
+            "vec_dot_iq3_xxs_q8_1"
+          ],
+          "change_class": "algorithm"
+        },
+        "fingerprint_sha256": "b1d7258a16211eadcf17ec2b0615322da9d26bcba0479c89ddefa54ad64bfa55"
+      },
+      "falsifiers": [
+        "Target type dispatch is absent from the production-representative frame",
+        "ISA attribution finds no removable type-specific work",
+        "Exact-kernel gain fails to survive whole-model replay"
+      ],
+      "evidence_refs": [
+        "ev-v9-qwen122b-iq2-profile",
+        "ev-v9-qwen35b-q8-profile",
+        "ev-v9-qwen35b-q4km-profile",
+        "ev-research-loop-snapshot"
+      ],
+      "interactions": [
+        {
+          "with": "akh-v2-q8-quantizer-new-mechanism",
+          "kind": "shared_bottleneck",
+          "rationale": "MMVQ consumes Q8_1 activations, so pipeline gains and costs may shift between families."
+        }
+      ],
+      "portability": {
+        "level": "low",
+        "source_frames": [
+          "frame-v9-qwen122b-iq2-tg128"
+        ],
+        "target_frames": [
+          "frame-v9-qwen122b-iq2-tg128"
+        ],
+        "constraints": [
+          "Exact quant type and shape",
+          "No generic MFMA premise"
+        ],
+        "required_validation": [
+          "Type-residency trace",
+          "Per-type correctness",
+          "Per-kernel and whole-model paired replay"
+        ]
+      },
+      "priority": {
+        "rank": 5,
+        "tier": "P0",
+        "device_time_share_pct_range": [
+          42.376,
+          59.9524
+        ],
+        "rationale": "MMVQ is the largest measured device-time family in every large-model frame."
+      },
+      "expected_value": {
+        "metric": "decode_tokens_per_s",
+        "direction": "higher_better",
+        "expected_relative_gain_pct_range": [
+          1.0,
+          8.0
+        ],
+        "device_time_ceiling_pct": 59.9524,
+        "basis": "Large measured family ceiling with no assumed generic-prefetch or MFMA gain.",
+        "device_time_ceiling_frame_id": "frame-v9-qwen122b-iq2-tg128",
+        "current_bundle_plausible_gain_ceiling_pct": null
+      },
+      "implementation": {
+        "cost": "medium",
+        "risk": "high",
+        "notes": [
+          "Quant-type-specific implementation",
+          "Requires exact type residency and ISA attribution",
+          "Must not pool distinct quant mechanisms"
+        ]
+      },
+      "stop_rule": [
+        "Stop if exact target type is not resident",
+        "Stop if attribution finds no removable type-specific work",
+        "Retire a patch whose exact-kernel gain does not reach whole-model decode"
+      ],
+      "current_bundle_eligibility": {
+        "eligible": false,
+        "template_ids": [
+          "cuda-vecdotq-v1"
+        ],
+        "blocking_conditions": [
+          "The current Q4_K_M proxy does not dispatch the target IQ2/IQ3 types"
+        ],
+        "reason": "The source template exists, but the current workload cannot falsify the large-model type hypothesis."
+      },
+      "record_version": 1,
+      "provenance": {
+        "introduced_at": "2026-08-14T12:00:00Z",
+        "introduced_by": "autokernel-strategy-integrator",
+        "origin": "manual-discovery-flow-formalization",
+        "note": "Initial evidence-bound v2 corpus record.",
+        "supersedes": null
+      },
+      "primary_falsifier": "Target type dispatch is absent from the production-representative frame",
+      "regime": {
+        "backend": "hip",
+        "phase": "decode",
+        "batch": 1,
+        "architecture": "gfx90a",
+        "model_or_frame": "frame-v9-qwen122b-iq2-tg128",
+        "quant": "IQ2_M",
+        "shape": "lowbit-type-specific-mmvq",
+        "measurement_graphs": false,
+        "target_runtime_graphs": true
+      },
+      "lifecycle": {
+        "maturity": "characterized",
+        "next_action": "Capture exact IQ2/IQ3 dispatch literals and authorize a representative large-model discovery bundle",
+        "candidate_identity": null,
+        "diagnostic_identity": null
+      },
+      "decision_policy": {
+        "metric": "decode_tokens_per_s",
+        "frame_id": "frame-v9-qwen122b-iq2-tg128",
+        "continuation_floor_pct": 0.5,
+        "nomination_floor_pct": 1,
+        "required_replications": 2,
+        "sign_policy": "all_positive",
+        "conflict_policy": "retain_inconclusive",
+        "max_distinct_candidates": 3,
+        "terminal_rule": "retire",
+        "effect_unit": "relative_percent",
+        "min_replication_effect_pct": 0.25,
+        "max_replication_spread_pct": 1.0
+      },
+      "epistemic": {
+        "grade": "profile_routing",
+        "confidence": "medium",
+        "limitations": [
+          "Family aggregate does not isolate the proposed IQ2/IQ3 implementation.",
+          "No current-bundle route exercises the target quant types."
+        ]
+      }
+    },
+    {
+      "hypothesis_id": "akh-v2-fa-gqa7-pair-tail",
+      "title": "Odd-GQA paired-head attention main path",
+      "status": "queued",
+      "statement": "For the exact D64 GQA7 decode shape, pairing six query heads and handling one scalar tail reduces attention launch or memory overhead without changing output layout.",
+      "target": {
+        "frame_ids": [
+          "frame-current-qwen05b-q4km-tg128"
+        ],
+        "source_files": [
+          "ggml/src/ggml-cuda/fattn-tile.cuh"
+        ],
+        "source_symbols": [
+          "launch_fattn_tile_switch_ncols2"
+        ],
+        "template_intent": "cuda-fattn-tile-v1"
+      },
+      "dispatch_anchors": [
+        {
+          "frame_id": "frame-current-qwen05b-q4km-tg128",
+          "signatures": [
+            {
+              "kernel_literal": "flash_attn_tile<64,64,2,1>",
+              "calls": 3096,
+              "grid": 7168,
+              "workgroup": 64,
+              "lds_bytes": 5120
+            }
+          ],
+          "total_calls": 3096,
+          "aggregation": "exact_signatures",
+          "selection": "Single exact sealed current-catalog signature.",
+          "evidence_ref": "ev-current-qwen05-profile",
+          "excluded_signatures": []
+        }
+      ],
+      "mechanism": {
+        "facets": {
+          "mechanism": "odd_gqa_paired_head_main_scalar_tail",
+          "ops": [
+            "flash_attn"
+          ],
+          "files": [
+            "ggml/src/ggml-cuda/fattn-tile.cuh"
+          ],
+          "symbols": [
+            "launch_fattn_tile_switch_ncols2"
+          ],
+          "change_class": "dispatcher"
+        },
+        "fingerprint_sha256": "43a0ad2e8c0583bdc3fa35259def6ffed89e102890f0f05c1af186f608587b49"
+      },
+      "falsifiers": [
+        "Dedicated correctness fails any GQA7 shape",
+        "Dispatch count or device duration does not fall",
+        "Large-model target shapes do not contain the exact D64 GQA7 route"
+      ],
+      "evidence_refs": [
+        "ev-source-plan-v1",
+        "ev-current-qwen05-profile",
+        "ev-v9-qwen122b-iq2-profile",
+        "ev-v9-qwen35b-q8-profile",
+        "ev-v9-qwen35b-q4km-profile"
+      ],
+      "interactions": [
+        {
+          "with": "akh-v2-rope64-incumbent",
+          "kind": "shared_bottleneck",
+          "rationale": "Both are shape-specific launch-band changes on the current small-model frame."
+        }
+      ],
+      "portability": {
+        "level": "exact_frame",
+        "source_frames": [
+          "frame-current-qwen05b-q4km-tg128"
+        ],
+        "target_frames": [
+          "frame-current-qwen05b-q4km-tg128"
+        ],
+        "constraints": [
+          "D64",
+          "GQA ratio seven",
+          "single-token decode"
+        ],
+        "required_validation": [
+          "Dedicated odd-GQA correctness harness",
+          "Exact TILE dispatch proof",
+          "Large-frame shape inventory before transfer"
+        ]
+      },
+      "priority": {
+        "rank": 6,
+        "tier": "P1",
+        "device_time_share_pct_range": [
+          3.1458,
+          8.5364
+        ],
+        "rationale": "Attention has high per-call latency, but source-plan selector variants were sign-conflicted."
+      },
+      "expected_value": {
+        "metric": "decode_tokens_per_s",
+        "direction": "higher_better",
+        "expected_relative_gain_pct_range": [
+          0.5,
+          2.0
+        ],
+        "device_time_ceiling_pct": 8.5364,
+        "basis": "Current exact TILE share; large-model attention family ceilings are lower and not assumed transferable.",
+        "device_time_ceiling_frame_id": "frame-current-qwen05b-q4km-tg128",
+        "current_bundle_plausible_gain_ceiling_pct": 8.5364
+      },
+      "implementation": {
+        "cost": "high",
+        "risk": "high",
+        "notes": [
+          "Grid and output indexing change",
+          "Dedicated odd-GQA correctness required",
+          "Exact-frame specialization"
+        ]
+      },
+      "stop_rule": [
+        "Stop on any GQA7 correctness mismatch",
+        "Stop if paired-head dispatch is not exact",
+        "Retire if candidate does not reduce attention device time and whole decode"
+      ],
+      "current_bundle_eligibility": {
+        "eligible": true,
+        "template_ids": [
+          "cuda-fattn-tile-v1"
+        ],
+        "blocking_conditions": [],
+        "reason": "Exact D64/GQA7 current route and sealed fattn-tile source bounds are available; correctness remains a mandatory falsifier."
+      },
+      "record_version": 1,
+      "provenance": {
+        "introduced_at": "2026-08-14T12:00:00Z",
+        "introduced_by": "autokernel-strategy-integrator",
+        "origin": "manual-discovery-flow-formalization",
+        "note": "Initial evidence-bound v2 corpus record.",
+        "supersedes": null
+      },
+      "primary_falsifier": "Dedicated correctness fails any GQA7 shape",
+      "regime": {
+        "backend": "hip",
+        "phase": "decode",
+        "batch": 1,
+        "architecture": "gfx90a",
+        "model_or_frame": "frame-current-qwen05b-q4km-tg128",
+        "quant": "Q4_K_M",
+        "shape": "D64-Q1-GQA7",
+        "measurement_graphs": false,
+        "target_runtime_graphs": true
+      },
+      "lifecycle": {
+        "maturity": "characterized",
+        "next_action": "Author paired-head main plus scalar-tail logic and run exact GQA7 correctness before timing",
+        "candidate_identity": null,
+        "diagnostic_identity": null
+      },
+      "decision_policy": {
+        "metric": "decode_tokens_per_s",
+        "frame_id": "frame-current-qwen05b-q4km-tg128",
+        "continuation_floor_pct": 0.25,
+        "nomination_floor_pct": 0.5,
+        "required_replications": 2,
+        "sign_policy": "all_positive",
+        "conflict_policy": "retain_inconclusive",
+        "max_distinct_candidates": 2,
+        "terminal_rule": "retire",
+        "effect_unit": "relative_percent",
+        "min_replication_effect_pct": 0.125,
+        "max_replication_spread_pct": 1.0
+      },
+      "epistemic": {
+        "grade": "profile_routing",
+        "confidence": "medium",
+        "limitations": [
+          "Graphs-off attribution establishes route and ceiling, not graphs-on reward.",
+          "The paired-head mechanism has not passed correctness."
+        ]
+      }
+    },
+    {
+      "hypothesis_id": "akh-v2-rms-direct-load-reduction",
+      "title": "Direct RMS arithmetic-preserving load and reduction",
+      "status": "queued",
+      "statement": "An arithmetic-preserving load, reduction, or synchronization change can reduce the exact current RMSNorm band without changing to the retired two-wave geometry.",
+      "primary_falsifier": "Exact RMSNorm duration does not improve while arithmetic and launch geometry remain unchanged",
+      "regime": {
+        "backend": "hip",
+        "phase": "decode",
+        "batch": 1,
+        "architecture": "gfx90a",
+        "model_or_frame": "frame-current-qwen05b-q4km-tg128",
+        "quant": "Q4_K_M",
+        "shape": "D896-rmsnorm",
+        "measurement_graphs": false,
+        "target_runtime_graphs": true
+      },
+      "target": {
+        "frame_ids": [
+          "frame-current-qwen05b-q4km-tg128"
+        ],
+        "source_files": [
+          "ggml/src/ggml-cuda/norm.cu"
+        ],
+        "source_symbols": [
+          "rms_norm_f32"
+        ],
+        "template_intent": "cuda-norm-v2"
+      },
+      "dispatch_anchors": [
+        {
+          "frame_id": "frame-current-qwen05b-q4km-tg128",
+          "signatures": [
+            {
+              "kernel_literal": "rms_norm",
+              "calls": 6321,
+              "grid": 256,
+              "workgroup": 256,
+              "lds_bytes": 512
+            }
+          ],
+          "total_calls": 6321,
+          "aggregation": "exact_signatures",
+          "selection": "Single exact sealed current-catalog signature.",
+          "evidence_ref": "ev-current-qwen05-profile",
+          "excluded_signatures": []
+        }
+      ],
+      "mechanism": {
+        "facets": {
+          "mechanism": "rms_arithmetic_preserving_load_reduction",
+          "ops": [
+            "rms_norm"
+          ],
+          "files": [
+            "ggml/src/ggml-cuda/norm.cu"
+          ],
+          "symbols": [
+            "rms_norm_f32"
+          ],
+          "change_class": "arithmetic"
+        },
+        "fingerprint_sha256": "897204040e0953111eb33ae333f2d676796e8a87c04f2a0a183c2dea24633388"
+      },
+      "falsifiers": [
+        "Exact RMSNorm duration does not improve while arithmetic and launch geometry remain unchanged",
+        "Representative correctness differs from frozen v9",
+        "Graphs-on whole-model direction is non-positive"
+      ],
+      "evidence_refs": [
+        "ev-current-qwen05-profile",
+        "ev-source-plan-v1"
+      ],
+      "interactions": [
+        {
+          "with": "akh-v2-rms-mul-rope-fusion",
+          "kind": "shared_bottleneck",
+          "rationale": "Direct RMS work must be measured before attributing any larger cross-op fusion benefit."
+        }
+      ],
+      "portability": {
+        "level": "exact_frame",
+        "source_frames": [
+          "frame-current-qwen05b-q4km-tg128"
+        ],
+        "target_frames": [
+          "frame-current-qwen05b-q4km-tg128"
+        ],
+        "constraints": [
+          "Arithmetic-preserving change only",
+          "Must not use the retired two-wave geometry"
+        ],
+        "required_validation": [
+          "Representative correctness",
+          "Exact RMS attribution",
+          "Graphs-on whole-model screen"
+        ]
+      },
+      "priority": {
+        "rank": 7,
+        "tier": "P1",
+        "device_time_share_pct_range": [
+          10.7349496,
+          10.7349496
+        ],
+        "rationale": "Material current exact band with a distinct mechanism from the retired wave-count attempt."
+      },
+      "expected_value": {
+        "metric": "decode_tokens_per_s",
+        "direction": "higher_better",
+        "expected_relative_gain_pct_range": [
+          0.25,
+          1.5
+        ],
+        "device_time_ceiling_pct": 10.7349496,
+        "basis": "Exact current graphs-off routing share; excludes fusion and geometry-change credit.",
+        "device_time_ceiling_frame_id": "frame-current-qwen05b-q4km-tg128",
+        "current_bundle_plausible_gain_ceiling_pct": 10.7349496
+      },
+      "implementation": {
+        "cost": "medium",
+        "risk": "medium",
+        "notes": [
+          "Preserve operation ordering and arithmetic",
+          "Hard-exclude dnr-rms-two-wave"
+        ]
+      },
+      "stop_rule": [
+        "Reject any wave-count change matching dnr-rms-two-wave",
+        "Stop on correctness mismatch",
+        "Retire after the declared candidate budget without exact and whole-model gain"
+      ],
+      "current_bundle_eligibility": {
+        "eligible": true,
+        "template_ids": [
+          "cuda-norm-v2"
+        ],
+        "blocking_conditions": [],
+        "reason": "Exact current route and sealed norm source template are available; the retired two-wave mechanism remains excluded."
+      },
+      "lifecycle": {
+        "maturity": "characterized",
+        "next_action": "Plan one arithmetic-preserving load/reduction mechanism under cuda-norm-v2",
+        "candidate_identity": null,
+        "diagnostic_identity": null
+      },
+      "decision_policy": {
+        "metric": "decode_tokens_per_s",
+        "frame_id": "frame-current-qwen05b-q4km-tg128",
+        "continuation_floor_pct": 0.2,
+        "nomination_floor_pct": 0.4,
+        "required_replications": 2,
+        "sign_policy": "all_positive",
+        "conflict_policy": "retain_inconclusive",
+        "max_distinct_candidates": 2,
+        "terminal_rule": "retire",
+        "effect_unit": "relative_percent",
+        "min_replication_effect_pct": 0.1,
+        "max_replication_spread_pct": 1.0
+      },
+      "epistemic": {
+        "grade": "profile_routing",
+        "confidence": "high",
+        "limitations": [
+          "Graphs-off attribution supplies routing and ceiling only.",
+          "No direct load/reduction candidate has been measured."
+        ]
+      },
+      "record_version": 1,
+      "provenance": {
+        "introduced_at": "2026-08-14T12:00:00Z",
+        "introduced_by": "autokernel-strategy-integrator",
+        "origin": "current-frame-profiler-audit",
+        "note": "Separates direct RMS arithmetic work from high-risk cross-op fusion and retired wave-count changes.",
+        "supersedes": null
+      }
+    },
+    {
+      "hypothesis_id": "akh-v2-moe-gather-layout",
+      "title": "MoE gather and shared-expert layout",
+      "status": "needs-template",
+      "statement": "Production routing skew leaves avoidable gather or shared-expert gate movement that can be removed without reimplementing the already-fused top-k path.",
+      "target": {
+        "frame_ids": [
+          "frame-v9-qwen122b-iq2-tg128",
+          "frame-v9-qwen35b-q8-tg128",
+          "frame-v9-qwen35b-q4km-tg128"
+        ],
+        "source_files": [
+          "ggml/src/ggml-cuda/getrows.cu"
+        ],
+        "source_symbols": [
+          "get_rows"
+        ],
+        "template_intent": "cuda-getrows-or-setrows-v2"
+      },
+      "dispatch_anchors": [
+        {
+          "frame_id": "frame-v9-qwen122b-iq2-tg128",
+          "signatures": [],
+          "total_calls": 9417,
+          "aggregation": "family_aggregate",
+          "selection": "Exact literal count is receipt-derived but grid/workgroup/LDS geometry is not bound: get_rows",
+          "evidence_ref": "ev-v9-qwen122b-iq2-profile",
+          "excluded_signatures": []
+        },
+        {
+          "frame_id": "frame-v9-qwen35b-q8-tg128",
+          "signatures": [],
+          "total_calls": 7875,
+          "aggregation": "family_aggregate",
+          "selection": "Exact literal count is receipt-derived but grid/workgroup/LDS geometry is not bound: get_rows",
+          "evidence_ref": "ev-v9-qwen35b-q8-profile",
+          "excluded_signatures": []
+        },
+        {
+          "frame_id": "frame-v9-qwen35b-q4km-tg128",
+          "signatures": [],
+          "total_calls": 7875,
+          "aggregation": "family_aggregate",
+          "selection": "Exact literal count is receipt-derived but grid/workgroup/LDS geometry is not bound: get_rows",
+          "evidence_ref": "ev-v9-qwen35b-q4km-profile",
+          "excluded_signatures": []
+        }
+      ],
+      "mechanism": {
+        "facets": {
+          "mechanism": "moe_gather_layout_elimination",
+          "ops": [
+            "get_rows",
+            "mul_mat_vec_q_moe"
+          ],
+          "files": [
+            "ggml/src/ggml-cuda/getrows.cu"
+          ],
+          "symbols": [
+            "get_rows"
+          ],
+          "change_class": "layout"
+        },
+        "fingerprint_sha256": "bdfc10594fe5eea37b073871ecee11170f3a5eee4d32fcec9112bafde4cb9503"
+      },
+      "falsifiers": [
+        "Expert-token histogram shows no actionable routing skew",
+        "Exact route is already the optimized shared-expert path",
+        "Gather improvement moves equal or greater cost into copies or MMVQ"
+      ],
+      "evidence_refs": [
+        "ev-v9-qwen122b-iq2-profile",
+        "ev-v9-qwen35b-q8-profile",
+        "ev-v9-qwen35b-q4km-profile",
+        "ev-research-loop-snapshot"
+      ],
+      "interactions": [
+        {
+          "with": "akh-v2-copy-layout-elimination",
+          "kind": "causal_overlap",
+          "rationale": "A gather-layout change may eliminate operations currently classified as copy."
+        }
+      ],
+      "portability": {
+        "level": "medium",
+        "source_frames": [
+          "frame-v9-qwen122b-iq2-tg128",
+          "frame-v9-qwen35b-q8-tg128",
+          "frame-v9-qwen35b-q4km-tg128"
+        ],
+        "target_frames": [
+          "frame-v9-qwen122b-iq2-tg128",
+          "frame-v9-qwen35b-q8-tg128",
+          "frame-v9-qwen35b-q4km-tg128"
+        ],
+        "constraints": [
+          "Routing-skew dependent",
+          "Top-k prior art already present"
+        ],
+        "required_validation": [
+          "Expert-token histogram",
+          "Exact get_rows and shared-expert route proof",
+          "New gather template"
+        ]
+      },
+      "priority": {
+        "rank": 8,
+        "tier": "P1",
+        "device_time_share_pct_range": [
+          5.9512,
+          8.494
+        ],
+        "rationale": "Top-k plus get_rows is a material large-model band, but only gather/layout remains novel."
+      },
+      "expected_value": {
+        "metric": "decode_tokens_per_s",
+        "direction": "higher_better",
+        "expected_relative_gain_pct_range": [
+          0.5,
+          3.0
+        ],
+        "device_time_ceiling_pct": 8.494,
+        "basis": "Combined measured router and gather ceiling; top-k is excluded from novel implementation credit.",
+        "device_time_ceiling_frame_id": "frame-v9-qwen35b-q4km-tg128",
+        "current_bundle_plausible_gain_ceiling_pct": null
+      },
+      "implementation": {
+        "cost": "high",
+        "risk": "high",
+        "notes": [
+          "Needs routing histogram before source",
+          "Layout can move cost into copy or MMVQ",
+          "Upstream transpose-free result is transfer prior only"
+        ]
+      },
+      "stop_rule": [
+        "Stop before source work if routing histogram shows no actionable skew",
+        "Reject generic top-k reimplementation",
+        "Retire if gather savings are offset elsewhere in the pipeline"
+      ],
+      "current_bundle_eligibility": {
+        "eligible": false,
+        "template_ids": [],
+        "blocking_conditions": [
+          "Current proxy is not a representative MoE routing frame",
+          "No sealed gather template exists"
+        ],
+        "reason": "Requires a large-model frame and write-side routing characterization first."
+      },
+      "record_version": 1,
+      "provenance": {
+        "introduced_at": "2026-08-14T12:00:00Z",
+        "introduced_by": "autokernel-strategy-integrator",
+        "origin": "manual-discovery-flow-formalization",
+        "note": "Initial evidence-bound v2 corpus record.",
+        "supersedes": null
+      },
+      "primary_falsifier": "Expert-token histogram shows no actionable routing skew",
+      "regime": {
+        "backend": "hip",
+        "phase": "decode",
+        "batch": 1,
+        "architecture": "gfx90a",
+        "model_or_frame": "large-model-moe-frames",
+        "quant": "mixed",
+        "shape": "moe-gather-routing",
+        "measurement_graphs": false,
+        "target_runtime_graphs": true
+      },
+      "lifecycle": {
+        "maturity": "design_prior",
+        "next_action": "Capture an evidence-bound expert-token histogram before authoring source",
+        "candidate_identity": null,
+        "diagnostic_identity": null
+      },
+      "decision_policy": {
+        "metric": "decode_tokens_per_s",
+        "frame_id": "frame-v9-qwen122b-iq2-tg128",
+        "continuation_floor_pct": 0.5,
+        "nomination_floor_pct": 1,
+        "required_replications": 2,
+        "sign_policy": "all_positive",
+        "conflict_policy": "retain_inconclusive",
+        "max_distinct_candidates": 2,
+        "terminal_rule": "retire",
+        "effect_unit": "relative_percent",
+        "min_replication_effect_pct": 0.25,
+        "max_replication_spread_pct": 1.0
+      },
+      "epistemic": {
+        "grade": "design_prior",
+        "confidence": "low",
+        "limitations": [
+          "Top-k and get_rows are derived subfamilies of other and routing skew is not captured.",
+          "Current bundle is not a representative MoE frame."
+        ]
+      }
+    },
+    {
+      "hypothesis_id": "akh-v2-rms-mul-rope-fusion",
+      "title": "Decode RMS/MUL/RoPE cross-op fusion",
+      "status": "needs-template",
+      "statement": "A source-verified fusible adjacency can remove launches or memory traffic across RMSNorm and neighboring elementwise/RoPE work without repeating the retired RMS wave-count change.",
+      "target": {
+        "frame_ids": [
+          "frame-current-qwen05b-q4km-tg128",
+          "frame-v9-qwen122b-iq2-tg128",
+          "frame-v9-qwen35b-q8-tg128",
+          "frame-v9-qwen35b-q4km-tg128"
+        ],
+        "source_files": [
+          "ggml/src/ggml-cuda/norm.cu",
+          "ggml/src/ggml-cuda/rope.cu"
+        ],
+        "source_symbols": [
+          "ggml_cuda_op_rms_norm",
+          "ggml_cuda_op_rope_impl"
+        ],
+        "template_intent": "cross-op-fusion-v2"
+      },
+      "dispatch_anchors": [
+        {
+          "frame_id": "frame-current-qwen05b-q4km-tg128",
+          "signatures": [],
+          "total_calls": 6321,
+          "aggregation": "family_aggregate",
+          "selection": "Receipt-derived family aggregate; no single grid/geometry is asserted.",
+          "evidence_ref": "ev-current-qwen05-profile",
+          "excluded_signatures": []
+        },
+        {
+          "frame_id": "frame-v9-qwen122b-iq2-tg128",
+          "signatures": [],
+          "total_calls": 20253,
+          "aggregation": "family_aggregate",
+          "selection": "Receipt-derived family aggregate; no single grid/geometry is asserted.",
+          "evidence_ref": "ev-v9-qwen122b-iq2-profile",
+          "excluded_signatures": []
+        },
+        {
+          "frame_id": "frame-v9-qwen35b-q8-tg128",
+          "signatures": [],
+          "total_calls": 16899,
+          "aggregation": "family_aggregate",
+          "selection": "Receipt-derived family aggregate; no single grid/geometry is asserted.",
+          "evidence_ref": "ev-v9-qwen35b-q8-profile",
+          "excluded_signatures": []
+        },
+        {
+          "frame_id": "frame-v9-qwen35b-q4km-tg128",
+          "signatures": [],
+          "total_calls": 16899,
+          "aggregation": "family_aggregate",
+          "selection": "Receipt-derived family aggregate; no single grid/geometry is asserted.",
+          "evidence_ref": "ev-v9-qwen35b-q4km-profile",
+          "excluded_signatures": []
+        }
+      ],
+      "mechanism": {
+        "facets": {
+          "mechanism": "rms_mul_rope_cross_op_fusion",
+          "ops": [
+            "rms_norm",
+            "mul",
+            "rope"
+          ],
+          "files": [
+            "ggml/src/ggml-cuda/norm.cu",
+            "ggml/src/ggml-cuda/rope.cu"
+          ],
+          "symbols": [
+            "ggml_cuda_op_rms_norm",
+            "ggml_cuda_op_rope_impl"
+          ],
+          "change_class": "fusion"
+        },
+        "fingerprint_sha256": "b1f92517f307c1ec62bc812d66fa80769e6b75c1bcbf6ce4933e246df4205c7e"
+      },
+      "falsifiers": [
+        "Current decode graph has no exact fusible adjacency",
+        "Fusion raises register or synchronization cost beyond removed traffic",
+        "Whole-model improvement is absent"
+      ],
+      "evidence_refs": [
+        "ev-current-qwen05-profile",
+        "ev-v9-qwen122b-iq2-profile",
+        "ev-v9-qwen35b-q8-profile",
+        "ev-v9-qwen35b-q4km-profile",
+        "ev-research-loop-snapshot"
+      ],
+      "interactions": [
+        {
+          "with": "akh-v2-rope64-incumbent",
+          "kind": "subsumes",
+          "rationale": "A fused path may replace the standalone RoPE launch geometry rather than compose with it."
+        }
+      ],
+      "portability": {
+        "level": "medium",
+        "source_frames": [
+          "frame-current-qwen05b-q4km-tg128",
+          "frame-v9-qwen122b-iq2-tg128",
+          "frame-v9-qwen35b-q8-tg128",
+          "frame-v9-qwen35b-q4km-tg128"
+        ],
+        "target_frames": [
+          "frame-current-qwen05b-q4km-tg128",
+          "frame-v9-qwen122b-iq2-tg128",
+          "frame-v9-qwen35b-q8-tg128",
+          "frame-v9-qwen35b-q4km-tg128"
+        ],
+        "constraints": [
+          "Decode-only adjacency",
+          "Do not infer from closed B64/B128 G15 cluster"
+        ],
+        "required_validation": [
+          "Graph adjacency receipt",
+          "Multi-file template or generated fused-kernel authority",
+          "Component and whole-model attribution"
+        ]
+      },
+      "priority": {
+        "rank": 9,
+        "tier": "P1",
+        "device_time_share_pct_range": [
+          4.3655,
+          10.735
+        ],
+        "rationale": "RMSNorm is material, but direct wave tuning failed and fusion depends on graph structure."
+      },
+      "expected_value": {
+        "metric": "decode_tokens_per_s",
+        "direction": "higher_better",
+        "expected_relative_gain_pct_range": [
+          0.5,
+          2.0
+        ],
+        "device_time_ceiling_pct": 10.735,
+        "basis": "RMS family ceiling only; neighboring work is not added until adjacency is proved.",
+        "device_time_ceiling_frame_id": "frame-current-qwen05b-q4km-tg128",
+        "current_bundle_plausible_gain_ceiling_pct": 10.735
+      },
+      "implementation": {
+        "cost": "high",
+        "risk": "high",
+        "notes": [
+          "Cross-file and cross-op semantics",
+          "Requires graph adjacency authority",
+          "Must not inherit stale G15 43-percent premise"
+        ]
+      },
+      "stop_rule": [
+        "Stop if exact graph adjacency is absent",
+        "Stop if fusion increases register or synchronization cost beyond removed traffic",
+        "Retire if component movement yields no whole-model gain"
+      ],
+      "current_bundle_eligibility": {
+        "eligible": false,
+        "template_ids": [],
+        "blocking_conditions": [
+          "Current templates are one-file and cannot authorize cross-file fusion",
+          "Exact fusible adjacency is not yet bound"
+        ],
+        "reason": "Needs a new template and source-graph proof before planning a patch."
+      },
+      "record_version": 1,
+      "provenance": {
+        "introduced_at": "2026-08-14T12:00:00Z",
+        "introduced_by": "autokernel-strategy-integrator",
+        "origin": "manual-discovery-flow-formalization",
+        "note": "Initial evidence-bound v2 corpus record.",
+        "supersedes": null
+      },
+      "primary_falsifier": "Current decode graph has no exact fusible adjacency",
+      "regime": {
+        "backend": "hip",
+        "phase": "decode",
+        "batch": 1,
+        "architecture": "gfx90a",
+        "model_or_frame": "multi-frame-v9",
+        "quant": "mixed",
+        "shape": "rms-mul-rope-adjacency",
+        "measurement_graphs": false,
+        "target_runtime_graphs": true
+      },
+      "lifecycle": {
+        "maturity": "design_prior",
+        "next_action": "Prove exact graph adjacency and bounded cross-file source authority before candidate authoring",
+        "candidate_identity": null,
+        "diagnostic_identity": null
+      },
+      "decision_policy": {
+        "metric": "decode_tokens_per_s",
+        "frame_id": "frame-current-qwen05b-q4km-tg128",
+        "continuation_floor_pct": 0.5,
+        "nomination_floor_pct": 1,
+        "required_replications": 2,
+        "sign_policy": "all_positive",
+        "conflict_policy": "retain_inconclusive",
+        "max_distinct_candidates": 2,
+        "terminal_rule": "retire",
+        "effect_unit": "relative_percent",
+        "min_replication_effect_pct": 0.25,
+        "max_replication_spread_pct": 1.0
+      },
+      "epistemic": {
+        "grade": "design_prior",
+        "confidence": "low",
+        "limitations": [
+          "No exact fusible adjacency is evidence-bound.",
+          "RMS device-time share is not a fusion ceiling until neighboring work is proved."
+        ]
+      }
+    },
+    {
+      "hypothesis_id": "akh-v2-rope64-incumbent",
+      "title": "RoPE workgroup-64 incumbent",
+      "status": "candidate_incumbent",
+      "statement": "The current D128 NEOX RoPE proxy benefits when inactive waves are removed by reducing workgroup size from 256 to 64.",
+      "target": {
+        "frame_ids": [
+          "frame-current-qwen05b-q4km-tg128"
+        ],
+        "source_files": [
+          "ggml/src/ggml-cuda/rope.cu"
+        ],
+        "source_symbols": [
+          "ggml_cuda_op_rope_impl"
+        ],
+        "template_intent": "cuda-rope-v2"
+      },
+      "dispatch_anchors": [
+        {
+          "frame_id": "frame-current-qwen05b-q4km-tg128",
+          "signatures": [
+            {
+              "kernel_literal": "rope_neox<true,false,float,float>",
+              "calls": 3096,
+              "grid": 512,
+              "workgroup": 256,
+              "lds_bytes": 0
+            },
+            {
+              "kernel_literal": "rope_neox<true,false,float,__half>",
+              "calls": 3096,
+              "grid": 3584,
+              "workgroup": 256,
+              "lds_bytes": 0
+            }
+          ],
+          "total_calls": 6192,
+          "aggregation": "exact_signatures",
+          "selection": "All exact sealed current-catalog signatures for this target route.",
+          "evidence_ref": "ev-source-plan-v1",
+          "excluded_signatures": []
+        }
+      ],
+      "mechanism": {
+        "facets": {
+          "mechanism": "rope_remove_inactive_waves",
+          "ops": [
+            "rope"
+          ],
+          "files": [
+            "ggml/src/ggml-cuda/rope.cu"
+          ],
+          "symbols": [
+            "ggml_cuda_op_rope_impl"
+          ],
+          "change_class": "launch_geometry"
+        },
+        "fingerprint_sha256": "cf5c84dde41e0267378c2132395435c07088ef119baf5e2fdb71929bc9106d58"
+      },
+      "falsifiers": [
+        "A clean governed replay changes sign",
+        "Large-model RoPE share or shape does not match",
+        "Composition loses the standalone effect"
+      ],
+      "evidence_refs": [
+        "ev-source-plan-v1",
+        "ev-current-qwen05-profile"
+      ],
+      "interactions": [
+        {
+          "with": "akh-v2-rms-mul-rope-fusion",
+          "kind": "mutually_exclusive",
+          "rationale": "A fused RoPE route may remove the standalone kernel this incumbent tunes."
+        }
+      ],
+      "portability": {
+        "level": "low",
+        "source_frames": [
+          "frame-current-qwen05b-q4km-tg128"
+        ],
+        "target_frames": [
+          "frame-current-qwen05b-q4km-tg128",
+          "frame-v9-qwen122b-iq2-tg128",
+          "frame-v9-qwen35b-q8-tg128",
+          "frame-v9-qwen35b-q4km-tg128"
+        ],
+        "constraints": [
+          "D128 NEOX shape",
+          "Candidate-only pooled median 1.3466 percent"
+        ],
+        "required_validation": [
+          "Do not repeat discovery screen",
+          "Production-shape route check",
+          "Promotion-grade replay only if separately authorized"
+        ]
+      },
+      "priority": {
+        "rank": 10,
+        "tier": "P2",
+        "device_time_share_pct_range": [
+          0.66,
+          8.6127
+        ],
+        "rationale": "Replicated proxy incumbent with sharply lower large-model ceiling."
+      },
+      "expected_value": {
+        "metric": "decode_tokens_per_s",
+        "direction": "higher_better",
+        "expected_relative_gain_pct_range": [
+          1.0,
+          1.5
+        ],
+        "device_time_ceiling_pct": 8.6127,
+        "basis": "Candidate-only pooled median was 1.3466 percent on the exact proxy frame.",
+        "device_time_ceiling_frame_id": "frame-current-qwen05b-q4km-tg128",
+        "current_bundle_plausible_gain_ceiling_pct": 8.6127
+      },
+      "implementation": {
+        "cost": "low",
+        "risk": "medium",
+        "notes": [
+          "Existing source candidate",
+          "Shape-specific",
+          "Not promotion-ready"
+        ]
+      },
+      "stop_rule": [
+        "Do not repeat discovery screening",
+        "Retire transfer if production shape or share does not match",
+        "Require separate operator authority before promotion-grade replay"
+      ],
+      "current_bundle_eligibility": {
+        "eligible": false,
+        "template_ids": [
+          "cuda-rope-v2"
+        ],
+        "blocking_conditions": [
+          "Exact mechanism is already an incumbent and is DNR for another discovery screen"
+        ],
+        "reason": "Template-compatible does not mean planner-eligible; only a distinct mechanism or promotion run may re-enter."
+      },
+      "record_version": 1,
+      "provenance": {
+        "introduced_at": "2026-08-14T12:00:00Z",
+        "introduced_by": "autokernel-strategy-integrator",
+        "origin": "manual-discovery-flow-formalization",
+        "note": "Initial evidence-bound v2 corpus record.",
+        "supersedes": null
+      },
+      "primary_falsifier": "A clean governed replay changes sign",
+      "regime": {
+        "backend": "hip",
+        "phase": "decode",
+        "batch": 1,
+        "architecture": "gfx90a",
+        "model_or_frame": "frame-current-qwen05b-q4km-tg128",
+        "quant": "Q4_K_M",
+        "shape": "D128-NEOX-rope",
+        "measurement_graphs": false,
+        "target_runtime_graphs": true
+      },
+      "lifecycle": {
+        "maturity": "candidate_incumbent",
+        "next_action": "Retain only as candidate comparison context; no repeat discovery or production claim",
+        "candidate_identity": null,
+        "diagnostic_identity": null
+      },
+      "decision_policy": {
+        "metric": "decode_tokens_per_s",
+        "frame_id": "frame-current-qwen05b-q4km-tg128",
+        "continuation_floor_pct": 1,
+        "nomination_floor_pct": 1,
+        "required_replications": 2,
+        "sign_policy": "all_positive",
+        "conflict_policy": "retain_inconclusive",
+        "max_distinct_candidates": 1,
+        "terminal_rule": "retire",
+        "effect_unit": "relative_percent",
+        "min_replication_effect_pct": 0.5,
+        "max_replication_spread_pct": 1.0
+      },
+      "epistemic": {
+        "grade": "replicated_candidate_screen",
+        "confidence": "high",
+        "limitations": [
+          "Candidate-only nonpromotable screen; no production or promotion authority."
+        ]
+      }
+    },
+    {
+      "hypothesis_id": "akh-v2-q4k-onewave-incumbent",
+      "title": "Q4_K one-wave incumbent",
+      "status": "candidate_incumbent",
+      "statement": "The current Q4_K proxy may benefit when one wave owns each output-row block and cross-wave reduction is removed.",
+      "target": {
+        "frame_ids": [
+          "frame-current-qwen05b-q4km-tg128",
+          "frame-v9-qwen35b-q4km-tg128"
+        ],
+        "source_files": [
+          "ggml/src/ggml-cuda/mmvq.cu"
+        ],
+        "source_symbols": [
+          "MMVQ_PARAMETERS_GCN"
+        ],
+        "template_intent": "cuda-mmvq-v2"
+      },
+      "dispatch_anchors": [
+        {
+          "frame_id": "frame-current-qwen05b-q4km-tg128",
+          "signatures": [],
+          "total_calls": 1548,
+          "aggregation": "family_aggregate",
+          "selection": "Exact literal count is receipt-derived but grid/workgroup/LDS geometry is not bound: mul_mat_vec_q<type=12>",
+          "evidence_ref": "ev-source-plan-v1",
+          "excluded_signatures": []
+        },
+        {
+          "frame_id": "frame-v9-qwen35b-q4km-tg128",
+          "signatures": [],
+          "total_calls": null,
+          "aggregation": "not_applicable",
+          "selection": "No dispatch signature is available or applicable; characterization must precede candidate work.",
+          "evidence_ref": "ev-v9-qwen35b-q4km-profile",
+          "excluded_signatures": []
+        }
+      ],
+      "mechanism": {
+        "facets": {
+          "mechanism": "q4_k_one_wave_per_output_block",
+          "ops": [
+            "mul_mat_vec_q"
+          ],
+          "files": [
+            "ggml/src/ggml-cuda/mmvq.cu"
+          ],
+          "symbols": [
+            "MMVQ_PARAMETERS_GCN"
+          ],
+          "change_class": "launch_geometry"
+        },
+        "fingerprint_sha256": "374ad6f6ccb756464d19223ec53bb45dda6e878d34344723c8af6cfc12897f17"
+      },
+      "falsifiers": [
+        "Clean governed replay changes sign",
+        "Large Q4_K frame fails exact route or correctness",
+        "Branchless control-flow candidate dominates or conflicts"
+      ],
+      "evidence_refs": [
+        "ev-source-plan-v1",
+        "ev-current-qwen05-profile",
+        "ev-v9-qwen35b-q4km-profile"
+      ],
+      "interactions": [
+        {
+          "with": "akh-v2-q4k-branchless-scale-min",
+          "kind": "causal_overlap",
+          "rationale": "Both change the same type-12 MMVQ path and may interact non-additively."
+        }
+      ],
+      "portability": {
+        "level": "low",
+        "source_frames": [
+          "frame-current-qwen05b-q4km-tg128"
+        ],
+        "target_frames": [
+          "frame-current-qwen05b-q4km-tg128",
+          "frame-v9-qwen35b-q4km-tg128"
+        ],
+        "constraints": [
+          "Q4_K batch-one route",
+          "Candidate-only pooled median 1.0126 percent"
+        ],
+        "required_validation": [
+          "Do not repeat discovery screen",
+          "Large-frame exact dispatch",
+          "Promotion-grade replay only if separately authorized"
+        ]
+      },
+      "priority": {
+        "rank": 11,
+        "tier": "P2",
+        "device_time_share_pct_range": [
+          3.8994,
+          24.1445
+        ],
+        "rationale": "Positive proxy incumbent, but lower-confidence than branchless control flow and subadditive in composition."
+      },
+      "expected_value": {
+        "metric": "decode_tokens_per_s",
+        "direction": "higher_better",
+        "expected_relative_gain_pct_range": [
+          0.5,
+          1.5
+        ],
+        "device_time_ceiling_pct": 24.1445,
+        "basis": "Candidate-only pooled median was 1.0126 percent on the proxy; large-frame transfer is unmeasured.",
+        "device_time_ceiling_frame_id": "frame-current-qwen05b-q4km-tg128",
+        "current_bundle_plausible_gain_ceiling_pct": 24.1445
+      },
+      "implementation": {
+        "cost": "low",
+        "risk": "medium",
+        "notes": [
+          "Existing source candidate",
+          "Quant and shape specific",
+          "Interacts with branchless scale/min"
+        ]
+      },
+      "stop_rule": [
+        "Do not repeat discovery screening",
+        "Retire transfer on exact large-frame route or correctness failure",
+        "Require separate operator authority before promotion-grade replay"
+      ],
+      "current_bundle_eligibility": {
+        "eligible": false,
+        "template_ids": [
+          "cuda-mmvq-v2"
+        ],
+        "blocking_conditions": [
+          "Exact mechanism is already an incumbent and is DNR for another discovery screen"
+        ],
+        "reason": "Retain as comparison context rather than send it through the loop again."
+      },
+      "record_version": 1,
+      "provenance": {
+        "introduced_at": "2026-08-14T12:00:00Z",
+        "introduced_by": "autokernel-strategy-integrator",
+        "origin": "manual-discovery-flow-formalization",
+        "note": "Initial evidence-bound v2 corpus record.",
+        "supersedes": null
+      },
+      "primary_falsifier": "Clean governed replay changes sign",
+      "regime": {
+        "backend": "hip",
+        "phase": "decode",
+        "batch": 1,
+        "architecture": "gfx90a",
+        "model_or_frame": "frame-current-qwen05b-q4km-tg128",
+        "quant": "Q4_K_M",
+        "shape": "type12-one-wave",
+        "measurement_graphs": false,
+        "target_runtime_graphs": true
+      },
+      "lifecycle": {
+        "maturity": "candidate_incumbent",
+        "next_action": "Retain only as candidate comparison context; no repeat discovery or production claim",
+        "candidate_identity": null,
+        "diagnostic_identity": null
+      },
+      "decision_policy": {
+        "metric": "decode_tokens_per_s",
+        "frame_id": "frame-current-qwen05b-q4km-tg128",
+        "continuation_floor_pct": 0.5,
+        "nomination_floor_pct": 1,
+        "required_replications": 2,
+        "sign_policy": "all_positive",
+        "conflict_policy": "retain_inconclusive",
+        "max_distinct_candidates": 1,
+        "terminal_rule": "retire",
+        "effect_unit": "relative_percent",
+        "min_replication_effect_pct": 0.25,
+        "max_replication_spread_pct": 1.0
+      },
+      "epistemic": {
+        "grade": "replicated_candidate_screen",
+        "confidence": "medium",
+        "limitations": [
+          "Candidate-only nonpromotable screen; large-model transfer and production reward are unmeasured."
+        ]
+      }
+    },
+    {
+      "hypothesis_id": "akh-v2-set-rows-current",
+      "title": "Current set-rows ownership and layout",
+      "status": "queued",
+      "statement": "An exact current-frame set-rows ownership or layout change may eliminate work without shifting equal cost into its producer.",
+      "primary_falsifier": "The exact set-rows device-time improvement cannot clear the predeclared small-effect floor",
+      "regime": {
+        "backend": "hip",
+        "phase": "decode",
+        "batch": 1,
+        "architecture": "gfx90a",
+        "model_or_frame": "frame-current-qwen05b-q4km-tg128",
+        "quant": "Q4_K_M",
+        "shape": "set-rows",
+        "measurement_graphs": false,
+        "target_runtime_graphs": true
+      },
+      "target": {
+        "frame_ids": [
+          "frame-current-qwen05b-q4km-tg128"
+        ],
+        "source_files": [
+          "ggml/src/ggml-cuda/set-rows.cu"
+        ],
+        "source_symbols": [
+          "set_rows"
+        ],
+        "template_intent": "cuda-set-rows-v1"
+      },
+      "dispatch_anchors": [
+        {
+          "frame_id": "frame-current-qwen05b-q4km-tg128",
+          "signatures": [
+            {
+              "kernel_literal": "set_rows",
+              "calls": 3096,
+              "grid": 256,
+              "workgroup": 256,
+              "lds_bytes": 0
+            }
+          ],
+          "total_calls": 3096,
+          "aggregation": "exact_signatures",
+          "selection": "Single exact sealed current-catalog signature.",
+          "evidence_ref": "ev-current-qwen05-profile",
+          "excluded_signatures": []
+        }
+      ],
+      "mechanism": {
+        "facets": {
+          "mechanism": "set_rows_ownership_or_layout",
+          "ops": [
+            "set_rows"
+          ],
+          "files": [
+            "ggml/src/ggml-cuda/set-rows.cu"
+          ],
+          "symbols": [
+            "set_rows"
+          ],
+          "change_class": "layout"
+        },
+        "fingerprint_sha256": "6ba289a5876ed90b0c4812ca3cb2bcd5747eb0475e610c9e44b5a173819c53c0"
+      },
+      "falsifiers": [
+        "The exact set-rows device-time improvement cannot clear the predeclared small-effect floor",
+        "Cost shifts into the producer or a gather operation",
+        "Graphs-on whole-model direction is non-positive"
+      ],
+      "evidence_refs": [
+        "ev-current-qwen05-profile"
+      ],
+      "interactions": [
+        {
+          "with": "akh-v2-copy-layout-elimination",
+          "kind": "shared_bottleneck",
+          "rationale": "Current set-rows and large-model copy/layout work may share ownership mechanics but have different exact frames."
+        }
+      ],
+      "portability": {
+        "level": "exact_frame",
+        "source_frames": [
+          "frame-current-qwen05b-q4km-tg128"
+        ],
+        "target_frames": [
+          "frame-current-qwen05b-q4km-tg128"
+        ],
+        "constraints": [
+          "Exact set-rows route only",
+          "No cost shift into producer"
+        ],
+        "required_validation": [
+          "Exact-kernel attribution",
+          "Graphs-on whole-model screen"
+        ]
+      },
+      "priority": {
+        "rank": 12,
+        "tier": "P3",
+        "device_time_share_pct_range": [
+          3.5214881479,
+          3.5214881479
+        ],
+        "rationale": "Real current cost, but the small Amdahl ceiling requires a strict hold floor."
+      },
+      "expected_value": {
+        "metric": "decode_tokens_per_s",
+        "direction": "higher_better",
+        "expected_relative_gain_pct_range": [
+          0.0,
+          0.5
+        ],
+        "device_time_ceiling_pct": 3.5214881479,
+        "basis": "Exact current graphs-off routing share; opportunity remains on hold pending a defensible mechanism.",
+        "device_time_ceiling_frame_id": "frame-current-qwen05b-q4km-tg128",
+        "current_bundle_plausible_gain_ceiling_pct": 3.5214881479
+      },
+      "implementation": {
+        "cost": "medium",
+        "risk": "medium",
+        "notes": [
+          "Prefer elimination or ownership changes over microkernel-only tuning"
+        ]
+      },
+      "stop_rule": [
+        "Stop before authoring if no eliminable ownership edge is found",
+        "Retire after one candidate below the small-effect floor"
+      ],
+      "current_bundle_eligibility": {
+        "eligible": false,
+        "template_ids": [
+          "cuda-set-rows-v1"
+        ],
+        "blocking_conditions": [
+          "No evidence-bound ownership mechanism currently justifies spending a candidate attempt at the 3.52 percent ceiling"
+        ],
+        "reason": "The source is authorable, but frame economics place it on hold until characterization supplies a defensible small-effect mechanism."
+      },
+      "lifecycle": {
+        "maturity": "characterized",
+        "next_action": "Characterize producer ownership and retain on hold unless an eliminable edge is proved",
+        "candidate_identity": null,
+        "diagnostic_identity": null
+      },
+      "decision_policy": {
+        "metric": "decode_tokens_per_s",
+        "frame_id": "frame-current-qwen05b-q4km-tg128",
+        "effect_unit": "relative_percent",
+        "continuation_floor_pct": 0.15,
+        "nomination_floor_pct": 0.25,
+        "min_replication_effect_pct": 0.075,
+        "required_replications": 2,
+        "max_replication_spread_pct": 1.0,
+        "sign_policy": "all_positive",
+        "conflict_policy": "retain_inconclusive",
+        "max_distinct_candidates": 1,
+        "terminal_rule": "retire"
+      },
+      "epistemic": {
+        "grade": "profile_routing",
+        "confidence": "medium",
+        "limitations": [
+          "Graphs-off attribution establishes route and ceiling only.",
+          "No eliminable producer ownership is currently proved."
+        ]
+      },
+      "record_version": 1,
+      "provenance": {
+        "introduced_at": "2026-08-14T12:00:00Z",
+        "introduced_by": "autokernel-strategy-integrator",
+        "origin": "current-frame-profiler-audit",
+        "note": "Captures the exact set-rows band separately from large-model copy/layout work.",
+        "supersedes": null
+      }
+    },
+    {
+      "hypothesis_id": "akh-v2-graphs-on-host-helper-scheduling",
+      "title": "Graphs-on host/helper scheduling decomposition",
+      "status": "needs-template",
+      "statement": "Graphs-on batch-one decode may expose host or helper scheduling gaps that graphs-off kernel attribution cannot observe and that a host/runtime lane could reduce.",
+      "primary_falsifier": "A graphs-on synchronized decomposition finds no persistent host or helper scheduling gap",
+      "regime": {
+        "backend": "hip",
+        "phase": "decode",
+        "batch": 1,
+        "architecture": "gfx90a",
+        "model_or_frame": "frame-current-qwen05b-q4km-tg128",
+        "quant": "Q4_K_M",
+        "shape": "graphs-on-host-helper-scheduling",
+        "measurement_graphs": false,
+        "target_runtime_graphs": true
+      },
+      "target": {
+        "frame_ids": [
+          "frame-current-qwen05b-q4km-tg128"
+        ],
+        "source_files": [
+          "ggml/src/ggml-cuda/ggml-cuda.cu"
+        ],
+        "source_symbols": [
+          "ggml_backend_cuda_graph_compute"
+        ],
+        "template_intent": "host-runtime-scheduling-v1"
+      },
+      "dispatch_anchors": [
+        {
+          "frame_id": "frame-current-qwen05b-q4km-tg128",
+          "signatures": [],
+          "total_calls": null,
+          "aggregation": "not_applicable",
+          "selection": "No dispatch signature is available or applicable; characterization must precede candidate work.",
+          "evidence_ref": "ev-current-qwen05-profile",
+          "excluded_signatures": []
+        }
+      ],
+      "mechanism": {
+        "facets": {
+          "mechanism": "graphs_on_host_helper_scheduling",
+          "ops": [
+            "graph_compute",
+            "host_schedule"
+          ],
+          "files": [
+            "ggml/src/ggml-cuda/ggml-cuda.cu"
+          ],
+          "symbols": [
+            "ggml_backend_cuda_graph_compute"
+          ],
+          "change_class": "schedule"
+        },
+        "fingerprint_sha256": "76afef69534a826d731c8f90783f0d16a3861c497eae601d304642d90cb6d445"
+      },
+      "falsifiers": [
+        "A graphs-on synchronized decomposition finds no persistent host or helper scheduling gap",
+        "Any observed gap disappears under repeated samples overlapping the phenomenon",
+        "A change only moves time into GPU work or CPU inference contention"
+      ],
+      "evidence_refs": [
+        "ev-current-qwen05-profile",
+        "ev-research-loop-snapshot"
+      ],
+      "interactions": [
+        {
+          "with": "akh-v2-rms-mul-rope-fusion",
+          "kind": "causal_overlap",
+          "rationale": "Launch removal and host scheduling can affect the same graphs-on wall-time gaps and require isolated attribution."
+        }
+      ],
+      "portability": {
+        "level": "exact_frame",
+        "source_frames": [
+          "frame-current-qwen05b-q4km-tg128"
+        ],
+        "target_frames": [
+          "frame-current-qwen05b-q4km-tg128"
+        ],
+        "constraints": [
+          "Graphs-on reward runtime",
+          "Observation window must overlap the scheduling gap"
+        ],
+        "required_validation": [
+          "Graphs-on synchronized CPU/GPU decomposition",
+          "Whole-model paired screen"
+        ]
+      },
+      "priority": {
+        "rank": 13,
+        "tier": "P3",
+        "device_time_share_pct_range": [
+          0,
+          100
+        ],
+        "rationale": "Potentially real whole-token pain is invisible to graphs-off attribution; characterization precedes any implementation."
+      },
+      "expected_value": {
+        "metric": "decode_tokens_per_s",
+        "direction": "higher_better",
+        "expected_relative_gain_pct_range": [
+          0,
+          2.0
+        ],
+        "device_time_ceiling_pct": 100,
+        "basis": "Uncharacterized whole-token wall-time opportunity; no device-time share is claimed.",
+        "device_time_ceiling_frame_id": "frame-current-qwen05b-q4km-tg128",
+        "current_bundle_plausible_gain_ceiling_pct": 100
+      },
+      "implementation": {
+        "cost": "high",
+        "risk": "high",
+        "notes": [
+          "Requires a host/runtime mutation lane, not GPU-source templates",
+          "Must preserve CPU inference resource policy"
+        ]
+      },
+      "stop_rule": [
+        "Stop if synchronized graphs-on decomposition shows no persistent gap",
+        "Do not infer host gaps from graphs-off device-time traces"
+      ],
+      "current_bundle_eligibility": {
+        "eligible": false,
+        "template_ids": [],
+        "blocking_conditions": [
+          "No sealed host/runtime scheduling template exists",
+          "Graphs-on synchronized scheduling evidence has not been captured"
+        ],
+        "reason": "Expose as a real characterization question, but keep it outside the GPU-source planner lane."
+      },
+      "lifecycle": {
+        "maturity": "design_prior",
+        "next_action": "Capture a graphs-on synchronized host/helper/GPU timeline before defining a host-runtime template",
+        "candidate_identity": null,
+        "diagnostic_identity": null
+      },
+      "decision_policy": {
+        "metric": "decode_tokens_per_s",
+        "frame_id": "frame-current-qwen05b-q4km-tg128",
+        "effect_unit": "relative_percent",
+        "continuation_floor_pct": 0.25,
+        "nomination_floor_pct": 0.5,
+        "min_replication_effect_pct": 0.125,
+        "required_replications": 2,
+        "max_replication_spread_pct": 1.0,
+        "sign_policy": "all_positive",
+        "conflict_policy": "retain_inconclusive",
+        "max_distinct_candidates": 2,
+        "terminal_rule": "retire"
+      },
+      "epistemic": {
+        "grade": "design_prior",
+        "confidence": "low",
+        "limitations": [
+          "All current profiler frames disable graphs and cannot observe graphs-on host/helper scheduling.",
+          "No synchronized host/GPU timeline is bound."
+        ]
+      },
+      "record_version": 1,
+      "provenance": {
+        "introduced_at": "2026-08-14T12:00:00Z",
+        "introduced_by": "autokernel-strategy-integrator",
+        "origin": "strategic-opportunity-audit",
+        "note": "Preserves the Tier-2 graphs-on scheduling question outside GPU-source eligibility.",
+        "supersedes": null
+      }
+    },
+    {
+      "hypothesis_id": "akh-v2-copy-layout-elimination",
+      "title": "Decode copy/layout elimination",
+      "status": "needs-template",
+      "statement": "A producer-consumer layout change can remove a measurable subset of decode copy launches rather than only making the copy microkernel faster.",
+      "target": {
+        "frame_ids": [
+          "frame-v9-qwen122b-iq2-tg128",
+          "frame-v9-qwen35b-q8-tg128",
+          "frame-v9-qwen35b-q4km-tg128"
+        ],
+        "source_files": [
+          "ggml/src/ggml-cuda/cpy.cu"
+        ],
+        "source_symbols": [
+          "ggml_cuda_cpy"
+        ],
+        "template_intent": "cuda-set-rows-or-copy-v2"
+      },
+      "dispatch_anchors": [
+        {
+          "frame_id": "frame-v9-qwen122b-iq2-tg128",
+          "signatures": [],
+          "total_calls": 10836,
+          "aggregation": "family_aggregate",
+          "selection": "Receipt-derived family aggregate; no single grid/geometry is asserted.",
+          "evidence_ref": "ev-v9-qwen122b-iq2-profile",
+          "excluded_signatures": []
+        },
+        {
+          "frame_id": "frame-v9-qwen35b-q8-tg128",
+          "signatures": [],
+          "total_calls": 9030,
+          "aggregation": "family_aggregate",
+          "selection": "Receipt-derived family aggregate; no single grid/geometry is asserted.",
+          "evidence_ref": "ev-v9-qwen35b-q8-profile",
+          "excluded_signatures": []
+        },
+        {
+          "frame_id": "frame-v9-qwen35b-q4km-tg128",
+          "signatures": [],
+          "total_calls": 9030,
+          "aggregation": "family_aggregate",
+          "selection": "Receipt-derived family aggregate; no single grid/geometry is asserted.",
+          "evidence_ref": "ev-v9-qwen35b-q4km-profile",
+          "excluded_signatures": []
+        }
+      ],
+      "mechanism": {
+        "facets": {
+          "mechanism": "producer_consumer_copy_elimination",
+          "ops": [
+            "copy",
+            "set_rows"
+          ],
+          "files": [
+            "ggml/src/ggml-cuda/cpy.cu"
+          ],
+          "symbols": [
+            "ggml_cuda_cpy"
+          ],
+          "change_class": "layout"
+        },
+        "fingerprint_sha256": "118cde977f9c281a01cefb5e9d90c69ea783b617194fbcb30b3fce996a421224"
+      },
+      "falsifiers": [
+        "Copy calls are context-shift-only rather than token-generation critical",
+        "Layout change shifts equal cost into gather or MMVQ",
+        "Measured whole-model ceiling is below the campaign floor"
+      ],
+      "evidence_refs": [
+        "ev-current-qwen05-profile",
+        "ev-v9-qwen122b-iq2-profile",
+        "ev-v9-qwen35b-q8-profile",
+        "ev-v9-qwen35b-q4km-profile",
+        "ev-research-loop-snapshot"
+      ],
+      "interactions": [
+        {
+          "with": "akh-v2-moe-gather-layout",
+          "kind": "causal_overlap",
+          "rationale": "MoE gather/layout changes may remove the same copy traffic."
+        }
+      ],
+      "portability": {
+        "level": "medium",
+        "source_frames": [
+          "frame-v9-qwen122b-iq2-tg128",
+          "frame-v9-qwen35b-q8-tg128",
+          "frame-v9-qwen35b-q4km-tg128"
+        ],
+        "target_frames": [
+          "frame-v9-qwen122b-iq2-tg128",
+          "frame-v9-qwen35b-q8-tg128",
+          "frame-v9-qwen35b-q4km-tg128"
+        ],
+        "constraints": [
+          "Elimination, not microkernel-only acceleration",
+          "Separate token generation from context shift"
+        ],
+        "required_validation": [
+          "Operation-lifetime trace",
+          "New copy template",
+          "Whole-model decode attribution"
+        ]
+      },
+      "priority": {
+        "rank": 14,
+        "tier": "P3",
+        "device_time_share_pct_range": [
+          2.3187,
+          2.8384
+        ],
+        "rationale": "Small standalone ceiling and upstream microkernel gains reported no token-generation uplift."
+      },
+      "expected_value": {
+        "metric": "decode_tokens_per_s",
+        "direction": "higher_better",
+        "expected_relative_gain_pct_range": [
+          0.0,
+          1.0
+        ],
+        "device_time_ceiling_pct": 2.8384,
+        "basis": "Measured copy-family ceiling; expected value requires elimination rather than microkernel-only gain.",
+        "device_time_ceiling_frame_id": "frame-v9-qwen35b-q4km-tg128",
+        "current_bundle_plausible_gain_ceiling_pct": null
+      },
+      "implementation": {
+        "cost": "high",
+        "risk": "high",
+        "notes": [
+          "Producer-consumer layout change",
+          "May overlap MoE gather",
+          "Must isolate token generation from context shift"
+        ]
+      },
+      "stop_rule": [
+        "Stop if calls are not token-generation critical",
+        "Stop if cost moves into gather or MMVQ",
+        "Retire if the measured ceiling remains below campaign floor"
+      ],
+      "current_bundle_eligibility": {
+        "eligible": false,
+        "template_ids": [],
+        "blocking_conditions": [
+          "No sealed cpy.cu template exists",
+          "Current trace does not isolate token-generation-critical copies"
+        ],
+        "reason": "Characterization and a new template are required."
+      },
+      "record_version": 1,
+      "provenance": {
+        "introduced_at": "2026-08-14T12:00:00Z",
+        "introduced_by": "autokernel-strategy-integrator",
+        "origin": "manual-discovery-flow-formalization",
+        "note": "Initial evidence-bound v2 corpus record.",
+        "supersedes": null
+      },
+      "primary_falsifier": "Copy calls are context-shift-only rather than token-generation critical",
+      "regime": {
+        "backend": "hip",
+        "phase": "decode",
+        "batch": 1,
+        "architecture": "gfx90a",
+        "model_or_frame": "large-model-moe-frames",
+        "quant": "mixed",
+        "shape": "copy-layout",
+        "measurement_graphs": false,
+        "target_runtime_graphs": true
+      },
+      "lifecycle": {
+        "maturity": "characterized",
+        "next_action": "Separate token-generation-critical copy traffic and prove producer-consumer ownership before source work",
+        "candidate_identity": null,
+        "diagnostic_identity": null
+      },
+      "decision_policy": {
+        "metric": "decode_tokens_per_s",
+        "frame_id": "frame-v9-qwen35b-q8-tg128",
+        "continuation_floor_pct": 0.25,
+        "nomination_floor_pct": 0.5,
+        "required_replications": 2,
+        "sign_policy": "all_positive",
+        "conflict_policy": "retain_inconclusive",
+        "max_distinct_candidates": 2,
+        "terminal_rule": "retire",
+        "effect_unit": "relative_percent",
+        "min_replication_effect_pct": 0.125,
+        "max_replication_spread_pct": 1.0
+      },
+      "epistemic": {
+        "grade": "profile_routing",
+        "confidence": "low",
+        "limitations": [
+          "Family classification does not establish eliminable producer-consumer ownership.",
+          "Large-model only and not current-bundle eligible."
+        ]
+      }
+    },
+    {
+      "hypothesis_id": "akh-v2-gdn-standalone",
+      "title": "Standalone GDN tuning",
+      "status": "retired",
+      "statement": "Standalone GDN source tuning is worth a discovery slot in the current large-model decode portfolio.",
+      "target": {
+        "frame_ids": [
+          "frame-v9-qwen122b-iq2-tg128",
+          "frame-v9-qwen35b-q8-tg128",
+          "frame-v9-qwen35b-q4km-tg128"
+        ],
+        "source_files": [
+          "ggml/src/ggml-cuda/gdn.cu"
+        ],
+        "source_symbols": [
+          "gdn"
+        ],
+        "template_intent": "none-retired"
+      },
+      "dispatch_anchors": [
+        {
+          "frame_id": "frame-v9-qwen122b-iq2-tg128",
+          "signatures": [],
+          "total_calls": 4644,
+          "aggregation": "family_aggregate",
+          "selection": "Receipt-derived family aggregate; no single grid/geometry is asserted.",
+          "evidence_ref": "ev-v9-qwen122b-iq2-profile",
+          "excluded_signatures": []
+        },
+        {
+          "frame_id": "frame-v9-qwen35b-q8-tg128",
+          "signatures": [],
+          "total_calls": 3870,
+          "aggregation": "family_aggregate",
+          "selection": "Receipt-derived family aggregate; no single grid/geometry is asserted.",
+          "evidence_ref": "ev-v9-qwen35b-q8-profile",
+          "excluded_signatures": []
+        },
+        {
+          "frame_id": "frame-v9-qwen35b-q4km-tg128",
+          "signatures": [],
+          "total_calls": 3870,
+          "aggregation": "family_aggregate",
+          "selection": "Receipt-derived family aggregate; no single grid/geometry is asserted.",
+          "evidence_ref": "ev-v9-qwen35b-q4km-profile",
+          "excluded_signatures": []
+        }
+      ],
+      "mechanism": {
+        "facets": {
+          "mechanism": "standalone_gdn_kernel_tuning",
+          "ops": [
+            "gdn"
+          ],
+          "files": [
+            "ggml/src/ggml-cuda/gdn.cu"
+          ],
+          "symbols": [
+            "gdn"
+          ],
+          "change_class": "schedule"
+        },
+        "fingerprint_sha256": "2e2463c43800ada708c6f94cf19d7c933979e700d30753b412444f05bb660a1d"
+      },
+      "falsifiers": [
+        "Measured family share remains below the discovery contribution floor"
+      ],
+      "evidence_refs": [
+        "ev-v9-qwen122b-iq2-profile",
+        "ev-v9-qwen35b-q8-profile",
+        "ev-v9-qwen35b-q4km-profile"
+      ],
+      "interactions": [],
+      "portability": {
+        "level": "medium",
+        "source_frames": [
+          "frame-v9-qwen122b-iq2-tg128",
+          "frame-v9-qwen35b-q8-tg128",
+          "frame-v9-qwen35b-q4km-tg128"
+        ],
+        "target_frames": [
+          "frame-v9-qwen122b-iq2-tg128",
+          "frame-v9-qwen35b-q8-tg128",
+          "frame-v9-qwen35b-q4km-tg128"
+        ],
+        "constraints": [
+          "Standalone kernel only"
+        ],
+        "required_validation": [
+          "Reopen only after a new trace crosses the contribution floor"
+        ]
+      },
+      "priority": {
+        "rank": 15,
+        "tier": "P3",
+        "device_time_share_pct_range": [
+          1.6451,
+          1.862
+        ],
+        "rationale": "Current large-model ceiling is too small relative to higher-ranked measured families."
+      },
+      "expected_value": {
+        "metric": "decode_tokens_per_s",
+        "direction": "higher_better",
+        "expected_relative_gain_pct_range": [
+          0.0,
+          0.5
+        ],
+        "device_time_ceiling_pct": 1.862,
+        "basis": "Measured family ceiling is below the normal discovery contribution floor.",
+        "device_time_ceiling_frame_id": "frame-v9-qwen122b-iq2-tg128",
+        "current_bundle_plausible_gain_ceiling_pct": null
+      },
+      "implementation": {
+        "cost": "medium",
+        "risk": "medium",
+        "notes": [
+          "No current template",
+          "Low standalone ceiling",
+          "Retired before source work"
+        ]
+      },
+      "stop_rule": [
+        "Remain retired while every current large-frame share is below two percent",
+        "Reopen only on a new evidence-bound frame above the contribution floor"
+      ],
+      "current_bundle_eligibility": {
+        "eligible": false,
+        "template_ids": [],
+        "blocking_conditions": [
+          "Retired for low measured ceiling",
+          "No current template exists"
+        ],
+        "reason": "Not eligible unless a new current trace materially changes the ceiling."
+      },
+      "record_version": 1,
+      "provenance": {
+        "introduced_at": "2026-08-14T12:00:00Z",
+        "introduced_by": "autokernel-strategy-integrator",
+        "origin": "manual-discovery-flow-formalization",
+        "note": "Initial evidence-bound v2 corpus record.",
+        "supersedes": null
+      },
+      "primary_falsifier": "Measured family share remains below the discovery contribution floor",
+      "regime": {
+        "backend": "hip",
+        "phase": "decode",
+        "batch": 1,
+        "architecture": "gfx90a",
+        "model_or_frame": "large-model-moe-frames",
+        "quant": "mixed",
+        "shape": "gated-delta-net",
+        "measurement_graphs": false,
+        "target_runtime_graphs": true
+      },
+      "lifecycle": {
+        "maturity": "retired",
+        "next_action": "Remain retired unless a sealed current frame exceeds the declared device-time contribution floor",
+        "candidate_identity": null,
+        "diagnostic_identity": null
+      },
+      "decision_policy": {
+        "metric": "decode_tokens_per_s",
+        "frame_id": "frame-v9-qwen122b-iq2-tg128",
+        "continuation_floor_pct": 0.5,
+        "nomination_floor_pct": 1,
+        "required_replications": 2,
+        "sign_policy": "all_positive",
+        "conflict_policy": "retain_inconclusive",
+        "max_distinct_candidates": 1,
+        "terminal_rule": "retire",
+        "effect_unit": "relative_percent",
+        "min_replication_effect_pct": 0.25,
+        "max_replication_spread_pct": 1.0
+      },
+      "epistemic": {
+        "grade": "retired_negative",
+        "confidence": "high",
+        "limitations": [
+          "Retirement is scoped to the measured large-model frames and standalone tuning."
+        ]
+      }
+    }
+  ],
+  "do_not_repeat": [
+    {
+      "dnr_id": "dnr-d64-single-column-tile",
+      "title": "D64 single-column TILE specialization",
+      "enforcement": "hard_refusal_exact_mechanism_and_regime",
+      "statement": "Do not repeat the exact D64 Q1 one-column TILE specialization on the current frame.",
+      "mechanism": {
+        "facets": {
+          "mechanism": "d64_single_column_tile_specialization",
+          "ops": [
+            "flash_attn"
+          ],
+          "files": [
+            "ggml/src/ggml-cuda/fattn-tile.cuh"
+          ],
+          "symbols": [
+            "ggml_cuda_fattn_tile_get_config_amd"
+          ],
+          "change_class": "launch_geometry"
+        },
+        "fingerprint_sha256": "17301caf381a44f362ff7b29632eea6b571b935b9d05a23b17c64ead0f9a3b82"
+      },
+      "regime": {
+        "backend": "hip",
+        "phase": "decode",
+        "batch": 1,
+        "architecture": "gfx90a",
+        "model_or_frame": "applicable-v9-frame",
+        "quant": "not_applicable",
+        "shape": "D64-Q1-GQA7",
+        "measurement_graphs": false,
+        "target_runtime_graphs": true
+      },
+      "falsifier_result": "Correctness and exact 3096 candidate dispatches passed, but the governed screen measured negative 0.9830455 percent.",
+      "evidence_refs": [
+        "ev-source-plan-v1",
+        "ev-current-qwen05-profile"
+      ],
+      "reentry_conditions": [
+        "A materially different attention algorithm",
+        "A moved production anchor or shape"
+      ],
+      "record_version": 1,
+      "provenance": {
+        "introduced_at": "2026-08-14T12:00:00Z",
+        "introduced_by": "autokernel-strategy-integrator",
+        "origin": "manual-dnr-formalization",
+        "note": "Initial stable v2 hard-refusal record; reentry remains explicitly scoped.",
+        "supersedes": null
+      },
+      "classification": "measured_negative"
+    },
+    {
+      "dnr_id": "dnr-q5-four-wave",
+      "title": "Q5_0 four-wave MMVQ geometry",
+      "enforcement": "hard_refusal_exact_mechanism_and_regime",
+      "statement": "Do not repeat doubling Q5_0 batch-one MMVQ from two to four physical waves.",
+      "mechanism": {
+        "facets": {
+          "mechanism": "q5_0_four_wave_geometry",
+          "ops": [
+            "mul_mat_vec_q"
+          ],
+          "files": [
+            "ggml/src/ggml-cuda/mmvq.cu"
+          ],
+          "symbols": [
+            "MMVQ_PARAMETERS_GCN"
+          ],
+          "change_class": "launch_geometry"
+        },
+        "fingerprint_sha256": "f0377310595ae864e1a2f5a14c5d225324777e7ea047ab106a27a2fd4f7ac3d2"
+      },
+      "regime": {
+        "backend": "hip",
+        "phase": "decode",
+        "batch": 1,
+        "architecture": "gfx90a",
+        "model_or_frame": "applicable-v9-frame",
+        "quant": "Q5_0",
+        "shape": "mechanism-exact",
+        "measurement_graphs": false,
+        "target_runtime_graphs": true
+      },
+      "falsifier_result": "Twelve correctness cases and exact dispatch passed; median throughput regressed 10.5356767 percent.",
+      "evidence_refs": [
+        "ev-source-plan-v1"
+      ],
+      "reentry_conditions": [
+        "A different mechanism that does not increase small-K rows per block",
+        "A different architecture or batch regime"
+      ],
+      "record_version": 1,
+      "provenance": {
+        "introduced_at": "2026-08-14T12:00:00Z",
+        "introduced_by": "autokernel-strategy-integrator",
+        "origin": "manual-dnr-formalization",
+        "note": "Initial stable v2 hard-refusal record; reentry remains explicitly scoped.",
+        "supersedes": null
+      },
+      "classification": "measured_negative"
+    },
+    {
+      "dnr_id": "dnr-q8-vec4-quantizer",
+      "title": "Q8_1 vec4 activation quantizer",
+      "enforcement": "hard_refusal_exact_mechanism_and_regime",
+      "statement": "Do not repeat the one-wave vec4 Q8_1 quantizer rewrite.",
+      "mechanism": {
+        "facets": {
+          "mechanism": "q8_1_vec4_one_wave_quantizer",
+          "ops": [
+            "quantize_q8_1"
+          ],
+          "files": [
+            "ggml/src/ggml-cuda/quantize.cu"
+          ],
+          "symbols": [
+            "quantize_q8_1"
+          ],
+          "change_class": "vectorization"
+        },
+        "fingerprint_sha256": "3e1d18433c2b8f438ba94395e8bb1f92cbfce905b468a49740e73c41134fc0b1"
+      },
+      "regime": {
+        "backend": "hip",
+        "phase": "decode",
+        "batch": 1,
+        "architecture": "gfx90a",
+        "model_or_frame": "qwen05b-tg128",
+        "quant": "not_applicable",
+        "shape": "mechanism-exact",
+        "measurement_graphs": false,
+        "target_runtime_graphs": true
+      },
+      "falsifier_result": "All 1139 correctness cases passed, but exact kernel time was 3.46 percent slower and throughput regressed 0.9203597 percent.",
+      "evidence_refs": [
+        "ev-source-plan-v1"
+      ],
+      "reentry_conditions": [
+        "A different arithmetic or scheduling mechanism",
+        "Evidence that reduction order or concurrency changed on a new anchor"
+      ],
+      "record_version": 1,
+      "provenance": {
+        "introduced_at": "2026-08-14T12:00:00Z",
+        "introduced_by": "autokernel-strategy-integrator",
+        "origin": "manual-dnr-formalization",
+        "note": "Initial stable v2 hard-refusal record; reentry remains explicitly scoped.",
+        "supersedes": null
+      },
+      "classification": "measured_negative"
+    },
+    {
+      "dnr_id": "dnr-q8-workgroup128-exact-replay",
+      "title": "Exact Q8_1 workgroup-128 replay",
+      "enforcement": "hard_refusal_exact_mechanism_and_regime",
+      "statement": "Do not spend another discovery slot on the unchanged workgroup-128 Q8_1 candidate.",
+      "mechanism": {
+        "facets": {
+          "mechanism": "q8_1_workgroup_128",
+          "ops": [
+            "quantize_q8_1"
+          ],
+          "files": [
+            "ggml/src/ggml-cuda/quantize.cu"
+          ],
+          "symbols": [
+            "quantize_q8_1"
+          ],
+          "change_class": "launch_geometry"
+        },
+        "fingerprint_sha256": "039283f439a98d70feaf4e8ad60e3980d46f7aa58f6114e4e7c876162a4e1ae3"
+      },
+      "regime": {
+        "backend": "hip",
+        "phase": "decode",
+        "batch": 1,
+        "architecture": "gfx90a",
+        "model_or_frame": "qwen05b-tg128",
+        "quant": "not_applicable",
+        "shape": "mechanism-exact",
+        "measurement_graphs": false,
+        "target_runtime_graphs": true
+      },
+      "falsifier_result": "Initial positive 2.826 percent did not replicate; independent result was negative 0.063 percent and pooled median only 0.669 percent.",
+      "evidence_refs": [
+        "ev-source-plan-v1"
+      ],
+      "reentry_conditions": [
+        "A materially different grid or scheduling discriminator",
+        "A large-model frame with a predeclared transfer rationale"
+      ],
+      "record_version": 1,
+      "provenance": {
+        "introduced_at": "2026-08-14T12:00:00Z",
+        "introduced_by": "autokernel-strategy-integrator",
+        "origin": "manual-dnr-formalization",
+        "note": "Initial stable v2 hard-refusal record; reentry remains explicitly scoped.",
+        "supersedes": null
+      },
+      "classification": "nonreplication"
+    },
+    {
+      "dnr_id": "dnr-rms-two-wave",
+      "title": "RMSNorm two-wave geometry",
+      "enforcement": "hard_refusal_exact_mechanism_and_regime",
+      "statement": "Do not repeat reducing the exact fused D896 RMSNorm kernel from four waves to two.",
+      "mechanism": {
+        "facets": {
+          "mechanism": "rmsnorm_two_wave_geometry",
+          "ops": [
+            "rms_norm"
+          ],
+          "files": [
+            "ggml/src/ggml-cuda/norm.cu"
+          ],
+          "symbols": [
+            "ggml_cuda_op_rms_norm"
+          ],
+          "change_class": "launch_geometry"
+        },
+        "fingerprint_sha256": "fe8e1067413a055a0ea27b34c40d1c325ef9a838bdffd4f301aba7ae80a1e28f"
+      },
+      "regime": {
+        "backend": "hip",
+        "phase": "decode",
+        "batch": 1,
+        "architecture": "gfx90a",
+        "model_or_frame": "applicable-v9-frame",
+        "quant": "not_applicable",
+        "shape": "D896",
+        "measurement_graphs": false,
+        "target_runtime_graphs": true
+      },
+      "falsifier_result": "Twenty-one correctness cases passed; kernel duration worsened 28.01 percent and throughput regressed 0.9805 percent.",
+      "evidence_refs": [
+        "ev-source-plan-v1"
+      ],
+      "reentry_conditions": [
+        "A cross-op fusion rather than wave-count change",
+        "A different norm shape with new occupancy evidence"
+      ],
+      "record_version": 1,
+      "provenance": {
+        "introduced_at": "2026-08-14T12:00:00Z",
+        "introduced_by": "autokernel-strategy-integrator",
+        "origin": "manual-dnr-formalization",
+        "note": "Initial stable v2 hard-refusal record; reentry remains explicitly scoped.",
+        "supersedes": null
+      },
+      "classification": "measured_negative"
+    },
+    {
+      "dnr_id": "dnr-rope64-q4k-onewave-stack",
+      "title": "Unchanged RoPE64 plus Q4_K one-wave stack",
+      "enforcement": "hard_refusal_exact_mechanism_and_regime",
+      "statement": "Do not repeat the unchanged composition of the two proxy incumbents.",
+      "mechanism": {
+        "facets": {
+          "mechanism": "rope64_plus_q4k_onewave_composition",
+          "ops": [
+            "rope",
+            "mul_mat_vec_q"
+          ],
+          "files": [
+            "ggml/src/ggml-cuda/rope.cu",
+            "ggml/src/ggml-cuda/mmvq.cu"
+          ],
+          "symbols": [
+            "ggml_cuda_op_rope_impl",
+            "MMVQ_PARAMETERS_GCN"
+          ],
+          "change_class": "composition"
+        },
+        "fingerprint_sha256": "8ff614b2a9cc9f1c26f2462462346396c7b3c89d658f727df909c23f82123376"
+      },
+      "regime": {
+        "backend": "hip",
+        "phase": "decode",
+        "batch": 1,
+        "architecture": "gfx90a",
+        "model_or_frame": "qwen05b-tg128",
+        "quant": "not_applicable",
+        "shape": "mechanism-exact",
+        "measurement_graphs": false,
+        "target_runtime_graphs": true
+      },
+      "falsifier_result": "Pooled median was 0.885 percent and subadditive, below standalone RoPE64.",
+      "evidence_refs": [
+        "ev-source-plan-v1"
+      ],
+      "reentry_conditions": [
+        "A new component with a causal interaction model",
+        "Promotion-grade replay separately authorized by the operator"
+      ],
+      "record_version": 1,
+      "provenance": {
+        "introduced_at": "2026-08-14T12:00:00Z",
+        "introduced_by": "autokernel-strategy-integrator",
+        "origin": "manual-dnr-formalization",
+        "note": "Initial stable v2 hard-refusal record; reentry remains explicitly scoped.",
+        "supersedes": null
+      },
+      "classification": "subadditive"
+    },
+    {
+      "dnr_id": "dnr-fa-vec-selector-gqa7",
+      "title": "D64 GQA7 VEC-for-TILE selector",
+      "enforcement": "hard_refusal_exact_mechanism_and_regime",
+      "statement": "Do not repeat the exact source selector that forces VEC instead of TILE for D64 Q1 GQA7.",
+      "mechanism": {
+        "facets": {
+          "mechanism": "force_vec_instead_of_tile_d64_gqa7",
+          "ops": [
+            "flash_attn"
+          ],
+          "files": [
+            "ggml/src/ggml-cuda/fattn.cu"
+          ],
+          "symbols": [
+            "ggml_cuda_get_best_fattn_kernel"
+          ],
+          "change_class": "selector"
+        },
+        "fingerprint_sha256": "bc6907fda4fe05774302305d1e47cdc6269935e06d9fde986202e222dd1a899c"
+      },
+      "regime": {
+        "backend": "hip",
+        "phase": "decode",
+        "batch": 1,
+        "architecture": "gfx90a",
+        "model_or_frame": "applicable-v9-frame",
+        "quant": "not_applicable",
+        "shape": "D64-Q1-GQA7",
+        "measurement_graphs": false,
+        "target_runtime_graphs": true
+      },
+      "falsifier_result": "Two screens were positive 1.858 percent then negative 1.807 percent; direction is sign-conflicted.",
+      "evidence_refs": [
+        "ev-source-plan-v1",
+        "ev-strategy-summary-v1"
+      ],
+      "reentry_conditions": [
+        "A different selector predicate with a new shape discriminator",
+        "A kernel change rather than the same selector flip"
+      ],
+      "record_version": 1,
+      "provenance": {
+        "introduced_at": "2026-08-14T12:00:00Z",
+        "introduced_by": "autokernel-strategy-integrator",
+        "origin": "manual-dnr-formalization",
+        "note": "Initial stable v2 hard-refusal record; reentry remains explicitly scoped.",
+        "supersedes": null
+      },
+      "classification": "sign_conflict"
+    },
+    {
+      "dnr_id": "dnr-q6k-onewave",
+      "title": "Q6_K one-wave MMVQ geometry",
+      "enforcement": "hard_refusal_exact_mechanism_and_regime",
+      "statement": "Do not repeat the exact Q6_K one-wave candidate.",
+      "mechanism": {
+        "facets": {
+          "mechanism": "q6_k_one_wave_per_output_block",
+          "ops": [
+            "mul_mat_vec_q"
+          ],
+          "files": [
+            "ggml/src/ggml-cuda/mmvq.cu"
+          ],
+          "symbols": [
+            "MMVQ_PARAMETERS_GCN"
+          ],
+          "change_class": "launch_geometry"
+        },
+        "fingerprint_sha256": "2c3879e4af1e40cf200bc3bde74d0a8c380d370c7145dde0ea597c066b25ffc2"
+      },
+      "regime": {
+        "backend": "hip",
+        "phase": "decode",
+        "batch": 1,
+        "architecture": "gfx90a",
+        "model_or_frame": "applicable-v9-frame",
+        "quant": "Q6_K",
+        "shape": "mechanism-exact",
+        "measurement_graphs": false,
+        "target_runtime_graphs": true
+      },
+      "falsifier_result": "Full 1139-case correctness and exact dispatch passed; throughput regressed 0.479 percent.",
+      "evidence_refs": [
+        "ev-source-plan-v1"
+      ],
+      "reentry_conditions": [
+        "A non-wave-count Q6_K mechanism",
+        "A different architecture or batch regime"
+      ],
+      "record_version": 1,
+      "provenance": {
+        "introduced_at": "2026-08-14T12:00:00Z",
+        "introduced_by": "autokernel-strategy-integrator",
+        "origin": "manual-dnr-formalization",
+        "note": "Initial stable v2 hard-refusal record; reentry remains explicitly scoped.",
+        "supersedes": null
+      },
+      "classification": "measured_negative"
+    },
+    {
+      "dnr_id": "dnr-q4k-stored-aggregate-sum",
+      "title": "Q4_K stored aggregate Q8-sum substitution",
+      "enforcement": "hard_refusal_exact_mechanism_and_regime",
+      "statement": "Do not replace lane-local eight-element Q8 sums with the stored 32-element block aggregate.",
+      "mechanism": {
+        "facets": {
+          "mechanism": "q4k_replace_lane_sum_with_stored_aggregate",
+          "ops": [
+            "mul_mat_vec_q"
+          ],
+          "files": [
+            "ggml/src/ggml-cuda/vecdotq.cuh"
+          ],
+          "symbols": [
+            "vec_dot_q4_K_q8_1"
+          ],
+          "change_class": "arithmetic"
+        },
+        "fingerprint_sha256": "3a21a65f51d284fb98c5173c226ca36aed6be24470f0b7916aafaa0cb627ba59"
+      },
+      "regime": {
+        "backend": "hip",
+        "phase": "decode",
+        "batch": 1,
+        "architecture": "gfx90a",
+        "model_or_frame": "applicable-v9-frame",
+        "quant": "Q4_K",
+        "shape": "mechanism-exact",
+        "measurement_graphs": false,
+        "target_runtime_graphs": true
+      },
+      "falsifier_result": "Candidate failed all five representative correctness cases while frozen v9 passed all five.",
+      "evidence_refs": [
+        "ev-research-loop-snapshot"
+      ],
+      "reentry_conditions": [
+        "A proof of equivalent lane-local semantics",
+        "A different exact instruction subset"
+      ],
+      "record_version": 1,
+      "provenance": {
+        "introduced_at": "2026-08-14T12:00:00Z",
+        "introduced_by": "autokernel-strategy-integrator",
+        "origin": "manual-dnr-formalization",
+        "note": "Initial stable v2 hard-refusal record; reentry remains explicitly scoped.",
+        "supersedes": null
+      },
+      "classification": "measured_negative"
+    },
+    {
+      "dnr_id": "dnr-mfma-batch1-decode",
+      "title": "MFMA authoring for batch-one decode",
+      "enforcement": "hard_refusal_exact_mechanism_and_regime",
+      "statement": "Do not treat near-zero MFMA utilization at batch one as a kernel defect or author decode MFMA kernels to fix it.",
+      "mechanism": {
+        "facets": {
+          "mechanism": "mfma_decode_kernel_authoring",
+          "ops": [
+            "mul_mat"
+          ],
+          "files": [
+            "ggml/src/ggml-cuda/mmq.cu"
+          ],
+          "symbols": [
+            "mul_mat"
+          ],
+          "change_class": "algorithm"
+        },
+        "fingerprint_sha256": "b7672cb24671a169e5cfef13a1418aed7cadcb1f3f48ed6449ab7a869087c881"
+      },
+      "regime": {
+        "backend": "hip",
+        "phase": "decode",
+        "batch": 1,
+        "architecture": "gfx90a",
+        "model_or_frame": "MI210",
+        "quant": "not_applicable",
+        "shape": "mechanism-exact",
+        "measurement_graphs": false,
+        "target_runtime_graphs": true
+      },
+      "falsifier_result": "Arithmetic intensity is 1.0 to 5.2 FLOP per byte, 31 to 113 times below the ridge; near-zero MFMA is physics.",
+      "evidence_refs": [
+        "ev-research-loop-snapshot"
+      ],
+      "reentry_conditions": [
+        "Batch at or above Q4_K 31, Q8_0 59, or bf16 110",
+        "A new measured roofline that changes the crossover"
+      ],
+      "record_version": 1,
+      "provenance": {
+        "introduced_at": "2026-08-14T12:00:00Z",
+        "introduced_by": "autokernel-strategy-integrator",
+        "origin": "manual-dnr-formalization",
+        "note": "Initial stable v2 hard-refusal record; reentry remains explicitly scoped.",
+        "supersedes": null
+      },
+      "classification": "physics_constraint"
+    },
+    {
+      "dnr_id": "dnr-streamk-nonzero-wgm-order",
+      "title": "Nonzero WGM launch ordering on gfx90a",
+      "enforcement": "hard_refusal_exact_mechanism_and_regime",
+      "statement": "Keep WGM0; do not repeat the nonzero stream-k MMQ launch-order sweep.",
+      "mechanism": {
+        "facets": {
+          "mechanism": "nonzero_wgm_launch_order",
+          "ops": [
+            "mul_mat_q"
+          ],
+          "files": [
+            "ggml/src/ggml-cuda/mmq.cu"
+          ],
+          "symbols": [
+            "launch_kernel"
+          ],
+          "change_class": "launch_order"
+        },
+        "fingerprint_sha256": "70a8057c18f3abe6350dcacb4868612629a69ca2e47d085bab87c730beec7eec"
+      },
+      "regime": {
+        "backend": "hip",
+        "phase": "decode",
+        "batch": 1,
+        "architecture": "gfx90a",
+        "model_or_frame": "MI210",
+        "quant": "not_applicable",
+        "shape": "wgm=2-32",
+        "measurement_graphs": false,
+        "target_runtime_graphs": true
+      },
+      "falsifier_result": "All cells passed 43 correctness cases; every nonzero mapping regressed 1.286 to 4.050 percent and WGM8 reduced TCC hit rate.",
+      "evidence_refs": [
+        "ev-research-loop-snapshot"
+      ],
+      "reentry_conditions": [
+        "A different architecture",
+        "A new mapping mechanism with a non-synthetic locality argument"
+      ],
+      "record_version": 1,
+      "provenance": {
+        "introduced_at": "2026-08-14T12:00:00Z",
+        "introduced_by": "autokernel-strategy-integrator",
+        "origin": "manual-dnr-formalization",
+        "note": "Initial stable v2 hard-refusal record; reentry remains explicitly scoped.",
+        "supersedes": null
+      },
+      "classification": "physics_constraint"
+    },
+    {
+      "dnr_id": "dnr-async-prefetch-v9-exact",
+      "title": "Unchanged frozen-v9 async-prefetch replay",
+      "enforcement": "hard_refusal_exact_mechanism_and_regime",
+      "statement": "Do not bank or replay the unchanged async-prefetch strategy as a two-percent candidate.",
+      "mechanism": {
+        "facets": {
+          "mechanism": "q8_0_async_prefetch_existing_gate",
+          "ops": [
+            "mul_mat_vec_q"
+          ],
+          "files": [
+            "ggml/src/ggml-cuda/mmvq.cu"
+          ],
+          "symbols": [
+            "mul_mat_vec_q8_0_prefetch"
+          ],
+          "change_class": "prefetch"
+        },
+        "fingerprint_sha256": "53a472cfb50b472d5219547aae9ecc71573c7ca552d64a6aa752a5b4b5a3bf35"
+      },
+      "regime": {
+        "backend": "hip",
+        "phase": "decode",
+        "batch": 1,
+        "architecture": "gfx90a",
+        "model_or_frame": "MI210",
+        "quant": "not_applicable",
+        "shape": "mechanism-exact",
+        "measurement_graphs": false,
+        "target_runtime_graphs": true
+      },
+      "falsifier_result": "Two governed 20-block campaigns measured 0.936 and 1.2442303249 percent medians, both below the predeclared two-percent floor.",
+      "evidence_refs": [
+        "ev-prefetch-v9-r2",
+        "ev-prefetch-v9-r1-independent",
+        "ev-research-loop-snapshot"
+      ],
+      "reentry_conditions": [
+        "A materially different prefetch mechanism",
+        "A different quant, shape, or batch regime with a new falsifier"
+      ],
+      "record_version": 1,
+      "provenance": {
+        "introduced_at": "2026-08-14T12:00:00Z",
+        "introduced_by": "autokernel-strategy-integrator",
+        "origin": "manual-dnr-formalization",
+        "note": "Initial stable v2 hard-refusal record; reentry remains explicitly scoped.",
+        "supersedes": null
+      },
+      "classification": "nonreplication"
+    },
+    {
+      "dnr_id": "dnr-g15-batched-elementwise-fusion",
+      "title": "G15 batched elementwise/norm fusion premise",
+      "enforcement": "hard_refusal_exact_mechanism_and_regime",
+      "statement": "Do not author the G15 batched fusion from the stale 43-percent non-GEMM bucket.",
+      "mechanism": {
+        "facets": {
+          "mechanism": "g15_generic_batched_norm_elementwise_fusion",
+          "ops": [
+            "norm",
+            "activation",
+            "elementwise"
+          ],
+          "files": [
+            "ggml/src/ggml-cuda"
+          ],
+          "symbols": [
+            "batched_decode_cluster"
+          ],
+          "change_class": "fusion"
+        },
+        "fingerprint_sha256": "bd39a16eff230213595ae35f7b67e41750f262032c68f49b63fbfdc40d098d8e"
+      },
+      "regime": {
+        "backend": "hip",
+        "phase": "decode",
+        "batch": "64-128",
+        "architecture": "gfx90a",
+        "model_or_frame": "MI210",
+        "quant": "not_applicable",
+        "shape": "mechanism-exact",
+        "measurement_graphs": false,
+        "target_runtime_graphs": true
+      },
+      "falsifier_result": "Current frozen-v9 family maps measured only 1.837 and 1.490 percent, more than 13 times below the predeclared 20-percent floor.",
+      "evidence_refs": [
+        "ev-research-loop-snapshot"
+      ],
+      "reentry_conditions": [
+        "A new current exact trace above the 20-percent target-selection floor",
+        "A narrower mechanism with independent measured share"
+      ],
+      "record_version": 1,
+      "provenance": {
+        "introduced_at": "2026-08-14T12:00:00Z",
+        "introduced_by": "autokernel-strategy-integrator",
+        "origin": "manual-dnr-formalization",
+        "note": "Initial stable v2 hard-refusal record; reentry remains explicitly scoped.",
+        "supersedes": null
+      },
+      "classification": "nonreplication"
+    },
+    {
+      "dnr_id": "dnr-graphs-off-decode",
+      "title": "HIP graphs off for decode",
+      "enforcement": "hard_refusal_exact_mechanism_and_regime",
+      "statement": "Do not compose kernel candidates with HIP graphs disabled in the production-compatible decode frame.",
+      "mechanism": {
+        "facets": {
+          "mechanism": "disable_hip_graphs",
+          "ops": [
+            "decode_graph"
+          ],
+          "files": [
+            "runtime_configuration"
+          ],
+          "symbols": [
+            "GGML_HIP_GRAPHS"
+          ],
+          "change_class": "runtime_configuration"
+        },
+        "fingerprint_sha256": "b3107ef67cd73ce37b7c95ec7f7e8eb00a5a5dc7244a77f9adf03fcf0b2d288d"
+      },
+      "regime": {
+        "backend": "hip",
+        "phase": "decode",
+        "batch": 1,
+        "architecture": "gfx90a",
+        "model_or_frame": "qwen05b-tg128",
+        "quant": "not_applicable",
+        "shape": "mechanism-exact",
+        "measurement_graphs": false,
+        "target_runtime_graphs": false
+      },
+      "falsifier_result": "Graphs off regressed median decode throughput 11.994296 percent.",
+      "evidence_refs": [
+        "ev-strategy-summary-v1",
+        "ev-source-plan-v1"
+      ],
+      "reentry_conditions": [
+        "A different runtime with a measured graph-capture defect",
+        "A non-decode regime"
+      ],
+      "record_version": 1,
+      "provenance": {
+        "introduced_at": "2026-08-14T12:00:00Z",
+        "introduced_by": "autokernel-strategy-integrator",
+        "origin": "manual-dnr-formalization",
+        "note": "Initial stable v2 hard-refusal record; reentry remains explicitly scoped.",
+        "supersedes": null
+      },
+      "classification": "configuration_regression"
+    },
+    {
+      "dnr_id": "dnr-kv-offload-off",
+      "title": "Disable KV offload",
+      "enforcement": "hard_refusal_exact_mechanism_and_regime",
+      "statement": "Do not disable KV offload in the GPU decode frame.",
+      "mechanism": {
+        "facets": {
+          "mechanism": "disable_kv_offload",
+          "ops": [
+            "kv_cache"
+          ],
+          "files": [
+            "runtime_configuration"
+          ],
+          "symbols": [
+            "kv_offload"
+          ],
+          "change_class": "runtime_configuration"
+        },
+        "fingerprint_sha256": "4828dfc9ee13722c2378fee6fb484e7fed6b2a73040c5bca3e714246437660c7"
+      },
+      "regime": {
+        "backend": "hip",
+        "phase": "decode",
+        "batch": 1,
+        "architecture": "gfx90a",
+        "model_or_frame": "qwen05b-tg128",
+        "quant": "not_applicable",
+        "shape": "mechanism-exact",
+        "measurement_graphs": false,
+        "target_runtime_graphs": true
+      },
+      "falsifier_result": "Disabling KV offload caused a 37.047169-percent median decode regression.",
+      "evidence_refs": [
+        "ev-strategy-summary-v1"
+      ],
+      "reentry_conditions": [
+        "A CPU-only regime",
+        "A fundamentally different KV placement architecture"
+      ],
+      "record_version": 1,
+      "provenance": {
+        "introduced_at": "2026-08-14T12:00:00Z",
+        "introduced_by": "autokernel-strategy-integrator",
+        "origin": "manual-dnr-formalization",
+        "note": "Initial stable v2 hard-refusal record; reentry remains explicitly scoped.",
+        "supersedes": null
+      },
+      "classification": "configuration_regression"
+    },
+    {
+      "dnr_id": "dnr-topk-reimplementation",
+      "title": "Reimplement already-fused gfx90a top-k",
+      "enforcement": "hard_refusal_exact_mechanism_and_regime",
+      "statement": "Do not treat generic top-k fusion as novel while the gfx90a fused route is already present.",
+      "mechanism": {
+        "facets": {
+          "mechanism": "generic_topk_fusion_reimplementation",
+          "ops": [
+            "topk_moe"
+          ],
+          "files": [
+            "ggml/src/ggml-cuda/topk.cu"
+          ],
+          "symbols": [
+            "topk_moe"
+          ],
+          "change_class": "fusion"
+        },
+        "fingerprint_sha256": "73f85e7e59fd5b90185dd43aca3889996493bef9c8122d88575b21f965be3e24"
+      },
+      "regime": {
+        "backend": "hip",
+        "phase": "decode",
+        "batch": 1,
+        "architecture": "gfx90a",
+        "model_or_frame": "MI210",
+        "quant": "not_applicable",
+        "shape": "mechanism-exact",
+        "measurement_graphs": false,
+        "target_runtime_graphs": true
+      },
+      "falsifier_result": "Prior-art audit confirms the fused gfx90a top-k route already exists; only gather/layout remains a novel measured question.",
+      "evidence_refs": [
+        "ev-research-loop-snapshot",
+        "ev-v9-qwen122b-iq2-profile",
+        "ev-v9-qwen35b-q8-profile",
+        "ev-v9-qwen35b-q4km-profile"
+      ],
+      "reentry_conditions": [
+        "Exact source proof that the target dispatch bypasses the fused route",
+        "A distinct algorithm with an explicit delta from current top-k"
+      ],
+      "record_version": 1,
+      "provenance": {
+        "introduced_at": "2026-08-14T12:00:00Z",
+        "introduced_by": "autokernel-strategy-integrator",
+        "origin": "manual-dnr-formalization",
+        "note": "Initial stable v2 hard-refusal record; reentry remains explicitly scoped.",
+        "supersedes": null
+      },
+      "classification": "prior_art_already_present"
+    }
+  ]
+}
