@@ -64,6 +64,31 @@ class SourceCase(unittest.TestCase):
             "@@ -1,1 +1,1 @@ if (\n-old\n+new\n")
         _hunks, symbols = S.hunk_identities(patch)
         self.assertEqual(symbols, (S.FILE_SCOPE,))
+
+    def test_hunk_body_function_overrides_stale_preceding_function_header(self):
+        patch_bytes = (
+            b"diff --git a/ggml/src/ggml-cuda/vecdotq.cuh b/ggml/src/ggml-cuda/vecdotq.cuh\n"
+            b"--- a/ggml/src/ggml-cuda/vecdotq.cuh\n"
+            b"+++ b/ggml/src/ggml-cuda/vecdotq.cuh\n"
+            b"@@ -170,3 +170,3 @@ static __device__ float vec_dot_q4_1_q8_1_impl(\n"
+            b" template <int vdr> static __device__ float vec_dot_q5_0_q8_1_impl(\n"
+            b"-old_impl\n"
+            b"+new_impl\n"
+            b" context\n"
+        )
+        manifest = S.SourcePatchManifest(
+            campaign_id="ak-inaugural", proposal_id="akp-inaugural",
+            candidate_id="akc-inaugural", source_tree="llama.cpp",
+            production_base_commit="0" * 40, instrument_commit="1" * 40,
+            change_class="arithmetic",
+            declared_files=("ggml/src/ggml-cuda/vecdotq.cuh",),
+            declared_symbols={"ggml/src/ggml-cuda/vecdotq.cuh": (
+                "vec_dot_q5_0_q8_1_impl",)},
+            mechanism_id="stale-diff-header",
+            patch_sha256=hashlib.sha256(patch_bytes).hexdigest(),
+            patch_bytes=patch_bytes)
+        _hunks, symbols = S.hunk_identities(manifest.patch_text)
+        self.assertEqual(symbols, ("vec_dot_q5_0_q8_1_impl",))
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(prefix="ak-source-candidate-")
         self.addCleanup(self.tmp.cleanup)

@@ -91,6 +91,42 @@ def _symbol_from_context(context: str) -> str:
     return FILE_SCOPE
 
 
+def _symbol_from_hunk(context: str, body: Sequence[str]) -> str:
+    """Derive a function from source-backed hunk lines before header prose.
+
+    Diff may label a hunk with the preceding function when the hunk begins on
+    macros or a template declaration.  Unchanged/deleted body lines, unlike
+    caller-authored hunk prose, are checked against the source when applied.
+    A single function definition there is therefore the stronger scope signal.
+    """
+    header_symbol = _symbol_from_context(context)
+    body_symbols: list[str] = []
+    for line in body:
+        if not line or line[0] not in {" ", "-"}:
+            continue
+        normalized = line[1:].strip()
+        match = _TRUNCATED_FUNC.search(normalized)
+        if match is None or match.group("name") in _CONTROL_WORDS:
+            continue
+        # A body line is stronger than GNU diff's sometimes-stale header only
+        # when it is a truncated declaration/definition, not an ordinary call.
+        # Require a declaration-like prefix and reject expression punctuation.
+        prefix = normalized[:match.start("name")].strip()
+        if (not prefix or prefix in _CONTROL_WORDS
+                or any(char in prefix for char in "=;{}")):
+            continue
+        symbol = match.group("name")
+        if symbol not in body_symbols:
+            body_symbols.append(symbol)
+    if len(body_symbols) == 1:
+        return body_symbols[0]
+    if header_symbol in body_symbols:
+        return header_symbol
+    if body_symbols:
+        return FILE_SCOPE
+    return header_symbol
+
+
 def _hunk_rows(diff_text: str) -> tuple[tuple[str, str, str], ...]:
     """Return stable hunk ids and content-derived enclosing symbols.
 
@@ -113,7 +149,7 @@ def _hunk_rows(diff_text: str) -> tuple[tuple[str, str, str], ...]:
             "context": " ".join(current_context.split()), "body": normalized,
         }
         rows.append((current_file, f"akhunk:{schemas.content_hash(material)}",
-                     _symbol_from_context(current_context)))
+                     _symbol_from_hunk(current_context, body)))
         current_header, current_context, body = None, "", []
 
     for line in diff_text.splitlines():
