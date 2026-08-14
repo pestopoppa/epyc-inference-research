@@ -1254,7 +1254,15 @@ def _reduce_arm(
 ) -> dict[str, Any]:
     exact_result: dict[str, Any] = {}
     for expectation in exact:
-        hits = _matching(rows, expectation.kernel_pattern)
+        # One real kernel symbol can launch at several governed geometries in
+        # the same workload (quantize_q8_1 is the canonical case).  Select the
+        # geometry as well as the escaped name so each expected cell remains
+        # exact and independently countable.
+        hits = [row for row in _matching(rows, expectation.kernel_pattern)
+                if (int(row["grid"]), int(row["workgroup"]), int(row["lds"]),
+                    int(row["blocks_per_call"])) ==
+                   (expectation.grid, expectation.workgroup,
+                    expectation.lds_bytes, expectation.blocks_per_call)]
         geometry = _geometry_signature(hits)
         expected_geometry = [{
             "grid": expectation.grid, "workgroup": expectation.workgroup,
@@ -1266,6 +1274,15 @@ def _reduce_arm(
             raise EvidenceProducerError(
                 f"exact dispatch {expectation.signature} count/geometry mismatch")
         exact_result[expectation.signature] = geometry
+    for pattern in {item.kernel_pattern for item in exact}:
+        allowed = {(item.grid, item.workgroup, item.lds_bytes, item.blocks_per_call)
+                   for item in exact if item.kernel_pattern == pattern}
+        unexpected = [row for row in _matching(rows, pattern)
+                      if (int(row["grid"]), int(row["workgroup"]), int(row["lds"]),
+                          int(row["blocks_per_call"])) not in allowed]
+        if unexpected:
+            raise EvidenceProducerError(
+                "exact dispatch matched an unreviewed geometry")
     forbidden_result: dict[str, int] = {}
     for expectation in forbidden:
         count = len(_matching(rows, expectation.kernel_pattern))

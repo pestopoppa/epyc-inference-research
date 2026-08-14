@@ -75,6 +75,28 @@ def _build(root: Path, *, rocwmma: str, mfma: str, graphs: str = "ON") -> Path:
 
 
 class TestGpuDiscoveryBuildIdentity(unittest.TestCase):
+    def test_parser_and_preflight_preserve_sealed_arm_schedule(self) -> None:
+        parsed = gpu.parser().parse_args([
+            "--anchor-build", "/anchor", "--candidate-build", "/candidate",
+            "--model", "/model", "--output-dir", "/output",
+            "--campaign-id", "ak-order", "--arm-order-schedule", "candidate,anchor",
+            "--arm-order-seed-sha256", "d" * 64])
+        self.assertEqual(parsed.arm_order_schedule, "candidate,anchor")
+        self.assertEqual(parsed.arm_order_seed_sha256, "d" * 64)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            build = _build(root / "build", rocwmma="ON", mfma="OFF")
+            model = root / "model"; model.write_bytes(b"model")
+            args = _bind_admission(argparse.Namespace(
+                model=str(model), anchor_build=str(build), candidate_build=str(build),
+                factor="flash_attention", campaign_id="ak-order", calls=3,
+                workload="prefill_pp512", device_id=gpu.DEVICE_ID,
+                inference_window_lock=None, arm_order_schedule="candidate,anchor",
+                arm_order_seed_sha256="d" * 64))
+            sealed = gpu.preflight(args)
+        self.assertEqual(sealed["arm_order_schedule"], ["candidate", "anchor"])
+        self.assertEqual(sealed["arm_order_seed_sha256"], "d" * 64)
+
     def test_source_patch_accepts_shared_reward_binary_and_distinct_hip_loaders(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -752,12 +774,13 @@ class TestGpuDiscoveryRunCleanup(unittest.TestCase):
             vram = root / "vram"; vram.write_text("0", encoding="ascii")
             out = root / "out"
             build = root / "build"; build.mkdir()
-            identity = {"source_commit": "a" * 40}
+            anchor_identity = {"source_commit": "a" * 40}
+            candidate_identity = {"source_commit": "b" * 40}
             sealed = {
                 "model": str(model), "model_sha256": gpu.sha256_file(model),
                 "model_size_bytes": model.stat().st_size,
                 "anchor_build": str(build), "candidate_build": str(build),
-                "anchor_identity": identity, "candidate_identity": identity,
+                "anchor_identity": anchor_identity, "candidate_identity": candidate_identity,
                 "sole_factor": {"name": "source_patch", "anchor": "a", "candidate": "b"},
                 "serialized_readiness": {"ready_continue": {"enabled": False}},
                 "host_transfer": {"mode": "cold_serialized"},
@@ -774,6 +797,8 @@ class TestGpuDiscoveryRunCleanup(unittest.TestCase):
                 "anchor_no_kv_offload": False, "candidate_no_kv_offload": False,
                 "anchor_poll": 50, "candidate_poll": 50,
                 "frame": "tg128-ngl99", "metric": "decode_tokens_per_s",
+                "arm_order_schedule": ["candidate", "anchor"],
+                "arm_order_seed_sha256": "d" * 64,
             }
             claim = mock.Mock()
             claim.borrowed_outer_reservation = True
@@ -794,6 +819,10 @@ class TestGpuDiscoveryRunCleanup(unittest.TestCase):
                 device_claim_journal=str(root / "gpu.jsonl"),
                 campaign_id="cleanup-test", seed=8613, calls=9,
                 _device_claim_acquirer=borrowed_acquirer)
+            call_order = []
+            def ordered_invocation(**kwargs):
+                call_order.append(kwargs["expected_source_commit"])
+                return invocation
             with mock.patch.object(gpu, "preflight", return_value=sealed), \
                  mock.patch.object(gpu.storage, "assert_not_scratch", return_value=out), \
                  mock.patch.object(gpu, "_readiness_policy_for_arm", return_value=None), \
@@ -839,9 +868,15 @@ class TestGpuDiscoveryRunCleanup(unittest.TestCase):
                  mock.patch.object(gpu.device_claim, "acquire_device_claim",
                                    side_effect=AssertionError("nested physical claim")), \
                  mock.patch.object(gpu.device_sampler, "RocmSmiSampler", return_value=sampler), \
-                 mock.patch.object(gpu, "invoke", return_value=invocation), \
+                 mock.patch.object(gpu, "invoke", side_effect=ordered_invocation), \
                  mock.patch.object(gpu.autokernel_progression, "export_progression"):
                 result = gpu.run(args)
+            self.assertEqual(call_order, ["b" * 40, "a" * 40])
+            self.assertEqual(result["arm_order_schedule"], ["candidate", "anchor"])
+            self.assertEqual(result["arm_order_seed_sha256"], "d" * 64)
+            bank = json.loads((root / "success/baseline-bank.json").read_text())
+            self.assertEqual(bank["arm_order_schedule"], ["candidate", "anchor"])
+            self.assertEqual(bank["arm_order_seed_sha256"], "d" * 64)
             claim.release.assert_called_once_with()
             self.assertEqual(result["device_claim_open"]["claim_id"], "akd-outer")
             self.assertEqual(result["device_claim_borrowed_phase_end"]["outer_claim_id"],

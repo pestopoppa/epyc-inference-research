@@ -20,7 +20,7 @@ import inspect
 import json
 import math
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 import statistics
 import stat
@@ -33,7 +33,7 @@ from . import gpu_source_proofs
 from scripts.benchmark import autokernel_progression
 from scripts.benchmark import run_autokernel_gpu_discovery as gpu_discovery
 
-SCHEMA = "epyc.autokernel.discovery_controller.v3"
+SCHEMA = "epyc.autokernel.discovery_controller.v4"
 ROSTER_SCHEMA = "epyc.autokernel.discovery_roster.v3"
 AUTHORITY = "nonpromotable_candidate_only_discovery"
 HASH = __import__("re").compile(r"^[0-9a-f]{64}$")
@@ -214,9 +214,17 @@ class BoundedDispatchExpectation:
     lds_bytes: int
 
     def __post_init__(self) -> None:
-        import re
-        if (not isinstance(self.kernel_name, str) or not re.fullmatch(r"[A-Za-z0-9_:<>.,-]{1,256}", self.kernel_name)
-                or any(ch in self.kernel_name for ch in "*?[]()|+\\^$")):
+        # rocprof-v1 reports the complete demangled HIP symbol, including spaces,
+        # pointers, template punctuation, and the ``[clone .kd]`` suffix.  This is
+        # still a literal: the deployment factory escapes it before constructing
+        # an evidence matcher.  Bound bytes and control characters here instead
+        # of accidentally making real symbols inexpressible.
+        if (not isinstance(self.kernel_name, str)
+                or not 1 <= len(self.kernel_name.encode("utf-8")) <= 2048
+                or any(ord(ch) < 0x20 or ord(ch) == 0x7f for ch in self.kernel_name)
+                or (any(ch in self.kernel_name for ch in "*?[]|+\\^$")
+                    and not self.kernel_name.endswith(" [clone .kd]"))
+                or (" " in self.kernel_name and "(" not in self.kernel_name)):
             raise DiscoveryControllerError("dispatch kernel name must be a bounded literal")
         for label, value, maximum in (("calls", self.calls, 10_000_000), ("grid", self.grid, 1 << 31),
                                       ("workgroup", self.workgroup, 4096), ("lds_bytes", self.lds_bytes, 1 << 30)):
@@ -251,7 +259,7 @@ class GpuSourceExperimentIntent:
     target_symbol: str
     correctness_id: str
     dispatch_id: str
-    expected_dispatch: BoundedDispatchExpectation
+    expected_dispatch: tuple[BoundedDispatchExpectation, ...]
     load_mode_recommendation: LoadModeRecommendation | None = None
 
     def __post_init__(self) -> None:
@@ -265,8 +273,14 @@ class GpuSourceExperimentIntent:
         for label, value in (("target_surface", self.target_surface),
                              ("target_symbol", self.target_symbol)):
             _text(value, f"experiment intent {label}")
-        if not isinstance(self.expected_dispatch, BoundedDispatchExpectation):
-            raise DiscoveryControllerError("experiment intent requires bounded literal dispatch expectation")
+        if (not isinstance(self.expected_dispatch, tuple)
+                or not 1 <= len(self.expected_dispatch) <= 8
+                or not all(isinstance(item, BoundedDispatchExpectation)
+                           for item in self.expected_dispatch)
+                or len({(item.kernel_name, item.grid, item.workgroup, item.lds_bytes)
+                        for item in self.expected_dispatch}) != len(self.expected_dispatch)):
+            raise DiscoveryControllerError(
+                "experiment intent requires 1..8 distinct bounded literal dispatch expectations")
         if self.load_mode_recommendation is not None and not isinstance(
                 self.load_mode_recommendation, LoadModeRecommendation):
             raise DiscoveryControllerError("load-mode recommendation must be typed and immutable")
@@ -376,15 +390,118 @@ class Recovery:
         if (self.status == "sealed_result") != isinstance(self.result, SealedScreen): raise DiscoveryControllerError("recovery result binding is invalid")
 
 
+@dataclass(frozen=True)
+class ReviewedSourceFile:
+    relative_path: str
+    sha256: str
+    content: bytes
+
+    def __post_init__(self) -> None:
+        path = PurePosixPath(self.relative_path)
+        if (path.is_absolute() or path.as_posix() != self.relative_path
+                or any(part in {"", ".", ".."} for part in path.parts)
+                or not HASH.fullmatch(self.sha256)
+                or hashlib.sha256(self.content).hexdigest() != self.sha256):
+            raise DiscoveryControllerError("reviewed source file identity is malformed")
+
+
+@dataclass(frozen=True)
+class ReviewedSourcePackage:
+    instrument_commit: str
+    files: tuple[ReviewedSourceFile, ...]
+    package_sha256: str
+
+    def __post_init__(self) -> None:
+        if (not re.fullmatch(r"[0-9a-f]{40}", self.instrument_commit)
+                or not self.files
+                or tuple(sorted(item.relative_path for item in self.files)) != tuple(
+                    item.relative_path for item in self.files)
+                or len({item.relative_path for item in self.files}) != len(self.files)):
+            raise DiscoveryControllerError("reviewed source package is malformed")
+        body = {"schema": "epyc.autokernel.reviewed_source_package.v1",
+                "instrument_commit": self.instrument_commit,
+                "files": [{"relative_path": item.relative_path, "sha256": item.sha256,
+                           "workspace_path": f"reviewed-source/{item.relative_path}"}
+                          for item in self.files]}
+        if self.package_sha256 != _sha(body):
+            raise DiscoveryControllerError("reviewed source package hash mismatch")
+
+    def manifest(self) -> dict[str, Any]:
+        body = {"schema": "epyc.autokernel.reviewed_source_package.v1",
+                "instrument_commit": self.instrument_commit,
+                "files": [{"relative_path": item.relative_path, "sha256": item.sha256,
+                           "workspace_path": f"reviewed-source/{item.relative_path}"}
+                          for item in self.files]}
+        return {**body, "package_sha256": self.package_sha256}
+
+    def _manifest_bytes(self) -> bytes:
+        return json.dumps(self.manifest(), sort_keys=True, indent=2).encode() + b"\n"
+
+    @staticmethod
+    def _require_owned_directory(path: Path, label: str) -> None:
+        info = path.lstat()
+        if (not stat.S_ISDIR(info.st_mode) or path.is_symlink()
+                or info.st_uid != os.getuid() or info.st_nlink < 2):
+            raise DiscoveryControllerError(f"{label} is not an owned non-symlink directory")
+
+    def revalidate_materialized(self, workspace: Path) -> None:
+        self._require_owned_directory(workspace, "actor workspace")
+        root = workspace / "reviewed-source"
+        self._require_owned_directory(root, "reviewed source root")
+        for item in self.files:
+            target = root.joinpath(*PurePosixPath(item.relative_path).parts)
+            current = root
+            for part in PurePosixPath(item.relative_path).parts[:-1]:
+                current = current / part
+                self._require_owned_directory(current, "reviewed source parent")
+            info = target.lstat()
+            if (not stat.S_ISREG(info.st_mode) or target.is_symlink()
+                    or info.st_uid != os.getuid() or info.st_nlink != 1
+                    or hashlib.sha256(target.read_bytes()).hexdigest() != item.sha256):
+                raise DiscoveryControllerError("reviewed source bytes changed in actor workspace")
+        manifest_path = root / "source-package.json"
+        info = manifest_path.lstat()
+        if (not stat.S_ISREG(info.st_mode) or manifest_path.is_symlink()
+                or info.st_uid != os.getuid() or info.st_nlink != 1
+                or manifest_path.read_bytes() != self._manifest_bytes()):
+            raise DiscoveryControllerError("reviewed source package manifest changed")
+
+    def materialize(self, workspace: Path) -> Mapping[str, Any]:
+        self._require_owned_directory(workspace, "actor workspace")
+        root = workspace / "reviewed-source"
+        if root.exists() or root.is_symlink():
+            raise DiscoveryControllerError("disposable reviewed-source root already exists")
+        root.mkdir(mode=0o700)
+        for item in self.files:
+            target = root.joinpath(*PurePosixPath(item.relative_path).parts)
+            target.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
+            with target.open("xb") as handle:
+                handle.write(item.content); handle.flush(); os.fsync(handle.fileno())
+            target.chmod(0o400)
+            if (target.is_symlink() or target.stat().st_nlink != 1
+                    or hashlib.sha256(target.read_bytes()).hexdigest() != item.sha256):
+                raise DiscoveryControllerError("reviewed source materialization changed bytes")
+        manifest = self.manifest()
+        encoded = self._manifest_bytes()
+        manifest_path = root / "source-package.json"
+        with manifest_path.open("xb") as handle:
+            handle.write(encoded); handle.flush(); os.fsync(handle.fileno())
+        manifest_path.chmod(0o400)
+        self.revalidate_materialized(workspace)
+        return manifest
+
+
 class CodexPlanner:
     """Concrete Sol actor. It may write only a plan and patch manifest in workspace."""
     def __init__(self, *, wrapper: Path, environment: Mapping[str, str],
                  template_catalog: Mapping[str, Any] | None = None,
+                 reviewed_sources: ReviewedSourcePackage | None = None,
                  wrapper_sha256: str | None = None,
                  runtime_identity: Mapping[str, Any] | None = None,
                  actor_launcher_sha256: str | None = None) -> None:
         self.wrapper, self.environment = wrapper, dict(environment)
         self.template_catalog = json.loads(json.dumps(template_catalog or {}, sort_keys=True))
+        self.reviewed_sources = reviewed_sources
         self.wrapper_sha256 = wrapper_sha256
         self.runtime_identity = None if runtime_identity is None else dict(runtime_identity)
         self.actor_launcher_sha256 = actor_launcher_sha256
@@ -405,6 +522,8 @@ class CodexPlanner:
         # The model gets a bounded source/profile brief plus a machine contract;
         # it never receives authority to select a campaign, base, executable,
         # argv, profile parser, or evidence regex.
+        source_package = (None if self.reviewed_sources is None
+                          else self.reviewed_sources.materialize(workspace))
         contract = {
             "plan_json_keys": ["hypothesis_id", "statement", "falsifier", "regime",
                                "proposal", "source_manifest_path", "experiment_intent"],
@@ -421,8 +540,22 @@ class CodexPlanner:
                 str(example.get("id")) for example in
                 context.get("admission_policy", {}).get("examples", [])
                 if isinstance(example, Mapping) and isinstance(example.get("id"), str)}),
-            "expected_dispatch_keys": ["kernel_name", "calls", "grid", "workgroup", "lds_bytes"],
-            "source_manifest": "epyc.autokernel.source_patch.v1; use deployment-assigned ids/base/instrument only",
+            "expected_dispatch": "array of 1..8 exact objects",
+            "expected_dispatch_item_keys": ["kernel_name", "calls", "grid", "workgroup", "lds_bytes"],
+            "source_manifest_schema": {
+                "exact_keys": ["schema", "campaign_id", "proposal_id", "candidate_id",
+                    "source_tree", "production_base_commit", "instrument_commit",
+                    "change_class", "declared_files", "declared_symbols", "mechanism_id",
+                    "patch_sha256", "patch_encoding", "patch_base64"],
+                "constants": {"schema": source_candidate.SCHEMA_SOURCE_PATCH,
+                              "source_tree": "llama.cpp", "patch_encoding": "base64"},
+                "patch_rule": "patch_base64 is strict base64 of a complete UTF-8 unified diff; patch_sha256 hashes the decoded bytes",
+            },
+            "proposal_schema": {
+                "exact_keys": ["proposal_id", "change_class", "change"],
+                "change_exact_keys": ["files_and_symbols", "estimated_diff_size"],
+                "files_and_symbols_rule": "sorted file:symbol declarations exactly equal source manifest declarations",
+            },
             "proposal_requirements": ["proposal_id matches manifest", "change_class matches manifest",
                                        "change.files_and_symbols exactly matches manifest declarations",
                                        "change.estimated_diff_size is positive"],
@@ -432,9 +565,38 @@ class CodexPlanner:
         assignment = context.get("authoring_assignment")
         if not isinstance(assignment, Mapping):
             raise DiscoveryControllerError("planner context lacks controller-owned authoring assignment")
+        example_patch = ("diff --git a/ggml/src/ggml-cuda/example.cu "
+                         "b/ggml/src/ggml-cuda/example.cu\n--- a/ggml/src/ggml-cuda/example.cu\n"
+                         "+++ b/ggml/src/ggml-cuda/example.cu\n@@ -1 +1 @@ example_symbol()\n-old\n+new\n")
+        example = {
+            "plan.json": {"hypothesis_id": "akh-example", "statement": "bounded hypothesis",
+                "falsifier": "an exact non-improvement falsifies it", "regime": {"phase": "decode"},
+                "proposal": {"proposal_id": assignment["proposal_id"], "change_class": "dispatcher",
+                    "change": {"files_and_symbols": ["ggml/src/ggml-cuda/example.cu:example_symbol"],
+                               "estimated_diff_size": 2}},
+                "source_manifest_path": "source-patch.json",
+                "experiment_intent": {"template_id": "replace-with-reviewed-id",
+                    "target_surface": "gpu_decode", "target_symbol": "replace-with-reviewed-symbol",
+                    "correctness_id": "backend-ops-hip-v1",
+                    "dispatch_id": "decode-tg128-rocprof-v1",
+                    "expected_dispatch": [{"kernel_name": "exact rocprof demangled literal",
+                        "calls": 1, "grid": 64, "workgroup": 64, "lds_bytes": 0}] }},
+            "source-patch.json": {"schema": source_candidate.SCHEMA_SOURCE_PATCH,
+                "campaign_id": assignment["campaign_id"], "proposal_id": assignment["proposal_id"],
+                "candidate_id": assignment["candidate_id"], "source_tree": "llama.cpp",
+                "production_base_commit": assignment["production_base_commit"],
+                "instrument_commit": assignment["instrument_commit"], "change_class": "dispatcher",
+                "declared_files": ["ggml/src/ggml-cuda/example.cu"],
+                "declared_symbols": {"ggml/src/ggml-cuda/example.cu": ["example_symbol"]},
+                "mechanism_id": "bounded-example",
+                "patch_sha256": hashlib.sha256(example_patch.encode()).hexdigest(),
+                "patch_encoding": "base64",
+                "patch_base64": base64.b64encode(example_patch.encode()).decode("ascii")}}
         prompt = json.dumps({"role": SOL, "context": context,
                              "experiment_template_catalog": self.template_catalog,
+                             "reviewed_source_package": source_package,
                              "authoring_contract": contract,
+                             "structural_example_only": example,
                              "output": "Write plan.json and source-patch.json in workspace."}, sort_keys=True)
         self._runtime()
         result = codex_container_actor.run_actor(wrapper=self.wrapper, workspace=workspace, model=SOL["model"], effort=SOL["effort"], prompt=prompt, environment=self.environment,
@@ -442,6 +604,8 @@ class CodexPlanner:
             expected_runtime_identity=self.runtime_identity,
             expected_launcher_sha256=self.actor_launcher_sha256)
         if result.returncode: raise DiscoveryControllerError(f"Sol actor failed: {result.stderr[-400:]}")
+        if self.reviewed_sources is not None:
+            self.reviewed_sources.revalidate_materialized(workspace)
         return _load_plan(workspace / "plan.json", workspace,
                           assignment=AuthoringAssignment(**assignment))
 
@@ -529,7 +693,10 @@ def _load_plan(path: Path, root: Path, *, assignment: AuthoringAssignment | None
         if not isinstance(intent_raw, Mapping) or set(intent_raw) not in (allowed_intent, allowed_intent - {"load_mode_recommendation"}):
             raise DiscoveryControllerError("planner experiment intent schema mismatch")
         expected = intent_raw["expected_dispatch"]
-        if not isinstance(expected, Mapping) or set(expected) != {"kernel_name", "calls", "grid", "workgroup", "lds_bytes"}:
+        expected_keys = {"kernel_name", "calls", "grid", "workgroup", "lds_bytes"}
+        if (not isinstance(expected, list) or not 1 <= len(expected) <= 8
+                or not all(isinstance(row, Mapping) and set(row) == expected_keys
+                           for row in expected)):
             raise DiscoveryControllerError("planner bounded dispatch schema mismatch")
         recommendation = intent_raw.get("load_mode_recommendation")
         if recommendation is not None:
@@ -539,7 +706,7 @@ def _load_plan(path: Path, root: Path, *, assignment: AuthoringAssignment | None
                 mode=recommendation["mode"], rationale=recommendation["rationale"],
                 example_ids=tuple(recommendation["example_ids"]))
         intent = GpuSourceExperimentIntent(**{**intent_raw,
-            "expected_dispatch": BoundedDispatchExpectation(**expected),
+            "expected_dispatch": tuple(BoundedDispatchExpectation(**row) for row in expected),
             "load_mode_recommendation": recommendation})
     else:
         intent = None
@@ -890,7 +1057,7 @@ def _restore_pending(value: Mapping[str, Any]) -> PlannedCandidate:
         raise DiscoveryControllerError("pending experiment intent is malformed")
     if intent is not None:
         expected = intent.get("expected_dispatch")
-        if not isinstance(expected, Mapping):
+        if not isinstance(expected, list) or not expected:
             raise DiscoveryControllerError("pending bounded dispatch is malformed")
         recommendation = intent.get("load_mode_recommendation")
         if recommendation is not None:
@@ -899,7 +1066,8 @@ def _restore_pending(value: Mapping[str, Any]) -> PlannedCandidate:
             recommendation = LoadModeRecommendation(
                 mode=recommendation.get("mode"), rationale=recommendation.get("rationale"),
                 example_ids=tuple(recommendation.get("example_ids", ())))
-        intent = {**intent, "expected_dispatch": BoundedDispatchExpectation(**expected),
+        intent = {**intent, "expected_dispatch": tuple(
+                      BoundedDispatchExpectation(**row) for row in expected),
                   "load_mode_recommendation": recommendation}
     return PlannedCandidate(hypothesis_id=raw["hypothesis_id"],statement=raw["statement"],falsifier=raw["falsifier"],regime=raw["regime"],proposal=raw["proposal"],source_manifest=manifest,source_manifest_sha256=raw["source_manifest_sha256"],experiment_intent=GpuSourceExperimentIntent(**intent) if intent else None)
 

@@ -92,40 +92,45 @@ class ExperimentTemplate:
                                   ensure_ascii=False, allow_nan=False))))
 
     def matches(self, intent: controller.GpuSourceExperimentIntent) -> bool:
-        return (self.template_id, self.target_surface, self.target_symbol,
-                self.correctness_id, self.dispatch_id) == (
-                    intent.template_id, intent.target_surface, intent.target_symbol,
+        return ((self.template_id, self.target_surface,
+                 self.correctness_id, self.dispatch_id) == (
+                    intent.template_id, intent.target_surface,
                     intent.correctness_id, intent.dispatch_id)
+                and any(intent.target_symbol in symbols
+                        for symbols in self.allowed_symbols.values()))
 
     def bind_dispatch(self, intent: controller.GpuSourceExperimentIntent) -> evidence.DispatchContract:
         """Derive an internal escaped matcher from planner literals and reviewed bounds."""
         if not self.matches(intent):
             raise DeploymentFactoryError("dispatch intent does not select this reviewed template")
-        expected = intent.expected_dispatch
+        expected_rows = intent.expected_dispatch
         bounds = self.semantics.get("dispatch_bounds", {})
         if not isinstance(bounds, Mapping):
             raise DeploymentFactoryError("template dispatch bounds are malformed")
-        for key, value in (("calls", expected.calls), ("grid", expected.grid),
-                           ("workgroup", expected.workgroup), ("lds_bytes", expected.lds_bytes)):
-            limit = bounds.get(key)
-            if (not isinstance(limit, list) or len(limit) != 2
-                    or not all(isinstance(item, int) for item in limit)
-                    or not limit[0] <= value <= limit[1]):
-                raise DeploymentFactoryError(f"planner dispatch {key} exceeds reviewed template bounds")
-        prefixes = bounds.get("kernel_prefixes")
-        if (not isinstance(prefixes, list) or not prefixes
-                or not all(isinstance(value, str) and value for value in prefixes)
-                or not any(expected.kernel_name.startswith(prefix) for prefix in prefixes)):
-            raise DeploymentFactoryError("planner kernel literal is outside reviewed template families")
-        if expected.grid % expected.workgroup:
-            raise DeploymentFactoryError("planner dispatch grid must be an exact workgroup multiple")
-        blocks = expected.grid // expected.workgroup
-        candidate = evidence.ExactDispatch(
-            signature=f"{self.dispatch_id}.candidate",
-            kernel_pattern="^" + re.escape(expected.kernel_name) + "$",
-            calls=expected.calls, grid=expected.grid, workgroup=expected.workgroup,
-            lds_bytes=expected.lds_bytes, blocks_per_call=blocks)
-        return evidence.DispatchContract(candidate_exact=(candidate,),
+        markers = bounds.get("kernel_name_fragments")
+        if (not isinstance(markers, list) or not markers
+                or not all(isinstance(value, str) and value for value in markers)):
+            raise DeploymentFactoryError("template kernel literal markers are malformed")
+        candidate = []
+        for index, expected in enumerate(expected_rows):
+            for key, value in (("calls", expected.calls), ("grid", expected.grid),
+                               ("workgroup", expected.workgroup), ("lds_bytes", expected.lds_bytes)):
+                limit = bounds.get(key)
+                if (not isinstance(limit, list) or len(limit) != 2
+                        or not all(isinstance(item, int) for item in limit)
+                        or not limit[0] <= value <= limit[1]):
+                    raise DeploymentFactoryError(f"planner dispatch {key} exceeds reviewed template bounds")
+            if not any(marker in expected.kernel_name for marker in markers):
+                raise DeploymentFactoryError("planner kernel literal is outside reviewed template families")
+            if expected.grid % expected.workgroup:
+                raise DeploymentFactoryError("planner dispatch grid must be an exact workgroup multiple")
+            candidate.append(evidence.ExactDispatch(
+                signature=f"{self.dispatch_id}.candidate.{index}",
+                kernel_pattern="^" + re.escape(expected.kernel_name) + "$",
+                calls=expected.calls, grid=expected.grid, workgroup=expected.workgroup,
+                lds_bytes=expected.lds_bytes,
+                blocks_per_call=expected.grid // expected.workgroup))
+        return evidence.DispatchContract(candidate_exact=tuple(candidate),
             anchor_exact=self.dispatch.anchor_exact,
             candidate_forbidden=self.dispatch.candidate_forbidden,
             anchor_forbidden=self.dispatch.anchor_forbidden,
@@ -290,9 +295,15 @@ _INSTRUMENT_DIFF_PATHS = frozenset({
 })
 _TARGET_SOURCE_SHA256 = MappingProxyType({
     "ggml/src/ggml-cuda/fattn.cu": "f6a61657387c153e88bde036e25684b512c7cf078b1d17c7e3b2d31ee73f28d3",
+    "ggml/src/ggml-cuda/fattn-common.cuh": "47537d7980d81f7dc9daa18698f5fdbb990ef6b916fa75fed4bc0bbfd1aa08cb",
+    "ggml/src/ggml-cuda/fattn-tile.cu": "f57657daf3c5209a32d182bb888ead02b1e806a26273cfa4df8b0a6345ae8247",
+    "ggml/src/ggml-cuda/fattn-tile.cuh": "eaa043031cb9574ec4a0018fc0bea25d3cd7d43230bb23b37e63241e3101d9f0",
     "ggml/src/ggml-cuda/mmvq.cu": "15d25d71c945de19e8efc9fbfc6b7e5e66f33bc7635f9dc648d9e1f231ba409e",
     "ggml/src/ggml-cuda/rope.cu": "8286f7b57bb76ab490e05d42cb8262ad886b85a8fdaaef63d6538b7ff06940b2",
     "ggml/src/ggml-cuda/norm.cu": "37e670ad50f8b0c3fb9acaaba54ad520b143b0e73994de5c10f8635e334ff0cd",
+    "ggml/src/ggml-cuda/quantize.cu": "9f0074ec27a46a78c4c4709d00163acc35dae772854c290ba9592574d30bd3d9",
+    "ggml/src/ggml-cuda/set-rows.cu": "24654fe55234c12b0d4d1e9c78871509fc5348f7e3ff123e146838c861a8c8a9",
+    "ggml/src/ggml-cuda/vecdotq.cuh": "c418082b854a33339b99702b10062132595256478d99f5673a81adf403651eb5",
 })
 _SAFE_ACTOR_ENVIRONMENT = MappingProxyType({
     "PATH": "/usr/local/bin:/usr/bin:/bin",
@@ -308,6 +319,12 @@ _SITE_MODEL = Path(
     "/mnt/raid0/llm/models/lmstudio-community/Qwen2.5-Coder-0.5B-GGUF/"
     "Qwen2.5-Coder-0.5B-Q4_K_M.gguf")
 _SITE_SOURCE_PLAN = Path("/mnt/raid0/llm/autokernel/surface/gpu_decode_source_plan.json")
+_PROFILE_TRACE_RECEIPT = Path(
+    "/mnt/raid0/llm/autokernel/screens/ak-gpu-qwen05b-tg128-rocprof-attribution-20260813/receipt.json")
+_PROFILE_TRACE_RECEIPT_SHA256 = "20742be4a69abf5bb70c228660ff0629bf416ed4452c4f69b9765ef74a933cd8"
+_PROFILE_TRACE_CSV = Path(
+    "/mnt/raid0/llm/autokernel/screens/ak-gpu-qwen05b-tg128-rocprof-attribution-20260813/timestamps.csv")
+_PROFILE_TRACE_CSV_SHA256 = "a11bc20a03dfd5ca157990c1766ebbb5edb70a5c036d73d85d806e4f39a222a8"
 _SITE_WINDOW_LOCK = Path("/mnt/raid0/llm/tmp/model-call.lock")
 _SITE_ACTOR_WRAPPER = Path(
     "/usr/local/share/npm-global/lib/node_modules/@openai/codex/bin/codex.js")
@@ -450,7 +467,7 @@ def initialize_static_deployment_bundle(root: Path) -> Path:
                "runtime_config_sha256": runtime_sha,
                "profile_receipts": [{"path": str(source_plan.path), "sha256": source_plan.sha256}],
                "hotspots": hotspots,
-               "source_constraints": {"template_registry": "gpu-source-templates-v1",
+               "source_constraints": {"template_registry": "gpu-source-templates-v2",
                                       "one_reviewed_file_per_candidate": True,
                                       "excluded_source_plan_fields": ["planner_posture", "current_execution",
                                                                        "max_overlap_bytes", "overlap_policy"]},
@@ -567,74 +584,181 @@ def _rocprof_v1_policy(config: deployment.DiscoveryDeployment) -> tuple[
 
 
 def _template_registry() -> ExperimentTemplateRegistry:
+    if (_digest_regular(_PROFILE_TRACE_RECEIPT, "reviewed profile receipt")
+            != _PROFILE_TRACE_RECEIPT_SHA256
+            or _digest_regular(_PROFILE_TRACE_CSV, "reviewed profile timestamp CSV")
+            != _PROFILE_TRACE_CSV_SHA256):
+        raise DeploymentFactoryError("reviewed real-trace template authority changed")
+    mmvq_pattern = lambda type_id, flags: (
+        rf"^void mul_mat_vec_q<\(ggml_type\){type_id}, 1, {flags}>\(.*\) \[clone \.kd\]$")
+    mmvq_anchor = (
+        (mmvq_pattern(6, "true, true"), 6063, 57344, 128, 1024),
+        (mmvq_pattern(6, "true, true"), 4644, 8192, 128, 1024),
+        (mmvq_pattern(6, "true, true"), 3096, 311296, 128, 1024),
+        (mmvq_pattern(6, "false, true"), 129, 57344, 128, 512),
+        (mmvq_pattern(12, "true, false"), 1548, 114688, 128, 512),
+        (mmvq_pattern(14, "true, false"), 1548, 114688, 128, 512),
+        (mmvq_pattern(8, "true, true"), 1548, 8192, 256, 6144),
+        (mmvq_pattern(8, "false, true"), 129, 9723904, 256, 3072),
+    )
+    fattn_tile_anchor = ((
+        r"^void flash_attn_tile<64, 64, 2, 1, false>\(.*\) \[clone \.kd\]$",
+        3096, 7168, 64, 5120),)
+    fattn_common_anchor = (*fattn_tile_anchor, (
+        r"^void flash_attn_combine_results<64>\(.*\) \[clone \.kd\]$",
+        3096, 896, 64, 512))
+    quantize_anchor = (
+        (r"^quantize_q8_1\(.*\) \[clone \.kd\]$", 15609, 1024, 256, 0),
+        (r"^quantize_q8_1\(.*\) \[clone \.kd\]$", 3096, 5120, 256, 0),
+    )
+    rope_anchor = (
+        (r"^void rope_neox<true, false, float, __half>\(.*\) \[clone \.kd\]$",
+         3096, 512, 256, 0),
+        (r"^void rope_neox<true, false, float, float>\(.*\) \[clone \.kd\]$",
+         3096, 3584, 256, 0),
+    )
+    norm_anchor = ((
+        r"^void rms_norm_f32<256, true, false>\(.*\) \[clone \.kd\]$",
+        6321, 256, 256, 512),)
+    set_rows_anchor = ((
+        r"^void k_set_rows<float, long, __half>\(.*\) \[clone \.kd\]$",
+        3096, 256, 256, 0),)
     families = (
-        ("cuda-fattn-v1", "ggml/src/ggml-cuda/fattn.cu",
-         "ggml_cuda_get_best_fattn_kernel", ("ggml_cuda_get_best_fattn_kernel",
-          "ggml_cuda_flash_attn_ext", "ggml_cuda_flash_attn_ext_vec",
-          "ggml_cuda_flash_attn_ext_mma_f16", "ggml_cuda_flash_attn_ext_supported",
-          "ggml_cuda_flash_attn_ext_get_alloc_size"),
-         ("fattn", "flash_attn"), "FLASH_ATTN_EXT", 2868,
-         ({"trace": "VEC selector", "file": "ggml/src/ggml-cuda/fattn.cu",
-           "symbol": "ggml_cuda_get_best_fattn_kernel"},
-          {"trace": "TILE geometry", "file": "ggml/src/ggml-cuda/fattn.cu",
-           "symbol": "ggml_cuda_get_best_fattn_kernel"})),
-        ("cuda-mmvq-v1", "ggml/src/ggml-cuda/mmvq.cu",
-         "ggml_cuda_op_mul_mat_vec_q", ("ggml_cuda_op_mul_mat_vec_q",
-          "ggml_cuda_mul_mat_vec_q", "mul_mat_vec_q_switch_type",
-          "mul_mat_vec_q_switch_ncols_dst", "mul_mat_vec_q_moe_launch",
-          "mul_mat_vec_q_switch_fusion", "mul_mat_vec_q8_0_prefetch_launch"),
-         ("mmvq", "mul_mat_vec"), "MUL_MAT", 1139,
-         tuple({"trace": f"{quant} dispatch", "file": "ggml/src/ggml-cuda/mmvq.cu",
-                "symbol": "mul_mat_vec_q_switch_type"} for quant in ("Q4", "Q5", "Q6"))),
-        ("cuda-rope-v1", "ggml/src/ggml-cuda/rope.cu",
-         "ggml_cuda_op_rope_impl", ("ggml_cuda_op_rope_impl", "ggml_cuda_op_rope",
-          "ggml_cuda_op_rope_back", "ggml_cuda_op_rope_fused", "rope_norm",
-          "rope_neox", "rope_multi", "rope_vision", "rope_norm_cuda",
-          "rope_neox_cuda", "rope_multi_cuda", "rope_vision_cuda"),
-         ("rope",), "ROPE", 428,
-         ({"trace": "ROPE dispatch", "file": "ggml/src/ggml-cuda/rope.cu",
-           "symbol": "ggml_cuda_op_rope_impl"},)),
-        ("cuda-norm-v1", "ggml/src/ggml-cuda/norm.cu",
-         "ggml_cuda_op_rms_norm", ("ggml_cuda_op_norm", "ggml_cuda_op_group_norm",
-          "ggml_cuda_op_rms_norm", "ggml_cuda_op_rms_norm_fused",
-          "ggml_cuda_op_rms_norm_fused_add", "ggml_cuda_op_rms_norm_back",
-          "ggml_cuda_op_l2_norm", "norm_f32", "group_norm_f32", "rms_norm_f32",
-          "rms_norm_back_f32", "l2_norm_f32", "norm_f32_cuda",
-          "group_norm_f32_cuda", "rms_norm_f32_cuda", "rms_norm_mul_f32_cuda",
-          "rms_norm_back_f32_cuda", "l2_norm_f32_cuda"),
-         ("norm", "rms_norm", "group_norm", "l2_norm"), "RMS_NORM", 21,
-         ({"trace": "RMS_NORM dispatch", "file": "ggml/src/ggml-cuda/norm.cu",
-           "symbol": "ggml_cuda_op_rms_norm"},)),
+        {"id": "cuda-fattn-v2", "path": "ggml/src/ggml-cuda/fattn.cu",
+         "primary": "ggml_cuda_get_best_fattn_kernel",
+         "symbols": ("ggml_cuda_get_best_fattn_kernel", "ggml_cuda_flash_attn_ext",
+            "ggml_cuda_flash_attn_ext_vec", "ggml_cuda_flash_attn_ext_mma_f16",
+            "ggml_cuda_flash_attn_ext_supported", "ggml_cuda_flash_attn_ext_get_alloc_size"),
+         "markers": ("flash_attn_tile<", "flash_attn_vec<", "flash_attn_combine_results<"),
+         "op": "FLASH_ATTN_EXT", "cases": 2868, "anchor": fattn_tile_anchor,
+         "replays": ({"trace": "VEC selector", "symbol": "ggml_cuda_get_best_fattn_kernel"},)},
+        {"id": "cuda-fattn-tile-v1", "path": "ggml/src/ggml-cuda/fattn-tile.cuh",
+         "primary": "ggml_cuda_fattn_tile_get_config_amd",
+         "symbols": ("ggml_cuda_fattn_tile_get_config_amd", "ggml_cuda_fattn_tile_get_config_amd_rdna",
+            "ggml_cuda_fattn_tile_get_config", "ggml_cuda_fattn_tile_get_nthreads",
+            "ggml_cuda_fattn_tile_get_occupancy", "ggml_cuda_fattn_tile_get_nbatch_fa",
+            "ggml_cuda_fattn_tile_get_nbatch_K", "flash_attn_tile_load_tile",
+            "flash_attn_tile_iter_KQ", "flash_attn_tile_iter", "flash_attn_tile",
+            "launch_fattn_tile_switch_ncols1", "launch_fattn_tile_switch_ncols2",
+            "ggml_cuda_flash_attn_ext_tile_case", "ggml_cuda_flash_attn_ext_tile"),
+         "markers": ("flash_attn_tile<",), "op": "FLASH_ATTN_EXT", "cases": 2868,
+         "anchor": fattn_tile_anchor,
+         "replays": ({"trace": "D64 Q1 TILE geometry", "symbol": "ggml_cuda_fattn_tile_get_config_amd"},)},
+        {"id": "cuda-fattn-tile-entry-v1", "path": "ggml/src/ggml-cuda/fattn-tile.cu",
+         "primary": "ggml_cuda_flash_attn_ext_tile", "symbols": ("ggml_cuda_flash_attn_ext_tile",),
+         "markers": ("flash_attn_tile<",), "op": "FLASH_ATTN_EXT", "cases": 2868,
+         "anchor": fattn_tile_anchor, "replays": ()},
+        {"id": "cuda-fattn-common-v1", "path": "ggml/src/ggml-cuda/fattn-common.cuh",
+         "primary": "launch_fattn",
+         "symbols": ("ggml_cuda_flash_attn_ext_get_f16_extra_data", "vec_dot_fattn_vec_KQ_f16",
+            "vec_dot_fattn_vec_KQ_bf16", "vec_dot_fattn_vec_KQ_q4_0", "vec_dot_fattn_vec_KQ_q4_1",
+            "vec_dot_fattn_vec_KQ_q5_0", "vec_dot_fattn_vec_KQ_q5_1", "vec_dot_fattn_vec_KQ_q8_0",
+            "quantize_q8_1_to_shared", "dequantize_V_f16", "dequantize_V_bf16", "dequantize_V_q4_0",
+            "dequantize_V_q4_1", "dequantize_V_q5_0", "dequantize_V_q5_1", "dequantize_V_q8_0",
+            "flash_attn_mask_to_KV_max", "flash_attn_stream_k_fixup_uniform",
+            "flash_attn_stream_k_fixup_general", "flash_attn_combine_results", "launch_fattn"),
+         "markers": ("flash_attn_tile<", "flash_attn_combine_results<"),
+         "op": "FLASH_ATTN_EXT", "cases": 2868, "anchor": fattn_common_anchor, "replays": ()},
+        {"id": "cuda-mmvq-v2", "path": "ggml/src/ggml-cuda/mmvq.cu",
+         "primary": "ggml_cuda_op_mul_mat_vec_q",
+         "symbols": ("ggml_cuda_op_mul_mat_vec_q", "ggml_cuda_mul_mat_vec_q",
+            "mul_mat_vec_q_switch_type", "mul_mat_vec_q_switch_ncols_dst",
+            "mul_mat_vec_q_moe_launch", "mul_mat_vec_q_switch_fusion",
+            "mul_mat_vec_q8_0_prefetch_launch"),
+         "markers": ("mul_mat_vec_q<",), "op": "MUL_MAT", "cases": 1139,
+         "anchor": mmvq_anchor,
+         "replays": tuple({"trace": f"{q} exact dispatch", "symbol": "mul_mat_vec_q_switch_type"}
+                          for q in ("Q4_K", "Q5_0", "Q6_K"))},
+        {"id": "cuda-vecdotq-v1", "path": "ggml/src/ggml-cuda/vecdotq.cuh",
+         "primary": "vec_dot_q5_0_q8_1",
+         "symbols": ("get_int_b1", "get_int_b2", "get_int_b4", "get_int_from_table_16", "unpack_ksigns",
+            "vec_dot_q4_0_q8_1_impl", "vec_dot_q4_1_q8_1_impl", "vec_dot_q5_0_q8_1_impl",
+            "vec_dot_q5_1_q8_1_impl", "vec_dot_q8_0_q8_1_impl", "vec_dot_q8_1_q8_1_impl",
+            "vec_dot_q8_0_16_q8_1_impl", "vec_dot_mxfp4_q8_1", "vec_dot_nvfp4_q8_1",
+            "vec_dot_q2_K_q8_1_impl_mmvq", "vec_dot_q2_K_q8_1_impl_mmq",
+            "vec_dot_q3_K_q8_1_impl_mmvq", "vec_dot_q3_K_q8_1_impl_mmq",
+            "vec_dot_q4_K_q8_1_impl_vmmq", "vec_dot_q4_K_q8_1_impl_mmq",
+            "vec_dot_q5_K_q8_1_impl_vmmq", "vec_dot_q5_K_q8_1_impl_mmq",
+            "vec_dot_q6_K_q8_1_impl_mmvq", "vec_dot_q6_K_q8_1_impl_mmq",
+            "vec_dot_q1_0_q8_1", "vec_dot_q4_0_q8_1", "vec_dot_q4_1_q8_1",
+            "vec_dot_q5_0_q8_1", "vec_dot_q5_1_q8_1", "vec_dot_q8_0_q8_1",
+            "vec_dot_q2_K_q8_1", "vec_dot_q3_K_q8_1", "vec_dot_q4_K_q8_1",
+            "vec_dot_q5_K_q8_1", "vec_dot_q6_K_q8_1", "vec_dot_iq2_xxs_q8_1",
+            "vec_dot_iq2_xs_q8_1", "vec_dot_iq2_s_q8_1", "vec_dot_iq3_xxs_q8_1",
+            "vec_dot_iq3_s_q8_1", "vec_dot_iq1_s_q8_1", "vec_dot_iq1_m_q8_1",
+            "vec_dot_iq4_nl_q8_1", "vec_dot_iq4_xs_q8_1"),
+         "markers": ("mul_mat_vec_q<",), "op": "MUL_MAT", "cases": 1139,
+         "anchor": mmvq_anchor, "replays": ()},
+        {"id": "cuda-quantize-q8-v1", "path": "ggml/src/ggml-cuda/quantize.cu",
+         "primary": "quantize_q8_1",
+         "symbols": ("quantize_q8_1", "quantize_mmq_nvfp4", "quantize_mmq_mxfp4",
+            "quantize_mmq_q8_1", "quantize_row_q8_1_cuda", "quantize_mmq_q8_1_cuda",
+            "quantize_scatter_mmq_q8_1_cuda", "quantize_scatter_mmq_fp4_cuda",
+            "quantize_mmq_fp4_cuda"),
+         "markers": ("quantize_q8_1",), "op": "MUL_MAT", "cases": 1139,
+         "anchor": quantize_anchor,
+         "replays": ({"trace": "Q8_1 block128 nonreplication", "symbol": "quantize_q8_1"},)},
+        {"id": "cuda-rope-v2", "path": "ggml/src/ggml-cuda/rope.cu",
+         "primary": "ggml_cuda_op_rope_impl",
+         "symbols": ("ggml_cuda_op_rope_impl", "ggml_cuda_op_rope", "ggml_cuda_op_rope_back",
+            "ggml_cuda_op_rope_fused", "rope_norm", "rope_neox", "rope_multi", "rope_vision",
+            "rope_norm_cuda", "rope_neox_cuda", "rope_multi_cuda", "rope_vision_cuda"),
+         "markers": ("rope_neox<",), "op": "ROPE", "cases": 428,
+         "anchor": rope_anchor, "replays": ({"trace": "RoPE64 top-K", "symbol": "ggml_cuda_op_rope_impl"},)},
+        {"id": "cuda-norm-v2", "path": "ggml/src/ggml-cuda/norm.cu",
+         "primary": "ggml_cuda_op_rms_norm",
+         "symbols": ("ggml_cuda_op_norm", "ggml_cuda_op_group_norm", "ggml_cuda_op_rms_norm",
+            "ggml_cuda_op_rms_norm_fused", "ggml_cuda_op_rms_norm_fused_add",
+            "ggml_cuda_op_rms_norm_back", "ggml_cuda_op_l2_norm", "norm_f32", "group_norm_f32",
+            "rms_norm_f32", "rms_norm_back_f32", "l2_norm_f32", "norm_f32_cuda",
+            "group_norm_f32_cuda", "rms_norm_f32_cuda", "rms_norm_mul_f32_cuda",
+            "rms_norm_back_f32_cuda", "l2_norm_f32_cuda"),
+         "markers": ("rms_norm_f32<",), "op": "RMS_NORM", "cases": 21,
+         "anchor": norm_anchor, "replays": ({"trace": "RMS128 negative", "symbol": "ggml_cuda_op_rms_norm"},)},
+        {"id": "cuda-set-rows-v1", "path": "ggml/src/ggml-cuda/set-rows.cu",
+         "primary": "ggml_cuda_op_set_rows",
+         "symbols": ("k_set_rows_quant", "set_rows_cuda_quant", "k_set_rows", "set_rows_cuda",
+                     "ggml_cuda_op_set_rows"),
+         "markers": ("k_set_rows<",), "op": "SET_ROWS", "cases": 655,
+         "anchor": set_rows_anchor, "replays": ()},
     )
     templates = {}
-    for template_id, path, symbol, symbols, prefixes, correctness_op, cases, replays in families:
-        family_pattern = "^(?:" + "|".join(re.escape(prefix) for prefix in prefixes) + ").*$"
+    for family in families:
+        template_id, path = family["id"], family["path"]
+        anchor = tuple(evidence.ExactDispatch(
+            signature=f"{template_id}.anchor.{index}", kernel_pattern=row[0],
+            calls=row[1], grid=row[2], workgroup=row[3], lds_bytes=row[4],
+            blocks_per_call=row[2] // row[3])
+            for index, row in enumerate(family["anchor"]))
         templates[template_id] = ExperimentTemplate(
-            template_id=template_id, target_surface="gpu_decode", target_symbol=symbol,
+            template_id=template_id, target_surface="gpu_decode", target_symbol=family["primary"],
             correctness_id="backend-ops-hip-v1", dispatch_id="decode-tg128-rocprof-v1",
-            dispatch=evidence.DispatchContract(
-                candidate_exact=(evidence.ExactDispatch(
-                    f"{template_id}.candidate-family", family_pattern, 1, 64, 64, 0, 1),),
-                anchor_exact=(evidence.ExactDispatch(
-                    f"{template_id}.anchor-family", family_pattern, 1, 64, 64, 0, 1),)),
+            dispatch=evidence.DispatchContract(candidate_exact=tuple(
+                replace(row, signature=row.signature.replace(".anchor.", ".candidate-seed."))
+                for row in anchor), anchor_exact=anchor),
             allowed_files=frozenset({path}),
-            allowed_symbols={path: frozenset(symbols)},
+            allowed_symbols={path: frozenset(family["symbols"])},
             semantics={"workload": "decode_tg128", "calls_per_arm": 9,
                        "load_admission_profile_id": _LOAD_PROFILE_ID,
-                       "correctness_op": correctness_op,
-                       "expected_correctness_cases": cases,
+                       "correctness_op": family["op"],
+                       "expected_correctness_cases": family["cases"],
                        "suite_seed": _CORRECTNESS_SUITE_SEED,
                        "test_source_commit": _INSTRUMENT_COMMIT,
                        "test_source_sha256": _INSTRUMENT_TEST_SOURCE_SHA256,
                        "production_instrument_target_sha256": _TARGET_SOURCE_SHA256[path],
-                       "manual_replay_traces": list(replays),
-                       "dispatch_bounds": {"calls": [1, 4096], "grid": [64, 1048576],
+                       "profile_anchor_source": {
+                           "receipt": str(_PROFILE_TRACE_RECEIPT),
+                           "receipt_sha256": _PROFILE_TRACE_RECEIPT_SHA256,
+                           "timestamp_csv": str(_PROFILE_TRACE_CSV),
+                           "timestamp_csv_sha256": _PROFILE_TRACE_CSV_SHA256},
+                       "manual_replay_traces": [dict(row, file=path) for row in family["replays"]],
+                       "dispatch_bounds": {"calls": [1, 20000], "grid": [64, 16777216],
                                            "workgroup": [64, 1024], "lds_bytes": [0, 131072],
-                                           "kernel_prefixes": list(prefixes)}})
+                                           "kernel_name_fragments": list(family["markers"])}})
     provisional = object.__new__(ExperimentTemplateRegistry)
-    object.__setattr__(provisional, "version", "gpu-source-templates-v1")
+    object.__setattr__(provisional, "version", "gpu-source-templates-v2")
     object.__setattr__(provisional, "templates", MappingProxyType(templates))
-    body = {"version": "gpu-source-templates-v1", "templates": {
+    body = {"version": "gpu-source-templates-v2", "templates": {
         key: {"template_id": value.template_id, "target_surface": value.target_surface,
               "target_symbol": value.target_symbol, "correctness_id": value.correctness_id,
               "dispatch_id": value.dispatch_id, "allowed_files": sorted(value.allowed_files),
@@ -648,7 +772,33 @@ def _template_registry() -> ExperimentTemplateRegistry:
         for key, value in sorted(templates.items())}}
     digest = hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":"),
                                        ensure_ascii=False, allow_nan=False).encode()).hexdigest()
-    return ExperimentTemplateRegistry("gpu-source-templates-v1", digest, templates)
+    return ExperimentTemplateRegistry("gpu-source-templates-v2", digest, templates)
+
+
+def _reviewed_source_package(
+        config: deployment.DiscoveryDeployment,
+        templates: ExperimentTemplateRegistry) -> controller.ReviewedSourcePackage:
+    paths = sorted({path for template in templates.templates.values()
+                    for path in template.allowed_files})
+    files: list[controller.ReviewedSourceFile] = []
+    for relative in paths:
+        result = subprocess.run(
+            ("git", "-C", str(config.instrument_path), "show",
+             f"{config.instrument_commit}:{relative}"),
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+        expected = _TARGET_SOURCE_SHA256.get(relative)
+        actual = hashlib.sha256(result.stdout).hexdigest()
+        if result.returncode or expected is None or actual != expected:
+            raise DeploymentFactoryError(
+                f"reviewed actor source differs from instrument authority: {relative}")
+        files.append(controller.ReviewedSourceFile(relative, actual, result.stdout))
+    body = {"schema": "epyc.autokernel.reviewed_source_package.v1",
+            "instrument_commit": config.instrument_commit,
+            "files": [{"relative_path": item.relative_path, "sha256": item.sha256,
+                       "workspace_path": f"reviewed-source/{item.relative_path}"}
+                      for item in files]}
+    return controller.ReviewedSourcePackage(
+        config.instrument_commit, tuple(files), schemas.content_hash(body))
 
 
 def _target_source_equality_receipt(config: deployment.DiscoveryDeployment) -> tuple[Path, str]:
@@ -900,8 +1050,24 @@ def _evidence_binding(config: deployment.DiscoveryDeployment) -> EvidencePlanBin
     return EvidencePlanBinding(build=build)
 
 
+def _arm_order_schedule(*, deployment_config_sha256: str,
+                        source_manifest_sha256: str,
+                        repetition: int) -> tuple[str, str]:
+    if (not all(isinstance(value, str) and controller.HASH.fullmatch(value)
+                for value in (deployment_config_sha256, source_manifest_sha256))
+            or repetition not in {1, 2}):
+        raise DeploymentFactoryError("arm-order schedule authority is malformed")
+    seed = schemas.content_hash({
+        "schema": "epyc.autokernel.discovery_arm_order.v1",
+        "deployment_config_sha256": deployment_config_sha256,
+        "source_manifest_sha256": source_manifest_sha256})
+    anchor_first_s1 = int(seed[-1], 16) % 2 == 0
+    anchor_first = anchor_first_s1 if repetition == 1 else not anchor_first_s1
+    return seed, ("anchor,candidate" if anchor_first else "candidate,anchor")
+
+
 def _runner_binding(config: deployment.DiscoveryDeployment) -> RunnerArgsBinding:
-    def build(_candidate: controller.PlannedCandidate, build_: controller.GpuSourceBuild,
+    def build(candidate: controller.PlannedCandidate, build_: controller.GpuSourceBuild,
               permit: Mapping[str, Any]) -> Any:
         operation_key = permit.get("operation_key")
         repetition = permit.get("repetition")
@@ -929,10 +1095,16 @@ def _runner_binding(config: deployment.DiscoveryDeployment) -> RunnerArgsBinding
                 raise DeploymentFactoryError("runner load-admission carrier changed")
         else:
             decision_path.write_bytes(decision_raw)
+        schedule_seed, arm_order = _arm_order_schedule(
+            deployment_config_sha256=config.config_sha256,
+            source_manifest_sha256=candidate.source_manifest_sha256,
+            repetition=repetition)
         argv = ["--anchor-build", str(build_.anchor_build), "--candidate-build", str(build_.candidate_build),
                 "--model", str(config.model.path), "--output-dir", str(output),
                 "--campaign-id", f"ak-discovery-{config.config_sha256[:16]}",
                 "--factor", "source_patch", "--calls", "9", "--workload", "decode_tg128",
+                "--arm-order-schedule", arm_order,
+                "--arm-order-seed-sha256", schedule_seed,
                 "--inference-window-lock", str(config.inference_window_lock),
                 "--load-admission-decision", str(decision_path),
                 "--load-admission-policy", str(config.admission_policy.input.path),
@@ -999,15 +1171,22 @@ def _seal_graph_receipt(config: deployment.DiscoveryDeployment,
                         templates: ExperimentTemplateRegistry,
                         target_equality: tuple[Path, str],
                         instrument_review: tuple[Path, str],
+                        source_package: controller.ReviewedSourcePackage,
                         execution_modules: Mapping[str, Mapping[str, str]],
                         production_runtime_sha256: str,
                         critic_auth: Mapping[str, Any]) -> tuple[Path, str]:
     planner_launcher = Path(codex_container_actor.__file__).resolve(strict=True)
     critic_launcher = Path(claude_fable5_critic_actor.__file__).resolve(strict=True)
-    body = {"schema": "epyc.autokernel.static_discovery_graph.v2",
+    body = {"schema": "epyc.autokernel.static_discovery_graph.v3",
             "authority": "nonpromotable_candidate_only_discovery", "promotion_claim": False,
             "inference_executed": False, "config_sha256": config.config_sha256,
             "registry_ids": dict(_STATIC_IDS), "template_registry_sha256": templates.registry_sha256,
+            "reviewed_source_package": source_package.manifest(),
+            "profile_trace_authority": {
+                "receipt": str(_PROFILE_TRACE_RECEIPT),
+                "receipt_sha256": _PROFILE_TRACE_RECEIPT_SHA256,
+                "timestamp_csv": str(_PROFILE_TRACE_CSV),
+                "timestamp_csv_sha256": _PROFILE_TRACE_CSV_SHA256},
             "admission_policy_sha256": config.admission_policy.value["policy_sha256"],
             "load_admission_profile_id": _LOAD_PROFILE_ID,
             "actor_wrappers": {
@@ -1045,6 +1224,9 @@ def _seal_graph_receipt(config: deployment.DiscoveryDeployment,
             "instrument_review": {"path": str(instrument_review[0]),
                                   "sha256": instrument_review[1]},
             "batched_runner": {"processes_per_arm": 1, "calls_per_arm": 9,
+                               "arm_order_policy": (
+                                   "sha256(deployment_config_sha256+source_manifest_sha256) "
+                                   "parity selects S1; S2 is the exact reverse"),
                                "ready_continue_schema": "epyc.autokernel.ready_continue.v1",
                                "instrument_commit": _INSTRUMENT_COMMIT,
                                "contract_source_sha256": _READY_CONTINUE_CONTRACT_SHA256,
@@ -1094,6 +1276,8 @@ def build_static_deployment_graph(config: deployment.DiscoveryDeployment) -> Sta
     instrument_review = _instrument_review_receipt(config)
     execution_modules = _execution_module_identity()
     templates = _template_registry()
+    source_package = (_reviewed_source_package(config, templates)
+                      if isinstance(config.instrument_commit, str) else None)
     registry = _static_registry(config, templates)
     production_snapshot = _require(
         registry["production_snapshot"][_STATIC_IDS["production_snapshot"]],
@@ -1120,7 +1304,8 @@ def build_static_deployment_graph(config: deployment.DiscoveryDeployment) -> Sta
     adapters = dict(adapters)
     adapters["planner"] = controller.CodexPlanner(
         wrapper=config.actor_wrapper.path, environment=_SAFE_ACTOR_ENVIRONMENT,
-        template_catalog=catalog, wrapper_sha256=config.actor_wrapper.sha256,
+        template_catalog=catalog, reviewed_sources=source_package,
+        wrapper_sha256=config.actor_wrapper.sha256,
         runtime_identity=planner_runtime,
         actor_launcher_sha256=planner_launcher_sha256)
     adapters["critic"] = controller.ClaudeCritic(
@@ -1131,6 +1316,7 @@ def build_static_deployment_graph(config: deployment.DiscoveryDeployment) -> Sta
     receipt, digest = _seal_graph_receipt(
         config, planner_runtime, critic_runtime, templates,
         target_equality, instrument_review,
+        source_package,
         execution_modules,
         production_snapshot.runtime_semantics_sha256,
         critic_auth)
@@ -1461,15 +1647,25 @@ def materialize(config: deployment.DiscoveryDeployment, registry: Mapping[str, M
                      "allowed_files": sorted(template.allowed_files),
                      "allowed_symbols": {path: sorted(symbols)
                                          for path, symbols in template.allowed_symbols.items()},
+                     "source_workspace_paths": {
+                         path: f"reviewed-source/{path}" for path in template.allowed_files},
+                     "profile_anchor_dispatch": [vars(row)
+                                                 for row in template.dispatch.anchor_exact],
+                     "candidate_dispatch_authoring": (
+                         "expected_dispatch is an array of exact rocprof-v1 literal name/geometry cells; "
+                         "include every geometry emitted by the changed kernel symbol"),
                      "semantics": dict(template.semantics)}
                for key, template in templates.templates.items()}
+    source_package = (_reviewed_source_package(config, templates)
+                      if isinstance(config.instrument_commit, str) else None)
     planner_runtime = codex_container_actor.runtime_identity(config.actor_wrapper.path)
     critic_runtime = claude_fable5_critic_actor.runtime_identity(
         config.critic_wrapper.path)
     _validate_critic_auth_source()
     planner = controller.CodexPlanner(
         wrapper=config.actor_wrapper.path, environment=env.values,
-        template_catalog=catalog, wrapper_sha256=config.actor_wrapper.sha256,
+        template_catalog=catalog, reviewed_sources=source_package,
+        wrapper_sha256=config.actor_wrapper.sha256,
         runtime_identity=planner_runtime,
         actor_launcher_sha256=_digest_regular(
             Path(codex_container_actor.__file__).resolve(),

@@ -1038,6 +1038,12 @@ def preflight(args: argparse.Namespace) -> dict:
     model = Path(args.model).resolve()
     anchor_build = Path(args.anchor_build).resolve()
     candidate_build = Path(args.candidate_build).resolve()
+    order = tuple(getattr(args, "arm_order_schedule", "anchor,candidate").split(","))
+    order_seed = getattr(args, "arm_order_seed_sha256", "0" * 64)
+    if (set(order) != {"anchor", "candidate"} or len(order) != 2
+            or not isinstance(order_seed, str) or len(order_seed) != 64
+            or any(ch not in "0123456789abcdef" for ch in order_seed)):
+        raise RuntimeError("GPU discovery arm-order authority is malformed")
     if not model.is_file():
         raise RuntimeError(f"model does not exist: {model}")
     model_size_bytes = model.stat().st_size
@@ -1167,6 +1173,8 @@ def preflight(args: argparse.Namespace) -> dict:
         "frame": recipe,
         "metric": metric,
         "invocations": {"anchor": args.calls, "candidate": args.calls},
+        "arm_order_schedule": list(order),
+        "arm_order_seed_sha256": order_seed,
         "inference_executed": False,
         "runtime_arms": runtime_arms,
         "serialized_readiness": {
@@ -1264,34 +1272,50 @@ def run(args: argparse.Namespace) -> dict:
         }
         atomic_json(live_governance_path, live_governance)
         sampler = device_sampler.RocmSmiSampler(device_index=0, interval_s=0.250).start()
-        anchor_runs = [invoke(
-            build=anchor_build, model=model, seed=args.seed,
-            expected_source_commit=(None if sealed["runtime_arms"] else anchor_identity["source_commit"]),
-            baseline_vram=baseline_vram,
-            flash_attention=sealed["anchor_flash_attention"],
-            prompt_tokens=sealed["prompt_tokens"],
-            generation_tokens=sealed["generation_tokens"],
-            threads=sealed["anchor_threads"], ubatch=sealed["anchor_ubatch"],
-            batch=sealed["anchor_batch"],
-            mmap=sealed["anchor_mmap"],
-            no_op_offload=sealed["anchor_no_op_offload"],
-            split_mode=sealed["anchor_split_mode"],
-            no_kv_offload=sealed["anchor_no_kv_offload"],
-            poll=sealed["anchor_poll"],
-            campaign_id=args.campaign_id, cpu_journal=cpu_journal,
-            sealed_load_decision=sealed["host_transfer"],
-            inference_window_lock=Path(sealed["inference_window_lock"]),
-            reward_binary=(Path(sealed["runtime_arms"]["measurement_binary"])
-                           if sealed["runtime_arms"] else None),
-            hip_library_dir=(Path(sealed["runtime_arms"]["anchor_loader_dir"])
-                             if sealed["runtime_arms"] else None),
-            common_loader_dir=(Path(sealed["runtime_arms"]["common_loader_dir"])
+        arm_order = tuple(sealed.get("arm_order_schedule", [
+            "anchor", "candidate"]))
+        if set(arm_order) != {"anchor", "candidate"} or len(arm_order) != 2:
+            raise RuntimeError("arm order must contain anchor and candidate exactly once")
+
+        def run_arm(arm: str) -> list[dict]:
+            anchor = arm == "anchor"
+            prefix = "anchor" if anchor else "candidate"
+            identity = anchor_identity if anchor else candidate_identity
+            readiness = anchor_readiness if anchor else candidate_readiness
+            handshake = anchor_handshake if anchor else candidate_handshake
+            return [invoke(
+                build=anchor_build if anchor else candidate_build,
+                model=model, seed=args.seed if anchor else args.seed + args.calls,
+                expected_source_commit=(None if sealed["runtime_arms"]
+                                        else identity["source_commit"]),
+                baseline_vram=baseline_vram,
+                flash_attention=sealed[f"{prefix}_flash_attention"],
+                prompt_tokens=sealed["prompt_tokens"],
+                generation_tokens=sealed["generation_tokens"],
+                threads=sealed[f"{prefix}_threads"],
+                ubatch=sealed[f"{prefix}_ubatch"], batch=sealed[f"{prefix}_batch"],
+                mmap=sealed[f"{prefix}_mmap"],
+                no_op_offload=sealed[f"{prefix}_no_op_offload"],
+                split_mode=sealed[f"{prefix}_split_mode"],
+                no_kv_offload=sealed[f"{prefix}_no_kv_offload"],
+                poll=sealed[f"{prefix}_poll"],
+                campaign_id=args.campaign_id, cpu_journal=cpu_journal,
+                sealed_load_decision=sealed["host_transfer"],
+                inference_window_lock=Path(sealed["inference_window_lock"]),
+                reward_binary=(Path(sealed["runtime_arms"]["measurement_binary"])
                                if sealed["runtime_arms"] else None),
-            runtime_arm=("anchor" if sealed["runtime_arms"] else None),
-            repetitions=args.calls, load_readiness_policy=anchor_readiness,
-            ready_continue_handshake=anchor_handshake,
-            supervisor_root=out / "supervisor-anchor")
-            for _ in range(1)]
+                hip_library_dir=(Path(sealed["runtime_arms"][f"{prefix}_loader_dir"])
+                                 if sealed["runtime_arms"] else None),
+                common_loader_dir=(Path(sealed["runtime_arms"]["common_loader_dir"])
+                                   if sealed["runtime_arms"] else None),
+                runtime_arm=(arm if sealed["runtime_arms"] else None),
+                repetitions=args.calls, load_readiness_policy=readiness,
+                ready_continue_handshake=handshake,
+                supervisor_root=out / f"supervisor-{arm}")]
+
+        arm_runs = {arm: run_arm(arm) for arm in arm_order}
+        anchor_runs = arm_runs["anchor"]
+        candidate_runs = arm_runs["candidate"]
         bank_body = {
             "schema": SCHEMA_BANK, "campaign_id": args.campaign_id,
             "status": "complete", "started_at": started_at, "ended_at": utc_now(),
@@ -1308,40 +1332,14 @@ def run(args: argparse.Namespace) -> dict:
             "anchor_identity": anchor_identity,
             "candidate_identity": candidate_identity,
             "anchor_processes": 1,
+            "arm_order_schedule": list(arm_order),
+            "arm_order_seed_sha256": sealed.get("arm_order_seed_sha256", "0" * 64),
             "anchor_samples": [sample for run in anchor_runs for sample in run["samples"]],
             "anchor_runs": anchor_runs,
         }
         bank = gpu_beliefs.attach_baseline_beliefs(
             bank_body, producer_path=Path(__file__).resolve())
         atomic_json(out / "baseline-bank.json", bank)
-        candidate_runs = [invoke(
-            build=candidate_build, model=model, seed=args.seed + args.calls,
-            expected_source_commit=(None if sealed["runtime_arms"] else candidate_identity["source_commit"]),
-            baseline_vram=baseline_vram,
-            flash_attention=sealed["candidate_flash_attention"],
-            prompt_tokens=sealed["prompt_tokens"],
-            generation_tokens=sealed["generation_tokens"],
-            threads=sealed["candidate_threads"], ubatch=sealed["candidate_ubatch"],
-            batch=sealed["candidate_batch"],
-            mmap=sealed["candidate_mmap"],
-            no_op_offload=sealed["candidate_no_op_offload"],
-            split_mode=sealed["candidate_split_mode"],
-            no_kv_offload=sealed["candidate_no_kv_offload"],
-            poll=sealed["candidate_poll"],
-            campaign_id=args.campaign_id, cpu_journal=cpu_journal,
-            sealed_load_decision=sealed["host_transfer"],
-            inference_window_lock=Path(sealed["inference_window_lock"]),
-            reward_binary=(Path(sealed["runtime_arms"]["measurement_binary"])
-                           if sealed["runtime_arms"] else None),
-            hip_library_dir=(Path(sealed["runtime_arms"]["candidate_loader_dir"])
-                             if sealed["runtime_arms"] else None),
-            common_loader_dir=(Path(sealed["runtime_arms"]["common_loader_dir"])
-                               if sealed["runtime_arms"] else None),
-            runtime_arm=("candidate" if sealed["runtime_arms"] else None),
-            repetitions=args.calls, load_readiness_policy=candidate_readiness,
-            ready_continue_handshake=candidate_handshake,
-            supervisor_root=out / "supervisor-candidate")
-            for _ in range(1)]
         center = sum(bank["anchor_samples"]) / len(bank["anchor_samples"])
         values = [sample for run in candidate_runs for sample in run["samples"]]
         effects = [(value - center) / center for value in values]
@@ -1369,6 +1367,8 @@ def run(args: argparse.Namespace) -> dict:
             "baseline_sha256": bank["baseline_sha256"],
             "anchor_invocations": args.calls, "candidate_invocations": args.calls,
             "anchor_processes": 1, "candidate_processes": 1,
+            "arm_order_schedule": list(arm_order),
+            "arm_order_seed_sha256": sealed.get("arm_order_seed_sha256", "0" * 64),
             "baseline_center": center, "candidate_samples": values,
             "relative_effects": effects, "median_relative": median(effects),
             "host_noise_policy": "ordinary_host_activity_recorded_not_blocking",
@@ -1451,6 +1451,10 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--seed", type=int, default=8613)
     result.add_argument("--calls", type=int, choices=(3, 5, 9), default=3,
                         help="fresh invocations per arm (discovery evidence only)")
+    result.add_argument("--arm-order-schedule",
+                        choices=("anchor,candidate", "candidate,anchor"),
+                        default="anchor,candidate")
+    result.add_argument("--arm-order-seed-sha256", default="0" * 64)
     result.add_argument("--workload", choices=("prefill_pp512", "decode_tg128"),
                         default="prefill_pp512")
     result.add_argument("--inference-window-lock")

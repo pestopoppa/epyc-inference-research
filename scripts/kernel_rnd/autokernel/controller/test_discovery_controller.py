@@ -33,6 +33,68 @@ class FakeScreen:
  def reconcile(self,inflight): return D.Recovery("safe_to_start")
 
 class Tests(unittest.TestCase):
+ def source_package(self):
+  content=b"void reviewed_kernel() {}\n"; digest=hashlib.sha256(content).hexdigest()
+  body={"schema":"epyc.autokernel.reviewed_source_package.v1","instrument_commit":"1"*40,
+        "files":[{"relative_path":"ggml/src/ggml-cuda/reviewed.cu","sha256":digest,
+                  "workspace_path":"reviewed-source/ggml/src/ggml-cuda/reviewed.cu"}]}
+  return D.ReviewedSourcePackage("1"*40,
+      (D.ReviewedSourceFile("ggml/src/ggml-cuda/reviewed.cu",digest,content),),D._sha(body))
+ def test_reviewed_source_package_is_exact_idempotent_and_hardlink_safe(self):
+  package=self.source_package()
+  with tempfile.TemporaryDirectory() as t:
+   root=Path(t); manifest=package.materialize(root)
+   self.assertEqual(manifest["package_sha256"],package.package_sha256)
+   source=root/"reviewed-source/ggml/src/ggml-cuda/reviewed.cu"
+   self.assertEqual(source.read_bytes(),package.files[0].content)
+   with self.assertRaisesRegex(D.DiscoveryControllerError,"already exists"):
+    package.materialize(root)
+   source.chmod(0o600); alias=root/"source-hardlink"; alias.hardlink_to(source)
+   with self.assertRaisesRegex(D.DiscoveryControllerError,"source bytes changed"):
+    package.revalidate_materialized(root)
+  self.assertFalse(root.exists())
+ def test_planner_revalidates_reviewed_source_after_actor_before_loading_plan(self):
+  package=self.source_package()
+  with tempfile.TemporaryDirectory() as t:
+   root=Path(t); wrapper=root/"codex"; wrapper.write_bytes(b"codex"); wrapper.chmod(0o700)
+   planner=D.CodexPlanner(wrapper=wrapper,environment={"PATH":"/usr/bin"},reviewed_sources=package)
+   assignment=D.AuthoringAssignment("ak-test","akp-test","akc-test","0"*40,"1"*40)
+   def actor(**kwargs):
+    target=root/"reviewed-source/ggml/src/ggml-cuda/reviewed.cu"
+    target.chmod(0o600); target.write_bytes(b"mutated\n")
+    return SimpleNamespace(returncode=0,stderr="")
+   with patch.object(D.codex_container_actor,"runtime_identity",return_value=RUNTIME), \
+        patch.object(D.codex_container_actor,"run_actor",side_effect=actor), \
+        patch.object(D,"_load_plan",side_effect=AssertionError("mutated source reached loader")):
+    with self.assertRaisesRegex(D.DiscoveryControllerError,"source bytes changed"):
+     planner.plan(context={"authoring_assignment":assignment.to_dict()},workspace=root)
+ def test_planner_prompt_has_exact_schemas_source_paths_and_structural_example(self):
+  package=self.source_package(); captured={}
+  with tempfile.TemporaryDirectory() as t:
+   root=Path(t); wrapper=root/"codex"; wrapper.write_bytes(b"codex"); wrapper.chmod(0o700)
+   planner=D.CodexPlanner(wrapper=wrapper,environment={"PATH":"/usr/bin"},reviewed_sources=package)
+   assignment=D.AuthoringAssignment("ak-test","akp-test","akc-test","0"*40,"1"*40)
+   def actor(**kwargs):
+    captured.update(json.loads(kwargs["prompt"]))
+    source=root/"reviewed-source/ggml/src/ggml-cuda/reviewed.cu"
+    manifest=root/"reviewed-source/source-package.json"
+    self.assertEqual(source.read_bytes(),package.files[0].content)
+    self.assertEqual(json.loads(manifest.read_text())["package_sha256"],package.package_sha256)
+    return SimpleNamespace(returncode=1,stderr="stop")
+   with patch.object(D.codex_container_actor,"runtime_identity",return_value=RUNTIME), \
+        patch.object(D.codex_container_actor,"run_actor",side_effect=actor):
+    with self.assertRaisesRegex(D.DiscoveryControllerError,"Sol actor failed"):
+     planner.plan(context={"authoring_assignment":assignment.to_dict()},workspace=root)
+   self.assertEqual(captured["reviewed_source_package"]["package_sha256"],package.package_sha256)
+   self.assertEqual(captured["authoring_contract"]["expected_dispatch"],"array of 1..8 exact objects")
+   self.assertEqual(captured["structural_example_only"]["source-patch.json"]["patch_encoding"],"base64")
+ def test_reviewed_source_package_refuses_symlinked_parent(self):
+  package=self.source_package()
+  with tempfile.TemporaryDirectory() as t:
+   root=Path(t); outside=root/"outside"; outside.mkdir()
+   (root/"reviewed-source").symlink_to(outside, target_is_directory=True)
+   with self.assertRaisesRegex(D.DiscoveryControllerError,"already exists|symlink"):
+    package.materialize(root)
  def test_bounded_dispatch_refuses_meta_and_out_of_range_literals(self):
   valid=D.BoundedDispatchExpectation("kernel_6",2,128,64,0)
   self.assertEqual(valid.kernel_name,"kernel_6")
@@ -40,6 +102,8 @@ class Tests(unittest.TestCase):
    with self.subTest(name=name), self.assertRaises(D.DiscoveryControllerError):
     D.BoundedDispatchExpectation(name,1,1,1,0)
   with self.assertRaises(D.DiscoveryControllerError): D.BoundedDispatchExpectation("kernel",1,1,4097,0)
+  full="void kernel<float>(float const*, void*) [clone .kd]"
+  self.assertEqual(D.BoundedDispatchExpectation(full,2,128,64,0).kernel_name,full)
  def cfg(self,root,n=2): return D.ControllerConfig(root/"out",n)
  def test_exact_sol_planner_and_fable5_critic(self):
   self.assertEqual(D.sealed_roster()["claude_members"],1); self.assertEqual([x["model"] for x in D.sealed_roster()["members"]],["gpt-5.6-sol","claude-fable-5"])

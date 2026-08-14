@@ -310,6 +310,31 @@ def runtime_maps_for(current: E.GpuSourceEvidencePlan, arm: str) -> dict:
 
 
 class GpuSourceEvidenceTests(unittest.TestCase):
+    @staticmethod
+    def _dispatch(kernel: str, grid: int, workgroup: int, lds: int) -> dict:
+        return {"kernel": kernel, "grid": grid, "workgroup": workgroup,
+                "lds": lds, "blocks_per_call": grid // workgroup,
+                "begin_ns": 1, "end_ns": 2}
+
+    def test_exact_reducer_accepts_only_all_reviewed_geometries(self):
+        pattern = r"^void quantize_q8_1"
+        exact = (
+            E.ExactDispatch("q8.small", pattern, 2, 1024, 256, 0, 4),
+            E.ExactDispatch("q8.large", pattern, 1, 5120, 256, 0, 20),
+        )
+        rows = [self._dispatch("void quantize_q8_1<float>()", 1024, 256, 0)
+                for _ in range(2)]
+        rows.append(self._dispatch("void quantize_q8_1<float>()", 5120, 256, 0))
+        reduced = E._reduce_arm(rows, exact=exact, forbidden=(), invariants=())
+        self.assertEqual(reduced["exact"]["q8.small"]["calls"], 2)
+        self.assertEqual(reduced["exact"]["q8.large"]["calls"], 1)
+
+        with self.assertRaisesRegex(E.EvidenceProducerError, "count/geometry"):
+            E._reduce_arm(rows[:-1], exact=exact, forbidden=(), invariants=())
+        rows.append(self._dispatch("void quantize_q8_1<float>()", 2048, 256, 0))
+        with self.assertRaisesRegex(E.EvidenceProducerError, "unreviewed geometry"):
+            E._reduce_arm(rows, exact=exact, forbidden=(), invariants=())
+
     def produce(self, directory, *, executors=None, claims=None, plan_=None,
                 verifier=lambda _receipt: True):
         executors = executors or FakeExecutors()

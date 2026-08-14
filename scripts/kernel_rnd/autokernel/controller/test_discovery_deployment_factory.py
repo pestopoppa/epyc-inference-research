@@ -24,6 +24,54 @@ def template(path="ggml/src/ggml-cuda/fattn.cu", symbol="fattn_kernel"):
 
 
 class DeploymentFactoryTests(unittest.TestCase):
+    def test_v2_templates_are_extracted_from_exact_sealed_profile(self):
+        self.assertEqual(
+            hashlib.sha256(F._PROFILE_TRACE_RECEIPT.read_bytes()).hexdigest(),
+            F._PROFILE_TRACE_RECEIPT_SHA256)
+        self.assertEqual(
+            hashlib.sha256(F._PROFILE_TRACE_CSV.read_bytes()).hexdigest(),
+            F._PROFILE_TRACE_CSV_SHA256)
+        rows = F.evidence._load_dispatches(F._PROFILE_TRACE_CSV)
+        self.assertEqual(len(rows), 59_925)
+        registry = F._template_registry()
+        self.assertEqual(registry.version, "gpu-source-templates-v2")
+        self.assertEqual(len(registry.templates), 10)
+        for template_id, reviewed in registry.templates.items():
+            with self.subTest(template=template_id):
+                reduced = F.evidence._reduce_arm(
+                    rows, exact=reviewed.dispatch.anchor_exact,
+                    forbidden=reviewed.dispatch.anchor_forbidden,
+                    invariants=reviewed.dispatch.invariants)
+                self.assertEqual(set(reduced["exact"]),
+                                 {item.signature for item in reviewed.dispatch.anchor_exact})
+
+    def test_quantize_and_vecdot_templates_have_exact_source_and_correctness_authority(self):
+        registry = F._template_registry()
+        quantize = registry.templates["cuda-quantize-q8-v1"]
+        vecdot = registry.templates["cuda-vecdotq-v1"]
+        self.assertEqual(quantize.allowed_files,
+                         frozenset({"ggml/src/ggml-cuda/quantize.cu"}))
+        self.assertEqual(quantize.semantics["correctness_op"], "MUL_MAT")
+        self.assertEqual(quantize.semantics["expected_correctness_cases"], 1139)
+        self.assertEqual(len(quantize.dispatch.anchor_exact), 2)
+        self.assertEqual(vecdot.allowed_files,
+                         frozenset({"ggml/src/ggml-cuda/vecdotq.cuh"}))
+        self.assertEqual(vecdot.semantics["correctness_op"], "MUL_MAT")
+        self.assertEqual(vecdot.semantics["expected_correctness_cases"], 1139)
+        self.assertTrue(any("vec_dot_q5_0_q8_1" in symbol
+                            for symbol in vecdot.allowed_symbols[next(iter(vecdot.allowed_files))]))
+
+    def test_balanced_arm_schedule_is_seeded_and_s2_exactly_reverses_s1(self):
+        first_seed, first = F._arm_order_schedule(
+            deployment_config_sha256="a" * 64,
+            source_manifest_sha256="b" * 64, repetition=1)
+        second_seed, second = F._arm_order_schedule(
+            deployment_config_sha256="a" * 64,
+            source_manifest_sha256="b" * 64, repetition=2)
+        self.assertEqual(first_seed, second_seed)
+        self.assertEqual(second.split(","), list(reversed(first.split(","))))
+        self.assertEqual(len(first_seed), 64)
+
     def static_config(self, root: Path):
         production = root / "production"
         (production / "ggml/src/ggml-cuda").mkdir(parents=True)

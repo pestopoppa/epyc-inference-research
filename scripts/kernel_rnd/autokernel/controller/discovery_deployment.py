@@ -24,7 +24,7 @@ from .. import schemas
 from . import gpu_load_admission
 
 
-SCHEMA = "epyc.autokernel.discovery_deployment.v2"
+SCHEMA = "epyc.autokernel.discovery_deployment.v3"
 FROZEN_PRODUCTION_PATH = Path("/mnt/raid0/llm/llama.cpp")
 FROZEN_PRODUCTION_HEAD = "0db32c06e3e550065b78311a6031ef3dd2c4f27c"
 FROZEN_PRODUCTION_BRANCH = "production-consolidated-v9"
