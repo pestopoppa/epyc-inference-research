@@ -8,6 +8,7 @@ import hashlib
 import json
 import math
 import os
+import stat
 import subprocess
 import sys
 import time
@@ -252,6 +253,11 @@ class ReadyContinueHandshake:
         if not target.is_absolute() or target.is_symlink():
             raise RuntimeError("ready/continue handshake root is unsafe")
         target.mkdir(mode=0o700, parents=True, exist_ok=False)
+        os.chmod(target, 0o700)
+        root_stat = target.lstat()
+        if (not stat.S_ISDIR(root_stat.st_mode) or root_stat.st_uid != os.geteuid()
+                or stat.S_IMODE(root_stat.st_mode) != 0o700):
+            raise RuntimeError("ready/continue handshake root ownership is unsafe")
         marker = {
             "schema": "epyc.autokernel.ready_continue.v1",
             "decision_sha256": decision["decision_sha256"],
@@ -287,11 +293,13 @@ class ReadyContinueHandshake:
 
     def validate_ready(self, *, pid: int) -> dict[str, Any]:
         try:
-            stat = self.ready_path.lstat()
+            file_stat = self.ready_path.lstat()
             raw = self.ready_path.read_text(encoding="ascii")
         except OSError as exc:
             raise RuntimeError("governed instrument ready receipt is unavailable") from exc
-        if self.ready_path.is_symlink() or not self.ready_path.is_file() or stat.st_size > 512:
+        if (self.ready_path.is_symlink() or not stat.S_ISREG(file_stat.st_mode)
+                or file_stat.st_uid != os.geteuid() or file_stat.st_nlink != 1
+                or stat.S_IMODE(file_stat.st_mode) != 0o600 or file_stat.st_size > 512):
             raise RuntimeError("governed instrument ready receipt is unsafe")
         fields = raw.split()
         expected = [self.schema, str(pid), str(self.seed), str(self.repetitions), self.token]
@@ -314,6 +322,10 @@ class ReadyContinueHandshake:
             if os.write(fd, payload) != len(payload):
                 raise RuntimeError("governed instrument continue receipt write was incomplete")
             os.fsync(fd)
+            file_stat = os.fstat(fd)
+            if (not stat.S_ISREG(file_stat.st_mode) or file_stat.st_uid != os.geteuid()
+                    or file_stat.st_nlink != 1 or stat.S_IMODE(file_stat.st_mode) != 0o600):
+                raise RuntimeError("governed instrument continue receipt ownership is unsafe")
         finally:
             os.close(fd)
 
@@ -322,7 +334,11 @@ class ReadyContinueHandshake:
         for key, path in (("ready_removed", self.ready_path),
                           ("continue_removed", self.continue_path)):
             try:
-                if path.exists() and not path.is_symlink() and path.is_file():
+                if path.exists():
+                    file_stat = path.lstat()
+                    if (path.is_symlink() or not stat.S_ISREG(file_stat.st_mode)
+                            or file_stat.st_uid != os.geteuid() or file_stat.st_nlink != 1):
+                        raise RuntimeError("governed instrument handshake marker changed ownership")
                     path.unlink()
                     result[key] = True
             except OSError as exc:

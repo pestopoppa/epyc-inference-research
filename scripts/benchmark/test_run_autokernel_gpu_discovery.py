@@ -614,6 +614,7 @@ class TestGpuDiscoveryBatchedSubprocess(unittest.TestCase):
                 handshake.ready_path.write_text(
                     f"{handshake.schema} {process.pid} 8613 9 {handshake.token}\n",
                     encoding="ascii")
+                handshake.ready_path.chmod(0o600)
                 return process
             def release(witness):
                 self.assertFalse(handshake.continue_path.exists())
@@ -656,6 +657,7 @@ class TestGpuDiscoveryBatchedSubprocess(unittest.TestCase):
             def factory(*_args, **_kwargs):
                 handshake.ready_path.write_text(
                     f"{handshake.schema} 0 8613 9 {handshake.token}\n", encoding="ascii")
+                handshake.ready_path.chmod(0o600)
                 return process
             with mock.patch.object(gpu, "_runtime_maps_identity", return_value=identity), \
                  self.assertRaisesRegex(RuntimeError, "PID/seed/repetitions/token"):
@@ -669,5 +671,31 @@ class TestGpuDiscoveryBatchedSubprocess(unittest.TestCase):
                     vram_reader=lambda: 64, pgid_provider=lambda _pid: process.pid,
                     sleep=lambda _: None)
             self.assertIsNotNone(process.returncode)
+            self.assertFalse(handshake.continue_path.exists())
+            handshake.cleanup()
+
+    def test_foreign_kfd_during_handshake_terminates_child_without_continue(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            build = _build(root, rocwmma="ON", mfma="OFF")
+            model = root / "model.gguf"; model.write_bytes(b"model")
+            policy = _readiness(model)
+            handshake = gpu.ReadyContinueHandshake.create(
+                root=root / "barrier", decision=_admission(model), policy=policy,
+                arm="anchor", seed=8613, repetitions=9)
+            process = self._Process(self._row([1.0] * 9), running_polls=100)
+            with self.assertRaisesRegex(RuntimeError, "foreign KFD inference"):
+                gpu._invoke_locked(
+                    build=build, model=model, seed=8613, baseline_vram=0,
+                    flash_attention=True, expected_source_commit=gpu.SOURCE_COMMIT,
+                    repetitions=9, runtime_arm="anchor", readiness_policy=policy,
+                    ready_continue_handshake=handshake, on_load_ready=lambda _w: None,
+                    common_loader_dir=build / "bin", hip_library_dir=build / "bin",
+                    process_factory=lambda *_args, **_kwargs: process,
+                    kfd_pid_provider=lambda: (123, 456), vram_reader=lambda: 64,
+                    pgid_provider=lambda pid: process.pid if pid == 123 else 777,
+                    sleep=lambda _: None)
+            self.assertTrue(process.terminated)
+            self.assertTrue(process.waited)
             self.assertFalse(handshake.continue_path.exists())
             handshake.cleanup()
