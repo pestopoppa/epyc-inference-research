@@ -303,6 +303,53 @@ class StrictClaudeBoundaryGate(unittest.TestCase):
                         actor_launcher_sha256="0" * 64,
                     ).attest()
 
+    def test_launcher_drift_during_staging_refuses_before_model_boundary(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="autokernel-fable-module-race-gate-") as temporary:
+            root = Path(temporary)
+            workspace = root / "workspace"
+            auth = root / "auth"
+            workspace.mkdir(mode=0o700)
+            auth.mkdir(mode=0o700)
+            credential = auth / ".credentials.json"
+            credential.write_text(
+                json.dumps({"claudeAiOauth": {"accessToken": "test-only"}}),
+                encoding="utf-8",
+            )
+            credential.chmod(0o600)
+            wrapper = _wrapper(root)
+            runtime = _claude_runtime(wrapper)
+            launcher = Path(fable_actor.__file__).resolve()
+            launcher_bytes = launcher.read_bytes()
+            real_read = fable_actor._read_regular
+            launcher_reads = 0
+
+            def drifted_read(path, **kwargs):
+                nonlocal launcher_reads
+                if Path(path).resolve() == launcher:
+                    launcher_reads += 1
+                    if launcher_reads > 1:
+                        return b"simulated-launcher-drift"
+                return real_read(path, **kwargs)
+
+            with mock.patch.object(fable_actor, "_read_regular",
+                                   side_effect=drifted_read), \
+                    mock.patch.object(
+                        fable_actor, "_run_process",
+                        side_effect=AssertionError("drift reached model boundary"),
+                    ) as model_boundary, \
+                    self.assertRaisesRegex(
+                        fable_actor.ClaudeFable5CriticError, "launcher"):
+                fable_actor.run_critic(
+                    wrapper=wrapper, workspace=workspace, prompt="review",
+                    bindings=_bindings(),
+                    environment={"HOME": str(root)}, auth_root=auth,
+                    expected_wrapper_sha256=runtime["wrapper_sha256"],
+                    expected_runtime_identity=runtime,
+                    expected_launcher_sha256=_sha(launcher_bytes),
+                )
+            model_boundary.assert_not_called()
+            self.assertGreaterEqual(launcher_reads, 2)
+
 
 class VetoAndResumeGate(unittest.TestCase):
     def setUp(self) -> None:
