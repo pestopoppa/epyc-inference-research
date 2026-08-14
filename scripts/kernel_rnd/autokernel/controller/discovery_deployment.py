@@ -299,12 +299,19 @@ def _verify_production(path: Path, declared_branch: str, declared_head: str) -> 
 
 def _verify_instrument(path: Path, production_head: str, instrument_branch: str,
                        instrument_commit: str) -> None:
-    if not isinstance(instrument_branch, str) or not IDENTIFIER.fullmatch(instrument_branch):
+    if (not isinstance(instrument_branch, str) or not instrument_branch
+            or len(instrument_branch) > 255 or "\x00" in instrument_branch):
         raise DeploymentConfigError("instrument branch must be an exact identifier")
     if not isinstance(instrument_commit, str) or not GIT_SHA.fullmatch(instrument_commit):
         raise DeploymentConfigError("instrument commit must be an exact Git SHA")
     if path.is_symlink() or not path.is_dir():
         raise DeploymentConfigError("instrument.repo_path must be a regular Git checkout")
+    branch_check = subprocess.run(
+        ("git", "-C", str(path), "check-ref-format", "--branch", instrument_branch),
+        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL, check=False)
+    if branch_check.returncode:
+        raise DeploymentConfigError("instrument branch must be an exact Git branch name")
     # The measurement instrument is an explicitly approved descendant in a
     # separate experimental repository.  Its checked-out worktree may be dirty;
     # authority is the sealed branch object, never that checkout state.

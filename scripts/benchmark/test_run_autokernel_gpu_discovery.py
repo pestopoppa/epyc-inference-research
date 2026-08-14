@@ -120,8 +120,9 @@ class TestGpuDiscoveryBuildIdentity(unittest.TestCase):
                 factor="flash_attention", campaign_id="gpu", calls=3,
                 workload="prefill_pp512", device_id=gpu.DEVICE_ID,
                 inference_window_lock=None, instrument_ready_continue_v1=True,
-                instrument_ready_continue_commit="wrong"))
-            with self.assertRaisesRegex(RuntimeError, "sealed d9fdc17bd"):
+                instrument_ready_continue_commit="wrong",
+                instrument_ready_continue_contract_sha256="wrong"))
+            with self.assertRaisesRegex(RuntimeError, "sealed 81bf32f11"):
                 gpu.preflight(args)
     def test_decode_preflight_seals_tg128_shape_and_metric(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

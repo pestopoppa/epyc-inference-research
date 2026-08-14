@@ -223,10 +223,24 @@ _ROCPROF_V1_PREFIX = ("--tool-version", "1", "--timestamp", "on",
                        "--ctx-wait", "on", "--heartbeat", "30", "-i")
 _CORRECTNESS_SUITE_SEED = 2026081301
 _INSTRUMENT_PATH = Path("/mnt/raid0/llm/llama.cpp-experimental")
-_INSTRUMENT_BRANCH = "experimental-v9-autokernel-iq3-mmid-guard-r2-20260813"
-_INSTRUMENT_COMMIT = "894ec4dc55c829b11b663a46bc9b089d861b73a4"
-_INSTRUMENT_DIFF_SHA256 = "5f62f3ae6b79d0c1882ec71db164049bfb517310e33aa1bad1c71455a4d56e8c"
+_INSTRUMENT_BRANCH = "codex/autokernel-ready-continue-instrument-20260814"
+_INSTRUMENT_COMMIT = "81bf32f11b4a421880e8f25faec3e4ba872363f0"
+_INSTRUMENT_DIFF_SHA256 = "3cf9178fcc00e8c1d3dfc0bfd6086edbff6a6eb6ac528aa4d88b23843b5599c2"
 _INSTRUMENT_TEST_SOURCE_SHA256 = "6acd4bf95594d5797a54c912630ec56d3e89fcb3a3a43ca96f95152d77589db4"
+_READY_CONTINUE_CONTRACT_SHA256 = "1411f5e81c1b0b3db6952523922c672d88a78aaff5945865c9ccc2b4fc5fd99f"
+_INSTRUMENT_BENCH_SOURCE_SHA256 = "b118e62cf452aa351a93f864bf4822d157dfc4af309f97b5f64cb6d1f31d2e07"
+_INSTRUMENT_BENCH_README_SHA256 = "6429015fe5025d35b65e6271520ea668267910f82922e618b27b80c909cec33f"
+_INSTRUMENT_DIFF_PATHS = frozenset({
+    "ggml/src/ggml-cpu/iqk/iqk_dispatch.cpp",
+    "ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp",
+    "ggml/src/ggml-cpu/iqk/iqk_quantize.h",
+    "ggml/src/ggml-cpu/iqk/iqk_quantize_min.cpp",
+    "tests/CMakeLists.txt",
+    "tests/test-autokernel-ready-continue-contract.py",
+    "tests/test-backend-ops.cpp",
+    "tools/llama-bench/README.md",
+    "tools/llama-bench/llama-bench.cpp",
+})
 _TARGET_SOURCE_SHA256 = MappingProxyType({
     "ggml/src/ggml-cuda/fattn.cu": "f6a61657387c153e88bde036e25684b512c7cf078b1d17c7e3b2d31ee73f28d3",
     "ggml/src/ggml-cuda/mmvq.cu": "15d25d71c945de19e8efc9fbfc6b7e5e66f33bc7635f9dc648d9e1f231ba409e",
@@ -598,6 +612,67 @@ def _target_source_equality_receipt(config: deployment.DiscoveryDeployment) -> t
     return path.resolve(), hashlib.sha256(raw).hexdigest()
 
 
+def _instrument_review_receipt(config: deployment.DiscoveryDeployment) -> tuple[Path, str]:
+    """Revalidate the exact reviewed measurement-instrument delta and barrier."""
+    if (config.instrument_commit != _INSTRUMENT_COMMIT
+            or config.instrument_branch != _INSTRUMENT_BRANCH):
+        raise DeploymentFactoryError("deployment selected an unreviewed measurement instrument")
+    command = ("git", "-C", str(config.instrument_path))
+    diff = subprocess.run(
+        (*command, "diff", "--binary", f"{config.production_head}..{config.instrument_commit}"),
+        check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    names = subprocess.run(
+        (*command, "diff", "--name-only", "-z",
+         f"{config.production_head}..{config.instrument_commit}"),
+        check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    observed_paths = frozenset(
+        item.decode("utf-8", "strict") for item in names.stdout.split(b"\0") if item)
+    if (diff.returncode or names.returncode
+            or hashlib.sha256(diff.stdout).hexdigest() != _INSTRUMENT_DIFF_SHA256
+            or observed_paths != _INSTRUMENT_DIFF_PATHS):
+        raise DeploymentFactoryError("measurement instrument differs from its reviewed delta")
+    expected_blobs = {
+        "tests/test-backend-ops.cpp": _INSTRUMENT_TEST_SOURCE_SHA256,
+        "tests/test-autokernel-ready-continue-contract.py": _READY_CONTINUE_CONTRACT_SHA256,
+        "tools/llama-bench/llama-bench.cpp": _INSTRUMENT_BENCH_SOURCE_SHA256,
+        "tools/llama-bench/README.md": _INSTRUMENT_BENCH_README_SHA256,
+    }
+    blobs: dict[str, str] = {}
+    for relative, expected in sorted(expected_blobs.items()):
+        result = subprocess.run(
+            (*command, "show", f"{config.instrument_commit}:{relative}"),
+            check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        actual = hashlib.sha256(result.stdout).hexdigest()
+        if result.returncode or actual != expected:
+            raise DeploymentFactoryError(f"reviewed instrument blob changed: {relative}")
+        blobs[relative] = actual
+    body = {
+        "schema": "epyc.autokernel.measurement_instrument_review.v1",
+        "production_base_commit": config.production_head,
+        "instrument_branch": config.instrument_branch,
+        "instrument_commit": config.instrument_commit,
+        "instrument_diff_sha256": _INSTRUMENT_DIFF_SHA256,
+        "reviewed_diff_paths": sorted(_INSTRUMENT_DIFF_PATHS),
+        "reviewed_blobs": blobs,
+        "ready_continue_capability": {
+            "schema": "epyc.autokernel.ready_continue.v1",
+            "source": "tests/test-autokernel-ready-continue-contract.py",
+            "source_sha256": _READY_CONTINUE_CONTRACT_SHA256,
+            "instrument_commit": _INSTRUMENT_COMMIT,
+        },
+    }
+    body["receipt_sha256"] = schemas.content_hash(body)
+    raw = (json.dumps(body, sort_keys=True, indent=2) + "\n").encode()
+    path = config.state_root / "instrument-review.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        if path.is_symlink() or path.read_bytes() != raw:
+            raise DeploymentFactoryError("instrument review receipt changed")
+    else:
+        path.write_bytes(raw)
+    return path.resolve(), hashlib.sha256(raw).hexdigest()
+
+
 def static_template_registry_sha256() -> str:
     """Public value for authoring a sealed config; it grants no constructor authority."""
     return _template_registry().registry_sha256
@@ -794,6 +869,10 @@ def _runner_binding(config: deployment.DiscoveryDeployment) -> RunnerArgsBinding
                 "--common-loader-dir", str(build_.common_loader_dir),
                 "--anchor-loader-dir", str(build_.anchor_loader_dir),
                 "--candidate-loader-dir", str(build_.candidate_loader_dir),
+                "--instrument-ready-continue-v1",
+                "--instrument-ready-continue-commit", _INSTRUMENT_COMMIT,
+                "--instrument-ready-continue-contract-sha256",
+                _READY_CONTINUE_CONTRACT_SHA256,
                 "--cpu-claim-journal", str(config.operations_root / "claims" / "cpu.jsonl"),
                 "--device-claim-journal", str(config.operations_root / "claims" / "device.jsonl")]
         return controller.gpu_discovery.parser().parse_args(argv)
@@ -848,6 +927,7 @@ def _static_registry(config: deployment.DiscoveryDeployment,
 def _seal_graph_receipt(config: deployment.DiscoveryDeployment,
                         runtime: Mapping[str, Any], templates: ExperimentTemplateRegistry,
                         target_equality: tuple[Path, str],
+                        instrument_review: tuple[Path, str],
                         production_runtime_sha256: str) -> tuple[Path, str]:
     launcher_path = Path(codex_container_actor.__file__).resolve(strict=True)
     launcher_sha256 = _digest_regular(launcher_path, "Codex actor launcher")
@@ -873,7 +953,15 @@ def _seal_graph_receipt(config: deployment.DiscoveryDeployment,
                 "instrument_branch": config.instrument_branch,
                 "instrument_commit": config.instrument_commit,
                 "instrument_diff_sha256": _INSTRUMENT_DIFF_SHA256,
-                "instrument_test_source_sha256": _INSTRUMENT_TEST_SOURCE_SHA256},
+                "instrument_test_source_sha256": _INSTRUMENT_TEST_SOURCE_SHA256,
+                "ready_continue_contract_source_sha256": _READY_CONTINUE_CONTRACT_SHA256},
+            "instrument_review": {"path": str(instrument_review[0]),
+                                  "sha256": instrument_review[1]},
+            "batched_runner": {"processes_per_arm": 1, "calls_per_arm": 9,
+                               "ready_continue_schema": "epyc.autokernel.ready_continue.v1",
+                               "instrument_commit": _INSTRUMENT_COMMIT,
+                               "contract_source_sha256": _READY_CONTINUE_CONTRACT_SHA256,
+                               "safe_fallback": "full_process_cold_serialized_lock"},
             "instrument_target_equality": {"path": str(target_equality[0]),
                                            "sha256": target_equality[1]},
             "production_runtime_snapshot_sha256": production_runtime_sha256,
@@ -898,6 +986,7 @@ def build_static_deployment_graph(config: deployment.DiscoveryDeployment) -> Sta
     """Construct the sole live graph.  No registry/executor object is accepted."""
     config.revalidate()
     target_equality = _target_source_equality_receipt(config)
+    instrument_review = _instrument_review_receipt(config)
     templates = _template_registry()
     registry = _static_registry(config, templates)
     production_snapshot = _require(
@@ -925,7 +1014,7 @@ def build_static_deployment_graph(config: deployment.DiscoveryDeployment) -> Sta
         template_catalog=catalog, wrapper_sha256=config.actor_wrapper.sha256,
         runtime_identity=runtime, actor_launcher_sha256=launcher_sha256)
     receipt, digest = _seal_graph_receipt(
-        config, runtime, templates, target_equality,
+        config, runtime, templates, target_equality, instrument_review,
         production_snapshot.runtime_semantics_sha256)
     return StaticDeploymentGraph(config=config, adapters=MappingProxyType(adapters),
                                  registry_ids=_STATIC_IDS, graph_receipt=receipt,

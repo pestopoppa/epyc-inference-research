@@ -35,6 +35,8 @@ SCHEMA_BANK = "epyc.autokernel.gpu_screening_baseline.v2"
 SCHEMA_RESULT = "epyc.autokernel.gpu_candidate_only_screen.v2"
 SCHEMA_LIVE_GOVERNANCE = "epyc.autokernel.gpu_discovery_live_governance.v1"
 SOURCE_COMMIT = "0db32c06e3e550065b78311a6031ef3dd2c4f27c"
+READY_CONTINUE_INSTRUMENT_COMMIT = "81bf32f11b4a421880e8f25faec3e4ba872363f0"
+READY_CONTINUE_CONTRACT_SHA256 = "1411f5e81c1b0b3db6952523922c672d88a78aaff5945865c9ccc2b4fc5fd99f"
 CPU_LIST = "184-191"
 DEVICE_ID = "mi210_0"
 DEFAULT_HOST_BANDWIDTH_BYTES_S = 400 * 1000 * 1000 * 1000
@@ -1022,10 +1024,16 @@ def preflight(args: argparse.Namespace) -> dict:
                         "reward_closure": "shared_anchor_binary_per_arm_hip_dso"}
     requested_handshake = getattr(args, "instrument_ready_continue_v1", False)
     instrument_commit = getattr(args, "instrument_ready_continue_commit", None)
+    contract_sha256 = getattr(args, "instrument_ready_continue_contract_sha256", None)
     if requested_handshake and (
             not isinstance(instrument_commit, str)
-            or instrument_commit != "d9fdc17bd" or runtime_arms is None):
-        raise RuntimeError("ready/continue requires the sealed d9fdc17bd shared-runtime instrument")
+            or instrument_commit != READY_CONTINUE_INSTRUMENT_COMMIT
+            or contract_sha256 != READY_CONTINUE_CONTRACT_SHA256
+            or runtime_arms is None
+            or anchor_identity["source_commit"] != READY_CONTINUE_INSTRUMENT_COMMIT):
+        raise RuntimeError(
+            "ready/continue requires the sealed 81bf32f11 instrument, exact contract, "
+            "and instrument-derived anchor")
     return {
         "schema": "epyc.autokernel.gpu_discovery_preflight.v1",
         "campaign_id": args.campaign_id,
@@ -1075,7 +1083,8 @@ def preflight(args: argparse.Namespace) -> dict:
             "proof": "owned_kfd+positive_vram+exact_split_runtime_maps",
             "available": runtime_arms is not None,
             "ready_continue": {"enabled": bool(requested_handshake),
-                               "instrument_commit": instrument_commit},
+                               "instrument_commit": instrument_commit,
+                               "contract_source_sha256": contract_sha256},
         },
     }
 
@@ -1316,6 +1325,7 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--candidate-loader-dir")
     result.add_argument("--instrument-ready-continue-v1", action="store_true")
     result.add_argument("--instrument-ready-continue-commit")
+    result.add_argument("--instrument-ready-continue-contract-sha256")
     result.add_argument("--cpu-claim-journal", default="/mnt/raid0/llm/ak-claims/region.jsonl")
     result.add_argument("--device-claim-journal", default="/mnt/raid0/llm/ak-claims/device.jsonl")
     return result

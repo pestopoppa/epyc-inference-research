@@ -129,6 +129,8 @@ class DeploymentFactoryTests(unittest.TestCase):
                     mock.patch.object(F.codex_container_actor, "CA_CERTIFICATE_PATH", ca), \
                     mock.patch.object(F, "_target_source_equality_receipt",
                                       return_value=(root / "equality.json", "e" * 64)), \
+                    mock.patch.object(F, "_instrument_review_receipt",
+                                      return_value=(root / "instrument.json", "i" * 64)), \
                     mock.patch.object(F.codex_container_actor, "run_actor", side_effect=forbidden), \
                     mock.patch.object(F.controller.gpu_discovery, "run", side_effect=forbidden), \
                     mock.patch.object(F.controller, "run_controller", side_effect=forbidden), \
@@ -167,7 +169,9 @@ class DeploymentFactoryTests(unittest.TestCase):
                     mock.patch.object(F.codex_container_actor, "DOCKER_EXECUTABLE", str(docker)), \
                     mock.patch.object(F.codex_container_actor, "CA_CERTIFICATE_PATH", ca), \
                     mock.patch.object(F, "_target_source_equality_receipt",
-                                      return_value=(Path(temporary) / "equality.json", "e" * 64)):
+                                      return_value=(Path(temporary) / "equality.json", "e" * 64)), \
+                    mock.patch.object(F, "_instrument_review_receipt",
+                                      return_value=(Path(temporary) / "instrument.json", "i" * 64)):
                 graph = F.build_static_deployment_graph(config)
                 native, _host = F.codex_container_actor._codex_native_assets(
                     config.actor_wrapper.path)
