@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import unittest
+from collections.abc import Mapping
 
 from . import hypothesis_portfolio as P
 
@@ -42,7 +43,14 @@ L21_Q4K_ID = "akh-v2-q4k-mmq-dequant-gemv"
 def _text(value: object) -> str:
     """Return stable case-folded prose without losing Unicode result signs."""
 
-    return json.dumps(value, ensure_ascii=False, sort_keys=True).casefold()
+    def jsonable(item: object):
+        if isinstance(item, Mapping):
+            return {key: jsonable(child) for key, child in item.items()}
+        if isinstance(item, (list, tuple)):
+            return [jsonable(child) for child in item]
+        return item
+
+    return json.dumps(jsonable(value), ensure_ascii=False, sort_keys=True).casefold()
 
 
 class LegacyLeverPortfolioAcceptanceTest(unittest.TestCase):
