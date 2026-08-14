@@ -1,6 +1,6 @@
 """No-hardware replay tests for the typed discovery state machine."""
 from __future__ import annotations
-import argparse, hashlib, json, tempfile, unittest
+import argparse, base64, hashlib, json, tempfile, unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -260,6 +260,46 @@ class Tests(unittest.TestCase):
    self.assertIn("reviewed enclosing function symbol",hunk_rule)
    self.assertIn("Blank hunk context",hunk_rule)
    self.assertEqual(captured["structural_example_only"]["source-patch.json"]["patch_encoding"],"base64")
+   declarations=captured["structural_example_only"]["plan.json"]["proposal"]["change"]["files_and_symbols"]
+   self.assertIsInstance(declarations,list)
+   self.assertEqual(declarations,["ggml/src/ggml-cuda/example.cu:example_symbol"])
+ def test_load_plan_binds_exact_flat_manifest_symbols_before_critic(self):
+  with tempfile.TemporaryDirectory() as t:
+   root=Path(t); relative="ggml/src/ggml-cuda/vecdotq.cuh"
+   symbols=["vec_dot_q5_0_q8_1","vec_dot_q5_0_q8_1_impl"]
+   patch_bytes=(f"diff --git a/{relative} b/{relative}\n"
+                f"--- a/{relative}\n+++ b/{relative}\n"
+                "@@ -1 +1 @@ vec_dot_q5_0_q8_1_impl\n-old\n+new\n"
+                "@@ -3 +3 @@ vec_dot_q5_0_q8_1\n-before\n+after\n").encode()
+   assignment=D.AuthoringAssignment("ak-test","akp-test","akc-test","0"*40,"1"*40)
+   manifest={"schema":D.source_candidate.SCHEMA_SOURCE_PATCH,
+       "campaign_id":assignment.campaign_id,"proposal_id":assignment.proposal_id,
+       "candidate_id":assignment.candidate_id,"source_tree":"llama.cpp",
+       "production_base_commit":assignment.production_base_commit,
+       "instrument_commit":assignment.instrument_commit,"change_class":"arithmetic",
+       "declared_files":[relative],"declared_symbols":{relative:symbols},
+       "mechanism_id":"exact-q5-dequant","patch_sha256":hashlib.sha256(patch_bytes).hexdigest(),
+       "patch_encoding":"base64","patch_base64":base64.b64encode(patch_bytes).decode()}
+   (root/"source-patch.json").write_text(json.dumps(manifest))
+   base={"hypothesis_id":"akh-q5-exact","statement":"reuse q5 high bits",
+       "falsifier":"exact kernel duration does not improve","regime":{"phase":"decode"},
+       "proposal":{"proposal_id":assignment.proposal_id,"change_class":"arithmetic",
+                   "change":{"files_and_symbols":[f"{relative}:{symbol}" for symbol in symbols],
+                             "estimated_diff_size":4}},
+       "source_manifest_path":"source-patch.json"}
+   (root/"plan.json").write_text(json.dumps(base))
+   candidate=D._load_plan(root/"plan.json",root,assignment=assignment)
+   self.assertEqual(candidate.source_manifest.declared_symbols[relative],tuple(symbols))
+   for malformed in ([f"{relative}:{symbols[0]}"],
+                     {relative:symbols},
+                     [f"{relative}:{symbol}" for symbol in symbols]+[
+                         "ggml/src/ggml-cuda/offscope.cu:foreign_kernel"]):
+    with self.subTest(malformed=malformed):
+     plan=json.loads(json.dumps(base)); plan["proposal"]["change"]["files_and_symbols"]=malformed
+     (root/"plan.json").write_text(json.dumps(plan))
+     with self.assertRaisesRegex(D.source_candidate.SourceCandidateError,
+                                 "exactly equal"):
+      D._load_plan(root/"plan.json",root,assignment=assignment)
  def test_fable_context_binds_selected_reviewed_source_preimage(self):
   content=b"template <typename T>\nvoid quantize_q8_1(T * x) {\n    x[0] = T{};\n}\n"
   digest=hashlib.sha256(content).hexdigest()

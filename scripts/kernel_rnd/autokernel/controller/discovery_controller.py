@@ -688,7 +688,9 @@ class CodexPlanner:
                 "statement": example_statement,
                 "falsifier": example_falsifier, "regime": example_regime,
                 "proposal": {"proposal_id": assignment["proposal_id"], "change_class": example_change_class,
-                    "change": {"files_and_symbols": {example_file: example_symbols},
+                    "change": {"files_and_symbols": [
+                                   f"{example_file}:{symbol}"
+                                   for symbol in example_symbols],
                                "estimated_diff_size": 2}},
                 "source_manifest_path": "source-patch.json",
                 "experiment_intent": {"template_id": example_template,
@@ -907,6 +909,15 @@ def _load_plan(path: Path, root: Path, *, assignment: AuthoringAssignment | None
             raise DiscoveryControllerError("actor attempted to invent campaign/base/instrument identity")
         if value.get("proposal", {}).get("proposal_id") != assignment.proposal_id:
             raise DiscoveryControllerError("actor proposal does not use controller-assigned proposal identity")
+        # Bind the actor's proposal to controller-owned identity and the exact
+        # manifest file:symbol scope before the critic or any claim can run.
+        # The actor may not omit, regroup, or reformat these declarations.
+        manifest.bind(
+            proposal=value.get("proposal", {}),
+            campaign_id=assignment.campaign_id,
+            candidate_id=assignment.candidate_id,
+            production_base_commit=assignment.production_base_commit,
+            instrument_commit=assignment.instrument_commit)
     return PlannedCandidate(**value, source_manifest=manifest, source_manifest_sha256=manifest.patch_bundle_sha256,
                             experiment_intent=intent)
 
