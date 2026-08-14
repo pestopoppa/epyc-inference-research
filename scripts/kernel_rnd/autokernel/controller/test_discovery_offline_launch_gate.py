@@ -67,7 +67,7 @@ class OfflineLaunchGate(unittest.TestCase):
             nomination_threshold=.03, actor_wrapper=inputs["wrapper"],
             environment_profile_id="sealed-codex", device_id="mi210_0",
             claim_timeout_s=0, inference_window_lock=(root / "window.lock").resolve(),
-            small_model_max_bytes=512 * 1024 * 1024, model=inputs["model"],
+            model=inputs["model"],
             workload=inputs["workload"], runtime_config=inputs["runtime"], policy=inputs["policy"],
             planner_context=D.PlannerContext(context_input, context_value),
             source_builder_id="source", evidence_plan_id="evidence", runner_args_id="runner",
@@ -279,17 +279,19 @@ class OfflineLaunchGate(unittest.TestCase):
         expectation = getattr(C, "BoundedDispatchExpectation", None)
         self.assertIsNotNone(expectation)
         first = expectation(kernel_name="fattn_vec_f32", calls=2,
-                            grid=(128, 1, 1), workgroup=(64, 1, 1), lds_bytes=0)
+                            grid=128, workgroup=64, lds_bytes=0)
         second = expectation(kernel_name="fattn_vec_f32_v2", calls=1,
-                             grid=(64, 1, 1), workgroup=(64, 1, 1), lds_bytes=256)
+                             grid=64, workgroup=64, lds_bytes=256)
         self.assertNotEqual(first, second)
         self.assertIn("expected_dispatch",
                       C.GpuSourceExperimentIntent.__dataclass_fields__)
         critic_source = inspect.getsource(C.CodexCritic.review)
-        self.assertIn("expected_dispatch", critic_source)
-        materializer_source = inspect.getsource(F.materialize)
-        self.assertIn("expected_dispatch", materializer_source)
-        self.assertNotIn("actor_dispatch_regex", materializer_source)
+        self.assertIn("experiment_intent", critic_source)
+        self.assertIn("asdict(candidate.experiment_intent)", critic_source)
+        binder_source = inspect.getsource(F.ExperimentTemplate.bind_dispatch)
+        self.assertIn("expected_dispatch", binder_source)
+        self.assertIn("re.escape", binder_source)
+        self.assertNotIn("actor_dispatch_regex", binder_source)
 
     def test_literal_dispatch_expectation_refuses_meta_and_out_of_range(self):
         """Kernel names and geometry are bounded literals, never patterns."""
@@ -297,12 +299,12 @@ class OfflineLaunchGate(unittest.TestCase):
         self.assertIsNotNone(expectation)
         for kernel in ("*", ".*", "kernel[0]", "kernel;exec", "kernel $(x)"):
             with self.subTest(kernel=kernel), self.assertRaises(Exception):
-                expectation(kernel_name=kernel, calls=1, grid=(1, 1, 1),
-                            workgroup=(1, 1, 1), lds_bytes=0)
+                expectation(kernel_name=kernel, calls=1, grid=1,
+                            workgroup=1, lds_bytes=0)
         for bad in (0, -1, 2**31):
             with self.subTest(calls=bad), self.assertRaises(Exception):
-                expectation(kernel_name="kernel_v1", calls=bad, grid=(1, 1, 1),
-                            workgroup=(1, 1, 1), lds_bytes=0)
+                expectation(kernel_name="kernel_v1", calls=bad, grid=1,
+                            workgroup=1, lds_bytes=0)
 
     def test_planner_is_not_a_canned_finite_experiment_queue(self):
         """Deployment templates bound authority, not a finite patch inventory."""
