@@ -262,13 +262,15 @@ class StaticGpuSourceBuilder:
         campaign_root = self.operations_root / "worktrees" / operation_key
         build_root = self.build_root / operation_key
         campaign_root.mkdir(parents=True, exist_ok=True); build_root.mkdir(parents=True, exist_ok=True)
-        actor, actor_proof = worktree.create_campaign_worktree(anchor, candidate.source_manifest.campaign_id,
-                                                            root=campaign_root)
+        actor: worktree.Worktree | None = None
+        actor_proof: Any | None = None
         snapshots: list[worktree.Worktree] = []
         operation_dir = self.operations_root / "materialization" / operation_key
         operation_dir.mkdir(parents=True, exist_ok=True)
         completed: dict[str, Any] | None = None
         try:
+            actor, actor_proof = worktree.create_campaign_worktree(
+                anchor, candidate.source_manifest.campaign_id, root=campaign_root)
             applied = source_candidate.apply_source_candidate(candidate.source_manifest,
                                                                proposal=candidate.proposal, actor=actor)
             anchor_snapshot, _ = worktree.create_snapshot_worktree(
@@ -362,10 +364,11 @@ class StaticGpuSourceBuilder:
                     receipts.append(worktree.teardown_worktree(snapshot).to_dict())
                 except Exception as exc:  # retain all teardown attempts before refusing
                     teardown_errors.append(f"{snapshot.path.path}: {exc}")
-            try:
-                receipts.append(worktree.teardown_worktree(actor).to_dict())
-            except Exception as exc:
-                teardown_errors.append(f"{actor.path.path}: {exc}")
+            if actor is not None:
+                try:
+                    receipts.append(worktree.teardown_worktree(actor).to_dict())
+                except Exception as exc:
+                    teardown_errors.append(f"{actor.path.path}: {exc}")
             teardown = {"schema": "epyc.autokernel.source_materialization_teardown.v1",
                         "operation_key": operation_key, "receipts": receipts,
                         "errors": teardown_errors, "promotion_claim": False}
