@@ -25,6 +25,7 @@ from . import discovery_controller as C
 from . import discovery_deployment as D
 from . import discovery_deployment_factory as F
 from . import discovery_static_registry as S
+from . import gpu_source_adapter as A
 from . import gpu_source_evidence as E
 from . import gpu_residency_sampler as R
 from . import split_runtime_verifier as V
@@ -59,6 +60,15 @@ class OfflineLaunchGate(unittest.TestCase):
         context_path.write_text(__import__("json").dumps(context_value))
         context_input = D.ImmutableInput(
             context_path, __import__("hashlib").sha256(context_path.read_bytes()).hexdigest())
+        admission_value = {
+            "schema": D.ADMISSION_POLICY_SCHEMA, "version": "test-v1",
+            "profiles": [], "examples": [],
+        }
+        admission_value["policy_sha256"] = C._sha(admission_value)
+        admission_path = (root / "admission-policy.json").resolve()
+        admission_path.write_text(json.dumps(admission_value, sort_keys=True))
+        admission_input = D.ImmutableInput(
+            admission_path, hashlib.sha256(admission_path.read_bytes()).hexdigest())
         return D.DiscoveryDeployment(
             config_sha256="f" * 64,
             production_path=(root / "production").resolve(), production_head="a" * 40,
@@ -69,6 +79,7 @@ class OfflineLaunchGate(unittest.TestCase):
             claim_timeout_s=0, inference_window_lock=(root / "window.lock").resolve(),
             model=inputs["model"],
             workload=inputs["workload"], runtime_config=inputs["runtime"], policy=inputs["policy"],
+            admission_policy=D.AdmissionPolicy(admission_input, admission_value),
             planner_context=D.PlannerContext(context_input, context_value),
             source_builder_id="source", evidence_plan_id="evidence", runner_args_id="runner",
             experiment_template_registry_id="templates",
@@ -700,6 +711,38 @@ class OfflineLaunchGate(unittest.TestCase):
         self.assertIn("anchor_loader_dir", fields)
         self.assertIn("candidate_loader_dir", fields)
         self.assertIn("runtime_manifest_sha256", fields)
+
+    def test_series_key_ignores_fresh_baseline_receipt_but_binds_frame(self):
+        """S1/S2 pool across fresh baselines only when immutable frame is exact."""
+        bundle = SimpleNamespace(attribution={"path": "/sealed/pair.json"})
+        base = {
+            "manifest_sha256": "1" * 64, "model_sha256": "2" * 64,
+            "workload_sha256": "3" * 64, "runtime_config_sha256": "4" * 64,
+            "candidate_build_identity": {"source": "5" * 64},
+            "anchor_build_identity": {"source": "6" * 64},
+            "baseline_frame": {"anchor_build_identity": {"source": "6" * 64},
+                               "model_sha256": "2" * 64,
+                               "workload_sha256": "3" * 64,
+                               "runtime_config_sha256": "4" * 64},
+        }
+        screen = C.SealedScreen("/sealed/result.json", "7" * 64, .1, "candidate",
+                                "8" * 64, "9" * 64, "a" * 64)
+
+        def key(pair):
+            with mock.patch.object(A.evidence,
+                                   "load_gpu_source_evidence_bundle",
+                                   return_value=bundle), \
+                    mock.patch.object(A.gpu_source_proofs,
+                                      "load_receipt", return_value={"body": pair}):
+                return A._source_frame(Path("/sealed/op"), screen)[0]
+
+        first = key({**base, "baseline_sha256": "b" * 64})
+        second = key({**base, "baseline_sha256": "c" * 64})
+        changed = key({**base, "baseline_sha256": "d" * 64,
+                       "baseline_frame": {**base["baseline_frame"],
+                                          "workload_sha256": "e" * 64}})
+        self.assertEqual(first, second)
+        self.assertNotEqual(first, changed)
 
     def test_source_scope_rejects_reward_symbols_even_under_kernel_prefix(self):
         """A path prefix alone cannot authorize benchmark/reward manipulation."""
