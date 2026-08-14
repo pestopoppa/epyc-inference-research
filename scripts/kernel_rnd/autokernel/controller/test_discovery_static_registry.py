@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import hashlib
+import os
 import subprocess
 from dataclasses import replace
 from pathlib import Path
@@ -257,6 +258,10 @@ class _FakeBuildResult:
 class _FakeSplitRuntime:
     def __init__(self, root: Path) -> None:
         self.root = root.resolve()
+        self.common_dir = self.root / "common"
+        self.anchor_hip_dir = self.root / "anchor-hip"
+        self.candidate_hip_dir = self.root / "candidate-hip"
+        self.reward_binary = self.common_dir / "llama-bench"
 
     def to_dict(self):
         return {"schema": "epyc.autokernel.split_reward_runtime.v1",
@@ -360,6 +365,15 @@ class StaticBuildCacheTests(unittest.TestCase):
     def split_verifier(root: Path):
         return _FakeSplitRuntime(Path(root))
 
+    @staticmethod
+    def rewrite_receipt(path: Path, mutate) -> dict:
+        body = json.loads(path.read_text())
+        body.pop("receipt_sha256")
+        mutate(body)
+        body["receipt_sha256"] = E.schemas.content_hash(body)
+        path.write_text(json.dumps(body, sort_keys=True) + "\n")
+        return body
+
     def invoke(self, fixture, permit=None):
         with mock.patch(
                 "scripts.kernel_rnd.autokernel.controller.discovery_static_registry.worktree.run_build",
@@ -433,6 +447,61 @@ class StaticBuildCacheTests(unittest.TestCase):
                     StaticRegistryError, "ref differs"):
             self.invoke(fixture, {**fixture.permit, "operation_key": "a" * 64})
         self.assertEqual(len(fixture.calls), calls)
+
+    def test_changed_proposal_semantics_get_a_distinct_build_authority(self):
+        fixture = self.fixture(); first = self.invoke(fixture)
+        changed_proposal = json.loads(json.dumps(fixture.candidate.proposal))
+        changed_proposal["change"]["estimated_diff_size"] = 8
+        changed_candidate = replace(fixture.candidate, proposal=changed_proposal)
+        with mock.patch(
+                "scripts.kernel_rnd.autokernel.controller.discovery_static_registry.worktree.run_build",
+                side_effect=fixture.run_build), mock.patch(
+                "scripts.kernel_rnd.autokernel.controller.discovery_static_registry.split_runtime_verifier.verify_split_runtime",
+                side_effect=self.split_verifier):
+            second = fixture.builder.build(
+                changed_candidate, object(),
+                {**fixture.permit, "operation_key": "b" * 64})
+        self.assertNotEqual(first.build_key, second.build_key)
+        self.assertEqual(len(fixture.calls), 4)
+
+    def test_terminal_cannot_redirect_runner_loader_directories(self):
+        fixture = self.fixture(); build = self.invoke(fixture); calls = len(fixture.calls)
+        rogue = build.materialization_receipt.parent.parent / "rogue-loader"
+        rogue.mkdir()
+        terminal = build.materialization_receipt.parent.parent / "terminal.json"
+        self.rewrite_receipt(
+            terminal, lambda body: body["build"].update({"common_loader_dir": str(rogue)}))
+        with self.assertRaisesRegex(StaticRegistryError, "loader"):
+            self.invoke(fixture, {**fixture.permit, "operation_key": "c" * 64})
+        self.assertEqual(len(fixture.calls), calls)
+
+    def test_teardown_receipts_must_name_materialized_actor_and_snapshots(self):
+        fixture = self.fixture(); build = self.invoke(fixture); calls = len(fixture.calls)
+        teardown = build.teardown_receipt
+        missing = teardown.parent.parent / "worktrees/not-the-actor"
+        self.rewrite_receipt(
+            teardown, lambda body: body["receipts"][0].update(
+                {"worktree_path": str(missing)}))
+        terminal = build.materialization_receipt.parent.parent / "terminal.json"
+        new_sha = sha(teardown.read_bytes())
+        self.rewrite_receipt(
+            terminal, lambda body: body["build"].update({"teardown_sha256": new_sha}))
+        with self.assertRaisesRegex(StaticRegistryError, "do not bind"):
+            self.invoke(fixture, {**fixture.permit, "operation_key": "d" * 64})
+        self.assertEqual(len(fixture.calls), calls)
+
+    def test_authority_receipts_and_logs_must_have_one_hard_link(self):
+        for target in ("materialization", "log"):
+            with self.subTest(target=target):
+                fixture = self.fixture(); build = self.invoke(fixture); calls = len(fixture.calls)
+                if target == "materialization":
+                    authority = build.materialization_receipt
+                else:
+                    authority = next((build.materialization_receipt.parent.parent / "logs").iterdir())
+                os.link(authority, fixture.root / f"alias-{target}")
+                with self.assertRaisesRegex(StaticRegistryError, "one|hard link"):
+                    self.invoke(fixture, {**fixture.permit, "operation_key": "e" * 64})
+                self.assertEqual(len(fixture.calls), calls)
 
     def test_crash_after_intent_is_classified_incomplete_and_never_rebuilt(self):
         fixture = self.fixture()

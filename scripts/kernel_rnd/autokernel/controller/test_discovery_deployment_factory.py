@@ -314,6 +314,10 @@ class DeploymentFactoryTests(unittest.TestCase):
                              [config.config_sha256, config.config_sha256])
             self.assertEqual([row["instrument_branch"] for row in calls],
                              [config.instrument_branch, config.instrument_branch])
+            with self.assertRaisesRegex(F.DeploymentFactoryError, "operation identity"):
+                adapters["args_factory"](
+                    candidate, mock.Mock(operation_key="1" * 64),
+                    {"operation_key": "2" * 64})
 
 
 if __name__ == "__main__":

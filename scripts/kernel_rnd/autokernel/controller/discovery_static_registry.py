@@ -111,9 +111,31 @@ def _sealed_write(path: Path, body: Mapping[str, Any]) -> tuple[Path, str]:
 def _sealed_read(path: Path, *, schema: str, label: str) -> dict[str, Any]:
     if path.is_symlink() or not path.is_file():
         raise StaticRegistryError(f"{label} is absent or not a regular file")
+    flags = os.O_RDONLY
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
     try:
-        body = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+        descriptor = os.open(path, flags)
+        try:
+            before = os.fstat(descriptor)
+            if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
+                raise StaticRegistryError(f"{label} must have one regular-file link")
+            with os.fdopen(descriptor, "rb") as handle:
+                raw = handle.read()
+                after = os.fstat(handle.fileno())
+            if ((before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns,
+                 before.st_nlink) !=
+                    (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns,
+                     after.st_nlink)):
+                raise StaticRegistryError(f"{label} changed while being read")
+        except BaseException:
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+            raise
+        body = json.loads(raw.decode("utf-8", "strict"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise StaticRegistryError(f"{label} is not JSON") from exc
     if not isinstance(body, dict) or body.get("schema") != schema:
         raise StaticRegistryError(f"{label} schema mismatch")
@@ -123,7 +145,8 @@ def _sealed_read(path: Path, *, schema: str, label: str) -> dict[str, Any]:
     return body
 
 
-def _within(path: Path, root: Path, label: str, *, directory: bool = False) -> Path:
+def _within(path: Path, root: Path, label: str, *, directory: bool = False,
+            single_link: bool = False) -> Path:
     if path.is_symlink():
         raise StaticRegistryError(f"{label} may not be a symlink")
     try:
@@ -135,6 +158,8 @@ def _within(path: Path, root: Path, label: str, *, directory: bool = False) -> P
         raise StaticRegistryError(f"{label} is not a directory")
     if not directory and not resolved.is_file():
         raise StaticRegistryError(f"{label} is not a file")
+    if not directory and single_link and resolved.stat().st_nlink != 1:
+        raise StaticRegistryError(f"{label} must have exactly one hard link")
     return resolved
 
 
@@ -799,6 +824,10 @@ class StaticGpuSourceBuilder:
             paths=candidate.source_manifest.declared_files)
         effective_defines = dict(self._sealed_cmake_defines())
         effective_defines.setdefault("GGML_CCACHE", "OFF")
+        try:
+            proposal_sha256 = schemas.content_hash(dict(candidate.proposal))
+        except (TypeError, ValueError) as exc:
+            raise StaticRegistryError("candidate proposal is not canonical build authority") from exc
         contract: dict[str, Any] = {
             "schema": _BUILD_KEY_SCHEMA,
             "builder_schema": _BUILDER_SCHEMA,
@@ -807,6 +836,7 @@ class StaticGpuSourceBuilder:
             "instrument_authority": instrument,
             "patch_bundle_sha256": candidate.source_manifest.patch_bundle_sha256,
             "patch_sha256": candidate.source_manifest.patch_sha256,
+            "proposal_sha256": proposal_sha256,
             "selected_gpu_base_blobs": selected,
             "cmake_defines": [list(item) for item in sorted(effective_defines.items())],
             "build_type": "Release",
@@ -828,6 +858,7 @@ class StaticGpuSourceBuilder:
             "production_base_authority": contract["production_base_authority"],
             "instrument_authority": contract["instrument_authority"],
             "patch_bundle_sha256": contract["patch_bundle_sha256"],
+            "proposal_sha256": contract["proposal_sha256"],
             "builder_schema": contract["builder_schema"],
         })
 
@@ -965,7 +996,8 @@ class StaticGpuSourceBuilder:
                 "source_identity", "binary", "hip_library", "config", "linkage")}
             for value in values.values():
                 allowed_root = cache_root if value.role in {"source_identity", "linkage"} else build_root
-                _within(value.path, allowed_root, f"{arm} {value.role}")
+                _within(value.path, allowed_root, f"{arm} {value.role}",
+                        single_link=value.role in {"source_identity", "linkage"})
             evidence._verify_build_files(evidence.BuildIdentityFiles(**values), identity, arm)
         shared_row = materialization.get("shared_runtime")
         if not isinstance(shared_row, Mapping):
@@ -988,6 +1020,27 @@ class StaticGpuSourceBuilder:
             raise StaticRegistryError("cached split reward runtime cannot be revalidated") from exc
         if runtime_body["split_runtime_manifest"] != verified_runtime.to_dict():
             raise StaticRegistryError("cached split reward runtime identity changed")
+        expected_runtime_paths = {
+            "root": verified_runtime.root.resolve(strict=True),
+            "measurement": verified_runtime.reward_binary.resolve(strict=True),
+            "common": verified_runtime.common_dir.resolve(strict=True),
+            "anchor": verified_runtime.anchor_hip_dir.resolve(strict=True),
+            "candidate": verified_runtime.candidate_hip_dir.resolve(strict=True),
+        }
+        for label, path in (("common", build.common_loader_dir),
+                            ("anchor", build.anchor_loader_dir),
+                            ("candidate", build.candidate_loader_dir)):
+            _within(path, verified_runtime.root, f"cached {label} loader directory",
+                    directory=True)
+        actual_runtime_paths = {
+            "root": runtime_root,
+            "measurement": build.measurement_binary,
+            "common": build.common_loader_dir,
+            "anchor": build.anchor_loader_dir,
+            "candidate": build.candidate_loader_dir,
+        }
+        if actual_runtime_paths != expected_runtime_paths:
+            raise StaticRegistryError("cached runner loader paths differ from verified split runtime")
         if (build.measurement_binary != shared.measurement_binary.path
                 or build.reward_runtime_sha256 != shared.runtime_receipt.sha256
                 or build.anchor_identity.hip_library_sha256 != shared.anchor_hip_library.sha256
@@ -1003,6 +1056,23 @@ class StaticGpuSourceBuilder:
         receipts = teardown.get("receipts")
         if not isinstance(receipts, list) or len(receipts) != 3:
             raise StaticRegistryError("cached build teardown does not cover all worktrees")
+        actor = materialization.get("actor_worktree")
+        builds = materialization.get("builds")
+        if not isinstance(actor, Mapping) or not isinstance(builds, Mapping):
+            raise StaticRegistryError("materialization lacks worktree provenance")
+        expected_worktree_paths = {str(Path(str(actor.get("path", ""))).resolve())}
+        for build_receipt in builds.values():
+            plan = build_receipt.get("plan") if isinstance(build_receipt, Mapping) else None
+            if not isinstance(plan, Mapping):
+                raise StaticRegistryError("cached build receipt lacks a source snapshot")
+            expected_worktree_paths.add(str(Path(str(plan.get("source_root", ""))).resolve()))
+        if len(expected_worktree_paths) != 3:
+            raise StaticRegistryError("materialization worktree provenance is not one actor plus two snapshots")
+        actual_worktree_paths = {
+            str(Path(str(receipt.get("worktree_path", ""))).resolve())
+            for receipt in receipts if isinstance(receipt, Mapping)}
+        if actual_worktree_paths != expected_worktree_paths:
+            raise StaticRegistryError("teardown receipts do not bind the materialized worktrees")
         for receipt in receipts:
             if (not isinstance(receipt, Mapping)
                     or receipt.get("worktree_removed") is not True
@@ -1012,7 +1082,6 @@ class StaticGpuSourceBuilder:
             worktree_path = Path(str(receipt.get("worktree_path", "")))
             if worktree_path.exists() or worktree_path.is_symlink():
                 raise StaticRegistryError("a supposedly torn-down build worktree still exists")
-        builds = materialization.get("builds")
         if not isinstance(builds, Mapping) or len(builds) != 2:
             raise StaticRegistryError("cached materialization lacks both build receipts")
         for build_receipt in builds.values():
@@ -1021,7 +1090,7 @@ class StaticGpuSourceBuilder:
                     or build_receipt.get("log_disagrees_with_exit_code") is not False):
                 raise StaticRegistryError("cached build receipt is not successful")
             log = _within(Path(str(build_receipt.get("log_path", ""))), cache_root,
-                          "cached build log")
+                          "cached build log", single_link=True)
             if _digest(log) != build_receipt.get("log_sha256"):
                 raise StaticRegistryError("cached build log changed")
             facts = build_receipt.get("facts")
