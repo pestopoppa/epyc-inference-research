@@ -251,13 +251,108 @@ class DeploymentFactoryTests(unittest.TestCase):
                                planner_context=SimpleNamespace(value={"context_sha256": "c" * 64}))
             config.revalidate = mock.Mock()
             decision = SimpleNamespace(mode="cold_serialized", to_dict=lambda: {"decision_sha256": "d" * 64})
+            opened = F.device_claim.ClaimReceipt(
+                claim_id="akd-test", device_id="mi210_0", lock_path="/claim",
+                state="held", holder_pid=1, holder_start_ticks=1,
+                holder_boot_id="boot", host="host", purpose="probe",
+                campaign_id="ak-test", acquired_at="now")
+            class Claim:
+                held = True
+                def receipt(self): return opened
+                def release(self):
+                    self.held = False
+                    return F.replace(opened, released_at="done")
             with mock.patch.object(F.gpu_load_admission, "arbitrate", return_value=decision), \
                  mock.patch.object(F.inference_window.InferenceCallWindow, "acquire",
                                    side_effect=AssertionError("lease must not invent a CPU lock probe")):
-                admitted = F.GpuDiscoveryLease(config=config, mode="allowed_discovery_noise").admit(mock.Mock())
+                admitted = F.GpuDiscoveryLease(
+                    config=config, mode="allowed_discovery_noise", claim_journal=mock.Mock(),
+                    claim_acquirer=lambda *_args, **_kwargs: Claim(),
+                    claim_verifier=lambda _receipt: True).admit(
+                        mock.Mock(source_manifest=mock.Mock(campaign_id="ak-test")),
+                        operation_key="e" * 64)
         self.assertTrue(admitted["admitted"])
         self.assertEqual(admitted["mode"], "cold_serialized")
         self.assertEqual(admitted["load_admission"], {"decision_sha256": "d" * 64})
+
+    def test_reservation_cleanup_owns_malformed_verifier_and_retry_failures(self):
+        opened = F.device_claim.ClaimReceipt(
+            claim_id="akd-test", device_id="mi210_0", lock_path="/claim",
+            state="held", holder_pid=1, holder_start_ticks=1,
+            holder_boot_id="boot", host="host", purpose="outer",
+            campaign_id="ak-test", acquired_at="now")
+        class Claim:
+            def __init__(self, *, malformed=False, fail_release_once=False):
+                self.malformed = malformed; self.fail_release_once = fail_release_once
+                self.release_calls = 0; self.held = True
+            def receipt(self): return {"bad": True} if self.malformed else opened
+            def release(self):
+                self.release_calls += 1
+                self.held = False
+                if self.fail_release_once and self.release_calls == 1:
+                    raise RuntimeError("journal unavailable once")
+                return F.replace(opened, released_at="done")
+        config = mock.Mock(device_id="mi210_0")
+        operation_key = "e" * 64
+        for label, claim, verifier in (
+                ("malformed", Claim(malformed=True), lambda _receipt: True),
+                ("verifier", Claim(), lambda _receipt: (_ for _ in ()).throw(
+                    RuntimeError("verifier failed")))):
+            with self.subTest(label=label):
+                lease = F.GpuDiscoveryLease(
+                    config=config, mode="allowed_discovery_noise",
+                    claim_journal=mock.Mock(),
+                    claim_acquirer=lambda *_args, claim=claim, **_kwargs: claim,
+                    claim_verifier=verifier)
+                lease._campaigns[operation_key] = "ak-test"
+                with self.assertRaises(Exception):
+                    lease.reserve(operation_key)
+                self.assertFalse(claim.held)
+                self.assertEqual(claim.release_calls, 1)
+                self.assertNotIn(operation_key, lease._active)
+        claim = Claim(fail_release_once=True)
+        lease = F.GpuDiscoveryLease(
+            config=config, mode="allowed_discovery_noise", claim_journal=mock.Mock(),
+            claim_acquirer=lambda *_args, **_kwargs: claim,
+            claim_verifier=lambda _receipt: True)
+        lease._campaigns[operation_key] = "ak-test"
+        lease.reserve(operation_key)
+        released = lease.release(operation_key)
+        self.assertEqual(released["claim_id"], opened.claim_id)
+        self.assertEqual(claim.release_calls, 2)
+        self.assertNotIn(operation_key, lease._active)
+
+    def test_probe_validation_errors_always_release_the_acquired_handle(self):
+        with tempfile.TemporaryDirectory() as directory:
+            model = Path(directory) / "model"; model.write_bytes(b"model")
+            profile = SimpleNamespace(
+                model_path=str(model), model_sha256="a" * 64, device_id="mi210_0",
+                workload="tg128", calls_per_arm=9, cold_load_host_bytes=4,
+                worst_case_loads_per_interval=18)
+            config = mock.Mock(
+                inference_window_lock="/lock", device_id="mi210_0",
+                model=SimpleNamespace(path=model, sha256="a" * 64),
+                admission_policy=SimpleNamespace(corpus=SimpleNamespace(
+                    profiles=(profile,), policy_sha256="b" * 64, version="test-v2")),
+                planner_context=SimpleNamespace(value={"context_sha256": "c" * 64}))
+            config.revalidate = mock.Mock()
+            base = F.device_claim.ClaimReceipt(
+                claim_id="akd-probe", device_id="mi210_0", lock_path="/claim",
+                state="held", holder_pid=1, holder_start_ticks=1,
+                holder_boot_id="boot", host="host", purpose="probe",
+                campaign_id="ak-test", acquired_at="now")
+            class Probe:
+                def __init__(self, malformed=False): self.malformed=malformed; self.held=True; self.release_calls=0
+                def receipt(self): return {"bad":True} if self.malformed else base
+                def release(self): self.release_calls+=1; self.held=False; return F.replace(base,released_at="done")
+            decision = SimpleNamespace(mode="cold_serialized",to_dict=lambda:{"decision_sha256":"d"*64})
+            for label, probe, verifier in (
+                    ("malformed",Probe(True),lambda _receipt:True),
+                    ("verifier",Probe(),lambda _receipt:(_ for _ in ()).throw(RuntimeError("verify")))):
+                lease=F.GpuDiscoveryLease(config=config,mode="allowed_discovery_noise",claim_journal=mock.Mock(),claim_acquirer=lambda *_args,probe=probe,**_kwargs:probe,claim_verifier=verifier)
+                with self.subTest(label=label), mock.patch.object(F.gpu_load_admission,"arbitrate",return_value=decision), self.assertRaises(Exception):
+                    lease.admit(mock.Mock(source_manifest=mock.Mock(campaign_id="ak-test")),operation_key="f"*64)
+                self.assertFalse(probe.held); self.assertEqual(probe.release_calls,1)
 
     def test_materialized_builder_preserves_each_operation_and_binds_deployment_authority(self):
         """The build cache key must never replace the controller operation key."""

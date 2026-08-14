@@ -8,6 +8,7 @@ import subprocess
 
 from .. import schemas
 from . import discovery_controller as D
+from . import discovery_deployment_factory as F
 from . import gpu_source_adapter as A
 from . import gpu_source_evidence as E
 from .test_gpu_source_evidence import ClaimFactory, FakeExecutors, digest, plan
@@ -45,6 +46,44 @@ class FakeDelegate:
         self.proof_bundle(candidate, build)
         self.runner_attest()
         return self.args_factory(candidate, build, lease).screen
+
+
+class ReservationManager:
+    def __init__(self, *, waits=0):
+        self.waits = waits
+        self.reserve_calls = 0
+        self.borrow_calls = 0
+        self.release_calls = 0
+        self.active = False
+        self.outer = E.device_claim.ClaimReceipt(
+            claim_id="akd-outer", device_id="mi210_0", lock_path="/claim",
+            state="held", holder_pid=1, holder_start_ticks=1,
+            holder_boot_id="boot", host="host", holder_label="outer",
+            purpose="outer reservation", campaign_id="ak-gpu-source-evidence-test",
+            acquired_at="2026-08-14T00:00:00Z")
+
+    def reserve(self, operation_key):
+        self.reserve_calls += 1
+        if self.reserve_calls <= self.waits:
+            raise D.ResourceWait(
+                "busy", receipt={"admitted": False, "phase": "pre_executor_reservation",
+                                 "reason": "device_busy", "device_id": "mi210_0",
+                                 "operation_key": operation_key, "promotion_claim": False})
+        self.active = True
+        return self.outer.to_dict()
+
+    def borrower(self, _operation_key):
+        def acquire(_device, **_kwargs):
+            self.borrow_calls += 1
+            return F._BorrowedDeviceClaim(self.outer.to_dict())
+        return acquire
+
+    def release(self, _operation_key):
+        if not self.active:
+            return None
+        self.release_calls += 1
+        self.active = False
+        return F.replace(self.outer, released_at="2026-08-14T00:01:00Z").to_dict()
 
 
 class GpuSourceAdapterTests(unittest.TestCase):
@@ -124,6 +163,13 @@ class GpuSourceAdapterTests(unittest.TestCase):
             self.assertEqual(adapter.reconcile(inflight).status, "ambiguous")
         with tempfile.TemporaryDirectory() as directory:
             adapter, candidate, authorization, lease, inflight, current, _ = self.setup(directory)
+            root = adapter._root(lease["operation_key"]); root.mkdir(parents=True)
+            E._seal(root / "intent.json", A._intent_body(
+                operation_key=lease["operation_key"], candidate=candidate,
+                authorization=authorization, lease=lease))
+            self.assertEqual(adapter.reconcile(inflight).status, "safe_to_start")
+        with tempfile.TemporaryDirectory() as directory:
+            adapter, candidate, authorization, lease, inflight, current, _ = self.setup(directory)
             with mock.patch.object(D, "GpuSourceScreener", FakeDelegate):
                 adapter.screen(candidate, authorization, lease)
             result = adapter._root(lease["operation_key"]) / "screen-result.json"
@@ -149,6 +195,179 @@ class GpuSourceAdapterTests(unittest.TestCase):
             with self.assertRaisesRegex(A.GpuSourceAdapterError, "reconcile"):
                 adapter.screen(candidate, authorization, lease)
             self.assertEqual(executors.calls, [])
+
+    def test_race_after_build_is_resumable_wait_with_zero_gpu_executors(self):
+        with tempfile.TemporaryDirectory() as directory:
+            adapter, candidate, authorization, lease, inflight, current, executors = self.setup(directory)
+            manager = ReservationManager(waits=1)
+            adapter.reservation_manager = manager
+            with mock.patch.object(D, "GpuSourceScreener", FakeDelegate), \
+                    self.assertRaises(D.ResourceWait) as caught:
+                adapter.screen(candidate, authorization, lease)
+            self.assertEqual(executors.calls, [])
+            self.assertEqual(caught.exception.receipt["phase"], "pre_executor_reservation")
+            root = adapter._root(lease["operation_key"])
+            self.assertFalse((root / "proof").exists())
+            self.assertFalse((root / "runner-plan.json").exists())
+            self.assertEqual(adapter.reconcile(inflight).status, "safe_to_start")
+            with mock.patch.object(D, "GpuSourceScreener", FakeDelegate):
+                result = adapter.screen(candidate, authorization, lease)
+            self.assertEqual(result.result_sha256, current.result_sha256)
+            self.assertEqual(len(executors.calls), 3)
+            self.assertEqual(manager.borrow_calls, 3)
+            self.assertEqual(manager.release_calls, 1)
+            release = A._read_json(root / "reservation-release.json", "release")
+            self.assertEqual(release["device_claim_released"]["claim_id"], "akd-outer")
+            correctness = E.proofs.load_receipt(
+                root / "proof/correctness/receipt.json", schema=E.CORRECTNESS_SCHEMA)["body"]
+            self.assertEqual(correctness["device_claim_mode"], "borrowed_outer_reservation")
+            self.assertNotIn("device_claim_released", correctness)
+            self.assertFalse(correctness["device_claim_borrowed_phase_end"]["physical_release"])
+            release_path = root / "reservation-release.json"
+            release["device_claim_released"]["released_at"] = None
+            release.pop("receipt_sha256")
+            release["receipt_sha256"] = schemas.content_hash(release)
+            release_path.write_text(json.dumps(release, sort_keys=True))
+            self.assertEqual(adapter.reconcile(inflight).status, "ambiguous")
+
+    def test_probe_build_reservation_execution_and_release_are_ordered(self):
+        with tempfile.TemporaryDirectory() as directory:
+            adapter, candidate, authorization, _lease, _inflight, _current, _executors = \
+                self.setup(directory)
+            events = []
+            original_build = adapter.build_source
+            original_correctness = adapter.correctness_executor
+            original_rocprof = adapter.rocprof_executor
+
+            def build(*args):
+                events.append("build")
+                return original_build(*args)
+
+            def correctness(*args, **kwargs):
+                events.append("correctness")
+                return original_correctness(*args, **kwargs)
+
+            def rocprof(*args, **kwargs):
+                events.append("attribution")
+                return original_rocprof(*args, **kwargs)
+
+            class EventDelegate(FakeDelegate):
+                def screen(self, candidate_, authorization_, lease_):
+                    built = self.build_source(candidate_, authorization_, lease_)
+                    self.proof_bundle(candidate_, built)
+                    args = self.args_factory(candidate_, built, lease_)
+                    events.append("runner")
+                    return args.screen
+
+            model = Path(directory) / "model.gguf"
+            model.write_bytes(b"model")
+            profile = SimpleNamespace(
+                model_path=str(model), model_sha256="a" * 64,
+                device_id="mi210_0", workload="tg128", calls_per_arm=9,
+                cold_load_host_bytes=5, worst_case_loads_per_interval=18)
+            config = mock.Mock(
+                device_id="mi210_0", inference_window_lock="/cpu-window",
+                model=SimpleNamespace(path=model, sha256="a" * 64),
+                admission_policy=SimpleNamespace(corpus=SimpleNamespace(
+                    profiles=(profile,), examples=(), policy_sha256="b" * 64,
+                    version="test-v2")),
+                planner_context=SimpleNamespace(
+                    value={"context_sha256": "c" * 64}))
+            config.revalidate = mock.Mock()
+            claims = []
+
+            class PhysicalClaim:
+                def __init__(self, label, purpose, campaign_id):
+                    self.label = label
+                    self.held = True
+                    self.release_calls = 0
+                    self.opened = E.device_claim.ClaimReceipt(
+                        claim_id=f"akd-{label}", device_id="mi210_0",
+                        lock_path="/claim", state="held", holder_pid=1,
+                        holder_start_ticks=1, holder_boot_id="boot", host="host",
+                        holder_label="test", purpose=purpose,
+                        campaign_id=campaign_id, acquired_at="now")
+
+                def receipt(self):
+                    return self.opened
+
+                def release(self):
+                    self.release_calls += 1
+                    self.held = False
+                    events.append(f"{self.label}_release")
+                    return F.replace(self.opened, released_at="done")
+
+            def acquire(_device, *, purpose, campaign_id, **_kwargs):
+                label = "probe" if "probe" in purpose else "outer"
+                events.append(f"{label}_acquire")
+                claim = PhysicalClaim(label, purpose, campaign_id)
+                claims.append(claim)
+                return claim
+
+            manager = F.GpuDiscoveryLease(
+                config=config, mode="allowed_discovery_noise",
+                claim_journal=mock.Mock(), claim_acquirer=acquire,
+                claim_verifier=lambda _receipt: True)
+            operation_key = digest("operation")
+            admission_candidate = SimpleNamespace(
+                source_manifest=SimpleNamespace(
+                    campaign_id="ak-gpu-source-evidence-test"),
+                experiment_intent=None)
+            decision = SimpleNamespace(
+                mode="cold_serialized",
+                to_dict=lambda: {"decision_sha256": "d" * 64})
+            with mock.patch.object(F.gpu_load_admission, "arbitrate",
+                                   return_value=decision):
+                permit = manager.admit(
+                    admission_candidate, operation_key=operation_key)
+            adapter.build_source = build
+            adapter.correctness_executor = correctness
+            adapter.rocprof_executor = rocprof
+            adapter.reservation_manager = manager
+            with mock.patch.object(D, "GpuSourceScreener", EventDelegate):
+                adapter.screen(candidate, authorization, permit)
+            self.assertEqual(events, [
+                "probe_acquire", "probe_release", "build", "outer_acquire",
+                "correctness", "attribution", "attribution", "runner",
+                "outer_release"])
+            self.assertEqual(len(claims), 2)
+            self.assertEqual([claim.release_calls for claim in claims], [1, 1])
+
+    def test_outer_reservation_release_cardinality_across_stage_failures(self):
+        class StageDelegate(FakeDelegate):
+            fail_stage = ""
+
+            def screen(self, candidate, authorization, lease):
+                build = self.build_source(candidate, authorization, lease)
+                self.proof_bundle(candidate, build)
+                args = self.args_factory(candidate, build, lease)
+                if self.fail_stage == "runner":
+                    raise RuntimeError("runner failed")
+                result = args.screen
+                if self.fail_stage == "result":
+                    return F.replace(result, receipt_path=str(
+                        Path(args.output_dir).parent / "missing-result.json"))
+                return result
+
+        for stage, expected_reserve, expected_release in (
+                ("plan", 0, 0), ("evidence", 1, 1),
+                ("runner", 1, 1), ("result", 1, 1)):
+            with self.subTest(stage=stage), tempfile.TemporaryDirectory() as directory:
+                adapter, candidate, authorization, lease, _inflight, _current, _executors = \
+                    self.setup(directory)
+                manager = ReservationManager()
+                adapter.reservation_manager = manager
+                if stage == "plan":
+                    adapter.plan_factory = mock.Mock(side_effect=RuntimeError("plan failed"))
+                elif stage == "evidence":
+                    adapter.correctness_executor = mock.Mock(
+                        side_effect=RuntimeError("evidence failed"))
+                StageDelegate.fail_stage = stage
+                with mock.patch.object(D, "GpuSourceScreener", StageDelegate), \
+                        self.assertRaises(Exception):
+                    adapter.screen(candidate, authorization, lease)
+                self.assertEqual(manager.reserve_calls, expected_reserve)
+                self.assertEqual(manager.release_calls, expected_release)
 
     def test_protected_tree_change_during_builder_refuses(self):
         with tempfile.TemporaryDirectory() as directory:

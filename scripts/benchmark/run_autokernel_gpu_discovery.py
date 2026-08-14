@@ -1228,14 +1228,22 @@ def run(args: argparse.Namespace) -> dict:
                f"{sole_factor['name']} {sole_factor['anchor']}->{sole_factor['candidate']}")
     cpu_journal = cpu_region_claim.RegionClaimJournal(args.cpu_claim_journal)
     gpu_journal = device_claim.ClaimJournal(args.device_claim_journal)
+    claim_acquirer = getattr(args, "_device_claim_acquirer",
+                             device_claim.acquire_device_claim)
+    if not callable(claim_acquirer):
+        raise RuntimeError("device claim acquirer is not callable")
     gpu = None
     sampler = None
     live_governance = None
+    borrowed_phase_end = None
     live_governance_path = out / "live-governance.json"
     try:
-        gpu = device_claim.acquire_device_claim(
+        gpu = claim_acquirer(
             DEVICE_ID, purpose=purpose, campaign_id=args.campaign_id,
             journal=gpu_journal, timeout_s=0, max_hold_s=300)
+        claim_mode = ("borrowed_outer_reservation"
+                      if getattr(gpu, "borrowed_outer_reservation", False)
+                      else "direct_device_claim")
         live_governance = {
             "schema": SCHEMA_LIVE_GOVERNANCE,
             "status": "active",
@@ -1251,6 +1259,7 @@ def run(args: argparse.Namespace) -> dict:
             "non_promotable": True,
             "preflight_sha256": schemas.content_hash(sealed),
             "device_claim_open": gpu.receipt().to_dict(),
+            "device_claim_mode": claim_mode,
             "started_at": started_at,
         }
         atomic_json(live_governance_path, live_governance)
@@ -1338,6 +1347,19 @@ def run(args: argparse.Namespace) -> dict:
         effects = [(value - center) / center for value in values]
         numeric = sampler.stop().to_dict()
         sampler = None
+        if claim_mode == "borrowed_outer_reservation":
+            borrowed_phase_end = gpu.release()
+            if hasattr(borrowed_phase_end, "to_dict"):
+                borrowed_phase_end = borrowed_phase_end.to_dict()
+            if (not isinstance(borrowed_phase_end, Mapping)
+                    or borrowed_phase_end.get("schema") !=
+                    "epyc.autokernel.borrowed_device_claim_phase.v1"
+                    or borrowed_phase_end.get("mode") != "borrowed_outer_reservation"
+                    or borrowed_phase_end.get("outer_claim_id") !=
+                    gpu.receipt().to_dict().get("claim_id")
+                    or borrowed_phase_end.get("physical_release") is not False
+                    or "released_at" in borrowed_phase_end):
+                raise RuntimeError("borrowed throughput phase end is malformed")
         result_body = {
             "schema": SCHEMA_RESULT, "campaign_id": args.campaign_id,
             "status": "complete", "started_at": started_at, "ended_at": utc_now(),
@@ -1362,6 +1384,9 @@ def run(args: argparse.Namespace) -> dict:
             "cpu_coverage_windows": [
                 run["cpu_coverage"] for run in anchor_runs + candidate_runs],
             "device_claim_open": gpu.receipt().to_dict(),
+            "device_claim_mode": claim_mode,
+            **({"device_claim_borrowed_phase_end": dict(borrowed_phase_end)}
+               if borrowed_phase_end is not None else {}),
         }
         result = gpu_beliefs.attach_result_beliefs(
             result_body, bank=bank, producer_path=Path(__file__).resolve())
@@ -1384,14 +1409,25 @@ def run(args: argparse.Namespace) -> dict:
             except BaseException as exc:
                 sampler_error = exc
         if gpu is not None:
-            released = gpu.release().to_dict()
+            ended = (borrowed_phase_end
+                     if borrowed_phase_end is not None else gpu.release())
+            if hasattr(ended, "to_dict"):
+                ended = ended.to_dict()
+            if not isinstance(ended, Mapping):
+                raise RuntimeError("device claim end did not return a typed receipt")
             if live_governance is not None:
-                atomic_json(live_governance_path, {
+                terminal = {
                     **live_governance,
-                    "status": "released",
                     "ended_at": utc_now(),
-                    "device_claim_released": released,
-                })
+                }
+                if claim_mode == "borrowed_outer_reservation":
+                    terminal.update(
+                        status="borrowed_phase_ended",
+                        device_claim_borrowed_phase_end=dict(ended))
+                else:
+                    terminal.update(
+                        status="released", device_claim_released=dict(ended))
+                atomic_json(live_governance_path, terminal)
         if sampler_error is not None and not primary_active:
             raise sampler_error
 

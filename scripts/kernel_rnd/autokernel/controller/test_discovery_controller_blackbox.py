@@ -82,9 +82,13 @@ class Lease:
     def __init__(self, decisions=(True,)):
         self.decisions = iter(decisions)
 
-    def admit(self, candidate):
+    def admit(self, candidate, *, operation_key):
         admitted = next(self.decisions)
-        return {"admitted": admitted, "mode": "allowed_discovery_noise"}
+        return {"admitted": admitted, "mode": "allowed_discovery_noise",
+                "operation_key": operation_key}
+
+    def resume(self, candidate, permit):
+        return self.admit(candidate, operation_key=permit["operation_key"])
 
 
 class Screen:
@@ -335,6 +339,28 @@ class BlackBoxLaunchGate(unittest.TestCase):
             )
             self.assertTrue(completed["complete"])
             self.assertEqual((planner.calls, critic.calls, screen.calls), (1, 1, 1))
+
+    def test_recovery_busy_demotes_exact_inflight_to_pending_without_replanning(self):
+        with tempfile.TemporaryDirectory() as temp, \
+                patch.object(D.source_candidate, "SourcePatchManifest", Manifest), \
+                patch.object(D, "_write_projection"):
+            root = Path(temp)
+            planner, critic, screen = Planner(), Critic(), CrashBeforeRunner()
+            with self.assertRaises(ProcessCrash):
+                D.run_controller(
+                    self.config(root), planner=planner, critic=critic,
+                    screener=screen, lease=Lease((True,)))
+            waiting = D.run_controller(
+                self.config(root), planner=planner, critic=critic,
+                screener=screen, lease=Lease((False,)))
+            self.assertEqual(waiting["pending"]["row"]["status"], "waiting_resource")
+            self.assertEqual(waiting["next"], 1)
+            self.assertEqual((planner.calls, critic.calls, screen.entries), (1, 1, 1))
+            completed = D.run_controller(
+                self.config(root), planner=planner, critic=critic,
+                screener=screen, lease=Lease((True,)))
+            self.assertTrue(completed["complete"])
+            self.assertEqual((planner.calls, critic.calls, screen.entries), (1, 1, 2))
 
     def test_ordinary_post_start_exception_requires_reconcile_before_retry(self):
         with tempfile.TemporaryDirectory() as temp, \

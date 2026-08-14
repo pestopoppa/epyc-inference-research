@@ -707,6 +707,30 @@ class GpuSourceEvidenceTests(unittest.TestCase):
             self.assertTrue(child.killed)
             self.assertIsNotNone(child.poll())
 
+    def test_borrowed_phase_end_cannot_masquerade_as_physical_release(self):
+        with tempfile.TemporaryDirectory() as directory:
+            evidence_plan = plan(Path(directory) / "inputs")
+            opened = FakeClaim(1, evidence_plan.device_id, {
+                "holder_label": "outer", "purpose": "outer",
+                "campaign_id": evidence_plan.campaign_id}).receipt()
+            phase_end = {
+                "schema": E.BORROWED_PHASE_SCHEMA,
+                "mode": "borrowed_outer_reservation",
+                "outer_claim_id": opened["claim_id"],
+                "device_id": evidence_plan.device_id,
+                "campaign_id": evidence_plan.campaign_id,
+                "phase_ended_at": "2026-08-14T00:00:01Z",
+                "physical_release": False,
+            }
+            body = {"device_claim_open": opened,
+                    "device_claim_mode": "borrowed_outer_reservation",
+                    "device_claim_borrowed_phase_end": phase_end}
+            E._validate_claim_boundary(body, plan=evidence_plan)
+            forged = {**body, "device_claim_released": {
+                **opened, "released_at": "2026-08-14T00:00:01Z"}}
+            with self.assertRaisesRegex(E.EvidenceProducerError, "physical"):
+                E._validate_claim_boundary(forged, plan=evidence_plan)
+
 
 if __name__ == "__main__":
     unittest.main()

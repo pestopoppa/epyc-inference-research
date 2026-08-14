@@ -23,6 +23,7 @@ import os
 from pathlib import Path
 import re
 import statistics
+import stat
 import tempfile
 from typing import Any, Callable, Mapping, Protocol, Sequence
 
@@ -46,6 +47,14 @@ class PrecomputeScreenRefusal(DiscoveryControllerError):
     """Typed adapter refusal proving that no governed operation was started."""
 
 
+class ResourceWait(DiscoveryControllerError):
+    """A durable pre-executor refusal caused only by resource contention."""
+
+    def __init__(self, message: str, *, receipt: Mapping[str, Any]) -> None:
+        super().__init__(message)
+        self.receipt = dict(receipt)
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
@@ -55,6 +64,79 @@ def _canon(value: object) -> bytes:
 
 
 def _sha(value: object) -> str: return hashlib.sha256(_canon(value)).hexdigest()
+
+
+def _validated_resource_wait(exc: ResourceWait, operation_key: str) -> dict[str, Any]:
+    receipt = dict(exc.receipt)
+    required = {
+        "admitted": False,
+        "phase": "pre_executor_reservation",
+        "operation_key": operation_key,
+        "promotion_claim": False,
+    }
+    if any(receipt.get(key) != value for key, value in required.items()):
+        raise DiscoveryControllerError("resource wait does not bind the pre-executor operation")
+    path = Path(str(receipt.get("stage_receipt_path", "")))
+    expected = receipt.get("stage_receipt_sha256")
+    if (not path.is_absolute() or path.is_symlink() or not path.is_file()
+            or path.parent.name != "resource-waits"
+            or path.parent.parent.name != operation_key
+            or not isinstance(expected, str) or not HASH.fullmatch(expected)):
+        raise DiscoveryControllerError("resource wait lacks its durable stage receipt")
+    try:
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+        descriptor = os.open(path, flags)
+        try:
+            before = os.fstat(descriptor)
+            if (not stat.S_ISREG(before.st_mode) or before.st_uid != os.geteuid()
+                    or before.st_nlink != 1 or before.st_mode & 0o022):
+                raise DiscoveryControllerError(
+                    "resource wait stage receipt has unsafe file authority")
+            with os.fdopen(descriptor, "rb") as handle:
+                raw = handle.read()
+                after = os.fstat(handle.fileno())
+            if ((before.st_dev,before.st_ino,before.st_size,before.st_mtime_ns,before.st_nlink)
+                    != (after.st_dev,after.st_ino,after.st_size,after.st_mtime_ns,after.st_nlink)):
+                raise DiscoveryControllerError("resource wait stage receipt changed while read")
+        except BaseException:
+            try: os.close(descriptor)
+            except OSError: pass
+            raise
+        if hashlib.sha256(raw).hexdigest() != expected:
+            raise DiscoveryControllerError("resource wait stage receipt hash changed")
+        stage = json.loads(raw.decode("utf-8", "strict"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise DiscoveryControllerError("resource wait stage receipt is unreadable") from error
+    stage_required = {
+        "schema": "epyc.autokernel.gpu_source_resource_wait.v1",
+        "authority": AUTHORITY,
+        "promotion_claim": False,
+        "operation_key": operation_key,
+        "gpu_executor_started": False,
+        "proof_root_created": False,
+        "runner_plan_created": False,
+        "runner_output_created": False,
+    }
+    if (not isinstance(stage, Mapping)
+            or any(stage.get(key) != value for key, value in stage_required.items())
+            or stage.get("contention") != {
+                key: value for key, value in receipt.items()
+                if key not in {"stage_receipt_path", "stage_receipt_sha256"}}
+            or stage.get("receipt_sha256") != _sha({
+                key: value for key, value in stage.items() if key != "receipt_sha256"})):
+        raise DiscoveryControllerError("resource wait stage receipt is not a sealed pre-executor proof")
+    return receipt
+
+
+def _require_safe_resource_wait_recovery(screener: Screener,
+                                         inflight: Mapping[str, Any]) -> None:
+    reconcile = getattr(screener, "reconcile", None)
+    if not callable(reconcile):
+        raise DiscoveryControllerError("resource wait lacks reconciliation authority")
+    recovery = reconcile(inflight)
+    if not isinstance(recovery, Recovery) or recovery.status != "safe_to_start":
+        raise DiscoveryControllerError(
+            "resource wait conflicts with current operation artifacts")
 
 
 def _atomic(path: Path, value: Mapping[str, Any]) -> None:
@@ -261,7 +343,9 @@ class Critic(Protocol):
     def review(self, candidate: PlannedCandidate, *, context: Mapping[str, Any], workspace: Path) -> Critique: ...
 
 class Lease(Protocol):
-    def admit(self, candidate: PlannedCandidate) -> Mapping[str, Any]: ...
+    def admit(self, candidate: PlannedCandidate, *, operation_key: str) -> Mapping[str, Any]: ...
+    def resume(self, candidate: PlannedCandidate,
+               stale_permit: Mapping[str, Any]) -> Mapping[str, Any]: ...
 
 class Screener(Protocol):
     def screen(self, candidate: PlannedCandidate, authorization: hypotheses.ClaimAuthorization, lease: Mapping[str, Any]) -> SealedScreen: ...
@@ -585,6 +669,40 @@ class GpuSourceScreener:
         raw = durable
         if not (raw.get("schema") == "epyc.autokernel.gpu_candidate_only_screen.v2" and raw.get("non_promotable") is True and raw.get("promotion_claim") is False and raw.get("hip_residency_proved") is True):
             raise DiscoveryControllerError("GPU runner returned an unsealed or non-resident discovery result")
+        if (hasattr(args, "_device_claim_acquirer")
+                and raw.get("device_claim_mode") != "borrowed_outer_reservation"):
+            raise DiscoveryControllerError(
+                "GPU runner did not bind throughput to the borrowed outer reservation")
+        if hasattr(args, "_device_claim_acquirer"):
+            expected_outer = getattr(args, "_expected_outer_claim_id", None)
+            opened = raw.get("device_claim_open")
+            phase_end = raw.get("device_claim_borrowed_phase_end")
+            if (not isinstance(expected_outer, str)
+                    or not isinstance(opened, Mapping)
+                    or opened.get("claim_id") != expected_outer
+                    or not isinstance(phase_end, Mapping)
+                    or phase_end.get("schema") !=
+                    "epyc.autokernel.borrowed_device_claim_phase.v1"
+                    or phase_end.get("outer_claim_id") != expected_outer
+                    or phase_end.get("physical_release") is not False
+                    or "released_at" in phase_end
+                    or raw.get("device_claim_released") is not None):
+                raise DiscoveryControllerError(
+                    "GPU runner borrowed phase does not bind the exact outer claim")
+            governance_path = Path(args.output_dir).resolve() / "live-governance.json"
+            try:
+                governance = json.loads(governance_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                raise DiscoveryControllerError(
+                    "GPU runner lacks terminal borrowed-phase governance") from exc
+            if (not isinstance(governance, Mapping)
+                    or governance.get("status") != "borrowed_phase_ended"
+                    or governance.get("device_claim_mode") != "borrowed_outer_reservation"
+                    or governance.get("device_claim_open") != opened
+                    or governance.get("device_claim_borrowed_phase_end") != phase_end
+                    or governance.get("device_claim_released") is not None):
+                raise DiscoveryControllerError(
+                    "GPU runner terminal governance differs from its borrowed phase")
         projection = autokernel_progression._gpu_screen(result_path, raw)
         if projection is None: raise DiscoveryControllerError("GPU result failed canonical progression validation")
         return SealedScreen(receipt_path=str(result_path), result_sha256=str(raw["result_sha256"]), effect_fraction=float(raw["median_relative"]), classification=str(projection["stage"]), baseline_sha256=str(raw["baseline_sha256"]), source_proof_sha256=bundle.correctness["file_sha256"], dispatch_proof_sha256=bundle.attribution["file_sha256"])
@@ -935,7 +1053,44 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
             if not callable(reconcile): raise DiscoveryControllerError("inflight operation has no reconciliation adapter")
             recovery=reconcile(inflight)
             if not isinstance(recovery,Recovery) or recovery.status == "ambiguous": raise DiscoveryControllerError("inflight operation cannot be safely reconciled")
-            result=recovery.result if recovery.status == "sealed_result" else screener.screen(item,authorization,permit)
+            if recovery.status == "sealed_result":
+                result=recovery.result
+            else:
+                resume=getattr(lease,"resume",None)
+                if not callable(resume):
+                    raise DiscoveryControllerError("safe inflight recovery lacks resource re-admission")
+                fresh_permit=resume(item,permit)
+                if not bool(fresh_permit.get("admitted")):
+                    row=dict(inflight["row"]); row.update(
+                        status="waiting_resource",lease=dict(fresh_permit))
+                    state.pop("inflight",None)
+                    state["pending"]={
+                        "row":row,"candidate":inflight["candidate"],
+                        "authorization":inflight["authorization"],
+                        "confirmation":bool(inflight.get("confirmation")),
+                        "parent_authorization":inflight.get("parent_authorization")}
+                    store.save(state,"waiting_resource")
+                    return state
+                fresh_permit={**dict(fresh_permit),
+                              "repetition":permit.get("repetition")}
+                inflight["lease"]=fresh_permit; permit=fresh_permit
+                store.save(state,"pre_screen_reacquired")
+                try:
+                    result=screener.screen(item,authorization,permit)
+                except ResourceWait as exc:
+                    wait_receipt=_validated_resource_wait(
+                        exc,str(inflight["operation_key"]))
+                    _require_safe_resource_wait_recovery(screener,inflight)
+                    row=dict(inflight["row"]); row.update(
+                        status="waiting_resource",lease=wait_receipt)
+                    state.pop("inflight",None)
+                    state["pending"]={
+                        "row":row,"candidate":inflight["candidate"],
+                        "authorization":inflight["authorization"],
+                        "confirmation":bool(inflight.get("confirmation")),
+                        "parent_authorization":inflight.get("parent_authorization")}
+                    store.save(state,"waiting_resource")
+                    return state
         if not isinstance(result,SealedScreen): raise DiscoveryControllerError("inflight recovery produced no sealed result")
         result=_classified_result(state,item,result); row=dict(inflight["row"]); row.update(status=result.classification,result_sha256=result.result_sha256,evidence={"baseline":result.baseline_sha256,"source":result.source_proof_sha256,"dispatch":result.dispatch_proof_sha256},effect_fraction=result.effect_fraction,series_effect_fraction=result.series_effect_fraction,series_key=result.series_key,component_series_keys=list(result.component_series_keys))
         _record_attempt_once(tracker,item,str(item.proposal.get("proposal_id",row["proposal_sha256"])),result)
@@ -985,21 +1140,31 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                 state.pop("pending", None); state["iterations"].append(row); state["next"] += 1
                 store.save(state, "dry_run_authorized")
                 continue
-            permit=lease.admit(item)
+            repetition=2 if pending and pending.get("confirmation") else 1
+            operation_key=_sha({"turn":turn,"manifest":item.source_manifest_sha256,"authorization":authorization.to_dict(),"repetition":repetition})
+            permit=lease.admit(item, operation_key=operation_key)
             if not bool(permit.get("admitted")):
                 # Waiting is durable but is not an experiment and cannot spend an
                 # iteration budget.  Planning/critique may continue elsewhere;
                 # this exact candidate is retried only after a new lease admits it.
                 row.update(status="waiting_resource",lease=dict(permit)); state["pending"]={"row":row,"candidate":_pending_item(item),"authorization":authorization.to_dict(),"confirmation":bool(pending and pending.get("confirmation")),"parent_authorization":pending.get("parent_authorization") if pending else None}; store.save(state,"waiting_resource"); break
-            repetition=2 if pending and pending.get("confirmation") else 1
-            operation_key=_sha({"turn":turn,"manifest":item.source_manifest_sha256,"authorization":authorization.to_dict(),"repetition":repetition})
             # The governed GPU adapter owns an operation-key-bound receipt
             # namespace.  It refuses an unkeyed lease, making recovery and
             # result reconciliation refer to the same durable operation.
-            permit={**dict(permit), "operation_key":operation_key, "repetition":repetition}
-            state["inflight"]={"operation_key":operation_key,"row":row,"candidate":_pending_item(item),"authorization":authorization.to_dict(),"lease":dict(permit)}
+            if permit.get("operation_key") != operation_key:
+                raise DiscoveryControllerError("resource lease did not bind the exact operation key")
+            permit={**dict(permit), "repetition":repetition}
+            state["inflight"]={"operation_key":operation_key,"row":row,"candidate":_pending_item(item),"authorization":authorization.to_dict(),"lease":dict(permit),"confirmation":bool(pending and pending.get("confirmation")),"parent_authorization":pending.get("parent_authorization") if pending else None}
             store.save(state,"pre_screen_intent")
             try: result=screener.screen(item,authorization,permit)
+            except ResourceWait as exc:
+                wait_receipt=_validated_resource_wait(exc,operation_key)
+                _require_safe_resource_wait_recovery(screener,state["inflight"])
+                state.pop("inflight",None)
+                row.update(status="waiting_resource",lease=wait_receipt)
+                state["pending"]={"row":row,"candidate":_pending_item(item),"authorization":authorization.to_dict(),"confirmation":bool(pending and pending.get("confirmation")),"parent_authorization":pending.get("parent_authorization") if pending else None}
+                store.save(state,"waiting_resource")
+                break
             except PrecomputeScreenRefusal as exc:
                 state.pop("inflight",None); row.update(status="screen_refused",reason=f"{type(exc).__name__}: {exc}"); state["iterations"].append(row); state["next"]+=1; store.save(state,"screen_refused"); continue
             except Exception as exc:

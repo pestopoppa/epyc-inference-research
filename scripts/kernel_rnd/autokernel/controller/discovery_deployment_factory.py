@@ -6,6 +6,7 @@ bridge from those IDs to typed, registered Python construction seams.
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from datetime import datetime, timezone
 import argparse
 import base64
 import hashlib
@@ -172,10 +173,14 @@ class ExperimentTemplateRegistry:
 @dataclass(frozen=True)
 class InferenceWindowLeaseBinding:
     mode: str = "allowed_discovery_noise"
-    def make(self, config: deployment.DiscoveryDeployment) -> "GpuDiscoveryLease":
+    def make(self, config: deployment.DiscoveryDeployment, *, claim_journal: Any,
+             claim_acquirer: Callable[..., Any],
+             claim_verifier: Callable[[Mapping[str, Any]], object]) -> "GpuDiscoveryLease":
         if self.mode != "allowed_discovery_noise":
             raise DeploymentFactoryError("GPU discovery lease may only admit allowed discovery noise")
-        return GpuDiscoveryLease(config=config, mode=self.mode)
+        return GpuDiscoveryLease(
+            config=config, mode=self.mode, claim_journal=claim_journal,
+            claim_acquirer=claim_acquirer, claim_verifier=claim_verifier)
 
 @dataclass(frozen=True)
 class ProductionSnapshotBinding:
@@ -1013,6 +1018,16 @@ def _seal_graph_receipt(config: deployment.DiscoveryDeployment,
                 "build": str(config.build_root),
             },
             "device_id": config.device_id,
+            "device_reservation": {
+                "prebuild_admission": "nonblocking_acquire_verify_release_probe",
+                "postbuild_admission": "nonblocking_operation_scoped_outer_claim",
+                "held_across": ["correctness", "candidate_attribution",
+                                "anchor_attribution", "throughput"],
+                "inner_claim_mode": "borrowed_logical_phase_no_physical_release",
+                "nested_physical_acquisitions": False,
+                "physical_release_authority": "adapter_terminal_reservation_release",
+                "busy_disposition": "durable_pending_exact_candidate_no_iteration",
+            },
             "claim_journal": str(config.operations_root / "claims" / "device.jsonl")}
     body["graph_sha256"] = schemas.content_hash(body)
     path = config.state_root / "deployment-graph.json"
@@ -1072,11 +1087,83 @@ def build_static_deployment_graph(config: deployment.DiscoveryDeployment) -> Sta
 
 
 class GpuDiscoveryLease:
-    """Typed admission seam; actual runner calls must receive the same lock path."""
-    def __init__(self, *, config: deployment.DiscoveryDeployment, mode: str) -> None:
+    """Two-phase device admission and operation-scoped execution reservation."""
+    def __init__(self, *, config: deployment.DiscoveryDeployment, mode: str,
+                 claim_journal: Any, claim_acquirer: Callable[..., Any],
+                 claim_verifier: Callable[[Mapping[str, Any]], object]) -> None:
         self.config, self.mode = config, mode
-    def admit(self, candidate: controller.PlannedCandidate) -> Mapping[str, Any]:
+        self.claim_journal = claim_journal
+        self.claim_acquirer = claim_acquirer
+        self.claim_verifier = claim_verifier
+        self._active: dict[str, Any] = {}
+        self._campaigns: dict[str, str] = {}
+        self._pending_probe_release: dict[str, Any] = {}
+
+    @staticmethod
+    def _receipt(value: object, label: str) -> dict[str, Any]:
+        if hasattr(value, "to_dict"):
+            value = value.to_dict()  # type: ignore[union-attr]
+        if not isinstance(value, Mapping):
+            raise DeploymentFactoryError(f"{label} did not produce a device-claim receipt")
+        try:
+            return device_claim.ClaimReceipt.from_dict(value).to_dict()
+        except (TypeError, ValueError) as exc:
+            raise DeploymentFactoryError(f"{label} produced a malformed device-claim receipt") from exc
+
+    @staticmethod
+    def _passed(value: object) -> bool:
+        return value is True or getattr(value, "status", None) == schemas.PASS
+
+    def _claim(self, operation_key: str, *, purpose: str, max_hold_s: float) -> Any:
+        if not isinstance(operation_key, str) or not controller.HASH.fullmatch(operation_key):
+            raise DeploymentFactoryError("device reservation requires a canonical operation key")
+        campaign_id = self._campaigns.get(operation_key)
+        if not isinstance(campaign_id, str) or not campaign_id.startswith("ak-"):
+            raise DeploymentFactoryError("device reservation lacks the candidate campaign identity")
+        return self.claim_acquirer(
+            self.config.device_id, purpose=purpose,
+            campaign_id=campaign_id,
+            journal=self.claim_journal, holder_label="autokernel-discovery-controller",
+            timeout_s=0.0, max_hold_s=max_hold_s)
+
+    def _finish_probe_release(self, operation_key: str, claim: Any) -> dict[str, Any]:
+        self._pending_probe_release[operation_key] = claim
+        opened: dict[str, Any] | None = None
+        try:
+            opened = self._receipt(claim.receipt(), "admission probe before release")
+        except DeploymentFactoryError:
+            # Cleanup still proceeds for an acquired handle whose receipt is
+            # malformed; the original validation error remains authoritative.
+            pass
+        try:
+            try:
+                released = self._receipt(claim.release(), "admission probe release")
+            except BaseException:
+                released = self._receipt(
+                    claim.release(), "retried admission probe release")
+        except BaseException:
+            # Keep the exact handle: DeviceClaim's durable journal retry is
+            # impossible through a reconstructed object.
+            raise
+        if not released.get("released_at") or getattr(claim, "held", None) is not False:
+            raise DeploymentFactoryError("admission probe did not physically release")
+        if opened is not None:
+            comparable = tuple(key for key in opened if key != "released_at")
+            if any(released.get(key) != opened.get(key) for key in comparable):
+                raise DeploymentFactoryError("admission probe release changed claim identity")
+        self._pending_probe_release.pop(operation_key, None)
+        return released
+
+    def admit(self, candidate: controller.PlannedCandidate, *,
+              operation_key: str) -> Mapping[str, Any]:
         self.config.revalidate()
+        campaign_id = candidate.source_manifest.campaign_id
+        existing_campaign = self._campaigns.setdefault(operation_key, campaign_id)
+        if existing_campaign != campaign_id:
+            raise DeploymentFactoryError("operation key was rebound to another campaign")
+        pending_probe = self._pending_probe_release.get(operation_key)
+        if pending_probe is not None:
+            self._finish_probe_release(operation_key, pending_probe)
         corpus = self.config.admission_policy.corpus
         profiles = [profile for profile in corpus.profiles
                     if (profile.model_path == str(self.config.model.path)
@@ -1112,12 +1199,148 @@ class GpuDiscoveryLease:
         decision = gpu_load_admission.arbitrate(corpus, request, actor_recommendation=advisory)
         if decision.mode == "hot_resident":
             raise DeploymentFactoryError("nonpersistent source discovery runner cannot claim hot residency")
-        return {"admitted": True, "mode": decision.mode,
+        common = {"mode": decision.mode,
                 "device_id": self.config.device_id,
+                "operation_key": operation_key,
                 "inference_window_lock": str(self.config.inference_window_lock),
                 "model_sha256": self.config.model.sha256,
                 "load_admission": decision.to_dict(),
                 "promotion_claim": False}
+        try:
+            probe = self._claim(
+                operation_key, purpose="AutoKernel GPU discovery admission probe",
+                max_hold_s=30.0)
+        except device_claim.DeviceClaimTimeout as exc:
+            return {**common, "admitted": False, "phase": "prebuild_probe",
+                    "reason": "device_busy", "detail": str(exc)}
+        try:
+            opened = self._receipt(probe.receipt(), "admission probe")
+            if not self._passed(self.claim_verifier(opened)):
+                raise DeploymentFactoryError("admission probe was not verifiably held")
+        except BaseException as primary:
+            try:
+                self._finish_probe_release(operation_key, probe)
+            except BaseException as cleanup:
+                raise DeploymentFactoryError(
+                    f"admission probe validation failed ({primary}); release durability also failed") from cleanup
+            raise
+        released = self._finish_probe_release(operation_key, probe)
+        return {**common, "admitted": True, "phase": "prebuild_probe",
+                "device_claim_probe_open": opened,
+                "device_claim_probe_released": released}
+
+    def resume(self, candidate: controller.PlannedCandidate,
+               stale_permit: Mapping[str, Any]) -> Mapping[str, Any]:
+        operation_key = stale_permit.get("operation_key")
+        if not isinstance(operation_key, str):
+            raise DeploymentFactoryError("stale permit lacks its operation key")
+        fresh = self.admit(candidate, operation_key=operation_key)
+        for key in ("mode", "device_id", "inference_window_lock", "model_sha256",
+                    "load_admission", "promotion_claim", "operation_key"):
+            if fresh.get(key) != stale_permit.get(key):
+                raise DeploymentFactoryError("resumed device admission changed sealed policy authority")
+        return fresh
+
+    def reserve(self, operation_key: str) -> Mapping[str, Any]:
+        existing = self._active.get(operation_key)
+        if existing is not None:
+            opened = self._receipt(existing.receipt(), "active reservation")
+            if existing.held and self._passed(self.claim_verifier(opened)):
+                return opened
+            raise DeploymentFactoryError("operation reservation is present but not verifiably held")
+        if self._active:
+            raise DeploymentFactoryError("one deployment cannot hold two operation reservations")
+        try:
+            claim = self._claim(
+                operation_key, purpose="AutoKernel GPU source proof and throughput",
+                max_hold_s=3600.0)
+        except device_claim.DeviceClaimTimeout as exc:
+            raise controller.ResourceWait(
+                "device became busy after the prebuild probe",
+                receipt={"admitted": False, "phase": "pre_executor_reservation",
+                         "reason": "device_busy", "detail": str(exc),
+                         "device_id": self.config.device_id,
+                         "operation_key": operation_key,
+                         "promotion_claim": False}) from exc
+        # Register cleanup ownership before parsing any caller-controlled
+        # receipt or invoking a verifier that may raise.
+        self._active[operation_key] = claim
+        try:
+            opened = self._receipt(claim.receipt(), "operation reservation")
+            if not self._passed(self.claim_verifier(opened)):
+                raise DeploymentFactoryError("operation reservation was not verifiably held")
+        except BaseException as primary:
+            try:
+                self.release(operation_key)
+            except BaseException as cleanup:
+                raise DeploymentFactoryError(
+                    f"operation reservation validation failed ({primary}); release durability also failed") from cleanup
+            raise
+        return opened
+
+    def borrower(self, operation_key: str) -> Callable[..., Any]:
+        def acquire(device_id: str, **kwargs: Any) -> Any:
+            claim = self._active.get(operation_key)
+            if (claim is None or not claim.held or device_id != self.config.device_id
+                    or kwargs.get("campaign_id") != self._campaigns.get(operation_key)):
+                raise DeploymentFactoryError("borrowed device claim lacks its held outer reservation")
+            opened = self._receipt(claim.receipt(), "borrowed outer reservation")
+            if not self._passed(self.claim_verifier(opened)):
+                raise DeploymentFactoryError("borrowed outer reservation is no longer held")
+            return _BorrowedDeviceClaim(opened)
+        return acquire
+
+    def release(self, operation_key: str) -> Mapping[str, Any] | None:
+        claim = self._active.get(operation_key)
+        if claim is None:
+            return None
+        opened: dict[str, Any] | None = None
+        try:
+            opened = self._receipt(claim.receipt(), "operation reservation before release")
+        except DeploymentFactoryError:
+            pass
+        try:
+            released = self._receipt(claim.release(), "operation reservation release")
+        except BaseException:
+            released = self._receipt(
+                claim.release(), "retried operation reservation release")
+        if not released.get("released_at") or getattr(claim, "held", None) is not False:
+            raise DeploymentFactoryError("operation reservation did not physically release")
+        if opened is not None:
+            comparable = tuple(key for key in opened if key != "released_at")
+            if any(released.get(key) != opened.get(key) for key in comparable):
+                raise DeploymentFactoryError("operation reservation release changed claim identity")
+        self._active.pop(operation_key, None)
+        return released
+
+
+class _BorrowedDeviceClaim:
+    """Logical subclaim whose physical exclusion is owned by the outer claim."""
+    borrowed_outer_reservation = True
+    def __init__(self, opened: Mapping[str, Any]) -> None:
+        self._opened = device_claim.ClaimReceipt.from_dict(opened)
+        self._phase_end: dict[str, Any] | None = None
+
+    @property
+    def held(self) -> bool:
+        return self._phase_end is None
+
+    def receipt(self) -> device_claim.ClaimReceipt:
+        return self._opened
+
+    def release(self) -> Mapping[str, Any]:
+        if self._phase_end is None:
+            ended_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            self._phase_end = {
+                "schema": evidence.BORROWED_PHASE_SCHEMA,
+                "mode": "borrowed_outer_reservation",
+                "outer_claim_id": self._opened.claim_id,
+                "device_id": self._opened.device_id,
+                "campaign_id": self._opened.campaign_id,
+                "phase_ended_at": ended_at,
+                "physical_release": False,
+            }
+        return dict(self._phase_end)
 
 
 def _require(value: object, type_: type, label: str) -> Any:
@@ -1171,7 +1394,9 @@ def materialize(config: deployment.DiscoveryDeployment, registry: Mapping[str, M
                          "experiment_template_registry")
     if templates.registry_sha256 != config.experiment_template_registry_sha256:
         raise DeploymentFactoryError("experiment template registry differs from sealed deployment digest")
-    lease = lease_binding.make(config)
+    lease = lease_binding.make(
+        config, claim_journal=claim_journal, claim_acquirer=claim_acquirer,
+        claim_verifier=claim_verifier)
     # Actors are not dependency-injected: a caller supplied object could attest
     # any model.  The deployment wrapper digest/environment profile are the sole
     # authority for the two exact Codex actor identities.
@@ -1283,6 +1508,7 @@ def materialize(config: deployment.DiscoveryDeployment, registry: Mapping[str, M
         rocprof_executor=rocprof_executor, claim_journal=claim_journal,
         claim_acquirer=claim_acquirer, claim_verifier=claim_verifier,
         claim_timeout_s=config.claim_timeout_s, receipt_series=receipt_series,
+        reservation_manager=lease,
         protected_roots=(config.production_path, config.instrument_path),
         protected_files=snapshot.files, runner_attest=runner_attest)
     return controller.build_controller_adapters(planner=planner, critic=critic, screener=screener, lease=lease)

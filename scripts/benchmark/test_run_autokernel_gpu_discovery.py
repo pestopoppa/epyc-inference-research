@@ -1,5 +1,6 @@
 from pathlib import Path
 import argparse
+import json
 import tempfile
 import unittest
 from unittest import mock
@@ -775,24 +776,78 @@ class TestGpuDiscoveryRunCleanup(unittest.TestCase):
                 "frame": "tg128-ngl99", "metric": "decode_tokens_per_s",
             }
             claim = mock.Mock()
+            claim.borrowed_outer_reservation = True
             claim.receipt.return_value.to_dict.return_value = {"claim": "open"}
-            claim.release.return_value.to_dict.return_value = {"released": True}
+            claim.release.return_value = {
+                "schema": "epyc.autokernel.borrowed_device_claim_phase.v1",
+                "mode": "borrowed_outer_reservation", "outer_claim_id": "akd-outer",
+                "device_id": "mi210_0", "campaign_id": "cleanup-test",
+                "phase_ended_at": "done", "physical_release": False}
+            borrow_calls = []
+            def borrowed_acquirer(*args, **kwargs):
+                borrow_calls.append((args, kwargs)); return claim
             sampler = mock.Mock()
             sampler.start.return_value = sampler
             sampler.stop.side_effect = RuntimeError("sampler stop failed")
             args = argparse.Namespace(
                 output_dir=str(out), cpu_claim_journal=str(root / "cpu.jsonl"),
                 device_claim_journal=str(root / "gpu.jsonl"),
-                campaign_id="cleanup-test", seed=8613, calls=9)
+                campaign_id="cleanup-test", seed=8613, calls=9,
+                _device_claim_acquirer=borrowed_acquirer)
             with mock.patch.object(gpu, "preflight", return_value=sealed), \
                  mock.patch.object(gpu.storage, "assert_not_scratch", return_value=out), \
                  mock.patch.object(gpu, "_readiness_policy_for_arm", return_value=None), \
                  mock.patch.object(gpu, "_kfd_pids", return_value=()), \
                  mock.patch.object(gpu, "VRAM_USED", vram), \
-                 mock.patch.object(gpu.device_claim, "acquire_device_claim", return_value=claim), \
+                 mock.patch.object(gpu.device_claim, "acquire_device_claim",
+                                   side_effect=AssertionError("nested physical claim")), \
                  mock.patch.object(gpu.device_sampler, "RocmSmiSampler", return_value=sampler), \
                  mock.patch.object(gpu, "invoke", side_effect=RuntimeError("primary failure")), \
                  self.assertRaisesRegex(RuntimeError, "primary failure"):
                 gpu.run(args)
             claim.release.assert_called_once_with()
+            self.assertEqual(len(borrow_calls), 1)
             sampler.stop.assert_called_once_with()
+
+            # Success seals the logical throughput phase while the outer
+            # reservation remains physical release authority.
+            claim.reset_mock()
+            claim.borrowed_outer_reservation = True
+            claim.receipt.return_value.to_dict.return_value = gpu.device_claim.ClaimReceipt(
+                claim_id="akd-outer", device_id="mi210_0", lock_path="/claim",
+                state="held", holder_pid=1, holder_start_ticks=1,
+                holder_boot_id="boot", host="host", holder_label="test",
+                purpose="outer", campaign_id="cleanup-test", acquired_at="now").to_dict()
+            claim.release.return_value = {
+                "schema": "epyc.autokernel.borrowed_device_claim_phase.v1",
+                "mode": "borrowed_outer_reservation", "outer_claim_id": "akd-outer",
+                "device_id": "mi210_0", "campaign_id": "cleanup-test",
+                "phase_ended_at": "done", "physical_release": False}
+            sampler.reset_mock(); sampler.start.return_value = sampler
+            sampler.stop.side_effect = None
+            sampler.stop.return_value.to_dict.return_value = {"samples": []}
+            args.output_dir = str(root / "success")
+            invocation = {"samples": [100.0] * 9, "sample_count": 9,
+                          "hip_residency_proved": True,
+                          "cpu_coverage": {"covered": True}}
+            with mock.patch.object(gpu, "preflight", return_value=sealed), \
+                 mock.patch.object(gpu.storage, "assert_not_scratch",
+                                   return_value=root / "success"), \
+                 mock.patch.object(gpu, "_readiness_policy_for_arm", return_value=None), \
+                 mock.patch.object(gpu, "_kfd_pids", return_value=()), \
+                 mock.patch.object(gpu, "VRAM_USED", vram), \
+                 mock.patch.object(gpu.device_claim, "acquire_device_claim",
+                                   side_effect=AssertionError("nested physical claim")), \
+                 mock.patch.object(gpu.device_sampler, "RocmSmiSampler", return_value=sampler), \
+                 mock.patch.object(gpu, "invoke", return_value=invocation), \
+                 mock.patch.object(gpu.autokernel_progression, "export_progression"):
+                result = gpu.run(args)
+            claim.release.assert_called_once_with()
+            self.assertEqual(result["device_claim_open"]["claim_id"], "akd-outer")
+            self.assertEqual(result["device_claim_borrowed_phase_end"]["outer_claim_id"],
+                             "akd-outer")
+            self.assertFalse(result["device_claim_borrowed_phase_end"]["physical_release"])
+            self.assertNotIn("device_claim_released", result)
+            governance = json.loads((root / "success/live-governance.json").read_text())
+            self.assertEqual(governance["status"], "borrowed_phase_ended")
+            self.assertNotIn("device_claim_released", governance)

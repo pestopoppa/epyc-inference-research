@@ -12,12 +12,14 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, replace
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
 from typing import Any, Callable, Mapping, Sequence
 
 from .. import schemas
+from ..resource import device_claim
 from . import discovery_controller as controller
 from . import gpu_source_evidence as evidence
 from . import gpu_source_proofs
@@ -25,6 +27,8 @@ from scripts.benchmark import autokernel_progression
 
 OPERATION_SCHEMA = "epyc.autokernel.gpu_source_operation.v1"
 RESULT_SCHEMA = "epyc.autokernel.gpu_source_operation_result.v1"
+RESOURCE_WAIT_SCHEMA = "epyc.autokernel.gpu_source_resource_wait.v1"
+RESERVATION_RELEASE_SCHEMA = "epyc.autokernel.gpu_source_reservation_release.v1"
 AUTHORITY = evidence.AUTHORITY
 SHA = re.compile(r"^[0-9a-f]{64}$")
 
@@ -147,8 +151,16 @@ def _intent_body(*, operation_key: str, candidate: object,
         "operation_key": operation_key,
         "manifest_sha256": _candidate_manifest(candidate),
         "authorization_sha256": schemas.content_hash(authorization_raw),
-        "lease_sha256": schemas.content_hash(lease_raw),
+        "lease_sha256": schemas.content_hash(_lease_identity(lease_raw)),
     }
+
+
+def _lease_identity(lease: Mapping[str, Any]) -> dict[str, Any]:
+    """Stable policy authority; volatile probe receipts are resume evidence."""
+    keys = ("operation_key", "repetition", "mode", "device_id",
+            "inference_window_lock", "model_sha256", "load_admission",
+            "promotion_claim")
+    return {key: lease.get(key) for key in keys}
 
 
 def _inflight_identity(inflight: Mapping[str, Any]) -> dict[str, Any]:
@@ -162,8 +174,50 @@ def _inflight_identity(inflight: Mapping[str, Any]) -> dict[str, Any]:
         "operation_key": operation_key,
         "manifest_sha256": _candidate_manifest(candidate),
         "authorization_sha256": schemas.content_hash(authorization),
-        "lease_sha256": schemas.content_hash(lease),
+        "lease_sha256": schemas.content_hash(_lease_identity(lease)),
     }
+
+
+def _safe_wait_receipts(root: Path, identity: Mapping[str, Any]) -> tuple[dict[str, Any], ...]:
+    waits = root / "resource-waits"
+    if not waits.exists() and not waits.is_symlink():
+        return ()
+    if waits.is_symlink() or not waits.is_dir():
+        raise GpuSourceAdapterError("resource-wait history is not a real directory")
+    wait_stat = waits.stat()
+    if wait_stat.st_uid != os.geteuid() or wait_stat.st_mode & 0o077:
+        raise GpuSourceAdapterError("resource-wait history is not private to the controller owner")
+    rows = []
+    for path in sorted(waits.iterdir()):
+        if path.is_symlink() or not path.is_file() or not re.fullmatch(r"wait-[0-9]{4}\.json", path.name):
+            raise GpuSourceAdapterError("resource-wait history contains an unsafe entry")
+        row = _read_json(path, "resource-wait receipt")
+        required = {
+            "schema": RESOURCE_WAIT_SCHEMA,
+            "authority": AUTHORITY,
+            "promotion_claim": False,
+            "operation_key": identity["operation_key"],
+            "manifest_sha256": identity["manifest_sha256"],
+            "gpu_executor_started": False,
+            "proof_root_created": False,
+            "runner_plan_created": False,
+            "runner_output_created": False,
+        }
+        if any(row.get(key) != value for key, value in required.items()):
+            raise GpuSourceAdapterError("resource-wait receipt does not prove a pre-executor stop")
+        rows.append(row)
+    return tuple(rows)
+
+
+def _is_resumable_wait_root(root: Path, identity: Mapping[str, Any]) -> bool:
+    allowed = {"intent.json", "resource-waits"}
+    if any(path.name not in allowed for path in root.iterdir()):
+        return False
+    _safe_wait_receipts(root, identity)
+    # Intent-only means the process died before build/reservation.  Since no
+    # proof or runner carrier exists, re-entering the sealed builder/cache seam
+    # cannot repeat a GPU command.
+    return True
 
 
 def _protected_snapshot(paths: Sequence[Path],
@@ -307,6 +361,37 @@ def _source_frame(operation_root: Path, result: controller.SealedScreen) -> tupl
     return series_key, bundle
 
 
+def _require_borrowed_proof_claims(
+        bundle: gpu_source_proofs.GpuSourceProofBundle,
+        outer_opened: Mapping[str, Any]) -> None:
+    """Distinguish logical phase releases from the physical outer release."""
+    correctness = gpu_source_proofs.load_receipt(
+        Path(str(bundle.correctness["path"])), schema=evidence.CORRECTNESS_SCHEMA)["body"]
+    pair = gpu_source_proofs.load_receipt(
+        Path(str(bundle.attribution["path"])), schema=evidence.PAIR_SCHEMA)["body"]
+    bodies = [correctness]
+    for arm in ("candidate", "anchor"):
+        reference = pair.get(arm)
+        if not isinstance(reference, Mapping) or not isinstance(reference.get("body"), Mapping):
+            raise GpuSourceAdapterError("borrowed attribution reference is malformed")
+        bodies.append(reference["body"])
+    claim_id = outer_opened.get("claim_id")
+    for body in bodies:
+        witness = body.get("residency_witness")
+        if (not isinstance(witness, Mapping)
+                or witness.get("device_claim_mode") != "borrowed_outer_reservation"
+                or witness.get("outer_claim_id") != claim_id
+                or body.get("device_claim_open", {}).get("claim_id") != claim_id
+                or body.get("device_claim_mode") != "borrowed_outer_reservation"
+                or body.get("device_claim_released") is not None
+                or body.get("device_claim_borrowed_phase_end", {}).get(
+                    "outer_claim_id") != claim_id
+                or body.get("device_claim_borrowed_phase_end", {}).get(
+                    "physical_release") is not False):
+            raise GpuSourceAdapterError(
+                "proof phase does not explicitly bind the borrowed outer reservation")
+
+
 class GovernedGpuSourceAdapter:
     """Concrete screen/reconcile adapter with durable operation semantics."""
 
@@ -322,6 +407,7 @@ class GovernedGpuSourceAdapter:
         claim_acquirer: Callable[..., Any],
         claim_verifier: Callable[[Mapping[str, Any]], object],
         claim_timeout_s: float,
+        reservation_manager: Any | None,
         receipt_series: Callable[[controller.PlannedCandidate,
                                   controller.SealedScreen], Sequence[controller.SealedScreen]],
         protected_roots: Sequence[Path],
@@ -341,6 +427,7 @@ class GovernedGpuSourceAdapter:
         self.claim_acquirer = claim_acquirer
         self.claim_verifier = claim_verifier
         self.claim_timeout_s = claim_timeout_s
+        self.reservation_manager = reservation_manager
         self.receipt_series_loader = receipt_series
         self.protected_roots = tuple(path.resolve() for path in protected_roots)
         if not self.protected_roots:
@@ -359,7 +446,8 @@ class GovernedGpuSourceAdapter:
     def _root(self, operation_key: str) -> Path:
         return self.operations_root / _operation_key(operation_key)
 
-    def _proof_bundle(self, operation_root: Path) -> Callable[..., gpu_source_proofs.GpuSourceProofBundle]:
+    def _proof_bundle(self, operation_root: Path, operation_key: str,
+                      reservation_state: dict[str, Any]) -> Callable[..., gpu_source_proofs.GpuSourceProofBundle]:
         def produce(candidate: controller.PlannedCandidate,
                     build: controller.GpuSourceBuild) -> gpu_source_proofs.GpuSourceProofBundle:
             self.runner_attest()
@@ -378,15 +466,61 @@ class GovernedGpuSourceAdapter:
                         continue
                     raise GpuSourceAdapterError(
                         "GPU source evidence may not use a protected production tree")
+            claim_acquirer = self.claim_acquirer
+            if self.reservation_manager is not None:
+                try:
+                    opened = self.reservation_manager.reserve(operation_key)
+                except controller.ResourceWait as exc:
+                    if ((operation_root / "proof").exists()
+                            or (operation_root / "runner-plan.json").exists()
+                            or (operation_root / "runner").exists()):
+                        raise GpuSourceAdapterError(
+                            "resource contention surfaced after executor artifacts existed") from exc
+                    waits = operation_root / "resource-waits"
+                    if waits.exists() or waits.is_symlink():
+                        _safe_wait_receipts(operation_root, {
+                            "operation_key": operation_key,
+                            "manifest_sha256": candidate.source_manifest_sha256})
+                    else:
+                        waits.mkdir(mode=0o700)
+                    sequence = len(tuple(waits.iterdir())) + 1
+                    build_key = getattr(build, "build_key", None)
+                    materialization = getattr(build, "materialization_sha256", None)
+                    receipt_path = waits / f"wait-{sequence:04d}.json"
+                    loaded = evidence._seal(receipt_path, {
+                        "schema": RESOURCE_WAIT_SCHEMA,
+                        "authority": AUTHORITY,
+                        "promotion_claim": False,
+                        "operation_key": operation_key,
+                        "manifest_sha256": candidate.source_manifest_sha256,
+                        "build_key": build_key,
+                        "materialization_sha256": materialization,
+                        "gpu_executor_started": False,
+                        "proof_root_created": False,
+                        "runner_plan_created": False,
+                        "runner_output_created": False,
+                        "contention": dict(exc.receipt),
+                    })
+                    raise controller.ResourceWait(
+                        str(exc), receipt={**dict(exc.receipt),
+                                           "stage_receipt_path": str(receipt_path.resolve()),
+                                           "stage_receipt_sha256": loaded["file_sha256"]}) from exc
+                if not isinstance(opened, Mapping):
+                    raise GpuSourceAdapterError("outer reservation returned no typed receipt")
+                reservation_state["opened"] = dict(opened)
+                claim_acquirer = self.reservation_manager.borrower(operation_key)
             self.runner_attest()
-            return evidence.produce_gpu_source_evidence(
+            bundle = evidence.produce_gpu_source_evidence(
                 output_root=operation_root / "proof", plan=plan,
                 correctness_executor=self.correctness_executor,
                 rocprof_executor=self.rocprof_executor,
                 claim_journal=self.claim_journal,
-                claim_acquirer=self.claim_acquirer,
+                claim_acquirer=claim_acquirer,
                 claim_verifier=self.claim_verifier,
                 claim_timeout_s=self.claim_timeout_s)
+            if self.reservation_manager is not None:
+                _require_borrowed_proof_claims(bundle, opened)
+            return bundle
         return produce
 
     def _build_guarded(self, candidate: Any, authorization: Any,
@@ -405,15 +539,29 @@ class GovernedGpuSourceAdapter:
                lease: Mapping[str, Any]) -> controller.SealedScreen:
         operation_key = _operation_key(lease.get("operation_key"))
         operation_root = self._root(operation_key)
-        if operation_root.exists() or operation_root.is_symlink():
-            raise GpuSourceAdapterError(
-                "operation already has durable state; reconcile instead of restarting")
-        operation_root.mkdir(parents=True)
         intent = _intent_body(
             operation_key=operation_key, candidate=candidate,
             authorization=authorization, lease=lease)
-        evidence._seal(operation_root / "intent.json", intent)
+        identity = {key: intent[key] for key in (
+            "operation_key", "manifest_sha256", "authorization_sha256", "lease_sha256")}
+        if operation_root.exists() or operation_root.is_symlink():
+            if operation_root.is_symlink() or not operation_root.is_dir():
+                raise GpuSourceAdapterError("operation root is not a real directory")
+            try:
+                _validate_intent(
+                    _read_json(operation_root / "intent.json", "operation intent"),
+                    identity)
+            except GpuSourceAdapterError as exc:
+                raise GpuSourceAdapterError(
+                    "operation already has durable state; reconcile instead of restarting") from exc
+            if not _is_resumable_wait_root(operation_root, identity):
+                raise GpuSourceAdapterError(
+                    "operation already has durable state; reconcile instead of restarting")
+        else:
+            operation_root.mkdir(parents=True)
+            evidence._seal(operation_root / "intent.json", intent)
         runner_args: dict[str, Any] = {}
+        reservation_state: dict[str, Any] = {}
 
         def contained_args(candidate_: Any, build_: Any, lease_: Mapping[str, Any]) -> Any:
             args = self.args_factory(candidate_, build_, lease_)
@@ -426,6 +574,14 @@ class GovernedGpuSourceAdapter:
                     "GPU runner output escaped its operation directory") from exc
             if output.exists() or output.is_symlink():
                 raise GpuSourceAdapterError("GPU runner output must be fresh")
+            if self.reservation_manager is not None:
+                opened = reservation_state.get("opened")
+                if not isinstance(opened, Mapping) or not opened.get("claim_id"):
+                    raise GpuSourceAdapterError(
+                        "runner arguments were requested before the outer reservation")
+                setattr(args, "_device_claim_acquirer",
+                        self.reservation_manager.borrower(operation_key))
+                setattr(args, "_expected_outer_claim_id", opened["claim_id"])
             runner_args["args"] = args
             evidence._seal(operation_root / "runner-plan.json", {
                 "schema": "epyc.autokernel.gpu_source_runner_plan.v1",
@@ -441,44 +597,65 @@ class GovernedGpuSourceAdapter:
         self._active_protected_snapshot = protected_before
         delegate = controller.GpuSourceScreener(
             build_source=self._build_guarded,
-            proof_bundle=self._proof_bundle(operation_root),
+            proof_bundle=self._proof_bundle(
+                operation_root, operation_key, reservation_state),
             args_factory=contained_args, runner_attest=self.runner_attest)
+        reservation_released = False
+
+        def release_reservation() -> None:
+            nonlocal reservation_released
+            if reservation_released or self.reservation_manager is None:
+                return
+            released = self.reservation_manager.release(operation_key)
+            reservation_released = True
+            if released is not None:
+                evidence._seal(operation_root / "reservation-release.json", {
+                    "schema": RESERVATION_RELEASE_SCHEMA,
+                    "authority": AUTHORITY,
+                    "promotion_claim": False,
+                    "operation_key": operation_key,
+                    "device_claim_released": dict(released),
+                })
         try:
             result = delegate.screen(candidate, authorization, lease)
+            _load_screen_receipt(result)
+            series_key, _bundle = _source_frame(operation_root, result)
+            result = _with_series_key(result, series_key)
+            rows, effects = _series_payload(
+                self.receipt_series_loader(candidate, result), current=result)
+            evidence._seal(operation_root / "screen-result.json", {
+                "schema": RESULT_SCHEMA,
+                "authority": AUTHORITY,
+                "promotion_claim": False,
+                "operation_key": operation_key,
+                "manifest_sha256": candidate.source_manifest_sha256,
+                "screen": _screen_dict(result),
+                "receipt_series": rows,
+                "effects": effects,
+            })
+            release_reservation()
+            recovered = self.reconcile({
+                "operation_key": operation_key,
+                "candidate": {"candidate": {
+                    "source_manifest_sha256": candidate.source_manifest_sha256}},
+                "authorization": _mapping(authorization, "claim authorization"),
+                "lease": dict(lease),
+            })
+            if recovered.status != "sealed_result" or recovered.result != result:
+                raise GpuSourceAdapterError("freshly sealed operation did not reconcile")
+            return result
         finally:
             try:
-                protected_after = _protected_snapshot(
-                    self.protected_roots, self.protected_files)
+                try:
+                    release_reservation()
+                finally:
+                    protected_after = _protected_snapshot(
+                        self.protected_roots, self.protected_files)
             finally:
                 del self._active_protected_snapshot
             if protected_after != protected_before:
                 raise GpuSourceAdapterError(
                     "GPU source screen changed protected production tree")
-        _load_screen_receipt(result)
-        series_key, _bundle = _source_frame(operation_root, result)
-        result = _with_series_key(result, series_key)
-        rows, effects = _series_payload(
-            self.receipt_series_loader(candidate, result), current=result)
-        evidence._seal(operation_root / "screen-result.json", {
-            "schema": RESULT_SCHEMA,
-            "authority": AUTHORITY,
-            "promotion_claim": False,
-            "operation_key": operation_key,
-            "manifest_sha256": candidate.source_manifest_sha256,
-            "screen": _screen_dict(result),
-            "receipt_series": rows,
-            "effects": effects,
-        })
-        recovered = self.reconcile({
-            "operation_key": operation_key,
-            "candidate": {"candidate": {
-                "source_manifest_sha256": candidate.source_manifest_sha256}},
-            "authorization": _mapping(authorization, "claim authorization"),
-            "lease": dict(lease),
-        })
-        if recovered.status != "sealed_result" or recovered.result != result:
-            raise GpuSourceAdapterError("freshly sealed operation did not reconcile")
-        return result
 
     def reconcile(self, inflight: Mapping[str, Any]) -> Any:
         try:
@@ -493,6 +670,8 @@ class GovernedGpuSourceAdapter:
             _validate_intent(intent, identity)
             result_path = root / "screen-result.json"
             if not result_path.exists() and not result_path.is_symlink():
+                if _is_resumable_wait_root(root, identity):
+                    return _recovery("safe_to_start")
                 plan = _read_json(root / "runner-plan.json", "GPU runner plan")
                 if (plan.get("operation_key") != identity["operation_key"]
                         or plan.get("authority") != AUTHORITY
@@ -543,6 +722,22 @@ class GovernedGpuSourceAdapter:
                     "effects": effects,
                 })
             raw = _read_json(result_path, "operation result")
+            if self.reservation_manager is not None:
+                release = _read_json(
+                    root / "reservation-release.json", "outer reservation release")
+                if (release.get("schema") != RESERVATION_RELEASE_SCHEMA
+                        or release.get("authority") != AUTHORITY
+                        or release.get("promotion_claim") is not False
+                        or release.get("operation_key") != identity["operation_key"]):
+                    raise GpuSourceAdapterError("outer reservation release identity mismatch")
+                try:
+                    released = device_claim.ClaimReceipt.from_dict(
+                        release.get("device_claim_released"))
+                except (TypeError, ValueError) as exc:
+                    raise GpuSourceAdapterError(
+                        "outer reservation release receipt is malformed") from exc
+                if not released.released_at:
+                    raise GpuSourceAdapterError("outer reservation was not actually released")
             required = {
                 "schema": RESULT_SCHEMA,
                 "authority": AUTHORITY,
@@ -598,6 +793,7 @@ def build_governed_gpu_source_adapter(
     claim_acquirer: Callable[..., Any],
     claim_verifier: Callable[[Mapping[str, Any]], object],
     claim_timeout_s: float = 300.0,
+    reservation_manager: Any | None = None,
     receipt_series: Callable[[controller.PlannedCandidate,
                               controller.SealedScreen], Sequence[controller.SealedScreen]]
                     = lambda _candidate, current: (current,),
@@ -612,7 +808,8 @@ def build_governed_gpu_source_adapter(
         correctness_executor=correctness_executor,
         rocprof_executor=rocprof_executor, claim_journal=claim_journal,
         claim_acquirer=claim_acquirer, claim_verifier=claim_verifier,
-        claim_timeout_s=claim_timeout_s, receipt_series=receipt_series,
+        claim_timeout_s=claim_timeout_s, reservation_manager=reservation_manager,
+        receipt_series=receipt_series,
         protected_roots=protected_roots, protected_files=protected_files,
         runner_attest=runner_attest)
 

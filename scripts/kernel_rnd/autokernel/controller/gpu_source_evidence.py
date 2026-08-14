@@ -28,6 +28,7 @@ from . import gpu_source_proofs as proofs
 from . import split_runtime_verifier
 
 AUTHORITY = "nonpromotable_candidate_only_discovery"
+BORROWED_PHASE_SCHEMA = "epyc.autokernel.borrowed_device_claim_phase.v1"
 CORRECTNESS_SCHEMA = "epyc.autokernel.targeted_correctness_receipt.v2"
 ATTRIBUTION_SCHEMA = "epyc.autokernel.gpu_kernel_attribution.v2"
 PAIR_SCHEMA = "epyc.autokernel.gpu_kernel_attribution_pair.v1"
@@ -909,9 +910,29 @@ def _validate_claim_pair(opened: Mapping[str, Any], released: Mapping[str, Any],
                          *, plan: GpuSourceEvidencePlan) -> None:
     try:
         opened_typed = device_claim.ClaimReceipt.from_dict(opened)
+    except (TypeError, ValueError) as exc:
+        raise EvidenceProducerError("opened claim does not satisfy the device-claim schema") from exc
+    if released.get("schema") == BORROWED_PHASE_SCHEMA:
+        expected = {
+            "schema": BORROWED_PHASE_SCHEMA,
+            "mode": "borrowed_outer_reservation",
+            "outer_claim_id": opened_typed.claim_id,
+            "device_id": opened_typed.device_id,
+            "campaign_id": opened_typed.campaign_id,
+            "physical_release": False,
+        }
+        if (any(released.get(key) != value for key, value in expected.items())
+                or not isinstance(released.get("phase_ended_at"), str)
+                or not released["phase_ended_at"]
+                or "released_at" in released):
+            raise EvidenceProducerError("borrowed claim phase end is malformed")
+        if opened_typed.device_id != plan.device_id or opened_typed.campaign_id != plan.campaign_id:
+            raise EvidenceProducerError("borrowed claim does not bind the planned device/campaign")
+        return
+    try:
         released_typed = device_claim.ClaimReceipt.from_dict(released)
     except (TypeError, ValueError) as exc:
-        raise EvidenceProducerError("claim receipts do not satisfy the device-claim schema") from exc
+        raise EvidenceProducerError("released claim does not satisfy the device-claim schema") from exc
     if opened_typed.released_at is not None or not released_typed.released_at:
         raise EvidenceProducerError("claim release is missing or contradictory")
     comparable = ("claim_id", "device_id", "lock_path", "state", "holder_pid",
@@ -921,6 +942,35 @@ def _validate_claim_pair(opened: Mapping[str, Any], released: Mapping[str, Any],
         raise EvidenceProducerError("open/release claim identities differ")
     if opened_typed.device_id != plan.device_id or opened_typed.campaign_id != plan.campaign_id:
         raise EvidenceProducerError("claim does not bind the planned device/campaign")
+
+
+def _claim_boundary_fields(opened: Mapping[str, Any], ended: Mapping[str, Any],
+                           residency: Mapping[str, Any]) -> dict[str, Any]:
+    borrowed = residency.get("device_claim_mode") == "borrowed_outer_reservation"
+    return {
+        "device_claim_open": dict(opened),
+        "device_claim_mode": ("borrowed_outer_reservation" if borrowed
+                              else "direct_device_claim"),
+        **({"device_claim_borrowed_phase_end": dict(ended)} if borrowed
+           else {"device_claim_released": dict(ended)}),
+    }
+
+
+def _validate_claim_boundary(body: Mapping[str, Any], *, plan: GpuSourceEvidencePlan) -> None:
+    mode = body.get("device_claim_mode")
+    borrowed = body.get("device_claim_borrowed_phase_end")
+    released = body.get("device_claim_released")
+    if mode == "borrowed_outer_reservation":
+        if not isinstance(borrowed, Mapping) or released is not None:
+            raise EvidenceProducerError("borrowed phase cannot assert a physical claim release")
+        ended = borrowed
+    elif mode in (None, "direct_device_claim"):
+        if not isinstance(released, Mapping) or borrowed is not None:
+            raise EvidenceProducerError("direct claim lacks its physical release")
+        ended = released
+    else:
+        raise EvidenceProducerError("device claim mode is unknown")
+    _validate_claim_pair(body.get("device_claim_open", {}), ended, plan=plan)
 
 
 def _validate_residency_witness(value: object, *, device_id: str, label: str) -> None:
@@ -1001,6 +1051,7 @@ def _run_claimed(
     if any(path.exists() or path.is_symlink() for path in output_paths):
         raise EvidenceProducerError("executor outputs must be fresh paths")
     claim = None
+    borrowed_outer = False
     opened: dict[str, Any] | None = None
     capture: ExecutionCapture | None = None
     failure: BaseException | None = None
@@ -1016,6 +1067,7 @@ def _run_claimed(
             timeout_s=claim_timeout_s,
             max_hold_s=3600.0,
         )
+        borrowed_outer = bool(getattr(claim, "borrowed_outer_reservation", False))
         opened = _receipt_dict(claim.receipt(), "opened claim")
         verified_before = _check_result_passed(claim_verifier(opened))
         if not verified_before:
@@ -1043,6 +1095,9 @@ def _run_claimed(
     residency = _residency(capture, plan.device_id)
     residency["claim_verified_before"] = verified_before
     residency["claim_verified_after"] = verified_after
+    residency["device_claim_mode"] = (
+        "borrowed_outer_reservation" if borrowed_outer else "direct_device_claim")
+    residency["outer_claim_id"] = opened["claim_id"] if borrowed_outer else None
     return capture, opened, released, residency
 
 
@@ -1125,8 +1180,7 @@ def _produce_correctness(
         "expected_cases": plan.expected_correctness_cases,
         "passed_cases": plan.expected_correctness_cases,
         "exact_case_ok": True,
-        "device_claim_open": opened,
-        "device_claim_released": released,
+        **_claim_boundary_fields(opened, released, residency),
         "residency_witness": residency,
     }
     return _seal(directory / "receipt.json", body)
@@ -1308,8 +1362,7 @@ def _produce_attribution_arm(
         "exact_dispatch_signatures": reduction["exact"],
         "forbidden_dispatch_signatures": reduction["forbidden"],
         "invariant_signatures": reduction["invariants"],
-        "device_claim_open": opened,
-        "device_claim_released": released,
+        **_claim_boundary_fields(opened, released, residency),
         "residency_witness": residency,
         "runtime_maps_identity": runtime_maps,
     }
@@ -1423,8 +1476,7 @@ def _validate_attribution_body(body: Mapping[str, Any], *, plan: GpuSourceEviden
     }
     if any(body.get(key) != value for key, value in expected.items()):
         raise EvidenceProducerError(f"{arm} attribution receipt identity/config mismatch")
-    _validate_claim_pair(body.get("device_claim_open", {}),
-                         body.get("device_claim_released", {}), plan=plan)
+    _validate_claim_boundary(body, plan=plan)
     for kind in ("stdout", "stderr", "timestamp_csv"):
         path = Path(str(body.get(f"{kind}_path", "")))
         if _hash_file(path, kind, allow_empty=kind != "timestamp_csv") != body.get(f"{kind}_sha256"):
@@ -1515,8 +1567,7 @@ def _validate_correctness_body(body: Mapping[str, Any], plan: GpuSourceEvidenceP
     }
     if any(body.get(key) != value for key, value in expected.items()):
         raise EvidenceProducerError("correctness receipt identity/config/result mismatch")
-    _validate_claim_pair(body.get("device_claim_open", {}),
-                         body.get("device_claim_released", {}), plan=plan)
+    _validate_claim_boundary(body, plan=plan)
     for kind in ("stdout", "stderr"):
         path = Path(str(body.get(f"{kind}_path", "")))
         if _hash_file(path, kind, allow_empty=kind == "stderr") != body.get(f"{kind}_sha256"):

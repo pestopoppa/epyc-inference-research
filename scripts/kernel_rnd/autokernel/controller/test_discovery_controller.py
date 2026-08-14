@@ -21,7 +21,8 @@ class FakeCritic:
  def attest(self): return {**D.TERRA,"runtime":RUNTIME}
  def review(self,*args,**kw): return D.Critique(next(self.decisions),"bounded gate")
 class Lease:
- def admit(self,item): return {"admitted":True,"mode":"allowed_discovery_noise"}
+ def admit(self,item,*,operation_key): return {"admitted":True,"mode":"allowed_discovery_noise","operation_key":operation_key}
+ def resume(self,item,permit): return self.admit(item,operation_key=permit["operation_key"])
 class FakeScreen:
  def __init__(self,values): self.values=iter(values); self.calls=0
  def screen(self,*args):
@@ -98,9 +99,13 @@ class Tests(unittest.TestCase):
    build=D.GpuSourceBuild(anchor,candidate,D.gpu_source_proofs.BuildIdentity("commit-a",H,H,H,H,H),D.gpu_source_proofs.BuildIdentity("commit-b","b"*64,"b"*64,"b"*64,"b"*64,"b"*64))
    item=D.PlannedCandidate("akh-a","statement","falsifier",{}, {"id":"p"},Manifest(),H)
    args=argparse.Namespace(factor="source_patch",anchor_build=str(anchor),candidate_build=str(candidate),output_dir=str(root/"screen"))
+   args._device_claim_acquirer=lambda *_args,**_kwargs: None; args._expected_outer_claim_id="akd-outer"
    (root/"screen").mkdir()
-   raw={"schema":"epyc.autokernel.gpu_candidate_only_screen.v2","non_promotable":True,"promotion_claim":False,"hip_residency_proved":True,"median_relative":.02,"baseline_sha256":H}; raw["result_sha256"]=D.gpu_source_proofs._hash(raw)
+   phase={"schema":"epyc.autokernel.borrowed_device_claim_phase.v1","mode":"borrowed_outer_reservation","outer_claim_id":"akd-outer","device_id":"mi210_0","campaign_id":"ak-test","phase_ended_at":"done","physical_release":False}
+   opened={"claim_id":"akd-outer"}; raw={"schema":"epyc.autokernel.gpu_candidate_only_screen.v2","non_promotable":True,"promotion_claim":False,"hip_residency_proved":True,"median_relative":.02,"baseline_sha256":H,"device_claim_mode":"borrowed_outer_reservation","device_claim_open":opened,"device_claim_borrowed_phase_end":phase}; raw["result_sha256"]=D.gpu_source_proofs._hash(raw)
    (root/"screen"/"result.json").write_text(json.dumps(raw))
+   governance={"status":"borrowed_phase_ended","device_claim_mode":"borrowed_outer_reservation","device_claim_open":opened,"device_claim_borrowed_phase_end":phase}
+   (root/"screen"/"live-governance.json").write_text(json.dumps(governance))
    run.side_effect=lambda _args: events.append("runner") or raw
    source_hash=hashlib.sha256(source_file.read_bytes()).hexdigest(); dispatch_hash=hashlib.sha256(dispatch_file.read_bytes()).hexdigest()
    candidate_identity=build.candidate_identity; anchor_identity=build.anchor_identity; material={"manifest_sha256":H,"candidate":candidate_identity,"anchor":anchor_identity,"workload_sha256":H,"correctness":{"file_sha256":source_hash,"native_sha256":H},"attribution":{"file_sha256":dispatch_hash,"native_sha256":H}}
@@ -109,12 +114,50 @@ class Tests(unittest.TestCase):
    with patch.object(D.autokernel_progression,"_gpu_screen",return_value={"stage":"candidate"}):
     got=screen.screen(item,object(),{})
    self.assertEqual(events,["build","source","dispatch","runner"]); self.assertEqual(got.dispatch_proof_sha256,dispatch_hash)
+   (root/"screen"/"live-governance.json").unlink()
+   with patch.object(D.autokernel_progression,"_gpu_screen",return_value={"stage":"candidate"}), self.assertRaisesRegex(D.DiscoveryControllerError,"governance"):
+    screen.screen(item,object(),{})
+   wrong_phase={**phase,"outer_claim_id":"akd-wrong"}; wrong_opened={"claim_id":"akd-wrong"}
+   wrong={**raw,"device_claim_open":wrong_opened,"device_claim_borrowed_phase_end":wrong_phase}; wrong.pop("result_sha256"); wrong["result_sha256"]=D.gpu_source_proofs._hash(wrong)
+   (root/"screen"/"result.json").write_text(json.dumps(wrong))
+   (root/"screen"/"live-governance.json").write_text(json.dumps({**governance,"device_claim_open":wrong_opened,"device_claim_borrowed_phase_end":wrong_phase}))
+   run.side_effect=lambda _args: wrong
+   with patch.object(D.autokernel_progression,"_gpu_screen",return_value={"stage":"candidate"}), self.assertRaisesRegex(D.DiscoveryControllerError,"exact outer claim"):
+    screen.screen(item,object(),{})
  def test_lease_wait_is_durable_without_spending_iteration(self):
   class Wait:
-   def admit(self,item): return {"admitted":False,"reason":"CPU window busy"}
+   def admit(self,item,*,operation_key): return {"admitted":False,"reason":"CPU window busy","operation_key":operation_key}
   with tempfile.TemporaryDirectory() as t, patch.object(D.source_candidate,"SourcePatchManifest",Manifest), patch.object(D,"_write_projection"):
    r=D.run_controller(self.cfg(Path(t),1),planner=FakePlanner(),critic=FakeCritic(["accept"]),screener=FakeScreen([.1]),lease=Wait())
    self.assertEqual(r["next"],1); self.assertEqual(r["pending"]["row"]["status"],"waiting_resource"); self.assertFalse(r["complete"])
+ def test_postbuild_resource_wait_retries_exact_candidate_without_replanning(self):
+  class Race(FakeScreen):
+   def __init__(self,root): super().__init__([]); self.root=root
+   def screen(self,*args):
+    self.calls+=1
+    if self.calls == 1:
+     operation_key=args[2]["operation_key"]; directory=self.root/operation_key/"resource-waits"; directory.mkdir(parents=True,mode=0o700)
+     contention={"admitted":False,"phase":"pre_executor_reservation","reason":"device_busy","operation_key":operation_key,"promotion_claim":False}
+     body={"schema":"epyc.autokernel.gpu_source_resource_wait.v1","authority":D.AUTHORITY,"promotion_claim":False,"operation_key":operation_key,"gpu_executor_started":False,"proof_root_created":False,"runner_plan_created":False,"runner_output_created":False,"contention":contention}; body["receipt_sha256"]=D._sha(body)
+     path=directory/"wait-0001.json"; path.write_text(json.dumps(body,sort_keys=True)); digest=hashlib.sha256(path.read_bytes()).hexdigest()
+     raise D.ResourceWait("device race",receipt={**contention,"stage_receipt_path":str(path),"stage_receipt_sha256":digest})
+    return D.SealedScreen("receipt",H,.04,"candidate",H,H,H)
+  with tempfile.TemporaryDirectory() as t, patch.object(D.source_candidate,"SourcePatchManifest",Manifest), patch.object(D,"_write_projection"):
+   root=Path(t); planner=FakePlanner(); critic=FakeCritic(["accept"]); screen=Race(root/"operations"); lease=Lease()
+   waiting=D.run_controller(self.cfg(root,1),planner=planner,critic=critic,screener=screen,lease=lease)
+   self.assertEqual((waiting["next"],waiting["pending"]["row"]["status"]),(1,"waiting_resource"))
+   done=D.run_controller(self.cfg(root,1),planner=planner,critic=critic,screener=screen,lease=lease)
+   self.assertTrue(done["complete"]); self.assertEqual((len(planner.calls),screen.calls),(1,2))
+ def test_forged_resource_wait_cannot_erase_ambiguous_inflight(self):
+  class Forged(FakeScreen):
+   def screen(self,*args):
+    operation_key=args[2]["operation_key"]
+    raise D.ResourceWait("forged",receipt={"admitted":False,"phase":"pre_executor_reservation","operation_key":operation_key,"promotion_claim":False})
+  with tempfile.TemporaryDirectory() as t, patch.object(D.source_candidate,"SourcePatchManifest",Manifest), patch.object(D,"_write_projection"):
+   root=Path(t)
+   with self.assertRaisesRegex(D.DiscoveryControllerError,"durable stage"):
+    D.run_controller(self.cfg(root,1),planner=FakePlanner(),critic=FakeCritic(["accept"]),screener=Forged([]),lease=Lease())
+   state=json.loads((root/"out"/"state.json").read_text()); self.assertIn("inflight",state); self.assertNotIn("pending",state)
  def test_pending_roundtrip_uses_real_manifest_and_skips_planner_critic(self):
   with tempfile.TemporaryDirectory() as t:
    root=Path(t); patch_bytes=b"diff --git a/ggml/src/ggml.c b/ggml/src/ggml.c\n--- a/ggml/src/ggml.c\n+++ b/ggml/src/ggml.c\n@@ -1 +1 @@\n-x\n+y\n"; manifest=D.source_candidate.SourcePatchManifest(campaign_id="ak-test",proposal_id="akp-test",candidate_id="akc-test",source_tree="llama.cpp",production_base_commit="0"*40,instrument_commit="0"*40,change_class="fusion",declared_files=("ggml/src/ggml.c",),declared_symbols={"ggml/src/ggml.c":("<file-scope>",)},mechanism_id="test",patch_sha256=hashlib.sha256(patch_bytes).hexdigest(),patch_bytes=patch_bytes)
