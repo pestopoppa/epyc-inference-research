@@ -350,6 +350,50 @@ class StrictClaudeBoundaryGate(unittest.TestCase):
             model_boundary.assert_not_called()
             self.assertGreaterEqual(launcher_reads, 2)
 
+    def test_staged_wrapper_must_match_attested_bytes_before_popen(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="autokernel-fable-staged-wrapper-gate-") as temporary:
+            root = Path(temporary)
+            workspace = root / "workspace"
+            auth = root / "auth"
+            workspace.mkdir(mode=0o700)
+            auth.mkdir(mode=0o700)
+            credential = auth / ".credentials.json"
+            credential.write_text(
+                json.dumps({"claudeAiOauth": {"accessToken": "test-only"}}),
+                encoding="utf-8",
+            )
+            credential.chmod(0o600)
+            wrapper = _wrapper(root)
+            runtime = _claude_runtime(wrapper)
+            real_write = fable_actor._write_private
+
+            def corrupt_staged_wrapper(path, content, **kwargs):
+                real_write(path, content, **kwargs)
+                if Path(path).name == "claude":
+                    Path(path).chmod(0o700)
+                    Path(path).write_text("#!/bin/sh\nexit 92\n", encoding="utf-8")
+                    Path(path).chmod(0o500)
+
+            with mock.patch.object(
+                    fable_actor, "_write_private",
+                    side_effect=corrupt_staged_wrapper), \
+                    mock.patch.object(
+                        fable_actor.subprocess, "Popen",
+                        side_effect=AssertionError("staged drift reached Popen"),
+                    ) as popen, \
+                    self.assertRaisesRegex(
+                        fable_actor.ClaudeFable5CriticError, "wrapper|staged"):
+                fable_actor.run_critic(
+                    wrapper=wrapper, workspace=workspace, prompt="review",
+                    bindings=_bindings(),
+                    environment={"HOME": str(root)}, auth_root=auth,
+                    expected_wrapper_sha256=runtime["wrapper_sha256"],
+                    expected_runtime_identity=runtime,
+                    expected_launcher_sha256=_sha(
+                        Path(fable_actor.__file__).resolve().read_bytes()),
+                )
+            popen.assert_not_called()
+
 
 class VetoAndResumeGate(unittest.TestCase):
     def setUp(self) -> None:
