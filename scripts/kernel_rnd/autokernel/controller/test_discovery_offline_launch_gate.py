@@ -237,6 +237,32 @@ class OfflineLaunchGate(unittest.TestCase):
         self.assertFalse(coverage["promotion_claim"])
         self.assertEqual(gpu_runner.DEVICE_ID, "mi210_0")
 
+    def test_runner_consumes_exact_lease_admission_without_legacy_recompute(self):
+        """Lease decision reaches preflight/result unchanged and is revalidated."""
+        args_fields = getattr(F, "GpuDiscoveryRunnerArgs", None)
+        self.assertIsNotNone(args_fields)
+        fields = set(args_fields.__dataclass_fields__)
+        self.assertIn("load_admission", fields)
+        self.assertNotIn("allow_small_model_cpu_overlap", fields)
+        preflight = inspect.getsource(gpu_runner.preflight)
+        run = inspect.getsource(gpu_runner.run)
+        for token in ("validate_decision_receipt", "policy_version",
+                      "policy_sha256", "policy_file_sha256",
+                      "effective_context_sha256"):
+            self.assertIn(token, preflight)
+        self.assertNotIn("SITE_LOAD_PROFILES", preflight)
+        self.assertNotIn("observed_headroom=True", preflight)
+        self.assertNotIn("allow_small_model_cpu_overlap", preflight)
+        self.assertIn("load_admission", run)
+        self.assertIn("decision_sha256", run)
+
+    def test_permit_admission_is_not_recomputed_or_overridden_by_args_factory(self):
+        """One sealed decision is the sole load-mode authority end to end."""
+        materialize = inspect.getsource(F.materialize)
+        self.assertIn('permit["load_admission"]', materialize)
+        self.assertIn("load_admission", inspect.getsource(F.GpuDiscoveryLease.admit))
+        self.assertNotIn("host_transfer_admission", materialize)
+
     def test_three_mode_admission_defaults_unknown_or_excess_to_serialized(self):
         """Overlap is earned by all predicates; missing data never guesses."""
         decide = getattr(gpu_runner, "host_transfer_admission")
