@@ -29,6 +29,13 @@ class FakeScreen:
  def reconcile(self,inflight): return D.Recovery("safe_to_start")
 
 class Tests(unittest.TestCase):
+ def test_bounded_dispatch_refuses_meta_and_out_of_range_literals(self):
+  valid=D.BoundedDispatchExpectation("kernel_6",2,128,64,0)
+  self.assertEqual(valid.kernel_name,"kernel_6")
+  for name in ("kernel.*", "kernel[0]", "kernel name"):
+   with self.subTest(name=name), self.assertRaises(D.DiscoveryControllerError):
+    D.BoundedDispatchExpectation(name,1,1,1,0)
+  with self.assertRaises(D.DiscoveryControllerError): D.BoundedDispatchExpectation("kernel",1,1,4097,0)
  def cfg(self,root,n=2): return D.ControllerConfig(root/"out",n)
  def test_exact_two_codex_no_claude(self):
   self.assertEqual(D.sealed_roster()["claude_members"],0); self.assertEqual([x["model"] for x in D.sealed_roster()["members"]],["gpt-5.6-sol","gpt-5.6-terra"])

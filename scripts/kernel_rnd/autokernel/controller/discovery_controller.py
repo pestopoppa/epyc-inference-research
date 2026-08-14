@@ -106,6 +106,27 @@ class AuthoringAssignment:
 
 
 @dataclass(frozen=True)
+class BoundedDispatchExpectation:
+    """Planner-authored literal geometry; never a regex, argv, or command."""
+    kernel_name: str
+    calls: int
+    grid: int
+    workgroup: int
+    lds_bytes: int
+
+    def __post_init__(self) -> None:
+        import re
+        if (not isinstance(self.kernel_name, str) or not re.fullmatch(r"[A-Za-z0-9_:<>.,-]{1,256}", self.kernel_name)
+                or any(ch in self.kernel_name for ch in "*?[]()|+\\^$")):
+            raise DiscoveryControllerError("dispatch kernel name must be a bounded literal")
+        for label, value, maximum in (("calls", self.calls, 10_000_000), ("grid", self.grid, 1 << 31),
+                                      ("workgroup", self.workgroup, 4096), ("lds_bytes", self.lds_bytes, 1 << 30)):
+            if (isinstance(value, bool) or not isinstance(value, int) or value < 0
+                    or value > maximum or (label != "lds_bytes" and value == 0)):
+                raise DiscoveryControllerError(f"dispatch {label} is outside reviewed literal bounds")
+
+
+@dataclass(frozen=True)
 class GpuSourceExperimentIntent:
     """Actor-selected *registry IDs*, never actor-selected commands or regexes."""
     template_id: str
@@ -113,6 +134,7 @@ class GpuSourceExperimentIntent:
     target_symbol: str
     correctness_id: str
     dispatch_id: str
+    expected_dispatch: BoundedDispatchExpectation
 
     def __post_init__(self) -> None:
         import re
@@ -125,6 +147,8 @@ class GpuSourceExperimentIntent:
         for label, value in (("target_surface", self.target_surface),
                              ("target_symbol", self.target_symbol)):
             _text(value, f"experiment intent {label}")
+        if not isinstance(self.expected_dispatch, BoundedDispatchExpectation):
+            raise DiscoveryControllerError("experiment intent requires bounded literal dispatch expectation")
 
 
 @dataclass(frozen=True)
@@ -244,7 +268,8 @@ class CodexPlanner:
             "plan_json_keys": ["hypothesis_id", "statement", "falsifier", "regime",
                                "proposal", "source_manifest_path", "experiment_intent"],
             "experiment_intent_keys": ["template_id", "target_surface", "target_symbol",
-                                       "correctness_id", "dispatch_id"],
+                                       "correctness_id", "dispatch_id", "expected_dispatch"],
+            "expected_dispatch_keys": ["kernel_name", "calls", "grid", "workgroup", "lds_bytes"],
             "source_manifest": "epyc.autokernel.source_patch.v1; use deployment-assigned ids/base/instrument only",
             "proposal_requirements": ["proposal_id matches manifest", "change_class matches manifest",
                                        "change.files_and_symbols exactly matches manifest declarations",
@@ -312,9 +337,13 @@ def _load_plan(path: Path, root: Path, *, assignment: AuthoringAssignment | None
     if set(value) not in (allowed, allowed - {"experiment_intent"}): raise DiscoveryControllerError("planner output schema mismatch")
     intent_raw = value.pop("experiment_intent", None)
     if intent_raw is not None:
-        if not isinstance(intent_raw, Mapping) or set(intent_raw) != {"template_id", "target_surface", "target_symbol", "correctness_id", "dispatch_id"}:
+        if not isinstance(intent_raw, Mapping) or set(intent_raw) != {"template_id", "target_surface", "target_symbol", "correctness_id", "dispatch_id", "expected_dispatch"}:
             raise DiscoveryControllerError("planner experiment intent schema mismatch")
-        intent = GpuSourceExperimentIntent(**intent_raw)
+        expected = intent_raw["expected_dispatch"]
+        if not isinstance(expected, Mapping) or set(expected) != {"kernel_name", "calls", "grid", "workgroup", "lds_bytes"}:
+            raise DiscoveryControllerError("planner bounded dispatch schema mismatch")
+        intent = GpuSourceExperimentIntent(**{**intent_raw,
+            "expected_dispatch": BoundedDispatchExpectation(**expected)})
     else:
         intent = None
     raw_path = Path(_text(value.pop("source_manifest_path"), "source_manifest_path"))
@@ -594,6 +623,11 @@ def _restore_pending(value: Mapping[str, Any]) -> PlannedCandidate:
     intent = raw.get("experiment_intent")
     if intent is not None and not isinstance(intent, Mapping):
         raise DiscoveryControllerError("pending experiment intent is malformed")
+    if intent is not None:
+        expected = intent.get("expected_dispatch")
+        if not isinstance(expected, Mapping):
+            raise DiscoveryControllerError("pending bounded dispatch is malformed")
+        intent = {**intent, "expected_dispatch": BoundedDispatchExpectation(**expected)}
     return PlannedCandidate(hypothesis_id=raw["hypothesis_id"],statement=raw["statement"],falsifier=raw["falsifier"],regime=raw["regime"],proposal=raw["proposal"],source_manifest=manifest,source_manifest_sha256=raw["source_manifest_sha256"],experiment_intent=GpuSourceExperimentIntent(**intent) if intent else None)
 
 
