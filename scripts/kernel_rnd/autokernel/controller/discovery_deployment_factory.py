@@ -9,6 +9,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 import argparse
 import base64
+import csv
 import hashlib
 import json
 import os
@@ -19,6 +20,7 @@ from types import MappingProxyType
 from typing import Any, Callable, Mapping
 
 from .. import schemas, source_candidate
+from .. import hypothesis_portfolio
 from ..execution import inference_window, device_sampler, worktree
 from ..execution import cpu_region_claim
 from ..execution import instrument_integrity
@@ -113,6 +115,14 @@ class ExperimentTemplate:
             raise DeploymentFactoryError("template kernel literal markers are malformed")
         candidate = []
         for index, expected in enumerate(expected_rows):
+            anchor = {row.signature: row for row in self.dispatch.anchor_exact}.get(
+                expected.route_id)
+            if (anchor is None or (anchor.calls, anchor.grid, anchor.workgroup,
+                                   anchor.lds_bytes) != (
+                    expected.calls, expected.grid, expected.workgroup,
+                    expected.lds_bytes)):
+                raise DeploymentFactoryError(
+                    "planner dispatch route differs from reviewed anchor authority")
             for key, value in (("calls", expected.calls), ("grid", expected.grid),
                                ("workgroup", expected.workgroup), ("lds_bytes", expected.lds_bytes)):
                 limit = bounds.get(key)
@@ -125,7 +135,7 @@ class ExperimentTemplate:
             if expected.grid % expected.workgroup:
                 raise DeploymentFactoryError("planner dispatch grid must be an exact workgroup multiple")
             candidate.append(evidence.ExactDispatch(
-                signature=f"{self.dispatch_id}.candidate.{index}",
+                signature=f"{expected.route_id}.candidate",
                 kernel_pattern="^" + re.escape(expected.kernel_name) + "$",
                 calls=expected.calls, grid=expected.grid, workgroup=expected.workgroup,
                 lds_bytes=expected.lds_bytes,
@@ -243,6 +253,7 @@ def _execution_module_identity() -> dict[str, dict[str, str]]:
         "device_sampler": Path(device_sampler.__file__).resolve(strict=True),
         "gpu_residency_sampler": Path(gpu_residency_sampler.__file__).resolve(strict=True),
         "claude_fable5_critic_actor": Path(claude_fable5_critic_actor.__file__).resolve(strict=True),
+        "hypothesis_portfolio": Path(hypothesis_portfolio.__file__).resolve(strict=True),
     }
     return {name: {"path": str(path), "sha256": _digest_regular(path, name)}
             for name, path in modules.items()}
@@ -318,13 +329,15 @@ _SAFE_CRITIC_ENVIRONMENT = MappingProxyType({
 _SITE_MODEL = Path(
     "/mnt/raid0/llm/models/lmstudio-community/Qwen2.5-Coder-0.5B-GGUF/"
     "Qwen2.5-Coder-0.5B-Q4_K_M.gguf")
-_SITE_SOURCE_PLAN = Path("/mnt/raid0/llm/autokernel/surface/gpu_decode_source_plan.json")
 _PROFILE_TRACE_RECEIPT = Path(
     "/mnt/raid0/llm/autokernel/screens/ak-gpu-qwen05b-tg128-rocprof-attribution-20260813/receipt.json")
 _PROFILE_TRACE_RECEIPT_SHA256 = "20742be4a69abf5bb70c228660ff0629bf416ed4452c4f69b9765ef74a933cd8"
 _PROFILE_TRACE_CSV = Path(
     "/mnt/raid0/llm/autokernel/screens/ak-gpu-qwen05b-tg128-rocprof-attribution-20260813/timestamps.csv")
 _PROFILE_TRACE_CSV_SHA256 = "a11bc20a03dfd5ca157990c1766ebbb5edb70a5c036d73d85d806e4f39a222a8"
+_PORTFOLIO_SEMANTIC_SHA256 = "a8f9db7b44e36c9f842b94f55257b82f736e149bd49377e29fa2dcb487aef64a"
+_PORTFOLIO_FILE_SHA256 = "4fabd8ee6141fab652c6834c9881085bea0034c7b1a301bc0418a7a55a70e381"
+_PORTFOLIO_CONTRACT_SHA256 = "00e5a1eb557fde4e77c5e85414bde0e9dfd9ded7ad72e62f8a8d6057614f1cd0"
 _SITE_WINDOW_LOCK = Path("/mnt/raid0/llm/tmp/model-call.lock")
 _SITE_ACTOR_WRAPPER = Path(
     "/usr/local/share/npm-global/lib/node_modules/@openai/codex/bin/codex.js")
@@ -336,6 +349,14 @@ def _digest_regular(path: Path, label: str) -> str:
     if path.is_symlink() or not path.is_file():
         raise DeploymentFactoryError(f"{label} must be a regular non-symlink file")
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _plain(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {key: _plain(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_plain(item) for item in value]
+    return value
 
 
 def _validate_critic_auth_source() -> Mapping[str, Any]:
@@ -378,10 +399,52 @@ def initialize_static_deployment_bundle(root: Path) -> Path:
         raise DeploymentFactoryError("bundle root must be an absolute non-symlink path")
     root.mkdir(parents=True, exist_ok=True)
     config_dir = root / "config"
-    for directory in (config_dir, root / "locks"):
+    for directory in (config_dir, root / "locks", root / "portfolio-evidence"):
         directory.mkdir(parents=True, exist_ok=True)
+        directory.chmod(0o700)
+    try:
+        portfolio = hypothesis_portfolio.load(hypothesis_portfolio.DEFAULT_PORTFOLIO)
+        hypothesis_portfolio.verify_evidence_files(portfolio)
+    except hypothesis_portfolio.PortfolioError as exc:
+        raise DeploymentFactoryError("checked-in hypothesis portfolio is not deployable") from exc
+    if (portfolio.sha256 != _PORTFOLIO_SEMANTIC_SHA256
+            or _digest_regular(hypothesis_portfolio.DEFAULT_PORTFOLIO,
+                               "checked-in hypothesis portfolio")
+            != _PORTFOLIO_FILE_SHA256):
+        raise DeploymentFactoryError("checked-in hypothesis portfolio identity changed")
+    portfolio_path = config_dir / "discovery-hypothesis-portfolio-v2.json"
+    _atomic_bytes(portfolio_path, hypothesis_portfolio.DEFAULT_PORTFOLIO.read_bytes())
+    portfolio_file_sha = _digest_regular(portfolio_path, "hypothesis portfolio")
+    contract_source = hypothesis_portfolio.DEFAULT_PORTFOLIO.with_name(
+        "HYPOTHESIS_PORTFOLIO_V2.md")
+    contract_path = config_dir / "HYPOTHESIS_PORTFOLIO_V2.md"
+    _atomic_bytes(contract_path, contract_source.read_bytes())
+    contract_sha = _digest_regular(contract_path, "hypothesis portfolio contract")
+    if contract_sha != _PORTFOLIO_CONTRACT_SHA256:
+        raise DeploymentFactoryError("hypothesis portfolio contract identity changed")
+    vendored_evidence: dict[str, dict[str, str]] = {}
+    for row in portfolio.body["evidence"]:
+        evidence_id = row["evidence_id"]
+        target = root / "portfolio-evidence" / f"{evidence_id}.bin"
+        raw = Path(row["path"]).read_bytes()
+        if hashlib.sha256(raw).hexdigest() != row["sha256"]:
+            raise DeploymentFactoryError(f"portfolio evidence changed: {evidence_id}")
+        _atomic_bytes(target, raw)
+        target.chmod(0o400)
+        vendored_evidence[evidence_id] = {
+            "path": str(target.resolve()), "sha256": row["sha256"]}
+    evidence_manifest = {
+        "schema": deployment.EVIDENCE_MANIFEST_SCHEMA,
+        "portfolio_sha256": portfolio.sha256,
+        "evidence": vendored_evidence,
+    }
+    evidence_manifest["manifest_sha256"] = schemas.content_hash(evidence_manifest)
+    evidence_manifest_path, evidence_manifest_file_sha = _json_artifact(
+        config_dir / "hypothesis-evidence-manifest.json", evidence_manifest)
     model = _bound(_SITE_MODEL, "model")
-    source_plan = _bound(_SITE_SOURCE_PLAN, "reviewed_source_plan")
+    source_plan = _bound(
+        Path(vendored_evidence["ev-source-plan-v1"]["path"]),
+        "vendored_reviewed_source_plan")
     wrapper_path = _SITE_ACTOR_WRAPPER.resolve(strict=True)
     wrapper = _bound(wrapper_path, "actor_wrapper")
     critic_path = _SITE_CRITIC_WRAPPER.resolve(strict=True)
@@ -462,6 +525,17 @@ def initialize_static_deployment_bundle(root: Path) -> Path:
                          "source_excerpt": line,
                          "source_excerpt_sha256": hashlib.sha256(line.encode()).hexdigest(),
                          "note": "projected verified source/hotspot fact; no resource authority"})
+    templates = _template_registry()
+    template_surfaces = _normalized_template_surfaces(templates, portfolio)
+    portfolio_dispatch_authority = _portfolio_dispatch_authority(templates, portfolio)
+    reviewed_source_body = {
+        "schema": "epyc.autokernel.reviewed_source_package.v1",
+        "instrument_commit": _INSTRUMENT_COMMIT,
+        "files": [{"relative_path": path, "sha256": _TARGET_SOURCE_SHA256[path],
+                   "workspace_path": f"reviewed-source/{path}"}
+                  for path in sorted(_TARGET_SOURCE_SHA256)],
+    }
+    hypotheses = portfolio.hypotheses
     context = {"schema": deployment.PLANNER_CONTEXT_SCHEMA,
                "model_sha256": model.sha256, "workload_sha256": workload_sha,
                "runtime_config_sha256": runtime_sha,
@@ -474,7 +548,22 @@ def initialize_static_deployment_bundle(root: Path) -> Path:
                "initial_strategies": [
                    "Do not repeat retired fattn single-column, Q5 four-wave, Q8 vec4, or RMS128 variants.",
                    "Explore a new literal dispatch-bound hypothesis in one reviewed template.",
-                   "Treat prior RoPE64 and Q4_K one-wave results as DNR/top-K context, not promotion evidence."]}
+                   "Treat prior RoPE64 and Q4_K one-wave results as DNR/top-K context, not promotion evidence."],
+               "hypothesis_portfolio_sha256": portfolio.sha256,
+               "eligible_hypotheses": _plain(portfolio.eligible_projection()),
+               "do_not_repeat": _plain(portfolio.dnr_projection()),
+               "incumbents": _plain([row for row in hypotheses
+                                      if row["status"] == "candidate_incumbent"]),
+               "ineligible_hypotheses": _plain([
+                   row for row in hypotheses
+                   if not row["current_bundle_eligibility"]["eligible"]]),
+               "hypothesis_evidence_manifest_sha256": evidence_manifest["manifest_sha256"],
+               "hypothesis_evidence": vendored_evidence,
+               "reviewed_source_package_sha256": schemas.content_hash(reviewed_source_body),
+               "template_registry_sha256": templates.registry_sha256,
+               "template_surfaces_sha256": schemas.content_hash(template_surfaces),
+               "template_surfaces": template_surfaces,
+               "portfolio_dispatch_authority": portfolio_dispatch_authority}
     context["context_sha256"] = schemas.content_hash(context)
     context_path, context_sha = _json_artifact(config_dir / "planner-context.json", context)
     for directory in (root / "state", root / "evidence", root / "operations", root / "builds"):
@@ -501,7 +590,15 @@ def initialize_static_deployment_bundle(root: Path) -> Path:
              "immutable_inputs": {"model": {"path": str(model.path), "sha256": model.sha256},
                                   "workload": {"path": str(workload_path), "sha256": workload_sha},
                                   "runtime_config": {"path": str(runtime_path), "sha256": runtime_sha},
-                                  "admission_policy": {"path": str(policy_path), "sha256": policy_sha}},
+                                  "admission_policy": {"path": str(policy_path), "sha256": policy_sha},
+                                  "hypothesis_portfolio": {"path": str(portfolio_path.resolve()),
+                                                           "sha256": portfolio_file_sha},
+                                  "hypothesis_evidence_manifest": {
+                                      "path": str(evidence_manifest_path),
+                                      "sha256": evidence_manifest_file_sha},
+                                  "hypothesis_portfolio_contract": {
+                                      "path": str(contract_path.resolve()),
+                                      "sha256": contract_sha}},
              "planner_context": {"path": str(context_path), "sha256": context_sha},
              "source_plan": {"source_builder_id": _STATIC_IDS["source_builder"],
                              "evidence_plan_id": _STATIC_IDS["evidence_plan"],
@@ -805,6 +902,135 @@ def _reviewed_source_package(
                       for item in files]}
     return controller.ReviewedSourcePackage(
         config.instrument_commit, tuple(files), schemas.content_hash(body))
+
+
+_TEMPLATE_CHANGE_CLASSES = {
+    "cuda-fattn-v2": ("dispatcher",),
+    "cuda-fattn-tile-v1": ("dispatcher",),
+    "cuda-fattn-tile-entry-v1": ("dispatcher",),
+    "cuda-fattn-common-v1": ("arithmetic", "fusion"),
+    "cuda-mmvq-v2": ("arithmetic", "dispatcher"),
+    "cuda-vecdotq-v1": ("arithmetic",),
+    "cuda-quantize-q8-v1": ("arithmetic",),
+    "cuda-rope-v2": ("arithmetic",),
+    "cuda-norm-v2": ("arithmetic",),
+    "cuda-set-rows-v1": ("arithmetic", "layout"),
+}
+
+
+def _normalized_template_surfaces(
+        templates: ExperimentTemplateRegistry,
+        portfolio: hypothesis_portfolio.Portfolio) -> dict[str, Mapping[str, Any]]:
+    surfaces: dict[str, Mapping[str, Any]] = {}
+    for template_id, template in templates.templates.items():
+        exact = template.dispatch.anchor_exact
+        eligible = [row for row in portfolio.eligible_hypotheses()
+                    if template_id in row["current_bundle_eligibility"]["template_ids"]]
+        if len(eligible) > 1:
+            raise DeploymentFactoryError(
+                f"{template_id} has multiple eligible questions; v2 requires one exact "
+                "dispatch authority per template")
+        selected: set[tuple[str, int, int, int, int]] = set()
+        excluded: set[tuple[str, int, int, int, int]] = set()
+        for record in eligible:
+            current = next(anchor for anchor in record["dispatch_anchors"]
+                           if anchor["frame_id"] == portfolio.body["current_bundle"]["frame_id"])
+            for carrier, target in ((current["signatures"], selected),
+                                    (current["excluded_signatures"], excluded)):
+                for row in carrier:
+                    route = (row["route_id"], *(row[key] for key in
+                              ("calls", "grid", "workgroup", "lds_bytes")))
+                    if route in target:
+                        raise DeploymentFactoryError(
+                            f"portfolio repeats {template_id} dispatch geometry")
+                    target.add(route)
+        available = {(row.signature, row.calls, row.grid, row.workgroup,
+                      row.lds_bytes) for row in exact}
+        declared_exclusions: set[tuple[str, int, int, int, int]] = set()
+        for excluded_row in template.semantics.get("planner_target_exclusions", []):
+            matches = [row for row in exact
+                       if (row.kernel_pattern, row.calls, row.grid, row.workgroup,
+                           row.lds_bytes) == (
+                               excluded_row["kernel_pattern"], excluded_row["calls"],
+                               excluded_row["grid"], excluded_row["workgroup"],
+                               excluded_row["lds_bytes"])]
+            if len(matches) != 1:
+                raise DeploymentFactoryError(
+                    f"{template_id} exclusion lacks one exact deployed route")
+            row = matches[0]
+            declared_exclusions.add((row.signature, row.calls, row.grid,
+                                     row.workgroup, row.lds_bytes))
+        if eligible and (not selected or not selected.issubset(available)
+                         or excluded != declared_exclusions
+                         or not excluded.issubset(available)
+                         or selected & excluded):
+            raise DeploymentFactoryError(
+                f"portfolio geometry differs from {template_id} reviewed trace authority")
+        authorized = selected if eligible else available - declared_exclusions
+        dispatch = [{"route_id": route_id, "calls": calls, "grid": grid, "workgroup": workgroup,
+                     "lds_bytes": lds_bytes}
+                    for route_id, calls, grid, workgroup, lds_bytes in sorted(authorized)]
+        surfaces[template_id] = {
+            "source_files": sorted(template.allowed_files),
+            "source_symbols": sorted({symbol for symbols in
+                                      template.allowed_symbols.values()
+                                      for symbol in symbols}),
+            "change_classes": list(_TEMPLATE_CHANGE_CLASSES[template_id]),
+            "dispatch_signatures": dispatch,
+            "excluded_signatures": [
+                {"route_id": route_id, "calls": calls, "grid": grid, "workgroup": workgroup,
+                 "lds_bytes": lds_bytes}
+                for route_id, calls, grid, workgroup, lds_bytes in sorted(declared_exclusions)],
+        }
+    hypothesis_portfolio.validate_template_authorability(
+        portfolio, templates.version, surfaces)
+    return surfaces
+
+
+def _portfolio_dispatch_authority(
+        templates: ExperimentTemplateRegistry,
+        portfolio: hypothesis_portfolio.Portfolio) -> dict[str, list[dict[str, Any]]]:
+    """Bind eligible shorthand geometry to exact raw literals from the sealed CSV."""
+    aggregates: dict[tuple[str, int, int, int], int] = {}
+    with _PROFILE_TRACE_CSV.open(newline="", encoding="utf-8") as handle:
+        for row in csv.DictReader(handle):
+            identity = (row["KernelName"], int(row["grd"]), int(row["wgr"]),
+                        int(row["lds"]))
+            aggregates[identity] = aggregates.get(identity, 0) + 1
+    result: dict[str, list[dict[str, Any]]] = {}
+    for record in portfolio.eligible_hypotheses():
+        template_id = record["current_bundle_eligibility"]["template_ids"][0]
+        template = templates.templates[template_id]
+        current = next(anchor for anchor in record["dispatch_anchors"]
+                       if anchor["frame_id"] == portfolio.body["current_bundle"]["frame_id"])
+        rows: list[dict[str, Any]] = []
+        anchor_by_route = {row.signature: row for row in template.dispatch.anchor_exact}
+        for expected in current["signatures"]:
+            contract = anchor_by_route.get(expected["route_id"])
+            if (contract is None or (contract.calls, contract.grid, contract.workgroup,
+                                     contract.lds_bytes) != tuple(
+                    expected[key] for key in ("calls", "grid", "workgroup", "lds_bytes"))):
+                raise DeploymentFactoryError(
+                    f"{record['hypothesis_id']} route differs from deployed template")
+            matches = []
+            for (name, grid, workgroup, lds_bytes), calls in aggregates.items():
+                if ((calls, grid, workgroup, lds_bytes) != tuple(
+                        expected[key] for key in ("calls", "grid", "workgroup", "lds_bytes"))):
+                    continue
+                if re.fullmatch(contract.kernel_pattern, name):
+                    matches.append(name)
+            if len(matches) != 1:
+                raise DeploymentFactoryError(
+                    f"{record['hypothesis_id']} geometry lacks one exact raw trace literal")
+            rows.append({"route_id": expected["route_id"],
+                         "kernel_name": matches[0],
+                         **{key: expected[key] for key in
+                            ("calls", "grid", "workgroup", "lds_bytes")}})
+        if len({tuple(row.items()) for row in rows}) != len(rows):
+            raise DeploymentFactoryError(
+                f"{record['hypothesis_id']} repeats an exact raw dispatch row")
+        result[record["hypothesis_id"]] = rows
+    return result
 
 
 def _target_source_equality_receipt(config: deployment.DiscoveryDeployment) -> tuple[Path, str]:
@@ -1183,10 +1409,24 @@ def _seal_graph_receipt(config: deployment.DiscoveryDeployment,
                         critic_auth: Mapping[str, Any]) -> tuple[Path, str]:
     planner_launcher = Path(codex_container_actor.__file__).resolve(strict=True)
     critic_launcher = Path(claude_fable5_critic_actor.__file__).resolve(strict=True)
-    body = {"schema": "epyc.autokernel.static_discovery_graph.v3",
+    surfaces = _normalized_template_surfaces(
+        templates, config.hypothesis_portfolio.value)
+    body = {"schema": "epyc.autokernel.static_discovery_graph.v4",
             "authority": "nonpromotable_candidate_only_discovery", "promotion_claim": False,
             "inference_executed": False, "config_sha256": config.config_sha256,
             "registry_ids": dict(_STATIC_IDS), "template_registry_sha256": templates.registry_sha256,
+            "template_surfaces": surfaces,
+            "template_surfaces_sha256": schemas.content_hash(surfaces),
+            "portfolio_dispatch_authority":
+                config.planner_context.value["portfolio_dispatch_authority"],
+            "portfolio_dispatch_authority_sha256": schemas.content_hash(
+                config.planner_context.value["portfolio_dispatch_authority"]),
+            "hypothesis_portfolio": {
+                "semantic_sha256": config.hypothesis_portfolio.value.sha256,
+                "file_sha256": config.hypothesis_portfolio.input.sha256,
+                "evidence_manifest_sha256":
+                    config.hypothesis_evidence_manifest.value["manifest_sha256"],
+                "contract_sha256": config.hypothesis_portfolio_contract.sha256},
             "reviewed_source_package": source_package.manifest(),
             "profile_trace_authority": {
                 "receipt": str(_PROFILE_TRACE_RECEIPT),
@@ -1278,12 +1518,39 @@ def _seal_graph_receipt(config: deployment.DiscoveryDeployment,
 def build_static_deployment_graph(config: deployment.DiscoveryDeployment) -> StaticDeploymentGraph:
     """Construct the sole live graph.  No registry/executor object is accepted."""
     config.revalidate()
+    if (config.hypothesis_portfolio.value.sha256 != _PORTFOLIO_SEMANTIC_SHA256
+            or config.hypothesis_portfolio.input.sha256 != _PORTFOLIO_FILE_SHA256
+            or config.hypothesis_portfolio_contract.sha256
+            != _PORTFOLIO_CONTRACT_SHA256):
+        raise DeploymentFactoryError(
+            "deployment selected an unreviewed hypothesis portfolio authority")
     target_equality = _target_source_equality_receipt(config)
     instrument_review = _instrument_review_receipt(config)
     execution_modules = _execution_module_identity()
     templates = _template_registry()
+    try:
+        hypothesis_portfolio.validate_template_authorability(
+            config.hypothesis_portfolio.value, templates.version,
+            _normalized_template_surfaces(templates, config.hypothesis_portfolio.value))
+    except hypothesis_portfolio.PortfolioError as exc:
+        raise DeploymentFactoryError(
+            "portfolio exceeds the deployed template registry") from exc
     source_package = (_reviewed_source_package(config, templates)
                       if isinstance(config.instrument_commit, str) else None)
+    surfaces = _normalized_template_surfaces(templates, config.hypothesis_portfolio.value)
+    dispatch_authority = _portfolio_dispatch_authority(
+        templates, config.hypothesis_portfolio.value)
+    if (config.planner_context.value["reviewed_source_package_sha256"]
+            != source_package.package_sha256
+            or config.planner_context.value["template_registry_sha256"]
+            != templates.registry_sha256
+            or config.planner_context.value["template_surfaces"] != surfaces
+            or config.planner_context.value["template_surfaces_sha256"]
+            != schemas.content_hash(surfaces)
+            or config.planner_context.value["portfolio_dispatch_authority"]
+            != dispatch_authority):
+        raise DeploymentFactoryError(
+            "planner context differs from live reviewed source/template authority")
     registry = _static_registry(config, templates)
     production_snapshot = _require(
         registry["production_snapshot"][_STATIC_IDS["production_snapshot"]],
@@ -1794,7 +2061,7 @@ def controller_config(config: deployment.DiscoveryDeployment, *, dry_run: bool =
         max_iterations=config.max_iterations,
         nomination_threshold=config.nomination_threshold, dry_run=dry_run,
         planner_context={**config.planner_context.value,
-                         "admission_policy": config.admission_policy.value},
+                         "admission_policy": _plain(config.admission_policy.value)},
         planner_context_sha256=schemas.content_hash({
             "planner_context_sha256": config.planner_context.value["context_sha256"],
             "admission_policy_sha256": config.admission_policy.corpus.policy_sha256,
@@ -1806,6 +2073,8 @@ def controller_config(config: deployment.DiscoveryDeployment, *, dry_run: bool =
         admission_corpus_sha256=config.admission_policy.value["policy_sha256"],
         admission_corpus_version=config.admission_policy.corpus.version,
         deployment_identity_sha256=config.config_sha256,
+        hypothesis_portfolio=config.hypothesis_portfolio.value,
+        hypothesis_portfolio_sha256=config.hypothesis_portfolio.value.sha256,
         # The sealed deployment digest, not a caller argument, namespaces all
         # controller/worktree/receipt identities across concurrent deployments.
         campaign_id=f"ak-discovery-{config.config_sha256[:16]}")

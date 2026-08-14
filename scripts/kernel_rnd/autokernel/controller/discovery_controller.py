@@ -27,7 +27,7 @@ import stat
 import tempfile
 from typing import Any, Callable, Mapping, Protocol, Sequence
 
-from .. import campaign, journal, schemas, source_candidate
+from .. import campaign, hypothesis_portfolio, journal, schemas, source_candidate
 from . import claude_fable5_critic_actor, codex_container_actor, do_not_repeat, hypotheses
 from . import gpu_source_proofs
 from scripts.benchmark import autokernel_progression
@@ -204,7 +204,7 @@ class AuthoringAssignment:
             required = {"portfolio_sha256", "record_sha256", "hypothesis_id",
                         "statement", "falsifier", "mechanism_id", "regime",
                         "target_file", "target_symbols", "template_id",
-                        "change_class", "decision_policy"}
+                        "change_class", "decision_policy", "expected_dispatch"}
             value = self.portfolio_binding
             if (not isinstance(value, Mapping) or set(value) != required
                     or not HASH.fullmatch(str(value.get("portfolio_sha256")))
@@ -218,7 +218,13 @@ class AuthoringAssignment:
                     or not value["target_symbols"]
                     or not all(isinstance(item, str) and item
                                for item in value["target_symbols"])
-                    or not isinstance(value.get("decision_policy"), Mapping)):
+                    or not isinstance(value.get("decision_policy"), Mapping)
+                    or not isinstance(value.get("expected_dispatch"), (list, tuple))
+                    or not 1 <= len(value["expected_dispatch"]) <= 8
+                    or not all(isinstance(row, Mapping)
+                               and set(row) == {"route_id", "kernel_name", "calls", "grid",
+                                               "workgroup", "lds_bytes"}
+                               for row in value["expected_dispatch"])):
                 raise DiscoveryControllerError("invalid controller-owned portfolio binding")
 
     def to_dict(self) -> dict[str, Any]:
@@ -228,6 +234,7 @@ class AuthoringAssignment:
 @dataclass(frozen=True)
 class BoundedDispatchExpectation:
     """Planner-authored literal geometry; never a regex, argv, or command."""
+    route_id: str
     kernel_name: str
     calls: int
     grid: int
@@ -235,6 +242,8 @@ class BoundedDispatchExpectation:
     lds_bytes: int
 
     def __post_init__(self) -> None:
+        if not re.fullmatch(r"[a-z0-9][a-z0-9_.-]*\.anchor\.[0-9]+", self.route_id):
+            raise DiscoveryControllerError("dispatch route id is not deployed authority")
         # rocprof-v1 reports the complete demangled HIP symbol, including spaces,
         # pointers, template punctuation, and the ``[clone .kd]`` suffix.  This is
         # still a literal: the deployment factory escapes it before constructing
@@ -298,7 +307,8 @@ class GpuSourceExperimentIntent:
                 or not 1 <= len(self.expected_dispatch) <= 8
                 or not all(isinstance(item, BoundedDispatchExpectation)
                            for item in self.expected_dispatch)
-                or len({(item.kernel_name, item.grid, item.workgroup, item.lds_bytes)
+                or len({(item.route_id, item.kernel_name, item.grid,
+                         item.workgroup, item.lds_bytes)
                         for item in self.expected_dispatch}) != len(self.expected_dispatch)):
             raise DiscoveryControllerError(
                 "experiment intent requires 1..8 distinct bounded literal dispatch expectations")
@@ -584,6 +594,12 @@ class CodexPlanner:
         # argv, profile parser, or evidence regex.
         source_package = (None if self.reviewed_sources is None
                           else self.reviewed_sources.materialize(workspace))
+        planner_context = context.get("planner_context")
+        if (self.reviewed_sources is None or not isinstance(planner_context, Mapping)
+                or planner_context.get("reviewed_source_package_sha256")
+                != self.reviewed_sources.package_sha256):
+            raise DiscoveryControllerError(
+                "planner lacks the exact reviewed source preimage authority")
         contract = {
             "plan_json_keys": ["hypothesis_id", "statement", "falsifier", "regime",
                                "proposal", "source_manifest_path", "experiment_intent"],
@@ -601,7 +617,7 @@ class CodexPlanner:
                 context.get("admission_policy", {}).get("examples", [])
                 if isinstance(example, Mapping) and isinstance(example.get("id"), str)}),
             "expected_dispatch": "array of 1..8 exact objects",
-            "expected_dispatch_item_keys": ["kernel_name", "calls", "grid", "workgroup", "lds_bytes"],
+            "expected_dispatch_item_keys": ["route_id", "kernel_name", "calls", "grid", "workgroup", "lds_bytes"],
             "source_manifest_schema": {
                 "exact_keys": ["schema", "campaign_id", "proposal_id", "candidate_id",
                     "source_tree", "production_base_commit", "instrument_commit",
@@ -638,6 +654,7 @@ class CodexPlanner:
             example_template = binding["template_id"]
             example_mechanism = binding["mechanism_id"]
             example_change_class = binding["change_class"]
+            example_dispatch = list(binding["expected_dispatch"])
         else:
             example_file = "ggml/src/ggml-cuda/example.cu"
             example_symbol = "example_symbol"
@@ -649,6 +666,10 @@ class CodexPlanner:
             example_template = "replace-with-reviewed-id"
             example_mechanism = "bounded-example"
             example_change_class = "dispatcher"
+            example_dispatch = [{"kernel_name": "exact rocprof demangled literal",
+                                 "route_id": "replace-with-reviewed-id.anchor.0",
+                                 "calls": 1, "grid": 64,
+                                 "workgroup": 64, "lds_bytes": 0}]
         example_patch = (f"diff --git a/{example_file} b/{example_file}\n"
                          f"--- a/{example_file}\n+++ b/{example_file}\n"
                          f"@@ -1 +1 @@ {example_symbol}()\n-old\n+new\n")
@@ -664,8 +685,7 @@ class CodexPlanner:
                     "target_surface": "gpu_decode", "target_symbol": example_symbol,
                     "correctness_id": "backend-ops-hip-v1",
                     "dispatch_id": "decode-tg128-rocprof-v1",
-                    "expected_dispatch": [{"kernel_name": "exact rocprof demangled literal",
-                        "calls": 1, "grid": 64, "workgroup": 64, "lds_bytes": 0}] }},
+                    "expected_dispatch": example_dispatch}},
             "source-patch.json": {"schema": source_candidate.SCHEMA_SOURCE_PATCH,
                 "campaign_id": assignment["campaign_id"], "proposal_id": assignment["proposal_id"],
                 "candidate_id": assignment["candidate_id"], "source_tree": "llama.cpp",
@@ -1021,7 +1041,7 @@ class ControllerConfig:
     # well as the hashes separately carried below.  Durable state records this
     # one canonical identity so a resume cannot silently switch checkout roots.
     deployment_identity_sha256: str | None = None
-    hypothesis_portfolio: Mapping[str, Any] | None = None
+    hypothesis_portfolio: hypothesis_portfolio.Portfolio | None = None
     hypothesis_portfolio_sha256: str | None = None
     def __post_init__(self) -> None:
         if (not self.output_root.is_absolute() or not 1 <= self.max_iterations <= 1000
@@ -1048,6 +1068,11 @@ class ControllerConfig:
                 or self.hypothesis_portfolio_sha256 is not None
                 and not HASH.fullmatch(self.hypothesis_portfolio_sha256)):
             raise DiscoveryControllerError("invalid sealed hypothesis portfolio authority")
+        if (self.hypothesis_portfolio is not None
+                and (not isinstance(self.hypothesis_portfolio, hypothesis_portfolio.Portfolio)
+                     or self.hypothesis_portfolio.sha256 != self.hypothesis_portfolio_sha256)):
+            raise DiscoveryControllerError(
+                "controller portfolio must be one loader-validated immutable authority")
         sealed = (self.planner_context_sha256, self.production_base_commit,
                   self.instrument_commit, self.experiment_template_registry_sha256,
                   self.admission_corpus_sha256, self.admission_corpus_version,
@@ -1115,7 +1140,7 @@ def _portfolio_binding(config: ControllerConfig,
             or eligibility.get("eligible") is not True
             or not isinstance(mechanism, Mapping)
             or not isinstance(policy, Mapping)
-            or not isinstance(falsifiers, list) or not falsifiers
+            or not isinstance(falsifiers, (list, tuple)) or not falsifiers
             or record.get("primary_falsifier") not in falsifiers
             or not isinstance(record.get("regime"), Mapping)):
         raise DiscoveryControllerError("eligible portfolio record is incomplete")
@@ -1128,10 +1153,10 @@ def _portfolio_binding(config: ControllerConfig,
                    "sign_policy", "conflict_policy", "max_distinct_candidates",
                    "terminal_rule"}
     facets = mechanism.get("facets") if isinstance(mechanism, Mapping) else None
-    if (not isinstance(files, list) or len(files) != 1
-            or not isinstance(symbols, list) or not symbols
+    if (not isinstance(files, (list, tuple)) or len(files) != 1
+            or not isinstance(symbols, (list, tuple)) or not symbols
             or not all(isinstance(value, str) and value for value in files + symbols)
-            or not isinstance(templates, list) or len(templates) != 1
+            or not isinstance(templates, (list, tuple)) or len(templates) != 1
             or target.get("template_intent") != templates[0]
             or not HASH.fullmatch(str(mechanism.get("fingerprint_sha256")))
             or not isinstance(facets, Mapping)
@@ -1151,7 +1176,7 @@ def _portfolio_binding(config: ControllerConfig,
             "eligible portfolio record is not expressible by one exact reviewed template")
     binding = {
         "portfolio_sha256": config.hypothesis_portfolio_sha256,
-        "record_sha256": _sha(record),
+        "record_sha256": hypothesis_portfolio.content_sha256(record),
         "hypothesis_id": record.get("hypothesis_id"),
         "statement": record.get("statement"),
         "falsifier": record["primary_falsifier"],
@@ -1163,6 +1188,13 @@ def _portfolio_binding(config: ControllerConfig,
         "template_id": templates[0],
         "decision_policy": dict(policy),
     }
+    dispatch_authority = (config.planner_context or {}).get(
+        "portfolio_dispatch_authority", {})
+    rows = dispatch_authority.get(binding["hypothesis_id"])
+    if not isinstance(rows, list):
+        raise DiscoveryControllerError(
+            "eligible portfolio record lacks deployed raw dispatch authority")
+    binding["expected_dispatch"] = [dict(row) for row in rows]
     AuthoringAssignment(
         campaign_id="ak-portfolio-validation", proposal_id="akp-portfolio-validation",
         candidate_id="akc-portfolio-validation", production_base_commit="0" * 40,
@@ -1174,9 +1206,7 @@ def _select_portfolio_binding(state: Mapping[str, Any],
                               config: ControllerConfig) -> dict[str, Any] | None:
     if config.hypothesis_portfolio is None:
         return None
-    records = config.hypothesis_portfolio.get("hypotheses")
-    if not isinstance(records, list):
-        raise DiscoveryControllerError("hypothesis portfolio lacks records")
+    records = config.hypothesis_portfolio.hypotheses
     eligible = [row for row in records if isinstance(row, Mapping)
                 and isinstance(row.get("current_bundle_eligibility"), Mapping)
                 and row["current_bundle_eligibility"].get("eligible") is True]
@@ -1198,9 +1228,9 @@ def _select_portfolio_binding(state: Mapping[str, Any],
 
 
 def _validate_portfolio_candidate(item: PlannedCandidate, binding: Mapping[str, Any],
-                                  portfolio: Mapping[str, Any]) -> None:
+                                  portfolio: hypothesis_portfolio.Portfolio) -> None:
     """Refuse any actor attempt to rename or expand a reviewed question."""
-    for dnr in portfolio.get("do_not_repeat", ()):
+    for dnr in portfolio.do_not_repeat:
         if not isinstance(dnr, Mapping):
             raise DiscoveryControllerError("portfolio DNR record is malformed")
         mechanism = dnr.get("mechanism")
@@ -1222,7 +1252,9 @@ def _validate_portfolio_candidate(item: PlannedCandidate, binding: Mapping[str, 
                set(binding["target_symbols"])
             or intent is None
             or intent.template_id != binding["template_id"]
-            or intent.target_symbol not in binding["target_symbols"]):
+            or intent.target_symbol not in binding["target_symbols"]
+            or [asdict(row) for row in intent.expected_dispatch]
+               != list(binding["expected_dispatch"])):
         raise DiscoveryControllerError(
             "planner candidate differs from its controller-owned portfolio assignment")
 
@@ -1661,7 +1693,7 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                     try:
                         _validate_portfolio_candidate(
                             item, portfolio_binding,
-                            config.hypothesis_portfolio or {})
+                            config.hypothesis_portfolio)
                     except DiscoveryControllerError as exc:
                         row.update(status="portfolio_refused", reason=str(exc))
                         state["iterations"].append(row); state["next"] += 1

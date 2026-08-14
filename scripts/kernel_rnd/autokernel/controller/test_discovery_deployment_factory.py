@@ -13,6 +13,7 @@ from pathlib import Path
 from types import SimpleNamespace
 import tempfile
 
+from .. import hypothesis_portfolio
 from . import discovery_deployment_factory as F
 from . import discovery_controller as C
 
@@ -67,6 +68,39 @@ class DeploymentFactoryTests(unittest.TestCase):
             "reason": "Q5 false/true tail is not the reviewed true/true dequant route"}])
         q5_true = vecdot.dispatch.anchor_exact[:3]
         self.assertEqual(sum(row.calls for row in q5_true), 13_803)
+
+    def test_portfolio_dispatch_authority_round_trips_real_q5_and_q8_trace(self):
+        portfolio = hypothesis_portfolio.load(hypothesis_portfolio.DEFAULT_PORTFOLIO)
+        registry = F._template_registry()
+        surfaces = F._normalized_template_surfaces(registry, portfolio)
+        authority = F._portfolio_dispatch_authority(registry, portfolio)
+        self.assertEqual([(row["calls"], row["grid"]) for row in
+                          authority["akh-v2-q5-type-specific-dequant"]],
+                         [(6063, 57344), (4644, 8192), (3096, 311296)])
+        self.assertEqual([(row["calls"], row["grid"]) for row in
+                          authority["akh-v2-q8-quantizer-new-mechanism"]],
+                         [(15609, 1024), (3096, 5120)])
+        self.assertEqual(surfaces["cuda-vecdotq-v1"]["excluded_signatures"],
+                         [{"route_id": "cuda-vecdotq-v1.anchor.3",
+                           "calls": 129, "grid": 57344,
+                           "workgroup": 128, "lds_bytes": 512}])
+        rows = F.evidence._load_dispatches(F._PROFILE_TRACE_CSV)
+        for hypothesis_id, template_id in (
+                ("akh-v2-q5-type-specific-dequant", "cuda-vecdotq-v1"),
+                ("akh-v2-q8-quantizer-new-mechanism", "cuda-quantize-q8-v1")):
+            template = registry.templates[template_id]
+            expected = tuple(C.BoundedDispatchExpectation(**row)
+                             for row in authority[hypothesis_id])
+            intent = C.GpuSourceExperimentIntent(
+                template.template_id, template.target_surface,
+                template.target_symbol, template.correctness_id,
+                template.dispatch_id, expected)
+            bound = template.bind_dispatch(intent)
+            reduced = F.evidence._reduce_arm(
+                rows, exact=bound.candidate_exact,
+                forbidden=bound.candidate_forbidden,
+                invariants=bound.invariants)
+            self.assertEqual(len(reduced["exact"]), len(expected))
 
     def test_balanced_arm_schedule_is_seeded_and_s2_exactly_reverses_s1(self):
         first_seed, first = F._arm_order_schedule(
@@ -130,6 +164,17 @@ class DeploymentFactoryTests(unittest.TestCase):
         immutable = lambda path: SimpleNamespace(
             path=path.resolve(), sha256=hashlib.sha256(path.read_bytes()).hexdigest())
         registry_sha = F.static_template_registry_sha256()
+        portfolio = hypothesis_portfolio.load(hypothesis_portfolio.DEFAULT_PORTFOLIO)
+        templates = F._template_registry()
+        surfaces = F._normalized_template_surfaces(templates, portfolio)
+        source_body = {"schema": "epyc.autokernel.reviewed_source_package.v1",
+                       "instrument_commit": F._INSTRUMENT_COMMIT,
+                       "files": [{"relative_path": path,
+                                  "sha256": F._TARGET_SOURCE_SHA256[path],
+                                  "workspace_path": f"reviewed-source/{path}"}
+                                 for path in sorted(F._TARGET_SOURCE_SHA256)]}
+        portfolio_input = immutable(hypothesis_portfolio.DEFAULT_PORTFOLIO)
+        evidence_manifest = {"manifest_sha256": "f" * 64, "evidence": {}}
         config = SimpleNamespace(
             config_sha256="c" * 64, production_path=production.resolve(),
             production_branch=F.deployment.FROZEN_PRODUCTION_BRANCH,
@@ -152,7 +197,18 @@ class DeploymentFactoryTests(unittest.TestCase):
                     model_sha256=hashlib.sha256(model.read_bytes()).hexdigest(),
                     model_path=str(model.resolve()), model_bytes=model.stat().st_size,
                     workload="decode_tg128", calls_per_arm=9, device_id="mi210_0"),))),
-            planner_context=SimpleNamespace(value={"context_sha256": "b" * 64}),
+            planner_context=SimpleNamespace(value={
+                "context_sha256": "b" * 64,
+                "reviewed_source_package_sha256": F.schemas.content_hash(source_body),
+                "template_registry_sha256": registry_sha,
+                "template_surfaces": surfaces,
+                "template_surfaces_sha256": F.schemas.content_hash(surfaces),
+                "portfolio_dispatch_authority": F._portfolio_dispatch_authority(
+                    templates, portfolio)}),
+            hypothesis_portfolio=SimpleNamespace(value=portfolio, input=portfolio_input),
+            hypothesis_evidence_manifest=SimpleNamespace(value=evidence_manifest),
+            hypothesis_portfolio_contract=SimpleNamespace(
+                sha256=F._PORTFOLIO_CONTRACT_SHA256),
             source_builder_id="gpu-source-v1",
             evidence_plan_id="reviewed-gpu-source-evidence-v1",
             runner_args_id="qwen05b-tg128",
@@ -173,6 +229,31 @@ class DeploymentFactoryTests(unittest.TestCase):
         self.assertNotIn("registry", str(signature))
         self.assertNotIn("executor", str(signature))
         self.assertNotIn("journal", str(signature))
+
+    def test_public_initializer_vendors_and_revalidates_all_portfolio_evidence(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "portfolio-v2-bundle"
+            path = F.initialize_static_deployment_bundle(root)
+            loaded = F.deployment.load_deployment_config(path)
+            controller_config = F.controller_config(loaded, dry_run=True)
+            json.dumps(controller_config.planner_context)
+            portfolio = loaded.hypothesis_portfolio.value
+            self.assertEqual(portfolio.sha256,
+                             "a8f9db7b44e36c9f842b94f55257b82f736e149bd49377e29fa2dcb487aef64a")
+            rows = loaded.hypothesis_evidence_manifest.value["evidence"]
+            self.assertEqual(set(rows), {row["evidence_id"]
+                                         for row in portfolio.body["evidence"]})
+            self.assertTrue(all(str(root / "portfolio-evidence") in row["path"]
+                                for row in rows.values()))
+            self.assertFalse(any(
+                original["path"] == rows[original["evidence_id"]]["path"]
+                for original in portfolio.body["evidence"]))
+            carrier = Path(next(iter(rows.values()))["path"])
+            carrier.chmod(0o600)
+            carrier.write_bytes(b"tampered")
+            carrier.chmod(0o400)
+            with self.assertRaises(F.deployment.DeploymentConfigError):
+                F.deployment.load_deployment_config(path)
 
     def test_execution_module_attestor_refuses_any_live_byte_drift(self):
         sealed = {"runner": {"path": "/sealed/runner.py", "sha256": "a" * 64}}
@@ -306,6 +387,8 @@ class DeploymentFactoryTests(unittest.TestCase):
                            instrument_commit="c" * 40,
                            config_sha256="c" * 64,
                            experiment_template_registry_sha256="d" * 64)
+        portfolio = hypothesis_portfolio.load(hypothesis_portfolio.DEFAULT_PORTFOLIO)
+        config.hypothesis_portfolio = SimpleNamespace(value=portfolio)
         config.admission_policy = SimpleNamespace(
             value={"policy_sha256": "e" * 64, "examples": [], "profiles": []},
             corpus=SimpleNamespace(policy_sha256="e" * 64, version="test-v2"))

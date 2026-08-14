@@ -20,11 +20,11 @@ import re
 import subprocess
 from typing import Any, Mapping
 
-from .. import schemas
+from .. import hypothesis_portfolio, schemas
 from . import gpu_load_admission
 
 
-SCHEMA = "epyc.autokernel.discovery_deployment.v3"
+SCHEMA = "epyc.autokernel.discovery_deployment.v4"
 FROZEN_PRODUCTION_PATH = Path("/mnt/raid0/llm/llama.cpp")
 FROZEN_PRODUCTION_HEAD = "0db32c06e3e550065b78311a6031ef3dd2c4f27c"
 FROZEN_PRODUCTION_BRANCH = "production-consolidated-v9"
@@ -41,6 +41,14 @@ class DeploymentConfigError(RuntimeError):
 def _exact(value: object, keys: set[str], label: str) -> Mapping[str, Any]:
     if not isinstance(value, Mapping) or set(value) != keys:
         raise DeploymentConfigError(f"{label} must contain exactly {sorted(keys)}")
+    return value
+
+
+def _jsonable(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {key: _jsonable(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_jsonable(item) for item in value]
     return value
 
 
@@ -104,7 +112,8 @@ class ImmutableInput:
         _digest_file(self.path, self.sha256, label)
 
 
-PLANNER_CONTEXT_SCHEMA = "epyc.autokernel.discovery_planner_context.v1"
+PLANNER_CONTEXT_SCHEMA = "epyc.autokernel.discovery_planner_context.v2"
+EVIDENCE_MANIFEST_SCHEMA = "epyc.autokernel.hypothesis_evidence_manifest.v1"
 ADMISSION_POLICY_SCHEMA = gpu_load_admission.POLICY_SCHEMA
 _PLANNER_CONTEXT_LIMIT = 512 * 1024
 
@@ -133,6 +142,81 @@ class AdmissionPolicy:
             raise DeploymentConfigError("admission policy semantic identity changed")
 
 
+@dataclass(frozen=True)
+class HypothesisPortfolioInput:
+    input: ImmutableInput
+    value: hypothesis_portfolio.Portfolio
+
+    def revalidate(self) -> None:
+        self.input.revalidate("hypothesis_portfolio")
+        try:
+            refreshed = hypothesis_portfolio.load(self.input.path)
+        except hypothesis_portfolio.PortfolioError as exc:
+            raise DeploymentConfigError("hypothesis portfolio schema/content mismatch") from exc
+        if refreshed.sha256 != self.value.sha256:
+            raise DeploymentConfigError("hypothesis portfolio semantic identity changed")
+
+
+@dataclass(frozen=True)
+class HypothesisEvidenceManifest:
+    input: ImmutableInput
+    value: Mapping[str, Any]
+
+    def revalidate(self, portfolio: hypothesis_portfolio.Portfolio) -> None:
+        self.input.revalidate("hypothesis_evidence_manifest")
+        refreshed = _evidence_manifest(self.input, portfolio=portfolio)
+        if refreshed.value != self.value:
+            raise DeploymentConfigError("hypothesis evidence manifest changed")
+
+
+def _portfolio(raw: ImmutableInput) -> HypothesisPortfolioInput:
+    try:
+        value = hypothesis_portfolio.load(raw.path)
+    except hypothesis_portfolio.PortfolioError as exc:
+        raise DeploymentConfigError("hypothesis portfolio schema/content mismatch") from exc
+    return HypothesisPortfolioInput(raw, value)
+
+
+def _evidence_manifest(raw: ImmutableInput, *, portfolio: hypothesis_portfolio.Portfolio
+                       ) -> HypothesisEvidenceManifest:
+    try:
+        body = json.loads(raw.path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise DeploymentConfigError("hypothesis evidence manifest is not JSON") from exc
+    required = {"schema", "portfolio_sha256", "evidence", "manifest_sha256"}
+    if not isinstance(body, Mapping) or set(body) != required:
+        raise DeploymentConfigError("hypothesis evidence manifest schema is incomplete")
+    if (body["schema"] != EVIDENCE_MANIFEST_SCHEMA
+            or body["portfolio_sha256"] != portfolio.sha256
+            or body["manifest_sha256"] != schemas.content_hash(
+                {key: value for key, value in body.items() if key != "manifest_sha256"})):
+        raise DeploymentConfigError("hypothesis evidence manifest identity mismatch")
+    evidence = body["evidence"]
+    expected = {row["evidence_id"]: row["sha256"] for row in portfolio.body["evidence"]}
+    if not isinstance(evidence, Mapping) or set(evidence) != set(expected):
+        raise DeploymentConfigError("hypothesis evidence manifest coverage mismatch")
+    for evidence_id, row in evidence.items():
+        if not isinstance(row, Mapping) or set(row) != {"path", "sha256"}:
+            raise DeploymentConfigError("hypothesis evidence manifest row is malformed")
+        path = _absolute(row["path"], f"hypothesis evidence {evidence_id}.path")
+        expected_root = raw.path.parent.parent / "portfolio-evidence"
+        try:
+            resolved_evidence_root = expected_root.resolve(strict=True)
+            status = path.stat(follow_symlinks=False)
+        except OSError as exc:
+            raise DeploymentConfigError(
+                "hypothesis evidence bundle root/carrier is unavailable") from exc
+        if (not _under(path, resolved_evidence_root)
+                or status.st_uid != os.geteuid() or status.st_nlink != 1
+                or status.st_mode & 0o077):
+            raise DeploymentConfigError(
+                "hypothesis evidence is not a private bundle-owned carrier")
+        if row["sha256"] != expected[evidence_id]:
+            raise DeploymentConfigError("hypothesis evidence manifest digest differs from corpus")
+        _digest_file(path, row["sha256"], f"hypothesis evidence {evidence_id}")
+    return HypothesisEvidenceManifest(raw, dict(body))
+
+
 def _admission_policy(raw: ImmutableInput, *, model: ImmutableInput,
                       workload: ImmutableInput) -> AdmissionPolicy:
     try:
@@ -146,7 +230,9 @@ def _admission_policy(raw: ImmutableInput, *, model: ImmutableInput,
 
 
 def _planner_context(value: object, *, model: ImmutableInput,
-                     workload: ImmutableInput, runtime_config: ImmutableInput) -> PlannerContext:
+                     workload: ImmutableInput, runtime_config: ImmutableInput,
+                     portfolio: HypothesisPortfolioInput,
+                     evidence_manifest: HypothesisEvidenceManifest) -> PlannerContext:
     raw = _input(value, "planner_context")
     if raw.path.stat().st_size > _PLANNER_CONTEXT_LIMIT:
         raise DeploymentConfigError("planner_context exceeds its bounded actor input limit")
@@ -156,7 +242,13 @@ def _planner_context(value: object, *, model: ImmutableInput,
         raise DeploymentConfigError("planner_context is not JSON") from exc
     required = {"schema", "context_sha256", "model_sha256", "workload_sha256",
                 "runtime_config_sha256", "profile_receipts", "hotspots",
-                "source_constraints", "initial_strategies"}
+                "source_constraints", "initial_strategies",
+                "hypothesis_portfolio_sha256", "eligible_hypotheses",
+                "do_not_repeat", "incumbents", "ineligible_hypotheses",
+                "hypothesis_evidence_manifest_sha256", "hypothesis_evidence",
+                "reviewed_source_package_sha256", "template_registry_sha256",
+                "template_surfaces_sha256", "template_surfaces",
+                "portfolio_dispatch_authority"}
     if not isinstance(body, Mapping) or set(body) != required:
         raise DeploymentConfigError("planner_context has an unknown or incomplete schema")
     if body["schema"] != PLANNER_CONTEXT_SCHEMA:
@@ -169,6 +261,42 @@ def _planner_context(value: object, *, model: ImmutableInput,
             body.get("runtime_config_sha256")) != (model.sha256, workload.sha256,
                                                       runtime_config.sha256):
         raise DeploymentConfigError("planner_context is not bound to sealed model/workload/runtime")
+    if body.get("hypothesis_portfolio_sha256") != portfolio.value.sha256:
+        raise DeploymentConfigError("planner_context is not bound to the sealed portfolio")
+    if body.get("hypothesis_evidence_manifest_sha256") != evidence_manifest.value["manifest_sha256"]:
+        raise DeploymentConfigError("planner_context is not bound to vendored portfolio evidence")
+    if (not all(SHA.fullmatch(str(body.get(key))) for key in (
+            "reviewed_source_package_sha256", "template_registry_sha256",
+            "template_surfaces_sha256"))
+            or schemas.content_hash(body.get("template_surfaces"))
+            != body.get("template_surfaces_sha256")):
+        raise DeploymentConfigError("planner_context source/template authority is malformed")
+    if body.get("hypothesis_evidence") != evidence_manifest.value["evidence"]:
+        raise DeploymentConfigError("planner_context evidence projection differs from vendored manifest")
+    if not all(isinstance(body.get(key), list) for key in (
+            "eligible_hypotheses", "do_not_repeat", "incumbents", "ineligible_hypotheses")):
+        raise DeploymentConfigError("planner_context portfolio partitions are malformed")
+    hypotheses = tuple(portfolio.value.hypotheses)
+    expected_partitions = {
+        "eligible_hypotheses": _jsonable(portfolio.value.eligible_projection()),
+        "do_not_repeat": _jsonable(portfolio.value.dnr_projection()),
+        "incumbents": _jsonable(tuple(row for row in hypotheses
+                                       if row["status"] == "candidate_incumbent")),
+        "ineligible_hypotheses": _jsonable(tuple(row for row in hypotheses
+                                                  if not row["current_bundle_eligibility"]["eligible"])),
+    }
+    if any(body[key] != expected for key, expected in expected_partitions.items()):
+        raise DeploymentConfigError("planner_context portfolio projection is not exact")
+    dispatch_authority = body["portfolio_dispatch_authority"]
+    eligible_ids = {row["hypothesis_id"] for row in portfolio.value.eligible_hypotheses()}
+    if (not isinstance(dispatch_authority, Mapping)
+            or set(dispatch_authority) != eligible_ids
+            or any(not isinstance(rows, list) or not 1 <= len(rows) <= 8
+                   or any(not isinstance(row, Mapping)
+                          or set(row) != {"route_id", "kernel_name", "calls", "grid", "workgroup", "lds_bytes"}
+                          for row in rows)
+                   for rows in dispatch_authority.values())):
+        raise DeploymentConfigError("planner_context dispatch authority is malformed")
     receipts = body["profile_receipts"]
     hotspots = body["hotspots"]
     if (not isinstance(receipts, list) or len(receipts) > 64
@@ -236,6 +364,9 @@ class DiscoveryDeployment:
     runtime_config: ImmutableInput
     policy: ImmutableInput
     admission_policy: AdmissionPolicy
+    hypothesis_portfolio: HypothesisPortfolioInput
+    hypothesis_evidence_manifest: HypothesisEvidenceManifest
+    hypothesis_portfolio_contract: ImmutableInput
     planner_context: PlannerContext
     source_builder_id: str
     evidence_plan_id: str
@@ -256,6 +387,9 @@ class DiscoveryDeployment:
                              ("runtime_config", self.runtime_config), ("policy", self.policy)):
             value.revalidate(label)
         self.admission_policy.revalidate()
+        self.hypothesis_portfolio.revalidate()
+        self.hypothesis_evidence_manifest.revalidate(self.hypothesis_portfolio.value)
+        self.hypothesis_portfolio_contract.revalidate("hypothesis_portfolio_contract")
         self.planner_context.revalidate()
 
 
@@ -419,21 +553,43 @@ def load_deployment_config(path: Path) -> DiscoveryDeployment:
         raise DeploymentConfigError("gpu.inference_window_lock parent/file is invalid")
     if _overlaps(window, production_path):
         raise DeploymentConfigError("gpu.inference_window_lock must not enter frozen production")
-    inputs = _exact(top["immutable_inputs"], {"model", "workload", "runtime_config", "admission_policy"}, "immutable_inputs")
+    inputs = _exact(top["immutable_inputs"], {
+        "model", "workload", "runtime_config", "admission_policy",
+        "hypothesis_portfolio", "hypothesis_evidence_manifest",
+        "hypothesis_portfolio_contract"}, "immutable_inputs")
     source = _exact(top["source_plan"], {"source_builder_id", "evidence_plan_id",
                                            "runner_args_id", "experiment_template_registry_id", "experiment_template_registry_sha256",
                                            "production_snapshot_id"}, "source_plan")
+    template_registry_sha256 = _digest_identifier(
+        source["experiment_template_registry_sha256"],
+        "source_plan.experiment_template_registry_sha256")
     model = _input(inputs["model"], "model")
     workload = _input(inputs["workload"], "workload")
     runtime_config = _input(inputs["runtime_config"], "runtime_config")
     admission_policy_input = _input(inputs["admission_policy"], "admission_policy")
     admission_policy = _admission_policy(admission_policy_input, model=model, workload=workload)
+    portfolio_input = _portfolio(_input(inputs["hypothesis_portfolio"],
+                                        "hypothesis_portfolio"))
+    evidence_manifest = _evidence_manifest(
+        _input(inputs["hypothesis_evidence_manifest"], "hypothesis_evidence_manifest"),
+        portfolio=portfolio_input.value)
+    portfolio_contract = _input(inputs["hypothesis_portfolio_contract"],
+                                "hypothesis_portfolio_contract")
     planner_context = _planner_context(top["planner_context"], model=model,
-                                       workload=workload, runtime_config=runtime_config)
+                                       workload=workload, runtime_config=runtime_config,
+                                       portfolio=portfolio_input,
+                                       evidence_manifest=evidence_manifest)
+    if planner_context.value["template_registry_sha256"] != template_registry_sha256:
+        raise DeploymentConfigError(
+            "planner_context template registry differs from source plan")
     for label, input_ in (("actors.wrapper", actor_wrapper), ("actors.critic", critic_wrapper),
                           ("model", model),
                           ("workload", workload), ("runtime_config", runtime_config),
-                          ("admission_policy", admission_policy_input), ("planner_context", planner_context.input)):
+                          ("admission_policy", admission_policy_input),
+                          ("hypothesis_portfolio", portfolio_input.input),
+                          ("hypothesis_evidence_manifest", evidence_manifest.input),
+                          ("hypothesis_portfolio_contract", portfolio_contract),
+                          ("planner_context", planner_context.input)):
         if any(_overlaps(input_.path, protected)
                for protected in (*roots.values(), production_path, instrument_path)):
             raise DeploymentConfigError(
@@ -451,12 +607,16 @@ def load_deployment_config(path: Path) -> DiscoveryDeployment:
         environment_profile_id=environment_profile_id, device_id=device_id,
         claim_timeout_s=float(claim_timeout_s), inference_window_lock=window,
         model=model, workload=workload, admission_policy=admission_policy,
-        runtime_config=runtime_config, policy=admission_policy_input, planner_context=planner_context,
+        runtime_config=runtime_config, policy=admission_policy_input,
+        hypothesis_portfolio=portfolio_input,
+        hypothesis_evidence_manifest=evidence_manifest,
+        hypothesis_portfolio_contract=portfolio_contract,
+        planner_context=planner_context,
         source_builder_id=_identifier(source["source_builder_id"], "source_plan.source_builder_id"),
         evidence_plan_id=_identifier(source["evidence_plan_id"], "source_plan.evidence_plan_id"),
         runner_args_id=_identifier(source["runner_args_id"], "source_plan.runner_args_id"),
         experiment_template_registry_id=_identifier(source["experiment_template_registry_id"], "source_plan.experiment_template_registry_id"),
-        experiment_template_registry_sha256=_digest_identifier(source["experiment_template_registry_sha256"], "source_plan.experiment_template_registry_sha256"),
+        experiment_template_registry_sha256=template_registry_sha256,
         inference_window_lease_id=_identifier(gpu["inference_window_lease_id"], "gpu.inference_window_lease_id"),
         production_snapshot_id=_identifier(source["production_snapshot_id"], "source_plan.production_snapshot_id"),
     )
@@ -488,5 +648,7 @@ def resolve_registry(config: DiscoveryDeployment, registry: Mapping[str, Mapping
     return ResolvedDeployment(config=config, **values)
 
 
-__all__ = ["SCHEMA", "PLANNER_CONTEXT_SCHEMA", "DeploymentConfigError", "ImmutableInput", "PlannerContext", "DiscoveryDeployment",
+__all__ = ["SCHEMA", "PLANNER_CONTEXT_SCHEMA", "EVIDENCE_MANIFEST_SCHEMA",
+           "DeploymentConfigError", "ImmutableInput", "PlannerContext",
+           "HypothesisPortfolioInput", "HypothesisEvidenceManifest", "DiscoveryDeployment",
            "ResolvedDeployment", "load_deployment_config", "resolve_registry"]

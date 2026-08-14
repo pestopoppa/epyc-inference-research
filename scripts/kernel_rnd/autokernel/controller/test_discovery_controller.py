@@ -4,6 +4,7 @@ import argparse, hashlib, json, tempfile, unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
+from .. import hypothesis_portfolio
 from . import discovery_controller as D
 
 H="a"*64
@@ -54,8 +55,16 @@ class Tests(unittest.TestCase):
                "metric":"decode_tokens_per_s","effect_unit":"relative_percent",
                "min_replication_effect_pct":0.0,"max_replication_spread_pct":1.0}}
  def portfolio_config(self, root, records):
+  portfolio=hypothesis_portfolio.Portfolio(
+      {"hypotheses":records,"frames":[],"do_not_repeat":[]},"f"*64)
   return D.ControllerConfig(root,3,dry_run=True,
-      hypothesis_portfolio={"hypotheses":records,"frames":[],"do_not_repeat":[]},
+      planner_context={"portfolio_dispatch_authority": {
+          row["hypothesis_id"]: [{"route_id":"cuda-quantize-q8-v1.anchor.0",
+                                  "kernel_name":"quantize_q8_1", "calls":18705,
+                                  "grid":1024,"workgroup":256,"lds_bytes":0}]
+          for row in records if row["current_bundle_eligibility"]["eligible"]}},
+      planner_context_sha256="e"*64,
+      hypothesis_portfolio=portfolio,
       hypothesis_portfolio_sha256="f"*64)
  def portfolio_candidate(self, binding, *, hypothesis_id=None, mechanism_id=None,
                          regime=None):
@@ -71,7 +80,8 @@ class Tests(unittest.TestCase):
       patch_sha256=hashlib.sha256(patch).hexdigest(),patch_bytes=patch)
   intent=D.GpuSourceExperimentIntent(binding["template_id"],"gpu_decode",symbols[0],
       "backend-ops-hip-v1","decode-tg128-rocprof-v1",
-      (D.BoundedDispatchExpectation("quantize_q8_1",18705,1024,256,0),))
+      tuple(D.BoundedDispatchExpectation(**row)
+            for row in binding["expected_dispatch"]))
   return D.PlannedCandidate(hypothesis_id or binding["hypothesis_id"],
       binding["statement"],binding["falsifier"],regime or binding["regime"],
       {"proposal_id":"akp-test","change_class":binding["change_class"]},
@@ -94,12 +104,37 @@ class Tests(unittest.TestCase):
     D._validate_portfolio_candidate(
         self.portfolio_candidate(second,hypothesis_id="akh-invented"),second,
         config.hypothesis_portfolio)
+ def test_portfolio_dispatch_rows_refuse_missing_extra_and_duplicate_precompute(self):
+  with tempfile.TemporaryDirectory() as t:
+   config=self.portfolio_config(Path(t),[self.portfolio_record()])
+   binding=D._select_portfolio_binding({"iterations":[]},config)
+   candidate=self.portfolio_candidate(binding)
+   base=candidate.experiment_intent
+   for rows in ((), base.expected_dispatch + (
+           D.BoundedDispatchExpectation("cuda-quantize-q8-v1.anchor.1",
+                                        "quantize_q8_1_extra",1,64,64,0),)):
+    altered=D.GpuSourceExperimentIntent(
+        base.template_id,base.target_surface,base.target_symbol,
+        base.correctness_id,base.dispatch_id,rows or (
+            D.BoundedDispatchExpectation("cuda-quantize-q8-v1.anchor.1",
+                                         "quantize_q8_1_missing",1,64,64,0),))
+    bad=D.PlannedCandidate(candidate.hypothesis_id,candidate.statement,
+        candidate.falsifier,candidate.regime,candidate.proposal,
+        candidate.source_manifest,candidate.source_manifest_sha256,altered)
+    with self.assertRaisesRegex(D.DiscoveryControllerError,"portfolio assignment"):
+     D._validate_portfolio_candidate(bad,binding,config.hypothesis_portfolio)
+   with self.assertRaisesRegex(D.DiscoveryControllerError,"distinct"):
+    D.GpuSourceExperimentIntent(
+        base.template_id,base.target_surface,base.target_symbol,
+        base.correctness_id,base.dispatch_id,
+        (base.expected_dispatch[0],base.expected_dispatch[0]))
  def test_portfolio_exact_dnr_match_refuses_before_selected_binding(self):
   with tempfile.TemporaryDirectory() as t:
    record=self.portfolio_record(); config=self.portfolio_config(Path(t),[record])
    binding=D._select_portfolio_binding({"iterations":[]},config)
    dnr={"mechanism":{"fingerprint_sha256":"e"*64},"regime":{"phase":"decode"}}
-   portfolio={**config.hypothesis_portfolio,"do_not_repeat":[dnr]}
+   portfolio=hypothesis_portfolio.Portfolio(
+       {**config.hypothesis_portfolio.body,"do_not_repeat":[dnr]},"f"*64)
    with self.assertRaisesRegex(D.DiscoveryControllerError,"DNR"):
     D._validate_portfolio_candidate(
         self.portfolio_candidate(binding,mechanism_id="e"*64,
@@ -196,7 +231,9 @@ class Tests(unittest.TestCase):
         patch.object(D.codex_container_actor,"run_actor",side_effect=actor), \
         patch.object(D,"_load_plan",side_effect=AssertionError("mutated source reached loader")):
     with self.assertRaisesRegex(D.DiscoveryControllerError,"source bytes changed"):
-     planner.plan(context={"authoring_assignment":assignment.to_dict()},workspace=root)
+     planner.plan(context={"authoring_assignment":assignment.to_dict(),
+                           "planner_context":{"reviewed_source_package_sha256":
+                                              package.package_sha256}},workspace=root)
  def test_planner_prompt_has_exact_schemas_source_paths_and_structural_example(self):
   package=self.source_package(); captured={}
   with tempfile.TemporaryDirectory() as t:
@@ -213,7 +250,9 @@ class Tests(unittest.TestCase):
    with patch.object(D.codex_container_actor,"runtime_identity",return_value=RUNTIME), \
         patch.object(D.codex_container_actor,"run_actor",side_effect=actor):
     with self.assertRaisesRegex(D.DiscoveryControllerError,"Sol actor failed"):
-     planner.plan(context={"authoring_assignment":assignment.to_dict()},workspace=root)
+     planner.plan(context={"authoring_assignment":assignment.to_dict(),
+                           "planner_context":{"reviewed_source_package_sha256":
+                                              package.package_sha256}},workspace=root)
    self.assertEqual(captured["reviewed_source_package"]["package_sha256"],package.package_sha256)
    self.assertEqual(captured["authoring_contract"]["expected_dispatch"],"array of 1..8 exact objects")
    self.assertEqual(captured["structural_example_only"]["source-patch.json"]["patch_encoding"],"base64")
@@ -258,15 +297,26 @@ class Tests(unittest.TestCase):
    with self.assertRaisesRegex(D.DiscoveryControllerError,"already exists|symlink"):
     package.materialize(root)
  def test_bounded_dispatch_refuses_meta_and_out_of_range_literals(self):
-  valid=D.BoundedDispatchExpectation("kernel_6",2,128,64,0)
+  valid=D.BoundedDispatchExpectation("template-v1.anchor.0","kernel_6",2,128,64,0)
   self.assertEqual(valid.kernel_name,"kernel_6")
   for name in ("kernel.*", "kernel[0]", "kernel name"):
    with self.subTest(name=name), self.assertRaises(D.DiscoveryControllerError):
-    D.BoundedDispatchExpectation(name,1,1,1,0)
-  with self.assertRaises(D.DiscoveryControllerError): D.BoundedDispatchExpectation("kernel",1,1,4097,0)
+    D.BoundedDispatchExpectation("template-v1.anchor.0",name,1,1,1,0)
+  with self.assertRaises(D.DiscoveryControllerError): D.BoundedDispatchExpectation("template-v1.anchor.0","kernel",1,1,4097,0)
   full="void kernel<float>(float const*, void*) [clone .kd]"
-  self.assertEqual(D.BoundedDispatchExpectation(full,2,128,64,0).kernel_name,full)
+  self.assertEqual(D.BoundedDispatchExpectation("template-v1.anchor.0",full,2,128,64,0).kernel_name,full)
  def cfg(self,root,n=2): return D.ControllerConfig(root/"out",n)
+ def test_old_v3_and_v4_durable_state_refuse(self):
+  for version in ("v3","v4"):
+   with self.subTest(version=version), tempfile.TemporaryDirectory() as t:
+    root=Path(t); store=D.DurableState(root)
+    body={"schema":f"epyc.autokernel.discovery_controller.{version}",
+          "authority":D.AUTHORITY,"roster":D.sealed_roster(),
+          "iterations":[],"next":1,"complete":False}
+    body["state_sha256"]=D._sha(body)
+    D._atomic(store.path,body)
+    with self.assertRaisesRegex(D.DiscoveryControllerError,"wrong controller journal"):
+     store.load()
  def test_exact_sol_planner_and_fable5_critic(self):
   self.assertEqual(D.sealed_roster()["claude_members"],1); self.assertEqual([x["model"] for x in D.sealed_roster()["members"]],["gpt-5.6-sol","claude-fable-5"])
  def test_legacy_terra_roster_state_refuses_resume(self):

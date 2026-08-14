@@ -8,6 +8,7 @@ import unittest
 from unittest import mock
 from types import SimpleNamespace
 
+from .. import hypothesis_portfolio
 from . import discovery_deployment as D
 
 
@@ -62,6 +63,38 @@ class DeploymentConfigTests(unittest.TestCase):
         policy_path = Path(inputs["admission_policy"]["path"])
         policy_path.write_text(json.dumps(policy_body), encoding="utf-8")
         inputs["admission_policy"]["sha256"] = digest(policy_path)
+        portfolio = hypothesis_portfolio.load(hypothesis_portfolio.DEFAULT_PORTFOLIO)
+        config_dir = root / "config"
+        config_dir.mkdir()
+        portfolio_path = config_dir / "portfolio.json"
+        portfolio_path.write_bytes(hypothesis_portfolio.DEFAULT_PORTFOLIO.read_bytes())
+        inputs["hypothesis_portfolio"] = {
+            "path": str(portfolio_path), "sha256": digest(portfolio_path)}
+        contract_path = config_dir / "HYPOTHESIS_PORTFOLIO_V2.md"
+        contract_path.write_bytes(hypothesis_portfolio.DEFAULT_PORTFOLIO.with_name(
+            "HYPOTHESIS_PORTFOLIO_V2.md").read_bytes())
+        inputs["hypothesis_portfolio_contract"] = {
+            "path": str(contract_path), "sha256": digest(contract_path)}
+        evidence = {}
+        evidence_root = root / "portfolio-evidence"
+        evidence_root.mkdir()
+        for row in portfolio.body["evidence"]:
+            target = evidence_root / f"{row['evidence_id']}.bin"
+            target.write_bytes(Path(row["path"]).read_bytes())
+            target.chmod(0o400)
+            evidence[row["evidence_id"]] = {"path": str(target),
+                                               "sha256": row["sha256"]}
+        evidence_manifest = {
+            "schema": D.EVIDENCE_MANIFEST_SCHEMA,
+            "portfolio_sha256": portfolio.sha256, "evidence": evidence}
+        evidence_manifest["manifest_sha256"] = D.schemas.content_hash(evidence_manifest)
+        evidence_path = config_dir / "evidence-manifest.json"
+        evidence_path.write_text(json.dumps(evidence_manifest), encoding="utf-8")
+        inputs["hypothesis_evidence_manifest"] = {
+            "path": str(evidence_path), "sha256": digest(evidence_path)}
+        def plain(value):
+            return json.loads(json.dumps(value, default=lambda item: dict(item)))
+        template_surfaces = {"test": {"source_files": ["ggml.cu"]}}
         planner_context = {
             "schema": D.PLANNER_CONTEXT_SCHEMA,
             "model_sha256": inputs["model"]["sha256"],
@@ -74,6 +107,26 @@ class DeploymentConfigTests(unittest.TestCase):
                            "source_excerpt_sha256": hashlib.sha256(b"__global__ void kernel() {}").hexdigest()}],
             "source_constraints": {"allowed_roots": ["ggml/src/ggml-hip/"]},
             "initial_strategies": ["one wave"],
+            "hypothesis_portfolio_sha256": portfolio.sha256,
+            "eligible_hypotheses": plain(portfolio.eligible_projection()),
+            "do_not_repeat": plain(portfolio.dnr_projection()),
+            "incumbents": plain([row for row in portfolio.hypotheses
+                                  if row["status"] == "candidate_incumbent"]),
+            "ineligible_hypotheses": plain([
+                row for row in portfolio.hypotheses
+                if not row["current_bundle_eligibility"]["eligible"]]),
+            "hypothesis_evidence_manifest_sha256": evidence_manifest["manifest_sha256"],
+            "hypothesis_evidence": evidence,
+            "reviewed_source_package_sha256": "e" * 64,
+            "template_registry_sha256": "d" * 64,
+            "template_surfaces_sha256": D.schemas.content_hash(template_surfaces),
+            "template_surfaces": template_surfaces,
+            "portfolio_dispatch_authority": {
+                row["hypothesis_id"]: [{
+                    "route_id": f"{row['current_bundle_eligibility']['template_ids'][0]}.anchor.0",
+                    "kernel_name": "kernel()", "calls": 1,
+                                        "grid": 64, "workgroup": 64, "lds_bytes": 0}]
+                for row in portfolio.eligible_hypotheses()},
         }
         planner_context["context_sha256"] = D.schemas.content_hash(
             {key: item for key, item in planner_context.items() if key != "context_sha256"})
@@ -142,6 +195,15 @@ class DeploymentConfigTests(unittest.TestCase):
                 path.write_text(json.dumps(raw), encoding="utf-8")
                 with self.assertRaises(D.DeploymentConfigError):
                     self.load(path)
+
+    def test_old_v3_bundle_refuses_before_materialization(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path, raw = self.config(Path(temp))
+            raw["schema"] = "epyc.autokernel.discovery_deployment.v3"
+            seal(raw)
+            path.write_text(json.dumps(raw), encoding="utf-8")
+            with self.assertRaisesRegex(D.DeploymentConfigError, "schema mismatch"):
+                self.load(path)
 
     def test_rejects_production_output_path_and_tampered_input(self):
         with tempfile.TemporaryDirectory() as temp:
