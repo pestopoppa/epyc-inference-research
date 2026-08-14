@@ -17,8 +17,11 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Callable, Mapping
 
-from .. import schemas
-from ..execution import inference_window, device_sampler
+from .. import schemas, source_candidate
+from ..execution import inference_window, device_sampler, worktree
+from ..execution import cpu_region_claim
+from ..execution import instrument_integrity
+from ..evaluator import integrity
 from ..resource import device_claim
 from . import discovery_controller as controller
 from . import discovery_deployment as deployment
@@ -213,6 +216,15 @@ def _execution_module_identity() -> dict[str, dict[str, str]]:
         "gpu_discovery_runner": Path(controller.gpu_discovery.__file__).resolve(strict=True),
         "gpu_source_adapter": Path(gpu_source_adapter.__file__).resolve(strict=True),
         "discovery_static_registry": Path(discovery_static_registry.__file__).resolve(strict=True),
+        "discovery_deployment": Path(deployment.__file__).resolve(strict=True),
+        "gpu_load_admission": Path(gpu_load_admission.__file__).resolve(strict=True),
+        "split_runtime_verifier": Path(controller.gpu_discovery.split_runtime_verifier.__file__).resolve(strict=True),
+        "inference_window": Path(inference_window.__file__).resolve(strict=True),
+        "cpu_region_claim": Path(cpu_region_claim.__file__).resolve(strict=True),
+        "worktree": Path(worktree.__file__).resolve(strict=True),
+        "source_candidate": Path(source_candidate.__file__).resolve(strict=True),
+        "instrument_integrity": Path(instrument_integrity.__file__).resolve(strict=True),
+        "evaluator_integrity": Path(integrity.__file__).resolve(strict=True),
         "gpu_source_evidence": Path(evidence.__file__).resolve(strict=True),
         "gpu_source_proofs": Path(gpu_source_proofs.__file__).resolve(strict=True),
         "gpu_discovery_beliefs": Path(autokernel_gpu_discovery_beliefs.__file__).resolve(strict=True),

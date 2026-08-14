@@ -482,6 +482,7 @@ class GovernedGpuSourceAdapter:
 
     def reconcile(self, inflight: Mapping[str, Any]) -> Any:
         try:
+            self.runner_attest()
             identity = _inflight_identity(inflight)
             root = self._root(identity["operation_key"])
             if not root.exists() and not root.is_symlink():

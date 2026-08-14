@@ -497,7 +497,8 @@ def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
            kfd_pid_provider: Callable[[], tuple[int, ...]] | None = None,
            vram_reader: Callable[[], int] | None = None,
            pgid_provider: Callable[[int], int] | None = None,
-           sleep: Callable[[float], None] | None = None) -> dict:
+           sleep: Callable[[float], None] | None = None,
+           supervisor_root: Path | None = None) -> dict:
     """Run one cold load and all sealed repetitions for one discovery arm."""
     if isinstance(repetitions, bool) or not isinstance(repetitions, int) or repetitions < 1:
         raise RuntimeError("GPU discovery repetitions must be a positive integer")
@@ -532,7 +533,8 @@ def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
             reward_binary=reward_binary, hip_library_dir=hip_library_dir, common_loader_dir=common_loader_dir,
             runtime_arm=runtime_arm, repetitions=repetitions,
             process_factory=process_factory, kfd_pid_provider=kfd_pid_provider,
-            vram_reader=vram_reader, pgid_provider=pgid_provider, sleep=sleep)
+            vram_reader=vram_reader, pgid_provider=pgid_provider, sleep=sleep,
+            supervisor_root=supervisor_root)
         # Deliberately no shared CPU inference-window lock here.  The sealed
         # admission receipt, not model size or caller flags, admits this noise.
         result["inference_call_window"] = None
@@ -632,7 +634,8 @@ def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
             on_load_ready=(release_for_ready if ready_continue_handshake is not None else None),
             process_factory=process_factory,
             kfd_pid_provider=kfd_pid_provider, vram_reader=vram_reader,
-            pgid_provider=pgid_provider, sleep=sleep)
+            pgid_provider=pgid_provider, sleep=sleep,
+            supervisor_root=supervisor_root)
         if getattr(coverage, "borrowed", False) and configured_lease.held:
             coverage.validate()
     finally:
@@ -678,7 +681,8 @@ def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
                    vram_reader: Callable[[], int] | None = None,
                    pgid_provider: Callable[[int], int] | None = None,
                    sleep: Callable[[float], None] | None = None,
-                   max_runtime_s: float = 1800.0) -> dict:
+                   max_runtime_s: float = 1800.0,
+                   supervisor_root: Path | None = None) -> dict:
     if isinstance(repetitions, bool) or not isinstance(repetitions, int) or repetitions < 1:
         raise RuntimeError("GPU discovery repetitions must be a positive integer")
     if (isinstance(max_runtime_s, bool) or not isinstance(max_runtime_s, (int, float))
@@ -732,16 +736,29 @@ def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
     # Real children write to regular files, not PIPEs: llama-bench may emit
     # enough diagnostics to fill a pipe while the supervisor is sampling KFD,
     # which would deadlock the process and retain the shared inference lock.
-    output_context = tempfile.TemporaryDirectory(prefix="autokernel-gpu-arm-")
+    if supervisor_root is not None:
+        supervisor_root = supervisor_root.resolve()
+        supervisor_root.mkdir(parents=True, exist_ok=True, mode=0o700)
+        root_stat = supervisor_root.lstat()
+        if (supervisor_root.is_symlink() or root_stat.st_uid != os.getuid()
+                or stat.S_IMODE(root_stat.st_mode) != 0o700):
+            raise RuntimeError("GPU supervisor output root is not private operation authority")
+    output_context = tempfile.TemporaryDirectory(
+        prefix="arm-", dir=None if supervisor_root is None else supervisor_root)
     output_root = Path(output_context.name)
     stdout_path, stderr_path = output_root / "stdout", output_root / "stderr"
     stdout_handle = stdout_path.open("w+", encoding="utf-8")
     stderr_handle = stderr_path.open("w+", encoding="utf-8")
+    os.chmod(stdout_path, 0o600); os.chmod(stderr_path, 0o600)
     real_process = process_factory is None
-    process = factory(argv, env=env, stdin=subprocess.DEVNULL,
-                      stdout=(stdout_handle if real_process else subprocess.PIPE),
-                      stderr=(stderr_handle if real_process else subprocess.PIPE),
-                      text=True, start_new_session=True)
+    try:
+        process = factory(argv, env=env, stdin=subprocess.DEVNULL,
+                          stdout=(stdout_handle if real_process else subprocess.PIPE),
+                          stderr=(stderr_handle if real_process else subprocess.PIPE),
+                          text=True, start_new_session=True)
+    except BaseException:
+        stdout_handle.close(); stderr_handle.close(); output_context.cleanup()
+        raise
     samples = []
     maps_identity = None
     readiness_witness = None
@@ -749,29 +766,38 @@ def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
     teardown: dict[str, Any] = {"required": False, "term_sent": False,
                                 "kill_sent": False, "death_proved": False}
     stdout = stderr = ""
+    captured_owned: set[int] = set()
     def stop_child() -> None:
         teardown["required"] = True
-        if process.poll() is not None:
-            teardown["death_proved"] = True
-            return
-        try:
-            if real_process:
-                if os.getpgid(process.pid) != process.pid:
-                    raise RuntimeError("GPU discovery child does not own its sealed process group")
-                os.killpg(process.pid, signal.SIGTERM)
-            else:
-                process.terminate()
-            teardown["term_sent"] = True
-            process.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            if real_process:
-                os.killpg(process.pid, signal.SIGKILL)
-            else:
-                process.kill()
-            teardown["kill_sent"] = True
-            process.wait(timeout=10)
+        if process.poll() is None:
+            try:
+                if real_process:
+                    if os.getpgid(process.pid) != process.pid:
+                        raise RuntimeError("GPU discovery child does not own its sealed process group")
+                    os.killpg(process.pid, signal.SIGTERM)
+                else:
+                    process.terminate()
+                teardown["term_sent"] = True
+                process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                if real_process:
+                    os.killpg(process.pid, signal.SIGKILL)
+                else:
+                    process.kill()
+                teardown["kill_sent"] = True
+                process.wait(timeout=10)
         if process.returncode is None:
             raise RuntimeError("GPU discovery child remained alive after TERM/KILL teardown")
+        remaining = captured_owned.intersection(kfd_provider())
+        if remaining:
+            raise RuntimeError(f"GPU discovery owned KFD descendants survived teardown: {sorted(remaining)}")
+        if real_process:
+            try:
+                os.killpg(process.pid, 0)
+            except ProcessLookupError:
+                pass
+            else:
+                raise RuntimeError("GPU discovery process group survived teardown")
         teardown["death_proved"] = True
     try:
       while process.poll() is None:
@@ -791,6 +817,7 @@ def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
                 continue
         if foreign:
             raise RuntimeError(f"foreign KFD inference overlapped discovery: {foreign}")
+        captured_owned.update(owned)
         samples.append({"offset_s": time.monotonic(), "kfd_pids": list(kfd),
                         "owned_kfd_pids": owned, "vram_used_bytes": vram})
         if (maps_identity is None and runtime_arm is not None and owned
@@ -816,6 +843,12 @@ def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
         pause(0.05)
       if real_process:
           stdout_handle.flush(); stderr_handle.flush()
+          for artifact in (stdout_path, stderr_path):
+              output_stat = artifact.lstat()
+              if (artifact.is_symlink() or output_stat.st_uid != os.getuid()
+                      or output_stat.st_nlink != 1
+                      or stat.S_IMODE(output_stat.st_mode) & 0o077):
+                  raise RuntimeError("GPU supervisor output carrier is unsafe")
           stdout_handle.seek(0); stderr_handle.seek(0)
           stdout, stderr = stdout_handle.read(), stderr_handle.read()
       else:
@@ -886,7 +919,7 @@ def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
                            "elapsed_s": time.monotonic() - supervisor_started,
                            "stdout_sha256": hashlib.sha256(stdout.encode()).hexdigest(),
                            "stderr_sha256": hashlib.sha256(stderr.encode()).hexdigest(),
-                           "teardown": teardown},
+                           "teardown": teardown, "temporary_output_cleaned": True},
             "runtime_maps_identity": maps_identity,
             "load_readiness_witness": readiness_witness,
             "hip_residency_proved": True}
@@ -1247,7 +1280,8 @@ def run(args: argparse.Namespace) -> dict:
                                if sealed["runtime_arms"] else None),
             runtime_arm=("anchor" if sealed["runtime_arms"] else None),
             repetitions=args.calls, load_readiness_policy=anchor_readiness,
-            ready_continue_handshake=anchor_handshake)
+            ready_continue_handshake=anchor_handshake,
+            supervisor_root=out / "supervisor-anchor")
             for _ in range(1)]
         bank_body = {
             "schema": SCHEMA_BANK, "campaign_id": args.campaign_id,
@@ -1296,7 +1330,8 @@ def run(args: argparse.Namespace) -> dict:
                                if sealed["runtime_arms"] else None),
             runtime_arm=("candidate" if sealed["runtime_arms"] else None),
             repetitions=args.calls, load_readiness_policy=candidate_readiness,
-            ready_continue_handshake=candidate_handshake)
+            ready_continue_handshake=candidate_handshake,
+            supervisor_root=out / "supervisor-candidate")
             for _ in range(1)]
         center = sum(bank["anchor_samples"]) / len(bank["anchor_samples"])
         values = [sample for run in candidate_runs for sample in run["samples"]]

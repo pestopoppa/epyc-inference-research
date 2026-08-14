@@ -500,7 +500,7 @@ class TestGpuDiscoveryBatchedSubprocess(unittest.TestCase):
             build = _build(Path(directory), rocwmma="ON", mfma="OFF")
             model = Path(directory) / "model.gguf"; model.write_bytes(b"model")
             policy = _readiness(model)
-            process = self._Process(self._row([1.0] * 9))
+            process = self._Process(self._row([1.0] * 9), running_polls=100)
             identity = {
                 "schema": "epyc.autokernel.split_reward_runtime_maps.v1",
                 "runtime_manifest_sha256": "d" * 64, "arm": "anchor",
@@ -523,7 +523,7 @@ class TestGpuDiscoveryBatchedSubprocess(unittest.TestCase):
             build = _build(Path(directory), rocwmma="ON", mfma="OFF")
             model = Path(directory) / "model.gguf"; model.write_bytes(b"model")
             policy = _readiness(model)
-            process = self._Process(self._row([1.0] * 9))
+            process = self._Process(self._row([1.0] * 9), running_polls=100)
             events = []
 
             class Lease:
@@ -571,7 +571,8 @@ class TestGpuDiscoveryBatchedSubprocess(unittest.TestCase):
                     runtime_arm="anchor", load_readiness_policy=policy,
                     reward_binary=build / "bin" / "llama-bench",
                     hip_library_dir=build / "bin", common_loader_dir=build / "bin",
-                    process_factory=factory, kfd_pid_provider=lambda: (123,),
+                    process_factory=factory,
+                    kfd_pid_provider=lambda: () if process.waited else (123,),
                     vram_reader=lambda: 64, pgid_provider=lambda _pid: process.pid,
                     sleep=lambda _: None)
         self.assertEqual(events, ["lock-acquire", "spawn", "maps-witness",
@@ -635,7 +636,8 @@ class TestGpuDiscoveryBatchedSubprocess(unittest.TestCase):
                     repetitions=9, runtime_arm="anchor", readiness_policy=policy,
                     ready_continue_handshake=handshake, on_load_ready=release,
                     common_loader_dir=build / "bin", hip_library_dir=build / "bin",
-                    process_factory=factory, kfd_pid_provider=lambda: (123,),
+                    process_factory=factory,
+                    kfd_pid_provider=lambda: () if process.waited else (123,),
                     vram_reader=lambda: 64, pgid_provider=lambda _pid: process.pid,
                     sleep=lambda _: None)
             self.assertEqual(events, ["lock-released"])
@@ -653,7 +655,7 @@ class TestGpuDiscoveryBatchedSubprocess(unittest.TestCase):
             handshake = gpu.ReadyContinueHandshake.create(
                 root=root / "barrier", decision=_admission(model), policy=policy,
                 arm="anchor", seed=8613, repetitions=9)
-            process = self._Process(self._row([1.0] * 9))
+            process = self._Process(self._row([1.0] * 9), running_polls=100)
             identity = {
                 "schema": "epyc.autokernel.split_reward_runtime_maps.v1",
                 "runtime_manifest_sha256": "d" * 64, "arm": "anchor",
@@ -673,7 +675,8 @@ class TestGpuDiscoveryBatchedSubprocess(unittest.TestCase):
                     repetitions=9, runtime_arm="anchor", readiness_policy=policy,
                     ready_continue_handshake=handshake, on_load_ready=lambda _w: None,
                     common_loader_dir=build / "bin", hip_library_dir=build / "bin",
-                    process_factory=factory, kfd_pid_provider=lambda: (123,),
+                    process_factory=factory,
+                    kfd_pid_provider=lambda: () if process.waited else (123,),
                     vram_reader=lambda: 64, pgid_provider=lambda _pid: process.pid,
                     sleep=lambda _: None)
             self.assertIsNotNone(process.returncode)
@@ -698,7 +701,8 @@ class TestGpuDiscoveryBatchedSubprocess(unittest.TestCase):
                     ready_continue_handshake=handshake, on_load_ready=lambda _w: None,
                     common_loader_dir=build / "bin", hip_library_dir=build / "bin",
                     process_factory=lambda *_args, **_kwargs: process,
-                    kfd_pid_provider=lambda: (123, 456), vram_reader=lambda: 64,
+                    kfd_pid_provider=lambda: (() if process.waited else (123, 456)),
+                    vram_reader=lambda: 64,
                     pgid_provider=lambda pid: process.pid if pid == 123 else 777,
                     sleep=lambda _: None)
             self.assertTrue(process.terminated)
@@ -722,6 +726,21 @@ class TestGpuDiscoveryBatchedSubprocess(unittest.TestCase):
         self.assertTrue(process.terminated)
         self.assertTrue(process.waited)
         self.assertIsNotNone(process.returncode)
+
+    def test_popen_failure_cleans_private_output_carriers(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            build = _build(root, rocwmma="ON", mfma="OFF")
+            model = root / "model.gguf"; model.write_bytes(b"model")
+            supervisor = root / "supervisor"
+            with self.assertRaisesRegex(OSError, "spawn refused"):
+                gpu._invoke_locked(
+                    build=build, model=model, seed=8613, baseline_vram=0,
+                    flash_attention=True, repetitions=9,
+                    supervisor_root=supervisor,
+                    process_factory=lambda *_args, **_kwargs: (_ for _ in ()).throw(
+                        OSError("spawn refused")))
+            self.assertEqual(list(supervisor.iterdir()), [])
 
 
 class TestGpuDiscoveryRunCleanup(unittest.TestCase):
