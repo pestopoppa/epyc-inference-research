@@ -99,10 +99,43 @@ class ClaudeFable5CriticActorTests(unittest.TestCase):
         self.assertEqual(identity["effort"], "high")
         self.assertEqual(
             identity["auth_staging_policy"],
-            "ephemeral_0600_copy_no_secret_receipt",
+            "ephemeral_0600_copy_atomic_oauth_rotation_sync_no_secret_receipt",
         )
         self.assertNotIn("credential", json.dumps(identity).lower())
         self.assertNotIn("auth_root", identity)
+
+    def test_rotated_staged_credential_is_atomically_retained(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace, auth = self._layout(temporary)
+            wrapper = self._wrapper(Path(temporary), "print('{}')\n")
+            rotated = json.dumps({"claudeAiOauth": {
+                "accessToken": "rotated", "refreshToken": "new-refresh",
+            }}, sort_keys=True).encode()
+            with C._staged_auth(
+                    workspace=workspace, auth_root=auth,
+                    wrapper_content=wrapper.read_bytes()) as stage:
+                credential = stage.config / ".credentials.json"
+                credential.write_bytes(rotated)
+                credential.chmod(0o600)
+            self.assertEqual((auth / ".credentials.json").read_bytes(), rotated)
+            self.assertEqual(
+                stat.S_IMODE((auth / ".credentials.json").stat().st_mode), 0o600)
+            self.assertEqual(list(workspace.glob(".autokernel-fable5-*")), [])
+
+    def test_concurrent_newer_credential_wins_over_staged_rotation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace, auth = self._layout(temporary)
+            wrapper = self._wrapper(Path(temporary), "print('{}')\n")
+            staged = json.dumps({"claudeAiOauth": {"accessToken": "staged"}}).encode()
+            newer = json.dumps({"claudeAiOauth": {"accessToken": "newer"}}).encode()
+            with C._staged_auth(
+                    workspace=workspace, auth_root=auth,
+                    wrapper_content=wrapper.read_bytes()) as stage:
+                credential = stage.config / ".credentials.json"
+                credential.write_bytes(staged); credential.chmod(0o600)
+                original = auth / ".credentials.json"
+                original.write_bytes(newer); original.chmod(0o600)
+            self.assertEqual((auth / ".credentials.json").read_bytes(), newer)
 
     def test_exact_argv_disables_tools_mcp_customizations_and_sessions(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

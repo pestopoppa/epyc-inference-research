@@ -12,6 +12,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from dataclasses import dataclass
 import errno
+import fcntl
 import hashlib
 import json
 import math
@@ -32,7 +33,7 @@ PROVIDER = "claude"
 MODEL = "claude-fable-5"
 EFFORT = "high"
 RUNTIME_KIND = "claude_cli_structured_critic"
-AUTH_STAGING_POLICY = "ephemeral_0600_copy_no_secret_receipt"
+AUTH_STAGING_POLICY = "ephemeral_0600_copy_atomic_oauth_rotation_sync_no_secret_receipt"
 BINDING_KEYS = (
     "proposal_sha256",
     "source_manifest_sha256",
@@ -274,13 +275,7 @@ def _write_private(path: Path, content: bytes, *, mode: int = 0o600) -> None:
         raise ClaudeFable5CriticError(f"could not seal private staged file: {path.name}")
 
 
-def _credentials(auth_root: Path) -> bytes:
-    if not auth_root.is_absolute() or auth_root.is_symlink() or not auth_root.is_dir():
-        raise ClaudeFable5CriticError("Claude auth root is unavailable or unsafe")
-    content = _read_regular(
-        auth_root / ".credentials.json", private=True,
-        maximum=MAX_CREDENTIAL_BYTES,
-    )
+def _validated_credential_content(content: bytes) -> bytes:
     try:
         parsed = json.loads(content)
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -290,6 +285,65 @@ def _credentials(auth_root: Path) -> bytes:
             or not parsed["claudeAiOauth"]):
         raise ClaudeFable5CriticError("Claude credential carrier has an unexpected shape")
     return content
+
+
+def _credentials(auth_root: Path) -> bytes:
+    if not auth_root.is_absolute() or auth_root.is_symlink() or not auth_root.is_dir():
+        raise ClaudeFable5CriticError("Claude auth root is unavailable or unsafe")
+    return _validated_credential_content(_read_regular(
+        auth_root / ".credentials.json", private=True,
+        maximum=MAX_CREDENTIAL_BYTES,
+    ))
+
+
+def _sync_rotated_credentials(*, auth_root: Path, original: bytes,
+                              staged_path: Path) -> None:
+    """Atomically retain a CLI-rotated OAuth credential without exposing it."""
+    rotated = _validated_credential_content(_read_regular(
+        staged_path, private=True, maximum=MAX_CREDENTIAL_BYTES))
+    if rotated == original:
+        return
+    lock_path = auth_root / ".autokernel-credential-refresh.lock"
+    flags = os.O_RDWR | os.O_CREAT | os.O_CLOEXEC | os.O_NOFOLLOW
+    lock_fd = os.open(lock_path, flags, 0o600)
+    temporary: Path | None = None
+    try:
+        info = os.fstat(lock_fd)
+        if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid()
+                or info.st_nlink != 1 or stat.S_IMODE(info.st_mode) != 0o600):
+            raise ClaudeFable5CriticError("Claude credential refresh lock is unsafe")
+        fcntl.flock(lock_fd, fcntl.LOCK_EX)
+        current = _credentials(auth_root)
+        if current != original:
+            # Another cooperative launcher already installed a newer rotation.
+            return
+        fd, raw_path = tempfile.mkstemp(
+            prefix=".credentials.json.autokernel-", dir=auth_root)
+        temporary = Path(raw_path)
+        try:
+            os.fchmod(fd, 0o600)
+            offset = 0
+            while offset < len(rotated):
+                offset += os.write(fd, rotated[offset:])
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+        target = auth_root / ".credentials.json"
+        _read_regular(target, private=True, maximum=MAX_CREDENTIAL_BYTES)
+        os.replace(temporary, target)
+        temporary = None
+        directory_fd = os.open(auth_root, os.O_RDONLY | os.O_CLOEXEC)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+        try:
+            fcntl.flock(lock_fd, fcntl.LOCK_UN)
+        finally:
+            os.close(lock_fd)
 
 
 def _safe_directory(path: Path, *, label: str) -> Path:
@@ -321,11 +375,29 @@ def _staged_auth(*, workspace: Path, auth_root: Path,
             wrapper=staged_wrapper,
         )
     finally:
-        if root.is_symlink():
-            raise ClaudeFable5CriticError("Claude staging root became a symlink")
-        shutil.rmtree(root)
-        if root.exists() or root.is_symlink():
-            raise ClaudeFable5CriticError("Claude staged credentials survived cleanup")
+        sync_error: BaseException | None = None
+        try:
+            _sync_rotated_credentials(
+                auth_root=auth_root, original=credential,
+                staged_path=config / ".credentials.json")
+        except BaseException as exc:
+            sync_error = exc
+        cleanup_error: BaseException | None = None
+        try:
+            if root.is_symlink():
+                raise ClaudeFable5CriticError("Claude staging root became a symlink")
+            shutil.rmtree(root)
+            if root.exists() or root.is_symlink():
+                raise ClaudeFable5CriticError("Claude staged credentials survived cleanup")
+        except BaseException as exc:
+            cleanup_error = exc
+        if cleanup_error is not None:
+            if sync_error is not None:
+                cleanup_error.add_note(
+                    f"Claude rotated credential sync also failed: {sync_error!r}")
+            raise cleanup_error
+        if sync_error is not None:
+            raise sync_error
 
 
 _ENV_ALLOWLIST = frozenset({
