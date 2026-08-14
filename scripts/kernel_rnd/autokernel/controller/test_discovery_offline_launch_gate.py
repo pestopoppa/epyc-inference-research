@@ -359,6 +359,60 @@ class OfflineLaunchGate(unittest.TestCase):
         self.assertIn("correctness_suite_seed", post_init)
         self.assertIn("candidate", post_init)
 
+    def test_materialization_consumer_binds_production_instrument_and_candidate_ancestry(self):
+        """A rehashed receipt cannot swap 0db/894/candidate lineage."""
+        with tempfile.TemporaryDirectory() as directory:
+            built, _plan, operation_dir = self._static_builder_result(Path(directory))
+            path = operation_dir / "materialization.json"
+            original = json.loads(path.read_text())
+        required = {
+            "production_base_commit", "instrument_commit",
+            "instrument_path", "instrument_branch",
+            "candidate_parent_commit", "candidate_descends_instrument",
+        }
+        self.assertTrue(required <= set(original),
+                        f"materialization lacks era authority: {required - set(original)}")
+        consumer = inspect.signature(S.evidence_identity_files_for_build).parameters
+        for argument in ("expected_production_base_commit",
+                         "expected_instrument_commit",
+                         "expected_instrument_path",
+                         "expected_instrument_branch"):
+            self.assertIn(argument, consumer)
+
+    def test_materialization_consumer_refuses_rehashed_era_tamper(self):
+        """Outer/self rehashing cannot convert a different instrument into evidence."""
+        source = inspect.getsource(S.evidence_identity_files_for_build)
+        for field in ("production_base_commit", "instrument_commit",
+                      "instrument_path", "instrument_branch",
+                      "candidate_descends_instrument"):
+            self.assertIn(field, source)
+        self.assertIn("merge-base", source)
+        self.assertIn("--is-ancestor", source)
+
+    def test_durable_state_refuses_deployment_or_instrument_identity_change(self):
+        """Resume binds deployment config plus both production/instrument refs."""
+        required = {
+            "deployment_config_sha256", "production_path",
+            "production_base_commit", "instrument_path",
+            "instrument_branch", "instrument_commit",
+        }
+        fields = set(C.ControllerConfig.__dataclass_fields__)
+        self.assertTrue(required <= fields,
+                        f"controller lacks durable launch identity: {required - fields}")
+        run_source = inspect.getsource(C._run_controller_locked)
+        for field in required:
+            self.assertIn(field, run_source)
+
+    def test_zero_injection_validate_only_checks_instrument_and_correctness_policy(self):
+        """CLI validation proves exact 894 ref and seeded/count-bounded suite."""
+        parameters = inspect.signature(F.deployment_main).parameters
+        self.assertEqual(set(parameters), {"argv"})
+        source = inspect.getsource(F.deployment_main)
+        self.assertIn("--validate-only", source)
+        for token in ("instrument_path", "instrument_branch", "instrument_head",
+                      "correctness_suite_seed", "expected_correctness_cases"):
+            self.assertIn(token, source)
+
     def test_wrong_actor_overlap_recommendation_is_deterministically_downgraded(self):
         """Negative examples are facts, not prose an actor can vote past."""
         with tempfile.TemporaryDirectory() as directory:
