@@ -251,39 +251,49 @@ class OfflineLaunchGate(unittest.TestCase):
         fields = C.ControllerConfig.__dataclass_fields__
         self.assertIn("admission_corpus_version", fields)
         self.assertIn("admission_corpus_sha256", fields)
+        self.assertIn("effective_planner_context_sha256", fields)
         context_source = inspect.getsource(C._context)
         state_source = inspect.getsource(C.DurableState.save)
         self.assertIn("admission_corpus_version", context_source)
         self.assertIn("admission_corpus_sha256", context_source)
+        self.assertIn("effective_planner_context_sha256", context_source)
+        self.assertIn("admission_corpus_version", state_source)
         self.assertIn("admission_corpus_sha256", state_source)
+        self.assertIn("effective_planner_context_sha256", state_source)
 
     def test_wrong_actor_overlap_recommendation_is_deterministically_downgraded(self):
         """Negative examples are facts, not prose an actor can vote past."""
-        keys = {"facts", "missing", "mode", "rationale", "disqualifiers",
-                "counterfactual", "evidence"}
-        corpus = {
-            "version": "admission-corpus-v1", "sha256": "c" * 64,
-            "examples": [
-                {"facts": {"profile": "exact-reviewed-tg128"}, "missing": [],
-                 "mode": "cold_overlap", "rationale": "reviewed profile",
-                 "disqualifiers": [], "counterfactual": "higher cadence serializes",
-                 "evidence": ["sha256:" + "a" * 64]},
-                *[{"facts": {"case": case}, "missing": (["headroom"] if case == "unknown" else []),
-                   "mode": "cold_serialized", "rationale": case,
-                   "disqualifiers": [case], "counterfactual": "exact reviewed facts",
-                   "evidence": ["sha256:" + "b" * 64]}
-                  for case in ("high_cadence", "unknown", "large", "hot_mismatch", "foreign_kfd")],
-            ],
-        }
-        self.assertTrue(all(set(row) == keys for row in corpus["examples"]))
-        decide = getattr(gpu_runner, "host_transfer_admission")
-        self.assertIn("admission_corpus", inspect.signature(decide).parameters)
-        for case in ("high_cadence", "unknown", "large", "hot_mismatch", "foreign_kfd"):
-            result = decide(admission_corpus=corpus, observed_case=case,
-                            actor_recommendation="cold_overlap")
-            with self.subTest(case=case):
-                self.assertIn(result["mode"], {"cold_serialized", "refused"})
-                self.assertNotEqual(result.get("authorized_by"), "actor")
+        with tempfile.TemporaryDirectory() as directory:
+            config = self._config(Path(directory))
+            keys = {"id", "facts", "missing", "recommended_mode", "rationale",
+                    "disqualifiers", "counterfactual", "evidence"}
+            examples = [
+                {"id": case, "facts": {"case": case},
+                 "missing": (["headroom"] if case == "unknown" else []),
+                 "recommended_mode": "cold_serialized", "rationale": case,
+                 "disqualifiers": [case], "counterfactual": "exact reviewed facts",
+                 "evidence": ["sha256:" + "b" * 64]}
+                for case in ("high_cadence", "unknown", "large",
+                             "hot_mismatch", "foreign_kfd")]
+            self.assertTrue(all(set(row) == keys for row in examples))
+            corpus = {**config.admission_policy.value, "examples": examples}
+            corpus["policy_sha256"] = C._sha(
+                {key: value for key, value in corpus.items()
+                 if key != "policy_sha256"})
+            policy = replace(config.admission_policy, value=corpus)
+            config = replace(config, admission_policy=policy)
+            lease = F.GpuDiscoveryLease(config=config,
+                                        mode="allowed_discovery_noise")
+            for case in ("high_cadence", "unknown", "large",
+                         "hot_mismatch", "foreign_kfd"):
+                candidate = SimpleNamespace(regime={
+                    "observed_case": case,
+                    "actor_load_mode_recommendation": "cold_overlap"})
+                with self.subTest(case=case), \
+                        mock.patch.object(D.DiscoveryDeployment, "revalidate"):
+                    result = lease.admit(candidate)
+                    self.assertIn(result["mode"], {"cold_serialized", "refused"})
+                    self.assertNotEqual(result.get("authorized_by"), "actor")
 
     def test_planner_can_author_distinct_literal_dispatch_expectations(self):
         """One template supports genuine hypotheses without actor-authored regex/argv."""
@@ -643,6 +653,46 @@ class OfflineLaunchGate(unittest.TestCase):
                 E._verify_plan_files(projected)
             except E.EvidenceProducerError as exc:
                 self.fail(f"builder receipt is incompatible with evidence validator: {exc}")
+
+    def test_source_tree_receipt_separates_carrier_and_tree_hashes(self):
+        """The JSON carrier hashes bytes; nested entries recompute tree identity."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"; source.mkdir()
+            (source / "kernel.cpp").write_text("int kernel() { return 1; }\n")
+            tree = S.integrity.hash_source_tree(source)
+            carrier_body = {
+                "schema": "epyc.autokernel.source_tree_identity.v1",
+                "source_commit": "c" * 40,
+                "tree": tree.to_dict(),
+            }
+            carrier = root / "source-identity.json"
+            carrier.write_text(json.dumps(carrier_body, sort_keys=True))
+            carrier_sha = hashlib.sha256(carrier.read_bytes()).hexdigest()
+            self.assertNotEqual(carrier_sha, tree.sha256)
+            evidence_plan = plan(root / "inputs")
+            files = replace(
+                evidence_plan.identity_files.candidate,
+                source_identity=E.BoundInputFile(
+                    "source_identity", carrier.resolve(), carrier_sha))
+            identity = replace(evidence_plan.candidate,
+                               source_commit="c" * 40,
+                               source_sha256=tree.sha256)
+            try:
+                E._verify_build_files(files, identity, "candidate")
+            except E.EvidenceProducerError as exc:
+                self.fail(f"valid source-tree receipt was rejected: {exc}")
+
+            tampered = json.loads(carrier.read_text())
+            tampered["tree"]["entries"][0][1] = "f" * 64
+            carrier.write_text(json.dumps(tampered, sort_keys=True))
+            tampered_files = replace(
+                files, source_identity=E.BoundInputFile(
+                    "source_identity", carrier.resolve(),
+                    hashlib.sha256(carrier.read_bytes()).hexdigest()))
+            with self.assertRaisesRegex(E.EvidenceProducerError,
+                                        "tree|manifest|source"):
+                E._verify_build_files(tampered_files, identity, "candidate")
 
     def test_shared_reward_runtime_accepts_real_shaped_elf_without_injected_verifier(self):
         """Real ELF RUNPATH/SONAME closure passes the production verifier seam."""
