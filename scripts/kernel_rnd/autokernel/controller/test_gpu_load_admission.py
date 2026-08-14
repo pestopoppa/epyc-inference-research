@@ -63,6 +63,7 @@ def write_corpus(root: Path, value: dict | None = None) -> tuple[Path, str]:
 
 def request(**changes) -> A.AdmissionRequest:
     values = {
+        "effective_context_sha256": H("9"),
         "model_path": "/models/qwen.gguf", "model_sha256": H("a"),
         "model_bytes": 400_000_000, "workload": "tg128",
         "calls_per_arm": 9, "device_id": "mi210_0",
@@ -76,14 +77,14 @@ def request(**changes) -> A.AdmissionRequest:
     return A.AdmissionRequest(**values)
 
 
-def hot_identity(model_path: Path) -> HotResidencyIdentity:
+def hot_identity(model_path: Path, *, process_start_ticks: int = 456) -> HotResidencyIdentity:
     body = {
         "schema": "epyc.autokernel.split_reward_runtime_maps.v1",
         "runtime_manifest_sha256": H("1"), "arm": "candidate",
         "reward_binary_sha256": H("2"), "hip_library_sha256": H("3"),
         "model_path": str(model_path), "model_sha256": H("a"),
         "device_id": "mi210_0", "kfd_pid": 123, "boot_id": "boot-a",
-        "process_start_ticks": 456,
+        "process_start_ticks": process_start_ticks,
         "mapped_local_sha256": {"/runtime/libggml-hip.so.0": H("3")},
     }
     return HotResidencyIdentity(
@@ -91,7 +92,7 @@ def hot_identity(model_path: Path) -> HotResidencyIdentity:
         reward_binary_sha256=H("2"), hip_library_sha256=H("3"),
         model_path=model_path, model_sha256=H("a"),
         device_id="mi210_0", kfd_pid=123, boot_id="boot-a",
-        process_start_ticks=456,
+        process_start_ticks=process_start_ticks,
         mapped_local_sha256=MappingProxyType(body["mapped_local_sha256"]),
         identity_sha256=schemas.content_hash(body))
 
@@ -111,6 +112,23 @@ class GpuLoadAdmissionTests(unittest.TestCase):
         self.assertIsInstance(policy.examples[0].facts, MappingProxyType)
         with self.assertRaises(TypeError):
             policy.examples[0].facts["telemetry"] = "changed"
+
+    def test_examples_are_illustrative_not_mode_authority(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            value = corpus_body()
+            value["examples"][0]["mode"] = "hot_resident"
+            value["examples"][1]["mode"] = "cold_overlap"
+            value["policy_sha256"] = schemas.content_hash(
+                {key: item for key, item in value.items()
+                 if key != "policy_sha256"})
+            policy = self.load(root, value)
+        # Neither a positive hot example nor a misleading negative overlap
+        # example can promote an exact cold-overlap request to hot residency.
+        self.assertEqual(A.arbitrate(policy, request()).mode, "cold_overlap")
+        self.assertEqual(A.arbitrate(
+            policy, request(workload="pp512"),
+            actor_recommendation="hot_resident").mode, "cold_serialized")
 
     def test_policy_refuses_outer_or_inner_hash_tamper_and_bad_examples(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -149,7 +167,11 @@ class GpuLoadAdmissionTests(unittest.TestCase):
         self.assertEqual(decision.profile["profile_id"], "mi210-qwen-tg128-v1")
         self.assertEqual(decision.disqualifiers, ())
         receipt = decision.to_dict()
-        A.validate_decision_receipt(receipt)
+        A.validate_decision_receipt(
+            receipt, expected_policy_version=policy.version,
+            expected_policy_sha256=policy.policy_sha256,
+            expected_policy_file_sha256=policy.file_sha256,
+            expected_effective_context_sha256=H("9"))
         self.assertEqual(receipt["policy_version"], policy.version)
         self.assertEqual(receipt["policy_sha256"], policy.policy_sha256)
         self.assertEqual(receipt["policy_file_sha256"], policy.file_sha256)
@@ -192,10 +214,27 @@ class GpuLoadAdmissionTests(unittest.TestCase):
                            runtime_manifest_sha256=H("1"), runtime_arm="candidate",
                            hot_residency=hot,
                            expected_hot_identity_sha256=hot.identity_sha256,
-                           residency_revalidated=True)
+                           hot_revalidation=hot)
             self.assertEqual(A.arbitrate(policy, item).mode, "hot_resident")
             # A different expected identity cannot turn a cold request hot.
             item = replace(item, expected_hot_identity_sha256=H("0"))
+            self.assertEqual(A.arbitrate(policy, item).mode, "cold_serialized")
+
+    def test_hot_revalidation_is_typed_current_maps_identity_not_boolean(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            policy = self.load(root)
+            model = root / "qwen.gguf"; model.write_bytes(b"model")
+            hot = hot_identity(model.resolve())
+            base = dict(
+                model_path=str(model.resolve()),
+                runtime_manifest_sha256=H("1"), runtime_arm="candidate",
+                hot_residency=hot,
+                expected_hot_identity_sha256=hot.identity_sha256)
+            with self.assertRaisesRegex(A.AdmissionPolicyError, "incomplete"):
+                request(**base)
+            changed = hot_identity(model.resolve(), process_start_ticks=457)
+            item = request(**base, hot_revalidation=changed)
             self.assertEqual(A.arbitrate(policy, item).mode, "cold_serialized")
 
     def test_actor_can_preserve_or_downgrade_but_never_upgrade(self) -> None:
@@ -217,6 +256,7 @@ class GpuLoadAdmissionTests(unittest.TestCase):
             policy = self.load(Path(directory))
         receipt = A.arbitrate(policy, request()).to_dict()
         for field in ("policy_version", "policy_sha256", "policy_file_sha256",
+                      "effective_context_sha256",
                       "request", "profile",
                       "actor_recommendation", "mode", "reason", "disqualifiers"):
             changed = json.loads(json.dumps(receipt))
@@ -230,7 +270,40 @@ class GpuLoadAdmissionTests(unittest.TestCase):
                 changed[field] = H("0") if "sha256" in field else "changed"
             with self.subTest(field=field), \
                     self.assertRaises(A.AdmissionPolicyError):
-                A.validate_decision_receipt(changed)
+                A.validate_decision_receipt(
+                    changed, expected_policy_version=policy.version,
+                    expected_policy_sha256=policy.policy_sha256,
+                    expected_policy_file_sha256=policy.file_sha256,
+                    expected_effective_context_sha256=H("9"))
+
+        for authority in ("expected_policy_version", "expected_policy_sha256",
+                          "expected_policy_file_sha256",
+                          "expected_effective_context_sha256"):
+            kwargs = {
+                "expected_policy_version": policy.version,
+                "expected_policy_sha256": policy.policy_sha256,
+                "expected_policy_file_sha256": policy.file_sha256,
+                "expected_effective_context_sha256": H("9"),
+            }
+            kwargs[authority] = ("other-v1" if authority.endswith("version")
+                                 else H("0"))
+            with self.subTest(authority=authority), \
+                    self.assertRaisesRegex(A.AdmissionPolicyError,
+                                            "authority frame"):
+                A.validate_decision_receipt(receipt, **kwargs)
+
+        rebound = json.loads(json.dumps(receipt))
+        rebound["request"]["effective_context_sha256"] = H("0")
+        rebound["decision_sha256"] = schemas.content_hash(
+            {key: item for key, item in rebound.items()
+             if key != "decision_sha256"})
+        with self.assertRaisesRegex(A.AdmissionPolicyError,
+                                    "request/effective-context"):
+            A.validate_decision_receipt(
+                rebound, expected_policy_version=policy.version,
+                expected_policy_sha256=policy.policy_sha256,
+                expected_policy_file_sha256=policy.file_sha256,
+                expected_effective_context_sha256=H("9"))
 
 
 if __name__ == "__main__":

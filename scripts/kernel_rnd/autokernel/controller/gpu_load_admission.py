@@ -161,10 +161,11 @@ class PolicyExample:
             raise AdmissionPolicyError("example polarity must be positive or negative")
         if self.mode not in MODES:
             raise AdmissionPolicyError("example mode is invalid")
-        if self.polarity == "positive" and self.mode not in {"cold_overlap", "hot_resident"}:
-            raise AdmissionPolicyError("positive example must describe reviewed overlap or future hot reuse")
-        if self.polarity == "negative" and self.mode != "cold_serialized":
-            raise AdmissionPolicyError("negative example must fail closed to serialization")
+        # Examples are sealed teaching material, not executable authority.  A
+        # positive example may illustrate either of the two fact-authorized
+        # fast paths, while a positive or negative example may also document
+        # the safe serialized fallback.  The arbiter below deliberately never
+        # consults example.mode when deciding a request.
         if not isinstance(self.facts, Mapping) or not self.facts:
             raise AdmissionPolicyError("example facts must be a non-empty immutable mapping")
         for label, values in (("missing", self.missing),
@@ -215,6 +216,7 @@ class PolicyCorpus:
 
 @dataclass(frozen=True)
 class AdmissionRequest:
+    effective_context_sha256: str
     model_path: str
     model_sha256: str
     model_bytes: int
@@ -232,9 +234,10 @@ class AdmissionRequest:
     runtime_arm: str | None = None
     hot_residency: HotResidencyIdentity | None = None
     expected_hot_identity_sha256: str | None = None
-    residency_revalidated: bool = False
+    hot_revalidation: HotResidencyIdentity | None = None
 
     def __post_init__(self) -> None:
+        _sha(self.effective_context_sha256, "effective planner context")
         path = Path(_text(self.model_path, "request model_path"))
         if not path.is_absolute() or ".." in path.parts:
             raise AdmissionPolicyError("request model_path must be absolute")
@@ -263,20 +266,21 @@ class AdmissionRequest:
                 or len(set(self.foreign_kfd_pids)) != len(self.foreign_kfd_pids)):
             raise AdmissionPolicyError("foreign KFD PID evidence is malformed")
         hot_fields = (self.runtime_manifest_sha256, self.runtime_arm,
-                      self.hot_residency, self.expected_hot_identity_sha256)
+                      self.hot_residency, self.expected_hot_identity_sha256,
+                      self.hot_revalidation)
         if any(value is not None for value in hot_fields):
             if (not all(value is not None for value in hot_fields)
                     or not isinstance(self.hot_residency, HotResidencyIdentity)
+                    or not isinstance(self.hot_revalidation, HotResidencyIdentity)
                     or self.runtime_arm not in {"anchor", "candidate"}
-                    or not self.residency_revalidated):
+                    ):
                 raise AdmissionPolicyError("hot residency request is incomplete")
             _sha(self.runtime_manifest_sha256, "runtime manifest")
             _sha(self.expected_hot_identity_sha256, "expected hot identity")
-        elif self.residency_revalidated:
-            raise AdmissionPolicyError("residency cannot be revalidated without an identity")
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            "effective_context_sha256": self.effective_context_sha256,
             "model_path": self.model_path, "model_sha256": self.model_sha256,
             "model_bytes": self.model_bytes, "workload": self.workload,
             "calls_per_arm": self.calls_per_arm, "device_id": self.device_id,
@@ -292,7 +296,9 @@ class AdmissionRequest:
             "hot_residency_identity_sha256": (
                 self.hot_residency.identity_sha256 if self.hot_residency else None),
             "expected_hot_identity_sha256": self.expected_hot_identity_sha256,
-            "residency_revalidated": self.residency_revalidated,
+            "hot_revalidation_identity_sha256": (
+                self.hot_revalidation.identity_sha256
+                if self.hot_revalidation else None),
         }
 
 
@@ -301,6 +307,7 @@ class AdmissionDecision:
     policy_version: str
     policy_sha256: str
     policy_file_sha256: str
+    effective_context_sha256: str
     request: Mapping[str, Any]
     profile: Mapping[str, Any] | None
     actor_recommendation: str | None
@@ -310,10 +317,12 @@ class AdmissionDecision:
     decision_sha256: str
 
     def __post_init__(self) -> None:
+        _text(self.policy_version, "decision policy version", identifier=True)
         if self.mode not in MODES:
             raise AdmissionPolicyError("decision mode is invalid")
         _sha(self.policy_sha256, "decision policy")
         _sha(self.policy_file_sha256, "decision policy file")
+        _sha(self.effective_context_sha256, "decision effective context")
         _sha(self.decision_sha256, "decision")
         if self.actor_recommendation is not None and self.actor_recommendation not in MODES:
             raise AdmissionPolicyError("decision recommendation is invalid")
@@ -325,6 +334,7 @@ class AdmissionDecision:
             "policy_version": self.policy_version,
             "policy_sha256": self.policy_sha256,
             "policy_file_sha256": self.policy_file_sha256,
+            "effective_context_sha256": self.effective_context_sha256,
             "request": _thaw(self.request),
             "profile": None if self.profile is None else _thaw(self.profile),
             "actor_recommendation": self.actor_recommendation,
@@ -418,7 +428,8 @@ def _profile_mismatches(profile: ReviewedProfile,
 
 def _hot_identity_valid(request: AdmissionRequest) -> bool:
     hot = request.hot_residency
-    if hot is None:
+    current = request.hot_revalidation
+    if hot is None or current is None:
         return False
     body = {
         "schema": "epyc.autokernel.split_reward_runtime_maps.v1",
@@ -439,7 +450,9 @@ def _hot_identity_valid(request: AdmissionRequest) -> bool:
         str(hot.model_path) == request.model_path,
         hot.model_sha256 == request.model_sha256,
         hot.device_id == request.device_id,
-        request.residency_revalidated,
+        hot.same_resident_process(current),
+        dict(hot.mapped_local_sha256) == dict(current.mapped_local_sha256),
+        str(hot.model_path) == str(current.model_path),
         not request.foreign_kfd_pids,
     ))
 
@@ -452,6 +465,7 @@ def _decision(*, corpus: PolicyCorpus, request: AdmissionRequest,
         "schema": DECISION_SCHEMA, "policy_version": corpus.version,
         "policy_sha256": corpus.policy_sha256,
         "policy_file_sha256": corpus.file_sha256,
+        "effective_context_sha256": request.effective_context_sha256,
         "request": request.to_dict(),
         "profile": None if profile is None else profile.to_dict(),
         "actor_recommendation": recommendation, "mode": mode,
@@ -461,6 +475,7 @@ def _decision(*, corpus: PolicyCorpus, request: AdmissionRequest,
     return AdmissionDecision(
         policy_version=corpus.version, policy_sha256=corpus.policy_sha256,
         policy_file_sha256=corpus.file_sha256,
+        effective_context_sha256=request.effective_context_sha256,
         request=_freeze(body["request"]),
         profile=None if profile is None else _freeze(body["profile"]),
         actor_recommendation=recommendation, mode=mode, reason=reason,
@@ -532,9 +547,13 @@ def arbitrate(corpus: PolicyCorpus, request: AdmissionRequest, *,
                      reason=reason, disqualifiers=tuple(sorted(set(disqualifiers))))
 
 
-def validate_decision_receipt(value: Mapping[str, Any]) -> None:
+def validate_decision_receipt(
+        value: Mapping[str, Any], *, expected_policy_version: str,
+        expected_policy_sha256: str, expected_policy_file_sha256: str,
+        expected_effective_context_sha256: str) -> None:
     """Fail closed if any decision field changed after sealing."""
     keys = {"schema", "policy_version", "policy_sha256", "policy_file_sha256",
+            "effective_context_sha256",
             "request", "profile",
             "actor_recommendation", "mode", "reason", "disqualifiers",
             "promotion_claim", "decision_sha256"}
@@ -542,6 +561,23 @@ def validate_decision_receipt(value: Mapping[str, Any]) -> None:
     if (raw["schema"] != DECISION_SCHEMA or raw["mode"] not in MODES
             or raw["promotion_claim"] is not False):
         raise AdmissionPolicyError("decision receipt authority is invalid")
+    expected_authority = (
+        _text(expected_policy_version, "expected policy version", identifier=True),
+        _sha(expected_policy_sha256, "expected policy"),
+        _sha(expected_policy_file_sha256, "expected policy file"),
+        _sha(expected_effective_context_sha256, "expected effective context"),
+    )
+    observed_authority = (
+        raw["policy_version"], raw["policy_sha256"],
+        raw["policy_file_sha256"], raw["effective_context_sha256"],
+    )
+    if observed_authority != expected_authority:
+        raise AdmissionPolicyError("decision receipt authority frame mismatch")
+    if (not isinstance(raw["request"], Mapping)
+            or raw["request"].get("effective_context_sha256")
+            != raw["effective_context_sha256"]):
+        raise AdmissionPolicyError(
+            "decision receipt request/effective-context binding mismatch")
     expected = _content_hash({key: item for key, item in raw.items()
                               if key != "decision_sha256"})
     if raw["decision_sha256"] != expected:
