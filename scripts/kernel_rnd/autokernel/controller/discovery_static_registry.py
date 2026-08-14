@@ -6,12 +6,15 @@ path, argv, CMake flag, or production path is accepted from planner output.
 """
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass
+import fcntl
 import hashlib
 import json
 import os
 from pathlib import Path
 import shutil
+import stat
 import subprocess
 from typing import Any, Mapping
 
@@ -32,12 +35,127 @@ class StaticRegistryError(RuntimeError):
 _REWARD_FILES = ("llama-bench", "libllama-bench-impl.so", "libllama-common.so",
                  "libllama.so", "libggml.so", "libggml-cpu.so", "libggml-base.so")
 _HIP = "libggml-hip.so"
+_BUILDER_SCHEMA = "epyc.autokernel.static_gpu_source_builder.v2"
+_BUILD_KEY_SCHEMA = "epyc.autokernel.gpu_source_build_key.v1"
+_BUILD_REF_SCHEMA = "epyc.autokernel.gpu_source_build_ref.v1"
+_BUILD_INTENT_SCHEMA = "epyc.autokernel.gpu_source_build_intent.v1"
+_BUILD_TERMINAL_SCHEMA = "epyc.autokernel.gpu_source_build_terminal.v1"
+_TEARDOWN_SCHEMA = "epyc.autokernel.source_materialization_teardown.v2"
+_REQUIRED_TARGETS = ("llama-bench", "test-backend-ops")
+_BUILD_ENV_NAMES = (
+    "PATH", "HOME", "LANG", "LC_ALL", "ROCM_PATH", "HIP_PATH",
+    "LD_LIBRARY_PATH", "LIBRARY_PATH", "CPATH", "C_INCLUDE_PATH",
+    "CPLUS_INCLUDE_PATH", "PKG_CONFIG_PATH", "CMAKE_PREFIX_PATH", "CC",
+    "CXX", "CFLAGS", "CXXFLAGS", "CPPFLAGS", "LDFLAGS", "MAKEFLAGS",
+)
+_SEALED_BUILD_PATH = "/opt/rocm/bin:/usr/local/bin:/usr/bin:/bin"
 
 
 def _digest(path: Path) -> str:
     if path.is_symlink() or not path.is_file():
         raise StaticRegistryError(f"runtime artifact is not a regular file: {path}")
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _canonical(value: Mapping[str, Any]) -> bytes:
+    return (json.dumps(value, sort_keys=True, separators=(",", ":"),
+                       ensure_ascii=False, allow_nan=False) + "\n").encode("utf-8")
+
+
+def _regular_directory(path: Path, label: str, *, create: bool = False) -> Path:
+    if create and not path.exists() and not path.is_symlink():
+        path.mkdir(parents=True)
+    if path.is_symlink() or not path.is_dir():
+        raise StaticRegistryError(f"{label} must be a regular directory: {path}")
+    return path.resolve(strict=True)
+
+
+def _sealed_write(path: Path, body: Mapping[str, Any]) -> tuple[Path, str]:
+    """Create one self-hashed receipt without replacing prior evidence."""
+    if path.exists() or path.is_symlink():
+        raise StaticRegistryError(f"sealed receipt already exists: {path}")
+    parent = _regular_directory(path.parent, "receipt parent")
+    payload = dict(body)
+    payload["receipt_sha256"] = schemas.content_hash(payload)
+    raw = _canonical(payload)
+    temporary = parent / f".{path.name}.{os.getpid()}.tmp"
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        descriptor = os.open(temporary, flags, 0o600)
+        try:
+            with os.fdopen(descriptor, "wb") as handle:
+                handle.write(raw)
+                handle.flush()
+                os.fsync(handle.fileno())
+            # `replace` would silently overwrite a receipt installed between
+            # the pre-check and publication.  A hard-link publication is
+            # same-filesystem and fails atomically when the destination exists.
+            os.link(temporary, path, follow_symlinks=False)
+            temporary.unlink()
+            directory_fd = os.open(parent, os.O_RDONLY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+        except BaseException:
+            if temporary.exists() and not temporary.is_symlink():
+                temporary.unlink()
+            raise
+    except FileExistsError as exc:
+        raise StaticRegistryError(f"concurrent temporary receipt collision: {temporary}") from exc
+    return path.resolve(strict=True), hashlib.sha256(raw).hexdigest()
+
+
+def _sealed_read(path: Path, *, schema: str, label: str) -> dict[str, Any]:
+    if path.is_symlink() or not path.is_file():
+        raise StaticRegistryError(f"{label} is absent or not a regular file")
+    try:
+        body = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise StaticRegistryError(f"{label} is not JSON") from exc
+    if not isinstance(body, dict) or body.get("schema") != schema:
+        raise StaticRegistryError(f"{label} schema mismatch")
+    payload = {key: value for key, value in body.items() if key != "receipt_sha256"}
+    if body.get("receipt_sha256") != schemas.content_hash(payload):
+        raise StaticRegistryError(f"{label} self-hash mismatch")
+    return body
+
+
+def _within(path: Path, root: Path, label: str, *, directory: bool = False) -> Path:
+    if path.is_symlink():
+        raise StaticRegistryError(f"{label} may not be a symlink")
+    try:
+        resolved = path.resolve(strict=True)
+        resolved.relative_to(root.resolve(strict=True))
+    except (OSError, ValueError) as exc:
+        raise StaticRegistryError(f"{label} escapes its sealed cache root") from exc
+    if directory and not resolved.is_dir():
+        raise StaticRegistryError(f"{label} is not a directory")
+    if not directory and not resolved.is_file():
+        raise StaticRegistryError(f"{label} is not a file")
+    return resolved
+
+
+@contextmanager
+def _exclusive_lock(path: Path):
+    parent = _regular_directory(path.parent, "build lock parent", create=True)
+    target = parent / path.name
+    flags = os.O_RDWR | os.O_CREAT
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    descriptor = os.open(target, flags, 0o600)
+    try:
+        if target.is_symlink() or not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            raise StaticRegistryError("build cache lock is not a regular file")
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        yield
+    finally:
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_UN)
+        finally:
+            os.close(descriptor)
 
 
 def _resolved_regular(path: Path) -> Path:
@@ -341,6 +459,101 @@ def _source_tree_receipt(*, path: Path, root: Path, commit: str) -> tuple[Path, 
     return path, _digest(path)
 
 
+def _production_authority(*, production_path: Path, production_branch: str,
+                          production_commit: str) -> dict[str, str]:
+    root = production_path.resolve(strict=True)
+    if root.is_symlink() or not root.is_dir():
+        raise StaticRegistryError("frozen production path is not a regular directory")
+    def git(*argv: str) -> str:
+        result = subprocess.run(("git", "-C", str(root), *argv), stdin=subprocess.DEVNULL,
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                text=True, check=False)
+        if result.returncode:
+            raise StaticRegistryError(
+                f"could not revalidate frozen production authority: {' '.join(argv)}")
+        return result.stdout.strip()
+    if (git("rev-parse", "HEAD") != production_commit
+            or git("branch", "--show-current") != production_branch
+            or git("status", "--porcelain", "--untracked-files=no")):
+        raise StaticRegistryError("frozen production checkout changed from deployment authority")
+    return {"path": str(root), "branch": production_branch, "commit": production_commit}
+
+
+def _program_identity(name: str, *, path_value: str) -> dict[str, str] | None:
+    resolved_name = shutil.which(name, path=path_value)
+    if resolved_name is None:
+        return None
+    requested = Path(resolved_name)
+    try:
+        resolved = requested.resolve(strict=True)
+    except OSError as exc:
+        raise StaticRegistryError(f"build tool cannot be resolved: {name}") from exc
+    if resolved.is_symlink() or not resolved.is_file():
+        raise StaticRegistryError(f"build tool is not a regular file: {name}")
+    return {"requested": str(requested.absolute()), "resolved": str(resolved),
+            "sha256": _digest(resolved)}
+
+
+def _path_identity(path: Path) -> dict[str, str] | None:
+    if not path.exists() and not path.is_symlink():
+        return None
+    try:
+        resolved = path.resolve(strict=True)
+    except OSError as exc:
+        raise StaticRegistryError(f"build tool cannot be resolved: {path}") from exc
+    if resolved.is_symlink() or not resolved.is_file():
+        raise StaticRegistryError(f"build tool is not a regular file: {path}")
+    return {"requested": str(path.absolute()), "resolved": str(resolved),
+            "sha256": _digest(resolved)}
+
+
+def _build_environment_and_toolchain() -> tuple[dict[str, str], dict[str, Any]]:
+    """Freeze the small environment actually supplied to both build phases."""
+    environment = {name: os.environ[name] for name in _BUILD_ENV_NAMES if name in os.environ}
+    # Do not let a controller/container wrapper's ephemeral PATH become part of
+    # the compiler selection or make otherwise identical S1/S2 keys diverge.
+    environment["PATH"] = _SEALED_BUILD_PATH
+    path_value = _SEALED_BUILD_PATH
+    programs = {name: _program_identity(name, path_value=path_value)
+                for name in ("cmake", "cc", "c++", "make", "ninja", "hipcc")}
+    if programs["cmake"] is None or programs["cc"] is None or programs["c++"] is None:
+        raise StaticRegistryError("sealed build toolchain requires cmake, cc, and c++")
+    # Resolve the compilers rather than letting a later PATH edit choose them.
+    environment["CC"] = str(programs["cc"]["resolved"])
+    environment["CXX"] = str(programs["c++"]["resolved"])
+    rocm_root = Path(environment.get("ROCM_PATH", environment.get("HIP_PATH", "/opt/rocm")))
+    rocm_programs = {relative: _path_identity(rocm_root / relative) for relative in (
+        "bin/hipcc", "llvm/bin/clang", "llvm/bin/clang++", "llvm/bin/ld.lld")}
+    toolchain = {
+        "schema": "epyc.autokernel.build_toolchain.v1",
+        "programs": programs,
+        "rocm_root": str(rocm_root.resolve(strict=False)),
+        "rocm_programs": rocm_programs,
+        "dynamic_environment": {
+            "TMPDIR": "<arm-build-dir>/.autokernel-tmp",
+            "PYTHONDONTWRITEBYTECODE": "1",
+        },
+    }
+    toolchain["toolchain_sha256"] = schemas.content_hash(toolchain)
+    return environment, toolchain
+
+
+def _verify_source_identity_receipt(path: Path, *, expected_sha256: str,
+                                    identity: gpu_source_proofs.BuildIdentity,
+                                    cache_root: Path) -> None:
+    path = _within(path, cache_root, "source identity receipt")
+    if _digest(path) != expected_sha256:
+        raise StaticRegistryError("source identity receipt carrier changed")
+    body = _sealed_read(path, schema="epyc.autokernel.source_tree_identity.v1",
+                        label="source identity receipt")
+    tree = body.get("tree")
+    if (body.get("source_commit") != identity.source_commit
+            or not isinstance(tree, Mapping)
+            or tree.get("sha256") != identity.source_sha256
+            or tree.get("listing_is_complete") is not True):
+        raise StaticRegistryError("source identity receipt differs from build identity")
+
+
 def _copy_regular(source: Path, target: Path) -> None:
     if source.is_symlink() or not source.is_file():
         raise StaticRegistryError(f"runtime object is not regular: {source}")
@@ -544,11 +757,377 @@ class StaticGpuSourceBuilder:
             supplied[key] = value
         return tuple(sorted(supplied.items()))
 
+    def _contract(self, candidate: controller.PlannedCandidate,
+                  permit: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, str]]:
+        instrument_branch = permit.get("instrument_branch")
+        deployment_sha = permit.get("deployment_config_sha256")
+        if not isinstance(instrument_branch, str) or not instrument_branch:
+            raise StaticRegistryError("static source builder requires a sealed instrument branch")
+        if (not isinstance(deployment_sha, str) or len(deployment_sha) != 64
+                or any(char not in "0123456789abcdef" for char in deployment_sha)):
+            raise StaticRegistryError("static source builder requires sealed deployment authority")
+        production_root = self.production_path.resolve(strict=True)
+        instrument_root = self.instrument_path.resolve(strict=True)
+        if production_root == instrument_root:
+            raise StaticRegistryError("instrument repository must be separate from frozen production")
+        mutable_roots = (self.operations_root.resolve(strict=False),
+                         self.build_root.resolve(strict=False))
+        if (mutable_roots[0] == mutable_roots[1]
+                or mutable_roots[0].is_relative_to(mutable_roots[1])
+                or mutable_roots[1].is_relative_to(mutable_roots[0])):
+            raise StaticRegistryError("build root and cache root may not overlap")
+        for mutable in mutable_roots:
+            for protected in (production_root, instrument_root):
+                if mutable == protected or mutable.is_relative_to(protected) or protected.is_relative_to(mutable):
+                    raise StaticRegistryError("build/cache roots may not overlap protected source repositories")
+        _regular_directory(self.operations_root, "operations root", create=True)
+        _regular_directory(self.build_root, "build root", create=True)
+        environment, toolchain = _build_environment_and_toolchain()
+        production = _production_authority(
+            production_path=self.production_path, production_branch=self.production_branch,
+            production_commit=candidate.source_manifest.production_base_commit)
+        instrument = _instrument_authority(
+            instrument_path=self.instrument_path,
+            production_commit=candidate.source_manifest.production_base_commit,
+            instrument_branch=instrument_branch,
+            instrument_commit=candidate.source_manifest.instrument_commit)
+        selected = _verify_selected_gpu_blobs(
+            production_path=self.production_path,
+            production_commit=candidate.source_manifest.production_base_commit,
+            instrument_path=self.instrument_path,
+            instrument_commit=candidate.source_manifest.instrument_commit,
+            paths=candidate.source_manifest.declared_files)
+        effective_defines = dict(self._sealed_cmake_defines())
+        effective_defines.setdefault("GGML_CCACHE", "OFF")
+        contract: dict[str, Any] = {
+            "schema": _BUILD_KEY_SCHEMA,
+            "builder_schema": _BUILDER_SCHEMA,
+            "deployment_config_sha256": deployment_sha,
+            "production_base_authority": production,
+            "instrument_authority": instrument,
+            "patch_bundle_sha256": candidate.source_manifest.patch_bundle_sha256,
+            "patch_sha256": candidate.source_manifest.patch_sha256,
+            "selected_gpu_base_blobs": selected,
+            "cmake_defines": [list(item) for item in sorted(effective_defines.items())],
+            "build_type": "Release",
+            "parallelism": {"jobs": 1, "cpu_list": None, "load_average_cap": None},
+            "required_targets": list(_REQUIRED_TARGETS),
+            "build_environment": dict(sorted(environment.items())),
+            "toolchain": toolchain,
+            "operations_root": str(self.operations_root.resolve(strict=False)),
+            "build_root": str(self.build_root.resolve(strict=False)),
+        }
+        contract["build_key"] = schemas.content_hash(contract)
+        return contract, environment
+
+    @staticmethod
+    def _request_key(contract: Mapping[str, Any]) -> str:
+        return schemas.content_hash({
+            "schema": "epyc.autokernel.gpu_source_build_request.v1",
+            "deployment_config_sha256": contract["deployment_config_sha256"],
+            "production_base_authority": contract["production_base_authority"],
+            "instrument_authority": contract["instrument_authority"],
+            "patch_bundle_sha256": contract["patch_bundle_sha256"],
+            "builder_schema": contract["builder_schema"],
+        })
+
+    @staticmethod
+    def _build_projection(build: controller.GpuSourceBuild) -> dict[str, Any]:
+        fields = {
+            "anchor_build": str(build.anchor_build),
+            "candidate_build": str(build.candidate_build),
+            "candidate_identity": vars(build.candidate_identity),
+            "anchor_identity": vars(build.anchor_identity),
+            "measurement_binary": str(build.measurement_binary),
+            "common_loader_dir": str(build.common_loader_dir),
+            "anchor_loader_dir": str(build.anchor_loader_dir),
+            "candidate_loader_dir": str(build.candidate_loader_dir),
+            "reward_runtime_sha256": build.reward_runtime_sha256,
+            "build_key": build.build_key,
+            "materialization_receipt": str(build.materialization_receipt),
+            "materialization_sha256": build.materialization_sha256,
+            "anchor_source_tree_receipt": str(build.anchor_source_tree_receipt),
+            "anchor_source_tree_sha256": build.anchor_source_tree_sha256,
+            "candidate_source_tree_receipt": str(build.candidate_source_tree_receipt),
+            "candidate_source_tree_sha256": build.candidate_source_tree_sha256,
+            "teardown_receipt": str(build.teardown_receipt),
+            "teardown_sha256": build.teardown_sha256,
+        }
+        if any(value in (None, "None") for value in fields.values()):
+            raise StaticRegistryError("completed build projection is incomplete")
+        return fields
+
+    def _validate_ref(self, path: Path, *, request_key: str, build_key: str) -> None:
+        row = _sealed_read(path, schema=_BUILD_REF_SCHEMA, label="build cache ref")
+        if (row.get("request_key") != request_key or row.get("build_key") != build_key
+                or row.get("builder_schema") != _BUILDER_SCHEMA):
+            raise StaticRegistryError("build cache ref differs from the sealed request")
+
+    def _reopen(self, *, cache_root: Path, build_root: Path, operation_key: str,
+                expected_intent: Mapping[str, Any], contract: Mapping[str, Any]) -> controller.GpuSourceBuild:
+        intent_path = cache_root / "intent.json"
+        intent = _sealed_read(intent_path, schema=_BUILD_INTENT_SCHEMA,
+                              label="build cache intent")
+        if any(intent.get(key) != value for key, value in expected_intent.items()):
+            raise StaticRegistryError("build cache intent differs from the canonical build contract")
+        terminal_path = cache_root / "terminal.json"
+        if not terminal_path.exists() and not terminal_path.is_symlink():
+            raise StaticRegistryError("build cache is incomplete after a prior intent; refusing rebuild")
+        terminal = _sealed_read(terminal_path, schema=_BUILD_TERMINAL_SCHEMA,
+                                label="build cache terminal")
+        if (terminal.get("build_key") != contract["build_key"]
+                or terminal.get("intent_file_sha256") != _digest(intent_path)):
+            raise StaticRegistryError("build cache terminal does not close its intent")
+        if terminal.get("state") != "complete":
+            raise StaticRegistryError("prior build transaction is terminal but not reusable")
+        raw = terminal.get("build")
+        if not isinstance(raw, Mapping):
+            raise StaticRegistryError("completed build transaction has no typed projection")
+        try:
+            build = controller.GpuSourceBuild(
+                anchor_build=Path(str(raw["anchor_build"])),
+                candidate_build=Path(str(raw["candidate_build"])),
+                candidate_identity=gpu_source_proofs.BuildIdentity(**dict(raw["candidate_identity"])),
+                anchor_identity=gpu_source_proofs.BuildIdentity(**dict(raw["anchor_identity"])),
+                measurement_binary=Path(str(raw["measurement_binary"])),
+                common_loader_dir=Path(str(raw["common_loader_dir"])),
+                anchor_loader_dir=Path(str(raw["anchor_loader_dir"])),
+                candidate_loader_dir=Path(str(raw["candidate_loader_dir"])),
+                reward_runtime_sha256=str(raw["reward_runtime_sha256"]),
+                operation_key=operation_key,
+                build_key=str(raw["build_key"]),
+                materialization_receipt=Path(str(raw["materialization_receipt"])),
+                materialization_sha256=str(raw["materialization_sha256"]),
+                anchor_source_tree_receipt=Path(str(raw["anchor_source_tree_receipt"])),
+                anchor_source_tree_sha256=str(raw["anchor_source_tree_sha256"]),
+                candidate_source_tree_receipt=Path(str(raw["candidate_source_tree_receipt"])),
+                candidate_source_tree_sha256=str(raw["candidate_source_tree_sha256"]),
+                teardown_receipt=Path(str(raw["teardown_receipt"])),
+                teardown_sha256=str(raw["teardown_sha256"]),
+            )
+        except (KeyError, TypeError, ValueError, controller.DiscoveryControllerError) as exc:
+            raise StaticRegistryError("completed build projection is malformed") from exc
+        if build.build_key != contract["build_key"]:
+            raise StaticRegistryError("cached build identity is not keyed by its build contract")
+        _within(build.anchor_build, build_root, "anchor build", directory=True)
+        _within(build.candidate_build, build_root, "candidate build", directory=True)
+        materialization_path = _within(
+            build.materialization_receipt, cache_root, "materialization receipt")
+        materialization = _sealed_read(
+            materialization_path, schema="epyc.autokernel.gpu_source_materialization.v1",
+            label="materialization receipt")
+        if (materialization.get("build_key") != contract["build_key"]
+                or materialization.get("build_contract") != contract
+                or materialization.get("operation_key") != contract["build_key"]
+                or materialization.get("manifest_sha256") != contract["patch_bundle_sha256"]
+                or materialization.get("production_base_authority") != contract["production_base_authority"]
+                or materialization.get("instrument_authority") != contract["instrument_authority"]):
+            raise StaticRegistryError("materialization receipt differs from sealed build contract")
+        if _digest(materialization_path) != build.materialization_sha256:
+            raise StaticRegistryError("materialization receipt bytes changed")
+        if (_production_authority(
+                production_path=self.production_path, production_branch=self.production_branch,
+                production_commit=str(contract["production_base_authority"]["commit"]))
+                != contract["production_base_authority"]):
+            raise StaticRegistryError("production authority changed after cached build")
+        current_instrument = _instrument_authority(
+            instrument_path=self.instrument_path,
+            production_commit=str(contract["production_base_authority"]["commit"]),
+            instrument_branch=str(contract["instrument_authority"]["instrument_branch"]),
+            instrument_commit=str(contract["instrument_authority"]["instrument_commit"]))
+        if current_instrument != contract["instrument_authority"]:
+            raise StaticRegistryError("instrument authority changed after cached build")
+        selected = _verify_selected_gpu_blobs(
+            production_path=self.production_path,
+            production_commit=str(contract["production_base_authority"]["commit"]),
+            instrument_path=self.instrument_path,
+            instrument_commit=str(contract["instrument_authority"]["instrument_commit"]),
+            paths=tuple(sorted(contract["selected_gpu_base_blobs"])))
+        if selected != contract["selected_gpu_base_blobs"]:
+            raise StaticRegistryError("selected source blobs changed after cached build")
+        _verify_source_identity_receipt(
+            build.anchor_source_tree_receipt,
+            expected_sha256=str(build.anchor_source_tree_sha256),
+            identity=build.anchor_identity, cache_root=cache_root)
+        _verify_source_identity_receipt(
+            build.candidate_source_tree_receipt,
+            expected_sha256=str(build.candidate_source_tree_sha256),
+            identity=build.candidate_identity, cache_root=cache_root)
+        refs = materialization.get("build_identity_files")
+        if not isinstance(refs, Mapping) or set(refs) != {"anchor", "candidate"}:
+            raise StaticRegistryError("materialization build carrier map is malformed")
+        for arm, identity in (("anchor", build.anchor_identity),
+                              ("candidate", build.candidate_identity)):
+            row = refs[arm]
+            if not isinstance(row, Mapping):
+                raise StaticRegistryError("materialization build carrier row is malformed")
+            values = {key: evidence._bound_from_dict(row[key]) for key in (
+                "source_identity", "binary", "hip_library", "config", "linkage")}
+            for value in values.values():
+                allowed_root = cache_root if value.role in {"source_identity", "linkage"} else build_root
+                _within(value.path, allowed_root, f"{arm} {value.role}")
+            evidence._verify_build_files(evidence.BuildIdentityFiles(**values), identity, arm)
+        shared_row = materialization.get("shared_runtime")
+        if not isinstance(shared_row, Mapping):
+            raise StaticRegistryError("materialization shared runtime is malformed")
+        shared = evidence.SharedRewardRuntimeFiles(**{
+            key: evidence._bound_from_dict(shared_row[key]) for key in (
+                "measurement_binary", "runtime_receipt", "anchor_hip_library",
+                "candidate_hip_library")})
+        for item in (shared.measurement_binary, shared.runtime_receipt,
+                     shared.anchor_hip_library, shared.candidate_hip_library):
+            _within(item.path, cache_root, f"shared runtime {item.role}")
+            evidence._verify_bound(item)
+        runtime_body = _sealed_read(shared.runtime_receipt.path,
+                                    schema="epyc.autokernel.shared_reward_runtime.v1",
+                                    label="shared reward runtime receipt")
+        try:
+            runtime_root = Path(str(runtime_body["split_runtime_manifest"]["root"]))
+            verified_runtime = split_runtime_verifier.verify_split_runtime(runtime_root)
+        except (KeyError, TypeError, OSError, split_runtime_verifier.SplitRuntimeError) as exc:
+            raise StaticRegistryError("cached split reward runtime cannot be revalidated") from exc
+        if runtime_body["split_runtime_manifest"] != verified_runtime.to_dict():
+            raise StaticRegistryError("cached split reward runtime identity changed")
+        if (build.measurement_binary != shared.measurement_binary.path
+                or build.reward_runtime_sha256 != shared.runtime_receipt.sha256
+                or build.anchor_identity.hip_library_sha256 != shared.anchor_hip_library.sha256
+                or build.candidate_identity.hip_library_sha256 != shared.candidate_hip_library.sha256):
+            raise StaticRegistryError("cached reward runtime differs from build identities")
+        teardown_path = _within(build.teardown_receipt, cache_root, "teardown receipt")
+        teardown = _sealed_read(teardown_path, schema=_TEARDOWN_SCHEMA,
+                                label="teardown receipt")
+        if (_digest(teardown_path) != build.teardown_sha256
+                or teardown.get("build_key") != contract["build_key"]
+                or teardown.get("errors") != []):
+            raise StaticRegistryError("cached build teardown is incomplete")
+        receipts = teardown.get("receipts")
+        if not isinstance(receipts, list) or len(receipts) != 3:
+            raise StaticRegistryError("cached build teardown does not cover all worktrees")
+        for receipt in receipts:
+            if (not isinstance(receipt, Mapping)
+                    or receipt.get("worktree_removed") is not True
+                    or receipt.get("branch_exists_after") is not False
+                    or receipt.get("all_production_trees_unchanged") is not True):
+                raise StaticRegistryError("cached worktree teardown proof is not clean")
+            worktree_path = Path(str(receipt.get("worktree_path", "")))
+            if worktree_path.exists() or worktree_path.is_symlink():
+                raise StaticRegistryError("a supposedly torn-down build worktree still exists")
+        builds = materialization.get("builds")
+        if not isinstance(builds, Mapping) or len(builds) != 2:
+            raise StaticRegistryError("cached materialization lacks both build receipts")
+        for build_receipt in builds.values():
+            if (not isinstance(build_receipt, Mapping)
+                    or build_receipt.get("succeeded") is not True
+                    or build_receipt.get("log_disagrees_with_exit_code") is not False):
+                raise StaticRegistryError("cached build receipt is not successful")
+            log = _within(Path(str(build_receipt.get("log_path", ""))), cache_root,
+                          "cached build log")
+            if _digest(log) != build_receipt.get("log_sha256"):
+                raise StaticRegistryError("cached build log changed")
+            facts = build_receipt.get("facts")
+            if (not isinstance(facts, Mapping)
+                    or not set(_REQUIRED_TARGETS).issubset(set(facts.get("built_targets", [])))):
+                raise StaticRegistryError("cached build receipt lacks required targets")
+            plan = build_receipt.get("plan")
+            expected_cmake = str(contract["toolchain"]["programs"]["cmake"]["resolved"])
+            expected_parallelism = contract["parallelism"]
+            if (not isinstance(plan, Mapping)
+                    or plan.get("targets") != contract["required_targets"]
+                    or plan.get("build_type") != contract["build_type"]
+                    or plan.get("cmake_defines") != contract["cmake_defines"]
+                    or plan.get("parallelism") != expected_parallelism
+                    or not isinstance(plan.get("configure_command"), list)
+                    or not isinstance(plan.get("build_command"), list)
+                    or expected_cmake not in plan["configure_command"]
+                    or expected_cmake not in plan["build_command"]):
+                raise StaticRegistryError("cached build plan differs from sealed build contract")
+        return build
+
     def build(self, candidate: controller.PlannedCandidate, _authorization: Any,
               _permit: Mapping[str, Any]) -> controller.GpuSourceBuild:
         operation_key = _permit.get("operation_key")
-        if not isinstance(operation_key, str) or len(operation_key) != 64:
+        if (not isinstance(operation_key, str) or len(operation_key) != 64
+                or any(char not in "0123456789abcdef" for char in operation_key)):
             raise StaticRegistryError("static builder requires the sealed controller operation key")
+        contract, environment = self._contract(candidate, _permit)
+        build_key = str(contract["build_key"])
+        request_key = self._request_key(contract)
+        cache_base = self.operations_root / "build-cache"
+        _regular_directory(cache_base, "build cache", create=True)
+        refs_root = _regular_directory(cache_base / "refs", "build cache refs", create=True)
+        entries_root = _regular_directory(cache_base / "entries", "build cache entries", create=True)
+        locks_root = _regular_directory(cache_base / "locks", "build cache locks", create=True)
+        cache_root = entries_root / build_key
+        keyed_build_root = self.build_root / build_key
+        expected_intent = {
+            "schema": _BUILD_INTENT_SCHEMA,
+            "authority": "nonpromotable_candidate_only_discovery",
+            "promotion_claim": False,
+            "request_key": request_key,
+            "build_key": build_key,
+            "build_contract": contract,
+        }
+        with _exclusive_lock(locks_root / f"request-{request_key}.lock"):
+            with _exclusive_lock(locks_root / f"build-{build_key}.lock"):
+                ref_path = refs_root / f"{request_key}.json"
+                created_ref = False
+                cache_present = cache_root.exists() or cache_root.is_symlink()
+                if ref_path.exists() or ref_path.is_symlink():
+                    self._validate_ref(ref_path, request_key=request_key, build_key=build_key)
+                else:
+                    if cache_present:
+                        raise StaticRegistryError(
+                            "build cache entry exists without its sealed ref; refusing reuse")
+                    _sealed_write(ref_path, {
+                        "schema": _BUILD_REF_SCHEMA, "builder_schema": _BUILDER_SCHEMA,
+                        "request_key": request_key, "build_key": build_key,
+                        "promotion_claim": False})
+                    created_ref = True
+                if cache_present:
+                    _regular_directory(cache_root, "build cache entry")
+                    return self._reopen(cache_root=cache_root,
+                                        build_root=keyed_build_root,
+                                        operation_key=operation_key,
+                                        expected_intent=expected_intent, contract=contract)
+                if not created_ref:
+                    raise StaticRegistryError(
+                        "build ref exists without its cache transaction; refusing rebuild")
+                cache_root.mkdir()
+                _intent_path, intent_file_sha = _sealed_write(
+                    cache_root / "intent.json", expected_intent)
+                try:
+                    build = self._build_uncached(
+                        candidate, _authorization,
+                        {**dict(_permit), "operation_key": build_key,
+                         "build_contract": contract, "build_environment": environment,
+                         "cache_root": str(cache_root)})
+                except Exception as exc:
+                    _sealed_write(cache_root / "terminal.json", {
+                        "schema": _BUILD_TERMINAL_SCHEMA, "build_key": build_key,
+                        "intent_file_sha256": intent_file_sha, "state": "failed",
+                        "failure_type": type(exc).__name__, "promotion_claim": False})
+                    raise
+                _sealed_write(cache_root / "terminal.json", {
+                    "schema": _BUILD_TERMINAL_SCHEMA, "build_key": build_key,
+                    "intent_file_sha256": intent_file_sha, "state": "complete",
+                    "build": self._build_projection(build), "promotion_claim": False})
+                return self._reopen(cache_root=cache_root,
+                                    build_root=keyed_build_root,
+                                    operation_key=operation_key,
+                                    expected_intent=expected_intent, contract=contract)
+
+    def _build_uncached(self, candidate: controller.PlannedCandidate, _authorization: Any,
+                        _permit: Mapping[str, Any]) -> controller.GpuSourceBuild:
+        operation_key = _permit.get("operation_key")
+        if not isinstance(operation_key, str) or len(operation_key) != 64:
+            raise StaticRegistryError("uncached builder requires its canonical build key")
+        contract = _permit.get("build_contract")
+        environment = _permit.get("build_environment")
+        cache_root_raw = _permit.get("cache_root")
+        if (not isinstance(contract, Mapping) or contract.get("build_key") != operation_key
+                or not isinstance(environment, Mapping) or not isinstance(cache_root_raw, str)):
+            raise StaticRegistryError("uncached builder lacks its sealed build transaction")
+        cache_root = Path(cache_root_raw).resolve(strict=True)
         # Production remains verification-only.  Every mutable worktree is
         # created from the independently sealed experimental instrument repo.
         if self.instrument_path.resolve(strict=True) == self.production_path.resolve(strict=True):
@@ -569,13 +1148,17 @@ class StaticGpuSourceBuilder:
             instrument_path=self.instrument_path,
             instrument_commit=candidate.source_manifest.instrument_commit,
             paths=candidate.source_manifest.declared_files)
-        campaign_root = self.operations_root / "worktrees" / operation_key
+        campaign_root = cache_root / "worktrees"
         build_root = self.build_root / operation_key
-        campaign_root.mkdir(parents=True, exist_ok=True); build_root.mkdir(parents=True, exist_ok=True)
+        if campaign_root.exists() or campaign_root.is_symlink():
+            raise StaticRegistryError("fresh build transaction already has a worktree root")
+        if build_root.exists() or build_root.is_symlink():
+            raise StaticRegistryError("fresh build transaction already has a keyed build root")
+        campaign_root.mkdir(); build_root.mkdir()
         actor: worktree.Worktree | None = None
         actor_proof: Any | None = None
         snapshots: list[worktree.Worktree] = []
-        operation_dir = self.operations_root / "materialization" / operation_key
+        operation_dir = cache_root / "receipts"
         operation_dir.mkdir(parents=True, exist_ok=True)
         completed: dict[str, Any] | None = None
         try:
@@ -601,16 +1184,19 @@ class StaticGpuSourceBuilder:
                                                        root=build_root)
                 plans.append((ident, snapshot, build_dir, worktree.BuildPlan(
                     source_root=snapshot.path, build_dir=build_dir, actor_worktree=actor.path,
-                    parallelism=parallel, targets=("llama-bench", "test-backend-ops"), cmake_defines=self._sealed_cmake_defines())))
+                    parallelism=parallel, targets=_REQUIRED_TARGETS,
+                    cmake_defines=self._sealed_cmake_defines(),
+                    cmake=str(contract["toolchain"]["programs"]["cmake"]["resolved"]))))
             results = []
             for ident, snapshot, build_dir, plan in plans:
-                log = (self.operations_root / "build-logs" / operation_key
-                       / f"{ident}.log")
+                log = cache_root / "logs" / f"{ident}.log"
                 log.parent.mkdir(parents=True, exist_ok=True)
-                result = worktree.run_build(plan, log_path=log)
+                result = worktree.run_build(plan, log_path=log,
+                                            env={str(key): str(value)
+                                                 for key, value in environment.items()})
                 if not result.succeeded or result.log_disagrees_with_exit_code:
                     raise StaticRegistryError(f"clean build did not succeed for {ident}")
-                if not {"llama-bench", "test-backend-ops"}.issubset(set(result.facts.built_targets)):
+                if not set(_REQUIRED_TARGETS).issubset(set(result.facts.built_targets)):
                     raise StaticRegistryError(f"build did not prove required targets for {ident}")
                 results.append((ident, snapshot, build_dir, result))
             by_id = {ident: (snapshot, build_dir, result) for ident, snapshot, build_dir, result in results}
@@ -652,9 +1238,10 @@ class StaticGpuSourceBuilder:
                 arm="candidate", build_dir=Path(by_id[candidate.source_manifest.candidate_id][1].path),
                 source_receipt=candidate_source_receipt)
             runtime = SharedRewardRuntime.materialize(
-                root=self.operations_root / "runtime" / operation_key,
+                root=cache_root / "runtime",
                 anchor_build=Path(by_id["akc-anchor"][1].path),
-                candidate_build=Path(by_id[candidate.source_manifest.candidate_id][1].path))
+                candidate_build=Path(by_id[candidate.source_manifest.candidate_id][1].path),
+                verifier=split_runtime_verifier.verify_split_runtime)
             # `create_*worktree` independently proves the experimental checkout
             # was unchanged around each operation.  Re-read the sealed branch
             # object as well, so a ref move cannot be hidden between actor
@@ -669,13 +1256,13 @@ class StaticGpuSourceBuilder:
                 "schema": "epyc.autokernel.gpu_source_materialization.v1",
                 "authority": "nonpromotable_candidate_only_discovery",
                 "operation_key": operation_key,
-                "actor_worktree": actor.to_dict(),
+                "build_key": operation_key,
+                "build_contract": dict(contract),
+                "actor_worktree": actor.to_record(),
                 "actor_proof": actor_proof.to_dict(),
                 "manifest_sha256": candidate.source_manifest.patch_bundle_sha256,
                 "production_base_authority": {
-                    "path": str(self.production_path.resolve(strict=True)),
-                    "branch": self.production_branch,
-                    "commit": candidate.source_manifest.production_base_commit,
+                    **dict(contract["production_base_authority"]),
                 },
                 "instrument_authority": instrument_authority,
                 "selected_gpu_base_blobs": selected_gpu_blobs,
@@ -731,7 +1318,8 @@ class StaticGpuSourceBuilder:
                 "anchor_loader_dir": runtime.anchor_loader_dir,
                 "candidate_loader_dir": runtime.candidate_loader_dir,
                 "reward_runtime_sha256": _digest(runtime.receipt_path),
-                "operation_key": operation_key, "materialization_receipt": materialization_path,
+                "operation_key": None, "build_key": operation_key,
+                "materialization_receipt": materialization_path,
                 "materialization_sha256": _digest(materialization_path),
                 "anchor_source_tree_receipt": anchor_source_receipt,
                 "anchor_source_tree_sha256": anchor_source_sha,
@@ -751,8 +1339,9 @@ class StaticGpuSourceBuilder:
                     receipts.append(worktree.teardown_worktree(actor).to_dict())
                 except Exception as exc:
                     teardown_errors.append(f"{actor.path.path}: {exc}")
-            teardown = {"schema": "epyc.autokernel.source_materialization_teardown.v1",
-                        "operation_key": operation_key, "receipts": receipts,
+            teardown = {"schema": _TEARDOWN_SCHEMA,
+                        "operation_key": operation_key, "build_key": operation_key,
+                        "receipts": receipts,
                         "errors": teardown_errors, "promotion_claim": False}
             teardown["receipt_sha256"] = schemas.content_hash(teardown)
             receipt_path = operation_dir / "teardown.json"

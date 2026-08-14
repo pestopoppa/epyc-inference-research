@@ -248,6 +248,60 @@ class DeploymentFactoryTests(unittest.TestCase):
         self.assertEqual(admitted["mode"], "cold_serialized")
         self.assertEqual(admitted["load_admission"], {"decision_sha256": "d" * 64})
 
+    def test_materialized_builder_preserves_each_operation_and_binds_deployment_authority(self):
+        """The build cache key must never replace the controller operation key."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            protected = root / "protected"; protected.mkdir()
+            artifact = protected / "artifact"; artifact.write_bytes(b"frozen")
+            bound = F.evidence.BoundInputFile(
+                "production_artifact", artifact,
+                hashlib.sha256(artifact.read_bytes()).hexdigest())
+            calls = []
+            source = F.SourceBuilderBinding(
+                lambda _candidate, _authorization, permit: calls.append(dict(permit)) or dict(permit))
+            templates = mock.Mock(spec=F.ExperimentTemplateRegistry)
+            templates.registry_sha256 = "e" * 64
+            templates.templates = {}
+            templates.resolve.return_value = mock.sentinel.template
+            resolved = SimpleNamespace(
+                environment_profile=F.EnvironmentProfile({"PATH": "/usr/bin"}),
+                source_builder=source,
+                evidence_plan=F.EvidencePlanBinding(mock.Mock()),
+                runner_args=F.RunnerArgsBinding(mock.Mock()),
+                experiment_template_registry=templates,
+                inference_window_lease=F.InferenceWindowLeaseBinding(),
+                production_snapshot=F.ProductionSnapshotBinding((bound,)))
+            config = mock.Mock(
+                config_sha256="d" * 64, experiment_template_registry_sha256="e" * 64,
+                actor_wrapper=SimpleNamespace(path=Path("/sealed/codex-wrapper")),
+                production_path=protected, instrument_path=protected,
+                claim_timeout_s=0.0, instrument_branch="measurement-instrument")
+            config.revalidate = mock.Mock()
+            candidate = mock.Mock(experiment_intent=mock.sentinel.intent,
+                                  source_manifest=mock.Mock())
+            adapters = {}
+            def adapter_factory(**kwargs):
+                adapters.update(kwargs)
+                return mock.sentinel.screener
+            with mock.patch.object(F.deployment, "resolve_registry", return_value=resolved), \
+                 mock.patch.object(F, "_validate_source_scope"), \
+                 mock.patch.object(F.gpu_source_adapter, "build_governed_gpu_source_adapter",
+                                   side_effect=adapter_factory), \
+                 mock.patch.object(F.controller, "build_controller_adapters",
+                                   side_effect=lambda **kwargs: kwargs):
+                F.materialize(config, {}, correctness_executor=mock.Mock(),
+                              rocprof_executor=mock.Mock(), claim_journal=mock.Mock())
+                build = adapters["build_source"]
+                first = build(candidate, object(), {"operation_key": "1" * 64})
+                second = build(candidate, object(), {"operation_key": "2" * 64})
+            self.assertEqual(first["operation_key"], "1" * 64)
+            self.assertEqual(second["operation_key"], "2" * 64)
+            self.assertEqual([row["deployment_config_sha256"] for row in calls],
+                             [config.config_sha256, config.config_sha256])
+            self.assertEqual([row["instrument_branch"] for row in calls],
+                             [config.instrument_branch, config.instrument_branch])
+
 
 if __name__ == "__main__":
     unittest.main()

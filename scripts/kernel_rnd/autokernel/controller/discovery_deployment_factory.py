@@ -1148,7 +1148,8 @@ def materialize(config: deployment.DiscoveryDeployment, registry: Mapping[str, M
             candidate_id=candidate.source_manifest.candidate_id,
             production_base_commit=config.production_head,
             instrument_commit=config.instrument_commit)
-        permit = {**permit, "instrument_branch": config.instrument_branch}
+        permit = {**permit, "instrument_branch": config.instrument_branch,
+                  "deployment_config_sha256": config.config_sha256}
         snapshot.revalidate()
         return source.build(candidate, authorization, permit)
     def plan(candidate: controller.PlannedCandidate, build_: controller.GpuSourceBuild):
@@ -1174,6 +1175,7 @@ def materialize(config: deployment.DiscoveryDeployment, registry: Mapping[str, M
         if (build_.measurement_binary is None or build_.common_loader_dir is None
                 or build_.anchor_loader_dir is None or build_.candidate_loader_dir is None
                 or build_.reward_runtime_sha256 is None or build_.operation_key is None
+                or build_.build_key is None
                 or build_.materialization_receipt is None or build_.materialization_sha256 is None
                 or build_.anchor_source_tree_receipt is None or build_.anchor_source_tree_sha256 is None
                 or build_.candidate_source_tree_receipt is None or build_.candidate_source_tree_sha256 is None

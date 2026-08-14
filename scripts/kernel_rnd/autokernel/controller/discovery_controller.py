@@ -491,6 +491,7 @@ class GpuSourceBuild:
     candidate_loader_dir: Path | None = None
     reward_runtime_sha256: str | None = None
     operation_key: str | None = None
+    build_key: str | None = None
     materialization_receipt: Path | None = None
     materialization_sha256: str | None = None
     anchor_source_tree_receipt: Path | None = None
@@ -517,6 +518,8 @@ class GpuSourceBuild:
                 raise DiscoveryControllerError("GPU source build has an incomplete shared reward closure")
         if self.operation_key is not None and (not isinstance(self.operation_key, str) or not HASH.fullmatch(self.operation_key)):
             raise DiscoveryControllerError("GPU source build operation key is invalid")
+        if self.build_key is not None and (not isinstance(self.build_key, str) or not HASH.fullmatch(self.build_key)):
+            raise DiscoveryControllerError("GPU source build cache key is invalid")
         for path, expected, label in ((self.materialization_receipt, self.materialization_sha256, "materialization"),
                                       (self.anchor_source_tree_receipt, self.anchor_source_tree_sha256, "anchor source tree"),
                                       (self.candidate_source_tree_receipt, self.candidate_source_tree_sha256, "candidate source tree"),
