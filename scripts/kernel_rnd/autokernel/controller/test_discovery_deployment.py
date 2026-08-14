@@ -35,6 +35,12 @@ class DeploymentConfigTests(unittest.TestCase):
             path = root / f"{label}.json"
             path.write_text(label, encoding="utf-8")
             inputs[label] = {"path": str(path), "sha256": digest(path)}
+        policy_body = {"schema": D.ADMISSION_POLICY_SCHEMA, "version": "test-v1",
+                       "profiles": [], "examples": []}
+        policy_body["policy_sha256"] = D.schemas.content_hash(policy_body)
+        policy_path = Path(inputs["policy"]["path"])
+        policy_path.write_text(json.dumps(policy_body), encoding="utf-8")
+        inputs["policy"]["sha256"] = digest(policy_path)
         planner_context = {
             "schema": D.PLANNER_CONTEXT_SCHEMA,
             "model_sha256": inputs["model"]["sha256"],

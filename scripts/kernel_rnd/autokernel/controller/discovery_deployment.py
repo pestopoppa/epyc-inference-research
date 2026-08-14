@@ -104,6 +104,7 @@ class ImmutableInput:
 
 
 PLANNER_CONTEXT_SCHEMA = "epyc.autokernel.discovery_planner_context.v1"
+ADMISSION_POLICY_SCHEMA = "epyc.autokernel.gpu_load_admission_policy.v1"
 _PLANNER_CONTEXT_LIMIT = 512 * 1024
 
 
@@ -115,6 +116,35 @@ class PlannerContext:
 
     def revalidate(self) -> None:
         self.input.revalidate("planner_context")
+
+
+@dataclass(frozen=True)
+class AdmissionPolicy:
+    input: ImmutableInput
+    value: Mapping[str, Any]
+
+    def revalidate(self) -> None:
+        self.input.revalidate("admission_policy")
+
+
+def _admission_policy(raw: ImmutableInput, *, model: ImmutableInput,
+                      workload: ImmutableInput) -> AdmissionPolicy:
+    try:
+        body = json.loads(raw.path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise DeploymentConfigError("admission policy is not JSON") from exc
+    required = {"schema", "version", "policy_sha256", "profiles", "examples"}
+    if not isinstance(body, Mapping) or set(body) != required or body.get("schema") != ADMISSION_POLICY_SCHEMA:
+        raise DeploymentConfigError("admission policy schema mismatch")
+    if body.get("policy_sha256") != schemas.content_hash({k: v for k, v in body.items() if k != "policy_sha256"}):
+        raise DeploymentConfigError("admission policy self-hash mismatch")
+    if not isinstance(body.get("profiles"), list) or not isinstance(body.get("examples"), list):
+        raise DeploymentConfigError("admission policy profiles/examples are malformed")
+    for example in body["examples"]:
+        keys = {"id", "facts", "missing", "recommended_mode", "rationale", "disqualifiers", "counterfactual", "evidence"}
+        if not isinstance(example, Mapping) or set(example) != keys or example["recommended_mode"] not in {"cold_overlap", "cold_serialized", "hot_resident", "refuse"}:
+            raise DeploymentConfigError("admission policy example is malformed")
+    return AdmissionPolicy(input=raw, value=dict(body))
 
 
 def _planner_context(value: object, *, model: ImmutableInput,
@@ -201,6 +231,7 @@ class DiscoveryDeployment:
     workload: ImmutableInput
     runtime_config: ImmutableInput
     policy: ImmutableInput
+    admission_policy: AdmissionPolicy
     planner_context: PlannerContext
     source_builder_id: str
     evidence_plan_id: str
@@ -217,6 +248,7 @@ class DiscoveryDeployment:
         for label, value in (("model", self.model), ("workload", self.workload),
                              ("runtime_config", self.runtime_config), ("policy", self.policy)):
             value.revalidate(label)
+        self.admission_policy.revalidate()
         self.planner_context.revalidate()
 
 
@@ -337,6 +369,7 @@ def load_deployment_config(path: Path) -> DiscoveryDeployment:
     workload = _input(inputs["workload"], "workload")
     runtime_config = _input(inputs["runtime_config"], "runtime_config")
     policy = _input(inputs["policy"], "policy")
+    admission_policy = _admission_policy(policy, model=model, workload=workload)
     planner_context = _planner_context(top["planner_context"], model=model,
                                        workload=workload, runtime_config=runtime_config)
     for label, input_ in (("actors.wrapper", actor_wrapper), ("model", model),
@@ -353,7 +386,7 @@ def load_deployment_config(path: Path) -> DiscoveryDeployment:
         nomination_threshold=float(threshold), actor_wrapper=actor_wrapper,
         environment_profile_id=environment_profile_id, device_id=device_id,
         claim_timeout_s=float(claim_timeout_s), inference_window_lock=window,
-        model=model, workload=workload,
+        model=model, workload=workload, admission_policy=admission_policy,
         runtime_config=runtime_config, policy=policy, planner_context=planner_context,
         source_builder_id=_identifier(source["source_builder_id"], "source_plan.source_builder_id"),
         evidence_plan_id=_identifier(source["evidence_plan_id"], "source_plan.evidence_plan_id"),

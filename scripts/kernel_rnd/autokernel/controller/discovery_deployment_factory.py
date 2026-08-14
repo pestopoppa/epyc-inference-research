@@ -313,11 +313,13 @@ def controller_config(config: deployment.DiscoveryDeployment, *, dry_run: bool =
         output_root=config.state_root, evidence_root=config.evidence_root,
         max_iterations=config.max_iterations,
         nomination_threshold=config.nomination_threshold, dry_run=dry_run,
-        planner_context=config.planner_context.value,
+        planner_context={**config.planner_context.value,
+                         "admission_policy": config.admission_policy.value},
         planner_context_sha256=config.planner_context.value["context_sha256"],
         production_base_commit=config.production_head,
         instrument_commit=config.production_head,
         experiment_template_registry_sha256=config.experiment_template_registry_sha256,
+        admission_corpus_sha256=config.admission_policy.value["policy_sha256"],
         # The sealed deployment digest, not a caller argument, namespaces all
         # controller/worktree/receipt identities across concurrent deployments.
         campaign_id=f"ak-discovery-{config.config_sha256[:16]}")
