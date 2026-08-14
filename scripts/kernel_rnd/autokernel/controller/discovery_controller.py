@@ -273,7 +273,7 @@ class LoadModeRecommendation:
         if (self.mode not in {"cold_overlap", "cold_serialized", "hot_resident"}
                 or not isinstance(self.rationale, str) or not self.rationale.strip()
                 or len(self.rationale) > 1024 or not isinstance(self.example_ids, tuple)
-                or not self.example_ids or len(self.example_ids) > 8
+                or len(self.example_ids) > 8
                 or len(set(self.example_ids)) != len(self.example_ids)
                 or any(not isinstance(item, str) or not identifier.fullmatch(item)
                        for item in self.example_ids)):
@@ -809,7 +809,7 @@ def _load_plan(path: Path, root: Path, *, assignment: AuthoringAssignment | None
         if not isinstance(intent_raw, Mapping) or set(intent_raw) not in (allowed_intent, allowed_intent - {"load_mode_recommendation"}):
             raise DiscoveryControllerError("planner experiment intent schema mismatch")
         expected = intent_raw["expected_dispatch"]
-        expected_keys = {"kernel_name", "calls", "grid", "workgroup", "lds_bytes"}
+        expected_keys = {"route_id", "kernel_name", "calls", "grid", "workgroup", "lds_bytes"}
         if (not isinstance(expected, list) or not 1 <= len(expected) <= 8
                 or not all(isinstance(row, Mapping) and set(row) == expected_keys
                            for row in expected)):

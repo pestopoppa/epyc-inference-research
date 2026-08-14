@@ -298,6 +298,74 @@ class BlackBoxLaunchGate(unittest.TestCase):
                              item.source_manifest.patch_bundle_sha256)
             self.assertEqual(restored.source_manifest.patch_bytes, patch_bytes)
 
+    def test_real_planner_multirow_dispatch_and_fallback_advice_load(self):
+        """Regression for the first live Sol artifact rejected before Fable."""
+        patch_bytes = (
+            b"diff --git a/ggml/src/ggml.c b/ggml/src/ggml.c\n"
+            b"--- a/ggml/src/ggml.c\n+++ b/ggml/src/ggml.c\n"
+            b"@@ -1 +1 @@\n-x\n+y\n"
+        )
+        assignment = D.AuthoringAssignment(
+            "ak-inaugural", "akp-inaugural", "akc-inaugural", "0" * 40, "1" * 40)
+        symbols = {"ggml/src/ggml.c": ["<file-scope>"]}
+        manifest = {
+            "schema": D.source_candidate.SCHEMA_SOURCE_PATCH,
+            "campaign_id": assignment.campaign_id,
+            "proposal_id": assignment.proposal_id,
+            "candidate_id": assignment.candidate_id,
+            "source_tree": "llama.cpp",
+            "production_base_commit": assignment.production_base_commit,
+            "instrument_commit": assignment.instrument_commit,
+            "change_class": "fusion",
+            "declared_files": ["ggml/src/ggml.c"],
+            "declared_symbols": symbols,
+            "mechanism_id": "inaugural-live-artifact",
+            "patch_sha256": hashlib.sha256(patch_bytes).hexdigest(),
+            "patch_encoding": "base64",
+            "patch_base64": base64.b64encode(patch_bytes).decode("ascii"),
+        }
+        kernel = "void mul_mat_vec_q<(ggml_type)6>(void const*) [clone .kd]"
+        rows = [
+            {"route_id": f"cuda-vecdotq-v1.anchor.{index}",
+             "kernel_name": kernel, "calls": calls, "grid": grid,
+             "workgroup": 128, "lds_bytes": 1024}
+            for index, (calls, grid) in enumerate(
+                ((6063, 57344), (4644, 8192), (3096, 311296)))
+        ]
+        plan = {
+            "hypothesis_id": "akh-v2-q5-type-specific-dequant",
+            "statement": "bounded Q5 dequant hypothesis",
+            "falsifier": "the exact type-6 kernel does not improve",
+            "regime": {"backend": "hip", "phase": "decode"},
+            "proposal": {"proposal_id": assignment.proposal_id,
+                         "change_class": "fusion",
+                         "change": {"files_and_symbols": symbols,
+                                    "estimated_diff_size": 2}},
+            "source_manifest_path": "source-patch.json",
+            "experiment_intent": {
+                "template_id": "cuda-vecdotq-v1",
+                "target_surface": "gpu_decode",
+                "target_symbol": "vec_dot_q5_0_q8_1",
+                "correctness_id": "backend-ops-hip-v1",
+                "dispatch_id": "decode-tg128-rocprof-v1",
+                "expected_dispatch": rows,
+                "load_mode_recommendation": {
+                    "mode": "cold_serialized",
+                    "rationale": "No reviewed overlap authority exists.",
+                    "example_ids": [],
+                },
+            },
+        }
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "source-patch.json").write_text(json.dumps(manifest))
+            (root / "plan.json").write_text(json.dumps(plan))
+            item = D._load_plan(root / "plan.json", root, assignment=assignment)
+        self.assertEqual(
+            [row.route_id for row in item.experiment_intent.expected_dispatch],
+            [row["route_id"] for row in rows])
+        self.assertEqual(item.experiment_intent.load_mode_recommendation.example_ids, ())
+
     def test_actor_cannot_invent_assigned_campaign_or_base_identity(self):
         patch_bytes = (
             b"diff --git a/ggml/src/ggml.c b/ggml/src/ggml.c\n"
