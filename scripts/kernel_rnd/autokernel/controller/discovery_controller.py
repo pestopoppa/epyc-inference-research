@@ -28,7 +28,8 @@ import tempfile
 from typing import Any, Callable, Mapping, Protocol, Sequence
 
 from .. import campaign, hypothesis_portfolio, journal, schemas, source_candidate
-from . import claude_fable5_critic_actor, codex_container_actor, do_not_repeat, hypotheses
+from . import (claude_fable5_critic_actor, codex_container_actor,
+               discovery_telemetry, do_not_repeat, hypotheses)
 from . import gpu_source_proofs
 from scripts.benchmark import autokernel_progression
 from scripts.benchmark import run_autokernel_gpu_discovery as gpu_discovery
@@ -568,13 +569,15 @@ class CodexPlanner:
                  reviewed_sources: ReviewedSourcePackage | None = None,
                  wrapper_sha256: str | None = None,
                  runtime_identity: Mapping[str, Any] | None = None,
-                 actor_launcher_sha256: str | None = None) -> None:
+                 actor_launcher_sha256: str | None = None,
+                 telemetry: discovery_telemetry.DiscoveryTelemetry | None = None) -> None:
         self.wrapper, self.environment = wrapper, dict(environment)
         self.template_catalog = json.loads(json.dumps(template_catalog or {}, sort_keys=True))
         self.reviewed_sources = reviewed_sources
         self.wrapper_sha256 = wrapper_sha256
         self.runtime_identity = None if runtime_identity is None else dict(runtime_identity)
         self.actor_launcher_sha256 = actor_launcher_sha256
+        self.telemetry = telemetry
     def _runtime(self) -> Mapping[str, Any]:
         if self.wrapper_sha256 is not None:
             if self.wrapper.is_symlink() or not self.wrapper.is_file() or hashlib.sha256(self.wrapper.read_bytes()).hexdigest() != self.wrapper_sha256:
@@ -705,10 +708,36 @@ class CodexPlanner:
                              "structural_example_only": example,
                              "output": "Write plan.json and source-patch.json in workspace."}, sort_keys=True)
         self._runtime()
-        result = codex_container_actor.run_actor(wrapper=self.wrapper, workspace=workspace, model=SOL["model"], effort=SOL["effort"], prompt=prompt, environment=self.environment,
-            expected_wrapper_sha256=self.wrapper_sha256,
-            expected_runtime_identity=self.runtime_identity,
-            expected_launcher_sha256=self.actor_launcher_sha256)
+        if self.telemetry is not None:
+            self.telemetry.emit(
+                "planner", "planner_started",
+                campaign_id=assignment["campaign_id"],
+                hypothesis_id=example_hypothesis, provider=SOL["provider"],
+                model=SOL["model"], effort=SOL["effort"])
+        try:
+            result = codex_container_actor.run_actor(wrapper=self.wrapper, workspace=workspace, model=SOL["model"], effort=SOL["effort"], prompt=prompt, environment=self.environment,
+                expected_wrapper_sha256=self.wrapper_sha256,
+                expected_runtime_identity=self.runtime_identity,
+                expected_launcher_sha256=self.actor_launcher_sha256)
+        except Exception:
+            if self.telemetry is not None:
+                self.telemetry.emit(
+                    "planner", "planner_failed",
+                    campaign_id=assignment["campaign_id"],
+                    hypothesis_id=example_hypothesis, provider=SOL["provider"],
+                    model=SOL["model"], effort=SOL["effort"])
+            raise
+        if self.telemetry is not None:
+            result_facts = {
+                "returncode": result.returncode,
+                "stdout_sha256": hashlib.sha256(result.stdout.encode()).hexdigest(),
+                "stderr_sha256": hashlib.sha256(result.stderr.encode()).hexdigest(),
+            }
+            self.telemetry.emit(
+                "planner", "planner_failed" if result.returncode else "planner_completed",
+                campaign_id=assignment["campaign_id"],
+                hypothesis_id=example_hypothesis, provider=SOL["provider"],
+                model=SOL["model"], effort=SOL["effort"], result=result_facts)
         if result.returncode: raise DiscoveryControllerError(f"Sol actor failed: {result.stderr[-400:]}")
         if self.reviewed_sources is not None:
             self.reviewed_sources.revalidate_materialized(workspace)
@@ -724,6 +753,7 @@ class ClaudeCritic:
                  wrapper_sha256: str | None = None,
                  runtime_identity: Mapping[str, Any] | None = None,
                  actor_launcher_sha256: str | None = None,
+                 telemetry: discovery_telemetry.DiscoveryTelemetry | None = None,
                  auth_root: Path = Path("/home/node/.claude")) -> None:
         self.wrapper, self.environment = wrapper, dict(environment)
         self.template_catalog = json.loads(json.dumps(template_catalog or {}, sort_keys=True))
@@ -731,6 +761,7 @@ class ClaudeCritic:
         self.wrapper_sha256 = wrapper_sha256
         self.runtime_identity = None if runtime_identity is None else dict(runtime_identity)
         self.actor_launcher_sha256 = actor_launcher_sha256
+        self.telemetry = telemetry
         self.auth_root = auth_root
     def _runtime(self) -> Mapping[str, Any]:
         if self.wrapper_sha256 is not None:
@@ -780,13 +811,39 @@ class ClaudeCritic:
             "required_output_bindings": bindings,
             "output": "Return only the strict structured critique; do not edit files or use tools."}, sort_keys=True)
         self._runtime()
-        result = claude_fable5_critic_actor.run_critic(
-            wrapper=self.wrapper, workspace=workspace, prompt=prompt,
-            bindings=bindings, environment=self.environment,
-            auth_root=self.auth_root,
-            expected_wrapper_sha256=self.wrapper_sha256,
-            expected_runtime_identity=self.runtime_identity,
-            expected_launcher_sha256=self.actor_launcher_sha256)
+        campaign_id = manifest.campaign_id
+        if self.telemetry is not None:
+            self.telemetry.emit(
+                "autokernel", "critic_started", campaign_id=campaign_id,
+                hypothesis_id=candidate.hypothesis_id,
+                provider=FABLE5_CRITIC["provider"], model=FABLE5_CRITIC["model"],
+                effort=FABLE5_CRITIC["effort"])
+        try:
+            result = claude_fable5_critic_actor.run_critic(
+                wrapper=self.wrapper, workspace=workspace, prompt=prompt,
+                bindings=bindings, environment=self.environment,
+                auth_root=self.auth_root,
+                expected_wrapper_sha256=self.wrapper_sha256,
+                expected_runtime_identity=self.runtime_identity,
+                expected_launcher_sha256=self.actor_launcher_sha256)
+        except Exception:
+            if self.telemetry is not None:
+                self.telemetry.emit(
+                    "autokernel", "critic_failed", campaign_id=campaign_id,
+                    hypothesis_id=candidate.hypothesis_id,
+                    provider=FABLE5_CRITIC["provider"], model=FABLE5_CRITIC["model"],
+                    effort=FABLE5_CRITIC["effort"])
+            raise
+        if self.telemetry is not None:
+            self.telemetry.emit(
+                "autokernel", "critic_completed", campaign_id=campaign_id,
+                hypothesis_id=candidate.hypothesis_id,
+                provider=FABLE5_CRITIC["provider"], model=FABLE5_CRITIC["model"],
+                effort=FABLE5_CRITIC["effort"], result={
+                    "stdout_sha256": result.stdout_sha256,
+                    "stderr_sha256": result.stderr_sha256,
+                    "decision": result.decision,
+                })
         return Critique(result.decision, result.reason)
 
 
