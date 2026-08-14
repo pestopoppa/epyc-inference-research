@@ -18,6 +18,7 @@ import math
 import os
 from pathlib import Path
 import re
+import resource
 import shutil
 import signal
 import stat
@@ -44,6 +45,8 @@ DECISIONS = ("accept", "reject", "revise")
 MAX_PROMPT_BYTES = 1024 * 1024
 MAX_REASON_CHARS = 4000
 MAX_CREDENTIAL_BYTES = 1024 * 1024
+MAX_STDOUT_BYTES = 2 * 1024 * 1024
+MAX_STDERR_BYTES = 1024 * 1024
 _DIGEST_RE = re.compile(r"[0-9a-f]{64}")
 _SCRUBBED_STATE = b'{"hasCompletedOnboarding":true}\n'
 _EMPTY_MCP = b'{"mcpServers":{}}\n'
@@ -110,6 +113,7 @@ class _Stage:
     config: Path
     runtime: Path
     mcp_config: Path
+    wrapper: Path
 
 
 def _read_regular(path: Path, *, executable: bool = False,
@@ -167,6 +171,13 @@ def _wrapper_identity(wrapper: Path) -> tuple[Path, str]:
     return wrapper, _sha256_bytes(content)
 
 
+def _wrapper_authority(wrapper: Path) -> tuple[Path, str, bytes]:
+    if not wrapper.is_absolute() or wrapper.is_symlink():
+        raise ClaudeFable5CriticError("Claude wrapper must be an absolute non-symlink path")
+    content = _read_regular(wrapper, executable=True)
+    return wrapper, _sha256_bytes(content), content
+
+
 def runtime_identity(wrapper: Path) -> dict[str, object]:
     """Return the exact non-secret runtime identity expected by deployment."""
     path, digest = _wrapper_identity(wrapper)
@@ -180,6 +191,10 @@ def runtime_identity(wrapper: Path) -> dict[str, object]:
         "argv_policy_sha256": ARGV_POLICY_SHA256,
         "auth_staging_policy": AUTH_STAGING_POLICY,
     }
+
+
+def _launcher_sha256() -> str:
+    return _sha256_bytes(_read_regular(Path(__file__).resolve()))
 
 
 def _validated_bindings(bindings: Mapping[str, str]) -> dict[str, str]:
@@ -241,9 +256,9 @@ def build_argv(*, wrapper: Path, config_dir: Path,
     )
 
 
-def _write_private(path: Path, content: bytes) -> None:
+def _write_private(path: Path, content: bytes, *, mode: int = 0o600) -> None:
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC
-    fd = os.open(path, flags, 0o600)
+    fd = os.open(path, flags, mode)
     try:
         offset = 0
         while offset < len(content):
@@ -251,7 +266,7 @@ def _write_private(path: Path, content: bytes) -> None:
         os.fsync(fd)
     finally:
         os.close(fd)
-    if stat.S_IMODE(path.stat().st_mode) != 0o600:
+    if stat.S_IMODE(path.stat().st_mode) != mode:
         raise ClaudeFable5CriticError(f"could not seal private staged file: {path.name}")
 
 
@@ -280,7 +295,8 @@ def _safe_directory(path: Path, *, label: str) -> Path:
 
 
 @contextmanager
-def _staged_auth(*, workspace: Path, auth_root: Path) -> Iterator[_Stage]:
+def _staged_auth(*, workspace: Path, auth_root: Path,
+                 wrapper_content: bytes) -> Iterator[_Stage]:
     workspace = _safe_directory(workspace, label="critic workspace")
     credential = _credentials(auth_root)
     root = Path(tempfile.mkdtemp(prefix=".autokernel-fable5-", dir=workspace))
@@ -294,7 +310,12 @@ def _staged_auth(*, workspace: Path, auth_root: Path) -> Iterator[_Stage]:
         _write_private(config / ".claude.json", _SCRUBBED_STATE)
         mcp = config / "empty-mcp.json"
         _write_private(mcp, _EMPTY_MCP)
-        yield _Stage(root=root, config=config, runtime=runtime, mcp_config=mcp)
+        staged_wrapper = root / "claude"
+        _write_private(staged_wrapper, wrapper_content, mode=0o500)
+        yield _Stage(
+            root=root, config=config, runtime=runtime, mcp_config=mcp,
+            wrapper=staged_wrapper,
+        )
     finally:
         if root.is_symlink():
             raise ClaudeFable5CriticError("Claude staging root became a symlink")
@@ -397,51 +418,75 @@ def _close_process_pipes(process: subprocess.Popen[str]) -> None:
             stream.close()
 
 
+def _limit_output_files() -> None:
+    resource.setrlimit(
+        resource.RLIMIT_FSIZE,
+        (max(MAX_STDOUT_BYTES, MAX_STDERR_BYTES),
+         max(MAX_STDOUT_BYTES, MAX_STDERR_BYTES)),
+    )
+
+
+def _capture_text(handle: Any, maximum: int) -> str:
+    handle.flush()
+    handle.seek(0)
+    content = handle.read(maximum + 1)
+    if len(content) > maximum:
+        raise ClaudeFable5CriticError("Claude output exceeded its bounded capture")
+    return content.decode("utf-8", errors="replace")
+
+
 def _run_process(*, argv: Sequence[str], cwd: Path, environment: Mapping[str, str],
                  prompt: str, timeout_seconds: float,
-                 terminate_grace_seconds: float) -> tuple[int, str, str]:
-    try:
-        process = subprocess.Popen(
-            tuple(argv), cwd=cwd, env=dict(environment), stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-            start_new_session=True,
-        )
-    except OSError as exc:
-        raise ClaudeFable5CriticError("could not start sealed Claude wrapper") from exc
-    timed_out = False
-    stdout = ""
-    stderr = ""
-    primary: BaseException | None = None
-    try:
+                 terminate_grace_seconds: float,
+                 capture_root: Path,
+                 expected_launcher_sha256: str | None = None) -> tuple[int, str, str]:
+    with tempfile.TemporaryFile(mode="w+b", dir=capture_root) as stdout_file, \
+            tempfile.TemporaryFile(mode="w+b", dir=capture_root) as stderr_file:
+        if (expected_launcher_sha256 is not None
+                and _launcher_sha256() != expected_launcher_sha256):
+            raise ClaudeFable5CriticError(
+                "Claude launcher bytes changed at the process spawn boundary")
         try:
-            stdout, stderr = process.communicate(input=prompt, timeout=timeout_seconds)
-        except subprocess.TimeoutExpired as exc:
-            timed_out = True
-            stdout = exc.stdout if isinstance(exc.stdout, str) else ""
-            stderr = exc.stderr if isinstance(exc.stderr, str) else ""
-    except BaseException as exc:
-        primary = exc
-    cleanup_error: BaseException | None = None
-    try:
-        _destroy_group(process, terminate_grace_seconds)
-    except BaseException as exc:
-        cleanup_error = exc
-    finally:
-        _close_process_pipes(process)
-    if cleanup_error is not None:
+            process = subprocess.Popen(
+                tuple(argv), cwd=cwd, env=dict(environment), stdin=subprocess.PIPE,
+                stdout=stdout_file, stderr=stderr_file,
+                start_new_session=True, preexec_fn=_limit_output_files,
+            )
+        except OSError as exc:
+            raise ClaudeFable5CriticError("could not start sealed Claude wrapper") from exc
+        timed_out = False
+        primary: BaseException | None = None
+        try:
+            try:
+                process.communicate(
+                    input=prompt.encode("utf-8"), timeout=timeout_seconds)
+            except subprocess.TimeoutExpired:
+                timed_out = True
+        except BaseException as exc:
+            primary = exc
+        cleanup_error: BaseException | None = None
+        try:
+            _destroy_group(process, terminate_grace_seconds)
+        except BaseException as exc:
+            cleanup_error = exc
+        finally:
+            _close_process_pipes(process)
+        if cleanup_error is not None:
+            if primary is not None:
+                cleanup_error.add_note(
+                    f"Claude process also raised before teardown: {primary!r}")
+                raise cleanup_error from primary
+            raise cleanup_error
         if primary is not None:
-            cleanup_error.add_note(
-                f"Claude process also raised before teardown: {primary!r}")
-            raise cleanup_error from primary
-        raise cleanup_error
-    if primary is not None:
-        raise primary
-    if timed_out:
-        raise ClaudeFable5CriticTimeout(
-            "Claude Fable 5 critic exceeded its bounded timeout; process group destroyed")
-    if process.returncode is None:
-        raise ClaudeFable5CriticError("Claude wrapper has no terminal return code")
-    return process.returncode, stdout, stderr
+            raise primary
+        stdout = _capture_text(stdout_file, MAX_STDOUT_BYTES)
+        stderr = _capture_text(stderr_file, MAX_STDERR_BYTES)
+        if timed_out:
+            raise ClaudeFable5CriticTimeout(
+                "Claude Fable 5 critic exceeded its bounded timeout; process group destroyed")
+        if process.returncode is None:
+            raise ClaudeFable5CriticError("Claude wrapper has no terminal return code")
+        return process.returncode, stdout, stderr
 
 
 def _parse_result(stdout: str, bindings: Mapping[str, str]) -> dict[str, str]:
@@ -493,14 +538,24 @@ def run_critic(
         raise ClaudeFable5CriticError("critic terminate grace must be finite and positive")
     exact_bindings = _validated_bindings(bindings)
     workspace = _safe_directory(workspace, label="critic workspace")
-    current_runtime = runtime_identity(wrapper)
+    wrapper_path, wrapper_sha256, wrapper_content = _wrapper_authority(wrapper)
+    current_runtime = {
+        "kind": RUNTIME_KIND,
+        "provider": PROVIDER,
+        "model": MODEL,
+        "effort": EFFORT,
+        "wrapper_path": str(wrapper_path),
+        "wrapper_sha256": wrapper_sha256,
+        "argv_policy_sha256": ARGV_POLICY_SHA256,
+        "auth_staging_policy": AUTH_STAGING_POLICY,
+    }
     if (expected_wrapper_sha256 is not None
             and current_runtime["wrapper_sha256"] != expected_wrapper_sha256):
         raise ClaudeFable5CriticError("Claude wrapper bytes changed after deployment validation")
     if (expected_runtime_identity is not None
             and current_runtime != dict(expected_runtime_identity)):
         raise ClaudeFable5CriticError("Claude runtime identity changed before spawn")
-    launcher_sha256 = _sha256_bytes(_read_regular(Path(__file__).resolve()))
+    launcher_sha256 = _launcher_sha256()
     if (expected_launcher_sha256 is not None
             and launcher_sha256 != expected_launcher_sha256):
         raise ClaudeFable5CriticError("Claude launcher/argv policy bytes changed before spawn")
@@ -509,21 +564,28 @@ def run_critic(
         if not isinstance(home, str) or not Path(home).is_absolute():
             raise ClaudeFable5CriticError("absolute HOME is required to locate Claude auth")
         auth_root = Path(home) / ".claude"
-    with _staged_auth(workspace=workspace, auth_root=auth_root) as stage:
+    with _staged_auth(
+            workspace=workspace, auth_root=auth_root,
+            wrapper_content=wrapper_content) as stage:
         argv = build_argv(
-            wrapper=wrapper, config_dir=stage.config, bindings=exact_bindings)
+            wrapper=stage.wrapper, config_dir=stage.config, bindings=exact_bindings)
         # Reopen every public byte authority immediately before process creation.
         if runtime_identity(wrapper) != current_runtime:
             raise ClaudeFable5CriticError("Claude runtime identity changed during staging")
+        child_environment = _scrubbed_environment(environment, stage)
+        if _launcher_sha256() != launcher_sha256:
+            raise ClaudeFable5CriticError("Claude launcher bytes changed during staging")
         returncode, stdout, stderr = _run_process(
             argv=argv, cwd=workspace,
-            environment=_scrubbed_environment(environment, stage), prompt=prompt,
+            environment=child_environment, prompt=prompt,
             timeout_seconds=float(timeout_seconds),
             terminate_grace_seconds=float(terminate_grace_seconds),
+            capture_root=stage.runtime,
+            expected_launcher_sha256=launcher_sha256,
         )
         if runtime_identity(wrapper) != current_runtime:
             raise ClaudeFable5CriticError("Claude runtime identity changed during execution")
-        if _sha256_bytes(_read_regular(Path(__file__).resolve())) != launcher_sha256:
+        if _launcher_sha256() != launcher_sha256:
             raise ClaudeFable5CriticError("Claude launcher bytes changed during execution")
         if returncode != 0:
             tail = stderr[-400:].replace("\n", " ")
