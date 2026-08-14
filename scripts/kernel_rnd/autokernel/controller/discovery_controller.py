@@ -626,6 +626,12 @@ class CodexPlanner:
                 "constants": {"schema": source_candidate.SCHEMA_SOURCE_PATCH,
                               "source_tree": "llama.cpp", "patch_encoding": "base64"},
                 "patch_rule": "patch_base64 is strict base64 of a complete UTF-8 unified diff; patch_sha256 hashes the decoded bytes",
+                "unified_diff_hunk_rule": (
+                    "Every @@ hunk header must contain exact old/new line counts matching its "
+                    "body and must end with the reviewed enclosing function symbol from "
+                    "declared_symbols for that file. Blank hunk context, a preceding function, "
+                    "or a following function is invalid. Before exit, decode patch_base64, "
+                    "recount every hunk, and recompute patch_sha256."),
             },
             "proposal_schema": {
                 "exact_keys": ["proposal_id", "change_class", "change"],

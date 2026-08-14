@@ -255,6 +255,10 @@ class Tests(unittest.TestCase):
                                               package.package_sha256}},workspace=root)
    self.assertEqual(captured["reviewed_source_package"]["package_sha256"],package.package_sha256)
    self.assertEqual(captured["authoring_contract"]["expected_dispatch"],"array of 1..8 exact objects")
+   hunk_rule=captured["authoring_contract"]["source_manifest_schema"]["unified_diff_hunk_rule"]
+   self.assertIn("exact old/new line counts",hunk_rule)
+   self.assertIn("reviewed enclosing function symbol",hunk_rule)
+   self.assertIn("Blank hunk context",hunk_rule)
    self.assertEqual(captured["structural_example_only"]["source-patch.json"]["patch_encoding"],"base64")
  def test_fable_context_binds_selected_reviewed_source_preimage(self):
   content=b"template <typename T>\nvoid quantize_q8_1(T * x) {\n    x[0] = T{};\n}\n"
