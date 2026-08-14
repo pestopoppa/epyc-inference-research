@@ -44,6 +44,9 @@ _HUNK = re.compile(
     r"^@@ -(?P<old>\d+)(?:,(?P<oldn>\d+))? \+(?P<new>\d+)"
     r"(?:,(?P<newn>\d+))? @@(?P<context>.*)$")
 _FUNC = re.compile(r"(?P<name>[A-Za-z_~][A-Za-z0-9_:~<>]*)\s*\([^()]*\)\s*(?:const\s*)?(?:\{|$)")
+_TRUNCATED_FUNC = re.compile(
+    r"(?P<name>[A-Za-z_~][A-Za-z0-9_:~<>]*)\s*\(\s*$")
+_CONTROL_WORDS = frozenset({"if", "for", "while", "switch", "catch"})
 _MODE_LINE = re.compile(r"^(?:old|new|deleted file|new file) mode (?P<mode>\d+)$")
 _ALLOWED_MODES = frozenset({"100644", "100755"})
 
@@ -75,9 +78,16 @@ def _sha256(data: bytes) -> str:
 
 
 def _symbol_from_context(context: str) -> str:
-    matches = list(_FUNC.finditer(context.strip()))
+    normalized = context.strip()
+    matches = list(_FUNC.finditer(normalized))
     if matches:
         return matches[-1].group("name")
+    # GNU diff truncates long C/C++ function context at the opening parenthesis.
+    # Accept that exact suffix form while continuing to reject control-flow
+    # statements as enclosing source symbols.
+    match = _TRUNCATED_FUNC.search(normalized)
+    if match is not None and match.group("name") not in _CONTROL_WORDS:
+        return match.group("name")
     return FILE_SCOPE
 
 

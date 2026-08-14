@@ -30,6 +30,40 @@ def _git(*args, cwd):
 
 
 class SourceCase(unittest.TestCase):
+    def test_truncated_cpp_hunk_context_derives_exact_function_symbols(self):
+        patch_bytes = (
+            b"diff --git a/ggml/src/ggml-cuda/vecdotq.cuh b/ggml/src/ggml-cuda/vecdotq.cuh\n"
+            b"--- a/ggml/src/ggml-cuda/vecdotq.cuh\n"
+            b"+++ b/ggml/src/ggml-cuda/vecdotq.cuh\n"
+            b"@@ -176,1 +176,1 @@ template <int vdr> static __device__ __forceinline__ float vec_dot_q5_0_q8_1_impl(\n"
+            b"-old_impl\n"
+            b"+new_impl\n"
+            b"@@ -764,1 +764,1 @@ static __device__ __forceinline__ float vec_dot_q5_0_q8_1(\n"
+            b"-old_entry\n"
+            b"+new_entry\n"
+        )
+        manifest = S.SourcePatchManifest(
+            campaign_id="ak-inaugural", proposal_id="akp-inaugural",
+            candidate_id="akc-inaugural", source_tree="llama.cpp",
+            production_base_commit="0" * 40, instrument_commit="1" * 40,
+            change_class="arithmetic",
+            declared_files=("ggml/src/ggml-cuda/vecdotq.cuh",),
+            declared_symbols={"ggml/src/ggml-cuda/vecdotq.cuh": (
+                "vec_dot_q5_0_q8_1", "vec_dot_q5_0_q8_1_impl")},
+            mechanism_id="inaugural-live-artifact",
+            patch_sha256=hashlib.sha256(patch_bytes).hexdigest(),
+            patch_bytes=patch_bytes)
+        _hunks, symbols = S.hunk_identities(manifest.patch_text)
+        self.assertEqual(symbols, (
+            "vec_dot_q5_0_q8_1", "vec_dot_q5_0_q8_1_impl"))
+
+    def test_truncated_control_flow_context_remains_file_scope(self):
+        patch = (
+            "diff --git a/ggml/src/ggml-cuda/x.cu b/ggml/src/ggml-cuda/x.cu\n"
+            "--- a/ggml/src/ggml-cuda/x.cu\n+++ b/ggml/src/ggml-cuda/x.cu\n"
+            "@@ -1,1 +1,1 @@ if (\n-old\n+new\n")
+        _hunks, symbols = S.hunk_identities(patch)
+        self.assertEqual(symbols, (S.FILE_SCOPE,))
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(prefix="ak-source-candidate-")
         self.addCleanup(self.tmp.cleanup)
