@@ -255,6 +255,8 @@ class Tests(unittest.TestCase):
                                               package.package_sha256}},workspace=root)
    self.assertEqual(captured["reviewed_source_package"]["package_sha256"],package.package_sha256)
    self.assertEqual(captured["authoring_contract"]["expected_dispatch"],"array of 1..8 exact objects")
+   estimate_rule=captured["authoring_contract"]["proposal_schema"]["estimated_diff_size_rule"]
+   self.assertIn("added lines plus removed lines",estimate_rule)
    hunk_rule=captured["authoring_contract"]["source_manifest_schema"]["unified_diff_hunk_rule"]
    self.assertIn("exact old/new line counts",hunk_rule)
    self.assertIn("reviewed enclosing function symbol",hunk_rule)
@@ -290,6 +292,12 @@ class Tests(unittest.TestCase):
    (root/"plan.json").write_text(json.dumps(base))
    candidate=D._load_plan(root/"plan.json",root,assignment=assignment)
    self.assertEqual(candidate.source_manifest.declared_symbols[relative],tuple(symbols))
+   undersized=json.loads(json.dumps(base))
+   undersized["proposal"]["change"]["estimated_diff_size"]=3
+   (root/"plan.json").write_text(json.dumps(undersized))
+   with self.assertRaisesRegex(D.DiscoveryControllerError,
+                               r"actual changed-line count \(3 < 4\)"):
+    D._load_plan(root/"plan.json",root,assignment=assignment)
    for malformed in ([f"{relative}:{symbols[0]}"],
                      {relative:symbols},
                      [f"{relative}:{symbol}" for symbol in symbols]+[

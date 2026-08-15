@@ -28,6 +28,7 @@ import tempfile
 from typing import Any, Callable, Mapping, Protocol, Sequence
 
 from .. import campaign, hypothesis_portfolio, journal, schemas, source_candidate
+from ..evaluator import integrity
 from . import (claude_fable5_critic_actor, codex_container_actor,
                discovery_telemetry, do_not_repeat, hypotheses)
 from . import gpu_source_proofs
@@ -641,10 +642,13 @@ class CodexPlanner:
                 "exact_keys": ["proposal_id", "change_class", "change"],
                 "change_exact_keys": ["files_and_symbols", "estimated_diff_size"],
                 "files_and_symbols_rule": "sorted file:symbol declarations exactly equal source manifest declarations",
+                "estimated_diff_size_rule": (
+                    "integer ceiling for actual changed lines in the decoded unified diff; "
+                    "actual changed lines are added lines plus removed lines across every hunk"),
             },
             "proposal_requirements": ["proposal_id matches manifest", "change_class matches manifest",
                                        "change.files_and_symbols exactly matches manifest declarations",
-                                       "change.estimated_diff_size is positive"],
+                                       "change.estimated_diff_size is positive and is not less than the decoded patch's actual changed-line count"],
             "forbidden": ["commands", "argv", "environment", "measurement results",
                           "campaign/base/instrument selection", "unbounded source reads"],
         }
@@ -918,6 +922,21 @@ def _load_plan(path: Path, root: Path, *, assignment: AuthoringAssignment | None
             candidate_id=assignment.candidate_id,
             production_base_commit=assignment.production_base_commit,
             instrument_commit=assignment.instrument_commit)
+        proposal = value.get("proposal")
+        change = proposal.get("change") if isinstance(proposal, Mapping) else None
+        estimated = change.get("estimated_diff_size") if isinstance(change, Mapping) else None
+        if isinstance(estimated, bool) or not isinstance(estimated, int) or estimated < 1:
+            raise DiscoveryControllerError("planner estimated_diff_size must be a positive integer")
+        try:
+            actual_changed_lines = integrity.parse_unified_diff(
+                manifest.patch_bytes.decode("utf-8")).total_changed
+        except (UnicodeDecodeError, integrity.DiffParseError) as exc:
+            raise DiscoveryControllerError(
+                "planner patch cannot be counted as a complete UTF-8 unified diff") from exc
+        if estimated < actual_changed_lines:
+            raise DiscoveryControllerError(
+                "planner estimated_diff_size is smaller than the decoded patch's actual "
+                f"changed-line count ({estimated} < {actual_changed_lines})")
     return PlannedCandidate(**value, source_manifest=manifest, source_manifest_sha256=manifest.patch_bundle_sha256,
                             experiment_intent=intent)
 
