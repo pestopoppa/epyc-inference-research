@@ -303,11 +303,12 @@ class BlackBoxLaunchGate(unittest.TestCase):
         patch_bytes = (
             b"diff --git a/ggml/src/ggml.c b/ggml/src/ggml.c\n"
             b"--- a/ggml/src/ggml.c\n+++ b/ggml/src/ggml.c\n"
-            b"@@ -1 +1 @@\n-x\n+y\n"
+            b"@@ -1 +1 @@ vec_dot_q5_0_q8_1\n-x\n+y\n"
         )
         assignment = D.AuthoringAssignment(
             "ak-inaugural", "akp-inaugural", "akc-inaugural", "0" * 40, "1" * 40)
-        symbols = {"ggml/src/ggml.c": ["<file-scope>"]}
+        symbol = "vec_dot_q5_0_q8_1"
+        symbols = {"ggml/src/ggml.c": [symbol]}
         manifest = {
             "schema": D.source_candidate.SCHEMA_SOURCE_PATCH,
             "campaign_id": assignment.campaign_id,
@@ -339,7 +340,8 @@ class BlackBoxLaunchGate(unittest.TestCase):
             "regime": {"backend": "hip", "phase": "decode"},
             "proposal": {"proposal_id": assignment.proposal_id,
                          "change_class": "fusion",
-                         "change": {"files_and_symbols": symbols,
+                         "change": {"files_and_symbols": [
+                                        f"ggml/src/ggml.c:{symbol}"],
                                     "estimated_diff_size": 2}},
             "source_manifest_path": "source-patch.json",
             "experiment_intent": {
@@ -382,7 +384,10 @@ class BlackBoxLaunchGate(unittest.TestCase):
                     "mechanism_id": "bounded", "patch_sha256": hashlib.sha256(patch_bytes).hexdigest(),
                     "patch_encoding": "base64", "patch_base64": base64.b64encode(patch_bytes).decode("ascii")}
         plan = {"hypothesis_id": "akh-assigned", "statement": "s", "falsifier": "f",
-                "regime": {}, "proposal": {"proposal_id": assignment.proposal_id},
+                "regime": {}, "proposal": {"proposal_id": assignment.proposal_id,
+                    "change_class": "fusion", "change": {
+                        "files_and_symbols": ["ggml/src/ggml.c:<file-scope>"],
+                        "estimated_diff_size": 2}},
                 "source_manifest_path": "source-patch.json"}
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp); (root / "source-patch.json").write_text(json.dumps(manifest)); (root / "plan.json").write_text(json.dumps(plan))
