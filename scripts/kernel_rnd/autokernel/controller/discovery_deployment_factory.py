@@ -41,6 +41,7 @@ from scripts.benchmark import autokernel_gpu_discovery_beliefs
 
 
 class DeploymentFactoryError(RuntimeError): pass
+_MI210_KFD_PROCS = Path("/sys/class/kfd/kfd/proc")
 _ALLOWED_ENV = frozenset({"PATH", "HOME", "CODEX_HOME", "HTTPS_PROXY", "HTTP_PROXY",
                           "NO_PROXY", "SSL_CERT_FILE", "SSL_CERT_DIR"})
 
@@ -1608,14 +1609,36 @@ class GpuDiscoveryLease:
     """Two-phase device admission and operation-scoped execution reservation."""
     def __init__(self, *, config: deployment.DiscoveryDeployment, mode: str,
                  claim_journal: Any, claim_acquirer: Callable[..., Any],
-                 claim_verifier: Callable[[Mapping[str, Any]], object]) -> None:
+                 claim_verifier: Callable[[Mapping[str, Any]], object],
+                 kfd_root: Path = _MI210_KFD_PROCS) -> None:
+        if not kfd_root.is_absolute() or ".." in kfd_root.parts:
+            raise DeploymentFactoryError("KFD process root must be an absolute path")
         self.config, self.mode = config, mode
         self.claim_journal = claim_journal
         self.claim_acquirer = claim_acquirer
         self.claim_verifier = claim_verifier
+        self.kfd_root = kfd_root
         self._active: dict[str, Any] = {}
         self._campaigns: dict[str, str] = {}
         self._pending_probe_release: dict[str, Any] = {}
+
+    def _foreign_kfd_pids(self) -> tuple[tuple[int, ...], str | None]:
+        """Read the complete KFD process inventory or return a refusal code."""
+        if self.kfd_root.is_symlink() or not self.kfd_root.is_dir():
+            return (), "foreign_kfd_inventory_invalid"
+        try:
+            entries = tuple(self.kfd_root.iterdir())
+        except OSError:
+            return (), "foreign_kfd_inventory_unreadable"
+        pids: list[int] = []
+        for entry in entries:
+            name = entry.name
+            if (not name.isascii() or not name.isdecimal()
+                    or name != str(int(name)) or int(name) <= 0
+                    or entry.is_symlink() or not entry.is_dir()):
+                return (), "foreign_kfd_inventory_invalid"
+            pids.append(int(name))
+        return tuple(sorted(set(pids))), None
 
     @staticmethod
     def _receipt(value: object, label: str) -> dict[str, Any]:
@@ -1696,6 +1719,7 @@ class GpuDiscoveryLease:
         if len(profiles) != 1:
             raise DeploymentFactoryError("sealed admission policy has no unique configured model profile")
         profile = profiles[0]
+        foreign_kfd_pids, kfd_refusal = self._foreign_kfd_pids()
         actual_bytes = self.config.model.path.stat().st_size
         request = gpu_load_admission.AdmissionRequest(
             effective_context_sha256=schemas.content_hash({
@@ -1712,6 +1736,7 @@ class GpuDiscoveryLease:
             # policy/binding, not an ambient or caller-supplied observation.
             telemetry_observed=False, telemetry_age_ms=None,
             observed_headroom_bytes_per_s=None, telemetry_receipt_sha256=None)
+        request = replace(request, foreign_kfd_pids=foreign_kfd_pids)
         advisory = None
         intent = candidate.experiment_intent
         if isinstance(intent, controller.GpuSourceExperimentIntent) and intent.load_mode_recommendation is not None:
@@ -1730,6 +1755,13 @@ class GpuDiscoveryLease:
                 "model_sha256": self.config.model.sha256,
                 "load_admission": decision.to_dict(),
                 "promotion_claim": False}
+        if kfd_refusal is not None:
+            return {**common, "admitted": False, "phase": "prebuild_probe",
+                    "reason": kfd_refusal, "foreign_kfd_pids": []}
+        if foreign_kfd_pids:
+            return {**common, "admitted": False, "phase": "prebuild_probe",
+                    "reason": "foreign_kfd_busy",
+                    "foreign_kfd_pids": list(foreign_kfd_pids)}
         try:
             probe = self._claim(
                 operation_key, purpose="AutoKernel GPU discovery admission probe",
@@ -1759,10 +1791,31 @@ class GpuDiscoveryLease:
         if not isinstance(operation_key, str):
             raise DeploymentFactoryError("stale permit lacks its operation key")
         fresh = self.admit(candidate, operation_key=operation_key)
+        foreign_wait = str(stale_permit.get("reason", "")).startswith("foreign_kfd_")
         for key in ("mode", "device_id", "inference_window_lock", "model_sha256",
-                    "load_admission", "promotion_claim", "operation_key"):
+                    "promotion_claim", "operation_key"):
             if fresh.get(key) != stale_permit.get(key):
                 raise DeploymentFactoryError("resumed device admission changed sealed policy authority")
+        if not foreign_wait and fresh.get("load_admission") != stale_permit.get("load_admission"):
+            raise DeploymentFactoryError("resumed device admission changed sealed policy authority")
+        if foreign_wait:
+            def stable(value: object) -> dict[str, Any]:
+                row = value if isinstance(value, Mapping) else {}
+                profile = row.get("profile") if isinstance(row.get("profile"), Mapping) else {}
+                request = row.get("request") if isinstance(row.get("request"), Mapping) else {}
+                return {"policy_file_sha256": row.get("policy_file_sha256"),
+                        "policy_sha256": row.get("policy_sha256"),
+                        "policy_version": row.get("policy_version"),
+                        "profile_id": profile.get("profile_id"),
+                        "profile_model_sha256": profile.get("model_sha256"),
+                        "request_context_sha256": request.get("effective_context_sha256"),
+                        "request_model_sha256": request.get("model_sha256"),
+                        "request_device_id": request.get("device_id"),
+                        "promotion_claim": row.get("promotion_claim")}
+            if stable(fresh.get("load_admission")) != stable(
+                    stale_permit.get("load_admission")):
+                raise DeploymentFactoryError(
+                    "resumed foreign-KFD wait changed sealed policy authority")
         return fresh
 
     def reserve(self, operation_key: str) -> Mapping[str, Any]:
@@ -1774,6 +1827,21 @@ class GpuDiscoveryLease:
             raise DeploymentFactoryError("operation reservation is present but not verifiably held")
         if self._active:
             raise DeploymentFactoryError("one deployment cannot hold two operation reservations")
+        def kfd_wait() -> controller.ResourceWait | None:
+            foreign, refusal = self._foreign_kfd_pids()
+            if refusal is None and not foreign:
+                return None
+            reason = refusal or "foreign_kfd_busy"
+            return controller.ResourceWait(
+                "foreign KFD inventory prevents GPU reservation",
+                receipt={"admitted": False, "phase": "pre_executor_reservation",
+                         "reason": reason, "foreign_kfd_pids": list(foreign),
+                         "device_id": self.config.device_id,
+                         "operation_key": operation_key,
+                         "promotion_claim": False})
+        wait = kfd_wait()
+        if wait is not None:
+            raise wait
         try:
             claim = self._claim(
                 operation_key, purpose="AutoKernel GPU source proof and throughput",
@@ -1793,6 +1861,9 @@ class GpuDiscoveryLease:
             opened = self._receipt(claim.receipt(), "operation reservation")
             if not self._passed(self.claim_verifier(opened)):
                 raise DeploymentFactoryError("operation reservation was not verifiably held")
+            wait = kfd_wait()
+            if wait is not None:
+                raise wait
         except BaseException as primary:
             try:
                 self.release(operation_key)

@@ -414,6 +414,7 @@ class DeploymentFactoryTests(unittest.TestCase):
         import tempfile
         with tempfile.TemporaryDirectory() as directory:
             model = Path(directory) / "model"; model.write_bytes(b"model")
+            kfd_root = Path(directory) / "kfd"; kfd_root.mkdir()
             profile = SimpleNamespace(model_path=str(model), model_sha256="a" * 64,
                                       device_id="mi210_0", workload="tg128", calls_per_arm=9,
                                       cold_load_host_bytes=4, worst_case_loads_per_interval=18)
@@ -441,14 +442,82 @@ class DeploymentFactoryTests(unittest.TestCase):
                 admitted = F.GpuDiscoveryLease(
                     config=config, mode="allowed_discovery_noise", claim_journal=mock.Mock(),
                     claim_acquirer=lambda *_args, **_kwargs: Claim(),
-                    claim_verifier=lambda _receipt: F.schemas.Check(F.schemas.PASS)).admit(
+                    claim_verifier=lambda _receipt: F.schemas.Check(F.schemas.PASS),
+                    kfd_root=kfd_root).admit(
                         mock.Mock(source_manifest=mock.Mock(campaign_id="ak-test")),
                         operation_key="e" * 64)
         self.assertTrue(admitted["admitted"])
         self.assertEqual(admitted["mode"], "cold_serialized")
         self.assertEqual(admitted["load_admission"], {"decision_sha256": "d" * 64})
 
+    def test_prebuild_kfd_inventory_refuses_foreign_unreadable_and_malformed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); model = root / "model"; model.write_bytes(b"model")
+            kfd_root = root / "kfd"; kfd_root.mkdir()
+            profile = SimpleNamespace(
+                model_path=str(model), model_sha256="a" * 64, device_id="mi210_0",
+                workload="tg128", calls_per_arm=9, cold_load_host_bytes=4,
+                worst_case_loads_per_interval=18)
+            config = mock.Mock(
+                inference_window_lock="/lock", device_id="mi210_0",
+                model=SimpleNamespace(path=model, sha256="a" * 64),
+                admission_policy=SimpleNamespace(corpus=SimpleNamespace(
+                    profiles=(profile,), policy_sha256="b" * 64, version="test-v2")),
+                planner_context=SimpleNamespace(value={"context_sha256": "c" * 64}))
+            config.revalidate = mock.Mock()
+            opened = F.device_claim.ClaimReceipt(
+                claim_id="akd-kfd", device_id="mi210_0", lock_path="/claim",
+                state="held", holder_pid=1, holder_start_ticks=1,
+                holder_boot_id="boot", host="host", purpose="probe",
+                campaign_id="ak-test", acquired_at="now")
+            class Claim:
+                held = True
+                def receipt(self): return opened
+                def release(self): self.held=False; return F.replace(opened,released_at="done")
+            acquire = mock.Mock(side_effect=lambda *_args, **_kwargs: Claim())
+            decision = SimpleNamespace(
+                mode="cold_serialized", to_dict=lambda:{"decision_sha256":"d"*64})
+            candidate = mock.Mock(source_manifest=mock.Mock(campaign_id="ak-test"))
+            lease = F.GpuDiscoveryLease(
+                config=config, mode="allowed_discovery_noise", claim_journal=mock.Mock(),
+                claim_acquirer=acquire, claim_verifier=lambda _receipt: True,
+                kfd_root=kfd_root)
+            for pid in (42, 7): (kfd_root / str(pid)).mkdir()
+            with mock.patch.object(F.gpu_load_admission,"arbitrate",return_value=decision):
+                busy=lease.admit(candidate,operation_key="e"*64)
+            self.assertEqual((busy["admitted"],busy["reason"],busy["foreign_kfd_pids"]),
+                             (False,"foreign_kfd_busy",[7,42]))
+            acquire.assert_not_called()
+            for pid in (42, 7): (kfd_root / str(pid)).rmdir()
+            with mock.patch.object(F.gpu_load_admission,"arbitrate",return_value=decision):
+                resumed=lease.resume(candidate,busy)
+            self.assertTrue(resumed["admitted"]); acquire.assert_called_once()
+            (kfd_root / "99").mkdir()
+            with self.assertRaises(C.ResourceWait) as blocked:
+                lease.reserve("e"*64)
+            self.assertEqual((blocked.exception.receipt["phase"],
+                              blocked.exception.receipt["reason"],
+                              blocked.exception.receipt["foreign_kfd_pids"]),
+                             ("pre_executor_reservation","foreign_kfd_busy",[99]))
+            # Only the released prebuild probe was acquired; no outer claim ran.
+            acquire.assert_called_once(); (kfd_root / "99").rmdir()
+
+            malformed=kfd_root / "not-a-pid"; malformed.mkdir(); acquire.reset_mock()
+            with mock.patch.object(F.gpu_load_admission,"arbitrate",return_value=decision):
+                invalid=lease.admit(candidate,operation_key="f"*64)
+            self.assertEqual((invalid["admitted"],invalid["reason"]),
+                             (False,"foreign_kfd_inventory_invalid"))
+            acquire.assert_not_called(); malformed.rmdir()
+            with mock.patch.object(Path,"iterdir",side_effect=PermissionError("denied")), \
+                 mock.patch.object(F.gpu_load_admission,"arbitrate",return_value=decision):
+                unreadable=lease.admit(candidate,operation_key="1"*64)
+            self.assertEqual((unreadable["admitted"],unreadable["reason"]),
+                             (False,"foreign_kfd_inventory_unreadable"))
+            acquire.assert_not_called()
+
     def test_reservation_cleanup_owns_malformed_verifier_and_retry_failures(self):
+        kfd_directory = tempfile.mkdtemp(); self.addCleanup(shutil.rmtree,kfd_directory)
+        kfd_root = Path(kfd_directory)
         opened = F.device_claim.ClaimReceipt(
             claim_id="akd-test", device_id="mi210_0", lock_path="/claim",
             state="held", holder_pid=1, holder_start_ticks=1,
@@ -476,7 +545,7 @@ class DeploymentFactoryTests(unittest.TestCase):
                     config=config, mode="allowed_discovery_noise",
                     claim_journal=mock.Mock(),
                     claim_acquirer=lambda *_args, claim=claim, **_kwargs: claim,
-                    claim_verifier=verifier)
+                    claim_verifier=verifier, kfd_root=kfd_root)
                 lease._campaigns[operation_key] = "ak-test"
                 with self.assertRaises(Exception):
                     lease.reserve(operation_key)
@@ -487,7 +556,7 @@ class DeploymentFactoryTests(unittest.TestCase):
         lease = F.GpuDiscoveryLease(
             config=config, mode="allowed_discovery_noise", claim_journal=mock.Mock(),
             claim_acquirer=lambda *_args, **_kwargs: claim,
-            claim_verifier=lambda _receipt: True)
+            claim_verifier=lambda _receipt: True, kfd_root=kfd_root)
         lease._campaigns[operation_key] = "ak-test"
         lease.reserve(operation_key)
         released = lease.release(operation_key)
@@ -498,6 +567,7 @@ class DeploymentFactoryTests(unittest.TestCase):
     def test_probe_validation_errors_always_release_the_acquired_handle(self):
         with tempfile.TemporaryDirectory() as directory:
             model = Path(directory) / "model"; model.write_bytes(b"model")
+            kfd_root = Path(directory) / "kfd"; kfd_root.mkdir()
             profile = SimpleNamespace(
                 model_path=str(model), model_sha256="a" * 64, device_id="mi210_0",
                 workload="tg128", calls_per_arm=9, cold_load_host_bytes=4,
@@ -522,7 +592,7 @@ class DeploymentFactoryTests(unittest.TestCase):
             for label, probe, verifier in (
                     ("malformed",Probe(True),lambda _receipt:True),
                     ("verifier",Probe(),lambda _receipt:(_ for _ in ()).throw(RuntimeError("verify")))):
-                lease=F.GpuDiscoveryLease(config=config,mode="allowed_discovery_noise",claim_journal=mock.Mock(),claim_acquirer=lambda *_args,probe=probe,**_kwargs:probe,claim_verifier=verifier)
+                lease=F.GpuDiscoveryLease(config=config,mode="allowed_discovery_noise",claim_journal=mock.Mock(),claim_acquirer=lambda *_args,probe=probe,**_kwargs:probe,claim_verifier=verifier,kfd_root=kfd_root)
                 with self.subTest(label=label), mock.patch.object(F.gpu_load_admission,"arbitrate",return_value=decision), self.assertRaises(Exception):
                     lease.admit(mock.Mock(source_manifest=mock.Mock(campaign_id="ak-test")),operation_key="f"*64)
                 self.assertFalse(probe.held); self.assertEqual(probe.release_calls,1)

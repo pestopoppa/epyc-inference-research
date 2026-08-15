@@ -305,10 +305,11 @@ class GpuSourceAdapterTests(unittest.TestCase):
                 claims.append(claim)
                 return claim
 
+            kfd_root = Path(directory) / "kfd"; kfd_root.mkdir()
             manager = F.GpuDiscoveryLease(
                 config=config, mode="allowed_discovery_noise",
                 claim_journal=mock.Mock(), claim_acquirer=acquire,
-                claim_verifier=lambda _receipt: True)
+                claim_verifier=lambda _receipt: True, kfd_root=kfd_root)
             operation_key = digest("operation")
             admission_candidate = SimpleNamespace(
                 source_manifest=SimpleNamespace(
