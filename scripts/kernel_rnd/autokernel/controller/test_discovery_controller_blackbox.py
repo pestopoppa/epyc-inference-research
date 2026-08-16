@@ -14,6 +14,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from scripts.benchmark import run_autokernel_gpu_discovery as gpu_reward
 from scripts.kernel_rnd.autokernel.controller import discovery_controller as D
 
 
@@ -222,14 +223,17 @@ class BlackBoxLaunchGate(unittest.TestCase):
         return first, second
 
     def test_launch_gate_refuses_semantically_encoded_phase_switch(self):
-        """INTENTIONALLY RED until timed-phase output integrity is enforced.
+        """Opaque source state may pass static review but cannot pass timed output.
 
         The live path runs correctness in ``test-backend-ops`` and later runs
         attribution/reward in fresh ``llama-bench`` processes.  Fresh process
         state does not neutralize a call-sequence switch: each executable has a
-        distinct, repeatable call sequence, and no timed output tensor is
-        compared with an oracle.  The deliberately opaque counter below avoids
-        every lexical phase/call/timing token while retaining that behavior.
+        distinct, repeatable call sequence.  The deliberately opaque counter
+        below avoids every lexical phase/call/timing token.  The candidate
+        returns the same sealed 81bf 64-bit output hashes but shifts all work
+        into the first member; serialized pair-max scoring proves that the
+        fast second member earns no gain.  This is authority over that sealed
+        instrument hash contract, not a new cryptographic collision claim.
         """
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -279,9 +283,56 @@ class BlackBoxLaunchGate(unittest.TestCase):
                 "source_manifest_path": "source-patch.json",
             }
             (root / "plan.json").write_text(json.dumps(plan))
-            with self.assertRaisesRegex(
-                    D.source_candidate.SourceCandidateError, "reward-integrity"):
-                D._load_plan(root / "plan.json", root, assignment=assignment)
+            loaded = D._load_plan(root / "plan.json", root, assignment=assignment)
+            self.assertEqual(loaded.source_manifest.mechanism_id,
+                             "opaque-sequence-switch")
+
+            def semantics(*, first_ns: list[int], second_ts: list[float]) -> dict:
+                input_hashes = ["a000000000000001", "a000000000000002",
+                                "a000000000000003"]
+                output_hashes = ["b000000000000065", "b000000000000066",
+                                 "b000000000000067"]
+                row = {
+                    "autokernel_hardened": True,
+                    "autokernel_output_invariant": True,
+                    "autokernel_hybrid_ab_complete": True,
+                    "autokernel_thread_set_stable": True,
+                    "autokernel_escape_checks_complete": True,
+                    "autokernel_input_working_set_bytes": 12288,
+                    "autokernel_device_sync_mode": "hip_full_device",
+                    "autokernel_input_hashes": ",".join(input_hashes),
+                    "autokernel_output_hashes": ",".join(
+                        f"{value}/{value}" for value in output_hashes),
+                    "autokernel_input_addresses": "0x1/0x2,0x3/0x4,0x5/0x6",
+                    "autokernel_context_addresses": "0x7/0x8,0x9/0xa,0xb/0xc",
+                    "autokernel_unsynchronized_samples_ns": ",".join(
+                        str(value) for value in first_ns),
+                    "autokernel_thread_set_hashes": ",".join([(
+                        "00000000000000aa/00000000000000aa/"
+                        "00000000000000aa/00000000000000aa")] * 3),
+                    "samples_ts": second_ts,
+                }
+                return gpu_reward._validate_timed_output_semantics(
+                    row, repetitions=3, seed=8613, tokens_per_repetition=128,
+                    serialization_env={
+                        "AMD_SERIALIZE_KERNEL": "3", "AMD_SERIALIZE_COPY": "3",
+                        "GGML_CUDA_DISABLE_GRAPHS": "1"})
+
+            anchor_semantics = semantics(
+                first_ns=[1000, 1000, 1000],
+                second_ts=[128_000_000.0, 128_000_000.0, 128_000_000.0])
+            switched_semantics = semantics(
+                first_ns=[1000, 1000, 1000],
+                second_ts=[128_000_000_000.0] * 3)
+            oracle = gpu_reward._validate_cross_arm_timed_outputs(
+                {"timed_output_semantics": anchor_semantics},
+                {"timed_output_semantics": switched_semantics})
+            self.assertTrue(oracle["bitwise_equal"])
+            self.assertEqual(switched_semantics["second_samples_ns"], [1, 1, 1])
+            self.assertEqual(switched_semantics["protected_samples_ns"],
+                             anchor_semantics["protected_samples_ns"])
+            self.assertEqual(switched_semantics["protected_samples_ts"],
+                             anchor_semantics["protected_samples_ts"])
 
     def test_pending_resume_reuses_exact_candidate_without_replanning(self):
         with tempfile.TemporaryDirectory() as temp, \

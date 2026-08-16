@@ -8,6 +8,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import signal
 import stat
 import subprocess
@@ -47,6 +48,9 @@ VRAM_USED = Path("/sys/class/drm/card2/device/mem_info_vram_used")
 KFD_PROCS = Path("/sys/class/kfd/kfd/proc")
 MODEL_CALL_WINDOW = inference_window.InferenceCallWindow(timeout_s=600.0)
 
+_HEX64_RE = re.compile(r"^[0-9a-f]{16}$")
+_ADDRESS_RE = re.compile(r"^0x[0-9a-f]+$")
+
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
@@ -68,6 +72,193 @@ def atomic_json(path: Path, payload: dict) -> None:
         handle.flush()
         os.fsync(handle.fileno())
     os.replace(temporary, path)
+
+
+def _split_exact(value: Any, *, field: str, count: int) -> list[str]:
+    if not isinstance(value, str):
+        raise RuntimeError(f"governed instrument {field} is not a string")
+    items = value.split(",") if value else []
+    if len(items) != count:
+        raise RuntimeError(
+            f"governed instrument {field} must contain exactly {count} entries")
+    return items
+
+
+def _validate_timed_output_semantics(row: Mapping[str, Any], *, repetitions: int,
+                                     seed: int, tokens_per_repetition: int,
+                                     serialization_env: Mapping[str, str]) -> dict[str, Any]:
+    """Validate every semantic-integrity field emitted by the sealed 81bf instrument.
+
+    HIP serialization makes the instrument's first host interval synchronous.
+    The protected score is therefore the slower member of each semantically
+    identical pair, so moving work from one invocation to the other cannot earn
+    reward.
+    """
+    exact_integrity_env = {
+        "AMD_SERIALIZE_KERNEL": "3", "AMD_SERIALIZE_COPY": "3",
+        "GGML_CUDA_DISABLE_GRAPHS": "1",
+    }
+    if serialization_env != exact_integrity_env:
+        raise RuntimeError("rewarded process lacks exact serialized graphs-off integrity environment")
+    if (isinstance(tokens_per_repetition, bool)
+            or not isinstance(tokens_per_repetition, int) or tokens_per_repetition <= 0):
+        raise RuntimeError("timed-output semantics require a positive token count")
+    required_true = (
+        "autokernel_hardened", "autokernel_output_invariant",
+        "autokernel_hybrid_ab_complete", "autokernel_thread_set_stable",
+        "autokernel_escape_checks_complete",
+    )
+    if any(row.get(field) is not True for field in required_true):
+        raise RuntimeError("governed instrument semantic-integrity flags are incomplete")
+    working_set = row.get("autokernel_input_working_set_bytes")
+    if isinstance(working_set, bool) or not isinstance(working_set, int) or working_set <= 0:
+        raise RuntimeError("governed instrument input working set is invalid")
+    if row.get("autokernel_device_sync_mode") != "hip_full_device":
+        raise RuntimeError("governed instrument ranked member lacks full-device synchronization")
+
+    input_hashes = _split_exact(
+        row.get("autokernel_input_hashes"), field="input hashes", count=repetitions)
+    if any(_HEX64_RE.fullmatch(value) is None for value in input_hashes) \
+            or len(set(input_hashes)) != repetitions:
+        raise RuntimeError("governed instrument input hashes are malformed or reused")
+
+    output_pairs = _split_exact(
+        row.get("autokernel_output_hashes"), field="output hash pairs", count=repetitions)
+    output_hashes: list[str] = []
+    for pair in output_pairs:
+        members = pair.split("/")
+        if (len(members) != 2 or any(_HEX64_RE.fullmatch(value) is None for value in members)
+                or members[0] != members[1]):
+            raise RuntimeError("governed instrument paired output hashes are not bitwise invariant")
+        output_hashes.append(members[0])
+
+    for field in ("autokernel_input_addresses", "autokernel_context_addresses"):
+        pairs = _split_exact(row.get(field), field=field, count=repetitions)
+        flattened: list[str] = []
+        for pair in pairs:
+            members = pair.split("/")
+            if len(members) != 2 or any(_ADDRESS_RE.fullmatch(value) is None for value in members):
+                raise RuntimeError(f"governed instrument {field} is malformed")
+            flattened.extend(members)
+        if len(set(flattened)) != 2 * repetitions:
+            raise RuntimeError(f"governed instrument {field} did not rotate every pair member")
+
+    first_samples_raw = _split_exact(
+        row.get("autokernel_unsynchronized_samples_ns"),
+        field="serialized first-member samples", count=repetitions)
+    if any(not value.isdigit() or int(value) <= 0 for value in first_samples_raw):
+        raise RuntimeError("governed instrument serialized first-member timings are malformed")
+    first_samples_ns = [int(value) for value in first_samples_raw]
+    native_ranked = row.get("samples_ts")
+    if (not isinstance(native_ranked, list) or len(native_ranked) != repetitions
+            or any(isinstance(value, bool) or not isinstance(value, (int, float))
+                   or not math.isfinite(float(value)) or float(value) <= 0
+                   for value in native_ranked)):
+        raise RuntimeError("governed instrument ranked samples are malformed")
+    second_samples_ns = [int(round(1e9 * tokens_per_repetition / float(value)))
+                         for value in native_ranked]
+    if any(value <= 0 for value in second_samples_ns):
+        raise RuntimeError("governed instrument ranked timing conversion is invalid")
+    protected_samples_ns = [max(first, second)
+                            for first, second in zip(first_samples_ns, second_samples_ns)]
+    protected_samples_ts = [1e9 * tokens_per_repetition / value
+                            for value in protected_samples_ns]
+    thread_sets = _split_exact(
+        row.get("autokernel_thread_set_hashes"), field="thread-set hashes", count=repetitions)
+    for item in thread_sets:
+        members = item.split("/")
+        if (len(members) != 4 or any(_HEX64_RE.fullmatch(value) is None for value in members)
+                or len(set(members)) != 1):
+            raise RuntimeError("governed instrument thread-set hashes are unstable")
+
+    body = {
+        "schema": "epyc.autokernel.timed_output_semantics.v1",
+        "instrument_commit": READY_CONTINUE_INSTRUMENT_COMMIT,
+        "seed": seed,
+        "repetitions": repetitions,
+        "tokens_per_repetition": tokens_per_repetition,
+        "input_hashes": input_hashes,
+        "output_hashes": output_hashes,
+        "within_pair_bitwise_equal": True,
+        "ranked_member_device_sync": "hip_full_device",
+        "serialization_env": dict(serialization_env),
+        "first_samples_ns": first_samples_ns,
+        "second_samples_ns": second_samples_ns,
+        "protected_samples_ns": protected_samples_ns,
+        "protected_samples_ts": protected_samples_ts,
+        "anti_shift_witness": "hip_serialized_pair_max",
+        "reward_admissible": True,
+    }
+    return {**body, "receipt_sha256": schemas.content_hash(body)}
+
+
+def _validate_cross_arm_timed_outputs(anchor: Mapping[str, Any],
+                                      candidate: Mapping[str, Any]) -> dict[str, Any]:
+    anchor_semantics = anchor.get("timed_output_semantics")
+    candidate_semantics = candidate.get("timed_output_semantics")
+    if not isinstance(anchor_semantics, Mapping) or not isinstance(candidate_semantics, Mapping):
+        raise RuntimeError("matched arms lack sealed timed-output semantic receipts")
+    exact_env = {
+        "AMD_SERIALIZE_KERNEL": "3", "AMD_SERIALIZE_COPY": "3",
+        "GGML_CUDA_DISABLE_GRAPHS": "1",
+    }
+    for label, semantics in (("anchor", anchor_semantics),
+                             ("candidate", candidate_semantics)):
+        receipt_sha256 = semantics.get("receipt_sha256")
+        unsigned = {key: value for key, value in semantics.items()
+                    if key != "receipt_sha256"}
+        if (semantics.get("schema") != "epyc.autokernel.timed_output_semantics.v1"
+                or semantics.get("instrument_commit") != READY_CONTINUE_INSTRUMENT_COMMIT
+                or semantics.get("serialization_env") != exact_env
+                or semantics.get("anti_shift_witness") != "hip_serialized_pair_max"
+                or semantics.get("reward_admissible") is not True
+                or not isinstance(semantics.get("repetitions"), int)
+                or semantics.get("repetitions", 0) <= 0
+                or receipt_sha256 != schemas.content_hash(unsigned)):
+            raise RuntimeError(f"{label} timed-output semantic receipt is invalid")
+        repetitions = semantics["repetitions"]
+        tokens = semantics.get("tokens_per_repetition")
+        first = semantics.get("first_samples_ns")
+        second = semantics.get("second_samples_ns")
+        protected = semantics.get("protected_samples_ns")
+        protected_ts = semantics.get("protected_samples_ts")
+        inputs = semantics.get("input_hashes")
+        outputs = semantics.get("output_hashes")
+        if (isinstance(tokens, bool) or not isinstance(tokens, int) or tokens <= 0
+                or not all(isinstance(values, list) and len(values) == repetitions
+                           for values in (first, second, protected, protected_ts,
+                                          inputs, outputs))
+                or any(isinstance(value, bool) or not isinstance(value, int) or value <= 0
+                       for values in (first, second, protected) for value in values)
+                or protected != [max(a, b) for a, b in zip(first, second)]
+                or any(isinstance(value, bool) or not isinstance(value, (int, float))
+                       or not math.isclose(float(value), 1e9 * tokens / elapsed,
+                                           rel_tol=1e-12, abs_tol=1e-12)
+                       for value, elapsed in zip(protected_ts, protected))
+                or len(set(inputs)) != repetitions):
+            raise RuntimeError(f"{label} timed-output semantic receipt is internally inconsistent")
+    if anchor_semantics.get("seed") != candidate_semantics.get("seed"):
+        raise RuntimeError("matched arms did not use the same hidden input seed")
+    if anchor_semantics.get("repetitions") != candidate_semantics.get("repetitions"):
+        raise RuntimeError("matched arms have different timed-output repetition counts")
+    if anchor_semantics.get("input_hashes") != candidate_semantics.get("input_hashes"):
+        raise RuntimeError("matched arms did not execute the same hidden input bank")
+    if anchor_semantics.get("output_hashes") != candidate_semantics.get("output_hashes"):
+        raise RuntimeError("candidate timed outputs differ bitwise from the sealed anchor")
+    if (anchor_semantics.get("reward_admissible") is not True
+            or candidate_semantics.get("reward_admissible") is not True):
+        raise RuntimeError(
+            "timed-output semantics lack a complete anti-shift witness for reward admission")
+    body = {
+        "schema": "epyc.autokernel.cross_arm_timed_output_oracle.v1",
+        "seed": anchor_semantics["seed"],
+        "repetitions": anchor_semantics["repetitions"],
+        "input_hashes": anchor_semantics["input_hashes"],
+        "output_hashes": anchor_semantics["output_hashes"],
+        "bitwise_equal": True,
+        "anti_shift_witness": "hip_serialized_pair_max",
+    }
+    return {**body, "receipt_sha256": schemas.content_hash(body)}
 
 
 def cache_bool(build: Path, name: str) -> bool:
@@ -491,6 +682,7 @@ def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
            cold_loads_in_interval: int = 1,
            sealed_load_decision: dict | None = None,
            repetitions: int = 1,
+           timed_output_oracle: bool = False,
            load_readiness_policy: LoadReadinessPolicy | None = None,
            ready_continue_handshake: ReadyContinueHandshake | None = None,
            process_factory: Callable[..., Any] | None = None,
@@ -532,6 +724,7 @@ def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
             split_mode=split_mode, no_kv_offload=no_kv_offload, poll=poll,
             reward_binary=reward_binary, hip_library_dir=hip_library_dir, common_loader_dir=common_loader_dir,
             runtime_arm=runtime_arm, repetitions=repetitions,
+            timed_output_oracle=timed_output_oracle,
             process_factory=process_factory, kfd_pid_provider=kfd_pid_provider,
             vram_reader=vram_reader, pgid_provider=pgid_provider, sleep=sleep,
             supervisor_root=supervisor_root)
@@ -630,6 +823,7 @@ def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
             reward_binary=reward_binary, hip_library_dir=hip_library_dir,
             common_loader_dir=common_loader_dir, runtime_arm=runtime_arm,
             repetitions=repetitions, readiness_policy=load_readiness_policy,
+            timed_output_oracle=timed_output_oracle,
             ready_continue_handshake=ready_continue_handshake,
             on_load_ready=(release_for_ready if ready_continue_handshake is not None else None),
             process_factory=process_factory,
@@ -673,6 +867,7 @@ def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
                    reward_binary: Path | None = None, hip_library_dir: Path | None = None,
                    common_loader_dir: Path | None = None, runtime_arm: str | None = None,
                    repetitions: int = 1,
+                   timed_output_oracle: bool = False,
                    readiness_policy: LoadReadinessPolicy | None = None,
                    ready_continue_handshake: ReadyContinueHandshake | None = None,
                    on_load_ready: Callable[[Mapping[str, Any]], None] | None = None,
@@ -719,8 +914,16 @@ def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
             "-o", "jsonl")
     if not common_dir.is_dir():
         raise RuntimeError("sealed common reward loader directory is absent")
+    if not isinstance(timed_output_oracle, bool):
+        raise RuntimeError("timed-output oracle capability must be boolean")
+    serialization_env = ({
+        "AMD_SERIALIZE_KERNEL": "3", "AMD_SERIALIZE_COPY": "3",
+        "GGML_CUDA_DISABLE_GRAPHS": "1",
+    }
+                         if timed_output_oracle else {})
     env = {"PATH": "/usr/bin:/bin",
-           "LD_LIBRARY_PATH": f"{loader_dir}:{common_dir}:/opt/rocm/lib"}
+           "LD_LIBRARY_PATH": f"{loader_dir}:{common_dir}:/opt/rocm/lib",
+           **serialization_env}
     factory = subprocess.Popen if process_factory is None else process_factory
     kfd_provider = _kfd_pids if kfd_pid_provider is None else kfd_pid_provider
     pgid = os.getpgid if pgid_provider is None else pgid_provider
@@ -872,13 +1075,17 @@ def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
     raw_samples = row.get("samples_ts")
     if (not isinstance(raw_samples, list) or len(raw_samples) != repetitions
             or any(isinstance(value, bool) or not isinstance(value, (int, float))
-                   or not math.isfinite(float(value)) for value in raw_samples)):
+                   or not math.isfinite(float(value)) or float(value) <= 0
+                   for value in raw_samples)):
         raise RuntimeError(
             f"GPU discovery invocation requires exactly {repetitions} finite raw samples")
     metric = row.get("avg_ts")
     if (isinstance(metric, bool) or not isinstance(metric, (int, float))
-            or not math.isfinite(float(metric))):
+            or not math.isfinite(float(metric)) or float(metric) <= 0):
         raise RuntimeError("GPU discovery invocation emitted a non-finite reward metric")
+    native_avg = sum(float(value) for value in raw_samples) / len(raw_samples)
+    if not math.isclose(float(metric), native_avg, rel_tol=1e-9, abs_tol=1e-9):
+        raise RuntimeError("GPU discovery native avg_ts does not rederive from samples_ts")
     if row.get("backends") != "ROCm" or row.get("gpu_info") != "AMD Instinct MI210":
         raise RuntimeError("GPU discovery invocation did not report MI210 ROCm execution")
     reported_commit = str(row.get("build_commit", ""))
@@ -907,12 +1114,46 @@ def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
         raise RuntimeError("GPU discovery window lacks sealed runtime loader-map identity")
     if ready_continue_handshake is not None and readiness_witness is None:
         raise RuntimeError("governed instrument exited without ready before measurement")
-    return {"argv": list(argv), "env": {"LD_LIBRARY_PATH": env["LD_LIBRARY_PATH"]},
+    timed_output_semantics = (
+        _validate_timed_output_semantics(
+            row, repetitions=repetitions, seed=seed,
+            tokens_per_repetition=prompt_tokens + generation_tokens,
+            serialization_env={key: env[key] for key in serialization_env})
+        if timed_output_oracle else None)
+    protected_samples = (timed_output_semantics["protected_samples_ts"]
+                         if timed_output_semantics is not None
+                         else [float(value) for value in raw_samples])
+    protected_metric = (1e9 * (prompt_tokens + generation_tokens) * repetitions
+                        / sum(timed_output_semantics["protected_samples_ns"])
+                        if timed_output_semantics is not None
+                        else sum(protected_samples) / len(protected_samples))
+    metric_contract = ({
+        "schema": "epyc.autokernel.serialized_pair_max_metric.v1",
+        "scope": "integrity_discovery_only",
+        "production_throughput_authority": False,
+        "graph_mode": "disabled_for_integrity",
+        "scored_sample": "min(first_tokens_per_s,second_tokens_per_s)",
+        "serialization_env": serialization_env,
+    } if timed_output_semantics is not None else {
+        "schema": "epyc.autokernel.native_llama_bench_metric.v1",
+        "scope": "legacy_nonpromotable_discovery",
+        "production_throughput_authority": False,
+    })
+    return {"argv": list(argv), "env": {
+                "LD_LIBRARY_PATH": env["LD_LIBRARY_PATH"], **serialization_env},
             "reward_binary": str(binary), "reward_binary_sha256": sha256_file(binary),
             "hip_library": str(loader_dir / "libggml-hip.so"),
             "hip_library_sha256": sha256_file(loader_dir / "libggml-hip.so"),
             "common_loader_dir": str(common_dir),
-            "metric": float(metric), "samples": [float(value) for value in raw_samples],
+            "metric": protected_metric, "samples": protected_samples,
+            "metric_contract": metric_contract,
+            "native_metric_diagnostic": {
+                "schema": "epyc.autokernel.native_llama_bench_diagnostic.v1",
+                "avg_ts": float(metric),
+                "samples_ts": [float(value) for value in raw_samples],
+                "reward_authority": timed_output_semantics is None,
+                "production_throughput_authority": False,
+            },
             "sample_count": repetitions, "seed": seed, "raw_row": row,
             "stderr_tail": stderr[-2000:], "residency": samples,
             "supervisor": {"deadline_s": float(max_runtime_s),
@@ -922,6 +1163,8 @@ def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
                            "teardown": teardown, "temporary_output_cleaned": True},
             "runtime_maps_identity": maps_identity,
             "load_readiness_witness": readiness_witness,
+            **({"timed_output_semantics": timed_output_semantics}
+               if timed_output_semantics is not None else {}),
             "hip_residency_proved": True}
 
 
@@ -1131,6 +1374,11 @@ def preflight(args: argparse.Namespace) -> dict:
         raise RuntimeError(
             "ready/continue requires the sealed 81bf32f11 instrument, exact contract, "
             "and instrument-derived anchor")
+    timed_output_oracle = runtime_arms is not None
+    if timed_output_oracle and anchor_identity["source_commit"] != READY_CONTINUE_INSTRUMENT_COMMIT:
+        raise RuntimeError(
+            "shared source-discovery reward requires the exact sealed 81bf32f11 "
+            "timed-output instrument")
     return {
         "schema": "epyc.autokernel.gpu_discovery_preflight.v1",
         "campaign_id": args.campaign_id,
@@ -1172,6 +1420,20 @@ def preflight(args: argparse.Namespace) -> dict:
         "generation_tokens": generation_tokens,
         "frame": recipe,
         "metric": metric,
+        "metric_contract": ({
+            "schema": "epyc.autokernel.serialized_pair_max_metric.v1",
+            "scope": "integrity_discovery_only",
+            "production_throughput_authority": False,
+            "graph_mode": "disabled_for_integrity",
+            "scored_sample": "min(first_tokens_per_s,second_tokens_per_s)",
+            "serialization_env": {
+                "AMD_SERIALIZE_KERNEL": "3", "AMD_SERIALIZE_COPY": "3",
+                "GGML_CUDA_DISABLE_GRAPHS": "1"},
+        } if timed_output_oracle else {
+            "schema": "epyc.autokernel.native_llama_bench_metric.v1",
+            "scope": "legacy_nonpromotable_discovery",
+            "production_throughput_authority": False,
+        }),
         "invocations": {"anchor": args.calls, "candidate": args.calls},
         "arm_order_schedule": list(order),
         "arm_order_seed_sha256": order_seed,
@@ -1184,6 +1446,16 @@ def preflight(args: argparse.Namespace) -> dict:
             "ready_continue": {"enabled": bool(requested_handshake),
                                "instrument_commit": instrument_commit,
                                "contract_source_sha256": contract_sha256},
+        },
+        "timed_output_oracle": {
+            "enabled": timed_output_oracle,
+            "instrument_commit": (READY_CONTINUE_INSTRUMENT_COMMIT
+                                  if timed_output_oracle else None),
+            "authority": "sealed_81bf_64bit_output_hash_contract",
+            "serialization_env": ({
+                "AMD_SERIALIZE_KERNEL": "3", "AMD_SERIALIZE_COPY": "3",
+                "GGML_CUDA_DISABLE_GRAPHS": "1"}
+                if timed_output_oracle else {}),
         },
     }
 
@@ -1220,13 +1492,14 @@ def run(args: argparse.Namespace) -> dict:
     candidate_readiness = _readiness_policy_for_arm(
         sealed=sealed, arm="candidate", model=model)
     handshake_enabled = bool(sealed["serialized_readiness"]["ready_continue"]["enabled"])
+    timed_output_oracle_enabled = bool(sealed.get("timed_output_oracle", {}).get("enabled"))
     anchor_handshake = (ReadyContinueHandshake.create(
         root=out / "ready-continue-anchor", decision=sealed["host_transfer"],
         policy=anchor_readiness, arm="anchor", seed=args.seed, repetitions=args.calls)
         if handshake_enabled and anchor_readiness is not None else None)
     candidate_handshake = (ReadyContinueHandshake.create(
         root=out / "ready-continue-candidate", decision=sealed["host_transfer"],
-        policy=candidate_readiness, arm="candidate", seed=args.seed + args.calls,
+        policy=candidate_readiness, arm="candidate", seed=args.seed,
         repetitions=args.calls)
         if handshake_enabled and candidate_readiness is not None else None)
     if _kfd_pids():
@@ -1285,7 +1558,8 @@ def run(args: argparse.Namespace) -> dict:
             handshake = anchor_handshake if anchor else candidate_handshake
             return [invoke(
                 build=anchor_build if anchor else candidate_build,
-                model=model, seed=args.seed if anchor else args.seed + args.calls,
+                model=model, seed=(args.seed if timed_output_oracle_enabled or anchor
+                                   else args.seed + args.calls),
                 expected_source_commit=(None if sealed["runtime_arms"]
                                         else identity["source_commit"]),
                 baseline_vram=baseline_vram,
@@ -1309,19 +1583,30 @@ def run(args: argparse.Namespace) -> dict:
                 common_loader_dir=(Path(sealed["runtime_arms"]["common_loader_dir"])
                                    if sealed["runtime_arms"] else None),
                 runtime_arm=(arm if sealed["runtime_arms"] else None),
-                repetitions=args.calls, load_readiness_policy=readiness,
+                repetitions=args.calls,
+                timed_output_oracle=timed_output_oracle_enabled,
+                load_readiness_policy=readiness,
                 ready_continue_handshake=handshake,
                 supervisor_root=out / f"supervisor-{arm}")]
 
         arm_runs = {arm: run_arm(arm) for arm in arm_order}
         anchor_runs = arm_runs["anchor"]
         candidate_runs = arm_runs["candidate"]
+        timed_output_oracle = None
+        if timed_output_oracle_enabled:
+            timed_output_oracle = _validate_cross_arm_timed_outputs(
+                anchor_runs[0], candidate_runs[0])
         bank_body = {
             "schema": SCHEMA_BANK, "campaign_id": args.campaign_id,
             "status": "complete", "started_at": started_at, "ended_at": utc_now(),
             "authority": "nonpromotable_candidate_only_discovery",
             "frame": {"backend": "llama_gpu", "recipe": sealed["frame"],
                       "metric": sealed["metric"], "metric_direction": "higher_better",
+                      "metric_contract": sealed.get("metric_contract", {
+                          "schema": "epyc.autokernel.native_llama_bench_metric.v1",
+                          "scope": "legacy_nonpromotable_discovery",
+                          "production_throughput_authority": False,
+                      }),
                       "n_prompt": sealed["prompt_tokens"],
                       "n_gen": sealed["generation_tokens"],
                       "model": str(model), "model_sha256": sha256_file(model),
@@ -1336,11 +1621,16 @@ def run(args: argparse.Namespace) -> dict:
             "arm_order_seed_sha256": sealed.get("arm_order_seed_sha256", "0" * 64),
             "anchor_samples": [sample for run in anchor_runs for sample in run["samples"]],
             "anchor_runs": anchor_runs,
+            **({"timed_output_oracle": timed_output_oracle}
+               if timed_output_oracle is not None else {}),
         }
         bank = gpu_beliefs.attach_baseline_beliefs(
             bank_body, producer_path=Path(__file__).resolve())
         atomic_json(out / "baseline-bank.json", bank)
-        center = sum(bank["anchor_samples"]) / len(bank["anchor_samples"])
+        center = (float(anchor_runs[0]["metric"])
+                  if bank["frame"]["metric_contract"]["schema"] ==
+                  "epyc.autokernel.serialized_pair_max_metric.v1"
+                  else sum(bank["anchor_samples"]) / len(bank["anchor_samples"]))
         values = [sample for run in candidate_runs for sample in run["samples"]]
         effects = [(value - center) / center for value in values]
         numeric = sampler.stop().to_dict()
@@ -1379,6 +1669,8 @@ def run(args: argparse.Namespace) -> dict:
             "frame": bank["frame"], "sole_factor": bank["sole_factor"],
             "candidate_identity": bank["candidate_identity"],
             "candidate_runs": candidate_runs, "device_sampling": numeric,
+            **({"timed_output_oracle": timed_output_oracle}
+               if timed_output_oracle is not None else {}),
             "hip_residency_proved": all(run["hip_residency_proved"]
                                          for run in anchor_runs + candidate_runs),
             "cpu_coverage_windows": [
