@@ -80,7 +80,8 @@ class DeploymentConfigTests(unittest.TestCase):
         evidence_root.mkdir()
         for row in portfolio.body["evidence"]:
             target = evidence_root / f"{row['evidence_id']}.bin"
-            target.write_bytes(Path(row["path"]).read_bytes())
+            target.write_bytes(hypothesis_portfolio.read_evidence_bytes(
+                row["path"], row["evidence_id"]))
             target.chmod(0o400)
             evidence[row["evidence_id"]] = {"path": str(target),
                                                "sha256": row["sha256"]}
