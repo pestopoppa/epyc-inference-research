@@ -59,6 +59,29 @@ DNR_CLASSIFICATIONS = frozenset({
     "sign_conflict", "physics_constraint", "prior_art_already_present",
     "configuration_regression", "low_value",
 })
+GFX90A_LOW_PRECISION_EVIDENCE_ID = "ev-gfx90a-low-precision-isa-20260815"
+GFX90A_LOW_PRECISION_DNR_POLICY = {
+    "dnr-gfx90a-int8-mfma-compute-headroom": {
+        "mechanism": "int8_mfma_decode_compute_headroom_claim",
+        "quant": "INT8",
+        "shape": "native-mfma-throughput-claim",
+    },
+    "dnr-gfx90a-native-fp8-mfma-decode": {
+        "mechanism": "native_fp8_mfma_decode_authoring",
+        "quant": "FP8-native-compute",
+        "shape": "native-mfma",
+    },
+    "dnr-gfx90a-int4-matrix-decode": {
+        "mechanism": "int4_matrix_decode_authoring",
+        "quant": "INT4",
+        "shape": "matrix-path",
+    },
+    "dnr-gfx90a-ck-fp8-native-benchmark": {
+        "mechanism": "ck_fp8_gemm_native_datapath_benchmark",
+        "quant": "FP8",
+        "shape": "composable-kernel-fp8-gemm",
+    },
+}
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 GIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
@@ -807,6 +830,35 @@ def _validate_dnr(rows: Any, evidence_ids: set[str]) -> set[str]:
         fingerprints.add(identity)
     _validate_supersession_graph(
         {row["dnr_id"]: row["provenance"]["supersedes"] for row in rows}, "DNR")
+    by_id = {row["dnr_id"]: row for row in rows}
+    missing_policy = sorted(set(GFX90A_LOW_PRECISION_DNR_POLICY) - set(by_id))
+    if missing_policy:
+        raise PortfolioError(f"missing required gfx90a low-precision DNRs: {missing_policy}")
+    for dnr_id, expected in GFX90A_LOW_PRECISION_DNR_POLICY.items():
+        row = by_id[dnr_id]
+        regime = row["regime"]
+        if (
+            row["classification"] != "physics_constraint"
+            or row["mechanism"]["facets"]["mechanism"] != expected["mechanism"]
+            or regime["backend"] != "hip"
+            or regime["phase"] != "decode"
+            or regime["batch"] != 1
+            or regime["architecture"] != "gfx90a"
+            or regime["model_or_frame"] != "MI210-current-v9"
+            or regime["quant"] != expected["quant"]
+            or regime["shape"] != expected["shape"]
+            or row["evidence_refs"] != [GFX90A_LOW_PRECISION_EVIDENCE_ID]
+        ):
+            raise PortfolioError(f"{dnr_id} contradicts required gfx90a low-precision policy")
+    native_fp8 = by_id["dnr-gfx90a-native-fp8-mfma-decode"]
+    if not any(
+        "software-storage" in condition and "native FP8 compute" in condition
+        for condition in native_fp8["reentry_conditions"]
+    ):
+        raise PortfolioError("native FP8 DNR must preserve software-storage/BF16-compute eligibility")
+    ck_fp8 = by_id["dnr-gfx90a-ck-fp8-native-benchmark"]
+    if "eight sequential FP32 operations" not in ck_fp8["falsifier_result"]:
+        raise PortfolioError("CK FP8 DNR must retain the FP32-emulation trap")
     return ids
 
 
@@ -832,6 +884,19 @@ def validate(body: Any) -> Portfolio:
     if body["promotion_authority"] is not False:
         raise PortfolioError("portfolio must never claim promotion authority")
     evidence_ids = _validate_evidence(body["evidence"])
+    low_precision_evidence = next(
+        (row for row in body["evidence"]
+         if row["evidence_id"] == GFX90A_LOW_PRECISION_EVIDENCE_ID),
+        None,
+    )
+    if (
+        low_precision_evidence is None
+        or low_precision_evidence["path"]
+        != "/workspace/handoffs/active/mi210-q8-dequant-gemv-roofline.md"
+        or low_precision_evidence["sha256"]
+        != "1e8768a89815cc6c8cf5277ddc437ac9d2a5353597478c68d23bd79646dd0d91"
+    ):
+        raise PortfolioError("gfx90a low-precision evidence path/SHA policy drifted")
     frame_ids = _validate_frames(body["frames"], evidence_ids)
     _validate_bundle(body["current_bundle"], frame_ids)
     current_frame = body["current_bundle"]["frame_id"]

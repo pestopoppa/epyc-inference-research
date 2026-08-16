@@ -406,6 +406,74 @@ class HypothesisPortfolioTest(unittest.TestCase):
             for row in q4_children
         ))
 
+    def test_gfx90a_low_precision_dnrs_are_exact_and_preserve_software_fp8(self):
+        portfolio = P.load(P.DEFAULT_PORTFOLIO)
+        evidence = {row["evidence_id"]: row for row in portfolio.body["evidence"]}
+        authority = evidence[P.GFX90A_LOW_PRECISION_EVIDENCE_ID]
+        self.assertEqual(
+            authority["path"],
+            "/workspace/handoffs/active/mi210-q8-dequant-gemv-roofline.md",
+        )
+        self.assertEqual(
+            authority["sha256"],
+            "1e8768a89815cc6c8cf5277ddc437ac9d2a5353597478c68d23bd79646dd0d91",
+        )
+        for dnr_id, expected in P.GFX90A_LOW_PRECISION_DNR_POLICY.items():
+            row = portfolio.dnr_record(dnr_id)
+            self.assertEqual(row["classification"], "physics_constraint")
+            self.assertEqual(row["regime"]["architecture"], "gfx90a")
+            self.assertEqual(row["regime"]["phase"], "decode")
+            self.assertEqual(row["regime"]["batch"], 1)
+            self.assertEqual(row["regime"]["quant"], expected["quant"])
+            self.assertEqual(row["regime"]["shape"], expected["shape"])
+            self.assertEqual(
+                row["evidence_refs"], (P.GFX90A_LOW_PRECISION_EVIDENCE_ID,)
+            )
+        native_fp8 = portfolio.dnr_record("dnr-gfx90a-native-fp8-mfma-decode")
+        self.assertIn("software FP8 weight storage", native_fp8["statement"])
+        self.assertIn("no native-compute or compute-headroom claim", native_fp8["statement"])
+        ck_fp8 = portfolio.dnr_record("dnr-gfx90a-ck-fp8-native-benchmark")
+        self.assertIn("eight sequential FP32 operations", ck_fp8["falsifier_result"])
+
+    def test_gfx90a_low_precision_policy_tampering_is_refused_adversarially(self):
+        mutations = []
+
+        body = self.body()
+        body["do_not_repeat"] = [
+            row for row in body["do_not_repeat"]
+            if row["dnr_id"] != "dnr-gfx90a-int4-matrix-decode"
+        ]
+        mutations.append((body, "missing required gfx90a"))
+
+        body = self.body()
+        row = next(row for row in body["do_not_repeat"]
+                   if row["dnr_id"] == "dnr-gfx90a-int8-mfma-compute-headroom")
+        row["regime"]["batch"] = 8
+        mutations.append((body, "contradicts required gfx90a"))
+
+        body = self.body()
+        row = next(row for row in body["do_not_repeat"]
+                   if row["dnr_id"] == "dnr-gfx90a-native-fp8-mfma-decode")
+        row["reentry_conditions"] = ["No reentry"]
+        mutations.append((body, "must preserve software-storage"))
+
+        body = self.body()
+        row = next(row for row in body["do_not_repeat"]
+                   if row["dnr_id"] == "dnr-gfx90a-ck-fp8-native-benchmark")
+        row["falsifier_result"] = "Composable Kernel compiled successfully."
+        mutations.append((body, "FP32-emulation trap"))
+
+        body = self.body()
+        evidence = next(row for row in body["evidence"]
+                        if row["evidence_id"] == P.GFX90A_LOW_PRECISION_EVIDENCE_ID)
+        evidence["sha256"] = "0" * 64
+        mutations.append((body, "evidence path/SHA policy drifted"))
+
+        for body, message in mutations:
+            with self.subTest(message=message), self.assertRaisesRegex(
+                    P.PortfolioError, message):
+                P.validate(body)
+
     def test_provenance_cycle_primary_falsifier_and_attempt_budget_are_refused(self):
         body = self.body()
         first, second = body["hypotheses"][:2]
@@ -480,7 +548,7 @@ class HypothesisPortfolioTest(unittest.TestCase):
             self.assertEqual(P.main(["validate", str(P.DEFAULT_PORTFOLIO)]), 0)
         result = json.loads(stdout.getvalue())
         self.assertEqual(result["hypotheses"], 18)
-        self.assertEqual(result["do_not_repeat"], 17)
+        self.assertEqual(result["do_not_repeat"], 21)
         self.assertEqual(result["eligible"], 4)
         stdout = StringIO()
         with redirect_stdout(stdout):
@@ -488,7 +556,7 @@ class HypothesisPortfolioTest(unittest.TestCase):
         summary = json.loads(stdout.getvalue())
         self.assertEqual(summary["sha256"], result["sha256"])
         self.assertEqual(len(summary["eligible_records"]), 4)
-        self.assertEqual(len(summary["do_not_repeat"]), 17)
+        self.assertEqual(len(summary["do_not_repeat"]), 21)
 
     def test_duplicate_json_key_is_refused(self):
         with tempfile.TemporaryDirectory() as temp:
