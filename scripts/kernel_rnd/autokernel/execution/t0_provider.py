@@ -3589,6 +3589,12 @@ class ExecutedT0EvidenceProvider:
                 () if scan is None else scan.pointer_memoization_findings),
             structured_short_circuit_findings=(
                 () if scan is None else scan.structured_short_circuit_findings),
+            phase_detection_findings=(
+                () if scan is None else scan.phase_detection_findings),
+            capture_replay_findings=(
+                () if scan is None else scan.capture_replay_findings),
+            content_specialization_findings=(
+                () if scan is None else scan.content_specialization_findings),
             receipt_ref=collected.ref(),
             environment_probe_detector_id=(
                 None if scan is None else scan.environment_probe_detector_id),
@@ -3604,6 +3610,12 @@ class ExecutedT0EvidenceProvider:
                 None if scan is None else scan.pointer_memoization_detector_id),
             structured_short_circuit_detector_id=(
                 None if scan is None else scan.structured_short_circuit_detector_id),
+            phase_detection_detector_id=(
+                None if scan is None else scan.phase_detection_detector_id),
+            capture_replay_detector_id=(
+                None if scan is None else scan.capture_replay_detector_id),
+            content_specialization_detector_id=(
+                None if scan is None else scan.content_specialization_detector_id),
         )
 
     # -- the Protocol method ----------------------------------------------

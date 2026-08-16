@@ -179,6 +179,29 @@ class SourceCase(unittest.TestCase):
         self.assertTrue(self.actor.is_clean())
         self.assertEqual(self.actor.head_commit(), applied.candidate_commit)
 
+    def test_phase_graph_and_content_specialization_refuse_before_apply(self):
+        probes = (
+            "if (hipStreamIsCapturing(stream, &status)) return x;",
+            "auto graph = torch.cuda.CUDAGraph();",
+            "auto input_fingerprint = checksum_input(input);",
+        )
+        for probe in probes:
+            patch = (
+                f"diff --git a/{PATH} b/{PATH}\n"
+                f"--- a/{PATH}\n+++ b/{PATH}\n"
+                "@@ -2,3 +2,4 @@ int kernel_step(int x) {\n"
+                " int kernel_step(int x) {\n"
+                f"+    {probe}\n"
+                "-    return x + 1;\n"
+                "+    return x + 2;\n"
+                " }\n"
+            ).encode()
+            with self.subTest(probe=probe), self.assertRaisesRegex(
+                    S.SourceCandidateError, "pre-build reward-integrity"):
+                self.manifest(
+                    patch_sha256=hashlib.sha256(patch).hexdigest(),
+                    patch_bytes=patch)
+
     def test_digest_and_every_identity_mismatch_refuse(self):
         with self.assertRaisesRegex(S.SourceCandidateError, "patch_sha256"):
             self.manifest(patch_sha256="3" * 64)
