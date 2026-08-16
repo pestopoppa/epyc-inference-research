@@ -1,0 +1,92 @@
+{
+  "schema": "epyc.autokernel.discovery_controller_launch_gate.v1",
+  "authority": "offline_acceptance_only_no_inference_or_promotion_authority",
+  "gate": "all_required_cases_pass_before_any_live_adapter_is_accepted",
+  "required_cases": [
+    {
+      "id": "pending_exact_resume",
+      "given": "An accepted candidate is durably waiting for a resource lease.",
+      "when": "The controller is restarted and the lease admits.",
+      "then": [
+        "The planner and critic are not called again.",
+        "The same hypothesis, proposal, source manifest bytes and authorization lineage are used.",
+        "The iteration budget is consumed only after a terminal measured or refused outcome."
+      ]
+    },
+    {
+      "id": "crash_before_runner",
+      "given": "A durable operation checkpoint exists and the process crashes before the model runner starts.",
+      "when": "The controller restarts.",
+      "then": [
+        "The exact pending candidate resumes without replanning.",
+        "Exactly one model-runner invocation occurs in total.",
+        "No nomination is emitted before measured evidence exists."
+      ]
+    },
+    {
+      "id": "crash_after_runner",
+      "given": "The model runner completed and wrote a native self-hashed result before the controller process crashed.",
+      "when": "The controller restarts with the same operation key.",
+      "then": [
+        "The durable result is re-read and revalidated.",
+        "The model runner is not invoked again.",
+        "The measured outcome is recorded exactly once."
+      ]
+    },
+    {
+      "id": "nomination_exactly_once",
+      "given": "A qualifying measured result exists and a crash occurs during projection or final checkpointing.",
+      "when": "The controller restarts one or more times.",
+      "then": [
+        "The promotion queue contains exactly one row for the result plus manifest idempotency key.",
+        "Every row remains candidate-only, promotion_claim false, and operator_decision_required true."
+      ]
+    },
+    {
+      "id": "dnr_measured_outcomes",
+      "given": "A source proposal receives discovery-grade measured evidence.",
+      "when": "The next planner context is compiled.",
+      "then": [
+        "One attempt binds proposal ID, disposition, effect and result receipt hash.",
+        "The exact proposal is suppressible as already tried.",
+        "A noisy screened-out result does not resolve the scientific hypothesis as refuted."
+      ]
+    },
+    {
+      "id": "pooled_classifier",
+      "given": "Independent S1 and optional S2 effects are available.",
+      "when": "The controller classifies discovery evidence.",
+      "then": [
+        "A single positive is candidate-only, never replicated.",
+        "Two positive screens become top-K replicated.",
+        "Opposite signs become inconclusive.",
+        "A replicated stack below its strongest component is subadditive.",
+        "The dashboard projection is never classification authority."
+      ]
+    },
+    {
+      "id": "producer_tamper_matrix",
+      "given": "A valid correctness and two-arm attribution proof bundle.",
+      "when": "Each bound field or referenced file is independently mutated.",
+      "then": [
+        "Native receipt hash mutation is refused.",
+        "File byte/hash mutation is refused.",
+        "Manifest, build, model, workload and runtime-config mismatches are refused.",
+        "Claim/release mismatch and non-overlapping residency are refused.",
+        "Exact geometry, forbidden dispatch, inverse anchor and invariant-hot-signature mismatches are refused.",
+        "Timestamp CSV, stdout and stderr byte/hash mismatches are refused."
+      ]
+    },
+    {
+      "id": "concrete_adapter_factory",
+      "given": "A configured production-safe discovery adapter module.",
+      "when": "The CLI loads module:function and performs dry preflight.",
+      "then": [
+        "It returns concrete Planner, Critic, Lease and GPU source Screener implementations.",
+        "The source screener owns isolated build, governed correctness, governed two-arm attribution and candidate-only runner seams.",
+        "Production paths are read-only and all mutable/build outputs are outside the frozen tree.",
+        "No shell command or planner result field crosses the typed boundary."
+      ]
+    }
+  ]
+}
