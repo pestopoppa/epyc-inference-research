@@ -1,6 +1,6 @@
 {
-  "schema": "epyc.autokernel.c5_rocm_correctness_provider.v1",
-  "provider_id": "sol-execbench-rocm-c5-gfx90a-correctness-v1",
+  "schema": "epyc.autokernel.c5_rocm_correctness_provider.v2",
+  "provider_id": "sol-execbench-rocm-c5-gfx90a-correctness-v2",
   "source": {
     "url": "https://github.com/williamqwu/sol-execbench-rocm",
     "commit": "7e751eccb8e45a0d0efbcb8c0db8f6eac57a837e",

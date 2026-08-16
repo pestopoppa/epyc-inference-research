@@ -14,20 +14,25 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 import subprocess
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
+from types import MappingProxyType
 from typing import Any, Mapping, Sequence
 
 from . import c5_seed_corpus
 
 
-SCHEMA = "epyc.autokernel.c5_rocm_correctness_provider.v1"
-PLAN_SCHEMA = "epyc.autokernel.c5_rocm_correctness_plan.v1"
-AUDIT_SCHEMA = "epyc.autokernel.c5_rocm_primary_artifact_audit.v1"
-RESULT_SCHEMA = "epyc.autokernel.c5_rocm_correctness_result.v1"
-PROVIDER_ID = "sol-execbench-rocm-c5-gfx90a-correctness-v1"
+SCHEMA = "epyc.autokernel.c5_rocm_correctness_provider.v2"
+PLAN_SCHEMA = "epyc.autokernel.c5_rocm_correctness_plan.v2"
+AUDIT_SCHEMA = "epyc.autokernel.c5_rocm_primary_artifact_audit.v2"
+RESULT_SCHEMA = "epyc.autokernel.c5_rocm_correctness_result.v2"
+RAW_TRACE_SCHEMA = "epyc.autokernel.c5_rocm_correctness_trace.v1"
+STAGE_SCHEMA = "epyc.autokernel.c5_rocm_correctness_driver_stage.v2"
+PROVIDER_ID = "sol-execbench-rocm-c5-gfx90a-correctness-v2"
 TARGET_ARCH = "gfx90a"
 TARGET_HARDWARE = "LOCAL"
 AUTHORITY = "correctness_oracle_only"
@@ -65,7 +70,6 @@ _FORBIDDEN_RESULT_KEYS = frozenset({
     "t_b_ms", "t_k", "t_k_ms", "latency", "latency_ms", "speedup",
     "throughput", "bandwidth", "flops",
 })
-_CORRECTNESS_ONLY_ENV = "EPYC_AUTOKERNEL_C5_CORRECTNESS_ONLY"
 _EVAL_ANCHOR = """    if _correctness_failed:
         continue
 
@@ -74,27 +78,42 @@ _EVAL_ANCHOR = """    if _correctness_failed:
 _EVAL_REPLACEMENT = f"""    if _correctness_failed:
         continue
 
-    # EPYC AutoKernel C5: stop at the trusted live-reference boundary.  The
-    # port's subsequent timing path depends on part-local constants that do not
-    # exist for gfx90a.  Emit correctness with no Performance object and never
-    # enter that path when the sealed provider plan requests oracle mode.
-    if os.environ.get(\"{_CORRECTNESS_ONLY_ENV}\") == \"1\":
-        _emit(
-            Trace(
-                definition=definition.name,
-                solution=_solution_name,
-                workload=_workload,
-                evaluation=_make_eval(
-                    EvaluationStatus.PASSED,
-                    _device,
-                    None,
-                    correctness=_correctness,
-                    performance=None,
-                    extra_msg=\"EPYC AutoKernel correctness oracle; timing and SOL scoring disabled\",
-                ),
-            )
-        )
-        continue
+    # EPYC AutoKernel C5: this staged driver is unconditionally correctness-only.
+    # Candidate code and environment mutation cannot select the provider's timing
+    # branch. Emit a provider-local trace because upstream Trace(PASSED) requires
+    # a Performance object even when no timing was performed.
+    _epyc_record = {{
+        \"schema\": \"{RAW_TRACE_SCHEMA}\",
+        \"provider_id\": \"{PROVIDER_ID}\",
+        \"seed_id\": None,
+        \"problem_id\": definition.name,
+        \"solution\": _solution_name,
+        \"workload_uuid\": str(_workload.uuid),
+        \"target\": {{
+            \"hardware\": _device_name,
+            \"architecture\": (
+                torch.cuda.get_device_properties(0).gcnArchName.split(\":\", 1)[0]
+                if torch.cuda.is_available() else \"cpu\"
+            ),
+        }},
+        \"evaluation\": {{
+            \"status\": \"PASSED\",
+            \"correctness\": _correctness.model_dump(mode=\"json\"),
+            \"performance\": None,
+            \"rounds\": 10,
+            \"fresh_inputs_each_round\": True,
+            \"live_reference_each_round\": True,
+            \"message\": \"EPYC AutoKernel correctness oracle; timing and SOL scoring disabled\",
+        }},
+        \"authority\": \"{AUTHORITY}\",
+    }}
+    _epyc_seed_by_problem = {json.dumps({value: key for key, value in EXPECTED_PROBLEMS.items()}, sort_keys=True)}
+    _epyc_record[\"seed_id\"] = _epyc_seed_by_problem.get(definition.name)
+    if _epyc_record[\"seed_id\"] is None:
+        raise RuntimeError(\"EPYC AutoKernel C5 problem identity is not in the sealed seed join\")
+    print(json.dumps(_epyc_record, sort_keys=True, allow_nan=False),
+          file=_real_stdout, flush=True)
+    continue
 
     # -- Monkey-patch defense before timing --
 """
@@ -104,10 +123,54 @@ class OracleRefusal(ValueError):
     """The requested surface would exceed correctness-oracle authority."""
 
 
+def _plain(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {str(key): _plain(child) for key, child in value.items()}
+    if isinstance(value, (tuple, list)):
+        return [_plain(child) for child in value]
+    return value
+
+
+def _freeze(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return MappingProxyType({str(key): _freeze(child) for key, child in value.items()})
+    if isinstance(value, list):
+        return tuple(_freeze(child) for child in value)
+    return value
+
+
+@dataclass(frozen=True)
+class CorrectnessPlan(Mapping[str, Any]):
+    """Deeply immutable, schema-validated correctness plan."""
+
+    document: Mapping[str, Any]
+
+    def __getitem__(self, key: str) -> Any:
+        return self.document[key]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self.document)
+
+    def __len__(self) -> int:
+        return len(self.document)
+
+    def to_dict(self) -> dict[str, Any]:
+        return _plain(self.document)
+
+
 def _canonical_sha256(value: Any) -> str:
     return hashlib.sha256(json.dumps(
-        value, sort_keys=True, separators=(",", ":"), allow_nan=False,
+        _plain(value), sort_keys=True, separators=(",", ":"), allow_nan=False,
     ).encode("utf-8")).hexdigest()
+
+
+def _object_without_duplicates(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise OracleRefusal(f"duplicate JSON key {key!r}")
+        result[key] = value
+    return result
 
 
 def _file_sha256(path: Path) -> str:
@@ -311,24 +374,27 @@ def _git(root: Path, *args: str) -> str:
     return completed.stdout.strip()
 
 
-def _workload_dtypes(path: Path) -> tuple[tuple[str, ...], int]:
+def _workload_dtypes(path: Path) -> tuple[tuple[str, ...], tuple[str, ...]]:
     seen: set[str] = set()
-    count = 0
+    uuids: list[str] = []
     for line in path.read_text(encoding="utf-8").splitlines():
         if not line.strip():
             continue
-        count += 1
         try:
-            row = json.loads(line)
+            row = json.loads(line, object_pairs_hook=_object_without_duplicates)
         except json.JSONDecodeError as exc:
             raise OracleRefusal(f"invalid workload JSONL in {path}") from exc
+        workload_uuid = _text(_mapping(row, "workload").get("uuid"), "workload.uuid")
+        if workload_uuid in uuids:
+            raise OracleRefusal(f"duplicate workload UUID in {path}")
+        uuids.append(workload_uuid)
         tolerance = _mapping(_mapping(row, "workload").get("tolerance"), "tolerance")
         provenance = _text(tolerance.get("_provenance"), "tolerance._provenance")
         match = _TOLERANCE_DTYPE_RE.search(provenance)
         if match is None:
             raise OracleRefusal(f"workload dtype provenance missing in {path}")
         seen.add(_TOLERANCE_DTYPE[match.group(1)])
-    return tuple(sorted(seen)), count
+    return tuple(sorted(seen)), tuple(uuids)
 
 
 def audit_primary_artifacts(source_root: str | Path,
@@ -364,13 +430,16 @@ def audit_primary_artifacts(source_root: str | Path,
         workload_path = (root / seed.workload_path).resolve(strict=True)
         if not workload_path.is_relative_to(root) or _file_sha256(workload_path) != seed.workload_sha256:
             raise OracleRefusal(f"{seed.seed_id}: workload artifact identity drifted")
-        dtypes, count = _workload_dtypes(workload_path)
+        dtypes, workload_uuids = _workload_dtypes(workload_path)
+        count = len(workload_uuids)
         problem = _mapping(problems.get(seed.problem_id), f"manifest.{seed.problem_id}")
         deferred = problem.get("deferred")
         if (
             count != seed.workload_count
             or problem.get("n_workloads") != seed.workload_count
             or problem.get("n_scoreable") != seed.workload_count
+            or set(_mapping(problem.get("workloads"), "manifest.workloads"))
+            != set(workload_uuids)
             or deferred not in (None, [])
         ):
             raise OracleRefusal(f"{seed.seed_id}: workload/scoreable population drifted")
@@ -380,6 +449,7 @@ def audit_primary_artifacts(source_root: str | Path,
             "seed_id": seed.seed_id, "problem_id": seed.problem_id,
             "workload_count": count, "oracle_workload_dtypes": list(dtypes),
             "workload_sha256": seed.workload_sha256,
+            "workload_uuids": list(workload_uuids),
         })
     receipt = {
         "schema": AUDIT_SCHEMA, "provider_id": PROVIDER_ID,
@@ -403,7 +473,9 @@ def _render_correctness_driver(root: Path, oracle: OracleConfig) -> str:
     if source.count(_EVAL_ANCHOR) != 1:
         raise OracleRefusal("provider evaluation template correctness/timing boundary drifted")
     rendered = source.replace(_EVAL_ANCHOR, _EVAL_REPLACEMENT)
-    if rendered.count(_CORRECTNESS_ONLY_ENV) != 1:
+    if (rendered.count(RAW_TRACE_SCHEMA) != 1
+            or "EPYC_AUTOKERNEL_C5_CORRECTNESS_ONLY" in rendered
+            or "if os.environ" in _EVAL_REPLACEMENT):
         raise OracleRefusal("correctness-only driver overlay was not applied exactly once")
     return rendered
 
@@ -437,10 +509,10 @@ def stage_correctness_driver(
     with destination.open("w" if replaced_packager_template else "x", encoding="utf-8") as handle:
         handle.write(rendered)
     receipt = {
-        "schema": "epyc.autokernel.c5_rocm_correctness_driver_stage.v1",
+        "schema": STAGE_SCHEMA,
         "provider_id": PROVIDER_ID, "source_audit_sha256": audit["receipt_sha256"],
         "destination": str(destination), "driver_sha256": _file_sha256(destination),
-        "required_environment": {_CORRECTNESS_ONLY_ENV: "1"},
+        "correctness_stop": "unconditional_before_timing",
         "replaced_packager_template": replaced_packager_template,
         "timing_path_reachable": False, "sol_scoring_path_reachable": False,
         "hardware_accessed": False, "build_executed": False, "authority": AUTHORITY,
@@ -461,10 +533,109 @@ def _runtime_provenance(value: Mapping[str, Any]) -> dict[str, str]:
     return observed
 
 
+_PLAN_KEYS = {
+    "schema", "provider_id", "source_audit", "runtime_provenance",
+    "source_runtime_provenance", "runtime_compatibility", "target",
+    "operations", "execution_seam", "corpus", "scoring", "authority",
+    "plan_sha256",
+}
+
+
+def _validate_plan(value: Mapping[str, Any] | CorrectnessPlan, *,
+                   config: OracleConfig | None = None) -> CorrectnessPlan:
+    """Re-attest every external byte before admitting an immutable plan."""
+    oracle = load() if config is None else config
+    document = value.to_dict() if isinstance(value, CorrectnessPlan) else _plain(
+        _mapping(value, "plan"))
+    _exact_keys(document, _PLAN_KEYS, "plan")
+    plan_sha = _text(document["plan_sha256"], "plan.plan_sha256")
+    if not _SHA256_RE.fullmatch(plan_sha) or plan_sha != _canonical_sha256({
+        key: child for key, child in document.items() if key != "plan_sha256"
+    }):
+        raise OracleRefusal("plan_sha256 does not bind the complete plan")
+    if (document["schema"] != PLAN_SCHEMA or document["provider_id"] != PROVIDER_ID
+            or document["authority"] != AUTHORITY):
+        raise OracleRefusal("plan schema/provider/authority drifted")
+
+    audit = _mapping(document["source_audit"], "plan.source_audit")
+    source_root = Path(_text(audit.get("source_root"), "source_audit.source_root"))
+    if not source_root.is_absolute():
+        raise OracleRefusal("source_audit.source_root must be absolute")
+    expected_audit = audit_primary_artifacts(source_root, oracle)
+    if _plain(audit) != expected_audit:
+        raise OracleRefusal("plan source audit differs from fresh primary-artifact audit")
+
+    runtime = _runtime_provenance(_mapping(
+        document["runtime_provenance"], "plan.runtime_provenance"))
+    source_runtime = dict(_mapping(
+        oracle.document["source_runtime_provenance"], "source runtime"))
+    if document["source_runtime_provenance"] != source_runtime:
+        raise OracleRefusal("plan source runtime provenance drifted")
+    if document["runtime_compatibility"] != {
+        "rocm_exact_match": runtime["rocm_version"] == source_runtime["rocm_version"],
+        "compatibility_claimed": False,
+        "authority": "record_only_no_cross_version_inference",
+    }:
+        raise OracleRefusal("plan runtime compatibility statement drifted")
+    if document["target"] != dict(_mapping(oracle.document["target"], "target")):
+        raise OracleRefusal("plan target drifted")
+    if document["operations"] != {
+        "compile": True, "correctness": True, "correctness_rounds": 10,
+        "fresh_inputs_each_round": True, "live_reference_each_round": True,
+        "timing": False, "profiling": False, "sol_scoring": False,
+    }:
+        raise OracleRefusal("plan exceeds compile/correctness-only operations")
+    expected_driver_sha = hashlib.sha256(
+        _render_correctness_driver(source_root, oracle).encode("utf-8")).hexdigest()
+    if document["execution_seam"] != {
+        "staged_driver": "eval_driver.py", "driver_sha256": expected_driver_sha,
+        "correctness_stop": "unconditional_before_timing",
+        "timing_path_reachable": False, "sol_scoring_path_reachable": False,
+    }:
+        raise OracleRefusal("plan correctness-only execution seam drifted")
+    if document["scoring"] != dict(_mapping(oracle.document["scoring"], "scoring")):
+        raise OracleRefusal("plan scoring boundary drifted")
+
+    corpus = _mapping(document["corpus"], "plan.corpus")
+    _exact_keys(corpus, {"seed_count", "workload_count", "seeds"}, "plan.corpus")
+    rows = corpus["seeds"]
+    if not isinstance(rows, list) or not rows:
+        raise OracleRefusal("plan corpus seeds must be a non-empty list")
+    audit_rows = {row["seed_id"]: row for row in expected_audit["seeds"]}
+    hyra = {seed.seed_id: seed for seed in c5_seed_corpus.load().seeds}
+    seen: set[str] = set()
+    total = 0
+    for row_value in rows:
+        row = _mapping(row_value, "plan seed")
+        _exact_keys(row, {
+            "seed_id", "problem_id", "workload_count", "workload_uuids",
+            "oracle_workload_dtypes", "hyra_reference_dtypes",
+        }, "plan seed")
+        seed_id = _text(row["seed_id"], "plan seed.seed_id")
+        if seed_id in seen or seed_id not in audit_rows:
+            raise OracleRefusal(f"plan has unexpected or duplicate seed {seed_id!r}")
+        seen.add(seed_id)
+        expected = audit_rows[seed_id]
+        if row != {
+            "seed_id": seed_id, "problem_id": expected["problem_id"],
+            "workload_count": expected["workload_count"],
+            "workload_uuids": expected["workload_uuids"],
+            "oracle_workload_dtypes": expected["oracle_workload_dtypes"],
+            "hyra_reference_dtypes": list(hyra[seed_id].dtypes),
+        }:
+            raise OracleRefusal(f"{seed_id}: plan corpus differs from primary evidence")
+        total += expected["workload_count"]
+    if corpus["seed_count"] != len(rows) or corpus["workload_count"] != total:
+        raise OracleRefusal("plan corpus totals do not match its exact workload population")
+    if sum(seed.workload_count for seed in oracle.seeds) != EXPECTED_WORKLOADS:
+        raise OracleRefusal("provider registry no longer carries exactly 193 workloads")
+    return CorrectnessPlan(_freeze(document))
+
+
 def compile_plan(
     source_root: str | Path, *, runtime_provenance: Mapping[str, Any],
     seed_ids: Sequence[str] | None = None, config: OracleConfig | None = None,
-) -> dict[str, Any]:
+) -> CorrectnessPlan:
     """Seal a compile+correctness plan; never authorize timing or scoring."""
     oracle = load() if config is None else config
     audit = audit_primary_artifacts(source_root, oracle)
@@ -472,6 +643,7 @@ def compile_plan(
     correctness_driver = _render_correctness_driver(source, oracle)
     runtime = _runtime_provenance(runtime_provenance)
     selected = oracle.select(seed_ids)
+    audit_by_id = {row["seed_id"]: row for row in audit["seeds"]}
     hyra_by_id = {seed.seed_id: seed for seed in c5_seed_corpus.load().seeds}
     source_runtime = dict(_mapping(
         oracle.document["source_runtime_provenance"], "source runtime"))
@@ -495,7 +667,7 @@ def compile_plan(
         "execution_seam": {
             "staged_driver": "eval_driver.py",
             "driver_sha256": hashlib.sha256(correctness_driver.encode("utf-8")).hexdigest(),
-            "required_environment": {_CORRECTNESS_ONLY_ENV: "1"},
+            "correctness_stop": "unconditional_before_timing",
             "timing_path_reachable": False, "sol_scoring_path_reachable": False,
         },
         "corpus": {
@@ -504,6 +676,7 @@ def compile_plan(
             "seeds": [{
                 "seed_id": seed.seed_id, "problem_id": seed.problem_id,
                 "workload_count": seed.workload_count,
+                "workload_uuids": audit_by_id[seed.seed_id]["workload_uuids"],
                 "oracle_workload_dtypes": list(seed.oracle_workload_dtypes),
                 "hyra_reference_dtypes": list(hyra_by_id[seed.seed_id].dtypes),
             } for seed in selected],
@@ -512,7 +685,7 @@ def compile_plan(
         "authority": AUTHORITY,
     }
     plan["plan_sha256"] = _canonical_sha256(plan)
-    return plan
+    return _validate_plan(plan, config=oracle)
 
 
 def _reject_numeric_claim_keys(value: Any) -> None:
@@ -526,67 +699,175 @@ def _reject_numeric_claim_keys(value: Any) -> None:
             _reject_numeric_claim_keys(child)
 
 
-def validate_result(result: Mapping[str, Any], *, plan: Mapping[str, Any]) -> dict[str, Any]:
-    """Validate an unscored provider result and refuse every numeric claim path."""
-    row = _mapping(result, "result")
-    _reject_numeric_claim_keys(row)
-    _exact_keys(row, {
-        "schema", "provider_id", "plan_sha256", "target", "runtime_provenance",
-        "authority", "seed_results",
-    }, "result")
+_STAGE_KEYS = {
+    "schema", "provider_id", "source_audit_sha256", "destination",
+    "driver_sha256", "correctness_stop", "replaced_packager_template",
+    "timing_path_reachable", "sol_scoring_path_reachable", "hardware_accessed",
+    "build_executed", "authority", "receipt_sha256",
+}
+_RAW_TRACE_KEYS = {
+    "schema", "provider_id", "seed_id", "problem_id", "solution",
+    "workload_uuid", "target", "evaluation", "authority",
+}
+_RAW_EVALUATION_KEYS = {
+    "status", "correctness", "performance", "rounds", "fresh_inputs_each_round",
+    "live_reference_each_round", "message",
+}
+_CORRECTNESS_KEYS = {
+    "max_relative_error", "max_absolute_error", "has_nan", "has_inf", "extra",
+}
+
+
+def _validate_stage_receipt(value: Mapping[str, Any], *,
+                            plan: CorrectnessPlan) -> dict[str, Any]:
+    stage = _plain(_mapping(value, "stage receipt"))
+    _exact_keys(stage, _STAGE_KEYS, "stage receipt")
+    receipt_sha = _text(stage["receipt_sha256"], "stage receipt.receipt_sha256")
+    if not _SHA256_RE.fullmatch(receipt_sha) or receipt_sha != _canonical_sha256({
+        key: child for key, child in stage.items() if key != "receipt_sha256"
+    }):
+        raise OracleRefusal("stage receipt self-hash differs")
+    destination = Path(_text(stage["destination"], "stage receipt.destination"))
+    if (not destination.is_absolute() or destination.is_symlink()
+            or not destination.is_file()):
+        raise OracleRefusal("staged driver must remain an absolute regular non-symlink file")
     if (
-        row["schema"] != RESULT_SCHEMA
-        or row["provider_id"] != PROVIDER_ID
-        or row["plan_sha256"] != plan.get("plan_sha256")
-        or row["target"] != {"hardware": TARGET_HARDWARE, "architecture": TARGET_ARCH}
-        or row["runtime_provenance"] != plan.get("runtime_provenance")
-        or row["authority"] != AUTHORITY
+        stage["schema"] != STAGE_SCHEMA
+        or stage["provider_id"] != PROVIDER_ID
+        or stage["source_audit_sha256"] != plan["source_audit"]["receipt_sha256"]
+        or stage["driver_sha256"] != plan["execution_seam"]["driver_sha256"]
+        or _file_sha256(destination) != stage["driver_sha256"]
+        or stage["correctness_stop"] != "unconditional_before_timing"
+        or stage["timing_path_reachable"] is not False
+        or stage["sol_scoring_path_reachable"] is not False
+        or stage["hardware_accessed"] is not False
+        or stage["build_executed"] is not False
+        or not isinstance(stage["replaced_packager_template"], bool)
+        or stage["authority"] != AUTHORITY
     ):
-        raise OracleRefusal("result identity/authority differs from its plan")
-    planned = {seed["seed_id"]: seed for seed in plan["corpus"]["seeds"]}
-    seed_results = row["seed_results"]
-    if not isinstance(seed_results, list):
-        raise OracleRefusal("seed_results must be a list")
-    seen: set[str] = set()
-    for value in seed_results:
-        seed = _mapping(value, "seed_result")
-        _exact_keys(seed, {
-            "seed_id", "compile_status", "correctness_status",
-            "correctness_rounds_run", "workloads_checked", "error",
-        }, "seed_result")
-        seed_id = _text(seed["seed_id"], "seed_result.seed_id")
-        if seed_id in seen or seed_id not in planned:
-            raise OracleRefusal(f"unexpected or duplicate seed result {seed_id!r}")
-        seen.add(seed_id)
-        if seed["compile_status"] not in {"passed", "failed"}:
-            raise OracleRefusal(f"{seed_id}: invalid compile status")
-        if seed["correctness_status"] not in {"passed", "failed", "not_run"}:
-            raise OracleRefusal(f"{seed_id}: invalid correctness status")
-        rounds = seed["correctness_rounds_run"]
-        checked = seed["workloads_checked"]
+        raise OracleRefusal("stage receipt differs from the immutable correctness plan")
+    return stage
+
+
+def _trace_lines(raw_traces: bytes) -> list[tuple[bytes, Mapping[str, Any]]]:
+    if not isinstance(raw_traces, bytes) or not raw_traces or not raw_traces.endswith(b"\n"):
+        raise OracleRefusal("raw provider traces must be non-empty newline-terminated bytes")
+    rows: list[tuple[bytes, Mapping[str, Any]]] = []
+    for line in raw_traces.splitlines():
+        if not line:
+            raise OracleRefusal("raw provider traces cannot contain blank lines")
+        try:
+            parsed = json.loads(line, object_pairs_hook=_object_without_duplicates)
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise OracleRefusal("raw provider trace is not strict UTF-8 JSONL") from exc
+        rows.append((line, _mapping(parsed, "raw provider trace")))
+    return rows
+
+
+def reduce_staged_result(raw_traces: bytes, *, plan: Mapping[str, Any] | CorrectnessPlan,
+                         stage_receipt: Mapping[str, Any]) -> Mapping[str, Any]:
+    """Reduce exact staged JSONL bytes into the only admissible C5 pass receipt."""
+    sealed_plan = _validate_plan(plan)
+    stage = _validate_stage_receipt(stage_receipt, plan=sealed_plan)
+    planned = {seed["seed_id"]: seed for seed in sealed_plan["corpus"]["seeds"]}
+    expected_pairs = {
+        (seed_id, uuid) for seed_id, seed in planned.items()
+        for uuid in seed["workload_uuids"]
+    }
+    observed: set[tuple[str, str]] = set()
+    by_seed: dict[str, list[Mapping[str, Any]]] = {seed_id: [] for seed_id in planned}
+    hardware_names: set[str] = set()
+    solution: str | None = None
+    for _line, row in _trace_lines(raw_traces):
+        _exact_keys(row, _RAW_TRACE_KEYS, "raw provider trace")
+        _reject_numeric_claim_keys(row)
+        seed_id = _text(row["seed_id"], "trace.seed_id")
+        workload_uuid = _text(row["workload_uuid"], "trace.workload_uuid")
+        pair = (seed_id, workload_uuid)
+        if pair not in expected_pairs or pair in observed:
+            raise OracleRefusal(f"unexpected or duplicate workload trace {pair!r}")
+        expected = planned[seed_id]
+        current_solution = _text(row["solution"], "trace.solution")
+        solution = current_solution if solution is None else solution
+        target = _mapping(row["target"], "trace.target")
+        _exact_keys(target, {"hardware", "architecture"}, "trace.target")
+        hardware_names.add(_text(target["hardware"], "trace.target.hardware"))
+        evaluation = _mapping(row["evaluation"], "trace.evaluation")
+        _exact_keys(evaluation, _RAW_EVALUATION_KEYS, "trace.evaluation")
+        correctness = _mapping(evaluation["correctness"], "trace.correctness")
+        _exact_keys(correctness, _CORRECTNESS_KEYS, "trace.correctness")
+        for field in ("max_relative_error", "max_absolute_error"):
+            metric = correctness[field]
+            if (isinstance(metric, bool) or not isinstance(metric, (int, float))
+                    or not math.isfinite(float(metric)) or float(metric) < 0):
+                raise OracleRefusal(f"trace.correctness.{field} must be finite and non-negative")
+        if (not isinstance(correctness["has_nan"], bool)
+                or not isinstance(correctness["has_inf"], bool)
+                or correctness["has_nan"] or correctness["has_inf"]
+                or (correctness["extra"] is not None
+                    and not isinstance(correctness["extra"], Mapping))):
+            raise OracleRefusal("passed trace carries invalid correctness state")
         if (
-            isinstance(rounds, bool) or not isinstance(rounds, int) or not 0 <= rounds <= 10
-            or isinstance(checked, bool) or not isinstance(checked, int)
-            or not 0 <= checked <= planned[seed_id]["workload_count"]
+            row["schema"] != RAW_TRACE_SCHEMA
+            or row["provider_id"] != PROVIDER_ID
+            or row["problem_id"] != expected["problem_id"]
+            or current_solution != solution
+            or target["architecture"] != TARGET_ARCH
+            or row["authority"] != AUTHORITY
+            or evaluation["status"] != "PASSED"
+            or evaluation["performance"] is not None
+            or evaluation["rounds"] != 10
+            or evaluation["fresh_inputs_each_round"] is not True
+            or evaluation["live_reference_each_round"] is not True
+            or evaluation["message"]
+            != "EPYC AutoKernel correctness oracle; timing and SOL scoring disabled"
         ):
-            raise OracleRefusal(f"{seed_id}: invalid correctness coverage")
-        if seed["correctness_status"] == "passed" and (
-            seed["compile_status"] != "passed" or rounds != 10
-            or checked != planned[seed_id]["workload_count"]
-        ):
-            raise OracleRefusal(f"{seed_id}: correctness pass lacks full ten-round coverage")
-        if seed["correctness_status"] == "not_run" and (rounds or checked):
-            raise OracleRefusal(f"{seed_id}: not_run cannot claim coverage")
-        if seed["error"] is not None and not isinstance(seed["error"], str):
-            raise OracleRefusal(f"{seed_id}: error must be text or null")
-    if seen != set(planned):
-        raise OracleRefusal("result does not cover every planned seed")
-    return json.loads(json.dumps(row))
+            raise OracleRefusal("raw trace exceeds or contradicts correctness-only authority")
+        observed.add(pair)
+        by_seed[seed_id].append(row)
+    if observed != expected_pairs:
+        missing = sorted(expected_pairs - observed)
+        raise OracleRefusal(f"raw provider trace population is incomplete: {missing[:3]}")
+
+    seed_results = []
+    for seed_id in planned:
+        rows = by_seed[seed_id]
+        seed_results.append({
+            "seed_id": seed_id, "compile_status": "passed",
+            "correctness_status": "passed", "correctness_rounds_run": 10,
+            "workloads_checked": len(rows), "error": None,
+            "trace_sha256": _canonical_sha256(rows),
+        })
+    result = {
+        "schema": RESULT_SCHEMA, "provider_id": PROVIDER_ID,
+        "plan_sha256": sealed_plan["plan_sha256"],
+        "stage_receipt_sha256": stage["receipt_sha256"],
+        "raw_trace_sha256": hashlib.sha256(raw_traces).hexdigest(),
+        "raw_trace_count": len(observed),
+        "target": {"hardware": sorted(hardware_names), "architecture": TARGET_ARCH},
+        "runtime_provenance": _plain(sealed_plan["runtime_provenance"]),
+        "authority": AUTHORITY, "seed_results": seed_results,
+    }
+    result["result_sha256"] = _canonical_sha256(result)
+    return _freeze(result)
+
+
+def validate_result(result: Mapping[str, Any], *,
+                    plan: Mapping[str, Any] | CorrectnessPlan,
+                    stage_receipt: Mapping[str, Any], raw_traces: bytes) -> Mapping[str, Any]:
+    """Re-reduce raw bytes; an aggregate alone can never carry authority."""
+    expected = reduce_staged_result(
+        raw_traces, plan=plan, stage_receipt=stage_receipt)
+    observed = _plain(_mapping(result, "result"))
+    _reject_numeric_claim_keys(observed)
+    if observed != _plain(expected):
+        raise OracleRefusal("result differs from strict raw-trace reduction")
+    return expected
 
 
 __all__ = [
-    "AUDIT_SCHEMA", "AUTHORITY", "EXPECTED_WORKLOADS", "OracleConfig",
-    "OracleRefusal", "OracleSeed", "PLAN_SCHEMA", "PROVIDER_ID", "RESULT_SCHEMA",
-    "SCHEMA", "TARGET_ARCH", "audit_primary_artifacts", "compile_plan", "load",
-    "stage_correctness_driver", "validate_result",
+    "AUDIT_SCHEMA", "AUTHORITY", "CorrectnessPlan", "EXPECTED_WORKLOADS", "OracleConfig",
+    "OracleRefusal", "OracleSeed", "PLAN_SCHEMA", "PROVIDER_ID", "RAW_TRACE_SCHEMA",
+    "RESULT_SCHEMA", "SCHEMA", "STAGE_SCHEMA", "TARGET_ARCH", "audit_primary_artifacts", "compile_plan",
+    "load", "reduce_staged_result", "stage_correctness_driver", "validate_result",
 ]

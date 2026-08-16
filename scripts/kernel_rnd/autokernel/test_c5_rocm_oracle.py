@@ -98,18 +98,35 @@ class C5RocmOraclePlanTest(unittest.TestCase):
 
     @staticmethod
     def audit():
-        return {
+        config = C.load()
+        rows = [{
+            "seed_id": seed.seed_id,
+            "problem_id": seed.problem_id,
+            "workload_count": seed.workload_count,
+            "oracle_workload_dtypes": list(seed.oracle_workload_dtypes),
+            "workload_sha256": seed.workload_sha256,
+            "workload_uuids": [
+                f"{seed.seed_id}-workload-{index:03d}"
+                for index in range(seed.workload_count)
+            ],
+        } for seed in config.seeds]
+        value = {
             "schema": C.AUDIT_SCHEMA,
             "provider_id": C.PROVIDER_ID,
+            "source_root": "/tmp",
             "source_commit": C.load().source["commit"],
+            "manifest_sha256": C.load().document["primary_artifacts"]["manifest_sha256"],
+            "provider_code": {},
             "seed_count": 8,
             "workload_count": 193,
+            "seeds": rows,
             "hardware_accessed": False,
             "build_executed": False,
             "scoring_constants_imported": False,
             "authority": C.AUTHORITY,
-            "receipt_sha256": "a" * 64,
         }
+        value["receipt_sha256"] = C._canonical_sha256(value)
+        return value
 
     def plan(self, seed_ids=None):
         with mock.patch.object(C, "audit_primary_artifacts", return_value=self.audit()), \
@@ -131,13 +148,22 @@ class C5RocmOraclePlanTest(unittest.TestCase):
         self.assertFalse(plan["execution_seam"]["timing_path_reachable"])
         self.assertFalse(plan["execution_seam"]["sol_scoring_path_reachable"])
         self.assertEqual(
-            plan["execution_seam"]["required_environment"],
-            {C._CORRECTNESS_ONLY_ENV: "1"},
+            plan["execution_seam"]["correctness_stop"],
+            "unconditional_before_timing",
         )
         self.assertFalse(plan["scoring"]["enabled"])
         self.assertFalse(plan["runtime_compatibility"]["rocm_exact_match"])
         self.assertFalse(plan["runtime_compatibility"]["compatibility_claimed"])
-        self.assertNotIn("sol_score", json.dumps(plan).lower())
+        self.assertNotIn("sol_score", json.dumps(plan.to_dict()).lower())
+        with self.assertRaises(TypeError):
+            plan["corpus"]["workload_count"] = 0
+        self.assertEqual(
+            plan["plan_sha256"],
+            C._canonical_sha256({
+                key: value for key, value in plan.to_dict().items()
+                if key != "plan_sha256"
+            }),
+        )
 
     def test_runtime_provenance_is_required_even_when_not_rocm72(self):
         runtime = self.runtime()
@@ -164,9 +190,11 @@ class C5RocmOraclePlanTest(unittest.TestCase):
             with mock.patch.object(C, "audit_primary_artifacts", return_value=self.audit()):
                 receipt = C.stage_correctness_driver(source, stage_text)
             rendered = Path(stage_text, "eval_driver.py").read_text(encoding="utf-8")
-            self.assertIn(C._CORRECTNESS_ONLY_ENV, rendered)
-            self.assertIn("performance=None", rendered)
+            self.assertNotIn("EPYC_AUTOKERNEL_C5_CORRECTNESS_ONLY", rendered)
+            self.assertNotIn("if os.environ", C._EVAL_REPLACEMENT)
+            self.assertIn('"performance": None', rendered)
             self.assertIn("continue\n\n    # -- Monkey-patch defense before timing --", rendered)
+            self.assertEqual(receipt["correctness_stop"], "unconditional_before_timing")
             self.assertFalse(receipt["timing_path_reachable"])
             self.assertFalse(receipt["sol_scoring_path_reachable"])
             self.assertFalse(receipt["hardware_accessed"])
@@ -187,55 +215,148 @@ class C5RocmOraclePlanTest(unittest.TestCase):
         plan = self.plan(("k145", "k227"))
         self.assertEqual(plan["corpus"]["workload_count"], 63)
         rows = {row["seed_id"]: row for row in plan["corpus"]["seeds"]}
-        self.assertEqual(rows["k145"]["oracle_workload_dtypes"], ["fp32"])
-        self.assertEqual(rows["k145"]["hyra_reference_dtypes"], ["fp16"])
-        self.assertEqual(rows["k227"]["oracle_workload_dtypes"], ["bf16"])
-        self.assertEqual(rows["k227"]["hyra_reference_dtypes"], ["bf16", "fp16"])
+        self.assertEqual(rows["k145"]["oracle_workload_dtypes"], ("fp32",))
+        self.assertEqual(rows["k145"]["hyra_reference_dtypes"], ("fp16",))
+        self.assertEqual(rows["k227"]["oracle_workload_dtypes"], ("bf16",))
+        self.assertEqual(rows["k227"]["hyra_reference_dtypes"], ("bf16", "fp16"))
 
-    def full_result(self, plan):
-        return {
-            "schema": C.RESULT_SCHEMA,
+    def stage_receipt(self, plan, root):
+        destination = Path(root, "eval_driver.py")
+        destination.write_text("# oracle\n", encoding="utf-8")
+        stage = {
+            "schema": C.STAGE_SCHEMA,
             "provider_id": C.PROVIDER_ID,
-            "plan_sha256": plan["plan_sha256"],
-            "target": {"hardware": "LOCAL", "architecture": "gfx90a"},
-            "runtime_provenance": plan["runtime_provenance"],
+            "source_audit_sha256": plan["source_audit"]["receipt_sha256"],
+            "destination": str(destination),
+            "driver_sha256": C._file_sha256(destination),
+            "correctness_stop": "unconditional_before_timing",
+            "replaced_packager_template": True,
+            "timing_path_reachable": False,
+            "sol_scoring_path_reachable": False,
+            "hardware_accessed": False,
+            "build_executed": False,
             "authority": C.AUTHORITY,
-            "seed_results": [{
-                "seed_id": seed["seed_id"],
-                "compile_status": "passed",
-                "correctness_status": "passed",
-                "correctness_rounds_run": 10,
-                "workloads_checked": seed["workload_count"],
-                "error": None,
-            } for seed in plan["corpus"]["seeds"]],
         }
+        stage["receipt_sha256"] = C._canonical_sha256(stage)
+        return stage
 
-    def test_full_compile_and_correctness_result_is_admitted_without_score(self):
+    @staticmethod
+    def raw_traces(plan):
+        rows = []
+        for seed in plan["corpus"]["seeds"]:
+            for workload_uuid in seed["workload_uuids"]:
+                rows.append({
+                    "schema": C.RAW_TRACE_SCHEMA,
+                    "provider_id": C.PROVIDER_ID,
+                    "seed_id": seed["seed_id"],
+                    "problem_id": seed["problem_id"],
+                    "solution": "candidate",
+                    "workload_uuid": workload_uuid,
+                    "target": {"hardware": "AMD Instinct MI210", "architecture": "gfx90a"},
+                    "evaluation": {
+                        "status": "PASSED",
+                        "correctness": {
+                            "max_relative_error": 0.0,
+                            "max_absolute_error": 0.0,
+                            "has_nan": False,
+                            "has_inf": False,
+                            "extra": None,
+                        },
+                        "performance": None,
+                        "rounds": 10,
+                        "fresh_inputs_each_round": True,
+                        "live_reference_each_round": True,
+                        "message": (
+                            "EPYC AutoKernel correctness oracle; timing and SOL scoring disabled"
+                        ),
+                    },
+                    "authority": C.AUTHORITY,
+                })
+        return b"".join(
+            json.dumps(row, sort_keys=True, separators=(",", ":")).encode() + b"\n"
+            for row in rows)
+
+    def reduce(self, raw, plan, stage):
+        with mock.patch.object(C, "audit_primary_artifacts", return_value=self.audit()), \
+                mock.patch.object(C, "_render_correctness_driver", return_value="# oracle\n"):
+            return C.reduce_staged_result(raw, plan=plan, stage_receipt=stage)
+
+    def validate(self, result, raw, plan, stage):
+        with mock.patch.object(C, "audit_primary_artifacts", return_value=self.audit()), \
+                mock.patch.object(C, "_render_correctness_driver", return_value="# oracle\n"):
+            return C.validate_result(
+                result, plan=plan, stage_receipt=stage, raw_traces=raw)
+
+    def test_full_compile_and_correctness_result_is_reduced_from_raw_bytes(self):
         plan = self.plan(("k138", "k215"))
-        result = self.full_result(plan)
-        self.assertEqual(C.validate_result(result, plan=plan), result)
+        with tempfile.TemporaryDirectory() as temporary:
+            stage = self.stage_receipt(plan, temporary)
+            raw = self.raw_traces(plan)
+            result = self.reduce(raw, plan, stage)
+            self.assertEqual(result["raw_trace_count"], 45)
+            self.assertEqual(result["raw_trace_sha256"], C.hashlib.sha256(raw).hexdigest())
+            self.assertEqual(self.validate(result, raw, plan, stage), result)
+            with self.assertRaises(TypeError):
+                result["raw_trace_count"] = 0
 
-    def test_false_sol_timing_and_performance_claims_refuse_at_any_depth(self):
+    def test_original_fabricated_plan_zero_workload_poc_is_refused(self):
+        fabricated = {
+            "plan_sha256": "not-a-sha", "runtime_provenance": {"fabricated": True},
+            "corpus": {"seeds": [{"seed_id": "k138", "workload_count": 0}]},
+        }
+        with self.assertRaisesRegex(C.OracleRefusal, "plan.*fields|plan_sha256"):
+            C.reduce_staged_result(b"{}\n", plan=fabricated, stage_receipt={})
+
         plan = self.plan(("k138",))
-        for key in ("sol_score", "t_sol_ms", "t_b_ms", "latency_ms", "speedup"):
-            result = self.full_result(plan)
-            result["seed_results"][0][key] = 1.0
-            with self.subTest(key=key), self.assertRaisesRegex(
-                C.OracleRefusal, "correctness-only result"
-            ):
-                C.validate_result(result, plan=plan)
+        tampered = plan.to_dict()
+        tampered["corpus"]["seeds"][0]["workload_count"] = 0
+        tampered["corpus"]["seeds"][0]["workload_uuids"] = []
+        tampered["corpus"]["workload_count"] = 0
+        tampered["plan_sha256"] = C._canonical_sha256({
+            key: value for key, value in tampered.items() if key != "plan_sha256"
+        })
+        with mock.patch.object(C, "audit_primary_artifacts", return_value=self.audit()), \
+                mock.patch.object(C, "_render_correctness_driver", return_value="# oracle\n"), \
+                self.assertRaisesRegex(C.OracleRefusal, "differs from primary evidence"):
+            C._validate_plan(tampered)
 
-    def test_correctness_pass_requires_all_workloads_and_all_ten_rounds(self):
+    def test_raw_population_timing_claim_and_aggregate_forgery_refuse(self):
         plan = self.plan(("k138",))
-        result = self.full_result(plan)
-        result["seed_results"][0]["correctness_rounds_run"] = 9
-        with self.assertRaisesRegex(C.OracleRefusal, "full ten-round coverage"):
-            C.validate_result(result, plan=plan)
+        with tempfile.TemporaryDirectory() as temporary:
+            stage = self.stage_receipt(plan, temporary)
+            raw = self.raw_traces(plan)
+            result = self.reduce(raw, plan, stage)
 
-        result = self.full_result(plan)
-        result["seed_results"][0]["workloads_checked"] = 15
-        with self.assertRaisesRegex(C.OracleRefusal, "full ten-round coverage"):
-            C.validate_result(result, plan=plan)
+            with self.assertRaisesRegex(C.OracleRefusal, "population is incomplete"):
+                self.reduce(b"\n".join(raw.splitlines()[:-1]) + b"\n", plan, stage)
+
+            rows = [json.loads(line) for line in raw.splitlines()]
+            rows[0]["evaluation"]["performance"] = {"latency_ms": 1.0}
+            timed = b"".join(json.dumps(row).encode() + b"\n" for row in rows)
+            with self.assertRaisesRegex(C.OracleRefusal, "correctness-only result"):
+                self.reduce(timed, plan, stage)
+
+            rows = [json.loads(line) for line in raw.splitlines()]
+            rows[0]["target"]["architecture"] = "gfx950"
+            foreign = b"".join(json.dumps(row).encode() + b"\n" for row in rows)
+            with self.assertRaisesRegex(C.OracleRefusal, "correctness-only authority"):
+                self.reduce(foreign, plan, stage)
+
+            forged = C._plain(result)
+            forged["seed_results"][0]["workloads_checked"] = 0
+            forged["result_sha256"] = C._canonical_sha256({
+                key: value for key, value in forged.items() if key != "result_sha256"
+            })
+            with self.assertRaisesRegex(C.OracleRefusal, "strict raw-trace reduction"):
+                self.validate(forged, raw, plan, stage)
+
+    def test_staged_driver_byte_drift_refuses_before_reduction(self):
+        plan = self.plan(("k138",))
+        with tempfile.TemporaryDirectory() as temporary:
+            stage = self.stage_receipt(plan, temporary)
+            Path(stage["destination"]).write_text("candidate changed driver\n", encoding="utf-8")
+            with self.assertRaisesRegex(C.OracleRefusal, "stage receipt differs"):
+                self.reduce(self.raw_traces(plan), plan, stage)
 
 
 if __name__ == "__main__":

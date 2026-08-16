@@ -13,7 +13,9 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import re
+import stat
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, Mapping, Sequence
@@ -409,17 +411,62 @@ def _registry_path() -> Path:
     return Path(__file__).with_name("c5_seed_corpus.json")
 
 
-def load(path: str | Path | None = None) -> C5SeedCorpus:
+def _read_pinned(path: Path, label: str) -> bytes:
+    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        fd = os.open(path, flags)
+    except OSError as exc:
+        raise SeedCorpusError(f"{label}: cannot open evidence: {exc}") from exc
+    try:
+        before = os.fstat(fd)
+        if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1
+                or before.st_uid != os.geteuid()):
+            raise SeedCorpusError(f"{label}: evidence must be an owned single-link regular file")
+        chunks: list[bytes] = []
+        while True:
+            chunk = os.read(fd, 1024 * 1024)
+            if not chunk:
+                break
+            chunks.append(chunk)
+        raw = b"".join(chunks)
+        after = os.fstat(fd)
+    finally:
+        os.close(fd)
+    try:
+        path_after = path.stat(follow_symlinks=False)
+    except OSError as exc:
+        raise SeedCorpusError(f"{label}: evidence path disappeared: {exc}") from exc
+    before_id = (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns)
+    after_id = (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns)
+    if (before_id != after_id or len(raw) != before.st_size
+            or (path_after.st_dev, path_after.st_ino) != (before.st_dev, before.st_ino)):
+        raise SeedCorpusError(f"{label}: evidence changed while it was read")
+    return raw
+
+
+def verify_policy_evidence_files(corpus: C5SeedCorpus) -> None:
+    """Verify internal policy authority bytes before any author-facing projection."""
+    for evidence in corpus.policy_evidence:
+        evidence_id = str(evidence["evidence_id"])
+        raw = _read_pinned(Path(str(evidence["path"])), evidence_id)
+        if hashlib.sha256(raw).hexdigest() != evidence["sha256"]:
+            raise SeedCorpusError(f"{evidence_id}: policy evidence SHA-256 mismatch")
+
+
+def load(path: str | Path | None = None, *, verify_evidence: bool = True) -> C5SeedCorpus:
     registry = _registry_path() if path is None else Path(path)
     raw = registry.read_bytes()
     try:
         document = json.loads(raw)
     except json.JSONDecodeError as exc:
         raise SeedCorpusError("C5 seed corpus is not valid JSON") from exc
-    return C5SeedCorpus.from_dict(
+    corpus = C5SeedCorpus.from_dict(
         _mapping(document, "corpus"),
         registry_sha256=hashlib.sha256(raw).hexdigest(),
     )
+    if verify_evidence:
+        verify_policy_evidence_files(corpus)
+    return corpus
 
 
 def seed_context_item(seed_ids: Sequence[str] | None = None):
