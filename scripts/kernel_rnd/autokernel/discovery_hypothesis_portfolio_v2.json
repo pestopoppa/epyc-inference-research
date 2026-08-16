@@ -178,6 +178,20 @@
         "The proposed L21 hypothesis is an LDS-staged Q4_K MMQ dequant-GEMV rewrite with lower VGPR pressure, limited to batch-one latency roles",
         "Exact PMC confirmation of VALU or issue pressure rather than HBM saturation is a required pre-authoring gate"
       ]
+    },
+    {
+      "evidence_id": "ev-gfx90a-low-precision-isa-20260815",
+      "path": "/workspace/handoffs/active/mi210-q8-dequant-gemv-roofline.md",
+      "sha256": "1e8768a89815cc6c8cf5277ddc437ac9d2a5353597478c68d23bd79646dd0d91",
+      "authority": "governance_snapshot",
+      "temporal_status": "current_v9",
+      "claims": [
+        "gfx90a FP16 and INT8 MFMA have identical shape sets and identical 181.0 peak rate, so INT8 MFMA has no compute-headroom advantage",
+        "gfx90a has no native FP8 MFMA because the fp8-insts target feature is absent",
+        "INT4 has no MFMA matrix path and remains a VALU dot-product path",
+        "Batch-one decode is 31 to 113 times below the ridge and cannot benefit from MFMA authoring",
+        "Composable Kernel lowers each logical FP8 MFMA on gfx90a into eight sequential FP32 operations"
+      ]
     }
   ],
   "frames": [
@@ -5008,6 +5022,212 @@
         "supersedes": null
       },
       "classification": "measured_negative"
+    },
+    {
+      "dnr_id": "dnr-gfx90a-int8-mfma-compute-headroom",
+      "title": "gfx90a INT8 MFMA compute-headroom premise",
+      "enforcement": "hard_refusal_exact_mechanism_and_regime",
+      "statement": "Do not author or rank batch-one INT8 MFMA decode work on a claim that INT8 has more native matrix throughput than FP16 on gfx90a.",
+      "mechanism": {
+        "facets": {
+          "mechanism": "int8_mfma_decode_compute_headroom_claim",
+          "ops": [
+            "int8_gemm",
+            "mul_mat"
+          ],
+          "files": [
+            "kernel-authoring-policy/gfx90a-isa"
+          ],
+          "symbols": [
+            "int8_mfma_peak_rate"
+          ],
+          "change_class": "oracle_port"
+        },
+        "fingerprint_sha256": "a8db93dc66a2086a26d33db483611c82c0a598d9e9d907c9a63c9f8ba1ee7bf4"
+      },
+      "regime": {
+        "backend": "hip",
+        "phase": "decode",
+        "batch": 1,
+        "architecture": "gfx90a",
+        "model_or_frame": "MI210-current-v9",
+        "quant": "INT8",
+        "shape": "native-mfma-throughput-claim",
+        "measurement_graphs": false,
+        "target_runtime_graphs": true
+      },
+      "falsifier_result": "Two toolchains and AMD's instruction calculator agree that gfx90a FP16 and INT8 expose identical MFMA shape sets and identical 181.0 peak rate; batch-one decode is additionally 31 to 113 times below the ridge.",
+      "evidence_refs": [
+        "ev-gfx90a-low-precision-isa-20260815"
+      ],
+      "reentry_conditions": [
+        "A different architecture whose ISA exposes a higher native INT8 matrix rate than FP16",
+        "New ISA-level evidence that the gfx90a INT8 and FP16 shape or issue rates differ",
+        "A non-decode compute-bound regime justified without an INT8-greater-than-FP16 premise"
+      ],
+      "record_version": 1,
+      "provenance": {
+        "introduced_at": "2026-08-16T09:45:00Z",
+        "introduced_by": "autokernel-gfx90a-policy-integrator",
+        "origin": "gfx90a-low-precision-isa-settlement-20260815",
+        "note": "Hard-scopes the rejected compute-headroom premise without forbidding VALU unpacking, occupancy, or other low-quant decode work.",
+        "supersedes": null
+      },
+      "classification": "physics_constraint"
+    },
+    {
+      "dnr_id": "dnr-gfx90a-native-fp8-mfma-decode",
+      "title": "gfx90a native FP8 MFMA decode",
+      "enforcement": "hard_refusal_exact_mechanism_and_regime",
+      "statement": "Do not claim or author a native FP8 MFMA decode path on gfx90a; software FP8 weight storage with decode/upcast to BF16 remains a distinct eligible hypothesis only when it makes no native-compute or compute-headroom claim.",
+      "mechanism": {
+        "facets": {
+          "mechanism": "native_fp8_mfma_decode_authoring",
+          "ops": [
+            "fp8_gemm",
+            "mul_mat"
+          ],
+          "files": [
+            "kernel-authoring-policy/gfx90a-isa"
+          ],
+          "symbols": [
+            "native_fp8_mfma"
+          ],
+          "change_class": "oracle_port"
+        },
+        "fingerprint_sha256": "4144db2d6307d30a80f1fb16bdcc14e7b21ebb5dbfd1fa7a701b2504388f9567"
+      },
+      "regime": {
+        "backend": "hip",
+        "phase": "decode",
+        "batch": 1,
+        "architecture": "gfx90a",
+        "model_or_frame": "MI210-current-v9",
+        "quant": "FP8-native-compute",
+        "shape": "native-mfma",
+        "measurement_graphs": false,
+        "target_runtime_graphs": true
+      },
+      "falsifier_result": "The gfx90a target has no fp8-insts feature and accepts none of the FP8/BF8 MFMA mnemonics; any viable FP8-weight experiment must decode/upcast into a supported compute type.",
+      "evidence_refs": [
+        "ev-gfx90a-low-precision-isa-20260815"
+      ],
+      "reentry_conditions": [
+        "A different architecture with native FP8 matrix instructions",
+        "New ISA-level proof that gfx90a exposes the fp8-insts feature",
+        "A software-storage and BF16-compute proposal whose mechanism and regime do not claim native FP8 compute or headroom"
+      ],
+      "record_version": 1,
+      "provenance": {
+        "introduced_at": "2026-08-16T09:45:00Z",
+        "introduced_by": "autokernel-gfx90a-policy-integrator",
+        "origin": "gfx90a-low-precision-isa-settlement-20260815",
+        "note": "Separates unavailable native FP8 compute from the already-authorable software FP8 storage and BF16 upcast path.",
+        "supersedes": null
+      },
+      "classification": "physics_constraint"
+    },
+    {
+      "dnr_id": "dnr-gfx90a-int4-matrix-decode",
+      "title": "gfx90a INT4 matrix decode",
+      "enforcement": "hard_refusal_exact_mechanism_and_regime",
+      "statement": "Do not author or rank an INT4 MFMA matrix decode path on gfx90a; INT4 is a VALU dot-product path, not a matrix path.",
+      "mechanism": {
+        "facets": {
+          "mechanism": "int4_matrix_decode_authoring",
+          "ops": [
+            "int4_gemm",
+            "mul_mat"
+          ],
+          "files": [
+            "kernel-authoring-policy/gfx90a-isa"
+          ],
+          "symbols": [
+            "int4_mfma"
+          ],
+          "change_class": "oracle_port"
+        },
+        "fingerprint_sha256": "240c01a9cefca25aee0c5953ff303feca2e0ce3587dbe5f0d40d2f0cd92a5d34"
+      },
+      "regime": {
+        "backend": "hip",
+        "phase": "decode",
+        "batch": 1,
+        "architecture": "gfx90a",
+        "model_or_frame": "MI210-current-v9",
+        "quant": "INT4",
+        "shape": "matrix-path",
+        "measurement_graphs": false,
+        "target_runtime_graphs": true
+      },
+      "falsifier_result": "The compiler exposes zero INT4 MFMA mnemonics on every checked CDNA generation; gfx90a INT4 uses v_dot8_i32_i4 on VALU.",
+      "evidence_refs": [
+        "ev-gfx90a-low-precision-isa-20260815"
+      ],
+      "reentry_conditions": [
+        "A future architecture or toolchain with a real INT4 matrix instruction",
+        "A VALU bit-unpacking or occupancy proposal that does not claim an INT4 matrix path"
+      ],
+      "record_version": 1,
+      "provenance": {
+        "introduced_at": "2026-08-16T09:45:00Z",
+        "introduced_by": "autokernel-gfx90a-policy-integrator",
+        "origin": "gfx90a-low-precision-isa-settlement-20260815",
+        "note": "Hard-refuses only the nonexistent matrix path and preserves eligible VALU low-quant work.",
+        "supersedes": null
+      },
+      "classification": "physics_constraint"
+    },
+    {
+      "dnr_id": "dnr-gfx90a-ck-fp8-native-benchmark",
+      "title": "Composable Kernel FP8 benchmark as native gfx90a datapath evidence",
+      "enforcement": "hard_refusal_exact_mechanism_and_regime",
+      "statement": "Do not admit a Composable Kernel FP8 GEMM run on gfx90a as evidence of native FP8 performance or capability; it measures FP32 emulation.",
+      "mechanism": {
+        "facets": {
+          "mechanism": "ck_fp8_gemm_native_datapath_benchmark",
+          "ops": [
+            "fp8_gemm"
+          ],
+          "files": [
+            "composable-kernel"
+          ],
+          "symbols": [
+            "ck_fp8_gemm"
+          ],
+          "change_class": "oracle_port"
+        },
+        "fingerprint_sha256": "ccb4d239bdfd2d35ea92cbe511ac6420ed43ec25fed524e55049c4ee7f859adb"
+      },
+      "regime": {
+        "backend": "hip",
+        "phase": "decode",
+        "batch": 1,
+        "architecture": "gfx90a",
+        "model_or_frame": "MI210-current-v9",
+        "quant": "FP8",
+        "shape": "composable-kernel-fp8-gemm",
+        "measurement_graphs": false,
+        "target_runtime_graphs": true
+      },
+      "falsifier_result": "Composable Kernel's non-gfx94x branch lowers each logical FP8 MFMA into eight sequential FP32 operations, so a successful MI210 run is an emulation benchmark.",
+      "evidence_refs": [
+        "ev-gfx90a-low-precision-isa-20260815"
+      ],
+      "reentry_conditions": [
+        "Composable Kernel refuses the unsupported gfx90a path before measurement",
+        "Disassembly proves a native FP8 matrix instruction rather than the eight-operation FP32 lowering",
+        "The result is explicitly labelled FP32 emulation and is not used as native FP8 datapath evidence"
+      ],
+      "record_version": 1,
+      "provenance": {
+        "introduced_at": "2026-08-16T09:45:00Z",
+        "introduced_by": "autokernel-gfx90a-policy-integrator",
+        "origin": "gfx90a-ck-fp8-emulation-trap-20260815",
+        "note": "Records the compile-and-run trap without treating emulation success as hardware capability.",
+        "supersedes": null
+      },
+      "classification": "physics_constraint"
     }
   ]
 }

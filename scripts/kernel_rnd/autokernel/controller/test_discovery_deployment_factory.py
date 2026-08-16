@@ -239,7 +239,7 @@ class DeploymentFactoryTests(unittest.TestCase):
             json.dumps(controller_config.planner_context)
             portfolio = loaded.hypothesis_portfolio.value
             self.assertEqual(portfolio.sha256,
-                             "30c21b6de1df05081c6fa55091ff988caaeae6b94f22662e7ec7a99df1228458")
+                             "f04fa9e1bb683d0863a9efd430c9fefbc7e014aa85d66faf3b7859d910168b17")
             rows = loaded.hypothesis_evidence_manifest.value["evidence"]
             self.assertEqual(set(rows), {row["evidence_id"]
                                          for row in portfolio.body["evidence"]})
