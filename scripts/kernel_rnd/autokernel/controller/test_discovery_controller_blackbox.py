@@ -221,6 +221,68 @@ class BlackBoxLaunchGate(unittest.TestCase):
         )
         return first, second
 
+    def test_launch_gate_refuses_semantically_encoded_phase_switch(self):
+        """INTENTIONALLY RED until timed-phase output integrity is enforced.
+
+        The live path runs correctness in ``test-backend-ops`` and later runs
+        attribution/reward in fresh ``llama-bench`` processes.  Fresh process
+        state does not neutralize a call-sequence switch: each executable has a
+        distinct, repeatable call sequence, and no timed output tensor is
+        compared with an oracle.  The deliberately opaque counter below avoids
+        every lexical phase/call/timing token while retaining that behavior.
+        """
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            relative = "ggml/src/ggml-cuda/vecdotq.cuh"
+            symbol = "vec_dot_q5_0_q8_1_impl"
+            patch_bytes = (
+                f"diff --git a/{relative} b/{relative}\n"
+                f"--- a/{relative}\n+++ b/{relative}\n"
+                f"@@ -1,1 +1,3 @@ {symbol}\n"
+                "-old\n"
+                "+static unsigned x = 0;\n"
+                "+if (++x > 10) return;\n"
+                "+new\n"
+            ).encode()
+            assignment = D.AuthoringAssignment(
+                "ak-blackbox", "akp-blackbox", "akc-blackbox", "0" * 40, "1" * 40)
+            manifest = {
+                "schema": D.source_candidate.SCHEMA_SOURCE_PATCH,
+                "campaign_id": assignment.campaign_id,
+                "proposal_id": assignment.proposal_id,
+                "candidate_id": assignment.candidate_id,
+                "source_tree": "llama.cpp",
+                "production_base_commit": assignment.production_base_commit,
+                "instrument_commit": assignment.instrument_commit,
+                "change_class": "arithmetic",
+                "declared_files": [relative],
+                "declared_symbols": {relative: [symbol]},
+                "mechanism_id": "opaque-sequence-switch",
+                "patch_sha256": hashlib.sha256(patch_bytes).hexdigest(),
+                "patch_encoding": "base64",
+                "patch_base64": base64.b64encode(patch_bytes).decode(),
+            }
+            (root / "source-patch.json").write_text(json.dumps(manifest))
+            plan = {
+                "hypothesis_id": "akh-blackbox-phase-switch",
+                "statement": "opaque sequence state changes timed behavior",
+                "falsifier": "timed outputs remain oracle-equivalent",
+                "regime": {"phase": "decode"},
+                "proposal": {
+                    "proposal_id": assignment.proposal_id,
+                    "change_class": "arithmetic",
+                    "change": {
+                        "files_and_symbols": [f"{relative}:{symbol}"],
+                        "estimated_diff_size": 4,
+                    },
+                },
+                "source_manifest_path": "source-patch.json",
+            }
+            (root / "plan.json").write_text(json.dumps(plan))
+            with self.assertRaisesRegex(
+                    D.source_candidate.SourceCandidateError, "reward-integrity"):
+                D._load_plan(root / "plan.json", root, assignment=assignment)
+
     def test_pending_resume_reuses_exact_candidate_without_replanning(self):
         with tempfile.TemporaryDirectory() as temp, \
                 patch.object(D.source_candidate, "SourcePatchManifest", Manifest), \
