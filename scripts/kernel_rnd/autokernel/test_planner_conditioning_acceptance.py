@@ -129,7 +129,7 @@ class PlannerConditioningAcceptance(unittest.TestCase):
         for evidence_id, (relative, digest) in LADDER_EVIDENCE.items():
             row = self._evidence(evidence_id)
             self.assertEqual(f"repo://{relative}", row["path"])
-            self.assertEqual("governance_snapshot", row["authority"])
+            self.assertEqual("non_governed_design_prior", row["authority"])
             self.assertEqual("current_v9", row["temporal_status"])
             self._assert_immutable_carrier(row, digest)
 
