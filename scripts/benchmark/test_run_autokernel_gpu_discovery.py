@@ -105,7 +105,9 @@ class TestGpuDiscoveryBuildIdentity(unittest.TestCase):
             # Candidate source identity differs, but one anchor-built benchmark
             # executable is used for both arms; only HIP loading may differ.
             def git_commit(argv, **_kwargs):
-                return mock.Mock(stdout=("a" * 40 if str(anchor) in argv else "b" * 40), returncode=0)
+                return mock.Mock(
+                    stdout=(gpu.READY_CONTINUE_INSTRUMENT_COMMIT
+                            if str(anchor) in argv else "b" * 40), returncode=0)
             with mock.patch.object(gpu.subprocess, "run", side_effect=git_commit):
                 model = root / "model.gguf"; model.write_bytes(b"model")
                 for build, payload in ((anchor, b"anchor-hip"), (candidate, b"candidate-hip")):
@@ -125,6 +127,7 @@ class TestGpuDiscoveryBuildIdentity(unittest.TestCase):
                              gpu.sha256_file(anchor / "bin" / "llama-bench"))
             self.assertNotEqual(sealed["runtime_arms"]["anchor_hip_sha256"],
                                 sealed["runtime_arms"]["candidate_hip_sha256"])
+            self.assertTrue(sealed["timed_output_oracle"]["enabled"])
 
     def test_preflight_records_cold_serialization_for_over_budget_cadence(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -490,6 +493,9 @@ class TestGpuDiscoveryBatchedSubprocess(unittest.TestCase):
 
     @staticmethod
     def _row(samples: list[float]) -> str:
+        count = len(samples)
+        input_hashes = [f"{index + 1:016x}" for index in range(count)]
+        output_hashes = [f"{index + 101:016x}" for index in range(count)]
         return __import__("json").dumps({
             "backends": "ROCm", "gpu_info": "AMD Instinct MI210",
             "build_commit": "0db32c0", "n_prompt": 512, "n_gen": 0,
@@ -497,6 +503,26 @@ class TestGpuDiscoveryBatchedSubprocess(unittest.TestCase):
             "use_mmap": True, "no_op_offload": 0, "split_mode": "layer",
             "no_kv_offload": False, "poll": 50, "avg_ts": sum(samples) / len(samples),
             "samples_ts": samples,
+            "autokernel_hardened": True,
+            "autokernel_output_invariant": True,
+            "autokernel_hybrid_ab_complete": True,
+            "autokernel_thread_set_stable": True,
+            "autokernel_escape_checks_complete": True,
+            "autokernel_input_working_set_bytes": 4096 * count,
+            "autokernel_input_hashes": ",".join(input_hashes),
+            "autokernel_input_addresses": ",".join(
+                f"0x{2 * index + 1:x}/0x{2 * index + 2:x}" for index in range(count)),
+            "autokernel_context_addresses": ",".join(
+                f"0x{2 * count + 2 * index + 1:x}/0x{2 * count + 2 * index + 2:x}"
+                for index in range(count)),
+            "autokernel_output_hashes": ",".join(
+                f"{value}/{value}" for value in output_hashes),
+            "autokernel_unsynchronized_samples_ns": ",".join(
+                str(max(1, round(512e9 / value))) for value in samples),
+            "autokernel_thread_set_hashes": ",".join(
+                ["00000000000000aa/00000000000000aa/"
+                 "00000000000000aa/00000000000000aa"] * count),
+            "autokernel_device_sync_mode": "hip_full_device",
         }) + "\n"
 
     def test_one_process_collects_exactly_nine_native_samples(self) -> None:
@@ -517,6 +543,106 @@ class TestGpuDiscoveryBatchedSubprocess(unittest.TestCase):
         self.assertEqual(result["sample_count"], 9)
         self.assertEqual(result["metric"], 104.0)
         self.assertEqual(result["raw_row"]["samples_ts"], result["samples"])
+        self.assertNotIn("AMD_SERIALIZE_KERNEL", seen[0][1]["env"])
+        self.assertNotIn("AMD_SERIALIZE_COPY", seen[0][1]["env"])
+        self.assertNotIn("GGML_CUDA_DISABLE_GRAPHS", seen[0][1]["env"])
+        self.assertEqual(result["metric_contract"], {
+            "schema": "epyc.autokernel.native_llama_bench_metric.v1",
+            "scope": "legacy_nonpromotable_discovery",
+            "production_throughput_authority": False,
+        })
+
+    def test_timed_output_oracle_requires_exact_serialization_environment(self) -> None:
+        row = json.loads(self._row([100.0] * 9))
+        exact = {"AMD_SERIALIZE_KERNEL": "3", "AMD_SERIALIZE_COPY": "3",
+                 "GGML_CUDA_DISABLE_GRAPHS": "1"}
+        invalid = [
+            {key: value for key, value in exact.items() if key != missing}
+            for missing in exact]
+        invalid.extend(({**exact, "GGML_CUDA_DISABLE_GRAPHS": "0"},
+                        {**exact, "AMD_SERIALIZE_KERNEL": "2"}))
+        for incomplete in invalid:
+            with self.subTest(incomplete=incomplete), \
+                    self.assertRaisesRegex(RuntimeError, "exact serialized graphs-off"):
+                gpu._validate_timed_output_semantics(
+                    row, repetitions=9, seed=8613, tokens_per_repetition=512,
+                    serialization_env=incomplete)
+
+    def test_timed_output_oracle_is_independent_of_ready_continue_unlock(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            build = _build(Path(directory), rocwmma="ON", mfma="OFF")
+            model = Path(directory) / "model.gguf"; model.write_bytes(b"model")
+            process = self._Process(self._row([100.0] * 3))
+            seen = []
+            result = gpu._invoke_locked(
+                build=build, model=model, seed=8613, baseline_vram=0,
+                flash_attention=True, expected_source_commit=gpu.SOURCE_COMMIT,
+                repetitions=3, timed_output_oracle=True,
+                process_factory=lambda argv, **kwargs: (seen.append((argv, kwargs)) or process),
+                kfd_pid_provider=lambda: (123,), vram_reader=lambda: 64,
+                pgid_provider=lambda _pid: process.pid, sleep=lambda _: None)
+        self.assertEqual(seen[0][1]["env"]["AMD_SERIALIZE_KERNEL"], "3")
+        self.assertEqual(seen[0][1]["env"]["AMD_SERIALIZE_COPY"], "3")
+        self.assertEqual(seen[0][1]["env"]["GGML_CUDA_DISABLE_GRAPHS"], "1")
+        self.assertIn("timed_output_semantics", result)
+        self.assertIsNone(result["load_readiness_witness"])
+        self.assertTrue(result["timed_output_semantics"]["reward_admissible"])
+
+    def test_pair_max_charges_slower_member_under_cache_asymmetry(self) -> None:
+        row = json.loads(self._row([1_000_000_000.0]))
+        row["autokernel_unsynchronized_samples_ns"] = "10000"
+        receipt = gpu._validate_timed_output_semantics(
+            row, repetitions=1, seed=8613, tokens_per_repetition=512,
+            serialization_env={"AMD_SERIALIZE_KERNEL": "3", "AMD_SERIALIZE_COPY": "3",
+                               "GGML_CUDA_DISABLE_GRAPHS": "1"})
+        self.assertEqual(receipt["second_samples_ns"], [512])
+        self.assertEqual(receipt["protected_samples_ns"], [10000])
+        self.assertEqual(receipt["protected_samples_ts"], [51_200_000.0])
+        self.assertEqual(receipt["anti_shift_witness"], "hip_serialized_pair_max")
+        self.assertTrue(receipt["reward_admissible"])
+
+    def test_timed_output_oracle_refuses_wrong_or_replayed_hashes(self) -> None:
+        wrong = json.loads(self._row([100.0] * 3))
+        wrong["autokernel_output_hashes"] = (
+            "a000000000000065/a000000000000066,"
+            "a000000000000066/a000000000000066,"
+            "a000000000000067/a000000000000067")
+        with self.assertRaisesRegex(RuntimeError, "not bitwise invariant"):
+            gpu._validate_timed_output_semantics(
+                wrong, repetitions=3, seed=8613, tokens_per_repetition=512,
+                serialization_env={"AMD_SERIALIZE_KERNEL": "3", "AMD_SERIALIZE_COPY": "3",
+                                   "GGML_CUDA_DISABLE_GRAPHS": "1"})
+        replayed = json.loads(self._row([100.0] * 3))
+        replayed["autokernel_input_hashes"] = ",".join(["a000000000000001"] * 3)
+        with self.assertRaisesRegex(RuntimeError, "malformed or reused"):
+            gpu._validate_timed_output_semantics(
+                replayed, repetitions=3, seed=8613, tokens_per_repetition=512,
+                serialization_env={"AMD_SERIALIZE_KERNEL": "3", "AMD_SERIALIZE_COPY": "3",
+                                   "GGML_CUDA_DISABLE_GRAPHS": "1"})
+
+    def test_cross_arm_oracle_refuses_changed_outputs(self) -> None:
+        row = json.loads(self._row([100.0] * 3))
+        kwargs = {
+            "repetitions": 3, "seed": 8613, "tokens_per_repetition": 512,
+            "serialization_env": {
+                "AMD_SERIALIZE_KERNEL": "3", "AMD_SERIALIZE_COPY": "3",
+                "GGML_CUDA_DISABLE_GRAPHS": "1"},
+        }
+        anchor = {"timed_output_semantics": gpu._validate_timed_output_semantics(row, **kwargs)}
+        changed = dict(row)
+        changed["autokernel_output_hashes"] = (
+            "f0000000000000ff/f0000000000000ff,"
+            "a000000000000066/a000000000000066,"
+            "a000000000000067/a000000000000067")
+        candidate = {
+            "timed_output_semantics": gpu._validate_timed_output_semantics(changed, **kwargs)}
+        with self.assertRaisesRegex(RuntimeError, "differ bitwise"):
+            gpu._validate_cross_arm_timed_outputs(anchor, candidate)
+        tampered = dict(anchor["timed_output_semantics"])
+        tampered["serialization_env"] = {"AMD_SERIALIZE_KERNEL": "3"}
+        with self.assertRaisesRegex(RuntimeError, "semantic receipt is invalid"):
+            gpu._validate_cross_arm_timed_outputs(
+                {"timed_output_semantics": tampered}, candidate)
 
     def test_serialized_readiness_does_not_unlock_on_maps_without_instrument_barrier(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -629,7 +755,10 @@ class TestGpuDiscoveryBatchedSubprocess(unittest.TestCase):
             handshake = gpu.ReadyContinueHandshake.create(
                 root=root / "barrier", decision=decision, policy=policy,
                 arm="anchor", seed=8613, repetitions=9)
-            process = self._Process(self._row([1.0] * 9))
+            row = json.loads(self._row([1.0] * 9))
+            row["autokernel_unsynchronized_samples_ns"] = ",".join(
+                [str(512_000_000_000)] * 8 + [str(1_024_000_000_000)])
+            process = self._Process(json.dumps(row) + "\n")
             identity = {
                 "schema": "epyc.autokernel.split_reward_runtime_maps.v1",
                 "runtime_manifest_sha256": "d" * 64, "arm": "anchor",
@@ -637,10 +766,13 @@ class TestGpuDiscoveryBatchedSubprocess(unittest.TestCase):
                 "device_id": gpu.DEVICE_ID, "identity_sha256": "e" * 64,
             }
             events = []
-            def factory(argv, **_kwargs):
+            def factory(argv, **kwargs):
                 self.assertIn("--autokernel-ready-file", argv)
                 self.assertIn("--autokernel-continue-file", argv)
                 self.assertIn("--autokernel-ready-token", argv)
+                self.assertEqual(kwargs["env"]["AMD_SERIALIZE_KERNEL"], "3")
+                self.assertEqual(kwargs["env"]["AMD_SERIALIZE_COPY"], "3")
+                self.assertEqual(kwargs["env"]["GGML_CUDA_DISABLE_GRAPHS"], "1")
                 handshake.ready_path.write_text(
                     f"{handshake.schema} {process.pid} 8613 9 {handshake.token}\n",
                     encoding="ascii")
@@ -657,6 +789,7 @@ class TestGpuDiscoveryBatchedSubprocess(unittest.TestCase):
                     build=build, model=model, seed=8613, baseline_vram=0,
                     flash_attention=True, expected_source_commit=gpu.SOURCE_COMMIT,
                     repetitions=9, runtime_arm="anchor", readiness_policy=policy,
+                    timed_output_oracle=True,
                     ready_continue_handshake=handshake, on_load_ready=release,
                     common_loader_dir=build / "bin", hip_library_dir=build / "bin",
                     process_factory=factory,
@@ -667,6 +800,18 @@ class TestGpuDiscoveryBatchedSubprocess(unittest.TestCase):
             self.assertEqual(handshake.continue_path.read_text(encoding="ascii"),
                              handshake.token + "\n")
             self.assertEqual(result["load_readiness_witness"]["ready"]["token"], handshake.token)
+            self.assertAlmostEqual(result["metric"], 0.9)
+            self.assertEqual(result["samples"], [1.0] * 8 + [0.5])
+            self.assertEqual(result["metric_contract"], {
+                "schema": "epyc.autokernel.serialized_pair_max_metric.v1",
+                "scope": "integrity_discovery_only",
+                "production_throughput_authority": False,
+                "graph_mode": "disabled_for_integrity",
+                "scored_sample": "min(first_tokens_per_s,second_tokens_per_s)",
+                "serialization_env": {
+                    "AMD_SERIALIZE_KERNEL": "3", "AMD_SERIALIZE_COPY": "3",
+                    "GGML_CUDA_DISABLE_GRAPHS": "1"},
+            })
             self.assertEqual(handshake.cleanup(), {"ready_removed": True, "continue_removed": True})
 
     def test_tampered_ready_receipt_terminates_child_before_any_continue(self) -> None:
