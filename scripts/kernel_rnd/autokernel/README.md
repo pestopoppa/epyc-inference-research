@@ -372,6 +372,7 @@ calibration exists. Source-changing campaigns additionally require their own
 | `placement_context.py` | **AutoKernel G1 host-topology bridge.** Loads only hash-valid P2-5j receipts, preserves all four placements and their uncertainty rather than passing a winner alone, and carries the no-speedup/no-carve/no-activation boundary into discovery context. |
 | `hipkittens_lds.py` | **INF-03 offline gfx90a adapter.** Solves LDS bank count from the complete four-bank overlap pattern, validates the all-pairs phase relation, reads hash-bound rocprofv2/v3 counter CSVs, and projects a diagnostic-only authoring-context item. It neither launches a profiler nor assumes the CDNA3 answer transfers. |
 | `c5_seed_corpus.py` | **C5 static seed registry.** Pins the eight intake-884 HyRA SOL-ExecBench artifacts and their NVIDIA/Hopper-only attestations, separates direct Triton references from CUDA-bound re-authoring targets, and emits non-numeric gfx90a task context. No upstream latency or SOL score is admitted as an MI210 target. |
+| `c5_rocm_oracle.py` | **C5 offline ROCm correctness contract (not on the inaugural execution graph).** Re-attests the pinned port and exact 193-workload population, stages an unconditional pre-timing correctness driver, and admits a result only by re-reducing complete raw JSONL traces against an immutable self-hashed plan and the still-identical staged driver. It has no timing, scoring, ranking, launch, or promotion authority. |
 | `evaluator/c3_epyc_suite.py` | **INF-48 C3/C5 exit contract.** Selects hash-bound attention and MoE C5 cases plus an explicitly EPYC-native Q4_K dequant case; requires exact captured-tensor surfaces, vendor rather than eager baselines, correctness-first `fast_p`, and a matched whole-model re-bench through the case's declared integration. Missing evidence is `COULD_NOT_CHECK`, and the reducer has no release or promotion authority. |
 | `evaluator/c3_epyc_compiler.py` | **INF-48 controller/backend JSON seam.** Emits a source-hash-bound three-case plan and compiles only hash-bound vendor, candidate, correctness, integrity, capture, integration, and whole-model observations. Unavailable evidence withholds `fast_p` and whole-model speedup; the CLI and direct-call backend execute no workload. |
 | `evaluator/c3_epyc_tensor_capture.py` | **INF-48 governed EPYC tensor producer.** Its CLI produces and re-probes a hash-bound live ROCm logical/BDF inventory, compiles an exact request manifest without inference, then executes only with both `--execute` and `--authorize-inference` while the codified `184-191` CPU claim and logical `mi210_0` claim are held, unexpired, and continuously revalidated. Descendant/start-tick KFD identity, overlapping numeric device samples, bounded process-group teardown, immutable acquire/release journal slices, and final claim release are required by the v2 window receipt. |
@@ -509,6 +510,14 @@ correctness through timing on the physical card. The upstream completed/correct
 results remain NVIDIA/Hopper-only provenance. `seed_context_item()` deliberately
 omits their SOL scores and latencies from authoring context; an arena task may
 select exact rows through `ArenaTask.c5_seed_ids`.
+
+The separate `c5_rocm_oracle.py` provider remains deliberately outside the
+inaugural execution graph. Its v2 contract can prepare a future operator-owned
+run without creating a launch path: plans are deeply immutable and re-attest the
+pinned provider checkout, the staged driver exits unconditionally before the
+upstream timing branch, and result admission requires the complete raw trace
+bytes plus the self-hashed stage receipt. Aggregate or actor-authored pass claims
+are not admissible inputs.
 
 ### INF-48 C3/EPYC JSON seam
 

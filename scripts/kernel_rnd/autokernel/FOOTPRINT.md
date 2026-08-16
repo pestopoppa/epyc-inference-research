@@ -143,6 +143,7 @@ incident or a measured fact; "reduced rigour" is not a reason.
 | `placement_context.py` | 216 | no | P2-5j hash-bound placement-belief projection; it exposes observation-only topology context to authoring without gaining selection, ranking, launch, or promotion authority |
 | `hipkittens_lds.py` | 430 | no | INF-03 deterministic offline gfx90a LDS topology reducer; it consumes completed counter captures and gives authoring diagnostic context without profiler-launch or ranking authority |
 | `c5_seed_corpus.py` | 309 | no | C5 static HyRA task registry; it contributes hash-bound, non-numeric gfx90a authoring context and must never gain campaign mutation, scoring, or NVIDIA-to-MI210 claim-transfer authority |
+| `c5_rocm_oracle.py` | 592 | no | C5 offline correctness-provider contract; it re-attests pinned source bytes, stages an unconditional no-timing driver, and reduces raw trace bytes without gaining inaugural campaign execution, scoring, ranking, or promotion authority |
 | `datatype_targets.py` | 132 | no | INF-03 static FP8/NVFP4 authoring contracts; they expose no cross-vendor performance numbers and have no campaign mutation, execution, scoring, or capability-attestation authority |
 | `substrate.py` | 340 | no | validated planning facts; it reads checked-in measured/datasheet receipts before proposal construction and never joins the mutation/build path |
 | `lanes.py` | 314 | no | screening declarations and rank-transfer calibration; without measured calibration campaign #1 stays on the full verified path |

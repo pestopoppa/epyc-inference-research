@@ -21,7 +21,7 @@ from typing import Any, Mapping, Optional, Sequence
 
 from . import schemas
 from .evaluator import correctness, integrity
-from .execution import chain, instrument_integrity, worktree
+from .execution import chain, instrument_integrity, reward_hack_scan, worktree
 
 __all__ = [
     "SCHEMA_SOURCE_PATCH", "SourceCandidateError", "SourcePatchManifest",
@@ -44,6 +44,9 @@ _HUNK = re.compile(
     r"^@@ -(?P<old>\d+)(?:,(?P<oldn>\d+))? \+(?P<new>\d+)"
     r"(?:,(?P<newn>\d+))? @@(?P<context>.*)$")
 _FUNC = re.compile(r"(?P<name>[A-Za-z_~][A-Za-z0-9_:~<>]*)\s*\([^()]*\)\s*(?:const\s*)?(?:\{|$)")
+_TRUNCATED_FUNC = re.compile(
+    r"(?P<name>[A-Za-z_~][A-Za-z0-9_:~<>]*)\s*\(\s*$")
+_CONTROL_WORDS = frozenset({"if", "for", "while", "switch", "catch"})
 _MODE_LINE = re.compile(r"^(?:old|new|deleted file|new file) mode (?P<mode>\d+)$")
 _ALLOWED_MODES = frozenset({"100644", "100755"})
 
@@ -75,10 +78,58 @@ def _sha256(data: bytes) -> str:
 
 
 def _symbol_from_context(context: str) -> str:
-    matches = list(_FUNC.finditer(context.strip()))
+    normalized = context.strip()
+    if (_PLAIN_ID.fullmatch(normalized) is not None
+            and normalized not in _CONTROL_WORDS):
+        return normalized
+    matches = list(_FUNC.finditer(normalized))
     if matches:
         return matches[-1].group("name")
+    # GNU diff truncates long C/C++ function context at the opening parenthesis.
+    # Accept that exact suffix form while continuing to reject control-flow
+    # statements as enclosing source symbols.
+    match = _TRUNCATED_FUNC.search(normalized)
+    if match is not None and match.group("name") not in _CONTROL_WORDS:
+        return match.group("name")
     return FILE_SCOPE
+
+
+def _symbol_from_hunk(context: str, body: Sequence[str]) -> str:
+    """Derive a function from source-backed hunk lines before header prose.
+
+    Diff may label a hunk with the preceding function when the hunk begins on
+    macros or a template declaration.  Unchanged/deleted body lines, unlike
+    caller-authored hunk prose, are checked against the source when applied.
+    A single function definition there is therefore the stronger scope signal.
+    """
+    header_symbol = _symbol_from_context(context)
+    body_symbols: list[str] = []
+    for line in body:
+        # Only leading unchanged source can identify the declaration whose
+        # body the hunk enters.  Later context may begin the *next* function.
+        if not line or line[0] != " ":
+            break
+        normalized = line[1:].strip()
+        match = _TRUNCATED_FUNC.search(normalized)
+        if match is None or match.group("name") in _CONTROL_WORDS:
+            continue
+        # A body line is stronger than GNU diff's sometimes-stale header only
+        # when it is a truncated declaration/definition, not an ordinary call.
+        # Require a declaration-like prefix and reject expression punctuation.
+        prefix = normalized[:match.start("name")].strip()
+        if (not prefix or prefix in _CONTROL_WORDS
+                or any(char in prefix for char in "=;{}")):
+            continue
+        symbol = match.group("name")
+        if symbol not in body_symbols:
+            body_symbols.append(symbol)
+    if len(body_symbols) == 1:
+        return body_symbols[0]
+    if header_symbol in body_symbols:
+        return header_symbol
+    if body_symbols:
+        return FILE_SCOPE
+    return header_symbol
 
 
 def _hunk_rows(diff_text: str) -> tuple[tuple[str, str, str], ...]:
@@ -103,7 +154,7 @@ def _hunk_rows(diff_text: str) -> tuple[tuple[str, str, str], ...]:
             "context": " ".join(current_context.split()), "body": normalized,
         }
         rows.append((current_file, f"akhunk:{schemas.content_hash(material)}",
-                     _symbol_from_context(current_context)))
+                     _symbol_from_hunk(current_context, body)))
         current_header, current_context, body = None, "", []
 
     for line in diff_text.splitlines():
@@ -224,6 +275,17 @@ class SourcePatchManifest:
         schemas.require.str(self.mechanism_id, "mechanism_id", error=SourceCandidateError)
         text, paths, _hunks, _actual_symbols, actual_by_file, _deleted = \
             _validate_patch_text(self.patch_bytes)
+        scan = reward_hack_scan.scan_unified_diff(text)
+        prebuild_findings = {
+            "phase_detection": scan.phase_detection_findings,
+            "capture_replay": scan.capture_replay_findings,
+            "content_specialization": scan.content_specialization_findings,
+        }
+        detected = {name: rows for name, rows in prebuild_findings.items() if rows}
+        if detected:
+            raise SourceCandidateError(
+                "source patch violates the pre-build reward-integrity policy: "
+                f"{sorted(detected)}")
         if paths != files:
             raise SourceCandidateError(
                 f"patch paths {list(paths)} do not exactly equal declared_files {list(files)}")

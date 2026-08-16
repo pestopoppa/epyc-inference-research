@@ -693,7 +693,10 @@ class EndToEndScenario(unittest.TestCase):
                 async_escape_detector_id="async-escape/v1",
                 instrument_frame_detector_id="instrument-frame/v1",
                 pointer_memoization_detector_id="pointer-memoization/v1",
-                structured_short_circuit_detector_id="structured-short-circuit/v1"),
+                structured_short_circuit_detector_id="structured-short-circuit/v1",
+                phase_detection_detector_id="phase-detection/v1",
+                capture_replay_detector_id="capture-replay/v1",
+                content_specialization_detector_id="content-specialization/v1"),
         )
         kwargs.update(overrides)
         return CO.T0Evidence(**kwargs)

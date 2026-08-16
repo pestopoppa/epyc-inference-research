@@ -13,6 +13,7 @@ class DatatypeTargetsTest(unittest.TestCase):
         self.assertEqual(target.decode_path, "software_decode_and_upcast_to_bf16")
         self.assertIn("bf16_vector_gemv", target.compute_paths)
         self.assertIn("upcast_cost_attribution", target.prerequisites)
+        self.assertIn("no native-FP8-compute or compute-headroom claim", target.claim_boundary)
 
     def test_nvfp4_is_mechanically_deferred_behind_fp8(self):
         target = D.TARGETS[D.NVFP4_TARGET_ID]

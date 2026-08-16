@@ -58,6 +58,11 @@ _DEQUANT_CONTRACT = (
     "captured-workload-shape-required"
 )
 _DEQUANT_CONTRACT_SHA256 = hashlib.sha256(_DEQUANT_CONTRACT.encode()).hexdigest()
+_TIMING_INTEGRITY_FACTORS = {
+    "graphs": "off",
+    "timed_outputs": "validated",
+    "input_rotation": "address_and_content",
+}
 
 
 class C3ContractError(ValueError):
@@ -220,6 +225,29 @@ class ExactOpSurface:
         if any(not key or not value or value.lower() == "auto"
                for key, value in normalized_factors):
             raise C3ContractError("surface factors must be named and resolved; auto is forbidden")
+        factor_map = dict(normalized_factors)
+        mismatched = {
+            key: (factor_map.get(key), expected)
+            for key, expected in _TIMING_INTEGRITY_FACTORS.items()
+            if factor_map.get(key) != expected
+        }
+        if mismatched:
+            raise C3ContractError(
+                "C3 timing surface lacks phase/capture/content integrity factors: "
+                f"{mismatched}")
+        stream_sync = factor_map.get("stream_sync")
+        if stream_sync == "full_device":
+            if "stream_fence" in factor_map or "stream_join" in factor_map:
+                raise C3ContractError(
+                    "full-device synchronization may not claim a side-stream fence/join")
+        elif stream_sync == "tracked_fence_join_v1":
+            if (factor_map.get("stream_fence") != "after_start"
+                    or factor_map.get("stream_join") != "before_stop"):
+                raise C3ContractError(
+                    "tracked streams require a fence after start and join before stop")
+        else:
+            raise C3ContractError(
+                "C3 timing requires full_device or tracked_fence_join_v1 stream integrity")
         return cls(
             case_id=_text(case_id, "case_id"), architecture=TARGET_ARCH,
             device_id=_text(device_id, "device_id"),

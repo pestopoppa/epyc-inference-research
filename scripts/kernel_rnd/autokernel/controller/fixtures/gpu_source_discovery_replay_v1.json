@@ -1,0 +1,363 @@
+{
+  "schema": "epyc.autokernel.discovery_replay_fixture.v1",
+  "authority": "offline_replay_only_no_inference_or_promotion_authority",
+  "generated_from": "/mnt/raid0/llm/autokernel/surface/gpu_decode_source_plan.json",
+  "generated_from_schema": "epyc.autokernel.gpu_decode_source_plan.v1",
+  "result_schema": "epyc.autokernel.gpu_candidate_only_screen.v2",
+  "correctness_schemas": [
+    "epyc.autokernel.targeted_correctness_receipt.v1",
+    "epyc.autokernel.gpu_correctness_smoke.v1"
+  ],
+  "attribution_schema": "epyc.autokernel.gpu_kernel_attribution.v1",
+  "invariants": {
+    "candidate_only": true,
+    "non_promotable": true,
+    "promotion_claim": false,
+    "metric": "decode_tokens_per_s",
+    "metric_direction": "higher_better",
+    "workload": "MI210 decode tg128",
+    "stage_order": [
+      "planned",
+      "critic_scope",
+      "patched",
+      "built",
+      "correctness",
+      "attribution",
+      "screen_s1",
+      "optional_screen_s2",
+      "classified",
+      "feedback"
+    ]
+  },
+  "decision_policy": {
+    "material_negative_s1": "screened_out_without_replication",
+    "positive_or_close_s1": "one_independent_replication",
+    "two_positive_screens": "top_k_replicated_candidate",
+    "opposite_sign_screens": "inconclusive_abandon_retest",
+    "positive_stack_below_component_pool": "replicated_but_subadditive",
+    "invalid_gate_receipt": "preserve_invalid_and_retry_fresh_without_overwrite"
+  },
+  "traces": [
+    {
+      "trace_id": "clear_negative_stops_after_s1",
+      "candidate": "fattn_d64_single_column_tile",
+      "candidate_commit": "a80f96cb2a88",
+      "required_states": [
+        "correctness_pass",
+        "candidate_dispatch_proved",
+        "screen_s1",
+        "screened_out"
+      ],
+      "forbidden_states": [
+        "screen_s2",
+        "champion",
+        "promotion"
+      ],
+      "evidence": [
+        {
+          "role": "correctness",
+          "path": "/mnt/raid0/llm/autokernel/screens/ak-gpu-fattn-d64-singlecol-correctness-20260813-s2/receipt.json"
+        },
+        {
+          "role": "candidate_attribution",
+          "path": "/mnt/raid0/llm/autokernel/screens/ak-gpu-qwen05b-tg128-singlecol-candidate-attribution-20260813-s2/receipt.json"
+        },
+        {
+          "role": "screen_s1",
+          "path": "/mnt/raid0/llm/autokernel/screens/ak-gpu-fattn-d64-singlecol-tg128-screen-20260813-s3/result.json",
+          "file_sha256": "bacc66f6898c589e48a0ad66ded150f9c2a8b663506624c4286bf7826dc53c76",
+          "result_sha256": "b344786aadcae8d7a38674934eeb7f53dc635bbb7fa536d50e9bb50ffd789eb5",
+          "median_relative": -0.009830455418071184,
+          "positive_calls": 2,
+          "calls": 9
+        }
+      ],
+      "expected_classification": "screened_out",
+      "expected_next_action": "new_hypothesis"
+    },
+    {
+      "trace_id": "positive_then_nonreplication",
+      "candidate": "quantize_q8_1_block128",
+      "candidate_commit": "684c16e8698b",
+      "required_states": [
+        "correctness_pass",
+        "candidate_dispatch_proved",
+        "screen_s1_positive",
+        "screen_s2_nonpositive",
+        "inconclusive_top_k_low"
+      ],
+      "evidence": [
+        {
+          "role": "correctness",
+          "path": "/mnt/raid0/llm/autokernel/screens/ak-gpu-q8-block128-correctness-20260813-s1/receipt.json"
+        },
+        {
+          "role": "candidate_attribution",
+          "path": "/mnt/raid0/llm/autokernel/screens/ak-gpu-q8-block128-attribution-20260813-s1/receipt.json"
+        },
+        {
+          "role": "screen_s1",
+          "path": "/mnt/raid0/llm/autokernel/screens/ak-gpu-q8-block128-tg128-screen-20260813-s1/result.json",
+          "file_sha256": "11486121032adfea8250c660a8130505581d9e10b158927128260757738b8b1a",
+          "result_sha256": "a983f25173c2f4c827ac5d7c92edd5a1d6cd07bc581ad809dc9ea6e9b11f30c8",
+          "median_relative": 0.028261487719039555,
+          "positive_calls": 7,
+          "calls": 9
+        },
+        {
+          "role": "screen_s2",
+          "path": "/mnt/raid0/llm/autokernel/screens/ak-gpu-q8-block128-tg128-screen-20260813-s2/result.json",
+          "file_sha256": "63071fb35ae9cd4a0e2546273b3142be13d09b59951865ff991755d688f20e9a",
+          "result_sha256": "98cf18974a66be24fa7c7ac511444bae9288a1459bbf683c5139f2c0147be1bf",
+          "median_relative": -0.0006306608777196349,
+          "positive_calls": 4,
+          "calls": 9
+        }
+      ],
+      "pooled": {
+        "median_relative": 0.006691072,
+        "positive_calls": 11,
+        "calls": 18
+      },
+      "expected_classification": "inconclusive",
+      "expected_next_action": "defer_retest_and_move_to_new_hypothesis"
+    },
+    {
+      "trace_id": "replicated_positive_enters_top_k",
+      "candidate": "rope_neox_workgroup64",
+      "candidate_commit": "874cb02208b5",
+      "required_states": [
+        "correctness_pass",
+        "candidate_dispatch_proved",
+        "screen_s1_positive",
+        "screen_s2_positive",
+        "top_k_replicated"
+      ],
+      "evidence": [
+        {
+          "role": "correctness",
+          "path": "/mnt/raid0/llm/autokernel/screens/ak-gpu-rope64-correctness-20260813-s1/receipt.json"
+        },
+        {
+          "role": "candidate_attribution",
+          "path": "/mnt/raid0/llm/autokernel/screens/ak-gpu-rope64-attribution-20260813-s1/receipt.json"
+        },
+        {
+          "role": "screen_s1",
+          "path": "/mnt/raid0/llm/autokernel/screens/ak-gpu-rope64-tg128-screen-20260813-s1/result.json",
+          "file_sha256": "c4e39fa019c6e44326a271522949b8f82e2504adf8183cb2a034bb753f74f329",
+          "result_sha256": "47cc0e58dc7db15b703dbcf6e0563545d4e8312d42d6690da2e11b6417c9b005",
+          "median_relative": 0.01323121584079885,
+          "positive_calls": 8,
+          "calls": 9
+        },
+        {
+          "role": "screen_s2",
+          "path": "/mnt/raid0/llm/autokernel/screens/ak-gpu-rope64-tg128-screen-20260813-s2/result.json",
+          "file_sha256": "416cb0d2b7c6cebb79f2fcc5a01baff139b318272cd9c9ed6c857ee1438ead4e",
+          "result_sha256": "6b8a62747ec28212219a615748349351368c86ac710d873e2644cbefecd8c606",
+          "median_relative": 0.014670578756915098,
+          "positive_calls": 6,
+          "calls": 9
+        }
+      ],
+      "pooled": {
+        "median_relative": 0.013465889,
+        "positive_calls": 14,
+        "calls": 18
+      },
+      "expected_classification": "top_k_replicated_candidate",
+      "expected_next_action": "preserve_candidate_and_move_to_new_hypothesis"
+    },
+    {
+      "trace_id": "replicated_stack_is_subadditive",
+      "candidate": "rope64_plus_q4k_onewave",
+      "candidate_commit": "d7e77599a507",
+      "component_pooled_median_relative": {
+        "rope64": 0.013465889,
+        "q4k_onewave": 0.01012618
+      },
+      "required_states": [
+        "combined_correctness_pass",
+        "both_dispatches_proved",
+        "screen_s1_positive",
+        "screen_s2_positive",
+        "replicated_but_subadditive"
+      ],
+      "evidence": [
+        {
+          "role": "correctness",
+          "path": "/mnt/raid0/llm/autokernel/screens/ak-gpu-rope64-q4k-onewave-correctness-20260813-s1/receipt.json"
+        },
+        {
+          "role": "candidate_attribution",
+          "path": "/mnt/raid0/llm/autokernel/screens/ak-gpu-rope64-q4k-onewave-attribution-20260813-s1/receipt.json"
+        },
+        {
+          "role": "screen_s1",
+          "path": "/mnt/raid0/llm/autokernel/screens/ak-gpu-rope64-q4k-onewave-tg128-screen-20260813-s1/result.json",
+          "file_sha256": "b9b793d36303c2dbcea9fae5aaa0a4b49cc935ad68b42b54a11519e525d01129",
+          "result_sha256": "7bdee1b0eb2bea8cbc6bdca6acc7550cc2a41eb69e68fb07a8c6e13c12bdb070",
+          "median_relative": 0.021687370691388094,
+          "positive_calls": 7,
+          "calls": 9
+        },
+        {
+          "role": "screen_s2",
+          "path": "/mnt/raid0/llm/autokernel/screens/ak-gpu-rope64-q4k-onewave-tg128-screen-20260813-s2/result.json",
+          "file_sha256": "ebb36ece4157441d55972ec15baf8d4f46dbcbf6530300740c587cecb043e417",
+          "result_sha256": "2be8f068622b5754127e51f31ea7c02b7d63e65ffdd70cc5e896218e022605be",
+          "median_relative": 0.003313242012254847,
+          "positive_calls": 7,
+          "calls": 9
+        }
+      ],
+      "pooled": {
+        "median_relative": 0.008846762,
+        "mean_relative": 0.012438139,
+        "positive_calls": 14,
+        "calls": 18
+      },
+      "expected_classification": "replicated_but_subadditive",
+      "expected_next_action": "do_not_repeat_stack"
+    },
+    {
+      "trace_id": "invalid_evidence_is_preserved_then_sign_conflict",
+      "candidate": "fattn_vec_d64_gqa7_selector",
+      "candidate_commit": "20847108c632",
+      "required_states": [
+        "generic_correctness_pre_rebuild_not_exact_evidence",
+        "unsealed_exact_output_not_authority",
+        "governed_exact_correctness_pass",
+        "invalid_attribution_missing_timestamps_preserved",
+        "candidate_vec_dispatch_proved",
+        "anchor_tile_inverse_proved",
+        "screen_s1_positive",
+        "screen_s2_negative",
+        "inconclusive_sign_conflict"
+      ],
+      "evidence": [
+        {
+          "role": "generic_correctness_only",
+          "path": "/mnt/raid0/llm/autokernel/screens/ak-gpu-fattn-vec-d64-gqa7-correctness-20260813-s1/receipt.json",
+          "source_commit": "6dc0b9523",
+          "usable_for_exact_gate": false
+        },
+        {
+          "role": "unsealed_exact_output",
+          "path": "/mnt/raid0/llm/autokernel/screens/ak-gpu-fattn-vec-d64-gqa7-correctness-20260813-s2/stdout.txt",
+          "usable_for_exact_gate": false
+        },
+        {
+          "role": "exact_correctness",
+          "path": "/mnt/raid0/llm/autokernel/screens/ak-gpu-fattn-vec-d64-gqa7-correctness-20260813-s3/receipt.json",
+          "source_commit": "20847108c",
+          "result": "PASS",
+          "exact_case_ok": true
+        },
+        {
+          "role": "invalid_candidate_attribution",
+          "path": "/mnt/raid0/llm/autokernel/screens/ak-gpu-fattn-vec-d64-gqa7-attribution-candidate-20260813-s1",
+          "reason": "timestamps_input_missing",
+          "usable": false
+        },
+        {
+          "role": "candidate_attribution",
+          "path": "/mnt/raid0/llm/autokernel/screens/ak-gpu-fattn-vec-d64-gqa7-attribution-candidate-20260813-s3/receipt.json",
+          "result": "PASS",
+          "rocwmma_fattn_off": true,
+          "vec_calls": 3096,
+          "tile_calls": 0
+        },
+        {
+          "role": "anchor_inverse_attribution",
+          "path": "/mnt/raid0/llm/autokernel/screens/ak-gpu-fattn-vec-d64-gqa7-attribution-anchor-20260813-s1/receipt.json",
+          "result": "PASS",
+          "rocwmma_fattn_off": true,
+          "vec_calls": 0,
+          "tile_calls": 3096
+        },
+        {
+          "role": "screen_s1",
+          "path": "/mnt/raid0/llm/autokernel/screens/ak-gpu-fattn-vec-d64-gqa7-tg128-20260813-s1/result.json",
+          "file_sha256": "950165e856b85f07e1fbd0c1cc0c1c8acfd400a5d1d9945374b3a0c4a5e7cacb",
+          "result_sha256": "e27649da4e6a57af72336f9c92b54759cac1974e841658b19030be3bba6a3e34",
+          "median_relative": 0.01857598289866718,
+          "positive_calls": 6,
+          "calls": 9
+        },
+        {
+          "role": "screen_s2",
+          "path": "/mnt/raid0/llm/autokernel/screens/ak-gpu-fattn-vec-d64-gqa7-tg128-20260813-s2/result.json",
+          "file_sha256": "de28e0493db482645ef154d1265d2a5a9b80b7cfe0981c67373191e297ea409e",
+          "result_sha256": "e4d240c90ace096171adbf21c82dd872d01febc80718071e6bfcab771e4e9dea",
+          "median_relative": -0.018068395524266558,
+          "positive_calls": 4,
+          "calls": 9
+        }
+      ],
+      "expected_classification": "inconclusive",
+      "expected_next_action": "abandon_retest_this_pass"
+    },
+    {
+      "trace_id": "contract_expectation_corrected_before_negative_screen",
+      "candidate": "q6k_onewave",
+      "candidate_commit": "de1f1b844865",
+      "required_states": [
+        "targeted_receipt_preserved_invalid",
+        "critic_corrects_expected_cardinality_12_to_11",
+        "full_correctness_pass_with_residency",
+        "exact_candidate_dispatch_proved",
+        "screen_s1_negative",
+        "screened_out"
+      ],
+      "evidence": [
+        {
+          "role": "invalid_targeted_correctness",
+          "path": "/mnt/raid0/llm/autokernel/screens/ak-gpu-q6k-onewave-correctness-targeted-20260813-s1/receipt.json",
+          "result": "FAIL",
+          "exact_case_ok": false,
+          "reason": "incorrect_expected_cardinality_and_zero_residency",
+          "usable": false
+        },
+        {
+          "role": "full_correctness",
+          "path": "/mnt/raid0/llm/autokernel/screens/ak-gpu-q6k-onewave-correctness-full-20260813-s1/receipt.json",
+          "result": "PASS",
+          "expected_summary": "1139/1139",
+          "residency_required": true
+        },
+        {
+          "role": "candidate_attribution",
+          "path": "/mnt/raid0/llm/autokernel/screens/ak-gpu-q6k-onewave-attribution-20260813-s1/receipt.json",
+          "result": "PASS",
+          "exact_kernel": "mul_mat_vec_q<(ggml_type)14, 1, true, false>",
+          "calls": 1548,
+          "blocks_per_call": 896,
+          "anchor_geometry": {
+            "grid": 114688,
+            "workgroup": 128,
+            "lds_bytes": 512
+          },
+          "candidate_geometry": {
+            "grid": 57344,
+            "workgroup": 64,
+            "lds_bytes": 0
+          },
+          "other_hot_signatures_unchanged": true
+        },
+        {
+          "role": "screen_s1",
+          "path": "/mnt/raid0/llm/autokernel/screens/ak-gpu-q6k-onewave-tg128-20260813-s1/result.json",
+          "file_sha256": "d82249550753d03647ac1271050435a4bde1443575ebae3d79472b29b097e42b",
+          "result_sha256": "4fb8ccaab30fdf3128962fa00598a39d3ce87afd3f8e0f6977ed8c5f9e8b13ae",
+          "median_relative": -0.004794482542046476,
+          "positive_calls": 4,
+          "calls": 9
+        }
+      ],
+      "expected_classification": "screened_out",
+      "expected_next_action": "do_not_repeat_q6k_onewave"
+    }
+  ]
+}

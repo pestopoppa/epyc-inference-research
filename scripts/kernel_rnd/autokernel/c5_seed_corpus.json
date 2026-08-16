@@ -24,6 +24,20 @@
     "disposition": "re_author_and_re_attest",
     "attestation_status": "absent"
   },
+  "policy_evidence": [
+    {
+      "evidence_id": "ev-gfx90a-sol-bound-quality-20260815",
+      "path": "/workspace/handoffs/active/agentic-rocm-kernel-authoring.md",
+      "sha256": "c8cec57941b5c0954cd65b44719b984612d9c25094fce3e2ef4bcd42e8ec4f70",
+      "claims": [
+        "k215 has meaningful SOL-bound quality at 6.8x median headroom",
+        "k138, k145, and k175 have loose SOL-bound quality at 33.4x, 16.8x, and 17.0x median headroom",
+        "k154, k225, k227, and k228 have vacuous SOL-bound quality at 506x, 5710x, 3690x, and 36837x median headroom",
+        "k175 additionally uses the defective declared_traffic tier",
+        "Current gfx90a compilation and correctness are eligible, while SOL scoring requires measured gfx90a constants"
+      ]
+    }
+  ],
   "seeds": [
     {
       "seed_id": "k138",
@@ -45,6 +59,22 @@
         "disposition": "re_author_and_re_attest",
         "attestation_status": "absent",
         "source_use": "reference_spec_only"
+      },
+      "sol_bound": {
+        "quality": "loose",
+        "median_headroom_t_b_over_t_sol": 33.4,
+        "traffic_basis": "not_flagged",
+        "allowed_claims": [
+          "correctness_oracle",
+          "pytorch_relative_speed",
+          "source_sol_score_with_bound_quality_label"
+        ],
+        "current_frame_eligibility": {
+          "correctness_oracle": true,
+          "sol_score": false,
+          "reason": "gfx90a F_LOCK, LLC_BYTES, T_b, and tolerances have not been measured"
+        },
+        "evidence_ref": "ev-gfx90a-sol-bound-quality-20260815"
       }
     },
     {
@@ -67,6 +97,22 @@
         "disposition": "re_author_and_re_attest",
         "attestation_status": "absent",
         "source_use": "reference_spec_only"
+      },
+      "sol_bound": {
+        "quality": "loose",
+        "median_headroom_t_b_over_t_sol": 16.8,
+        "traffic_basis": "not_flagged",
+        "allowed_claims": [
+          "correctness_oracle",
+          "pytorch_relative_speed",
+          "source_sol_score_with_bound_quality_label"
+        ],
+        "current_frame_eligibility": {
+          "correctness_oracle": true,
+          "sol_score": false,
+          "reason": "gfx90a F_LOCK, LLC_BYTES, T_b, and tolerances have not been measured"
+        },
+        "evidence_ref": "ev-gfx90a-sol-bound-quality-20260815"
       }
     },
     {
@@ -89,6 +135,21 @@
         "disposition": "re_author_and_re_attest",
         "attestation_status": "absent",
         "source_use": "reference_spec_only"
+      },
+      "sol_bound": {
+        "quality": "vacuous",
+        "median_headroom_t_b_over_t_sol": 506.0,
+        "traffic_basis": "not_flagged",
+        "allowed_claims": [
+          "correctness_oracle",
+          "pytorch_relative_speed"
+        ],
+        "current_frame_eligibility": {
+          "correctness_oracle": true,
+          "sol_score": false,
+          "reason": "gfx90a F_LOCK, LLC_BYTES, T_b, and tolerances have not been measured"
+        },
+        "evidence_ref": "ev-gfx90a-sol-bound-quality-20260815"
       }
     },
     {
@@ -111,6 +172,21 @@
         "disposition": "re_author_and_re_attest",
         "attestation_status": "absent",
         "source_use": "reference_spec_only"
+      },
+      "sol_bound": {
+        "quality": "loose",
+        "median_headroom_t_b_over_t_sol": 17.0,
+        "traffic_basis": "defective_declared_traffic",
+        "allowed_claims": [
+          "correctness_oracle",
+          "pytorch_relative_speed"
+        ],
+        "current_frame_eligibility": {
+          "correctness_oracle": true,
+          "sol_score": false,
+          "reason": "gfx90a F_LOCK, LLC_BYTES, T_b, and tolerances have not been measured"
+        },
+        "evidence_ref": "ev-gfx90a-sol-bound-quality-20260815"
       }
     },
     {
@@ -133,6 +209,22 @@
         "disposition": "re_author_and_re_attest",
         "attestation_status": "absent",
         "source_use": "behavior_and_target_only"
+      },
+      "sol_bound": {
+        "quality": "meaningful",
+        "median_headroom_t_b_over_t_sol": 6.8,
+        "traffic_basis": "not_flagged",
+        "allowed_claims": [
+          "correctness_oracle",
+          "pytorch_relative_speed",
+          "source_sol_score_with_bound_quality_label"
+        ],
+        "current_frame_eligibility": {
+          "correctness_oracle": true,
+          "sol_score": false,
+          "reason": "gfx90a F_LOCK, LLC_BYTES, T_b, and tolerances have not been measured"
+        },
+        "evidence_ref": "ev-gfx90a-sol-bound-quality-20260815"
       }
     },
     {
@@ -155,6 +247,21 @@
         "disposition": "re_author_and_re_attest",
         "attestation_status": "absent",
         "source_use": "behavior_and_target_only"
+      },
+      "sol_bound": {
+        "quality": "vacuous",
+        "median_headroom_t_b_over_t_sol": 5710.0,
+        "traffic_basis": "not_flagged",
+        "allowed_claims": [
+          "correctness_oracle",
+          "pytorch_relative_speed"
+        ],
+        "current_frame_eligibility": {
+          "correctness_oracle": true,
+          "sol_score": false,
+          "reason": "gfx90a F_LOCK, LLC_BYTES, T_b, and tolerances have not been measured"
+        },
+        "evidence_ref": "ev-gfx90a-sol-bound-quality-20260815"
       }
     },
     {
@@ -177,6 +284,21 @@
         "disposition": "re_author_and_re_attest",
         "attestation_status": "absent",
         "source_use": "behavior_and_target_only"
+      },
+      "sol_bound": {
+        "quality": "vacuous",
+        "median_headroom_t_b_over_t_sol": 3690.0,
+        "traffic_basis": "not_flagged",
+        "allowed_claims": [
+          "correctness_oracle",
+          "pytorch_relative_speed"
+        ],
+        "current_frame_eligibility": {
+          "correctness_oracle": true,
+          "sol_score": false,
+          "reason": "gfx90a F_LOCK, LLC_BYTES, T_b, and tolerances have not been measured"
+        },
+        "evidence_ref": "ev-gfx90a-sol-bound-quality-20260815"
       }
     },
     {
@@ -199,6 +321,21 @@
         "disposition": "re_author_and_re_attest",
         "attestation_status": "absent",
         "source_use": "reference_spec_only"
+      },
+      "sol_bound": {
+        "quality": "vacuous",
+        "median_headroom_t_b_over_t_sol": 36837.0,
+        "traffic_basis": "not_flagged",
+        "allowed_claims": [
+          "correctness_oracle",
+          "pytorch_relative_speed"
+        ],
+        "current_frame_eligibility": {
+          "correctness_oracle": true,
+          "sol_score": false,
+          "reason": "gfx90a F_LOCK, LLC_BYTES, T_b, and tolerances have not been measured"
+        },
+        "evidence_ref": "ev-gfx90a-sol-bound-quality-20260815"
       }
     }
   ]

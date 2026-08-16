@@ -1,0 +1,39 @@
+{
+  "schema": "epyc.autokernel.discovery_deployment_launch_gate.v1",
+  "authority": "offline_acceptance_only",
+  "hardware_execution": false,
+  "requirements": [
+    {
+      "id": "wrapper-executable-identity",
+      "accept": "actor wrapper is an executable regular file whose bytes are revalidated immediately before actor start"
+    },
+    {
+      "id": "no-symlink-authority",
+      "accept": "configuration, wrapper, immutable inputs, output roots, and lock path reject a symlink at the named path or any existing ancestor before canonical resolution"
+    },
+    {
+      "id": "sealed-input-separation",
+      "accept": "wrapper/model/workload/runtime-config/policy paths are mutually outside state/evidence/operations and frozen production trees"
+    },
+    {
+      "id": "actual-small-model-binding",
+      "accept": "the model file subjected to small_model_max_bytes is the same digest-bound path present in every model-bearing correctness, attribution, and throughput argv"
+    },
+    {
+      "id": "typed-lease-device-claim",
+      "accept": "factory resolves a typed lease adapter bound to mi210_0, the configured inference-window lock, allowed_discovery_noise, model byte cap, and promotion_claim=false"
+    },
+    {
+      "id": "environment-allowlist",
+      "accept": "environment profile has an exact allowlist, rejects LD_PRELOAD/PYTHONPATH/library injection, and producer independently pins each arm LD_LIBRARY_PATH"
+    },
+    {
+      "id": "typed-dispatch-contract",
+      "accept": "registry dispatch entry is a typed DispatchContract whose exact/forbidden/invariant geometry is bound into the evidence policy; arbitrary mappings are refused"
+    },
+    {
+      "id": "runner-argv-binding",
+      "accept": "typed runner args bind candidate and anchor builds, actual model, workload, runtime config, contained fresh output, small-model cap, and nonpromotable discovery mode"
+    }
+  ]
+}

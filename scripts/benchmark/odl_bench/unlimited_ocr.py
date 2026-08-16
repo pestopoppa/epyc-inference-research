@@ -32,6 +32,7 @@ import subprocess
 import time
 import urllib.error
 import urllib.request
+from contextlib import nullcontext as _nullcontext
 from pathlib import Path
 from typing import Any
 
@@ -97,6 +98,34 @@ PROMPT_PROFILES = {
     "default": DEFAULT_PROMPT,
     "html_tables": HTML_TABLE_PROMPT,
 }
+
+
+def _inference_call_window() -> Any:
+    """The shared model-call mutex (flock at ak-claims/inference-call-window.lock).
+
+    R11/2026-08-13: `inference` owns compute and grants windows; AutoKernel's
+    windowed-controls hold this host-wide flock around every CPU/GPU model call
+    so large-model loads squeeze between CPU calls instead of perturbing the
+    same memory system. The ODL-P2 demo must participate or it overlaps blindly.
+    Lazy import + optional: if the module is unavailable (e.g. a stripped
+    checkout), the run proceeds WITHOUT the mutex but records the fact so the
+    caller can hold instead of overlapping unknowingly.
+    """
+    try:
+        from scripts.kernel_rnd.autokernel.execution.inference_window import (  # type: ignore
+            InferenceCallWindow,
+        )
+        return InferenceCallWindow()
+    except ImportError:
+        try:
+            from kernel_rnd.autokernel.execution.inference_window import (  # type: ignore
+                InferenceCallWindow,
+            )
+            return InferenceCallWindow()
+        except Exception as exc:  # noqa: BLE001 - degrade with an explicit flag
+            return None, exc
+    except Exception as exc:  # noqa: BLE001 - degrade with an explicit flag
+        return None, exc
 
 
 @dataclasses.dataclass(frozen=True)
@@ -244,73 +273,104 @@ class UnlimitedOcrProducer:
         skipped = 0
         errors = 0
         cleanup: dict[str, Any] = {}
+        window_receipt: dict[str, Any] = {}
+        # R11/2026-08-13: model load + inference calls must hold the shared
+        # inference-call window so a large-model load squeezes between CPU calls
+        # instead of perturbing the same memory system. The whole server-resident
+        # interval (launch -> health -> page queries -> terminate) is the model
+        # call; hold the flock for exactly that span.
+        call_window = _inference_call_window()
+        if isinstance(call_window, tuple):  # (None, exc) — degraded, no mutex
+            _window = None
+            window_receipt = {"schema": "epyc.autokernel.inference_call_window.v1",
+                              "lock_path": None, "waited_s": 0.0, "held_s": 0.0,
+                              "scope": "model_load_and_inference_only", "released": True,
+                              "degraded": f"{call_window[1]!r}"}
+            _window_ctx = _nullcontext()
+        else:
+            _window = call_window
+            _window_ctx = _window.hold()
         try:
-            with server_stderr.open("w", encoding="utf-8") as stderr:
-                proc = subprocess.Popen(
-                    server_argv,
-                    stdout=subprocess.DEVNULL,
-                    stderr=stderr,
-                    text=True,
-                    start_new_session=True,
-                )
-            wait_for_health(self.config.port, self.config.startup_timeout_s)
-
-            image_paths = run_configs.gt_image_paths(gt_json, image_root=image_root)
-            for gt_image in run_configs.gt_image_basenames(gt_json):
-                image_path = image_paths.get(gt_image)
-                pred_name = run_configs.prediction_filename_for(gt_image)
-                if image_path is None or not image_path.exists():
-                    skipped += 1
-                    continue
-
-                started = time.perf_counter()
-                try:
-                    response = query_page(self.config, image_path)
-                    latency_ms = (time.perf_counter() - started) * 1000.0
-                    content = normalize_pipe_table_blocks(content_from_response(response))
-                    timings = response.get("timings") or {}
-                    usage = response.get("usage") or {}
-                    finish_reason = finish_reason_from_response(response)
-                except Exception as exc:  # noqa: BLE001 - preserve per-page failures as artifacts
-                    errors += 1
-                    latency_ms = (time.perf_counter() - started) * 1000.0
-                    content = ""
-                    timings = {}
-                    usage = {}
-                    finish_reason = "error"
-                    response = {
-                        "error": repr(exc),
-                        "gt_image": gt_image,
-                        "source_image": str(image_path),
-                        "latency_ms": latency_ms,
+            with _window_ctx as lease:
+                with server_stderr.open("w", encoding="utf-8") as stderr:
+                    proc = subprocess.Popen(
+                        server_argv,
+                        stdout=subprocess.DEVNULL,
+                        stderr=stderr,
+                        text=True,
+                        start_new_session=True,
+                    )
+                wait_for_health(self.config.port, self.config.startup_timeout_s)
+                if _window is not None:
+                    window_receipt = {
+                        "schema": "epyc.autokernel.inference_call_window.v1",
+                        "lock_path": str(lease.path),
+                        "waited_s": lease.waited_s,
+                        "held_s": max(0.0, time.monotonic() - lease.acquired_monotonic_s),
+                        "scope": "model_load_and_inference_only",
+                        "released": False,
                     }
 
-                (prediction_dir / pred_name).write_text(content, encoding="utf-8")
-                write_json(response_dir / f"{Path(pred_name).stem}.response.json", response)
-                artifacts.append(
-                    PredictionArtifact(
-                        gt_image=gt_image,
-                        prediction_filename=pred_name,
-                        source_pdf="",
-                        char_count=len(content),
-                        latency_ms=latency_ms,
-                        source_image=str(image_path),
-                        prompt_tokens=usage.get("prompt_tokens") or timings.get("prompt_n"),
-                        completion_tokens=usage.get("completion_tokens") or timings.get("predicted_n"),
-                        prompt_tps=timings.get("prompt_per_second"),
-                        decode_tps=timings.get("predicted_per_second"),
-                        finish_reason=finish_reason,
+                image_paths = run_configs.gt_image_paths(gt_json, image_root=image_root)
+                for gt_image in run_configs.gt_image_basenames(gt_json):
+                    image_path = image_paths.get(gt_image)
+                    pred_name = run_configs.prediction_filename_for(gt_image)
+                    if image_path is None or not image_path.exists():
+                        skipped += 1
+                        continue
+
+                    started = time.perf_counter()
+                    try:
+                        response = query_page(self.config, image_path)
+                        latency_ms = (time.perf_counter() - started) * 1000.0
+                        content = normalize_pipe_table_blocks(content_from_response(response))
+                        timings = response.get("timings") or {}
+                        usage = response.get("usage") or {}
+                        finish_reason = finish_reason_from_response(response)
+                    except Exception as exc:  # noqa: BLE001 - preserve per-page failures as artifacts
+                        errors += 1
+                        latency_ms = (time.perf_counter() - started) * 1000.0
+                        content = ""
+                        timings = {}
+                        usage = {}
+                        finish_reason = "error"
+                        response = {
+                            "error": repr(exc),
+                            "gt_image": gt_image,
+                            "source_image": str(image_path),
+                            "latency_ms": latency_ms,
+                        }
+
+                    (prediction_dir / pred_name).write_text(content, encoding="utf-8")
+                    write_json(response_dir / f"{Path(pred_name).stem}.response.json", response)
+                    artifacts.append(
+                        PredictionArtifact(
+                            gt_image=gt_image,
+                            prediction_filename=pred_name,
+                            source_pdf="",
+                            char_count=len(content),
+                            latency_ms=latency_ms,
+                            source_image=str(image_path),
+                            prompt_tokens=usage.get("prompt_tokens") or timings.get("prompt_n"),
+                            completion_tokens=usage.get("completion_tokens") or timings.get("predicted_n"),
+                            prompt_tps=timings.get("prompt_per_second"),
+                            decode_tps=timings.get("predicted_per_second"),
+                            finish_reason=finish_reason,
+                        )
                     )
-                )
         finally:
             if proc is not None:
                 cleanup = terminate(proc)
                 write_json(response_dir / "cleanup.json", cleanup)
+            if _window is not None and window_receipt.get("released") is False:
+                window_receipt["released"] = True
+            write_json(response_dir / "inference_window.json", window_receipt)
 
         detail_bits = [
             f"server_log={server_stderr}",
             f"cleanup_dead={cleanup.get('dead')}",
             f"max_tokens={self.config.max_tokens}",
+            f"window={'held' if _window is not None else 'MISSING'}",
         ]
         if skipped:
             detail_bits.append(f"{skipped} GT pages had no resolvable image")

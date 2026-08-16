@@ -13,7 +13,9 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import re
+import stat
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, Mapping, Sequence
@@ -31,6 +33,33 @@ TARGET_HARDWARE = "AMD Instinct MI210"
 DISPOSITION = "re_author_and_re_attest"
 REQUIRED_MECHANISMS = ("wavefront_64", "mfma", "lds")
 ALLOWED_DTYPES = frozenset({"bf16", "fp16"})
+BOUND_QUALITIES = frozenset({"meaningful", "loose", "vacuous"})
+TRAFFIC_BASES = frozenset({"not_flagged", "defective_declared_traffic"})
+SOL_BOUND_EVIDENCE_ID = "ev-gfx90a-sol-bound-quality-20260815"
+EXPECTED_BOUND_QUALITY = {
+    "k138": "loose",
+    "k145": "loose",
+    "k154": "vacuous",
+    "k175": "loose",
+    "k215": "meaningful",
+    "k225": "vacuous",
+    "k227": "vacuous",
+    "k228": "vacuous",
+}
+EXPECTED_HEADROOM = {
+    "k138": 33.4,
+    "k145": 16.8,
+    "k154": 506.0,
+    "k175": 17.0,
+    "k215": 6.8,
+    "k225": 5710.0,
+    "k227": 3690.0,
+    "k228": 36837.0,
+}
+BASE_ALLOWED_CLAIMS = ("correctness_oracle", "pytorch_relative_speed")
+SOL_ALLOWED_CLAIMS = BASE_ALLOWED_CLAIMS + (
+    "source_sol_score_with_bound_quality_label",
+)
 _SEED_RE = re.compile(r"k[0-9]{3}")
 _SLUG_RE = re.compile(r"[a-z0-9][a-z0-9_-]+")
 _SHA256_RE = re.compile(r"[0-9a-f]{64}")
@@ -51,6 +80,15 @@ def _mapping(value: Any, label: str) -> Mapping[str, Any]:
     if not isinstance(value, Mapping):
         raise SeedCorpusError(f"{label} must be an object")
     return value
+
+
+def _exact_keys(value: Mapping[str, Any], expected: set[str], label: str) -> None:
+    actual = set(value)
+    if actual != expected:
+        raise SeedCorpusError(
+            f"{label} keys differ; missing={sorted(expected - actual)}, "
+            f"extra={sorted(actual - expected)}"
+        )
 
 
 def _sha256(value: Any, label: str) -> str:
@@ -94,12 +132,27 @@ class C5Seed:
     sol_score: float
     latency_ms: float
     source_use: str
+    bound_quality: str
+    median_headroom_t_b_over_t_sol: float
+    traffic_basis: str
+    allowed_claims: tuple[str, ...]
+    current_frame_correctness_eligible: bool
+    current_frame_sol_score_eligible: bool
+    current_frame_reason: str
+    policy_evidence_ref: str
 
     @classmethod
     def from_dict(cls, row: Mapping[str, Any]) -> "C5Seed":
+        _exact_keys(row, {
+            "seed_id", "submission_id", "slug", "artifact", "artifact_sha256",
+            "reference_kind", "operator_family", "dtypes", "observed_nvidia_bindings",
+            "upstream_result", "gfx90a", "sol_bound",
+        }, "seed")
         seed_id = _text(row.get("seed_id"), "seed.seed_id")
         if not _SEED_RE.fullmatch(seed_id):
             raise SeedCorpusError(f"invalid seed id {seed_id!r}")
+        if seed_id not in EXPECTED_SEED_IDS:
+            raise SeedCorpusError(f"unexpected seed id {seed_id!r}")
         submission_id = row.get("submission_id")
         if (
             isinstance(submission_id, bool)
@@ -147,6 +200,54 @@ class C5Seed:
         )
         if gfx90a.get("source_use") != expected_use:
             raise SeedCorpusError(f"{seed_id}: source_use conflicts with reference kind")
+        sol_bound = _mapping(row.get("sol_bound"), f"{seed_id}.sol_bound")
+        _exact_keys(sol_bound, {
+            "quality", "median_headroom_t_b_over_t_sol", "traffic_basis",
+            "allowed_claims", "current_frame_eligibility", "evidence_ref",
+        }, f"{seed_id}.sol_bound")
+        quality = _text(sol_bound.get("quality"), f"{seed_id}.sol_bound.quality")
+        if quality not in BOUND_QUALITIES or quality != EXPECTED_BOUND_QUALITY[seed_id]:
+            raise SeedCorpusError(f"{seed_id}: SOL bound-quality label drifted")
+        headroom = _positive_float(
+            sol_bound.get("median_headroom_t_b_over_t_sol"),
+            f"{seed_id}.sol_bound.median_headroom_t_b_over_t_sol",
+        )
+        if headroom != EXPECTED_HEADROOM[seed_id]:
+            raise SeedCorpusError(f"{seed_id}: SOL bound headroom drifted")
+        traffic = _text(sol_bound.get("traffic_basis"), f"{seed_id}.sol_bound.traffic_basis")
+        expected_traffic = "defective_declared_traffic" if seed_id == "k175" else "not_flagged"
+        if traffic not in TRAFFIC_BASES or traffic != expected_traffic:
+            raise SeedCorpusError(f"{seed_id}: declared-traffic policy drifted")
+        allowed_claims = _tuple_of_text(
+            sol_bound.get("allowed_claims"), f"{seed_id}.sol_bound.allowed_claims"
+        )
+        expected_claims = (
+            SOL_ALLOWED_CLAIMS
+            if quality != "vacuous" and traffic == "not_flagged"
+            else BASE_ALLOWED_CLAIMS
+        )
+        if allowed_claims != expected_claims:
+            raise SeedCorpusError(f"{seed_id}: allowed SOL claims contradict bound quality")
+        eligibility = _mapping(
+            sol_bound.get("current_frame_eligibility"),
+            f"{seed_id}.sol_bound.current_frame_eligibility",
+        )
+        _exact_keys(
+            eligibility, {"correctness_oracle", "sol_score", "reason"},
+            f"{seed_id}.sol_bound.current_frame_eligibility",
+        )
+        if eligibility.get("correctness_oracle") is not True:
+            raise SeedCorpusError(f"{seed_id}: current gfx90a correctness oracle must stay eligible")
+        if eligibility.get("sol_score") is not False:
+            raise SeedCorpusError(f"{seed_id}: current gfx90a SOL score lacks measured constants")
+        eligibility_reason = _text(
+            eligibility.get("reason"), f"{seed_id}.sol_bound.current_frame_eligibility.reason"
+        )
+        evidence_ref = _text(
+            sol_bound.get("evidence_ref"), f"{seed_id}.sol_bound.evidence_ref"
+        )
+        if evidence_ref != SOL_BOUND_EVIDENCE_ID:
+            raise SeedCorpusError(f"{seed_id}: SOL policy evidence reference drifted")
         return cls(
             seed_id=seed_id,
             submission_id=submission_id,
@@ -160,6 +261,14 @@ class C5Seed:
             sol_score=_positive_float(result.get("sol_score"), f"{seed_id}.sol_score", maximum=1.0),
             latency_ms=_positive_float(result.get("latency_ms"), f"{seed_id}.latency_ms"),
             source_use=expected_use,
+            bound_quality=quality,
+            median_headroom_t_b_over_t_sol=headroom,
+            traffic_basis=traffic,
+            allowed_claims=allowed_claims,
+            current_frame_correctness_eligible=True,
+            current_frame_sol_score_eligible=False,
+            current_frame_reason=eligibility_reason,
+            policy_evidence_ref=evidence_ref,
         )
 
     def task_descriptor(self, *, revision: str) -> dict[str, Any]:
@@ -183,6 +292,17 @@ class C5Seed:
                 "disposition": DISPOSITION,
                 "attestation_status": "absent",
             },
+            "sol_bound_policy": {
+                "quality": self.bound_quality,
+                "traffic_basis": self.traffic_basis,
+                "allowed_authoring_claims": list(BASE_ALLOWED_CLAIMS),
+                "current_frame_eligibility": {
+                    "correctness_oracle": self.current_frame_correctness_eligible,
+                    "speed_of_light_objective": "disabled_missing_gfx90a_constants",
+                    "reason": self.current_frame_reason,
+                },
+                "evidence_ref": self.policy_evidence_ref,
+            },
         }
 
 
@@ -192,11 +312,16 @@ class C5SeedCorpus:
     source_revision: str
     artifact_root: str
     intake_ref: str
+    policy_evidence: tuple[Mapping[str, Any], ...]
     seeds: tuple[C5Seed, ...]
     registry_sha256: str
 
     @classmethod
     def from_dict(cls, document: Mapping[str, Any], *, registry_sha256: str) -> "C5SeedCorpus":
+        _exact_keys(document, {
+            "schema", "corpus_id", "provenance", "source_attestation",
+            "gfx90a_contract", "policy_evidence", "seeds",
+        }, "corpus")
         if document.get("schema") != SCHEMA or document.get("corpus_id") != CORPUS_ID:
             raise SeedCorpusError("unexpected C5 seed-corpus schema or corpus id")
         provenance = _mapping(document.get("provenance"), "provenance")
@@ -228,6 +353,21 @@ class C5SeedCorpus:
         ):
             raise SeedCorpusError("gfx90a contract must require fresh MI210 authoring/attestation")
 
+        policy_evidence_raw = document.get("policy_evidence")
+        if not isinstance(policy_evidence_raw, list) or len(policy_evidence_raw) != 1:
+            raise SeedCorpusError("policy_evidence must contain the one SOL-bound authority")
+        evidence = _mapping(policy_evidence_raw[0], "policy_evidence[0]")
+        _exact_keys(evidence, {"evidence_id", "path", "sha256", "claims"}, "policy_evidence[0]")
+        if evidence.get("evidence_id") != SOL_BOUND_EVIDENCE_ID:
+            raise SeedCorpusError("policy evidence id drifted")
+        evidence_path = _text(evidence.get("path"), "policy_evidence[0].path")
+        if not Path(evidence_path).is_absolute() or ".." in Path(evidence_path).parts:
+            raise SeedCorpusError("policy evidence path must be absolute and traversal-free")
+        _sha256(evidence.get("sha256"), "policy_evidence[0].sha256")
+        claims = _tuple_of_text(evidence.get("claims"), "policy_evidence[0].claims")
+        if len(claims) < 4:
+            raise SeedCorpusError("policy evidence must carry the complete bound-quality claim set")
+
         rows = document.get("seeds")
         if not isinstance(rows, list):
             raise SeedCorpusError("seeds must be a list")
@@ -249,6 +389,7 @@ class C5SeedCorpus:
             source_revision=revision,
             artifact_root=artifact_root,
             intake_ref=intake_ref,
+            policy_evidence=(dict(evidence),),
             seeds=seeds,
             registry_sha256=_sha256(registry_sha256, "registry_sha256"),
         )
@@ -270,17 +411,62 @@ def _registry_path() -> Path:
     return Path(__file__).with_name("c5_seed_corpus.json")
 
 
-def load(path: str | Path | None = None) -> C5SeedCorpus:
+def _read_pinned(path: Path, label: str) -> bytes:
+    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        fd = os.open(path, flags)
+    except OSError as exc:
+        raise SeedCorpusError(f"{label}: cannot open evidence: {exc}") from exc
+    try:
+        before = os.fstat(fd)
+        if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1
+                or before.st_uid != os.geteuid()):
+            raise SeedCorpusError(f"{label}: evidence must be an owned single-link regular file")
+        chunks: list[bytes] = []
+        while True:
+            chunk = os.read(fd, 1024 * 1024)
+            if not chunk:
+                break
+            chunks.append(chunk)
+        raw = b"".join(chunks)
+        after = os.fstat(fd)
+    finally:
+        os.close(fd)
+    try:
+        path_after = path.stat(follow_symlinks=False)
+    except OSError as exc:
+        raise SeedCorpusError(f"{label}: evidence path disappeared: {exc}") from exc
+    before_id = (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns)
+    after_id = (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns)
+    if (before_id != after_id or len(raw) != before.st_size
+            or (path_after.st_dev, path_after.st_ino) != (before.st_dev, before.st_ino)):
+        raise SeedCorpusError(f"{label}: evidence changed while it was read")
+    return raw
+
+
+def verify_policy_evidence_files(corpus: C5SeedCorpus) -> None:
+    """Verify internal policy authority bytes before any author-facing projection."""
+    for evidence in corpus.policy_evidence:
+        evidence_id = str(evidence["evidence_id"])
+        raw = _read_pinned(Path(str(evidence["path"])), evidence_id)
+        if hashlib.sha256(raw).hexdigest() != evidence["sha256"]:
+            raise SeedCorpusError(f"{evidence_id}: policy evidence SHA-256 mismatch")
+
+
+def load(path: str | Path | None = None, *, verify_evidence: bool = True) -> C5SeedCorpus:
     registry = _registry_path() if path is None else Path(path)
     raw = registry.read_bytes()
     try:
         document = json.loads(raw)
     except json.JSONDecodeError as exc:
         raise SeedCorpusError("C5 seed corpus is not valid JSON") from exc
-    return C5SeedCorpus.from_dict(
+    corpus = C5SeedCorpus.from_dict(
         _mapping(document, "corpus"),
         registry_sha256=hashlib.sha256(raw).hexdigest(),
     )
+    if verify_evidence:
+        verify_policy_evidence_files(corpus)
+    return corpus
 
 
 def seed_context_item(seed_ids: Sequence[str] | None = None):
@@ -297,6 +483,10 @@ def seed_context_item(seed_ids: Sequence[str] | None = None):
             "revision": corpus.source_revision,
             "scope": "nvidia_hopper_only",
         },
+        "policy_evidence": [
+            {key: evidence[key] for key in ("evidence_id", "path", "sha256")}
+            for evidence in corpus.policy_evidence
+        ],
         "tasks": [seed.task_descriptor(revision=corpus.source_revision) for seed in selected],
     }
     content = json.dumps(payload, sort_keys=True, separators=(",", ":"))

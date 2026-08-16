@@ -45,7 +45,9 @@ class C3EpycCompilerTest(unittest.TestCase):
             "recipe_id": f"epyc.op.case-{index}.v1",
             "recipe_sha256": digest(f"recipe-{index}"),
             "harness_build_sha256": digest("harness"),
-            "factors": {"graphs": "off", "stream_sync": "full_device", "warmup": 10},
+            "factors": {"graphs": "off", "stream_sync": "full_device", "warmup": 10,
+                        "timed_outputs": "validated",
+                        "input_rotation": "address_and_content"},
         }
 
     def observed_case(self, case, index: int) -> dict:

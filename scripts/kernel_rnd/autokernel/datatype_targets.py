@@ -67,8 +67,10 @@ TARGETS = {
             "whole_model_exit_gate",
         ),
         claim_boundary=(
-            "Fresh MI210 evidence is required; byte-count reduction alone proves no performance gain, "
-            "and bf16 MFMA is forbidden as a batch-one assumption"
+            "Software FP8 weight storage is eligible only with decode/upcast into a supported BF16 "
+            "compute path and no native-FP8-compute or compute-headroom claim; fresh MI210 evidence "
+            "is required, byte-count reduction alone proves no performance gain, and BF16 MFMA is "
+            "forbidden as a batch-one assumption"
         ),
     ),
     NVFP4_TARGET_ID: DatatypeTarget(

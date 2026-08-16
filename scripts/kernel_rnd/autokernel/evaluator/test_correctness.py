@@ -355,7 +355,10 @@ def anti_hack(**overrides) -> C.AntiRewardHackingEvidence:
         async_escape_detector_id="async-escape/v1",
         instrument_frame_detector_id="instrument-frame/v1",
         pointer_memoization_detector_id="pointer-memoization/v1",
-        structured_short_circuit_detector_id="structured-short-circuit/v1")
+        structured_short_circuit_detector_id="structured-short-circuit/v1",
+        phase_detection_detector_id="phase-detection/v1",
+        capture_replay_detector_id="capture-replay/v1",
+        content_specialization_detector_id="content-specialization/v1")
     kwargs.update(overrides)
     return C.AntiRewardHackingEvidence(**kwargs)
 
@@ -1876,7 +1879,10 @@ class TestAntiRewardHacking(unittest.TestCase):
             async_escape_detector_id=None,
             instrument_frame_detector_id=None,
             pointer_memoization_detector_id=None,
-            structured_short_circuit_detector_id=None)))
+            structured_short_circuit_detector_id=None,
+            phase_detection_detector_id=None,
+            capture_replay_detector_id=None,
+            content_specialization_detector_id=None)))
         gate = report.gate(C.GID_ANTI_REWARD_HACKING)
         self.assertEqual(gate.check.outcome, S.COULD_NOT_CHECK)
         self.assertIn("did not run", " ".join(gate.check.reasons))
@@ -1905,6 +1911,18 @@ class TestAntiRewardHacking(unittest.TestCase):
             ("instrument_frame_findings", "tools/llama-bench/llama-bench.cpp:9"),
             ("pointer_memoization_findings", "kernel.hip:4:pointer cache"),
             ("structured_short_circuit_findings", "kernel.hip:8:n == 128"),
+        )
+        for field, finding in cases:
+            with self.subTest(field=field):
+                report = run(ev=evidence(anti_reward_hacking=anti_hack(
+                    **{field: (finding,)})))
+                self.assertEqual(report.outcome(C.GID_ANTI_REWARD_HACKING), S.FAIL)
+
+    def test_phase_capture_and_content_specialization_each_fail(self):
+        cases = (
+            ("phase_detection_findings", "kernel.py:8:timing_phase"),
+            ("capture_replay_findings", "kernel.py:4:torch.compile"),
+            ("content_specialization_findings", "kernel.py:6:input_fingerprint"),
         )
         for field, finding in cases:
             with self.subTest(field=field):
