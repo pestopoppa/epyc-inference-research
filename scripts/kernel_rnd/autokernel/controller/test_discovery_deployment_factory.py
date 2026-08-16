@@ -303,6 +303,17 @@ class DeploymentFactoryTests(unittest.TestCase):
                              config.critic_wrapper.sha256)
             self.assertEqual(receipt["actor_cells"],
                              [dict(C.SOL), dict(C.FABLE5_CRITIC)])
+            timed_oracle = receipt["batched_runner"]["timed_output_oracle"]
+            self.assertTrue(timed_oracle["enabled_for_source_patch"])
+            self.assertTrue(timed_oracle["independent_of_early_unlock"])
+            self.assertEqual(timed_oracle["instrument_commit"], F._INSTRUMENT_COMMIT)
+            self.assertEqual(timed_oracle["environment"], {
+                "AMD_SERIALIZE_KERNEL": "3",
+                "AMD_SERIALIZE_COPY": "3",
+                "GGML_CUDA_DISABLE_GRAPHS": "1",
+            })
+            self.assertEqual(timed_oracle["scope"], "integrity_discovery_only")
+            self.assertFalse(timed_oracle["production_throughput_authority"])
             self.assertIn("discovery_telemetry", receipt["execution_modules"])
             self.assertEqual(
                 receipt["execution_modules"]["discovery_telemetry"]["sha256"],
