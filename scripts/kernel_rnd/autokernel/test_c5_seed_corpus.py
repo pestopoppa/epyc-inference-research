@@ -6,7 +6,10 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import os
+import tempfile
 import unittest
+from pathlib import Path
 
 from . import c5_seed_corpus as C
 
@@ -203,6 +206,39 @@ class C5SeedCorpusTest(unittest.TestCase):
         document["seeds"][0]["sol_bound"]["unreviewed_override"] = True
         with self.assertRaisesRegex(C.SeedCorpusError, "keys differ"):
             self.parse(document)
+
+    def test_runtime_policy_evidence_bytes_and_file_identity_are_verified(self):
+        document = self.document()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            evidence = root / "authority.md"
+            evidence.write_bytes(b"reviewed policy\n")
+            document["policy_evidence"][0]["path"] = str(evidence)
+            document["policy_evidence"][0]["sha256"] = hashlib.sha256(
+                evidence.read_bytes()).hexdigest()
+            registry = root / "registry.json"
+            registry.write_text(json.dumps(document), encoding="utf-8")
+            C.load(registry)
+
+            evidence.write_bytes(b"tampered policy\n")
+            with self.assertRaisesRegex(C.SeedCorpusError, "SHA-256 mismatch"):
+                C.load(registry)
+
+            document["policy_evidence"][0]["sha256"] = hashlib.sha256(
+                evidence.read_bytes()).hexdigest()
+            link = root / "authority-link.md"
+            link.symlink_to(evidence)
+            document["policy_evidence"][0]["path"] = str(link)
+            registry.write_text(json.dumps(document), encoding="utf-8")
+            with self.assertRaisesRegex(C.SeedCorpusError, "cannot open evidence"):
+                C.load(registry)
+
+            hardlink = root / "authority-hardlink.md"
+            os.link(evidence, hardlink)
+            document["policy_evidence"][0]["path"] = str(hardlink)
+            registry.write_text(json.dumps(document), encoding="utf-8")
+            with self.assertRaisesRegex(C.SeedCorpusError, "single-link"):
+                C.load(registry)
 
 
 if __name__ == "__main__":
