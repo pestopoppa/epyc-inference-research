@@ -21,7 +21,7 @@ from typing import Any, Mapping, Optional, Sequence
 
 from . import schemas
 from .evaluator import correctness, integrity
-from .execution import chain, instrument_integrity, worktree
+from .execution import chain, instrument_integrity, reward_hack_scan, worktree
 
 __all__ = [
     "SCHEMA_SOURCE_PATCH", "SourceCandidateError", "SourcePatchManifest",
@@ -275,6 +275,17 @@ class SourcePatchManifest:
         schemas.require.str(self.mechanism_id, "mechanism_id", error=SourceCandidateError)
         text, paths, _hunks, _actual_symbols, actual_by_file, _deleted = \
             _validate_patch_text(self.patch_bytes)
+        scan = reward_hack_scan.scan_unified_diff(text)
+        prebuild_findings = {
+            "phase_detection": scan.phase_detection_findings,
+            "capture_replay": scan.capture_replay_findings,
+            "content_specialization": scan.content_specialization_findings,
+        }
+        detected = {name: rows for name, rows in prebuild_findings.items() if rows}
+        if detected:
+            raise SourceCandidateError(
+                "source patch violates the pre-build reward-integrity policy: "
+                f"{sorted(detected)}")
         if paths != files:
             raise SourceCandidateError(
                 f"patch paths {list(paths)} do not exactly equal declared_files {list(files)}")

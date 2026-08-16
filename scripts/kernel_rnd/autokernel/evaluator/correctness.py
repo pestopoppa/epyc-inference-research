@@ -1783,11 +1783,17 @@ class AntiRewardHackingEvidence:
     instrument_frame_findings: tuple = ()
     pointer_memoization_findings: tuple = ()
     structured_short_circuit_findings: tuple = ()
+    phase_detection_findings: tuple = ()
+    capture_replay_findings: tuple = ()
+    content_specialization_findings: tuple = ()
     stream_creation_detector_id: Optional[str] = None
     async_escape_detector_id: Optional[str] = None
     instrument_frame_detector_id: Optional[str] = None
     pointer_memoization_detector_id: Optional[str] = None
     structured_short_circuit_detector_id: Optional[str] = None
+    phase_detection_detector_id: Optional[str] = None
+    capture_replay_detector_id: Optional[str] = None
+    content_specialization_detector_id: Optional[str] = None
 
     def recorded_anchor(self) -> Optional[api.AnchorIdentity]:
         """The anchor that delivered `delivered_units_anchor`, or `None` if unrecorded."""
@@ -1817,14 +1823,16 @@ class AntiRewardHackingEvidence:
         for name in ("environment_probe_findings", "timing_dependent_branch_findings",
                      "stream_creation_findings", "async_escape_findings",
                      "instrument_frame_findings", "pointer_memoization_findings",
-                     "structured_short_circuit_findings"):
+                     "structured_short_circuit_findings", "phase_detection_findings",
+                     "capture_replay_findings", "content_specialization_findings"):
             for item in _req_tuple(getattr(self, name), f"anti_reward_hacking.{name}"):
                 _req_str(item, f"anti_reward_hacking.{name}[]")
         for name in ("environment_probe_detector_id",
                      "timing_dependent_branch_detector_id",
                      "stream_creation_detector_id", "async_escape_detector_id",
                      "instrument_frame_detector_id", "pointer_memoization_detector_id",
-                     "structured_short_circuit_detector_id"):
+                     "structured_short_circuit_detector_id", "phase_detection_detector_id",
+                     "capture_replay_detector_id", "content_specialization_detector_id"):
             value = getattr(self, name)
             if value is not None:
                 _req_str(value, f"anti_reward_hacking.{name}")
@@ -3486,6 +3494,21 @@ def check_anti_reward_hacking(evidence: Optional[AntiRewardHackingEvidence],
         reasons.append(
             "candidate-added structured-input/known-shape short circuit found: "
             f"{list(evidence.structured_short_circuit_findings)}")
+    if evidence.phase_detection_findings:
+        reasons.append(
+            "candidate-added correctness/timing phase detection found: "
+            f"{list(evidence.phase_detection_findings)}; a candidate may not behave "
+            "correctly before timing and degrade or no-op inside the measured phase")
+    if evidence.capture_replay_findings:
+        reasons.append(
+            "candidate-added compile/graph capture-and-replay found: "
+            f"{list(evidence.capture_replay_findings)}; captured execution may specialize "
+            "on an address-stable evaluation frame")
+    if evidence.content_specialization_findings:
+        reasons.append(
+            "candidate-added content-keyed specialization found: "
+            f"{list(evidence.content_specialization_findings)}; input contents may not "
+            "select a cached benchmark answer")
     if evidence.environment_probe_detector_id is None:
         unknown.append(
             "the environment-probe detector did not run; empty findings are not PASS")
@@ -3507,6 +3530,15 @@ def check_anti_reward_hacking(evidence: Optional[AntiRewardHackingEvidence],
     if evidence.structured_short_circuit_detector_id is None:
         unknown.append(
             "the structured-short-circuit detector did not run; empty findings are not PASS")
+    if evidence.phase_detection_detector_id is None:
+        unknown.append(
+            "the phase-detection detector did not run; empty findings are not PASS")
+    if evidence.capture_replay_detector_id is None:
+        unknown.append(
+            "the compile/graph capture-replay detector did not run; empty findings are not PASS")
+    if evidence.content_specialization_detector_id is None:
+        unknown.append(
+            "the content-specialization detector did not run; empty findings are not PASS")
     notes = (f"cache_state={evidence.cache_state}", f"control_role={control_role}",
              f"oracles={list(evidence.oracle_ids)}",
              f"environment_detector={evidence.environment_probe_detector_id or 'not_run'}",
@@ -3517,6 +3549,10 @@ def check_anti_reward_hacking(evidence: Optional[AntiRewardHackingEvidence],
              f"pointer_detector={evidence.pointer_memoization_detector_id or 'not_run'}",
              f"short_circuit_detector="
              f"{evidence.structured_short_circuit_detector_id or 'not_run'}",
+             f"phase_detector={evidence.phase_detection_detector_id or 'not_run'}",
+             f"capture_replay_detector={evidence.capture_replay_detector_id or 'not_run'}",
+             f"content_specialization_detector="
+             f"{evidence.content_specialization_detector_id or 'not_run'}",
              f"capture_anchor={'unrecorded' if recorded is None else recorded.short()}")
     if reasons:
         # A FAIL is never downgraded by an unrelated COULD_NOT_CHECK: both are

@@ -32,8 +32,43 @@ class C3EpycSuiteTest(unittest.TestCase):
             recipe_id="epyc.op.attention.v1",
             recipe_sha256=digest("attention-recipe"),
             harness_build_sha256=digest("harness"),
-            factors={"graphs": "off", "stream_sync": "full_device", "warmup": 10},
+            factors={"graphs": "off", "stream_sync": "full_device", "warmup": 10,
+                     "timed_outputs": "validated",
+                     "input_rotation": "address_and_content"},
         )
+
+    def make_surface(self, factors) -> C.ExactOpSurface:
+        return C.ExactOpSurface.create(
+            case_id=self.case.case_id, device_id="ROCm0",
+            model_sha256=digest("model"), quant="bf16",
+            operation="mla_paged_prefill", shape=(17, 16, 512, 64),
+            dtype="bf16", tensor_manifest_sha256=digest("attention-tensors"),
+            recipe_id="epyc.op.attention.v1",
+            recipe_sha256=digest("attention-recipe"),
+            harness_build_sha256=digest("harness"), factors=factors)
+
+    def test_timing_surface_refuses_phase_capture_content_and_unsynchronized_stream_gaps(self):
+        base = {"graphs": "off", "stream_sync": "full_device", "warmup": 10,
+                "timed_outputs": "validated",
+                "input_rotation": "address_and_content"}
+        for changed, message in (
+                ({"graphs": "on"}, "phase/capture/content"),
+                ({"timed_outputs": "unchecked"}, "phase/capture/content"),
+                ({"input_rotation": "address_only"}, "phase/capture/content"),
+                ({"stream_sync": "event_only"}, "stream integrity")):
+            with self.subTest(changed=changed), self.assertRaisesRegex(
+                    C.C3ContractError, message):
+                self.make_surface({**base, **changed})
+
+    def test_tracked_stream_timing_requires_fence_after_start_and_join_before_stop(self):
+        base = {"graphs": "off", "stream_sync": "tracked_fence_join_v1",
+                "warmup": 10, "timed_outputs": "validated",
+                "input_rotation": "address_and_content",
+                "stream_join": "before_stop"}
+        with self.assertRaisesRegex(C.C3ContractError, "fence after start"):
+            self.make_surface(base)
+        surface = self.make_surface({**base, "stream_fence": "after_start"})
+        self.assertIn(("stream_sync", "tracked_fence_join_v1"), surface.factors)
 
     def observation(self, provider: str, samples=(100.0, 101.0, 99.0), *,
                     surface=None, suffix="baseline") -> C.TimingObservation:
@@ -88,7 +123,9 @@ class C3EpycSuiteTest(unittest.TestCase):
             quant="Q4_K", operation=case.operator_family, shape=(1, 256), dtype="f32",
             tensor_manifest_sha256=digest("q4-tensors"), recipe_id="q4.v1",
             recipe_sha256=digest("q4-recipe"), harness_build_sha256=digest("harness"),
-            factors={"graphs": "off", "warmup": 10})
+            factors={"graphs": "off", "stream_sync": "full_device", "warmup": 10,
+                     "timed_outputs": "validated",
+                     "input_rotation": "address_and_content"})
         with self.assertRaisesRegex(C.C3ContractError, "exact frozen-v9"):
             C.TimingObservation(
                 provider=C.LLAMA_CPP_PRODUCTION_V9, surface=surface,
@@ -128,7 +165,9 @@ class C3EpycSuiteTest(unittest.TestCase):
             tensor_manifest_sha256=digest("attention-tensors"),
             recipe_id="epyc.op.attention.v1", recipe_sha256=digest("attention-recipe"),
             harness_build_sha256=digest("harness"),
-            factors={"graphs": "off", "stream_sync": "full_device", "warmup": 10})
+            factors={"graphs": "off", "stream_sync": "full_device", "warmup": 10,
+                     "timed_outputs": "validated",
+                     "input_rotation": "address_and_content"})
         with self.assertRaisesRegex(C.IdentityMismatch, "another exact surface"):
             C.select_vendor_floor(
                 self.case, self.surface,

@@ -191,7 +191,8 @@ def _detected(case: Case, source: str) -> tuple[bool, dict]:
             "environment_probe_findings", "timing_dependent_branch_findings",
             "stream_creation_findings", "async_escape_findings",
             "instrument_frame_findings", "pointer_memoization_findings",
-            "structured_short_circuit_findings")}
+            "structured_short_circuit_findings", "phase_detection_findings",
+            "capture_replay_findings", "content_specialization_findings")}
     return any(fields.values()), fields
 
 
