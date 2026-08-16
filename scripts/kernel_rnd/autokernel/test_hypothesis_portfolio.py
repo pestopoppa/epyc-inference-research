@@ -548,7 +548,7 @@ class HypothesisPortfolioTest(unittest.TestCase):
             self.assertEqual(P.main(["validate", str(P.DEFAULT_PORTFOLIO)]), 0)
         result = json.loads(stdout.getvalue())
         self.assertEqual(result["hypotheses"], 21)
-        self.assertEqual(result["do_not_repeat"], 21)
+        self.assertEqual(result["do_not_repeat"], 22)
         self.assertEqual(result["eligible"], 4)
         stdout = StringIO()
         with redirect_stdout(stdout):
@@ -556,7 +556,7 @@ class HypothesisPortfolioTest(unittest.TestCase):
         summary = json.loads(stdout.getvalue())
         self.assertEqual(summary["sha256"], result["sha256"])
         self.assertEqual(len(summary["eligible_records"]), 4)
-        self.assertEqual(len(summary["do_not_repeat"]), 21)
+        self.assertEqual(len(summary["do_not_repeat"]), 22)
 
     def test_duplicate_json_key_is_refused(self):
         with tempfile.TemporaryDirectory() as temp:

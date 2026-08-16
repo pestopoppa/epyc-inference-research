@@ -260,6 +260,111 @@
         "IQ2_XXS carries a 437-instruction vector-ALU excess over IQ4_XS, with sign expansion identified as the concrete source-level direction",
         "Immutable research-side snapshot of epyc-root commit 9e21451c5680d10eae7b577979a9e78b39d27eed"
       ]
+    },
+    {
+      "evidence_id": "ev-q4k-mmq-stock-correctness-v9",
+      "path": "repo://scripts/kernel_rnd/autokernel/evidence/q4k-mmq-correctness-20260811/stock-receipt.json",
+      "sha256": "6e7870558c6317a7ef12f7fca8a267466cc0734295d0c33562103a0c022a3502",
+      "authority": "candidate_only",
+      "temporal_status": "current_v9",
+      "claims": [
+        "Frozen-v9 forced-dispatch baseline: force-rocBLAS passed 43/43 while force-MMQ passed 18/43 and failed 25/43 under unchanged κ=1.5",
+        "The stock Q4_K MMQ baseline is not correctness-clean and cannot carry performance ranking or source-authoring authority"
+      ]
+    },
+    {
+      "evidence_id": "ev-q4k-mmq-dp4a-negative-v9",
+      "path": "repo://scripts/kernel_rnd/autokernel/evidence/q4k-mmq-correctness-20260811/dp4a-receipt.json",
+      "sha256": "c955f5df4cd584586b0e59746b8dc1e2542fbde57a558de0257ba616dee78021",
+      "authority": "candidate_only",
+      "temporal_status": "current_v9",
+      "claims": [
+        "A separately compiled force-MMQ DP4A arm repeated the same 25/43 Q4_K failures while the rocBLAS control passed 43/43",
+        "The stock defect is not MFMA-specific; it is common to MMQ Q8 activation staging"
+      ]
+    },
+    {
+      "evidence_id": "ev-q4k-mmq-ls-scale-negative-v9",
+      "path": "repo://scripts/kernel_rnd/autokernel/evidence/q4k-mmq-correctness-20260811/ls-scale-receipt.json",
+      "sha256": "476e6fb3fc004b30067ea9de4826a094a90db529c610670673c159e803342d89",
+      "authority": "candidate_only",
+      "temporal_status": "current_v9",
+      "claims": [
+        "A Q4_K-only least-squares refinement of the per-32 Q8 activation scale repeated 25/43 failures under unchanged κ=1.5",
+        "The least-squares refinement was reverted and supplies no surviving clean source identity"
+      ]
+    },
+    {
+      "evidence_id": "ev-q4k-mmq-qsum-fix-diagnostic-v9",
+      "path": "repo://scripts/kernel_rnd/autokernel/evidence/q4k-mmq-correctness-20260811/qsum-fix-receipt.json",
+      "sha256": "355bdcf169cb8682d2f56e1754b321f770a0fe3c0bbc5f6e1dc58eaffb443fb2",
+      "authority": "candidate_only",
+      "temporal_status": "current_v9",
+      "claims": [
+        "A local uncommitted repair derives the Q4_K affine min-correction sum from the same quantized/dequantized Q8 population as the dot product",
+        "Default, force-rocBLAS, force-MMQ MFMA and force-MMQ DP4A then passed 172/172 under unchanged κ=1.5",
+        "This is diagnostic evidence only: no committed clean source identity is bound, so it cannot unlock authoring or performance ranking"
+      ]
+    },
+    {
+      "evidence_id": "ev-q8-mmvq-int8-native-source-v9",
+      "path": "repo://scripts/kernel_rnd/autokernel/evidence/legacy-governance/ev-gfx90a-low-precision-isa-20260815-1e8768a89815cc6c8cf5277ddc437ac9d2a5353597478c68d23bd79646dd0d91.md",
+      "sha256": "1e8768a89815cc6c8cf5277ddc437ac9d2a5353597478c68d23bd79646dd0d91",
+      "authority": "governance_snapshot",
+      "temporal_status": "current_v9",
+      "claims": [
+        "Q8_0 MMVQ vec_dot_q8_0_q8_1 is already integer-native: ggml_cuda_dp4a performs the integer MAC with one floating-point scale per 32-element block",
+        "There is no per-element FP dequantization in this path to hide or fuse",
+        "This source fact does not retire genuinely new Q8_1 producer-consumer reuse, caching or cross-op fusion mechanisms"
+      ]
+    },
+    {
+      "evidence_id": "ev-iq-live-residency-tripwire-20260815",
+      "path": "repo://scripts/kernel_rnd/autokernel/evidence/legacy-governance/ev-gfx90a-low-precision-isa-20260815-1e8768a89815cc6c8cf5277ddc437ac9d2a5353597478c68d23bd79646dd0d91.md",
+      "sha256": "1e8768a89815cc6c8cf5277ddc437ac9d2a5353597478c68d23bd79646dd0d91",
+      "authority": "governance_snapshot",
+      "temporal_status": "current_v9",
+      "claims": [
+        "No IQ-format role is currently ROCm0 serving-resident, so the measured low-bit occupancy cost is a latent exposure rather than present live-stack payoff",
+        "Reopen and reprice immediately on any registry transition that makes an IQ1, IQ2, IQ3 or IQ4 GGUF ROCm0 serving-resident",
+        "The 122B diagnostic frame establishes mechanism relevance but does not establish current live-role exposure"
+      ]
+    },
+    {
+      "evidence_id": "ev-iq2-exact-instantiation-confound-v9",
+      "path": "repo://scripts/kernel_rnd/autokernel/evidence/quant-ladder-20260816/a10_iq2_vgpr_lever_20260812.md",
+      "sha256": "7ec3e4340b243c6f7afdb0f9c5cea6b95227351c88cab2a03ecefbcc8183cd46",
+      "authority": "governance_snapshot",
+      "temporal_status": "current_v9",
+      "claims": [
+        "The synthetic IQ2_XXS false-false instantiation reports 63 true VGPR and 8 waves per SIMD",
+        "The production MoE decode IQ2_XXS true-false instantiation reports 78 true VGPR and 6 waves per SIMD",
+        "Static, profile or correctness evidence from a different template instantiation is inadmissible for the production occupancy claim"
+      ]
+    },
+    {
+      "evidence_id": "ev-iq2-decode-phase-confound-v9",
+      "path": "repo://scripts/kernel_rnd/autokernel/evidence/quant-ladder-20260816/a10_iq2_decode_attribution_20260812.md",
+      "sha256": "2cc47f5fce673f461f9766ed59cd0c448e96bb75f576578beeccfef2b99df44d",
+      "authority": "governance_snapshot",
+      "temporal_status": "current_v9",
+      "claims": [
+        "The governed rocprof-v1 runner hardcoded -n 0, so its attribution was prefill-only and cannot support a decode claim",
+        "The companion decode capture was explicitly non-governed and supplies planner limitations rather than decision authority",
+        "A decode claim requires an exact phase command with generated tokens greater than zero and a capture window overlapping decode"
+      ]
+    },
+    {
+      "evidence_id": "ev-static-tool-silence-confound-v9",
+      "path": "repo://scripts/kernel_rnd/autokernel/evidence/quant-ladder-20260816/a10_iq2_vgpr_lever_20260812.md",
+      "sha256": "7ec3e4340b243c6f7afdb0f9c5cea6b95227351c88cab2a03ecefbcc8183cd46",
+      "authority": "governance_snapshot",
+      "temporal_status": "current_v9",
+      "claims": [
+        "llvm-nm does not exist in the installed ROCm toolchain; suppressed stderr piped to grep laundered the missing tool into a plausible empty negative",
+        "Use llvm-readelf -s and bind tool existence, exact argv, exit status and unsuppressed stderr before accepting a negative static scan",
+        "Missing-tool or failed-tool silence is no-match evidence of nothing"
+      ]
     }
   ],
   "frames": [
@@ -907,7 +1012,7 @@
         "direction": "higher_better",
         "expected_relative_gain_pct_range": [
           0.5,
-          3.0
+          3
         ],
         "device_time_ceiling_pct": 24.1445,
         "basis": "The 24.1445 percent device-time ceiling is the separate graphs-off 35B Q4_K_M family share. Current type-12 share is 3.899413 percent, so applying the dirty 10.554 percent kernel delta yields only about 0.4115 percent current whole-token Amdahl ceiling; neither establishes graphs-on reward.",
@@ -980,7 +1085,7 @@
         "terminal_rule": "retire",
         "effect_unit": "relative_percent",
         "min_replication_effect_pct": 0.125,
-        "max_replication_spread_pct": 1.0
+        "max_replication_spread_pct": 1
       },
       "epistemic": {
         "grade": "dirty_diagnostic",
@@ -1131,7 +1236,7 @@
         "direction": "higher_better",
         "expected_relative_gain_pct_range": [
           0.5,
-          3.0
+          3
         ],
         "device_time_ceiling_pct": 27.42969404468003,
         "basis": "The selected three true/true rows total 13,803 calls and 27.429694 percent graphs-off device time. The 129-call false/true tail is an explicit excluded signature; routing and ceiling do not establish graphs-on reward.",
@@ -1177,7 +1282,7 @@
         "terminal_rule": "retire",
         "effect_unit": "relative_percent",
         "min_replication_effect_pct": 0.125,
-        "max_replication_spread_pct": 1.0
+        "max_replication_spread_pct": 1
       },
       "epistemic": {
         "grade": "profile_routing",
@@ -1340,7 +1445,7 @@
         "direction": "higher_better",
         "expected_relative_gain_pct_range": [
           0.5,
-          3.0
+          3
         ],
         "device_time_ceiling_pct": 27.42969404468003,
         "basis": "The selected three true/true rows total 13,803 calls and 27.429694 percent graphs-off device time. The 129-call false/true tail is an explicit excluded signature; routing and ceiling do not establish graphs-on reward.",
@@ -1393,7 +1498,7 @@
         "terminal_rule": "retire",
         "effect_unit": "relative_percent",
         "min_replication_effect_pct": 0.125,
-        "max_replication_spread_pct": 1.0
+        "max_replication_spread_pct": 1
       },
       "epistemic": {
         "grade": "correctness_only",
@@ -1560,7 +1665,7 @@
         "direction": "higher_better",
         "expected_relative_gain_pct_range": [
           0.5,
-          4.0
+          4
         ],
         "device_time_ceiling_pct": 21.2282,
         "basis": "Measured across four exact frames; expected value excludes retired vec4 and workgroup-128 mechanics.",
@@ -1627,7 +1732,7 @@
         "terminal_rule": "retire",
         "effect_unit": "relative_percent",
         "min_replication_effect_pct": 0.125,
-        "max_replication_spread_pct": 1.0
+        "max_replication_spread_pct": 1
       },
       "epistemic": {
         "grade": "profile_routing",
@@ -1694,7 +1799,11 @@
         "ev-quant-ladder-occupancy-knee-20260816",
         "ev-quant-ladder-tg128-raw-20260816",
         "ev-quant-ladder-manifest-20260815",
-        "ev-iq2-vgpr-static-20260812"
+        "ev-iq2-vgpr-static-20260812",
+        "ev-iq-live-residency-tripwire-20260815",
+        "ev-iq2-exact-instantiation-confound-v9",
+        "ev-iq2-decode-phase-confound-v9",
+        "ev-static-tool-silence-confound-v9"
       ],
       "interactions": [
         {
@@ -1722,14 +1831,21 @@
           "scratch=0 and vgpr_spill_count=0 are mandatory",
           "IQ4_XS is the occupancy comparator; the ungoverned throughput bands are observations, not thresholds",
           "IQ3 remains a separate characterization question because the v_perm_b32 source mechanism is established for IQ2_XXS only",
-          "Only quality-valid serving formats have product relevance; the thirty-chunk ladder rungs do not"
+          "Only quality-valid serving formats have product relevance; the thirty-chunk ladder rungs do not",
+          "Every evidence carrier must bind the exact production kernel instantiation rather than a synthetic wrapper",
+          "Decode attribution must bind an exact phase command with generated tokens greater than zero",
+          "Negative static scans must prove tool execution and preserve stderr"
         ],
         "required_validation": [
           "Type-residency trace",
           "Compiler code-object receipt with true VGPR, allocation-rounded VGPR, waves per SIMD, scratch and spill count",
           "If explicitly activated, a codified governed T1b real-graph ladder replication with declared comparator semantics, min_measurable_us, cache_state and an A/A band before the design prior gates a decision",
           "Per-type correctness on a quality-valid model",
-          "Per-kernel and whole-model paired replay"
+          "Per-kernel and whole-model paired replay",
+          "Exact production template instantiation in static, correctness and profile receipts",
+          "Exact decode command semantics and an in-window decode capture",
+          "Tool path/digest, exact argv, zero exit status, stdout and unsuppressed stderr for any negative static claim",
+          "A registry snapshot proving an IQ1, IQ2, IQ3 or IQ4 role is ROCm0 serving-resident before assigning live-stack payoff"
         ]
       },
       "priority": {
@@ -1745,11 +1861,11 @@
         "metric": "decode_tokens_per_s",
         "direction": "higher_better",
         "expected_relative_gain_pct_range": [
-          1.0,
-          8.0
+          1,
+          8
         ],
         "device_time_ceiling_pct": 59.9524,
-        "basis": "Large measured family ceiling plus a design-prior occupancy mechanism. The ungoverned 90.05 and 82.89 t/s bands do not set continuation, nomination, or acceptance thresholds.",
+        "basis": "Large measured diagnostic family ceiling plus a design-prior occupancy mechanism. No IQ-format role is currently ROCm0 serving-resident, so live-stack payoff remains latent; the ungoverned 90.05 and 82.89 t/s bands set no continuation, nomination or acceptance threshold.",
         "device_time_ceiling_frame_id": "frame-v9-qwen122b-iq2-tg128",
         "current_bundle_plausible_gain_ceiling_pct": null
       },
@@ -1779,16 +1895,17 @@
         "blocking_conditions": [
           "The current Q4_K_M proxy does not dispatch IQ2_XXS",
           "No explicitly authorized, codified governed T1b real-graph AK-QL-3 replication with declared comparator semantics and an A/A band is bound",
-          "No exact product IQ2_XXS dispatch or compiler resource receipt is bound"
+          "No exact product IQ2_XXS dispatch or compiler resource receipt is bound",
+          "No IQ-format live serving role is ROCm0-resident; the 122B diagnostic exposure is latent and establishes no current live-stack payoff"
         ],
-        "reason": "The record conditions future IQ2_XXS planning but grants no current-frame eligibility or autonomous kernel spend."
+        "reason": "The record conditions future IQ2_XXS planning but grants no current-frame eligibility or autonomous kernel spend; reprice only when a live IQ role becomes ROCm0 serving-resident."
       },
-      "record_version": 2,
+      "record_version": 3,
       "provenance": {
         "introduced_at": "2026-08-14T12:00:00Z",
         "introduced_by": "autokernel-strategy-integrator",
         "origin": "manual-discovery-flow-formalization",
-        "note": "AK-QL-2 revision: binds the 2026-08-16 design prior and static VGPR carrier, limits the source mechanism to IQ2_XXS, and makes the zero-spill 64-VGPR crossing the value threshold.",
+        "note": "AK-QL-2 revision: preserves the zero-spill 64-VGPR mechanism while adding the live-IQ residency tripwire and exact-instantiation, phase-command and tool-execution evidence limitations.",
         "supersedes": null
       },
       "primary_falsifier": "A forced register reduction reaches at most 64 true allocated VGPR but introduces scratch or a nonzero vgpr_spill_count",
@@ -1805,7 +1922,7 @@
       },
       "lifecycle": {
         "maturity": "design_prior",
-        "next_action": "No autonomous action; if the operator explicitly activates AK-QL-3, first codify a governed T1b real-graph comparator, then bind exact product IQ2_XXS residency/resource receipts before considering one v_perm_b32 zero-spill candidate",
+        "next_action": "No autonomous action; reprice immediately if the registry makes an IQ1, IQ2, IQ3 or IQ4 role ROCm0 serving-resident, then bind exact production IQ2_XXS instantiation, phase-command and tool-execution receipts before any v_perm_b32 zero-spill candidate",
         "candidate_identity": null,
         "diagnostic_identity": null
       },
@@ -1821,7 +1938,7 @@
         "terminal_rule": "retire",
         "effect_unit": "relative_percent",
         "min_replication_effect_pct": 0.25,
-        "max_replication_spread_pct": 1.0
+        "max_replication_spread_pct": 1
       },
       "epistemic": {
         "grade": "design_prior",
@@ -1833,7 +1950,11 @@
           "Family aggregate does not isolate IQ2_XXS and no current-bundle route exercises it.",
           "The IQ2 and IQ3 ladder files are performance probes built from a thirty-chunk imatrix and are not quality-grade models.",
           "No ladder rung can support a promotion argument until AK-QL-5 pairs speed with correctness on quality-valid artifacts.",
-          "IQ4_XS B8 is a suspected outlier and is non-quotable without governed replication."
+          "IQ4_XS B8 is a suspected outlier and is non-quotable without governed replication.",
+          "Static, profile and correctness evidence must bind the exact production IQ2_XXS true-false instantiation; the synthetic false-false path at 63 VGPR and eight waves cannot substitute for the production 78-VGPR six-wave path",
+          "The governed rocprof-v1 phase command hardcoded -n 0 and was prefill-only; its attribution cannot support a decode claim, while the companion decode capture was non-governed",
+          "A negative static scan is inadmissible unless tool existence, exact argv, exit status and unsuppressed stderr prove tool execution; missing llvm-nm previously produced plausible empty output",
+          "No IQ-format live serving role is ROCm0-resident, so current production payoff is latent despite diagnostic mechanism relevance"
         ]
       }
     },
@@ -1944,8 +2065,8 @@
         "metric": "decode_tokens_per_s",
         "direction": "higher_better",
         "expected_relative_gain_pct_range": [
-          0.0,
-          0.0
+          0,
+          0
         ],
         "device_time_ceiling_pct": 59.9524,
         "basis": "This is a mechanism-discrimination record, not a candidate reward estimate; the observed ratios and throughput bands set no candidate budget.",
@@ -2006,16 +2127,16 @@
       "decision_policy": {
         "metric": "iq_to_iq4xs_batched_ratio",
         "frame_id": "frame-v9-qwen122b-iq2-tg128",
-        "continuation_floor_pct": 0.0,
-        "nomination_floor_pct": 0.0,
+        "continuation_floor_pct": 0,
+        "nomination_floor_pct": 0,
         "required_replications": 2,
         "sign_policy": "all_positive",
         "conflict_policy": "retain_inconclusive",
         "max_distinct_candidates": 1,
         "terminal_rule": "needs_review",
         "effect_unit": "relative_percent",
-        "min_replication_effect_pct": 0.0,
-        "max_replication_spread_pct": 0.0
+        "min_replication_effect_pct": 0,
+        "max_replication_spread_pct": 0
       },
       "epistemic": {
         "grade": "design_prior",
@@ -2116,8 +2237,8 @@
         "rank": 20,
         "tier": "P3",
         "device_time_share_pct_range": [
-          0.0,
-          0.0
+          0,
+          0
         ],
         "rationale": "The counterfactual is discriminating but has no current practical-serving relevance and is not a desired run."
       },
@@ -2125,10 +2246,10 @@
         "metric": "decode_tokens_per_s",
         "direction": "higher_better",
         "expected_relative_gain_pct_range": [
-          0.0,
-          0.0
+          0,
+          0
         ],
-        "device_time_ceiling_pct": 0.0,
+        "device_time_ceiling_pct": 0,
         "basis": "Informational conditioning only; no product reward or candidate budget is asserted.",
         "device_time_ceiling_frame_id": "frame-v9-qwen122b-iq2-tg128",
         "current_bundle_plausible_gain_ceiling_pct": null
@@ -2188,16 +2309,16 @@
       "decision_policy": {
         "metric": "iq1s_to_iq4xs_governed_ratio",
         "frame_id": "frame-v9-qwen122b-iq2-tg128",
-        "continuation_floor_pct": 0.0,
-        "nomination_floor_pct": 0.0,
+        "continuation_floor_pct": 0,
+        "nomination_floor_pct": 0,
         "required_replications": 2,
         "sign_policy": "all_positive",
         "conflict_policy": "retain_inconclusive",
         "max_distinct_candidates": 1,
         "terminal_rule": "needs_review",
         "effect_unit": "relative_percent",
-        "min_replication_effect_pct": 0.0,
-        "max_replication_spread_pct": 0.0
+        "min_replication_effect_pct": 0,
+        "max_replication_spread_pct": 0
       },
       "epistemic": {
         "grade": "design_prior",
@@ -2295,8 +2416,8 @@
         "rank": 21,
         "tier": "P3",
         "device_time_share_pct_range": [
-          0.0,
-          0.0
+          0,
+          0
         ],
         "rationale": "This is a retired blanket planning premise, not a candidate or a hard evidence-grade refusal."
       },
@@ -2304,10 +2425,10 @@
         "metric": "decode_tokens_per_s",
         "direction": "higher_better",
         "expected_relative_gain_pct_range": [
-          0.0,
-          0.0
+          0,
+          0
         ],
-        "device_time_ceiling_pct": 0.0,
+        "device_time_ceiling_pct": 0,
         "basis": "No reward is assigned to a retired planning assumption.",
         "device_time_ceiling_frame_id": "frame-v9-qwen122b-iq2-tg128",
         "current_bundle_plausible_gain_ceiling_pct": null
@@ -2366,16 +2487,16 @@
       "decision_policy": {
         "metric": "iq_to_iq4xs_batched_ratio",
         "frame_id": "frame-v9-qwen122b-iq2-tg128",
-        "continuation_floor_pct": 0.0,
-        "nomination_floor_pct": 0.0,
+        "continuation_floor_pct": 0,
+        "nomination_floor_pct": 0,
         "required_replications": 2,
         "sign_policy": "all_positive",
         "conflict_policy": "retain_inconclusive",
         "max_distinct_candidates": 1,
         "terminal_rule": "needs_review",
         "effect_unit": "relative_percent",
-        "min_replication_effect_pct": 0.0,
-        "max_replication_spread_pct": 0.0
+        "min_replication_effect_pct": 0,
+        "max_replication_spread_pct": 0
       },
       "epistemic": {
         "grade": "design_prior",
@@ -2494,7 +2615,7 @@
         "direction": "higher_better",
         "expected_relative_gain_pct_range": [
           0.5,
-          2.0
+          2
         ],
         "device_time_ceiling_pct": 8.5364,
         "basis": "Current exact TILE share; large-model attention family ceilings are lower and not assumed transferable.",
@@ -2561,7 +2682,7 @@
         "terminal_rule": "retire",
         "effect_unit": "relative_percent",
         "min_replication_effect_pct": 0.125,
-        "max_replication_spread_pct": 1.0
+        "max_replication_spread_pct": 1
       },
       "epistemic": {
         "grade": "profile_routing",
@@ -2731,7 +2852,7 @@
         "terminal_rule": "retire",
         "effect_unit": "relative_percent",
         "min_replication_effect_pct": 0.1,
-        "max_replication_spread_pct": 1.0
+        "max_replication_spread_pct": 1
       },
       "epistemic": {
         "grade": "profile_routing",
@@ -2869,7 +2990,7 @@
         "direction": "higher_better",
         "expected_relative_gain_pct_range": [
           0.5,
-          3.0
+          3
         ],
         "device_time_ceiling_pct": 8.494,
         "basis": "Combined measured router and gather ceiling; top-k is excluded from novel implementation credit.",
@@ -2937,7 +3058,7 @@
         "terminal_rule": "retire",
         "effect_unit": "relative_percent",
         "min_replication_effect_pct": 0.25,
-        "max_replication_spread_pct": 1.0
+        "max_replication_spread_pct": 1
       },
       "epistemic": {
         "grade": "design_prior",
@@ -3085,7 +3206,7 @@
         "direction": "higher_better",
         "expected_relative_gain_pct_range": [
           0.5,
-          2.0
+          2
         ],
         "device_time_ceiling_pct": 10.735,
         "basis": "RMS family ceiling only; neighboring work is not added until adjacency is proved.",
@@ -3153,7 +3274,7 @@
         "terminal_rule": "retire",
         "effect_unit": "relative_percent",
         "min_replication_effect_pct": 0.25,
-        "max_replication_spread_pct": 1.0
+        "max_replication_spread_pct": 1
       },
       "epistemic": {
         "grade": "design_prior",
@@ -3275,7 +3396,7 @@
         "metric": "decode_tokens_per_s",
         "direction": "higher_better",
         "expected_relative_gain_pct_range": [
-          1.0,
+          1,
           1.5
         ],
         "device_time_ceiling_pct": 8.6127,
@@ -3345,7 +3466,7 @@
         "terminal_rule": "retire",
         "effect_unit": "relative_percent",
         "min_replication_effect_pct": 0.5,
-        "max_replication_spread_pct": 1.0
+        "max_replication_spread_pct": 1
       },
       "epistemic": {
         "grade": "replicated_candidate_screen",
@@ -3528,7 +3649,7 @@
         "terminal_rule": "retire",
         "effect_unit": "relative_percent",
         "min_replication_effect_pct": 0.25,
-        "max_replication_spread_pct": 1.0
+        "max_replication_spread_pct": 1
       },
       "epistemic": {
         "grade": "replicated_candidate_screen",
@@ -3648,7 +3769,7 @@
         "metric": "decode_tokens_per_s",
         "direction": "higher_better",
         "expected_relative_gain_pct_range": [
-          0.0,
+          0,
           0.5
         ],
         "device_time_ceiling_pct": 3.5214881479,
@@ -3691,7 +3812,7 @@
         "nomination_floor_pct": 0.25,
         "min_replication_effect_pct": 0.075,
         "required_replications": 2,
-        "max_replication_spread_pct": 1.0,
+        "max_replication_spread_pct": 1,
         "sign_policy": "all_positive",
         "conflict_policy": "retain_inconclusive",
         "max_distinct_candidates": 1,
@@ -3818,7 +3939,7 @@
         "direction": "higher_better",
         "expected_relative_gain_pct_range": [
           0,
-          2.0
+          2
         ],
         "device_time_ceiling_pct": 100,
         "basis": "Uncharacterized whole-token wall-time opportunity; no device-time share is claimed.",
@@ -3860,7 +3981,7 @@
         "nomination_floor_pct": 0.5,
         "min_replication_effect_pct": 0.125,
         "required_replications": 2,
-        "max_replication_spread_pct": 1.0,
+        "max_replication_spread_pct": 1,
         "sign_policy": "all_positive",
         "conflict_policy": "retain_inconclusive",
         "max_distinct_candidates": 2,
@@ -4002,8 +4123,8 @@
         "metric": "decode_tokens_per_s",
         "direction": "higher_better",
         "expected_relative_gain_pct_range": [
-          0.0,
-          1.0
+          0,
+          1
         ],
         "device_time_ceiling_pct": 2.8384,
         "basis": "Measured copy-family ceiling; expected value requires elimination rather than microkernel-only gain.",
@@ -4071,7 +4192,7 @@
         "terminal_rule": "retire",
         "effect_unit": "relative_percent",
         "min_replication_effect_pct": 0.125,
-        "max_replication_spread_pct": 1.0
+        "max_replication_spread_pct": 1
       },
       "epistemic": {
         "grade": "profile_routing",
@@ -4187,7 +4308,7 @@
         "metric": "decode_tokens_per_s",
         "direction": "higher_better",
         "expected_relative_gain_pct_range": [
-          0.0,
+          0,
           0.5
         ],
         "device_time_ceiling_pct": 1.862,
@@ -4255,7 +4376,7 @@
         "terminal_rule": "retire",
         "effect_unit": "relative_percent",
         "min_replication_effect_pct": 0.25,
-        "max_replication_spread_pct": 1.0
+        "max_replication_spread_pct": 1
       },
       "epistemic": {
         "grade": "retired_negative",
@@ -4316,12 +4437,17 @@
       "falsifiers": [
         "Exact batch-one Q4_K MMQ profiling shows HBM saturation rather than VALU, issue, or VGPR pressure",
         "The exact latency role does not dispatch the Q4_K MMQ path",
-        "A correctness-preserving candidate fails to improve paired whole-model batch-one latency"
+        "A correctness-preserving candidate fails to improve paired whole-model batch-one latency",
+        "A committed clean-source same-population Q8 qsum repair fails the unchanged 172-case κ=1.5 matrix"
       ],
       "evidence_refs": [
         "ev-v9-qwen35b-q4km-profile",
         "ev-fable5-mi210-lever-matrix",
-        "ev-fable5-mi210-roofline"
+        "ev-fable5-mi210-roofline",
+        "ev-q4k-mmq-stock-correctness-v9",
+        "ev-q4k-mmq-dp4a-negative-v9",
+        "ev-q4k-mmq-ls-scale-negative-v9",
+        "ev-q4k-mmq-qsum-fix-diagnostic-v9"
       ],
       "interactions": [
         {
@@ -4349,6 +4475,9 @@
           "gfx90a CDNA2 LDS and VGPR behavior"
         ],
         "required_validation": [
+          "Committed clean source identity incorporating the same-population Q8 qsum repair",
+          "Unchanged 172-case fp64 ratio matrix passes 172/172 with zero failures under κ=1.5",
+          "Correctness receipt source identity exactly matches the assignment production base before any profiling or source authoring",
           "Exact Q4_K MMQ dispatch proof",
           "PMC evidence of VALU, issue, or VGPR pressure rather than HBM saturation",
           "New sealed MMQ Q4_K template",
@@ -4368,8 +4497,8 @@
         "metric": "decode_tokens_per_s",
         "direction": "higher_better",
         "expected_relative_gain_pct_range": [
-          0.0,
-          43.0
+          0,
+          43
         ],
         "device_time_ceiling_pct": 24.1445,
         "basis": "The handoff measures a roughly 28 pp Q4_K-to-fp16 roofline gap and estimates recovery from about 33% toward 45–50%, with about 43% throughput upside only if the exact batch-one MMQ path is dequant-pressure-bound; the measured family share remains the whole-model ceiling.",
@@ -4382,10 +4511,13 @@
         "notes": [
           "New MMQ Q4_K kernel mechanism rather than a replay of MMVQ branchless or one-wave work",
           "LDS staging and VGPR allocation are architecture-sensitive",
-          "Quality and correctness must be gated before throughput credit"
+          "Quality and correctness must be gated before throughput credit",
+          "The stock frozen-v9 MMQ path is a defective baseline; correctness repair precedes optimization"
         ]
       },
       "stop_rule": [
+        "Hard pre-authoring blocker: refuse Q4_K MMQ source work and performance ranking until the committed clean-source correctness unlock passes",
+        "The diagnostic 172/172 receipt alone cannot unlock authoring because it binds no committed clean source identity",
         "Stop before source work if exact PMC evidence shows HBM saturation",
         "Stop if the exact latency role does not dispatch Q4_K MMQ",
         "Retire on any correctness mismatch or non-positive paired batch-one result",
@@ -4395,18 +4527,20 @@
         "eligible": false,
         "template_ids": [],
         "blocking_conditions": [
+          "Frozen v9 Q4_K MMQ is not correctness-clean: force-MMQ passed 18/43 and failed 25/43 under unchanged κ=1.5",
+          "The diagnostic same-population Q8 qsum repair passed 172/172 but has no committed clean source identity bound to an assignment base",
           "No exact batch-one Q4_K MMQ PMC characterization is bound",
           "No sealed MMQ Q4_K source template exists",
           "The current small-model bundle routes the measured Q4_K subset through MMVQ, not this proposed parent mechanism"
         ],
-        "reason": "Retain as an explicit L21 parent question, but admit no candidate until dispatch, pressure, and source-authorability gates pass."
+        "reason": "Hard pre-authoring refusal: retain the L21 parent question, but admit no source candidate or performance ranking until a committed clean-source repair passes the unchanged 172-case κ=1.5 matrix and binds the assignment base."
       },
-      "record_version": 1,
+      "record_version": 2,
       "provenance": {
         "introduced_at": "2026-08-14T13:00:00Z",
         "introduced_by": "autokernel-portfolio-memory-integrator",
         "origin": "fable5-window2-findings-l21-formalization",
-        "note": "Restores the exact L21 MMQ dequant-GEMV question from fable5-window2-findings without conflating it with narrower Q4_K MMVQ mechanisms.",
+        "note": "L21 revision: carries the exact stock, DP4A, least-squares and same-population qsum receipts and makes clean-source 172/172 correctness a hard pre-authoring unlock.",
         "supersedes": null
       },
       "primary_falsifier": "Exact batch-one Q4_K MMQ profiling shows HBM saturation rather than VALU, issue, or VGPR pressure",
@@ -4423,15 +4557,15 @@
       },
       "lifecycle": {
         "maturity": "characterized",
-        "next_action": "Bind an exact batch-one Q4_K MMQ PMC profile and only then author a sealed cuda-mmq-q4k template if the pressure gate passes",
+        "next_action": "First bind a committed clean-source same-population Q8 qsum repair to the assignment base and pass 172/172 under unchanged κ=1.5; only then bind exact Q4_K MMQ PMC pressure and consider a sealed template",
         "candidate_identity": null,
         "diagnostic_identity": null
       },
       "decision_policy": {
         "metric": "decode_tokens_per_s",
         "frame_id": "frame-v9-qwen35b-q4km-tg128",
-        "continuation_floor_pct": 1.0,
-        "nomination_floor_pct": 2.0,
+        "continuation_floor_pct": 1,
+        "nomination_floor_pct": 2,
         "required_replications": 3,
         "sign_policy": "all_positive",
         "conflict_policy": "retain_inconclusive",
@@ -4439,7 +4573,7 @@
         "terminal_rule": "retire",
         "effect_unit": "relative_percent",
         "min_replication_effect_pct": 0.5,
-        "max_replication_spread_pct": 2.0
+        "max_replication_spread_pct": 2
       },
       "epistemic": {
         "grade": "profile_routing",
@@ -4447,7 +4581,10 @@
         "limitations": [
           "The roughly 28 pp roofline gap is measured, but the proposed 45–50% MMQ recovery is not yet isolated by exact PMC evidence.",
           "The 43-percent figure is a conditional estimate, not a candidate result.",
-          "No authored candidate or template exists."
+          "No authored candidate or template exists.",
+          "Frozen-v9 force-rocBLAS passed 43/43 while force-MMQ passed only 18/43, so stock MMQ timings are not a correctness-clean performance baseline",
+          "DP4A repeated the 25/43 failures and the least-squares scale refinement did not repair them",
+          "The same-population Q8 qsum repair passed 172/172 only as a local uncommitted diagnostic and supplies no clean source identity"
         ]
       }
     },
@@ -4534,8 +4671,8 @@
         "rank": 17,
         "tier": "P2",
         "device_time_share_pct_range": [
-          0.0,
-          0.0
+          0,
+          0
         ],
         "rationale": "The residual is explicitly preserved, but no representative ultra-sparse frame exists from which to estimate a device-time ceiling."
       },
@@ -4543,10 +4680,10 @@
         "metric": "decode_tokens_per_s",
         "direction": "higher_better",
         "expected_relative_gain_pct_range": [
-          0.0,
-          10.0
+          0,
+          10
         ],
-        "device_time_ceiling_pct": 0.0,
+        "device_time_ceiling_pct": 0,
         "basis": "Zero is the evidence-bound ceiling in the currently represented frames, not an estimate of ultra-sparse upside; the handoff records only that 256-expert sparsity may change the crossover.",
         "device_time_ceiling_frame_id": "frame-v9-qwen35b-q8-tg128",
         "current_bundle_plausible_gain_ceiling_pct": null
@@ -4605,8 +4742,8 @@
       "decision_policy": {
         "metric": "decode_tokens_per_s",
         "frame_id": "frame-v9-qwen35b-q8-tg128",
-        "continuation_floor_pct": 1.0,
-        "nomination_floor_pct": 2.0,
+        "continuation_floor_pct": 1,
+        "nomination_floor_pct": 2,
         "required_replications": 3,
         "sign_policy": "all_positive",
         "conflict_policy": "retain_inconclusive",
@@ -4614,7 +4751,7 @@
         "terminal_rule": "retire",
         "effect_unit": "relative_percent",
         "min_replication_effect_pct": 0.5,
-        "max_replication_spread_pct": 2.0
+        "max_replication_spread_pct": 2
       },
       "epistemic": {
         "grade": "design_prior",
@@ -4709,7 +4846,7 @@
         "rank": 18,
         "tier": "P3",
         "device_time_share_pct_range": [
-          0.0,
+          0,
           42.376
         ],
         "rationale": "The Q8 family is large, but current handoff evidence says coalescing was healthy; admission depends on a new counter-confirmed frame."
@@ -4718,8 +4855,8 @@
         "metric": "decode_tokens_per_s",
         "direction": "higher_better",
         "expected_relative_gain_pct_range": [
-          0.0,
-          3.0
+          0,
+          3
         ],
         "device_time_ceiling_pct": 42.376,
         "basis": "The ceiling is the broad Q8 MMVQ family share, not evidence of SoA upside; measured healthy coalescing currently assigns zero admissible candidate value.",
@@ -4780,7 +4917,7 @@
         "metric": "decode_tokens_per_s",
         "frame_id": "frame-v9-qwen35b-q8-tg128",
         "continuation_floor_pct": 0.5,
-        "nomination_floor_pct": 1.0,
+        "nomination_floor_pct": 1,
         "required_replications": 3,
         "sign_policy": "all_positive",
         "conflict_policy": "retain_inconclusive",
@@ -4788,7 +4925,7 @@
         "terminal_rule": "retire",
         "effect_unit": "relative_percent",
         "min_replication_effect_pct": 0.25,
-        "max_replication_spread_pct": 1.0
+        "max_replication_spread_pct": 1
       },
       "epistemic": {
         "grade": "profile_routing",
@@ -5002,6 +5139,56 @@
         "supersedes": null
       },
       "classification": "nonreplication"
+    },
+    {
+      "dnr_id": "dnr-q8-fp-dequant-port-into-mmvq",
+      "title": "Q8_0 per-element floating-point dequant port into MMVQ",
+      "enforcement": "hard_refusal_exact_mechanism_and_regime",
+      "statement": "Do not port or fuse a generic per-element Q8_0 floating-point dequantization into MMVQ; the exact path is already integer-native DP4A with one scale per 32-element block.",
+      "mechanism": {
+        "facets": {
+          "mechanism": "q8_0_per_element_fp_dequant_fusion_port",
+          "ops": [
+            "mul_mat_vec_q"
+          ],
+          "files": [
+            "ggml/src/ggml-cuda/vecdotq.cuh"
+          ],
+          "symbols": [
+            "vec_dot_q8_0_q8_1"
+          ],
+          "change_class": "arithmetic"
+        },
+        "fingerprint_sha256": "cdfa933eb91641e6397aef957a98d47fd6ce5c9d72f26964385a48f867c83935"
+      },
+      "regime": {
+        "backend": "hip",
+        "phase": "decode",
+        "batch": 1,
+        "architecture": "gfx90a",
+        "model_or_frame": "frame-v9-qwen35b-q8-tg128",
+        "quant": "Q8_0",
+        "shape": "q8-0-mmvq-dp4a",
+        "measurement_graphs": false,
+        "target_runtime_graphs": true
+      },
+      "falsifier_result": "Source inspection establishes that vec_dot_q8_0_q8_1 already uses ggml_cuda_dp4a integer MAC with one floating-point scale per 32-element block and has no per-element floating-point dequantization to hide.",
+      "evidence_refs": [
+        "ev-q8-mmvq-int8-native-source-v9"
+      ],
+      "reentry_conditions": [
+        "A sealed source identity proves the integer-native DP4A path was removed or materially changed",
+        "A genuinely distinct Q8_1 producer-consumer reuse, caching or cross-op fusion mechanism that does not claim existing per-element floating-point dequantization"
+      ],
+      "record_version": 1,
+      "provenance": {
+        "introduced_at": "2026-08-16T19:30:00Z",
+        "introduced_by": "autokernel-planner-conditioning-integrator",
+        "origin": "q8-integer-native-source-fact",
+        "note": "Hard-scopes one stale generic-dequant premise without disturbing the eligible Q8_1 producer/reuse hypothesis.",
+        "supersedes": null
+      },
+      "classification": "prior_art_already_present"
     },
     {
       "dnr_id": "dnr-rms-two-wave",
