@@ -293,10 +293,10 @@ class C5Seed:
             "sol_bound_policy": {
                 "quality": self.bound_quality,
                 "traffic_basis": self.traffic_basis,
-                "allowed_claims": list(self.allowed_claims),
+                "allowed_authoring_claims": list(BASE_ALLOWED_CLAIMS),
                 "current_frame_eligibility": {
                     "correctness_oracle": self.current_frame_correctness_eligible,
-                    "sol_score": self.current_frame_sol_score_eligible,
+                    "speed_of_light_objective": "disabled_missing_gfx90a_constants",
                     "reason": self.current_frame_reason,
                 },
                 "evidence_ref": self.policy_evidence_ref,

@@ -80,7 +80,11 @@ class C5SeedCorpusTest(unittest.TestCase):
             task["reference"]["observed_nvidia_bindings"],
             ["cublaslt", "cupy", "flashinfer", "wmma"],
         )
-        self.assertFalse(task["sol_bound_policy"]["current_frame_eligibility"]["sol_score"])
+        self.assertEqual(
+            task["sol_bound_policy"]["current_frame_eligibility"][
+                "speed_of_light_objective"],
+            "disabled_missing_gfx90a_constants")
+        self.assertNotIn("sol_score", json.dumps(task, sort_keys=True))
         self.assertNotIn("median_headroom_t_b_over_t_sol", json.dumps(task))
         self.assertNotIn("latency_ms", json.dumps(task))
 
