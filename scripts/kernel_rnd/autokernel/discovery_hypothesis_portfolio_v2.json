@@ -1,7 +1,7 @@
 {
   "schema": "epyc.autokernel.discovery_hypothesis_portfolio.v2",
   "corpus_id": "gpu-decode-v9-20260814",
-  "generated_at": "2026-08-14T13:00:00Z",
+  "generated_at": "2026-08-16T18:56:28Z",
   "promotion_authority": false,
   "current_bundle": {
     "bundle_id": "gpu-source-templates-v2-qwen05b-tg128",
@@ -145,18 +145,19 @@
     },
     {
       "evidence_id": "ev-research-loop-snapshot",
-      "path": "/workspace/handoffs/active/autokernel-research-loop.md",
+      "path": "repo://scripts/kernel_rnd/autokernel/evidence/legacy-governance/ev-research-loop-snapshot-9eb44c2f26c919e89045a1143899bfa98b30d2ae07a3177ce6dbac263e634a4a.md",
       "sha256": "9eb44c2f26c919e89045a1143899bfa98b30d2ae07a3177ce6dbac263e634a4a",
       "authority": "governance_snapshot",
       "temporal_status": "current_v9",
       "claims": [
         "Hash-bound snapshot of current hard constraints and closed families",
-        "Carries G15, G17, G18, MFMA, prior-art, and reentry conditions"
+        "Carries G15, G17, G18, MFMA, prior-art, and reentry conditions",
+        "Immutable snapshot recovered from the sealed gfx90a safety-v2 deployment; later live-handoff evolution cannot alter this authority"
       ]
     },
     {
       "evidence_id": "ev-fable5-mi210-lever-matrix",
-      "path": "/workspace/handoffs/active/fable5-window2-findings-05c-mi210-lever-category-matrix.md",
+      "path": "repo://scripts/kernel_rnd/autokernel/evidence/legacy-levers/ev-fable5-mi210-lever-matrix-2f6cb30655b4cf01998249fc57619a9e080ae45ba3f22e95eda29bd8bbc179bb.md",
       "sha256": "2f6cb30655b4cf01998249fc57619a9e080ae45ba3f22e95eda29bd8bbc179bb",
       "authority": "governance_snapshot",
       "temporal_status": "current_v9",
@@ -164,24 +165,26 @@
         "The L1-MoE lever forcing low-batch expert work from MMVQ to MMQ regressed B2 by 30 percent, B4 by 21 percent, and B8 by 10.5 percent; the default CDNA threshold of 8 was already optimal",
         "The measured A3B/A4B result does not close the unmeasured 256-expert ultra-sparse hypothesis",
         "The L6 Q8_0 SoA-repack lever is conditional on high TCC_EA_RDREQ_32B sub-line amplification and was not warranted in the measured healthy-coalescing frame",
-        "The L21 Q4_K dequant-efficiency lever remains an open batch-one latency hypothesis"
+        "The L21 Q4_K dequant-efficiency lever remains an open batch-one latency hypothesis",
+        "Immutable snapshot of epyc-root commit b1a24e45a44b3f2c9199d52481d82220320370a6; later live-handoff evolution cannot alter this authority"
       ]
     },
     {
       "evidence_id": "ev-fable5-mi210-roofline",
-      "path": "/workspace/handoffs/active/fable5-window2-findings-05-intake-sweep-and-roofline.md",
+      "path": "repo://scripts/kernel_rnd/autokernel/evidence/legacy-governance/ev-fable5-mi210-roofline-08de87ef44a14de4420432bd04aad5f7e3c3f41639578e9e7f4a7f35dea64357.md",
       "sha256": "08de87ef44a14de4420432bd04aad5f7e3c3f41639578e9e7f4a7f35dea64357",
       "authority": "governance_snapshot",
       "temporal_status": "current_v9",
       "claims": [
         "Batch-one Q4_K measured about 34 percent of the bandwidth roofline versus 50 percent for Q8_0 and 62.5 percent for fp16",
         "The proposed L21 hypothesis is an LDS-staged Q4_K MMQ dequant-GEMV rewrite with lower VGPR pressure, limited to batch-one latency roles",
-        "Exact PMC confirmation of VALU or issue pressure rather than HBM saturation is a required pre-authoring gate"
+        "Exact PMC confirmation of VALU or issue pressure rather than HBM saturation is a required pre-authoring gate",
+        "Immutable snapshot recovered from the sealed gfx90a safety-v2 deployment; later live-handoff evolution cannot alter this authority"
       ]
     },
     {
       "evidence_id": "ev-gfx90a-low-precision-isa-20260815",
-      "path": "/workspace/handoffs/active/mi210-q8-dequant-gemv-roofline.md",
+      "path": "repo://scripts/kernel_rnd/autokernel/evidence/legacy-governance/ev-gfx90a-low-precision-isa-20260815-1e8768a89815cc6c8cf5277ddc437ac9d2a5353597478c68d23bd79646dd0d91.md",
       "sha256": "1e8768a89815cc6c8cf5277ddc437ac9d2a5353597478c68d23bd79646dd0d91",
       "authority": "governance_snapshot",
       "temporal_status": "current_v9",
@@ -190,7 +193,72 @@
         "gfx90a has no native FP8 MFMA because the fp8-insts target feature is absent",
         "INT4 has no MFMA matrix path and remains a VALU dot-product path",
         "Batch-one decode is 31 to 113 times below the ridge and cannot benefit from MFMA authoring",
-        "Composable Kernel lowers each logical FP8 MFMA on gfx90a into eight sequential FP32 operations"
+        "Composable Kernel lowers each logical FP8 MFMA on gfx90a into eight sequential FP32 operations",
+        "Immutable snapshot recovered from the sealed gfx90a safety-v2 deployment; later live-handoff evolution cannot alter this authority"
+      ]
+    },
+    {
+      "evidence_id": "ev-quant-ladder-occupancy-knee-20260816",
+      "path": "repo://scripts/kernel_rnd/autokernel/evidence/quant-ladder-20260816/a10_quant_ladder_occupancy_knee_20260816.md",
+      "sha256": "eec0b1733d4bf5c684f537cf7c28c442f938b17bf3ea6ebfeee85a86c5ccab78",
+      "authority": "non_governed_design_prior",
+      "temporal_status": "current_v9",
+      "claims": [
+        "Design-prior observation from one Goedel-8B matched quant ladder: the unreplicated batch-one decode bands partitioned at the static 64-VGPR occupancy boundary; the observed throughput bands are not acceptance thresholds",
+        "Bounded ungoverned batch-one design-prior rows, never acceptance thresholds: Q8_0 25 VGPR, 8 waves, 99.09 t/s; Q6_K 46, 8, 90.05; Q5_K_M 55, 8, 100.93; Q4_K_M 44, 8, 108.75; IQ4_XS 64, 8, 129.77; IQ3_XXS 71, 6, 79.44; IQ2_XXS 78, 6, 82.89; prefill spans 2398 to 2881 t/s with no corresponding knee",
+        "The unreplicated batched sweep left a 12 to 23 percent B32 deficit for six-wave IQ3_XXS and IQ2_XXS while eight-wave Q4_K_M reached about 0.99 of IQ4_XS",
+        "The IQ4_XS B8 cell is a suspected outlier and must not be quoted without governed replication and an A/A band",
+        "The measurement is speed-only, non-governed, n=1 per cell, and supplies no promotion authority",
+        "Immutable research-side snapshot of epyc-root commit 9e21451c5680d10eae7b577979a9e78b39d27eed"
+      ]
+    },
+    {
+      "evidence_id": "ev-quant-ladder-tg128-raw-20260816",
+      "path": "repo://scripts/kernel_rnd/autokernel/evidence/quant-ladder-20260816/ladder-results-20260816.jsonl",
+      "sha256": "7dbdf4dc10b9f2cd4f90c7a2d00bd778d9c67cfca1e2238771b4685744aec3a7",
+      "authority": "non_governed_design_prior",
+      "temporal_status": "current_v9",
+      "claims": [
+        "Raw pp512 and tg128 output for eight Goedel-8B ladder rungs from frozen production build 10125",
+        "Raw carrier is non-governed and must not be converted into a decision threshold without governed replication",
+        "Immutable research-side snapshot of epyc-root commit 9e21451c5680d10eae7b577979a9e78b39d27eed"
+      ]
+    },
+    {
+      "evidence_id": "ev-quant-ladder-np-raw-20260816",
+      "path": "repo://scripts/kernel_rnd/autokernel/evidence/quant-ladder-20260816/np_sweep-20260816.log",
+      "sha256": "8f19b1c54ce1ebb7c8d95e5948488411f9c1f11468b68a8c2c07618fa6edf3bb",
+      "authority": "non_governed_design_prior",
+      "temporal_status": "current_v9",
+      "claims": [
+        "Raw batch 1 through 32 quantized sweep for the eight Goedel-8B ladder rungs",
+        "The IQ4_XS B8 cell is unreplicated and suspected anomalous",
+        "Immutable research-side snapshot of epyc-root commit 9e21451c5680d10eae7b577979a9e78b39d27eed"
+      ]
+    },
+    {
+      "evidence_id": "ev-quant-ladder-manifest-20260815",
+      "path": "repo://scripts/kernel_rnd/autokernel/evidence/quant-ladder-20260816/a10_quant_ladder_MANIFEST_20260815.md",
+      "sha256": "bcefb69acf85ec73e6b3a0300be38fd6055671e325338f6d6c1658ba37193722",
+      "authority": "non_governed_design_prior",
+      "temporal_status": "current_v9",
+      "claims": [
+        "All quantized rungs derive from one Goedel-8B f16 source and frozen production quantizer 0db32c06e build 10125",
+        "The 1.23 MB thirty-chunk imatrix makes the IQ2 and IQ3 files performance probes rather than quality-grade models",
+        "Immutable research-side snapshot of epyc-root commit 9e21451c5680d10eae7b577979a9e78b39d27eed"
+      ]
+    },
+    {
+      "evidence_id": "ev-iq2-vgpr-static-20260812",
+      "path": "repo://scripts/kernel_rnd/autokernel/evidence/quant-ladder-20260816/a10_iq2_vgpr_lever_20260812.md",
+      "sha256": "7ec3e4340b243c6f7afdb0f9c5cea6b95227351c88cab2a03ecefbcc8183cd46",
+      "authority": "non_governed_design_prior",
+      "temporal_status": "current_v9",
+      "claims": [
+        "Frozen-v9 code-object notes put IQ4_XS at 64 VGPR and eight waves per SIMD, IQ3_XXS at 71 and six waves, IQ2_XXS at 78 and six waves, and IQ1_S at 42 and eight waves for the identical true-false MMVQ wrapper",
+        "Every reported row has scratch zero and vgpr_spill_count zero; a valid occupancy target must preserve both",
+        "IQ2_XXS carries a 437-instruction vector-ALU excess over IQ4_XS, with sign expansion identified as the concrete source-level direction",
+        "Immutable research-side snapshot of epyc-root commit 9e21451c5680d10eae7b577979a9e78b39d27eed"
       ]
     }
   ],
@@ -1572,9 +1640,9 @@
     },
     {
       "hypothesis_id": "akh-v2-lowbit-type-specialized-mmvq",
-      "title": "Large-model type-specialized low-bit MMVQ",
+      "title": "IQ2_XXS zero-spill 64-VGPR occupancy crossing",
       "status": "queued",
-      "statement": "Type-specific unpack, lane mapping, or control-flow changes in the exact IQ2/IQ3 MMVQ variants can reduce the dominant 122B decode device-time band without MFMA.",
+      "statement": "For the exact IQ2_XXS true-false MMVQ wrapper, replacing the source-verified sign-expansion chain with a v_perm_b32-style formulation can reduce true allocated VGPR from 78 to at most 64, preserve scratch=0 and vgpr_spill_count=0, and regain eight waves per SIMD; a result at 65 to 70 VGPR has no predicted occupancy payoff.",
       "target": {
         "frame_ids": [
           "frame-v9-qwen122b-iq2-tg128"
@@ -1583,8 +1651,7 @@
           "ggml/src/ggml-cuda/vecdotq.cuh"
         ],
         "source_symbols": [
-          "vec_dot_iq2_xxs_q8_1",
-          "vec_dot_iq3_xxs_q8_1"
+          "vec_dot_iq2_xxs_q8_1"
         ],
         "template_intent": "cuda-vecdotq-v1"
       },
@@ -1594,14 +1661,14 @@
           "signatures": [],
           "total_calls": 66693,
           "aggregation": "family_aggregate",
-          "selection": "Receipt-derived family aggregate; no single grid/geometry is asserted.",
+          "selection": "Receipt-derived family aggregate establishes product relevance but does not isolate IQ2_XXS; exact type residency and dispatch must be captured before any spend.",
           "evidence_ref": "ev-v9-qwen122b-iq2-profile",
           "excluded_signatures": []
         }
       ],
       "mechanism": {
         "facets": {
-          "mechanism": "type_specialized_lowbit_unpack",
+          "mechanism": "iq2_xxs_vperm_zero_spill_occupancy_threshold",
           "ops": [
             "mul_mat_vec_q"
           ],
@@ -1609,29 +1676,36 @@
             "ggml/src/ggml-cuda/vecdotq.cuh"
           ],
           "symbols": [
-            "vec_dot_iq2_xxs_q8_1",
-            "vec_dot_iq3_xxs_q8_1"
+            "vec_dot_iq2_xxs_q8_1"
           ],
           "change_class": "algorithm"
         },
-        "fingerprint_sha256": "b1d7258a16211eadcf17ec2b0615322da9d26bcba0479c89ddefa54ad64bfa55"
+        "fingerprint_sha256": "66c112b392f028ad3f5347758b75f2efc3d8253658fb4117fb957a2ec58d8332"
       },
       "falsifiers": [
         "Target type dispatch is absent from the production-representative frame",
-        "ISA attribution finds no removable type-specific work",
-        "Exact-kernel gain fails to survive whole-model replay"
+        "A forced register reduction reaches at most 64 true allocated VGPR but introduces scratch or a nonzero vgpr_spill_count",
+        "A governed candidate at at most 64 true allocated VGPR with scratch=0 and vgpr_spill_count=0 does not reach eight achieved waves per SIMD",
+        "A governed zero-spill eight-wave candidate fails paired exact-kernel or whole-model replay",
+        "Any representative correctness check differs from frozen v9"
       ],
       "evidence_refs": [
         "ev-v9-qwen122b-iq2-profile",
-        "ev-v9-qwen35b-q8-profile",
-        "ev-v9-qwen35b-q4km-profile",
-        "ev-research-loop-snapshot"
+        "ev-quant-ladder-occupancy-knee-20260816",
+        "ev-quant-ladder-tg128-raw-20260816",
+        "ev-quant-ladder-manifest-20260815",
+        "ev-iq2-vgpr-static-20260812"
       ],
       "interactions": [
         {
           "with": "akh-v2-q8-quantizer-new-mechanism",
           "kind": "shared_bottleneck",
           "rationale": "MMVQ consumes Q8_1 activations, so pipeline gains and costs may shift between families."
+        },
+        {
+          "with": "akh-v2-quant-ladder-batched-wave-slot-residual",
+          "kind": "shared_bottleneck",
+          "rationale": "AK-H-QL-1 supplies the zero-spill occupancy mechanism; AK-H-QL-2 asks whether that mechanism explains the batched residual and requires governed replication first."
         }
       ],
       "portability": {
@@ -1643,12 +1717,18 @@
           "frame-v9-qwen122b-iq2-tg128"
         ],
         "constraints": [
-          "Exact quant type and shape",
-          "No generic MFMA premise"
+          "Exact IQ2_XXS true-false wrapper and product-resident shape",
+          "True allocated VGPR at most 64, not allocation-rounding prose alone",
+          "scratch=0 and vgpr_spill_count=0 are mandatory",
+          "IQ4_XS is the occupancy comparator; the ungoverned throughput bands are observations, not thresholds",
+          "IQ3 remains a separate characterization question because the v_perm_b32 source mechanism is established for IQ2_XXS only",
+          "Only quality-valid serving formats have product relevance; the thirty-chunk ladder rungs do not"
         ],
         "required_validation": [
           "Type-residency trace",
-          "Per-type correctness",
+          "Compiler code-object receipt with true VGPR, allocation-rounded VGPR, waves per SIMD, scratch and spill count",
+          "If explicitly activated, a codified governed T1b real-graph ladder replication with declared comparator semantics, min_measurable_us, cache_state and an A/A band before the design prior gates a decision",
+          "Per-type correctness on a quality-valid model",
           "Per-kernel and whole-model paired replay"
         ]
       },
@@ -1659,7 +1739,7 @@
           42.376,
           59.9524
         ],
-        "rationale": "MMVQ is the largest measured device-time family in every large-model frame."
+        "rationale": "MMVQ is the largest measured device-time family in every large-model frame; the value case is threshold-shaped at the zero-spill 64-VGPR boundary rather than linear in instruction count."
       },
       "expected_value": {
         "metric": "decode_tokens_per_s",
@@ -1669,7 +1749,7 @@
           8.0
         ],
         "device_time_ceiling_pct": 59.9524,
-        "basis": "Large measured family ceiling with no assumed generic-prefetch or MFMA gain.",
+        "basis": "Large measured family ceiling plus a design-prior occupancy mechanism. The ungoverned 90.05 and 82.89 t/s bands do not set continuation, nomination, or acceptance thresholds.",
         "device_time_ceiling_frame_id": "frame-v9-qwen122b-iq2-tg128",
         "current_bundle_plausible_gain_ceiling_pct": null
       },
@@ -1677,15 +1757,19 @@
         "cost": "medium",
         "risk": "high",
         "notes": [
-          "Quant-type-specific implementation",
-          "Requires exact type residency and ISA attribution",
+          "Use the source-verified v_perm_b32 sign-expansion direction for IQ2_XXS only",
+          "A 65 to 70 VGPR landing is not an occupancy win and must not be valued as partial progress",
+          "Reject forced register caps that create scratch traffic or spills",
+          "Do not transfer the source mechanism to IQ3 without separate ISA attribution",
           "Must not pool distinct quant mechanisms"
         ]
       },
       "stop_rule": [
         "Stop if exact target type is not resident",
-        "Stop if attribution finds no removable type-specific work",
-        "Retire a patch whose exact-kernel gain does not reach whole-model decode"
+        "Stop a candidate immediately if true allocated VGPR remains above 64",
+        "Stop a candidate immediately if scratch is nonzero or vgpr_spill_count is nonzero",
+        "Stop on any representative correctness mismatch",
+        "Retire a zero-spill eight-wave patch whose governed exact-kernel gain does not reach whole-model decode"
       ],
       "current_bundle_eligibility": {
         "eligible": false,
@@ -1693,33 +1777,35 @@
           "cuda-vecdotq-v1"
         ],
         "blocking_conditions": [
-          "The current Q4_K_M proxy does not dispatch the target IQ2/IQ3 types"
+          "The current Q4_K_M proxy does not dispatch IQ2_XXS",
+          "No explicitly authorized, codified governed T1b real-graph AK-QL-3 replication with declared comparator semantics and an A/A band is bound",
+          "No exact product IQ2_XXS dispatch or compiler resource receipt is bound"
         ],
-        "reason": "The source template exists, but the current workload cannot falsify the large-model type hypothesis."
+        "reason": "The record conditions future IQ2_XXS planning but grants no current-frame eligibility or autonomous kernel spend."
       },
-      "record_version": 1,
+      "record_version": 2,
       "provenance": {
         "introduced_at": "2026-08-14T12:00:00Z",
         "introduced_by": "autokernel-strategy-integrator",
         "origin": "manual-discovery-flow-formalization",
-        "note": "Initial evidence-bound v2 corpus record.",
+        "note": "AK-QL-2 revision: binds the 2026-08-16 design prior and static VGPR carrier, limits the source mechanism to IQ2_XXS, and makes the zero-spill 64-VGPR crossing the value threshold.",
         "supersedes": null
       },
-      "primary_falsifier": "Target type dispatch is absent from the production-representative frame",
+      "primary_falsifier": "A forced register reduction reaches at most 64 true allocated VGPR but introduces scratch or a nonzero vgpr_spill_count",
       "regime": {
         "backend": "hip",
         "phase": "decode",
         "batch": 1,
         "architecture": "gfx90a",
         "model_or_frame": "frame-v9-qwen122b-iq2-tg128",
-        "quant": "IQ2_M",
-        "shape": "lowbit-type-specific-mmvq",
+        "quant": "IQ2_XXS product-resident transfer only",
+        "shape": "true-false-mmvq-zero-spill-64-vgpr-crossing",
         "measurement_graphs": false,
         "target_runtime_graphs": true
       },
       "lifecycle": {
-        "maturity": "characterized",
-        "next_action": "Capture exact IQ2/IQ3 dispatch literals and authorize a representative large-model discovery bundle",
+        "maturity": "design_prior",
+        "next_action": "No autonomous action; if the operator explicitly activates AK-QL-3, first codify a governed T1b real-graph comparator, then bind exact product IQ2_XXS residency/resource receipts before considering one v_perm_b32 zero-spill candidate",
         "candidate_identity": null,
         "diagnostic_identity": null
       },
@@ -1738,11 +1824,568 @@
         "max_replication_spread_pct": 1.0
       },
       "epistemic": {
-        "grade": "profile_routing",
+        "grade": "design_prior",
         "confidence": "medium",
         "limitations": [
-          "Family aggregate does not isolate the proposed IQ2/IQ3 implementation.",
-          "No current-bundle route exercises the target quant types."
+          "The throughput ladder is non-governed, n=1 per cell and has no A/A band.",
+          "The supporting Goedel ladder ran graphs-on/real-graph, while measurement_graphs=false names the separate graphs-off target-profile authority and must not be read as the ladder's graph policy.",
+          "The observed fast and slow throughput bands are not candidate acceptance thresholds.",
+          "Family aggregate does not isolate IQ2_XXS and no current-bundle route exercises it.",
+          "The IQ2 and IQ3 ladder files are performance probes built from a thirty-chunk imatrix and are not quality-grade models.",
+          "No ladder rung can support a promotion argument until AK-QL-5 pairs speed with correctness on quality-valid artifacts.",
+          "IQ4_XS B8 is a suspected outlier and is non-quotable without governed replication."
+        ]
+      }
+    },
+    {
+      "hypothesis_id": "akh-v2-quant-ladder-batched-wave-slot-residual",
+      "title": "AK-H-QL-2 batched IQ2/IQ3 wave-slot residual",
+      "status": "needs-template",
+      "statement": "In the exact graphs-on/real-graph MI210 Goedel-8B design-prior sweep, the IQ3_XXS and IQ2_XXS deficit that remained through B32 may be wave-slot-bound rather than a purely per-weight-read cost; if explicitly activated, a codified governed T1b real-graph AK-QL-3 replication with declared comparator semantics and an A/A band is a precondition for this explanation to gate any decision.",
+      "target": {
+        "frame_ids": [
+          "frame-v9-qwen122b-iq2-tg128"
+        ],
+        "source_files": [
+          "ggml/src/ggml-cuda/vecdotq.cuh"
+        ],
+        "source_symbols": [
+          "vec_dot_iq2_xxs_q8_1",
+          "vec_dot_iq3_xxs_q8_1"
+        ],
+        "template_intent": "governed-characterization-only-no-source-template"
+      },
+      "dispatch_anchors": [
+        {
+          "frame_id": "frame-v9-qwen122b-iq2-tg128",
+          "signatures": [],
+          "total_calls": 66693,
+          "aggregation": "family_aggregate",
+          "selection": "The product profile supplies only an MMVQ family ceiling; the ungoverned Goedel sweep supplies design-prior regime conditioning, not an exact product dispatch or reward threshold.",
+          "evidence_ref": "ev-v9-qwen122b-iq2-profile",
+          "excluded_signatures": []
+        }
+      ],
+      "mechanism": {
+        "facets": {
+          "mechanism": "batched_iq2_iq3_wave_slot_residual",
+          "ops": [
+            "mul_mat_vec_q"
+          ],
+          "files": [
+            "ggml/src/ggml-cuda/vecdotq.cuh"
+          ],
+          "symbols": [
+            "vec_dot_iq2_xxs_q8_1",
+            "vec_dot_iq3_xxs_q8_1"
+          ],
+          "change_class": "algorithm"
+        },
+        "fingerprint_sha256": "45f27b83fd38927c71336b228d3c9a425c0970ecb9f853cda38632233144828d"
+      },
+      "falsifiers": [
+        "Governed AK-QL-3 replication with an A/A band places the B32 IQ2_XXS or IQ3_XXS ratio at parity while achieved occupancy remains unchanged",
+        "A fixed additive per-weight-read model reproduces the governed B1 through B32 curve without an occupancy term",
+        "The governed sweep does not reproduce a regime-specific residual for the six-wave IQ formats",
+        "A correctness-valid serving artifact does not dispatch the implicated format or path"
+      ],
+      "evidence_refs": [
+        "ev-v9-qwen122b-iq2-profile",
+        "ev-quant-ladder-occupancy-knee-20260816",
+        "ev-quant-ladder-np-raw-20260816",
+        "ev-quant-ladder-manifest-20260815",
+        "ev-iq2-vgpr-static-20260812"
+      ],
+      "interactions": [
+        {
+          "with": "akh-v2-lowbit-type-specialized-mmvq",
+          "kind": "shared_bottleneck",
+          "rationale": "AK-H-QL-1 proposes the zero-spill occupancy crossing; this record asks whether wave slots explain the batched residual after governed replication."
+        },
+        {
+          "with": "akh-v2-batching-closes-all-lowbit-gaps",
+          "kind": "mutually_exclusive",
+          "rationale": "A governed persistent IQ2/IQ3 residual contradicts the retired blanket planning premise, while parity inside an A/A band permits its scoped reentry."
+        }
+      ],
+      "portability": {
+        "level": "low",
+        "source_frames": [
+          "frame-v9-qwen122b-iq2-tg128"
+        ],
+        "target_frames": [
+          "frame-v9-qwen122b-iq2-tg128"
+        ],
+        "constraints": [
+          "The supporting sweep is one Goedel-8B model on MI210 with B1 through B32",
+          "IQ4_XS is the comparator and its B8 cell is a suspected outlier that cannot be quoted unreplicated",
+          "The explanation is format- and occupancy-regime-specific, not a universal batching law",
+          "Only correctness-valid serving formats have product relevance"
+        ],
+        "required_validation": [
+          "If explicitly activated, a codified governed T1b real-graph full ladder and sweep replication",
+          "Declared graphs-on comparator semantics that do not alias the separate graphs-off target profile",
+          "Declared min_measurable_us and cache_state",
+          "A/A band applied to every ratio comparison",
+          "Achieved occupancy rather than static allocation alone",
+          "AK-QL-5 correctness pairing before any production argument"
+        ]
+      },
+      "priority": {
+        "rank": 19,
+        "tier": "P1",
+        "device_time_share_pct_range": [
+          42.376,
+          59.9524
+        ],
+        "rationale": "The question conditions a dominant large-model family, but the current evidence is an unreplicated design prior and therefore cannot authorize kernel spend."
+      },
+      "expected_value": {
+        "metric": "decode_tokens_per_s",
+        "direction": "higher_better",
+        "expected_relative_gain_pct_range": [
+          0.0,
+          0.0
+        ],
+        "device_time_ceiling_pct": 59.9524,
+        "basis": "This is a mechanism-discrimination record, not a candidate reward estimate; the observed ratios and throughput bands set no candidate budget.",
+        "device_time_ceiling_frame_id": "frame-v9-qwen122b-iq2-tg128",
+        "current_bundle_plausible_gain_ceiling_pct": null
+      },
+      "implementation": {
+        "cost": "low",
+        "risk": "low",
+        "notes": [
+          "Governed measurement only before any source work",
+          "Do not quote the IQ4_XS B8 cell without replication",
+          "Do not infer correctness or serving quality from the thirty-chunk performance probes"
+        ]
+      },
+      "stop_rule": [
+        "Remain design_prior unless the operator explicitly activates and AK-QL-3 binds a governed T1b real-graph A/A-bounded replication",
+        "Retire the wave-slot explanation if either primary governed falsifier fires",
+        "Do not create a kernel candidate directly from this explanatory record",
+        "Do not use any ladder rung in a promotion argument before AK-QL-5 correctness pairing"
+      ],
+      "current_bundle_eligibility": {
+        "eligible": false,
+        "template_ids": [],
+        "blocking_conditions": [
+          "No operator-authorized, codified governed T1b real-graph AK-QL-3 replication with declared comparator semantics and an A/A band is bound",
+          "The current Q4_K_M bundle does not exercise IQ2_XXS or IQ3_XXS",
+          "This is a characterization question with no source-candidate dispatch authority"
+        ],
+        "reason": "Planner memory only until governed replication; it is ineligible for autonomous kernel spend."
+      },
+      "record_version": 1,
+      "provenance": {
+        "introduced_at": "2026-08-16T18:56:28Z",
+        "introduced_by": "autokernel-quant-ladder-integrator",
+        "origin": "epyc-root-9e21451c-section-22-ak-h-ql-2",
+        "note": "Preserves AK-H-QL-2 and its AK-QL-3 governed-replication precondition without turning an ungoverned ratio into a reward threshold.",
+        "supersedes": null
+      },
+      "primary_falsifier": "Governed AK-QL-3 replication with an A/A band places the B32 IQ2_XXS or IQ3_XXS ratio at parity while achieved occupancy remains unchanged",
+      "regime": {
+        "backend": "hip",
+        "phase": "decode",
+        "batch": "1-32",
+        "architecture": "gfx90a",
+        "model_or_frame": "Goedel-8B-design-prior-to-frame-v9-qwen122b-iq2-tg128",
+        "quant": "IQ2_XXS and IQ3_XXS versus IQ4_XS",
+        "shape": "batched-mmvq-wave-slot-residual",
+        "measurement_graphs": false,
+        "target_runtime_graphs": true
+      },
+      "lifecycle": {
+        "maturity": "design_prior",
+        "next_action": "No autonomous action; if explicitly activated, first codify a governed T1b real-graph AK-QL-3 comparator with min_measurable_us, declared cache_state and an A/A band; no kernel source candidate follows automatically",
+        "candidate_identity": null,
+        "diagnostic_identity": null
+      },
+      "decision_policy": {
+        "metric": "iq_to_iq4xs_batched_ratio",
+        "frame_id": "frame-v9-qwen122b-iq2-tg128",
+        "continuation_floor_pct": 0.0,
+        "nomination_floor_pct": 0.0,
+        "required_replications": 2,
+        "sign_policy": "all_positive",
+        "conflict_policy": "retain_inconclusive",
+        "max_distinct_candidates": 1,
+        "terminal_rule": "needs_review",
+        "effect_unit": "relative_percent",
+        "min_replication_effect_pct": 0.0,
+        "max_replication_spread_pct": 0.0
+      },
+      "epistemic": {
+        "grade": "design_prior",
+        "confidence": "low",
+        "limitations": [
+          "Non-governed n=1 sweep with no A/A band.",
+          "The supporting ladder is graphs-on/real-graph; measurement_graphs=false refers only to the separate graphs-off target-profile carrier.",
+          "The record's zero-valued decision fields explicitly carry no candidate budget.",
+          "The IQ4_XS B8 cell is a suspected outlier and non-quotable.",
+          "The IQ2 and IQ3 artifacts are speed probes rather than quality-grade models.",
+          "No correctness or promotion authority is present."
+        ]
+      }
+    },
+    {
+      "hypothesis_id": "akh-v2-iq1s-occupancy-discriminator",
+      "title": "AK-H-QL-3 IQ1_S occupancy sign discriminator",
+      "status": "needs-template",
+      "statement": "As an informational counterfactual, IQ1_S at 42 true allocated VGPR and eight waves per SIMD is predicted not to follow the low-bit cliff if occupancy rather than bit width controls the sign; this is memory-only and may be activated only by explicit operator direction plus practical IQ1 serving relevance.",
+      "target": {
+        "frame_ids": [
+          "frame-v9-qwen122b-iq2-tg128"
+        ],
+        "source_files": [
+          "ggml/src/ggml-cuda/vecdotq.cuh"
+        ],
+        "source_symbols": [
+          "vec_dot_iq1_s_q8_1"
+        ],
+        "template_intent": "memory-only-no-dispatch-template"
+      },
+      "dispatch_anchors": [
+        {
+          "frame_id": "frame-v9-qwen122b-iq2-tg128",
+          "signatures": [],
+          "total_calls": null,
+          "aggregation": "not_applicable",
+          "selection": "No product IQ1_S route or practical serving case is bound; the static code-object row is informational conditioning only.",
+          "evidence_ref": "ev-iq2-vgpr-static-20260812",
+          "excluded_signatures": []
+        }
+      ],
+      "mechanism": {
+        "facets": {
+          "mechanism": "iq1_s_occupancy_sign_discriminator",
+          "ops": [
+            "mul_mat_vec_q"
+          ],
+          "files": [
+            "ggml/src/ggml-cuda/vecdotq.cuh"
+          ],
+          "symbols": [
+            "vec_dot_iq1_s_q8_1"
+          ],
+          "change_class": "algorithm"
+        },
+        "fingerprint_sha256": "d1af1bd40c7e514a949aaa0c0e8c780290e65cb719021652583cb1274774a268"
+      },
+      "falsifiers": [
+        "A future explicitly authorized governed T1b real-graph characterization places IQ1_S with the governed slow band despite measured eight-wave occupancy",
+        "The practical serving path does not dispatch GPU IQ1_S MMVQ",
+        "A correctness-valid IQ1_S artifact is unavailable"
+      ],
+      "evidence_refs": [
+        "ev-quant-ladder-occupancy-knee-20260816",
+        "ev-iq2-vgpr-static-20260812"
+      ],
+      "interactions": [
+        {
+          "with": "akh-v2-lowbit-type-specialized-mmvq",
+          "kind": "shared_bottleneck",
+          "rationale": "IQ1_S is a sign-discriminating counterfactual for the occupancy story, not part of the IQ2_XXS authoring plan."
+        }
+      ],
+      "portability": {
+        "level": "exact_frame",
+        "source_frames": [
+          "frame-v9-qwen122b-iq2-tg128"
+        ],
+        "target_frames": [
+          "frame-v9-qwen122b-iq2-tg128"
+        ],
+        "constraints": [
+          "Inactive memory only",
+          "No IQ1 product route or quality-valid serving role is presently bound",
+          "CPU iqk IQ1 stubs do not answer the GPU MMVQ question",
+          "Activation requires explicit operator direction and practical serving relevance"
+        ],
+        "required_validation": [
+          "Explicit operator activation",
+          "Practical IQ1 serving relevance",
+          "T1b real-graph characterization with declared comparator semantics",
+          "Achieved eight-wave occupancy",
+          "Correctness-valid IQ1_S artifact"
+        ]
+      },
+      "priority": {
+        "rank": 20,
+        "tier": "P3",
+        "device_time_share_pct_range": [
+          0.0,
+          0.0
+        ],
+        "rationale": "The counterfactual is discriminating but has no current practical-serving relevance and is not a desired run."
+      },
+      "expected_value": {
+        "metric": "decode_tokens_per_s",
+        "direction": "higher_better",
+        "expected_relative_gain_pct_range": [
+          0.0,
+          0.0
+        ],
+        "device_time_ceiling_pct": 0.0,
+        "basis": "Informational conditioning only; no product reward or candidate budget is asserted.",
+        "device_time_ceiling_frame_id": "frame-v9-qwen122b-iq2-tg128",
+        "current_bundle_plausible_gain_ceiling_pct": null
+      },
+      "implementation": {
+        "cost": "low",
+        "risk": "medium",
+        "notes": [
+          "Do not dispatch automatically",
+          "Do not treat one-rung speed as production relevance",
+          "Use a correctness-valid artifact if explicitly activated"
+        ]
+      },
+      "stop_rule": [
+        "Remain inactive absent explicit operator direction",
+        "Remain inactive absent practical IQ1 serving relevance",
+        "Do not spend GPU or source-authoring budget from this record",
+        "If activated, stop on absent GPU IQ1_S MMVQ dispatch or missing correctness-valid artifact"
+      ],
+      "current_bundle_eligibility": {
+        "eligible": false,
+        "template_ids": [],
+        "blocking_conditions": [
+          "No explicit operator activation",
+          "No practical IQ1 serving relevance",
+          "No exact product IQ1_S route",
+          "No governed T1b real-graph characterization authority"
+        ],
+        "reason": "Memory-only discriminating counterfactual; it is intentionally non-dispatchable and ineligible for automatic spend."
+      },
+      "record_version": 1,
+      "provenance": {
+        "introduced_at": "2026-08-16T18:56:28Z",
+        "introduced_by": "autokernel-quant-ladder-integrator",
+        "origin": "epyc-root-9e21451c-section-22-ak-h-ql-3",
+        "note": "Preserves the IQ1_S sign discriminator while applying the operator correction that AK-QL-4 is informational, inactive and not a desired run.",
+        "supersedes": null
+      },
+      "primary_falsifier": "A future explicitly authorized governed T1b real-graph characterization places IQ1_S with the governed slow band despite measured eight-wave occupancy",
+      "regime": {
+        "backend": "hip",
+        "phase": "decode",
+        "batch": "1-32",
+        "architecture": "gfx90a",
+        "model_or_frame": "informational-IQ1_S-counterfactual",
+        "quant": "IQ1_S",
+        "shape": "true-false-mmvq-sign-discriminator",
+        "measurement_graphs": false,
+        "target_runtime_graphs": true
+      },
+      "lifecycle": {
+        "maturity": "design_prior",
+        "next_action": "None; retain as inactive planner memory unless the operator explicitly activates a practical IQ1 serving question",
+        "candidate_identity": null,
+        "diagnostic_identity": null
+      },
+      "decision_policy": {
+        "metric": "iq1s_to_iq4xs_governed_ratio",
+        "frame_id": "frame-v9-qwen122b-iq2-tg128",
+        "continuation_floor_pct": 0.0,
+        "nomination_floor_pct": 0.0,
+        "required_replications": 2,
+        "sign_policy": "all_positive",
+        "conflict_policy": "retain_inconclusive",
+        "max_distinct_candidates": 1,
+        "terminal_rule": "needs_review",
+        "effect_unit": "relative_percent",
+        "min_replication_effect_pct": 0.0,
+        "max_replication_spread_pct": 0.0
+      },
+      "epistemic": {
+        "grade": "design_prior",
+        "confidence": "low",
+        "limitations": [
+          "No IQ1 throughput measurement is bound.",
+          "Static register allocation does not prove achieved occupancy or throughput.",
+          "No current product or quality-valid IQ1 serving artifact is bound.",
+          "The record has no compute, source-authoring or promotion authority."
+        ]
+      }
+    },
+    {
+      "hypothesis_id": "akh-v2-batching-closes-all-lowbit-gaps",
+      "title": "AK-QL-6 blanket batching-closes-gap planning premise",
+      "status": "retired",
+      "statement": "Retire, as a planning assumption only in the exact MI210 Goedel-8B B1-through-B32 design-prior regime, the blanket claim that batching closes every low-bit dequant gap; this warning does not forbid measuring batching, proposing a narrower per-format mechanism, or reentry after governed AK-QL-3 replication.",
+      "target": {
+        "frame_ids": [
+          "frame-v9-qwen122b-iq2-tg128"
+        ],
+        "source_files": [
+          "ggml/src/ggml-cuda/vecdotq.cuh"
+        ],
+        "source_symbols": [
+          "vec_dot_iq2_xxs_q8_1",
+          "vec_dot_iq3_xxs_q8_1"
+        ],
+        "template_intent": "retired-planning-assumption-no-source-template"
+      },
+      "dispatch_anchors": [
+        {
+          "frame_id": "frame-v9-qwen122b-iq2-tg128",
+          "signatures": [],
+          "total_calls": null,
+          "aggregation": "not_applicable",
+          "selection": "The scoped warning comes from the ungoverned Goedel sweep and is not an exact product dispatch refusal.",
+          "evidence_ref": "ev-quant-ladder-occupancy-knee-20260816",
+          "excluded_signatures": []
+        }
+      ],
+      "mechanism": {
+        "facets": {
+          "mechanism": "blanket_batching_closes_all_lowbit_dequant_gaps",
+          "ops": [
+            "mul_mat_vec_q"
+          ],
+          "files": [
+            "ggml/src/ggml-cuda/vecdotq.cuh"
+          ],
+          "symbols": [
+            "vec_dot_iq2_xxs_q8_1",
+            "vec_dot_iq3_xxs_q8_1"
+          ],
+          "change_class": "planning_assumption"
+        },
+        "fingerprint_sha256": "4e240a2abcd2b35145c26e685ced68bd7b90e82eaf9cabced79b6f03b261917c"
+      },
+      "falsifiers": [
+        "Governed AK-QL-3 replication with an A/A band shows IQ2_XXS and IQ3_XXS B32 parity with IQ4_XS in the same regime",
+        "A narrower governed per-format batching claim is established without asserting a universal low-bit rule"
+      ],
+      "evidence_refs": [
+        "ev-quant-ladder-occupancy-knee-20260816",
+        "ev-quant-ladder-np-raw-20260816",
+        "ev-quant-ladder-manifest-20260815"
+      ],
+      "interactions": [
+        {
+          "with": "akh-v2-quant-ladder-batched-wave-slot-residual",
+          "kind": "mutually_exclusive",
+          "rationale": "The scoped warning prevents the blanket premise from outranking the governed wave-slot question; it does not decide that question."
+        }
+      ],
+      "portability": {
+        "level": "exact_frame",
+        "source_frames": [
+          "frame-v9-qwen122b-iq2-tg128"
+        ],
+        "target_frames": [
+          "frame-v9-qwen122b-iq2-tg128"
+        ],
+        "constraints": [
+          "Planning-warning scope is MI210, Goedel-8B, IQ2_XXS and IQ3_XXS versus IQ4_XS, B1 through B32",
+          "Design-prior only; not a hard scientific DNR",
+          "Does not block batching measurement or a narrower per-format mechanism"
+        ],
+        "required_validation": [
+          "If explicitly activated, governed T1b real-graph AK-QL-3 replication with declared comparator semantics, min_measurable_us, cache_state and an A/A band for reentry",
+          "Per-format scope rather than a universal low-bit premise",
+          "AK-QL-5 correctness pairing before production relevance"
+        ]
+      },
+      "priority": {
+        "rank": 21,
+        "tier": "P3",
+        "device_time_share_pct_range": [
+          0.0,
+          0.0
+        ],
+        "rationale": "This is a retired blanket planning premise, not a candidate or a hard evidence-grade refusal."
+      },
+      "expected_value": {
+        "metric": "decode_tokens_per_s",
+        "direction": "higher_better",
+        "expected_relative_gain_pct_range": [
+          0.0,
+          0.0
+        ],
+        "device_time_ceiling_pct": 0.0,
+        "basis": "No reward is assigned to a retired planning assumption.",
+        "device_time_ceiling_frame_id": "frame-v9-qwen122b-iq2-tg128",
+        "current_bundle_plausible_gain_ceiling_pct": null
+      },
+      "implementation": {
+        "cost": "low",
+        "risk": "low",
+        "notes": [
+          "Warning-only research memory",
+          "No hard DNR authority",
+          "Narrower format-specific batching work remains admissible"
+        ]
+      },
+      "stop_rule": [
+        "Do not use the blanket premise to dismiss IQ2 or IQ3 occupancy work",
+        "Do not treat the design-prior sweep as promotion evidence",
+        "Permit reentry when governed AK-QL-3 evidence with an A/A band supports it",
+        "Permit any narrower governed per-format batching hypothesis"
+      ],
+      "current_bundle_eligibility": {
+        "eligible": false,
+        "template_ids": [],
+        "blocking_conditions": [
+          "Retired planning assumptions cannot dispatch",
+          "Current bundle has no IQ2_XXS or IQ3_XXS route",
+          "The supporting sweep is design-prior grade"
+        ],
+        "reason": "Warn-only retired memory; not current-frame eligible and not a hard DNR."
+      },
+      "record_version": 1,
+      "provenance": {
+        "introduced_at": "2026-08-16T18:56:28Z",
+        "introduced_by": "autokernel-quant-ladder-integrator",
+        "origin": "epyc-root-9e21451c-section-22-ak-ql-6",
+        "note": "Records AK-QL-6 as a scoped design-prior planning warning rather than silently upgrading it into a promotion-grade hard refusal.",
+        "supersedes": null
+      },
+      "primary_falsifier": "Governed AK-QL-3 replication with an A/A band shows IQ2_XXS and IQ3_XXS B32 parity with IQ4_XS in the same regime",
+      "regime": {
+        "backend": "hip",
+        "phase": "decode",
+        "batch": "1-32",
+        "architecture": "gfx90a",
+        "model_or_frame": "Goedel-8B-quant-ladder-design-prior",
+        "quant": "IQ2_XXS and IQ3_XXS versus IQ4_XS",
+        "shape": "blanket-batching-closes-all-lowbit-gaps-planning-premise",
+        "measurement_graphs": false,
+        "target_runtime_graphs": true
+      },
+      "lifecycle": {
+        "maturity": "retired",
+        "next_action": "None; if explicitly activated, reenter only with codified governed T1b real-graph AK-QL-3 A/A-bounded evidence or as a narrower per-format hypothesis",
+        "candidate_identity": null,
+        "diagnostic_identity": null
+      },
+      "decision_policy": {
+        "metric": "iq_to_iq4xs_batched_ratio",
+        "frame_id": "frame-v9-qwen122b-iq2-tg128",
+        "continuation_floor_pct": 0.0,
+        "nomination_floor_pct": 0.0,
+        "required_replications": 2,
+        "sign_policy": "all_positive",
+        "conflict_policy": "retain_inconclusive",
+        "max_distinct_candidates": 1,
+        "terminal_rule": "needs_review",
+        "effect_unit": "relative_percent",
+        "min_replication_effect_pct": 0.0,
+        "max_replication_spread_pct": 0.0
+      },
+      "epistemic": {
+        "grade": "design_prior",
+        "confidence": "low",
+        "limitations": [
+          "Non-governed n=1 sweep with no A/A band.",
+          "The supporting Goedel sweep is graphs-on/real-graph; measurement_graphs=false binds only the separate graphs-off target-profile authority.",
+          "Warn-only scope; not a hard DNR or scientific conclusion.",
+          "The IQ4_XS B8 cell is suspected anomalous and non-quotable.",
+          "The ladder contains speed probes without correctness or quality authority."
         ]
       }
     },

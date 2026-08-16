@@ -412,7 +412,7 @@ class HypothesisPortfolioTest(unittest.TestCase):
         authority = evidence[P.GFX90A_LOW_PRECISION_EVIDENCE_ID]
         self.assertEqual(
             authority["path"],
-            "/workspace/handoffs/active/mi210-q8-dequant-gemv-roofline.md",
+            P.GFX90A_LOW_PRECISION_EVIDENCE_PATH,
         )
         self.assertEqual(
             authority["sha256"],
@@ -547,7 +547,7 @@ class HypothesisPortfolioTest(unittest.TestCase):
         with redirect_stdout(stdout):
             self.assertEqual(P.main(["validate", str(P.DEFAULT_PORTFOLIO)]), 0)
         result = json.loads(stdout.getvalue())
-        self.assertEqual(result["hypotheses"], 18)
+        self.assertEqual(result["hypotheses"], 21)
         self.assertEqual(result["do_not_repeat"], 21)
         self.assertEqual(result["eligible"], 4)
         stdout = StringIO()

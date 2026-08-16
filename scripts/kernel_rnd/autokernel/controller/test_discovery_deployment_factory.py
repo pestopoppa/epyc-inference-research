@@ -239,7 +239,30 @@ class DeploymentFactoryTests(unittest.TestCase):
             json.dumps(controller_config.planner_context)
             portfolio = loaded.hypothesis_portfolio.value
             self.assertEqual(portfolio.sha256,
-                             "f04fa9e1bb683d0863a9efd430c9fefbc7e014aa85d66faf3b7859d910168b17")
+                             "fe3a9ba1fb60ac3573d20a698e7774c3e333d802f6d7c9a97d4fd5edc4bc97bb")
+            context = loaded.planner_context.value
+            self.assertEqual(
+                {row["hypothesis_id"] for row in context["eligible_hypotheses"]},
+                {"akh-v2-q5-type-specific-dequant",
+                 "akh-v2-q8-quantizer-new-mechanism",
+                 "akh-v2-fa-gqa7-pair-tail",
+                 "akh-v2-rms-direct-load-reduction"},
+            )
+            ineligible = {
+                row["hypothesis_id"]: row for row in context["ineligible_hypotheses"]
+            }
+            for hypothesis_id in (
+                    "akh-v2-lowbit-type-specialized-mmvq",
+                    "akh-v2-quant-ladder-batched-wave-slot-residual",
+                    "akh-v2-iq1s-occupancy-discriminator",
+                    "akh-v2-batching-closes-all-lowbit-gaps"):
+                self.assertIn(hypothesis_id, ineligible)
+            self.assertEqual(
+                ineligible["akh-v2-batching-closes-all-lowbit-gaps"]["status"],
+                "retired")
+            self.assertNotIn(
+                "akh-v2-batching-closes-all-lowbit-gaps",
+                {row["dnr_id"] for row in context["do_not_repeat"]})
             rows = loaded.hypothesis_evidence_manifest.value["evidence"]
             self.assertEqual(set(rows), {row["evidence_id"]
                                          for row in portfolio.body["evidence"]})

@@ -20,15 +20,17 @@ ROOFLINE_EVIDENCE = "ev-fable5-mi210-roofline"
 EXPECTED_EVIDENCE = {
     LEVER_MATRIX_EVIDENCE: {
         "path": (
-            "/workspace/handoffs/active/"
-            "fable5-window2-findings-05c-mi210-lever-category-matrix.md"
+            "repo://scripts/kernel_rnd/autokernel/evidence/legacy-levers/"
+            "ev-fable5-mi210-lever-matrix-"
+            "2f6cb30655b4cf01998249fc57619a9e080ae45ba3f22e95eda29bd8bbc179bb.md"
         ),
         "sha256": "2f6cb30655b4cf01998249fc57619a9e080ae45ba3f22e95eda29bd8bbc179bb",
     },
     ROOFLINE_EVIDENCE: {
         "path": (
-            "/workspace/handoffs/active/"
-            "fable5-window2-findings-05-intake-sweep-and-roofline.md"
+            "repo://scripts/kernel_rnd/autokernel/evidence/legacy-governance/"
+            "ev-fable5-mi210-roofline-"
+            "08de87ef44a14de4420432bd04aad5f7e3c3f41639578e9e7f4a7f35dea64357.md"
         ),
         "sha256": "08de87ef44a14de4420432bd04aad5f7e3c3f41639578e9e7f4a7f35dea64357",
     },

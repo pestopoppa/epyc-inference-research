@@ -9,8 +9,11 @@ JSON keys and ambiguous or mutable authority carriers.
 
 1. Keep the stable `hypothesis_id` or `dnr_id`; increment `record_version` for a
    revision and bind `provenance` (`introduced_at`, actor, origin, note, supersedes).
-2. Add absolute evidence paths, SHA-256 identities, authority class, temporal status
-   and bounded claims. Evidence does not inherit promotion authority.
+2. Add absolute governed-receipt paths or immutable checked-in `repo://` evidence
+   carriers, SHA-256 identities, authority class, temporal status and bounded claims.
+   `repo://` paths must remain under `scripts/kernel_rnd/autokernel/evidence`; use them
+   for cross-repository snapshots so a mutable handoff cannot break regeneration.
+   Evidence does not inherit promotion authority.
 3. Bind exact frames: model path/SHA, measurement binary/source identity, graph
    policy, workload regime and hotspot derivation selector/raw-artifact SHA.
 4. Declare the mechanism, exact regime, primary and supporting falsifiers, target
@@ -63,6 +66,11 @@ Epistemic grades distinguish design priors, graphs-off routing profiles, dirty
 diagnostics, correctness-only candidates, replicated nonpromotable candidate screens
 and retired negatives. Graphs-off attribution is routing/device-time-ceiling evidence;
 it cannot establish graphs-on whole-model reward direction.
+
+Evidence authority `non_governed_design_prior` means the bytes are immutable research
+memory only: it grants no decision, candidate, compute or promotion authority. Use it
+for raw or summarized non-governed observations rather than upgrading them to a
+`governance_snapshot` merely because their carrier is hash-bound.
 
 Statuses are `queued`, `candidate_incumbent`, `retired` and `needs-template`.
 `candidate_incumbent` is candidate-only and nonpromotable; it never means production

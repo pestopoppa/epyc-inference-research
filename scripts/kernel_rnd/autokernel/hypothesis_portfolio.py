@@ -52,7 +52,7 @@ EPISTEMIC_GRADES = frozenset({
 CONFIDENCE_LEVELS = frozenset({"low", "medium", "high"})
 EVIDENCE_AUTHORITIES = frozenset({
     "governed_diagnostic", "candidate_only", "presentation_projection",
-    "dirty_diagnostic", "governance_snapshot",
+    "dirty_diagnostic", "governance_snapshot", "non_governed_design_prior",
 })
 DNR_CLASSIFICATIONS = frozenset({
     "measured_negative", "nonreplication", "correctness_failure", "subadditive",
@@ -60,6 +60,11 @@ DNR_CLASSIFICATIONS = frozenset({
     "configuration_regression", "low_value",
 })
 GFX90A_LOW_PRECISION_EVIDENCE_ID = "ev-gfx90a-low-precision-isa-20260815"
+GFX90A_LOW_PRECISION_EVIDENCE_PATH = (
+    "repo://scripts/kernel_rnd/autokernel/evidence/legacy-governance/"
+    "ev-gfx90a-low-precision-isa-20260815-"
+    "1e8768a89815cc6c8cf5277ddc437ac9d2a5353597478c68d23bd79646dd0d91.md"
+)
 GFX90A_LOW_PRECISION_DNR_POLICY = {
     "dnr-gfx90a-int8-mfma-compute-headroom": {
         "mechanism": "int8_mfma_decode_compute_headroom_claim",
@@ -88,6 +93,8 @@ ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
 RFC3339_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$")
 TEMPLATE_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]*-v[1-9][0-9]*$")
 ROUTE_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]*-v[1-9][0-9]*\.anchor\.[0-9]+$")
+REPO_EVIDENCE_PREFIX = "repo://"
+REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 
 _TOP_KEYS = frozenset({
     "schema", "corpus_id", "generated_at", "promotion_authority",
@@ -420,8 +427,18 @@ def _validate_evidence(rows: Any) -> set[str]:
             raise PortfolioError(f"duplicate evidence id: {evidence_id}")
         ids.add(evidence_id)
         path = _text(row["path"], f"{label}.path")
-        if not Path(path).is_absolute() or ".." in Path(path).parts:
-            raise PortfolioError(f"{label}.path must be absolute and traversal-free")
+        if path.startswith(REPO_EVIDENCE_PREFIX):
+            relative = Path(path.removeprefix(REPO_EVIDENCE_PREFIX))
+            if (relative.is_absolute() or ".." in relative.parts
+                    or not relative.parts
+                    or relative.parts[:4] != (
+                        "scripts", "kernel_rnd", "autokernel", "evidence")):
+                raise PortfolioError(
+                    f"{label}.path repository carrier must stay under "
+                    "scripts/kernel_rnd/autokernel/evidence")
+        elif not Path(path).is_absolute() or ".." in Path(path).parts:
+            raise PortfolioError(
+                f"{label}.path must be absolute or a traversal-free repo carrier")
         _sha(row["sha256"], f"{label}.sha256")
         if row["authority"] not in EVIDENCE_AUTHORITIES:
             raise PortfolioError(f"{label}.authority is not recognized")
@@ -891,8 +908,7 @@ def validate(body: Any) -> Portfolio:
     )
     if (
         low_precision_evidence is None
-        or low_precision_evidence["path"]
-        != "/workspace/handoffs/active/mi210-q8-dequant-gemv-roofline.md"
+        or low_precision_evidence["path"] != GFX90A_LOW_PRECISION_EVIDENCE_PATH
         or low_precision_evidence["sha256"]
         != "1e8768a89815cc6c8cf5277ddc437ac9d2a5353597478c68d23bd79646dd0d91"
     ):
@@ -924,6 +940,17 @@ def validate(body: Any) -> Portfolio:
     return Portfolio(_freeze(frozen), content_sha256(frozen))
 
 
+def _authority_stat_valid(value: os.stat_result) -> bool:
+    return (stat.S_ISREG(value.st_mode) and value.st_nlink == 1
+            and value.st_uid == os.geteuid())
+
+
+def _authority_stat_identity(value: os.stat_result) -> tuple[int, ...]:
+    return (value.st_dev, value.st_ino, value.st_mode, value.st_nlink,
+            value.st_uid, value.st_gid, value.st_size, value.st_mtime_ns,
+            value.st_ctime_ns)
+
+
 def _read_pinned(path: Path, label: str) -> bytes:
     flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
     try:
@@ -932,8 +959,7 @@ def _read_pinned(path: Path, label: str) -> bytes:
         raise PortfolioError(f"{label}: cannot open authority: {exc}") from exc
     try:
         before = os.fstat(fd)
-        if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1
-                or before.st_uid != os.geteuid()):
+        if not _authority_stat_valid(before):
             raise PortfolioError(f"{label}: authority must be an owned single-link regular file")
         chunks: list[bytes] = []
         while True:
@@ -949,10 +975,11 @@ def _read_pinned(path: Path, label: str) -> bytes:
         path_after = path.stat(follow_symlinks=False)
     except OSError as exc:
         raise PortfolioError(f"{label}: authority path disappeared: {exc}") from exc
-    identity_before = (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns)
-    identity_after = (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns)
-    if (identity_before != identity_after or len(raw) != before.st_size
-            or (path_after.st_dev, path_after.st_ino) != (before.st_dev, before.st_ino)):
+    identity_before = _authority_stat_identity(before)
+    identity_after = _authority_stat_identity(after)
+    if (not _authority_stat_valid(after) or identity_before != identity_after
+            or len(raw) != before.st_size
+            or _authority_stat_identity(path_after) != identity_after):
         raise PortfolioError(f"{label}: authority changed while it was read")
     return raw
 
@@ -965,6 +992,78 @@ def load(path: os.PathLike[str] | str) -> Portfolio:
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise PortfolioError(f"portfolio is not valid UTF-8 JSON: {exc}") from exc
     return validate(body)
+
+
+def _repository_evidence_relative(value: str) -> Path:
+    if not value.startswith(REPO_EVIDENCE_PREFIX):
+        raise PortfolioError("evidence path is not a repository carrier")
+    relative = Path(value.removeprefix(REPO_EVIDENCE_PREFIX))
+    if (relative.is_absolute() or ".." in relative.parts
+            or relative.parts[:4] != (
+                "scripts", "kernel_rnd", "autokernel", "evidence")
+            or len(relative.parts) <= 4):
+        raise PortfolioError(
+            "repository evidence carrier must stay under "
+            "scripts/kernel_rnd/autokernel/evidence")
+    return relative
+
+
+def _read_repo_pinned(value: str, label: str) -> bytes:
+    """Read one repository carrier through an fd-pinned no-follow component walk."""
+    relative = _repository_evidence_relative(value)
+    directory_flags = (os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
+                       | getattr(os, "O_DIRECTORY", 0)
+                       | getattr(os, "O_NOFOLLOW", 0))
+    leaf_flags = (os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
+                  | getattr(os, "O_NOFOLLOW", 0))
+    descriptors: list[int] = []
+    parent_fd: int | None = None
+    leaf_fd: int | None = None
+    try:
+        parent_fd = os.open(REPOSITORY_ROOT, directory_flags)
+        descriptors.append(parent_fd)
+        for part in relative.parts[:-1]:
+            parent_fd = os.open(part, directory_flags, dir_fd=parent_fd)
+            descriptors.append(parent_fd)
+        leaf = relative.parts[-1]
+        leaf_fd = os.open(leaf, leaf_flags, dir_fd=parent_fd)
+        descriptors.append(leaf_fd)
+        before = os.fstat(leaf_fd)
+        if not _authority_stat_valid(before):
+            raise PortfolioError(
+                f"{label}: repository authority must be an owned single-link regular file")
+        chunks: list[bytes] = []
+        while True:
+            chunk = os.read(leaf_fd, 1024 * 1024)
+            if not chunk:
+                break
+            chunks.append(chunk)
+        raw = b"".join(chunks)
+        after = os.fstat(leaf_fd)
+        path_after = os.stat(leaf, dir_fd=parent_fd, follow_symlinks=False)
+    except OSError as exc:
+        raise PortfolioError(
+            f"{label}: cannot open repository authority without following links: {exc}") from exc
+    finally:
+        for descriptor in reversed(descriptors):
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+    identity_before = _authority_stat_identity(before)
+    identity_after = _authority_stat_identity(after)
+    if (not _authority_stat_valid(after) or identity_before != identity_after
+            or len(raw) != before.st_size
+            or _authority_stat_identity(path_after) != identity_after):
+        raise PortfolioError(f"{label}: repository authority changed while it was read")
+    return raw
+
+
+def read_evidence_bytes(value: str, label: str) -> bytes:
+    """Read absolute or checked-in evidence through one fd-pinned authority API."""
+    if value.startswith(REPO_EVIDENCE_PREFIX):
+        return _read_repo_pinned(value, label)
+    return _read_pinned(Path(value), label)
 
 
 def verify_evidence_files(portfolio: Portfolio, evidence_ids: Iterable[str] | None = None) -> None:
@@ -982,8 +1081,7 @@ def verify_evidence_files(portfolio: Portfolio, evidence_ids: Iterable[str] | No
         raise PortfolioError(f"unknown evidence ids requested: {unknown}")
     for evidence_id in sorted(selected):
         row = rows[evidence_id]
-        path = Path(row["path"])
-        raw = _read_pinned(path, evidence_id)
+        raw = read_evidence_bytes(row["path"], evidence_id)
         actual = hashlib.sha256(raw).hexdigest()
         if actual != row["sha256"]:
             raise PortfolioError(f"{evidence_id}: evidence SHA-256 mismatch")
@@ -1113,7 +1211,8 @@ def main(argv: list[str] | None = None) -> int:
 __all__ = [
     "SCHEMA", "STATUSES", "MATURITIES", "Portfolio", "PortfolioError",
     "DEFAULT_PORTFOLIO", "content_sha256", "mechanism_fingerprint", "validate",
-    "load", "verify_evidence_files", "validate_template_authorability",
+    "load", "read_evidence_bytes", "verify_evidence_files",
+    "validate_template_authorability",
 ]
 
 

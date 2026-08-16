@@ -338,9 +338,9 @@ _PROFILE_TRACE_RECEIPT_SHA256 = "20742be4a69abf5bb70c228660ff0629bf416ed4452c4f6
 _PROFILE_TRACE_CSV = Path(
     "/mnt/raid0/llm/autokernel/screens/ak-gpu-qwen05b-tg128-rocprof-attribution-20260813/timestamps.csv")
 _PROFILE_TRACE_CSV_SHA256 = "a11bc20a03dfd5ca157990c1766ebbb5edb70a5c036d73d85d806e4f39a222a8"
-_PORTFOLIO_SEMANTIC_SHA256 = "f04fa9e1bb683d0863a9efd430c9fefbc7e014aa85d66faf3b7859d910168b17"
-_PORTFOLIO_FILE_SHA256 = "de392627d5a393c495b58901fbb6ee94e26082a38b41813c87fe5585a15e8871"
-_PORTFOLIO_CONTRACT_SHA256 = "00e5a1eb557fde4e77c5e85414bde0e9dfd9ded7ad72e62f8a8d6057614f1cd0"
+_PORTFOLIO_SEMANTIC_SHA256 = "fe3a9ba1fb60ac3573d20a698e7774c3e333d802f6d7c9a97d4fd5edc4bc97bb"
+_PORTFOLIO_FILE_SHA256 = "34d423342f15a85dc054d8d6066403b63060ce6b22d44c8bfd080697762311e2"
+_PORTFOLIO_CONTRACT_SHA256 = "96f207733e5fc27a722763cf1b3c542f327eb70d41e04b9948aaec086b3facd4"
 _SITE_WINDOW_LOCK = Path("/mnt/raid0/llm/tmp/model-call.lock")
 _SITE_ACTOR_WRAPPER = Path(
     "/usr/local/share/npm-global/lib/node_modules/@openai/codex/bin/codex.js")
@@ -429,7 +429,8 @@ def initialize_static_deployment_bundle(root: Path) -> Path:
     for row in portfolio.body["evidence"]:
         evidence_id = row["evidence_id"]
         target = root / "portfolio-evidence" / f"{evidence_id}.bin"
-        raw = Path(row["path"]).read_bytes()
+        raw = hypothesis_portfolio.read_evidence_bytes(
+            row["path"], f"portfolio evidence {evidence_id}")
         if hashlib.sha256(raw).hexdigest() != row["sha256"]:
             raise DeploymentFactoryError(f"portfolio evidence changed: {evidence_id}")
         _atomic_bytes(target, raw)
