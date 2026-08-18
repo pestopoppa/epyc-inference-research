@@ -7,6 +7,7 @@ it does not widen runtime authority.
 """
 from __future__ import annotations
 
+import dataclasses
 from pathlib import Path
 import tempfile
 from types import SimpleNamespace
@@ -17,6 +18,7 @@ from .. import hypothesis_portfolio
 from . import discovery_controller as C
 from . import discovery_deployment_factory as F
 from . import gpu_source_evidence as E
+from . import test_discovery_controller as TD
 from .test_gpu_source_evidence import ClaimFactory, FakeExecutors, plan
 
 
@@ -124,7 +126,7 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
         self.assertEqual(variants["gqa7_scalar_tail"]["ncols2"], 1)
 
     def test_fa_correctness_requires_and_receipts_exact_odd_gqa7_cases(self):
-        """RED: the generic FLASH_ATTN_EXT total has no GQA7 shape proof."""
+        """RED: metadata alone cannot make the generic total a GQA7 proof."""
         template = self.registry.templates["cuda-fattn-tile-v1"]
         required = template.semantics.get("required_correctness_cases")
         self.assertIsInstance(required, list)
@@ -136,6 +138,19 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
             self.assertEqual(row["gqa_ratio"], 7)
             self.assertEqual(row["query_tokens"], 1)
             self.assertGreaterEqual(row["expected_matches"], 1)
+        invocations = template.semantics.get("correctness_invocations")
+        self.assertIsInstance(invocations, list)
+        self.assertEqual([row["invocation_id"] for row in invocations],
+                         ["generic_flash_attn_ext", "odd_gqa7_d64_q1"])
+        generic, dedicated = invocations
+        self.assertEqual(generic["expected_cases"], 2868)
+        self.assertEqual(dedicated["expected_cases"], len(required))
+        self.assertEqual(dedicated["required_cases"], required)
+        self.assertEqual(dedicated["case_set"], "odd_gqa7_d64_q1_v1")
+        # The plan/policy/receipt API must carry both invocations.  A template
+        # declaration that is never consumed is deliberately not acceptance.
+        self.assertIn("correctness_invocations",
+                      E.GpuSourceEvidencePlan.__dataclass_fields__)
 
     def test_each_strategy_has_a_separate_graphs_on_target_runtime_screen(self):
         """RED: serialized graphs-off attribution cannot discharge this gate."""
@@ -179,6 +194,12 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
                 self.assertEqual(fsm["first_incomplete_stage_policy"],
                                  "execute_once")
                 self.assertIs(fsm["reject_identity_drift"], True)
+                schedule = fsm["attribution_arm_order_schedule"]
+                self.assertIs(schedule["counterbalanced"], True)
+                self.assertEqual(tuple(schedule["s1"]),
+                                 tuple(reversed(schedule["s2"])))
+                self.assertEqual(set(schedule["s1"]),
+                                 {"candidate", "anchor"})
 
     def test_each_strategy_requires_exact_attribution_and_graphs_on_gain(self):
         """RED: an opaque attribution hash cannot discharge a falsifier."""
@@ -211,6 +232,74 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
         self.assertEqual(route["total_duration_ns"], 80)
         self.assertEqual(route["duration_ns"], [30, 50])
         self.assertEqual(route["median_duration_ns"], 40)
+
+    def test_sealed_decision_carries_both_effects_and_requires_conjunction(self):
+        """RED: one whole-model scalar cannot stand in for exact attribution."""
+        fields = C.SealedScreen.__dataclass_fields__
+        self.assertIn("exact_attribution_effect_fraction", fields)
+        self.assertIn("target_runtime_effect_fraction", fields)
+        result = C.SealedScreen(
+            receipt_path="result.json", result_sha256="a" * 64,
+            effect_fraction=.05, classification="candidate",
+            baseline_sha256="b" * 64, source_proof_sha256="c" * 64,
+            dispatch_proof_sha256="d" * 64,
+            exact_attribution_effect_fraction=-.01,
+            target_runtime_effect_fraction=.05)
+        classified = C._classified_result(
+            {"iterations": []},
+            SimpleNamespace(source_manifest_sha256="e" * 64, regime={}),
+            result)
+        self.assertNotIn(classified.classification,
+                         {"candidate", "top_k_replicated_candidate"})
+
+    def test_three_real_critic_rejections_skip_only_that_strategy(self):
+        """RED: exercise the live critic_pending branch, not a helper directly."""
+        fixture = TD.Tests(methodName="runTest")
+        with tempfile.TemporaryDirectory() as directory:
+            records = [
+                fixture.portfolio_record(
+                    hypothesis_id="akh-first", rank=1, budget=2),
+                fixture.portfolio_record(
+                    hypothesis_id="akh-second", rank=2, budget=2),
+            ]
+            config = dataclasses.replace(
+                fixture.portfolio_config(Path(directory), records),
+                max_iterations=4)
+
+            class BoundPlanner:
+                def __init__(self):
+                    self.selected = []
+
+                def attest(self):
+                    return {**C.SOL, "runtime": {
+                        "kind": "docker_workspace_bind_only",
+                        "docker_path": "/docker", "docker_sha256": "a" * 64,
+                        "image_id": "image", "codex_native_sha256": "a" * 64,
+                        "code_mode_host_sha256": "a" * 64,
+                        "ca_certificate_sha256": "a" * 64,
+                        "writable_host_binds": ["/workspace"],
+                        "host_network_mode": "docker_bridge"}}
+
+                def plan(self, *, context, workspace):
+                    binding = context["authoring_assignment"]["portfolio_binding"]
+                    self.selected.append(binding["hypothesis_id"])
+                    return fixture.portfolio_candidate(binding)
+
+            class Never:
+                def __getattr__(self, _name):
+                    def fail(*_args, **_kwargs):
+                        raise AssertionError("dry authoring audit reached compute")
+                    return fail
+
+            planner = BoundPlanner()
+            result = C.run_controller(
+                config, planner=planner,
+                critic=TD.FakeCritic(["reject", "reject", "reject", "accept"]),
+                screener=Never(), lease=Never())
+            self.assertEqual(planner.selected,
+                             ["akh-first", "akh-first", "akh-first", "akh-second"])
+            self.assertIn("akh-first", result["portfolio_skips"])
+            self.assertNotIn("akh-first", result["portfolio_terminals"])
 
 
 class EvidenceStageResumeRedGate(unittest.TestCase):
@@ -311,6 +400,22 @@ class EvidenceStageResumeRedGate(unittest.TestCase):
             self.assertIsInstance(bundle, E.proofs.GpuSourceProofBundle)
             self.assertEqual(resumed_exec.calls, [])
             self.assertEqual(resumed_claims.claims, [])
+
+    def test_pair_receipt_seals_exact_duration_comparison(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            output = base / "evidence"
+            current = plan(base / "inputs")
+            bundle = self._produce(
+                output, current, FakeExecutors(), ClaimFactory())
+            pair = E.proofs.load_receipt(
+                Path(bundle.attribution["path"]), schema=E.PAIR_SCHEMA)["body"]
+            comparison = pair["exact_duration_comparison"]
+            self.assertEqual(comparison["candidate_total_duration_ns"], 19)
+            self.assertEqual(comparison["anchor_total_duration_ns"], 19)
+            self.assertEqual(comparison["relative_improvement_fraction"], 0.0)
+            self.assertIs(comparison["all_candidate_routes_present"], True)
+            self.assertIs(comparison["all_anchor_routes_present"], True)
 
 
 if __name__ == "__main__":
