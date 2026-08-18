@@ -229,6 +229,103 @@ def _is_resumable_wait_root(root: Path, identity: Mapping[str, Any]) -> bool:
     return True
 
 
+def _validated_stage_receipt(path: Path, schema: str,
+                             identity: Mapping[str, Any]) -> Mapping[str, Any]:
+    """Validate enough of a terminal stage to prove retry cannot repeat it.
+
+    Full plan-dependent validation happens inside ``produce_gpu_source_evidence``
+    after the sealed build and plan have been reconstructed.  Reconcile only
+    decides whether it is safe to re-enter that producer.  A self-hashed,
+    operation-bound terminal receipt is safe: the producer will either reuse it
+    after recursive validation or refuse before invoking the next executor.
+    """
+    loaded = gpu_source_proofs.load_receipt(path, schema=schema)
+    body = loaded["body"]
+    if (body.get("authority") != AUTHORITY
+            or body.get("promotion_claim") is not False
+            or body.get("manifest_sha256") != identity["manifest_sha256"]):
+        raise GpuSourceAdapterError("partial proof receipt identity mismatch")
+    return loaded
+
+
+def _is_resumable_stage_root(root: Path, identity: Mapping[str, Any]) -> bool:
+    """Return true only for an ordered proof journal with terminal boundaries.
+
+    Raw output without a receipt is deliberately not resumable: the adapter
+    cannot know whether the corresponding GPU command completed.  Completed
+    receipts, however, are exactly-once checkpoints and must survive controller
+    or API reloads.
+    """
+    allowed_root = {
+        "intent.json", "source-manifest.json", "resource-waits", "proof",
+    }
+    if any(path.name not in allowed_root for path in root.iterdir()):
+        return False
+    proof = root / "proof"
+    if proof.is_symlink() or not proof.is_dir():
+        return False
+    allowed_proof = {
+        "correctness", "attribution-candidate", "attribution-anchor",
+        "attribution-pair.json", "proof-bundle.json",
+    }
+    if any(path.name not in allowed_proof for path in proof.iterdir()):
+        return False
+    try:
+        correctness = proof / "correctness"
+        if correctness.is_symlink() or not correctness.is_dir():
+            return False
+        aggregate = correctness / "receipt.json"
+        refusal = correctness / "refusal.json"
+        if aggregate.exists() or aggregate.is_symlink():
+            if refusal.exists() or refusal.is_symlink():
+                return False
+            _validated_stage_receipt(
+                aggregate, evidence.CORRECTNESS_SCHEMA, identity)
+        elif refusal.exists() or refusal.is_symlink():
+            _validated_stage_receipt(
+                refusal, evidence.CORRECTNESS_REFUSAL_SCHEMA, identity)
+        else:
+            # Multi-invocation correctness may crash after one sub-receipt but
+            # before the aggregate.  Every extant child must be terminal.
+            children = tuple(correctness.iterdir())
+            if not children:
+                return False
+            for child in children:
+                child_receipt = child / "receipt.json"
+                if child.is_symlink() or not child.is_dir() \
+                        or not child_receipt.exists():
+                    return False
+                _validated_stage_receipt(
+                    child_receipt, evidence.CORRECTNESS_SCHEMA, identity)
+
+        completed_arms = 0
+        for arm in ("candidate", "anchor"):
+            arm_dir = proof / f"attribution-{arm}"
+            if not arm_dir.exists() and not arm_dir.is_symlink():
+                continue
+            if arm_dir.is_symlink() or not arm_dir.is_dir():
+                return False
+            _validated_stage_receipt(
+                arm_dir / "receipt.json", evidence.ATTRIBUTION_SCHEMA, identity)
+            completed_arms += 1
+
+        pair = proof / "attribution-pair.json"
+        if pair.exists() or pair.is_symlink():
+            if completed_arms != 2:
+                return False
+            _validated_stage_receipt(pair, evidence.PAIR_SCHEMA, identity)
+        bundle = proof / "proof-bundle.json"
+        if bundle.exists() or bundle.is_symlink():
+            if not pair.exists():
+                return False
+            evidence.load_gpu_source_evidence_bundle(bundle)
+        return True
+    except (GpuSourceAdapterError, evidence.EvidenceProducerError,
+            gpu_source_proofs.ProofError, OSError, TypeError, ValueError,
+            KeyError):
+        return False
+
+
 def _git_snapshot_bytes(root: Path, args: Sequence[str], label: str) -> bytes:
     completed = subprocess.run(
         ["git", "-C", str(root), *args], stdin=subprocess.DEVNULL,
@@ -680,7 +777,8 @@ class GovernedGpuSourceAdapter:
             except GpuSourceAdapterError as exc:
                 raise GpuSourceAdapterError(
                     "operation already has durable state; reconcile instead of restarting") from exc
-            if not _is_resumable_wait_root(operation_root, identity):
+            if (not _is_resumable_wait_root(operation_root, identity)
+                    and not _is_resumable_stage_root(operation_root, identity)):
                 raise GpuSourceAdapterError(
                     "operation already has durable state; reconcile instead of restarting")
         else:
@@ -816,6 +914,8 @@ class GovernedGpuSourceAdapter:
             result_path = root / "screen-result.json"
             if not result_path.exists() and not result_path.is_symlink():
                 if _is_resumable_wait_root(root, identity):
+                    return _recovery("safe_to_start")
+                if _is_resumable_stage_root(root, identity):
                     return _recovery("safe_to_start")
                 plan = _read_json(root / "runner-plan.json", "GPU runner plan")
                 if (plan.get("operation_key") != identity["operation_key"]

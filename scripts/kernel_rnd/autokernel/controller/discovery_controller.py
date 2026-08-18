@@ -58,6 +58,47 @@ class PlannerOutputRefusal(DiscoveryControllerError):
     """
 
 
+class PlannerProviderTransient(PlannerOutputRefusal):
+    """A retryable provider/API interruption before candidate validation."""
+
+
+class GovernedStageRefusal(DiscoveryControllerError):
+    stage = ""
+    disposition = ""
+    scientific_budget_spent = False
+
+    def __init__(self, message: str, *, receipt_path: str,
+                 receipt_sha256: str) -> None:
+        super().__init__(message)
+        if (not isinstance(receipt_path, str) or not receipt_path
+                or not isinstance(receipt_sha256, str)
+                or not HASH.fullmatch(receipt_sha256)):
+            raise DiscoveryControllerError(
+                "governed stage refusal lacks a sealed receipt")
+        self.receipt_path = receipt_path
+        self.receipt_sha256 = receipt_sha256
+
+
+class SourceApplyRefusal(GovernedStageRefusal):
+    stage = "source_apply"
+    disposition = "authoring_refused"
+
+
+class CompileRefusal(GovernedStageRefusal):
+    stage = "compile"
+    disposition = "authoring_refused"
+
+
+class CorrectnessRefusal(GovernedStageRefusal):
+    stage = "correctness"
+    disposition = "correctness_falsified"
+
+
+class DispatchAttributionRefusal(GovernedStageRefusal):
+    stage = "dispatch_attribution"
+    disposition = "attribution_route_falsified"
+
+
 class PrecomputeScreenRefusal(DiscoveryControllerError):
     """Typed adapter refusal proving that no governed operation was started."""
 
@@ -914,10 +955,10 @@ class CodexPlanner:
                         campaign_id=assignment["campaign_id"],
                         hypothesis_id=example_hypothesis, provider=SOL["provider"],
                         model=SOL["model"], effort=SOL["effort"], result=result_facts)
-                raise DiscoveryControllerError(
+                raise PlannerProviderTransient(
                     f"Sol actor failed: {getattr(result, 'stderr', '')[-400:]}")
         if result_facts["returncode"]:
-            raise DiscoveryControllerError(
+            raise PlannerProviderTransient(
                 f"sealed Sol actor invocation failed with return code "
                 f"{result_facts['returncode']}")
         if self.reviewed_sources is not None:
@@ -1372,7 +1413,7 @@ class GpuSourceScreener:
                 result_sha256=body["result_sha256"],
                 effect_fraction=exact_effect, classification="screened_out",
                 baseline_sha256=schemas.content_hash(
-                    comparison["anchor_routes"]),
+                    comparison.get("anchor_routes", comparison)),
                 source_proof_sha256=bundle.correctness["file_sha256"],
                 dispatch_proof_sha256=bundle.attribution["file_sha256"],
                 exact_attribution_effect_fraction=exact_effect,
@@ -2091,7 +2132,8 @@ def _apply_portfolio_outcome(state: dict[str, Any], row: dict[str, Any]) -> None
     # screens only.  Critic/source/authorization refusals have no result or
     # evidence graph and cannot establish the terminal claim "no gain after N
     # candidates" merely by carrying distinct proposed manifest hashes.
-    measured = (isinstance(row.get("result_sha256"), str)
+    measured = (row.get("scientific_budget_spent") is True
+                or isinstance(row.get("result_sha256"), str)
                 and HASH.fullmatch(row["result_sha256"])
                 and isinstance(row.get("evidence"), Mapping))
     if not measured:
@@ -2111,9 +2153,10 @@ def _apply_portfolio_outcome(state: dict[str, Any], row: dict[str, Any]) -> None
     attempts = {item.get("source_manifest_sha256") for item in state["iterations"]
                 if item.get("portfolio_hypothesis_id") == hypothesis_id
                 and isinstance(item.get("source_manifest_sha256"), str)
-                and isinstance(item.get("result_sha256"), str)
-                and HASH.fullmatch(item["result_sha256"])
-                and isinstance(item.get("evidence"), Mapping)}
+                and (item.get("scientific_budget_spent") is True
+                     or isinstance(item.get("result_sha256"), str)
+                     and HASH.fullmatch(item["result_sha256"])
+                     and isinstance(item.get("evidence"), Mapping))}
     if len(attempts) >= policy["max_distinct_candidates"]:
         disposition = policy["terminal_rule"]
         terminals[hypothesis_id] = {"disposition": disposition,
@@ -2158,7 +2201,8 @@ def _record_planner_refusal(state: dict[str, Any], *, turn: int,
     """Persist one non-candidate authoring refusal without spending science budget."""
     row: dict[str, Any] = {
         "turn": turn,
-        "status": "planner_refused",
+        "status": ("planner_transient" if isinstance(exc, PlannerProviderTransient)
+                   else "planner_refused"),
         "reason": str(exc),
         "context_sha256": _sha(context),
     }
@@ -2489,7 +2533,11 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                     _record_planner_refusal(
                         state, turn=turn, context=context,
                         portfolio_binding=portfolio_binding, exc=exc)
-                    store.save(state, "planner_refused")
+                    store.save(
+                        state,
+                        "planner_transient"
+                        if isinstance(exc, PlannerProviderTransient)
+                        else "planner_refused")
                     continue
                 except Exception as exc:
                     state["planning"]["failure"]={
@@ -2573,7 +2621,14 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                 # deliberately never asks for a resource lease or starts a
                 # source build, correctness, attribution, or model call.
                 row.update(status="dry_run_authorized", authorization=authorization.to_dict())
-                state.pop("pending", None); state["iterations"].append(row); _apply_portfolio_outcome(state,row); state["next"] += 1
+                state.pop("pending", None); state["iterations"].append(row); _apply_portfolio_outcome(state,row)
+                dry_hypothesis = row.get("portfolio_hypothesis_id")
+                if isinstance(dry_hypothesis, str):
+                    state.setdefault("portfolio_skips", {})[dry_hypothesis] = {
+                        "disposition": "dry_run_validated",
+                        "scientific_terminal": False,
+                    }
+                state["next"] += 1
                 store.save(state, "dry_run_authorized")
                 continue
             repetition=2 if pending and pending.get("confirmation") else 1
@@ -2605,6 +2660,28 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
             except PrecomputeScreenRefusal as exc:
                 _record_precompute_refusal(state, row, exc)
                 store.save(state,"screen_refused"); continue
+            except GovernedStageRefusal as exc:
+                state.pop("inflight", None)
+                state.pop("pending", None)
+                row.update(
+                    status=exc.disposition, reason=str(exc),
+                    stage=exc.stage,
+                    stage_receipt_path=exc.receipt_path,
+                    stage_receipt_sha256=exc.receipt_sha256,
+                    scientific_budget_spent=exc.scientific_budget_spent)
+                state["iterations"].append(row)
+                _note_portfolio_authoring_failure(state, row)
+                hypothesis_id = row.get("portfolio_hypothesis_id")
+                if (isinstance(hypothesis_id, str)
+                        and exc.disposition == "correctness_falsified"):
+                    state.setdefault("portfolio_terminals", {})[hypothesis_id] = {
+                        "disposition": exc.disposition,
+                        "stage_receipt_path": exc.receipt_path,
+                        "stage_receipt_sha256": exc.receipt_sha256,
+                    }
+                state["next"] += 1
+                store.save(state, exc.disposition)
+                continue
             except Exception as exc:
                 # The durable start intent has been written.  An ordinary
                 # exception may follow a build, claim, or model invocation, so

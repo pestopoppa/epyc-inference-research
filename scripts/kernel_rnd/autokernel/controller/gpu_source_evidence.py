@@ -1660,7 +1660,9 @@ def _reduce_arm(
         if not hits:
             raise EvidenceProducerError(
                 f"invariant dispatch {expectation.signature} has no calls")
-        invariant_result[expectation.signature] = _geometry_signature(hits)
+        invariant_result[expectation.signature] = {
+            key: value for key, value in _geometry_signature(hits).items()
+            if key in {"calls", "geometries"}}
     return {"exact": exact_result, "forbidden": forbidden_result,
             "invariants": invariant_result}
 

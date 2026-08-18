@@ -825,6 +825,7 @@ def _template_registry() -> ExperimentTemplateRegistry:
         "target_runtime_graphs_on_gain_required": True,
         "combination": "conjunction",
         "direction": "lower_exact_duration_and_higher_throughput",
+        "short_circuit_graphs_on_when_exact_nonpositive": True,
     }
     stage_fsm = {
         "stages": [
@@ -1017,11 +1018,14 @@ def _template_registry() -> ExperimentTemplateRegistry:
                                {"invocation_id": "generic_flash_attn_ext",
                                 "case_set": "generic_flash_attn_ext_v1",
                                 "expected_cases": 2868,
-                                "required_cases": []},
+                                "required_cases": [], "environment": {}},
                                {"invocation_id": "odd_gqa7_d64_q1",
                                 "case_set": "odd_gqa7_d64_q1_v1",
                                 "expected_cases": len(gqa7_correctness_cases),
-                                "required_cases": gqa7_correctness_cases},
+                                "required_cases": gqa7_correctness_cases,
+                                "environment": {
+                                    "AUTOKERNEL_CORRECTNESS_CASE_SET":
+                                        "odd_gqa7_d64_q1_v1"}},
                            ],
                            "candidate_dispatch_authority":
                                "derived_from_anchor_by_exact_7_equals_3x2_plus_1_partition"}
