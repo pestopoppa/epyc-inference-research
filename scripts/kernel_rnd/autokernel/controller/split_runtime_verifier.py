@@ -394,30 +394,29 @@ def verify_runtime_maps(manifest: SplitRuntimeManifest, *, arm: str, maps_text: 
     hip_dir = manifest.anchor_hip_dir if arm == "anchor" else manifest.candidate_hip_dir
     expected_hip = (hip_dir / _HIP_SONAME).resolve(strict=True)
     expected_model = model_path.resolve(strict=True)
+    allowed_roots = (manifest.common_dir, manifest.anchor_hip_dir,
+                     manifest.candidate_hip_dir)
+    local = {path for path in paths if any(path == root or root in path.parents
+                                           for root in allowed_roots)}
+    wrong_arm = manifest.candidate_hip_dir if arm == "anchor" else manifest.anchor_hip_dir
+    if any(path == wrong_arm or wrong_arm in path.parents for path in local):
+        raise SplitRuntimeError("runtime maps contain the opposite HIP arm")
+    expected_common = {path.resolve(strict=True) for path in manifest.common_dir.iterdir()
+                       if path.is_file()}
+    allowed_local = expected_common | {expected_hip}
+    if local - allowed_local:
+        raise SplitRuntimeError("runtime maps contain an unsealed local object")
+    if expected_model in paths and _sha(expected_model) != model_sha256:
+        raise SplitRuntimeError("runtime maps model bytes changed after verification")
     if manifest.reward_binary.resolve(strict=True) not in paths:
         raise RuntimeMapsIncomplete("runtime maps omit shared reward executable")
     if expected_hip not in paths:
         raise RuntimeMapsIncomplete("runtime maps omit intended HIP SONAME object")
     if expected_model not in paths:
         raise RuntimeMapsIncomplete("runtime maps omit the sealed resident model")
-    if _sha(expected_model) != model_sha256:
-        raise SplitRuntimeError("runtime maps model bytes changed after verification")
-
-    allowed_roots = (manifest.common_dir, manifest.anchor_hip_dir,
-                     manifest.candidate_hip_dir)
-    local = {path for path in paths if any(path == root or root in path.parents
-                                           for root in allowed_roots)}
-    wrong_arm = manifest.candidate_hip_dir if arm == "anchor" else manifest.anchor_hip_dir
-    if any(wrong_arm in path.parents for path in local):
-        raise SplitRuntimeError("runtime maps contain the opposite HIP arm")
-    expected_common = {path.resolve(strict=True) for path in manifest.common_dir.iterdir()
-                       if path.is_file()}
     if not expected_common.issubset(local):
         missing = sorted(str(path) for path in expected_common - local)
         raise RuntimeMapsIncomplete(f"runtime maps omit common closure objects: {missing}")
-    allowed_local = expected_common | {expected_hip}
-    if local != allowed_local:
-        raise SplitRuntimeError("runtime maps contain an unsealed local object")
     mapped = {str(path): _sha(path) for path in sorted(local)}
     expected_common_hashes: dict[str, str] = {}
     for record in manifest.common_files:

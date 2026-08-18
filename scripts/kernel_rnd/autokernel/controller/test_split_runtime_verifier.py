@@ -207,6 +207,21 @@ class SplitRuntimeVerifierTests(unittest.TestCase):
                     model_sha256=_sha(model), device_id="mi210_0", kfd_pid=1,
                     boot_id="boot", process_start_ticks=1)
 
+    def test_maps_refuse_complete_opposite_arm_before_incomplete_classification(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "runtime"
+            _runtime(root)
+            manifest = V.verify_split_runtime(root, elf_reader=_fake_elf)
+            model = Path(directory) / "model.gguf"
+            model.write_bytes(b"model")
+            with self.assertRaisesRegex(V.SplitRuntimeError, "opposite HIP arm") as raised:
+                V.verify_runtime_maps(
+                    manifest, arm="candidate",
+                    maps_text=_maps(manifest, "anchor", model),
+                    model_path=model, model_sha256=_sha(model), device_id="mi210_0",
+                    kfd_pid=1, boot_id="boot", process_start_ticks=1)
+            self.assertNotIsInstance(raised.exception, V.RuntimeMapsIncomplete)
+
     def test_default_readelf_parser_on_existing_real_build_is_read_only(self) -> None:
         binary = Path(
             "/mnt/raid0/llm/autokernel/worktrees/ak-gpu-q5-onewave-20260813/"
