@@ -833,10 +833,11 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
         self.assertEqual([row["status"] for row in result["iterations"]],
                          ["dry_run_authorized"] * len(ELIGIBLE))
         self.assertEqual(result["terminal_reason"], "portfolio_exhausted")
-        self.assertEqual(set(result["portfolio_skips"]), set(expected))
+        self.assertEqual(set(result["portfolio_validations"]), set(expected))
         self.assertTrue(all(
             row["disposition"] == "dry_run_validated"
-            for row in result["portfolio_skips"].values()))
+            for row in result["portfolio_validations"].values()))
+        self.assertEqual(result.get("portfolio_skips", {}), {})
         self.assertEqual(result["portfolio_terminals"], {})
 
     def test_planner_provider_transient_is_typed_and_retries_after_restart(self):
@@ -1232,6 +1233,67 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
             receipt = Path(first.exception.receipt_path)
             forged = __import__("json").loads(receipt.read_text())
             forged["reason"] = "forged but self-consistent route reason"
+            forged.pop("receipt_sha256")
+            forged["receipt_sha256"] = E.schemas.content_hash(forged)
+            receipt.write_text(__import__("json").dumps(
+                forged, sort_keys=True) + "\n")
+            with mock.patch.object(C, "GpuSourceScreener", TA.FakeDelegate), \
+                    self.assertRaises(E.EvidenceProducerError):
+                adapter.screen(candidate, authorization, lease)
+            self.assertEqual(executors.calls, calls_after_terminal)
+
+    def test_dedicated_correctness_refusal_rederives_reason_on_reopen(self):
+        """The FA second invocation has the same tamper/restart contract."""
+        helper = TA.GpuSourceAdapterTests(methodName="runTest")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            values = helper.setup(directory)
+            adapter, candidate, authorization, lease, _inflight, _current, executors = values
+            evidence_plan = plan(root / "multi-correctness-inputs")
+            base_argv = list(evidence_plan.correctness_argv)
+            invocations = (
+                {"invocation_id": "generic", "argv": base_argv,
+                 "backend": evidence_plan.correctness_backend,
+                 "op": evidence_plan.correctness_op,
+                 "case_set": "generic", "expected_cases": 3,
+                 "required_cases": [], "environment_overrides": []},
+                {"invocation_id": "dedicated", "argv": base_argv,
+                 "backend": evidence_plan.correctness_backend,
+                 "op": evidence_plan.correctness_op,
+                 "case_set": "odd_gqa7_d64_q1_v1", "expected_cases": 3,
+                 "required_cases": [], "environment_overrides": [[
+                     "AUTOKERNEL_CORRECTNESS_CASE_SET",
+                     "odd_gqa7_d64_q1_v1"]]},
+            )
+            provisional = dataclasses.replace(
+                evidence_plan, correctness_invocations=invocations)
+            policy_path = provisional.policy.path
+            policy_path.write_text(__import__("json").dumps(
+                E._policy_payload(provisional), sort_keys=True))
+            policy = E.BoundInputFile(
+                "execution_policy", policy_path,
+                hashlib.sha256(policy_path.read_bytes()).hexdigest())
+            evidence_plan = dataclasses.replace(provisional, policy=policy)
+            adapter.plan_factory = lambda *_args: evidence_plan
+            original_correctness = executors.correctness
+
+            def fail_dedicated(invocation):
+                if sum(call[0] == "correctness" for call in executors.calls):
+                    executors.correctness_summary = "2/3 tests passed"
+                return original_correctness(invocation)
+
+            adapter.correctness_executor = fail_dedicated
+            with mock.patch.object(C, "GpuSourceScreener", TA.FakeDelegate), \
+                    self.assertRaises(C.CorrectnessRefusal) as first:
+                adapter.screen(candidate, authorization, lease)
+            self.assertEqual(
+                [call[:2] for call in executors.calls],
+                [("correctness", "candidate"),
+                 ("correctness", "candidate")])
+            calls_after_terminal = list(executors.calls)
+            receipt = Path(first.exception.receipt_path)
+            forged = __import__("json").loads(receipt.read_text())
+            forged["reason"] = "forged but self-consistent correctness reason"
             forged.pop("receipt_sha256")
             forged["receipt_sha256"] = E.schemas.content_hash(forged)
             receipt.write_text(__import__("json").dumps(
