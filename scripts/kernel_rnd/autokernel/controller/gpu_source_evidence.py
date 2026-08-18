@@ -1360,12 +1360,27 @@ def _matching(rows: Sequence[Mapping[str, Any]], pattern: str) -> list[Mapping[s
 
 def _geometry_signature(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     counts: dict[tuple[int, int, int, int], int] = {}
+    durations: list[int] = []
     for row in rows:
         key = (int(row["grid"]), int(row["workgroup"]), int(row["lds"]),
                int(row["blocks_per_call"]))
         counts[key] = counts.get(key, 0) + 1
+        duration = int(row["end_ns"]) - int(row["begin_ns"])
+        if duration <= 0:
+            raise EvidenceProducerError("timestamp row has non-positive duration")
+        durations.append(duration)
+    ordered_durations = sorted(durations)
     return {
         "calls": len(rows),
+        "total_duration_ns": sum(durations),
+        "duration_ns": durations,
+        "duration_statistic": "median_per_dispatch_ns",
+        "median_duration_ns": (
+            None if not ordered_durations else
+            (ordered_durations[len(ordered_durations) // 2]
+             if len(ordered_durations) % 2 else
+             (ordered_durations[len(ordered_durations) // 2 - 1]
+              + ordered_durations[len(ordered_durations) // 2]) / 2)),
         "geometries": [
             {"grid": key[0], "workgroup": key[1], "lds_bytes": key[2],
              "blocks_per_call": key[3], "calls": count}
@@ -1396,7 +1411,8 @@ def _reduce_arm(
             "blocks_per_call": expectation.blocks_per_call,
             "calls": expectation.calls,
         }]
-        if geometry != {"calls": expectation.calls, "geometries": expected_geometry}:
+        if (geometry["calls"] != expectation.calls
+                or geometry["geometries"] != expected_geometry):
             raise EvidenceProducerError(
                 f"exact dispatch {expectation.signature} count/geometry mismatch")
         exact_result[expectation.signature] = geometry
@@ -1808,6 +1824,67 @@ def load_gpu_source_correctness_refusal(
     return loaded
 
 
+def load_gpu_source_attribution_receipt(
+        path: Path, plan: GpuSourceEvidencePlan, *, arm: str) -> Mapping[str, Any]:
+    """Re-open one completed attribution arm as an exactly-once stage.
+
+    The raw timestamp CSV is part of the receipt graph, so reusing this stage
+    re-runs the authoritative dispatch and duration reduction over the original
+    bytes.  It never trusts the presence of a receipt filename alone.
+    """
+    if arm not in {"candidate", "anchor"}:
+        raise EvidenceProducerError("attribution receipt arm is invalid")
+    _verify_plan_files(plan)
+    try:
+        loaded = proofs.load_receipt(path, schema=ATTRIBUTION_SCHEMA)
+    except proofs.ProofError as exc:
+        raise EvidenceProducerError(
+            f"completed {arm} attribution receipt is not durably recoverable") from exc
+    _validate_attribution_body(loaded["body"], plan=plan, arm=arm)
+    return loaded
+
+
+def _load_gpu_source_attribution_pair(
+        path: Path, plan: GpuSourceEvidencePlan,
+        candidate: Mapping[str, Any], anchor: Mapping[str, Any]) -> Mapping[str, Any]:
+    try:
+        loaded = proofs.load_receipt(path, schema=PAIR_SCHEMA)
+    except proofs.ProofError as exc:
+        raise EvidenceProducerError(
+            "completed attribution pair is not durably recoverable") from exc
+    body = loaded["body"]
+    expected = {
+        "schema": PAIR_SCHEMA,
+        "authority": AUTHORITY,
+        "non_promotable": True,
+        "promotion_claim": False,
+        "manifest_sha256": plan.manifest_sha256,
+        "model_sha256": plan.model_sha256,
+        "workload_sha256": plan.workload_sha256,
+        "runtime_config_sha256": plan.runtime_config_sha256,
+        "candidate_build_identity": asdict(plan.candidate),
+        "anchor_build_identity": asdict(plan.anchor),
+        "identity_files": _identity_files_reference(plan.identity_files),
+        "shared_runtime": _shared_runtime_reference(plan.shared_runtime),
+        "execution_policy": _bound_reference(plan.policy),
+        "expectations": _expectations(plan),
+        "candidate": _reference(candidate),
+        "anchor": _reference(anchor),
+        "inverse_attribution_proved": True,
+    }
+    if any(body.get(key) != value for key, value in expected.items()):
+        raise EvidenceProducerError(
+            "completed attribution pair identity/contract changed")
+    candidate_body, anchor_body = candidate["body"], anchor["body"]
+    if (body.get("invariant_signatures")
+            != candidate_body.get("invariant_signatures")
+            or candidate_body.get("invariant_signatures")
+            != anchor_body.get("invariant_signatures")):
+        raise EvidenceProducerError(
+            "completed attribution pair changed an invariant signature")
+    return loaded
+
+
 def _contract_from_dict(value: Mapping[str, Any]) -> DispatchContract:
     try:
         return DispatchContract(
@@ -1869,45 +1946,99 @@ def produce_gpu_source_evidence(
     claim_verifier: Callable[[Mapping[str, Any]], object] = _default_claim_verifier,
     claim_timeout_s: float = 300.0,
 ) -> proofs.GpuSourceProofBundle:
-    """Execute correctness, candidate attribution, and anchor inverse attribution.
+    """Execute or exactly-once resume the ordered GPU proof stages.
 
-    The root must be fresh.  Every command owns an independently acquired and
-    released device claim.  A failure leaves raw file-backed diagnostics but
-    never produces a success bundle.
+    Every completed stage is recursively revalidated and reused.  Only the
+    first incomplete stage may execute.  A directory containing raw output but
+    no terminal receipt is deliberately ambiguous: replaying it could perform
+    a GPU command twice, so the producer refuses instead.
     """
     root = output_root.resolve()
-    if root.exists() or output_root.is_symlink():
-        raise EvidenceProducerError("output_root must be a fresh path")
+    if output_root.is_symlink() or (root.exists() and (root.is_symlink()
+                                                       or not root.is_dir())):
+        raise EvidenceProducerError("output_root must be a real directory")
     if (isinstance(claim_timeout_s, bool) or not isinstance(claim_timeout_s, (int, float))
             or not math.isfinite(claim_timeout_s) or claim_timeout_s < 0):
         raise EvidenceProducerError("claim timeout must be finite and non-negative")
     _verify_plan_files(plan)
-    root.mkdir(parents=True)
-    correctness = _produce_correctness(
-        root, plan, correctness_executor, claim_acquirer=claim_acquirer,
-        claim_verifier=claim_verifier, claim_journal=claim_journal,
-        claim_timeout_s=float(claim_timeout_s))
-    candidate = _produce_attribution_arm(
-        root, "candidate", plan, rocprof_executor, claim_acquirer=claim_acquirer,
-        claim_verifier=claim_verifier, claim_journal=claim_journal,
-        claim_timeout_s=float(claim_timeout_s))
-    anchor = _produce_attribution_arm(
-        root, "anchor", plan, rocprof_executor, claim_acquirer=claim_acquirer,
-        claim_verifier=claim_verifier, claim_journal=claim_journal,
-        claim_timeout_s=float(claim_timeout_s))
-    pair = _produce_pair(root, plan, candidate, anchor)
+    bundle_path = root / "proof-bundle.json"
+    if bundle_path.exists() or bundle_path.is_symlink():
+        return load_gpu_source_evidence_bundle(bundle_path)
+    root.mkdir(parents=True, exist_ok=True)
+
+    correctness_dir = root / "correctness"
+    correctness_path = correctness_dir / "receipt.json"
+    refusal_path = correctness_dir / "refusal.json"
+    later_paths = (
+        root / "attribution-candidate", root / "attribution-anchor",
+        root / "attribution-pair.json")
+    if correctness_path.exists() or correctness_path.is_symlink():
+        if refusal_path.exists() or refusal_path.is_symlink():
+            raise EvidenceProducerError(
+                "correctness stage has contradictory pass/refusal receipts")
+        correctness = load_gpu_source_correctness_receipt(correctness_path, plan)
+    elif refusal_path.exists() or refusal_path.is_symlink():
+        loaded_refusal = load_gpu_source_correctness_refusal(refusal_path, plan)
+        raise CorrectnessParseRefusal(str(loaded_refusal["body"]["reason"]))
+    else:
+        if (correctness_dir.exists() or correctness_dir.is_symlink()
+                or any(path.exists() or path.is_symlink() for path in later_paths)):
+            raise EvidenceProducerError(
+                "correctness stage is incomplete or later evidence exists out of order")
+        correctness = _produce_correctness(
+            root, plan, correctness_executor, claim_acquirer=claim_acquirer,
+            claim_verifier=claim_verifier, claim_journal=claim_journal,
+            claim_timeout_s=float(claim_timeout_s))
+
+    candidate_dir = root / "attribution-candidate"
+    candidate_path = candidate_dir / "receipt.json"
+    if candidate_path.exists() or candidate_path.is_symlink():
+        candidate = load_gpu_source_attribution_receipt(
+            candidate_path, plan, arm="candidate")
+    else:
+        if (candidate_dir.exists() or candidate_dir.is_symlink()
+                or (root / "attribution-anchor").exists()
+                or (root / "attribution-pair.json").exists()):
+            raise EvidenceProducerError(
+                "candidate attribution is incomplete or later evidence exists out of order")
+        candidate = _produce_attribution_arm(
+            root, "candidate", plan, rocprof_executor,
+            claim_acquirer=claim_acquirer, claim_verifier=claim_verifier,
+            claim_journal=claim_journal, claim_timeout_s=float(claim_timeout_s))
+
+    anchor_dir = root / "attribution-anchor"
+    anchor_path = anchor_dir / "receipt.json"
+    if anchor_path.exists() or anchor_path.is_symlink():
+        anchor = load_gpu_source_attribution_receipt(
+            anchor_path, plan, arm="anchor")
+    else:
+        if (anchor_dir.exists() or anchor_dir.is_symlink()
+                or (root / "attribution-pair.json").exists()):
+            raise EvidenceProducerError(
+                "anchor attribution is incomplete or pair exists out of order")
+        anchor = _produce_attribution_arm(
+            root, "anchor", plan, rocprof_executor,
+            claim_acquirer=claim_acquirer, claim_verifier=claim_verifier,
+            claim_journal=claim_journal, claim_timeout_s=float(claim_timeout_s))
+
+    pair_path = root / "attribution-pair.json"
+    if pair_path.exists() or pair_path.is_symlink():
+        pair = _load_gpu_source_attribution_pair(
+            pair_path, plan, candidate, anchor)
+    else:
+        pair = _produce_pair(root, plan, candidate, anchor)
     bundle = proofs.GpuSourceProofBundle.from_validated_paths(
         manifest_sha256=plan.manifest_sha256, candidate=plan.candidate,
         anchor=plan.anchor, workload_sha256=plan.workload_sha256,
         correctness=_reference(correctness), attribution=_reference(pair))
-    _seal(root / "proof-bundle.json", {
+    _seal(bundle_path, {
         "schema": SEALED_BUNDLE_SCHEMA,
         "authority": AUTHORITY,
         "promotion_claim": False,
         "bundle": bundle.to_dict(),
     })
     # Re-read the complete graph once before returning it to the controller.
-    return load_gpu_source_evidence_bundle(root / "proof-bundle.json")
+    return load_gpu_source_evidence_bundle(bundle_path)
 
 
 def load_gpu_source_evidence_bundle(path: Path) -> proofs.GpuSourceProofBundle:

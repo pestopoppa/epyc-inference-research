@@ -117,6 +117,75 @@ class ExperimentTemplate:
         if (not isinstance(markers, list) or not markers
                 or not all(isinstance(value, str) and value for value in markers)):
             raise DeploymentFactoryError("template kernel literal markers are malformed")
+        variants = self.semantics.get("candidate_dispatch_variants")
+        if variants is not None:
+            # The only topology-changing template is the reviewed odd-GQA7
+            # pair+tail strategy.  The planner still has to bind the one exact
+            # observed anchor row, but it never authors the candidate route,
+            # call count, or geometry.  Those are derived here from the sealed
+            # 7 = 3*2 + 1 partition contract.
+            if (self.template_id != "cuda-fattn-tile-v1"
+                    or not isinstance(variants, Mapping)
+                    or set(variants) != {"gqa7_bulk_pairs", "gqa7_scalar_tail"}
+                    or len(expected_rows) != 1
+                    or len(self.dispatch.anchor_exact) != 1):
+                raise DeploymentFactoryError(
+                    "candidate dispatch variants are outside reviewed GQA7 authority")
+            expected = expected_rows[0]
+            anchor = self.dispatch.anchor_exact[0]
+            if (expected.route_id != anchor.signature
+                    or (expected.calls, expected.grid, expected.workgroup,
+                        expected.lds_bytes) !=
+                       (anchor.calls, anchor.grid, anchor.workgroup,
+                        anchor.lds_bytes)
+                    or re.fullmatch(anchor.kernel_pattern,
+                                    expected.kernel_name) is None):
+                raise DeploymentFactoryError(
+                    "GQA7 planner dispatch differs from reviewed anchor authority")
+            old = "<64, 64, 2, 1, false>"
+            new = "<64, 64, 1, 2, false>"
+            if expected.kernel_name.count(old) != 1:
+                raise DeploymentFactoryError(
+                    "GQA7 anchor kernel literal cannot derive reviewed bulk route")
+            bulk_name = expected.kernel_name.replace(old, new)
+            derived = {
+                "gqa7_bulk_pairs": (bulk_name, anchor.grid * 3 // 7, 2),
+                "gqa7_scalar_tail": (expected.kernel_name,
+                                      anchor.grid // 7, 1),
+            }
+            if anchor.grid % 7:
+                raise DeploymentFactoryError(
+                    "GQA7 anchor grid cannot be partitioned into 3 pairs plus tail")
+            candidate = []
+            for name in ("gqa7_bulk_pairs", "gqa7_scalar_tail"):
+                row = variants[name]
+                raw_name, grid, ncols2 = derived[name]
+                expected_row = {
+                    "kernel_name": raw_name.split("(", 1)[0],
+                    "calls": anchor.calls,
+                    "grid": grid,
+                    "workgroup": anchor.workgroup,
+                    "lds_bytes": anchor.lds_bytes,
+                    "gqa_ratio": 7,
+                    "head_size": 64,
+                    "ncols2": ncols2,
+                }
+                if any(row.get(key) != value
+                       for key, value in expected_row.items()):
+                    raise DeploymentFactoryError(
+                        "GQA7 candidate variant differs from relational authority")
+                candidate.append(evidence.ExactDispatch(
+                    signature=f"{self.template_id}.candidate.{name}",
+                    kernel_pattern="^" + re.escape(raw_name) + "$",
+                    calls=anchor.calls, grid=grid,
+                    workgroup=anchor.workgroup, lds_bytes=anchor.lds_bytes,
+                    blocks_per_call=grid // anchor.workgroup))
+            return evidence.DispatchContract(
+                candidate_exact=tuple(candidate),
+                anchor_exact=self.dispatch.anchor_exact,
+                candidate_forbidden=self.dispatch.candidate_forbidden,
+                anchor_forbidden=self.dispatch.anchor_forbidden,
+                invariants=self.dispatch.invariants)
         candidate = []
         for index, expected in enumerate(expected_rows):
             anchor = {row.signature: row for row in self.dispatch.anchor_exact}.get(
@@ -729,6 +798,63 @@ def _template_registry() -> ExperimentTemplateRegistry:
     set_rows_anchor = ((
         r"^void k_set_rows<float, long, __half>\(.*\) \[clone \.kd\]$",
         3096, 256, 256, 0),)
+    target_runtime_screen = {
+        "stage_id": "target_runtime_graphs_on_screen",
+        "workload": "decode_tg128",
+        "hip_graphs": True,
+        "paired": True,
+        "decision_required": True,
+        "exact_invocations": 1,
+        "resume_without_repeat": True,
+        "authority": (
+            "whole-model reward direction only; graphs-off attribution remains "
+            "a separate route/device-time receipt"),
+    }
+    decision_evidence = {
+        "all_exact_routes_have_duration": True,
+        "exact_attribution_gain_required": True,
+        "target_runtime_graphs_on_gain_required": True,
+        "combination": "conjunction",
+        "direction": "lower_exact_duration_and_higher_throughput",
+    }
+    stage_fsm = {
+        "stages": [
+            "correctness", "candidate_attribution", "anchor_attribution",
+            "measurement_graphs_off_screen",
+            "target_runtime_graphs_on_screen"],
+        "crash_after_test_points": [
+            "correctness", "candidate_attribution", "anchor_attribution",
+            "measurement_graphs_off_screen",
+            "target_runtime_graphs_on_screen"],
+        "completed_stage_policy": "revalidate_receipt_and_reuse",
+        "first_incomplete_stage_policy": "execute_once",
+        "reject_identity_drift": True,
+    }
+    gqa7_candidate_variants = {
+        "gqa7_bulk_pairs": {
+            "kernel_name": "void flash_attn_tile<64, 64, 1, 2, false>",
+            "calls": 3096, "grid": 3072, "workgroup": 64,
+            "lds_bytes": 5120, "gqa_ratio": 7, "head_size": 64,
+            "ncols2": 2,
+        },
+        "gqa7_scalar_tail": {
+            "kernel_name": "void flash_attn_tile<64, 64, 2, 1, false>",
+            "calls": 3096, "grid": 1024, "workgroup": 64,
+            "lds_bytes": 5120, "gqa_ratio": 7, "head_size": 64,
+            "ncols2": 1,
+        },
+    }
+    gqa7_correctness_cases = [
+        {"op": "FLASH_ATTN_EXT", "hsk": 64, "hsv": 64,
+         "gqa_ratio": 7, "query_tokens": 1, "kv": 128,
+         "mask": False, "expected_matches": 1},
+        {"op": "FLASH_ATTN_EXT", "hsk": 64, "hsv": 64,
+         "gqa_ratio": 7, "query_tokens": 1, "kv": 512,
+         "mask": True, "expected_matches": 1},
+        {"op": "FLASH_ATTN_EXT", "hsk": 64, "hsv": 64,
+         "gqa_ratio": 7, "query_tokens": 1, "kv": 2048,
+         "mask": True, "expected_matches": 1},
+    ]
     families = (
         {"id": "cuda-fattn-v2", "path": "ggml/src/ggml-cuda/fattn.cu",
          "primary": "ggml_cuda_get_best_fattn_kernel",
@@ -864,6 +990,14 @@ def _template_registry() -> ExperimentTemplateRegistry:
                        "manual_replay_traces": [dict(row, file=path) for row in family["replays"]],
                        "planner_target_exclusions": list(
                            family.get("planner_target_exclusions", ())),
+                       "target_runtime_screen": target_runtime_screen,
+                       "stage_fsm": stage_fsm,
+                       "decision_evidence": decision_evidence,
+                       **({"candidate_dispatch_variants": gqa7_candidate_variants,
+                           "required_correctness_cases": gqa7_correctness_cases,
+                           "candidate_dispatch_authority":
+                               "derived_from_anchor_by_exact_7_equals_3x2_plus_1_partition"}
+                          if template_id == "cuda-fattn-tile-v1" else {}),
                        "dispatch_bounds": {"calls": [1, 20000], "grid": [64, 16777216],
                                            "workgroup": [64, 1024], "lds_bytes": [0, 131072],
                                            "kernel_name_fragments": list(family["markers"])}})

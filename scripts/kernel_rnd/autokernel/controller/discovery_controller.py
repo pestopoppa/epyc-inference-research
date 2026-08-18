@@ -1581,11 +1581,15 @@ def _select_portfolio_binding(state: Mapping[str, Any],
         raise DiscoveryControllerError("eligible portfolio priority is malformed") from exc
     for record in eligible:
         binding = _portfolio_binding(config, record)
-        if binding["hypothesis_id"] in state.get("portfolio_terminals", {}):
+        if (binding["hypothesis_id"] in state.get("portfolio_terminals", {})
+                or binding["hypothesis_id"] in state.get("portfolio_skips", {})):
             continue
         attempts = {row.get("source_manifest_sha256") for row in state["iterations"]
                     if row.get("portfolio_hypothesis_id") == binding["hypothesis_id"]
-                    and isinstance(row.get("source_manifest_sha256"), str)}
+                    and isinstance(row.get("source_manifest_sha256"), str)
+                    and isinstance(row.get("result_sha256"), str)
+                    and HASH.fullmatch(row["result_sha256"])
+                    and isinstance(row.get("evidence"), Mapping)}
         if len(attempts) < binding["decision_policy"]["max_distinct_candidates"]:
             return binding
     return None
@@ -1987,6 +1991,15 @@ def _apply_portfolio_outcome(state: dict[str, Any], row: dict[str, Any]) -> None
         return
     terminals = state.setdefault("portfolio_terminals", {})
     status = row.get("status")
+    # A scientific candidate budget counts measured, recursively sealed
+    # screens only.  Critic/source/authorization refusals have no result or
+    # evidence graph and cannot establish the terminal claim "no gain after N
+    # candidates" merely by carrying distinct proposed manifest hashes.
+    measured = (isinstance(row.get("result_sha256"), str)
+                and HASH.fullmatch(row["result_sha256"])
+                and isinstance(row.get("evidence"), Mapping))
+    if not measured:
+        return
     if status == "top_k_replicated_candidate":
         terminals[hypothesis_id] = {"disposition": "nominated",
                                     "policy": dict(policy)}
@@ -2001,7 +2014,10 @@ def _apply_portfolio_outcome(state: dict[str, Any], row: dict[str, Any]) -> None
             return
     attempts = {item.get("source_manifest_sha256") for item in state["iterations"]
                 if item.get("portfolio_hypothesis_id") == hypothesis_id
-                and isinstance(item.get("source_manifest_sha256"), str)}
+                and isinstance(item.get("source_manifest_sha256"), str)
+                and isinstance(item.get("result_sha256"), str)
+                and HASH.fullmatch(item["result_sha256"])
+                and isinstance(item.get("evidence"), Mapping)}
     if len(attempts) >= policy["max_distinct_candidates"]:
         disposition = policy["terminal_rule"]
         terminals[hypothesis_id] = {"disposition": disposition,
@@ -2018,7 +2034,25 @@ def _record_precompute_refusal(state: dict[str, Any], row: dict[str, Any],
                reason=f"{type(exc).__name__}: {exc}")
     state["iterations"].append(row)
     _apply_portfolio_outcome(state, row)
+    _note_portfolio_authoring_failure(state, row)
     state["next"] += 1
+
+
+def _note_portfolio_authoring_failure(state: dict[str, Any],
+                                      row: Mapping[str, Any]) -> None:
+    """Bound repeated non-scientific actor failures without retiring science."""
+    hypothesis_id = row.get("portfolio_hypothesis_id")
+    if not isinstance(hypothesis_id, str):
+        return
+    failures = state.setdefault("portfolio_authoring_failures", {})
+    count = int(failures.get(hypothesis_id, 0)) + 1
+    failures[hypothesis_id] = count
+    if count >= 3:
+        state.setdefault("portfolio_skips", {})[hypothesis_id] = {
+            "disposition": "bounded_authoring_skip",
+            "scientific_terminal": False,
+            "failure_count": count,
+        }
 
 
 def _record_planner_refusal(state: dict[str, Any], *, turn: int,
@@ -2048,6 +2082,7 @@ def _record_planner_refusal(state: dict[str, Any], *, turn: int,
                 portfolio_binding["decision_policy"]),
         )
     state["iterations"].append(row)
+    _note_portfolio_authoring_failure(state, row)
     state["next"] += 1
 
 
@@ -2382,13 +2417,14 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                             item, portfolio_binding,
                             config.hypothesis_portfolio)
                     except DiscoveryControllerError as exc:
-                        row.update(status="portfolio_refused", reason=str(exc))
+                        row.update(status="planner_contract_refused",
+                                   reason=str(exc))
                         state.pop("planning", None)
-                        state["iterations"].append(row); state["next"] += 1
-                        state["complete"] = True
-                        state["terminal_reason"] = "portfolio_actor_contract_refused"
-                        store.save(state, "portfolio_refused")
-                        break
+                        state["iterations"].append(row)
+                        _note_portfolio_authoring_failure(state, row)
+                        state["next"] += 1
+                        store.save(state, "planner_contract_refused")
+                        continue
                     receipt = _portfolio_exact_dnr_check(
                         config, item, portfolio_binding)
                     row["portfolio_exact_dnr_check"] = receipt
@@ -2417,7 +2453,7 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                 store.save(state,"planner_checkpointed")
                 continue
             if review.decision != "accept":
-                row["status"]="critic_"+review.decision; state["iterations"].append(row); _apply_portfolio_outcome(state,row); state["next"]+=1; store.save(state,"critic_refused"); continue
+                row["status"]="critic_"+review.decision; state["iterations"].append(row); _apply_portfolio_outcome(state,row); _note_portfolio_authoring_failure(state,row); state["next"]+=1; store.save(state,"critic_refused"); continue
             if pending_phase == "critic_complete":
                 _ensure_question(
                     tracker, item,
@@ -2430,9 +2466,9 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                 except hypotheses.RepeatsAReceiptedNegative as exc:
                     row.update(campaign_ledger_dnr_outcome=schemas.FAIL,
                                campaign_ledger_dnr_reasons=[str(exc)],
-                               status="authorization_refused",reason=str(exc)); state.pop("pending",None); state["iterations"].append(row); _apply_portfolio_outcome(state,row); state["next"]+=1; store.save(state,"authorization_refused"); continue
+                               status="authorization_refused",reason=str(exc)); state.pop("pending",None); state["iterations"].append(row); _apply_portfolio_outcome(state,row); _note_portfolio_authoring_failure(state,row); state["next"]+=1; store.save(state,"authorization_refused"); continue
                 except hypotheses.HypothesisError as exc:
-                    row.update(status="authorization_refused",reason=str(exc)); state.pop("pending",None); state["iterations"].append(row); _apply_portfolio_outcome(state,row); state["next"]+=1; store.save(state,"authorization_refused"); continue
+                    row.update(status="authorization_refused",reason=str(exc)); state.pop("pending",None); state["iterations"].append(row); _apply_portfolio_outcome(state,row); _note_portfolio_authoring_failure(state,row); state["next"]+=1; store.save(state,"authorization_refused"); continue
             if config.dry_run:
                 # The dry-run still proves exact Sol/Terra actor attestation,
                 # plan schema, critic binding, and DNR authorization.  It
