@@ -23,7 +23,7 @@ from typing import Any, Callable, Mapping
 
 from .. import schemas, source_candidate
 from .. import hypothesis_portfolio
-from ..execution import inference_window, device_sampler, worktree
+from ..execution import inference_window, device_sampler, t0_provider, worktree
 from ..execution import cpu_region_claim
 from ..execution import instrument_integrity
 from ..evaluator import integrity
@@ -1123,6 +1123,18 @@ def _instrument_review_receipt(config: deployment.DiscoveryDeployment) -> tuple[
             "source_sha256": _READY_CONTINUE_CONTRACT_SHA256,
             "instrument_commit": _INSTRUMENT_COMMIT,
         },
+        "backend_ops_property_capability": {
+            "schema": "epyc.autokernel.backend_ops_property_capability_source.v1",
+            "source": "tests/test-backend-ops.cpp",
+            "source_sha256": _INSTRUMENT_TEST_SOURCE_SHA256,
+            "suite_seed": discovery_static_registry._CORRECTNESS_CAPABILITY_SEED,
+            "argv_suffix": list(t0_provider.backend_ops_property_self_test_argv(
+                "test-backend-ops",
+                discovery_static_registry._CORRECTNESS_CAPABILITY_SEED)[1:]),
+            "expected_stderr": (
+                "AUTOKERNEL_PROPERTY_SELF_TEST suite_seed=2026081301 "
+                "sensitivity=1.000 specificity=1.000 planted=5 clean=5\n"),
+        },
     }
     body["receipt_sha256"] = schemas.content_hash(body)
     raw = (json.dumps(body, sort_keys=True, indent=2) + "\n").encode()
@@ -1361,23 +1373,13 @@ def _evidence_binding(config: deployment.DiscoveryDeployment) -> EvidencePlanBin
                 or _digest_regular(timestamp_input.path, "rocprof-v1 input")
                 != timestamp_input.sha256):
             raise DeploymentFactoryError("rocprof-v1 policy changed before evidence binding")
-        correctness_tool = _bound(
-            build_.candidate_build / "bin" / "test-backend-ops", "executable")
-        # The reviewed instrument, not the planner, owns deterministic-suite
-        # capability.  Check the built tool before spending a device claim.
-        capability = subprocess.run((str(correctness_tool.path), "--help"),
-                                    check=False, stdin=subprocess.DEVNULL,
-                                    capture_output=True, text=True, env={
-                                        "HIP_VISIBLE_DEVICES": "0",
-                                        "LD_LIBRARY_PATH": (
-                                            f"{identities.candidate.hip_library.path.parent}:"
-                                            "/opt/rocm/lib"),
-                                        "PATH": "/opt/rocm/bin:/usr/bin:/bin",
-                                        "ROCM_PATH": "/opt/rocm"})
-        if (capability.returncode != 0
-                or "--suite-seed <u64>" not in capability.stdout):
+        try:
+            correctness_tool, capability_receipt = (
+                discovery_static_registry.correctness_capability_files_for_build(
+                    build_, arm="candidate"))
+        except discovery_static_registry.StaticRegistryError as exc:
             raise DeploymentFactoryError(
-                "candidate correctness tool lacks reviewed deterministic suite support")
+                "candidate correctness tool lacks a sealed passing property self-test") from exc
         semantics = template.semantics
         op = semantics.get("correctness_op")
         cases = semantics.get("expected_correctness_cases")
@@ -1424,7 +1426,8 @@ def _evidence_binding(config: deployment.DiscoveryDeployment) -> EvidencePlanBin
             candidate_rocprof_argv=profile_argv, anchor_rocprof_argv=profile_argv,
             dispatch=template.bind_dispatch(candidate.experiment_intent),
             identity_files=identities, policy=placeholder,
-            correctness_inputs=(correctness_tool, identities.candidate.binary,
+            correctness_inputs=(correctness_tool, capability_receipt,
+                                identities.candidate.binary,
                                 identities.candidate.config, identities.candidate.linkage),
             candidate_rocprof_inputs=(profiler, timestamp_input, reward_binary,
                                       identities.model, identities.workload,
@@ -2244,6 +2247,11 @@ def materialize(config: deployment.DiscoveryDeployment, registry: Mapping[str, M
         # before an expensive source builder can be entered.  Evidence binding
         # later reopens this same file and refuses any intervening mutation.
         _manifest_file_for_operation(config, candidate, operation_key)
+        # Re-open the reviewed source-level capability before entering the
+        # expensive builder.  The builder still executes and receipts both
+        # exact binaries after compilation; this early gate prevents a known
+        # incompatible instrument source from consuming a build transaction.
+        _instrument_review_receipt(config)
         return source.build(candidate, authorization, permit)
     def plan(candidate: controller.PlannedCandidate, build_: controller.GpuSourceBuild):
         config.revalidate()
@@ -2259,10 +2267,22 @@ def materialize(config: deployment.DiscoveryDeployment, registry: Mapping[str, M
             instrument_branch=config.instrument_branch,
             instrument_commit=config.instrument_commit)
         template = templates.resolve(candidate.experiment_intent)
-        result = plans.build(candidate, build_, template)
-        expected_dispatch = template.bind_dispatch(candidate.experiment_intent)
-        if result.dispatch != expected_dispatch or result.model_sha256 != config.model.sha256:
-            raise DeploymentFactoryError("evidence plan does not bind configured model/selected reviewed template")
+        try:
+            result = plans.build(candidate, build_, template)
+            expected_dispatch = template.bind_dispatch(candidate.experiment_intent)
+            if (result.dispatch != expected_dispatch
+                    or result.model_sha256 != config.model.sha256):
+                raise DeploymentFactoryError(
+                    "evidence plan does not bind configured model/selected reviewed template")
+        except (DeploymentFactoryError,
+                discovery_static_registry.StaticRegistryError,
+                evidence.EvidenceProducerError) as exc:
+            # plan_factory is invoked before the adapter acquires the outer GPU
+            # reservation or creates a proof/runner artifact.  Preserve the
+            # completed build terminal, but classify this exact boundary as a
+            # safe typed refusal rather than an ambiguous operation crash.
+            raise controller.PostBuildEvidencePlanRefusal(
+                f"post-build evidence plan refused before execution: {exc}") from exc
         return result
     def args(candidate: controller.PlannedCandidate, build_: controller.GpuSourceBuild, permit: Mapping[str, Any]):
         config.revalidate()

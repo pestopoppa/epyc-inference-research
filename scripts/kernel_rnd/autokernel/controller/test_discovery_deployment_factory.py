@@ -882,7 +882,9 @@ class DeploymentFactoryTests(unittest.TestCase):
                  mock.patch.object(F.codex_container_actor, "runtime_identity",
                                    return_value={}), \
                  mock.patch.object(F.claude_fable5_critic_actor, "runtime_identity",
-                                   return_value={}):
+                                   return_value={}), \
+                 mock.patch.object(F, "_instrument_review_receipt",
+                                   return_value=(root / "instrument-review.json", "f" * 64)):
                 F.materialize(config, {}, correctness_executor=mock.Mock(),
                               rocprof_executor=mock.Mock(), claim_journal=mock.Mock())
                 build = adapters["build_source"]
@@ -897,6 +899,14 @@ class DeploymentFactoryTests(unittest.TestCase):
                             F.DeploymentFactoryError,
                             "canonical carrier hash mismatch"):
                     build(restored, object(), {"operation_key": "3" * 64})
+                (operations / ("4" * 64)).mkdir(mode=0o700)
+                with mock.patch.object(
+                        F, "_instrument_review_receipt",
+                        side_effect=F.DeploymentFactoryError(
+                            "instrument capability changed")), self.assertRaisesRegex(
+                                F.DeploymentFactoryError,
+                                "instrument capability changed"):
+                    build(restored, object(), {"operation_key": "4" * 64})
             self.assertEqual(first["operation_key"], "1" * 64)
             self.assertEqual(second["operation_key"], "2" * 64)
             self.assertFalse((operations / ("3" * 64) / "source-manifest.json").exists())

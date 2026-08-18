@@ -62,6 +62,15 @@ class PrecomputeScreenRefusal(DiscoveryControllerError):
     """Typed adapter refusal proving that no governed operation was started."""
 
 
+class PostBuildEvidencePlanRefusal(PrecomputeScreenRefusal):
+    """A completed build was refused before claim/proof/runner execution.
+
+    The builder's exact terminal remains reusable by its sealed build key; the
+    controller may durably classify this screen without treating the operation
+    as an ambiguous GPU run.
+    """
+
+
 class ResourceWait(DiscoveryControllerError):
     """A durable pre-executor refusal caused only by resource contention."""
 
@@ -1199,6 +1208,14 @@ class GpuSourceBuild:
     anchor_source_tree_sha256: str | None = None
     candidate_source_tree_receipt: Path | None = None
     candidate_source_tree_sha256: str | None = None
+    anchor_correctness_binary: Path | None = None
+    anchor_correctness_binary_sha256: str | None = None
+    candidate_correctness_binary: Path | None = None
+    candidate_correctness_binary_sha256: str | None = None
+    anchor_correctness_capability_receipt: Path | None = None
+    anchor_correctness_capability_sha256: str | None = None
+    candidate_correctness_capability_receipt: Path | None = None
+    candidate_correctness_capability_sha256: str | None = None
     teardown_receipt: Path | None = None
     teardown_sha256: str | None = None
     def __post_init__(self) -> None:
@@ -1224,6 +1241,10 @@ class GpuSourceBuild:
         for path, expected, label in ((self.materialization_receipt, self.materialization_sha256, "materialization"),
                                       (self.anchor_source_tree_receipt, self.anchor_source_tree_sha256, "anchor source tree"),
                                       (self.candidate_source_tree_receipt, self.candidate_source_tree_sha256, "candidate source tree"),
+                                      (self.anchor_correctness_binary, self.anchor_correctness_binary_sha256, "anchor correctness binary"),
+                                      (self.candidate_correctness_binary, self.candidate_correctness_binary_sha256, "candidate correctness binary"),
+                                      (self.anchor_correctness_capability_receipt, self.anchor_correctness_capability_sha256, "anchor correctness capability"),
+                                      (self.candidate_correctness_capability_receipt, self.candidate_correctness_capability_sha256, "candidate correctness capability"),
                                       (self.teardown_receipt, self.teardown_sha256, "teardown")):
             if (path is None) != (expected is None):
                 raise DiscoveryControllerError(f"GPU source build has incomplete {label} receipt")

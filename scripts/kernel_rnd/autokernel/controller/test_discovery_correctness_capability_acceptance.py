@@ -15,6 +15,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 
 from ..execution import t0_provider
 from . import discovery_controller as C
@@ -257,6 +258,20 @@ class V8DeterministicCorrectnessCapabilityAcceptance(unittest.TestCase):
         self.assertEqual(receipt.role, "instrument_capability")
         self.assertEqual(receipt.sha256,
                          bound.candidate_correctness_capability_sha256)
+
+    def test_evidence_rehashes_and_revalidates_single_link_candidate_binary(self):
+        """A valid receipt cannot bless a binary changed after terminal sealing."""
+        with tempfile.TemporaryDirectory() as temporary:
+            bound = self._capability_bound_build(Path(temporary).resolve())
+            with mock.patch.object(R, "_digest", wraps=R._digest) as digest, \
+                    mock.patch.object(R, "_within", wraps=R._within) as within:
+                R.correctness_capability_files_for_build(bound, arm="candidate")
+        binary = bound.candidate_correctness_binary
+        self.assertIn(mock.call(binary), digest.call_args_list)
+        self.assertTrue(any(
+            call.args and call.args[0] == binary
+            and call.kwargs.get("single_link") is True
+            for call in within.call_args_list))
 
     def test_validate_only_receipt_preloads_exact_suite_contract_before_build(self):
         # The instrument source hash is available during validate-only, long

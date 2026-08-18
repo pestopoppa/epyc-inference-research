@@ -12,6 +12,7 @@ import time
 import unittest
 from unittest import mock
 
+from . import discovery_static_registry as S
 from .discovery_static_registry import (SharedRewardRuntime, StaticRegistryError,
                                         runtime_maps_sampler, evidence_identity_files_for_build,
                                         StaticGpuSourceBuilder, _instrument_authority,
@@ -44,6 +45,94 @@ def _bin(root: Path, *, hip: bytes) -> Path:
     (bindir / "libggml-hip.so.0").symlink_to(versioned.name)
     (bindir / "libggml-hip.so").symlink_to("libggml-hip.so.0")
     return root
+
+
+class CorrectnessCapabilityTests(unittest.TestCase):
+    MARKER = (b"AUTOKERNEL_PROPERTY_SELF_TEST suite_seed=2026081301 "
+              b"sensitivity=1.000 specificity=1.000 planted=5 clean=5\n")
+
+    def make_build(self, root: Path) -> Path:
+        build = _bin(root / "build", hip=b"candidate hip")
+        tool = build / "bin/test-backend-ops"
+        tool.write_bytes(b"diagnostic executable")
+        tool.chmod(0o755)
+        return build
+
+    def test_attestor_accepts_only_exact_hardware_free_behavior(self):
+        with tempfile.TemporaryDirectory() as directory:
+            build = self.make_build(Path(directory))
+            observed = {}
+            def runner(argv, **kwargs):
+                observed.update(argv=argv, kwargs=kwargs)
+                return subprocess.CompletedProcess(argv, 0, b"", self.MARKER)
+            record = S._attest_correctness_capability(
+                build, arm="candidate", runner=runner)
+            tool = build / "bin/test-backend-ops"
+            self.assertEqual(record["binary"], {
+                "path": str(tool), "sha256": sha(tool.read_bytes())})
+            self.assertEqual(record["result"], {
+                "suite_seed": 2026081301, "sensitivity": 1.0,
+                "specificity": 1.0, "planted": 5, "clean": 5})
+            self.assertEqual(observed["argv"], (
+                str(tool), "test", "--suite-seed", "2026081301",
+                "--autokernel-property-self-test"))
+            self.assertEqual(observed["kwargs"]["env"]["LD_LIBRARY_PATH"],
+                             f"{build / 'bin'}:/opt/rocm/lib")
+
+    def test_usage_rc1_malformed_stderr_and_wrong_seed_refuse(self):
+        cases = (
+            subprocess.CompletedProcess((), 1, b"Usage: --suite-seed <u64>\n", b""),
+            subprocess.CompletedProcess((), 0, b"", b"not a capability\n"),
+            subprocess.CompletedProcess((), 0, b"", b"\xff"),
+            subprocess.CompletedProcess(
+                (), 0, b"", self.MARKER.replace(b"2026081301", b"99")),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            build = self.make_build(Path(directory))
+            for completed in cases:
+                with self.subTest(completed=completed), self.assertRaises(
+                        StaticRegistryError):
+                    S._attest_correctness_capability(
+                        build, arm="candidate", runner=lambda *_args, **_kwargs: completed)
+
+    def test_wrong_binary_or_linkage_surface_refuses_before_capability(self):
+        with tempfile.TemporaryDirectory() as directory:
+            build = self.make_build(Path(directory))
+            tool = build / "bin/test-backend-ops"
+            tool.chmod(0o644)
+            with self.assertRaisesRegex(StaticRegistryError, "regular executable"):
+                S._attest_correctness_capability(build, arm="candidate")
+            tool.chmod(0o755)
+            (build / "bin/libggml-hip.so").unlink()
+            (build / "bin/libggml-hip.so.0").unlink()
+            with self.assertRaisesRegex(StaticRegistryError, "runtime artifact"):
+                S._attest_correctness_capability(
+                    build, arm="candidate",
+                    runner=lambda *_args, **_kwargs: subprocess.CompletedProcess(
+                        (), 0, b"", self.MARKER))
+
+    def test_sealed_receipt_reopens_with_exact_binary_identity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            build = self.make_build(root)
+            record = S._attest_correctness_capability(
+                build, arm="candidate",
+                runner=lambda *_args, **_kwargs: subprocess.CompletedProcess(
+                    (), 0, b"", self.MARKER))
+            receipt, receipt_sha = S._sealed_write(root / "capability.json", record)
+            tool = build / "bin/test-backend-ops"
+            reopened = S._verify_correctness_capability_receipt(
+                receipt=receipt, receipt_sha256=receipt_sha,
+                binary=tool, binary_sha256=sha(tool.read_bytes()),
+                build=build, arm="candidate")
+            self.assertEqual(reopened["result"]["suite_seed"], 2026081301)
+            tool.write_bytes(b"changed")
+            tool.chmod(0o755)
+            with self.assertRaisesRegex(StaticRegistryError, "identity mismatch"):
+                S._verify_correctness_capability_receipt(
+                    receipt=receipt, receipt_sha256=receipt_sha,
+                    binary=tool, binary_sha256=sha(tool.read_bytes()),
+                    build=build, arm="candidate")
 
 
 class SharedRewardRuntimeTests(unittest.TestCase):
@@ -326,10 +415,15 @@ class StaticBuildCacheTests(unittest.TestCase):
             manifest.patch_bundle_sha256)
         operations = root / "operations"; operations.mkdir()
         build_root = root / "build"; build_root.mkdir()
+        def capability_runner(argv, **_kwargs):
+            marker = (b"AUTOKERNEL_PROPERTY_SELF_TEST suite_seed=2026081301 "
+                      b"sensitivity=1.000 specificity=1.000 planted=5 clean=5\n")
+            return subprocess.CompletedProcess(argv, 0, b"", marker)
         builder = StaticGpuSourceBuilder(
             production_path=production, production_branch="production-test",
             instrument_path=instrument, operations_root=operations,
-            build_root=build_root, cmake_defines=(("GGML_HIP", "ON"),))
+            build_root=build_root, cmake_defines=(("GGML_HIP", "ON"),),
+            correctness_capability_runner=capability_runner)
         calls = []
 
         def run_build(plan, *, log_path, **_kwargs):
@@ -341,6 +435,7 @@ class StaticBuildCacheTests(unittest.TestCase):
                          "test-backend-ops"):
                 (bindir / name).write_bytes(f"shared-{name}".encode())
             (bindir / "llama-bench").chmod(0o755)
+            (bindir / "test-backend-ops").chmod(0o755)
             hip = b"candidate-hip" if "akc-cache-test" in str(build) else b"anchor-hip"
             versioned = bindir / "libggml-hip.so.0.16.0"; versioned.write_bytes(hip)
             (bindir / "libggml-hip.so.0").symlink_to(versioned.name)
@@ -531,7 +626,7 @@ class StaticBuildCacheTests(unittest.TestCase):
         (cache / "entries").mkdir(); (cache / "locks").mkdir()
         _sealed_write(refs / f"{request_key}.json", {
             "schema": "epyc.autokernel.gpu_source_build_ref.v1",
-            "builder_schema": "epyc.autokernel.static_gpu_source_builder.v2",
+            "builder_schema": S._BUILDER_SCHEMA,
             "request_key": request_key, "build_key": contract["build_key"],
             "promotion_claim": False})
         with self.assertRaisesRegex(StaticRegistryError, "without its cache transaction"):

@@ -361,7 +361,7 @@ class GpuSourceAdapterTests(unittest.TestCase):
                 return result
 
         for stage, expected_reserve, expected_release in (
-                ("plan", 0, 0), ("evidence", 1, 1),
+                ("plan", 0, 0), ("typed-plan", 0, 0), ("evidence", 1, 1),
                 ("runner", 1, 1), ("result", 1, 1)):
             with self.subTest(stage=stage), tempfile.TemporaryDirectory() as directory:
                 adapter, candidate, authorization, lease, _inflight, _current, _executors = \
@@ -370,6 +370,9 @@ class GpuSourceAdapterTests(unittest.TestCase):
                 adapter.reservation_manager = manager
                 if stage == "plan":
                     adapter.plan_factory = mock.Mock(side_effect=RuntimeError("plan failed"))
+                elif stage == "typed-plan":
+                    adapter.plan_factory = mock.Mock(side_effect=
+                        D.PostBuildEvidencePlanRefusal("typed plan refusal"))
                 elif stage == "evidence":
                     adapter.correctness_executor = mock.Mock(
                         side_effect=RuntimeError("evidence failed"))

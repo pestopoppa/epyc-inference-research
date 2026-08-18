@@ -498,6 +498,31 @@ class BackendOpsCsvParsing(unittest.TestCase):
 
 class BackendOpsCapabilityParsing(unittest.TestCase):
 
+    def test_property_self_test_requires_exact_seed_and_perfect_gate(self):
+        text = ("AUTOKERNEL_PROPERTY_SELF_TEST suite_seed=2026081301 "
+                "sensitivity=1.000 specificity=1.000 planted=5 clean=5\n")
+        result = t0.parse_backend_ops_property_self_test(
+            text, expected_suite_seed=2026081301)
+        self.assertEqual((result.planted, result.clean), (5, 5))
+        self.assertEqual(
+            t0.backend_ops_property_self_test_argv("/tmp/test-backend-ops", 2026081301),
+            ("/tmp/test-backend-ops", "test", "--suite-seed", "2026081301",
+             "--autokernel-property-self-test"))
+
+    def test_usage_or_wrong_property_self_test_cannot_grant_capability(self):
+        for output in (
+                "Usage: test-backend-ops [--suite-seed <u64>]\n",
+                ("AUTOKERNEL_PROPERTY_SELF_TEST suite_seed=99 sensitivity=1.000 "
+                 "specificity=1.000 planted=5 clean=5\n"),
+                ("AUTOKERNEL_PROPERTY_SELF_TEST suite_seed=2026081301 sensitivity=0.800 "
+                 "specificity=1.000 planted=5 clean=5\n"),
+                ("AUTOKERNEL_PROPERTY_SELF_TEST suite_seed=2026081301 sensitivity=1.000 "
+                 "specificity=1.000 planted=4 clean=5\n")):
+            with self.subTest(output=output), self.assertRaises(
+                    t0.InstrumentCapabilityError):
+                t0.parse_backend_ops_property_self_test(
+                    output, expected_suite_seed=2026081301)
+
     def test_help_binds_only_advertised_flags(self):
         help_text = ("Usage: test-backend-ops [mode] [-o <op,..>] [-b <backend>] "
                      "[--output <console|sql|csv>] [-j <n>]\n")
