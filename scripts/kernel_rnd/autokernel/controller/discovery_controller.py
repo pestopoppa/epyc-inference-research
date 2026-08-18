@@ -1708,7 +1708,9 @@ def _select_portfolio_binding(state: Mapping[str, Any],
     for record in eligible:
         binding = _portfolio_binding(config, record)
         if (binding["hypothesis_id"] in state.get("portfolio_terminals", {})
-                or binding["hypothesis_id"] in state.get("portfolio_skips", {})):
+                or binding["hypothesis_id"] in state.get("portfolio_skips", {})
+                or binding["hypothesis_id"] in state.get(
+                    "portfolio_validations", {})):
             continue
         attempts = {row.get("source_manifest_sha256") for row in state["iterations"]
                     if row.get("portfolio_hypothesis_id") == binding["hypothesis_id"]
@@ -2088,6 +2090,34 @@ def _classified_result(state: Mapping[str, Any], item: PlannedCandidate,
     return SealedScreen(receipt_path=result.receipt_path,result_sha256=result.result_sha256,effect_fraction=result.effect_fraction,classification=classification,baseline_sha256=result.baseline_sha256,source_proof_sha256=result.source_proof_sha256,dispatch_proof_sha256=result.dispatch_proof_sha256,exact_attribution_effect_fraction=result.exact_attribution_effect_fraction,target_runtime_effect_fraction=result.target_runtime_effect_fraction,candidate_only=result.candidate_only,promotion_claim=result.promotion_claim,stages=result.stages,series_key=series_key,component_series_keys=components,series_effect_fraction=float(statistics.median(effects)))
 
 
+def _screen_iteration_fields(result: SealedScreen, *, repetition: int) -> dict[str, Any]:
+    target_executed = result.target_runtime_effect_fraction is not None
+    return {
+        "status": result.classification,
+        "result_sha256": result.result_sha256,
+        "evidence": {"baseline": result.baseline_sha256,
+                     "source": result.source_proof_sha256,
+                     "dispatch": result.dispatch_proof_sha256},
+        "effect_fraction": result.effect_fraction,
+        "series_effect_fraction": result.series_effect_fraction,
+        "series_key": result.series_key,
+        "component_series_keys": list(result.component_series_keys),
+        "exact_attribution_effect_fraction":
+            result.exact_attribution_effect_fraction,
+        "target_runtime_effect_fraction":
+            result.target_runtime_effect_fraction,
+        "target_runtime_executed": target_executed,
+        "target_runtime_reason": (
+            None if target_executed else
+            "nonpositive_exact_duration"
+            if result.exact_attribution_effect_fraction is not None
+            and result.exact_attribution_effect_fraction <= 0
+            else "not_required_or_unavailable"),
+        "stages": list(result.stages),
+        "repetition": repetition,
+    }
+
+
 def _schedule_replication(state: dict[str, Any], *, item: PlannedCandidate,
                           authorization: hypotheses.ClaimAuthorization,
                           row: Mapping[str, Any], result: SealedScreen,
@@ -2222,24 +2252,36 @@ def _record_planner_refusal(state: dict[str, Any], *, turn: int,
                 portfolio_binding["decision_policy"]),
         )
     state["iterations"].append(row)
-    _note_portfolio_authoring_failure(state, row)
-    state["next"] += 1
+    if isinstance(exc, PlannerProviderTransient):
+        # Provider/API availability is neither authored output nor a scientific
+        # attempt.  Keep the controller turn and portfolio assignment, but use
+        # a fresh sealed actor operation on the next pass.
+        state["planner_provider_attempt"] = int(
+            state.get("planner_provider_attempt", 0)) + 1
+    else:
+        _note_portfolio_authoring_failure(state, row)
+        state["next"] += 1
 
 
 def _planning_intent(config: ControllerConfig, *, turn: int,
                      context: Mapping[str, Any],
-                     portfolio_binding: Mapping[str, Any] | None) -> dict[str, Any]:
+                     portfolio_binding: Mapping[str, Any] | None,
+                     provider_attempt: int = 0) -> dict[str, Any]:
+    if isinstance(provider_attempt, bool) or provider_attempt < 0:
+        raise DiscoveryControllerError("planner provider attempt is invalid")
     context_sha256 = _sha(context)
     operation_key = _sha({
         "schema": "epyc.autokernel.planning_operation.v1",
         "turn": turn,
         "context_sha256": context_sha256,
         "deployment_identity_sha256": config.deployment_identity_sha256,
+        "provider_attempt": provider_attempt,
     })
     workspace = (config.output_root / "planner-operations" /
                  operation_key / "workspace")
     return {
         "phase": "intent", "turn": turn,
+        "provider_attempt": provider_attempt,
         "operation_key": operation_key,
         "context": dict(context), "context_sha256": context_sha256,
         "portfolio_binding": (None if portfolio_binding is None
@@ -2413,7 +2455,10 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
         if not precompute_refused:
             if not isinstance(result,SealedScreen): raise DiscoveryControllerError("inflight recovery produced no sealed result")
             row=dict(inflight["row"]); policy=row.get("portfolio_decision_policy")
-            result=_classified_result(state,item,result,policy); row.update(status=result.classification,result_sha256=result.result_sha256,evidence={"baseline":result.baseline_sha256,"source":result.source_proof_sha256,"dispatch":result.dispatch_proof_sha256},effect_fraction=result.effect_fraction,series_effect_fraction=result.series_effect_fraction,series_key=result.series_key,component_series_keys=list(result.component_series_keys))
+            result=_classified_result(state,item,result,policy); row.update(
+                _screen_iteration_fields(
+                    result, repetition=int(inflight["lease"].get(
+                        "repetition", 2 if inflight.get("confirmation") else 1))))
             _record_attempt_once(tracker,item,str(item.proposal.get("proposal_id",row["proposal_sha256"])),result)
             state.pop("inflight",None); state.pop("pending",None); state["iterations"].append(row); _apply_portfolio_outcome(state,row); state["next"]+=1; _schedule_replication(state,item=item,authorization=authorization,row=row,result=result,max_iterations=config.max_iterations); _append_nomination(config.output_root,item,result,_decision_floor(policy,"nomination_floor_pct",config.nomination_threshold)); _write_projection(config.evidence_root or config.output_root); store.save(state,"recovered_screen")
     while not state["complete"] and state["next"] <= config.max_iterations:
@@ -2446,7 +2491,9 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
             if pending is None:
                 state["planning"] = _planning_intent(
                     config, turn=turn, context=context,
-                    portfolio_binding=portfolio_binding)
+                    portfolio_binding=portfolio_binding,
+                    provider_attempt=int(
+                        state.get("planner_provider_attempt", 0)))
                 store.save(state, "planner_intent")
                 planning = state["planning"]
         with tempfile.TemporaryDirectory(prefix=f"ak-discovery-{turn}-", dir=config.output_root) as temp:
@@ -2624,11 +2671,15 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                 state.pop("pending", None); state["iterations"].append(row); _apply_portfolio_outcome(state,row)
                 dry_hypothesis = row.get("portfolio_hypothesis_id")
                 if isinstance(dry_hypothesis, str):
-                    state.setdefault("portfolio_skips", {})[dry_hypothesis] = {
+                    state.setdefault("portfolio_validations", {})[dry_hypothesis] = {
                         "disposition": "dry_run_validated",
                         "scientific_terminal": False,
                     }
                 state["next"] += 1
+                if (config.hypothesis_portfolio is not None
+                        and _select_portfolio_binding(state, config) is None):
+                    state["complete"] = True
+                    state["terminal_reason"] = "portfolio_exhausted"
                 store.save(state, "dry_run_authorized")
                 continue
             repetition=2 if pending and pending.get("confirmation") else 1
@@ -2670,11 +2721,13 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                     stage_receipt_sha256=exc.receipt_sha256,
                     scientific_budget_spent=exc.scientific_budget_spent)
                 state["iterations"].append(row)
-                _note_portfolio_authoring_failure(state, row)
+                if exc.disposition == "authoring_refused":
+                    _note_portfolio_authoring_failure(state, row)
                 hypothesis_id = row.get("portfolio_hypothesis_id")
+                terminals = state.setdefault("portfolio_terminals", {})
                 if (isinstance(hypothesis_id, str)
                         and exc.disposition == "correctness_falsified"):
-                    state.setdefault("portfolio_terminals", {})[hypothesis_id] = {
+                    terminals[hypothesis_id] = {
                         "disposition": exc.disposition,
                         "stage_receipt_path": exc.receipt_path,
                         "stage_receipt_sha256": exc.receipt_sha256,
@@ -2692,7 +2745,8 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                 raise
             state["inflight"]["result"]=asdict(result); store.save(state,"post_screen_result")
             policy=row.get("portfolio_decision_policy")
-            result=_classified_result(state,item,result,policy); row.update(status=result.classification,result_sha256=result.result_sha256,evidence={"baseline":result.baseline_sha256,"source":result.source_proof_sha256,"dispatch":result.dispatch_proof_sha256},effect_fraction=result.effect_fraction,series_effect_fraction=result.series_effect_fraction,series_key=result.series_key,component_series_keys=list(result.component_series_keys))
+            result=_classified_result(state,item,result,policy); row.update(
+                _screen_iteration_fields(result, repetition=repetition))
             # Record the measured disposition before exposing it to the next
             # planner context.  This is the only source of repeat suppression.
             _record_attempt_once(tracker,item,str(item.proposal.get("proposal_id",row["proposal_sha256"])),result)

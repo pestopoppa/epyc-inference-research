@@ -292,11 +292,15 @@ def _is_resumable_stage_root(root: Path, identity: Mapping[str, Any]) -> bool:
                 return False
             for child in children:
                 child_receipt = child / "receipt.json"
+                child_refusal = child / "refusal.json"
                 if child.is_symlink() or not child.is_dir() \
-                        or not child_receipt.exists():
+                        or (child_receipt.exists() == child_refusal.exists()) \
+                        or (child_receipt.is_symlink() or child_refusal.is_symlink()):
                     return False
                 _validated_stage_receipt(
-                    child_receipt, evidence.CORRECTNESS_SCHEMA, identity)
+                    child_receipt if child_receipt.exists() else child_refusal,
+                    (evidence.CORRECTNESS_SCHEMA if child_receipt.exists()
+                     else evidence.CORRECTNESS_REFUSAL_SCHEMA), identity)
 
         completed_arms = 0
         for arm in ("candidate", "anchor"):
@@ -305,8 +309,14 @@ def _is_resumable_stage_root(root: Path, identity: Mapping[str, Any]) -> bool:
                 continue
             if arm_dir.is_symlink() or not arm_dir.is_dir():
                 return False
+            receipt = arm_dir / "receipt.json"
+            refusal = arm_dir / "refusal.json"
+            if receipt.exists() == refusal.exists():
+                return False
             _validated_stage_receipt(
-                arm_dir / "receipt.json", evidence.ATTRIBUTION_SCHEMA, identity)
+                receipt if receipt.exists() else refusal,
+                (evidence.ATTRIBUTION_SCHEMA if receipt.exists()
+                 else evidence.ATTRIBUTION_REFUSAL_SCHEMA), identity)
             completed_arms += 1
 
         pair = proof / "attribution-pair.json"
@@ -733,14 +743,29 @@ class GovernedGpuSourceAdapter:
                 reservation_state["opened"] = dict(opened)
                 claim_acquirer = self.reservation_manager.borrower(operation_key)
             self.runner_attest()
-            bundle = evidence.produce_gpu_source_evidence(
-                output_root=operation_root / "proof", plan=plan,
-                correctness_executor=self.correctness_executor,
-                rocprof_executor=self.rocprof_executor,
-                claim_journal=self.claim_journal,
-                claim_acquirer=claim_acquirer,
-                claim_verifier=self.claim_verifier,
-                claim_timeout_s=self.claim_timeout_s)
+            try:
+                bundle = evidence.produce_gpu_source_evidence(
+                    output_root=operation_root / "proof", plan=plan,
+                    correctness_executor=self.correctness_executor,
+                    rocprof_executor=self.rocprof_executor,
+                    claim_journal=self.claim_journal,
+                    claim_acquirer=claim_acquirer,
+                    claim_verifier=self.claim_verifier,
+                    claim_timeout_s=self.claim_timeout_s)
+            except evidence.CorrectnessParseRefusal as exc:
+                if not exc.receipt_path or not exc.receipt_sha256:
+                    raise GpuSourceAdapterError(
+                        "correctness refusal lacks its durable terminal") from exc
+                raise controller.CorrectnessRefusal(
+                    str(exc), receipt_path=exc.receipt_path,
+                    receipt_sha256=exc.receipt_sha256) from exc
+            except evidence.DispatchAttributionParseRefusal as exc:
+                if not exc.receipt_path or not exc.receipt_sha256:
+                    raise GpuSourceAdapterError(
+                        "attribution refusal lacks its durable terminal") from exc
+                raise controller.DispatchAttributionRefusal(
+                    str(exc), receipt_path=exc.receipt_path,
+                    receipt_sha256=exc.receipt_sha256) from exc
             if self.reservation_manager is not None:
                 _require_borrowed_proof_claims(bundle, opened)
             return bundle

@@ -35,6 +35,7 @@ CORRECTNESS_REFUSAL_SCHEMA = "epyc.autokernel.targeted_correctness_refusal.v1"
 CORRECTNESS_PARSER_ID = "ak.t0.backend_ops_console/v1"
 EXECUTION_POLICY_SCHEMA = "epyc.autokernel.gpu_source_execution_policy.v2"
 ATTRIBUTION_SCHEMA = "epyc.autokernel.gpu_kernel_attribution.v2"
+ATTRIBUTION_REFUSAL_SCHEMA = "epyc.autokernel.gpu_kernel_attribution_refusal.v1"
 PAIR_SCHEMA = "epyc.autokernel.gpu_kernel_attribution_pair.v1"
 SEALED_BUNDLE_SCHEMA = "epyc.autokernel.gpu_source_evidence_bundle.v1"
 SHA = re.compile(r"^[0-9a-f]{64}$")
@@ -46,8 +47,22 @@ class EvidenceProducerError(RuntimeError):
     """The producer refused to mint a success receipt."""
 
 
-class CorrectnessParseRefusal(EvidenceProducerError):
+class SealedEvidenceRefusal(EvidenceProducerError):
+    """A scientific stage ended durably without a passing receipt."""
+
+    def __init__(self, message: str, *, receipt_path: str | None = None,
+                 receipt_sha256: str | None = None) -> None:
+        super().__init__(message)
+        self.receipt_path = receipt_path
+        self.receipt_sha256 = receipt_sha256
+
+
+class CorrectnessParseRefusal(SealedEvidenceRefusal):
     """The authoritative backend-op parser could not prove the targeted run."""
+
+
+class DispatchAttributionParseRefusal(SealedEvidenceRefusal):
+    """The measured profile violated the exact reviewed route contract."""
 
 
 def _durable_refusal_reason(exc: BaseException) -> str:
@@ -1302,7 +1317,7 @@ def _produce_correctness(
         parsed = _parse_correctness(
             invocation.stdout_path.read_text(encoding="utf-8"), plan)
     except CorrectnessParseRefusal as exc:
-        _seal(directory / "refusal.json", {
+        refusal = _seal(directory / "refusal.json", {
             "schema": CORRECTNESS_REFUSAL_SCHEMA,
             "authority": AUTHORITY,
             "promotion_claim": False,
@@ -1330,7 +1345,9 @@ def _produce_correctness(
             **_claim_boundary_fields(opened, released, residency),
             "residency_witness": residency,
         })
-        raise
+        raise CorrectnessParseRefusal(
+            str(exc), receipt_path=str(refusal["path"]),
+            receipt_sha256=str(refusal["file_sha256"])) from exc
     if capture.exit_code != 0:
         raise EvidenceProducerError("targeted correctness command exited nonzero")
     body = {
@@ -1440,6 +1457,56 @@ def _correctness_invocation_environment(
     return tuple(sorted(environment.items()))
 
 
+def _load_correctness_invocation_refusal(
+        path: Path, plan: GpuSourceEvidencePlan,
+        contract: Mapping[str, Any]) -> Mapping[str, Any]:
+    loaded = proofs.load_receipt(path, schema=CORRECTNESS_REFUSAL_SCHEMA)
+    body = loaded["body"]
+    expected = {
+        "authority": AUTHORITY, "promotion_claim": False,
+        "status": "refused", "classification": "output_parse_refusal",
+        "error_type": "CorrectnessParseRefusal",
+        "campaign_id": plan.campaign_id, "device_id": plan.device_id,
+        "manifest_sha256": plan.manifest_sha256,
+        "candidate_build_identity": asdict(plan.candidate),
+        "workload_sha256": plan.workload_sha256,
+        "invocation_id": contract["invocation_id"],
+        "case_set": contract.get("case_set"),
+        "command_argv": list(contract["argv"]),
+        "command_cwd": str(plan.execution_cwd),
+        "command_environment_sha256": schemas.content_hash([
+            list(item) for item in _correctness_invocation_environment(
+                plan, contract)]),
+        "correctness_parser_id": CORRECTNESS_PARSER_ID,
+        "correctness_backend": contract["backend"],
+        "correctness_op": contract["op"],
+        "expected_cases": contract["expected_cases"],
+        "required_cases": list(contract.get("required_cases", [])),
+    }
+    if (any(body.get(key) != value for key, value in expected.items())
+            or not isinstance(body.get("reason"), str) or not body["reason"]):
+        raise EvidenceProducerError(
+            "correctness invocation refusal identity changed")
+    _validate_claim_boundary(body, plan=plan)
+    for kind in ("stdout", "stderr"):
+        if _hash_file(Path(str(body.get(f"{kind}_path", ""))), kind,
+                      allow_empty=kind == "stderr") != body.get(f"{kind}_sha256"):
+            raise EvidenceProducerError(
+                f"correctness invocation refusal {kind} changed")
+    try:
+        _parse_correctness(
+            Path(str(body["stdout_path"])).read_text(encoding="utf-8"),
+            plan, contract)
+    except CorrectnessParseRefusal as exc:
+        if _durable_refusal_reason(exc) != body["reason"]:
+            raise EvidenceProducerError(
+                "correctness invocation refusal reason changed") from exc
+    else:
+        raise EvidenceProducerError(
+            "correctness invocation refusal now parses as a pass")
+    return loaded
+
+
 def _produce_correctness_invocations(
         root: Path, plan: GpuSourceEvidencePlan, executor: CommandExecutor, *,
         claim_acquirer: Callable[..., Any],
@@ -1451,11 +1518,22 @@ def _produce_correctness_invocations(
         invocation_id = str(contract["invocation_id"])
         invocation_dir = directory / invocation_id
         receipt_path = invocation_dir / "receipt.json"
+        refusal_path = invocation_dir / "refusal.json"
         if receipt_path.exists() or receipt_path.is_symlink():
+            if refusal_path.exists() or refusal_path.is_symlink():
+                raise EvidenceProducerError(
+                    f"correctness invocation {invocation_id} has contradictory terminals")
             loaded = proofs.load_receipt(receipt_path, schema=CORRECTNESS_SCHEMA)
             _validate_correctness_invocation_receipt(loaded, plan, contract)
             references.append(_reference(loaded))
             continue
+        if refusal_path.exists() or refusal_path.is_symlink():
+            loaded = _load_correctness_invocation_refusal(
+                refusal_path, plan, contract)
+            raise CorrectnessParseRefusal(
+                str(loaded["body"]["reason"]),
+                receipt_path=str(loaded["path"]),
+                receipt_sha256=str(loaded["file_sha256"]))
         if invocation_dir.exists() or invocation_dir.is_symlink():
             raise EvidenceProducerError(
                 f"correctness invocation {invocation_id} is incomplete")
@@ -1471,9 +1549,43 @@ def _produce_correctness_invocations(
             claim_acquirer=claim_acquirer, claim_verifier=claim_verifier,
             claim_journal=claim_journal, claim_timeout_s=claim_timeout_s)
         outputs = _output_hashes(invocation)
-        parsed = _parse_correctness(
-            invocation.stdout_path.read_text(encoding="utf-8"), plan,
-            contract)
+        try:
+            parsed = _parse_correctness(
+                invocation.stdout_path.read_text(encoding="utf-8"), plan,
+                contract)
+        except CorrectnessParseRefusal as exc:
+            refusal = _seal(refusal_path, {
+                "schema": CORRECTNESS_REFUSAL_SCHEMA,
+                "authority": AUTHORITY, "promotion_claim": False,
+                "status": "refused",
+                "classification": "output_parse_refusal",
+                "error_type": type(exc).__name__,
+                "reason": _durable_refusal_reason(exc),
+                "campaign_id": plan.campaign_id,
+                "device_id": plan.device_id,
+                "manifest_sha256": plan.manifest_sha256,
+                "candidate_build_identity": asdict(plan.candidate),
+                "workload_sha256": plan.workload_sha256,
+                "invocation_id": invocation_id,
+                "case_set": contract.get("case_set"),
+                "command_argv": list(contract["argv"]),
+                "command_cwd": str(plan.execution_cwd),
+                "command_environment_sha256": schemas.content_hash([
+                    list(item) for item in _correctness_invocation_environment(
+                        plan, contract)]),
+                "exit_code": capture.exit_code, **outputs,
+                "started_at": capture.started_at, "ended_at": capture.ended_at,
+                "correctness_parser_id": CORRECTNESS_PARSER_ID,
+                "correctness_backend": contract["backend"],
+                "correctness_op": contract["op"],
+                "expected_cases": contract["expected_cases"],
+                "required_cases": list(contract.get("required_cases", [])),
+                **_claim_boundary_fields(opened, released, residency),
+                "residency_witness": residency,
+            })
+            raise CorrectnessParseRefusal(
+                str(exc), receipt_path=str(refusal["path"]),
+                receipt_sha256=str(refusal["file_sha256"])) from exc
         if capture.exit_code != 0:
             raise EvidenceProducerError(
                 f"correctness invocation {invocation_id} exited nonzero")
@@ -1706,9 +1818,40 @@ def _produce_attribution_arm(
         raise EvidenceProducerError(f"{arm} rocprof command exited nonzero")
     assert invocation.timestamp_csv_path is not None
     dispatches = _load_dispatches(invocation.timestamp_csv_path)
-    reduction = _reduce_arm(
-        dispatches, exact=exact, forbidden=forbidden,
-        invariants=plan.dispatch.invariants)
+    try:
+        reduction = _reduce_arm(
+            dispatches, exact=exact, forbidden=forbidden,
+            invariants=plan.dispatch.invariants)
+    except EvidenceProducerError as exc:
+        refusal = _seal(directory / "refusal.json", {
+            "schema": ATTRIBUTION_REFUSAL_SCHEMA,
+            "authority": AUTHORITY, "promotion_claim": False,
+            "status": "refused",
+            "classification": "attribution_route_falsified",
+            "error_type": "DispatchAttributionParseRefusal",
+            "reason": _durable_refusal_reason(exc),
+            "arm": arm, "campaign_id": plan.campaign_id,
+            "device_id": plan.device_id,
+            "manifest_sha256": plan.manifest_sha256,
+            "build_identity": asdict(identity),
+            "model_sha256": plan.model_sha256,
+            "workload_sha256": plan.workload_sha256,
+            "runtime_config_sha256": plan.runtime_config_sha256,
+            "command_argv": list(argv),
+            "command_cwd": str(plan.execution_cwd),
+            "command_environment_sha256": schemas.content_hash([
+                list(item) for item in (
+                    plan.candidate_rocprof_environment if arm == "candidate"
+                    else plan.anchor_rocprof_environment)]),
+            "exit_code": capture.exit_code, **outputs,
+            "started_at": capture.started_at, "ended_at": capture.ended_at,
+            "expectations": _expectations(plan),
+            **_claim_boundary_fields(opened, released, residency),
+            "residency_witness": residency,
+        })
+        raise DispatchAttributionParseRefusal(
+            str(exc), receipt_path=str(refusal["path"]),
+            receipt_sha256=str(refusal["file_sha256"])) from exc
     runtime_maps = _validated_runtime_maps_identity(
         capture, plan=plan, arm=arm, residency=residency)
     body = {
@@ -1750,6 +1893,54 @@ def _produce_attribution_arm(
         "runtime_maps_identity": runtime_maps,
     }
     return _seal(directory / "receipt.json", body)
+
+
+def load_gpu_source_attribution_refusal(
+        path: Path, plan: GpuSourceEvidencePlan, *, arm: str) -> Mapping[str, Any]:
+    if arm not in {"candidate", "anchor"}:
+        raise EvidenceProducerError("attribution refusal arm is invalid")
+    loaded = proofs.load_receipt(path, schema=ATTRIBUTION_REFUSAL_SCHEMA)
+    body = loaded["body"]
+    identity = plan.candidate if arm == "candidate" else plan.anchor
+    expected = {
+        "authority": AUTHORITY, "promotion_claim": False,
+        "status": "refused", "classification": "attribution_route_falsified",
+        "error_type": "DispatchAttributionParseRefusal", "arm": arm,
+        "campaign_id": plan.campaign_id, "device_id": plan.device_id,
+        "manifest_sha256": plan.manifest_sha256,
+        "build_identity": asdict(identity), "model_sha256": plan.model_sha256,
+        "workload_sha256": plan.workload_sha256,
+        "runtime_config_sha256": plan.runtime_config_sha256,
+        "expectations": _expectations(plan),
+    }
+    if (any(body.get(key) != value for key, value in expected.items())
+            or not isinstance(body.get("reason"), str) or not body["reason"]):
+        raise EvidenceProducerError("attribution refusal identity changed")
+    _validate_claim_boundary(body, plan=plan)
+    for kind in ("stdout", "stderr", "timestamp_csv"):
+        if _hash_file(Path(str(body.get(f"{kind}_path", ""))), kind,
+                      allow_empty=kind == "stderr") != body.get(f"{kind}_sha256"):
+            raise EvidenceProducerError(f"attribution refusal {kind} changed")
+    # Re-derive the exact route failure from the original timestamp bytes.
+    # The refusal's self-hash is not allowed to turn a rewritten explanation
+    # into scientific evidence.
+    timestamp_path = Path(str(body["timestamp_csv_path"]))
+    dispatches = _load_dispatches(timestamp_path)
+    exact = (plan.dispatch.candidate_exact if arm == "candidate"
+             else plan.dispatch.anchor_exact)
+    forbidden = (plan.dispatch.candidate_forbidden if arm == "candidate"
+                 else plan.dispatch.anchor_forbidden)
+    try:
+        _reduce_arm(dispatches, exact=exact, forbidden=forbidden,
+                    invariants=plan.dispatch.invariants)
+    except EvidenceProducerError as exc:
+        if _durable_refusal_reason(exc) != body["reason"]:
+            raise EvidenceProducerError(
+                "attribution refusal reason differs from timestamp evidence") from exc
+    else:
+        raise EvidenceProducerError(
+            "attribution refusal timestamp now satisfies the route contract")
+    return loaded
 
 
 def _reference(loaded: Mapping[str, Any]) -> dict[str, Any]:
@@ -2317,7 +2508,10 @@ def produce_gpu_source_evidence(
         correctness = load_gpu_source_correctness_receipt(correctness_path, plan)
     elif refusal_path.exists() or refusal_path.is_symlink():
         loaded_refusal = load_gpu_source_correctness_refusal(refusal_path, plan)
-        raise CorrectnessParseRefusal(str(loaded_refusal["body"]["reason"]))
+        raise CorrectnessParseRefusal(
+            str(loaded_refusal["body"]["reason"]),
+            receipt_path=str(loaded_refusal["path"]),
+            receipt_sha256=str(loaded_refusal["file_sha256"]))
     else:
         if ((correctness_dir.exists() or correctness_dir.is_symlink())
                 and not plan.correctness_invocations
@@ -2333,10 +2527,21 @@ def produce_gpu_source_evidence(
     for index, arm in enumerate(plan.attribution_arm_order):
         arm_dir = root / f"attribution-{arm}"
         arm_path = arm_dir / "receipt.json"
+        arm_refusal_path = arm_dir / "refusal.json"
         if arm_path.exists() or arm_path.is_symlink():
+            if arm_refusal_path.exists() or arm_refusal_path.is_symlink():
+                raise EvidenceProducerError(
+                    f"{arm} attribution has contradictory terminals")
             arm_receipts[arm] = load_gpu_source_attribution_receipt(
                 arm_path, plan, arm=arm)
             continue
+        if arm_refusal_path.exists() or arm_refusal_path.is_symlink():
+            refusal = load_gpu_source_attribution_refusal(
+                arm_refusal_path, plan, arm=arm)
+            raise DispatchAttributionParseRefusal(
+                str(refusal["body"]["reason"]),
+                receipt_path=str(refusal["path"]),
+                receipt_sha256=str(refusal["file_sha256"]))
         later_arms = plan.attribution_arm_order[index + 1:]
         if (arm_dir.exists() or arm_dir.is_symlink()
                 or any((root / f"attribution-{later}").exists()

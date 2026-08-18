@@ -32,6 +32,14 @@ class StaticRegistryError(RuntimeError):
     pass
 
 
+class _SourceApplyFailure(StaticRegistryError):
+    """A planner-authored patch failed before compilation began."""
+
+
+class _CompileFailure(StaticRegistryError):
+    """A sealed source tree reached the compiler but did not build."""
+
+
 _REWARD_FILES = ("llama-bench", "libllama-bench-impl.so", "libllama-common.so",
                  "libllama.so", "libggml.so", "libggml-cpu.so", "libggml-base.so")
 _HIP = "libggml-hip.so"
@@ -1085,9 +1093,9 @@ class StaticGpuSourceBuilder:
                 or terminal.get("intent_file_sha256") != _digest(intent_path)):
             raise StaticRegistryError("build cache terminal does not close its intent")
         if terminal.get("state") != "complete":
-            if (terminal.get("state") == "failed"
-                    and terminal.get("failure_type") ==
-                    source_candidate.SourceCandidateError.__name__):
+            failure_stage = terminal.get("failure_stage")
+            if terminal.get("state") == "failed" and failure_stage in {
+                    "source_apply", "compile"}:
                 # The ref, canonical intent, terminal self-hash, build key,
                 # and exact intent-file digest have all been revalidated above.
                 # Only that complete identity chain may recover the original
@@ -1100,9 +1108,14 @@ class StaticGpuSourceBuilder:
                         "source candidate failed terminal has an unsafe diagnostic")
                 detail = (f": {failure_message}"
                           if isinstance(failure_message, str) else "")
-                raise source_candidate.SourceCandidateError(
-                    "sealed prior build transaction rejected source candidate "
-                    f"authoring for build {contract['build_key']}{detail}")
+                refusal_type = (controller.SourceApplyRefusal
+                                if failure_stage == "source_apply"
+                                else controller.CompileRefusal)
+                raise refusal_type(
+                    "sealed prior build transaction rejected "
+                    f"{failure_stage} for build {contract['build_key']}{detail}",
+                    receipt_path=str(terminal_path.resolve()),
+                    receipt_sha256=_digest(terminal_path))
             raise StaticRegistryError("prior build transaction is terminal but not reusable")
         raw = terminal.get("build")
         if not isinstance(raw, Mapping):
@@ -1409,15 +1422,35 @@ class StaticGpuSourceBuilder:
                          "build_contract": contract, "build_environment": environment,
                          "cache_root": str(cache_root)})
                 except Exception as exc:
+                    failure_stage = (
+                        "source_apply" if isinstance(
+                            exc, (_SourceApplyFailure,
+                                  source_candidate.SourceCandidateError))
+                        else "compile" if isinstance(exc, _CompileFailure)
+                        else None)
                     failure = {
                         "schema": _BUILD_TERMINAL_SCHEMA, "build_key": build_key,
                         "intent_file_sha256": intent_file_sha, "state": "failed",
-                        "failure_type": type(exc).__name__, "promotion_claim": False}
-                    if isinstance(exc, source_candidate.SourceCandidateError):
+                        "failure_type": type(exc).__name__,
+                        **({"failure_stage": failure_stage}
+                           if failure_stage is not None else {}),
+                        "promotion_claim": False}
+                    if failure_stage is not None:
                         message = _source_failure_message(str(exc))
                         if message is not None:
                             failure["failure_message"] = message
-                    _sealed_write(cache_root / "terminal.json", failure)
+                    terminal_path, _terminal_file_sha = _sealed_write(
+                        cache_root / "terminal.json", failure)
+                    if failure_stage is not None:
+                        terminal = _sealed_read(
+                            terminal_path, schema=_BUILD_TERMINAL_SCHEMA,
+                            label="build failure terminal")
+                        refusal_type = (controller.SourceApplyRefusal
+                                        if failure_stage == "source_apply"
+                                        else controller.CompileRefusal)
+                        raise refusal_type(
+                            str(exc), receipt_path=str(terminal_path),
+                            receipt_sha256=_digest(terminal_path)) from exc
                     raise
                 _sealed_write(cache_root / "terminal.json", {
                     "schema": _BUILD_TERMINAL_SCHEMA, "build_key": build_key,
@@ -1476,8 +1509,12 @@ class StaticGpuSourceBuilder:
         try:
             actor, actor_proof = worktree.create_campaign_worktree(
                 anchor, candidate.source_manifest.campaign_id, root=campaign_root)
-            applied = source_candidate.apply_source_candidate(candidate.source_manifest,
-                                                               proposal=candidate.proposal, actor=actor)
+            try:
+                applied = source_candidate.apply_source_candidate(
+                    candidate.source_manifest,
+                    proposal=candidate.proposal, actor=actor)
+            except source_candidate.SourceCandidateError as exc:
+                raise _SourceApplyFailure(str(exc)) from exc
             anchor_snapshot, _ = worktree.create_snapshot_worktree(
                 self.instrument_path, anchor.commit,
                 worktree.snapshot_worktree_path(candidate.source_manifest.campaign_id,
@@ -1507,9 +1544,11 @@ class StaticGpuSourceBuilder:
                                             env={str(key): str(value)
                                                  for key, value in environment.items()})
                 if not result.succeeded or result.log_disagrees_with_exit_code:
-                    raise StaticRegistryError(f"clean build did not succeed for {ident}")
+                    raise _CompileFailure(
+                        f"clean build did not succeed for {ident}")
                 if not set(_REQUIRED_TARGETS).issubset(set(result.facts.built_targets)):
-                    raise StaticRegistryError(f"build did not prove required targets for {ident}")
+                    raise _CompileFailure(
+                        f"build did not prove required targets for {ident}")
                 results.append((ident, snapshot, build_dir, result))
             by_id = {ident: (snapshot, build_dir, result) for ident, snapshot, build_dir, result in results}
             arm_builds = {
