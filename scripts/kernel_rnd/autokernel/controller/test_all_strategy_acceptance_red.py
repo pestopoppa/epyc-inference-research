@@ -147,6 +147,19 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
                 return AllStrategyAcceptanceRedGate._bound_candidate(
                     fixture, binding, context, self.sequence)
 
+        class NegativeScreen:
+            def __init__(self):
+                self.calls = 0
+
+            def screen(self, *_args):
+                self.calls += 1
+                return C.SealedScreen(
+                    "receipt", f"{self.calls:064x}", -0.01, "candidate",
+                    "a" * 64, "b" * 64, "c" * 64)
+
+            def reconcile(self, inflight):
+                return C.Recovery("safe_to_start")
+
         expected = [
             row["hypothesis_id"]
             for row in records
@@ -158,7 +171,7 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
             result = C.run_controller(
                 config, planner=planner,
                 critic=TD.FakeCritic(["accept"] * len(expected)),
-                screener=TD.FakeScreen([-0.01] * len(expected)),
+                screener=NegativeScreen(),
                 lease=TD.Lease())
         self.assertEqual(planner.selected, expected)
         self.assertEqual(result["terminal_reason"], "portfolio_exhausted")
