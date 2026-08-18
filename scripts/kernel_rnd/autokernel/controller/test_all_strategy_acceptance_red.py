@@ -1,9 +1,9 @@
 """Hardware-free acceptance gate for every currently eligible GPU strategy.
 
 The non-FA assertions describe seams that are already usable.  The two FA
-assertions are intentionally red until the paired-head bulk/tail dispatch and
-odd-GQA7 correctness contracts are sealed.  This file is test-only audit work;
-it does not widen runtime authority.
+assertions are intentionally red until every strategy can traverse the same
+typed, resumable proof state machine.  This file is test-only audit work; it
+does not widen runtime authority.
 """
 from __future__ import annotations
 
@@ -20,6 +20,7 @@ from . import discovery_controller as C
 from . import discovery_deployment_factory as F
 from . import gpu_source_evidence as E
 from . import test_discovery_controller as TD
+from . import test_gpu_source_adapter as TA
 from .test_gpu_source_evidence import ClaimFactory, FakeExecutors, plan
 
 
@@ -216,6 +217,9 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
                 self.assertEqual(decision["combination"], "conjunction")
                 self.assertEqual(decision["direction"],
                                  "lower_exact_duration_and_higher_throughput")
+                self.assertIs(
+                    decision["short_circuit_graphs_on_when_exact_nonpositive"],
+                    True)
 
     def test_profile_reducer_preserves_exact_route_duration(self):
         """RED: BeginNs/EndNs are parsed today and then silently discarded."""
@@ -427,6 +431,250 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
             self.assertIn("akh-first", result["portfolio_skips"])
             self.assertNotIn("akh-first", result["portfolio_terminals"])
 
+    def test_dry_run_advances_through_every_eligible_strategy_once(self):
+        """RED: authorization-only validation must not spin on rank one."""
+        fixture = TD.Tests(methodName="runTest")
+
+        class BoundPlanner:
+            def __init__(self):
+                self.selected = []
+
+            def attest(self):
+                return {**C.SOL, "runtime": {
+                    "kind": "docker_workspace_bind_only",
+                    "docker_path": "/docker", "docker_sha256": "a" * 64,
+                    "image_id": "image", "codex_native_sha256": "a" * 64,
+                    "code_mode_host_sha256": "a" * 64,
+                    "ca_certificate_sha256": "a" * 64,
+                    "writable_host_binds": ["/workspace"],
+                    "host_network_mode": "docker_bridge"}}
+
+            def plan(self, *, context, workspace):
+                binding = context["authoring_assignment"]["portfolio_binding"]
+                self.selected.append(binding["hypothesis_id"])
+                return fixture.portfolio_candidate(binding)
+
+        class NeverCompute:
+            def __getattr__(self, _name):
+                def fail(*_args, **_kwargs):
+                    raise AssertionError("dry-run reached a compute boundary")
+                return fail
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config = C.ControllerConfig(
+                root, len(ELIGIBLE) + 1, dry_run=True,
+                planner_context={
+                    "portfolio_dispatch_authority": self.dispatch},
+                planner_context_sha256="e" * 64,
+                production_base_commit="0" * 40,
+                instrument_commit="1" * 40,
+                hypothesis_portfolio=self.portfolio,
+                hypothesis_portfolio_sha256=self.portfolio.sha256)
+            planner = BoundPlanner()
+            result = C.run_controller(
+                config, planner=planner,
+                critic=TD.FakeCritic(["accept"] * (len(ELIGIBLE) + 1)),
+                screener=NeverCompute(), lease=NeverCompute())
+        expected = [row[0] for row in ELIGIBLE]
+        self.assertEqual(planner.selected, expected)
+        self.assertEqual([row["status"] for row in result["iterations"]],
+                         ["dry_run_authorized"] * len(ELIGIBLE))
+        self.assertEqual(result["terminal_reason"], "portfolio_exhausted")
+        self.assertEqual(set(result["portfolio_skips"]), set(expected))
+        self.assertTrue(all(
+            row["disposition"] == "dry_run_validated"
+            for row in result["portfolio_skips"].values()))
+        self.assertEqual(result["portfolio_terminals"], {})
+
+    def test_planner_provider_transient_is_typed_and_retries_after_restart(self):
+        """RED: an API reload cannot poison a durable planning operation."""
+        fixture = TD.Tests(methodName="runTest")
+        transient_type = getattr(C, "PlannerProviderTransient", None)
+        self.assertIsInstance(transient_type, type)
+        self.assertTrue(issubclass(transient_type, C.PlannerOutputRefusal))
+
+        class StopAfterTransientCheckpoint(BaseException):
+            pass
+
+        class FlakyPlanner:
+            def __init__(self):
+                self.calls = 0
+                self.selected = []
+
+            def attest(self):
+                return {**C.SOL, "runtime": {
+                    "kind": "docker_workspace_bind_only",
+                    "docker_path": "/docker", "docker_sha256": "a" * 64,
+                    "image_id": "image", "codex_native_sha256": "a" * 64,
+                    "code_mode_host_sha256": "a" * 64,
+                    "ca_certificate_sha256": "a" * 64,
+                    "writable_host_binds": ["/workspace"],
+                    "host_network_mode": "docker_bridge"}}
+
+            def plan(self, *, context, workspace):
+                self.calls += 1
+                binding = context["authoring_assignment"]["portfolio_binding"]
+                self.selected.append(binding["hypothesis_id"])
+                if self.calls == 1:
+                    raise transient_type("provider unavailable during API reload")
+                return fixture.portfolio_candidate(binding)
+
+        class NeverCompute:
+            def __getattr__(self, _name):
+                def fail(*_args, **_kwargs):
+                    raise AssertionError("transient dry-run reached compute")
+                return fail
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            record = fixture.portfolio_record(
+                hypothesis_id="akh-provider-retry", rank=1, budget=2)
+            config = dataclasses.replace(
+                fixture.portfolio_config(root, [record]), max_iterations=3)
+            planner = FlakyPlanner()
+            original_save = C.DurableState.save
+            stopped = [False]
+
+            def save_then_stop(store, state, phase):
+                original_save(store, state, phase)
+                if phase == "planner_transient" and not stopped[0]:
+                    stopped[0] = True
+                    raise StopAfterTransientCheckpoint(phase)
+
+            with mock.patch.object(C.DurableState, "save", new=save_then_stop), \
+                    self.assertRaises(StopAfterTransientCheckpoint):
+                C.run_controller(
+                    config, planner=planner,
+                    critic=TD.FakeCritic(["accept"]),
+                    screener=NeverCompute(), lease=NeverCompute())
+            result = C.run_controller(
+                config, planner=planner, critic=TD.FakeCritic(["accept"]),
+                screener=NeverCompute(), lease=NeverCompute())
+        self.assertEqual(planner.calls, 2)
+        self.assertEqual(planner.selected,
+                         ["akh-provider-retry", "akh-provider-retry"])
+        self.assertEqual([row["status"] for row in result["iterations"]],
+                         ["planner_transient", "dry_run_authorized"])
+        self.assertEqual(result["terminal_reason"], "portfolio_exhausted")
+        self.assertNotIn("akh-provider-retry", result["portfolio_terminals"])
+
+    def test_nonzero_codex_actor_exit_is_provider_transient_not_terminal(self):
+        """RED: the concrete planner must map provider exits to retry policy."""
+        fixture = TD.Tests(methodName="runTest")
+        package = fixture.source_package()
+        transient_type = getattr(C, "PlannerProviderTransient", None)
+        self.assertIsInstance(transient_type, type)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            workspace = root / "operation" / "workspace"
+            workspace.mkdir(parents=True)
+            wrapper = root / "codex"
+            wrapper.write_bytes(b"codex")
+            wrapper.chmod(0o700)
+            planner = C.CodexPlanner(
+                wrapper=wrapper, environment={"PATH": "/usr/bin"},
+                reviewed_sources=package)
+            assignment = C.AuthoringAssignment(
+                "ak-test", "akp-test", "akc-test", "0" * 40, "1" * 40)
+            context = {
+                "authoring_assignment": assignment.to_dict(),
+                "planner_context": {
+                    "reviewed_source_package_sha256": package.package_sha256}}
+            actor_result = SimpleNamespace(
+                returncode=75, stdout="", stderr="provider unavailable")
+            with mock.patch.object(
+                    C.codex_container_actor, "runtime_identity",
+                    return_value=TD.RUNTIME), mock.patch.object(
+                    C.codex_container_actor, "run_actor",
+                    return_value=actor_result), self.assertRaises(transient_type):
+                planner.plan(
+                    context=context, workspace=workspace,
+                    checkpoint_path=root / "operation" / "actor-result.json")
+
+    def test_typed_stage_refusals_have_exact_accounting_contract(self):
+        """RED: known stage outcomes must never become generic ambiguity."""
+        base = getattr(C, "GovernedStageRefusal", None)
+        self.assertIsInstance(base, type)
+        expected = (
+            ("SourceApplyRefusal", "source_apply", "authoring_refused"),
+            ("CompileRefusal", "compile", "authoring_refused"),
+            ("CorrectnessRefusal", "correctness", "correctness_falsified"),
+            ("DispatchAttributionRefusal", "dispatch_attribution",
+             "attribution_route_falsified"),
+        )
+        for name, stage, disposition in expected:
+            with self.subTest(refusal=name):
+                refusal_type = getattr(C, name, None)
+                self.assertIsInstance(refusal_type, type)
+                self.assertTrue(issubclass(refusal_type, base))
+                refusal = refusal_type(
+                    "sealed stage outcome", receipt_path="/sealed/receipt.json",
+                    receipt_sha256="a" * 64)
+                self.assertEqual(refusal.stage, stage)
+                self.assertEqual(refusal.disposition, disposition)
+                self.assertEqual(refusal.receipt_path, "/sealed/receipt.json")
+                self.assertEqual(refusal.receipt_sha256, "a" * 64)
+                self.assertIs(refusal.scientific_budget_spent, False)
+
+    def test_controller_accounts_each_typed_stage_refusal_without_ambiguity(self):
+        """RED: exercise the public screen boundary and portfolio state."""
+        fixture = TD.Tests(methodName="runTest")
+
+        class BoundPlanner:
+            def attest(self):
+                return {**C.SOL, "runtime": TD.RUNTIME}
+
+            def plan(self, *, context, workspace):
+                return fixture.portfolio_candidate(
+                    context["authoring_assignment"]["portfolio_binding"])
+
+        expected = (
+            ("SourceApplyRefusal", "authoring_refused", False),
+            ("CompileRefusal", "authoring_refused", False),
+            ("CorrectnessRefusal", "correctness_falsified", True),
+            ("DispatchAttributionRefusal", "attribution_route_falsified", False),
+        )
+        for name, disposition, hypothesis_terminal in expected:
+            with self.subTest(refusal=name), tempfile.TemporaryDirectory() as directory:
+                refusal_type = getattr(C, name, None)
+                self.assertIsInstance(refusal_type, type)
+                receipt = E._seal(
+                    Path(directory) / "stage-receipt.json",
+                    {"schema": "epyc.autokernel.stage_outcome_test.v1",
+                     "stage": name})
+                receipt_path = str(
+                    (Path(directory) / "stage-receipt.json").resolve())
+                receipt_sha256 = receipt["body"]["receipt_sha256"]
+                refusal = refusal_type(
+                    "sealed stage outcome", receipt_path=receipt_path,
+                    receipt_sha256=receipt_sha256)
+
+                class RefusingScreen:
+                    def reconcile(self, inflight):
+                        return C.Recovery("safe_to_start")
+
+                    def screen(self, *_args):
+                        raise refusal
+
+                record = fixture.portfolio_record(
+                    hypothesis_id="akh-stage-outcome", rank=1, budget=1)
+                config = dataclasses.replace(
+                    fixture.portfolio_config(Path(directory), [record]),
+                    max_iterations=1, dry_run=False)
+                result = C.run_controller(
+                    config, planner=BoundPlanner(),
+                    critic=TD.FakeCritic(["accept"]),
+                    screener=RefusingScreen(), lease=TD.Lease())
+                row = result["iterations"][0]
+                self.assertEqual(row["status"], disposition)
+                self.assertEqual(row["stage_receipt_path"], receipt_path)
+                self.assertEqual(row["stage_receipt_sha256"], receipt_sha256)
+                self.assertIs(row["scientific_budget_spent"], False)
+                self.assertEqual(
+                    "akh-stage-outcome" in result["portfolio_terminals"],
+                    hypothesis_terminal)
+
 
 class EvidenceStageResumeRedGate(unittest.TestCase):
     """Acceptance for exact-once proof stages after a process/API restart.
@@ -542,6 +790,70 @@ class EvidenceStageResumeRedGate(unittest.TestCase):
             self.assertEqual(comparison["relative_improvement_fraction"], 0.0)
             self.assertIs(comparison["all_candidate_routes_present"], True)
             self.assertIs(comparison["all_anchor_routes_present"], True)
+
+
+class AdapterStageResumeRedGate(unittest.TestCase):
+    """The controller-facing adapter must reopen partial proof receipts.
+
+    Producer-level reuse is insufficient: on a real controller restart,
+    ``reconcile`` runs before the producer can inspect those receipts.  Each
+    case below crashes after one durable boundary, then calls the public
+    adapter again and requires exactly one total invocation of correctness,
+    candidate attribution, and anchor attribution.
+    """
+
+    def _exercise(self, crash_stage: str) -> None:
+        fixture = TA.GpuSourceAdapterTests(methodName="runTest")
+        with tempfile.TemporaryDirectory() as directory:
+            values = fixture.setup(directory)
+            (adapter, candidate, authorization, lease, inflight, current,
+             executors) = values
+            original_arm = E._produce_attribution_arm
+
+            if crash_stage == "correctness":
+                patcher = mock.patch.object(
+                    E, "_produce_attribution_arm",
+                    side_effect=RuntimeError("crash after correctness"))
+            elif crash_stage == "candidate_attribution":
+                def crash_before_anchor(root, arm, plan_, executor, **kwargs):
+                    if arm == "anchor":
+                        raise RuntimeError("crash after candidate attribution")
+                    return original_arm(root, arm, plan_, executor, **kwargs)
+                patcher = mock.patch.object(
+                    E, "_produce_attribution_arm",
+                    side_effect=crash_before_anchor)
+            elif crash_stage == "anchor_attribution":
+                patcher = mock.patch.object(
+                    E, "_produce_pair",
+                    side_effect=RuntimeError("crash after anchor attribution"))
+            else:  # pragma: no cover - test authoring error
+                self.fail(f"unknown crash stage {crash_stage}")
+
+            with mock.patch.object(C, "GpuSourceScreener", TA.FakeDelegate), \
+                    patcher, self.assertRaisesRegex(RuntimeError, "crash after"):
+                adapter.screen(candidate, authorization, lease)
+
+            # This is the decisive adapter seam.  "ambiguous" here prevents
+            # the already resumable producer from ever being re-entered.
+            self.assertEqual(adapter.reconcile(inflight).status,
+                             "safe_to_start")
+            with mock.patch.object(C, "GpuSourceScreener", TA.FakeDelegate):
+                resumed = adapter.screen(candidate, authorization, lease)
+            self.assertEqual(resumed.result_sha256, current.result_sha256)
+            self.assertEqual([row[:2] for row in executors.calls], [
+                ("correctness", "candidate"),
+                ("rocprof", "candidate"),
+                ("rocprof", "anchor"),
+            ])
+
+    def test_adapter_resume_after_correctness_is_exactly_once(self):
+        self._exercise("correctness")
+
+    def test_adapter_resume_after_candidate_attribution_is_exactly_once(self):
+        self._exercise("candidate_attribution")
+
+    def test_adapter_resume_after_anchor_attribution_is_exactly_once(self):
+        self._exercise("anchor_attribution")
 
 
 if __name__ == "__main__":
