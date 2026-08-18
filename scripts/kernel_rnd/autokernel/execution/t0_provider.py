@@ -2094,19 +2094,34 @@ def parse_backend_ops_console(text: str) -> BackendOpsRun:
             continue
         tests = _TESTS_PASSED_RE.match(line)
         if tests and name is not None:
+            if reported != (None, None):
+                raise OutputParseError(
+                    f"backend {name!r} emitted more than one tests-passed summary")
             reported = (int(tests.group(1)), int(tests.group(2)))
             continue
         bstatus = _BACKEND_STATUS_RE.match(line)
         if bstatus:
+            if name is None or bstatus.group(1) != name:
+                raise OutputParseError(
+                    "backend status summary does not name the active backend frame")
+            if status is not None:
+                raise OutputParseError(
+                    f"backend {bstatus.group(1)!r} emitted more than one status summary")
             status = bstatus.group(2)
             continue
         summary = _BACKENDS_PASSED_RE.match(line)
         if summary:
+            if backends_total is not None:
+                raise OutputParseError(
+                    "test-backend-ops emitted more than one backends-passed summary")
             saw_frame = True
             flush()
             backends_passed, backends_total = int(summary.group(1)), int(summary.group(2))
             continue
-        if line.strip() in ("OK", "FAIL") and backends_total is not None and overall is None:
+        if line.strip() in ("OK", "FAIL") and backends_total is not None:
+            if overall is not None:
+                raise OutputParseError(
+                    "test-backend-ops emitted more than one overall verdict")
             overall = line.strip()
             continue
         if line.strip() == "Failing tests:":

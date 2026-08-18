@@ -1420,9 +1420,8 @@ def _evidence_binding(config: deployment.DiscoveryDeployment) -> EvidencePlanBin
             runtime_config_sha256=config.runtime_config.sha256,
             candidate=build_.candidate_identity, anchor=build_.anchor_identity,
             correctness_argv=correctness_argv,
-            correctness_summary_pattern=(
-                rf"(?s)(?P<passed>\d+)/(?P<total>\d+) tests passed.*"
-                rf"Backend ROCm0: .*OK.*1/1 backends passed"),
+            correctness_backend="ROCm0",
+            correctness_op=op,
             expected_correctness_cases=cases,
             candidate_rocprof_argv=profile_argv, anchor_rocprof_argv=profile_argv,
             dispatch=template.bind_dispatch(candidate.experiment_intent),

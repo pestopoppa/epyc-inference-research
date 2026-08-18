@@ -23,13 +23,17 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Mapping, Protocol, Sequence
 
 from .. import schemas
+from ..execution import t0_provider
 from ..resource import device_claim
 from . import gpu_source_proofs as proofs
 from . import split_runtime_verifier
 
 AUTHORITY = "nonpromotable_candidate_only_discovery"
 BORROWED_PHASE_SCHEMA = "epyc.autokernel.borrowed_device_claim_phase.v1"
-CORRECTNESS_SCHEMA = "epyc.autokernel.targeted_correctness_receipt.v2"
+CORRECTNESS_SCHEMA = "epyc.autokernel.targeted_correctness_receipt.v3"
+CORRECTNESS_REFUSAL_SCHEMA = "epyc.autokernel.targeted_correctness_refusal.v1"
+CORRECTNESS_PARSER_ID = "ak.t0.backend_ops_console/v1"
+EXECUTION_POLICY_SCHEMA = "epyc.autokernel.gpu_source_execution_policy.v2"
 ATTRIBUTION_SCHEMA = "epyc.autokernel.gpu_kernel_attribution.v2"
 PAIR_SCHEMA = "epyc.autokernel.gpu_kernel_attribution_pair.v1"
 SEALED_BUNDLE_SCHEMA = "epyc.autokernel.gpu_source_evidence_bundle.v1"
@@ -40,6 +44,15 @@ ROCPROF_TIMESTAMP_OUTPUT = "{TIMESTAMP_CSV}"
 
 class EvidenceProducerError(RuntimeError):
     """The producer refused to mint a success receipt."""
+
+
+class CorrectnessParseRefusal(EvidenceProducerError):
+    """The authoritative backend-op parser could not prove the targeted run."""
+
+
+def _durable_refusal_reason(exc: BaseException) -> str:
+    """ASCII-stable error text for the legacy proof receipt hash reducer."""
+    return str(exc).encode("ascii", "backslashreplace").decode("ascii")
 
 
 def _hash_file(path: Path, label: str, *, allow_empty: bool = True) -> str:
@@ -403,7 +416,8 @@ class GpuSourceEvidencePlan:
     candidate: proofs.BuildIdentity
     anchor: proofs.BuildIdentity
     correctness_argv: tuple[str, ...]
-    correctness_summary_pattern: str
+    correctness_backend: str
+    correctness_op: str
     expected_correctness_cases: int
     candidate_rocprof_argv: tuple[str, ...]
     anchor_rocprof_argv: tuple[str, ...]
@@ -440,12 +454,12 @@ class GpuSourceEvidencePlan:
                 or not isinstance(self.expected_correctness_cases, int)
                 or self.expected_correctness_cases < 1):
             raise EvidenceProducerError("expected correctness count must be positive")
-        try:
-            compiled = re.compile(self.correctness_summary_pattern)
-        except re.error as exc:
-            raise EvidenceProducerError("invalid correctness summary regex") from exc
-        if not {"passed", "total"}.issubset(compiled.groupindex):
-            raise EvidenceProducerError("correctness regex requires named passed and total groups")
+        if (not isinstance(self.correctness_backend, str)
+                or not self.correctness_backend
+                or not isinstance(self.correctness_op, str)
+                or not self.correctness_op):
+            raise EvidenceProducerError(
+                "correctness backend and operation must be explicit")
         if not isinstance(self.identity_files, EvidenceIdentityFiles):
             raise EvidenceProducerError("plan requires typed file-backed identities")
         if not isinstance(self.policy, BoundInputFile):
@@ -754,7 +768,7 @@ def _verify_source_tree_identity(carrier: BoundInputFile,
 
 def _policy_payload(plan: GpuSourceEvidencePlan) -> dict[str, Any]:
     return {
-        "schema": "epyc.autokernel.gpu_source_execution_policy.v1",
+        "schema": EXECUTION_POLICY_SCHEMA,
         "manifest_sha256": plan.manifest_sha256,
         "model_sha256": plan.model_sha256,
         "workload_sha256": plan.workload_sha256,
@@ -762,7 +776,9 @@ def _policy_payload(plan: GpuSourceEvidencePlan) -> dict[str, Any]:
         "candidate_build_identity": asdict(plan.candidate),
         "anchor_build_identity": asdict(plan.anchor),
         "correctness_argv": list(plan.correctness_argv),
-        "correctness_summary_pattern": plan.correctness_summary_pattern,
+        "correctness_parser_id": CORRECTNESS_PARSER_ID,
+        "correctness_backend": plan.correctness_backend,
+        "correctness_op": plan.correctness_op,
         "expected_correctness_cases": plan.expected_correctness_cases,
         "candidate_rocprof_argv": list(plan.candidate_rocprof_argv),
         "anchor_rocprof_argv": list(plan.anchor_rocprof_argv),
@@ -1121,18 +1137,86 @@ def _output_hashes(invocation: CommandInvocation) -> dict[str, Any]:
     return result
 
 
-def _parse_summary(stdout: str, plan: GpuSourceEvidencePlan) -> str:
-    matches = list(re.finditer(plan.correctness_summary_pattern, stdout, re.MULTILINE))
-    if len(matches) != 1:
-        raise EvidenceProducerError("correctness stdout must contain exactly one summary")
-    match = matches[0]
+@dataclass(frozen=True)
+class _CorrectnessResult:
+    backend: str
+    operation: str
+    passed_cases: int
+    total_cases: int
+    skipped_backends: tuple[str, ...]
+    backends_passed: int
+    backends_total: int
+    overall: str
+
+    @property
+    def summary(self) -> str:
+        return f"{self.passed_cases}/{self.total_cases} tests passed"
+
+
+def _parse_correctness(stdout: str, plan: GpuSourceEvidencePlan) -> _CorrectnessResult:
+    """Reduce console bytes through the T0 parser, then enforce this exact plan.
+
+    The tool counts skipped devices as passed backends.  Therefore neither its
+    final ``N/N backends passed`` line nor a regex spanning that line proves the
+    selected GPU ran anything.  The authoritative T0 parser attributes cases to
+    concrete backend frames, excludes unsupported cases, and reconciles its
+    parse with the tool's per-backend count before this reducer accepts it.
+    """
     try:
-        passed, total = int(match.group("passed")), int(match.group("total"))
-    except (ValueError, IndexError) as exc:
-        raise EvidenceProducerError("correctness summary counts are invalid") from exc
-    if passed != plan.expected_correctness_cases or total != plan.expected_correctness_cases:
-        raise EvidenceProducerError("correctness did not pass the exact expected case count")
-    return match.group(0)
+        run = t0_provider.parse_backend_ops_console(stdout)
+        run.reconcile()
+    except t0_provider.OutputParseError as exc:
+        raise CorrectnessParseRefusal(
+            f"correctness console parse refused: {exc}") from exc
+
+    targets = tuple(row for row in run.backends
+                    if row.name == plan.correctness_backend)
+    if len(targets) != 1:
+        raise CorrectnessParseRefusal(
+            "correctness output must contain exactly one target backend frame")
+    target = targets[0]
+    if target.skipped:
+        raise CorrectnessParseRefusal("target correctness backend was skipped")
+    if target.status != "OK":
+        raise CorrectnessParseRefusal("target correctness backend did not report OK")
+
+    compared = tuple(case for case in target.cases
+                     if case.status != "not_supported")
+    if not compared:
+        raise CorrectnessParseRefusal(
+            "target correctness backend exercised zero supported cases")
+    if any(case.op != plan.correctness_op for case in compared):
+        raise CorrectnessParseRefusal(
+            "target correctness backend exercised an unexpected operation")
+    if any(not case.passed for case in compared):
+        raise CorrectnessParseRefusal(
+            "target correctness backend contains a failed case")
+    expected = plan.expected_correctness_cases
+    if (len(compared) != expected
+            or target.reported_passed != expected
+            or target.reported_total != expected):
+        raise CorrectnessParseRefusal(
+            "correctness did not pass the exact expected case count")
+
+    others = tuple(row for row in run.backends if row is not target)
+    if any(not row.skipped or row.cases for row in others):
+        raise CorrectnessParseRefusal(
+            "a non-target backend was exercised by targeted correctness")
+    if (run.backends_total != len(run.backends)
+            or run.backends_passed != run.backends_total
+            or run.overall != "OK"
+            or run.failing_tests):
+        raise CorrectnessParseRefusal(
+            "correctness backend/overall summaries do not prove a clean run")
+    return _CorrectnessResult(
+        backend=plan.correctness_backend,
+        operation=plan.correctness_op,
+        passed_cases=expected,
+        total_cases=expected,
+        skipped_backends=tuple(row.name for row in others),
+        backends_passed=run.backends_passed,
+        backends_total=run.backends_total,
+        overall=run.overall)
 
 
 def _produce_correctness(
@@ -1152,7 +1236,39 @@ def _produce_correctness(
         claim_verifier=claim_verifier, claim_journal=claim_journal,
         claim_timeout_s=claim_timeout_s)
     outputs = _output_hashes(invocation)
-    summary = _parse_summary(invocation.stdout_path.read_text(encoding="utf-8"), plan)
+    try:
+        parsed = _parse_correctness(
+            invocation.stdout_path.read_text(encoding="utf-8"), plan)
+    except CorrectnessParseRefusal as exc:
+        _seal(directory / "refusal.json", {
+            "schema": CORRECTNESS_REFUSAL_SCHEMA,
+            "authority": AUTHORITY,
+            "promotion_claim": False,
+            "status": "refused",
+            "classification": "output_parse_refusal",
+            "error_type": type(exc).__name__,
+            "reason": _durable_refusal_reason(exc),
+            "campaign_id": plan.campaign_id,
+            "device_id": plan.device_id,
+            "manifest_sha256": plan.manifest_sha256,
+            "candidate_build_identity": asdict(plan.candidate),
+            "workload_sha256": plan.workload_sha256,
+            "command_argv": list(plan.correctness_argv),
+            "command_cwd": str(plan.execution_cwd),
+            "command_environment_sha256": schemas.content_hash(
+                [list(item) for item in plan.correctness_environment]),
+            "exit_code": capture.exit_code,
+            **outputs,
+            "started_at": capture.started_at,
+            "ended_at": capture.ended_at,
+            "correctness_parser_id": CORRECTNESS_PARSER_ID,
+            "correctness_backend": plan.correctness_backend,
+            "correctness_op": plan.correctness_op,
+            "expected_cases": plan.expected_correctness_cases,
+            **_claim_boundary_fields(opened, released, residency),
+            "residency_witness": residency,
+        })
+        raise
     if capture.exit_code != 0:
         raise EvidenceProducerError("targeted correctness command exited nonzero")
     body = {
@@ -1179,8 +1295,14 @@ def _produce_correctness(
         **outputs,
         "started_at": capture.started_at,
         "ended_at": capture.ended_at,
-        "summary": summary,
-        "correctness_summary_pattern": plan.correctness_summary_pattern,
+        "summary": parsed.summary,
+        "correctness_parser_id": CORRECTNESS_PARSER_ID,
+        "correctness_backend": parsed.backend,
+        "correctness_op": parsed.operation,
+        "skipped_backends": list(parsed.skipped_backends),
+        "backends_passed": parsed.backends_passed,
+        "backends_total": parsed.backends_total,
+        "overall": parsed.overall,
         "expected_cases": plan.expected_correctness_cases,
         "passed_cases": plan.expected_correctness_cases,
         "exact_case_ok": True,
@@ -1582,7 +1704,9 @@ def _validate_correctness_body(body: Mapping[str, Any], plan: GpuSourceEvidenceP
         "shared_runtime": _shared_runtime_reference(plan.shared_runtime),
         "execution_policy": _bound_reference(plan.policy),
         "command_input_files": [_bound_reference(x) for x in plan.correctness_inputs],
-        "correctness_summary_pattern": plan.correctness_summary_pattern,
+        "correctness_parser_id": CORRECTNESS_PARSER_ID,
+        "correctness_backend": plan.correctness_backend,
+        "correctness_op": plan.correctness_op,
         "expected_cases": plan.expected_correctness_cases,
         "passed_cases": plan.expected_correctness_cases, "exact_case_ok": True,
     }
@@ -1593,11 +1717,95 @@ def _validate_correctness_body(body: Mapping[str, Any], plan: GpuSourceEvidenceP
         path = Path(str(body.get(f"{kind}_path", "")))
         if _hash_file(path, kind, allow_empty=kind == "stderr") != body.get(f"{kind}_sha256"):
             raise EvidenceProducerError(f"correctness {kind} bytes changed")
-    if _parse_summary(Path(str(body["stdout_path"])).read_text(encoding="utf-8"), plan) != body.get("summary"):
+    parsed = _parse_correctness(
+        Path(str(body["stdout_path"])).read_text(encoding="utf-8"), plan)
+    if (parsed.summary != body.get("summary")
+            or list(parsed.skipped_backends) != body.get("skipped_backends")
+            or parsed.backends_passed != body.get("backends_passed")
+            or parsed.backends_total != body.get("backends_total")
+            or parsed.overall != body.get("overall")):
         raise EvidenceProducerError("correctness summary changed")
     _validate_residency_witness(
         body.get("residency_witness"), device_id=plan.device_id,
         label="correctness")
+
+
+def load_gpu_source_correctness_receipt(
+        path: Path, plan: GpuSourceEvidencePlan) -> Mapping[str, Any]:
+    """Re-open one completed correctness phase without requiring later phases.
+
+    This is the durable phase boundary: a crash or refusal in attribution may
+    not turn a completed GPU correctness command back into an in-memory fact.
+    The loader recursively rechecks the plan's immutable inputs, receipt hash,
+    raw stdout/stderr bytes, typed backend-op parse, device claim and in-window
+    residency before returning the receipt.
+    """
+    _verify_plan_files(plan)
+    try:
+        loaded = proofs.load_receipt(path, schema=CORRECTNESS_SCHEMA)
+    except proofs.ProofError as exc:
+        raise EvidenceProducerError(
+            "completed correctness receipt is not durably recoverable") from exc
+    _validate_correctness_body(loaded["body"], plan)
+    return loaded
+
+
+def load_gpu_source_correctness_refusal(
+        path: Path, plan: GpuSourceEvidencePlan) -> Mapping[str, Any]:
+    """Validate a durable typed refusal without converting it into a pass."""
+    _verify_plan_files(plan)
+    try:
+        loaded = proofs.load_receipt(path, schema=CORRECTNESS_REFUSAL_SCHEMA)
+    except proofs.ProofError as exc:
+        raise EvidenceProducerError(
+            "correctness parse refusal is not durably recoverable") from exc
+    body = loaded["body"]
+    expected = {
+        "authority": AUTHORITY,
+        "promotion_claim": False,
+        "status": "refused",
+        "classification": "output_parse_refusal",
+        "error_type": "CorrectnessParseRefusal",
+        "campaign_id": plan.campaign_id,
+        "device_id": plan.device_id,
+        "manifest_sha256": plan.manifest_sha256,
+        "candidate_build_identity": asdict(plan.candidate),
+        "workload_sha256": plan.workload_sha256,
+        "command_argv": list(plan.correctness_argv),
+        "command_cwd": str(plan.execution_cwd),
+        "command_environment_sha256": schemas.content_hash(
+            [list(item) for item in plan.correctness_environment]),
+        "correctness_parser_id": CORRECTNESS_PARSER_ID,
+        "correctness_backend": plan.correctness_backend,
+        "correctness_op": plan.correctness_op,
+        "expected_cases": plan.expected_correctness_cases,
+    }
+    if (any(body.get(key) != value for key, value in expected.items())
+            or not isinstance(body.get("reason"), str)
+            or not body["reason"]):
+        raise EvidenceProducerError(
+            "correctness parse refusal identity/classification mismatch")
+    _validate_claim_boundary(body, plan=plan)
+    for kind in ("stdout", "stderr"):
+        path_ = Path(str(body.get(f"{kind}_path", "")))
+        if _hash_file(path_, kind, allow_empty=kind == "stderr") != body.get(
+                f"{kind}_sha256"):
+            raise EvidenceProducerError(
+                f"correctness refusal {kind} bytes changed")
+    try:
+        _parse_correctness(
+            Path(str(body["stdout_path"])).read_text(encoding="utf-8"), plan)
+    except CorrectnessParseRefusal as exc:
+        if _durable_refusal_reason(exc) != body["reason"]:
+            raise EvidenceProducerError(
+                "correctness parse refusal reason changed") from exc
+    else:
+        raise EvidenceProducerError(
+            "correctness parse refusal now parses as a pass")
+    _validate_residency_witness(
+        body.get("residency_witness"), device_id=plan.device_id,
+        label="correctness refusal")
+    return loaded
 
 
 def _contract_from_dict(value: Mapping[str, Any]) -> DispatchContract:
@@ -1629,7 +1837,8 @@ def _plan_from_receipts(correctness: Mapping[str, Any], pair: Mapping[str, Any])
             candidate=proofs.BuildIdentity(**pair_body["candidate_build_identity"]),
             anchor=proofs.BuildIdentity(**pair_body["anchor_build_identity"]),
             correctness_argv=tuple(correct_body["command_argv"]),
-            correctness_summary_pattern=str(correct_body["correctness_summary_pattern"]),
+            correctness_backend=str(correct_body["correctness_backend"]),
+            correctness_op=str(correct_body["correctness_op"]),
             expected_correctness_cases=int(correct_body["expected_cases"]),
             candidate_rocprof_argv=_receipt_rocprof_template(candidate_body),
             anchor_rocprof_argv=_receipt_rocprof_template(anchor_body),
@@ -1745,9 +1954,11 @@ def load_gpu_source_evidence_bundle(path: Path) -> proofs.GpuSourceProofBundle:
 
 
 __all__ = [
-    "AUTHORITY", "EvidenceProducerError", "GpuResidencySample",
+    "AUTHORITY", "EvidenceProducerError", "CorrectnessParseRefusal",
+    "CORRECTNESS_PARSER_ID", "GpuResidencySample",
     "ExecutionCapture", "CommandInvocation", "CommandExecutor",
     "ExactDispatch", "ForbiddenDispatch", "InvariantDispatch",
     "DispatchContract", "GpuSourceEvidencePlan", "produce_gpu_source_evidence",
+    "load_gpu_source_correctness_receipt", "load_gpu_source_correctness_refusal",
     "load_gpu_source_evidence_bundle",
 ]

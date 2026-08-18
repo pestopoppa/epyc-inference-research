@@ -33,7 +33,7 @@
     ]
   },
   "correctness_receipt": {
-    "schema": "epyc.autokernel.targeted_correctness_receipt.v2",
+    "schema": "epyc.autokernel.targeted_correctness_receipt.v3",
     "required": [
       "status",
       "result",
@@ -44,6 +44,9 @@
       "candidate_build_identity",
       "workload_sha256",
       "command_argv",
+      "correctness_parser_id",
+      "correctness_backend",
+      "correctness_op",
       "exit_code",
       "stdout_sha256",
       "stderr_sha256",
@@ -57,6 +60,8 @@
     "acceptance": [
       "status is complete and result is PASS",
       "exit_code is zero and the exact expected case/count is rederived from stdout",
+      "the shared T0 console parser proves the selected backend was exercised, its supported cases all name the planned operation, and its per-backend count is exact",
+      "skipped non-target backends are recorded but never counted as target evidence; unsupported and zero-case target output cannot pass",
       "open and release receipts share claim_id, campaign_id, device_id, holder PID/start ticks and boot ID",
       "KFD PID and nonzero VRAM were sampled during the child execution interval",
       "all plan and build identities match exactly"
