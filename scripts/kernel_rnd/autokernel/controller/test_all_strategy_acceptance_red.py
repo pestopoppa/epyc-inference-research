@@ -1328,6 +1328,35 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
                 hashlib.sha256(receipt.read_bytes()).hexdigest(),
                 first.exception.receipt_sha256)
 
+    def test_cross_arm_invariant_drift_is_reusable_dispatch_terminal(self):
+        """A parsed candidate/anchor topology change is a measured falsifier."""
+        helper = TA.GpuSourceAdapterTests(methodName="runTest")
+        with tempfile.TemporaryDirectory() as directory:
+            values = helper.setup(directory)
+            adapter, candidate, authorization, lease, _inflight, _current, executors = values
+            executors.invariant_changed = True
+            with mock.patch.object(C, "GpuSourceScreener", TA.FakeDelegate), \
+                    self.assertRaises(C.DispatchAttributionRefusal) as first:
+                adapter.screen(candidate, authorization, lease)
+            calls_after_terminal = list(executors.calls)
+            with mock.patch.object(C, "GpuSourceScreener", TA.FakeDelegate), \
+                    self.assertRaises(C.DispatchAttributionRefusal) as reopened:
+                adapter.screen(candidate, authorization, lease)
+            self.assertEqual(executors.calls, calls_after_terminal)
+            self.assertEqual(
+                [call[:2] for call in executors.calls],
+                [("correctness", "candidate"),
+                 ("rocprof", "candidate"), ("rocprof", "anchor")])
+            self.assertEqual(
+                (reopened.exception.receipt_path,
+                 reopened.exception.receipt_sha256),
+                (first.exception.receipt_path,
+                 first.exception.receipt_sha256))
+            receipt = Path(first.exception.receipt_path)
+            self.assertEqual(
+                hashlib.sha256(receipt.read_bytes()).hexdigest(),
+                first.exception.receipt_sha256)
+
     def test_malformed_profile_output_remains_ambiguous_not_falsified(self):
         """Only a parsed route mismatch may become a scientific route terminal."""
         helper = TA.GpuSourceAdapterTests(methodName="runTest")
@@ -1609,6 +1638,76 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
                 self.assertEqual((planner.calls, screen.executor_calls), (1, 1))
                 self.assertEqual(screen.calls, 2)
                 self.assertNotIn("inflight", result)
+
+    def test_bounded_dispatch_falsifiers_advance_to_next_hypothesis(self):
+        """Candidate route terminals cannot starve the rest of the portfolio."""
+        fixture = TD.Tests(methodName="runTest")
+        records_by_id = {
+            row["hypothesis_id"]: row
+            for row in self.portfolio.eligible_hypotheses()}
+        first = records_by_id["akh-v2-q8-quantizer-new-mechanism"]
+        second = records_by_id["akh-v2-rms-direct-load-reduction"]
+        route_budget = first["decision_policy"]["max_distinct_candidates"]
+
+        class Planner:
+            def __init__(self):
+                self.selected = []
+                self.sequence = 0
+
+            def attest(self):
+                return {**C.SOL, "runtime": TD.RUNTIME}
+
+            def plan(self, *, context, workspace):
+                self.sequence += 1
+                binding = context["authoring_assignment"]["portfolio_binding"]
+                self.selected.append(binding["hypothesis_id"])
+                return AllStrategyAcceptanceRedGate._bound_candidate(
+                    fixture, binding, context, self.sequence)
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            route_receipt = E._seal(root / "route-refusal.json", {
+                "schema": "epyc.autokernel.stage_outcome_test.v1",
+                "stage": "dispatch_attribution"})
+            correctness_receipt = E._seal(root / "correctness-refusal.json", {
+                "schema": "epyc.autokernel.stage_outcome_test.v1",
+                "stage": "correctness"})
+
+            class Screen:
+                def reconcile(self, _inflight):
+                    return C.Recovery("safe_to_start")
+
+                def screen(self, candidate, *_args):
+                    if candidate.hypothesis_id == first["hypothesis_id"]:
+                        raise C.DispatchAttributionRefusal(
+                            "reviewed route absent",
+                            receipt_path=str((root / "route-refusal.json").resolve()),
+                            receipt_sha256=route_receipt["file_sha256"])
+                    raise C.CorrectnessRefusal(
+                        "targeted correctness mismatch",
+                        receipt_path=str(
+                            (root / "correctness-refusal.json").resolve()),
+                        receipt_sha256=correctness_receipt["file_sha256"])
+
+            planner = Planner()
+            result = C.run_controller(
+                self._real_portfolio_config(
+                    root / "state", [first, second],
+                    iterations=route_budget + 2),
+                planner=planner,
+                critic=TD.FakeCritic(["accept"] * (route_budget + 1)),
+                screener=Screen(), lease=TD.Lease())
+        self.assertEqual(
+            planner.selected,
+            [first["hypothesis_id"]] * route_budget +
+            [second["hypothesis_id"]])
+        self.assertIn(first["hypothesis_id"], result["portfolio_skips"])
+        self.assertNotIn(first["hypothesis_id"], result["portfolio_terminals"])
+        self.assertEqual(
+            result["portfolio_terminals"][second["hypothesis_id"]][
+                "disposition"],
+            "correctness_falsified")
+        self.assertEqual(result["terminal_reason"], "portfolio_exhausted")
 
 
 class EvidenceStageResumeRedGate(unittest.TestCase):
