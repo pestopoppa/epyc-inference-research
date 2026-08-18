@@ -639,7 +639,7 @@ class StaticBuildCacheTests(unittest.TestCase):
                 StaticGpuSourceBuilder, "_build_uncached",
                 side_effect=source_candidate.SourceCandidateError(
                     "committed diff derives undeclared symbols")):
-            with self.assertRaises(source_candidate.SourceCandidateError):
+            with self.assertRaises(C.SourceApplyRefusal):
                 fixture.builder.build(
                     fixture.candidate, object(), fixture.permit)
 
@@ -647,11 +647,12 @@ class StaticBuildCacheTests(unittest.TestCase):
         terminal = next((cache / "entries").iterdir()) / "terminal.json"
         sealed = json.loads(terminal.read_text())
         self.assertEqual(
-            (sealed["state"], sealed["failure_type"], sealed["failure_message"]),
-            ("failed", "SourceCandidateError",
+            (sealed["state"], sealed["failure_stage"],
+             sealed["failure_type"], sealed["failure_message"]),
+            ("failed", "source_apply", "SourceCandidateError",
              "committed diff derives undeclared symbols"))
         with self.assertRaisesRegex(
-                source_candidate.SourceCandidateError,
+                C.SourceApplyRefusal,
                 "committed diff derives undeclared symbols"):
             self.invoke(fixture, {**fixture.permit, "operation_key": "6" * 64})
         self.assertEqual(fixture.calls, [])
@@ -661,7 +662,7 @@ class StaticBuildCacheTests(unittest.TestCase):
         with mock.patch.object(
                 StaticGpuSourceBuilder, "_build_uncached",
                 side_effect=source_candidate.SourceCandidateError("legacy failure")):
-            with self.assertRaises(source_candidate.SourceCandidateError):
+            with self.assertRaises(C.SourceApplyRefusal):
                 fixture.builder.build(
                     fixture.candidate, object(), fixture.permit)
         terminal = next(
@@ -669,8 +670,8 @@ class StaticBuildCacheTests(unittest.TestCase):
         ) / "terminal.json"
         self.rewrite_receipt(terminal, lambda body: body.pop("failure_message"))
         with self.assertRaisesRegex(
-                source_candidate.SourceCandidateError,
-                "sealed prior build transaction rejected source candidate authoring"):
+                C.SourceApplyRefusal,
+                "sealed prior build transaction rejected source_apply"):
             self.invoke(fixture, {**fixture.permit, "operation_key": "a" * 64})
         self.assertEqual(fixture.calls, [])
 
@@ -684,7 +685,7 @@ class StaticBuildCacheTests(unittest.TestCase):
                         StaticGpuSourceBuilder, "_build_uncached",
                         side_effect=source_candidate.SourceCandidateError(
                             "committed diff derives undeclared symbols")):
-                    with self.assertRaises(source_candidate.SourceCandidateError):
+                    with self.assertRaises(C.SourceApplyRefusal):
                         fixture.builder.build(
                             fixture.candidate, object(), fixture.permit)
                 terminal = next(
