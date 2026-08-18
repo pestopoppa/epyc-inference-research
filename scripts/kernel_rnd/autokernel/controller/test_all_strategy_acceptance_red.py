@@ -973,11 +973,16 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
                         self.calls += 1
                         raise refusal
 
-                record = fixture.portfolio_record(
-                    hypothesis_id="akh-stage-outcome", rank=1, budget=1)
-                config = dataclasses.replace(
-                    fixture.portfolio_config(Path(directory), [record]),
-                    max_iterations=1, dry_run=False)
+                # Exercise the live path with the same complete, sealed
+                # deployment authority required at launch.  Replacing only
+                # ``dry_run`` on the legacy unit fixture would (correctly)
+                # fail before the typed screen boundary under test.
+                record = next(
+                    row for row in self.portfolio.eligible_hypotheses()
+                    if row["hypothesis_id"] ==
+                    "akh-v2-q8-quantizer-new-mechanism")
+                config = self._real_portfolio_config(
+                    Path(directory), [record], iterations=1)
                 planner = BoundPlanner()
                 critic = TD.FakeCritic(["accept"])
                 screener = RefusingScreen()
@@ -1010,7 +1015,7 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
                 self.assertEqual(row["stage_receipt_sha256"], receipt_sha256)
                 self.assertIs(row["scientific_budget_spent"], False)
                 self.assertEqual(
-                    "akh-stage-outcome" in result["portfolio_terminals"],
+                    record["hypothesis_id"] in result["portfolio_terminals"],
                     hypothesis_terminal)
                 self.assertEqual((planner.calls, screener.calls), (1, 1))
 
