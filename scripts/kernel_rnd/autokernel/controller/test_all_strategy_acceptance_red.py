@@ -8,6 +8,7 @@ does not widen runtime authority.
 from __future__ import annotations
 
 import dataclasses
+import hashlib
 from pathlib import Path
 import tempfile
 from types import SimpleNamespace
@@ -20,6 +21,7 @@ from . import discovery_controller as C
 from . import discovery_deployment_factory as F
 from . import gpu_source_evidence as E
 from . import test_discovery_controller as TD
+from . import test_discovery_static_registry as TSR
 from . import test_gpu_source_adapter as TA
 from .test_gpu_source_evidence import ClaimFactory, FakeExecutors, plan
 
@@ -636,6 +638,102 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
         self.assertNotIn(result.classification,
                          {"candidate", "top_k_replicated_candidate"})
 
+    def test_graphs_off_and_on_receipts_resume_without_repeating_process(self):
+        """A crash after either model stage reuses its durable result exactly once."""
+        class CrashAfterDurableResult(BaseException):
+            pass
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            anchor, candidate = root / "anchor", root / "candidate"
+            anchor.mkdir(); candidate.mkdir()
+            correctness_file, attribution_file = root / "correctness.json", root / "dispatch.json"
+            correctness_file.write_text("correctness")
+            attribution_file.write_text("dispatch")
+            correctness_sha = hashlib.sha256(
+                correctness_file.read_bytes()).hexdigest()
+            attribution_sha = hashlib.sha256(
+                attribution_file.read_bytes()).hexdigest()
+            build = C.GpuSourceBuild(
+                anchor, candidate,
+                C.gpu_source_proofs.BuildIdentity(
+                    "commit-a", "a" * 64, "a" * 64, "a" * 64,
+                    "a" * 64, "a" * 64),
+                C.gpu_source_proofs.BuildIdentity(
+                    "commit-b", "b" * 64, "b" * 64, "b" * 64,
+                    "b" * 64, "b" * 64))
+            material = {
+                "manifest_sha256": "a" * 64,
+                "candidate": build.candidate_identity,
+                "anchor": build.anchor_identity,
+                "workload_sha256": "a" * 64,
+                "correctness": {
+                    "file_sha256": correctness_sha,
+                    "native_sha256": "a" * 64},
+                "attribution": {
+                    "file_sha256": attribution_sha,
+                    "native_sha256": "a" * 64,
+                    "body": {"exact_duration_comparison": {
+                        "relative_improvement_fraction": .05,
+                        "candidate_routes": {"candidate": {
+                            "total_duration_ns": 95}},
+                        "anchor_routes": {"anchor": {
+                            "total_duration_ns": 100}}}}},
+            }
+            hashed = {
+                **material,
+                "candidate": build.candidate_identity.__dict__,
+                "anchor": build.anchor_identity.__dict__}
+            bundle = C.gpu_source_proofs.GpuSourceProofBundle(
+                **material,
+                bundle_sha256=C.gpu_source_proofs._hash(hashed))
+            off = SimpleNamespace(
+                factor="source_patch", anchor_build=str(anchor),
+                candidate_build=str(candidate), output_dir=str(root / "off"),
+                runtime_graphs="off")
+            on = SimpleNamespace(
+                factor="source_patch", anchor_build=str(anchor),
+                candidate_build=str(candidate), output_dir=str(root / "on"),
+                runtime_graphs="on")
+            off._target_runtime_args = on
+            item = SimpleNamespace(source_manifest_sha256="a" * 64)
+            screener = C.GpuSourceScreener(
+                build_source=lambda *_args: build,
+                proof_bundle=lambda *_args: bundle,
+                args_factory=lambda *_args: off)
+            process_calls = []
+
+            def durable_then_crash(current):
+                graph_mode = current.runtime_graphs
+                process_calls.append(graph_mode)
+                body = {
+                    "schema": "epyc.autokernel.gpu_candidate_only_screen.v2",
+                    "non_promotable": True, "promotion_claim": False,
+                    "hip_residency_proved": True,
+                    "runtime_graphs": graph_mode,
+                    "median_relative": .04,
+                    "baseline_sha256": "c" * 64,
+                }
+                body["result_sha256"] = C.gpu_source_proofs._hash(body)
+                output = Path(current.output_dir)
+                output.mkdir(parents=True, exist_ok=True)
+                (output / "result.json").write_text(
+                    __import__("json").dumps(body, sort_keys=True))
+                raise CrashAfterDurableResult(graph_mode)
+
+            with mock.patch.object(
+                    C.gpu_discovery, "run", side_effect=durable_then_crash):
+                with self.assertRaises(CrashAfterDurableResult):
+                    screener.screen(item, object(), {})
+                with self.assertRaises(CrashAfterDurableResult):
+                    screener.screen(item, object(), {})
+                with mock.patch.object(
+                        C.autokernel_progression, "_gpu_screen",
+                        return_value={"stage": "candidate"}):
+                    result = screener.screen(item, object(), {})
+            self.assertEqual(process_calls, ["off", "on"])
+            self.assertEqual(result.target_runtime_effect_fraction, .04)
+
     def test_three_real_critic_rejections_skip_only_that_strategy(self):
         """RED: exercise the live critic_pending branch, not a helper directly."""
         fixture = TD.Tests(methodName="runTest")
@@ -813,6 +911,55 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
         self.assertEqual(result["terminal_reason"], "portfolio_exhausted")
         self.assertNotIn("akh-provider-retry", result["portfolio_terminals"])
 
+    def test_repeated_planner_provider_transients_do_not_spend_turn_or_skip(self):
+        """Provider/API availability is not an authored or scientific attempt."""
+        fixture = TD.Tests(methodName="runTest")
+        transient_type = getattr(C, "PlannerProviderTransient", None)
+        self.assertIsInstance(transient_type, type)
+
+        class Planner:
+            def __init__(self):
+                self.calls = 0
+
+            def attest(self):
+                return {**C.SOL, "runtime": TD.RUNTIME}
+
+            def plan(self, *, context, workspace):
+                self.calls += 1
+                if self.calls <= 4:
+                    raise transient_type("provider unavailable")
+                return fixture.portfolio_candidate(
+                    context["authoring_assignment"]["portfolio_binding"])
+
+        class NeverCompute:
+            def __getattr__(self, _name):
+                def fail(*_args, **_kwargs):
+                    raise AssertionError("transient dry-run reached compute")
+                return fail
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            record = fixture.portfolio_record(
+                hypothesis_id="akh-provider-endurance", rank=1, budget=1)
+            # Exactly one controller/scientific turn is available.  Four API
+            # reloads must not consume it or become a bounded authoring skip.
+            config = dataclasses.replace(
+                fixture.portfolio_config(root, [record]), max_iterations=1)
+            planner = Planner()
+            result = C.run_controller(
+                config, planner=planner,
+                critic=TD.FakeCritic(["accept"]),
+                screener=NeverCompute(), lease=NeverCompute())
+        self.assertEqual(planner.calls, 5)
+        self.assertEqual(
+            [row["status"] for row in result["iterations"]],
+            ["planner_transient"] * 4 + ["dry_run_authorized"])
+        self.assertNotIn("akh-provider-endurance",
+                         result.get("portfolio_authoring_failures", {}))
+        self.assertNotIn("akh-provider-endurance",
+                         result.get("portfolio_skips", {}))
+        self.assertEqual(result["terminal_reason"], "portfolio_exhausted")
+
     def test_critic_provider_failure_retries_without_rerunning_planner(self):
         """An API interruption leaves critic_pending as the restart point."""
         fixture = TD.Tests(methodName="runTest")
@@ -924,6 +1071,126 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
                 self.assertEqual(refusal.receipt_path, "/sealed/receipt.json")
                 self.assertEqual(refusal.receipt_sha256, "a" * 64)
                 self.assertIs(refusal.scientific_budget_spent, False)
+
+    def test_static_builder_emits_reusable_typed_source_apply_terminal(self):
+        """A known rejected patch is durable authoring evidence, not ambiguity."""
+        case = TSR.StaticBuildCacheTests(methodName="runTest")
+        fixture = case.fixture()
+        try:
+            error = C.source_candidate.SourceCandidateError(
+                "committed diff derives undeclared symbols")
+            with mock.patch.object(
+                    TSR.StaticGpuSourceBuilder, "_build_uncached",
+                    side_effect=error), self.assertRaises(
+                        C.SourceApplyRefusal) as first:
+                fixture.builder.build(
+                    fixture.candidate, object(), fixture.permit)
+            with self.assertRaises(C.SourceApplyRefusal) as reopened:
+                case.invoke(
+                    fixture, {**fixture.permit, "operation_key": "6" * 64})
+            self.assertEqual(first.exception.stage, "source_apply")
+            self.assertEqual(first.exception.disposition, "authoring_refused")
+            self.assertEqual(
+                (reopened.exception.receipt_path,
+                 reopened.exception.receipt_sha256),
+                (first.exception.receipt_path,
+                 first.exception.receipt_sha256))
+            receipt = Path(first.exception.receipt_path)
+            self.assertTrue(receipt.is_file())
+            self.assertEqual(
+                hashlib.sha256(receipt.read_bytes()).hexdigest(),
+                first.exception.receipt_sha256)
+            self.assertEqual(fixture.calls, [])
+        finally:
+            case.doCleanups()
+
+    def test_static_builder_emits_reusable_typed_compile_terminal(self):
+        """A completed failed build is not retried or collapsed into generic error."""
+        case = TSR.StaticBuildCacheTests(methodName="runTest")
+        fixture = case.fixture()
+        original_run_build = fixture.run_build
+
+        def failed_build(*args, **kwargs):
+            result = original_run_build(*args, **kwargs)
+            result.succeeded = False
+            return result
+
+        fixture.run_build = failed_build
+        try:
+            with self.assertRaises(C.CompileRefusal) as first:
+                case.invoke(fixture)
+            calls_after_terminal = list(fixture.calls)
+            with self.assertRaises(C.CompileRefusal) as reopened:
+                case.invoke(
+                    fixture, {**fixture.permit, "operation_key": "7" * 64})
+            self.assertEqual(first.exception.stage, "compile")
+            self.assertEqual(first.exception.disposition, "authoring_refused")
+            self.assertEqual(fixture.calls, calls_after_terminal)
+            self.assertEqual(
+                (reopened.exception.receipt_path,
+                 reopened.exception.receipt_sha256),
+                (first.exception.receipt_path,
+                 first.exception.receipt_sha256))
+            receipt = Path(first.exception.receipt_path)
+            self.assertEqual(
+                hashlib.sha256(receipt.read_bytes()).hexdigest(),
+                first.exception.receipt_sha256)
+        finally:
+            case.doCleanups()
+
+    def test_adapter_emits_reusable_typed_correctness_terminal(self):
+        """Parsed target mismatch must be terminal without repeating the GPU call."""
+        helper = TA.GpuSourceAdapterTests(methodName="runTest")
+        with tempfile.TemporaryDirectory() as directory:
+            values = helper.setup(directory)
+            adapter, candidate, authorization, lease, _inflight, _current, executors = values
+            executors.correctness_summary = "2/3 tests passed"
+            with mock.patch.object(C, "GpuSourceScreener", TA.FakeDelegate), \
+                    self.assertRaises(C.CorrectnessRefusal) as first:
+                adapter.screen(candidate, authorization, lease)
+            calls_after_terminal = list(executors.calls)
+            with mock.patch.object(C, "GpuSourceScreener", TA.FakeDelegate), \
+                    self.assertRaises(C.CorrectnessRefusal) as reopened:
+                adapter.screen(candidate, authorization, lease)
+            self.assertEqual(executors.calls, calls_after_terminal)
+            self.assertEqual(len(executors.calls), 1)
+            self.assertEqual(
+                (reopened.exception.receipt_path,
+                 reopened.exception.receipt_sha256),
+                (first.exception.receipt_path,
+                 first.exception.receipt_sha256))
+            receipt = Path(first.exception.receipt_path)
+            self.assertEqual(
+                hashlib.sha256(receipt.read_bytes()).hexdigest(),
+                first.exception.receipt_sha256)
+
+    def test_adapter_emits_reusable_typed_dispatch_terminal(self):
+        """A measured forbidden/drifted route terminates without replay."""
+        helper = TA.GpuSourceAdapterTests(methodName="runTest")
+        with tempfile.TemporaryDirectory() as directory:
+            values = helper.setup(directory)
+            adapter, candidate, authorization, lease, _inflight, _current, executors = values
+            executors.forbidden = True
+            with mock.patch.object(C, "GpuSourceScreener", TA.FakeDelegate), \
+                    self.assertRaises(C.DispatchAttributionRefusal) as first:
+                adapter.screen(candidate, authorization, lease)
+            calls_after_terminal = list(executors.calls)
+            with mock.patch.object(C, "GpuSourceScreener", TA.FakeDelegate), \
+                    self.assertRaises(C.DispatchAttributionRefusal) as reopened:
+                adapter.screen(candidate, authorization, lease)
+            self.assertEqual(executors.calls, calls_after_terminal)
+            self.assertEqual(
+                [call[:2] for call in executors.calls],
+                [("correctness", "candidate"), ("rocprof", "candidate")])
+            self.assertEqual(
+                (reopened.exception.receipt_path,
+                 reopened.exception.receipt_sha256),
+                (first.exception.receipt_path,
+                 first.exception.receipt_sha256))
+            receipt = Path(first.exception.receipt_path)
+            self.assertEqual(
+                hashlib.sha256(receipt.read_bytes()).hexdigest(),
+                first.exception.receipt_sha256)
 
     def test_controller_accounts_each_typed_stage_refusal_without_ambiguity(self):
         """RED: exercise the public screen boundary and portfolio state."""
