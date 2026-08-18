@@ -292,6 +292,27 @@ class V8DeterministicCorrectnessCapabilityAcceptance(unittest.TestCase):
         self.assertEqual(tuple(capability["argv_suffix"]), SELF_TEST_SUFFIX)
         self.assertEqual(capability["expected_stderr"], SELF_TEST_MARKER + "\n")
 
+    def test_execution_closure_binds_t0_provider_and_refuses_live_byte_drift(self):
+        """The shared parser/argv authority must be covered by runtime attestation."""
+        sealed = F._execution_module_identity()
+        provider = Path(t0_provider.__file__).resolve(strict=True)
+        self.assertEqual(sealed["t0_provider"], {
+            "path": str(provider),
+            "sha256": hashlib.sha256(provider.read_bytes()).hexdigest(),
+        })
+        attest = F._module_attestor(sealed)
+        live_digest = F._digest_regular
+
+        def drift(path: Path, label: str) -> str:
+            if path == provider:
+                return "0" * 64
+            return live_digest(path, label)
+
+        with mock.patch.object(F, "_digest_regular", side_effect=drift), \
+                self.assertRaisesRegex(
+                    F.DeploymentFactoryError, "module bytes changed"):
+            attest()
+
 
 if __name__ == "__main__":
     unittest.main()
