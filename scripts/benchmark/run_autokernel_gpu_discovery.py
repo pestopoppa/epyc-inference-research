@@ -261,6 +261,103 @@ def _validate_cross_arm_timed_outputs(anchor: Mapping[str, Any],
     return {**body, "receipt_sha256": schemas.content_hash(body)}
 
 
+def _validate_graphs_on_output_semantics(
+        row: Mapping[str, Any], *, repetitions: int, seed: int) -> dict[str, Any]:
+    """Prove graphs-on native timing inspected every hardened output."""
+    required_true = (
+        "autokernel_hardened", "autokernel_output_invariant",
+        "autokernel_hybrid_ab_complete", "autokernel_thread_set_stable",
+        "autokernel_escape_checks_complete")
+    if any(row.get(field) is not True for field in required_true):
+        raise RuntimeError("graphs-on output-integrity flags are incomplete")
+    input_hashes = _split_exact(
+        row.get("autokernel_input_hashes"), field="input hashes",
+        count=repetitions)
+    if (any(_HEX64_RE.fullmatch(value) is None for value in input_hashes)
+            or len(set(input_hashes)) != repetitions):
+        raise RuntimeError("graphs-on input contents are malformed or reused")
+    output_pairs = _split_exact(
+        row.get("autokernel_output_hashes"), field="output hash pairs",
+        count=repetitions)
+    output_hashes: list[str] = []
+    for pair in output_pairs:
+        members = pair.split("/")
+        if (len(members) != 2
+                or any(_HEX64_RE.fullmatch(value) is None for value in members)
+                or members[0] != members[1]):
+            raise RuntimeError("graphs-on timed outputs are not bitwise invariant")
+        output_hashes.append(members[0])
+    addresses: dict[str, list[str]] = {}
+    for field in ("autokernel_input_addresses", "autokernel_context_addresses"):
+        pairs = _split_exact(row.get(field), field=field, count=repetitions)
+        flattened: list[str] = []
+        for pair in pairs:
+            members = pair.split("/")
+            if (len(members) != 2
+                    or any(_ADDRESS_RE.fullmatch(value) is None for value in members)):
+                raise RuntimeError(f"graphs-on {field} is malformed")
+            flattened.extend(members)
+        if len(set(flattened)) != 2 * repetitions:
+            raise RuntimeError(f"graphs-on {field} reused an address")
+        addresses[field] = flattened
+    samples = row.get("samples_ts")
+    if (not isinstance(samples, list) or len(samples) != repetitions
+            or any(isinstance(value, bool) or not isinstance(value, (int, float))
+                   or not math.isfinite(float(value)) or float(value) <= 0
+                   for value in samples)):
+        raise RuntimeError("graphs-on native samples are malformed")
+    body = {
+        "schema": "epyc.autokernel.graphs_on_output_integrity.v1",
+        "instrument_commit": READY_CONTINUE_INSTRUMENT_COMMIT,
+        "seed": seed, "repetitions": repetitions,
+        "input_hashes": input_hashes, "output_hashes": output_hashes,
+        "input_addresses": addresses["autokernel_input_addresses"],
+        "context_addresses": addresses["autokernel_context_addresses"],
+        "unique_content_per_repetition": True,
+        "unique_addresses_per_pair_member": True,
+        "within_repetition_bitwise_equal": True,
+        "graph_environment": {"GGML_CUDA_DISABLE_GRAPHS": None},
+        "reward_admissible": True,
+    }
+    return {**body, "receipt_sha256": schemas.content_hash(body)}
+
+
+def _validate_cross_arm_graphs_on_outputs(
+        anchor: Mapping[str, Any], candidate: Mapping[str, Any]) -> dict[str, Any]:
+    rows = []
+    for label, arm in (("anchor", anchor), ("candidate", candidate)):
+        semantics = arm.get("graphs_on_output_integrity")
+        if not isinstance(semantics, Mapping):
+            raise RuntimeError(f"{label} lacks graphs-on output-integrity receipt")
+        unsigned = {key: value for key, value in semantics.items()
+                    if key != "receipt_sha256"}
+        if (semantics.get("schema") !=
+                "epyc.autokernel.graphs_on_output_integrity.v1"
+                or semantics.get("instrument_commit") !=
+                READY_CONTINUE_INSTRUMENT_COMMIT
+                or semantics.get("graph_environment") != {
+                    "GGML_CUDA_DISABLE_GRAPHS": None}
+                or semantics.get("reward_admissible") is not True
+                or semantics.get("receipt_sha256") != schemas.content_hash(unsigned)):
+            raise RuntimeError(f"{label} graphs-on output receipt is invalid")
+        rows.append(semantics)
+    anchor_semantics, candidate_semantics = rows
+    for field in ("seed", "repetitions", "input_hashes", "output_hashes"):
+        if anchor_semantics.get(field) != candidate_semantics.get(field):
+            raise RuntimeError(f"graphs-on cross-arm {field} differs")
+    body = {
+        "schema": "epyc.autokernel.cross_arm_graphs_on_output_oracle.v1",
+        "seed": anchor_semantics["seed"],
+        "repetitions": anchor_semantics["repetitions"],
+        "input_hashes": anchor_semantics["input_hashes"],
+        "output_hashes": anchor_semantics["output_hashes"],
+        "cross_arm_bitwise_equal": True,
+        "graph_environment": {"GGML_CUDA_DISABLE_GRAPHS": None},
+        "reward_admissible": True,
+    }
+    return {**body, "receipt_sha256": schemas.content_hash(body)}
+
+
 def cache_bool(build: Path, name: str) -> bool:
     prefix = f"{name}:BOOL="
     for line in (build / "CMakeCache.txt").read_text(encoding="utf-8").splitlines():
@@ -1131,6 +1228,10 @@ def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
             tokens_per_repetition=prompt_tokens + generation_tokens,
             serialization_env={key: env[key] for key in serialization_env})
         if timed_output_oracle else None)
+    graphs_on_output_integrity = (
+        _validate_graphs_on_output_semantics(
+            row, repetitions=repetitions, seed=seed)
+        if runtime_graphs == "on" else None)
     protected_samples = (timed_output_semantics["protected_samples_ts"]
                          if timed_output_semantics is not None
                          else [float(value) for value in raw_samples])
@@ -1182,6 +1283,8 @@ def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
             "load_readiness_witness": readiness_witness,
             **({"timed_output_semantics": timed_output_semantics}
                if timed_output_semantics is not None else {}),
+            **({"graphs_on_output_integrity": graphs_on_output_integrity}
+               if graphs_on_output_integrity is not None else {}),
             "hip_residency_proved": True}
 
 
@@ -1620,8 +1723,12 @@ def run(args: argparse.Namespace) -> dict:
         anchor_runs = arm_runs["anchor"]
         candidate_runs = arm_runs["candidate"]
         timed_output_oracle = None
+        graphs_on_output_oracle = None
         if timed_output_oracle_enabled:
             timed_output_oracle = _validate_cross_arm_timed_outputs(
+                anchor_runs[0], candidate_runs[0])
+        if sealed.get("runtime_graphs") == "on":
+            graphs_on_output_oracle = _validate_cross_arm_graphs_on_outputs(
                 anchor_runs[0], candidate_runs[0])
         bank_body = {
             "schema": SCHEMA_BANK, "campaign_id": args.campaign_id,
@@ -1650,6 +1757,8 @@ def run(args: argparse.Namespace) -> dict:
             "anchor_runs": anchor_runs,
             **({"timed_output_oracle": timed_output_oracle}
                if timed_output_oracle is not None else {}),
+            **({"graphs_on_output_oracle": graphs_on_output_oracle}
+               if graphs_on_output_oracle is not None else {}),
         }
         bank = gpu_beliefs.attach_baseline_beliefs(
             bank_body, producer_path=Path(__file__).resolve())
@@ -1699,6 +1808,8 @@ def run(args: argparse.Namespace) -> dict:
             "candidate_runs": candidate_runs, "device_sampling": numeric,
             **({"timed_output_oracle": timed_output_oracle}
                if timed_output_oracle is not None else {}),
+            **({"graphs_on_output_oracle": graphs_on_output_oracle}
+               if graphs_on_output_oracle is not None else {}),
             "hip_residency_proved": all(run["hip_residency_proved"]
                                          for run in anchor_runs + candidate_runs),
             "cpu_coverage_windows": [
