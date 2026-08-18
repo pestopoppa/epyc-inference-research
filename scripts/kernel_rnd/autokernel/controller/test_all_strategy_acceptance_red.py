@@ -127,6 +127,39 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
         self.assertEqual(variants["gqa7_bulk_pairs"]["ncols2"], 2)
         self.assertEqual(variants["gqa7_scalar_tail"]["ncols2"], 1)
 
+    def test_q5_exact_duration_compares_the_same_three_routes(self):
+        """RED: 3 candidate routes divided by 8 anchor routes is fake gain."""
+        hypothesis_id = "akh-v2-q5-type-specific-dequant"
+        record = next(
+            row for row in self.portfolio.eligible_hypotheses()
+            if row["hypothesis_id"] == hypothesis_id)
+        template = self.registry.templates["cuda-vecdotq-v1"]
+        authority = self.dispatch[hypothesis_id]
+        intent = C.GpuSourceExperimentIntent(
+            template.template_id, template.target_surface,
+            record["target"]["source_symbols"][0],
+            template.correctness_id, template.dispatch_id,
+            tuple(C.BoundedDispatchExpectation(**row) for row in authority))
+        contract = template.bind_dispatch(intent)
+        self.assertEqual(len(contract.candidate_exact), 3)
+        self.assertEqual(len(contract.anchor_exact), 3)
+        self.assertEqual(
+            [row.signature for row in contract.anchor_exact],
+            [row["route_id"] for row in authority])
+        self.assertEqual(
+            [(row.calls, row.grid, row.workgroup, row.lds_bytes)
+             for row in contract.candidate_exact],
+            [(row.calls, row.grid, row.workgroup, row.lds_bytes)
+             for row in contract.anchor_exact])
+        selected_patterns = {
+            row.kernel_pattern for row in contract.anchor_exact}
+        unselected_patterns = {
+            row.kernel_pattern for row in template.dispatch.anchor_exact
+            if row.kernel_pattern not in selected_patterns}
+        self.assertEqual(
+            {row.kernel_pattern for row in contract.invariants},
+            unselected_patterns)
+
     def test_fa_correctness_requires_and_receipts_exact_odd_gqa7_cases(self):
         """RED: metadata alone cannot make the generic total a GQA7 proof."""
         template = self.registry.templates["cuda-fattn-tile-v1"]
@@ -243,6 +276,28 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
         self.assertEqual(route["total_duration_ns"], 80)
         self.assertEqual(route["duration_ns"], [30, 50])
         self.assertEqual(route["median_duration_ns"], 40)
+
+    def test_invariant_comparison_excludes_independent_arm_timing_noise(self):
+        """RED: invariants compare topology; exact routes own time effects."""
+        exact = (E.ExactDispatch(
+            "target", r"^target$", 1, 128, 64, 0, 2),)
+        invariants = (E.InvariantDispatch("unchanged", r"^unchanged$"),)
+        candidate = E._reduce_arm([
+            {"kernel": "target", "grid": 128, "workgroup": 64, "lds": 0,
+             "blocks_per_call": 2, "begin_ns": 100, "end_ns": 120},
+            {"kernel": "unchanged", "grid": 64, "workgroup": 64, "lds": 0,
+             "blocks_per_call": 1, "begin_ns": 100, "end_ns": 150},
+        ], exact=exact, forbidden=(), invariants=invariants)
+        anchor = E._reduce_arm([
+            {"kernel": "target", "grid": 128, "workgroup": 64, "lds": 0,
+             "blocks_per_call": 2, "begin_ns": 100, "end_ns": 130},
+            {"kernel": "unchanged", "grid": 64, "workgroup": 64, "lds": 0,
+             "blocks_per_call": 1, "begin_ns": 100, "end_ns": 180},
+        ], exact=exact, forbidden=(), invariants=invariants)
+        self.assertEqual(candidate["invariants"], anchor["invariants"])
+        self.assertNotEqual(
+            candidate["exact"]["target"]["total_duration_ns"],
+            anchor["exact"]["target"]["total_duration_ns"])
 
     def test_sealed_decision_carries_both_effects_and_requires_conjunction(self):
         """RED: one whole-model scalar cannot stand in for exact attribution."""
