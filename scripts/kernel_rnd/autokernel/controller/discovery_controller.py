@@ -46,6 +46,17 @@ FABLE5_CRITIC = {"provider": "claude", "model": "claude-fable-5", "effort": "hig
 class DiscoveryControllerError(RuntimeError): pass
 
 
+class PlannerOutputRefusal(DiscoveryControllerError):
+    """A safe, bounded refusal of a completed planner's authored artifacts.
+
+    This type is deliberately narrower than ``DiscoveryControllerError``.  It
+    may be raised only after the Sol process returned successfully and while
+    validating files in its disposable workspace.  Runtime, authentication,
+    containment, and later source/build failures must retain their native
+    exception types.
+    """
+
+
 class PrecomputeScreenRefusal(DiscoveryControllerError):
     """Typed adapter refusal proving that no governed operation was started."""
 
@@ -400,7 +411,10 @@ class SealedScreen:
 
 class Planner(Protocol):
     def attest(self) -> Mapping[str, Any]: ...
-    def plan(self, *, context: Mapping[str, Any], workspace: Path) -> PlannedCandidate: ...
+    def plan(self, *, context: Mapping[str, Any], workspace: Path,
+             checkpoint_path: Path | None = None) -> PlannedCandidate: ...
+    def resume_plan(self, *, context: Mapping[str, Any],
+                    workspace: Path, checkpoint_path: Path) -> PlannedCandidate: ...
 
 class Critic(Protocol):
     def attest(self) -> Mapping[str, Any]: ...
@@ -564,6 +578,98 @@ class ReviewedSourcePackage:
         return {**value, "context_sha256": _sha(value)}
 
 
+PLANNER_ACTOR_CHECKPOINT_SCHEMA = "epyc.autokernel.planner_actor_checkpoint.v1"
+
+
+def _planner_artifact_manifest(workspace: Path) -> dict[str, Any]:
+    """Hash every actor-owned artifact outside the immutable source package."""
+    root_info = workspace.lstat()
+    if (workspace.is_symlink() or not stat.S_ISDIR(root_info.st_mode)
+            or root_info.st_uid != os.getuid()):
+        raise DiscoveryControllerError("planner workspace is not an owned directory")
+    files: list[dict[str, Any]] = []
+    directories: list[str] = []
+    total = 0
+    for path in sorted(workspace.rglob("*"), key=lambda item: item.as_posix()):
+        relative = path.relative_to(workspace)
+        if relative.parts[0] == "reviewed-source":
+            continue
+        info = path.lstat()
+        if path.is_symlink() or info.st_uid != os.getuid():
+            raise DiscoveryControllerError(
+                "planner artifact tree contains a symlink or foreign owner")
+        if stat.S_ISDIR(info.st_mode):
+            directories.append(relative.as_posix())
+            continue
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            raise DiscoveryControllerError(
+                "planner artifact tree contains a special file or hardlink")
+        raw = path.read_bytes()
+        total += len(raw)
+        files.append({"path": relative.as_posix(), "size": len(raw),
+                      "sha256": hashlib.sha256(raw).hexdigest()})
+    if len(files) > 32 or len(directories) > 32 or total > 2 * 1024 * 1024:
+        raise DiscoveryControllerError("planner artifact tree exceeds its sealed bound")
+    return {"directories": directories, "files": files,
+            "total_bytes": total}
+
+
+def _seal_planner_actor_checkpoint(workspace: Path, checkpoint_path: Path, *,
+                                   context: Mapping[str, Any],
+                                   result: Mapping[str, Any]) -> Mapping[str, Any]:
+    path = checkpoint_path
+    if path.parent != workspace.parent or path.name != "actor-result.json":
+        raise DiscoveryControllerError(
+            "planner actor checkpoint is outside its controller operation")
+    ReviewedSourcePackage._require_owned_directory(
+        path.parent, "planner operation root")
+    if path.exists() or path.is_symlink():
+        raise DiscoveryControllerError("planner actor checkpoint already exists")
+    body = {
+        "schema": PLANNER_ACTOR_CHECKPOINT_SCHEMA,
+        "context_sha256": _sha(context),
+        "assignment_sha256": _sha(context.get("authoring_assignment")),
+        "result": dict(result),
+        "artifacts": _planner_artifact_manifest(workspace),
+    }
+    body["receipt_sha256"] = _sha(body)
+    _atomic(path, body)
+    return body
+
+
+def _reopen_planner_actor_checkpoint(workspace: Path, checkpoint_path: Path, *,
+                                     context: Mapping[str, Any]) -> Mapping[str, Any]:
+    path = checkpoint_path
+    if path.parent != workspace.parent or path.name != "actor-result.json":
+        raise DiscoveryControllerError(
+            "planner actor checkpoint is outside its controller operation")
+    ReviewedSourcePackage._require_owned_directory(
+        path.parent, "planner operation root")
+    if not path.exists():
+        raise PlannerOutputRefusal(
+            "planner invocation stopped without a completed actor artifact checkpoint")
+    info = path.lstat()
+    if (path.is_symlink() or not stat.S_ISREG(info.st_mode)
+            or info.st_uid != os.getuid() or info.st_nlink != 1):
+        raise DiscoveryControllerError("planner actor checkpoint file is unsafe")
+    checkpoint = _read_object(path, workspace.parent)
+    declared = checkpoint.get("receipt_sha256")
+    if (checkpoint.get("schema") != PLANNER_ACTOR_CHECKPOINT_SCHEMA
+            or not isinstance(declared, str)
+            or declared != _sha({key: value for key, value in checkpoint.items()
+                                 if key != "receipt_sha256"})
+            or checkpoint.get("context_sha256") != _sha(context)
+            or checkpoint.get("assignment_sha256") !=
+               _sha(context.get("authoring_assignment"))
+            or checkpoint.get("artifacts") !=
+               _planner_artifact_manifest(workspace)
+            or not isinstance(checkpoint.get("result"), Mapping)
+            or isinstance(checkpoint["result"].get("returncode"), bool)
+            or not isinstance(checkpoint["result"].get("returncode"), int)):
+        raise DiscoveryControllerError("planner actor checkpoint identity changed")
+    return checkpoint
+
+
 class CodexPlanner:
     """Concrete Sol actor. It may write only a plan and patch manifest in workspace."""
     def __init__(self, *, wrapper: Path, environment: Mapping[str, str],
@@ -593,12 +699,27 @@ class CodexPlanner:
             raise DiscoveryControllerError("sealed Codex planner launcher/argv policy changed")
         return current
     def attest(self) -> Mapping[str, Any]: return {**SOL, "runtime": self._runtime()}
-    def plan(self, *, context: Mapping[str, Any], workspace: Path) -> PlannedCandidate:
+    def plan(self, *, context: Mapping[str, Any], workspace: Path,
+             checkpoint_path: Path | None = None) -> PlannedCandidate:
+        return self._plan(context=context, workspace=workspace, resume=False,
+                          checkpoint_path=checkpoint_path)
+
+    def resume_plan(self, *, context: Mapping[str, Any],
+                    workspace: Path, checkpoint_path: Path) -> PlannedCandidate:
+        return self._plan(context=context, workspace=workspace, resume=True,
+                          checkpoint_path=checkpoint_path)
+
+    def _plan(self, *, context: Mapping[str, Any], workspace: Path,
+              resume: bool, checkpoint_path: Path | None) -> PlannedCandidate:
         # The model gets a bounded source/profile brief plus a machine contract;
         # it never receives authority to select a campaign, base, executable,
         # argv, profile parser, or evidence regex.
-        source_package = (None if self.reviewed_sources is None
-                          else self.reviewed_sources.materialize(workspace))
+        if resume and self.reviewed_sources is not None:
+            self.reviewed_sources.revalidate_materialized(workspace)
+            source_package = self.reviewed_sources.manifest()
+        else:
+            source_package = (None if self.reviewed_sources is None
+                              else self.reviewed_sources.materialize(workspace))
         planner_context = context.get("planner_context")
         if (self.reviewed_sources is None or not isinstance(planner_context, Mapping)
                 or planner_context.get("reviewed_source_package_sha256")
@@ -721,41 +842,79 @@ class CodexPlanner:
                              "structural_example_only": example,
                              "output": "Write plan.json and source-patch.json in workspace."}, sort_keys=True)
         self._runtime()
-        if self.telemetry is not None:
+        if self.telemetry is not None and not resume:
             self.telemetry.emit(
                 "planner", "planner_started",
                 campaign_id=assignment["campaign_id"],
                 hypothesis_id=example_hypothesis, provider=SOL["provider"],
                 model=SOL["model"], effort=SOL["effort"])
+        if resume:
+            if checkpoint_path is None:
+                raise DiscoveryControllerError(
+                    "planner resume lacks its controller checkpoint path")
+            checkpoint = _reopen_planner_actor_checkpoint(
+                workspace, checkpoint_path, context=context)
+            result_facts = dict(checkpoint["result"])
+        else:
+            try:
+                result = codex_container_actor.run_actor(wrapper=self.wrapper, workspace=workspace, model=SOL["model"], effort=SOL["effort"], prompt=prompt, environment=self.environment,
+                    expected_wrapper_sha256=self.wrapper_sha256,
+                    expected_runtime_identity=self.runtime_identity,
+                    expected_launcher_sha256=self.actor_launcher_sha256)
+            except Exception:
+                if self.telemetry is not None:
+                    self.telemetry.emit(
+                        "planner", "planner_failed",
+                        campaign_id=assignment["campaign_id"],
+                        hypothesis_id=example_hypothesis, provider=SOL["provider"],
+                        model=SOL["model"], effort=SOL["effort"])
+                raise
+            result_facts = {
+                "returncode": result.returncode,
+                "stdout_sha256": hashlib.sha256(
+                    getattr(result, "stdout", "").encode()).hexdigest(),
+                "stderr_sha256": hashlib.sha256(
+                    getattr(result, "stderr", "").encode()).hexdigest(),
+            }
+            if checkpoint_path is not None:
+                _seal_planner_actor_checkpoint(
+                    workspace, checkpoint_path, context=context,
+                    result=result_facts)
+            if result.returncode:
+                if self.telemetry is not None:
+                    self.telemetry.emit(
+                        "planner", "planner_failed",
+                        campaign_id=assignment["campaign_id"],
+                        hypothesis_id=example_hypothesis, provider=SOL["provider"],
+                        model=SOL["model"], effort=SOL["effort"], result=result_facts)
+                raise DiscoveryControllerError(
+                    f"Sol actor failed: {getattr(result, 'stderr', '')[-400:]}")
+        if result_facts["returncode"]:
+            raise DiscoveryControllerError(
+                f"sealed Sol actor invocation failed with return code "
+                f"{result_facts['returncode']}")
+        if self.reviewed_sources is not None:
+            self.reviewed_sources.revalidate_materialized(workspace)
         try:
-            result = codex_container_actor.run_actor(wrapper=self.wrapper, workspace=workspace, model=SOL["model"], effort=SOL["effort"], prompt=prompt, environment=self.environment,
-                expected_wrapper_sha256=self.wrapper_sha256,
-                expected_runtime_identity=self.runtime_identity,
-                expected_launcher_sha256=self.actor_launcher_sha256)
-        except Exception:
+            candidate = _load_plan(
+                workspace / "plan.json", workspace,
+                assignment=AuthoringAssignment(**assignment))
+        except PlannerOutputRefusal as exc:
             if self.telemetry is not None:
                 self.telemetry.emit(
                     "planner", "planner_failed",
                     campaign_id=assignment["campaign_id"],
                     hypothesis_id=example_hypothesis, provider=SOL["provider"],
-                    model=SOL["model"], effort=SOL["effort"])
+                    model=SOL["model"], effort=SOL["effort"],
+                    result={**result_facts, "refusal_reason": str(exc)})
             raise
         if self.telemetry is not None:
-            result_facts = {
-                "returncode": result.returncode,
-                "stdout_sha256": hashlib.sha256(result.stdout.encode()).hexdigest(),
-                "stderr_sha256": hashlib.sha256(result.stderr.encode()).hexdigest(),
-            }
             self.telemetry.emit(
-                "planner", "planner_failed" if result.returncode else "planner_completed",
+                "planner", "planner_completed",
                 campaign_id=assignment["campaign_id"],
                 hypothesis_id=example_hypothesis, provider=SOL["provider"],
                 model=SOL["model"], effort=SOL["effort"], result=result_facts)
-        if result.returncode: raise DiscoveryControllerError(f"Sol actor failed: {result.stderr[-400:]}")
-        if self.reviewed_sources is not None:
-            self.reviewed_sources.revalidate_materialized(workspace)
-        return _load_plan(workspace / "plan.json", workspace,
-                          assignment=AuthoringAssignment(**assignment))
+        return candidate
 
 
 class ClaudeCritic:
@@ -869,25 +1028,73 @@ def _read_object(path: Path, root: Path) -> dict[str, Any]:
     return value
 
 
+def _read_planner_object(path: Path, root: Path) -> dict[str, Any]:
+    """Read planner JSON while keeping containment violations terminal."""
+    try:
+        path.resolve().relative_to(root.resolve())
+    except ValueError as exc:
+        raise DiscoveryControllerError("actor artifact escaped workspace") from exc
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise PlannerOutputRefusal(f"invalid actor artifact {path.name}") from exc
+    if not isinstance(value, dict):
+        raise PlannerOutputRefusal("actor artifact must be object")
+    return value
+
+
+_RETRYABLE_PLANNER_SOURCE_ERRORS = (
+    "source patch manifest is not strict JSON:",
+    "source patch manifest fields must be exactly",
+    "source patch manifest schema/encoding is unsupported",
+    "patch_base64 is invalid:",
+    "patch_sha256 does not match the embedded patch bytes",
+    "patch is not strict UTF-8:",
+    "patch contains NUL bytes",
+    "patch is not an accounted unified diff:",
+    "hunk appears before a diff --git header",
+    "source patch contains no accounted hunk",
+    "patch bytes must end in a newline",
+)
+
+
+def _load_planner_manifest(path: Path) -> source_candidate.SourcePatchManifest:
+    """Classify only syntactic carrier/patch defects as retryable output.
+
+    Identity, path/symbol scope, change-class, reward-integrity, and instrument
+    policy errors intentionally retain ``SourceCandidateError`` and terminate
+    fail closed.
+    """
+    try:
+        return source_candidate.load_source_patch_manifest(path)
+    except source_candidate.SourceCandidateError as exc:
+        reason = str(exc)
+        if any(reason.startswith(prefix) for prefix in
+               _RETRYABLE_PLANNER_SOURCE_ERRORS):
+            raise PlannerOutputRefusal(
+                f"SourceCandidateError: {reason}") from exc
+        raise
+
+
 def _load_plan(path: Path, root: Path, *, assignment: AuthoringAssignment | None = None) -> PlannedCandidate:
-    value = _read_object(path, root)
+    value = _read_planner_object(path, root)
     allowed = {"hypothesis_id", "statement", "falsifier", "regime", "proposal", "source_manifest_path", "experiment_intent"}
-    if set(value) not in (allowed, allowed - {"experiment_intent"}): raise DiscoveryControllerError("planner output schema mismatch")
+    if set(value) not in (allowed, allowed - {"experiment_intent"}): raise PlannerOutputRefusal("planner output schema mismatch")
     intent_raw = value.pop("experiment_intent", None)
     if intent_raw is not None:
         allowed_intent = {"template_id", "target_surface", "target_symbol", "correctness_id", "dispatch_id", "expected_dispatch", "load_mode_recommendation"}
         if not isinstance(intent_raw, Mapping) or set(intent_raw) not in (allowed_intent, allowed_intent - {"load_mode_recommendation"}):
-            raise DiscoveryControllerError("planner experiment intent schema mismatch")
+            raise PlannerOutputRefusal("planner experiment intent schema mismatch")
         expected = intent_raw["expected_dispatch"]
         expected_keys = {"route_id", "kernel_name", "calls", "grid", "workgroup", "lds_bytes"}
         if (not isinstance(expected, list) or not 1 <= len(expected) <= 8
                 or not all(isinstance(row, Mapping) and set(row) == expected_keys
                            for row in expected)):
-            raise DiscoveryControllerError("planner bounded dispatch schema mismatch")
+            raise PlannerOutputRefusal("planner bounded dispatch schema mismatch")
         recommendation = intent_raw.get("load_mode_recommendation")
         if recommendation is not None:
             if not isinstance(recommendation, Mapping) or set(recommendation) != {"mode", "rationale", "example_ids"}:
-                raise DiscoveryControllerError("planner load-mode recommendation schema mismatch")
+                raise PlannerOutputRefusal("planner load-mode recommendation schema mismatch")
             recommendation = LoadModeRecommendation(
                 mode=recommendation["mode"], rationale=recommendation["rationale"],
                 example_ids=tuple(recommendation["example_ids"]))
@@ -901,10 +1108,16 @@ def _load_plan(path: Path, root: Path, *, assignment: AuthoringAssignment | None
         raise DiscoveryControllerError("source manifest path must be a workspace-relative path")
     manifest_path = root / raw_path
     try:
-        manifest_path.resolve(strict=True).relative_to(root.resolve())
-    except (OSError, ValueError) as exc:
-        raise DiscoveryControllerError("source manifest escaped disposable workspace") from exc
-    manifest = source_candidate.load_source_patch_manifest(manifest_path)
+        resolved_manifest = manifest_path.resolve(strict=True)
+    except OSError as exc:
+        raise PlannerOutputRefusal(
+            f"invalid actor artifact {manifest_path.name}") from exc
+    try:
+        resolved_manifest.relative_to(root.resolve())
+    except ValueError as exc:
+        raise DiscoveryControllerError(
+            "source manifest escaped disposable workspace") from exc
+    manifest = _load_planner_manifest(resolved_manifest)
     if assignment is not None:
         if (manifest.campaign_id, manifest.proposal_id, manifest.candidate_id,
                 manifest.production_base_commit, manifest.instrument_commit) != (
@@ -926,15 +1139,15 @@ def _load_plan(path: Path, root: Path, *, assignment: AuthoringAssignment | None
         change = proposal.get("change") if isinstance(proposal, Mapping) else None
         estimated = change.get("estimated_diff_size") if isinstance(change, Mapping) else None
         if isinstance(estimated, bool) or not isinstance(estimated, int) or estimated < 1:
-            raise DiscoveryControllerError("planner estimated_diff_size must be a positive integer")
+            raise PlannerOutputRefusal("planner estimated_diff_size must be a positive integer")
         try:
             actual_changed_lines = integrity.parse_unified_diff(
                 manifest.patch_bytes.decode("utf-8")).total_changed
         except (UnicodeDecodeError, integrity.DiffParseError) as exc:
-            raise DiscoveryControllerError(
+            raise PlannerOutputRefusal(
                 "planner patch cannot be counted as a complete UTF-8 unified diff") from exc
         if estimated < actual_changed_lines:
-            raise DiscoveryControllerError(
+            raise PlannerOutputRefusal(
                 "planner estimated_diff_size is smaller than the decoded patch's actual "
                 f"changed-line count ({estimated} < {actual_changed_lines})")
     return PlannedCandidate(**value, source_manifest=manifest, source_manifest_sha256=manifest.patch_bundle_sha256,
@@ -1384,6 +1597,12 @@ def _context(state: Mapping[str, Any], tracker: hypotheses.HypothesisTracker, tu
             production_base_commit=config.production_base_commit,
             instrument_commit=config.instrument_commit or config.production_base_commit,
             portfolio_binding=portfolio_binding).to_dict()
+    prior_refusals = [
+        {key: row.get(key) for key in (
+            "turn", "status", "reason", "portfolio_hypothesis_id",
+            "context_sha256")}
+        for row in state["iterations"] if row.get("status") == "planner_refused"
+    ][-8:]
     return {"authority": AUTHORITY, "turn":turn, "roster":sealed_roster(),
             "planner_context": config.planner_context,
             "planner_context_sha256": config.planner_context_sha256,
@@ -1392,16 +1611,20 @@ def _context(state: Mapping[str, Any], tracker: hypotheses.HypothesisTracker, tu
             "deployment_identity_sha256": config.deployment_identity_sha256,
             "hypothesis_portfolio_sha256": config.hypothesis_portfolio_sha256,
             "authoring_assignment": assignment,
+            "prior_authoring_refusals": prior_refusals,
             "prior_results": prior, "do_not_repeat":_memory_block(tracker,turn)}
 
 
 def _pending_item(item: PlannedCandidate) -> dict[str, Any]:
     manifest = item.source_manifest
     raw_manifest=source_candidate.source_patch_manifest_bytes(manifest)
+    intent = (None if item.experiment_intent is None else
+              json.loads(json.dumps(asdict(item.experiment_intent),
+                                    sort_keys=True)))
     return {"hypothesis_id": item.hypothesis_id, "statement": item.statement,
             "falsifier": item.falsifier, "regime": dict(item.regime),
             "proposal": dict(item.proposal), "source_manifest_sha256": item.source_manifest_sha256,
-            "experiment_intent": asdict(item.experiment_intent) if item.experiment_intent else None,
+            "experiment_intent": intent,
             "manifest": {"campaign_id":manifest.campaign_id,"proposal_id":manifest.proposal_id,
                 "candidate_id":manifest.candidate_id,"source_tree":manifest.source_tree,
                 "production_base_commit":manifest.production_base_commit,"instrument_commit":manifest.instrument_commit,
@@ -1665,6 +1888,103 @@ def _record_precompute_refusal(state: dict[str, Any], row: dict[str, Any],
     state["next"] += 1
 
 
+def _record_planner_refusal(state: dict[str, Any], *, turn: int,
+                            context: Mapping[str, Any],
+                            portfolio_binding: Mapping[str, Any] | None,
+                            exc: PlannerOutputRefusal) -> None:
+    """Persist one non-candidate authoring refusal without spending science budget."""
+    row: dict[str, Any] = {
+        "turn": turn,
+        "status": "planner_refused",
+        "reason": str(exc),
+        "context_sha256": _sha(context),
+    }
+    planning = state.pop("planning", None)
+    if isinstance(planning, Mapping):
+        row["planner_operation_key"] = planning.get("operation_key")
+    if portfolio_binding is not None:
+        row.update(
+            hypothesis_id=portfolio_binding["hypothesis_id"],
+            statement=portfolio_binding["statement"],
+            falsifier=portfolio_binding["falsifier"],
+            regime=dict(portfolio_binding["regime"]),
+            portfolio_hypothesis_id=portfolio_binding["hypothesis_id"],
+            portfolio_binding=dict(portfolio_binding),
+            portfolio_record_sha256=portfolio_binding["record_sha256"],
+            portfolio_decision_policy=dict(
+                portfolio_binding["decision_policy"]),
+        )
+    state["iterations"].append(row)
+    state["next"] += 1
+
+
+def _planning_intent(config: ControllerConfig, *, turn: int,
+                     context: Mapping[str, Any],
+                     portfolio_binding: Mapping[str, Any] | None) -> dict[str, Any]:
+    context_sha256 = _sha(context)
+    operation_key = _sha({
+        "schema": "epyc.autokernel.planning_operation.v1",
+        "turn": turn,
+        "context_sha256": context_sha256,
+        "deployment_identity_sha256": config.deployment_identity_sha256,
+    })
+    workspace = (config.output_root / "planner-operations" /
+                 operation_key / "workspace")
+    return {
+        "phase": "intent", "turn": turn,
+        "operation_key": operation_key,
+        "context": dict(context), "context_sha256": context_sha256,
+        "portfolio_binding": (None if portfolio_binding is None
+                              else dict(portfolio_binding)),
+        "workspace": str(workspace),
+    }
+
+
+def _prepare_planner_workspace(config: ControllerConfig, operation_key: str,
+                               workspace: Path) -> bool:
+    """Create the exact persistent actor workspace without following links."""
+    operations = config.output_root / "planner-operations"
+    operation = operations / operation_key
+    if workspace != operation / "workspace":
+        raise DiscoveryControllerError(
+            "durable planner workspace escaped its operation namespace")
+    ReviewedSourcePackage._require_owned_directory(
+        config.output_root, "controller state root")
+    if not operations.exists():
+        operations.mkdir(mode=0o700)
+    ReviewedSourcePackage._require_owned_directory(
+        operations, "planner operations root")
+    if not operation.exists():
+        operation.mkdir(mode=0o700)
+    ReviewedSourcePackage._require_owned_directory(
+        operation, "planner operation root")
+    if workspace.exists() or workspace.is_symlink():
+        ReviewedSourcePackage._require_owned_directory(
+            workspace, "planner workspace")
+        return False
+    workspace.mkdir(mode=0o700)
+    ReviewedSourcePackage._require_owned_directory(
+        workspace, "planner workspace")
+    return True
+
+
+def _reopen_planning_intent(state: Mapping[str, Any], *,
+                            turn: int) -> tuple[dict[str, Any],
+                                                Mapping[str, Any] | None]:
+    planning = state.get("planning")
+    if (not isinstance(planning, Mapping) or planning.get("turn") != turn
+            or planning.get("phase") not in {"intent", "actor_entering"}
+            or not isinstance(planning.get("context"), Mapping)
+            or planning.get("context_sha256") != _sha(planning["context"])
+            or not isinstance(planning.get("operation_key"), str)
+            or not HASH.fullmatch(planning["operation_key"])):
+        raise DiscoveryControllerError("durable planning intent is malformed")
+    binding = planning.get("portfolio_binding")
+    if binding is not None and not isinstance(binding, Mapping):
+        raise DiscoveryControllerError("durable planning portfolio binding is malformed")
+    return dict(planning["context"]), binding
+
+
 def run_controller(config: ControllerConfig, *, planner: Planner, critic: Critic, screener: Screener, lease: Lease) -> dict[str, Any]:
     planner_attestation, critic_attestation = dict(planner.attest()), dict(critic.attest())
     if ({k: planner_attestation.get(k) for k in SOL} != SOL
@@ -1686,7 +2006,8 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
     existing_deployment = state.get("deployment_identity_sha256")
     if (existing_deployment is None and config.deployment_identity_sha256 is not None
             and (state.get("iterations") or state.get("pending") is not None
-                 or state.get("inflight") is not None)):
+                 or state.get("inflight") is not None
+                 or state.get("planning") is not None)):
         raise DiscoveryControllerError("legacy durable state lacks deployment identity; refusing resume")
     if existing_deployment is not None and existing_deployment != config.deployment_identity_sha256:
         raise DiscoveryControllerError("sealed deployment identity changed; durable discovery cannot resume")
@@ -1783,22 +2104,61 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
     while not state["complete"] and state["next"] <= config.max_iterations:
         turn=state["next"]
         pending=state.get("pending")
-        portfolio_binding = (pending.get("row", {}).get("portfolio_binding")
-                             if pending is not None else
-                             _select_portfolio_binding(state, config))
-        if (pending is None and config.hypothesis_portfolio is not None
-                and portfolio_binding is None):
-            state["complete"] = True
-            state["terminal_reason"] = "portfolio_exhausted"
-            store.save(state, "portfolio_exhausted")
-            break
-        context=_context(state,tracker,turn,config,portfolio_binding)
+        planning=state.get("planning")
+        if pending is not None and planning is not None:
+            raise DiscoveryControllerError(
+                "controller cannot own pending candidate and planning intent together")
+        if planning is not None:
+            context, portfolio_binding = _reopen_planning_intent(
+                state, turn=turn)
+        else:
+            portfolio_binding = (pending.get("row", {}).get("portfolio_binding")
+                                 if pending is not None else
+                                 _select_portfolio_binding(state, config))
+            if (pending is None and config.hypothesis_portfolio is not None
+                    and portfolio_binding is None):
+                state["complete"] = True
+                state["terminal_reason"] = "portfolio_exhausted"
+                store.save(state, "portfolio_exhausted")
+                break
+            if (pending is not None and isinstance(pending.get("context"), Mapping)):
+                context = dict(pending["context"])
+                if pending.get("context_sha256") != _sha(context):
+                    raise DiscoveryControllerError(
+                        "pending actor context identity changed")
+            else:
+                context=_context(state,tracker,turn,config,portfolio_binding)
+            if pending is None:
+                state["planning"] = _planning_intent(
+                    config, turn=turn, context=context,
+                    portfolio_binding=portfolio_binding)
+                store.save(state, "planner_intent")
+                planning = state["planning"]
         with tempfile.TemporaryDirectory(prefix=f"ak-discovery-{turn}-", dir=config.output_root) as temp:
             workspace=Path(temp)
+            pending_phase = pending.get("phase") if isinstance(pending, Mapping) else None
+            if pending is not None and pending_phase == "critic_pending":
+                item=_restore_pending(pending); row=dict(pending["row"])
+                review=critic.review(item,context=context,workspace=workspace)
+                row["critic"]=asdict(review)
+                if review.decision != "accept":
+                    row["status"]="critic_"+review.decision
+                    state.pop("pending", None); state["iterations"].append(row)
+                    _apply_portfolio_outcome(state,row); state["next"]+=1
+                    store.save(state,"critic_refused"); continue
+                state["pending"]={
+                    "phase":"critic_complete", "row":row,
+                    "candidate":pending["candidate"],
+                    "context":dict(context), "context_sha256":_sha(context),
+                    "confirmation":False, "parent_authorization":None}
+                store.save(state,"critic_checkpointed")
+                continue
             if pending is not None:
                 item=_restore_pending(pending); row=dict(pending["row"]); review=Critique(**row["critic"])
                 if "authorization" in pending:
                     authorization=hypotheses.ClaimAuthorization.from_dict(pending["authorization"])
+                elif pending_phase == "critic_complete":
+                    authorization=None
                 elif pending.get("confirmation") is True:
                     # A positive S1 is not a receipted negative.  Re-consult
                     # DNR and mint the explicit confirmation token before its
@@ -1808,7 +2168,50 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                 else:
                     raise DiscoveryControllerError("pending candidate lacks a sealed authorization")
             else:
-                item=planner.plan(context=context,workspace=workspace)
+                planning = state["planning"]
+                if isinstance(planning.get("failure"), Mapping):
+                    raise DiscoveryControllerError(
+                        "prior planner infrastructure/authority failure remains terminal: "
+                        f"{planning['failure'].get('type')}: "
+                        f"{planning['failure'].get('message')}")
+                if planning["phase"] == "intent":
+                    planning["phase"] = "actor_entering"
+                    store.save(state, "planner_entering")
+                planner_workspace=Path(str(planning["workspace"]))
+                expected_workspace=(config.output_root / "planner-operations" /
+                                    planning["operation_key"] / "workspace")
+                if planner_workspace != expected_workspace:
+                    raise DiscoveryControllerError(
+                        "durable planner workspace escaped its operation namespace")
+                checkpoint_path=planner_workspace.parent / "actor-result.json"
+                try:
+                    workspace_created=_prepare_planner_workspace(
+                        config, planning["operation_key"], planner_workspace)
+                    if not workspace_created:
+                        resume_plan=getattr(planner,"resume_plan",None)
+                        if not callable(resume_plan):
+                            raise PlannerOutputRefusal(
+                                "planner stopped before a reusable actor checkpoint")
+                        resume_kwargs={"context":context,"workspace":planner_workspace}
+                        if "checkpoint_path" in inspect.signature(resume_plan).parameters:
+                            resume_kwargs["checkpoint_path"]=checkpoint_path
+                        item=resume_plan(**resume_kwargs)
+                    else:
+                        plan_kwargs={"context":context,"workspace":planner_workspace}
+                        if "checkpoint_path" in inspect.signature(planner.plan).parameters:
+                            plan_kwargs["checkpoint_path"]=checkpoint_path
+                        item=planner.plan(**plan_kwargs)
+                except PlannerOutputRefusal as exc:
+                    _record_planner_refusal(
+                        state, turn=turn, context=context,
+                        portfolio_binding=portfolio_binding, exc=exc)
+                    store.save(state, "planner_refused")
+                    continue
+                except Exception as exc:
+                    state["planning"]["failure"]={
+                        "type":type(exc).__name__, "message":str(exc)}
+                    store.save(state,"planner_terminal_failure")
+                    raise
                 row={"turn":turn,"hypothesis_id":item.hypothesis_id,"statement":item.statement,
                      "falsifier":item.falsifier,"regime":dict(item.regime),
                      "proposal_sha256":_sha(item.proposal),"source_manifest_sha256":item.source_manifest_sha256,
@@ -1829,21 +2232,28 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                             config.hypothesis_portfolio)
                     except DiscoveryControllerError as exc:
                         row.update(status="portfolio_refused", reason=str(exc))
+                        state.pop("planning", None)
                         state["iterations"].append(row); state["next"] += 1
                         state["complete"] = True
                         state["terminal_reason"] = "portfolio_actor_contract_refused"
                         store.save(state, "portfolio_refused")
                         break
-                review=critic.review(item,context=context,workspace=workspace)
-                row["critic"]=asdict(review)
+                state.pop("planning", None)
+                state["pending"]={
+                    "phase":"critic_pending", "row":row,
+                    "candidate":_pending_item(item),
+                    "context":dict(context), "context_sha256":_sha(context),
+                    "confirmation":False, "parent_authorization":None}
+                store.save(state,"planner_checkpointed")
+                continue
             if review.decision != "accept":
                 row["status"]="critic_"+review.decision; state["iterations"].append(row); _apply_portfolio_outcome(state,row); state["next"]+=1; store.save(state,"critic_refused"); continue
-            if pending is None:
+            if pending_phase == "critic_complete":
                 _ensure_question(tracker,item)
                 ledger=do_not_repeat.compile_for_tracker(tracker)
                 try: authorization=tracker.authorize_claim(item.hypothesis_id,purpose="candidate_only_discovery",authorized_by="discovery_controller",ledger=ledger)
                 except hypotheses.HypothesisError as exc:
-                    row.update(status="authorization_refused",reason=str(exc)); state["iterations"].append(row); _apply_portfolio_outcome(state,row); state["next"]+=1; store.save(state,"authorization_refused"); continue
+                    row.update(status="authorization_refused",reason=str(exc)); state.pop("pending",None); state["iterations"].append(row); _apply_portfolio_outcome(state,row); state["next"]+=1; store.save(state,"authorization_refused"); continue
             if config.dry_run:
                 # The dry-run still proves exact Sol/Terra actor attestation,
                 # plan schema, critic binding, and DNR authorization.  It
@@ -1867,6 +2277,7 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
             if permit.get("operation_key") != operation_key:
                 raise DiscoveryControllerError("resource lease did not bind the exact operation key")
             permit={**dict(permit), "repetition":repetition}
+            state.pop("pending",None)
             state["inflight"]={"operation_key":operation_key,"row":row,"candidate":_pending_item(item),"authorization":authorization.to_dict(),"lease":dict(permit),"confirmation":bool(pending and pending.get("confirmation")),"parent_authorization":pending.get("parent_authorization") if pending else None}
             store.save(state,"pre_screen_intent")
             try: result=screener.screen(item,authorization,permit)
