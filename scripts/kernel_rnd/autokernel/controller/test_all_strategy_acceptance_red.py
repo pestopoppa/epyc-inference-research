@@ -145,9 +145,15 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
                          ["generic_flash_attn_ext", "odd_gqa7_d64_q1"])
         generic, dedicated = invocations
         self.assertEqual(generic["expected_cases"], 2868)
+        self.assertNotIn(
+            "AUTOKERNEL_CORRECTNESS_CASE_SET",
+            generic.get("environment", {}))
         self.assertEqual(dedicated["expected_cases"], len(required))
         self.assertEqual(dedicated["required_cases"], required)
         self.assertEqual(dedicated["case_set"], "odd_gqa7_d64_q1_v1")
+        self.assertEqual(
+            dedicated["environment"]["AUTOKERNEL_CORRECTNESS_CASE_SET"],
+            "odd_gqa7_d64_q1_v1")
         # The plan/policy/receipt API must carry both invocations.  A template
         # declaration that is never consumed is deliberately not acceptance.
         self.assertIn("correctness_invocations",
@@ -468,6 +474,60 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
         self.assertEqual(result["terminal_reason"], "portfolio_exhausted")
         self.assertNotIn("akh-provider-retry", result["portfolio_terminals"])
 
+    def test_critic_provider_failure_retries_without_rerunning_planner(self):
+        """An API interruption leaves critic_pending as the restart point."""
+        fixture = TD.Tests(methodName="runTest")
+
+        class CountingPlanner:
+            def __init__(self):
+                self.calls = 0
+
+            def attest(self):
+                return {**C.SOL, "runtime": TD.RUNTIME}
+
+            def plan(self, *, context, workspace):
+                self.calls += 1
+                return fixture.portfolio_candidate(
+                    context["authoring_assignment"]["portfolio_binding"])
+
+        class FlakyCritic:
+            def __init__(self):
+                self.calls = 0
+
+            def attest(self):
+                return TD.FakeCritic(["accept"]).attest()
+
+            def review(self, *_args, **_kwargs):
+                self.calls += 1
+                if self.calls == 1:
+                    raise RuntimeError("critic provider interrupted")
+                return C.Critique("accept", "bounded gate")
+
+        class NeverCompute:
+            def __getattr__(self, _name):
+                def fail(*_args, **_kwargs):
+                    raise AssertionError("critic retry reached compute")
+                return fail
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config = dataclasses.replace(
+                fixture.portfolio_config(root, [fixture.portfolio_record()]),
+                max_iterations=1)
+            planner, critic = CountingPlanner(), FlakyCritic()
+            with self.assertRaisesRegex(RuntimeError,
+                                        "critic provider interrupted"):
+                C.run_controller(
+                    config, planner=planner, critic=critic,
+                    screener=NeverCompute(), lease=NeverCompute())
+            result = C.run_controller(
+                config, planner=planner, critic=critic,
+                screener=NeverCompute(), lease=NeverCompute())
+        self.assertEqual((planner.calls, critic.calls), (1, 2))
+        self.assertEqual([row["status"] for row in result["iterations"]],
+                         ["dry_run_authorized"])
+        self.assertEqual(result["portfolio_terminals"], {})
+
     def test_nonzero_codex_actor_exit_is_provider_transient_not_terminal(self):
         """RED: the concrete planner must map provider exits to retry policy."""
         fixture = TD.Tests(methodName="runTest")
@@ -531,10 +591,14 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
         fixture = TD.Tests(methodName="runTest")
 
         class BoundPlanner:
+            def __init__(self):
+                self.calls = 0
+
             def attest(self):
                 return {**C.SOL, "runtime": TD.RUNTIME}
 
             def plan(self, *, context, workspace):
+                self.calls += 1
                 return fixture.portfolio_candidate(
                     context["authoring_assignment"]["portfolio_binding"])
 
@@ -560,10 +624,14 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
                     receipt_sha256=receipt_sha256)
 
                 class RefusingScreen:
+                    def __init__(self):
+                        self.calls = 0
+
                     def reconcile(self, inflight):
                         return C.Recovery("safe_to_start")
 
                     def screen(self, *_args):
+                        self.calls += 1
                         raise refusal
 
                 record = fixture.portfolio_record(
@@ -571,10 +639,32 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
                 config = dataclasses.replace(
                     fixture.portfolio_config(Path(directory), [record]),
                     max_iterations=1, dry_run=False)
+                planner = BoundPlanner()
+                critic = TD.FakeCritic(["accept"])
+                screener = RefusingScreen()
+                original_save = C.DurableState.save
+                stopped = [False]
+
+                class StopAfterStageCheckpoint(BaseException):
+                    pass
+
+                def save_then_stop(store, state, phase):
+                    original_save(store, state, phase)
+                    rows = state.get("iterations", [])
+                    if (rows and rows[-1].get("status") == disposition
+                            and not stopped[0]):
+                        stopped[0] = True
+                        raise StopAfterStageCheckpoint(phase)
+
+                with mock.patch.object(
+                        C.DurableState, "save", new=save_then_stop), \
+                        self.assertRaises(StopAfterStageCheckpoint):
+                    C.run_controller(
+                        config, planner=planner, critic=critic,
+                        screener=screener, lease=TD.Lease())
                 result = C.run_controller(
-                    config, planner=BoundPlanner(),
-                    critic=TD.FakeCritic(["accept"]),
-                    screener=RefusingScreen(), lease=TD.Lease())
+                    config, planner=planner, critic=critic,
+                    screener=screener, lease=TD.Lease())
                 row = result["iterations"][0]
                 self.assertEqual(row["status"], disposition)
                 self.assertEqual(row["stage_receipt_path"], receipt_path)
@@ -583,6 +673,7 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
                 self.assertEqual(
                     "akh-stage-outcome" in result["portfolio_terminals"],
                     hypothesis_terminal)
+                self.assertEqual((planner.calls, screener.calls), (1, 1))
 
 
 class EvidenceStageResumeRedGate(unittest.TestCase):
