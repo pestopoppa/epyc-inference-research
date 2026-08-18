@@ -7,12 +7,17 @@ it does not widen runtime authority.
 """
 from __future__ import annotations
 
+from pathlib import Path
+import tempfile
 from types import SimpleNamespace
 import unittest
+from unittest import mock
 
 from .. import hypothesis_portfolio
 from . import discovery_controller as C
 from . import discovery_deployment_factory as F
+from . import gpu_source_evidence as E
+from .test_gpu_source_evidence import ClaimFactory, FakeExecutors, plan
 
 
 ELIGIBLE = (
@@ -124,6 +129,133 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
                 self.assertIs(screen["hip_graphs"], True)
                 self.assertIs(screen["paired"], True)
                 self.assertIs(screen["decision_required"], True)
+                self.assertEqual(screen["stage_id"],
+                                 "target_runtime_graphs_on_screen")
+                self.assertEqual(screen["exact_invocations"], 1)
+                self.assertIs(screen["resume_without_repeat"], True)
+
+    def test_each_strategy_declares_the_exactly_once_resumable_stage_fsm(self):
+        """RED: stage receipts, not a fresh-root rule, own crash recovery."""
+        expected = (
+            "correctness",
+            "candidate_attribution",
+            "anchor_attribution",
+            "measurement_graphs_off_screen",
+            "target_runtime_graphs_on_screen",
+        )
+        for hypothesis_id, template_id, _op, _cases in ELIGIBLE:
+            with self.subTest(hypothesis=hypothesis_id):
+                fsm = self.registry.templates[template_id].semantics.get(
+                    "stage_fsm")
+                self.assertIsInstance(fsm, dict)
+                self.assertEqual(tuple(fsm["stages"]), expected)
+                self.assertEqual(tuple(fsm["crash_after_test_points"]),
+                                 expected)
+                self.assertEqual(fsm["completed_stage_policy"],
+                                 "revalidate_receipt_and_reuse")
+                self.assertEqual(fsm["first_incomplete_stage_policy"],
+                                 "execute_once")
+                self.assertIs(fsm["reject_identity_drift"], True)
+
+
+class EvidenceStageResumeRedGate(unittest.TestCase):
+    """Acceptance for exact-once proof stages after a process/API restart.
+
+    A completed receipt must be revalidated against the unchanged plan and
+    reused.  The resumed call may acquire a claim only for the first incomplete
+    GPU command.  These tests deliberately exercise the existing public
+    producer so recovery cannot be hidden in an uncalled helper.
+    """
+
+    @staticmethod
+    def _produce(root: Path, current: E.GpuSourceEvidencePlan,
+                 executors: FakeExecutors, claims: ClaimFactory):
+        return E.produce_gpu_source_evidence(
+            output_root=root, plan=current,
+            correctness_executor=executors.correctness,
+            rocprof_executor=executors.rocprof,
+            claim_journal=object(), claim_acquirer=claims,
+            claim_verifier=lambda _receipt: True, claim_timeout_s=0)
+
+    def test_resume_after_correctness_does_not_repeat_correctness(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            current = plan(base / "inputs")
+            output = base / "evidence"
+            first_exec, first_claims = FakeExecutors(), ClaimFactory()
+            with mock.patch.object(
+                    E, "_produce_attribution_arm",
+                    side_effect=RuntimeError("crash after correctness")):
+                with self.assertRaisesRegex(RuntimeError,
+                                            "crash after correctness"):
+                    self._produce(output, current, first_exec, first_claims)
+            self.assertTrue((output / "correctness/receipt.json").is_file())
+            self.assertEqual([row[:2] for row in first_exec.calls],
+                             [("correctness", "candidate")])
+
+            resumed_exec, resumed_claims = FakeExecutors(), ClaimFactory()
+            bundle = self._produce(
+                output, current, resumed_exec, resumed_claims)
+            self.assertIsInstance(bundle, E.proofs.GpuSourceProofBundle)
+            self.assertEqual([row[:2] for row in resumed_exec.calls], [
+                ("rocprof", "candidate"), ("rocprof", "anchor")])
+            self.assertEqual(len(resumed_claims.claims), 2)
+
+    def test_resume_after_candidate_attribution_does_not_repeat_prior_stages(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            current = plan(base / "inputs")
+            output = base / "evidence"
+            first_exec, first_claims = FakeExecutors(), ClaimFactory()
+            original = E._produce_attribution_arm
+
+            def crash_before_anchor(root, arm, plan_, executor, **kwargs):
+                if arm == "anchor":
+                    raise RuntimeError("crash after candidate attribution")
+                return original(root, arm, plan_, executor, **kwargs)
+
+            with mock.patch.object(E, "_produce_attribution_arm",
+                                   side_effect=crash_before_anchor):
+                with self.assertRaisesRegex(
+                        RuntimeError, "crash after candidate attribution"):
+                    self._produce(output, current, first_exec, first_claims)
+            self.assertTrue(
+                (output / "attribution-candidate/receipt.json").is_file())
+            self.assertEqual([row[:2] for row in first_exec.calls], [
+                ("correctness", "candidate"), ("rocprof", "candidate")])
+
+            resumed_exec, resumed_claims = FakeExecutors(), ClaimFactory()
+            bundle = self._produce(
+                output, current, resumed_exec, resumed_claims)
+            self.assertIsInstance(bundle, E.proofs.GpuSourceProofBundle)
+            self.assertEqual([row[:2] for row in resumed_exec.calls],
+                             [("rocprof", "anchor")])
+            self.assertEqual(len(resumed_claims.claims), 1)
+
+    def test_resume_after_anchor_attribution_runs_no_gpu_command_twice(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            current = plan(base / "inputs")
+            output = base / "evidence"
+            first_exec, first_claims = FakeExecutors(), ClaimFactory()
+            with mock.patch.object(
+                    E, "_produce_pair",
+                    side_effect=RuntimeError("crash after anchor attribution")):
+                with self.assertRaisesRegex(
+                        RuntimeError, "crash after anchor attribution"):
+                    self._produce(output, current, first_exec, first_claims)
+            self.assertTrue(
+                (output / "attribution-anchor/receipt.json").is_file())
+            self.assertEqual([row[:2] for row in first_exec.calls], [
+                ("correctness", "candidate"), ("rocprof", "candidate"),
+                ("rocprof", "anchor")])
+
+            resumed_exec, resumed_claims = FakeExecutors(), ClaimFactory()
+            bundle = self._produce(
+                output, current, resumed_exec, resumed_claims)
+            self.assertIsInstance(bundle, E.proofs.GpuSourceProofBundle)
+            self.assertEqual(resumed_exec.calls, [])
+            self.assertEqual(resumed_claims.claims, [])
 
 
 if __name__ == "__main__":
