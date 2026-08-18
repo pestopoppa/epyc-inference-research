@@ -40,12 +40,9 @@ def _contract(*, op: str, cases: int, backend: str = "ROCm0") -> object:
     return SimpleNamespace(
         correctness_argv=("/fixture/test-backend-ops", "test", "-o", op,
                           "-b", backend, "-j", "1", "--suite-seed", "2026081301"),
+        correctness_backend=backend,
+        correctness_op=op,
         expected_correctness_cases=cases,
-        # A successful implementation must not use this actor-controlled regex
-        # as its parser.  It is retained only because the v10 plan schema still
-        # carries the historical field.
-        correctness_summary_pattern=(
-            r"NEVER_MATCH_THIS(?P<passed>\d+)/(?P<total>\d+)"),
     )
 
 
@@ -96,10 +93,20 @@ class CorrectnessSummaryAcceptance(unittest.TestCase):
         with mock.patch.object(
                 t0_provider, "parse_backend_ops_console",
                 wraps=t0_provider.parse_backend_ops_console) as parser:
-            result = E._parse_summary(text, plan)
+            result = E._parse_correctness(text, plan)
         parser.assert_called_once_with(text)
-        self.assertIsInstance(result, dict)
-        return result
+        return {
+            "summary": result.summary,
+            "target_backend": result.backend,
+            "target_op": result.operation,
+            "passed_cases": result.passed_cases,
+            "total_cases": result.total_cases,
+            "target_status": "OK",
+            "skipped_backends": list(result.skipped_backends),
+            "backends_passed": result.backends_passed,
+            "backends_total": result.backends_total,
+            "overall": result.overall,
+        }
 
     @unittest.skipUnless(V10_STDOUT.is_file(),
                          "requires immutable v10 correctness stdout")
@@ -163,7 +170,7 @@ class CorrectnessSummaryAcceptance(unittest.TestCase):
         }
         for label, text in invalid.items():
             with self.subTest(case=label), self.assertRaises(E.EvidenceProducerError):
-                E._parse_summary(text, plan)
+                E._parse_correctness(text, plan)
 
     def test_malformed_missing_and_duplicate_summaries_refuse(self) -> None:
         plan = _contract(op="MUL_MAT", cases=3)
@@ -178,7 +185,7 @@ class CorrectnessSummaryAcceptance(unittest.TestCase):
         }
         for label, text in invalid.items():
             with self.subTest(case=label), self.assertRaises(E.EvidenceProducerError):
-                E._parse_summary(text, plan)
+                E._parse_correctness(text, plan)
 
 
 class CorrectnessReceiptStageAcceptance(unittest.TestCase):
@@ -195,9 +202,9 @@ class CorrectnessReceiptStageAcceptance(unittest.TestCase):
                 correctness_argv=(tool, "test", "-o", "RMS_NORM", "-b", "ROCm0",
                                   "-j", "1", "--suite-seed", "2026081301",
                                   *original_tail),
+                correctness_backend="ROCm0",
+                correctness_op="RMS_NORM",
                 expected_correctness_cases=3,
-                correctness_summary_pattern=(
-                    r"NEVER_MATCH_THIS(?P<passed>\d+)/(?P<total>\d+)"),
             )
             # The policy receipts the exact plan, so refresh the test-owned
             # carrier after changing the correctness contract.
@@ -208,7 +215,7 @@ class CorrectnessReceiptStageAcceptance(unittest.TestCase):
                 hashlib.sha256(plan.policy.path.read_bytes()).hexdigest()))
 
             delegates = fixtures.FakeExecutors(
-                correctness_summary=_console(op="RMS_NORM", cases=3))
+                correctness_summary=_console(op="RMS_NORM", cases=3).rstrip("\n"))
             observed: list[dict[str, object]] = []
             proof_root = root / "proof"
 
@@ -223,7 +230,18 @@ class CorrectnessReceiptStageAcceptance(unittest.TestCase):
                     receipt_path, schema=E.CORRECTNESS_SCHEMA)["body"]
                 observed.append({
                     "arm": invocation.arm,
-                    "parsed_summary": receipt.get("parsed_summary"),
+                    "parsed_summary": {
+                        "summary": receipt.get("summary"),
+                        "target_backend": receipt.get("correctness_backend"),
+                        "target_op": receipt.get("correctness_op"),
+                        "passed_cases": receipt.get("passed_cases"),
+                        "total_cases": receipt.get("expected_cases"),
+                        "target_status": "OK" if receipt.get("result") == "PASS" else None,
+                        "skipped_backends": receipt.get("skipped_backends"),
+                        "backends_passed": receipt.get("backends_passed"),
+                        "backends_total": receipt.get("backends_total"),
+                        "overall": receipt.get("overall"),
+                    },
                     "stdout_sha256": receipt.get("stdout_sha256"),
                 })
                 return delegates.rocprof(invocation)
