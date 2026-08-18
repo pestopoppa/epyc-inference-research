@@ -467,6 +467,26 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
         self.assertNotIn(classified.classification,
                          {"candidate", "top_k_replicated_candidate"})
 
+    def test_controller_stage_row_preserves_dual_decision_evidence(self):
+        result = C.SealedScreen(
+            receipt_path="result.json", result_sha256="a" * 64,
+            effect_fraction=.04, classification="candidate",
+            baseline_sha256="b" * 64, source_proof_sha256="c" * 64,
+            dispatch_proof_sha256="d" * 64,
+            exact_attribution_effect_fraction=.03,
+            target_runtime_effect_fraction=.04,
+            stages=("materialized", "built", "correctness", "attribution",
+                    "measurement_graphs_off_screen",
+                    "target_runtime_graphs_on_screen"))
+        row = C._screen_iteration_fields(result, repetition=2)
+        self.assertEqual(
+            (row["exact_attribution_effect_fraction"],
+             row["target_runtime_effect_fraction"],
+             row["target_runtime_executed"], row["target_runtime_reason"],
+             row["repetition"]),
+            (.03, .04, True, None, 2))
+        self.assertEqual(row["stages"], list(result.stages))
+
     def test_nonpositive_exact_duration_is_measured_and_short_circuits_graphs_on(self):
         """A valid neutral/regression is evidence, not an execution refusal."""
         fixture = TD.Tests(methodName="runTest")
@@ -733,6 +753,89 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
                     result = screener.screen(item, object(), {})
             self.assertEqual(process_calls, ["off", "on"])
             self.assertEqual(result.target_runtime_effect_fraction, .04)
+
+    def test_governed_adapter_resumes_each_dual_runner_terminal(self):
+        """Public reconcile/re-entry must understand the two-output runner plan."""
+        class CrashAfterDurableResult(BaseException):
+            pass
+
+        helper = TA.GpuSourceAdapterTests(methodName="runTest")
+        with tempfile.TemporaryDirectory() as directory:
+            values = helper.setup(directory)
+            adapter, candidate, authorization, lease, inflight, _current, executors = values
+            operation_root = adapter._root(lease["operation_key"])
+            off = SimpleNamespace(
+                factor="source_patch",
+                anchor_build=str(Path(directory) / "anchor-build"),
+                candidate_build=str(Path(directory) / "candidate-build"),
+                output_dir=str(operation_root / "runner" / "graphs-off"),
+                runtime_graphs="off")
+            on = SimpleNamespace(
+                factor="source_patch",
+                anchor_build=str(Path(directory) / "anchor-build"),
+                candidate_build=str(Path(directory) / "candidate-build"),
+                output_dir=str(operation_root / "runner" / "graphs-on"),
+                runtime_graphs="on")
+            off._target_runtime_args = on
+            adapter.args_factory = lambda *_args: off
+            original_rocprof = executors.rocprof
+
+            def positive_exact(invocation):
+                capture = original_rocprof(invocation)
+                if invocation.arm == "anchor":
+                    path = invocation.timestamp_csv_path
+                    raw = path.read_text()
+                    path.write_text(raw.replace(
+                        ",10,20", ",10,30").replace(
+                        ",21,30", ",21,50"))
+                return capture
+
+            adapter.rocprof_executor = positive_exact
+            process_calls = []
+
+            def durable_then_crash(current):
+                mode = current.runtime_graphs
+                process_calls.append(mode)
+                body = {
+                    "schema": "epyc.autokernel.gpu_candidate_only_screen.v2",
+                    "non_promotable": True, "promotion_claim": False,
+                    "hip_residency_proved": True, "runtime_graphs": mode,
+                    "median_relative": .04,
+                    "baseline_sha256": "c" * 64,
+                }
+                body["result_sha256"] = C.gpu_source_proofs._hash(body)
+                output = Path(current.output_dir)
+                output.mkdir(parents=True, exist_ok=True)
+                (output / "result.json").write_text(
+                    __import__("json").dumps(body, sort_keys=True))
+                raise CrashAfterDurableResult(mode)
+
+            with mock.patch.object(C.gpu_discovery, "run",
+                                   side_effect=durable_then_crash), \
+                    mock.patch.object(C.autokernel_progression, "_gpu_screen",
+                                      return_value={"stage": "candidate"}):
+                with self.assertRaises(CrashAfterDurableResult):
+                    adapter.screen(candidate, authorization, lease)
+                self.assertEqual(adapter.reconcile(inflight).status,
+                                 "safe_to_start")
+                with self.assertRaises(CrashAfterDurableResult):
+                    adapter.screen(candidate, authorization, lease)
+                self.assertEqual(adapter.reconcile(inflight).status,
+                                 "safe_to_start")
+                result = adapter.screen(candidate, authorization, lease)
+            self.assertEqual(process_calls, ["off", "on"])
+            self.assertEqual(
+                [call[:2] for call in executors.calls],
+                [("correctness", "candidate"),
+                 ("rocprof", "candidate"), ("rocprof", "anchor")])
+            self.assertGreater(result.exact_attribution_effect_fraction, 0)
+            self.assertEqual(result.target_runtime_effect_fraction, .04)
+            recovered = adapter.reconcile(inflight)
+            self.assertEqual(recovered.status, "sealed_result")
+            self.assertEqual(
+                (recovered.result.exact_attribution_effect_fraction,
+                 recovered.result.target_runtime_effect_fraction),
+                (result.exact_attribution_effect_fraction, .04))
 
     def test_three_real_critic_rejections_skip_only_that_strategy(self):
         """RED: exercise the live critic_pending branch, not a helper directly."""
@@ -1401,6 +1504,79 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
                     result.get("portfolio_authoring_failures", {}),
                     authoring_failure)
                 self.assertEqual((planner.calls, screener.calls), (1, 1))
+
+    def test_controller_recovery_accounts_durable_typed_terminal(self):
+        """Crash after producer terminal must not strand inflight forever."""
+        fixture = TD.Tests(methodName="runTest")
+
+        class CrashAfterProducerTerminal(BaseException):
+            pass
+
+        class Planner:
+            def __init__(self):
+                self.calls = 0
+
+            def attest(self):
+                return {**C.SOL, "runtime": TD.RUNTIME}
+
+            def plan(self, *, context, workspace):
+                self.calls += 1
+                return fixture.portfolio_candidate(
+                    context["authoring_assignment"]["portfolio_binding"])
+
+        for refusal_name, disposition in (
+                ("SourceApplyRefusal", "authoring_refused"),
+                ("CompileRefusal", "authoring_refused"),
+                ("CorrectnessRefusal", "correctness_falsified"),
+                ("DispatchAttributionRefusal", "attribution_route_falsified")):
+            with self.subTest(refusal=refusal_name), \
+                    tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                receipt = root / "durable-stage-terminal.json"
+                loaded = E._seal(receipt, {
+                    "schema": "epyc.autokernel.stage_outcome_test.v1",
+                    "stage": refusal_name})
+                refusal_type = getattr(C, refusal_name)
+                refusal = refusal_type(
+                    "durable producer outcome",
+                    receipt_path=str(receipt.resolve()),
+                    receipt_sha256=loaded["file_sha256"])
+
+                class Screen:
+                    def __init__(self):
+                        self.calls = 0
+                        self.executor_calls = 0
+
+                    def reconcile(self, _inflight):
+                        return C.Recovery("safe_to_start")
+
+                    def screen(self, *_args):
+                        self.calls += 1
+                        if self.calls == 1:
+                            self.executor_calls += 1
+                            raise CrashAfterProducerTerminal()
+                        raise refusal
+
+                record = next(
+                    row for row in self.portfolio.eligible_hypotheses()
+                    if row["hypothesis_id"] ==
+                    "akh-v2-q8-quantizer-new-mechanism")
+                config = self._real_portfolio_config(
+                    root, [record], iterations=1)
+                planner, screen = Planner(), Screen()
+                with self.assertRaises(CrashAfterProducerTerminal):
+                    C.run_controller(
+                        config, planner=planner,
+                        critic=TD.FakeCritic(["accept"]),
+                        screener=screen, lease=TD.Lease())
+                result = C.run_controller(
+                    config, planner=planner,
+                    critic=TD.FakeCritic(["accept"]),
+                    screener=screen, lease=TD.Lease())
+                self.assertEqual(result["iterations"][0]["status"], disposition)
+                self.assertEqual((planner.calls, screen.executor_calls), (1, 1))
+                self.assertEqual(screen.calls, 2)
+                self.assertNotIn("inflight", result)
 
 
 class EvidenceStageResumeRedGate(unittest.TestCase):
