@@ -1015,7 +1015,8 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
                 self.assertEqual(row["stage_receipt_sha256"], receipt_sha256)
                 self.assertIs(row["scientific_budget_spent"], False)
                 self.assertEqual(
-                    record["hypothesis_id"] in result["portfolio_terminals"],
+                    record["hypothesis_id"] in
+                    result.get("portfolio_terminals", {}),
                     hypothesis_terminal)
                 self.assertEqual((planner.calls, screener.calls), (1, 1))
 
