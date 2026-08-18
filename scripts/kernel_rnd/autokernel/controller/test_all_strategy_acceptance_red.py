@@ -818,18 +818,40 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
             def durable_then_crash(current):
                 mode = current.runtime_graphs
                 process_calls.append(mode)
+                opened = manager.outer.to_dict()
+                phase_end = {
+                    "schema": "epyc.autokernel.borrowed_device_claim_phase.v1",
+                    "mode": "borrowed_outer_reservation",
+                    "outer_claim_id": opened["claim_id"],
+                    "device_id": opened["device_id"],
+                    "campaign_id": opened["campaign_id"],
+                    "phase_ended_at": "2026-08-14T00:00:30Z",
+                    "physical_release": False,
+                }
                 body = {
                     "schema": "epyc.autokernel.gpu_candidate_only_screen.v2",
                     "non_promotable": True, "promotion_claim": False,
                     "hip_residency_proved": True, "runtime_graphs": mode,
                     "median_relative": .04,
                     "baseline_sha256": "c" * 64,
+                    "device_claim_mode": "borrowed_outer_reservation",
+                    "device_claim_open": opened,
+                    "device_claim_borrowed_phase_end": phase_end,
+                    "device_claim_released": None,
                 }
                 body["result_sha256"] = C.gpu_source_proofs._hash(body)
                 output = Path(current.output_dir)
                 output.mkdir(parents=True, exist_ok=True)
                 (output / "result.json").write_text(
                     __import__("json").dumps(body, sort_keys=True))
+                (output / "live-governance.json").write_text(
+                    __import__("json").dumps({
+                        "status": "borrowed_phase_ended",
+                        "device_claim_mode": "borrowed_outer_reservation",
+                        "device_claim_open": opened,
+                        "device_claim_borrowed_phase_end": phase_end,
+                        "device_claim_released": None,
+                    }, sort_keys=True))
                 raise CrashAfterDurableResult(mode)
 
             with mock.patch.object(C.gpu_discovery, "run",
