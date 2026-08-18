@@ -7,6 +7,7 @@ import io
 import json
 import os
 import shutil
+import stat
 import unittest
 from unittest import mock
 from pathlib import Path
@@ -59,8 +60,14 @@ class DeploymentFactoryTests(unittest.TestCase):
             operation_root.mkdir(mode=0o700, parents=True)
             config = SimpleNamespace(operations_root=operations)
 
-            manifest_file = F._manifest_file_for_operation(
-                config, candidate, operation_key)
+            synchronized_modes = []
+            original_fsync = F.os.fsync
+            def recording_fsync(descriptor):
+                synchronized_modes.append(os.fstat(descriptor).st_mode)
+                return original_fsync(descriptor)
+            with mock.patch.object(F.os, "fsync", side_effect=recording_fsync):
+                manifest_file = F._manifest_file_for_operation(
+                    config, candidate, operation_key)
             expected = source_candidate.source_patch_manifest_bytes(
                 candidate.source_manifest)
             self.assertEqual(manifest_file.path.parent, operation_root)
@@ -69,6 +76,8 @@ class DeploymentFactoryTests(unittest.TestCase):
                              candidate.source_manifest_sha256)
             self.assertEqual(json.loads(expected)["schema"],
                              source_candidate.SCHEMA_SOURCE_PATCH)
+            self.assertTrue(any(stat.S_ISREG(mode) for mode in synchronized_modes))
+            self.assertTrue(any(stat.S_ISDIR(mode) for mode in synchronized_modes))
 
             policy = b'{"schema":"test-policy"}'
             policy_path = F._write_operation_carrier(
@@ -115,7 +124,7 @@ class DeploymentFactoryTests(unittest.TestCase):
             insecure.mkdir(mode=0o700)
             insecure.chmod(0o755)
             with self.assertRaisesRegex(F.DeploymentFactoryError,
-                                        "not private to its owner"):
+                                        "private owner directory"):
                 F._manifest_file_for_operation(config, candidate, "c" * 64)
             outside = Path(directory).resolve() / "outside"
             outside.mkdir()
@@ -123,6 +132,75 @@ class DeploymentFactoryTests(unittest.TestCase):
             with self.assertRaisesRegex(F.DeploymentFactoryError,
                                         "operation carrier root"):
                 F._manifest_file_for_operation(config, candidate, "b" * 64)
+
+    def test_manifest_carrier_pins_leaf_and_parent_namespace_against_races(self):
+        candidate = planned_source_candidate()
+        expected = source_candidate.source_patch_manifest_bytes(
+            candidate.source_manifest)
+
+        for attack in ("inode-replacement", "escaping-symlink", "late-hardlink"):
+            with self.subTest(attack=attack), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory).resolve()
+                operations = root / "operations"
+                operation_key = "d" * 64
+                operation = operations / operation_key
+                operation.mkdir(mode=0o700, parents=True)
+                config = SimpleNamespace(operations_root=operations)
+                carrier = operation / "source-manifest.json"
+                original_reader = F._read_operation_carrier
+                attacked = False
+
+                def mutate_after_fstat(descriptor, label):
+                    nonlocal attacked
+                    result = original_reader(descriptor, label)
+                    if not attacked:
+                        attacked = True
+                        if attack == "inode-replacement":
+                            carrier.unlink()
+                            carrier.write_bytes(expected)
+                            carrier.chmod(0o600)
+                        elif attack == "escaping-symlink":
+                            outside = root / "outside-manifest.json"
+                            outside.write_bytes(expected)
+                            carrier.unlink()
+                            carrier.symlink_to(outside)
+                        else:
+                            os.link(carrier, root / "late-hardlink.json")
+                    return result
+
+                with mock.patch.object(
+                        F, "_read_operation_carrier",
+                        side_effect=mutate_after_fstat), self.assertRaisesRegex(
+                            F.DeploymentFactoryError, "directory entry"):
+                    F._manifest_file_for_operation(config, candidate, operation_key)
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            operations = root / "operations"
+            operation_key = "e" * 64
+            operation = operations / operation_key
+            operation.mkdir(mode=0o700, parents=True)
+            outside = root / "outside"
+            outside.mkdir(mode=0o700)
+            parked = root / "parked-operation"
+            config = SimpleNamespace(operations_root=operations)
+            original_open = F.os.open
+            attacked = False
+
+            def replace_directory_before_leaf(path, flags, mode=0o777, *, dir_fd=None):
+                nonlocal attacked
+                if path == "source-manifest.json" and dir_fd is not None and not attacked:
+                    attacked = True
+                    operation.rename(parked)
+                    operation.symlink_to(outside, target_is_directory=True)
+                return original_open(path, flags, mode, dir_fd=dir_fd)
+
+            with mock.patch.object(F.os, "open",
+                                   side_effect=replace_directory_before_leaf), \
+                    self.assertRaisesRegex(F.DeploymentFactoryError,
+                                           "parent chain changed"):
+                F._manifest_file_for_operation(config, candidate, operation_key)
+            self.assertFalse((outside / "source-manifest.json").exists())
 
     def test_v2_templates_are_extracted_from_exact_sealed_profile(self):
         self.assertEqual(

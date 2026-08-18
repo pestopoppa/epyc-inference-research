@@ -9,6 +9,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 import argparse
 import base64
+import contextlib
 import csv
 import hashlib
 import json
@@ -1145,58 +1146,112 @@ def _manifest_carrier_bytes(candidate: controller.PlannedCandidate) -> bytes:
     return raw
 
 
-def _operation_carrier_root(config: deployment.DiscoveryDeployment,
-                            operation_key: str) -> Path:
+def _directory_identity(value: os.stat_result) -> tuple[int, int, int, int]:
+    return (value.st_dev, value.st_ino, value.st_mode, value.st_uid)
+
+
+def _file_identity(value: os.stat_result) -> tuple[int, ...]:
+    return (value.st_dev, value.st_ino, value.st_mode, value.st_nlink,
+            value.st_uid, value.st_size, value.st_mtime_ns, value.st_ctime_ns)
+
+
+def _validate_directory(value: os.stat_result, label: str, *, private: bool) -> None:
+    if (not stat.S_ISDIR(value.st_mode) or value.st_uid != os.geteuid()
+            or (private and stat.S_IMODE(value.st_mode) & 0o077)):
+        qualifier = "private owner directory" if private else "owner directory"
+        raise DeploymentFactoryError(f"{label} is not a real {qualifier}")
+
+
+@contextlib.contextmanager
+def _pinned_operation_directory(config: deployment.DiscoveryDeployment,
+                                operation_key: str):
     if not isinstance(operation_key, str) or not controller.HASH.fullmatch(operation_key):
         raise DeploymentFactoryError("operation carrier requires an exact operation key")
     operations_root = Path(config.operations_root)
-    if (not operations_root.is_absolute() or operations_root.is_symlink()
-            or not operations_root.is_dir()):
-        raise DeploymentFactoryError("operations root is not a real directory")
-    root = operations_root / operation_key
-    if root.is_symlink() or not root.is_dir():
-        raise DeploymentFactoryError("operation carrier root is not a real directory")
-    metadata = root.stat()
-    if (not stat.S_ISDIR(metadata.st_mode) or metadata.st_uid != os.geteuid()
-            or stat.S_IMODE(metadata.st_mode) & 0o077):
-        raise DeploymentFactoryError("operation carrier root is not private to its owner")
+    if not operations_root.is_absolute():
+        raise DeploymentFactoryError("operations root must be absolute")
+    flags = (os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
+             | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0))
     try:
-        root.resolve(strict=True).relative_to(operations_root.resolve(strict=True))
-    except (OSError, ValueError) as exc:
-        raise DeploymentFactoryError("operation carrier root escaped operations root") from exc
-    return root
-
-
-def _read_operation_carrier(path: Path, label: str) -> bytes:
-    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
-    try:
-        descriptor = os.open(path, flags)
+        root_descriptor = os.open(operations_root, flags)
     except OSError as exc:
-        raise DeploymentFactoryError(f"{label} cannot be reopened safely") from exc
+        raise DeploymentFactoryError("operations root cannot be pinned") from exc
+    operation_descriptor = None
     try:
-        before = os.fstat(descriptor)
-        if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1
-                or before.st_uid != os.geteuid()
-                or stat.S_IMODE(before.st_mode) & 0o077):
+        root_identity = os.fstat(root_descriptor)
+        _validate_directory(root_identity, "operations root", private=False)
+        try:
+            operation_descriptor = os.open(
+                operation_key, flags, dir_fd=root_descriptor)
+        except OSError as exc:
+            raise DeploymentFactoryError("operation carrier root cannot be pinned") from exc
+        operation_identity = os.fstat(operation_descriptor)
+        _validate_directory(operation_identity, "operation carrier root", private=True)
+        try:
+            entry = os.stat(operation_key, dir_fd=root_descriptor,
+                            follow_symlinks=False)
+        except OSError as exc:
             raise DeploymentFactoryError(
-                f"{label} is not a private, single-link regular file")
-        chunks = []
-        size = 0
-        while True:
-            block = os.read(descriptor, 1024 * 1024)
-            if not block:
-                break
-            chunks.append(block)
-            size += len(block)
-        after = os.fstat(descriptor)
-        identity = lambda row: (
-            row.st_dev, row.st_ino, row.st_mode, row.st_nlink, row.st_uid,
-            row.st_size, row.st_mtime_ns, row.st_ctime_ns)
-        if identity(before) != identity(after) or size != after.st_size:
-            raise DeploymentFactoryError(f"{label} changed while it was reopened")
-        return b"".join(chunks)
+                "operation carrier root entry changed while pinning") from exc
+        if _directory_identity(entry) != _directory_identity(operation_identity):
+            raise DeploymentFactoryError("operation carrier root entry changed while pinning")
+        yield (operations_root, root_descriptor, root_identity,
+               operation_descriptor, operation_identity)
     finally:
-        os.close(descriptor)
+        if operation_descriptor is not None:
+            os.close(operation_descriptor)
+        os.close(root_descriptor)
+
+
+def _verify_operation_chain(operations_root: Path, root_descriptor: int,
+                            root_identity: os.stat_result, operation_key: str,
+                            operation_descriptor: int,
+                            operation_identity: os.stat_result) -> None:
+    current_root = os.fstat(root_descriptor)
+    current_operation = os.fstat(operation_descriptor)
+    try:
+        root_entry = os.stat(operations_root, follow_symlinks=False)
+        operation_entry = os.stat(
+            operation_key, dir_fd=root_descriptor, follow_symlinks=False)
+    except OSError as exc:
+        raise DeploymentFactoryError("operation carrier parent chain changed") from exc
+    if (_directory_identity(current_root) != _directory_identity(root_identity)
+            or _directory_identity(current_operation) != _directory_identity(operation_identity)
+            or _directory_identity(root_entry) != _directory_identity(root_identity)
+            or _directory_identity(operation_entry) != _directory_identity(operation_identity)):
+        raise DeploymentFactoryError("operation carrier parent chain changed")
+
+
+def _operation_carrier_root(config: deployment.DiscoveryDeployment,
+                            operation_key: str) -> Path:
+    with _pinned_operation_directory(config, operation_key) as pinned:
+        operations_root, root_fd, root_identity, operation_fd, operation_identity = pinned
+        _verify_operation_chain(
+            operations_root, root_fd, root_identity, operation_key,
+            operation_fd, operation_identity)
+        return operations_root / operation_key
+
+
+def _read_operation_carrier(descriptor: int, label: str) -> tuple[bytes, os.stat_result]:
+    before = os.fstat(descriptor)
+    if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1
+            or before.st_uid != os.geteuid()
+            or stat.S_IMODE(before.st_mode) & 0o077):
+        raise DeploymentFactoryError(
+            f"{label} is not a private, single-link regular file")
+    os.lseek(descriptor, 0, os.SEEK_SET)
+    chunks = []
+    size = 0
+    while True:
+        block = os.read(descriptor, 1024 * 1024)
+        if not block:
+            break
+        chunks.append(block)
+        size += len(block)
+    after = os.fstat(descriptor)
+    if _file_identity(before) != _file_identity(after) or size != after.st_size:
+        raise DeploymentFactoryError(f"{label} changed while it was reopened")
+    return b"".join(chunks), after
 
 
 def _write_operation_carrier(config: deployment.DiscoveryDeployment,
@@ -1204,22 +1259,66 @@ def _write_operation_carrier(config: deployment.DiscoveryDeployment,
                              label: str) -> Path:
     if name not in {"source-manifest.json", "evidence-policy.json"}:
         raise DeploymentFactoryError("operation carrier name is not allowlisted")
-    root = _operation_carrier_root(config, operation_key)
-    path = root / name
-    try:
-        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL
-                              | getattr(os, "O_NOFOLLOW", 0), 0o600)
-    except FileExistsError:
-        if _read_operation_carrier(path, label) != raw:
-            raise DeploymentFactoryError(f"{label} already exists with different bytes")
-    else:
-        with os.fdopen(descriptor, "wb") as stream:
-            stream.write(raw)
-            stream.flush()
-            os.fsync(stream.fileno())
-        if _read_operation_carrier(path, label) != raw:
-            raise DeploymentFactoryError(f"{label} changed after it was sealed")
-    return path.resolve(strict=True)
+    with _pinned_operation_directory(config, operation_key) as pinned:
+        operations_root, root_fd, root_identity, operation_fd, operation_identity = pinned
+        flags = (os.O_RDWR | os.O_CREAT | os.O_EXCL
+                 | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0))
+        try:
+            descriptor = os.open(name, flags, 0o600, dir_fd=operation_fd)
+        except FileExistsError:
+            try:
+                descriptor = os.open(
+                    name, os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
+                    | getattr(os, "O_NOFOLLOW", 0), dir_fd=operation_fd)
+            except OSError as exc:
+                raise DeploymentFactoryError(f"{label} cannot be reopened safely") from exc
+            created = False
+        except OSError as exc:
+            raise DeploymentFactoryError(f"{label} cannot be sealed safely") from exc
+        else:
+            created = True
+        try:
+            if created:
+                view = memoryview(raw)
+                while view:
+                    written = os.write(descriptor, view)
+                    if written <= 0:
+                        raise DeploymentFactoryError(f"{label} could not be sealed completely")
+                    view = view[written:]
+                os.fsync(descriptor)
+                os.fsync(operation_fd)
+            actual, file_identity = _read_operation_carrier(descriptor, label)
+            if actual != raw:
+                qualifier = "changed after it was sealed" if created else \
+                    "already exists with different bytes"
+                raise DeploymentFactoryError(f"{label} {qualifier}")
+            try:
+                entry = os.stat(name, dir_fd=operation_fd, follow_symlinks=False)
+            except OSError as exc:
+                raise DeploymentFactoryError(f"{label} directory entry changed") from exc
+            if (_file_identity(entry) != _file_identity(file_identity)
+                    or entry.st_nlink != 1):
+                raise DeploymentFactoryError(f"{label} directory entry changed")
+            _verify_operation_chain(
+                operations_root, root_fd, root_identity, operation_key,
+                operation_fd, operation_identity)
+            # This is the final namespace read before returning a path-based
+            # binding: it must still name the exact inode held by descriptor.
+            try:
+                final_entry = os.stat(
+                    name, dir_fd=operation_fd, follow_symlinks=False)
+            except OSError as exc:
+                raise DeploymentFactoryError(
+                    f"{label} final directory entry changed") from exc
+            if (_file_identity(final_entry) != _file_identity(file_identity)
+                    or final_entry.st_nlink != 1):
+                raise DeploymentFactoryError(f"{label} final directory entry changed")
+            _verify_operation_chain(
+                operations_root, root_fd, root_identity, operation_key,
+                operation_fd, operation_identity)
+            return operations_root / operation_key / name
+        finally:
+            os.close(descriptor)
 
 
 def _manifest_file_for_operation(config: deployment.DiscoveryDeployment,
@@ -1228,7 +1327,7 @@ def _manifest_file_for_operation(config: deployment.DiscoveryDeployment,
     raw = _manifest_carrier_bytes(candidate)
     path = _write_operation_carrier(
         config, operation_key, "source-manifest.json", raw, "source manifest carrier")
-    return evidence.BoundInputFile("manifest", path.resolve(), candidate.source_manifest_sha256)
+    return evidence.BoundInputFile("manifest", path, candidate.source_manifest_sha256)
 
 
 def _manifest_file(config: deployment.DiscoveryDeployment,
