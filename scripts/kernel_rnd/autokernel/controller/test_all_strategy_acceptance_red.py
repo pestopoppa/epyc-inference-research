@@ -85,6 +85,137 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
                 "disposition": policy["terminal_rule"], "policy": policy}
         self.assertIsNone(C._select_portfolio_binding(state, config))
 
+    def _real_portfolio_config(self, root: Path, records, *, iterations: int):
+        portfolio = hypothesis_portfolio.Portfolio(
+            {"hypotheses": list(records), "frames": [], "do_not_repeat": []},
+            "f" * 64)
+        authority = {
+            row["hypothesis_id"]: self.dispatch[row["hypothesis_id"]]
+            for row in records}
+        return C.ControllerConfig(
+            root, iterations, dry_run=False,
+            planner_context={"portfolio_dispatch_authority": authority},
+            planner_context_sha256="e" * 64,
+            production_base_commit="0" * 40,
+            instrument_commit="1" * 40,
+            hypothesis_portfolio=portfolio,
+            hypothesis_portfolio_sha256=portfolio.sha256)
+
+    @staticmethod
+    def _bound_candidate(fixture, binding, context, sequence):
+        base = fixture.portfolio_candidate(binding)
+        assignment = context["authoring_assignment"]
+        patch = base.source_manifest.patch_bytes.replace(
+            b"+y\n", f"+y{sequence}\n".encode())
+        manifest = dataclasses.replace(
+            base.source_manifest,
+            campaign_id=assignment["campaign_id"],
+            proposal_id=assignment["proposal_id"],
+            candidate_id=assignment["candidate_id"],
+            patch_bytes=patch,
+            patch_sha256=__import__("hashlib").sha256(patch).hexdigest())
+        proposal = {
+            **base.proposal,
+            "proposal_id": assignment["proposal_id"]}
+        return dataclasses.replace(
+            base, proposal=proposal, source_manifest=manifest,
+            source_manifest_sha256=manifest.patch_bundle_sha256)
+
+    def test_measured_terminal_automatically_selects_next_then_exhausts(self):
+        """All four ranks must advance without an operator/controller restart."""
+        fixture = TD.Tests(methodName="runTest")
+        records = sorted(
+            self.portfolio.eligible_hypotheses(),
+            key=lambda row: row["priority"]["rank"])
+
+        class Planner:
+            def __init__(self):
+                self.selected = []
+                self.sequence = 0
+
+            def attest(self):
+                return {**C.SOL, "runtime": TD.RUNTIME}
+
+            def plan(self, *, context, workspace):
+                self.sequence += 1
+                binding = context["authoring_assignment"]["portfolio_binding"]
+                self.selected.append(binding["hypothesis_id"])
+                return AllStrategyAcceptanceRedGate._bound_candidate(
+                    fixture, binding, context, self.sequence)
+
+        expected = [
+            row["hypothesis_id"]
+            for row in records
+            for _ in range(row["decision_policy"]["max_distinct_candidates"])]
+        with tempfile.TemporaryDirectory() as directory:
+            config = self._real_portfolio_config(
+                Path(directory), records, iterations=len(expected) + 1)
+            planner = Planner()
+            result = C.run_controller(
+                config, planner=planner,
+                critic=TD.FakeCritic(["accept"] * len(expected)),
+                screener=TD.FakeScreen([-0.01] * len(expected)),
+                lease=TD.Lease())
+        self.assertEqual(planner.selected, expected)
+        self.assertEqual(result["terminal_reason"], "portfolio_exhausted")
+        self.assertEqual(set(result["portfolio_terminals"]),
+                         {row["hypothesis_id"] for row in records})
+        self.assertTrue(all(
+            row["disposition"] == "retire"
+            for row in result["portfolio_terminals"].values()))
+
+    def test_each_strategy_positive_s1_runs_one_s2_then_nominates(self):
+        """Replication reuses the candidate and never asks either actor twice."""
+        fixture = TD.Tests(methodName="runTest")
+        records = {
+            row["hypothesis_id"]: row
+            for row in self.portfolio.eligible_hypotheses()}
+        for hypothesis_id, _template, _op, _cases in ELIGIBLE:
+            with self.subTest(hypothesis=hypothesis_id), \
+                    tempfile.TemporaryDirectory() as directory:
+                record = records[hypothesis_id]
+
+                class Planner:
+                    def __init__(self):
+                        self.calls = 0
+
+                    def attest(self):
+                        return {**C.SOL, "runtime": TD.RUNTIME}
+
+                    def plan(self, *, context, workspace):
+                        self.calls += 1
+                        binding = context[
+                            "authoring_assignment"]["portfolio_binding"]
+                        return AllStrategyAcceptanceRedGate._bound_candidate(
+                            fixture, binding, context, self.calls)
+
+                class Critic(TD.FakeCritic):
+                    def __init__(self):
+                        super().__init__(["accept"])
+                        self.calls = 0
+
+                    def review(self, *args, **kwargs):
+                        self.calls += 1
+                        return super().review(*args, **kwargs)
+
+                planner, critic = Planner(), Critic()
+                screen = TD.FakeScreen([0.02, 0.02])
+                result = C.run_controller(
+                    self._real_portfolio_config(
+                        Path(directory), [record], iterations=3),
+                    planner=planner, critic=critic,
+                    screener=screen, lease=TD.Lease())
+                self.assertEqual((planner.calls, critic.calls, screen.calls),
+                                 (1, 1, 2))
+                self.assertEqual(
+                    [row["status"] for row in result["iterations"]],
+                    ["candidate", "top_k_replicated_candidate"])
+                self.assertEqual(
+                    result["portfolio_terminals"][hypothesis_id]["disposition"],
+                    "nominated")
+                self.assertEqual(result["terminal_reason"],
+                                 "portfolio_exhausted")
+
     def test_authoring_refusals_do_not_spend_the_scientific_candidate_budget(self):
         """RED: no measurement cannot establish 'no gain after N candidates'."""
         records = {row["hypothesis_id"]: row
@@ -989,6 +1120,14 @@ class EvidenceStageResumeRedGate(unittest.TestCase):
                 plan(base / "inputs"),
                 attribution_arm_order_seed_sha256="f" * 64,
                 attribution_arm_order=("anchor", "candidate"))
+            policy_raw = __import__("json").dumps(
+                E._policy_payload(current), sort_keys=True,
+                separators=(",", ":")).encode()
+            current.policy.path.write_bytes(policy_raw)
+            current = dataclasses.replace(
+                current, policy=E.BoundInputFile(
+                    current.policy.role, current.policy.path,
+                    __import__("hashlib").sha256(policy_raw).hexdigest()))
             executors = FakeExecutors()
             bundle = self._produce(
                 base / "evidence", current, executors, ClaimFactory())
