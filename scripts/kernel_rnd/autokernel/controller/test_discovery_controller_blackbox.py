@@ -47,7 +47,21 @@ class Manifest:
 
     @property
     def patch_bundle_sha256(self):
-        return H
+        raw = json.dumps({
+            "schema": D.source_candidate.SCHEMA_SOURCE_PATCH,
+            "campaign_id": self.campaign_id, "proposal_id": self.proposal_id,
+            "candidate_id": self.candidate_id, "source_tree": self.source_tree,
+            "production_base_commit": self.production_base_commit,
+            "instrument_commit": self.instrument_commit,
+            "change_class": self.change_class,
+            "declared_files": list(self.declared_files),
+            "declared_symbols": {key: list(value)
+                                 for key, value in self.declared_symbols.items()},
+            "mechanism_id": self.mechanism_id, "patch_sha256": self.patch_sha256,
+            "patch_encoding": "base64",
+            "patch_base64": base64.b64encode(self.patch_bytes).decode("ascii"),
+        }, sort_keys=True, separators=(",", ":")).encode()
+        return hashlib.sha256(raw).hexdigest()
 
 
 class Planner:
@@ -59,14 +73,15 @@ class Planner:
 
     def plan(self, *, context, workspace):
         self.calls += 1
+        manifest = Manifest()
         return D.PlannedCandidate(
             "akh-blackbox",
             "bounded source hypothesis",
             "no throughput improvement",
             {"backend": "gpu", "phase": "decode"},
             {"proposal_id": "akp-blackbox"},
-            Manifest(),
-            H,
+            manifest,
+            manifest.patch_bundle_sha256,
         )
 
 
@@ -442,6 +457,22 @@ class BlackBoxLaunchGate(unittest.TestCase):
             self.assertEqual(restored.source_manifest_sha256,
                              item.source_manifest.patch_bundle_sha256)
             self.assertEqual(restored.source_manifest.patch_bytes, patch_bytes)
+
+            # A second, internally self-consistent raw carrier must not survive
+            # resume merely because its own file hash was updated.  The decoded
+            # bytes must equal the authoritative carrier reconstructed from the
+            # typed manifest as well.
+            pending = D._pending_item(item)
+            raw = json.loads(base64.b64decode(
+                pending["manifest_raw_base64"], validate=True))
+            raw["schema"] = "epyc.autokernel.source_patch.v1"
+            altered = json.dumps(
+                raw, sort_keys=True, separators=(",", ":")).encode()
+            pending["manifest_raw_base64"] = base64.b64encode(altered).decode("ascii")
+            pending["manifest_file_sha256"] = hashlib.sha256(altered).hexdigest()
+            with self.assertRaisesRegex(D.DiscoveryControllerError,
+                                        "pending manifest identity mismatch"):
+                D._restore_pending({"candidate": pending})
 
     def test_real_planner_multirow_dispatch_and_fallback_advice_load(self):
         """Regression for the first live Sol artifact rejected before Fable."""

@@ -1397,7 +1397,7 @@ def _context(state: Mapping[str, Any], tracker: hypotheses.HypothesisTracker, tu
 
 def _pending_item(item: PlannedCandidate) -> dict[str, Any]:
     manifest = item.source_manifest
-    raw_manifest=json.dumps({"schema":source_candidate.SCHEMA_SOURCE_PATCH,"campaign_id":manifest.campaign_id,"proposal_id":manifest.proposal_id,"candidate_id":manifest.candidate_id,"source_tree":manifest.source_tree,"production_base_commit":manifest.production_base_commit,"instrument_commit":manifest.instrument_commit,"change_class":manifest.change_class,"declared_files":list(manifest.declared_files),"declared_symbols":{k:list(v) for k,v in manifest.declared_symbols.items()},"mechanism_id":manifest.mechanism_id,"patch_sha256":manifest.patch_sha256,"patch_encoding":"base64","patch_base64":base64.b64encode(manifest.patch_bytes).decode("ascii")},sort_keys=True,separators=(",",":")).encode()
+    raw_manifest=source_candidate.source_patch_manifest_bytes(manifest)
     return {"hypothesis_id": item.hypothesis_id, "statement": item.statement,
             "falsifier": item.falsifier, "regime": dict(item.regime),
             "proposal": dict(item.proposal), "source_manifest_sha256": item.source_manifest_sha256,
@@ -1419,8 +1419,17 @@ def _restore_pending(value: Mapping[str, Any]) -> PlannedCandidate:
     try:
         manifest=source_candidate.SourcePatchManifest(campaign_id=m["campaign_id"],proposal_id=m["proposal_id"],candidate_id=m["candidate_id"],source_tree=m["source_tree"],production_base_commit=m["production_base_commit"],instrument_commit=m["instrument_commit"],change_class=m["change_class"],declared_files=tuple(m["declared_files"]),declared_symbols={k:tuple(v) for k,v in m["declared_symbols"].items()},mechanism_id=m["mechanism_id"],patch_sha256=m["patch_sha256"],patch_bytes=base64.b64decode(m["patch_base64"],validate=True))
     except (KeyError,TypeError,ValueError,source_candidate.SourceCandidateError) as exc: raise DiscoveryControllerError("pending candidate manifest is invalid") from exc
-    raw_bytes=base64.b64decode(raw.get("manifest_raw_base64",""),validate=True)
-    if hashlib.sha256(raw_bytes).hexdigest()!=raw.get("manifest_file_sha256") or manifest.patch_bundle_sha256!=raw.get("patch_bundle_sha256") or raw.get("source_manifest_sha256")!=manifest.patch_bundle_sha256: raise DiscoveryControllerError("pending manifest identity mismatch")
+    try:
+        raw_bytes=base64.b64decode(raw.get("manifest_raw_base64",""),validate=True)
+    except (TypeError, ValueError) as exc:
+        raise DiscoveryControllerError("pending manifest carrier is invalid") from exc
+    canonical_bytes=source_candidate.source_patch_manifest_bytes(manifest)
+    canonical_sha256=hashlib.sha256(canonical_bytes).hexdigest()
+    identities=(canonical_sha256, manifest.patch_bundle_sha256,
+                raw.get("manifest_file_sha256"), raw.get("patch_bundle_sha256"),
+                raw.get("source_manifest_sha256"))
+    if raw_bytes != canonical_bytes or any(value != canonical_sha256 for value in identities):
+        raise DiscoveryControllerError("pending manifest identity mismatch")
     intent = raw.get("experiment_intent")
     if intent is not None and not isinstance(intent, Mapping):
         raise DiscoveryControllerError("pending experiment intent is malformed")

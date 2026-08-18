@@ -13,7 +13,7 @@ from pathlib import Path
 from types import SimpleNamespace
 import tempfile
 
-from .. import hypothesis_portfolio
+from .. import hypothesis_portfolio, source_candidate
 from . import discovery_deployment_factory as F
 from . import discovery_controller as C
 
@@ -24,7 +24,106 @@ def template(path="ggml/src/ggml-cuda/fattn.cu", symbol="fattn_kernel"):
                                 {path: frozenset({symbol})}, {"kind": "fattn"})
 
 
+def planned_source_candidate() -> C.PlannedCandidate:
+    relative = "ggml/src/ggml-cuda/fattn.cu"
+    symbol = "fattn_kernel"
+    patch_bytes = (
+        f"diff --git a/{relative} b/{relative}\n"
+        f"--- a/{relative}\n+++ b/{relative}\n"
+        f"@@ -1 +1 @@ {symbol}\n-old\n+new\n"
+    ).encode()
+    manifest = source_candidate.SourcePatchManifest(
+        campaign_id="ak-test", proposal_id="akp-test", candidate_id="akc-test",
+        source_tree="llama.cpp", production_base_commit="0" * 40,
+        instrument_commit="1" * 40, change_class="arithmetic",
+        declared_files=(relative,), declared_symbols={relative: (symbol,)},
+        mechanism_id="manifest-carrier-regression",
+        patch_sha256=hashlib.sha256(patch_bytes).hexdigest(), patch_bytes=patch_bytes)
+    proposal = {
+        "proposal_id": manifest.proposal_id, "change_class": manifest.change_class,
+        "change": {"files_and_symbols": [f"{relative}:{symbol}"],
+                   "estimated_diff_size": 2}}
+    return C.PlannedCandidate(
+        "akh-manifest-carrier", "canonical manifest carrier",
+        "carrier identity mismatch", {"backend": "gpu"}, proposal, manifest,
+        manifest.patch_bundle_sha256)
+
+
 class DeploymentFactoryTests(unittest.TestCase):
+    def test_live_shape_manifest_and_policy_share_real_operation_namespace(self):
+        candidate = planned_source_candidate()
+        with tempfile.TemporaryDirectory() as directory:
+            operations = Path(directory).resolve() / "operations"
+            operation_key = "a" * 64
+            operation_root = operations / operation_key
+            operation_root.mkdir(mode=0o700, parents=True)
+            config = SimpleNamespace(operations_root=operations)
+
+            manifest_file = F._manifest_file_for_operation(
+                config, candidate, operation_key)
+            expected = source_candidate.source_patch_manifest_bytes(
+                candidate.source_manifest)
+            self.assertEqual(manifest_file.path.parent, operation_root)
+            self.assertEqual(manifest_file.path.read_bytes(), expected)
+            self.assertEqual(hashlib.sha256(expected).hexdigest(),
+                             candidate.source_manifest_sha256)
+            self.assertEqual(json.loads(expected)["schema"],
+                             source_candidate.SCHEMA_SOURCE_PATCH)
+
+            policy = b'{"schema":"test-policy"}'
+            policy_path = F._write_operation_carrier(
+                config, operation_key, "evidence-policy.json", policy,
+                "sealed evidence policy")
+            self.assertEqual(policy_path.parent, operation_root)
+            self.assertEqual(policy_path.read_bytes(), policy)
+            build_key = "b" * 64
+            reopened = F._manifest_file(
+                config, candidate, SimpleNamespace(
+                    operation_key=operation_key, build_key=build_key))
+            self.assertEqual(reopened.path, manifest_file.path)
+            self.assertEqual(reopened.path.read_bytes(), expected)
+            self.assertFalse((operations / build_key).exists())
+            self.assertFalse((operations / "materialization").exists())
+
+            for index, link in enumerate(("hardlink", "symlink"), start=1):
+                unsafe_key = str(index) * 64
+                unsafe_root = operations / unsafe_key
+                unsafe_root.mkdir(mode=0o700)
+                target = Path(directory).resolve() / f"{link}-target.json"
+                target.write_bytes(expected)
+                target.chmod(0o600)
+                carrier = unsafe_root / "source-manifest.json"
+                if link == "hardlink":
+                    os.link(target, carrier)
+                else:
+                    carrier.symlink_to(target)
+                with self.subTest(link=link), self.assertRaisesRegex(
+                        F.DeploymentFactoryError,
+                        "(single-link regular file|reopened safely)"):
+                    F._manifest_file_for_operation(config, candidate, unsafe_key)
+
+    def test_manifest_carrier_refuses_missing_or_escaped_operation_namespace(self):
+        candidate = planned_source_candidate()
+        with tempfile.TemporaryDirectory() as directory:
+            operations = Path(directory).resolve() / "operations"
+            operations.mkdir()
+            config = SimpleNamespace(operations_root=operations)
+            with self.assertRaisesRegex(F.DeploymentFactoryError,
+                                        "operation carrier root"):
+                F._manifest_file_for_operation(config, candidate, "a" * 64)
+            insecure = operations / ("c" * 64)
+            insecure.mkdir(mode=0o700)
+            insecure.chmod(0o755)
+            with self.assertRaisesRegex(F.DeploymentFactoryError,
+                                        "not private to its owner"):
+                F._manifest_file_for_operation(config, candidate, "c" * 64)
+            outside = Path(directory).resolve() / "outside"
+            outside.mkdir()
+            (operations / ("b" * 64)).symlink_to(outside, target_is_directory=True)
+            with self.assertRaisesRegex(F.DeploymentFactoryError,
+                                        "operation carrier root"):
+                F._manifest_file_for_operation(config, candidate, "b" * 64)
+
     def test_v2_templates_are_extracted_from_exact_sealed_profile(self):
         self.assertEqual(
             hashlib.sha256(F._PROFILE_TRACE_RECEIPT.read_bytes()).hexdigest(),
@@ -640,9 +739,19 @@ class DeploymentFactoryTests(unittest.TestCase):
             bound = F.evidence.BoundInputFile(
                 "production_artifact", artifact,
                 hashlib.sha256(artifact.read_bytes()).hexdigest())
+            operations = root / "operations"
+            operations.mkdir()
             calls = []
-            source = F.SourceBuilderBinding(
-                lambda _candidate, _authorization, permit: calls.append(dict(permit)) or dict(permit))
+            def source_build(_candidate, _authorization, permit):
+                carrier = operations / permit["operation_key"] / "source-manifest.json"
+                self.assertTrue(carrier.is_file())
+                self.assertEqual(
+                    carrier.read_bytes(),
+                    source_candidate.source_patch_manifest_bytes(
+                        _candidate.source_manifest))
+                calls.append(dict(permit))
+                return dict(permit)
+            source = F.SourceBuilderBinding(source_build)
             templates = mock.Mock(spec=F.ExperimentTemplateRegistry)
             templates.registry_sha256 = "e" * 64
             templates.templates = {}
@@ -663,10 +772,12 @@ class DeploymentFactoryTests(unittest.TestCase):
                 critic_wrapper=SimpleNamespace(path=Path("/sealed/claude-fable5"),
                                                sha256="b" * 64),
                 production_path=protected, instrument_path=protected,
-                claim_timeout_s=0.0, instrument_branch="measurement-instrument")
+                operations_root=operations, claim_timeout_s=0.0,
+                production_head="0" * 40, instrument_commit="1" * 40,
+                instrument_branch="measurement-instrument")
             config.revalidate = mock.Mock()
-            candidate = mock.Mock(experiment_intent=mock.sentinel.intent,
-                                  source_manifest=mock.Mock())
+            candidate = planned_source_candidate()
+            restored = C._restore_pending({"candidate": C._pending_item(candidate)})
             adapters = {}
             def adapter_factory(**kwargs):
                 adapters.update(kwargs)
@@ -677,6 +788,7 @@ class DeploymentFactoryTests(unittest.TestCase):
                                    side_effect=adapter_factory), \
                  mock.patch.object(F, "_production_runtime_snapshot",
                                    return_value=((bound,), {})), \
+                 mock.patch.object(F, "_reviewed_source_package", return_value=None), \
                  mock.patch.object(F.controller, "build_controller_adapters",
                                    side_effect=lambda **kwargs: kwargs), \
                  mock.patch.object(F.codex_container_actor, "runtime_identity",
@@ -686,10 +798,21 @@ class DeploymentFactoryTests(unittest.TestCase):
                 F.materialize(config, {}, correctness_executor=mock.Mock(),
                               rocprof_executor=mock.Mock(), claim_journal=mock.Mock())
                 build = adapters["build_source"]
+                (operations / ("1" * 64)).mkdir(mode=0o700)
                 first = build(candidate, object(), {"operation_key": "1" * 64})
-                second = build(candidate, object(), {"operation_key": "2" * 64})
+                (operations / ("2" * 64)).mkdir(mode=0o700)
+                second = build(restored, object(), {"operation_key": "2" * 64})
+                (operations / ("3" * 64)).mkdir(mode=0o700)
+                with mock.patch.object(
+                        source_candidate, "SCHEMA_SOURCE_PATCH",
+                        "epyc.autokernel.source_patch.v1"), self.assertRaisesRegex(
+                            F.DeploymentFactoryError,
+                            "canonical carrier hash mismatch"):
+                    build(restored, object(), {"operation_key": "3" * 64})
             self.assertEqual(first["operation_key"], "1" * 64)
             self.assertEqual(second["operation_key"], "2" * 64)
+            self.assertFalse((operations / ("3" * 64) / "source-manifest.json").exists())
+            self.assertEqual(len(calls), 2)
             self.assertEqual([row["deployment_config_sha256"] for row in calls],
                              [config.config_sha256, config.config_sha256])
             self.assertEqual([row["instrument_branch"] for row in calls],

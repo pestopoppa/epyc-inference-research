@@ -202,6 +202,13 @@ class GpuSourceAdapterTests(unittest.TestCase):
             adapter, candidate, authorization, lease, inflight, current, executors = self.setup(directory)
             manager = ReservationManager(waits=1)
             adapter.reservation_manager = manager
+            original_build = adapter.build_source
+            def build_with_manifest(*args):
+                operation_root = adapter._root(lease["operation_key"])
+                (operation_root / "source-manifest.json").write_bytes(
+                    b"sealed manifest")
+                return original_build(*args)
+            adapter.build_source = build_with_manifest
             with mock.patch.object(D, "GpuSourceScreener", FakeDelegate), \
                     self.assertRaises(D.ResourceWait) as caught:
                 adapter.screen(candidate, authorization, lease)
@@ -210,6 +217,8 @@ class GpuSourceAdapterTests(unittest.TestCase):
             root = adapter._root(lease["operation_key"])
             self.assertFalse((root / "proof").exists())
             self.assertFalse((root / "runner-plan.json").exists())
+            self.assertEqual(
+                (root / "source-manifest.json").read_bytes(), b"sealed manifest")
             self.assertEqual(adapter.reconcile(inflight).status, "safe_to_start")
             with mock.patch.object(D, "GpuSourceScreener", FakeDelegate):
                 result = adapter.screen(candidate, authorization, lease)

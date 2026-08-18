@@ -14,6 +14,7 @@ import hashlib
 import json
 import os
 import re
+import stat
 import subprocess
 from pathlib import Path
 from types import MappingProxyType
@@ -1137,33 +1138,105 @@ def static_template_registry_sha256() -> str:
     return _template_registry().registry_sha256
 
 
+def _manifest_carrier_bytes(candidate: controller.PlannedCandidate) -> bytes:
+    raw = source_candidate.source_patch_manifest_bytes(candidate.source_manifest)
+    if hashlib.sha256(raw).hexdigest() != candidate.source_manifest_sha256:
+        raise DeploymentFactoryError("candidate manifest canonical carrier hash mismatch")
+    return raw
+
+
+def _operation_carrier_root(config: deployment.DiscoveryDeployment,
+                            operation_key: str) -> Path:
+    if not isinstance(operation_key, str) or not controller.HASH.fullmatch(operation_key):
+        raise DeploymentFactoryError("operation carrier requires an exact operation key")
+    operations_root = Path(config.operations_root)
+    if (not operations_root.is_absolute() or operations_root.is_symlink()
+            or not operations_root.is_dir()):
+        raise DeploymentFactoryError("operations root is not a real directory")
+    root = operations_root / operation_key
+    if root.is_symlink() or not root.is_dir():
+        raise DeploymentFactoryError("operation carrier root is not a real directory")
+    metadata = root.stat()
+    if (not stat.S_ISDIR(metadata.st_mode) or metadata.st_uid != os.geteuid()
+            or stat.S_IMODE(metadata.st_mode) & 0o077):
+        raise DeploymentFactoryError("operation carrier root is not private to its owner")
+    try:
+        root.resolve(strict=True).relative_to(operations_root.resolve(strict=True))
+    except (OSError, ValueError) as exc:
+        raise DeploymentFactoryError("operation carrier root escaped operations root") from exc
+    return root
+
+
+def _read_operation_carrier(path: Path, label: str) -> bytes:
+    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as exc:
+        raise DeploymentFactoryError(f"{label} cannot be reopened safely") from exc
+    try:
+        before = os.fstat(descriptor)
+        if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1
+                or before.st_uid != os.geteuid()
+                or stat.S_IMODE(before.st_mode) & 0o077):
+            raise DeploymentFactoryError(
+                f"{label} is not a private, single-link regular file")
+        chunks = []
+        size = 0
+        while True:
+            block = os.read(descriptor, 1024 * 1024)
+            if not block:
+                break
+            chunks.append(block)
+            size += len(block)
+        after = os.fstat(descriptor)
+        identity = lambda row: (
+            row.st_dev, row.st_ino, row.st_mode, row.st_nlink, row.st_uid,
+            row.st_size, row.st_mtime_ns, row.st_ctime_ns)
+        if identity(before) != identity(after) or size != after.st_size:
+            raise DeploymentFactoryError(f"{label} changed while it was reopened")
+        return b"".join(chunks)
+    finally:
+        os.close(descriptor)
+
+
+def _write_operation_carrier(config: deployment.DiscoveryDeployment,
+                             operation_key: str, name: str, raw: bytes,
+                             label: str) -> Path:
+    if name not in {"source-manifest.json", "evidence-policy.json"}:
+        raise DeploymentFactoryError("operation carrier name is not allowlisted")
+    root = _operation_carrier_root(config, operation_key)
+    path = root / name
+    try:
+        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL
+                              | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    except FileExistsError:
+        if _read_operation_carrier(path, label) != raw:
+            raise DeploymentFactoryError(f"{label} already exists with different bytes")
+    else:
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(raw)
+            stream.flush()
+            os.fsync(stream.fileno())
+        if _read_operation_carrier(path, label) != raw:
+            raise DeploymentFactoryError(f"{label} changed after it was sealed")
+    return path.resolve(strict=True)
+
+
+def _manifest_file_for_operation(config: deployment.DiscoveryDeployment,
+                                 candidate: controller.PlannedCandidate,
+                                 operation_key: str) -> evidence.BoundInputFile:
+    raw = _manifest_carrier_bytes(candidate)
+    path = _write_operation_carrier(
+        config, operation_key, "source-manifest.json", raw, "source manifest carrier")
+    return evidence.BoundInputFile("manifest", path.resolve(), candidate.source_manifest_sha256)
+
+
 def _manifest_file(config: deployment.DiscoveryDeployment,
                    candidate: controller.PlannedCandidate,
                    build: controller.GpuSourceBuild) -> evidence.BoundInputFile:
-    manifest = candidate.source_manifest
-    value = {"schema": "epyc.autokernel.source_patch.v1",
-             "campaign_id": manifest.campaign_id, "proposal_id": manifest.proposal_id,
-             "candidate_id": manifest.candidate_id, "source_tree": manifest.source_tree,
-             "production_base_commit": manifest.production_base_commit,
-             "instrument_commit": manifest.instrument_commit,
-             "change_class": manifest.change_class,
-             "declared_files": list(manifest.declared_files),
-             "declared_symbols": {path: list(manifest.declared_symbols[path])
-                                  for path in manifest.declared_files},
-             "mechanism_id": manifest.mechanism_id, "patch_sha256": manifest.patch_sha256,
-             "patch_encoding": "base64",
-             "patch_base64": base64.b64encode(manifest.patch_bytes).decode("ascii")}
-    raw = schemas.canonical_bytes(value)
-    if hashlib.sha256(raw).hexdigest() != candidate.source_manifest_sha256:
-        raise DeploymentFactoryError("candidate manifest canonical carrier hash mismatch")
-    assert build.operation_key is not None
-    path = config.operations_root / "materialization" / build.operation_key / "source-manifest.json"
-    if path.exists():
-        if path.is_symlink() or path.read_bytes() != raw:
-            raise DeploymentFactoryError("source manifest carrier already exists with different bytes")
-    else:
-        path.write_bytes(raw)
-    return evidence.BoundInputFile("manifest", path.resolve(), candidate.source_manifest_sha256)
+    if build.operation_key is None:
+        raise DeploymentFactoryError("source build lacks an operation key")
+    return _manifest_file_for_operation(config, candidate, build.operation_key)
 
 
 def _evidence_binding(config: deployment.DiscoveryDeployment) -> EvidencePlanBinding:
@@ -1231,10 +1304,9 @@ def _evidence_binding(config: deployment.DiscoveryDeployment) -> EvidencePlanBin
         def profile_environment(hip: evidence.BoundInputFile) -> tuple[tuple[str, str], ...]:
             return tuple(sorted((*common_environment, ("LD_LIBRARY_PATH",
                 f"{hip.path.parent}:{reward_binary.path.parent}:{profiler_prefix / 'lib'}:/opt/rocm/lib"))))
+        carrier_root = _operation_carrier_root(config, build_.operation_key)
         placeholder = evidence.BoundInputFile(
-            "execution_policy",
-            (config.operations_root / "materialization" / build_.operation_key
-             / "evidence-policy.json").resolve(), "0" * 64)
+            "execution_policy", carrier_root / "evidence-policy.json", "0" * 64)
         provisional = evidence.GpuSourceEvidencePlan(
             campaign_id=candidate.source_manifest.campaign_id,
             device_id=config.device_id,
@@ -1271,14 +1343,11 @@ def _evidence_binding(config: deployment.DiscoveryDeployment) -> EvidencePlanBin
             candidate_rocprof_environment=profile_environment(shared.candidate_hip_library),
             anchor_rocprof_environment=profile_environment(shared.anchor_hip_library),
             shared_runtime=shared)
-        policy_path = placeholder.path
         raw = json.dumps(evidence._policy_payload(provisional), sort_keys=True,
                          separators=(",", ":")).encode()
-        if policy_path.exists():
-            if policy_path.is_symlink() or policy_path.read_bytes() != raw:
-                raise DeploymentFactoryError("sealed evidence policy changed for operation")
-        else:
-            policy_path.write_bytes(raw)
+        policy_path = _write_operation_carrier(
+            config, build_.operation_key, "evidence-policy.json", raw,
+            "sealed evidence policy")
         policy = evidence.BoundInputFile(
             "execution_policy", policy_path,
             hashlib.sha256(raw).hexdigest())
@@ -2067,6 +2136,13 @@ def materialize(config: deployment.DiscoveryDeployment, registry: Mapping[str, M
         permit = {**permit, "instrument_branch": config.instrument_branch,
                   "deployment_config_sha256": config.config_sha256}
         snapshot.revalidate()
+        operation_key = permit.get("operation_key")
+        if not isinstance(operation_key, str):
+            raise DeploymentFactoryError("source build permit lacks an operation key")
+        # Seal the exact manifest bytes in the adapter-owned operation namespace
+        # before an expensive source builder can be entered.  Evidence binding
+        # later reopens this same file and refuses any intervening mutation.
+        _manifest_file_for_operation(config, candidate, operation_key)
         return source.build(candidate, authorization, permit)
     def plan(candidate: controller.PlannedCandidate, build_: controller.GpuSourceBuild):
         config.revalidate()

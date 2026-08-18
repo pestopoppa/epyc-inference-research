@@ -11,15 +11,28 @@ H="a"*64
 RUNTIME={"kind":"docker_workspace_bind_only","docker_path":"/docker","docker_sha256":H,"image_id":"image","codex_native_sha256":H,"code_mode_host_sha256":H,"ca_certificate_sha256":H,"writable_host_binds":["/workspace"],"host_network_mode":"docker_bridge"}
 CLAUDE_RUNTIME={"kind":"claude_cli_structured_critic","provider":"claude","model":"claude-fable-5","effort":"high","wrapper_path":"/sealed/claude","wrapper_sha256":H,"argv_policy_sha256":H,"auth_staging_policy":"ephemeral_0600_copy_atomic_oauth_rotation_sync_no_secret_receipt"}
 class Manifest:
- campaign_id="ak-test"; proposal_id="akp-test"; candidate_id="akc-test"; source_tree="llama.cpp"; production_base_commit="0"*40; instrument_commit="0"*40; change_class="fusion"; declared_files=("ggml/src/ggml.c",); declared_symbols={"ggml/src/ggml.c":("<file-scope>",)}; mechanism_id="test"; patch_sha256="0"*64; patch_bundle_sha256=H; patch_bytes=b"diff --git a/ggml/src/ggml.c b/ggml/src/ggml.c\n--- a/ggml/src/ggml.c\n+++ b/ggml/src/ggml.c\n@@ -1 +1 @@\n-x\n+y\n"
+ campaign_id="ak-test"; proposal_id="akp-test"; candidate_id="akc-test"; source_tree="llama.cpp"; production_base_commit="0"*40; instrument_commit="0"*40; change_class="fusion"; declared_files=("ggml/src/ggml.c",); declared_symbols={"ggml/src/ggml.c":("<file-scope>",)}; mechanism_id="test"; patch_sha256="0"*64; patch_bytes=b"diff --git a/ggml/src/ggml.c b/ggml/src/ggml.c\n--- a/ggml/src/ggml.c\n+++ b/ggml/src/ggml.c\n@@ -1 +1 @@\n-x\n+y\n"
  patch_text=patch_bytes.decode("utf-8")
  def __init__(self, **values):
   for key, value in values.items(): setattr(self,key,value)
+ @property
+ def patch_bundle_sha256(self):
+  raw=json.dumps({"schema":D.source_candidate.SCHEMA_SOURCE_PATCH,
+      "campaign_id":self.campaign_id,"proposal_id":self.proposal_id,
+      "candidate_id":self.candidate_id,"source_tree":self.source_tree,
+      "production_base_commit":self.production_base_commit,
+      "instrument_commit":self.instrument_commit,"change_class":self.change_class,
+      "declared_files":list(self.declared_files),
+      "declared_symbols":{key:list(value) for key,value in self.declared_symbols.items()},
+      "mechanism_id":self.mechanism_id,"patch_sha256":self.patch_sha256,
+      "patch_encoding":"base64","patch_base64":base64.b64encode(self.patch_bytes).decode("ascii")},
+      sort_keys=True,separators=(",",":")).encode()
+  return hashlib.sha256(raw).hexdigest()
 class FakePlanner:
  def __init__(self): self.calls=[]
  def attest(self): return {**D.SOL,"runtime":RUNTIME}
  def plan(self,*,context,workspace):
-  self.calls.append(context); return D.PlannedCandidate("akh-test-"+str(len(self.calls)),"one-wave reduces cross-wave LDS","no speed improvement invalidates it",{"backend":"gpu","phase":"decode","mechanism":"one_wave"},{"id":"p"+str(len(self.calls))},Manifest(),H)
+  self.calls.append(context); manifest=Manifest(); return D.PlannedCandidate("akh-test-"+str(len(self.calls)),"one-wave reduces cross-wave LDS","no speed improvement invalidates it",{"backend":"gpu","phase":"decode","mechanism":"one_wave"},{"id":"p"+str(len(self.calls))},manifest,manifest.patch_bundle_sha256)
 class FakeCritic:
  def __init__(self,decisions): self.decisions=iter(decisions)
  def attest(self): return {**D.FABLE5_CRITIC,"runtime":CLAUDE_RUNTIME}

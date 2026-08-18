@@ -211,13 +211,21 @@ def _safe_wait_receipts(root: Path, identity: Mapping[str, Any]) -> tuple[dict[s
 
 
 def _is_resumable_wait_root(root: Path, identity: Mapping[str, Any]) -> bool:
-    allowed = {"intent.json", "resource-waits"}
+    allowed = {"intent.json", "source-manifest.json", "resource-waits"}
     if any(path.name not in allowed for path in root.iterdir()):
         return False
+    manifest = root / "source-manifest.json"
+    if manifest.exists() or manifest.is_symlink():
+        try:
+            binding = _regular_binding(manifest, "source-manifest.json")
+        except GpuSourceAdapterError:
+            return False
+        if binding["sha256"] != identity.get("manifest_sha256"):
+            return False
     _safe_wait_receipts(root, identity)
-    # Intent-only means the process died before build/reservation.  Since no
-    # proof or runner carrier exists, re-entering the sealed builder/cache seam
-    # cannot repeat a GPU command.
+    # Intent plus the canonical prebuild manifest means the process stopped no
+    # later than reservation.  With no proof, policy, or runner carrier,
+    # re-entering the sealed builder/cache seam cannot repeat a GPU command.
     return True
 
 
@@ -675,7 +683,7 @@ class GovernedGpuSourceAdapter:
                 raise GpuSourceAdapterError(
                     "operation already has durable state; reconcile instead of restarting")
         else:
-            operation_root.mkdir(parents=True)
+            operation_root.mkdir(mode=0o700, parents=True)
             evidence._seal(operation_root / "intent.json", intent)
         runner_args: dict[str, Any] = {}
         reservation_state: dict[str, Any] = {}
