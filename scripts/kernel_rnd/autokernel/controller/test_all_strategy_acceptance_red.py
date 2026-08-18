@@ -181,13 +181,12 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
         self.assertEqual(generic["expected_cases"], 2868)
         self.assertNotIn(
             "AUTOKERNEL_CORRECTNESS_CASE_SET",
-            generic.get("environment", {}))
+            dict(generic.get("environment_overrides", ())))
         self.assertEqual(dedicated["expected_cases"], len(required))
         self.assertEqual(dedicated["required_cases"], required)
         self.assertEqual(dedicated["case_set"], "odd_gqa7_d64_q1_v1")
-        self.assertEqual(
-            dedicated["environment"]["AUTOKERNEL_CORRECTNESS_CASE_SET"],
-            "odd_gqa7_d64_q1_v1")
+        self.assertEqual(dict(dedicated["environment_overrides"]), {
+            "AUTOKERNEL_CORRECTNESS_CASE_SET": "odd_gqa7_d64_q1_v1"})
         # The plan/policy/receipt API must carry both invocations.  A template
         # declaration that is never consumed is deliberately not acceptance.
         self.assertIn("correctness_invocations",
@@ -346,6 +345,11 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
                 "portfolio_hypothesis_id": binding["hypothesis_id"],
                 "portfolio_decision_policy": binding["decision_policy"],
                 "source_manifest_sha256": item.source_manifest_sha256,
+                "result_sha256": classified.result_sha256,
+                "evidence": {
+                    "baseline": classified.baseline_sha256,
+                    "source": classified.source_proof_sha256,
+                    "dispatch": classified.dispatch_proof_sha256},
                 "scientific_budget_spent": True,
             }
             state = {"iterations": [row], "portfolio_terminals": {}}
@@ -376,6 +380,43 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
         self.assertNotIn("GGML_CUDA_DISABLE_GRAPHS", result["env"])
         self.assertEqual(result["metric_contract"]["graph_environment"],
                          {"GGML_CUDA_DISABLE_GRAPHS": None})
+        self.assertIs(
+            result["graphs_on_output_integrity"]["reward_admissible"], True)
+
+    def test_graphs_on_reward_inspects_outputs_and_unique_inputs(self):
+        """RED: phase/content replay must fail before its speed is scored."""
+        fixture = TR.TestGpuDiscoveryBatchedSubprocess(methodName="runTest")
+        for corruption, pattern in (
+                ("output_mismatch", "output"),
+                ("reused_input", "input")):
+            with self.subTest(corruption=corruption), \
+                    tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                build = TR._build(root, rocwmma="ON", mfma="OFF")
+                model = root / "model.gguf"
+                model.write_bytes(b"model")
+                row = __import__("json").loads(fixture._row([100.0] * 3))
+                if corruption == "output_mismatch":
+                    row["autokernel_output_hashes"] = (
+                        "a0a0a0a0a0a0a065/f0f0f0f0f0f0f0ff,"
+                        "a0a0a0a0a0a0a066/a0a0a0a0a0a0a066,"
+                        "a0a0a0a0a0a0a067/a0a0a0a0a0a0a067")
+                else:
+                    row["autokernel_input_hashes"] = ",".join(
+                        ["a1a1a1a1a1a1a1a1"] * 3)
+                process = fixture._Process(
+                    __import__("json").dumps(row) + "\n")
+                with self.assertRaisesRegex(RuntimeError, pattern):
+                    C.gpu_discovery._invoke_locked(
+                        build=build, model=model, seed=8613,
+                        baseline_vram=0, flash_attention=True,
+                        expected_source_commit=C.gpu_discovery.SOURCE_COMMIT,
+                        repetitions=3, runtime_graphs="on",
+                        process_factory=lambda _argv, **_kwargs: process,
+                        kfd_pid_provider=lambda: (123,),
+                        vram_reader=lambda: 64,
+                        pgid_provider=lambda _pid: process.pid,
+                        sleep=lambda _: None)
 
     def test_nonpositive_exact_attribution_never_starts_a_model_screen(self):
         """RED: route-level falsification short-circuits both runner stages."""
@@ -411,7 +452,11 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
                 "attribution": {
                     "file_sha256": dispatch_hash, "native_sha256": "a" * 64,
                     "body": {"exact_duration_comparison": {
-                        "relative_improvement_fraction": -0.01}}},
+                        "relative_improvement_fraction": -0.01,
+                        "candidate_routes": {
+                            "candidate": {"total_duration_ns": 101}},
+                        "anchor_routes": {
+                            "anchor": {"total_duration_ns": 100}}}}},
             }
             hashed = {
                 **material,
@@ -936,6 +981,39 @@ class EvidenceStageResumeRedGate(unittest.TestCase):
             self.assertEqual(comparison["relative_improvement_fraction"], 0.0)
             self.assertIs(comparison["all_candidate_routes_present"], True)
             self.assertIs(comparison["all_anchor_routes_present"], True)
+
+    def test_plan_owned_reverse_arm_order_executes_and_receipts_exactly(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            current = dataclasses.replace(
+                plan(base / "inputs"),
+                attribution_arm_order_seed_sha256="f" * 64,
+                attribution_arm_order=("anchor", "candidate"))
+            executors = FakeExecutors()
+            bundle = self._produce(
+                base / "evidence", current, executors, ClaimFactory())
+            self.assertEqual([row[:2] for row in executors.calls], [
+                ("correctness", "candidate"),
+                ("rocprof", "anchor"),
+                ("rocprof", "candidate"),
+            ])
+            pair = E.proofs.load_receipt(
+                Path(bundle.attribution["path"]), schema=E.PAIR_SCHEMA)["body"]
+            self.assertEqual(pair["attribution_arm_order"],
+                             ["anchor", "candidate"])
+            self.assertEqual(pair["attribution_arm_order_seed_sha256"],
+                             "f" * 64)
+
+    def test_s1_s2_attribution_orders_are_exact_reversals(self):
+        first_seed, first = F._arm_order_schedule(
+            deployment_config_sha256="a" * 64,
+            source_manifest_sha256="b" * 64, repetition=1)
+        second_seed, second = F._arm_order_schedule(
+            deployment_config_sha256="a" * 64,
+            source_manifest_sha256="b" * 64, repetition=2)
+        self.assertEqual(first_seed, second_seed)
+        self.assertEqual(tuple(second.split(",")),
+                         tuple(reversed(first.split(","))))
 
 
 class AdapterStageResumeRedGate(unittest.TestCase):
