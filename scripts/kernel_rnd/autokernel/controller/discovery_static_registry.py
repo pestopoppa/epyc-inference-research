@@ -41,6 +41,7 @@ _BUILD_REF_SCHEMA = "epyc.autokernel.gpu_source_build_ref.v1"
 _BUILD_INTENT_SCHEMA = "epyc.autokernel.gpu_source_build_intent.v1"
 _BUILD_TERMINAL_SCHEMA = "epyc.autokernel.gpu_source_build_terminal.v1"
 _TEARDOWN_SCHEMA = "epyc.autokernel.source_materialization_teardown.v2"
+_SOURCE_FAILURE_MESSAGE_MAX_BYTES = 2048
 _REQUIRED_TARGETS = ("llama-bench", "test-backend-ops")
 _BUILD_ENV_NAMES = (
     "PATH", "HOME", "LANG", "LC_ALL", "ROCM_PATH", "HIP_PATH",
@@ -55,6 +56,19 @@ def _digest(path: Path) -> str:
     if path.is_symlink() or not path.is_file():
         raise StaticRegistryError(f"runtime artifact is not a regular file: {path}")
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _source_failure_message(value: object) -> str | None:
+    """Return a bounded one-line diagnostic safe for a sealed terminal."""
+    if not isinstance(value, str) or not value or not value.isprintable():
+        return None
+    try:
+        encoded = value.encode("utf-8", "strict")
+    except UnicodeEncodeError:
+        return None
+    if len(encoded) > _SOURCE_FAILURE_MESSAGE_MAX_BYTES:
+        return None
+    return value
 
 
 def _canonical(value: Mapping[str, Any]) -> bytes:
@@ -910,6 +924,24 @@ class StaticGpuSourceBuilder:
                 or terminal.get("intent_file_sha256") != _digest(intent_path)):
             raise StaticRegistryError("build cache terminal does not close its intent")
         if terminal.get("state") != "complete":
+            if (terminal.get("state") == "failed"
+                    and terminal.get("failure_type") ==
+                    source_candidate.SourceCandidateError.__name__):
+                # The ref, canonical intent, terminal self-hash, build key,
+                # and exact intent-file digest have all been revalidated above.
+                # Only that complete identity chain may recover the original
+                # typed authoring refusal; every other failed/tampered cache
+                # remains a non-reusable registry error.
+                failure_message = terminal.get("failure_message")
+                if (failure_message is not None
+                        and _source_failure_message(failure_message) is None):
+                    raise StaticRegistryError(
+                        "source candidate failed terminal has an unsafe diagnostic")
+                detail = (f": {failure_message}"
+                          if isinstance(failure_message, str) else "")
+                raise source_candidate.SourceCandidateError(
+                    "sealed prior build transaction rejected source candidate "
+                    f"authoring for build {contract['build_key']}{detail}")
             raise StaticRegistryError("prior build transaction is terminal but not reusable")
         raw = terminal.get("build")
         if not isinstance(raw, Mapping):
@@ -1171,10 +1203,15 @@ class StaticGpuSourceBuilder:
                          "build_contract": contract, "build_environment": environment,
                          "cache_root": str(cache_root)})
                 except Exception as exc:
-                    _sealed_write(cache_root / "terminal.json", {
+                    failure = {
                         "schema": _BUILD_TERMINAL_SCHEMA, "build_key": build_key,
                         "intent_file_sha256": intent_file_sha, "state": "failed",
-                        "failure_type": type(exc).__name__, "promotion_claim": False})
+                        "failure_type": type(exc).__name__, "promotion_claim": False}
+                    if isinstance(exc, source_candidate.SourceCandidateError):
+                        message = _source_failure_message(str(exc))
+                        if message is not None:
+                            failure["failure_message"] = message
+                    _sealed_write(cache_root / "terminal.json", failure)
                     raise
                 _sealed_write(cache_root / "terminal.json", {
                     "schema": _BUILD_TERMINAL_SCHEMA, "build_key": build_key,

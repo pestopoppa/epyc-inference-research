@@ -538,6 +538,83 @@ class StaticBuildCacheTests(unittest.TestCase):
             self.invoke(other, {**other.permit, "operation_key": "9" * 64})
         self.assertEqual(other.calls, [])
 
+    def test_exact_source_candidate_failed_terminal_recovers_only_typed_refusal(self):
+        fixture = self.fixture()
+        with mock.patch.object(
+                StaticGpuSourceBuilder, "_build_uncached",
+                side_effect=source_candidate.SourceCandidateError(
+                    "committed diff derives undeclared symbols")):
+            with self.assertRaises(source_candidate.SourceCandidateError):
+                fixture.builder.build(
+                    fixture.candidate, object(), fixture.permit)
+
+        cache = fixture.root / "operations/build-cache"
+        terminal = next((cache / "entries").iterdir()) / "terminal.json"
+        sealed = json.loads(terminal.read_text())
+        self.assertEqual(
+            (sealed["state"], sealed["failure_type"], sealed["failure_message"]),
+            ("failed", "SourceCandidateError",
+             "committed diff derives undeclared symbols"))
+        with self.assertRaisesRegex(
+                source_candidate.SourceCandidateError,
+                "committed diff derives undeclared symbols"):
+            self.invoke(fixture, {**fixture.permit, "operation_key": "6" * 64})
+        self.assertEqual(fixture.calls, [])
+
+    def test_legacy_source_candidate_failed_terminal_without_message_is_typed(self):
+        fixture = self.fixture()
+        with mock.patch.object(
+                StaticGpuSourceBuilder, "_build_uncached",
+                side_effect=source_candidate.SourceCandidateError("legacy failure")):
+            with self.assertRaises(source_candidate.SourceCandidateError):
+                fixture.builder.build(
+                    fixture.candidate, object(), fixture.permit)
+        terminal = next(
+            (fixture.root / "operations/build-cache/entries").iterdir()
+        ) / "terminal.json"
+        self.rewrite_receipt(terminal, lambda body: body.pop("failure_message"))
+        with self.assertRaisesRegex(
+                source_candidate.SourceCandidateError,
+                "sealed prior build transaction rejected source candidate authoring"):
+            self.invoke(fixture, {**fixture.permit, "operation_key": "a" * 64})
+        self.assertEqual(fixture.calls, [])
+
+    def test_failed_terminal_reclassification_refuses_other_or_tampered_identity(self):
+        cases = ("other_failure", "wrong_build_key", "tampered_hash",
+                 "malformed_message")
+        for case in cases:
+            with self.subTest(case=case):
+                fixture = self.fixture()
+                with mock.patch.object(
+                        StaticGpuSourceBuilder, "_build_uncached",
+                        side_effect=source_candidate.SourceCandidateError(
+                            "committed diff derives undeclared symbols")):
+                    with self.assertRaises(source_candidate.SourceCandidateError):
+                        fixture.builder.build(
+                            fixture.candidate, object(), fixture.permit)
+                terminal = next(
+                    (fixture.root / "operations/build-cache/entries").iterdir()
+                ) / "terminal.json"
+                if case == "other_failure":
+                    self.rewrite_receipt(
+                        terminal,
+                        lambda body: body.update(failure_type="RuntimeError"))
+                elif case == "wrong_build_key":
+                    self.rewrite_receipt(
+                        terminal, lambda body: body.update(build_key="0" * 64))
+                elif case == "malformed_message":
+                    self.rewrite_receipt(
+                        terminal,
+                        lambda body: body.update(failure_message="unsafe\nmessage"))
+                else:
+                    terminal.write_text(terminal.read_text().replace(
+                        "committed diff derives undeclared symbols",
+                        "committed diff derives changed symbols"))
+                with self.assertRaises(StaticRegistryError):
+                    self.invoke(
+                        fixture, {**fixture.permit, "operation_key": "7" * 64})
+                self.assertEqual(fixture.calls, [])
+
     def test_concurrent_repetitions_are_serialized_to_one_pair_build(self):
         fixture = self.fixture(); entered = threading.Event()
         original = fixture.run_build

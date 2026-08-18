@@ -1050,7 +1050,18 @@ class GpuSourceScreener:
         self.runner_attest = runner_attest
 
     def screen(self, candidate: PlannedCandidate, authorization: hypotheses.ClaimAuthorization, lease: Mapping[str, Any]) -> SealedScreen:
-        build = self.build_source(candidate, authorization, lease)
+        try:
+            build = self.build_source(candidate, authorization, lease)
+        except source_candidate.SourceCandidateError as exc:
+            # Source materialization re-derives the committed diff after the
+            # critic's review.  A mismatch here is an authoring rejection, not
+            # an ambiguous GPU operation: proof production, reservation, and
+            # the throughput runner are all strictly downstream of this call.
+            # Preserve that ordering as a typed precompute refusal so the
+            # controller durably records the failed iteration and advances.
+            raise PrecomputeScreenRefusal(
+                f"source candidate authoring rejected: {type(exc).__name__}: {exc}"
+            ) from exc
         bundle = self.proof_bundle(candidate, build)
         if not isinstance(bundle, gpu_source_proofs.GpuSourceProofBundle):
             raise DiscoveryControllerError("GPU source gate did not return a validated proof bundle")
@@ -1633,6 +1644,18 @@ def _apply_portfolio_outcome(state: dict[str, Any], row: dict[str, Any]) -> None
         row["portfolio_disposition"] = disposition
 
 
+def _record_precompute_refusal(state: dict[str, Any], row: dict[str, Any],
+                               exc: PrecomputeScreenRefusal) -> None:
+    """Commit one proven precompute rejection and consume its iteration."""
+    state.pop("inflight", None)
+    state.pop("pending", None)
+    row.update(status="screen_refused",
+               reason=f"{type(exc).__name__}: {exc}")
+    state["iterations"].append(row)
+    _apply_portfolio_outcome(state, row)
+    state["next"] += 1
+
+
 def run_controller(config: ControllerConfig, *, planner: Planner, critic: Critic, screener: Screener, lease: Lease) -> dict[str, Any]:
     planner_attestation, critic_attestation = dict(planner.attest()), dict(critic.attest())
     if ({k: planner_attestation.get(k) for k in SOL} != SOL
@@ -1691,6 +1714,7 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
     if state["complete"]: return state
     tracker=_tracker(store)
     if state.get("inflight") is not None:
+        precompute_refused = False
         inflight=state["inflight"]; item=_restore_pending({"candidate":inflight["candidate"]}); authorization=hypotheses.ClaimAuthorization.from_dict(inflight["authorization"]); permit=inflight["lease"]
         if isinstance(inflight.get("result"),Mapping): result=SealedScreen(**inflight["result"])
         else:
@@ -1736,11 +1760,17 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                         "parent_authorization":inflight.get("parent_authorization")}
                     store.save(state,"waiting_resource")
                     return state
-        if not isinstance(result,SealedScreen): raise DiscoveryControllerError("inflight recovery produced no sealed result")
-        row=dict(inflight["row"]); policy=row.get("portfolio_decision_policy")
-        result=_classified_result(state,item,result,policy); row.update(status=result.classification,result_sha256=result.result_sha256,evidence={"baseline":result.baseline_sha256,"source":result.source_proof_sha256,"dispatch":result.dispatch_proof_sha256},effect_fraction=result.effect_fraction,series_effect_fraction=result.series_effect_fraction,series_key=result.series_key,component_series_keys=list(result.component_series_keys))
-        _record_attempt_once(tracker,item,str(item.proposal.get("proposal_id",row["proposal_sha256"])),result)
-        state.pop("inflight",None); state.pop("pending",None); state["iterations"].append(row); _apply_portfolio_outcome(state,row); state["next"]+=1; _schedule_replication(state,item=item,authorization=authorization,row=row,result=result,max_iterations=config.max_iterations); _append_nomination(config.output_root,item,result,_decision_floor(policy,"nomination_floor_pct",config.nomination_threshold)); _write_projection(config.evidence_root or config.output_root); store.save(state,"recovered_screen")
+                except PrecomputeScreenRefusal as exc:
+                    row = dict(inflight["row"])
+                    _record_precompute_refusal(state, row, exc)
+                    store.save(state, "screen_refused")
+                    precompute_refused = True
+        if not precompute_refused:
+            if not isinstance(result,SealedScreen): raise DiscoveryControllerError("inflight recovery produced no sealed result")
+            row=dict(inflight["row"]); policy=row.get("portfolio_decision_policy")
+            result=_classified_result(state,item,result,policy); row.update(status=result.classification,result_sha256=result.result_sha256,evidence={"baseline":result.baseline_sha256,"source":result.source_proof_sha256,"dispatch":result.dispatch_proof_sha256},effect_fraction=result.effect_fraction,series_effect_fraction=result.series_effect_fraction,series_key=result.series_key,component_series_keys=list(result.component_series_keys))
+            _record_attempt_once(tracker,item,str(item.proposal.get("proposal_id",row["proposal_sha256"])),result)
+            state.pop("inflight",None); state.pop("pending",None); state["iterations"].append(row); _apply_portfolio_outcome(state,row); state["next"]+=1; _schedule_replication(state,item=item,authorization=authorization,row=row,result=result,max_iterations=config.max_iterations); _append_nomination(config.output_root,item,result,_decision_floor(policy,"nomination_floor_pct",config.nomination_threshold)); _write_projection(config.evidence_root or config.output_root); store.save(state,"recovered_screen")
     while not state["complete"] and state["next"] <= config.max_iterations:
         turn=state["next"]
         pending=state.get("pending")
@@ -1840,7 +1870,8 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                 store.save(state,"waiting_resource")
                 break
             except PrecomputeScreenRefusal as exc:
-                state.pop("inflight",None); row.update(status="screen_refused",reason=f"{type(exc).__name__}: {exc}"); state["iterations"].append(row); _apply_portfolio_outcome(state,row); state["next"]+=1; store.save(state,"screen_refused"); continue
+                _record_precompute_refusal(state, row, exc)
+                store.save(state,"screen_refused"); continue
             except Exception as exc:
                 # The durable start intent has been written.  An ordinary
                 # exception may follow a build, claim, or model invocation, so

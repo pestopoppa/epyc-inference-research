@@ -16,6 +16,8 @@ from unittest.mock import patch
 
 from scripts.benchmark import run_autokernel_gpu_discovery as gpu_reward
 from scripts.kernel_rnd.autokernel.controller import discovery_controller as D
+from scripts.kernel_rnd.autokernel.controller import gpu_source_adapter as A
+from scripts.kernel_rnd.autokernel.controller import gpu_source_evidence as E
 
 
 H = "a" * 64
@@ -146,6 +148,30 @@ class CrashBeforeRunner(Screen):
         return super().screen(item, authorization, lease)
 
 
+class CrashThenPrecomputeRefusal(Screen):
+    def __init__(self):
+        super().__init__()
+        self.entries = 0
+
+    def screen(self, item, authorization, lease):
+        self.entries += 1
+        if self.entries == 1:
+            raise ProcessCrash("before fake runner")
+        raise D.PrecomputeScreenRefusal(
+            "source candidate authoring rejected on safe restart")
+
+
+class CleanupFailureOverridesRefusal(Screen):
+    def screen(self, item, authorization, lease):
+        try:
+            raise D.PrecomputeScreenRefusal("authoring rejected")
+        finally:
+            raise RuntimeError("cleanup durability failed")
+
+    def reconcile(self, inflight):
+        return D.Recovery("ambiguous")
+
+
 class ExceptionAfterStart(Screen):
     def __init__(self):
         super().__init__()
@@ -205,6 +231,12 @@ class RecoveredResult(Screen):
                 "result.json", H, self.effect, "candidate", H, H, H
             ),
         )
+
+
+class PrecomputeRefusal(Screen):
+    def screen(self, item, authorization, lease):
+        self.calls += 1
+        raise D.PrecomputeScreenRefusal("bounded follow-on refusal")
 
 
 class BlackBoxLaunchGate(unittest.TestCase):
@@ -527,6 +559,63 @@ class BlackBoxLaunchGate(unittest.TestCase):
             self.assertTrue(completed["complete"])
             self.assertEqual((planner.calls, critic.calls, screen.calls), (1, 1, 1))
 
+    def test_safe_restart_precompute_refusal_is_durable_without_replanning(self):
+        with tempfile.TemporaryDirectory() as temp, \
+                patch.object(D.source_candidate, "SourcePatchManifest", Manifest), \
+                patch.object(D, "_write_projection"):
+            root = Path(temp)
+            planner, critic, screen = Planner(), Critic(), CrashThenPrecomputeRefusal()
+            with self.assertRaises(ProcessCrash):
+                D.run_controller(
+                    self.config(root), planner=planner, critic=critic,
+                    screener=screen, lease=Lease((True,)))
+            crashed = json.loads((root / "out" / "state.json").read_text())
+            self.assertEqual(crashed["next"], 1)
+            self.assertIn("inflight", crashed)
+
+            completed = D.run_controller(
+                self.config(root), planner=planner, critic=critic,
+                screener=screen, lease=Lease((True,)))
+
+            self.assertTrue(completed["complete"])
+            self.assertEqual(
+                json.loads((root / "out" / "state.json").read_text()), completed)
+            self.assertEqual((planner.calls, critic.calls, screen.entries), (1, 1, 2))
+            self.assertEqual(len(completed["iterations"]), 1)
+            self.assertEqual(completed["iterations"][0]["status"], "screen_refused")
+            self.assertIn("safe restart", completed["iterations"][0]["reason"])
+            self.assertNotIn("inflight", completed)
+            self.assertNotIn("pending", completed)
+            again = D.run_controller(
+                self.config(root), planner=planner, critic=critic,
+                screener=screen, lease=Lease((True,)))
+            self.assertEqual(again, completed)
+            self.assertEqual((planner.calls, critic.calls, screen.entries), (1, 1, 2))
+
+    def test_cleanup_failure_overrides_refusal_and_keeps_ambiguous_inflight(self):
+        with tempfile.TemporaryDirectory() as temp, \
+                patch.object(D.source_candidate, "SourcePatchManifest", Manifest), \
+                patch.object(D, "_write_projection"):
+            root = Path(temp)
+            planner, critic = Planner(), Critic()
+            screen = CleanupFailureOverridesRefusal()
+            with self.assertRaisesRegex(RuntimeError, "cleanup durability failed"):
+                D.run_controller(
+                    self.config(root), planner=planner, critic=critic,
+                    screener=screen, lease=Lease((True,)))
+            state = json.loads((root / "out" / "state.json").read_text())
+            self.assertEqual(state["next"], 1)
+            self.assertEqual(state["iterations"], [])
+            self.assertEqual(
+                state["inflight"]["exception"],
+                {"type": "RuntimeError", "message": "cleanup durability failed"})
+            with self.assertRaisesRegex(
+                    D.DiscoveryControllerError, "cannot be safely reconciled"):
+                D.run_controller(
+                    self.config(root), planner=planner, critic=critic,
+                    screener=screen, lease=Lease((True,)))
+            self.assertEqual((planner.calls, critic.calls), (1, 1))
+
     def test_recovery_busy_demotes_exact_inflight_to_pending_without_replanning(self):
         with tempfile.TemporaryDirectory() as temp, \
                 patch.object(D.source_candidate, "SourcePatchManifest", Manifest), \
@@ -565,6 +654,126 @@ class BlackBoxLaunchGate(unittest.TestCase):
                                        screener=screen, lease=Lease((True,)))
             self.assertTrue(resumed["complete"])
             self.assertEqual((planner.calls, critic.calls, screen.calls), (1, 1, 1))
+
+    def test_source_authoring_rejection_is_nonfatal_and_never_starts_gpu_work(self):
+        """A post-critic committed-diff rejection is a failed iteration.
+
+        This reproduces the live ``SourceCandidateError`` after the controller
+        has written ``pre_screen_intent``.  The governed adapter must unwind
+        its reservation seam, expose a typed precompute refusal, and let the
+        controller plan the next iteration without proof or runner activity.
+        """
+        with tempfile.TemporaryDirectory() as temp, \
+                patch.object(D.source_candidate, "SourcePatchManifest", Manifest), \
+                patch.object(D, "_write_projection"), \
+                patch.object(A, "_protected_snapshot", return_value={"sealed": True}), \
+                patch.object(D.gpu_discovery, "run",
+                             side_effect=AssertionError("GPU runner must not start")) as runner:
+            root = Path(temp)
+            protected = root / "protected"
+            protected.mkdir()
+            artifact = protected / "frozen.bin"
+            artifact.write_bytes(b"frozen")
+            bound = E.BoundInputFile(
+                "production_artifact", artifact.resolve(),
+                hashlib.sha256(artifact.read_bytes()).hexdigest())
+
+            class Reservation:
+                def __init__(self):
+                    self.reserve_calls = 0
+                    self.release_calls = 0
+                    self.active = set()
+
+                def reserve(self, operation_key):
+                    self.reserve_calls += 1
+                    self.active.add(operation_key)
+                    raise AssertionError("GPU reservation must not start")
+
+                def release(self, operation_key):
+                    self.release_calls += 1
+                    self.active.discard(operation_key)
+                    return None
+
+                def borrower(self, operation_key):
+                    raise AssertionError("GPU borrower must not be constructed")
+
+            reservation = Reservation()
+            proof_calls = []
+
+            def reject_after_materialization(*_args):
+                raise D.source_candidate.SourceCandidateError(
+                    "committed diff in 'ggml/src/ggml-cuda/vecdotq.cuh' "
+                    "derives undeclared symbols ['<file-scope>']")
+
+            def no_proof(*_args):
+                proof_calls.append("proof")
+                raise AssertionError("GPU proof must not start")
+
+            governed = A.GovernedGpuSourceAdapter(
+                operations_root=(root / "operations").resolve(),
+                build_source=reject_after_materialization,
+                plan_factory=no_proof,
+                args_factory=lambda *_args: (_ for _ in ()).throw(
+                    AssertionError("runner arguments must not be built")),
+                correctness_executor=no_proof, rocprof_executor=no_proof,
+                claim_journal=object(), claim_acquirer=no_proof,
+                claim_verifier=lambda _receipt: True, claim_timeout_s=0.0,
+                reservation_manager=reservation,
+                receipt_series=lambda *_args: (),
+                protected_roots=(protected,), protected_files=(bound,))
+
+            class RejectOnceThenRefuse:
+                def __init__(self):
+                    self.calls = 0
+                    self.follow_on = PrecomputeRefusal()
+
+                def screen(self, item, authorization, lease):
+                    self.calls += 1
+                    if self.calls == 1:
+                        return governed.screen(item, authorization, lease)
+                    return self.follow_on.screen(item, authorization, lease)
+
+            class ReleasedAdmissionProbe(Lease):
+                def __init__(self):
+                    super().__init__((True, True))
+                    self.probes = 0
+                    self.held = 0
+
+                def admit(self, candidate, *, operation_key):
+                    self.probes += 1
+                    self.held += 1
+                    try:
+                        return super().admit(candidate, operation_key=operation_key)
+                    finally:
+                        self.held -= 1
+
+            planner, critic, screen = Planner(), Critic(), RejectOnceThenRefuse()
+            admission = ReleasedAdmissionProbe()
+            result = D.run_controller(
+                D.ControllerConfig(root / "out", max_iterations=2),
+                planner=planner, critic=critic, screener=screen,
+                lease=admission)
+
+            self.assertTrue(result["complete"])
+            self.assertEqual(
+                json.loads((root / "out" / "state.json").read_text()), result)
+            self.assertEqual((planner.calls, critic.calls, screen.calls), (2, 2, 2))
+            self.assertEqual(
+                [row["status"] for row in result["iterations"]],
+                ["screen_refused", "screen_refused"])
+            self.assertIn("SourceCandidateError", result["iterations"][0]["reason"])
+            self.assertNotIn("inflight", result)
+            self.assertNotIn("pending", result)
+            self.assertEqual(proof_calls, [])
+            runner.assert_not_called()
+            self.assertEqual(reservation.reserve_calls, 0)
+            self.assertEqual(reservation.release_calls, 1)
+            self.assertEqual(reservation.active, set())
+            self.assertEqual((admission.probes, admission.held), (2, 0))
+            operation_roots = tuple((root / "operations").iterdir())
+            self.assertEqual(len(operation_roots), 1)
+            self.assertEqual(
+                {path.name for path in operation_roots[0].iterdir()}, {"intent.json"})
 
     def test_process_crash_after_runner_does_not_repeat_compute(self):
         with tempfile.TemporaryDirectory() as temp, \
