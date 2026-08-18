@@ -98,6 +98,10 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
             planner_context_sha256="e" * 64,
             production_base_commit="0" * 40,
             instrument_commit="1" * 40,
+            experiment_template_registry_sha256=self.registry.registry_sha256,
+            admission_corpus_sha256="c" * 64,
+            admission_corpus_version="test-v1",
+            deployment_identity_sha256="d" * 64,
             hypothesis_portfolio=portfolio,
             hypothesis_portfolio_sha256=portfolio.sha256)
 
