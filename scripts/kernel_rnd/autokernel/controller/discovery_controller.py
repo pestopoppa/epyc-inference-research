@@ -39,6 +39,7 @@ SCHEMA = "epyc.autokernel.discovery_controller.v5"
 ROSTER_SCHEMA = "epyc.autokernel.discovery_roster.v3"
 AUTHORITY = "nonpromotable_candidate_only_discovery"
 HASH = __import__("re").compile(r"^[0-9a-f]{64}$")
+PORTFOLIO_DNR_CHECK_SCHEMA = "epyc.autokernel.portfolio_exact_dnr_check.v1"
 SOL = {"provider": "codex", "model": "gpt-5.6-sol", "effort": "high", "role": "planner"}
 FABLE5_CRITIC = {"provider": "claude", "model": "claude-fable-5", "effort": "high", "role": "critic"}
 
@@ -1431,8 +1432,32 @@ def _memory_block(tracker: hypotheses.HypothesisTracker, turn: int) -> Mapping[s
     ledger=do_not_repeat.compile_for_tracker(tracker); return do_not_repeat.planner_round_block(tracker, ledger, round_id=f"discovery-{turn}")
 
 
-def _ensure_question(tracker: hypotheses.HypothesisTracker, item: PlannedCandidate) -> None:
-    question=hypotheses.Hypothesis(hypothesis_id=item.hypothesis_id, statement=item.statement, falsifier=item.falsifier, origin=hypotheses.ORIGIN_PLANNER, author="gpt-5.6-sol", regime=item.regime, source={"manifest_sha256":item.source_manifest_sha256})
+def _ensure_question(tracker: hypotheses.HypothesisTracker, item: PlannedCandidate,
+                     portfolio_binding: Mapping[str, Any] | None = None) -> None:
+    """Open the exact question whose campaign-ledger DNR gate will authorize it.
+
+    Legacy/generic callers retain their original regime verbatim: an old question
+    which did not declare a structural mechanism must continue to read
+    ``COULD_NOT_CHECK`` rather than acquiring authority retroactively.  A sealed
+    portfolio candidate is different.  The controller already owns its exact
+    manifest mechanism, so omitting that key would make every new AutoKernel
+    authorization structurally incomparable to the campaign ledger.  On this path the
+    mechanism is mandatory, controller-derived, and any actor-authored disagreement is
+    refused rather than silently overwritten.
+    """
+    regime = dict(item.regime)
+    if portfolio_binding is not None:
+        mechanism = item.source_manifest.mechanism_id
+        if (not isinstance(mechanism, str) or not HASH.fullmatch(mechanism)
+                or mechanism != portfolio_binding.get("mechanism_id")):
+            raise DiscoveryControllerError(
+                "portfolio candidate lacks its controller-owned structural mechanism")
+        declared = regime.get("mechanism")
+        if declared is not None and declared != mechanism:
+            raise DiscoveryControllerError(
+                "portfolio candidate regime disagrees with its controller-owned mechanism")
+        regime["mechanism"] = mechanism
+    question=hypotheses.Hypothesis(hypothesis_id=item.hypothesis_id, statement=item.statement, falsifier=item.falsifier, origin=hypotheses.ORIGIN_PLANNER, author="gpt-5.6-sol", regime=regime, source={"manifest_sha256":item.source_manifest_sha256})
     try: tracker.open_hypothesis(question)
     except hypotheses.HypothesisAlreadyTracked: pass
 
@@ -1548,14 +1573,8 @@ def _select_portfolio_binding(state: Mapping[str, Any],
 def _validate_portfolio_candidate(item: PlannedCandidate, binding: Mapping[str, Any],
                                   portfolio: hypothesis_portfolio.Portfolio) -> None:
     """Refuse any actor attempt to rename or expand a reviewed question."""
-    for dnr in portfolio.do_not_repeat:
-        if not isinstance(dnr, Mapping):
-            raise DiscoveryControllerError("portfolio DNR record is malformed")
-        mechanism = dnr.get("mechanism")
-        if (isinstance(mechanism, Mapping)
-                and item.source_manifest.mechanism_id == mechanism.get("fingerprint_sha256")
-                and dict(item.regime) == dnr.get("regime")):
-            raise DiscoveryControllerError("candidate exactly repeats a sealed DNR mechanism/regime")
+    if not isinstance(portfolio, hypothesis_portfolio.Portfolio):
+        raise DiscoveryControllerError("portfolio candidate lacks typed portfolio authority")
     intent = item.experiment_intent
     manifest = item.source_manifest
     if (item.hypothesis_id != binding["hypothesis_id"]
@@ -1575,6 +1594,99 @@ def _validate_portfolio_candidate(item: PlannedCandidate, binding: Mapping[str, 
                != list(binding["expected_dispatch"])):
         raise DiscoveryControllerError(
             "planner candidate differs from its controller-owned portfolio assignment")
+
+
+def _portfolio_exact_dnr_check(config: ControllerConfig, item: PlannedCandidate,
+                               binding: Mapping[str, Any]) -> dict[str, Any]:
+    """Return one canonical, candidate-bound receipt before critic or authorization.
+
+    This is intentionally separate from the campaign ledger.  The portfolio is sealed
+    input authority and can answer an exact mechanism/regime question directly; the
+    campaign ledger is derived runtime memory and may honestly answer
+    ``COULD_NOT_CHECK``.  Conflating the two outcomes makes a portfolio refusal vanish
+    into a generic authorization reason on restart.
+    """
+    portfolio = config.hypothesis_portfolio
+    semantic_sha256 = config.hypothesis_portfolio_sha256
+    if (not isinstance(portfolio, hypothesis_portfolio.Portfolio)
+            or not isinstance(semantic_sha256, str)
+            or portfolio.sha256 != semantic_sha256):
+        raise DiscoveryControllerError(
+            "portfolio exact-DNR check lacks sealed semantic authority")
+    mechanism_id = item.source_manifest.mechanism_id
+    if (not isinstance(mechanism_id, str) or not HASH.fullmatch(mechanism_id)
+            or mechanism_id != binding.get("mechanism_id")):
+        raise DiscoveryControllerError(
+            "portfolio exact-DNR check lacks the controller-owned candidate mechanism")
+    regime = dict(item.regime)
+    if regime != dict(binding.get("regime") or {}):
+        raise DiscoveryControllerError(
+            "portfolio exact-DNR check candidate regime differs from assignment")
+    matched: list[str] = []
+    for index, dnr in enumerate(portfolio.do_not_repeat):
+        if not isinstance(dnr, Mapping):
+            raise DiscoveryControllerError("portfolio DNR record is malformed")
+        dnr_id = dnr.get("dnr_id")
+        mechanism = dnr.get("mechanism")
+        dnr_regime = dnr.get("regime")
+        if (not isinstance(dnr_id, str) or not dnr_id.startswith("dnr-")
+                or not isinstance(mechanism, Mapping)
+                or not HASH.fullmatch(str(mechanism.get("fingerprint_sha256")))
+                or not isinstance(dnr_regime, Mapping)):
+            raise DiscoveryControllerError(
+                f"portfolio DNR record {index} lacks exact mechanism/regime identity")
+        if (mechanism_id == mechanism["fingerprint_sha256"]
+                and regime == dict(dnr_regime)):
+            matched.append(dnr_id)
+    body: dict[str, Any] = {
+        "schema": PORTFOLIO_DNR_CHECK_SCHEMA,
+        "portfolio_semantic_sha256": semantic_sha256,
+        "portfolio_hypothesis_id": binding.get("hypothesis_id"),
+        "candidate_source_manifest_sha256": item.source_manifest_sha256,
+        "candidate_mechanism_id": mechanism_id,
+        "canonical_regime_sha256": schemas.content_hash(regime),
+        "matched_dnr_ids": sorted(set(matched)),
+        "outcome": schemas.FAIL if matched else schemas.PASS,
+    }
+    body["receipt_sha256"] = schemas.content_hash(body)
+    return body
+
+
+def _revalidate_portfolio_checkpoint(config: ControllerConfig,
+                                     item: PlannedCandidate,
+                                     row: Mapping[str, Any]) -> None:
+    """Fail closed when a new portfolio checkpoint omitted or changed its DNR receipt."""
+    if config.hypothesis_portfolio is None:
+        # Legacy generic campaigns never had this receipt.  Their campaign-ledger
+        # COULD_NOT_CHECK semantics are preserved rather than rewritten on resume.
+        return
+    binding = row.get("portfolio_binding")
+    if not isinstance(binding, Mapping):
+        raise DiscoveryControllerError(
+            "portfolio pending candidate lacks controller-owned binding")
+    _validate_portfolio_candidate(item, binding, config.hypothesis_portfolio)
+    expected = _portfolio_exact_dnr_check(config, item, binding)
+    actual = row.get("portfolio_exact_dnr_check")
+    if not isinstance(actual, Mapping) or dict(actual) != expected:
+        raise DiscoveryControllerError(
+            "portfolio pending candidate DNR receipt is missing or changed")
+    if expected["outcome"] != schemas.PASS:
+        raise DiscoveryControllerError(
+            "portfolio pending candidate exactly matches a sealed DNR")
+
+
+def _bind_campaign_ledger_outcome(row: dict[str, Any],
+                                  authorization: hypotheses.ClaimAuthorization) -> None:
+    """Keep runtime-ledger disposition distinct from the sealed portfolio receipt."""
+    expected = authorization.do_not_repeat_outcome
+    reasons = list(authorization.do_not_repeat_reasons)
+    prior = row.get("campaign_ledger_dnr_outcome")
+    prior_reasons = row.get("campaign_ledger_dnr_reasons")
+    if prior is not None and (prior != expected or prior_reasons != reasons):
+        raise DiscoveryControllerError(
+            "campaign-ledger DNR outcome differs from durable authorization")
+    row["campaign_ledger_dnr_outcome"] = expected
+    row["campaign_ledger_dnr_reasons"] = reasons
 
 
 def _context(state: Mapping[str, Any], tracker: hypotheses.HypothesisTracker, turn: int,
@@ -2046,6 +2158,13 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
     if state.get("inflight") is not None:
         precompute_refused = False
         inflight=state["inflight"]; item=_restore_pending({"candidate":inflight["candidate"]}); authorization=hypotheses.ClaimAuthorization.from_dict(inflight["authorization"]); permit=inflight["lease"]
+        inflight_row = dict(inflight["row"])
+        _revalidate_portfolio_checkpoint(config, item, inflight_row)
+        _bind_campaign_ledger_outcome(inflight_row, authorization)
+        if (config.hypothesis_portfolio is not None
+                and inflight_row != dict(inflight["row"])):
+            raise DiscoveryControllerError(
+                "inflight DNR outcomes differ from durable authorization")
         if isinstance(inflight.get("result"),Mapping): result=SealedScreen(**inflight["result"])
         else:
             reconcile=getattr(screener,"reconcile",None)
@@ -2139,6 +2258,7 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
             pending_phase = pending.get("phase") if isinstance(pending, Mapping) else None
             if pending is not None and pending_phase == "critic_pending":
                 item=_restore_pending(pending); row=dict(pending["row"])
+                _revalidate_portfolio_checkpoint(config, item, row)
                 review=critic.review(item,context=context,workspace=workspace)
                 row["critic"]=asdict(review)
                 if review.decision != "accept":
@@ -2155,16 +2275,26 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                 continue
             if pending is not None:
                 item=_restore_pending(pending); row=dict(pending["row"]); review=Critique(**row["critic"])
+                _revalidate_portfolio_checkpoint(config, item, row)
                 if "authorization" in pending:
                     authorization=hypotheses.ClaimAuthorization.from_dict(pending["authorization"])
+                    durable_row = dict(row)
+                    _bind_campaign_ledger_outcome(row, authorization)
+                    if config.hypothesis_portfolio is not None and row != durable_row:
+                        raise DiscoveryControllerError(
+                            "portfolio pending candidate lacks campaign-ledger DNR outcome")
                 elif pending_phase == "critic_complete":
                     authorization=None
                 elif pending.get("confirmation") is True:
                     # A positive S1 is not a receipted negative.  Re-consult
                     # DNR and mint the explicit confirmation token before its
                     # own device claim, rather than reusing S1's token.
-                    _ensure_question(tracker,item)
+                    _ensure_question(
+                        tracker, item,
+                        row.get("portfolio_binding")
+                        if isinstance(row.get("portfolio_binding"), Mapping) else None)
                     authorization=tracker.authorize_claim(item.hypothesis_id,purpose="candidate_only_confirmation",authorized_by="discovery_controller",ledger=do_not_repeat.compile_for_tracker(tracker))
+                    _bind_campaign_ledger_outcome(row, authorization)
                 else:
                     raise DiscoveryControllerError("pending candidate lacks a sealed authorization")
             else:
@@ -2238,6 +2368,25 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                         state["terminal_reason"] = "portfolio_actor_contract_refused"
                         store.save(state, "portfolio_refused")
                         break
+                    receipt = _portfolio_exact_dnr_check(
+                        config, item, portfolio_binding)
+                    row["portfolio_exact_dnr_check"] = receipt
+                    if receipt["outcome"] == schemas.FAIL:
+                        row.update(
+                            status="portfolio_dnr_refused",
+                            reason="candidate exactly repeats sealed portfolio DNR "
+                                   + ", ".join(receipt["matched_dnr_ids"]))
+                        state.pop("planning", None)
+                        state["iterations"].append(row)
+                        state.setdefault("portfolio_terminals", {})[
+                            portfolio_binding["hypothesis_id"]] = {
+                                "disposition": "portfolio_dnr_refused",
+                                "policy": dict(portfolio_binding["decision_policy"]),
+                                "receipt_sha256": receipt["receipt_sha256"],
+                            }
+                        state["next"] += 1
+                        store.save(state, "portfolio_dnr_refused")
+                        continue
                 state.pop("planning", None)
                 state["pending"]={
                     "phase":"critic_pending", "row":row,
@@ -2249,9 +2398,18 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
             if review.decision != "accept":
                 row["status"]="critic_"+review.decision; state["iterations"].append(row); _apply_portfolio_outcome(state,row); state["next"]+=1; store.save(state,"critic_refused"); continue
             if pending_phase == "critic_complete":
-                _ensure_question(tracker,item)
+                _ensure_question(
+                    tracker, item,
+                    row.get("portfolio_binding")
+                    if isinstance(row.get("portfolio_binding"), Mapping) else None)
                 ledger=do_not_repeat.compile_for_tracker(tracker)
-                try: authorization=tracker.authorize_claim(item.hypothesis_id,purpose="candidate_only_discovery",authorized_by="discovery_controller",ledger=ledger)
+                try:
+                    authorization=tracker.authorize_claim(item.hypothesis_id,purpose="candidate_only_discovery",authorized_by="discovery_controller",ledger=ledger)
+                    _bind_campaign_ledger_outcome(row, authorization)
+                except hypotheses.RepeatsAReceiptedNegative as exc:
+                    row.update(campaign_ledger_dnr_outcome=schemas.FAIL,
+                               campaign_ledger_dnr_reasons=[str(exc)],
+                               status="authorization_refused",reason=str(exc)); state.pop("pending",None); state["iterations"].append(row); _apply_portfolio_outcome(state,row); state["next"]+=1; store.save(state,"authorization_refused"); continue
                 except hypotheses.HypothesisError as exc:
                     row.update(status="authorization_refused",reason=str(exc)); state.pop("pending",None); state["iterations"].append(row); _apply_portfolio_outcome(state,row); state["next"]+=1; store.save(state,"authorization_refused"); continue
             if config.dry_run:

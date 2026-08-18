@@ -515,10 +515,20 @@ class DeploymentFactoryTests(unittest.TestCase):
             self.assertEqual(timed_oracle["scope"], "integrity_discovery_only")
             self.assertFalse(timed_oracle["production_throughput_authority"])
             self.assertIn("discovery_telemetry", receipt["execution_modules"])
+            self.assertIn("hypotheses", receipt["execution_modules"])
+            self.assertIn("do_not_repeat", receipt["execution_modules"])
             self.assertEqual(
                 receipt["execution_modules"]["discovery_telemetry"]["sha256"],
                 F._digest_regular(Path(F.discovery_telemetry.__file__).resolve(),
                                   "discovery_telemetry"))
+            self.assertEqual(
+                receipt["execution_modules"]["hypotheses"]["sha256"],
+                F._digest_regular(Path(C.hypotheses.__file__).resolve(),
+                                  "hypotheses"))
+            self.assertEqual(
+                receipt["execution_modules"]["do_not_repeat"]["sha256"],
+                F._digest_regular(Path(C.do_not_repeat.__file__).resolve(),
+                                  "do_not_repeat"))
             self.assertTrue(receipt["critic_auth_source"]["validated"])
             self.assertFalse(receipt["critic_auth_source"]["secret_digest_persisted"])
             self.assertNotIn("sha256", receipt["critic_auth_source"])

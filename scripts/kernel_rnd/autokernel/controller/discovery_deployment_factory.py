@@ -238,6 +238,8 @@ def _execution_module_identity() -> dict[str, dict[str, str]]:
     modules = {
         "deployment_factory": Path(__file__).resolve(strict=True),
         "discovery_controller": Path(controller.__file__).resolve(strict=True),
+        "hypotheses": Path(controller.hypotheses.__file__).resolve(strict=True),
+        "do_not_repeat": Path(controller.do_not_repeat.__file__).resolve(strict=True),
         "discovery_telemetry": Path(discovery_telemetry.__file__).resolve(strict=True),
         "gpu_discovery_runner": Path(controller.gpu_discovery.__file__).resolve(strict=True),
         "gpu_source_adapter": Path(gpu_source_adapter.__file__).resolve(strict=True),

@@ -1,6 +1,6 @@
 """No-hardware replay tests for the typed discovery state machine."""
 from __future__ import annotations
-import argparse, base64, hashlib, json, tempfile, unittest
+import argparse, base64, dataclasses, hashlib, json, tempfile, unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -141,17 +141,76 @@ class Tests(unittest.TestCase):
         base.template_id,base.target_surface,base.target_symbol,
         base.correctness_id,base.dispatch_id,
         (base.expected_dispatch[0],base.expected_dispatch[0]))
- def test_portfolio_exact_dnr_match_refuses_before_selected_binding(self):
+ def test_portfolio_exact_dnr_match_has_canonical_receipt(self):
   with tempfile.TemporaryDirectory() as t:
    record=self.portfolio_record(); config=self.portfolio_config(Path(t),[record])
    binding=D._select_portfolio_binding({"iterations":[]},config)
-   dnr={"mechanism":{"fingerprint_sha256":"e"*64},"regime":{"phase":"decode"}}
+   dnr={"dnr_id":"dnr-exact-test",
+        "mechanism":{"fingerprint_sha256":binding["mechanism_id"]},
+        "regime":dict(binding["regime"])}
    portfolio=hypothesis_portfolio.Portfolio(
        {**config.hypothesis_portfolio.body,"do_not_repeat":[dnr]},"f"*64)
-   with self.assertRaisesRegex(D.DiscoveryControllerError,"DNR"):
-    D._validate_portfolio_candidate(
-        self.portfolio_candidate(binding,mechanism_id="e"*64,
-                                 regime={"phase":"decode"}),binding,portfolio)
+   config=dataclasses.replace(config,hypothesis_portfolio=portfolio)
+   candidate=self.portfolio_candidate(binding)
+   receipt=D._portfolio_exact_dnr_check(config,candidate,binding)
+   self.assertEqual(receipt["outcome"],D.schemas.FAIL)
+   self.assertEqual(receipt["matched_dnr_ids"],["dnr-exact-test"])
+   self.assertEqual(receipt["candidate_mechanism_id"],binding["mechanism_id"])
+   self.assertEqual(receipt["canonical_regime_sha256"],
+                    D.schemas.content_hash(binding["regime"]))
+   self.assertEqual(receipt["receipt_sha256"],D.schemas.content_hash(
+       {key:value for key,value in receipt.items() if key!="receipt_sha256"}))
+
+ def test_portfolio_exact_dnr_refuses_with_zero_critic_auth_lease_or_screen(self):
+  class Planner(FakePlanner):
+   def __init__(self,candidate): super().__init__(); self.candidate=candidate
+   def plan(self,**kwargs): self.calls.append(kwargs); return self.candidate
+  class NeverCritic(FakeCritic):
+   def __init__(self): super().__init__([]); self.calls=0
+   def review(self,*args,**kwargs):
+    self.calls+=1; raise AssertionError("portfolio DNR reached critic")
+  class Never:
+   calls=0
+   def __getattr__(self,_name):
+    def called(*_args,**_kwargs):
+     self.calls+=1; raise AssertionError("portfolio DNR reached compute")
+    return called
+  with tempfile.TemporaryDirectory() as t:
+   record=self.portfolio_record(); config=self.portfolio_config(Path(t),[record])
+   binding=D._select_portfolio_binding({"iterations":[]},config)
+   dnr={"dnr_id":"dnr-exact-test",
+        "mechanism":{"fingerprint_sha256":binding["mechanism_id"]},
+        "regime":dict(binding["regime"])}
+   portfolio=hypothesis_portfolio.Portfolio(
+       {**config.hypothesis_portfolio.body,"do_not_repeat":[dnr]},"f"*64)
+   config=dataclasses.replace(config,hypothesis_portfolio=portfolio)
+   critic=NeverCritic(); lease=Never(); screen=Never()
+   with patch.object(D.hypotheses.HypothesisTracker,"authorize_claim",
+                     side_effect=AssertionError("portfolio DNR reached authorization")) as auth:
+    result=D.run_controller(config,
+        planner=Planner(self.portfolio_candidate(binding)),critic=critic,
+        screener=screen,lease=lease)
+   row=result["iterations"][0]
+   self.assertEqual(row["status"],"portfolio_dnr_refused")
+   self.assertEqual(row["portfolio_exact_dnr_check"]["matched_dnr_ids"],
+                    ["dnr-exact-test"])
+   self.assertEqual((critic.calls,auth.call_count,lease.calls,screen.calls),(0,0,0,0))
+
+ def test_new_portfolio_path_fails_closed_on_missing_or_mismatched_mechanism_and_receipt(self):
+  with tempfile.TemporaryDirectory() as t:
+   config=self.portfolio_config(Path(t),[self.portfolio_record()])
+   binding=D._select_portfolio_binding({"iterations":[]},config)
+   candidate=self.portfolio_candidate(binding)
+   missing=dict(binding); missing.pop("mechanism_id")
+   tracker=D._tracker(D.DurableState(config.output_root))
+   with self.assertRaisesRegex(D.DiscoveryControllerError,"structural mechanism"):
+    D._ensure_question(tracker,candidate,missing)
+   mismatched=self.portfolio_candidate(binding,mechanism_id="e"*64)
+   with self.assertRaisesRegex(D.DiscoveryControllerError,"structural mechanism"):
+    D._ensure_question(tracker,mismatched,binding)
+   row={"portfolio_binding":dict(binding)}
+   with self.assertRaisesRegex(D.DiscoveryControllerError,"receipt is missing"):
+    D._revalidate_portfolio_checkpoint(config,candidate,row)
  def test_portfolio_decision_floor_retains_one_percent_and_refuses_weak_conflicted_nonfinite(self):
   policy=self.portfolio_record()["decision_policy"]
   self.assertEqual(D.classify_screen_series(
@@ -210,6 +269,89 @@ class Tests(unittest.TestCase):
   self.assertEqual(lease.calls,0); self.assertEqual(screen.calls,0)
   self.assertTrue(result["complete"])
   self.assertEqual(result["iterations"][0]["status"],"portfolio_refused")
+
+ def test_portfolio_dnr_receipt_round_trips_before_resumed_critic_and_authorization(self):
+  class Planner(FakePlanner):
+   def __init__(self,candidate): super().__init__(); self.candidate=candidate
+   def plan(self,**kwargs): self.calls.append(kwargs); return self.candidate
+  class CrashCritic(FakeCritic):
+   def __init__(self): super().__init__([])
+   def review(self,*_args,**_kwargs): raise RuntimeError("critic interrupted")
+  class NoReplan(FakePlanner):
+   def plan(self,**_kwargs): raise AssertionError("resume replanned a sealed candidate")
+  class Never:
+   def __getattr__(self,_name):
+    def called(*_args,**_kwargs): raise AssertionError("dry-run reached compute")
+    return called
+  with tempfile.TemporaryDirectory() as t:
+   record=self.portfolio_record(budget=1)
+   config=self.portfolio_config(Path(t),[record])
+   binding=D._select_portfolio_binding({"iterations":[]},config)
+   planner=Planner(self.portfolio_candidate(binding))
+   with self.assertRaisesRegex(RuntimeError,"critic interrupted"):
+    D.run_controller(config,planner=planner,critic=CrashCritic(),
+                     screener=Never(),lease=Never())
+   checkpoint=json.loads((config.output_root/"state.json").read_text())
+   receipt=dict(checkpoint["pending"]["row"]["portfolio_exact_dnr_check"])
+   self.assertEqual(receipt["outcome"],D.schemas.PASS)
+   result=D.run_controller(config,planner=NoReplan(),critic=FakeCritic(["accept"]),
+                           screener=Never(),lease=Never())
+   row=result["iterations"][0]
+   self.assertEqual(row["portfolio_exact_dnr_check"],receipt)
+   self.assertEqual(row["campaign_ledger_dnr_outcome"],D.schemas.PASS)
+   self.assertEqual(row["status"],"dry_run_authorized")
+   self.assertEqual(len(planner.calls),1)
+
+ def test_portfolio_family_budget_allows_two_distinct_candidates(self):
+  class Planner(FakePlanner):
+   def __init__(self,candidates): super().__init__(); self.candidates=iter(candidates)
+   def plan(self,**kwargs): self.calls.append(kwargs); return next(self.candidates)
+  class Never:
+   def __getattr__(self,_name):
+    def called(*_args,**_kwargs): raise AssertionError("dry-run reached compute")
+    return called
+  with tempfile.TemporaryDirectory() as t:
+   config=self.portfolio_config(Path(t),[self.portfolio_record(budget=2)])
+   binding=D._select_portfolio_binding({"iterations":[]},config)
+   first=self.portfolio_candidate(binding)
+   second_patch=first.source_manifest.patch_bytes.replace(b"+y\n",b"+z\n")
+   second_manifest=dataclasses.replace(
+       first.source_manifest,patch_bytes=second_patch,
+       patch_sha256=hashlib.sha256(second_patch).hexdigest())
+   second=D.PlannedCandidate(
+       first.hypothesis_id,first.statement,first.falsifier,first.regime,
+       first.proposal,second_manifest,second_manifest.patch_bundle_sha256,
+       first.experiment_intent)
+   result=D.run_controller(
+       config,planner=Planner([first,second]),
+       critic=FakeCritic(["accept","accept"]),screener=Never(),lease=Never())
+   rows=result["iterations"]
+   self.assertEqual([row["status"] for row in rows],
+                    ["dry_run_authorized","dry_run_authorized"])
+   self.assertEqual(len({row["source_manifest_sha256"] for row in rows}),2)
+   self.assertEqual([row["campaign_ledger_dnr_outcome"] for row in rows],
+                    [D.schemas.PASS,D.schemas.PASS])
+   tracked=D._tracker(D.DurableState(config.output_root)).state()[
+       binding["hypothesis_id"]]
+   self.assertEqual(tracked.hypothesis.regime["mechanism"],
+                    binding["mechanism_id"])
+
+ def test_legacy_generic_question_without_mechanism_remains_could_not_check(self):
+  class Planner(FakePlanner):
+   def plan(self,*,context,workspace):
+    self.calls.append(context); manifest=Manifest()
+    return D.PlannedCandidate(
+        "akh-legacy-generic","legacy question without structural identity",
+        "no speed improvement invalidates it",{"backend":"gpu","phase":"decode"},
+        {"id":"legacy"},manifest,manifest.patch_bundle_sha256)
+  with tempfile.TemporaryDirectory() as t, \
+       patch.object(D.source_candidate,"SourcePatchManifest",Manifest), \
+       patch.object(D,"_write_projection"):
+   result=D.run_controller(
+       D.ControllerConfig(Path(t)/"out",1,dry_run=True),planner=Planner(),
+       critic=FakeCritic(["accept"]),screener=FakeScreen([.1]),lease=Lease())
+  self.assertEqual(result["iterations"][0]["campaign_ledger_dnr_outcome"],
+                   D.schemas.COULD_NOT_CHECK)
  def source_package(self):
   content=b"void reviewed_kernel() {}\n"; digest=hashlib.sha256(content).hexdigest()
   body={"schema":"epyc.autokernel.reviewed_source_package.v1","instrument_commit":"1"*40,
