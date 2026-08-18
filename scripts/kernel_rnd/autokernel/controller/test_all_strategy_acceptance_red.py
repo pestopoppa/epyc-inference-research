@@ -14,6 +14,7 @@ from types import SimpleNamespace
 import unittest
 from unittest import mock
 
+from scripts.benchmark import test_run_autokernel_gpu_discovery as TR
 from .. import hypothesis_portfolio
 from . import discovery_controller as C
 from . import discovery_deployment_factory as F
@@ -250,6 +251,131 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
             SimpleNamespace(source_manifest_sha256="e" * 64, regime={}),
             result)
         self.assertNotIn(classified.classification,
+                         {"candidate", "top_k_replicated_candidate"})
+
+    def test_nonpositive_exact_duration_is_measured_and_short_circuits_graphs_on(self):
+        """A valid neutral/regression is evidence, not an execution refusal."""
+        fixture = TD.Tests(methodName="runTest")
+        record = fixture.portfolio_record(
+            hypothesis_id="akh-exact-nonpositive", rank=1, budget=1)
+        with tempfile.TemporaryDirectory() as directory:
+            config = fixture.portfolio_config(Path(directory), [record])
+            binding = C._select_portfolio_binding(
+                {"iterations": [], "portfolio_terminals": {}}, config)
+            item = fixture.portfolio_candidate(binding)
+            result = C.SealedScreen(
+                receipt_path="result.json", result_sha256="a" * 64,
+                effect_fraction=0.0, classification="candidate",
+                baseline_sha256="b" * 64, source_proof_sha256="c" * 64,
+                dispatch_proof_sha256="d" * 64,
+                exact_attribution_effect_fraction=0.0,
+                target_runtime_effect_fraction=None)
+            classified = C._classified_result(
+                {"iterations": []}, item, result,
+                binding["decision_policy"])
+            self.assertIn(classified.classification,
+                          {"inconclusive", "screened_out"})
+            self.assertIsNone(classified.target_runtime_effect_fraction)
+            row = {
+                "status": classified.classification,
+                "portfolio_hypothesis_id": binding["hypothesis_id"],
+                "portfolio_decision_policy": binding["decision_policy"],
+                "source_manifest_sha256": item.source_manifest_sha256,
+                "scientific_budget_spent": True,
+            }
+            state = {"iterations": [row], "portfolio_terminals": {}}
+            C._apply_portfolio_outcome(state, row)
+            self.assertIn(binding["hypothesis_id"],
+                          state["portfolio_terminals"])
+
+    def test_graphs_on_process_environment_omits_presence_only_disable_flag(self):
+        """RED: `DISABLE_GRAPHS=0` still disables graphs in llama.cpp."""
+        fixture = TR.TestGpuDiscoveryBatchedSubprocess(methodName="runTest")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            build = TR._build(root, rocwmma="ON", mfma="OFF")
+            model = root / "model.gguf"
+            model.write_bytes(b"model")
+            process = fixture._Process(fixture._row([100.0] * 3))
+            seen = []
+            result = C.gpu_discovery._invoke_locked(
+                build=build, model=model, seed=8613, baseline_vram=0,
+                flash_attention=True,
+                expected_source_commit=C.gpu_discovery.SOURCE_COMMIT,
+                repetitions=3, runtime_graphs="on",
+                process_factory=lambda argv, **kwargs: (
+                    seen.append((argv, kwargs)) or process),
+                kfd_pid_provider=lambda: (123,), vram_reader=lambda: 64,
+                pgid_provider=lambda _pid: process.pid, sleep=lambda _: None)
+        self.assertNotIn("GGML_CUDA_DISABLE_GRAPHS", seen[0][1]["env"])
+        self.assertNotIn("GGML_CUDA_DISABLE_GRAPHS", result["env"])
+        self.assertEqual(result["metric_contract"]["graph_environment"],
+                         {"GGML_CUDA_DISABLE_GRAPHS": None})
+
+    def test_nonpositive_exact_attribution_never_starts_a_model_screen(self):
+        """RED: route-level falsification short-circuits both runner stages."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            anchor = root / "anchor"
+            candidate = root / "candidate"
+            anchor.mkdir()
+            candidate.mkdir()
+            source_file = root / "source.json"
+            dispatch_file = root / "dispatch.json"
+            source_file.write_text("source")
+            dispatch_file.write_text("dispatch")
+            source_hash = __import__("hashlib").sha256(
+                source_file.read_bytes()).hexdigest()
+            dispatch_hash = __import__("hashlib").sha256(
+                dispatch_file.read_bytes()).hexdigest()
+            build = C.GpuSourceBuild(
+                anchor, candidate,
+                C.gpu_source_proofs.BuildIdentity(
+                    "commit-a", "a" * 64, "a" * 64, "a" * 64,
+                    "a" * 64, "a" * 64),
+                C.gpu_source_proofs.BuildIdentity(
+                    "commit-b", "b" * 64, "b" * 64, "b" * 64,
+                    "b" * 64, "b" * 64))
+            material = {
+                "manifest_sha256": "a" * 64,
+                "candidate": build.candidate_identity,
+                "anchor": build.anchor_identity,
+                "workload_sha256": "a" * 64,
+                "correctness": {
+                    "file_sha256": source_hash, "native_sha256": "a" * 64},
+                "attribution": {
+                    "file_sha256": dispatch_hash, "native_sha256": "a" * 64,
+                    "body": {"exact_duration_comparison": {
+                        "relative_improvement_fraction": -0.01}}},
+            }
+            hashed = {
+                **material,
+                "candidate": build.candidate_identity.__dict__,
+                "anchor": build.anchor_identity.__dict__}
+            bundle = C.gpu_source_proofs.GpuSourceProofBundle(
+                **material,
+                bundle_sha256=C.gpu_source_proofs._hash(hashed))
+            item = SimpleNamespace(source_manifest_sha256="a" * 64)
+            graphs_off = SimpleNamespace(
+                factor="source_patch", anchor_build=str(anchor),
+                candidate_build=str(candidate),
+                output_dir=str(root / "graphs-off"))
+            graphs_on = SimpleNamespace(
+                factor="source_patch", anchor_build=str(anchor),
+                candidate_build=str(candidate),
+                output_dir=str(root / "graphs-on"))
+            graphs_off._target_runtime_args = graphs_on
+            screener = C.GpuSourceScreener(
+                build_source=lambda *_args: build,
+                proof_bundle=lambda *_args: bundle,
+                args_factory=lambda *_args: graphs_off)
+            with mock.patch.object(
+                    C.gpu_discovery, "run",
+                    side_effect=AssertionError("model screen executed")):
+                result = screener.screen(item, object(), {})
+        self.assertEqual(result.exact_attribution_effect_fraction, -0.01)
+        self.assertIsNone(result.target_runtime_effect_fraction)
+        self.assertNotIn(result.classification,
                          {"candidate", "top_k_replicated_candidate"})
 
     def test_three_real_critic_rejections_skip_only_that_strategy(self):
