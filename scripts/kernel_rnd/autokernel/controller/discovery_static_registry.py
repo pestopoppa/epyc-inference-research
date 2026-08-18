@@ -1096,6 +1096,15 @@ class StaticGpuSourceBuilder:
             failure_stage = terminal.get("failure_stage")
             if terminal.get("state") == "failed" and failure_stage in {
                     "source_apply", "compile"}:
+                allowed_types = {
+                    "source_apply": {
+                        _SourceApplyFailure.__name__,
+                        source_candidate.SourceCandidateError.__name__},
+                    "compile": {_CompileFailure.__name__},
+                }
+                if terminal.get("failure_type") not in allowed_types[failure_stage]:
+                    raise StaticRegistryError(
+                        "failed build terminal stage/type classification changed")
                 # The ref, canonical intent, terminal self-hash, build key,
                 # and exact intent-file digest have all been revalidated above.
                 # Only that complete identity chain may recover the original

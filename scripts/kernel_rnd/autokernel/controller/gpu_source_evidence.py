@@ -37,6 +37,7 @@ EXECUTION_POLICY_SCHEMA = "epyc.autokernel.gpu_source_execution_policy.v2"
 ATTRIBUTION_SCHEMA = "epyc.autokernel.gpu_kernel_attribution.v2"
 ATTRIBUTION_REFUSAL_SCHEMA = "epyc.autokernel.gpu_kernel_attribution_refusal.v1"
 PAIR_SCHEMA = "epyc.autokernel.gpu_kernel_attribution_pair.v1"
+PAIR_REFUSAL_SCHEMA = "epyc.autokernel.gpu_kernel_attribution_pair_refusal.v1"
 SEALED_BUNDLE_SCHEMA = "epyc.autokernel.gpu_source_evidence_bundle.v1"
 SHA = re.compile(r"^[0-9a-f]{64}$")
 SOURCE_TREE_SCHEMA = "epyc.autokernel.source_tree_identity.v1"
@@ -2022,7 +2023,24 @@ def _produce_pair(
     anchor_invariants = _structural_signature_projection(
         anchor_body["invariant_signatures"])
     if candidate_invariants != anchor_invariants:
-        raise EvidenceProducerError("candidate changed an invariant hot signature")
+        reason = "candidate changed an invariant hot signature"
+        refusal = _seal(root / "attribution-pair-refusal.json", {
+            "schema": PAIR_REFUSAL_SCHEMA, "authority": AUTHORITY,
+            "promotion_claim": False, "status": "refused",
+            "classification": "attribution_route_falsified",
+            "error_type": "DispatchAttributionParseRefusal",
+            "reason": reason, "manifest_sha256": plan.manifest_sha256,
+            "model_sha256": plan.model_sha256,
+            "workload_sha256": plan.workload_sha256,
+            "runtime_config_sha256": plan.runtime_config_sha256,
+            "candidate": _reference(candidate), "anchor": _reference(anchor),
+            "candidate_invariant_signatures": candidate_invariants,
+            "anchor_invariant_signatures": anchor_invariants,
+            "expectations": _expectations(plan),
+        })
+        raise DispatchAttributionParseRefusal(
+            reason, receipt_path=str(refusal["path"]),
+            receipt_sha256=str(refusal["file_sha256"]))
     if plan.shared_runtime is not None:
         candidate_maps = candidate_body.get("runtime_maps_identity")
         anchor_maps = anchor_body.get("runtime_maps_identity")
@@ -2067,6 +2085,38 @@ def _produce_pair(
             candidate_body, anchor_body),
     }
     return _seal(root / "attribution-pair.json", body)
+
+
+def _load_gpu_source_attribution_pair_refusal(
+        path: Path, plan: GpuSourceEvidencePlan,
+        candidate: Mapping[str, Any], anchor: Mapping[str, Any]) -> Mapping[str, Any]:
+    loaded = proofs.load_receipt(path, schema=PAIR_REFUSAL_SCHEMA)
+    body = loaded["body"]
+    candidate_invariants = _structural_signature_projection(
+        candidate["body"].get("invariant_signatures"))
+    anchor_invariants = _structural_signature_projection(
+        anchor["body"].get("invariant_signatures"))
+    expected = {
+        "authority": AUTHORITY, "promotion_claim": False,
+        "status": "refused", "classification": "attribution_route_falsified",
+        "error_type": "DispatchAttributionParseRefusal",
+        "reason": "candidate changed an invariant hot signature",
+        "manifest_sha256": plan.manifest_sha256,
+        "model_sha256": plan.model_sha256,
+        "workload_sha256": plan.workload_sha256,
+        "runtime_config_sha256": plan.runtime_config_sha256,
+        "candidate": _reference(candidate), "anchor": _reference(anchor),
+        "candidate_invariant_signatures": candidate_invariants,
+        "anchor_invariant_signatures": anchor_invariants,
+        "expectations": _expectations(plan),
+    }
+    if any(body.get(key) != value for key, value in expected.items()):
+        raise EvidenceProducerError(
+            "attribution pair refusal identity/reduction changed")
+    if candidate_invariants == anchor_invariants:
+        raise EvidenceProducerError(
+            "attribution pair refusal no longer has invariant drift")
+    return loaded
 
 
 def _reload_reference(reference: Mapping[str, Any], *, schema: str) -> Mapping[str, Any]:
@@ -2500,7 +2550,7 @@ def produce_gpu_source_evidence(
     refusal_path = correctness_dir / "refusal.json"
     later_paths = (
         root / "attribution-candidate", root / "attribution-anchor",
-        root / "attribution-pair.json")
+        root / "attribution-pair.json", root / "attribution-pair-refusal.json")
     if correctness_path.exists() or correctness_path.is_symlink():
         if refusal_path.exists() or refusal_path.is_symlink():
             raise EvidenceProducerError(
@@ -2548,7 +2598,9 @@ def produce_gpu_source_evidence(
                        or (root / f"attribution-{later}").is_symlink()
                        for later in later_arms)
                 or (root / "attribution-pair.json").exists()
-                or (root / "attribution-pair.json").is_symlink()):
+                or (root / "attribution-pair.json").is_symlink()
+                or (root / "attribution-pair-refusal.json").exists()
+                or (root / "attribution-pair-refusal.json").is_symlink()):
             raise EvidenceProducerError(
                 f"{arm} attribution is incomplete or later evidence exists out of order")
         arm_receipts[arm] = _produce_attribution_arm(
@@ -2560,9 +2612,20 @@ def produce_gpu_source_evidence(
     anchor = arm_receipts["anchor"]
 
     pair_path = root / "attribution-pair.json"
+    pair_refusal_path = root / "attribution-pair-refusal.json"
     if pair_path.exists() or pair_path.is_symlink():
+        if pair_refusal_path.exists() or pair_refusal_path.is_symlink():
+            raise EvidenceProducerError(
+                "attribution pair has contradictory terminals")
         pair = _load_gpu_source_attribution_pair(
             pair_path, plan, candidate, anchor)
+    elif pair_refusal_path.exists() or pair_refusal_path.is_symlink():
+        refusal = _load_gpu_source_attribution_pair_refusal(
+            pair_refusal_path, plan, candidate, anchor)
+        raise DispatchAttributionParseRefusal(
+            str(refusal["body"]["reason"]),
+            receipt_path=str(refusal["path"]),
+            receipt_sha256=str(refusal["file_sha256"]))
     else:
         pair = _produce_pair(root, plan, candidate, anchor)
     bundle = proofs.GpuSourceProofBundle.from_validated_paths(

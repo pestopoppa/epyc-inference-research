@@ -458,6 +458,9 @@ class SealedScreen:
         if not self.candidate_only or self.promotion_claim: raise DiscoveryControllerError("discovery screen must remain nonpromotable")
         if tuple(self.stages) not in {
                 ("materialized", "built", "correctness", "attribution", "screen"),
+                ("materialized", "built", "correctness", "attribution",
+                 "measurement_graphs_off_screen",
+                 "target_runtime_graphs_on_screen"),
                 ("materialized", "built", "correctness", "attribution")}:
             raise DiscoveryControllerError("screen did not prove the required fail-closed stage order")
         for value in (self.result_sha256, self.baseline_sha256, self.source_proof_sha256, self.dispatch_proof_sha256):
@@ -1480,7 +1483,7 @@ class GpuSourceScreener:
         projection = autokernel_progression._gpu_screen(result_path, raw)
         if projection is None: raise DiscoveryControllerError("GPU result failed canonical progression validation")
         target_effect = float(raw["median_relative"])
-        return SealedScreen(receipt_path=str(result_path), result_sha256=str(raw["result_sha256"]), effect_fraction=target_effect, classification=str(projection["stage"]), baseline_sha256=str(raw["baseline_sha256"]), source_proof_sha256=bundle.correctness["file_sha256"], dispatch_proof_sha256=bundle.attribution["file_sha256"], exact_attribution_effect_fraction=exact_effect, target_runtime_effect_fraction=target_effect)
+        return SealedScreen(receipt_path=str(result_path), result_sha256=str(raw["result_sha256"]), effect_fraction=target_effect, classification=str(projection["stage"]), baseline_sha256=str(raw["baseline_sha256"]), source_proof_sha256=bundle.correctness["file_sha256"], dispatch_proof_sha256=bundle.attribution["file_sha256"], exact_attribution_effect_fraction=exact_effect, target_runtime_effect_fraction=target_effect, stages=("materialized", "built", "correctness", "attribution", "measurement_graphs_off_screen", "target_runtime_graphs_on_screen"))
 
 
 @dataclass(frozen=True)
@@ -2207,6 +2210,53 @@ def _record_precompute_refusal(state: dict[str, Any], row: dict[str, Any],
     state["next"] += 1
 
 
+def _record_governed_stage_refusal(
+        state: dict[str, Any], row: dict[str, Any],
+        exc: GovernedStageRefusal) -> None:
+    """Consume one already-sealed stage terminal without replaying its work."""
+    state.pop("inflight", None)
+    state.pop("pending", None)
+    row.update(
+        status=exc.disposition, reason=str(exc), stage=exc.stage,
+        stage_receipt_path=exc.receipt_path,
+        stage_receipt_sha256=exc.receipt_sha256,
+        scientific_budget_spent=exc.scientific_budget_spent)
+    state["iterations"].append(row)
+    if exc.disposition == "authoring_refused":
+        _note_portfolio_authoring_failure(state, row)
+    hypothesis_id = row.get("portfolio_hypothesis_id")
+    terminals = state.setdefault("portfolio_terminals", {})
+    if (isinstance(hypothesis_id, str)
+            and exc.disposition == "correctness_falsified"):
+        terminals[hypothesis_id] = {
+            "disposition": exc.disposition,
+            "stage_receipt_path": exc.receipt_path,
+            "stage_receipt_sha256": exc.receipt_sha256,
+        }
+    elif (isinstance(hypothesis_id, str)
+          and exc.disposition == "attribution_route_falsified"):
+        manifest = row.get("source_manifest_sha256")
+        policy = row.get("portfolio_decision_policy")
+        if (isinstance(manifest, str) and HASH.fullmatch(manifest)
+                and isinstance(policy, Mapping)):
+            failures = state.setdefault(
+                "portfolio_attribution_failures", {}).setdefault(
+                    hypothesis_id, [])
+            if manifest not in failures:
+                failures.append(manifest)
+            budget = policy.get("max_distinct_candidates")
+            if (isinstance(budget, int) and not isinstance(budget, bool)
+                    and budget > 0 and len(failures) >= budget):
+                state.setdefault("portfolio_skips", {})[hypothesis_id] = {
+                    "disposition": "bounded_attribution_falsified",
+                    "scientific_terminal": False,
+                    "distinct_candidate_count": len(failures),
+                    "stage_receipt_path": exc.receipt_path,
+                    "stage_receipt_sha256": exc.receipt_sha256,
+                }
+    state["next"] += 1
+
+
 def _note_portfolio_authoring_failure(state: dict[str, Any],
                                       row: Mapping[str, Any]) -> None:
     """Bound repeated non-scientific actor failures without retiring science."""
@@ -2451,6 +2501,11 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                     row = dict(inflight["row"])
                     _record_precompute_refusal(state, row, exc)
                     store.save(state, "screen_refused")
+                    precompute_refused = True
+                except GovernedStageRefusal as exc:
+                    row = dict(inflight["row"])
+                    _record_governed_stage_refusal(state, row, exc)
+                    store.save(state, exc.disposition)
                     precompute_refused = True
         if not precompute_refused:
             if not isinstance(result,SealedScreen): raise DiscoveryControllerError("inflight recovery produced no sealed result")
@@ -2712,27 +2767,7 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                 _record_precompute_refusal(state, row, exc)
                 store.save(state,"screen_refused"); continue
             except GovernedStageRefusal as exc:
-                state.pop("inflight", None)
-                state.pop("pending", None)
-                row.update(
-                    status=exc.disposition, reason=str(exc),
-                    stage=exc.stage,
-                    stage_receipt_path=exc.receipt_path,
-                    stage_receipt_sha256=exc.receipt_sha256,
-                    scientific_budget_spent=exc.scientific_budget_spent)
-                state["iterations"].append(row)
-                if exc.disposition == "authoring_refused":
-                    _note_portfolio_authoring_failure(state, row)
-                hypothesis_id = row.get("portfolio_hypothesis_id")
-                terminals = state.setdefault("portfolio_terminals", {})
-                if (isinstance(hypothesis_id, str)
-                        and exc.disposition == "correctness_falsified"):
-                    terminals[hypothesis_id] = {
-                        "disposition": exc.disposition,
-                        "stage_receipt_path": exc.receipt_path,
-                        "stage_receipt_sha256": exc.receipt_sha256,
-                    }
-                state["next"] += 1
+                _record_governed_stage_refusal(state, row, exc)
                 store.save(state, exc.disposition)
                 continue
             except Exception as exc:
