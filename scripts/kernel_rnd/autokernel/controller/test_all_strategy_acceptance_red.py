@@ -759,10 +759,32 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
         class CrashAfterDurableResult(BaseException):
             pass
 
+        class EpochReservation(TA.ReservationManager):
+            def __init__(self):
+                super().__init__()
+                self.claim_ids = []
+
+            def reserve(self, operation_key):
+                self.reserve_calls += 1
+                epoch = self.reserve_calls
+                self.outer = E.device_claim.ClaimReceipt(
+                    claim_id=f"akd-outer-{epoch}", device_id="mi210_0",
+                    lock_path=f"/claim-{epoch}", state="held",
+                    holder_pid=epoch, holder_start_ticks=epoch,
+                    holder_boot_id="boot", host="host",
+                    holder_label="outer", purpose="outer reservation",
+                    campaign_id="ak-gpu-source-evidence-test",
+                    acquired_at=f"2026-08-14T00:00:0{epoch}Z")
+                self.claim_ids.append(self.outer.claim_id)
+                self.active = True
+                return self.outer.to_dict()
+
         helper = TA.GpuSourceAdapterTests(methodName="runTest")
         with tempfile.TemporaryDirectory() as directory:
             values = helper.setup(directory)
             adapter, candidate, authorization, lease, inflight, _current, executors = values
+            manager = EpochReservation()
+            adapter.reservation_manager = manager
             operation_root = adapter._root(lease["operation_key"])
             off = SimpleNamespace(
                 factor="source_patch",
@@ -816,13 +838,20 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
                                       return_value={"stage": "candidate"}):
                 with self.assertRaises(CrashAfterDurableResult):
                     adapter.screen(candidate, authorization, lease)
+                self.assertEqual((manager.reserve_calls, manager.release_calls),
+                                 (1, 1))
                 self.assertEqual(adapter.reconcile(inflight).status,
                                  "safe_to_start")
                 with self.assertRaises(CrashAfterDurableResult):
                     adapter.screen(candidate, authorization, lease)
-                self.assertEqual(adapter.reconcile(inflight).status,
-                                 "safe_to_start")
-                result = adapter.screen(candidate, authorization, lease)
+                self.assertEqual((manager.reserve_calls, manager.release_calls),
+                                 (2, 2))
+                recovered_after_on = adapter.reconcile(inflight)
+                self.assertIn(recovered_after_on.status,
+                              {"safe_to_start", "sealed_result"})
+                result = (recovered_after_on.result
+                          if recovered_after_on.status == "sealed_result"
+                          else adapter.screen(candidate, authorization, lease))
             self.assertEqual(process_calls, ["off", "on"])
             self.assertEqual(
                 [call[:2] for call in executors.calls],
@@ -830,6 +859,9 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
                  ("rocprof", "candidate"), ("rocprof", "anchor")])
             self.assertGreater(result.exact_attribution_effect_fraction, 0)
             self.assertEqual(result.target_runtime_effect_fraction, .04)
+            self.assertEqual(manager.reserve_calls, manager.release_calls)
+            self.assertFalse(manager.active)
+            self.assertEqual(len(set(manager.claim_ids)), len(manager.claim_ids))
             recovered = adapter.reconcile(inflight)
             self.assertEqual(recovered.status, "sealed_result")
             self.assertEqual(
