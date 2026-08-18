@@ -1080,7 +1080,7 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
             error = C.source_candidate.SourceCandidateError(
                 "committed diff derives undeclared symbols")
             with mock.patch.object(
-                    TSR.StaticGpuSourceBuilder, "_build_uncached",
+                    TSR.source_candidate, "apply_source_candidate",
                     side_effect=error), self.assertRaises(
                         C.SourceApplyRefusal) as first:
                 fixture.builder.build(
@@ -1192,6 +1192,55 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
                 hashlib.sha256(receipt.read_bytes()).hexdigest(),
                 first.exception.receipt_sha256)
 
+    def test_malformed_profile_output_remains_ambiguous_not_falsified(self):
+        """Only a parsed route mismatch may become a scientific route terminal."""
+        helper = TA.GpuSourceAdapterTests(methodName="runTest")
+        with tempfile.TemporaryDirectory() as directory:
+            values = helper.setup(directory)
+            adapter, candidate, authorization, lease, _inflight, _current, executors = values
+
+            def malformed(invocation):
+                executors.calls.append((
+                    invocation.kind, invocation.arm, invocation.argv,
+                    invocation.environment))
+                invocation.stdout_path.write_text("profile complete\n")
+                invocation.stderr_path.write_text("")
+                invocation.timestamp_csv_path.write_text("malformed,csv\n")
+                return executors._capture(invocation, 0)
+
+            adapter.rocprof_executor = malformed
+            with mock.patch.object(C, "GpuSourceScreener", TA.FakeDelegate), \
+                    self.assertRaises(E.EvidenceProducerError) as caught:
+                adapter.screen(candidate, authorization, lease)
+            self.assertNotEqual(
+                type(caught.exception).__name__,
+                "DispatchAttributionParseRefusal")
+            proof = adapter._root(lease["operation_key"]) / "proof"
+            self.assertFalse(any(proof.glob("attribution-*/refusal.json")))
+
+    def test_dispatch_refusal_rederives_reason_before_typed_reopen(self):
+        """A rewritten self-hashed terminal cannot manufacture route falsification."""
+        helper = TA.GpuSourceAdapterTests(methodName="runTest")
+        with tempfile.TemporaryDirectory() as directory:
+            values = helper.setup(directory)
+            adapter, candidate, authorization, lease, _inflight, _current, executors = values
+            executors.forbidden = True
+            with mock.patch.object(C, "GpuSourceScreener", TA.FakeDelegate), \
+                    self.assertRaises(C.DispatchAttributionRefusal) as first:
+                adapter.screen(candidate, authorization, lease)
+            calls_after_terminal = list(executors.calls)
+            receipt = Path(first.exception.receipt_path)
+            forged = __import__("json").loads(receipt.read_text())
+            forged["reason"] = "forged but self-consistent route reason"
+            forged.pop("receipt_sha256")
+            forged["receipt_sha256"] = E.schemas.content_hash(forged)
+            receipt.write_text(__import__("json").dumps(
+                forged, sort_keys=True) + "\n")
+            with mock.patch.object(C, "GpuSourceScreener", TA.FakeDelegate), \
+                    self.assertRaises(E.EvidenceProducerError):
+                adapter.screen(candidate, authorization, lease)
+            self.assertEqual(executors.calls, calls_after_terminal)
+
     def test_controller_accounts_each_typed_stage_refusal_without_ambiguity(self):
         """RED: exercise the public screen boundary and portfolio state."""
         fixture = TD.Tests(methodName="runTest")
@@ -1209,12 +1258,12 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
                     context["authoring_assignment"]["portfolio_binding"])
 
         expected = (
-            ("SourceApplyRefusal", "authoring_refused", False),
-            ("CompileRefusal", "authoring_refused", False),
-            ("CorrectnessRefusal", "correctness_falsified", True),
-            ("DispatchAttributionRefusal", "attribution_route_falsified", False),
+            ("SourceApplyRefusal", "authoring_refused", False, True),
+            ("CompileRefusal", "authoring_refused", False, True),
+            ("CorrectnessRefusal", "correctness_falsified", True, False),
+            ("DispatchAttributionRefusal", "attribution_route_falsified", False, False),
         )
-        for name, disposition, hypothesis_terminal in expected:
+        for name, disposition, hypothesis_terminal, authoring_failure in expected:
             with self.subTest(refusal=name), tempfile.TemporaryDirectory() as directory:
                 refusal_type = getattr(C, name, None)
                 self.assertIsInstance(refusal_type, type)
@@ -1285,6 +1334,10 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
                     record["hypothesis_id"] in
                     result.get("portfolio_terminals", {}),
                     hypothesis_terminal)
+                self.assertEqual(
+                    record["hypothesis_id"] in
+                    result.get("portfolio_authoring_failures", {}),
+                    authoring_failure)
                 self.assertEqual((planner.calls, screener.calls), (1, 1))
 
 
