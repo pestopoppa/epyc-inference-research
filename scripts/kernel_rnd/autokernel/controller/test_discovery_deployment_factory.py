@@ -465,6 +465,23 @@ class DeploymentFactoryTests(unittest.TestCase):
              self.assertRaisesRegex(F.DeploymentFactoryError, "module bytes changed"):
             attest()
 
+    def test_t0_capability_contract_is_in_exact_graph_and_tamper_attested(self):
+        sealed = F._execution_module_identity()
+        self.assertEqual(
+            sealed["t0_provider"], {
+                "path": str(Path(F.t0_provider.__file__).resolve(strict=True)),
+                "sha256": F._digest_regular(
+                    Path(F.t0_provider.__file__).resolve(strict=True),
+                    "t0_provider"),
+            })
+        changed = json.loads(json.dumps(sealed))
+        changed["t0_provider"]["sha256"] = "0" * 64
+        attest = F._module_attestor(sealed)
+        with mock.patch.object(F, "_execution_module_identity", return_value=changed), \
+                self.assertRaisesRegex(
+                    F.DeploymentFactoryError, "module bytes changed"):
+            attest()
+
     def test_validate_only_materializes_static_graph_without_actor_or_hardware(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -517,6 +534,7 @@ class DeploymentFactoryTests(unittest.TestCase):
             self.assertIn("discovery_telemetry", receipt["execution_modules"])
             self.assertIn("hypotheses", receipt["execution_modules"])
             self.assertIn("do_not_repeat", receipt["execution_modules"])
+            self.assertIn("t0_provider", receipt["execution_modules"])
             self.assertEqual(
                 receipt["execution_modules"]["discovery_telemetry"]["sha256"],
                 F._digest_regular(Path(F.discovery_telemetry.__file__).resolve(),
@@ -529,6 +547,10 @@ class DeploymentFactoryTests(unittest.TestCase):
                 receipt["execution_modules"]["do_not_repeat"]["sha256"],
                 F._digest_regular(Path(C.do_not_repeat.__file__).resolve(),
                                   "do_not_repeat"))
+            self.assertEqual(
+                receipt["execution_modules"]["t0_provider"]["sha256"],
+                F._digest_regular(Path(F.t0_provider.__file__).resolve(),
+                                  "t0_provider"))
             self.assertTrue(receipt["critic_auth_source"]["validated"])
             self.assertFalse(receipt["critic_auth_source"]["secret_digest_persisted"])
             self.assertNotIn("sha256", receipt["critic_auth_source"])

@@ -252,6 +252,7 @@ def _execution_module_identity() -> dict[str, dict[str, str]]:
         "worktree": Path(worktree.__file__).resolve(strict=True),
         "source_candidate": Path(source_candidate.__file__).resolve(strict=True),
         "instrument_integrity": Path(instrument_integrity.__file__).resolve(strict=True),
+        "t0_provider": Path(t0_provider.__file__).resolve(strict=True),
         "evaluator_integrity": Path(integrity.__file__).resolve(strict=True),
         "gpu_source_evidence": Path(evidence.__file__).resolve(strict=True),
         "gpu_source_proofs": Path(gpu_source_proofs.__file__).resolve(strict=True),
