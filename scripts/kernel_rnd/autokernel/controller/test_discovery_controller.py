@@ -110,7 +110,9 @@ class Tests(unittest.TestCase):
    D._validate_portfolio_candidate(self.portfolio_candidate(first),first,
                                     config.hypothesis_portfolio)
    state["iterations"].append({"portfolio_hypothesis_id":"akh-first",
-                               "source_manifest_sha256":"1"*64})
+                               "source_manifest_sha256":"1"*64,
+                               "result_sha256":"2"*64,
+                               "evidence":{"source":"3"*64}})
    second=D._select_portfolio_binding(state,config)
    self.assertEqual(second["hypothesis_id"],"akh-lower")
    with self.assertRaisesRegex(D.DiscoveryControllerError,"controller-owned"):
@@ -268,7 +270,7 @@ class Tests(unittest.TestCase):
   self.assertEqual(critic.calls,0)
   self.assertEqual(lease.calls,0); self.assertEqual(screen.calls,0)
   self.assertTrue(result["complete"])
-  self.assertEqual(result["iterations"][0]["status"],"portfolio_refused")
+  self.assertEqual(result["iterations"][0]["status"],"planner_contract_refused")
 
  def test_portfolio_dnr_receipt_round_trips_before_resumed_critic_and_authorization(self):
   class Planner(FakePlanner):
@@ -326,11 +328,12 @@ class Tests(unittest.TestCase):
        config,planner=Planner([first,second]),
        critic=FakeCritic(["accept","accept"]),screener=Never(),lease=Never())
    rows=result["iterations"]
-   self.assertEqual([row["status"] for row in rows],
-                    ["dry_run_authorized","dry_run_authorized"])
-   self.assertEqual(len({row["source_manifest_sha256"] for row in rows}),2)
+   self.assertEqual([row["status"] for row in rows], ["dry_run_authorized"])
+   self.assertEqual(len({row["source_manifest_sha256"] for row in rows}),1)
    self.assertEqual([row["campaign_ledger_dnr_outcome"] for row in rows],
-                    [D.schemas.PASS,D.schemas.PASS])
+                    [D.schemas.PASS])
+   self.assertIn(binding["hypothesis_id"], result["portfolio_validations"])
+   self.assertNotIn(binding["hypothesis_id"], result.get("portfolio_skips", {}))
    tracked=D._tracker(D.DurableState(config.output_root)).state()[
        binding["hypothesis_id"]]
    self.assertEqual(tracked.hypothesis.regime["mechanism"],
@@ -814,19 +817,11 @@ class Tests(unittest.TestCase):
    candidate_identity=build.candidate_identity; anchor_identity=build.anchor_identity; material={"manifest_sha256":H,"candidate":candidate_identity,"anchor":anchor_identity,"workload_sha256":H,"correctness":{"file_sha256":source_hash,"native_sha256":H},"attribution":{"file_sha256":dispatch_hash,"native_sha256":H}}
    hashed={**material,"candidate":candidate_identity.__dict__,"anchor":anchor_identity.__dict__}; bundle=D.gpu_source_proofs.GpuSourceProofBundle(**material,bundle_sha256=D.gpu_source_proofs._hash(hashed))
    screen=D.GpuSourceScreener(build_source=lambda *_: events.append("build") or build,proof_bundle=lambda *_: events.extend(["source","dispatch"]) or bundle,args_factory=lambda *_:args)
-   with patch.object(D.autokernel_progression,"_gpu_screen",return_value={"stage":"candidate"}):
-    got=screen.screen(item,object(),{})
-   self.assertEqual(events,["build","source","dispatch","runner"]); self.assertEqual(got.dispatch_proof_sha256,dispatch_hash)
-   (root/"screen"/"live-governance.json").unlink()
-   with patch.object(D.autokernel_progression,"_gpu_screen",return_value={"stage":"candidate"}), self.assertRaisesRegex(D.DiscoveryControllerError,"governance"):
+   with self.assertRaisesRegex(
+           D.DiscoveryControllerError, "separate target-runtime stage"):
     screen.screen(item,object(),{})
-   wrong_phase={**phase,"outer_claim_id":"akd-wrong"}; wrong_opened={"claim_id":"akd-wrong"}
-   wrong={**raw,"device_claim_open":wrong_opened,"device_claim_borrowed_phase_end":wrong_phase}; wrong.pop("result_sha256"); wrong["result_sha256"]=D.gpu_source_proofs._hash(wrong)
-   (root/"screen"/"result.json").write_text(json.dumps(wrong))
-   (root/"screen"/"live-governance.json").write_text(json.dumps({**governance,"device_claim_open":wrong_opened,"device_claim_borrowed_phase_end":wrong_phase}))
-   run.side_effect=lambda _args: wrong
-   with patch.object(D.autokernel_progression,"_gpu_screen",return_value={"stage":"candidate"}), self.assertRaisesRegex(D.DiscoveryControllerError,"exact outer claim"):
-    screen.screen(item,object(),{})
+   self.assertEqual(events,["build","source","dispatch"])
+   run.assert_not_called()
  def test_lease_wait_is_durable_without_spending_iteration(self):
   class Wait:
    def admit(self,item,*,operation_key): return {"admitted":False,"reason":"CPU window busy","operation_key":operation_key}
