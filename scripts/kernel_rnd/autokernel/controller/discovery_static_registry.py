@@ -502,14 +502,29 @@ def runtime_maps_sampler(*, proc_root: Path = Path("/proc")) -> evidence.Runtime
         for kfd_pid in sorted(set(residency.kfd_pids)):
             try:
                 maps = (root / str(kfd_pid) / "maps").read_text(encoding="utf-8")
+                start_ticks = _start_ticks(root, kfd_pid)
+            except OSError:
+                # A short-lived profiler/helper KFD client may disappear
+                # between the residency and maps samples.
+                continue
+            except ValueError as exc:
+                raise StaticRegistryError(
+                    "owned KFD process has an invalid runtime identity") from exc
+            try:
                 identities.append(split_runtime_verifier.verify_runtime_maps(
                     manifest, arm=str(arm), maps_text=maps, model_path=model_path,
                     model_sha256=model_sha, device_id=device_id, kfd_pid=kfd_pid,
-                    boot_id=_boot_id(root), process_start_ticks=_start_ticks(root, kfd_pid)))
-            except (OSError, ValueError, split_runtime_verifier.SplitRuntimeError):
-                # rocprof and helper wrappers can be KFD clients themselves;
-                # only the uniquely proven full reward/model closure is valid.
+                    boot_id=_boot_id(root), process_start_ticks=start_ticks))
+            except split_runtime_verifier.RuntimeMapsIncomplete:
+                # rocprof and helper wrappers can be KFD clients themselves,
+                # and llama-bench maps the sealed closure incrementally.
                 continue
+            except (OSError, ValueError, split_runtime_verifier.SplitRuntimeError) as exc:
+                raise StaticRegistryError(
+                    "owned KFD runtime maps violate the sealed arm") from exc
+        if not identities:
+            raise evidence.RuntimeMapsNotReady(
+                "owned KFD process has not mapped the complete sealed arm yet")
         if len(identities) != 1:
             raise StaticRegistryError(
                 "runtime maps must prove exactly one owned KFD process for the sealed arm")

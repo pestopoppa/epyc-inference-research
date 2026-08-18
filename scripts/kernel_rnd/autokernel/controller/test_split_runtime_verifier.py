@@ -175,6 +175,23 @@ class SplitRuntimeVerifierTests(unittest.TestCase):
                     model_path=model, model_sha256=_sha(model), device_id="mi210_0",
                     kfd_pid=1, boot_id="boot", process_start_ticks=1)
 
+    def test_maps_type_incremental_model_mapping_as_incomplete(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "runtime"
+            _runtime(root)
+            manifest = V.verify_split_runtime(root, elf_reader=_fake_elf)
+            model = Path(directory) / "model.gguf"
+            model.write_bytes(b"model")
+            incomplete = "\n".join(
+                line for line in _maps(manifest, "candidate", model).splitlines()
+                if str(model.resolve()) not in line)
+            with self.assertRaisesRegex(V.RuntimeMapsIncomplete,
+                                        "omit the sealed resident model"):
+                V.verify_runtime_maps(
+                    manifest, arm="candidate", maps_text=incomplete,
+                    model_path=model, model_sha256=_sha(model), device_id="mi210_0",
+                    kfd_pid=1, boot_id="boot", process_start_ticks=1)
+
     def test_maps_refuse_wrong_arm_and_unsealed_local_object(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / "runtime"

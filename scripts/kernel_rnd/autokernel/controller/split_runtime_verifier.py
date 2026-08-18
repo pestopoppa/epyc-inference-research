@@ -43,6 +43,10 @@ class SplitRuntimeError(RuntimeError):
     pass
 
 
+class RuntimeMapsIncomplete(SplitRuntimeError):
+    """The process is valid but has not mapped the full runtime closure yet."""
+
+
 def _sha(path: Path) -> str:
     if path.is_symlink() or not path.is_file():
         raise SplitRuntimeError(f"expected regular runtime file: {path}")
@@ -391,11 +395,13 @@ def verify_runtime_maps(manifest: SplitRuntimeManifest, *, arm: str, maps_text: 
     expected_hip = (hip_dir / _HIP_SONAME).resolve(strict=True)
     expected_model = model_path.resolve(strict=True)
     if manifest.reward_binary.resolve(strict=True) not in paths:
-        raise SplitRuntimeError("runtime maps omit shared reward executable")
+        raise RuntimeMapsIncomplete("runtime maps omit shared reward executable")
     if expected_hip not in paths:
-        raise SplitRuntimeError("runtime maps omit intended HIP SONAME object")
-    if expected_model not in paths or _sha(expected_model) != model_sha256:
-        raise SplitRuntimeError("runtime maps do not prove the sealed resident model")
+        raise RuntimeMapsIncomplete("runtime maps omit intended HIP SONAME object")
+    if expected_model not in paths:
+        raise RuntimeMapsIncomplete("runtime maps omit the sealed resident model")
+    if _sha(expected_model) != model_sha256:
+        raise SplitRuntimeError("runtime maps model bytes changed after verification")
 
     allowed_roots = (manifest.common_dir, manifest.anchor_hip_dir,
                      manifest.candidate_hip_dir)
@@ -408,7 +414,7 @@ def verify_runtime_maps(manifest: SplitRuntimeManifest, *, arm: str, maps_text: 
                        if path.is_file()}
     if not expected_common.issubset(local):
         missing = sorted(str(path) for path in expected_common - local)
-        raise SplitRuntimeError(f"runtime maps omit common closure objects: {missing}")
+        raise RuntimeMapsIncomplete(f"runtime maps omit common closure objects: {missing}")
     allowed_local = expected_common | {expected_hip}
     if local != allowed_local:
         raise SplitRuntimeError("runtime maps contain an unsealed local object")

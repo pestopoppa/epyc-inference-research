@@ -737,6 +737,95 @@ class GpuSourceEvidenceTests(unittest.TestCase):
             self.assertEqual(capture.runtime_maps_identity, {"maps": "captured"})
             self.assertEqual(seen, [("candidate", 9393, (9393,), {"sealed": "context"})])
 
+    def test_direct_executor_retries_only_typed_runtime_maps_startup_race(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            invocation = E.CommandInvocation(
+                kind="rocprof", arm="candidate", argv=("/bin/true",),
+                stdout_path=(root / "stdout").resolve(), stderr_path=(root / "stderr").resolve(),
+                timestamp_csv_path=(root / "timestamps.csv").resolve(),
+                working_directory=root.resolve(), environment=(("LD_LIBRARY_PATH", "/test/lib"),),
+                runtime_maps_required=True, runtime_maps_context={"sealed": "context"})
+
+            class Child:
+                pid = 9394; polls = 0
+                def poll(self):
+                    self.polls += 1
+                    return None if self.polls <= 2 else 0
+                def wait(self): return 0
+
+            attempts = []
+            def maps(_call, _child_pid, _sample):
+                attempts.append(len(attempts) + 1)
+                if len(attempts) == 1:
+                    raise E.RuntimeMapsNotReady("model mapping is not complete")
+                return {"maps": "captured-after-startup"}
+
+            executor = E.SubprocessCommandExecutor(
+                residency_sampler=lambda pid: E.GpuResidencySample(
+                    observed_monotonic_ns=__import__("time").monotonic_ns(), device_id="mi210_0",
+                    kfd_pids=(pid,), vram_bytes=4096), runtime_maps_sampler=maps,
+                sample_interval_s=.00001, popen=mock.Mock(return_value=Child()))
+            capture = executor(invocation)
+            self.assertEqual(attempts, [1, 2])
+            self.assertEqual(capture.runtime_maps_identity,
+                             {"maps": "captured-after-startup"})
+
+    def test_direct_executor_refuses_if_runtime_maps_never_become_ready(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            invocation = E.CommandInvocation(
+                kind="rocprof", arm="candidate", argv=("/bin/true",),
+                stdout_path=(root / "stdout").resolve(), stderr_path=(root / "stderr").resolve(),
+                timestamp_csv_path=(root / "timestamps.csv").resolve(),
+                working_directory=root.resolve(), environment=(("LD_LIBRARY_PATH", "/test/lib"),),
+                runtime_maps_required=True, runtime_maps_context={"sealed": "context"})
+
+            class Child:
+                pid = 9395; polls = 0
+                def poll(self): self.polls += 1; return None if self.polls == 1 else 0
+                def wait(self): return 0
+
+            executor = E.SubprocessCommandExecutor(
+                residency_sampler=lambda pid: E.GpuResidencySample(
+                    observed_monotonic_ns=__import__("time").monotonic_ns(), device_id="mi210_0",
+                    kfd_pids=(pid,), vram_bytes=4096),
+                runtime_maps_sampler=lambda *_args: (_ for _ in ()).throw(
+                    E.RuntimeMapsNotReady("model mapping is not complete")),
+                sample_interval_s=.00001, popen=mock.Mock(return_value=Child()))
+            with self.assertRaisesRegex(E.EvidenceProducerError,
+                                        "did not prove the sealed arm"):
+                executor(invocation)
+
+    def test_direct_executor_does_not_retry_untyped_runtime_maps_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            invocation = E.CommandInvocation(
+                kind="rocprof", arm="candidate", argv=("/bin/true",),
+                stdout_path=(root / "stdout").resolve(), stderr_path=(root / "stderr").resolve(),
+                timestamp_csv_path=(root / "timestamps.csv").resolve(),
+                working_directory=root.resolve(), environment=(("LD_LIBRARY_PATH", "/test/lib"),),
+                runtime_maps_required=True, runtime_maps_context={"sealed": "context"})
+
+            class Child:
+                pid = 9396; alive = True; terminated = False
+                def poll(self): return None if self.alive else -15
+                def terminate(self): self.terminated = True; self.alive = False
+                def wait(self, timeout=None): return -15
+
+            child = Child()
+            executor = E.SubprocessCommandExecutor(
+                residency_sampler=lambda pid: E.GpuResidencySample(
+                    observed_monotonic_ns=__import__("time").monotonic_ns(), device_id="mi210_0",
+                    kfd_pids=(pid,), vram_bytes=4096),
+                runtime_maps_sampler=lambda *_args: (_ for _ in ()).throw(
+                    E.EvidenceProducerError("runtime identity is ambiguous")),
+                sample_interval_s=.00001, popen=mock.Mock(return_value=child))
+            with self.assertRaisesRegex(E.EvidenceProducerError,
+                                        "runtime identity is ambiguous"):
+                executor(invocation)
+            self.assertTrue(child.terminated)
+
     def test_shared_rocprof_without_production_maps_callback_refuses(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

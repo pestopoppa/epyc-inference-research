@@ -253,7 +253,9 @@ class SharedRewardRuntimeTests(unittest.TestCase):
             identity = mock.Mock(to_dict=lambda: {"identity_sha256": "b" * 64})
             def verify_side_effect(*_args, **kwargs):
                 if kwargs["kfd_pid"] == 122:
-                    raise __import__("scripts.kernel_rnd.autokernel.controller.split_runtime_verifier", fromlist=["SplitRuntimeError"]).SplitRuntimeError("wrapper")
+                    raise __import__(
+                        "scripts.kernel_rnd.autokernel.controller.split_runtime_verifier",
+                        fromlist=["RuntimeMapsIncomplete"]).RuntimeMapsIncomplete("wrapper")
                 return identity
             with mock.patch("scripts.kernel_rnd.autokernel.controller.discovery_static_registry.split_runtime_verifier.verify_split_runtime", return_value=manifest), \
                  mock.patch("scripts.kernel_rnd.autokernel.controller.discovery_static_registry.split_runtime_verifier.verify_runtime_maps", side_effect=verify_side_effect) as verify:
@@ -261,6 +263,106 @@ class SharedRewardRuntimeTests(unittest.TestCase):
             self.assertEqual(result, {"identity_sha256": "b" * 64})
             self.assertEqual(verify.call_args.kwargs["kfd_pid"], pid)
             self.assertEqual(verify.call_args.kwargs["process_start_ticks"], 77)
+
+    def test_runtime_maps_sampler_types_incomplete_startup_as_retryable(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            proc = root / "proc"; (proc / "sys/kernel/random").mkdir(parents=True)
+            (proc / "sys/kernel/random/boot_id").write_text("boot-test\n")
+            pid = 123; (proc / str(pid)).mkdir()
+            (proc / str(pid) / "maps").write_text("startup mappings only\n")
+            (proc / str(pid) / "stat").write_text(
+                f"{pid} (rocprof) R " + " ".join(["0"] * 18 + ["77"]))
+            model = root / "model.gguf"; model.write_bytes(b"model")
+            runtime_dir = root / "runtime"; runtime_dir.mkdir()
+            runtime_receipt = root / "runtime.json"
+            runtime_receipt.write_text(json.dumps({"split_runtime_manifest": {
+                "root": str(runtime_dir)}}))
+            invocation = mock.Mock(runtime_maps_context={
+                "arm": "candidate", "shared_runtime": {
+                    "runtime_receipt": {"path": str(runtime_receipt)}},
+                "model": {"path": str(model)}, "model_sha256": "a" * 64,
+                "device_id": "mi210_0"})
+            residency = mock.Mock(kfd_pids=(pid,))
+            split_module = __import__(
+                "scripts.kernel_rnd.autokernel.controller.split_runtime_verifier",
+                fromlist=["RuntimeMapsIncomplete"])
+            with mock.patch(
+                    "scripts.kernel_rnd.autokernel.controller.discovery_static_registry."
+                    "split_runtime_verifier.verify_split_runtime", return_value=mock.Mock()), \
+                 mock.patch(
+                    "scripts.kernel_rnd.autokernel.controller.discovery_static_registry."
+                    "split_runtime_verifier.verify_runtime_maps",
+                    side_effect=split_module.RuntimeMapsIncomplete("model not mapped yet")):
+                with self.assertRaisesRegex(E.RuntimeMapsNotReady,
+                                            "not mapped the complete sealed arm"):
+                    runtime_maps_sampler(proc_root=proc)(invocation, 99, residency)
+
+    def test_runtime_maps_sampler_does_not_retry_contradictory_owned_maps(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            proc = root / "proc"; (proc / "sys/kernel/random").mkdir(parents=True)
+            (proc / "sys/kernel/random/boot_id").write_text("boot-test\n")
+            pid = 123; (proc / str(pid)).mkdir()
+            (proc / str(pid) / "maps").write_text("wrong-arm mapping\n")
+            (proc / str(pid) / "stat").write_text(
+                f"{pid} (llama-bench) R " + " ".join(["0"] * 18 + ["77"]))
+            model = root / "model.gguf"; model.write_bytes(b"model")
+            runtime_dir = root / "runtime"; runtime_dir.mkdir()
+            runtime_receipt = root / "runtime.json"
+            runtime_receipt.write_text(json.dumps({"split_runtime_manifest": {
+                "root": str(runtime_dir)}}))
+            invocation = mock.Mock(runtime_maps_context={
+                "arm": "candidate", "shared_runtime": {
+                    "runtime_receipt": {"path": str(runtime_receipt)}},
+                "model": {"path": str(model)}, "model_sha256": "a" * 64,
+                "device_id": "mi210_0"})
+            residency = mock.Mock(kfd_pids=(pid,))
+            split_module = __import__(
+                "scripts.kernel_rnd.autokernel.controller.split_runtime_verifier",
+                fromlist=["SplitRuntimeError"])
+            with mock.patch(
+                    "scripts.kernel_rnd.autokernel.controller.discovery_static_registry."
+                    "split_runtime_verifier.verify_split_runtime", return_value=mock.Mock()), \
+                 mock.patch(
+                    "scripts.kernel_rnd.autokernel.controller.discovery_static_registry."
+                    "split_runtime_verifier.verify_runtime_maps",
+                    side_effect=split_module.SplitRuntimeError("opposite HIP arm")):
+                with self.assertRaisesRegex(StaticRegistryError,
+                                            "violate the sealed arm"):
+                    runtime_maps_sampler(proc_root=proc)(invocation, 99, residency)
+
+    def test_runtime_maps_sampler_refuses_multiple_complete_owned_identities(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            proc = root / "proc"; (proc / "sys/kernel/random").mkdir(parents=True)
+            (proc / "sys/kernel/random/boot_id").write_text("boot-test\n")
+            for pid in (122, 123):
+                (proc / str(pid)).mkdir()
+                (proc / str(pid) / "maps").write_text("complete mappings\n")
+                (proc / str(pid) / "stat").write_text(
+                    f"{pid} (llama-bench) R " + " ".join(["0"] * 18 + ["77"]))
+            model = root / "model.gguf"; model.write_bytes(b"model")
+            runtime_dir = root / "runtime"; runtime_dir.mkdir()
+            runtime_receipt = root / "runtime.json"
+            runtime_receipt.write_text(json.dumps({"split_runtime_manifest": {
+                "root": str(runtime_dir)}}))
+            invocation = mock.Mock(runtime_maps_context={
+                "arm": "candidate", "shared_runtime": {
+                    "runtime_receipt": {"path": str(runtime_receipt)}},
+                "model": {"path": str(model)}, "model_sha256": "a" * 64,
+                "device_id": "mi210_0"})
+            residency = mock.Mock(kfd_pids=(122, 123))
+            identity = mock.Mock(to_dict=lambda: {"identity_sha256": "b" * 64})
+            with mock.patch(
+                    "scripts.kernel_rnd.autokernel.controller.discovery_static_registry."
+                    "split_runtime_verifier.verify_split_runtime", return_value=mock.Mock()), \
+                 mock.patch(
+                    "scripts.kernel_rnd.autokernel.controller.discovery_static_registry."
+                    "split_runtime_verifier.verify_runtime_maps", return_value=identity):
+                with self.assertRaisesRegex(StaticRegistryError,
+                                            "exactly one owned KFD process"):
+                    runtime_maps_sampler(proc_root=proc)(invocation, 99, residency)
 
     def test_materialization_reconstructs_file_backed_tree_identities_after_teardown(self):
         with tempfile.TemporaryDirectory() as directory:

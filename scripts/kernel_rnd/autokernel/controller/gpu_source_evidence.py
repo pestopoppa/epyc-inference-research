@@ -48,6 +48,15 @@ class EvidenceProducerError(RuntimeError):
     """The producer refused to mint a success receipt."""
 
 
+class RuntimeMapsNotReady(RuntimeError):
+    """The owned GPU process has not mapped the complete sealed closure yet.
+
+    This is the sole retryable runtime-map outcome.  The direct executor may
+    retry it only while the exact captured child remains alive; every other
+    callback failure is terminal and tears the child down.
+    """
+
+
 class SealedEvidenceRefusal(EvidenceProducerError):
     """A scientific stage ended durably without a passing receipt."""
 
@@ -315,10 +324,19 @@ class SubprocessCommandExecutor:
                         if self.runtime_maps_sampler is None:
                             raise EvidenceProducerError(
                                 "shared reward invocation has no in-window maps sampler")
-                        runtime_maps_identity = self.runtime_maps_sampler(
-                            invocation, int(child.pid), sample)
-                        if not isinstance(runtime_maps_identity, Mapping):
-                            raise EvidenceProducerError("runtime maps sampler returned no typed identity")
+                        try:
+                            sampled_identity = self.runtime_maps_sampler(
+                                invocation, int(child.pid), sample)
+                        except RuntimeMapsNotReady:
+                            # A KFD client can become visible before llama-bench
+                            # has mapped its model and the sealed HIP/common
+                            # closure.  Retry only this typed startup state.
+                            sampled_identity = None
+                        if sampled_identity is not None:
+                            if not isinstance(sampled_identity, Mapping):
+                                raise EvidenceProducerError(
+                                    "runtime maps sampler returned no typed identity")
+                            runtime_maps_identity = sampled_identity
                     time.sleep(self.sample_interval_s)
                 exit_code = int(child.wait())
             except BaseException:
@@ -345,6 +363,9 @@ class SubprocessCommandExecutor:
             stderr.flush(); os.fsync(stderr.fileno())
         ended_ns = time.monotonic_ns()
         ended_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        if invocation.runtime_maps_required and runtime_maps_identity is None:
+            raise EvidenceProducerError(
+                "runtime maps did not prove the sealed arm during child execution")
         return ExecutionCapture(
             argv=invocation.argv, exit_code=exit_code, child_pid=int(child.pid),
             started_at=started_at, ended_at=ended_at,
