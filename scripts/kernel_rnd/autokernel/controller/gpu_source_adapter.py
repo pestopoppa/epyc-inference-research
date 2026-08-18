@@ -572,11 +572,12 @@ class GovernedGpuSourceAdapter:
         return self.operations_root / _operation_key(operation_key)
 
     def _proof_bundle(self, operation_root: Path, operation_key: str,
-                      reservation_state: dict[str, Any]) -> Callable[..., gpu_source_proofs.GpuSourceProofBundle]:
+                      reservation_state: dict[str, Any],
+                      lease: Mapping[str, Any]) -> Callable[..., gpu_source_proofs.GpuSourceProofBundle]:
         def produce(candidate: controller.PlannedCandidate,
                     build: controller.GpuSourceBuild) -> gpu_source_proofs.GpuSourceProofBundle:
             self.runner_attest()
-            plan = self.plan_factory(candidate, build)
+            plan = self.plan_factory(candidate, build, lease)
             if (not isinstance(plan, evidence.GpuSourceEvidencePlan)
                     or plan.manifest_sha256 != candidate.source_manifest_sha256
                     or plan.candidate != build.candidate_identity
@@ -723,7 +724,7 @@ class GovernedGpuSourceAdapter:
         delegate = controller.GpuSourceScreener(
             build_source=self._build_guarded,
             proof_bundle=self._proof_bundle(
-                operation_root, operation_key, reservation_state),
+                operation_root, operation_key, reservation_state, lease),
             args_factory=contained_args, runner_attest=self.runner_attest)
         reservation_released = False
 
@@ -909,8 +910,7 @@ class GovernedGpuSourceAdapter:
 def build_governed_gpu_source_adapter(
     *, operations_root: Path,
     build_source: Callable[..., controller.GpuSourceBuild],
-    plan_factory: Callable[[controller.PlannedCandidate,
-                           controller.GpuSourceBuild], evidence.GpuSourceEvidencePlan],
+    plan_factory: Callable[..., evidence.GpuSourceEvidencePlan],
     args_factory: Callable[..., Any],
     correctness_executor: evidence.CommandExecutor,
     rocprof_executor: evidence.CommandExecutor,

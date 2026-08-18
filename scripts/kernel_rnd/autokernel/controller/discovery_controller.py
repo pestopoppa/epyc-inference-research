@@ -2320,7 +2320,9 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                 if review.decision != "accept":
                     row["status"]="critic_"+review.decision
                     state.pop("pending", None); state["iterations"].append(row)
-                    _apply_portfolio_outcome(state,row); state["next"]+=1
+                    _apply_portfolio_outcome(state,row)
+                    _note_portfolio_authoring_failure(state, row)
+                    state["next"]+=1
                     store.save(state,"critic_refused"); continue
                 state["pending"]={
                     "phase":"critic_complete", "row":row,

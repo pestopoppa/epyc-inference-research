@@ -65,7 +65,8 @@ class SourceBuilderBinding:
 
 @dataclass(frozen=True)
 class EvidencePlanBinding:
-    build: Callable[[controller.PlannedCandidate, controller.GpuSourceBuild, "ExperimentTemplate"], evidence.GpuSourceEvidencePlan]
+    build: Callable[[controller.PlannedCandidate, controller.GpuSourceBuild,
+                     "ExperimentTemplate", int], evidence.GpuSourceEvidencePlan]
 
 @dataclass(frozen=True)
 class RunnerArgsBinding:
@@ -1490,7 +1491,7 @@ def _manifest_file(config: deployment.DiscoveryDeployment,
 def _evidence_binding(config: deployment.DiscoveryDeployment) -> EvidencePlanBinding:
     profiler, timestamp_input = _rocprof_v1_policy(config)
     def build(candidate: controller.PlannedCandidate, build_: controller.GpuSourceBuild,
-              template: ExperimentTemplate) -> evidence.GpuSourceEvidencePlan:
+              template: ExperimentTemplate, repetition: int = 1) -> evidence.GpuSourceEvidencePlan:
         if build_.materialization_receipt is None or build_.operation_key is None:
             raise DeploymentFactoryError("source build lacks materialization identity")
         identities = discovery_static_registry.evidence_identity_files_for_build(
@@ -1543,6 +1544,11 @@ def _evidence_binding(config: deployment.DiscoveryDeployment) -> EvidencePlanBin
             return tuple(sorted((*common_environment, ("LD_LIBRARY_PATH",
                 f"{hip.path.parent}:{reward_binary.path.parent}:{profiler_prefix / 'lib'}:/opt/rocm/lib"))))
         carrier_root = _operation_carrier_root(config, build_.operation_key)
+        order_seed, order_text = _arm_order_schedule(
+            deployment_config_sha256=config.config_sha256,
+            source_manifest_sha256=candidate.source_manifest_sha256,
+            repetition=repetition)
+        attribution_arm_order = tuple(order_text.split(","))
         placeholder = evidence.BoundInputFile(
             "execution_policy", carrier_root / "evidence-policy.json", "0" * 64)
         provisional = evidence.GpuSourceEvidencePlan(
@@ -1580,7 +1586,9 @@ def _evidence_binding(config: deployment.DiscoveryDeployment) -> EvidencePlanBin
                 ("PATH", "/opt/rocm/bin:/usr/bin:/bin"), ("ROCM_PATH", "/opt/rocm")))),
             candidate_rocprof_environment=profile_environment(shared.candidate_hip_library),
             anchor_rocprof_environment=profile_environment(shared.anchor_hip_library),
-            shared_runtime=shared)
+            shared_runtime=shared,
+            attribution_arm_order_seed_sha256=order_seed,
+            attribution_arm_order=attribution_arm_order)
         raw = json.dumps(evidence._policy_payload(provisional), sort_keys=True,
                          separators=(",", ":")).encode()
         policy_path = _write_operation_carrier(
@@ -2387,7 +2395,8 @@ def materialize(config: deployment.DiscoveryDeployment, registry: Mapping[str, M
         # incompatible instrument source from consuming a build transaction.
         _instrument_review_receipt(config)
         return source.build(candidate, authorization, permit)
-    def plan(candidate: controller.PlannedCandidate, build_: controller.GpuSourceBuild):
+    def plan(candidate: controller.PlannedCandidate, build_: controller.GpuSourceBuild,
+             permit: Mapping[str, Any]):
         config.revalidate()
         runner_attest()
         # Re-open the builder receipt at every evidence boundary.  In
@@ -2402,7 +2411,11 @@ def materialize(config: deployment.DiscoveryDeployment, registry: Mapping[str, M
             instrument_commit=config.instrument_commit)
         template = templates.resolve(candidate.experiment_intent)
         try:
-            result = plans.build(candidate, build_, template)
+            repetition = permit.get("repetition")
+            if repetition not in {1, 2}:
+                raise DeploymentFactoryError(
+                    "evidence plan lacks its controller-owned repetition")
+            result = plans.build(candidate, build_, template, repetition)
             expected_dispatch = template.bind_dispatch(candidate.experiment_intent)
             if (result.dispatch != expected_dispatch
                     or result.model_sha256 != config.model.sha256):

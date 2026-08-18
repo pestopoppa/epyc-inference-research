@@ -435,14 +435,21 @@ class GpuSourceEvidencePlan:
     candidate_rocprof_environment: tuple[tuple[str, str], ...] = ()
     anchor_rocprof_environment: tuple[tuple[str, str], ...] = ()
     shared_runtime: SharedRewardRuntimeFiles | None = None
+    attribution_arm_order_seed_sha256: str = "0" * 64
+    attribution_arm_order: tuple[str, str] = ("candidate", "anchor")
 
     def __post_init__(self) -> None:
         if (not isinstance(self.campaign_id, str) or not self.campaign_id
                 or not isinstance(self.device_id, str) or not self.device_id):
             raise EvidenceProducerError("campaign and device identities are required")
         for name in ("manifest_sha256", "model_sha256", "workload_sha256",
-                     "runtime_config_sha256"):
+                     "runtime_config_sha256", "attribution_arm_order_seed_sha256"):
             _hash(getattr(self, name), name)
+        if (not isinstance(self.attribution_arm_order, tuple)
+                or len(self.attribution_arm_order) != 2
+                or set(self.attribution_arm_order) != {"candidate", "anchor"}):
+            raise EvidenceProducerError(
+                "attribution arm order must contain candidate and anchor exactly once")
         if not isinstance(self.candidate, proofs.BuildIdentity) or not isinstance(self.anchor, proofs.BuildIdentity):
             raise EvidenceProducerError("both build identities must be typed")
         if self.candidate == self.anchor:
@@ -782,6 +789,8 @@ def _policy_payload(plan: GpuSourceEvidencePlan) -> dict[str, Any]:
         "expected_correctness_cases": plan.expected_correctness_cases,
         "candidate_rocprof_argv": list(plan.candidate_rocprof_argv),
         "anchor_rocprof_argv": list(plan.anchor_rocprof_argv),
+        "attribution_arm_order_seed_sha256": plan.attribution_arm_order_seed_sha256,
+        "attribution_arm_order": list(plan.attribution_arm_order),
         "correctness_inputs": [_bound_reference(x) for x in plan.correctness_inputs],
         "candidate_rocprof_inputs": [_bound_reference(x) for x in plan.candidate_rocprof_inputs],
         "anchor_rocprof_inputs": [_bound_reference(x) for x in plan.anchor_rocprof_inputs],
@@ -1580,6 +1589,8 @@ def _produce_pair(
         "correctness_environment": [list(item) for item in plan.correctness_environment],
         "candidate_rocprof_environment": [list(item) for item in plan.candidate_rocprof_environment],
         "anchor_rocprof_environment": [list(item) for item in plan.anchor_rocprof_environment],
+        "attribution_arm_order_seed_sha256": plan.attribution_arm_order_seed_sha256,
+        "attribution_arm_order": list(plan.attribution_arm_order),
         "expectations": _expectations(plan),
         "candidate": _reference(candidate),
         "anchor": _reference(anchor),
@@ -1870,6 +1881,8 @@ def _load_gpu_source_attribution_pair(
         "expectations": _expectations(plan),
         "candidate": _reference(candidate),
         "anchor": _reference(anchor),
+        "attribution_arm_order_seed_sha256": plan.attribution_arm_order_seed_sha256,
+        "attribution_arm_order": list(plan.attribution_arm_order),
         "inverse_attribution_proved": True,
     }
     if any(body.get(key) != value for key, value in expected.items()):
@@ -1933,6 +1946,9 @@ def _plan_from_receipts(correctness: Mapping[str, Any], pair: Mapping[str, Any])
             correctness_environment=tuple(tuple(x) for x in pair_body["correctness_environment"]),
             candidate_rocprof_environment=tuple(tuple(x) for x in pair_body["candidate_rocprof_environment"]),
             anchor_rocprof_environment=tuple(tuple(x) for x in pair_body["anchor_rocprof_environment"]),
+            attribution_arm_order_seed_sha256=str(
+                pair_body["attribution_arm_order_seed_sha256"]),
+            attribution_arm_order=tuple(pair_body["attribution_arm_order"]),
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise EvidenceProducerError("sealed bundle cannot reconstruct its plan") from exc
@@ -1990,36 +2006,30 @@ def produce_gpu_source_evidence(
             claim_verifier=claim_verifier, claim_journal=claim_journal,
             claim_timeout_s=float(claim_timeout_s))
 
-    candidate_dir = root / "attribution-candidate"
-    candidate_path = candidate_dir / "receipt.json"
-    if candidate_path.exists() or candidate_path.is_symlink():
-        candidate = load_gpu_source_attribution_receipt(
-            candidate_path, plan, arm="candidate")
-    else:
-        if (candidate_dir.exists() or candidate_dir.is_symlink()
-                or (root / "attribution-anchor").exists()
-                or (root / "attribution-pair.json").exists()):
+    arm_receipts: dict[str, Mapping[str, Any]] = {}
+    for index, arm in enumerate(plan.attribution_arm_order):
+        arm_dir = root / f"attribution-{arm}"
+        arm_path = arm_dir / "receipt.json"
+        if arm_path.exists() or arm_path.is_symlink():
+            arm_receipts[arm] = load_gpu_source_attribution_receipt(
+                arm_path, plan, arm=arm)
+            continue
+        later_arms = plan.attribution_arm_order[index + 1:]
+        if (arm_dir.exists() or arm_dir.is_symlink()
+                or any((root / f"attribution-{later}").exists()
+                       or (root / f"attribution-{later}").is_symlink()
+                       for later in later_arms)
+                or (root / "attribution-pair.json").exists()
+                or (root / "attribution-pair.json").is_symlink()):
             raise EvidenceProducerError(
-                "candidate attribution is incomplete or later evidence exists out of order")
-        candidate = _produce_attribution_arm(
-            root, "candidate", plan, rocprof_executor,
+                f"{arm} attribution is incomplete or later evidence exists out of order")
+        arm_receipts[arm] = _produce_attribution_arm(
+            root, arm, plan, rocprof_executor,
             claim_acquirer=claim_acquirer, claim_verifier=claim_verifier,
             claim_journal=claim_journal, claim_timeout_s=float(claim_timeout_s))
 
-    anchor_dir = root / "attribution-anchor"
-    anchor_path = anchor_dir / "receipt.json"
-    if anchor_path.exists() or anchor_path.is_symlink():
-        anchor = load_gpu_source_attribution_receipt(
-            anchor_path, plan, arm="anchor")
-    else:
-        if (anchor_dir.exists() or anchor_dir.is_symlink()
-                or (root / "attribution-pair.json").exists()):
-            raise EvidenceProducerError(
-                "anchor attribution is incomplete or pair exists out of order")
-        anchor = _produce_attribution_arm(
-            root, "anchor", plan, rocprof_executor,
-            claim_acquirer=claim_acquirer, claim_verifier=claim_verifier,
-            claim_journal=claim_journal, claim_timeout_s=float(claim_timeout_s))
+    candidate = arm_receipts["candidate"]
+    anchor = arm_receipts["anchor"]
 
     pair_path = root / "attribution-pair.json"
     if pair_path.exists() or pair_path.is_symlink():
