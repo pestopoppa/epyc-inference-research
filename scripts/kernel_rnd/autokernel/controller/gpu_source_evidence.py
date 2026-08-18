@@ -435,6 +435,10 @@ class GpuSourceEvidencePlan:
     candidate_rocprof_environment: tuple[tuple[str, str], ...] = ()
     anchor_rocprof_environment: tuple[tuple[str, str], ...] = ()
     shared_runtime: SharedRewardRuntimeFiles | None = None
+    # Empty means the legacy single command above.  Portfolio templates may
+    # instead seal an ordered multi-invocation correctness contract (FA uses a
+    # generic corpus plus a dedicated odd-GQA7 corpus).
+    correctness_invocations: tuple[Mapping[str, Any], ...] = ()
     attribution_arm_order_seed_sha256: str = "0" * 64
     attribution_arm_order: tuple[str, str] = ("candidate", "anchor")
 
@@ -450,6 +454,21 @@ class GpuSourceEvidencePlan:
                 or set(self.attribution_arm_order) != {"candidate", "anchor"}):
             raise EvidenceProducerError(
                 "attribution arm order must contain candidate and anchor exactly once")
+        for invocation in self.correctness_invocations:
+            if (not isinstance(invocation, Mapping)
+                    or not isinstance(invocation.get("invocation_id"), str)
+                    or not invocation["invocation_id"]
+                    or not isinstance(invocation.get("argv"), (list, tuple))
+                    or not invocation["argv"]
+                    or isinstance(invocation.get("expected_cases"), bool)
+                    or not isinstance(invocation.get("expected_cases"), int)
+                    or invocation["expected_cases"] < 1
+                    or not isinstance(invocation.get("required_cases", []), list)):
+                raise EvidenceProducerError(
+                    "correctness invocation contract is malformed")
+        if len({row["invocation_id"] for row in self.correctness_invocations}) \
+                != len(self.correctness_invocations):
+            raise EvidenceProducerError("correctness invocation IDs must be unique")
         if not isinstance(self.candidate, proofs.BuildIdentity) or not isinstance(self.anchor, proofs.BuildIdentity):
             raise EvidenceProducerError("both build identities must be typed")
         if self.candidate == self.anchor:
@@ -787,6 +806,7 @@ def _policy_payload(plan: GpuSourceEvidencePlan) -> dict[str, Any]:
         "correctness_backend": plan.correctness_backend,
         "correctness_op": plan.correctness_op,
         "expected_correctness_cases": plan.expected_correctness_cases,
+        "correctness_invocations": [dict(row) for row in plan.correctness_invocations],
         "candidate_rocprof_argv": list(plan.candidate_rocprof_argv),
         "anchor_rocprof_argv": list(plan.anchor_rocprof_argv),
         "attribution_arm_order_seed_sha256": plan.attribution_arm_order_seed_sha256,
@@ -1162,7 +1182,10 @@ class _CorrectnessResult:
         return f"{self.passed_cases}/{self.total_cases} tests passed"
 
 
-def _parse_correctness(stdout: str, plan: GpuSourceEvidencePlan) -> _CorrectnessResult:
+def _parse_correctness(
+        stdout: str, plan: GpuSourceEvidencePlan,
+        invocation_contract: Mapping[str, Any] | None = None,
+) -> _CorrectnessResult:
     """Reduce console bytes through the T0 parser, then enforce this exact plan.
 
     The tool counts skipped devices as passed backends.  Therefore neither its
@@ -1178,8 +1201,13 @@ def _parse_correctness(stdout: str, plan: GpuSourceEvidencePlan) -> _Correctness
         raise CorrectnessParseRefusal(
             f"correctness console parse refused: {exc}") from exc
 
-    targets = tuple(row for row in run.backends
-                    if row.name == plan.correctness_backend)
+    backend = (plan.correctness_backend if invocation_contract is None
+               else invocation_contract["backend"])
+    operation = (plan.correctness_op if invocation_contract is None
+                 else invocation_contract["op"])
+    expected = (plan.expected_correctness_cases if invocation_contract is None
+                else invocation_contract["expected_cases"])
+    targets = tuple(row for row in run.backends if row.name == backend)
     if len(targets) != 1:
         raise CorrectnessParseRefusal(
             "correctness output must contain exactly one target backend frame")
@@ -1194,18 +1222,38 @@ def _parse_correctness(stdout: str, plan: GpuSourceEvidencePlan) -> _Correctness
     if not compared:
         raise CorrectnessParseRefusal(
             "target correctness backend exercised zero supported cases")
-    if any(case.op != plan.correctness_op for case in compared):
+    if any(case.op != operation for case in compared):
         raise CorrectnessParseRefusal(
             "target correctness backend exercised an unexpected operation")
     if any(not case.passed for case in compared):
         raise CorrectnessParseRefusal(
             "target correctness backend contains a failed case")
-    expected = plan.expected_correctness_cases
     if (len(compared) != expected
             or target.reported_passed != expected
             or target.reported_total != expected):
         raise CorrectnessParseRefusal(
             "correctness did not pass the exact expected case count")
+    if invocation_contract is not None:
+        required = invocation_contract.get("required_cases", [])
+        for requirement in required:
+            pattern = requirement.get("params_pattern")
+            expected_matches = requirement.get("expected_matches")
+            if (not isinstance(pattern, str) or not pattern
+                    or isinstance(expected_matches, bool)
+                    or not isinstance(expected_matches, int)
+                    or expected_matches < 1):
+                raise CorrectnessParseRefusal(
+                    "required correctness case matcher is malformed")
+            matches = [case for case in target.cases
+                       if case.op == requirement.get("op")
+                       and re.search(pattern, case.params)]
+            if len(matches) != expected_matches:
+                raise CorrectnessParseRefusal(
+                    "required correctness case was absent or duplicated")
+            if any(case.status == "not_supported" or not case.passed
+                   for case in matches):
+                raise CorrectnessParseRefusal(
+                    "required correctness case was unsupported or failed")
 
     others = tuple(row for row in run.backends if row is not target)
     if any(not row.skipped or row.cases for row in others):
@@ -1218,8 +1266,8 @@ def _parse_correctness(stdout: str, plan: GpuSourceEvidencePlan) -> _Correctness
         raise CorrectnessParseRefusal(
             "correctness backend/overall summaries do not prove a clean run")
     return _CorrectnessResult(
-        backend=plan.correctness_backend,
-        operation=plan.correctness_op,
+        backend=backend,
+        operation=operation,
         passed_cases=expected,
         total_cases=expected,
         skipped_backends=tuple(row.name for row in others),
@@ -1233,6 +1281,11 @@ def _produce_correctness(
     claim_acquirer: Callable[..., Any], claim_verifier: Callable[[Mapping[str, Any]], object],
     claim_journal: Any, claim_timeout_s: float,
 ) -> Mapping[str, Any]:
+    if plan.correctness_invocations:
+        return _produce_correctness_invocations(
+            root, plan, executor, claim_acquirer=claim_acquirer,
+            claim_verifier=claim_verifier, claim_journal=claim_journal,
+            claim_timeout_s=claim_timeout_s)
     directory = root / "correctness"
     invocation = CommandInvocation(
         kind="correctness", arm="candidate", argv=plan.correctness_argv,
@@ -1319,6 +1372,166 @@ def _produce_correctness(
         "residency_witness": residency,
     }
     return _seal(directory / "receipt.json", body)
+
+
+def _validate_correctness_invocation_receipt(
+        loaded: Mapping[str, Any], plan: GpuSourceEvidencePlan,
+        contract: Mapping[str, Any]) -> None:
+    body = loaded["body"]
+    expected = {
+        "schema": CORRECTNESS_SCHEMA, "authority": AUTHORITY,
+        "non_promotable": True, "promotion_claim": False,
+        "status": "complete", "result": "PASS",
+        "campaign_id": plan.campaign_id, "device_id": plan.device_id,
+        "manifest_sha256": plan.manifest_sha256,
+        "candidate_build_identity": asdict(plan.candidate),
+        "workload_sha256": plan.workload_sha256,
+        "invocation_id": contract["invocation_id"],
+        "case_set": contract.get("case_set"),
+        "command_argv": list(contract["argv"]), "exit_code": 0,
+        "command_cwd": str(plan.execution_cwd),
+        "command_environment_sha256": schemas.content_hash(
+            [list(item) for item in _correctness_invocation_environment(
+                plan, contract)]),
+        "correctness_parser_id": CORRECTNESS_PARSER_ID,
+        "correctness_backend": contract["backend"],
+        "correctness_op": contract["op"],
+        "expected_cases": contract["expected_cases"],
+        "passed_cases": contract["expected_cases"],
+        "required_cases": list(contract.get("required_cases", [])),
+        "exact_case_ok": True,
+    }
+    if any(body.get(key) != value for key, value in expected.items()):
+        raise EvidenceProducerError(
+            "correctness invocation receipt identity/config/result mismatch")
+    _validate_claim_boundary(body, plan=plan)
+    for kind in ("stdout", "stderr"):
+        path = Path(str(body.get(f"{kind}_path", "")))
+        if _hash_file(path, kind, allow_empty=kind == "stderr") != body.get(
+                f"{kind}_sha256"):
+            raise EvidenceProducerError(
+                f"correctness invocation {kind} bytes changed")
+    parsed = _parse_correctness(
+        Path(str(body["stdout_path"])).read_text(encoding="utf-8"), plan,
+        contract)
+    if parsed.summary != body.get("summary"):
+        raise EvidenceProducerError("correctness invocation summary changed")
+    _validate_residency_witness(
+        body.get("residency_witness"), device_id=plan.device_id,
+        label=f"correctness {contract['invocation_id']}")
+
+
+def _correctness_invocation_environment(
+        plan: GpuSourceEvidencePlan,
+        contract: Mapping[str, Any]) -> tuple[tuple[str, str], ...]:
+    environment = dict(plan.correctness_environment)
+    overrides = contract.get("environment_overrides", [])
+    if (not isinstance(overrides, list)
+            or any(not isinstance(row, list) or len(row) != 2
+                   or not all(isinstance(value, str) for value in row)
+                   for row in overrides)):
+        raise EvidenceProducerError(
+            "correctness invocation environment overrides are malformed")
+    allowed = {"AUTOKERNEL_CORRECTNESS_CASE_SET"}
+    if any(row[0] not in allowed for row in overrides):
+        raise EvidenceProducerError(
+            "correctness invocation attempted an unreviewed environment override")
+    environment.update(dict(overrides))
+    return tuple(sorted(environment.items()))
+
+
+def _produce_correctness_invocations(
+        root: Path, plan: GpuSourceEvidencePlan, executor: CommandExecutor, *,
+        claim_acquirer: Callable[..., Any],
+        claim_verifier: Callable[[Mapping[str, Any]], object],
+        claim_journal: Any, claim_timeout_s: float) -> Mapping[str, Any]:
+    directory = root / "correctness"
+    references: list[dict[str, Any]] = []
+    for contract in plan.correctness_invocations:
+        invocation_id = str(contract["invocation_id"])
+        invocation_dir = directory / invocation_id
+        receipt_path = invocation_dir / "receipt.json"
+        if receipt_path.exists() or receipt_path.is_symlink():
+            loaded = proofs.load_receipt(receipt_path, schema=CORRECTNESS_SCHEMA)
+            _validate_correctness_invocation_receipt(loaded, plan, contract)
+            references.append(_reference(loaded))
+            continue
+        if invocation_dir.exists() or invocation_dir.is_symlink():
+            raise EvidenceProducerError(
+                f"correctness invocation {invocation_id} is incomplete")
+        invocation = CommandInvocation(
+            kind="correctness", arm="candidate",
+            argv=tuple(contract["argv"]),
+            stdout_path=(invocation_dir / "stdout.txt").resolve(),
+            stderr_path=(invocation_dir / "stderr.txt").resolve(),
+            working_directory=plan.execution_cwd,
+            environment=_correctness_invocation_environment(plan, contract))
+        capture, opened, released, residency = _run_claimed(
+            invocation, plan=plan, executor=executor,
+            claim_acquirer=claim_acquirer, claim_verifier=claim_verifier,
+            claim_journal=claim_journal, claim_timeout_s=claim_timeout_s)
+        outputs = _output_hashes(invocation)
+        parsed = _parse_correctness(
+            invocation.stdout_path.read_text(encoding="utf-8"), plan,
+            contract)
+        if capture.exit_code != 0:
+            raise EvidenceProducerError(
+                f"correctness invocation {invocation_id} exited nonzero")
+        body = {
+            "schema": CORRECTNESS_SCHEMA, "authority": AUTHORITY,
+            "non_promotable": True, "promotion_claim": False,
+            "status": "complete", "result": "PASS",
+            "campaign_id": plan.campaign_id, "device_id": plan.device_id,
+            "manifest_sha256": plan.manifest_sha256,
+            "candidate_build_identity": asdict(plan.candidate),
+            "workload_sha256": plan.workload_sha256,
+            "invocation_id": invocation_id,
+            "case_set": contract.get("case_set"),
+            "command_argv": list(contract["argv"]),
+            "command_cwd": str(plan.execution_cwd),
+            "command_environment_sha256": schemas.content_hash(
+                [list(item) for item in _correctness_invocation_environment(
+                    plan, contract)]),
+            "exit_code": capture.exit_code, **outputs,
+            "started_at": capture.started_at, "ended_at": capture.ended_at,
+            "summary": parsed.summary,
+            "correctness_parser_id": CORRECTNESS_PARSER_ID,
+            "correctness_backend": parsed.backend,
+            "correctness_op": parsed.operation,
+            "expected_cases": contract["expected_cases"],
+            "passed_cases": contract["expected_cases"],
+            "required_cases": list(contract.get("required_cases", [])),
+            "exact_case_ok": True,
+            **_claim_boundary_fields(opened, released, residency),
+            "residency_witness": residency,
+        }
+        loaded = _seal(receipt_path, body)
+        references.append(_reference(loaded))
+    aggregate = {
+        "schema": CORRECTNESS_SCHEMA, "authority": AUTHORITY,
+        "non_promotable": True, "promotion_claim": False,
+        "status": "complete", "result": "PASS",
+        "campaign_id": plan.campaign_id, "device_id": plan.device_id,
+        "manifest_sha256": plan.manifest_sha256,
+        "candidate_build_identity": asdict(plan.candidate),
+        "identity_files": _identity_files_reference(plan.identity_files),
+        "shared_runtime": _shared_runtime_reference(plan.shared_runtime),
+        "execution_policy": _bound_reference(plan.policy),
+        "command_input_files": [_bound_reference(x)
+                                for x in plan.correctness_inputs],
+        "workload_sha256": plan.workload_sha256,
+        "command_argv": list(plan.correctness_argv),
+        "command_cwd": str(plan.execution_cwd),
+        "correctness_parser_id": CORRECTNESS_PARSER_ID,
+        "correctness_backend": plan.correctness_backend,
+        "correctness_op": plan.correctness_op,
+        "expected_cases": plan.expected_correctness_cases,
+        "correctness_invocation_contracts": [dict(row)
+                                             for row in plan.correctness_invocations],
+        "invocations": references,
+        "exact_case_ok": True,
+    }
+    return _seal(directory / "receipt.json", aggregate)
 
 
 def _integer(row: Mapping[str, str], key: str, *, minimum: int) -> int:
@@ -1551,12 +1764,71 @@ def _expectations(plan: GpuSourceEvidencePlan) -> dict[str, Any]:
     }
 
 
+def _exact_duration_comparison(candidate_body: Mapping[str, Any],
+                               anchor_body: Mapping[str, Any]) -> dict[str, Any]:
+    """Reduce only contract-authorized routes into the decision-bearing pair."""
+    candidate_routes = candidate_body.get("exact_dispatch_signatures")
+    anchor_routes = anchor_body.get("exact_dispatch_signatures")
+    if not isinstance(candidate_routes, Mapping) or not isinstance(anchor_routes, Mapping):
+        raise EvidenceProducerError("attribution pair lacks exact route reductions")
+    def total(routes: Mapping[str, Any], label: str) -> int:
+        values: list[int] = []
+        for signature, row in routes.items():
+            if (not isinstance(signature, str) or not isinstance(row, Mapping)
+                    or isinstance(row.get("total_duration_ns"), bool)
+                    or not isinstance(row.get("total_duration_ns"), int)
+                    or row["total_duration_ns"] <= 0
+                    or isinstance(row.get("calls"), bool)
+                    or not isinstance(row.get("calls"), int)
+                    or row["calls"] <= 0):
+                raise EvidenceProducerError(
+                    f"{label} exact route lacks positive sealed duration/calls")
+            values.append(row["total_duration_ns"])
+        if not values:
+            raise EvidenceProducerError(f"{label} attribution has no exact routes")
+        return sum(values)
+    candidate_total = total(candidate_routes, "candidate")
+    anchor_total = total(anchor_routes, "anchor")
+    return {
+        "candidate_routes": dict(candidate_routes),
+        "anchor_routes": dict(anchor_routes),
+        "candidate_total_duration_ns": candidate_total,
+        "anchor_total_duration_ns": anchor_total,
+        "relative_improvement_fraction": (
+            anchor_total - candidate_total) / anchor_total,
+        "direction": ("improved" if candidate_total < anchor_total else
+                      "regressed" if candidate_total > anchor_total else "neutral"),
+        "all_candidate_routes_present": True,
+        "all_anchor_routes_present": True,
+        "statistic": "sum_exact_route_total_duration_ns",
+    }
+
+
+def _structural_signature_projection(value: object) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        raise EvidenceProducerError("invariant signature reduction is malformed")
+    projected: dict[str, Any] = {}
+    for signature, row in value.items():
+        if (not isinstance(signature, str) or not isinstance(row, Mapping)
+                or isinstance(row.get("calls"), bool)
+                or not isinstance(row.get("calls"), int)
+                or not isinstance(row.get("geometries"), list)):
+            raise EvidenceProducerError("invariant structural signature is malformed")
+        projected[signature] = {
+            "calls": row["calls"], "geometries": row["geometries"]}
+    return projected
+
+
 def _produce_pair(
     root: Path, plan: GpuSourceEvidencePlan, candidate: Mapping[str, Any],
     anchor: Mapping[str, Any],
 ) -> Mapping[str, Any]:
     candidate_body, anchor_body = candidate["body"], anchor["body"]
-    if candidate_body["invariant_signatures"] != anchor_body["invariant_signatures"]:
+    candidate_invariants = _structural_signature_projection(
+        candidate_body["invariant_signatures"])
+    anchor_invariants = _structural_signature_projection(
+        anchor_body["invariant_signatures"])
+    if candidate_invariants != anchor_invariants:
         raise EvidenceProducerError("candidate changed an invariant hot signature")
     if plan.shared_runtime is not None:
         candidate_maps = candidate_body.get("runtime_maps_identity")
@@ -1594,10 +1866,12 @@ def _produce_pair(
         "expectations": _expectations(plan),
         "candidate": _reference(candidate),
         "anchor": _reference(anchor),
-        "invariant_signatures": candidate_body["invariant_signatures"],
+        "invariant_signatures": candidate_invariants,
         "inverse_attribution_proved": True,
         "candidate_runtime_maps_identity": candidate_body.get("runtime_maps_identity"),
         "anchor_runtime_maps_identity": anchor_body.get("runtime_maps_identity"),
+        "exact_duration_comparison": _exact_duration_comparison(
+            candidate_body, anchor_body),
     }
     return _seal(root / "attribution-pair.json", body)
 
@@ -1716,6 +1990,43 @@ def _validate_runtime_maps_receipt(value: object, *, plan: GpuSourceEvidencePlan
 
 
 def _validate_correctness_body(body: Mapping[str, Any], plan: GpuSourceEvidencePlan) -> None:
+    if plan.correctness_invocations:
+        expected = {
+            "schema": CORRECTNESS_SCHEMA, "authority": AUTHORITY,
+            "non_promotable": True, "promotion_claim": False,
+            "status": "complete", "result": "PASS",
+            "campaign_id": plan.campaign_id, "device_id": plan.device_id,
+            "manifest_sha256": plan.manifest_sha256,
+            "candidate_build_identity": asdict(plan.candidate),
+            "identity_files": _identity_files_reference(plan.identity_files),
+            "shared_runtime": _shared_runtime_reference(plan.shared_runtime),
+            "execution_policy": _bound_reference(plan.policy),
+            "command_input_files": [_bound_reference(x)
+                                    for x in plan.correctness_inputs],
+            "workload_sha256": plan.workload_sha256,
+            "command_argv": list(plan.correctness_argv),
+            "command_cwd": str(plan.execution_cwd),
+            "correctness_parser_id": CORRECTNESS_PARSER_ID,
+            "correctness_backend": plan.correctness_backend,
+            "correctness_op": plan.correctness_op,
+            "expected_cases": plan.expected_correctness_cases,
+            "correctness_invocation_contracts": [dict(row)
+                                                 for row in plan.correctness_invocations],
+            "exact_case_ok": True,
+        }
+        if any(body.get(key) != value for key, value in expected.items()):
+            raise EvidenceProducerError(
+                "aggregate correctness receipt identity/config/result mismatch")
+        references = body.get("invocations")
+        if not isinstance(references, list) or len(references) != len(
+                plan.correctness_invocations):
+            raise EvidenceProducerError(
+                "aggregate correctness receipt has incomplete invocations")
+        for reference, contract in zip(references,
+                                       plan.correctness_invocations):
+            loaded = _reload_reference(reference, schema=CORRECTNESS_SCHEMA)
+            _validate_correctness_invocation_receipt(loaded, plan, contract)
+        return
     expected = {
         "schema": CORRECTNESS_SCHEMA, "authority": AUTHORITY,
         "non_promotable": True, "promotion_claim": False,
@@ -1878,6 +2189,7 @@ def _load_gpu_source_attribution_pair(
         "identity_files": _identity_files_reference(plan.identity_files),
         "shared_runtime": _shared_runtime_reference(plan.shared_runtime),
         "execution_policy": _bound_reference(plan.policy),
+        "correctness_invocations": [dict(row) for row in plan.correctness_invocations],
         "expectations": _expectations(plan),
         "candidate": _reference(candidate),
         "anchor": _reference(anchor),
@@ -1889,12 +2201,18 @@ def _load_gpu_source_attribution_pair(
         raise EvidenceProducerError(
             "completed attribution pair identity/contract changed")
     candidate_body, anchor_body = candidate["body"], anchor["body"]
-    if (body.get("invariant_signatures")
-            != candidate_body.get("invariant_signatures")
-            or candidate_body.get("invariant_signatures")
-            != anchor_body.get("invariant_signatures")):
+    candidate_invariants = _structural_signature_projection(
+        candidate_body.get("invariant_signatures"))
+    anchor_invariants = _structural_signature_projection(
+        anchor_body.get("invariant_signatures"))
+    if (body.get("invariant_signatures") != candidate_invariants
+            or candidate_invariants != anchor_invariants):
         raise EvidenceProducerError(
             "completed attribution pair changed an invariant signature")
+    if body.get("exact_duration_comparison") != _exact_duration_comparison(
+            candidate_body, anchor_body):
+        raise EvidenceProducerError(
+            "completed attribution pair exact-duration comparison changed")
     return loaded
 
 
@@ -1949,6 +2267,8 @@ def _plan_from_receipts(correctness: Mapping[str, Any], pair: Mapping[str, Any])
             attribution_arm_order_seed_sha256=str(
                 pair_body["attribution_arm_order_seed_sha256"]),
             attribution_arm_order=tuple(pair_body["attribution_arm_order"]),
+            correctness_invocations=tuple(
+                dict(row) for row in pair_body.get("correctness_invocations", [])),
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise EvidenceProducerError("sealed bundle cannot reconstruct its plan") from exc
@@ -1997,7 +2317,8 @@ def produce_gpu_source_evidence(
         loaded_refusal = load_gpu_source_correctness_refusal(refusal_path, plan)
         raise CorrectnessParseRefusal(str(loaded_refusal["body"]["reason"]))
     else:
-        if (correctness_dir.exists() or correctness_dir.is_symlink()
+        if ((correctness_dir.exists() or correctness_dir.is_symlink())
+                and not plan.correctness_invocations
                 or any(path.exists() or path.is_symlink() for path in later_paths)):
             raise EvidenceProducerError(
                 "correctness stage is incomplete or later evidence exists out of order")
@@ -2078,10 +2399,12 @@ def load_gpu_source_evidence_bundle(path: Path) -> proofs.GpuSourceProofBundle:
     anchor = _reload_reference(pair_body["anchor"], schema=ATTRIBUTION_SCHEMA)
     _validate_attribution_body(candidate["body"], plan=plan, arm="candidate")
     _validate_attribution_body(anchor["body"], plan=plan, arm="anchor")
-    if (candidate["body"]["invariant_signatures"]
-            != anchor["body"]["invariant_signatures"]
-            or pair_body.get("invariant_signatures")
-            != candidate["body"]["invariant_signatures"]
+    candidate_invariants = _structural_signature_projection(
+        candidate["body"]["invariant_signatures"])
+    anchor_invariants = _structural_signature_projection(
+        anchor["body"]["invariant_signatures"])
+    if (candidate_invariants != anchor_invariants
+            or pair_body.get("invariant_signatures") != candidate_invariants
             or pair_body.get("inverse_attribution_proved") is not True):
         raise EvidenceProducerError("inverse attribution or invariant signature mismatch")
     bundle = proofs.GpuSourceProofBundle(

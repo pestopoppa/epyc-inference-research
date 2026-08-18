@@ -188,6 +188,7 @@ class ExperimentTemplate:
                 anchor_forbidden=self.dispatch.anchor_forbidden,
                 invariants=self.dispatch.invariants)
         candidate = []
+        selected_anchors: list[evidence.ExactDispatch] = []
         for index, expected in enumerate(expected_rows):
             anchor = {row.signature: row for row in self.dispatch.anchor_exact}.get(
                 expected.route_id)
@@ -214,11 +215,18 @@ class ExperimentTemplate:
                 calls=expected.calls, grid=expected.grid, workgroup=expected.workgroup,
                 lds_bytes=expected.lds_bytes,
                 blocks_per_call=expected.grid // expected.workgroup))
+            selected_anchors.append(anchor)
+        selected_signatures = {row.signature for row in selected_anchors}
+        structural_only = tuple(evidence.InvariantDispatch(
+            signature=f"{row.signature}.structural",
+            kernel_pattern=row.kernel_pattern)
+            for row in self.dispatch.anchor_exact
+            if row.signature not in selected_signatures)
         return evidence.DispatchContract(candidate_exact=tuple(candidate),
-            anchor_exact=self.dispatch.anchor_exact,
+            anchor_exact=tuple(selected_anchors),
             candidate_forbidden=self.dispatch.candidate_forbidden,
             anchor_forbidden=self.dispatch.anchor_forbidden,
-            invariants=self.dispatch.invariants)
+            invariants=(*self.dispatch.invariants, *structural_only))
 
 
 @dataclass(frozen=True)
@@ -364,10 +372,10 @@ _ROCPROF_V1_PREFIX = ("--tool-version", "1", "--timestamp", "on",
                        "--ctx-wait", "on", "--heartbeat", "30", "-i")
 _CORRECTNESS_SUITE_SEED = 2026081301
 _INSTRUMENT_PATH = Path("/mnt/raid0/llm/llama.cpp-experimental")
-_INSTRUMENT_BRANCH = "codex/autokernel-ready-continue-instrument-20260814"
-_INSTRUMENT_COMMIT = "81bf32f11b4a421880e8f25faec3e4ba872363f0"
-_INSTRUMENT_DIFF_SHA256 = "3cf9178fcc00e8c1d3dfc0bfd6086edbff6a6eb6ac528aa4d88b23843b5599c2"
-_INSTRUMENT_TEST_SOURCE_SHA256 = "6acd4bf95594d5797a54c912630ec56d3e89fcb3a3a43ca96f95152d77589db4"
+_INSTRUMENT_BRANCH = "codex/autokernel-gqa7-correctness-instrument-20260818"
+_INSTRUMENT_COMMIT = "5bbcc5498e4732162356953b7be96a53073a6706"
+_INSTRUMENT_DIFF_SHA256 = "87122b4589d434c4275755640fbe2094d07ae4216315345bac16d68bed9703e0"
+_INSTRUMENT_TEST_SOURCE_SHA256 = "7571a536ba1305ad078948de2920aea33f9261ab9bb1b5714e55bd485ff335e9"
 _READY_CONTINUE_CONTRACT_SHA256 = "1411f5e81c1b0b3db6952523922c672d88a78aaff5945865c9ccc2b4fc5fd99f"
 _INSTRUMENT_BENCH_SOURCE_SHA256 = "b118e62cf452aa351a93f864bf4822d157dfc4af309f97b5f64cb6d1f31d2e07"
 _INSTRUMENT_BENCH_README_SHA256 = "6429015fe5025d35b65e6271520ea668267910f82922e618b27b80c909cec33f"
@@ -830,6 +838,12 @@ def _template_registry() -> ExperimentTemplateRegistry:
         "completed_stage_policy": "revalidate_receipt_and_reuse",
         "first_incomplete_stage_policy": "execute_once",
         "reject_identity_drift": True,
+        "attribution_arm_order_schedule": {
+            "counterbalanced": True,
+            "s1": ["candidate", "anchor"],
+            "s2": ["anchor", "candidate"],
+            "authority": "deployment+manifest keyed; S2 reverses S1",
+        },
     }
     gqa7_candidate_variants = {
         "gqa7_bulk_pairs": {
@@ -848,13 +862,16 @@ def _template_registry() -> ExperimentTemplateRegistry:
     gqa7_correctness_cases = [
         {"op": "FLASH_ATTN_EXT", "hsk": 64, "hsv": 64,
          "gqa_ratio": 7, "query_tokens": 1, "kv": 128,
-         "mask": False, "expected_matches": 1},
+         "mask": False, "expected_matches": 1,
+         "params_pattern": r"^hsk=64,hsv=64,nh=2,nr23=\[7,1\],kv=128,nb=1,mask=0,"},
         {"op": "FLASH_ATTN_EXT", "hsk": 64, "hsv": 64,
          "gqa_ratio": 7, "query_tokens": 1, "kv": 512,
-         "mask": True, "expected_matches": 1},
+         "mask": True, "expected_matches": 1,
+         "params_pattern": r"^hsk=64,hsv=64,nh=2,nr23=\[7,1\],kv=512,nb=1,mask=1,"},
         {"op": "FLASH_ATTN_EXT", "hsk": 64, "hsv": 64,
          "gqa_ratio": 7, "query_tokens": 1, "kv": 2048,
-         "mask": True, "expected_matches": 1},
+         "mask": True, "expected_matches": 1,
+         "params_pattern": r"^hsk=64,hsv=64,nh=2,nr23=\[7,1\],kv=2048,nb=1,mask=1,"},
     ]
     families = (
         {"id": "cuda-fattn-v2", "path": "ggml/src/ggml-cuda/fattn.cu",
@@ -996,6 +1013,16 @@ def _template_registry() -> ExperimentTemplateRegistry:
                        "decision_evidence": decision_evidence,
                        **({"candidate_dispatch_variants": gqa7_candidate_variants,
                            "required_correctness_cases": gqa7_correctness_cases,
+                           "correctness_invocations": [
+                               {"invocation_id": "generic_flash_attn_ext",
+                                "case_set": "generic_flash_attn_ext_v1",
+                                "expected_cases": 2868,
+                                "required_cases": []},
+                               {"invocation_id": "odd_gqa7_d64_q1",
+                                "case_set": "odd_gqa7_d64_q1_v1",
+                                "expected_cases": len(gqa7_correctness_cases),
+                                "required_cases": gqa7_correctness_cases},
+                           ],
                            "candidate_dispatch_authority":
                                "derived_from_anchor_by_exact_7_equals_3x2_plus_1_partition"}
                           if template_id == "cuda-fattn-tile-v1" else {}),
@@ -1526,6 +1553,25 @@ def _evidence_binding(config: deployment.DiscoveryDeployment) -> EvidencePlanBin
         correctness_argv = (
             str(correctness_tool.path), "test", "-o", op, "-b", "ROCm0", "-j", "1",
             "--suite-seed", str(seed))
+        correctness_invocations: tuple[Mapping[str, Any], ...] = ()
+        if template.template_id == "cuda-fattn-tile-v1":
+            required_cases = [dict(row) for row in semantics["required_correctness_cases"]]
+            correctness_invocations = (
+                {"invocation_id": "generic_flash_attn_ext",
+                 "argv": list(correctness_argv), "backend": "ROCm0",
+                 "op": op, "case_set": "generic_flash_attn_ext_v1",
+                 "expected_cases": cases, "required_cases": []},
+                {"invocation_id": "odd_gqa7_d64_q1",
+                 "argv": [*correctness_argv, "-p",
+                          "hsk=64,hsv=64,nh=2,nr23=[7,1]"],
+                 "backend": "ROCm0", "op": op,
+                 "case_set": "odd_gqa7_d64_q1_v1",
+                 "expected_cases": len(required_cases),
+                 "required_cases": required_cases,
+                 "environment_overrides": [
+                     ["AUTOKERNEL_CORRECTNESS_CASE_SET",
+                      "odd_gqa7_d64_q1_v1"]]},
+            )
         shared = identities.shared_runtime
         reward_binary = shared.measurement_binary
         profile_argv = (
@@ -1580,6 +1626,7 @@ def _evidence_binding(config: deployment.DiscoveryDeployment) -> EvidencePlanBin
             required_anchor_rocprof_argv_paths=(reward_binary.path, identities.model.path),
             execution_cwd=build_.candidate_build.resolve(strict=True),
             correctness_environment=tuple(sorted((
+                ("AUTOKERNEL_CORRECTNESS_CASE_SET", ""),
                 ("GGML_CUDA_DISABLE_GRAPHS", "1"), ("HIP_VISIBLE_DEVICES", "0"),
                 ("LD_LIBRARY_PATH",
                  f"{identities.candidate.hip_library.path.parent}:/opt/rocm/lib"),
@@ -1587,6 +1634,7 @@ def _evidence_binding(config: deployment.DiscoveryDeployment) -> EvidencePlanBin
             candidate_rocprof_environment=profile_environment(shared.candidate_hip_library),
             anchor_rocprof_environment=profile_environment(shared.anchor_hip_library),
             shared_runtime=shared,
+            correctness_invocations=correctness_invocations,
             attribution_arm_order_seed_sha256=order_seed,
             attribution_arm_order=attribution_arm_order)
         raw = json.dumps(evidence._policy_payload(provisional), sort_keys=True,
@@ -1624,7 +1672,7 @@ def _runner_binding(config: deployment.DiscoveryDeployment) -> RunnerArgsBinding
         repetition = permit.get("repetition")
         if operation_key != build_.operation_key or repetition not in {1, 2}:
             raise DeploymentFactoryError("runner operation identity differs from sealed build")
-        output = config.operations_root / str(operation_key) / "runner" / f"s{repetition}"
+        stage_root = config.operations_root / str(operation_key) / "runner" / f"s{repetition}"
         decision = permit.get("load_admission")
         if not isinstance(decision, Mapping):
             raise DeploymentFactoryError("runner permit lacks sealed load-admission decision")
@@ -1638,7 +1686,7 @@ def _runner_binding(config: deployment.DiscoveryDeployment) -> RunnerArgsBinding
             expected_policy_sha256=corpus.policy_sha256,
             expected_policy_file_sha256=corpus.file_sha256,
             expected_effective_context_sha256=effective)
-        decision_path = output / "load-admission-decision.json"
+        decision_path = stage_root / "load-admission-decision.json"
         decision_path.parent.mkdir(parents=True, exist_ok=True)
         decision_raw = (json.dumps(dict(decision), sort_keys=True, indent=2) + "\n").encode()
         if decision_path.exists():
@@ -1650,8 +1698,8 @@ def _runner_binding(config: deployment.DiscoveryDeployment) -> RunnerArgsBinding
             deployment_config_sha256=config.config_sha256,
             source_manifest_sha256=candidate.source_manifest_sha256,
             repetition=repetition)
-        argv = ["--anchor-build", str(build_.anchor_build), "--candidate-build", str(build_.candidate_build),
-                "--model", str(config.model.path), "--output-dir", str(output),
+        common_argv = ["--anchor-build", str(build_.anchor_build), "--candidate-build", str(build_.candidate_build),
+                "--model", str(config.model.path),
                 "--campaign-id", f"ak-discovery-{config.config_sha256[:16]}",
                 "--factor", "source_patch", "--calls", "9", "--workload", "decode_tg128",
                 "--arm-order-schedule", arm_order,
@@ -1667,7 +1715,16 @@ def _runner_binding(config: deployment.DiscoveryDeployment) -> RunnerArgsBinding
                 "--candidate-loader-dir", str(build_.candidate_loader_dir),
                 "--cpu-claim-journal", str(config.operations_root / "claims" / "cpu.jsonl"),
                 "--device-claim-journal", str(config.operations_root / "claims" / "device.jsonl")]
-        return controller.gpu_discovery.parser().parse_args(argv)
+        graphs_off = controller.gpu_discovery.parser().parse_args([
+            *common_argv, "--output-dir",
+            str(stage_root / "measurement-graphs-off"),
+            "--runtime-graphs", "off"])
+        graphs_on = controller.gpu_discovery.parser().parse_args([
+            *common_argv, "--output-dir",
+            str(stage_root / "target-runtime-graphs-on"),
+            "--runtime-graphs", "on"])
+        setattr(graphs_off, "_target_runtime_args", graphs_on)
+        return graphs_off
     return RunnerArgsBinding(build=build)
 
 

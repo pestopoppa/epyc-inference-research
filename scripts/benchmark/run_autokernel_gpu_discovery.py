@@ -38,7 +38,7 @@ SCHEMA_BANK = "epyc.autokernel.gpu_screening_baseline.v2"
 SCHEMA_RESULT = "epyc.autokernel.gpu_candidate_only_screen.v2"
 SCHEMA_LIVE_GOVERNANCE = "epyc.autokernel.gpu_discovery_live_governance.v1"
 SOURCE_COMMIT = "0db32c06e3e550065b78311a6031ef3dd2c4f27c"
-READY_CONTINUE_INSTRUMENT_COMMIT = "81bf32f11b4a421880e8f25faec3e4ba872363f0"
+READY_CONTINUE_INSTRUMENT_COMMIT = "5bbcc5498e4732162356953b7be96a53073a6706"
 READY_CONTINUE_CONTRACT_SHA256 = "1411f5e81c1b0b3db6952523922c672d88a78aaff5945865c9ccc2b4fc5fd99f"
 CPU_LIST = "184-191"
 DEVICE_ID = "mi210_0"
@@ -683,6 +683,7 @@ def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
            sealed_load_decision: dict | None = None,
            repetitions: int = 1,
            timed_output_oracle: bool = False,
+           runtime_graphs: str = "inherit",
            load_readiness_policy: LoadReadinessPolicy | None = None,
            ready_continue_handshake: ReadyContinueHandshake | None = None,
            process_factory: Callable[..., Any] | None = None,
@@ -694,6 +695,8 @@ def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
     """Run one cold load and all sealed repetitions for one discovery arm."""
     if isinstance(repetitions, bool) or not isinstance(repetitions, int) or repetitions < 1:
         raise RuntimeError("GPU discovery repetitions must be a positive integer")
+    if runtime_graphs not in {"inherit", "off", "on"}:
+        raise RuntimeError("runtime graph mode must be inherit, off, or on")
     if (not isinstance(sealed_load_decision, dict)
             or sealed_load_decision.get("mode") not in {"cold_overlap", "cold_serialized"}):
         raise RuntimeError("nonpersistent runner requires a sealed cold load decision")
@@ -725,6 +728,7 @@ def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
             reward_binary=reward_binary, hip_library_dir=hip_library_dir, common_loader_dir=common_loader_dir,
             runtime_arm=runtime_arm, repetitions=repetitions,
             timed_output_oracle=timed_output_oracle,
+            runtime_graphs=runtime_graphs,
             process_factory=process_factory, kfd_pid_provider=kfd_pid_provider,
             vram_reader=vram_reader, pgid_provider=pgid_provider, sleep=sleep,
             supervisor_root=supervisor_root)
@@ -824,6 +828,7 @@ def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
             common_loader_dir=common_loader_dir, runtime_arm=runtime_arm,
             repetitions=repetitions, readiness_policy=load_readiness_policy,
             timed_output_oracle=timed_output_oracle,
+            runtime_graphs=runtime_graphs,
             ready_continue_handshake=ready_continue_handshake,
             on_load_ready=(release_for_ready if ready_continue_handshake is not None else None),
             process_factory=process_factory,
@@ -868,6 +873,7 @@ def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
                    common_loader_dir: Path | None = None, runtime_arm: str | None = None,
                    repetitions: int = 1,
                    timed_output_oracle: bool = False,
+                   runtime_graphs: str = "inherit",
                    readiness_policy: LoadReadinessPolicy | None = None,
                    ready_continue_handshake: ReadyContinueHandshake | None = None,
                    on_load_ready: Callable[[Mapping[str, Any]], None] | None = None,
@@ -880,6 +886,9 @@ def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
                    supervisor_root: Path | None = None) -> dict:
     if isinstance(repetitions, bool) or not isinstance(repetitions, int) or repetitions < 1:
         raise RuntimeError("GPU discovery repetitions must be a positive integer")
+    if (runtime_graphs not in {"inherit", "off", "on"}
+            or timed_output_oracle and runtime_graphs not in {"inherit", "off"}):
+        raise RuntimeError("timed-output oracle requires graphs off")
     if (isinstance(max_runtime_s, bool) or not isinstance(max_runtime_s, (int, float))
             or not math.isfinite(float(max_runtime_s)) or not 1 <= max_runtime_s <= 3600):
         raise RuntimeError("GPU discovery supervisor deadline is outside reviewed bounds")
@@ -920,7 +929,9 @@ def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
         "AMD_SERIALIZE_KERNEL": "3", "AMD_SERIALIZE_COPY": "3",
         "GGML_CUDA_DISABLE_GRAPHS": "1",
     }
-                         if timed_output_oracle else {})
+                         if timed_output_oracle else (
+                             {"GGML_CUDA_DISABLE_GRAPHS": "1"}
+                             if runtime_graphs == "off" else {}))
     env = {"PATH": "/usr/bin:/bin",
            "LD_LIBRARY_PATH": f"{loader_dir}:{common_dir}:/opt/rocm/lib",
            **serialization_env}
@@ -1136,8 +1147,14 @@ def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
         "serialization_env": serialization_env,
     } if timed_output_semantics is not None else {
         "schema": "epyc.autokernel.native_llama_bench_metric.v1",
-        "scope": "legacy_nonpromotable_discovery",
-        "production_throughput_authority": False,
+        "scope": ("target_runtime_graphs_on_direction"
+                  if runtime_graphs == "on" else "legacy_nonpromotable_discovery"),
+        "production_throughput_authority": runtime_graphs == "on",
+        **({"graph_mode": runtime_graphs,
+            **({"graph_environment": {"GGML_CUDA_DISABLE_GRAPHS": "1"}}
+               if runtime_graphs == "off" else {
+                   "graph_environment": {"GGML_CUDA_DISABLE_GRAPHS": None}})}
+           if runtime_graphs != "inherit" else {}),
     })
     return {"argv": list(argv), "env": {
                 "LD_LIBRARY_PATH": env["LD_LIBRARY_PATH"], **serialization_env},
@@ -1374,7 +1391,10 @@ def preflight(args: argparse.Namespace) -> dict:
         raise RuntimeError(
             "ready/continue requires the sealed 81bf32f11 instrument, exact contract, "
             "and instrument-derived anchor")
-    timed_output_oracle = runtime_arms is not None
+    runtime_graphs = getattr(args, "runtime_graphs", "off")
+    if runtime_graphs not in {"off", "on"}:
+        raise RuntimeError("runtime graph mode must be off or on")
+    timed_output_oracle = runtime_arms is not None and runtime_graphs == "off"
     if timed_output_oracle and anchor_identity["source_commit"] != READY_CONTINUE_INSTRUMENT_COMMIT:
         raise RuntimeError(
             "shared source-discovery reward requires the exact sealed 81bf32f11 "
@@ -1420,6 +1440,7 @@ def preflight(args: argparse.Namespace) -> dict:
         "generation_tokens": generation_tokens,
         "frame": recipe,
         "metric": metric,
+        "runtime_graphs": runtime_graphs,
         "metric_contract": ({
             "schema": "epyc.autokernel.serialized_pair_max_metric.v1",
             "scope": "integrity_discovery_only",
@@ -1431,8 +1452,13 @@ def preflight(args: argparse.Namespace) -> dict:
                 "GGML_CUDA_DISABLE_GRAPHS": "1"},
         } if timed_output_oracle else {
             "schema": "epyc.autokernel.native_llama_bench_metric.v1",
-            "scope": "legacy_nonpromotable_discovery",
-            "production_throughput_authority": False,
+            "scope": ("target_runtime_graphs_on_direction"
+                      if runtime_graphs == "on" else "legacy_nonpromotable_discovery"),
+            "production_throughput_authority": runtime_graphs == "on",
+            "graph_mode": runtime_graphs,
+            **({"graph_environment": {"GGML_CUDA_DISABLE_GRAPHS": "1"}}
+               if runtime_graphs == "off" else {
+                   "graph_environment": {"GGML_CUDA_DISABLE_GRAPHS": None}}),
         }),
         "invocations": {"anchor": args.calls, "candidate": args.calls},
         "arm_order_schedule": list(order),
@@ -1585,6 +1611,7 @@ def run(args: argparse.Namespace) -> dict:
                 runtime_arm=(arm if sealed["runtime_arms"] else None),
                 repetitions=args.calls,
                 timed_output_oracle=timed_output_oracle_enabled,
+                runtime_graphs=str(sealed.get("runtime_graphs", "off")),
                 load_readiness_policy=readiness,
                 ready_continue_handshake=handshake,
                 supervisor_root=out / f"supervisor-{arm}")]
@@ -1666,6 +1693,7 @@ def run(args: argparse.Namespace) -> dict:
             "model_size_bytes": model.stat().st_size,
             "site_load_decision": sealed["host_transfer"],
             "promotion_claim": False,
+            "runtime_graphs": sealed.get("runtime_graphs", "off"),
             "frame": bank["frame"], "sole_factor": bank["sole_factor"],
             "candidate_identity": bank["candidate_identity"],
             "candidate_runs": candidate_runs, "device_sampling": numeric,
@@ -1758,6 +1786,7 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--instrument-ready-continue-v1", action="store_true")
     result.add_argument("--instrument-ready-continue-commit")
     result.add_argument("--instrument-ready-continue-contract-sha256")
+    result.add_argument("--runtime-graphs", choices=("off", "on"), default="off")
     result.add_argument("--cpu-claim-journal", default="/mnt/raid0/llm/ak-claims/region.jsonl")
     result.add_argument("--device-claim-journal", default="/mnt/raid0/llm/ak-claims/device.jsonl")
     return result

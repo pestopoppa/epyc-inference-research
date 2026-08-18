@@ -381,6 +381,8 @@ class SealedScreen:
     baseline_sha256: str
     source_proof_sha256: str
     dispatch_proof_sha256: str
+    exact_attribution_effect_fraction: float | None = None
+    target_runtime_effect_fraction: float | None = None
     candidate_only: bool = True
     promotion_claim: bool = False
     stages: tuple[str, ...] = ("materialized", "built", "correctness", "attribution", "screen")
@@ -399,8 +401,23 @@ class SealedScreen:
                 or not isinstance(self.effect_fraction, (int, float))
                 or not math.isfinite(float(self.effect_fraction))):
             raise DiscoveryControllerError("screen effect must be a finite measured number")
+        for label, value in (
+                ("exact attribution", self.exact_attribution_effect_fraction),
+                ("target runtime", self.target_runtime_effect_fraction)):
+            if (value is not None and (isinstance(value, bool)
+                    or not isinstance(value, (int, float))
+                    or not math.isfinite(float(value)))):
+                raise DiscoveryControllerError(
+                    f"{label} effect must be a finite measured number")
+        if (self.target_runtime_effect_fraction is not None
+                and float(self.effect_fraction)
+                != float(self.target_runtime_effect_fraction)):
+            raise DiscoveryControllerError(
+                "primary screen effect must be the target-runtime effect")
         if not self.candidate_only or self.promotion_claim: raise DiscoveryControllerError("discovery screen must remain nonpromotable")
-        if tuple(self.stages) != ("materialized", "built", "correctness", "attribution", "screen"):
+        if tuple(self.stages) not in {
+                ("materialized", "built", "correctness", "attribution", "screen"),
+                ("materialized", "built", "correctness", "attribution")}:
             raise DiscoveryControllerError("screen did not prove the required fail-closed stage order")
         for value in (self.result_sha256, self.baseline_sha256, self.source_proof_sha256, self.dispatch_proof_sha256):
             if not HASH.fullmatch(value): raise DiscoveryControllerError("sealed result requires evidence hashes")
@@ -1305,25 +1322,88 @@ class GpuSourceScreener:
         if bundle.candidate != build.candidate_identity or bundle.anchor != build.anchor_identity:
             raise DiscoveryControllerError("GPU proof bundle does not bind both sealed build identities")
         args = self.args_factory(candidate, build, lease)
+        target_args = getattr(args, "_target_runtime_args", None)
+        if target_args is None:
+            raise DiscoveryControllerError(
+                "GPU source runner lacks a separate target-runtime stage")
         # The established runner owns KFD/VRAM, device claims, paired samples,
         # and its durable result.  This controller does not spawn a shell.
-        if getattr(args, "factor", None) != "source_patch" or Path(getattr(args, "anchor_build", "")).resolve() != build.anchor_build or Path(getattr(args, "candidate_build", "")).resolve() != build.candidate_build:
+        if any(getattr(current, "factor", None) != "source_patch"
+               or Path(getattr(current, "anchor_build", "")).resolve()
+               != build.anchor_build
+               or Path(getattr(current, "candidate_build", "")).resolve()
+               != build.candidate_build
+               for current in (args, target_args)):
             raise DiscoveryControllerError("GPU source runner arguments are not bound to the typed build")
-        # Immediately-before-call byte attestation prevents a validated graph
-        # from silently executing a changed controller/factory/runner module.
-        self.runner_attest()
-        raw = gpu_discovery.run(args)
-        result_path = Path(args.output_dir).resolve() / "result.json"
-        durable = gpu_source_proofs.require_result_file(result_path, raw)["body"]
-        raw = durable
-        if not (raw.get("schema") == "epyc.autokernel.gpu_candidate_only_screen.v2" and raw.get("non_promotable") is True and raw.get("promotion_claim") is False and raw.get("hip_residency_proved") is True):
-            raise DiscoveryControllerError("GPU runner returned an unsealed or non-resident discovery result")
-        if (hasattr(args, "_device_claim_acquirer")
-                and raw.get("device_claim_mode") != "borrowed_outer_reservation"):
+        attribution_body = bundle.attribution.get("body")
+        comparison = (attribution_body.get("exact_duration_comparison")
+                      if isinstance(attribution_body, Mapping) else None)
+        if not isinstance(comparison, Mapping):
             raise DiscoveryControllerError(
-                "GPU runner did not bind throughput to the borrowed outer reservation")
-        if hasattr(args, "_device_claim_acquirer"):
-            expected_outer = getattr(args, "_expected_outer_claim_id", None)
+                "GPU source proof lacks exact-duration decision evidence")
+        exact_effect = float(comparison["relative_improvement_fraction"])
+        if exact_effect <= 0:
+            # A valid neutral/regressed exact-route measurement is a scientific
+            # outcome, not a refusal.  It terminates before any whole-model
+            # benchmark and therefore cannot consume a target-runtime call.
+            result_path = (Path(args.output_dir).resolve().parent /
+                           "exact-attribution-outcome.json")
+            body = {
+                "schema": "epyc.autokernel.exact_attribution_outcome.v1",
+                "authority": "nonpromotable_candidate_only_discovery",
+                "non_promotable": True, "promotion_claim": False,
+                "status": "complete", "classification": "screened_out",
+                "manifest_sha256": candidate.source_manifest_sha256,
+                "exact_attribution_effect_fraction": exact_effect,
+                "target_runtime_executed": False,
+                "target_runtime_reason": "nonpositive_exact_duration",
+                "dispatch_proof_sha256": bundle.attribution["file_sha256"],
+            }
+            body["result_sha256"] = schemas.content_hash(body)
+            if result_path.exists() or result_path.is_symlink():
+                if result_path.is_symlink() or json.loads(
+                        result_path.read_text(encoding="utf-8")) != body:
+                    raise DiscoveryControllerError(
+                        "exact-attribution outcome receipt changed")
+            else:
+                _atomic(result_path, body)
+            return SealedScreen(
+                receipt_path=str(result_path),
+                result_sha256=body["result_sha256"],
+                effect_fraction=exact_effect, classification="screened_out",
+                baseline_sha256=schemas.content_hash(
+                    comparison["anchor_routes"]),
+                source_proof_sha256=bundle.correctness["file_sha256"],
+                dispatch_proof_sha256=bundle.attribution["file_sha256"],
+                exact_attribution_effect_fraction=exact_effect,
+                target_runtime_effect_fraction=None,
+                stages=("materialized", "built", "correctness", "attribution"))
+        def run_stage(current: Any, *, graph_mode: str) -> tuple[Path, Mapping[str, Any]]:
+            # Immediately-before-call byte attestation prevents a validated
+            # graph from silently executing changed controller/runner bytes.
+            self.runner_attest()
+            result_path = Path(current.output_dir).resolve() / "result.json"
+            if result_path.exists() and not result_path.is_symlink():
+                raw = gpu_source_proofs.load_receipt(
+                    result_path,
+                    schema="epyc.autokernel.gpu_candidate_only_screen.v2")["body"]
+            else:
+                raw = gpu_discovery.run(current)
+            raw = gpu_source_proofs.require_result_file(result_path, raw)["body"]
+            if not (raw.get("schema") == "epyc.autokernel.gpu_candidate_only_screen.v2"
+                    and raw.get("non_promotable") is True
+                    and raw.get("promotion_claim") is False
+                    and raw.get("hip_residency_proved") is True
+                    and raw.get("runtime_graphs") == graph_mode):
+                raise DiscoveryControllerError(
+                    f"GPU {graph_mode} runner returned an unsealed/non-resident result")
+            if (hasattr(current, "_device_claim_acquirer")
+                    and raw.get("device_claim_mode") != "borrowed_outer_reservation"):
+                raise DiscoveryControllerError(
+                    "GPU runner did not bind throughput to the borrowed outer reservation")
+            if not hasattr(current, "_device_claim_acquirer"):
+                return result_path, raw
+            expected_outer = getattr(current, "_expected_outer_claim_id", None)
             opened = raw.get("device_claim_open")
             phase_end = raw.get("device_claim_borrowed_phase_end")
             if (not isinstance(expected_outer, str)
@@ -1338,7 +1418,7 @@ class GpuSourceScreener:
                     or raw.get("device_claim_released") is not None):
                 raise DiscoveryControllerError(
                     "GPU runner borrowed phase does not bind the exact outer claim")
-            governance_path = Path(args.output_dir).resolve() / "live-governance.json"
+            governance_path = Path(current.output_dir).resolve() / "live-governance.json"
             try:
                 governance = json.loads(governance_path.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError) as exc:
@@ -1352,9 +1432,14 @@ class GpuSourceScreener:
                     or governance.get("device_claim_released") is not None):
                 raise DiscoveryControllerError(
                     "GPU runner terminal governance differs from its borrowed phase")
+            return result_path, raw
+
+        _graphs_off_path, _graphs_off = run_stage(args, graph_mode="off")
+        result_path, raw = run_stage(target_args, graph_mode="on")
         projection = autokernel_progression._gpu_screen(result_path, raw)
         if projection is None: raise DiscoveryControllerError("GPU result failed canonical progression validation")
-        return SealedScreen(receipt_path=str(result_path), result_sha256=str(raw["result_sha256"]), effect_fraction=float(raw["median_relative"]), classification=str(projection["stage"]), baseline_sha256=str(raw["baseline_sha256"]), source_proof_sha256=bundle.correctness["file_sha256"], dispatch_proof_sha256=bundle.attribution["file_sha256"])
+        target_effect = float(raw["median_relative"])
+        return SealedScreen(receipt_path=str(result_path), result_sha256=str(raw["result_sha256"]), effect_fraction=target_effect, classification=str(projection["stage"]), baseline_sha256=str(raw["baseline_sha256"]), source_proof_sha256=bundle.correctness["file_sha256"], dispatch_proof_sha256=bundle.attribution["file_sha256"], exact_attribution_effect_fraction=exact_effect, target_runtime_effect_fraction=target_effect)
 
 
 @dataclass(frozen=True)
@@ -1727,12 +1812,13 @@ def _context(state: Mapping[str, Any], tracker: hypotheses.HypothesisTracker, tu
             "falsifier", "experiment_intent", "mechanism_id", "target_surface",
             "target_symbol")})
     assignment = None
-    if config.production_base_commit is not None:
+    if config.production_base_commit is not None or portfolio_binding is not None:
         assignment = AuthoringAssignment(
             campaign_id=config.campaign_id, proposal_id=f"akp-discovery-{turn}",
             candidate_id=f"akc-discovery-{turn}",
-            production_base_commit=config.production_base_commit,
-            instrument_commit=config.instrument_commit or config.production_base_commit,
+            production_base_commit=config.production_base_commit or "0" * 40,
+            instrument_commit=(config.instrument_commit
+                               or config.production_base_commit or "0" * 40),
             portfolio_binding=portfolio_binding).to_dict()
     prior_refusals = [
         {key: row.get(key) for key in (
@@ -1948,7 +2034,17 @@ def _classified_result(state: Mapping[str, Any], item: PlannedCandidate,
             decision_policy, "max_replication_spread_pct", 0.10),
         required_replications=_required_replications(decision_policy),
     )
-    return SealedScreen(receipt_path=result.receipt_path,result_sha256=result.result_sha256,effect_fraction=result.effect_fraction,classification=classification,baseline_sha256=result.baseline_sha256,source_proof_sha256=result.source_proof_sha256,dispatch_proof_sha256=result.dispatch_proof_sha256,candidate_only=result.candidate_only,promotion_claim=result.promotion_claim,stages=result.stages,series_key=series_key,component_series_keys=components,series_effect_fraction=float(statistics.median(effects)))
+    dual_effects_present = (result.exact_attribution_effect_fraction is not None
+                            or result.target_runtime_effect_fraction is not None)
+    if dual_effects_present and (
+            result.exact_attribution_effect_fraction is None
+            or result.target_runtime_effect_fraction is None
+            or result.exact_attribution_effect_fraction <= 0
+            or result.target_runtime_effect_fraction <= 0):
+        # Route/device-time and target-runtime throughput are conjunctive.  A
+        # disagreement is measured evidence, but never a candidate/nomination.
+        classification = "inconclusive"
+    return SealedScreen(receipt_path=result.receipt_path,result_sha256=result.result_sha256,effect_fraction=result.effect_fraction,classification=classification,baseline_sha256=result.baseline_sha256,source_proof_sha256=result.source_proof_sha256,dispatch_proof_sha256=result.dispatch_proof_sha256,exact_attribution_effect_fraction=result.exact_attribution_effect_fraction,target_runtime_effect_fraction=result.target_runtime_effect_fraction,candidate_only=result.candidate_only,promotion_claim=result.promotion_claim,stages=result.stages,series_key=series_key,component_series_keys=components,series_effect_fraction=float(statistics.median(effects)))
 
 
 def _schedule_replication(state: dict[str, Any], *, item: PlannedCandidate,

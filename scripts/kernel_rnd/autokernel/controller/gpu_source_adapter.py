@@ -691,15 +691,19 @@ class GovernedGpuSourceAdapter:
 
         def contained_args(candidate_: Any, build_: Any, lease_: Mapping[str, Any]) -> Any:
             args = self.args_factory(candidate_, build_, lease_)
-            output = Path(getattr(args, "output_dir", "")).resolve()
+            target_args = getattr(args, "_target_runtime_args", None)
+            outputs = (Path(getattr(args, "output_dir", "")).resolve(),
+                       *((Path(getattr(target_args, "output_dir", "")).resolve(),)
+                         if target_args is not None else ()))
             runner_root = (operation_root / "runner").resolve()
-            try:
-                output.relative_to(runner_root)
-            except ValueError as exc:
-                raise GpuSourceAdapterError(
-                    "GPU runner output escaped its operation directory") from exc
-            if output.exists() or output.is_symlink():
-                raise GpuSourceAdapterError("GPU runner output must be fresh")
+            for output in outputs:
+                try:
+                    output.relative_to(runner_root)
+                except ValueError as exc:
+                    raise GpuSourceAdapterError(
+                        "GPU runner output escaped its operation directory") from exc
+                if output.is_symlink():
+                    raise GpuSourceAdapterError("GPU runner output is a symlink")
             if self.reservation_manager is not None:
                 opened = reservation_state.get("opened")
                 if not isinstance(opened, Mapping) or not opened.get("claim_id"):
@@ -708,14 +712,29 @@ class GovernedGpuSourceAdapter:
                 setattr(args, "_device_claim_acquirer",
                         self.reservation_manager.borrower(operation_key))
                 setattr(args, "_expected_outer_claim_id", opened["claim_id"])
+                if target_args is not None:
+                    setattr(target_args, "_device_claim_acquirer",
+                            self.reservation_manager.borrower(operation_key))
+                    setattr(target_args, "_expected_outer_claim_id", opened["claim_id"])
             runner_args["args"] = args
-            evidence._seal(operation_root / "runner-plan.json", {
+            plan_body = {
                 "schema": "epyc.autokernel.gpu_source_runner_plan.v1",
                 "authority": AUTHORITY,
                 "promotion_claim": False,
                 "operation_key": operation_key,
-                "output_dir": str(output),
-            })
+                **({"measurement_graphs_off_output_dir": str(outputs[0]),
+                    "target_runtime_graphs_on_output_dir": str(outputs[1])}
+                   if target_args is not None else {"output_dir": str(outputs[0])}),
+            }
+            plan_path = operation_root / "runner-plan.json"
+            if plan_path.exists() or plan_path.is_symlink():
+                loaded = gpu_source_proofs.load_receipt(
+                    plan_path,
+                    schema="epyc.autokernel.gpu_source_runner_plan.v1")["body"]
+                if loaded != plan_body:
+                    raise GpuSourceAdapterError("runner plan identity changed")
+            else:
+                evidence._seal(plan_path, plan_body)
             return args
 
         protected_before = _protected_snapshot(
