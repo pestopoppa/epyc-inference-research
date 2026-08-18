@@ -81,6 +81,29 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
                 "disposition": policy["terminal_rule"], "policy": policy}
         self.assertIsNone(C._select_portfolio_binding(state, config))
 
+    def test_authoring_refusals_do_not_spend_the_scientific_candidate_budget(self):
+        """RED: no measurement cannot establish 'no gain after N candidates'."""
+        records = {row["hypothesis_id"]: row
+                   for row in self.portfolio.eligible_hypotheses()}
+        for hypothesis_id, _template_id, _op, _cases in ELIGIBLE:
+            policy = records[hypothesis_id]["decision_policy"]
+            for refused_status in (
+                    "critic_reject", "screen_refused", "authorization_refused"):
+                with self.subTest(hypothesis=hypothesis_id,
+                                  status=refused_status):
+                    state = {"iterations": [], "portfolio_terminals": {}}
+                    for number in range(policy["max_distinct_candidates"]):
+                        row = {
+                            "status": refused_status,
+                            "portfolio_hypothesis_id": hypothesis_id,
+                            "portfolio_decision_policy": dict(policy),
+                            "source_manifest_sha256": f"{number + 1:064x}",
+                        }
+                        state["iterations"].append(row)
+                        C._apply_portfolio_outcome(state, row)
+                    self.assertNotIn(hypothesis_id,
+                                     state["portfolio_terminals"])
+
     def test_fa_has_sealed_distinct_bulk_and_tail_candidate_routes(self):
         """RED: a pair+tail mutation cannot be forced through the anchor route."""
         template = self.registry.templates["cuda-fattn-tile-v1"]
@@ -156,6 +179,38 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
                 self.assertEqual(fsm["first_incomplete_stage_policy"],
                                  "execute_once")
                 self.assertIs(fsm["reject_identity_drift"], True)
+
+    def test_each_strategy_requires_exact_attribution_and_graphs_on_gain(self):
+        """RED: an opaque attribution hash cannot discharge a falsifier."""
+        for hypothesis_id, template_id, _op, _cases in ELIGIBLE:
+            with self.subTest(hypothesis=hypothesis_id):
+                decision = self.registry.templates[template_id].semantics.get(
+                    "decision_evidence")
+                self.assertIsInstance(decision, dict)
+                self.assertIs(decision["all_exact_routes_have_duration"], True)
+                self.assertIs(decision["exact_attribution_gain_required"], True)
+                self.assertIs(decision["target_runtime_graphs_on_gain_required"],
+                              True)
+                self.assertEqual(decision["combination"], "conjunction")
+                self.assertEqual(decision["direction"],
+                                 "lower_exact_duration_and_higher_throughput")
+
+    def test_profile_reducer_preserves_exact_route_duration(self):
+        """RED: BeginNs/EndNs are parsed today and then silently discarded."""
+        rows = [
+            {"kernel": "route", "grid": 128, "workgroup": 64, "lds": 0,
+             "blocks_per_call": 2, "begin_ns": 100, "end_ns": 130},
+            {"kernel": "route", "grid": 128, "workgroup": 64, "lds": 0,
+             "blocks_per_call": 2, "begin_ns": 200, "end_ns": 250},
+        ]
+        exact = (E.ExactDispatch(
+            "route", r"^route$", 2, 128, 64, 0, 2),)
+        reduced = E._reduce_arm(
+            rows, exact=exact, forbidden=(), invariants=())
+        route = reduced["exact"]["route"]
+        self.assertEqual(route["total_duration_ns"], 80)
+        self.assertEqual(route["duration_ns"], [30, 50])
+        self.assertEqual(route["median_duration_ns"], 40)
 
 
 class EvidenceStageResumeRedGate(unittest.TestCase):
