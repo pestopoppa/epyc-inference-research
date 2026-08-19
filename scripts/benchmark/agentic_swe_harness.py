@@ -409,6 +409,46 @@ ACTION_RE = re.compile(r"^[ \t]*ACTION:[ \t]*(bash|edit|done)\b[ \t]*([^\n]*?)[ 
                        re.MULTILINE | re.IGNORECASE)
 _FENCE_RE = re.compile(r"```(?:[\w+-]*)\n(.*?)```", re.DOTALL)
 
+# Native tool-call translation. Some models (e.g. Qwen3.x multimodal) emit their
+# native <tool_call>/<function=…> grammar instead of the harness's ACTION: text
+# grammar. We translate the native format into ACTION: lines before parsing, so
+# the model's exploration (bash) and edits are actually executed rather than
+# read as "no ACTION line found" and burned as wasted turns.
+_NATIVE_TC_RE = re.compile(r"<tool_call>\s*<function=(\w+)>(.*?)</function>\s*</tool_call>", re.DOTALL)
+_NATIVE_PARAM_RE = re.compile(r"<parameter=\w+>(.*?)</parameter>", re.DOTALL)
+
+
+def _translate_native_tool_calls(text: str) -> str:
+    """Map a model's native tool-call blocks onto ACTION: grammar (best effort).
+
+    Returns the text with any recognised native blocks replaced by ACTION:
+    lines; unrecognised blocks are left in place so the existing ACTION_RE
+    still gets a chance (and the malformed path still fires if nothing matches).
+    """
+    def repl(m: "re.Match[str]") -> str:
+        fn = (m.group(1) or "").lower()
+        body = m.group(2) or ""
+        params = [p.strip() for p in _NATIVE_PARAM_RE.findall(body)]
+        if fn in ("bash", "command", "run", "shell"):
+            cmd = params[0] if params else body.strip()
+            return f"ACTION: bash\n{cmd}\n" if cmd.strip() else ""
+        if fn in ("read", "read_file", "cat", "view"):
+            path = params[0] if params else body.strip()
+            return f"ACTION: bash\ncat {path}\n" if path else ""
+        if fn in ("grep", "search", "find"):
+            pat = params[0] if params else body.strip()
+            return f"ACTION: bash\ngrep -rn {pat} /testbed\n" if pat else ""
+        if fn in ("edit", "write", "patch", "replace"):
+            src = params[0] if params else body
+            if "SEARCH" in src or "=======" in src:
+                return f"ACTION: edit\n{src}\n"
+            return ""
+        if fn in ("submit", "finish", "done", "exit"):
+            return "ACTION: done"
+        return ""
+
+    return _NATIVE_TC_RE.sub(repl, text or "")
+
 
 @dataclass
 class Action:
@@ -419,6 +459,7 @@ class Action:
 
 
 def parse_action(text: str) -> Action:
+    text = _translate_native_tool_calls(text)
     matches = list(ACTION_RE.finditer(text or ""))
     if not matches:
         return Action(None, error="no ACTION line found")
@@ -633,6 +674,8 @@ def _write_live_status(path: Path | None, obj: dict) -> None:
 
 
 def _sha256_file(path: Path) -> str:
+    if not path.exists():
+        return ""  # instance produced no trajectory (e.g. early model error); hash is absent
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
