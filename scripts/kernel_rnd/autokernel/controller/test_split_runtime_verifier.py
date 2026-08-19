@@ -212,6 +212,46 @@ class SplitRuntimeVerifierTests(unittest.TestCase):
                     model_sha256=_sha(model), device_id="mi210_0", kfd_pid=1,
                     boot_id="boot", process_start_ticks=1)
 
+            unsealed = manifest.common_dir / "libunsealed-local.so"
+            unsealed.write_bytes(b"not in the sealed runtime manifest")
+            text = _maps(manifest, "anchor", model) + "\n" + _maps_line(unsealed)
+            with self.assertRaisesRegex(V.SplitRuntimeError,
+                                        "unsealed local object"):
+                V.verify_runtime_maps(
+                    manifest, arm="anchor", maps_text=text, model_path=model,
+                    model_sha256=_sha(model), device_id="mi210_0", kfd_pid=1,
+                    boot_id="boot", process_start_ticks=1)
+
+    def test_maps_refuse_deleted_sealed_path_but_ignore_unrelated_vanished_path(
+            self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "runtime"
+            _runtime(root)
+            manifest = V.verify_split_runtime(root, elf_reader=_fake_elf)
+            model = Path(directory) / "model.gguf"
+            model.write_bytes(b"model")
+            complete = _maps(manifest, "candidate", model)
+            vanished_comgr = (
+                "7e000000-7e001000 r--p 00000000 00:01 12345 "
+                "/tmp/comgr-vanished/input/linked.bc")
+            # An unrelated compiler scratch mapping is outside the authority
+            # and may vanish between sampling and validation.
+            V.verify_runtime_maps(
+                manifest, arm="candidate",
+                maps_text=complete + "\n" + vanished_comgr,
+                model_path=model, model_sha256=_sha(model),
+                device_id="mi210_0", kfd_pid=1, boot_id="boot",
+                process_start_ticks=1)
+            deleted_model = complete.replace(
+                str(model.resolve()), f"{model.resolve()} (deleted)")
+            with self.assertRaisesRegex(V.SplitRuntimeError,
+                                        "deleted sealed file mapping"):
+                V.verify_runtime_maps(
+                    manifest, arm="candidate", maps_text=deleted_model,
+                    model_path=model, model_sha256=_sha(model),
+                    device_id="mi210_0", kfd_pid=1, boot_id="boot",
+                    process_start_ticks=1)
+
     def test_maps_refuse_complete_opposite_arm_before_incomplete_classification(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / "runtime"

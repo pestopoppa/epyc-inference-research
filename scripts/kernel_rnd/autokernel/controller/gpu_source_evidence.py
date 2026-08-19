@@ -76,12 +76,16 @@ ROCPROF_V3_AGENT_COLUMNS = (
 PROFILER_MAPPED_ROLES = frozenset({
     "profiler_sdk_library", "profiler_sdk_tool_library",
     "profiler_aqlprofile_library", "profiler_hsa_runtime_library",
-    "profiler_register_library", "profiler_libpci_library",
+    "profiler_register_library",
 })
 PROFILER_V3_INPUT_ROLES = frozenset({
     "executable", "profiler_wrapper", "profiler_package",
     "profiler_runtime_manifest", "profiler_aqlprofile_manifest",
-    "profiler_libpci_manifest", *PROFILER_MAPPED_ROLES,
+    # libpci is part of the sealed loader/provenance closure but is not a
+    # resident DSO in the governed rocprofv3 KFD child.  Requiring a mapping
+    # would reject the exact observed runtime; it remains byte-bound here.
+    "profiler_libpci_manifest", "profiler_libpci_library",
+    *PROFILER_MAPPED_ROLES,
 })
 
 

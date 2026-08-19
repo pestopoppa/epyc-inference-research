@@ -367,6 +367,97 @@ class RocprofV3ClosureAcceptance(unittest.TestCase):
                     process_start_ticks=1)
 
 
+class RocprofV3GovernedMapsAcceptance(unittest.TestCase):
+    """Bind the residency contract to both governed tg128 map captures."""
+
+    DIAGNOSTICS = Path("/mnt/raid0/llm/autokernel/diagnostics")
+    ARMS = (
+        ("v13-rocprofv3-tg128-20260819", "candidate"),
+        ("v13-rocprofv3-anchor-tg128-20260819", "anchor"),
+    )
+
+    @staticmethod
+    def file_sha(path: Path) -> str:
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            while chunk := handle.read(1024 * 1024):
+                digest.update(chunk)
+        return digest.hexdigest()
+
+    @staticmethod
+    def required_profiler_mappings() -> dict[str, str]:
+        return {str(path): digest for path, digest in (
+            (F._ROCPROF_V3_SDK_LIB, F._ROCPROF_V3_SDK_LIB_SHA256),
+            (F._ROCPROF_V3_TOOL_LIB, F._ROCPROF_V3_TOOL_LIB_SHA256),
+            (F._ROCPROF_V3_AQL_LIB, F._ROCPROF_V3_AQL_LIB_SHA256),
+            (F._ROCPROF_V3_HSA_LIB, F._ROCPROF_V3_HSA_LIB_SHA256),
+            (F._ROCPROF_V3_REGISTER_LIB, F._ROCPROF_V3_REGISTER_LIB_SHA256),
+        )}
+
+    def test_governed_maps_complete_without_libpci_and_refuse_missing_required_dso(
+            self) -> None:
+        model = F._SITE_MODEL.resolve(strict=True)
+        model_sha = self.file_sha(model)
+        required = self.required_profiler_mappings()
+        self.assertNotIn(str(F._ROCPROF_V3_PCI_LIB), required)
+        self.assertNotIn("profiler_libpci_library", E.PROFILER_MAPPED_ROLES)
+        self.assertIn("profiler_libpci_library", E.PROFILER_V3_INPUT_ROLES)
+
+        for diagnostic_name, arm in self.ARMS:
+            with self.subTest(arm=arm):
+                root = self.DIAGNOSTICS / diagnostic_name
+                result = json.loads((root / "result.json").read_text())
+                argv = result["argv"]
+                binary = Path(argv[argv.index("/usr/bin/taskset") + 3])
+                manifest = V.verify_split_runtime(binary.parent.parent)
+                samples = json.loads((root / "samples.json").read_text())
+
+                # Sample 3 carries an already-vanished /tmp/comgr linked.bc.
+                # It is unrelated to the sealed runtime and must not prevent a
+                # complete classification for either arm.
+                sample3_pid, sample3_maps = next(iter(samples[3]["maps"].items()))
+                self.assertIn("/tmp/comgr-", sample3_maps)
+                comgr_path = next(
+                    Path(line.split(maxsplit=5)[5])
+                    for line in sample3_maps.splitlines()
+                    if "/tmp/comgr-" in line)
+                self.assertFalse(comgr_path.exists())
+                V.verify_runtime_maps(
+                    manifest, arm=arm, maps_text=sample3_maps,
+                    model_path=model, model_sha256=model_sha,
+                    device_id="mi210_0", kfd_pid=int(sample3_pid),
+                    boot_id="governed-fixture", process_start_ticks=1,
+                    required_mapped_files=required)
+
+                complete = 0
+                for sample_index in (4, 5, 6):
+                    pid, maps_text = next(iter(samples[sample_index]["maps"].items()))
+                    self.assertNotIn("libpciaccess", maps_text)
+                    V.verify_runtime_maps(
+                        manifest, arm=arm, maps_text=maps_text,
+                        model_path=model, model_sha256=model_sha,
+                        device_id="mi210_0", kfd_pid=int(pid),
+                        boot_id="governed-fixture", process_start_ticks=1,
+                        required_mapped_files=required)
+                    complete += 1
+                self.assertGreaterEqual(complete, 2)
+
+                missing_path = str(F._ROCPROF_V3_SDK_LIB)
+                pid, maps_text = next(iter(samples[4]["maps"].items()))
+                without_required = "\n".join(
+                    line for line in maps_text.splitlines()
+                    if missing_path not in line)
+                with self.assertRaisesRegex(
+                        V.RuntimeMapsIncomplete,
+                        "omit required profiler objects"):
+                    V.verify_runtime_maps(
+                        manifest, arm=arm, maps_text=without_required,
+                        model_path=model, model_sha256=model_sha,
+                        device_id="mi210_0", kfd_pid=int(pid),
+                        boot_id="governed-fixture", process_start_ticks=1,
+                        required_mapped_files=required)
+
+
 class RocprofV3FactoryAcceptance(unittest.TestCase):
     def test_factory_builds_only_the_exact_v3_plan_without_hardware(self):
         with tempfile.TemporaryDirectory() as raw:
@@ -514,6 +605,9 @@ class RocprofV3FactoryAcceptance(unittest.TestCase):
                            plan.anchor_rocprof_inputs):
                 roles = {item.role for item in inputs}
                 self.assertTrue(E.PROFILER_MAPPED_ROLES.issubset(roles))
+                self.assertIn("profiler_libpci_library", roles)
+                self.assertNotIn(
+                    "profiler_libpci_library", E.PROFILER_MAPPED_ROLES)
                 self.assertNotIn("timestamp_input", roles)
                 for item in inputs:
                     if item.role.endswith("_manifest"):

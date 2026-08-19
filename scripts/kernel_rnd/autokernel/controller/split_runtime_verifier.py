@@ -308,18 +308,38 @@ def verify_split_runtime(root: Path, *, elf_reader: ElfReader = readelf_identity
         candidate_hip_sha256=candidate_sha, manifest_sha256=_content_hash(body))
 
 
-def _maps_records(text: str) -> Mapping[Path, tuple[int, int, int]]:
+def _maps_records(
+        text: str, *, exact_paths: frozenset[Path],
+        governed_roots: tuple[Path, ...],
+        ) -> Mapping[Path, tuple[int, int, int]]:
+    """Parse only mappings that participate in the sealed runtime authority.
+
+    ROCm may transiently mmap and unlink compiler scratch files (for example
+    ``/tmp/comgr-*/linked.bc``).  Those unrelated mappings are not runtime
+    authority and must not become a strict-path dependency.  Conversely, an
+    exact sealed path or anything below a governed split-runtime root remains
+    fail-closed, including deleted paths and inode replacement.
+    """
     records: dict[Path, tuple[int, int, int]] = {}
     for line in text.splitlines():
         fields = line.split(maxsplit=5)
         if len(fields) != 6 or not fields[5].startswith("/"):
             continue
-        if fields[5].endswith(" (deleted)"):
-            raise SplitRuntimeError("runtime maps contain a deleted file mapping")
+        deleted = fields[5].endswith(" (deleted)")
+        raw_path = fields[5][:-10] if deleted else fields[5]
+        lexical = Path(os.path.normpath(raw_path))
+        relevant = (lexical in exact_paths
+                    or any(lexical == root or root in lexical.parents
+                           for root in governed_roots))
+        if not relevant:
+            continue
+        if deleted:
+            raise SplitRuntimeError(
+                "runtime maps contain a deleted sealed file mapping")
         try:
             major_text, minor_text = fields[3].split(":", 1)
             identity = (int(major_text, 16), int(minor_text, 16), int(fields[4]))
-            path = Path(fields[5]).resolve(strict=True)
+            path = lexical.resolve(strict=True)
         except (OSError, TypeError, ValueError) as exc:
             raise SplitRuntimeError("runtime maps file identity is malformed") from exc
         if identity[2] <= 0:
@@ -426,8 +446,6 @@ def verify_runtime_maps(manifest: SplitRuntimeManifest, *, arm: str, maps_text: 
     if not SHA256_RE.fullmatch(model_sha256) or kfd_pid <= 0 \
             or process_start_ticks <= 0 or not boot_id or not device_id:
         raise SplitRuntimeError("runtime residency identity is incomplete")
-    records = _maps_records(maps_text)
-    paths = frozenset(records)
     required_profiler: dict[Path, str] = {}
     for raw_path, digest in dict(required_mapped_files or {}).items():
         try:
@@ -445,13 +463,22 @@ def verify_runtime_maps(manifest: SplitRuntimeManifest, *, arm: str, maps_text: 
     expected_model = model_path.resolve(strict=True)
     allowed_roots = (manifest.common_dir, manifest.anchor_hip_dir,
                      manifest.candidate_hip_dir)
+    records = _maps_records(
+        maps_text,
+        exact_paths=frozenset({expected_model, *required_profiler}),
+        governed_roots=allowed_roots)
+    paths = frozenset(records)
     local = {path for path in paths if any(path == root or root in path.parents
                                            for root in allowed_roots)}
     wrong_arm = manifest.candidate_hip_dir if arm == "anchor" else manifest.anchor_hip_dir
     if any(path == wrong_arm or wrong_arm in path.parents for path in local):
         raise SplitRuntimeError("runtime maps contain the opposite HIP arm")
-    expected_common = {path.resolve(strict=True) for path in manifest.common_dir.iterdir()
-                       if path.is_file()}
+    # Derive membership from the sealed manifest, never from the mutable live
+    # directory.  A newly-added local DSO must remain extra/unsealed rather
+    # than silently expanding the expected set before the hash comparison.
+    expected_common = {
+        (manifest.common_dir / record.name).resolve(strict=True)
+        for record in manifest.common_files if record.kind == "file"}
     allowed_local = expected_common | {expected_hip}
     if local - allowed_local:
         raise SplitRuntimeError("runtime maps contain an unsealed local object")
