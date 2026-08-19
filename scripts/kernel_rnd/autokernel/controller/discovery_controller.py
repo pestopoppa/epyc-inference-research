@@ -113,6 +113,11 @@ class DispatchAttributionRefusal(GovernedStageRefusal):
     disposition = "attribution_route_falsified"
 
 
+class MeasurementOutputRefusal(GovernedStageRefusal):
+    stage = "measurement_output"
+    disposition = "measurement_output_refused"
+
+
 class PrecomputeScreenRefusal(DiscoveryControllerError):
     """Typed adapter refusal proving that no governed operation was started."""
 
@@ -1522,7 +1527,12 @@ class GpuSourceScreener:
                     result_path,
                     schema="epyc.autokernel.gpu_candidate_only_screen.v2")["body"]
             else:
-                raw = gpu_discovery.run(current)
+                try:
+                    raw = gpu_discovery.run(current)
+                except gpu_discovery.MeasurementOutputRefusal as exc:
+                    raise MeasurementOutputRefusal(
+                        str(exc), receipt_path=exc.receipt_path,
+                        receipt_sha256=exc.receipt_sha256) from exc
             raw = gpu_source_proofs.require_result_file(result_path, raw)["body"]
             if not (raw.get("schema") == "epyc.autokernel.gpu_candidate_only_screen.v2"
                     and raw.get("non_promotable") is True
@@ -2365,6 +2375,27 @@ def _record_governed_stage_refusal(
                     and budget > 0 and len(failures) >= budget):
                 state.setdefault("portfolio_skips", {})[hypothesis_id] = {
                     "disposition": "bounded_attribution_falsified",
+                    "scientific_terminal": False,
+                    "distinct_candidate_count": len(failures),
+                    "stage_receipt_path": exc.receipt_path,
+                    "stage_receipt_sha256": exc.receipt_sha256,
+                }
+    elif (isinstance(hypothesis_id, str)
+          and exc.disposition == "measurement_output_refused"):
+        manifest = row.get("source_manifest_sha256")
+        policy = row.get("portfolio_decision_policy")
+        if (isinstance(manifest, str) and HASH.fullmatch(manifest)
+                and isinstance(policy, Mapping)):
+            failures = state.setdefault(
+                "portfolio_measurement_output_failures", {}).setdefault(
+                    hypothesis_id, [])
+            if manifest not in failures:
+                failures.append(manifest)
+            budget = policy.get("max_distinct_candidates")
+            if (isinstance(budget, int) and not isinstance(budget, bool)
+                    and budget > 0 and len(failures) >= budget):
+                state.setdefault("portfolio_skips", {})[hypothesis_id] = {
+                    "disposition": "bounded_measurement_output_refused",
                     "scientific_terminal": False,
                     "distinct_candidate_count": len(failures),
                     "stage_receipt_path": exc.receipt_path,

@@ -349,6 +349,7 @@ def _is_resumable_stage_root(
 
         runner_plan = root / "runner-plan.json"
         runner_root = root / "runner"
+        partial_claims: list[device_claim.ClaimReceipt] = []
         if (runner_root.exists() or runner_root.is_symlink()) \
                 and not (runner_plan.exists() or runner_plan.is_symlink()):
             # The sealed deployment writes its admission carrier immediately
@@ -484,15 +485,72 @@ def _is_resumable_stage_root(
                             entry.resolve().is_relative_to(output)
                             for output in outputs):
                         return False
-            completed: list[bool] = []
+            stage_status: list[str] = []
             for output, graph_mode in zip(outputs, ("off", "on")):
                 if not output.exists() and not output.is_symlink():
-                    completed.append(False)
+                    stage_status.append("absent")
                     continue
                 if output.is_symlink() or not output.is_dir():
                     return False
                 result = output / "result.json"
                 if not result.exists() or result.is_symlink():
+                    if controller.gpu_discovery.validate_resumable_output(
+                            output, graph_mode=graph_mode):
+                        preflight_bytes, _ = (
+                            controller.gpu_discovery._capture_file(
+                                output / "preflight.json",
+                                "adapter resumable preflight"))
+                        order = json.loads(
+                            preflight_bytes)["arm_order_schedule"]
+                        output_claims: list[device_claim.ClaimReceipt] = []
+                        for arm in order:
+                            process = output / f"process-{arm}/receipt.json"
+                            if not process.exists():
+                                break
+                            process_bytes, _ = (
+                                controller.gpu_discovery._capture_file(
+                                    process,
+                                    "adapter resumable process receipt"))
+                            provisional = json.loads(process_bytes)
+                            process_body = (
+                                controller.gpu_discovery._load_process_capture(
+                                    process.parent,
+                                    identity=provisional.get("identity"))[
+                                        "receipt"])
+                            resource = process_body.get("resource_context")
+                            if not isinstance(resource, Mapping):
+                                return False
+                            try:
+                                opened = device_claim.ClaimReceipt.from_dict(
+                                    resource.get("device_claim_open"))
+                            except (TypeError, ValueError):
+                                return False
+                            partial_claims.append(opened)
+                            output_claims.append(opened)
+                        governance_bytes, _ = (
+                            controller.gpu_discovery._capture_file(
+                                output / "live-governance.json",
+                                "adapter live governance"))
+                        governance = json.loads(governance_bytes)
+                        if (not output_claims
+                                or governance.get("device_claim_open") !=
+                                output_claims[-1].to_dict()
+                                or governance.get("status") not in {
+                                    "borrowed_phase_ended", "released"}):
+                            return False
+                        if governance["status"] == "borrowed_phase_ended":
+                            phase = governance.get(
+                                "device_claim_borrowed_phase_end")
+                            if (not isinstance(phase, Mapping)
+                                    or phase.get("outer_claim_id") !=
+                                    output_claims[-1].claim_id
+                                    or phase.get("physical_release") is not False):
+                                return False
+                        elif not isinstance(
+                                governance.get("device_claim_released"), Mapping):
+                            return False
+                        stage_status.append("partial")
+                        continue
                     return False
                 body = gpu_source_proofs.load_receipt(
                     result,
@@ -502,12 +560,29 @@ def _is_resumable_stage_root(
                         or body.get("non_promotable") is not True
                         or body.get("hip_residency_proved") is not True):
                     return False
-                completed.append(True)
-            if completed[1] and not completed[0]:
+                stage_status.append("complete")
+            if (stage_status[1] != "absent"
+                    and stage_status[0] != "complete"):
                 return False
         if ((root / "reservation-release.json").exists()
                 or (root / "reservation-releases").exists()):
-            _reservation_release_epochs(root, identity["operation_key"])
+            releases = _reservation_release_epochs(
+                root, identity["operation_key"])
+            for opened in partial_claims:
+                release = releases.get(opened.claim_id)
+                if not isinstance(release, Mapping):
+                    return False
+                try:
+                    closed = device_claim.ClaimReceipt.from_dict(
+                        release.get("device_claim_released"))
+                except (TypeError, ValueError):
+                    return False
+                if (closed.released_at is None
+                        or replace(closed, released_at=None).to_dict()
+                        != opened.to_dict()):
+                    return False
+        elif partial_claims:
+            return False
         return True
     except (GpuSourceAdapterError, evidence.EvidenceProducerError,
             gpu_source_proofs.ProofError, OSError, TypeError, ValueError,

@@ -574,8 +574,9 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
                 else:
                     row["autokernel_input_hashes"] = ",".join(
                         ["a1a1a1a1a1a1a1a1"] * 3)
-                process = fixture._Process(
-                    __import__("json").dumps(row) + "\n")
+                rendered = __import__("json").dumps(row).replace(
+                    '"avg_ts": 100.0', '"avg_ts": 100.000000') + "\n"
+                process = fixture._Process(rendered)
                 with self.assertRaisesRegex(RuntimeError, pattern):
                     C.gpu_discovery._invoke_locked(
                         build=build, model=model, seed=8613,
@@ -1215,6 +1216,8 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
             ("CorrectnessRefusal", "correctness", "correctness_falsified"),
             ("DispatchAttributionRefusal", "dispatch_attribution",
              "attribution_route_falsified"),
+            ("MeasurementOutputRefusal", "measurement_output",
+             "measurement_output_refused"),
         )
         for name, stage, disposition in expected:
             with self.subTest(refusal=name):
@@ -1510,6 +1513,7 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
             ("CompileRefusal", "authoring_refused", False, True),
             ("CorrectnessRefusal", "correctness_falsified", True, False),
             ("DispatchAttributionRefusal", "attribution_route_falsified", False, False),
+            ("MeasurementOutputRefusal", "measurement_output_refused", False, False),
         )
         for name, disposition, hypothesis_terminal, authoring_failure in expected:
             with self.subTest(refusal=name), tempfile.TemporaryDirectory() as directory:
@@ -1608,7 +1612,8 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
                 ("SourceApplyRefusal", "authoring_refused"),
                 ("CompileRefusal", "authoring_refused"),
                 ("CorrectnessRefusal", "correctness_falsified"),
-                ("DispatchAttributionRefusal", "attribution_route_falsified")):
+                ("DispatchAttributionRefusal", "attribution_route_falsified"),
+                ("MeasurementOutputRefusal", "measurement_output_refused")):
             with self.subTest(refusal=refusal_name), \
                     tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)

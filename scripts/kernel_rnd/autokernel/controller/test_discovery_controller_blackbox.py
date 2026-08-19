@@ -358,6 +358,8 @@ class BlackBoxLaunchGate(unittest.TestCase):
                         "00000000000000aa/00000000000000aa/"
                         "00000000000000aa/00000000000000aa")] * 3),
                     "samples_ts": second_ts,
+                    "samples_ns": [round(128_000_000_000 / value)
+                                   for value in second_ts],
                 }
                 return gpu_reward._validate_timed_output_semantics(
                     row, repetitions=3, seed=8613, tokens_per_repetition=128,

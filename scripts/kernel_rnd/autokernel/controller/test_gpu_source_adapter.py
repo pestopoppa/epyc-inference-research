@@ -13,6 +13,7 @@ from . import discovery_deployment_factory as F
 from . import gpu_source_adapter as A
 from . import gpu_source_evidence as E
 from .test_gpu_source_evidence import ClaimFactory, FakeExecutors, digest, plan
+from scripts.benchmark import run_autokernel_gpu_discovery as gpu_runner
 
 
 def screen_receipt(path: Path, effect: float, label: str) -> D.SealedScreen:
@@ -545,6 +546,67 @@ class GpuSourceAdapterTests(unittest.TestCase):
                     adapter.screen(candidate, authorization, lease)
                 self.assertEqual(manager.reserve_calls, expected_reserve)
                 self.assertEqual(manager.release_calls, expected_release)
+
+    def test_public_reconcile_accepts_completed_arm_process_checkpoint_only(self):
+        class CrashAfterProcess(BaseException):
+            pass
+
+        class PartialRunnerDelegate(FakeDelegate):
+            def screen(self, candidate, authorization, lease):
+                build = self.build_source(candidate, authorization, lease)
+                self.proof_bundle(candidate, build)
+                args = self.args_factory(candidate, build, lease)
+                output = Path(args.output_dir)
+                output.mkdir(parents=True, mode=0o700)
+                preflight = {
+                    "runtime_graphs": "off",
+                    "arm_order_schedule": ["anchor", "candidate"],
+                }
+                gpu_runner.atomic_json(output / "preflight.json", preflight)
+                os.chmod(output / "preflight.json", 0o600)
+                opened = manager.outer.to_dict()
+                identity = {
+                    "runtime_graphs": "off", "runtime_arm": "anchor",
+                    "process_context": {
+                        "campaign_id": opened["campaign_id"],
+                        "arm": "anchor"},
+                }
+                gpu_runner._seal_process_capture(
+                    output / "process-anchor", identity=identity,
+                    returncode=0, stdout=b"{}\n", stderr=b"",
+                    residency=[{"owned_kfd_pids": [1],
+                                "vram_used_bytes": 1}],
+                    runtime_maps_identity=None, readiness_witness=None,
+                    elapsed_s=1.0, teardown={"death_proved": True},
+                    resource_context={
+                        "device_claim_open": opened,
+                        "device_claim_mode": "borrowed_outer_reservation"})
+                gpu_runner.atomic_json(output / "live-governance.json", {
+                    "status": "borrowed_phase_ended",
+                    "device_claim_open": opened,
+                    "device_claim_borrowed_phase_end": {
+                        "outer_claim_id": opened["claim_id"],
+                        "physical_release": False}})
+                os.chmod(output / "live-governance.json", 0o600)
+                raise CrashAfterProcess()
+
+        with tempfile.TemporaryDirectory() as directory:
+            adapter, candidate, authorization, lease, inflight, _current, _ = \
+                self.setup(directory)
+            operation_root = adapter._root(lease["operation_key"])
+            off = SimpleNamespace(
+                output_dir=str(operation_root / "runner/s1/measurement-graphs-off"))
+            on = SimpleNamespace(
+                output_dir=str(operation_root / "runner/s1/target-runtime-graphs-on"))
+            off._target_runtime_args = on
+            adapter.args_factory = lambda *_args: off
+            manager = ReservationManager()
+            adapter.reservation_manager = manager
+            with mock.patch.object(D, "GpuSourceScreener", PartialRunnerDelegate), \
+                    self.assertRaises(CrashAfterProcess):
+                adapter.screen(candidate, authorization, lease)
+            self.assertEqual(manager.release_calls, 1)
+            self.assertEqual(adapter.reconcile(inflight).status, "safe_to_start")
 
     def test_protected_tree_change_during_builder_refuses(self):
         with tempfile.TemporaryDirectory() as directory:
