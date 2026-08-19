@@ -309,16 +309,16 @@ class BoundedDispatchExpectation:
     def __post_init__(self) -> None:
         if not re.fullmatch(r"[a-z0-9][a-z0-9_.-]*\.anchor\.[0-9]+", self.route_id):
             raise DiscoveryControllerError("dispatch route id is not deployed authority")
-        # rocprof-v1 reports the complete demangled HIP symbol, including spaces,
-        # pointers, template punctuation, and the ``[clone .kd]`` suffix.  This is
+        # The reviewed profilers report complete demangled HIP symbols: v1 adds
+        # ``[clone .kd]`` while v3 emits the native undecorated name.  This is
         # still a literal: the deployment factory escapes it before constructing
-        # an evidence matcher.  Bound bytes and control characters here instead
-        # of accidentally making real symbols inexpressible.
+        # an evidence matcher.  Punctuation is admitted only on function-shaped
+        # names; bare regex-like planner strings remain invalid.
         if (not isinstance(self.kernel_name, str)
                 or not 1 <= len(self.kernel_name.encode("utf-8")) <= 2048
                 or any(ord(ch) < 0x20 or ord(ch) == 0x7f for ch in self.kernel_name)
                 or (any(ch in self.kernel_name for ch in "*?[]|+\\^$")
-                    and not self.kernel_name.endswith(" [clone .kd]"))
+                    and "(" not in self.kernel_name)
                 or (" " in self.kernel_name and "(" not in self.kernel_name)):
             raise DiscoveryControllerError("dispatch kernel name must be a bounded literal")
         for label, value, maximum in (("calls", self.calls, 10_000_000), ("grid", self.grid, 1 << 31),
@@ -892,7 +892,7 @@ class CodexPlanner:
                 "experiment_intent": {"template_id": example_template,
                     "target_surface": "gpu_decode", "target_symbol": example_symbol,
                     "correctness_id": "backend-ops-hip-v1",
-                    "dispatch_id": "decode-tg128-rocprof-v1",
+                    "dispatch_id": "decode-tg128-rocprof-v3",
                     "expected_dispatch": example_dispatch}},
             "source-patch.json": {"schema": source_candidate.SCHEMA_SOURCE_PATCH,
                 "campaign_id": assignment["campaign_id"], "proposal_id": assignment["proposal_id"],

@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from dataclasses import replace
 import hashlib
+import os
 import tempfile
 import unittest
 
@@ -57,7 +58,11 @@ def _fake_elf(path: Path) -> V.ElfIdentity:
 
 
 def _maps_line(path: Path) -> str:
-    return f"7f000000-7f001000 r-xp 00000000 00:00 1 {path.resolve()}"
+    resolved = path.resolve()
+    stat = resolved.stat()
+    return (f"7f000000-7f001000 r-xp 00000000 "
+            f"{os.major(stat.st_dev):02x}:{os.minor(stat.st_dev):02x} "
+            f"{stat.st_ino} {resolved}")
 
 
 def _maps(manifest: V.SplitRuntimeManifest, arm: str, model: Path) -> str:

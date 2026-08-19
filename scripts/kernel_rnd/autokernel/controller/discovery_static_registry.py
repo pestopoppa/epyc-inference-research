@@ -495,6 +495,11 @@ def runtime_maps_sampler(*, proc_root: Path = Path("/proc")) -> evidence.Runtime
             model_path = Path(str(model["path"])).resolve(strict=True)
             model_sha = str(context["model_sha256"])
             device_id = str(context["device_id"])
+            profiler_mapped = context.get("required_profiler_mapped_files", {})
+            if (not isinstance(profiler_mapped, Mapping)
+                    or any(not isinstance(key, str) or not isinstance(value, str)
+                           for key, value in profiler_mapped.items())):
+                raise TypeError("profiler mapping identities are malformed")
         except (KeyError, OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
             raise StaticRegistryError("runtime maps callback cannot load sealed context") from exc
         manifest = split_runtime_verifier.verify_split_runtime(runtime_root)
@@ -514,7 +519,8 @@ def runtime_maps_sampler(*, proc_root: Path = Path("/proc")) -> evidence.Runtime
                 identities.append(split_runtime_verifier.verify_runtime_maps(
                     manifest, arm=str(arm), maps_text=maps, model_path=model_path,
                     model_sha256=model_sha, device_id=device_id, kfd_pid=kfd_pid,
-                    boot_id=_boot_id(root), process_start_ticks=start_ticks))
+                    boot_id=_boot_id(root), process_start_ticks=start_ticks,
+                    required_mapped_files=dict(profiler_mapped)))
             except split_runtime_verifier.RuntimeMapsIncomplete:
                 # rocprof and helper wrappers can be KFD clients themselves,
                 # and llama-bench maps the sealed closure incrementally.

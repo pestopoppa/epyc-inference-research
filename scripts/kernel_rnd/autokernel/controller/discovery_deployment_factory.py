@@ -364,12 +364,32 @@ _STATIC_IDS = MappingProxyType({
 })
 _LOAD_PROFILE_ID = "mi210-qwen05b-tg128-fallback-only-v1"
 _FALLBACK_ONLY_HEADROOM_SENTINEL = 1 << 60
-_ROCPROF_V1 = Path(
-    "/mnt/raid0/llm/autokernel/tools/rocprof6.2-extracted/opt/rocm-6.2.0/bin/rocprof")
-_ROCPROF_V1_SHA256 = "585e3e6034e3c0bd9e591f0aa72f6156686680911a0b47ed4ece3c9a8372a4b2"
-_ROCPROF_V1_INPUT = b"pmc:\n\ngpu:\nrange:\nkernel:\n"
-_ROCPROF_V1_PREFIX = ("--tool-version", "1", "--timestamp", "on",
-                       "--ctx-wait", "on", "--heartbeat", "30", "-i")
+_ROCPROF_V3_SDK = Path("/mnt/raid0/llm/tools/rocprofiler-sdk-6.2.0-66/opt/rocm-6.2.0")
+_ROCPROF_V3 = _ROCPROF_V3_SDK / "bin/rocprofv3"
+_ROCPROF_V3_SHA256 = "c753449eb635ecb4d8be794e8b66439b200b252c157555920d260df5cbac767a"
+_ROCPROF_V3_PACKAGE = Path(
+    "/mnt/raid0/llm/tools/rocprofiler-sdk-6.2.0-66/"
+    "rocprofiler-sdk_0.4.0-66~20.04_amd64.deb")
+_ROCPROF_V3_PACKAGE_SHA256 = "e22b4f30a45c18b9e90fe1abd032c102e1c706d119084d1ca8a48bcd5a1f7baa"
+_ROCPROF_V3_PYTHON = evidence.ROCPROF_V3_PYTHON
+_ROCPROF_V3_PYTHON_SHA256 = "efb29ce53d36ebaeee80e3aa44fd6c7f9d71bbded5fe1665240b2ed8ecaeee0e"
+_ROCPROF_V3_SDK_LIB = _ROCPROF_V3_SDK / "lib/librocprofiler-sdk.so.0.4.0"
+_ROCPROF_V3_SDK_LIB_SHA256 = "44d8548b9e31c7ab4ecad3023878d9b9d8bcf62b69350ba3837c01270d45639c"
+_ROCPROF_V3_TOOL_LIB = (
+    _ROCPROF_V3_SDK / "lib/rocprofiler-sdk/librocprofiler-sdk-tool.so.0.4.0")
+_ROCPROF_V3_TOOL_LIB_SHA256 = "5da10b776a105ab4dc013d5bbee606dd74855494224d4448c77e37dbcaa72670"
+_ROCPROF_V3_OLD_LIB = Path(
+    "/mnt/raid0/llm/tools/rocm-profilers-6.2/opt/rocm-6.2.0/lib")
+_ROCPROF_V3_AQL_LIB = _ROCPROF_V3_OLD_LIB / "libhsa-amd-aqlprofile64.so.1.0.60200"
+_ROCPROF_V3_AQL_LIB_SHA256 = "2b984d7f29b4477a80a056e4e343815592c4fa4b23623b8bd406ea04ae6797ed"
+_ROCPROF_V3_PCI_LIB_DIR = Path(
+    "/mnt/raid0/llm/tools/rocm-profilers-6.2/usr/lib/x86_64-linux-gnu")
+_ROCPROF_V3_PCI_LIB = _ROCPROF_V3_PCI_LIB_DIR / "libpciaccess.so.0.11.1"
+_ROCPROF_V3_PCI_LIB_SHA256 = "9b83c428c743cd3ce54a03d5eb6bc8879d272c2cee51e0b7094364ac8d8f7c8a"
+_ROCPROF_V3_HSA_LIB = Path("/opt/rocm/lib/libhsa-runtime64.so.1.14.60200")
+_ROCPROF_V3_HSA_LIB_SHA256 = "013887a0ee59a2a088c2b95875cae3f48d2d661b4a6badcaa0541f116619c068"
+_ROCPROF_V3_REGISTER_LIB = Path("/opt/rocm/lib/librocprofiler-register.so.0.4.0")
+_ROCPROF_V3_REGISTER_LIB_SHA256 = "4f095b333e6f4cb123f4ba2f59850304f51387a254acba89d457a6ff6a76dfc4"
 _CORRECTNESS_SUITE_SEED = 2026081301
 _INSTRUMENT_PATH = Path("/mnt/raid0/llm/llama.cpp-experimental")
 _INSTRUMENT_BRANCH = "codex/autokernel-gqa7-correctness-instrument-20260818"
@@ -421,6 +441,12 @@ _PROFILE_TRACE_RECEIPT_SHA256 = "20742be4a69abf5bb70c228660ff0629bf416ed4452c4f6
 _PROFILE_TRACE_CSV = Path(
     "/mnt/raid0/llm/autokernel/screens/ak-gpu-qwen05b-tg128-rocprof-attribution-20260813/timestamps.csv")
 _PROFILE_TRACE_CSV_SHA256 = "a11bc20a03dfd5ca157990c1766ebbb5edb70a5c036d73d85d806e4f39a222a8"
+_PROFILE_V3_TRACE_CSV = Path(
+    "/mnt/raid0/llm/autokernel/diagnostics/"
+    "v13-rocprofv3-anchor-tg128-20260819/raw/v13_sdk_kernel_trace.csv")
+_PROFILE_V3_TRACE_CSV_SHA256 = "fb818d7b135becc5bfd773c1075cbdea91809d1f5c22ed8d8817560678b03c69"
+_PROFILE_V3_AGENT_CSV = _PROFILE_V3_TRACE_CSV.with_name("v13_sdk_agent_info.csv")
+_PROFILE_V3_AGENT_CSV_SHA256 = "50189a58f15ffb0008e840a8a6d18db1a88f73e3492b686b167d773de6b9323e"
 _PORTFOLIO_SEMANTIC_SHA256 = "c894690f56041ae355a50fffe23688abed1fa3eea9df4b7201faee2e565b4e78"
 _PORTFOLIO_FILE_SHA256 = "f9db2032d14e77f013e1a356d94a7cc7c5d0bc0d3c035368832066c9dfb66eb0"
 _PORTFOLIO_CONTRACT_SHA256 = "96f207733e5fc27a722763cf1b3c542f327eb70d41e04b9948aaec086b3facd4"
@@ -749,32 +775,76 @@ def _production_runtime_snapshot(root: Path) -> tuple[tuple[evidence.BoundInputF
     return tuple(files[path] for path in sorted(files)), semantics
 
 
-def _rocprof_v1_policy(config: deployment.DiscoveryDeployment) -> tuple[
-        evidence.BoundInputFile, evidence.BoundInputFile]:
-    profiler = _bound(_ROCPROF_V1, "executable")
-    if profiler.sha256 != _ROCPROF_V1_SHA256:
-        raise DeploymentFactoryError("fixed rocprof-v1 executable digest changed")
+def _checked_profiler_bound(path: Path, role: str, expected: str,
+                            ) -> evidence.BoundInputFile:
+    value = _bound(path, role)
+    if value.sha256 != expected:
+        raise DeploymentFactoryError(f"fixed rocprofv3 {role} digest changed")
+    return value
+
+
+def _rocprof_v3_policy(config: deployment.DiscoveryDeployment) -> tuple[
+        evidence.BoundInputFile, ...]:
+    """Seal the official SDK/package and every non-system mapped DSO."""
+    python = _checked_profiler_bound(
+        _ROCPROF_V3_PYTHON, "executable", _ROCPROF_V3_PYTHON_SHA256)
+    wrapper = _checked_profiler_bound(
+        _ROCPROF_V3, "profiler_wrapper", _ROCPROF_V3_SHA256)
+    package = _checked_profiler_bound(
+        _ROCPROF_V3_PACKAGE, "profiler_package", _ROCPROF_V3_PACKAGE_SHA256)
+    mapped = (
+        _checked_profiler_bound(
+            _ROCPROF_V3_SDK_LIB, "profiler_sdk_library",
+            _ROCPROF_V3_SDK_LIB_SHA256),
+        _checked_profiler_bound(
+            _ROCPROF_V3_TOOL_LIB, "profiler_sdk_tool_library",
+            _ROCPROF_V3_TOOL_LIB_SHA256),
+        _checked_profiler_bound(
+            _ROCPROF_V3_AQL_LIB, "profiler_aqlprofile_library",
+            _ROCPROF_V3_AQL_LIB_SHA256),
+        _checked_profiler_bound(
+            _ROCPROF_V3_HSA_LIB, "profiler_hsa_runtime_library",
+            _ROCPROF_V3_HSA_LIB_SHA256),
+        _checked_profiler_bound(
+            _ROCPROF_V3_REGISTER_LIB, "profiler_register_library",
+            _ROCPROF_V3_REGISTER_LIB_SHA256),
+        _checked_profiler_bound(
+            _ROCPROF_V3_PCI_LIB, "profiler_libpci_library",
+            _ROCPROF_V3_PCI_LIB_SHA256),
+    )
     root = config.operations_root / "config"
     root.mkdir(parents=True, exist_ok=True)
-    policy_path = root / "rocprof-v1-timestamps.txt"
-    if policy_path.exists():
-        if policy_path.is_symlink() or policy_path.read_bytes() != _ROCPROF_V1_INPUT:
-            raise DeploymentFactoryError("rocprof-v1 input policy differs from checked-in bytes")
-    else:
-        policy_path.write_bytes(_ROCPROF_V1_INPUT)
-    return profiler, evidence.BoundInputFile(
-        "timestamp_input", policy_path.resolve(),
-        hashlib.sha256(_ROCPROF_V1_INPUT).hexdigest())
+    manifests = []
+    for role, prefix, name in (
+        ("profiler_runtime_manifest", _ROCPROF_V3_SDK,
+         "rocprofv3-sdk-closure.json"),
+        ("profiler_aqlprofile_manifest", _ROCPROF_V3_OLD_LIB,
+         "rocprofv3-aqlprofile-closure.json"),
+        ("profiler_libpci_manifest", _ROCPROF_V3_PCI_LIB_DIR,
+         "rocprofv3-libpci-closure.json"),
+    ):
+        try:
+            snapshot = evidence.profiler_prefix_snapshot(prefix.resolve(strict=True))
+        except (OSError, evidence.EvidenceProducerError) as exc:
+            raise DeploymentFactoryError(
+                f"cannot snapshot {role}") from exc
+        path, digest = _json_artifact(root / name, snapshot)
+        manifests.append(evidence.BoundInputFile(role, path, digest))
+    return (python, wrapper, package, *manifests, *mapped)
 
 
 def _template_registry() -> ExperimentTemplateRegistry:
     if (_digest_regular(_PROFILE_TRACE_RECEIPT, "reviewed profile receipt")
             != _PROFILE_TRACE_RECEIPT_SHA256
             or _digest_regular(_PROFILE_TRACE_CSV, "reviewed profile timestamp CSV")
-            != _PROFILE_TRACE_CSV_SHA256):
+            != _PROFILE_TRACE_CSV_SHA256
+            or _digest_regular(_PROFILE_V3_TRACE_CSV, "reviewed v3 profile trace")
+            != _PROFILE_V3_TRACE_CSV_SHA256
+            or _digest_regular(_PROFILE_V3_AGENT_CSV, "reviewed v3 agent trace")
+            != _PROFILE_V3_AGENT_CSV_SHA256):
         raise DeploymentFactoryError("reviewed real-trace template authority changed")
     mmvq_pattern = lambda type_id, flags: (
-        rf"^void mul_mat_vec_q<\(ggml_type\){type_id}, 1, {flags}>\(.*\) \[clone \.kd\]$")
+        rf"^void mul_mat_vec_q<\(ggml_type\){type_id}, 1, {flags}>\(.*\)$")
     mmvq_anchor = (
         (mmvq_pattern(6, "true, true"), 6063, 57344, 128, 1024),
         (mmvq_pattern(6, "true, true"), 4644, 8192, 128, 1024),
@@ -786,26 +856,26 @@ def _template_registry() -> ExperimentTemplateRegistry:
         (mmvq_pattern(8, "false, true"), 129, 9723904, 256, 3072),
     )
     fattn_tile_anchor = ((
-        r"^void flash_attn_tile<64, 64, 2, 1, false>\(.*\) \[clone \.kd\]$",
+        r"^void flash_attn_tile<64, 64, 2, 1, false>\(.*\)$",
         3096, 7168, 64, 5120),)
     fattn_common_anchor = (*fattn_tile_anchor, (
-        r"^void flash_attn_combine_results<64>\(.*\) \[clone \.kd\]$",
+        r"^void flash_attn_combine_results<64>\(.*\)$",
         3096, 896, 64, 512))
     quantize_anchor = (
-        (r"^quantize_q8_1\(.*\) \[clone \.kd\]$", 15609, 1024, 256, 0),
-        (r"^quantize_q8_1\(.*\) \[clone \.kd\]$", 3096, 5120, 256, 0),
+        (r"^quantize_q8_1\(.*\)$", 15609, 1024, 256, 0),
+        (r"^quantize_q8_1\(.*\)$", 3096, 5120, 256, 0),
     )
     rope_anchor = (
-        (r"^void rope_neox<true, false, float, __half>\(.*\) \[clone \.kd\]$",
+        (r"^void rope_neox<true, false, float, __half>\(.*\)$",
          3096, 512, 256, 0),
-        (r"^void rope_neox<true, false, float, float>\(.*\) \[clone \.kd\]$",
+        (r"^void rope_neox<true, false, float, float>\(.*\)$",
          3096, 3584, 256, 0),
     )
     norm_anchor = ((
-        r"^void rms_norm_f32<256, true, false>\(.*\) \[clone \.kd\]$",
+        r"^void rms_norm_f32<256, true, false>\(.*\)$",
         6321, 256, 256, 512),)
     set_rows_anchor = ((
-        r"^void k_set_rows<float, long, __half>\(.*\) \[clone \.kd\]$",
+        r"^void k_set_rows<float, long, __half>\(.*\)$",
         3096, 256, 256, 0),)
     target_runtime_screen = {
         "stage_id": "target_runtime_graphs_on_screen",
@@ -987,7 +1057,7 @@ def _template_registry() -> ExperimentTemplateRegistry:
             for index, row in enumerate(family["anchor"]))
         templates[template_id] = ExperimentTemplate(
             template_id=template_id, target_surface="gpu_decode", target_symbol=family["primary"],
-            correctness_id="backend-ops-hip-v1", dispatch_id="decode-tg128-rocprof-v1",
+            correctness_id="backend-ops-hip-v1", dispatch_id="decode-tg128-rocprof-v3",
             dispatch=evidence.DispatchContract(candidate_exact=tuple(
                 replace(row, signature=row.signature.replace(".anchor.", ".candidate-seed."))
                 for row in anchor), anchor_exact=anchor),
@@ -1005,7 +1075,13 @@ def _template_registry() -> ExperimentTemplateRegistry:
                            "receipt": str(_PROFILE_TRACE_RECEIPT),
                            "receipt_sha256": _PROFILE_TRACE_RECEIPT_SHA256,
                            "timestamp_csv": str(_PROFILE_TRACE_CSV),
-                           "timestamp_csv_sha256": _PROFILE_TRACE_CSV_SHA256},
+                           "timestamp_csv_sha256": _PROFILE_TRACE_CSV_SHA256,
+                           "v3_kernel_trace": str(_PROFILE_V3_TRACE_CSV),
+                           "v3_kernel_trace_sha256": _PROFILE_V3_TRACE_CSV_SHA256,
+                           "v3_agent_info": str(_PROFILE_V3_AGENT_CSV),
+                           "v3_agent_info_sha256": _PROFILE_V3_AGENT_CSV_SHA256,
+                           "cross_profiler_projection_sha256":
+                               "8bf84656cd12eecf8e9881fd0f2b6f9f8da7e4485a0a668dcb08065e930fbc54"},
                        "manual_replay_traces": [dict(row, file=path) for row in family["replays"]],
                        "planner_target_exclusions": list(
                            family.get("planner_target_exclusions", ())),
@@ -1166,13 +1242,19 @@ def _normalized_template_surfaces(
 def _portfolio_dispatch_authority(
         templates: ExperimentTemplateRegistry,
         portfolio: hypothesis_portfolio.Portfolio) -> dict[str, list[dict[str, Any]]]:
-    """Bind eligible shorthand geometry to exact raw literals from the sealed CSV."""
+    """Bind eligible shorthand geometry to exact native rocprofv3 literals."""
     aggregates: dict[tuple[str, int, int, int], int] = {}
-    with _PROFILE_TRACE_CSV.open(newline="", encoding="utf-8") as handle:
-        for row in csv.DictReader(handle):
-            identity = (row["KernelName"], int(row["grd"]), int(row["wgr"]),
-                        int(row["lds"]))
-            aggregates[identity] = aggregates.get(identity, 0) + 1
+    dispatches = evidence._load_dispatches(
+        _PROFILE_V3_TRACE_CSV,
+        profiler_trace_schema_id=evidence.ROCPROF_V3_TRACE_ID,
+        expected_rows=59925)
+    evidence._load_rocprofv3_agent_info(
+        _PROFILE_V3_AGENT_CSV,
+        trace_agent_ids={int(row["agent_id"]) for row in dispatches})
+    for row in dispatches:
+        identity = (str(row["kernel"]), int(row["grid"]),
+                    int(row["workgroup"]), int(row["lds"]))
+        aggregates[identity] = aggregates.get(identity, 0) + 1
     result: dict[str, list[dict[str, Any]]] = {}
     for record in portfolio.eligible_hypotheses():
         template_id = record["current_bundle_eligibility"]["template_ids"][0]
@@ -1521,7 +1603,10 @@ def _manifest_file(config: deployment.DiscoveryDeployment,
 
 
 def _evidence_binding(config: deployment.DiscoveryDeployment) -> EvidencePlanBinding:
-    profiler, timestamp_input = _rocprof_v1_policy(config)
+    profiler_policy = _rocprof_v3_policy(config)
+    policy_by_role = {item.role: item for item in profiler_policy}
+    python = policy_by_role["executable"]
+    profiler = policy_by_role["profiler_wrapper"]
     def build(candidate: controller.PlannedCandidate, build_: controller.GpuSourceBuild,
               template: ExperimentTemplate, repetition: int = 1) -> evidence.GpuSourceEvidencePlan:
         if build_.materialization_receipt is None or build_.operation_key is None:
@@ -1535,12 +1620,19 @@ def _evidence_binding(config: deployment.DiscoveryDeployment) -> EvidencePlanBin
                 "runtime_config", config.runtime_config.path, config.runtime_config.sha256))
         if identities.shared_runtime is None:
             raise DeploymentFactoryError("source evidence lacks a shared reward runtime")
-        # Revalidate the profiler and timestamp carriers at the same binding
+        # Revalidate the profiler closure at the same binding
         # boundary as the source/runtime carriers.
-        if (_digest_regular(profiler.path, "rocprof-v1") != profiler.sha256
-                or _digest_regular(timestamp_input.path, "rocprof-v1 input")
-                != timestamp_input.sha256):
-            raise DeploymentFactoryError("rocprof-v1 policy changed before evidence binding")
+        if any(_digest_regular(item.path, item.role) != item.sha256
+               for item in profiler_policy):
+            raise DeploymentFactoryError(
+                "rocprofv3 policy changed before evidence binding")
+        for item in profiler_policy:
+            if item.role.endswith("_manifest"):
+                try:
+                    evidence._verify_profiler_runtime_manifest(item)
+                except evidence.EvidenceProducerError as exc:
+                    raise DeploymentFactoryError(
+                        "rocprofv3 closure changed before evidence binding") from exc
         try:
             correctness_tool, capability_receipt = (
                 discovery_static_registry.correctness_capability_files_for_build(
@@ -1580,20 +1672,22 @@ def _evidence_binding(config: deployment.DiscoveryDeployment) -> EvidencePlanBin
         shared = identities.shared_runtime
         reward_binary = shared.measurement_binary
         profile_argv = (
-            str(profiler.path), *_ROCPROF_V1_PREFIX, str(timestamp_input.path),
-            "-o", evidence.ROCPROF_TIMESTAMP_OUTPUT,
+            str(python.path), str(profiler.path), "--kernel-trace",
+            "-d", evidence.ROCPROF_OUTPUT_DIRECTORY,
+            "-o", evidence.ROCPROF_OUTPUT_BASENAME,
+            "--output-format", "csv", "--",
             "/usr/bin/taskset", "-c", "184-191", str(reward_binary.path),
             "-m", str(config.model.path), "-p", "0", "-n", "128", "-r", "1",
-            "-ngl", "99", "-fa", "on", "-t", "8")
-        profiler_prefix = _ROCPROF_V1.parents[1]
+            "-ngl", "99", "-fa", "on", "-t", "8", "-o", "json")
         common_environment = (
             ("GGML_CUDA_DISABLE_GRAPHS", "1"), ("HIP_VISIBLE_DEVICES", "0"),
-            ("PATH", f"{profiler_prefix / 'bin'}:/opt/rocm/bin:/usr/bin:/bin"),
-            ("ROCM_PATH", "/opt/rocm"),
-            ("ROCP_METRICS", str(profiler_prefix / "lib/rocprofiler/metrics.xml")))
+            ("PATH", f"{_ROCPROF_V3_SDK / 'bin'}:/opt/rocm/bin:/usr/bin:/bin"),
+            ("ROCM_PATH", "/opt/rocm"))
         def profile_environment(hip: evidence.BoundInputFile) -> tuple[tuple[str, str], ...]:
             return tuple(sorted((*common_environment, ("LD_LIBRARY_PATH",
-                f"{hip.path.parent}:{reward_binary.path.parent}:{profiler_prefix / 'lib'}:/opt/rocm/lib"))))
+                f"{hip.path.parent}:{reward_binary.path.parent}:"
+                f"{_ROCPROF_V3_SDK / 'lib'}:{_ROCPROF_V3_OLD_LIB}:"
+                f"{_ROCPROF_V3_PCI_LIB_DIR}:/opt/rocm/lib"))))
         carrier_root = _operation_carrier_root(config, build_.operation_key)
         order_seed, order_text = _arm_order_schedule(
             deployment_config_sha256=config.config_sha256,
@@ -1602,6 +1696,8 @@ def _evidence_binding(config: deployment.DiscoveryDeployment) -> EvidencePlanBin
         attribution_arm_order = tuple(order_text.split(","))
         placeholder = evidence.BoundInputFile(
             "execution_policy", carrier_root / "evidence-policy.json", "0" * 64)
+        dispatch = template.bind_dispatch(candidate.experiment_intent)
+        candidate_rows, anchor_rows = _expected_rocprofv3_rows(dispatch)
         provisional = evidence.GpuSourceEvidencePlan(
             campaign_id=candidate.source_manifest.campaign_id,
             device_id=config.device_id,
@@ -1615,15 +1711,15 @@ def _evidence_binding(config: deployment.DiscoveryDeployment) -> EvidencePlanBin
             correctness_op=op,
             expected_correctness_cases=cases,
             candidate_rocprof_argv=profile_argv, anchor_rocprof_argv=profile_argv,
-            dispatch=template.bind_dispatch(candidate.experiment_intent),
+            dispatch=dispatch,
             identity_files=identities, policy=placeholder,
             correctness_inputs=(correctness_tool, capability_receipt,
                                 identities.candidate.binary,
                                 identities.candidate.config, identities.candidate.linkage),
-            candidate_rocprof_inputs=(profiler, timestamp_input, reward_binary,
+            candidate_rocprof_inputs=(*profiler_policy, reward_binary,
                                       identities.model, identities.workload,
                                       identities.runtime_config),
-            anchor_rocprof_inputs=(profiler, timestamp_input, reward_binary,
+            anchor_rocprof_inputs=(*profiler_policy, reward_binary,
                                    identities.model, identities.workload,
                                    identities.runtime_config),
             required_correctness_argv_paths=(correctness_tool.path,),
@@ -1641,7 +1737,11 @@ def _evidence_binding(config: deployment.DiscoveryDeployment) -> EvidencePlanBin
             shared_runtime=shared,
             correctness_invocations=correctness_invocations,
             attribution_arm_order_seed_sha256=order_seed,
-            attribution_arm_order=attribution_arm_order)
+            attribution_arm_order=attribution_arm_order,
+            profiler_trace_schema_id=evidence.ROCPROF_V3_TRACE_ID,
+            expected_candidate_profiler_dispatch_rows=candidate_rows,
+            expected_anchor_profiler_dispatch_rows=anchor_rows,
+            profiler_transport_policy=evidence.ROCPROF_V3_TRANSPORT_POLICY)
         raw = json.dumps(evidence._policy_payload(provisional), sort_keys=True,
                          separators=(",", ":")).encode()
         policy_path = _write_operation_carrier(
@@ -1652,6 +1752,19 @@ def _evidence_binding(config: deployment.DiscoveryDeployment) -> EvidencePlanBin
             hashlib.sha256(raw).hexdigest())
         return replace(provisional, policy=policy)
     return EvidencePlanBinding(build=build)
+
+
+def _expected_rocprofv3_rows(
+        dispatch: evidence.DispatchContract) -> tuple[int, int]:
+    """Derive each arm's exact cardinality from the sealed anchor trace."""
+    anchor_rows = 59_925
+    candidate_rows = (anchor_rows
+                      + sum(row.calls for row in dispatch.candidate_exact)
+                      - sum(row.calls for row in dispatch.anchor_exact))
+    if candidate_rows < 1:
+        raise DeploymentFactoryError(
+            "candidate profiler cardinality derivation is invalid")
+    return candidate_rows, anchor_rows
 
 
 def _arm_order_schedule(*, deployment_config_sha256: str,
@@ -1792,6 +1905,8 @@ def _seal_graph_receipt(config: deployment.DiscoveryDeployment,
     critic_launcher = Path(claude_fable5_critic_actor.__file__).resolve(strict=True)
     surfaces = _normalized_template_surfaces(
         templates, config.hypothesis_portfolio.value)
+    profiler_runtime = [evidence._bound_reference(item)
+                        for item in _rocprof_v3_policy(config)]
     body = {"schema": "epyc.autokernel.static_discovery_graph.v4",
             "authority": "nonpromotable_candidate_only_discovery", "promotion_claim": False,
             "inference_executed": False, "config_sha256": config.config_sha256,
@@ -1813,7 +1928,20 @@ def _seal_graph_receipt(config: deployment.DiscoveryDeployment,
                 "receipt": str(_PROFILE_TRACE_RECEIPT),
                 "receipt_sha256": _PROFILE_TRACE_RECEIPT_SHA256,
                 "timestamp_csv": str(_PROFILE_TRACE_CSV),
-                "timestamp_csv_sha256": _PROFILE_TRACE_CSV_SHA256},
+                "timestamp_csv_sha256": _PROFILE_TRACE_CSV_SHA256,
+                "v3_kernel_trace": str(_PROFILE_V3_TRACE_CSV),
+                "v3_kernel_trace_sha256": _PROFILE_V3_TRACE_CSV_SHA256,
+                "v3_agent_info": str(_PROFILE_V3_AGENT_CSV),
+                "v3_agent_info_sha256": _PROFILE_V3_AGENT_CSV_SHA256,
+                "cross_profiler_projection_sha256":
+                    "8bf84656cd12eecf8e9881fd0f2b6f9f8da7e4485a0a668dcb08065e930fbc54"},
+            "profiler_runtime_authority": {
+                "trace_schema_id": evidence.ROCPROF_V3_TRACE_ID,
+                "transport_policy": evidence.ROCPROF_V3_TRANSPORT_POLICY,
+                "package": "rocprofiler-sdk 0.4.0-66~20.04 amd64",
+                "inputs": profiler_runtime,
+                "inputs_sha256": schemas.content_hash(profiler_runtime),
+            },
             "admission_policy_sha256": config.admission_policy.value["policy_sha256"],
             "load_admission_profile_id": _LOAD_PROFILE_ID,
             "actor_wrappers": {
@@ -2403,7 +2531,7 @@ def materialize(config: deployment.DiscoveryDeployment, registry: Mapping[str, M
                      "profile_anchor_dispatch": [vars(row)
                                                  for row in template.dispatch.anchor_exact],
                      "candidate_dispatch_authoring": (
-                         "expected_dispatch is an array of exact rocprof-v1 literal name/geometry cells; "
+                         "expected_dispatch is an array of exact rocprofv3 native literal name/geometry cells; "
                          "include every geometry emitted by the changed kernel symbol"),
                      "semantics": dict(template.semantics)}
                for key, template in templates.templates.items()}

@@ -308,15 +308,49 @@ def verify_split_runtime(root: Path, *, elf_reader: ElfReader = readelf_identity
         candidate_hip_sha256=candidate_sha, manifest_sha256=_content_hash(body))
 
 
-def _maps_paths(text: str) -> frozenset[Path]:
-    paths: set[Path] = set()
+def _maps_records(text: str) -> Mapping[Path, tuple[int, int, int]]:
+    records: dict[Path, tuple[int, int, int]] = {}
     for line in text.splitlines():
         fields = line.split(maxsplit=5)
         if len(fields) != 6 or not fields[5].startswith("/"):
             continue
-        raw = fields[5].removesuffix(" (deleted)")
-        paths.add(Path(raw).resolve(strict=True))
-    return frozenset(paths)
+        if fields[5].endswith(" (deleted)"):
+            raise SplitRuntimeError("runtime maps contain a deleted file mapping")
+        try:
+            major_text, minor_text = fields[3].split(":", 1)
+            identity = (int(major_text, 16), int(minor_text, 16), int(fields[4]))
+            path = Path(fields[5]).resolve(strict=True)
+        except (OSError, TypeError, ValueError) as exc:
+            raise SplitRuntimeError("runtime maps file identity is malformed") from exc
+        if identity[2] <= 0:
+            raise SplitRuntimeError("runtime maps file identity lacks an inode")
+        if path in records and records[path] != identity:
+            raise SplitRuntimeError("runtime maps path has conflicting inode identities")
+        records[path] = identity
+    return MappingProxyType(records)
+
+
+def _mapped_file_sha(path: Path, identity: tuple[int, int, int]) -> str:
+    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as exc:
+        raise SplitRuntimeError("mapped file cannot be opened without following links") from exc
+    try:
+        stat = os.fstat(descriptor)
+        actual = (os.major(stat.st_dev), os.minor(stat.st_dev), stat.st_ino)
+        if actual != identity:
+            raise SplitRuntimeError(
+                "mapped file pathname no longer names the mapped inode")
+        digest = hashlib.sha256()
+        while True:
+            chunk = os.read(descriptor, 1024 * 1024)
+            if not chunk:
+                break
+            digest.update(chunk)
+        return digest.hexdigest()
+    finally:
+        os.close(descriptor)
 
 
 @dataclass(frozen=True)
@@ -383,14 +417,29 @@ class HotResidencyIdentity:
 def verify_runtime_maps(manifest: SplitRuntimeManifest, *, arm: str, maps_text: str,
                         model_path: Path, model_sha256: str, device_id: str,
                         kfd_pid: int, boot_id: str,
-                        process_start_ticks: int) -> HotResidencyIdentity:
+                        process_start_ticks: int,
+                        required_mapped_files: Mapping[str, str] | None = None,
+                        ) -> HotResidencyIdentity:
     """Bind actual mapped objects and a process-lifetime marker to one arm."""
     if arm not in {"anchor", "candidate"}:
         raise SplitRuntimeError("runtime maps arm is invalid")
     if not SHA256_RE.fullmatch(model_sha256) or kfd_pid <= 0 \
             or process_start_ticks <= 0 or not boot_id or not device_id:
         raise SplitRuntimeError("runtime residency identity is incomplete")
-    paths = _maps_paths(maps_text)
+    records = _maps_records(maps_text)
+    paths = frozenset(records)
+    required_profiler: dict[Path, str] = {}
+    for raw_path, digest in dict(required_mapped_files or {}).items():
+        try:
+            resolved = Path(raw_path).resolve(strict=True)
+        except OSError as exc:
+            raise SplitRuntimeError(
+                "required profiler runtime object is unavailable") from exc
+        if (not resolved.is_file() or not SHA256_RE.fullmatch(digest)
+                or resolved in required_profiler):
+            raise SplitRuntimeError(
+                "required profiler runtime identity is malformed")
+        required_profiler[resolved] = digest
     hip_dir = manifest.anchor_hip_dir if arm == "anchor" else manifest.candidate_hip_dir
     expected_hip = (hip_dir / _HIP_SONAME).resolve(strict=True)
     expected_model = model_path.resolve(strict=True)
@@ -406,7 +455,9 @@ def verify_runtime_maps(manifest: SplitRuntimeManifest, *, arm: str, maps_text: 
     allowed_local = expected_common | {expected_hip}
     if local - allowed_local:
         raise SplitRuntimeError("runtime maps contain an unsealed local object")
-    if expected_model in paths and _sha(expected_model) != model_sha256:
+    if (expected_model in paths
+            and _mapped_file_sha(expected_model, records[expected_model])
+            != model_sha256):
         raise SplitRuntimeError("runtime maps model bytes changed after verification")
     if manifest.reward_binary.resolve(strict=True) not in paths:
         raise RuntimeMapsIncomplete("runtime maps omit shared reward executable")
@@ -417,23 +468,37 @@ def verify_runtime_maps(manifest: SplitRuntimeManifest, *, arm: str, maps_text: 
     if not expected_common.issubset(local):
         missing = sorted(str(path) for path in expected_common - local)
         raise RuntimeMapsIncomplete(f"runtime maps omit common closure objects: {missing}")
-    mapped = {str(path): _sha(path) for path in sorted(local)}
+    missing_profiler = set(required_profiler) - paths
+    if missing_profiler:
+        raise RuntimeMapsIncomplete(
+            "runtime maps omit required profiler objects: "
+            f"{sorted(str(path) for path in missing_profiler)}")
+    for path, digest in required_profiler.items():
+        if _mapped_file_sha(path, records[path]) != digest:
+            raise SplitRuntimeError(
+                "mapped profiler runtime bytes changed after sealing")
+    mapped_local = {str(path): _mapped_file_sha(path, records[path])
+                    for path in sorted(local)}
     expected_common_hashes: dict[str, str] = {}
     for record in manifest.common_files:
         if record.kind != "file" or record.sha256 is None:
             continue
         resolved = (manifest.common_dir / record.name).resolve(strict=True)
         expected_common_hashes[str(resolved)] = record.sha256
-    actual_common_hashes = {path: digest for path, digest in mapped.items()
+    actual_common_hashes = {path: digest for path, digest in mapped_local.items()
                             if Path(path) != expected_hip}
     if actual_common_hashes != expected_common_hashes:
         raise SplitRuntimeError("mapped common closure bytes changed after verification")
-    reward_sha = _sha(manifest.reward_binary)
-    hip_sha = _sha(expected_hip)
+    reward_sha = _mapped_file_sha(
+        manifest.reward_binary.resolve(strict=True),
+        records[manifest.reward_binary.resolve(strict=True)])
+    hip_sha = _mapped_file_sha(expected_hip, records[expected_hip])
     expected_hip_sha = (manifest.anchor_hip_sha256 if arm == "anchor"
                         else manifest.candidate_hip_sha256)
     if hip_sha != expected_hip_sha:
         raise SplitRuntimeError("mapped HIP DSO changed after verification")
+    mapped = dict(mapped_local)
+    mapped.update({str(path): digest for path, digest in required_profiler.items()})
     body = {"schema": MAPS_SCHEMA,
             "runtime_manifest_sha256": manifest.manifest_sha256, "arm": arm,
             "reward_binary_sha256": reward_sha, "hip_library_sha256": hip_sha,

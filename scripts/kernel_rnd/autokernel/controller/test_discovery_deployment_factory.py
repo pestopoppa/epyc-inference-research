@@ -209,7 +209,13 @@ class DeploymentFactoryTests(unittest.TestCase):
         self.assertEqual(
             hashlib.sha256(F._PROFILE_TRACE_CSV.read_bytes()).hexdigest(),
             F._PROFILE_TRACE_CSV_SHA256)
-        rows = F.evidence._load_dispatches(F._PROFILE_TRACE_CSV)
+        self.assertEqual(
+            hashlib.sha256(F._PROFILE_V3_TRACE_CSV.read_bytes()).hexdigest(),
+            F._PROFILE_V3_TRACE_CSV_SHA256)
+        rows = F.evidence._load_dispatches(
+            F._PROFILE_V3_TRACE_CSV,
+            profiler_trace_schema_id=F.evidence.ROCPROF_V3_TRACE_ID,
+            expected_rows=59_925)
         self.assertEqual(len(rows), 59_925)
         registry = F._template_registry()
         self.assertEqual(registry.version, "gpu-source-templates-v2")
@@ -261,7 +267,10 @@ class DeploymentFactoryTests(unittest.TestCase):
                          [{"route_id": "cuda-vecdotq-v1.anchor.3",
                            "calls": 129, "grid": 57344,
                            "workgroup": 128, "lds_bytes": 512}])
-        rows = F.evidence._load_dispatches(F._PROFILE_TRACE_CSV)
+        rows = F.evidence._load_dispatches(
+            F._PROFILE_V3_TRACE_CSV,
+            profiler_trace_schema_id=F.evidence.ROCPROF_V3_TRACE_ID,
+            expected_rows=59_925)
         for hypothesis_id, template_id in (
                 ("akh-v2-q5-type-specific-dequant", "cuda-vecdotq-v1"),
                 ("akh-v2-q8-quantizer-new-mechanism", "cuda-quantize-q8-v1")):
@@ -278,6 +287,39 @@ class DeploymentFactoryTests(unittest.TestCase):
                 forbidden=bound.candidate_forbidden,
                 invariants=bound.invariants)
             self.assertEqual(len(reduced["exact"]), len(expected))
+
+    def test_rocprofv3_policy_and_per_arm_cardinality_cover_all_four_strategies(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config = SimpleNamespace(
+                operations_root=Path(directory).resolve() / "operations")
+            policy = F._rocprof_v3_policy(config)
+        roles = {item.role for item in policy}
+        self.assertTrue(F.evidence.PROFILER_MAPPED_ROLES.issubset(roles))
+        self.assertTrue({"executable", "profiler_wrapper", "profiler_package",
+                         "profiler_runtime_manifest",
+                         "profiler_aqlprofile_manifest",
+                         "profiler_libpci_manifest"}.issubset(roles))
+        portfolio = hypothesis_portfolio.load(hypothesis_portfolio.DEFAULT_PORTFOLIO)
+        registry = F._template_registry()
+        authority = F._portfolio_dispatch_authority(registry, portfolio)
+        observed = {}
+        for record in portfolio.eligible_hypotheses():
+            template_id = record["current_bundle_eligibility"]["template_ids"][0]
+            reviewed = registry.templates[template_id]
+            intent = C.GpuSourceExperimentIntent(
+                reviewed.template_id, reviewed.target_surface,
+                reviewed.target_symbol, reviewed.correctness_id,
+                reviewed.dispatch_id,
+                tuple(C.BoundedDispatchExpectation(**row)
+                      for row in authority[record["hypothesis_id"]]))
+            observed[template_id] = F._expected_rocprofv3_rows(
+                reviewed.bind_dispatch(intent))
+        self.assertEqual(observed, {
+            "cuda-vecdotq-v1": (59_925, 59_925),
+            "cuda-quantize-q8-v1": (59_925, 59_925),
+            "cuda-fattn-tile-v1": (63_021, 59_925),
+            "cuda-norm-v2": (59_925, 59_925),
+        })
 
     def test_balanced_arm_schedule_is_seeded_and_s2_exactly_reverses_s1(self):
         first_seed, first = F._arm_order_schedule(
@@ -514,6 +556,16 @@ class DeploymentFactoryTests(unittest.TestCase):
             receipt = json.loads(Path(payload["graph_receipt"]).read_text(encoding="utf-8"))
             self.assertFalse(receipt["inference_executed"])
             self.assertEqual(receipt["registry_ids"], dict(F._STATIC_IDS))
+            profiler = receipt["profiler_runtime_authority"]
+            self.assertEqual(profiler["trace_schema_id"],
+                             F.evidence.ROCPROF_V3_TRACE_ID)
+            package = next(row for row in profiler["inputs"]
+                           if row["role"] == "profiler_package")
+            self.assertEqual(package, {
+                "role": "profiler_package",
+                "path": str(F._ROCPROF_V3_PACKAGE.resolve()),
+                "sha256": F._ROCPROF_V3_PACKAGE_SHA256,
+            })
             self.assertEqual(receipt["actor_wrappers"]["planner"]["sha256"],
                              config.actor_wrapper.sha256)
             self.assertEqual(receipt["actor_wrappers"]["critic"]["sha256"],
