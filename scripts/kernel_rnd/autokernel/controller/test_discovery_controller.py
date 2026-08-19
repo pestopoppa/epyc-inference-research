@@ -689,13 +689,147 @@ class Tests(unittest.TestCase):
   self.assertEqual(result["portfolio_skips"][
       "akh-v2-q5-type-specific-dequant"]["disposition"],
       "bounded_authoring_skip")
+  self.assertEqual(result["scientific_attempts"],0)
+  self.assertEqual(result["terminal_reason"],"portfolio_exhausted")
   self.assertTrue(all(row["status"] == "planner_refused"
                       and row["scientific_budget_spent"] is False
                       and row["telemetry_status"] == "emitted"
                       for row in result["iterations"]))
   self.assertEqual(events,["planner_started","planner_refused"]*3)
+ def test_four_bounded_planner_skips_reach_every_strategy_with_one_science_slot(self):
+  class RefusingPlanner:
+   def __init__(self): self.bindings=[]
+   def attest(self): return {**D.SOL,"runtime":RUNTIME}
+   def plan(self,*,context,workspace):
+    self.bindings.append(context["authoring_assignment"]["portfolio_binding"])
+    raise D.PlannerOutputRefusal("bounded authored artifact refusal")
+  class Never:
+   def attest(self): return {**D.FABLE5_CRITIC,"runtime":CLAUDE_RUNTIME}
+   def __getattr__(self,_name):
+    def called(*_args,**_kwargs):
+     raise AssertionError("refused portfolio reached critic or compute")
+    return called
+  with tempfile.TemporaryDirectory() as t:
+   records=[self.portfolio_record(
+       hypothesis_id=f"akh-strategy-{rank}",rank=rank,budget=3)
+       for rank in range(1,5)]
+   config=dataclasses.replace(self.portfolio_config(Path(t),records),
+                              max_iterations=1)
+   planner=RefusingPlanner(); never=Never()
+   result=D.run_controller(config,planner=planner,critic=never,
+                           screener=never,lease=never)
+  selected=[row["hypothesis_id"] for row in planner.bindings]
+  self.assertEqual(selected,
+                   [f"akh-strategy-{rank}" for rank in range(1,5)
+                    for _ in range(3)])
+  self.assertEqual([row["turn"] for row in result["iterations"]],
+                   list(range(1,13)))
+  self.assertEqual(len({row["planner_operation_key"]
+                        for row in result["iterations"]}),12)
+  self.assertEqual(result["scientific_attempts"],0)
+  self.assertEqual(result["terminal_reason"],"portfolio_exhausted")
+  self.assertTrue(result["complete"])
+ def test_completed_legacy_state_reentry_does_not_insert_science_counter(self):
+  class RefusingPlanner:
+   def attest(self): return {**D.SOL,"runtime":RUNTIME}
+   def plan(self,*,context,workspace):
+    raise D.PlannerOutputRefusal("legacy completed refusal")
+  class Never:
+   def attest(self): return {**D.FABLE5_CRITIC,"runtime":CLAUDE_RUNTIME}
+  with tempfile.TemporaryDirectory() as t:
+   root=Path(t); config=D.ControllerConfig(root,1,dry_run=True)
+   result=D.run_controller(config,planner=RefusingPlanner(),
+                           critic=Never(),screener=Never(),lease=Never())
+   self.assertTrue(result["complete"])
+   legacy=dict(result); legacy.pop("scientific_attempts")
+   legacy["state_sha256"]=D._sha({
+       key:value for key,value in legacy.items() if key != "state_sha256"})
+   D._atomic(root/"state.json",legacy)
+   before=(root/"state.json").read_bytes()
+   reopened=D.run_controller(config,planner=RefusingPlanner(),
+                             critic=Never(),screener=Never(),lease=Never())
+   self.assertNotIn("scientific_attempts",reopened)
+   self.assertEqual((root/"state.json").read_bytes(),before)
+ def test_controller_persists_visibility_degraded_without_masking_refusal(self):
+  outer=self; package=self.source_package()
+  class BrokenTelemetry:
+   def emit(self,*_args,**_kwargs):
+    raise OSError("injected telemetry transaction failure")
+  class Never:
+   def attest(self): return {**D.FABLE5_CRITIC,"runtime":CLAUDE_RUNTIME}
+   def __getattr__(self,_name):
+    def called(*_args,**_kwargs):
+     raise AssertionError("planner refusal reached critic or compute")
+    return called
+  with tempfile.TemporaryDirectory() as t:
+   root=Path(t); wrapper=root/"codex"; wrapper.write_bytes(b"codex"); wrapper.chmod(0o700)
+   planner=D.CodexPlanner(
+       wrapper=wrapper,environment={"PATH":"/usr/bin"},
+       reviewed_sources=package,telemetry=BrokenTelemetry())
+   def actor(**kwargs):
+    assignment=D.AuthoringAssignment(**json.loads(
+        kwargs["prompt"])["context"]["authoring_assignment"])
+    outer._write_planner_artifacts(
+        kwargs["workspace"],assignment,mode="underestimated_diff_v16")
+    return SimpleNamespace(returncode=0,stdout="",stderr="")
+   base=self.portfolio_config(root,[self.portfolio_record(
+       hypothesis_id="akh-visibility-q5",rank=1,budget=3)])
+   planner_context={**base.planner_context,
+       "reviewed_source_package_sha256":package.package_sha256}
+   config=dataclasses.replace(
+       base,max_iterations=1,planner_context=planner_context,
+       planner_context_sha256=D._sha(planner_context))
+   never=Never()
+   with patch.object(D.codex_container_actor,"runtime_identity",return_value=RUNTIME), \
+        patch.object(D.codex_container_actor,"run_actor",side_effect=actor):
+    result=D.run_controller(config,planner=planner,critic=never,
+                            screener=never,lease=never)
+  self.assertEqual(result["terminal_reason"],"portfolio_exhausted")
+  self.assertEqual({item["event"] for item in result["visibility_degraded"]},
+                   {"planner_started","planner_refused"})
+  self.assertTrue(all(row["status"] == "planner_refused"
+                      and row["visibility_degraded"] is True
+                      and row["telemetry_status"] == "emit_failed"
+                      for row in result["iterations"]))
+ def test_visibility_degradation_does_not_mask_successful_planner_or_critic(self):
+  outer=self
+  class Planner:
+   def __init__(self): self.telemetry_failures=[]
+   def attest(self): return {**D.SOL,"runtime":RUNTIME}
+   def plan(self,*,context,workspace):
+    self.telemetry_failures.append({
+        "event":"planner_completed","operation_key":"4"*64,
+        "error_type":"OSError","error_sha256":"5"*64})
+    return outer.portfolio_candidate(
+        context["authoring_assignment"]["portfolio_binding"])
+  class Critic:
+   def __init__(self): self.telemetry_failures=[]
+   def attest(self): return {**D.FABLE5_CRITIC,"runtime":CLAUDE_RUNTIME}
+   def review(self,*_args,**_kwargs):
+    self.telemetry_failures.append({
+        "event":"critic_completed","operation_key":"6"*64,
+        "error_type":"OSError","error_sha256":"7"*64})
+    return D.Critique("accept","bounded")
+  class Never:
+   def __getattr__(self,_name):
+    def called(*_args,**_kwargs):
+     raise AssertionError("dry run reached compute")
+    return called
+  with tempfile.TemporaryDirectory() as t:
+   config=dataclasses.replace(self.portfolio_config(
+       Path(t),[self.portfolio_record(rank=1,budget=1)]),max_iterations=1)
+   result=D.run_controller(config,planner=Planner(),critic=Critic(),
+                           screener=Never(),lease=Never())
+  row=result["iterations"][0]
+  self.assertEqual(row["status"],"dry_run_authorized")
+  self.assertTrue(row["visibility_degraded"])
+  self.assertEqual({item["event"] for item in row["telemetry_failures"]},
+                   {"planner_completed","critic_completed"})
+  self.assertEqual({item["event"] for item in result["visibility_degraded"]},
+                   {"planner_completed","critic_completed"})
  def test_v16_telemetry_terminal_recovers_checkpoint_and_rederives_refusal(self):
   outer=self
+  class StopAfterRefusal(BaseException): pass
   class LegacyThenCurrentPlanner:
    def __init__(self): self.plan_calls=0; self.resume_calls=0
    def attest(self): return {**D.SOL,"runtime":RUNTIME}
@@ -737,8 +871,15 @@ class Tests(unittest.TestCase):
    self.assertEqual(crashed["planning"]["failure"],{
        "type":"TelemetryError",
        "message":"telemetry result contains a non-allowlisted field"})
-   result=D.run_controller(config,planner=planner,critic=never,
-                           screener=never,lease=never)
+   original_save=D.DurableState.save
+   def stop_after_refusal(store,state,phase):
+    original_save(store,state,phase)
+    if phase == "planner_refused": raise StopAfterRefusal(phase)
+   with patch.object(D.DurableState,"save",new=stop_after_refusal), \
+        self.assertRaises(StopAfterRefusal):
+    D.run_controller(config,planner=planner,critic=never,
+                     screener=never,lease=never)
+   result=json.loads((root/"state.json").read_text())
   self.assertEqual((planner.plan_calls,planner.resume_calls),(1,1))
   self.assertEqual(planner.assert_checkpoint_rc,0)
   self.assertEqual(result["next"],2)
@@ -759,7 +900,9 @@ class Tests(unittest.TestCase):
  def test_v16_telemetry_terminal_refuses_missing_or_changed_checkpoint_closure(self):
   # The legacy exception name alone is not recovery authority.  The private
   # rc=0 checkpoint must still bind the exact actor artifact closure.
-  for mutation in ("missing_checkpoint","extra_artifact","hardlink_checkpoint"):
+  for mutation in ("missing_checkpoint","extra_artifact","hardlink_checkpoint",
+                   "result_rc1","extra_result","missing_stdout","bad_stdout",
+                   "extra_top_level","missing_top_level"):
    with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as t:
     root=Path(t); config=D.ControllerConfig(root,1,dry_run=True)
     context=D._context({"iterations":[]},D._tracker(D.DurableState(root)),1,
@@ -779,7 +922,19 @@ class Tests(unittest.TestCase):
         "telemetry result contains a non-allowlisted field"}
     if mutation == "missing_checkpoint": checkpoint.unlink()
     elif mutation == "extra_artifact": (workspace/"extra").write_text("x")
-    else: os.link(checkpoint,workspace.parent/"checkpoint-alias")
+    elif mutation == "hardlink_checkpoint":
+     os.link(checkpoint,workspace.parent/"checkpoint-alias")
+    else:
+     value=json.loads(checkpoint.read_text())
+     if mutation == "result_rc1": value["result"]["returncode"]=1
+     elif mutation == "extra_result": value["result"]["unexpected"]=True
+     elif mutation == "missing_stdout": value["result"].pop("stdout_sha256")
+     elif mutation == "bad_stdout": value["result"]["stdout_sha256"]="bad"
+     elif mutation == "extra_top_level": value["unexpected_top_level"]=True
+     else: value.pop("assignment_sha256")
+     value["receipt_sha256"]=D._sha({
+         key:item for key,item in value.items() if key != "receipt_sha256"})
+     checkpoint.write_text(json.dumps(value))
     state={"schema":D.SCHEMA,"authority":D.AUTHORITY,"roster":D.sealed_roster(),
            "iterations":[],"next":1,"complete":False,"planning":planning}
     store=D.DurableState(root); store.save(state,"fixture")

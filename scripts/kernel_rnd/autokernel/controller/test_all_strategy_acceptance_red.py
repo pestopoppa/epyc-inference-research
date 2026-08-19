@@ -1570,9 +1570,7 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
                     C.run_controller(
                         config, planner=planner, critic=critic,
                         screener=screener, lease=TD.Lease())
-                result = C.run_controller(
-                    config, planner=planner, critic=critic,
-                    screener=screener, lease=TD.Lease())
+                result = C.DurableState(config.output_root).load()
                 row = result["iterations"][0]
                 self.assertEqual(row["status"], disposition)
                 self.assertEqual(row["stage_receipt_path"], receipt_path)
@@ -1651,10 +1649,25 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
                         config, planner=planner,
                         critic=TD.FakeCritic(["accept"]),
                         screener=screen, lease=TD.Lease())
-                result = C.run_controller(
-                    config, planner=planner,
-                    critic=TD.FakeCritic(["accept"]),
-                    screener=screen, lease=TD.Lease())
+                original_save = C.DurableState.save
+
+                class StopAfterRecoveredTerminal(BaseException):
+                    pass
+
+                def save_then_stop(store, state, phase):
+                    original_save(store, state, phase)
+                    rows = state.get("iterations", [])
+                    if rows and rows[-1].get("status") == disposition:
+                        raise StopAfterRecoveredTerminal(phase)
+
+                with mock.patch.object(
+                        C.DurableState, "save", new=save_then_stop), \
+                        self.assertRaises(StopAfterRecoveredTerminal):
+                    C.run_controller(
+                        config, planner=planner,
+                        critic=TD.FakeCritic(["accept"]),
+                        screener=screen, lease=TD.Lease())
+                result = C.DurableState(config.output_root).load()
                 self.assertEqual(result["iterations"][0]["status"], disposition)
                 self.assertEqual((planner.calls, screen.executor_calls), (1, 1))
                 self.assertEqual(screen.calls, 2)

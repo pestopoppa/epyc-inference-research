@@ -156,7 +156,8 @@ def _sha(value: object) -> str: return hashlib.sha256(_canon(value)).hexdigest()
 
 def _emit_observational_telemetry(
         telemetry: discovery_telemetry.DiscoveryTelemetry | None,
-        *args: Any, **kwargs: Any) -> Exception | None:
+        *args: Any, failure_sink: list[dict[str, str]] | None = None,
+        **kwargs: Any) -> Exception | None:
     """Emit dashboard telemetry without granting it controller authority.
 
     The durable state machine and actor result remain primary.  Returning the
@@ -168,6 +169,13 @@ def _emit_observational_telemetry(
     try:
         telemetry.emit(*args, **kwargs)
     except Exception as exc:
+        if failure_sink is not None:
+            failure_sink.append({
+                "event": str(args[1]) if len(args) > 1 else "unknown",
+                "operation_key": str(kwargs.get("operation_key", "")),
+                "error_type": type(exc).__name__,
+                "error_sha256": hashlib.sha256(str(exc).encode()).hexdigest(),
+            })
         return exc
     return None
 
@@ -798,6 +806,7 @@ class CodexPlanner:
         self.runtime_identity = None if runtime_identity is None else dict(runtime_identity)
         self.actor_launcher_sha256 = actor_launcher_sha256
         self.telemetry = telemetry
+        self.telemetry_failures: list[dict[str, str]] = []
     def _runtime(self) -> Mapping[str, Any]:
         if self.wrapper_sha256 is not None:
             if self.wrapper.is_symlink() or not self.wrapper.is_file() or hashlib.sha256(self.wrapper.read_bytes()).hexdigest() != self.wrapper_sha256:
@@ -953,14 +962,25 @@ class CodexPlanner:
                              "controller_owned_portfolio_binding": binding,
                              "structural_example_only": example,
                              "output": "Write plan.json and source-patch.json in workspace."}, sort_keys=True)
+        checkpoint_operation_key = (
+            checkpoint_path.parent.name if checkpoint_path is not None else None)
+        telemetry_operation_key = (
+            checkpoint_operation_key
+            if isinstance(checkpoint_operation_key, str)
+            and HASH.fullmatch(checkpoint_operation_key)
+            else _sha({"context": context, "workspace": str(workspace)}))
         self._runtime()
-        if not resume:
-            _emit_observational_telemetry(
-                self.telemetry,
-                "planner", "planner_started",
-                campaign_id=assignment["campaign_id"],
-                hypothesis_id=example_hypothesis, provider=SOL["provider"],
-                model=SOL["model"], effort=SOL["effort"])
+        # Re-emitting on resume is intentional: operation-key idempotence
+        # repairs a crash-partial planner projection without duplicating a
+        # previously committed start event.
+        _emit_observational_telemetry(
+            self.telemetry,
+            "planner", "planner_started",
+            campaign_id=assignment["campaign_id"],
+            hypothesis_id=example_hypothesis, provider=SOL["provider"],
+            model=SOL["model"], effort=SOL["effort"],
+            operation_key=telemetry_operation_key,
+            failure_sink=self.telemetry_failures)
         if resume:
             if checkpoint_path is None:
                 raise DiscoveryControllerError(
@@ -968,6 +988,7 @@ class CodexPlanner:
             checkpoint = _reopen_planner_actor_checkpoint(
                 workspace, checkpoint_path, context=context)
             result_facts = dict(checkpoint["result"])
+            actor_failure_message = None
         else:
             try:
                 result = codex_container_actor.run_actor(wrapper=self.wrapper, workspace=workspace, model=SOL["model"], effort=SOL["effort"], prompt=prompt, environment=self.environment,
@@ -980,7 +1001,9 @@ class CodexPlanner:
                         "planner", "planner_failed",
                         campaign_id=assignment["campaign_id"],
                         hypothesis_id=example_hypothesis, provider=SOL["provider"],
-                        model=SOL["model"], effort=SOL["effort"])
+                        model=SOL["model"], effort=SOL["effort"],
+                        operation_key=telemetry_operation_key,
+                        failure_sink=self.telemetry_failures)
                 raise
             result_facts = {
                 "returncode": result.returncode,
@@ -989,23 +1012,27 @@ class CodexPlanner:
                 "stderr_sha256": hashlib.sha256(
                     getattr(result, "stderr", "").encode()).hexdigest(),
             }
+            actor_failure_message = (
+                f"Sol actor failed: {getattr(result, 'stderr', '')[-400:]}"
+                if result.returncode else None)
             if checkpoint_path is not None:
                 _seal_planner_actor_checkpoint(
                     workspace, checkpoint_path, context=context,
                     result=result_facts)
-            if result.returncode:
-                _emit_observational_telemetry(
-                        self.telemetry,
-                        "planner", "planner_failed",
-                        campaign_id=assignment["campaign_id"],
-                        hypothesis_id=example_hypothesis, provider=SOL["provider"],
-                        model=SOL["model"], effort=SOL["effort"], result=result_facts)
-                raise PlannerProviderTransient(
-                    f"Sol actor failed: {getattr(result, 'stderr', '')[-400:]}")
         if result_facts["returncode"]:
+            _emit_observational_telemetry(
+                    self.telemetry,
+                    "planner", "planner_failed",
+                    campaign_id=assignment["campaign_id"],
+                    hypothesis_id=example_hypothesis, provider=SOL["provider"],
+                    model=SOL["model"], effort=SOL["effort"],
+                    result=result_facts,
+                    operation_key=telemetry_operation_key,
+                    failure_sink=self.telemetry_failures)
             raise PlannerProviderTransient(
-                f"sealed Sol actor invocation failed with return code "
-                f"{result_facts['returncode']}")
+                actor_failure_message
+                or f"sealed Sol actor invocation failed with return code "
+                   f"{result_facts['returncode']}")
         if self.reviewed_sources is not None:
             self.reviewed_sources.revalidate_materialized(workspace)
         try:
@@ -1018,7 +1045,9 @@ class CodexPlanner:
                 campaign_id=assignment["campaign_id"],
                 hypothesis_id=example_hypothesis,
                 provider=SOL["provider"], model=SOL["model"],
-                effort=SOL["effort"], result={
+                effort=SOL["effort"], operation_key=telemetry_operation_key,
+                failure_sink=self.telemetry_failures,
+                result={
                     **result_facts,
                     "refusal_type": "planner_output_refusal",
                     "refusal_reason_sha256": hashlib.sha256(
@@ -1034,7 +1063,9 @@ class CodexPlanner:
                 "planner", "planner_completed",
                 campaign_id=assignment["campaign_id"],
                 hypothesis_id=example_hypothesis, provider=SOL["provider"],
-                model=SOL["model"], effort=SOL["effort"], result=result_facts)
+                model=SOL["model"], effort=SOL["effort"], result=result_facts,
+                operation_key=telemetry_operation_key,
+                failure_sink=self.telemetry_failures)
         return candidate
 
 
@@ -1055,6 +1086,7 @@ class ClaudeCritic:
         self.runtime_identity = None if runtime_identity is None else dict(runtime_identity)
         self.actor_launcher_sha256 = actor_launcher_sha256
         self.telemetry = telemetry
+        self.telemetry_failures: list[dict[str, str]] = []
         self.auth_root = auth_root
     def _runtime(self) -> Mapping[str, Any]:
         if self.wrapper_sha256 is not None:
@@ -1105,12 +1137,15 @@ class ClaudeCritic:
             "output": "Return only the strict structured critique; do not edit files or use tools."}, sort_keys=True)
         self._runtime()
         campaign_id = manifest.campaign_id
+        telemetry_operation_key = _sha(bindings)
         _emit_observational_telemetry(
                 self.telemetry,
                 "autokernel", "critic_started", campaign_id=campaign_id,
                 hypothesis_id=candidate.hypothesis_id,
                 provider=FABLE5_CRITIC["provider"], model=FABLE5_CRITIC["model"],
-                effort=FABLE5_CRITIC["effort"])
+                effort=FABLE5_CRITIC["effort"],
+                operation_key=telemetry_operation_key,
+                failure_sink=self.telemetry_failures)
         try:
             result = claude_fable5_critic_actor.run_critic(
                 wrapper=self.wrapper, workspace=workspace, prompt=prompt,
@@ -1125,7 +1160,9 @@ class ClaudeCritic:
                     "autokernel", "critic_failed", campaign_id=campaign_id,
                     hypothesis_id=candidate.hypothesis_id,
                     provider=FABLE5_CRITIC["provider"], model=FABLE5_CRITIC["model"],
-                    effort=FABLE5_CRITIC["effort"])
+                    effort=FABLE5_CRITIC["effort"],
+                    operation_key=telemetry_operation_key,
+                    failure_sink=self.telemetry_failures)
             raise
         if self.telemetry is not None:
             _emit_observational_telemetry(
@@ -1133,7 +1170,9 @@ class ClaudeCritic:
                     "autokernel", "critic_completed", campaign_id=campaign_id,
                     hypothesis_id=candidate.hypothesis_id,
                     provider=FABLE5_CRITIC["provider"], model=FABLE5_CRITIC["model"],
-                    effort=FABLE5_CRITIC["effort"], result={
+                    effort=FABLE5_CRITIC["effort"],
+                    operation_key=telemetry_operation_key,
+                    failure_sink=self.telemetry_failures, result={
                         "stdout_sha256": result.stdout_sha256,
                         "stderr_sha256": result.stderr_sha256,
                         "decision": result.decision,
@@ -1606,7 +1645,7 @@ class DurableState:
     def __init__(self, root: Path) -> None:
         self.root=root; self.book=journal.Journal(str(root / "journal")); self.book.initialize(); self.path=root / "state.json"
     def load(self) -> dict[str, Any]:
-        if not self.path.exists(): return {"schema": SCHEMA, "authority": AUTHORITY, "roster": sealed_roster(), "iterations": [], "next": 1, "complete": False}
+        if not self.path.exists(): return {"schema": SCHEMA, "authority": AUTHORITY, "roster": sealed_roster(), "iterations": [], "next": 1, "scientific_attempts": 0, "complete": False}
         value=_read_object(self.path, self.root); _require_roster(value.get("roster", {}))
         if value.get("schema") != SCHEMA or value.get("authority") != AUTHORITY: raise DiscoveryControllerError("wrong controller journal")
         declared=value.get("state_sha256")
@@ -2169,7 +2208,36 @@ def _screen_iteration_fields(result: SealedScreen, *, repetition: int) -> dict[s
             else "not_required_or_unavailable"),
         "stages": list(result.stages),
         "repetition": repetition,
+        "scientific_budget_spent": True,
     }
+
+
+def _row_spends_scientific_budget(row: Mapping[str, Any]) -> bool:
+    return (row.get("scientific_budget_spent") is True
+            or isinstance(row.get("result_sha256"), str)
+            and HASH.fullmatch(row["result_sha256"])
+            and isinstance(row.get("evidence"), Mapping))
+
+
+def _derived_scientific_attempts(state: Mapping[str, Any]) -> int:
+    iterations = state.get("iterations", [])
+    if not isinstance(iterations, list):
+        raise DiscoveryControllerError("durable iterations are malformed")
+    return sum(1 for row in iterations
+               if isinstance(row, Mapping)
+               and _row_spends_scientific_budget(row))
+
+
+def _bind_scientific_attempt_counter(state: dict[str, Any]) -> int:
+    """Bind the persisted counter to the recursively sealed result rows."""
+    derived = _derived_scientific_attempts(state)
+    declared = state.get("scientific_attempts")
+    if declared is not None and (isinstance(declared, bool)
+                                 or declared != derived):
+        raise DiscoveryControllerError(
+            "durable scientific-attempt counter disagrees with result rows")
+    state["scientific_attempts"] = derived
+    return derived
 
 
 def _schedule_replication(state: dict[str, Any], *, item: PlannedCandidate,
@@ -2184,7 +2252,8 @@ def _schedule_replication(state: dict[str, Any], *, item: PlannedCandidate,
     a nomination without conflating unrelated source patches under the same
     hypothesis.
     """
-    if (result.classification != "candidate" or state["next"] > max_iterations
+    if (result.classification != "candidate"
+            or _derived_scientific_attempts(state) >= max_iterations
             or state.get("pending") is not None):
         return
     replica = dict(row)
@@ -2216,10 +2285,7 @@ def _apply_portfolio_outcome(state: dict[str, Any], row: dict[str, Any]) -> None
     # screens only.  Critic/source/authorization refusals have no result or
     # evidence graph and cannot establish the terminal claim "no gain after N
     # candidates" merely by carrying distinct proposed manifest hashes.
-    measured = (row.get("scientific_budget_spent") is True
-                or isinstance(row.get("result_sha256"), str)
-                and HASH.fullmatch(row["result_sha256"])
-                and isinstance(row.get("evidence"), Mapping))
+    measured = _row_spends_scientific_budget(row)
     if not measured:
         return
     if status == "top_k_replicated_candidate":
@@ -2237,10 +2303,7 @@ def _apply_portfolio_outcome(state: dict[str, Any], row: dict[str, Any]) -> None
     attempts = {item.get("source_manifest_sha256") for item in state["iterations"]
                 if item.get("portfolio_hypothesis_id") == hypothesis_id
                 and isinstance(item.get("source_manifest_sha256"), str)
-                and (item.get("scientific_budget_spent") is True
-                     or isinstance(item.get("result_sha256"), str)
-                     and HASH.fullmatch(item["result_sha256"])
-                     and isinstance(item.get("evidence"), Mapping))}
+                and _row_spends_scientific_budget(item)}
     if len(attempts) >= policy["max_distinct_candidates"]:
         disposition = policy["terminal_rule"]
         terminals[hypothesis_id] = {"disposition": disposition,
@@ -2273,6 +2336,8 @@ def _record_governed_stage_refusal(
         stage_receipt_sha256=exc.receipt_sha256,
         scientific_budget_spent=exc.scientific_budget_spent)
     state["iterations"].append(row)
+    if exc.scientific_budget_spent:
+        state["scientific_attempts"] = _derived_scientific_attempts(state)
     if exc.disposition == "authoring_refused":
         _note_portfolio_authoring_failure(state, row)
     hypothesis_id = row.get("portfolio_hypothesis_id")
@@ -2323,6 +2388,27 @@ def _note_portfolio_authoring_failure(state: dict[str, Any],
             "scientific_terminal": False,
             "failure_count": count,
         }
+
+
+def _drain_visibility_degradation(
+        state: dict[str, Any], actor: object,
+        row: dict[str, Any] | None = None) -> list[dict[str, str]]:
+    failures = getattr(actor, "telemetry_failures", None)
+    if not isinstance(failures, list) or not failures:
+        return []
+    drained = [dict(item) for item in failures]
+    failures.clear()
+    durable = state.setdefault("visibility_degraded", [])
+    for item in drained:
+        if item not in durable:
+            durable.append(item)
+    if row is not None:
+        row["visibility_degraded"] = True
+        row_failures = row.setdefault("telemetry_failures", [])
+        for item in drained:
+            if item not in row_failures:
+                row_failures.append(item)
+    return drained
 
 
 def _record_planner_refusal(state: dict[str, Any], *, turn: int,
@@ -2418,6 +2504,25 @@ def _is_legacy_planner_refusal_telemetry_failure(
             and failure.get("type") == "TelemetryError"
             and failure.get("message") ==
             "telemetry result contains a non-allowlisted field")
+
+
+def _require_legacy_planner_success_result(
+        checkpoint: Mapping[str, Any]) -> None:
+    """Bind the v16 recovery exception to the exact completed actor result."""
+    if set(checkpoint) != {
+            "schema", "context_sha256", "assignment_sha256", "result",
+            "artifacts", "receipt_sha256"}:
+        raise DiscoveryControllerError(
+            "legacy planner telemetry recovery checkpoint schema changed")
+    result = checkpoint.get("result")
+    required = {"returncode", "stdout_sha256", "stderr_sha256"}
+    if (not isinstance(result, Mapping) or set(result) != required
+            or result.get("returncode") != 0
+            or any(not isinstance(result.get(key), str)
+                   or not HASH.fullmatch(result[key])
+                   for key in ("stdout_sha256", "stderr_sha256"))):
+        raise DiscoveryControllerError(
+            "legacy planner telemetry recovery lacks its exact rc=0 actor result")
 
 
 def _prepare_planner_workspace(config: ControllerConfig, operation_key: str,
@@ -2522,6 +2627,7 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
     # A completed state is an acknowledged terminal checkpoint.  Re-entering it
     # must be a read, not another executor opportunity or a timestamp rewrite.
     if state["complete"]: return state
+    _bind_scientific_attempt_counter(state)
     tracker=_tracker(store)
     if state.get("inflight") is not None:
         precompute_refused = False
@@ -2602,8 +2708,11 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                     result, repetition=int(inflight["lease"].get(
                         "repetition", 2 if inflight.get("confirmation") else 1))))
             _record_attempt_once(tracker,item,str(item.proposal.get("proposal_id",row["proposal_sha256"])),result)
-            state.pop("inflight",None); state.pop("pending",None); state["iterations"].append(row); _apply_portfolio_outcome(state,row); state["next"]+=1; _schedule_replication(state,item=item,authorization=authorization,row=row,result=result,max_iterations=config.max_iterations); _append_nomination(config.output_root,item,result,_decision_floor(policy,"nomination_floor_pct",config.nomination_threshold)); _write_projection(config.evidence_root or config.output_root); store.save(state,"recovered_screen")
-    while not state["complete"] and state["next"] <= config.max_iterations:
+            state.pop("inflight",None); state.pop("pending",None); state["iterations"].append(row); state["scientific_attempts"]=_derived_scientific_attempts(state); _apply_portfolio_outcome(state,row); state["next"]+=1; _schedule_replication(state,item=item,authorization=authorization,row=row,result=result,max_iterations=config.max_iterations); _append_nomination(config.output_root,item,result,_decision_floor(policy,"nomination_floor_pct",config.nomination_threshold)); _write_projection(config.evidence_root or config.output_root); store.save(state,"recovered_screen")
+    while (not state["complete"]
+           and (state["scientific_attempts"] < config.max_iterations
+                if config.hypothesis_portfolio is not None
+                else state["next"] <= config.max_iterations)):
         turn=state["next"]
         pending=state.get("pending")
         planning=state.get("planning")
@@ -2644,7 +2753,14 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
             if pending is not None and pending_phase == "critic_pending":
                 item=_restore_pending(pending); row=dict(pending["row"])
                 _revalidate_portfolio_checkpoint(config, item, row)
-                review=critic.review(item,context=context,workspace=workspace)
+                try:
+                    review=critic.review(item,context=context,workspace=workspace)
+                except Exception:
+                    if _drain_visibility_degradation(state, critic, row):
+                        state["pending"]["row"] = row
+                        store.save(state, "visibility_degraded")
+                    raise
+                _drain_visibility_degradation(state, critic, row)
                 row["critic"]=asdict(review)
                 if review.decision != "accept":
                     row["status"]="critic_"+review.decision
@@ -2699,9 +2815,10 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                         # checkpointed and while emitting the typed refusal.
                         # Validate the private, single-link actor closure now;
                         # a missing/extra/tampered artifact stays terminal.
-                        _reopen_planner_actor_checkpoint(
+                        checkpoint = _reopen_planner_actor_checkpoint(
                             planner_workspace, checkpoint_path,
                             context=context)
+                        _require_legacy_planner_success_result(checkpoint)
                         planning.pop("failure")
                         planning["telemetry_recovery"] = {
                             "schema": "epyc.autokernel.planner_telemetry_recovery.v1",
@@ -2737,6 +2854,8 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                     _record_planner_refusal(
                         state, turn=turn, context=context,
                         portfolio_binding=portfolio_binding, exc=exc)
+                    _drain_visibility_degradation(
+                        state, planner, state["iterations"][-1])
                     store.save(
                         state,
                         "planner_transient"
@@ -2746,6 +2865,8 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                 except Exception as exc:
                     state["planning"]["failure"]={
                         "type":type(exc).__name__, "message":str(exc)}
+                    _drain_visibility_degradation(
+                        state, planner, state["planning"])
                     store.save(state,"planner_terminal_failure")
                     raise
                 row={"turn":turn,"hypothesis_id":item.hypothesis_id,"statement":item.statement,
@@ -2756,6 +2877,7 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                      "target_surface":item.experiment_intent.target_surface if item.experiment_intent else None,
                      "target_symbol":item.experiment_intent.target_symbol if item.experiment_intent else None,
                      "context_sha256":_sha(context)}
+                _drain_visibility_degradation(state, planner, row)
                 if portfolio_binding is not None:
                     row.update(portfolio_hypothesis_id=portfolio_binding["hypothesis_id"],
                                portfolio_binding=dict(portfolio_binding),
@@ -2894,8 +3016,14 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
             # Record the measured disposition before exposing it to the next
             # planner context.  This is the only source of repeat suppression.
             _record_attempt_once(tracker,item,str(item.proposal.get("proposal_id",row["proposal_sha256"])),result)
-            state.pop("inflight",None); state.pop("pending",None); state["iterations"].append(row); _apply_portfolio_outcome(state,row); state["next"]+=1; _schedule_replication(state,item=item,authorization=authorization,row=row,result=result,max_iterations=config.max_iterations); _append_nomination(config.output_root,item,result,_decision_floor(policy,"nomination_floor_pct",config.nomination_threshold)); _write_projection(config.evidence_root or config.output_root); store.save(state,"screened")
-    state["complete"]=bool(state.get("complete")) or state["next"]>config.max_iterations
+            state.pop("inflight",None); state.pop("pending",None); state["iterations"].append(row); state["scientific_attempts"]=_derived_scientific_attempts(state); _apply_portfolio_outcome(state,row); state["next"]+=1; _schedule_replication(state,item=item,authorization=authorization,row=row,result=result,max_iterations=config.max_iterations); _append_nomination(config.output_root,item,result,_decision_floor(policy,"nomination_floor_pct",config.nomination_threshold)); _write_projection(config.evidence_root or config.output_root); store.save(state,"screened")
+    if config.hypothesis_portfolio is not None:
+        if (not state.get("complete")
+                and state["scientific_attempts"] >= config.max_iterations):
+            state["complete"] = True
+            state["terminal_reason"] = "scientific_budget_exhausted"
+    else:
+        state["complete"]=bool(state.get("complete")) or state["next"]>config.max_iterations
     if state["complete"]: state.pop("pending",None)
     store.save(state,"complete" if state["complete"] else "paused"); return state
 
