@@ -335,6 +335,31 @@ class GpuSourceAdapterTests(unittest.TestCase):
             release_path.write_bytes(original_release)
             self.assertEqual(adapter.reconcile(inflight).status, "safe_to_start")
 
+            journal = operation / "reservation-releases"
+            journal.mkdir()
+            extra_path = journal / "release-0001.json"
+            extra = A._read_json(release_path, "release")
+            extra["device_claim_released"]["claim_id"] = "akd-legitimate-extra"
+            extra.pop("receipt_sha256")
+            extra["receipt_sha256"] = schemas.content_hash(extra)
+            extra_path.write_text(json.dumps(extra, sort_keys=True),
+                                  encoding="utf-8")
+            legitimate_extra = extra_path.read_bytes()
+            self.assertEqual(adapter.reconcile(inflight).status, "safe_to_start")
+            for field, value in (("campaign_id", "wrong-extra-campaign"),
+                                 ("device_id", "wrong-extra-device")):
+                forged_extra = A._read_json(extra_path, "extra release")
+                forged_extra["device_claim_released"][field] = value
+                forged_extra.pop("receipt_sha256")
+                forged_extra["receipt_sha256"] = schemas.content_hash(
+                    forged_extra)
+                extra_path.write_text(json.dumps(forged_extra, sort_keys=True),
+                                      encoding="utf-8")
+                self.assertEqual(adapter.reconcile(inflight).status, "ambiguous")
+                extra_path.write_bytes(legitimate_extra)
+            extra_path.unlink(); journal.rmdir()
+            self.assertEqual(adapter.reconcile(inflight).status, "safe_to_start")
+
     def test_race_after_build_is_resumable_wait_with_zero_gpu_executors(self):
         with tempfile.TemporaryDirectory() as directory:
             adapter, candidate, authorization, lease, inflight, current, executors = self.setup(directory)

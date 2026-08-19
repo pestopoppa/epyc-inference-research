@@ -427,6 +427,15 @@ def _is_resumable_stage_root(
             if any(opened.to_dict() != canonical_open
                    for opened in opened_claims[1:]):
                 return False
+            for body in releases.values():
+                try:
+                    epoch = device_claim.ClaimReceipt.from_dict(
+                        body.get("device_claim_released"))
+                except (TypeError, ValueError):
+                    return False
+                if (epoch.device_id != opened_claims[0].device_id
+                        or epoch.campaign_id != opened_claims[0].campaign_id):
+                    return False
             release_body = releases.get(opened_claims[0].claim_id)
             if not isinstance(release_body, Mapping):
                 return False
