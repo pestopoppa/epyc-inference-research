@@ -400,6 +400,51 @@ def build_identity(build: Path) -> dict:
     return identity
 
 
+def _sealed_source_build_identity(
+        args: argparse.Namespace, *, arm: str, build: Path,
+        observed: dict) -> dict:
+    """Bind a source-patch arm to the builder's already-verified identity.
+
+    Source builds are intentionally torn down to non-git runtime snapshots, so
+    ``git rev-parse`` cannot recover their distinct commits here.  The static
+    deployment installs this private in-process carrier from ``GpuSourceBuild``;
+    there is deliberately no corresponding CLI option.  Revalidate every live
+    artifact which survives teardown before using the sealed source identity.
+    """
+    raw = getattr(args, f"_sealed_{arm}_source_build_identity", None)
+    required = {
+        "source_commit", "source_sha256", "binary_sha256",
+        "hip_library_sha256", "config_sha256", "linkage_sha256",
+    }
+    if not isinstance(raw, dict) or set(raw) != required:
+        raise RuntimeError(
+            f"source patch {arm} arm lacks its sealed builder identity")
+    if (not isinstance(raw["source_commit"], str)
+            or len(raw["source_commit"]) != 40
+            or any(ch not in "0123456789abcdef" for ch in raw["source_commit"])
+            or any(not isinstance(raw[key], str) or len(raw[key]) != 64
+                   or any(ch not in "0123456789abcdef" for ch in raw[key])
+                   for key in required - {"source_commit"})):
+        raise RuntimeError(f"source patch {arm} builder identity is malformed")
+    cache = build / "CMakeCache.txt"
+    binary = build / "bin" / "llama-bench"
+    hip = build / "bin" / "libggml-hip.so"
+    try:
+        hip_resolved = hip.resolve(strict=True)
+    except OSError as exc:
+        raise RuntimeError(
+            f"source patch {arm} HIP artifact cannot be resolved") from exc
+    live = {
+        "config_sha256": sha256_file(cache),
+        "binary_sha256": sha256_file(binary),
+        "hip_library_sha256": sha256_file(hip_resolved),
+    }
+    if any(raw[key] != value for key, value in live.items()):
+        raise RuntimeError(
+            f"source patch {arm} live artifact differs from sealed builder identity")
+    return {**observed, **raw}
+
+
 def _kfd_pids() -> tuple[int, ...]:
     try:
         return tuple(sorted(int(path.name) for path in KFD_PROCS.iterdir()
@@ -1441,6 +1486,13 @@ def preflight(args: argparse.Namespace) -> dict:
         raise RuntimeError("configured inference-window lock is unsafe")
     anchor_identity = build_identity(anchor_build)
     candidate_identity = build_identity(candidate_build)
+    if args.factor == "source_patch":
+        anchor_identity = _sealed_source_build_identity(
+            args, arm="anchor", build=anchor_build,
+            observed=anchor_identity)
+        candidate_identity = _sealed_source_build_identity(
+            args, arm="candidate", build=candidate_build,
+            observed=candidate_identity)
     factor = factor_spec(
         factor=args.factor, anchor_build=anchor_build, candidate_build=candidate_build,
         anchor_identity=anchor_identity, candidate_identity=candidate_identity)
@@ -1474,6 +1526,12 @@ def preflight(args: argparse.Namespace) -> dict:
         _candidate_hip_object, candidate_hip = hip_object(candidate_loader)
         if anchor_hip == candidate_hip:
             raise RuntimeError("source patch runtime closure requires distinct HIP DSOs")
+        if (shared_sha != anchor_identity["binary_sha256"]
+                or shared_sha != candidate_identity["binary_sha256"]
+                or anchor_hip != anchor_identity["hip_library_sha256"]
+                or candidate_hip != candidate_identity["hip_library_sha256"]):
+            raise RuntimeError(
+                "source patch reward runtime differs from sealed builder artifacts")
         runtime_arms = {"measurement_binary": str(measurement),
                         "measurement_binary_sha256": shared_sha,
                         "anchor_loader_dir": str(anchor_loader),
@@ -1898,14 +1956,74 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--instrument-ready-continue-commit")
     result.add_argument("--instrument-ready-continue-contract-sha256")
     result.add_argument("--runtime-graphs", choices=("off", "on"), default="off")
+    # These four paths/digests are emitted only by the sealed deployment
+    # runner binding.  Keep the path carriers separate from the typed fields
+    # consumed by ``preflight``: in-process governed callers install the
+    # already-validated decision object, while the standalone CLI hydrates the
+    # same object from these exact byte-bound carriers before crossing the
+    # execution boundary.
+    result.add_argument("--load-admission-decision",
+                        dest="load_admission_decision_path")
+    result.add_argument("--load-admission-policy",
+                        dest="load_admission_policy_path")
+    result.add_argument("--load-admission-policy-sha256",
+                        dest="load_admission_policy_file_sha256")
+    result.add_argument("--effective-context-sha256",
+                        dest="load_admission_effective_context_sha256")
     result.add_argument("--cpu-claim-journal", default="/mnt/raid0/llm/ak-claims/region.jsonl")
     result.add_argument("--device-claim-journal", default="/mnt/raid0/llm/ak-claims/device.jsonl")
     return result
 
 
+def _hydrate_cli_load_admission(args: argparse.Namespace) -> argparse.Namespace:
+    """Turn the exact CLI carriers into the typed preflight authority.
+
+    The runner never derives an admission decision.  It only reloads and
+    recursively validates the lease-owned receipt and its policy bytes.
+    """
+    decision_raw = getattr(args, "load_admission_decision_path", None)
+    policy_raw = getattr(args, "load_admission_policy_path", None)
+    policy_file_sha = getattr(args, "load_admission_policy_file_sha256", None)
+    effective_sha = getattr(args, "load_admission_effective_context_sha256", None)
+    if not all(isinstance(value, str) and value for value in (
+            decision_raw, policy_raw, policy_file_sha, effective_sha)):
+        raise RuntimeError(
+            "GPU discovery runner requires the complete sealed load-admission CLI frame")
+    decision_path = Path(decision_raw)
+    if (not decision_path.is_absolute() or decision_path.is_symlink()
+            or decision_path.resolve(strict=True) != decision_path
+            or not decision_path.is_file()):
+        raise RuntimeError("load-admission decision carrier is unsafe")
+    try:
+        raw = decision_path.read_bytes()
+        if len(raw) > gpu_load_admission.MAX_POLICY_BYTES:
+            raise RuntimeError("load-admission decision carrier is oversized")
+        decision = json.loads(raw.decode("utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise RuntimeError("load-admission decision carrier is unreadable") from exc
+    if not isinstance(decision, dict):
+        raise RuntimeError("load-admission decision carrier is not an object")
+    try:
+        corpus = gpu_load_admission.load_policy_corpus(
+            Path(policy_raw), expected_file_sha256=policy_file_sha)
+        gpu_load_admission.validate_decision_receipt(
+            decision, expected_policy_version=corpus.version,
+            expected_policy_sha256=corpus.policy_sha256,
+            expected_policy_file_sha256=corpus.file_sha256,
+            expected_effective_context_sha256=effective_sha)
+    except gpu_load_admission.AdmissionPolicyError as exc:
+        raise RuntimeError(f"sealed load-admission CLI frame refused: {exc}") from exc
+    args.load_admission_decision = decision
+    args.load_admission_policy_version = corpus.version
+    args.load_admission_policy_sha256 = corpus.policy_sha256
+    args.load_admission_policy_file_sha256 = corpus.file_sha256
+    args.load_admission_effective_context_sha256 = effective_sha
+    return args
+
+
 def main() -> int:
     try:
-        args = parser().parse_args()
+        args = _hydrate_cli_load_admission(parser().parse_args())
         payload = preflight(args) if args.preflight_only else run(args)
         if args.preflight_output:
             atomic_json(Path(args.preflight_output), payload)

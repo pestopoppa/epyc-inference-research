@@ -197,6 +197,98 @@ class GpuSourceAdapterTests(unittest.TestCase):
                 adapter.screen(candidate, authorization, lease)
             self.assertEqual(executors.calls, [])
 
+    def test_stop_after_proof_and_dual_runner_plan_resumes_without_reproof(self):
+        """A process stop at the exact v15 failure boundary is resumable."""
+        class StopAfterRunnerPlan(BaseException):
+            pass
+
+        class StopDelegate(FakeDelegate):
+            def screen(self, candidate, authorization, lease):
+                build = self.build_source(candidate, authorization, lease)
+                self.proof_bundle(candidate, build)
+                self.args_factory(candidate, build, lease)
+                raise StopAfterRunnerPlan("runner plan sealed")
+
+        with tempfile.TemporaryDirectory() as directory:
+            values = self.setup(directory)
+            adapter, candidate, authorization, lease, inflight, current, executors = values
+            operation = adapter._root(lease["operation_key"])
+
+            def dual_args(*_args):
+                off = SimpleNamespace(
+                    screen=current,
+                    output_dir=str(operation / "runner/measurement-graphs-off"))
+                on = SimpleNamespace(
+                    screen=current,
+                    output_dir=str(operation / "runner/target-runtime-graphs-on"))
+                off._target_runtime_args = on
+                return off
+
+            adapter.args_factory = dual_args
+            with mock.patch.object(D, "GpuSourceScreener", StopDelegate), \
+                    self.assertRaises(StopAfterRunnerPlan):
+                adapter.screen(candidate, authorization, lease)
+            self.assertTrue((operation / "proof/proof-bundle.json").is_file())
+            self.assertTrue((operation / "runner-plan.json").is_file())
+            self.assertEqual(len(executors.calls), 3)
+            self.assertEqual(adapter.reconcile(inflight).status, "safe_to_start")
+
+            with mock.patch.object(D, "GpuSourceScreener", FakeDelegate):
+                resumed = adapter.screen(candidate, authorization, lease)
+            self.assertEqual(resumed.result_sha256, current.result_sha256)
+            self.assertEqual(len(executors.calls), 3)
+            self.assertEqual(adapter.reconcile(inflight).status, "sealed_result")
+
+    def test_stop_after_admission_carrier_before_runner_plan_is_resumable(self):
+        """The exact v15 parser-failure boundary retains the measured proof."""
+        class ParserStopped(RuntimeError):
+            pass
+
+        with tempfile.TemporaryDirectory() as directory:
+            values = self.setup(directory)
+            adapter, candidate, authorization, lease, inflight, current, executors = values
+            operation = adapter._root(lease["operation_key"])
+
+            def stopped_args(*_args):
+                (operation / "evidence-policy.json").write_text(
+                    json.dumps({"schema": "test-execution-policy"}) + "\n",
+                    encoding="utf-8")
+                carrier_root = operation / "runner/s1"
+                carrier_root.mkdir(parents=True)
+                body = {
+                    "schema": "epyc.autokernel.gpu_load_admission_decision.v1",
+                    "promotion_claim": False,
+                }
+                body["decision_sha256"] = A.schemas.content_hash(body)
+                (carrier_root / "load-admission-decision.json").write_text(
+                    json.dumps(body, sort_keys=True) + "\n", encoding="utf-8")
+                raise ParserStopped("sealed runner parser refused")
+
+            adapter.args_factory = stopped_args
+            with mock.patch.object(D, "GpuSourceScreener", FakeDelegate), \
+                    self.assertRaises(ParserStopped):
+                adapter.screen(candidate, authorization, lease)
+            self.assertTrue((operation / "proof/proof-bundle.json").is_file())
+            self.assertFalse((operation / "runner-plan.json").exists())
+            self.assertEqual(len(executors.calls), 3)
+            self.assertEqual(adapter.reconcile(inflight).status, "safe_to_start")
+
+            def dual_args(*_args):
+                off = SimpleNamespace(
+                    screen=current,
+                    output_dir=str(operation / "runner/measurement-graphs-off"))
+                on = SimpleNamespace(
+                    screen=current,
+                    output_dir=str(operation / "runner/target-runtime-graphs-on"))
+                off._target_runtime_args = on
+                return off
+
+            adapter.args_factory = dual_args
+            with mock.patch.object(D, "GpuSourceScreener", FakeDelegate):
+                resumed = adapter.screen(candidate, authorization, lease)
+            self.assertEqual(resumed.result_sha256, current.result_sha256)
+            self.assertEqual(len(executors.calls), 3)
+
     def test_race_after_build_is_resumable_wait_with_zero_gpu_executors(self):
         with tempfile.TemporaryDirectory() as directory:
             adapter, candidate, authorization, lease, inflight, current, executors = self.setup(directory)

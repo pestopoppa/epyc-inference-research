@@ -1833,17 +1833,90 @@ def _runner_binding(config: deployment.DiscoveryDeployment) -> RunnerArgsBinding
                 "--candidate-loader-dir", str(build_.candidate_loader_dir),
                 "--cpu-claim-journal", str(config.operations_root / "claims" / "cpu.jsonl"),
                 "--device-claim-journal", str(config.operations_root / "claims" / "device.jsonl")]
-        graphs_off = controller.gpu_discovery.parser().parse_args([
-            *common_argv, "--output-dir",
-            str(stage_root / "measurement-graphs-off"),
-            "--runtime-graphs", "off"])
-        graphs_on = controller.gpu_discovery.parser().parse_args([
-            *common_argv, "--output-dir",
-            str(stage_root / "target-runtime-graphs-on"),
-            "--runtime-graphs", "on"])
+        try:
+            graphs_off = controller.gpu_discovery.parser().parse_args([
+                *common_argv, "--output-dir",
+                str(stage_root / "measurement-graphs-off"),
+                "--runtime-graphs", "off"])
+            graphs_on = controller.gpu_discovery.parser().parse_args([
+                *common_argv, "--output-dir",
+                str(stage_root / "target-runtime-graphs-on"),
+                "--runtime-graphs", "on"])
+        except SystemExit as exc:
+            # argparse is allowed to reject an invalid sealed contract, but it
+            # must not terminate the unified controller process.  This typed
+            # interruption leaves the already-sealed proof operation resumable.
+            raise controller.ResumableScreenInterruption(
+                f"governed runner argv parser refused with exit {exc.code}") from exc
+        sealed_identities = {
+            "anchor": dict(build_.anchor_identity.__dict__),
+            "candidate": dict(build_.candidate_identity.__dict__),
+        }
+        for current in (graphs_off, graphs_on):
+            for arm, identity in sealed_identities.items():
+                setattr(current, f"_sealed_{arm}_source_build_identity", identity)
         setattr(graphs_off, "_target_runtime_args", graphs_on)
         return graphs_off
     return RunnerArgsBinding(build=build)
+
+
+def _bind_runner_runtime_authority(
+        config: deployment.DiscoveryDeployment,
+        build_: controller.GpuSourceBuild,
+        permit: Mapping[str, Any], result: Any) -> Any:
+    """Install lease and source-build authority on both runner namespaces."""
+    decision = permit.get("load_admission")
+    if not isinstance(decision, Mapping):
+        raise DeploymentFactoryError(
+            "runner invocation lacks the sealed lease admission decision")
+    decision = dict(decision)
+    expected_admission = {
+        "load_admission_decision": decision,
+        "load_admission_policy_version": config.admission_policy.corpus.version,
+        "load_admission_policy_sha256": config.admission_policy.corpus.policy_sha256,
+        "load_admission_policy_file_sha256": config.admission_policy.corpus.file_sha256,
+        "load_admission_effective_context_sha256": decision.get(
+            "effective_context_sha256"),
+    }
+    target = getattr(result, "_target_runtime_args", None)
+    if target is None:
+        raise DeploymentFactoryError(
+            "runner arguments lack target-runtime graphs-on stage")
+    expected_build_identities = {
+        "anchor": dict(build_.anchor_identity.__dict__),
+        "candidate": dict(build_.candidate_identity.__dict__),
+    }
+    for current in (result, target):
+        for key, value in expected_admission.items():
+            existing = getattr(current, key, None)
+            if existing is not None and existing != value:
+                raise DeploymentFactoryError(
+                    f"runner arguments attempted to override {key}")
+            try:
+                setattr(current, key, value)
+            except (AttributeError, TypeError) as exc:
+                raise DeploymentFactoryError(
+                    "runner arguments cannot carry sealed load admission") from exc
+        for arm, identity in expected_build_identities.items():
+            if getattr(
+                    current,
+                    f"_sealed_{arm}_source_build_identity", None) != identity:
+                raise DeploymentFactoryError(
+                    "runner arguments changed sealed source build identity")
+        if (getattr(current, "factor", None) != "source_patch"
+                or str(getattr(current, "model", "")) != str(config.model.path)
+                or str(getattr(current, "anchor_build", "")) != str(build_.anchor_build)
+                or str(getattr(current, "candidate_build", "")) != str(build_.candidate_build)
+                or str(getattr(current, "measurement_binary", "")) != str(build_.measurement_binary)
+                or str(getattr(current, "common_loader_dir", "")) != str(build_.common_loader_dir)
+                or str(getattr(current, "anchor_loader_dir", "")) != str(build_.anchor_loader_dir)
+                or str(getattr(current, "candidate_loader_dir", "")) != str(build_.candidate_loader_dir)
+                or getattr(current, "promotion_claim", False) is not False
+                or str(getattr(current, "inference_window_lock", "")) != str(config.inference_window_lock)
+                or getattr(current, "load_admission_decision", None) != decision):
+            raise DeploymentFactoryError(
+                "runner arguments do not bind source builds/model/window/discovery authority")
+    return result
 
 
 def _static_registry(config: deployment.DiscoveryDeployment,
@@ -2639,42 +2712,7 @@ def materialize(config: deployment.DiscoveryDeployment, registry: Mapping[str, M
                 or build_.teardown_receipt is None or build_.teardown_sha256 is None):
             raise DeploymentFactoryError("source build lacks sealed runtime/materialization/teardown receipts")
         result = runner.build(candidate, build_, permit)
-        decision = permit.get("load_admission")
-        if not isinstance(decision, Mapping):
-            raise DeploymentFactoryError("runner invocation lacks the sealed lease admission decision")
-        decision = dict(decision)
-        expected_admission = {
-            "load_admission_decision": decision,
-            "load_admission_policy_version": config.admission_policy.corpus.version,
-            "load_admission_policy_sha256": config.admission_policy.corpus.policy_sha256,
-            "load_admission_policy_file_sha256": config.admission_policy.corpus.file_sha256,
-            "load_admission_effective_context_sha256": decision.get("effective_context_sha256"),
-        }
-        # A trusted static runner binding may construct an argparse.Namespace or
-        # another mutable typed args holder, but it never gets to choose the
-        # admission frame.  Refuse pre-filled mismatches and install the exact
-        # lease receipt for the runner's preflight validator.
-        for key, value in expected_admission.items():
-            existing = getattr(result, key, None)
-            if existing is not None and existing != value:
-                raise DeploymentFactoryError(f"runner arguments attempted to override {key}")
-            try:
-                setattr(result, key, value)
-            except (AttributeError, TypeError) as exc:
-                raise DeploymentFactoryError("runner arguments cannot carry sealed load admission") from exc
-        if (getattr(result, "factor", None) != "source_patch"
-                or str(getattr(result, "model", "")) != str(config.model.path)
-                or str(getattr(result, "anchor_build", "")) != str(build_.anchor_build)
-                or str(getattr(result, "candidate_build", "")) != str(build_.candidate_build)
-                or str(getattr(result, "measurement_binary", "")) != str(build_.measurement_binary)
-                or str(getattr(result, "common_loader_dir", "")) != str(build_.common_loader_dir)
-                or str(getattr(result, "anchor_loader_dir", "")) != str(build_.anchor_loader_dir)
-                or str(getattr(result, "candidate_loader_dir", "")) != str(build_.candidate_loader_dir)
-                or getattr(result, "promotion_claim", False) is not False
-                or str(getattr(result, "inference_window_lock", "")) != str(config.inference_window_lock)
-                or getattr(result, "load_admission_decision", None) != decision):
-            raise DeploymentFactoryError("runner arguments do not bind source builds/model/window/discovery authority")
-        return result
+        return _bind_runner_runtime_authority(config, build_, permit, result)
     screener = gpu_source_adapter.build_governed_gpu_source_adapter(
         operations_root=config.operations_root, build_source=build, plan_factory=plan,
         args_factory=args, correctness_executor=correctness_executor,

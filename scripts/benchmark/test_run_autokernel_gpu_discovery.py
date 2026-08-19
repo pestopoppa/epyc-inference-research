@@ -1,5 +1,6 @@
 from pathlib import Path
 import argparse
+import hashlib
 import json
 import tempfile
 import unittest
@@ -74,7 +75,97 @@ def _build(root: Path, *, rocwmma: str, mfma: str, graphs: str = "ON") -> Path:
     return build
 
 
+def _source_identity(build: Path, commit: str) -> dict[str, str]:
+    return {
+        "source_commit": commit,
+        "source_sha256": hashlib.sha256((commit + "-source").encode()).hexdigest(),
+        "binary_sha256": gpu.sha256_file(build / "bin/llama-bench"),
+        "hip_library_sha256": gpu.sha256_file(
+            (build / "bin/libggml-hip.so").resolve(strict=True)),
+        "config_sha256": gpu.sha256_file(build / "CMakeCache.txt"),
+        "linkage_sha256": hashlib.sha256((commit + "-linkage").encode()).hexdigest(),
+    }
+
+
 class TestGpuDiscoveryBuildIdentity(unittest.TestCase):
+    def test_cli_hydrates_exact_sealed_load_admission_frame(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            model = root / "model.gguf"; model.write_bytes(b"model")
+            profile = {
+                "profile_id": "mi210-test-v1", "model_path": str(model),
+                "model_sha256": gpu.sha256_file(model),
+                "model_bytes": model.stat().st_size,
+                "workload": "decode_tg128", "calls_per_arm": 9,
+                "device_id": gpu.DEVICE_ID,
+                "cold_load_host_bytes": model.stat().st_size,
+                "worst_case_loads_per_interval": 18,
+                "minimum_headroom_bytes_per_s": 1,
+                "telemetry_max_age_ms": 1000,
+                "evidence_sha256": "1" * 64,
+            }
+            examples = []
+            for identifier, polarity in (("positive", "positive"),
+                                         ("negative", "negative")):
+                examples.append({
+                    "id": identifier, "polarity": polarity,
+                    "facts": {"profile_id": profile["profile_id"],
+                              "state": identifier},
+                    "missing": [] if polarity == "positive" else ["telemetry"],
+                    "mode": ("cold_overlap" if polarity == "positive"
+                             else "cold_serialized"),
+                    "rationale": identifier,
+                    "disqualifiers": ([] if polarity == "positive"
+                                       else ["telemetry_missing"]),
+                    "counterfactual": "use exact facts",
+                    "evidence": ["sha256:" + ("2" if polarity == "positive"
+                                                else "3") * 64],
+                })
+            policy_body = {
+                "schema": gpu.gpu_load_admission.POLICY_SCHEMA,
+                "version": "test-v1", "profiles": [profile],
+                "examples": examples}
+            policy_body["policy_sha256"] = schemas.content_hash(policy_body)
+            policy = root / "policy.json"
+            policy.write_text(json.dumps(policy_body, sort_keys=True),
+                              encoding="utf-8")
+            policy_file_sha = gpu.sha256_file(policy)
+            corpus = gpu.gpu_load_admission.load_policy_corpus(
+                policy, expected_file_sha256=policy_file_sha)
+            effective = "4" * 64
+            request = gpu.gpu_load_admission.AdmissionRequest(
+                effective_context_sha256=effective,
+                model_path=str(model), model_sha256=gpu.sha256_file(model),
+                model_bytes=model.stat().st_size, workload="decode_tg128",
+                calls_per_arm=9, device_id=gpu.DEVICE_ID,
+                cold_load_host_bytes=model.stat().st_size,
+                worst_case_loads_per_interval=18,
+                telemetry_observed=False, telemetry_age_ms=None,
+                observed_headroom_bytes_per_s=None,
+                telemetry_receipt_sha256=None)
+            decision = gpu.gpu_load_admission.arbitrate(corpus, request).to_dict()
+            decision_path = root / "decision.json"
+            decision_path.write_text(json.dumps(decision, sort_keys=True),
+                                     encoding="utf-8")
+            argv = [
+                "--anchor-build", "/anchor", "--candidate-build", "/candidate",
+                "--model", str(model), "--output-dir", str(root / "output"),
+                "--campaign-id", "ak-cli-frame", "--workload", "decode_tg128",
+                "--calls", "9", "--load-admission-decision", str(decision_path),
+                "--load-admission-policy", str(policy),
+                "--load-admission-policy-sha256", policy_file_sha,
+                "--effective-context-sha256", effective]
+            hydrated = gpu._hydrate_cli_load_admission(
+                gpu.parser().parse_args(argv))
+            self.assertEqual(hydrated.load_admission_decision, decision)
+            self.assertEqual(hydrated.load_admission_policy_version,
+                             corpus.version)
+            self.assertEqual(hydrated.load_admission_policy_sha256,
+                             corpus.policy_sha256)
+            with self.assertRaisesRegex(RuntimeError, "CLI frame refused"):
+                gpu._hydrate_cli_load_admission(gpu.parser().parse_args([
+                    *argv[:-3], "0" * 64, *argv[-2:]]))
+
     def test_parser_and_preflight_preserve_sealed_arm_schedule(self) -> None:
         parsed = gpu.parser().parse_args([
             "--anchor-build", "/anchor", "--candidate-build", "/candidate",
@@ -122,12 +213,59 @@ class TestGpuDiscoveryBuildIdentity(unittest.TestCase):
                     common_loader_dir=str(anchor / "bin"), anchor_loader_dir=str(anchor / "bin"), candidate_loader_dir=str(candidate / "bin"),
                     device_id=gpu.DEVICE_ID,
                     inference_window_lock=None), mode="cold_overlap")
+                args._sealed_anchor_source_build_identity = _source_identity(
+                    anchor, gpu.READY_CONTINUE_INSTRUMENT_COMMIT)
+                args._sealed_candidate_source_build_identity = _source_identity(
+                    candidate, "b" * 40)
                 sealed = gpu.preflight(args)
             self.assertEqual(sealed["runtime_arms"]["measurement_binary_sha256"],
                              gpu.sha256_file(anchor / "bin" / "llama-bench"))
             self.assertNotEqual(sealed["runtime_arms"]["anchor_hip_sha256"],
                                 sealed["runtime_arms"]["candidate_hip_sha256"])
             self.assertTrue(sealed["timed_output_oracle"]["enabled"])
+
+    def test_source_patch_refuses_cli_identity_invention_and_live_drift(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            anchor = _build(root / "anchor", rocwmma="ON", mfma="OFF")
+            candidate = _build(root / "candidate", rocwmma="ON", mfma="OFF")
+            model = root / "model.gguf"; model.write_bytes(b"model")
+            for build, payload in ((anchor, b"anchor-hip"),
+                                   (candidate, b"candidate-hip")):
+                bindir = build / "bin"
+                (bindir / "libggml-hip.so").unlink()
+                versioned = bindir / "libggml-hip.so.0.16.0"
+                versioned.write_bytes(payload)
+                (bindir / "libggml-hip.so.0").symlink_to(versioned.name)
+                (bindir / "libggml-hip.so").symlink_to("libggml-hip.so.0")
+            args = _bind_admission(argparse.Namespace(
+                model=str(model), anchor_build=str(anchor),
+                candidate_build=str(candidate), factor="source_patch",
+                campaign_id="gpu-source-refusal", calls=3,
+                workload="prefill_pp512",
+                measurement_binary=str(anchor / "bin/llama-bench"),
+                common_loader_dir=str(anchor / "bin"),
+                anchor_loader_dir=str(anchor / "bin"),
+                candidate_loader_dir=str(candidate / "bin"),
+                device_id=gpu.DEVICE_ID, inference_window_lock=None),
+                mode="cold_overlap")
+            with self.assertRaisesRegex(RuntimeError, "sealed builder identity"):
+                gpu.preflight(args)
+            args._sealed_anchor_source_build_identity = _source_identity(
+                anchor, gpu.READY_CONTINUE_INSTRUMENT_COMMIT)
+            args._sealed_candidate_source_build_identity = _source_identity(
+                candidate, "b" * 40)
+            (candidate / "CMakeCache.txt").write_text(
+                "GGML_HIP_ROCWMMA_FATTN:BOOL=ON\n"
+                "GGML_HIP_MMQ_MFMA:BOOL=OFF\n"
+                "GGML_HIP_GRAPHS:BOOL=ON\n# drift\n", encoding="utf-8")
+            with self.assertRaisesRegex(RuntimeError, "live artifact differs"):
+                gpu.preflight(args)
+            parser_options = {
+                option for action in gpu.parser()._actions
+                for option in action.option_strings}
+            self.assertFalse(any("source-build-identity" in option
+                                 for option in parser_options))
 
     def test_preflight_records_cold_serialization_for_over_budget_cadence(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -332,6 +332,167 @@ class DeploymentFactoryTests(unittest.TestCase):
         self.assertEqual(second.split(","), list(reversed(first.split(","))))
         self.assertEqual(len(first_seed), 64)
 
+    def test_all_four_portfolio_strategies_materialize_exact_runner_cli(self):
+        """Every live strategy must parse and preflight both runner stages."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            model = root / "model.gguf"; model.write_bytes(b"model")
+            def make_build(name, hip_bytes):
+                build_root = root / name
+                bindir = build_root / "bin"; bindir.mkdir(parents=True)
+                cache = build_root / "CMakeCache.txt"
+                cache.write_text(
+                    "GGML_HIP_GRAPHS:BOOL=ON\n"
+                    "GGML_HIP_ROCWMMA_FATTN:BOOL=ON\n"
+                    "GGML_HIP_MMQ_MFMA:BOOL=OFF\n", encoding="utf-8")
+                binary = bindir / "llama-bench"
+                binary.write_bytes(b"shared-binary"); binary.chmod(0o755)
+                versioned = bindir / "libggml-hip.so.0.16.0"
+                versioned.write_bytes(hip_bytes)
+                (bindir / "libggml-hip.so.0").symlink_to(versioned.name)
+                (bindir / "libggml-hip.so").symlink_to("libggml-hip.so.0")
+                return build_root
+            anchor_build = make_build("anchor-build", b"anchor-hip")
+            candidate_build = make_build("candidate-build", b"candidate-hip")
+            policy_path = root / "admission-policy.json"
+            policy_path.write_text("{}\n", encoding="utf-8")
+            corpus = SimpleNamespace(
+                version="test-v1", policy_sha256="a" * 64,
+                file_sha256=hashlib.sha256(
+                    policy_path.read_bytes()).hexdigest())
+            config = SimpleNamespace(
+                operations_root=root / "operations",
+                config_sha256="b" * 64,
+                admission_policy=SimpleNamespace(
+                    corpus=corpus,
+                    input=SimpleNamespace(
+                        path=policy_path,
+                        sha256=corpus.file_sha256)),
+                planner_context=SimpleNamespace(
+                    value={"context_sha256": "c" * 64}),
+                model=SimpleNamespace(path=model),
+                inference_window_lock=root / "model-call.lock",
+                device_id="mi210_0")
+            def identity(build_root, commit):
+                return C.gpu_source_proofs.BuildIdentity(
+                    source_commit=commit,
+                    source_sha256=hashlib.sha256(
+                        (commit + "-source").encode()).hexdigest(),
+                    binary_sha256=hashlib.sha256(b"shared-binary").hexdigest(),
+                    hip_library_sha256=hashlib.sha256(
+                        (build_root / "bin/libggml-hip.so").resolve().read_bytes()
+                    ).hexdigest(),
+                    config_sha256=hashlib.sha256(
+                        (build_root / "CMakeCache.txt").read_bytes()).hexdigest(),
+                    linkage_sha256=hashlib.sha256(
+                        (commit + "-linkage").encode()).hexdigest())
+            build = SimpleNamespace(
+                operation_key="d" * 64,
+                anchor_build=anchor_build,
+                candidate_build=candidate_build,
+                measurement_binary=anchor_build / "bin/llama-bench",
+                common_loader_dir=anchor_build / "bin",
+                anchor_loader_dir=anchor_build / "bin",
+                candidate_loader_dir=candidate_build / "bin",
+                anchor_identity=identity(
+                    anchor_build, F.controller.gpu_discovery.READY_CONTINUE_INSTRUMENT_COMMIT),
+                candidate_identity=identity(candidate_build, "6" * 40))
+            effective = F.schemas.content_hash({
+                "planner_context_sha256": "c" * 64,
+                "admission_policy_sha256": corpus.policy_sha256,
+                "admission_policy_version": corpus.version})
+            decision = {
+                "effective_context_sha256": effective,
+                "mode": "cold_serialized",
+                "request": {
+                    "model_path": str(model),
+                    "model_sha256": hashlib.sha256(model.read_bytes()).hexdigest(),
+                    "model_bytes": model.stat().st_size,
+                    "workload": "decode_tg128", "calls_per_arm": 9,
+                    "device_id": "mi210_0"}}
+            binding = F._runner_binding(config)
+            for index, (hypothesis_id, _template, _op, _cases) in enumerate((
+                    ("akh-v2-q5-type-specific-dequant", "cuda-vecdotq-v1", "MUL_MAT", 1139),
+                    ("akh-v2-q8-quantizer-new-mechanism", "cuda-quantize-q8-v1", "MUL_MAT", 1139),
+                    ("akh-v2-fa-gqa7-pair-tail", "cuda-fattn-tile-v1", "FLASH_ATTN_EXT", 2868),
+                    ("akh-v2-rms-direct-load-reduction", "cuda-norm-v2", "RMS_NORM", 21),
+            ), start=1):
+                candidate = SimpleNamespace(
+                    hypothesis_id=hypothesis_id,
+                    source_manifest_sha256=f"{index}" * 64)
+                with mock.patch.object(
+                        F.gpu_load_admission, "validate_decision_receipt"):
+                    args = binding.build(candidate, build, {
+                        "operation_key": build.operation_key,
+                        "repetition": 1,
+                        "load_admission": decision})
+                args = F._bind_runner_runtime_authority(
+                    config, build, {"load_admission": decision}, args)
+                target = args._target_runtime_args
+                self.assertEqual((args.runtime_graphs, target.runtime_graphs),
+                                 ("off", "on"))
+                self.assertEqual(args.load_admission_decision_path,
+                                 str(root / "operations" / build.operation_key /
+                                     "runner/s1/load-admission-decision.json"))
+                self.assertEqual(args.load_admission_policy_path,
+                                 str(policy_path))
+                self.assertEqual(args.load_admission_policy_file_sha256,
+                                 corpus.file_sha256)
+                self.assertEqual(args.load_admission_effective_context_sha256,
+                                 decision["effective_context_sha256"])
+                self.assertEqual(
+                    args._sealed_candidate_source_build_identity,
+                    build.candidate_identity.__dict__)
+                self.assertEqual(
+                    target._sealed_anchor_source_build_identity,
+                    build.anchor_identity.__dict__)
+                with mock.patch.object(
+                        F.controller.gpu_discovery.gpu_load_admission,
+                        "validate_decision_receipt"):
+                    off = F.controller.gpu_discovery.preflight(args)
+                    on = F.controller.gpu_discovery.preflight(target)
+                self.assertEqual((off["runtime_graphs"], on["runtime_graphs"]),
+                                 ("off", "on"))
+                self.assertNotEqual(
+                    off["anchor_identity"]["source_commit"],
+                    off["candidate_identity"]["source_commit"])
+
+    def test_argparse_nonzero_is_an_ordinary_resumable_operation_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            config = SimpleNamespace(
+                operations_root=root / "operations", config_sha256="a" * 64,
+                admission_policy=SimpleNamespace(
+                    corpus=SimpleNamespace(
+                        version="test-v1", policy_sha256="b" * 64,
+                        file_sha256="c" * 64),
+                    input=SimpleNamespace(
+                        path=root / "policy.json", sha256="c" * 64)),
+                planner_context=SimpleNamespace(
+                    value={"context_sha256": "d" * 64}),
+                model=SimpleNamespace(path=root / "model"),
+                inference_window_lock=root / "lock", device_id="mi210_0")
+            binding = F._runner_binding(config)
+            parser = mock.Mock()
+            parser.parse_args.side_effect = SystemExit(2)
+            with mock.patch.object(F.gpu_load_admission,
+                                   "validate_decision_receipt"), \
+                    mock.patch.object(F.controller.gpu_discovery, "parser",
+                                      return_value=parser), self.assertRaisesRegex(
+                        C.ResumableScreenInterruption,
+                        "parser refused with exit 2"):
+                binding.build(
+                    SimpleNamespace(source_manifest_sha256="e" * 64),
+                    SimpleNamespace(
+                        operation_key="f" * 64, anchor_build=root / "anchor",
+                        candidate_build=root / "candidate",
+                        measurement_binary=root / "bench",
+                        common_loader_dir=root / "common",
+                        anchor_loader_dir=root / "anchor-lib",
+                        candidate_loader_dir=root / "candidate-lib"),
+                    {"operation_key": "f" * 64, "repetition": 1,
+                     "load_admission": {"effective_context_sha256": "0" * 64}})
+
     def static_config(self, root: Path):
         production = root / "production"
         (production / "ggml/src/ggml-cuda").mkdir(parents=True)

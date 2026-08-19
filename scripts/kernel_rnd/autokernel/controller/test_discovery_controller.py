@@ -794,6 +794,21 @@ class Tests(unittest.TestCase):
   with tempfile.TemporaryDirectory() as t, patch.object(D.source_candidate,"SourcePatchManifest",Manifest), patch.object(D,"_write_projection"):
    root=Path(t); p=FakePlanner(); r=D.run_controller(self.cfg(root,1),planner=p,critic=FakeCritic(["accept"]),screener=Bad([]),lease=Lease()); again=D.run_controller(self.cfg(root,1),planner=p,critic=FakeCritic(["accept"]),screener=Bad([]),lease=Lease())
    self.assertEqual(r["iterations"][0]["status"],"screen_refused"); self.assertEqual(again,r); self.assertEqual(len(p.calls),1)
+ def test_post_proof_transport_interruption_pauses_and_resumes_same_candidate(self):
+  class Interrupted(FakeScreen):
+   def screen(self,*args):
+    self.calls+=1
+    if self.calls==1:
+     raise D.ResumableScreenInterruption("runner parser exit 2")
+    return D.SealedScreen("receipt",H[:-1]+"1",.01,"candidate",H,H,H)
+  with tempfile.TemporaryDirectory() as t, patch.object(D.source_candidate,"SourcePatchManifest",Manifest), patch.object(D,"_write_projection"):
+   root=Path(t); planner=FakePlanner(); critic=FakeCritic(["accept"]); screen=Interrupted([])
+   first=D.run_controller(self.cfg(root,1),planner=planner,critic=critic,screener=screen,lease=Lease())
+   self.assertEqual(first["next"],1); self.assertEqual(first["iterations"],[])
+   self.assertTrue(first["inflight"]["interruption"]["resumable"])
+   second=D.run_controller(self.cfg(root,1),planner=planner,critic=critic,screener=screen,lease=Lease())
+   self.assertEqual(second["iterations"][0]["status"],"candidate")
+   self.assertEqual(len(planner.calls),1); self.assertEqual(screen.calls,2)
  def test_planner_result_field_is_impossible(self):
   with patch.object(D.source_candidate,"SourcePatchManifest",Manifest):
    with self.assertRaisesRegex(D.DiscoveryControllerError,"result"):

@@ -257,7 +257,8 @@ def _is_resumable_stage_root(root: Path, identity: Mapping[str, Any]) -> bool:
     or API reloads.
     """
     allowed_root = {
-        "intent.json", "source-manifest.json", "resource-waits", "proof",
+        "intent.json", "source-manifest.json", "evidence-policy.json",
+        "resource-waits", "proof",
         "runner-plan.json", "runner",
         "reservation-release.json", "reservation-releases",
     }
@@ -343,6 +344,37 @@ def _is_resumable_stage_root(root: Path, identity: Mapping[str, Any]) -> bool:
 
         runner_plan = root / "runner-plan.json"
         runner_root = root / "runner"
+        if (runner_root.exists() or runner_root.is_symlink()) \
+                and not (runner_plan.exists() or runner_plan.is_symlink()):
+            # The sealed deployment writes its admission carrier immediately
+            # before parsing the two runner namespaces.  A parser/process stop
+            # may therefore leave this exact pre-plan tree after proof.  It is
+            # safe to retry because args_factory revalidates these bytes before
+            # it can seal a runner plan or start a process.
+            if (not bundle.is_file() or bundle.is_symlink()
+                    or runner_root.is_symlink() or not runner_root.is_dir()):
+                return False
+            entries = tuple(runner_root.iterdir())
+            if len(entries) != 1 or entries[0].is_symlink() \
+                    or not entries[0].is_dir() \
+                    or entries[0].name not in {"s1", "s2"}:
+                return False
+            carriers = tuple(entries[0].iterdir())
+            if (len(carriers) != 1
+                    or carriers[0].name != "load-admission-decision.json"
+                    or carriers[0].is_symlink() or not carriers[0].is_file()):
+                return False
+            try:
+                loaded = json.loads(carriers[0].read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                return False
+            native = loaded.get("decision_sha256") if isinstance(loaded, dict) else None
+            if (not isinstance(native, str) or not SHA.fullmatch(native)
+                    or schemas.content_hash({
+                        key: value for key, value in loaded.items()
+                        if key != "decision_sha256"}) != native):
+                return False
+            return True
         if (runner_plan.exists() or runner_plan.is_symlink()
                 or runner_root.exists() or runner_root.is_symlink()):
             if not bundle.is_file() or bundle.is_symlink():

@@ -112,6 +112,15 @@ class PostBuildEvidencePlanRefusal(PrecomputeScreenRefusal):
     """
 
 
+class ResumableScreenInterruption(DiscoveryControllerError):
+    """A pre-run transport failure after durable proof was checkpointed.
+
+    The current candidate and its scientific proof remain inflight.  The
+    controller pauses without consuming an iteration so a corrected/reloaded
+    runner can resume at the first incomplete stage.
+    """
+
+
 class ResourceWait(DiscoveryControllerError):
     """A durable pre-executor refusal caused only by resource contention."""
 
@@ -2483,6 +2492,13 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                 store.save(state,"pre_screen_reacquired")
                 try:
                     result=screener.screen(item,authorization,permit)
+                except ResumableScreenInterruption as exc:
+                    inflight["interruption"] = {
+                        "type": type(exc).__name__, "message": str(exc),
+                        "resumable": True,
+                    }
+                    store.save(state, "screen_resumable_interruption")
+                    return state
                 except ResourceWait as exc:
                     wait_receipt=_validated_resource_wait(
                         exc,str(inflight["operation_key"]))
@@ -2755,6 +2771,13 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
             state["inflight"]={"operation_key":operation_key,"row":row,"candidate":_pending_item(item),"authorization":authorization.to_dict(),"lease":dict(permit),"confirmation":bool(pending and pending.get("confirmation")),"parent_authorization":pending.get("parent_authorization") if pending else None}
             store.save(state,"pre_screen_intent")
             try: result=screener.screen(item,authorization,permit)
+            except ResumableScreenInterruption as exc:
+                state["inflight"]["interruption"] = {
+                    "type": type(exc).__name__, "message": str(exc),
+                    "resumable": True,
+                }
+                store.save(state, "screen_resumable_interruption")
+                break
             except ResourceWait as exc:
                 wait_receipt=_validated_resource_wait(exc,operation_key)
                 _require_safe_resource_wait_recovery(screener,state["inflight"])
