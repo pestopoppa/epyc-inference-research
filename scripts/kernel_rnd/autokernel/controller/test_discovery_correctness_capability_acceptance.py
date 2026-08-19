@@ -280,7 +280,10 @@ class V8DeterministicCorrectnessCapabilityAcceptance(unittest.TestCase):
         # postbuild confirmation that the target actually compiled it.
         with tempfile.TemporaryDirectory() as temporary:
             config = replace(self.config,
-                             state_root=(Path(temporary).resolve() / "state"))
+                             state_root=(Path(temporary).resolve() / "state"),
+                             instrument_path=F._INSTRUMENT_PATH,
+                             instrument_branch=F._INSTRUMENT_BRANCH,
+                             instrument_commit=F._INSTRUMENT_COMMIT)
             path, digest = F._instrument_review_receipt(config)
             self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), digest)
             receipt = json.loads(path.read_text(encoding="utf-8"))
