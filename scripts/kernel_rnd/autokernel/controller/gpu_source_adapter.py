@@ -394,15 +394,6 @@ def _is_resumable_stage_root(
                         "device_id") != expected_device
                         for body in releases.values())):
                 return False
-            probe = lease.get("device_claim_probe_open")
-            expected_campaign = (probe.get("campaign_id")
-                                 if isinstance(probe, Mapping) else None)
-            if (expected_campaign is not None
-                    and (not isinstance(expected_campaign, str)
-                         or any(body.get("device_claim_released", {}).get(
-                             "campaign_id") != expected_campaign
-                             for body in releases.values()))):
-                return False
             correctness_body = gpu_source_proofs.load_receipt(
                 Path(str(loaded_bundle.correctness["path"])),
                 schema=evidence.CORRECTNESS_SCHEMA)["body"]
@@ -416,10 +407,41 @@ def _is_resumable_stage_root(
                         or not isinstance(reference.get("body"), Mapping)):
                     return False
                 proof_bodies.append(reference["body"])
-            proof_claims = {
-                body.get("device_claim_open", {}).get("claim_id")
-                for body in proof_bodies}
-            if (None in proof_claims or not proof_claims.issubset(releases)):
+            opened_claims = []
+            for body in proof_bodies:
+                try:
+                    opened = device_claim.ClaimReceipt.from_dict(
+                        body.get("device_claim_open"))
+                except (TypeError, ValueError):
+                    return False
+                phase_end = body.get("device_claim_borrowed_phase_end")
+                if (opened.released_at is not None
+                        or body.get("device_claim_mode") !=
+                        "borrowed_outer_reservation"
+                        or not isinstance(phase_end, Mapping)
+                        or phase_end.get("outer_claim_id") != opened.claim_id
+                        or phase_end.get("physical_release") is not False):
+                    return False
+                opened_claims.append(opened)
+            canonical_open = opened_claims[0].to_dict()
+            if any(opened.to_dict() != canonical_open
+                   for opened in opened_claims[1:]):
+                return False
+            release_body = releases.get(opened_claims[0].claim_id)
+            if not isinstance(release_body, Mapping):
+                return False
+            try:
+                released = device_claim.ClaimReceipt.from_dict(
+                    release_body.get("device_claim_released"))
+            except (TypeError, ValueError):
+                return False
+            # The release must be the exact physical terminal of the claim
+            # sealed into every completed proof stage.  This binds campaign,
+            # device, holder PID/start ticks, boot ID, lock, acquisition and
+            # expiry—not merely a mutable probe campaign or a claim-id string.
+            if (released.released_at is None
+                    or replace(released, released_at=None).to_dict()
+                    != canonical_open):
                 return False
             return True
         if (runner_plan.exists() or runner_plan.is_symlink()

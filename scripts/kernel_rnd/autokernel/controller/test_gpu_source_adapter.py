@@ -308,7 +308,8 @@ class GpuSourceAdapterTests(unittest.TestCase):
             for field, value in (
                     ("device_id", "wrong-device"),
                     ("campaign_id", "wrong-campaign"),
-                    ("claim_id", "akd-wrong-claim")):
+                    ("claim_id", "akd-wrong-claim"),
+                    ("holder_start_ticks", 999999)):
                 release = A._read_json(release_path, "release")
                 release["device_claim_released"][field] = value
                 release.pop("receipt_sha256")
@@ -317,6 +318,18 @@ class GpuSourceAdapterTests(unittest.TestCase):
                                         encoding="utf-8")
                 self.assertEqual(adapter.reconcile(inflight).status, "ambiguous")
                 release_path.write_bytes(original_release)
+            release = A._read_json(release_path, "release")
+            release["device_claim_released"]["campaign_id"] = "ak-coordinated-wrong"
+            release.pop("receipt_sha256")
+            release["receipt_sha256"] = schemas.content_hash(release)
+            release_path.write_text(json.dumps(release, sort_keys=True),
+                                    encoding="utf-8")
+            lease["device_claim_probe_open"]["campaign_id"] = \
+                "ak-coordinated-wrong"
+            self.assertEqual(adapter.reconcile(inflight).status, "ambiguous")
+            lease["device_claim_probe_open"]["campaign_id"] = \
+                "ak-gpu-source-evidence-test"
+            release_path.write_bytes(original_release)
             release_path.unlink()
             self.assertEqual(adapter.reconcile(inflight).status, "ambiguous")
             release_path.write_bytes(original_release)
