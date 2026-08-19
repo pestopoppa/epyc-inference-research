@@ -584,3 +584,36 @@ def test_main_pins_capture_schema_and_runner_source_hash(tmp_path, monkeypatch):
     meta = json.loads(out.read_text())["meta"]
     assert meta["capture_schema_version"] == runner.CAPTURE_SCHEMA_VERSION
     assert meta["runner_source_sha256"] == runner.RUNNER_SOURCE_SHA256
+
+
+def test_effective_request_records_what_was_sent_not_what_was_asked(monkeypatch):
+    """The completion path pins top_k=1 (greedy) and drops top_p/enable_thinking.
+
+    Recording the REQUESTED sampling as if it had been applied is a false
+    attestation. Origin: swebench_oracle 2026-08-15, where a 40-row chat
+    capture was merged with a 3-row completion regen and nothing in the row
+    schema recorded which protocol produced which row.
+    """
+    def fake_urlopen(req, timeout):  # noqa: ANN001, ARG001
+        return _FakeResponse({"choices": [{"text": "D"}],
+                              "usage": {"completion_tokens": 1, "prompt_tokens": 2}})
+    monkeypatch.setattr(runner.urllib.request, "urlopen", fake_urlopen)
+
+    comp = runner.query_server_meta(
+        "http://127.0.0.1:18072", "prompt", endpoint="completion",
+        temperature=0.6, top_p=0.95, top_k=20, enable_thinking=False)["effective"]
+    assert comp["endpoint"] == "completion"
+    assert comp["request_path"] == "/v1/completions"
+    assert comp["top_k"] == 1, "completion path is greedy; top_k=20 was NOT applied"
+    assert comp["top_p"] is None, "top_p is never sent on the completion path"
+    assert comp["enable_thinking"] is None
+    assert comp["greedy"] is True
+
+    chat = runner.query_server_meta(
+        "http://127.0.0.1:18072", "prompt", endpoint="chat",
+        temperature=0.6, top_p=0.95, top_k=20, enable_thinking=False)["effective"]
+    assert chat["endpoint"] == "chat"
+    assert chat["request_path"] == "/v1/chat/completions"
+    assert chat["top_k"] == 20 and chat["top_p"] == 0.95
+    assert chat["enable_thinking"] is False
+    assert chat.get("greedy") is not True

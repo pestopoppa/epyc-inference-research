@@ -286,6 +286,9 @@ def query_server_meta(
             # enable_thinking is only honoured on the /v1/chat/completions path.
             payload["chat_template_kwargs"] = {"enable_thinking": enable_thinking}
         request_path = "/v1/chat/completions"
+        effective = {"endpoint": "chat", "request_path": request_path,
+                     "temperature": temperature, "top_p": top_p, "top_k": top_k,
+                     "enable_thinking": enable_thinking}
     elif endpoint == "completion":
         payload = {
             "model": "",
@@ -297,6 +300,12 @@ def query_server_meta(
             "logprobs": 0,
         }
         request_path = "/v1/completions"
+        # The completion path pins top_k=1: this draw is GREEDY, and top_p /
+        # enable_thinking are never sent. Recording the requested values here
+        # would attest to sampling that did not happen.
+        effective = {"endpoint": "completion", "request_path": request_path,
+                     "temperature": temperature, "top_p": None, "top_k": 1,
+                     "enable_thinking": None, "greedy": True}
     else:
         raise ValueError(f"unsupported endpoint: {endpoint}")
 
@@ -312,7 +321,7 @@ def query_server_meta(
             choices = result.get("choices", [])
             if not choices:
                 return {"text": "", "reasoning": "", "finish_reason": "no_choices",
-                        "completion_tokens": 0, "error": ""}
+                        "completion_tokens": 0, "error": "", "effective": effective}
             choice = choices[0]
             if endpoint == "chat":
                 message = choice.get("message", {})
@@ -340,11 +349,13 @@ def query_server_meta(
                 "decode_tok_s": timings.get("predicted_per_second", 0.0),
                 "prompt_tok_s": timings.get("prompt_per_second", 0.0),
                 "error": "",
+                "effective": effective,
             }
     except Exception as e:
         print(f"  [runner] query failed: {e}", file=sys.stderr)
         return {"text": "", "reasoning": "", "finish_reason": "request_error",
-                "completion_tokens": 0, "error": str(e)[:300]}
+                "completion_tokens": 0, "error": str(e)[:300],
+                "effective": locals().get("effective")}
 
 
 # Canonical scoring primitives live in answer_scoring (single source; see
@@ -686,6 +697,7 @@ def run_suite(
                     "capture_schema_version": CAPTURE_SCHEMA_VERSION,
                     "runner_source_sha256": RUNNER_SOURCE_SHA256,
                     "rep": rep, "seed": rep_seed, "expected": expected,
+                    "effective_request": meta.get("effective"),
                     "extracted": got, "correct": bool(is_correct),
                     "empty_response": not response,
                     "finish_reason": meta.get("finish_reason", ""),
@@ -937,10 +949,15 @@ def main() -> int:
             "seed": args.seed,
             "stratify": args.stratify,
             "endpoint": args.endpoint,
+            # REQUESTED values. The completion path pins top_k=1 (greedy) and
+            # never sends top_p / enable_thinking, so these are what was ASKED
+            # FOR, not necessarily what was applied. The authority for what was
+            # actually sent is `effective_request` on each per-question row.
             "temperature": args.temperature,
             "top_p": args.top_p,
             "top_k": args.top_k,
             "enable_thinking": args.enable_thinking,
+            "sampling_fields_are_requested_not_effective": True,
             "repeats": args.repeats,
             "max_tokens": args.max_tokens,
             "questions_pinned": str(questions_in) if questions_in else "",
