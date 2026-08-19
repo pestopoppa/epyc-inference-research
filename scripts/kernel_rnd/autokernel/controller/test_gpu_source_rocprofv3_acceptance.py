@@ -458,6 +458,152 @@ class RocprofV3GovernedMapsAcceptance(unittest.TestCase):
                         required_mapped_files=required)
 
 
+class RocprofV3RawClosureAcceptance(unittest.TestCase):
+    REAL_V14_RAW = Path(
+        "/mnt/raid0/llm/autokernel/deployments/"
+        "gpu-discovery-quant-ladder-occupancy-v14/operations/"
+        "0846800a4806aeb98cc3d5ce60fcf2b2426264cb8afc8f8818a142302c7efda8/"
+        "proof/attribution-candidate/attempt-01/raw")
+
+    @staticmethod
+    def invocation(raw: Path) -> E.CommandInvocation:
+        return E.CommandInvocation(
+            kind="rocprof", arm="candidate", argv=("rocprofv3",),
+            stdout_path=raw / "stdout.txt",
+            stderr_path=raw / "stderr.txt",
+            timestamp_csv_path=raw / "trace_kernel_trace.csv",
+            working_directory=raw.parent.resolve(strict=True),
+            environment=(("LD_LIBRARY_PATH", "/opt/rocm/lib"),))
+
+    @staticmethod
+    def synthetic_raw(root: Path) -> Path:
+        raw = root / "raw"
+        raw.mkdir(parents=True)
+        (raw / ".rocprofv3").mkdir()
+        (raw / "stdout.txt").write_bytes(b"[{\"n_gen\": 128}]\n")
+        (raw / "stderr.txt").write_bytes(b"")
+        (raw / "trace_kernel_trace.csv").write_bytes(b"header\nrow\n")
+        (raw / "trace_agent_info.csv").write_bytes(b"header\nagent\n")
+        return raw
+
+    def test_exact_v14_raw_closure_seals_and_reopens_without_mutation(self) -> None:
+        raw = self.REAL_V14_RAW.resolve(strict=True)
+        self.assertEqual(set(path.name for path in raw.iterdir()), {
+            ".rocprofv3", "stdout.txt", "stderr.txt",
+            "trace_kernel_trace.csv", "trace_agent_info.csv"})
+        self.assertEqual(list((raw / ".rocprofv3").iterdir()), [])
+        invocation = self.invocation(raw)
+        sealed = E._rocprofv3_raw_artifacts(invocation)
+        reopened = E._rocprofv3_raw_artifacts(invocation)
+        self.assertEqual(sealed, reopened)
+        self.assertEqual(len(sealed), 5)
+        bookkeeping = sealed[0]
+        self.assertEqual(bookkeeping["name"], ".rocprofv3")
+        self.assertEqual(bookkeeping["kind"],
+                         "profiler_bookkeeping_directory")
+        self.assertFalse(bookkeeping["scientific_evidence"])
+        self.assertEqual(bookkeeping["mode"], "0755")
+        self.assertEqual(bookkeeping["links"], 2)
+        self.assertEqual(bookkeeping["entries"], 0)
+        self.assertEqual(
+            bookkeeping["metadata_sha256"],
+            E.schemas.content_hash({
+                key: value for key, value in bookkeeping.items()
+                if key != "metadata_sha256"}))
+        self.assertEqual({
+            row["name"]: row["sha256"] for row in sealed
+            if row["kind"] == "regular_file"}, {
+            "stdout.txt":
+                "e2afec30810f5c47cc6150d9f40f9553eed0fbdb25fa80d4eac3335d2992280e",
+            "stderr.txt":
+                "7bd641d8844ab4a2c46754ef9a8b8b55e7ad28a27533a653806b19bdda86afec",
+            "trace_agent_info.csv":
+                "50189a58f15ffb0008e840a8a6d18db1a88f73e3492b686b167d773de6b9323e",
+            "trace_kernel_trace.csv":
+                "e1012fbd79f638d8ca39ecf7f92deb7755e846db3b8a3487683f9a733164497e",
+        })
+
+    def test_raw_closure_refuses_every_unreviewed_topology(self) -> None:
+        mutations = (
+            "missing_metadata", "metadata_file", "metadata_symlink_escape",
+            "metadata_file_content", "metadata_directory_content",
+            "metadata_fifo", "metadata_writable", "metadata_mount",
+            "extra_file", "extra_directory", "stdout_symlink_escape",
+            "stdout_hardlink", "stderr_fifo",
+        )
+        for mutation in mutations:
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary).resolve()
+                raw = self.synthetic_raw(root)
+                metadata = raw / ".rocprofv3"
+                outside = root / "outside"
+                if mutation == "missing_metadata":
+                    metadata.rmdir()
+                elif mutation == "metadata_file":
+                    metadata.rmdir(); metadata.write_bytes(b"")
+                elif mutation == "metadata_symlink_escape":
+                    metadata.rmdir(); outside.mkdir()
+                    metadata.symlink_to(outside, target_is_directory=True)
+                elif mutation == "metadata_file_content":
+                    (metadata / "state.json").write_bytes(b"{}")
+                elif mutation == "metadata_directory_content":
+                    (metadata / "nested").mkdir()
+                elif mutation == "metadata_fifo":
+                    metadata.rmdir(); os.mkfifo(metadata)
+                elif mutation == "metadata_writable":
+                    metadata.chmod(0o777)
+                elif mutation == "metadata_mount":
+                    with mock.patch.object(E.os.path, "ismount", return_value=True):
+                        with self.assertRaises(E.EvidenceProducerError):
+                            E._rocprofv3_raw_artifacts(self.invocation(raw))
+                    continue
+                elif mutation == "extra_file":
+                    (raw / "extra.txt").write_bytes(b"extra")
+                elif mutation == "extra_directory":
+                    (raw / "extra").mkdir()
+                elif mutation == "stdout_symlink_escape":
+                    (raw / "stdout.txt").unlink(); outside.write_bytes(b"stdout")
+                    (raw / "stdout.txt").symlink_to(outside)
+                elif mutation == "stdout_hardlink":
+                    os.link(raw / "stdout.txt", outside)
+                elif mutation == "stderr_fifo":
+                    (raw / "stderr.txt").unlink(); os.mkfifo(raw / "stderr.txt")
+                with self.assertRaises(E.EvidenceProducerError):
+                    E._rocprofv3_raw_artifacts(self.invocation(raw))
+
+    def test_raw_root_symlink_escape_and_reopen_byte_mutation_refuse(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            real = self.synthetic_raw(root / "real-parent")
+            escaped = root / "escaped-parent"; escaped.mkdir()
+            link = escaped / "raw"; link.symlink_to(real, target_is_directory=True)
+            with self.assertRaisesRegex(
+                    E.EvidenceProducerError, "real contained path"):
+                E._rocprofv3_raw_artifacts(self.invocation(link))
+
+        with tempfile.TemporaryDirectory() as temporary:
+            raw = self.synthetic_raw(Path(temporary).resolve())
+            invocation = self.invocation(raw)
+            sealed = E._rocprofv3_raw_artifacts(invocation)
+            (raw / "stdout.txt").write_bytes(b"mutated after receipt sealing")
+            with self.assertRaisesRegex(
+                    E.EvidenceProducerError, "changed after sealing"):
+                E._revalidate_rocprofv3_raw_artifacts(invocation, sealed)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            raw = self.synthetic_raw(root)
+            invocation = self.invocation(raw)
+            sealed = E._rocprofv3_raw_artifacts(invocation)
+            original = raw / ".rocprofv3"
+            retained = root / "retained-original-metadata"
+            original.rename(retained)
+            original.mkdir()
+            with self.assertRaisesRegex(
+                    E.EvidenceProducerError, "changed after sealing"):
+                E._revalidate_rocprofv3_raw_artifacts(invocation, sealed)
+
+
 class RocprofV3FactoryAcceptance(unittest.TestCase):
     def test_factory_builds_only_the_exact_v3_plan_without_hardware(self):
         with tempfile.TemporaryDirectory() as raw:

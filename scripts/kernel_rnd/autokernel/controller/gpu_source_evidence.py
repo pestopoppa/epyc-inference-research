@@ -17,6 +17,7 @@ import math
 import os
 from pathlib import Path
 import re
+import stat
 import subprocess
 import time
 from datetime import datetime, timezone
@@ -2326,25 +2327,145 @@ def _profiler_attempt_expected_outcome(exit_code: int) -> tuple[str, bool]:
 def _rocprofv3_raw_artifacts(invocation: CommandInvocation) -> list[dict[str, Any]]:
     assert invocation.timestamp_csv_path is not None
     raw = invocation.timestamp_csv_path.parent
+    if not invocation.timestamp_csv_path.name.endswith("_kernel_trace.csv"):
+        raise EvidenceProducerError("rocprofv3 timestamp output name changed")
     basename = invocation.timestamp_csv_path.name[:-len("_kernel_trace.csv")]
-    expected = {
-        invocation.stdout_path.name, invocation.stderr_path.name,
-        invocation.timestamp_csv_path.name, f"{basename}_agent_info.csv"}
+    expected_paths = (
+        invocation.stdout_path, invocation.stderr_path,
+        invocation.timestamp_csv_path, raw / f"{basename}_agent_info.csv")
+    if (any(path.parent != raw for path in expected_paths)
+            or len({path.name for path in expected_paths}) != 4):
+        raise EvidenceProducerError(
+            "rocprofv3 raw output members must share one exact directory")
+    expected_files = {path.name for path in expected_paths}
+    metadata_name = ".rocprofv3"
+    expected_entries = expected_files | {metadata_name}
+    directory_flags = (os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
+                       | getattr(os, "O_DIRECTORY", 0)
+                       | getattr(os, "O_NOFOLLOW", 0))
+    file_flags = (os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
+                  | getattr(os, "O_NOFOLLOW", 0)
+                  | getattr(os, "O_NONBLOCK", 0))
+
+    def stable_identity(value: os.stat_result) -> tuple[int, ...]:
+        return (value.st_dev, value.st_ino, value.st_mode, value.st_nlink,
+                value.st_size, value.st_mtime_ns, value.st_ctime_ns)
+
+    def hash_member(directory_fd: int, name: str) -> tuple[str, int]:
+        try:
+            descriptor = os.open(name, file_flags, dir_fd=directory_fd)
+        except OSError as exc:
+            raise EvidenceProducerError(
+                f"rocprofv3 {name} is not an exact raw closure file") from exc
+        try:
+            before = os.fstat(descriptor)
+            if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
+                raise EvidenceProducerError(
+                    f"rocprofv3 {name} must be a single-link regular file")
+            if name != invocation.stderr_path.name and before.st_size == 0:
+                raise EvidenceProducerError(f"rocprofv3 {name} must not be empty")
+            digest = hashlib.sha256()
+            while True:
+                chunk = os.read(descriptor, 1024 * 1024)
+                if not chunk:
+                    break
+                digest.update(chunk)
+            after = os.fstat(descriptor)
+            if stable_identity(before) != stable_identity(after):
+                raise EvidenceProducerError(
+                    f"rocprofv3 {name} mutated while sealing raw output")
+            return digest.hexdigest(), before.st_size
+        finally:
+            os.close(descriptor)
+
     try:
-        actual = {path.name for path in raw.iterdir()}
+        resolved_raw = raw.resolve(strict=True)
+        if raw.is_symlink() or resolved_raw != raw:
+            raise EvidenceProducerError(
+                "rocprofv3 raw output directory must be a real contained path")
+        raw_fd = os.open(raw, directory_flags)
     except OSError as exc:
         raise EvidenceProducerError("rocprofv3 raw output directory is unreadable") from exc
-    if actual != expected:
+    try:
+        raw_before = os.fstat(raw_fd)
+        raw_path = os.lstat(raw)
+        if (not stat.S_ISDIR(raw_before.st_mode)
+                or stable_identity(raw_before) != stable_identity(raw_path)):
+            raise EvidenceProducerError(
+                "rocprofv3 raw output directory identity changed before sealing")
+        actual = set(os.listdir(raw_fd))
+        if actual != expected_entries:
+            raise EvidenceProducerError(
+                "rocprofv3 raw output directory is not the exact two-CSV closure")
+        try:
+            metadata_fd = os.open(metadata_name, directory_flags, dir_fd=raw_fd)
+        except OSError as exc:
+            raise EvidenceProducerError(
+                "rocprofv3 metadata entry must be a real contained directory") from exc
+        try:
+            metadata_before = os.fstat(metadata_fd)
+            metadata_mode = stat.S_IMODE(metadata_before.st_mode)
+            if (not stat.S_ISDIR(metadata_before.st_mode)
+                    or metadata_before.st_nlink != 2
+                    or metadata_before.st_dev != raw_before.st_dev
+                    or metadata_before.st_uid != raw_before.st_uid
+                    or metadata_before.st_gid != raw_before.st_gid
+                    or metadata_mode & 0o7000
+                    or metadata_mode & 0o022
+                    or os.path.ismount(raw / metadata_name)
+                    or os.listdir(metadata_fd)):
+                raise EvidenceProducerError(
+                    "rocprofv3 metadata directory must be a safe empty peer")
+            metadata_artifact = {
+                "name": metadata_name,
+                "path": str(raw / metadata_name),
+                "kind": "profiler_bookkeeping_directory",
+                "scientific_evidence": False,
+                "device_major": os.major(metadata_before.st_dev),
+                "device_minor": os.minor(metadata_before.st_dev),
+                "inode": metadata_before.st_ino,
+                "uid": metadata_before.st_uid,
+                "gid": metadata_before.st_gid,
+                "mode": format(metadata_mode, "04o"),
+                "links": metadata_before.st_nlink,
+                "entries": 0,
+            }
+            metadata_artifact["metadata_sha256"] = schemas.content_hash(
+                metadata_artifact)
+            artifacts = [metadata_artifact]
+            for name in sorted(expected_files):
+                digest, size = hash_member(raw_fd, name)
+                artifacts.append({"name": name, "path": str(raw / name),
+                                  "kind": "regular_file",
+                                  "scientific_evidence": True,
+                                  "sha256": digest, "bytes": size})
+            metadata_after = os.fstat(metadata_fd)
+            if (stable_identity(metadata_before) != stable_identity(metadata_after)
+                    or os.listdir(metadata_fd)
+                    or os.path.ismount(raw / metadata_name)):
+                raise EvidenceProducerError(
+                    "rocprofv3 metadata directory mutated while sealing raw output")
+            if set(os.listdir(raw_fd)) != expected_entries:
+                raise EvidenceProducerError(
+                    "rocprofv3 raw output directory mutated while sealing")
+            raw_after = os.fstat(raw_fd)
+            if stable_identity(raw_before) != stable_identity(raw_after):
+                raise EvidenceProducerError(
+                    "rocprofv3 raw output directory mutated while sealing")
+            return artifacts
+        finally:
+            os.close(metadata_fd)
+    finally:
+        os.close(raw_fd)
+
+
+def _revalidate_rocprofv3_raw_artifacts(
+        invocation: CommandInvocation, sealed: object) -> list[dict[str, Any]]:
+    current = _rocprofv3_raw_artifacts(invocation)
+    if not isinstance(sealed, list) or sealed != current:
         raise EvidenceProducerError(
-            "rocprofv3 raw output directory is not the exact two-CSV closure")
-    artifacts = []
-    for name in sorted(expected):
-        path = raw / name
-        artifacts.append({"name": name, "path": str(path),
-                          "sha256": _hash_file(path, f"rocprofv3 {name}",
-                                               allow_empty=name == "stderr.txt"),
-                          "bytes": path.stat().st_size})
-    return artifacts
+            "rocprofv3 raw artifact closure changed after sealing")
+    return current
 
 
 def _seal_profiler_failure_attempt(
@@ -2512,8 +2633,8 @@ def _load_profiler_attempt(
     completion = _parse_profile_completion(
         Path(str(body["stdout_path"])), expected_csv=output,
         plan=plan, arm=arm, argv=invocation.argv)
-    if (body.get("raw_artifacts") != _rocprofv3_raw_artifacts(invocation)
-            or body.get("dispatch_row_count") != len(dispatches)
+    _revalidate_rocprofv3_raw_artifacts(invocation, body.get("raw_artifacts"))
+    if (body.get("dispatch_row_count") != len(dispatches)
             or body.get("timestamp_reduction_sha256") != schemas.content_hash(dispatches)
             or body.get("structural_fingerprint_sha256")
             != _profiler_structural_fingerprint(dispatches)
@@ -2876,10 +2997,11 @@ def load_gpu_source_attribution_refusal(
     dispatches = _load_arm_dispatches(timestamp_path, plan, arm=arm)
     if plan.profiler_trace_schema_id == ROCPROF_V3_TRACE_ID:
         invocation = _rocprofv3_invocation(path.parent, 1, arm, plan)
+        _revalidate_rocprofv3_raw_artifacts(
+            invocation, body.get("raw_artifacts"))
         if (_receipt_rocprof_template(body) != (
                 plan.candidate_rocprof_argv if arm == "candidate"
                 else plan.anchor_rocprof_argv)
-                or body.get("raw_artifacts") != _rocprofv3_raw_artifacts(invocation)
                 or body.get("timestamp_reduction_sha256")
                 != schemas.content_hash(dispatches)
                 or body.get("structural_fingerprint_sha256")
