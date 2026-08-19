@@ -18,7 +18,7 @@ from typing import Mapping
 SCHEMA = "epyc.autokernel.discovery_live_event.v1"
 CHANNELS = frozenset({"autokernel", "planner"})
 EVENTS = frozenset({
-    "planner_started", "planner_completed", "planner_failed",
+    "planner_started", "planner_completed", "planner_failed", "planner_refused",
     "critic_started", "critic_completed", "critic_failed",
 })
 _ID = re.compile(r"[a-zA-Z0-9_.:-]{1,160}")
@@ -60,7 +60,9 @@ class DiscoveryTelemetry:
             "effort": _text(effort, "effort"),
         }
         if result is not None:
-            if set(result) - {"returncode", "stdout_sha256", "stderr_sha256", "decision"}:
+            if set(result) - {"returncode", "stdout_sha256", "stderr_sha256",
+                              "decision", "refusal_type",
+                              "refusal_reason_sha256"}:
                 raise TelemetryError("telemetry result contains a non-allowlisted field")
             projected: dict[str, object] = {}
             if "returncode" in result:
@@ -76,7 +78,27 @@ class DiscoveryTelemetry:
                 if decision not in ("accept", "reject", "revise"):
                     raise TelemetryError("invalid critic decision")
                 projected["decision"] = decision
+            if "refusal_type" in result:
+                refusal_type = result["refusal_type"]
+                if (event != "planner_refused"
+                        or refusal_type != "planner_output_refusal"):
+                    raise TelemetryError("invalid planner refusal type")
+                projected["refusal_type"] = refusal_type
+            if "refusal_reason_sha256" in result:
+                if event != "planner_refused":
+                    raise TelemetryError("refusal digest is only valid for planner refusal")
+                projected["refusal_reason_sha256"] = _text(
+                    result["refusal_reason_sha256"],
+                    "refusal_reason_sha256", digest=True)
+            if event == "planner_refused" and set(projected) != {
+                    "returncode", "stdout_sha256", "stderr_sha256",
+                    "refusal_type", "refusal_reason_sha256"}:
+                raise TelemetryError(
+                    "planner refusal telemetry lacks its exact typed result")
             row["result"] = projected
+        elif event == "planner_refused":
+            raise TelemetryError(
+                "planner refusal telemetry lacks its exact typed result")
         self.root.mkdir(parents=True, exist_ok=True)
         self._append(self.root / "autokernel.jsonl", row)
         if channel == "planner":

@@ -57,6 +57,20 @@ class PlannerOutputRefusal(DiscoveryControllerError):
     exception types.
     """
 
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        # Telemetry is observational.  A telemetry failure must never replace
+        # the already-derived, controller-owned planner refusal.
+        self.telemetry_status = "not_attempted"
+        self.telemetry_failure: dict[str, str] | None = None
+
+    def note_telemetry_failure(self, exc: Exception) -> None:
+        self.telemetry_status = "emit_failed"
+        self.telemetry_failure = {
+            "type": type(exc).__name__,
+            "message_sha256": hashlib.sha256(str(exc).encode()).hexdigest(),
+        }
+
 
 class PlannerProviderTransient(PlannerOutputRefusal):
     """A retryable provider/API interruption before candidate validation."""
@@ -138,6 +152,24 @@ def _canon(value: object) -> bytes:
 
 
 def _sha(value: object) -> str: return hashlib.sha256(_canon(value)).hexdigest()
+
+
+def _emit_observational_telemetry(
+        telemetry: discovery_telemetry.DiscoveryTelemetry | None,
+        *args: Any, **kwargs: Any) -> Exception | None:
+    """Emit dashboard telemetry without granting it controller authority.
+
+    The durable state machine and actor result remain primary.  Returning the
+    telemetry exception lets a typed primary refusal record the visibility
+    degradation without allowing it to replace that refusal.
+    """
+    if telemetry is None:
+        return None
+    try:
+        telemetry.emit(*args, **kwargs)
+    except Exception as exc:
+        return exc
+    return None
 
 
 def _validated_resource_wait(exc: ResourceWait, operation_key: str) -> dict[str, Any]:
@@ -922,8 +954,9 @@ class CodexPlanner:
                              "structural_example_only": example,
                              "output": "Write plan.json and source-patch.json in workspace."}, sort_keys=True)
         self._runtime()
-        if self.telemetry is not None and not resume:
-            self.telemetry.emit(
+        if not resume:
+            _emit_observational_telemetry(
+                self.telemetry,
                 "planner", "planner_started",
                 campaign_id=assignment["campaign_id"],
                 hypothesis_id=example_hypothesis, provider=SOL["provider"],
@@ -942,8 +975,8 @@ class CodexPlanner:
                     expected_runtime_identity=self.runtime_identity,
                     expected_launcher_sha256=self.actor_launcher_sha256)
             except Exception:
-                if self.telemetry is not None:
-                    self.telemetry.emit(
+                _emit_observational_telemetry(
+                        self.telemetry,
                         "planner", "planner_failed",
                         campaign_id=assignment["campaign_id"],
                         hypothesis_id=example_hypothesis, provider=SOL["provider"],
@@ -961,8 +994,8 @@ class CodexPlanner:
                     workspace, checkpoint_path, context=context,
                     result=result_facts)
             if result.returncode:
-                if self.telemetry is not None:
-                    self.telemetry.emit(
+                _emit_observational_telemetry(
+                        self.telemetry,
                         "planner", "planner_failed",
                         campaign_id=assignment["campaign_id"],
                         hypothesis_id=example_hypothesis, provider=SOL["provider"],
@@ -980,16 +1013,24 @@ class CodexPlanner:
                 workspace / "plan.json", workspace,
                 assignment=AuthoringAssignment(**assignment))
         except PlannerOutputRefusal as exc:
-            if self.telemetry is not None:
-                self.telemetry.emit(
-                    "planner", "planner_failed",
-                    campaign_id=assignment["campaign_id"],
-                    hypothesis_id=example_hypothesis, provider=SOL["provider"],
-                    model=SOL["model"], effort=SOL["effort"],
-                    result={**result_facts, "refusal_reason": str(exc)})
+            telemetry_exc = _emit_observational_telemetry(
+                self.telemetry, "planner", "planner_refused",
+                campaign_id=assignment["campaign_id"],
+                hypothesis_id=example_hypothesis,
+                provider=SOL["provider"], model=SOL["model"],
+                effort=SOL["effort"], result={
+                    **result_facts,
+                    "refusal_type": "planner_output_refusal",
+                    "refusal_reason_sha256": hashlib.sha256(
+                        str(exc).encode()).hexdigest(),
+                })
+            if self.telemetry is not None and telemetry_exc is None:
+                exc.telemetry_status = "emitted"
+            elif telemetry_exc is not None:
+                exc.note_telemetry_failure(telemetry_exc)
             raise
-        if self.telemetry is not None:
-            self.telemetry.emit(
+        _emit_observational_telemetry(
+                self.telemetry,
                 "planner", "planner_completed",
                 campaign_id=assignment["campaign_id"],
                 hypothesis_id=example_hypothesis, provider=SOL["provider"],
@@ -1064,8 +1105,8 @@ class ClaudeCritic:
             "output": "Return only the strict structured critique; do not edit files or use tools."}, sort_keys=True)
         self._runtime()
         campaign_id = manifest.campaign_id
-        if self.telemetry is not None:
-            self.telemetry.emit(
+        _emit_observational_telemetry(
+                self.telemetry,
                 "autokernel", "critic_started", campaign_id=campaign_id,
                 hypothesis_id=candidate.hypothesis_id,
                 provider=FABLE5_CRITIC["provider"], model=FABLE5_CRITIC["model"],
@@ -1079,23 +1120,24 @@ class ClaudeCritic:
                 expected_runtime_identity=self.runtime_identity,
                 expected_launcher_sha256=self.actor_launcher_sha256)
         except Exception:
-            if self.telemetry is not None:
-                self.telemetry.emit(
+            _emit_observational_telemetry(
+                    self.telemetry,
                     "autokernel", "critic_failed", campaign_id=campaign_id,
                     hypothesis_id=candidate.hypothesis_id,
                     provider=FABLE5_CRITIC["provider"], model=FABLE5_CRITIC["model"],
                     effort=FABLE5_CRITIC["effort"])
             raise
         if self.telemetry is not None:
-            self.telemetry.emit(
-                "autokernel", "critic_completed", campaign_id=campaign_id,
-                hypothesis_id=candidate.hypothesis_id,
-                provider=FABLE5_CRITIC["provider"], model=FABLE5_CRITIC["model"],
-                effort=FABLE5_CRITIC["effort"], result={
-                    "stdout_sha256": result.stdout_sha256,
-                    "stderr_sha256": result.stderr_sha256,
-                    "decision": result.decision,
-                })
+            _emit_observational_telemetry(
+                    self.telemetry,
+                    "autokernel", "critic_completed", campaign_id=campaign_id,
+                    hypothesis_id=candidate.hypothesis_id,
+                    provider=FABLE5_CRITIC["provider"], model=FABLE5_CRITIC["model"],
+                    effort=FABLE5_CRITIC["effort"], result={
+                        "stdout_sha256": result.stdout_sha256,
+                        "stderr_sha256": result.stderr_sha256,
+                        "decision": result.decision,
+                    })
         return Critique(result.decision, result.reason)
 
 
@@ -2293,11 +2335,24 @@ def _record_planner_refusal(state: dict[str, Any], *, turn: int,
         "status": ("planner_transient" if isinstance(exc, PlannerProviderTransient)
                    else "planner_refused"),
         "reason": str(exc),
+        "refusal_type": ("planner_provider_transient"
+                         if isinstance(exc, PlannerProviderTransient)
+                         else "planner_output_refusal"),
+        "scientific_budget_spent": False,
         "context_sha256": _sha(context),
     }
+    if not isinstance(exc, PlannerProviderTransient):
+        row["telemetry_event"] = "planner_refused"
+        row["telemetry_status"] = exc.telemetry_status
+        if exc.telemetry_failure is not None:
+            row["telemetry_failure"] = dict(exc.telemetry_failure)
     planning = state.pop("planning", None)
     if isinstance(planning, Mapping):
         row["planner_operation_key"] = planning.get("operation_key")
+        if isinstance(planning.get("telemetry_recovery"), Mapping):
+            row["planner_checkpoint_reused"] = True
+            row["telemetry_recovery"] = dict(
+                planning["telemetry_recovery"])
     if portfolio_binding is not None:
         row.update(
             hypothesis_id=portfolio_binding["hypothesis_id"],
@@ -2347,6 +2402,22 @@ def _planning_intent(config: ControllerConfig, *, turn: int,
                               else dict(portfolio_binding)),
         "workspace": str(workspace),
     }
+
+
+def _is_legacy_planner_refusal_telemetry_failure(
+        planning: Mapping[str, Any]) -> bool:
+    """Recognize only the v16 telemetry-schema crash after actor checkpoint.
+
+    The checkpoint and every actor artifact are independently revalidated by
+    the caller before this legacy marker may be cleared.
+    """
+    failure = planning.get("failure")
+    return (planning.get("phase") == "actor_entering"
+            and isinstance(failure, Mapping)
+            and set(failure) == {"type", "message"}
+            and failure.get("type") == "TelemetryError"
+            and failure.get("message") ==
+            "telemetry result contains a non-allowlisted field")
 
 
 def _prepare_planner_workspace(config: ControllerConfig, operation_key: str,
@@ -2615,14 +2686,6 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                     raise DiscoveryControllerError("pending candidate lacks a sealed authorization")
             else:
                 planning = state["planning"]
-                if isinstance(planning.get("failure"), Mapping):
-                    raise DiscoveryControllerError(
-                        "prior planner infrastructure/authority failure remains terminal: "
-                        f"{planning['failure'].get('type')}: "
-                        f"{planning['failure'].get('message')}")
-                if planning["phase"] == "intent":
-                    planning["phase"] = "actor_entering"
-                    store.save(state, "planner_entering")
                 planner_workspace=Path(str(planning["workspace"]))
                 expected_workspace=(config.output_root / "planner-operations" /
                                     planning["operation_key"] / "workspace")
@@ -2630,6 +2693,29 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                     raise DiscoveryControllerError(
                         "durable planner workspace escaped its operation namespace")
                 checkpoint_path=planner_workspace.parent / "actor-result.json"
+                if isinstance(planning.get("failure"), Mapping):
+                    if _is_legacy_planner_refusal_telemetry_failure(planning):
+                        # This exact historical failure occurred after rc=0 was
+                        # checkpointed and while emitting the typed refusal.
+                        # Validate the private, single-link actor closure now;
+                        # a missing/extra/tampered artifact stays terminal.
+                        _reopen_planner_actor_checkpoint(
+                            planner_workspace, checkpoint_path,
+                            context=context)
+                        planning.pop("failure")
+                        planning["telemetry_recovery"] = {
+                            "schema": "epyc.autokernel.planner_telemetry_recovery.v1",
+                            "disposition": "resume_checkpoint_and_rederive_refusal",
+                        }
+                        store.save(state, "planner_telemetry_recovery")
+                    else:
+                        raise DiscoveryControllerError(
+                            "prior planner infrastructure/authority failure remains terminal: "
+                            f"{planning['failure'].get('type')}: "
+                            f"{planning['failure'].get('message')}")
+                if planning["phase"] == "intent":
+                    planning["phase"] = "actor_entering"
+                    store.save(state, "planner_entering")
                 try:
                     workspace_created=_prepare_planner_workspace(
                         config, planning["operation_key"], planner_workspace)

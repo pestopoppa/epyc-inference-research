@@ -1,9 +1,9 @@
 """No-hardware replay tests for the typed discovery state machine."""
 from __future__ import annotations
-import argparse, base64, dataclasses, hashlib, json, tempfile, unittest
+import argparse, base64, dataclasses, hashlib, json, os, tempfile, unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from .. import hypothesis_portfolio
 from . import discovery_controller as D
 
@@ -430,6 +430,12 @@ class Tests(unittest.TestCase):
                f"@@ -1 +1 @@ {symbol}()\n-old\n+new\n").encode()
   if mode == "malformed_diff":
    patch_bytes=(f"@@ -1 +1 @@ {symbol}()\n-old\n+new\n").encode()
+  if mode == "underestimated_diff_v16":
+   patch_bytes=(f"diff --git a/{relative} b/{relative}\n"
+                f"--- a/{relative}\n+++ b/{relative}\n"
+                f"@@ -1,8 +1,7 @@ {symbol}()\n"
+                "-old1\n-old2\n-old3\n-old4\n-old5\n-old6\n-old7\n-old8\n"
+                "+new1\n+new2\n+new3\n+new4\n+new5\n+new6\n+new7\n").encode()
   manifest={"schema":D.source_candidate.SCHEMA_SOURCE_PATCH,
       "campaign_id":"ak-off-assignment" if mode == "off_assignment" else assignment.campaign_id,
       "proposal_id":assignment.proposal_id,"candidate_id":assignment.candidate_id,
@@ -443,7 +449,8 @@ class Tests(unittest.TestCase):
       "falsifier":"exact runtime does not improve","regime":{"phase":"decode"},
       "proposal":{"proposal_id":assignment.proposal_id,"change_class":"arithmetic",
                   "change":{"files_and_symbols":[f"{relative}:{symbol}"],
-                            "estimated_diff_size":2}},
+                            "estimated_diff_size":(
+                                14 if mode == "underestimated_diff_v16" else 2)}},
       "source_manifest_path":"source-patch.json"}
   if mode != "missing_plan": (workspace/"plan.json").write_text(json.dumps(plan))
   if mode not in {"missing_plan","missing_manifest"}:
@@ -453,22 +460,30 @@ class Tests(unittest.TestCase):
   assignment=D.AuthoringAssignment("ak-test","akp-test","akc-test","0"*40,"1"*40)
   for mode,pattern in (("malformed_diff","hunk.*file"),
                        ("missing_plan","invalid actor artifact plan.json"),
-                       ("missing_manifest","invalid actor artifact source-patch.json")):
+                       ("missing_manifest","invalid actor artifact source-patch.json"),
+                       ("underestimated_diff_v16", "14 < 15")):
    with self.subTest(mode=mode), tempfile.TemporaryDirectory() as t:
     root=Path(t); workspace=root/"operation"/"workspace"; workspace.mkdir(parents=True)
     wrapper=root/"codex"; wrapper.write_bytes(b"codex"); wrapper.chmod(0o700)
+    telemetry=D.discovery_telemetry.DiscoveryTelemetry(root/"live")
     planner=D.CodexPlanner(wrapper=wrapper,environment={"PATH":"/usr/bin"},
-                           reviewed_sources=package)
+                           reviewed_sources=package,telemetry=telemetry)
     def actor(**_kwargs):
      self._write_planner_artifacts(workspace,assignment,mode=mode)
      return SimpleNamespace(returncode=0,stdout="",stderr="")
     with patch.object(D.codex_container_actor,"runtime_identity",return_value=RUNTIME), \
          patch.object(D.codex_container_actor,"run_actor",side_effect=actor), \
-         self.assertRaisesRegex(D.PlannerOutputRefusal,pattern):
+         self.assertRaisesRegex(D.PlannerOutputRefusal,pattern) as caught:
      planner.plan(context={"authoring_assignment":assignment.to_dict(),
                            "planner_context":{"reviewed_source_package_sha256":
                                               package.package_sha256}},
                   workspace=workspace,checkpoint_path=root/"operation"/"actor-result.json")
+    events=[json.loads(line) for line in (root/"live/planner.jsonl").read_text().splitlines()]
+    self.assertEqual([row["event"] for row in events],
+                     ["planner_started","planner_refused"])
+    self.assertEqual(events[-1]["result"]["refusal_reason_sha256"],
+                     hashlib.sha256(str(caught.exception).encode()).hexdigest())
+    self.assertNotIn(str(caught.exception),json.dumps(events[-1]))
   with tempfile.TemporaryDirectory() as t:
    root=Path(t); workspace=root/"operation"/"workspace"; workspace.mkdir(parents=True)
    wrapper=root/"codex"; wrapper.write_bytes(b"codex"); wrapper.chmod(0o700)
@@ -485,6 +500,81 @@ class Tests(unittest.TestCase):
                                              package.package_sha256}},
                  workspace=workspace,checkpoint_path=root/"operation"/"actor-result.json")
    self.assertNotIsInstance(caught.exception,D.PlannerOutputRefusal)
+ def test_planner_refusal_survives_telemetry_schema_or_io_failure(self):
+  package=self.source_package()
+  assignment=D.AuthoringAssignment("ak-test","akp-test","akc-test","0"*40,"1"*40)
+  for failure in (D.discovery_telemetry.TelemetryError("schema drift"),
+                  OSError("telemetry disk unavailable")):
+   with self.subTest(failure=type(failure).__name__), tempfile.TemporaryDirectory() as t:
+    root=Path(t); workspace=root/"operation/workspace"; workspace.mkdir(parents=True)
+    wrapper=root/"codex"; wrapper.write_bytes(b"codex"); wrapper.chmod(0o700)
+    telemetry=Mock()
+    telemetry.emit.side_effect=lambda _channel,event,**_kwargs: (
+        (_ for _ in ()).throw(failure) if event == "planner_refused" else None)
+    planner=D.CodexPlanner(wrapper=wrapper,environment={"PATH":"/usr/bin"},
+                           reviewed_sources=package,telemetry=telemetry)
+    def actor(**_kwargs):
+     self._write_planner_artifacts(workspace,assignment,
+                                   mode="underestimated_diff_v16")
+     return SimpleNamespace(returncode=0,stdout="",stderr="")
+    with patch.object(D.codex_container_actor,"runtime_identity",return_value=RUNTIME), \
+         patch.object(D.codex_container_actor,"run_actor",side_effect=actor), \
+         self.assertRaisesRegex(D.PlannerOutputRefusal,"14 < 15") as caught:
+     planner.plan(context={"authoring_assignment":assignment.to_dict(),
+                           "planner_context":{"reviewed_source_package_sha256":
+                                              package.package_sha256}},
+                  workspace=workspace,
+                  checkpoint_path=root/"operation/actor-result.json")
+    self.assertEqual(caught.exception.telemetry_status,"emit_failed")
+    self.assertEqual(caught.exception.telemetry_failure["type"],
+                     type(failure).__name__)
+ def test_actor_telemetry_is_observational_for_success_and_primary_failures(self):
+  package=self.source_package()
+  assignment=D.AuthoringAssignment("ak-test","akp-test","akc-test","0"*40,"1"*40)
+  telemetry=Mock()
+  telemetry.emit.side_effect=OSError("telemetry unavailable")
+  with tempfile.TemporaryDirectory() as t:
+   root=Path(t); wrapper=root/"codex"; wrapper.write_bytes(b"codex"); wrapper.chmod(0o700)
+   success_workspace=root/"success/workspace"; success_workspace.mkdir(parents=True)
+   planner=D.CodexPlanner(wrapper=wrapper,environment={"PATH":"/usr/bin"},
+                          reviewed_sources=package,telemetry=telemetry)
+   def success(**_kwargs):
+    self._write_planner_artifacts(success_workspace,assignment)
+    return SimpleNamespace(returncode=0,stdout="ok",stderr="")
+   context={"authoring_assignment":assignment.to_dict(),
+            "planner_context":{"reviewed_source_package_sha256":
+                               package.package_sha256}}
+   with patch.object(D.codex_container_actor,"runtime_identity",return_value=RUNTIME), \
+        patch.object(D.codex_container_actor,"run_actor",side_effect=success):
+    candidate=planner.plan(
+        context=context,workspace=success_workspace,
+        checkpoint_path=root/"success/actor-result.json")
+   self.assertEqual(candidate.hypothesis_id,"akh-planner-fault")
+   failed_workspace=root/"failed/workspace"; failed_workspace.mkdir(parents=True)
+   with patch.object(D.codex_container_actor,"runtime_identity",return_value=RUNTIME), \
+        patch.object(D.codex_container_actor,"run_actor",
+                     side_effect=RuntimeError("planner transport primary")), \
+        self.assertRaisesRegex(RuntimeError,"planner transport primary"):
+    planner.plan(context=context,workspace=failed_workspace,
+                 checkpoint_path=root/"failed/actor-result.json")
+   claude=root/"claude"; claude.write_bytes(b"claude"); claude.chmod(0o700)
+   critic=D.ClaudeCritic(wrapper=claude,environment={"PATH":"/usr/bin"},
+                         telemetry=telemetry)
+   critic_result=SimpleNamespace(
+       decision="accept",reason="bounded",stdout_sha256="c"*64,
+       stderr_sha256="d"*64)
+   with patch.object(D.claude_fable5_critic_actor,"runtime_identity",
+                     return_value=CLAUDE_RUNTIME), \
+        patch.object(D.claude_fable5_critic_actor,"run_critic",
+                     return_value=critic_result):
+    self.assertEqual(critic.review(candidate,context=context,
+                                   workspace=root).decision,"accept")
+   with patch.object(D.claude_fable5_critic_actor,"runtime_identity",
+                     return_value=CLAUDE_RUNTIME), \
+        patch.object(D.claude_fable5_critic_actor,"run_critic",
+                     side_effect=RuntimeError("critic transport primary")), \
+        self.assertRaisesRegex(RuntimeError,"critic transport primary"):
+    critic.review(candidate,context=context,workspace=root)
  def test_rc0_actor_checkpoint_resumes_without_rerunning_sol(self):
   class StopAfterCheckpoint(BaseException): pass
   package=self.source_package(); assignment=D.AuthoringAssignment(
@@ -556,6 +646,150 @@ class Tests(unittest.TestCase):
    again=D.run_controller(config,planner=planner,critic=critic,
                           screener=screen,lease=lease)
    self.assertEqual(again,result); self.assertEqual(len(planner.contexts),3)
+ def test_concrete_v16_refusal_retries_are_bounded_without_science_or_compute(self):
+  outer=self; package=self.source_package()
+  class Never:
+   def attest(self): return {**D.FABLE5_CRITIC,"runtime":CLAUDE_RUNTIME}
+   def __getattr__(self,_name):
+    def called(*_args,**_kwargs):
+     raise AssertionError("planner refusal reached critic or compute")
+    return called
+  with tempfile.TemporaryDirectory() as t:
+   root=Path(t); wrapper=root/"codex"; wrapper.write_bytes(b"codex"); wrapper.chmod(0o700)
+   telemetry=D.discovery_telemetry.DiscoveryTelemetry(root/"live")
+   planner=D.CodexPlanner(wrapper=wrapper,environment={"PATH":"/usr/bin"},
+                          reviewed_sources=package,telemetry=telemetry)
+   actor_calls=[]
+   def actor(**kwargs):
+    prompt=json.loads(kwargs["prompt"])
+    assignment=D.AuthoringAssignment(
+        **prompt["context"]["authoring_assignment"])
+    actor_calls.append(assignment.candidate_id)
+    outer._write_planner_artifacts(
+        kwargs["workspace"],assignment,mode="underestimated_diff_v16")
+    return SimpleNamespace(returncode=0,stdout="",stderr="")
+   base=self.portfolio_config(root,[self.portfolio_record(
+       hypothesis_id="akh-v2-q5-type-specific-dequant",rank=1,budget=3)])
+   planner_context={**base.planner_context,
+       "reviewed_source_package_sha256":package.package_sha256}
+   config=dataclasses.replace(
+       base,planner_context=planner_context,
+       planner_context_sha256=D._sha(planner_context))
+   never=Never()
+   with patch.object(D.codex_container_actor,"runtime_identity",return_value=RUNTIME), \
+        patch.object(D.codex_container_actor,"run_actor",side_effect=actor):
+    result=D.run_controller(config,planner=planner,critic=never,
+                            screener=never,lease=never)
+   events=[json.loads(line)["event"]
+           for line in (root/"live/planner.jsonl").read_text().splitlines()]
+  self.assertEqual(actor_calls,
+                   ["akc-discovery-1","akc-discovery-2","akc-discovery-3"])
+  self.assertEqual(result["portfolio_authoring_failures"],{
+      "akh-v2-q5-type-specific-dequant":3})
+  self.assertEqual(result["portfolio_skips"][
+      "akh-v2-q5-type-specific-dequant"]["disposition"],
+      "bounded_authoring_skip")
+  self.assertTrue(all(row["status"] == "planner_refused"
+                      and row["scientific_budget_spent"] is False
+                      and row["telemetry_status"] == "emitted"
+                      for row in result["iterations"]))
+  self.assertEqual(events,["planner_started","planner_refused"]*3)
+ def test_v16_telemetry_terminal_recovers_checkpoint_and_rederives_refusal(self):
+  outer=self
+  class LegacyThenCurrentPlanner:
+   def __init__(self): self.plan_calls=0; self.resume_calls=0
+   def attest(self): return {**D.SOL,"runtime":RUNTIME}
+   def plan(self,*,context,workspace,checkpoint_path):
+    self.plan_calls+=1
+    assignment=D.AuthoringAssignment(**context["authoring_assignment"])
+    outer._write_planner_artifacts(
+        workspace,assignment,mode="underestimated_diff_v16")
+    D._seal_planner_actor_checkpoint(
+        workspace,checkpoint_path,context=context,
+        result={"returncode":0,"stdout_sha256":"a"*64,
+                "stderr_sha256":"b"*64})
+    raise D.discovery_telemetry.TelemetryError(
+        "telemetry result contains a non-allowlisted field")
+   def resume_plan(self,*,context,workspace,checkpoint_path):
+    self.resume_calls+=1
+    checkpoint=D._reopen_planner_actor_checkpoint(
+        workspace,checkpoint_path,context=context)
+    self.assert_checkpoint_rc=checkpoint["result"]["returncode"]
+    return D._load_plan(
+        workspace/"plan.json",workspace,
+        assignment=D.AuthoringAssignment(**context["authoring_assignment"]))
+  class Never:
+   def attest(self): return {**D.FABLE5_CRITIC,"runtime":CLAUDE_RUNTIME}
+   def __getattr__(self,_name):
+    def called(*_args,**_kwargs):
+     raise AssertionError("planner refusal reached critic or compute")
+    return called
+  with tempfile.TemporaryDirectory() as t:
+   root=Path(t); planner=LegacyThenCurrentPlanner(); never=Never()
+   config=dataclasses.replace(
+       self.portfolio_config(root,[self.portfolio_record(
+           hypothesis_id="akh-v2-q5-type-specific-dequant",rank=1,budget=3)]),
+       max_iterations=1)
+   with self.assertRaises(D.discovery_telemetry.TelemetryError):
+    D.run_controller(config,planner=planner,critic=never,
+                     screener=never,lease=never)
+   crashed=json.loads((root/"state.json").read_text())
+   self.assertEqual(crashed["planning"]["failure"],{
+       "type":"TelemetryError",
+       "message":"telemetry result contains a non-allowlisted field"})
+   result=D.run_controller(config,planner=planner,critic=never,
+                           screener=never,lease=never)
+  self.assertEqual((planner.plan_calls,planner.resume_calls),(1,1))
+  self.assertEqual(planner.assert_checkpoint_rc,0)
+  self.assertEqual(result["next"],2)
+  self.assertEqual(result.get("planner_provider_attempt",0),0)
+  self.assertEqual(result["portfolio_authoring_failures"],{
+      "akh-v2-q5-type-specific-dequant":1})
+  self.assertNotIn("portfolio_terminals",result)
+  row=result["iterations"][0]
+  self.assertEqual(row["status"],"planner_refused")
+  self.assertEqual(row["refusal_type"],"planner_output_refusal")
+  self.assertFalse(row["scientific_budget_spent"])
+  self.assertEqual(row["portfolio_hypothesis_id"],
+                   "akh-v2-q5-type-specific-dequant")
+  self.assertTrue(row["planner_checkpoint_reused"])
+  self.assertEqual(row["telemetry_recovery"]["disposition"],
+                   "resume_checkpoint_and_rederive_refusal")
+  self.assertIn("14 < 15",row["reason"])
+ def test_v16_telemetry_terminal_refuses_missing_or_changed_checkpoint_closure(self):
+  # The legacy exception name alone is not recovery authority.  The private
+  # rc=0 checkpoint must still bind the exact actor artifact closure.
+  for mutation in ("missing_checkpoint","extra_artifact","hardlink_checkpoint"):
+   with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as t:
+    root=Path(t); config=D.ControllerConfig(root,1,dry_run=True)
+    context=D._context({"iterations":[]},D._tracker(D.DurableState(root)),1,
+                       config,None)
+    planning=D._planning_intent(config,turn=1,context=context,
+                                portfolio_binding=None)
+    workspace=Path(planning["workspace"])
+    D._prepare_planner_workspace(config,planning["operation_key"],workspace)
+    (workspace/"plan.json").write_text("{}")
+    checkpoint=workspace.parent/"actor-result.json"
+    D._seal_planner_actor_checkpoint(
+        workspace,checkpoint,context=context,
+        result={"returncode":0,"stdout_sha256":"a"*64,
+                "stderr_sha256":"b"*64})
+    planning["phase"]="actor_entering"
+    planning["failure"]={"type":"TelemetryError","message":
+        "telemetry result contains a non-allowlisted field"}
+    if mutation == "missing_checkpoint": checkpoint.unlink()
+    elif mutation == "extra_artifact": (workspace/"extra").write_text("x")
+    else: os.link(checkpoint,workspace.parent/"checkpoint-alias")
+    state={"schema":D.SCHEMA,"authority":D.AUTHORITY,"roster":D.sealed_roster(),
+           "iterations":[],"next":1,"complete":False,"planning":planning}
+    store=D.DurableState(root); store.save(state,"fixture")
+    class Planner:
+     def attest(self): return {**D.SOL,"runtime":RUNTIME}
+    class Never:
+     def attest(self): return {**D.FABLE5_CRITIC,"runtime":CLAUDE_RUNTIME}
+    with self.assertRaises(D.DiscoveryControllerError):
+     D.run_controller(config,planner=Planner(),critic=Never(),
+                      screener=Never(),lease=Never())
  def test_valid_plan_and_accepted_critic_checkpoints_skip_actors_on_restart(self):
   class StopAfterSave(BaseException): pass
   class CountingCritic(FakeCritic):
