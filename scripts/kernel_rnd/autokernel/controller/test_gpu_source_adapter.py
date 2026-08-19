@@ -248,6 +248,18 @@ class GpuSourceAdapterTests(unittest.TestCase):
             values = self.setup(directory)
             adapter, candidate, authorization, lease, inflight, current, executors = values
             operation = adapter._root(lease["operation_key"])
+            decision = {
+                "schema": "epyc.autokernel.gpu_load_admission_decision.v1",
+                "effective_context_sha256": digest("effective-context"),
+                "request": {"device_id": "mi210_0"},
+                "promotion_claim": False,
+            }
+            decision["decision_sha256"] = A.schemas.content_hash(decision)
+            lease.update(repetition=1, device_id="mi210_0",
+                         load_admission=decision,
+                         device_claim_probe_open={
+                             "campaign_id": "ak-gpu-source-evidence-test"})
+            adapter.reservation_manager = ReservationManager()
 
             def stopped_args(*_args):
                 (operation / "evidence-policy.json").write_text(
@@ -255,13 +267,9 @@ class GpuSourceAdapterTests(unittest.TestCase):
                     encoding="utf-8")
                 carrier_root = operation / "runner/s1"
                 carrier_root.mkdir(parents=True)
-                body = {
-                    "schema": "epyc.autokernel.gpu_load_admission_decision.v1",
-                    "promotion_claim": False,
-                }
-                body["decision_sha256"] = A.schemas.content_hash(body)
                 (carrier_root / "load-admission-decision.json").write_text(
-                    json.dumps(body, sort_keys=True) + "\n", encoding="utf-8")
+                    json.dumps(decision, sort_keys=True, indent=2) + "\n",
+                    encoding="utf-8")
                 raise ParserStopped("sealed runner parser refused")
 
             adapter.args_factory = stopped_args
@@ -272,22 +280,47 @@ class GpuSourceAdapterTests(unittest.TestCase):
             self.assertFalse((operation / "runner-plan.json").exists())
             self.assertEqual(len(executors.calls), 3)
             self.assertEqual(adapter.reconcile(inflight).status, "safe_to_start")
+            carrier = operation / "runner/s1/load-admission-decision.json"
+            expected = carrier.read_bytes()
 
-            def dual_args(*_args):
-                off = SimpleNamespace(
-                    screen=current,
-                    output_dir=str(operation / "runner/measurement-graphs-off"))
-                on = SimpleNamespace(
-                    screen=current,
-                    output_dir=str(operation / "runner/target-runtime-graphs-on"))
-                off._target_runtime_args = on
-                return off
+            forged = dict(decision)
+            forged["effective_context_sha256"] = digest("wrong-context")
+            forged.pop("decision_sha256")
+            forged["decision_sha256"] = A.schemas.content_hash(forged)
+            carrier.write_text(
+                json.dumps(forged, sort_keys=True, indent=2) + "\n",
+                encoding="utf-8")
+            self.assertEqual(adapter.reconcile(inflight).status, "ambiguous")
+            carrier.write_bytes(expected)
 
-            adapter.args_factory = dual_args
-            with mock.patch.object(D, "GpuSourceScreener", FakeDelegate):
-                resumed = adapter.screen(candidate, authorization, lease)
-            self.assertEqual(resumed.result_sha256, current.result_sha256)
-            self.assertEqual(len(executors.calls), 3)
+            s1 = operation / "runner/s1"; s2 = operation / "runner/s2"
+            s1.rename(s2)
+            self.assertEqual(adapter.reconcile(inflight).status, "ambiguous")
+            s2.rename(s1)
+
+            outside = Path(directory) / "hardlinked-decision.json"
+            outside.write_bytes(expected); carrier.unlink(); os.link(outside, carrier)
+            self.assertEqual(adapter.reconcile(inflight).status, "ambiguous")
+            carrier.unlink(); outside.unlink(); carrier.write_bytes(expected)
+
+            release_path = operation / "reservation-release.json"
+            original_release = release_path.read_bytes()
+            for field, value in (
+                    ("device_id", "wrong-device"),
+                    ("campaign_id", "wrong-campaign"),
+                    ("claim_id", "akd-wrong-claim")):
+                release = A._read_json(release_path, "release")
+                release["device_claim_released"][field] = value
+                release.pop("receipt_sha256")
+                release["receipt_sha256"] = schemas.content_hash(release)
+                release_path.write_text(json.dumps(release, sort_keys=True),
+                                        encoding="utf-8")
+                self.assertEqual(adapter.reconcile(inflight).status, "ambiguous")
+                release_path.write_bytes(original_release)
+            release_path.unlink()
+            self.assertEqual(adapter.reconcile(inflight).status, "ambiguous")
+            release_path.write_bytes(original_release)
+            self.assertEqual(adapter.reconcile(inflight).status, "safe_to_start")
 
     def test_race_after_build_is_resumable_wait_with_zero_gpu_executors(self):
         with tempfile.TemporaryDirectory() as directory:

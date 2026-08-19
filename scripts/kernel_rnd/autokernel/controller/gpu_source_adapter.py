@@ -248,7 +248,9 @@ def _validated_stage_receipt(path: Path, schema: str,
     return loaded
 
 
-def _is_resumable_stage_root(root: Path, identity: Mapping[str, Any]) -> bool:
+def _is_resumable_stage_root(
+        root: Path, identity: Mapping[str, Any],
+        lease: Mapping[str, Any]) -> bool:
     """Return true only for an ordered proof journal with terminal boundaries.
 
     Raw output without a receipt is deliberately not resumable: the adapter
@@ -263,6 +265,8 @@ def _is_resumable_stage_root(root: Path, identity: Mapping[str, Any]) -> bool:
         "reservation-release.json", "reservation-releases",
     }
     if any(path.name not in allowed_root for path in root.iterdir()):
+        return False
+    if schemas.content_hash(_lease_identity(lease)) != identity["lease_sha256"]:
         return False
     proof = root / "proof"
     if proof.is_symlink() or not proof.is_dir():
@@ -337,10 +341,11 @@ def _is_resumable_stage_root(root: Path, identity: Mapping[str, Any]) -> bool:
             _validated_stage_receipt(
                 pair_refusal, evidence.PAIR_REFUSAL_SCHEMA, identity)
         bundle = proof / "proof-bundle.json"
+        loaded_bundle = None
         if bundle.exists() or bundle.is_symlink():
             if not pair.exists():
                 return False
-            evidence.load_gpu_source_evidence_bundle(bundle)
+            loaded_bundle = evidence.load_gpu_source_evidence_bundle(bundle)
 
         runner_plan = root / "runner-plan.json"
         runner_root = root / "runner"
@@ -354,10 +359,14 @@ def _is_resumable_stage_root(root: Path, identity: Mapping[str, Any]) -> bool:
             if (not bundle.is_file() or bundle.is_symlink()
                     or runner_root.is_symlink() or not runner_root.is_dir()):
                 return False
+            repetition = lease.get("repetition")
+            decision = lease.get("load_admission")
+            if repetition not in {1, 2} or not isinstance(decision, Mapping):
+                return False
             entries = tuple(runner_root.iterdir())
             if len(entries) != 1 or entries[0].is_symlink() \
                     or not entries[0].is_dir() \
-                    or entries[0].name not in {"s1", "s2"}:
+                    or entries[0].name != f"s{repetition}":
                 return False
             carriers = tuple(entries[0].iterdir())
             if (len(carriers) != 1
@@ -365,14 +374,52 @@ def _is_resumable_stage_root(root: Path, identity: Mapping[str, Any]) -> bool:
                     or carriers[0].is_symlink() or not carriers[0].is_file()):
                 return False
             try:
-                loaded = json.loads(carriers[0].read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError):
+                binding = _regular_binding(
+                    carriers[0],
+                    f"runner/s{repetition}/load-admission-decision.json")
+                expected = (json.dumps(
+                    dict(decision), sort_keys=True, indent=2) + "\n").encode()
+            except (GpuSourceAdapterError, OSError, TypeError, ValueError):
                 return False
-            native = loaded.get("decision_sha256") if isinstance(loaded, dict) else None
-            if (not isinstance(native, str) or not SHA.fullmatch(native)
-                    or schemas.content_hash({
-                        key: value for key, value in loaded.items()
-                        if key != "decision_sha256"}) != native):
+            if (binding["size"] != len(expected)
+                    or binding["sha256"] != hashlib.sha256(expected).hexdigest()):
+                return False
+            releases = _reservation_release_epochs(
+                root, identity["operation_key"])
+            if not releases or loaded_bundle is None:
+                return False
+            expected_device = lease.get("device_id")
+            if (not isinstance(expected_device, str)
+                    or any(body.get("device_claim_released", {}).get(
+                        "device_id") != expected_device
+                        for body in releases.values())):
+                return False
+            probe = lease.get("device_claim_probe_open")
+            expected_campaign = (probe.get("campaign_id")
+                                 if isinstance(probe, Mapping) else None)
+            if (expected_campaign is not None
+                    and (not isinstance(expected_campaign, str)
+                         or any(body.get("device_claim_released", {}).get(
+                             "campaign_id") != expected_campaign
+                             for body in releases.values()))):
+                return False
+            correctness_body = gpu_source_proofs.load_receipt(
+                Path(str(loaded_bundle.correctness["path"])),
+                schema=evidence.CORRECTNESS_SCHEMA)["body"]
+            pair_body = gpu_source_proofs.load_receipt(
+                Path(str(loaded_bundle.attribution["path"])),
+                schema=evidence.PAIR_SCHEMA)["body"]
+            proof_bodies = [correctness_body]
+            for arm in ("candidate", "anchor"):
+                reference = pair_body.get(arm)
+                if (not isinstance(reference, Mapping)
+                        or not isinstance(reference.get("body"), Mapping)):
+                    return False
+                proof_bodies.append(reference["body"])
+            proof_claims = {
+                body.get("device_claim_open", {}).get("claim_id")
+                for body in proof_bodies}
+            if (None in proof_claims or not proof_claims.issubset(releases)):
                 return False
             return True
         if (runner_plan.exists() or runner_plan.is_symlink()
@@ -949,7 +996,8 @@ class GovernedGpuSourceAdapter:
                 raise GpuSourceAdapterError(
                     "operation already has durable state; reconcile instead of restarting") from exc
             if (not _is_resumable_wait_root(operation_root, identity)
-                    and not _is_resumable_stage_root(operation_root, identity)):
+                    and not _is_resumable_stage_root(
+                        operation_root, identity, lease)):
                 raise GpuSourceAdapterError(
                     "operation already has durable state; reconcile instead of restarting")
         else:
@@ -1121,7 +1169,9 @@ class GovernedGpuSourceAdapter:
             if not result_path.exists() and not result_path.is_symlink():
                 if _is_resumable_wait_root(root, identity):
                     return _recovery("safe_to_start")
-                if _is_resumable_stage_root(root, identity):
+                if _is_resumable_stage_root(
+                        root, identity,
+                        _mapping(inflight.get("lease"), "inflight lease")):
                     return _recovery("safe_to_start")
                 plan = _read_json(root / "runner-plan.json", "GPU runner plan")
                 if (plan.get("operation_key") != identity["operation_key"]
