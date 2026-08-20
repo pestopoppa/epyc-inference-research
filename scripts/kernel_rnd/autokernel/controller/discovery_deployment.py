@@ -475,13 +475,19 @@ def _validate_root(path: Path, label: str) -> Path:
     return path.resolve(strict=False)
 
 
-def load_deployment_config(path: Path) -> DiscoveryDeployment:
+def load_deployment_config(path: Path, *, sealed_bytes: bytes | None = None
+                           ) -> DiscoveryDeployment:
     """Load one sealed JSON configuration without expanding its authority."""
-    if path.is_symlink() or not path.is_file():
-        raise DeploymentConfigError("deployment configuration must be a regular file")
     try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+        if sealed_bytes is None:
+            if path.is_symlink() or not path.is_file():
+                raise DeploymentConfigError(
+                    "deployment configuration must be a regular file")
+            payload = path.read_bytes()
+        else:
+            payload = sealed_bytes
+        raw = json.loads(payload.decode("utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise DeploymentConfigError("deployment configuration is not JSON") from exc
     top = _exact(raw, {"schema", "config_sha256", "production", "instrument", "controller", "actors", "gpu",
                        "immutable_inputs", "planner_context", "source_plan"}, "deployment configuration")

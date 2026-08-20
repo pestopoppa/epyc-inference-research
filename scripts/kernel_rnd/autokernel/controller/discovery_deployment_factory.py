@@ -39,6 +39,7 @@ from . import claude_fable5_critic_actor
 from . import discovery_telemetry
 from . import discovery_static_registry
 from . import discovery_supervisor
+from . import discovery_supervisor_secure
 from . import gpu_source_proofs
 from scripts.benchmark import autokernel_gpu_discovery_beliefs
 
@@ -47,6 +48,7 @@ class DeploymentFactoryError(RuntimeError): pass
 _MI210_KFD_PROCS = Path("/sys/class/kfd/kfd/proc")
 _ALLOWED_ENV = frozenset({"PATH", "HOME", "CODEX_HOME", "HTTPS_PROXY", "HTTP_PROXY",
                           "NO_PROXY", "SSL_CERT_FILE", "SSL_CERT_DIR"})
+_SUPERVISED_BUILD_AUTHORITY: Mapping[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -324,6 +326,8 @@ def _execution_module_identity() -> dict[str, dict[str, str]]:
         "gpu_source_adapter": Path(gpu_source_adapter.__file__).resolve(strict=True),
         "discovery_static_registry": Path(discovery_static_registry.__file__).resolve(strict=True),
         "discovery_supervisor": Path(discovery_supervisor.__file__).resolve(strict=True),
+        "discovery_supervisor_secure": Path(
+            discovery_supervisor_secure.__file__).resolve(strict=True),
         "discovery_deployment": Path(deployment.__file__).resolve(strict=True),
         "gpu_load_admission": Path(gpu_load_admission.__file__).resolve(strict=True),
         "split_runtime_verifier": Path(controller.gpu_discovery.split_runtime_verifier.__file__).resolve(strict=True),
@@ -460,9 +464,29 @@ _SITE_CLAUDE_AUTH_ROOT = Path("/home/node/.claude")
 
 
 def _digest_regular(path: Path, label: str) -> str:
-    if path.is_symlink() or not path.is_file():
-        raise DeploymentFactoryError(f"{label} must be a regular non-symlink file")
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+        before = os.fstat(fd)
+        if not stat.S_ISREG(before.st_mode):
+            raise OSError("not a regular file")
+        digest = hashlib.sha256()
+        while True:
+            chunk = os.read(fd, 1024 * 1024)
+            if not chunk:
+                break
+            digest.update(chunk)
+        after = os.fstat(fd)
+        stable = ("st_dev", "st_ino", "st_uid", "st_nlink", "st_mode",
+                  "st_size", "st_mtime_ns", "st_ctime_ns")
+        if any(getattr(before, key) != getattr(after, key) for key in stable):
+            raise OSError("file changed while hashing")
+    except OSError as exc:
+        raise DeploymentFactoryError(
+            f"{label} must be a stable regular non-symlink file") from exc
+    finally:
+        if "fd" in locals():
+            os.close(fd)
+    return digest.hexdigest()
 
 
 def _plain(value: Any) -> Any:
@@ -2648,6 +2672,9 @@ def materialize(config: deployment.DiscoveryDeployment, registry: Mapping[str, M
             instrument_commit=config.instrument_commit)
         permit = {**permit, "instrument_branch": config.instrument_branch,
                   "deployment_config_sha256": config.config_sha256}
+        if _SUPERVISED_BUILD_AUTHORITY is not None:
+            permit["supervised_build_authority"] = json.loads(json.dumps(
+                dict(_SUPERVISED_BUILD_AUTHORITY), sort_keys=True))
         snapshot.revalidate()
         operation_key = permit.get("operation_key")
         if not isinstance(operation_key, str):
@@ -2758,6 +2785,8 @@ def controller_config(config: deployment.DiscoveryDeployment, *, dry_run: bool =
 
 def deployment_main(argv: list[str] | None = None) -> int:
     """Config-only launcher; no caller can inject a registry or executor."""
+    global _SUPERVISED_BUILD_AUTHORITY
+    _SUPERVISED_BUILD_AUTHORITY = None
     parser = argparse.ArgumentParser(description=__doc__)
     authority = parser.add_mutually_exclusive_group(required=True)
     authority.add_argument("--deployment")
@@ -2767,7 +2796,17 @@ def deployment_main(argv: list[str] | None = None) -> int:
     modes.add_argument("--validate-only", action="store_true")
     modes.add_argument("--dry-run", action="store_true",
                        help="alias for validate-only; never calls an actor or hardware")
+    parser.add_argument("--supervised-config-fd", type=int,
+                        help=argparse.SUPPRESS)
+    parser.add_argument("--supervised-authority-fd", type=int,
+                        help=argparse.SUPPRESS)
+    parser.add_argument("--supervisor-runtime-root", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
+    supervised = (args.supervised_config_fd, args.supervised_authority_fd,
+                  args.supervisor_runtime_root)
+    if any(value is not None for value in supervised) and \
+            not all(value is not None for value in supervised):
+        parser.error("supervised config, authority, and runtime root must be paired")
     if args.initialize_bundle:
         if args.validate_only or args.dry_run:
             parser.error("bundle initialization does not accept execution flags")
@@ -2775,7 +2814,14 @@ def deployment_main(argv: list[str] | None = None) -> int:
         print(json.dumps({"status": "initialized", "inference_executed": False,
                           "deployment": str(result)}, sort_keys=True))
         return 0
-    config = deployment.load_deployment_config(Path(args.deployment))
+    sealed_bytes = None
+    if args.supervised_config_fd is not None:
+        sealed_bytes, authority = discovery_supervisor.verified_supervised_launch(
+            Path(args.supervisor_runtime_root), args.supervised_config_fd,
+            args.supervised_authority_fd)
+        _SUPERVISED_BUILD_AUTHORITY = authority
+    config = deployment.load_deployment_config(
+        Path(args.deployment), sealed_bytes=sealed_bytes)
     graph = build_static_deployment_graph(config)
     if args.validate_only or args.dry_run:
         print(json.dumps({"status": "validated", "inference_executed": False,
