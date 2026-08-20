@@ -2474,6 +2474,19 @@ def validate_resumable_output(root: Path, *, graph_mode: str) -> bool:
         return False
 
 
+def _invocation_seed(*, base_seed: int, repetitions: int, arm: str,
+                     timed_output_oracle_enabled: bool,
+                     runtime_graphs: str) -> int:
+    """Select an arm seed without contradicting a cross-arm output oracle."""
+    if arm not in {"anchor", "candidate"}:
+        raise RuntimeError("runner arm is invalid")
+    if runtime_graphs not in {"off", "on"}:
+        raise RuntimeError("runner graph mode is invalid")
+    same_input_required = timed_output_oracle_enabled or runtime_graphs == "on"
+    return (base_seed if same_input_required or arm == "anchor"
+            else base_seed + repetitions)
+
+
 def run(args: argparse.Namespace) -> dict:
     sealed = preflight(args)
     started_at = utc_now()
@@ -2558,8 +2571,10 @@ def run(args: argparse.Namespace) -> dict:
             handshake = anchor_handshake if anchor else candidate_handshake
             return [invoke(
                 build=anchor_build if anchor else candidate_build,
-                model=model, seed=(args.seed if timed_output_oracle_enabled or anchor
-                                   else args.seed + args.calls),
+                model=model, seed=_invocation_seed(
+                    base_seed=args.seed, repetitions=args.calls, arm=arm,
+                    timed_output_oracle_enabled=timed_output_oracle_enabled,
+                    runtime_graphs=str(sealed.get("runtime_graphs", "off"))),
                 expected_source_commit=(None if sealed["runtime_arms"]
                                         else identity["source_commit"]),
                 baseline_vram=baseline_vram,

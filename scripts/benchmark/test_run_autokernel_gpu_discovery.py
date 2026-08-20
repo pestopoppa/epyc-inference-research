@@ -1376,6 +1376,31 @@ class TestGpuDiscoveryBatchedSubprocess(unittest.TestCase):
 
 
 class TestGpuDiscoveryRunCleanup(unittest.TestCase):
+    def test_cross_arm_output_oracles_use_one_seed_in_both_arm_orders(self) -> None:
+        for arm_order in (("anchor", "candidate"), ("candidate", "anchor")):
+            with self.subTest(arm_order=arm_order, oracle="graphs-on"):
+                seeds = {
+                    arm: gpu._invocation_seed(
+                        base_seed=8613, repetitions=9, arm=arm,
+                        timed_output_oracle_enabled=False,
+                        runtime_graphs="on")
+                    for arm in arm_order
+                }
+                self.assertEqual(seeds, {"anchor": 8613, "candidate": 8613})
+            with self.subTest(arm_order=arm_order, oracle="timed-output"):
+                seeds = {
+                    arm: gpu._invocation_seed(
+                        base_seed=8613, repetitions=9, arm=arm,
+                        timed_output_oracle_enabled=True,
+                        runtime_graphs="off")
+                    for arm in arm_order
+                }
+                self.assertEqual(seeds, {"anchor": 8613, "candidate": 8613})
+
+        self.assertEqual(gpu._invocation_seed(
+            base_seed=8613, repetitions=9, arm="candidate",
+            timed_output_oracle_enabled=False, runtime_graphs="off"), 8622)
+
     def test_sampler_stop_failure_never_prevents_device_claim_release(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
