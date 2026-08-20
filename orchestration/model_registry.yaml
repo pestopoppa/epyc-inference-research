@@ -885,13 +885,17 @@ server_mode:
     slots: 1
     chat_template_kwargs:
       enable_thinking: false
-    model_role: qwen36_27b_mtp_q8_local
-    description: "Coding escalation — Qwen3.6-27B dense Q8 MTP on MI210 (ROCm0). 2026-07-31: MOVED off frontdoor's :8070 shared 35B process onto architect_general's :8083 GPU process; alias, launches no server of its own. Quality on this model NOT yet measured for the coder suite. Former Qwen2.5-Coder-32B-Q4 preserved as qwen25_coder_32b_q4km."
+    # 2026-08-20 Qwen3.6->Qwen3.8 swap: this MUST move with model_path. model_role is load-bearing —
+    # model_descriptors.py:1233-1244 substitutes the model_role role's config when an alias's model id
+    # differs from its server_mode entry (recording ignored_model_id), so a stale value here would
+    # silently serve the OLD artifact while the registry read as swapped.
+    model_role: qwen38_27b_q8_local
+    description: "Coding escalation — Qwen3.8-27B dense Q8 MTP on MI210 (ROCm0). 2026-08-20: artifact swapped from Qwen3.6-27B-MTP-Q8_0. 2026-07-31: MOVED off frontdoor's :8070 shared 35B process onto architect_general's :8083 GPU process; alias, launches no server of its own. Quality on this model NOT yet measured for the coder suite. Former Qwen2.5-Coder-32B-Q4 preserved as qwen25_coder_32b_q4km."
     alias_of: architect_general   # documentation; the load-bearing binding is server_mode.architect_general.shared_with
     benchmark_date: null   # 2026-07-31 model swap: 35B bench voided, 27B not yet run
     benchmark_score: null  # was "170/183 (93%)" = Qwen3.6-35B-A3B May-4 Claude-as-Judge; belongs to frontdoor's model, NOT this one
-    model: Qwen3.6-27B-MTP-Q8_0.gguf
-    model_path: /mnt/raid0/llm/models/Qwen3.6-27B-MTP-Q8_0.gguf
+    model: Qwen3.8-27B-Q8_0.gguf
+    model_path: /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf
     # FLAT `kv_quant` DELIBERATELY RETAINED (not migrated into `serving_shape`).
     # coder_escalation is an ALIAS on architect_general's :8083 process — it launches
     # no server, so it HAS no serving shape of its own; giving it a `serving_shape`
@@ -1138,8 +1142,10 @@ server_mode:
                                      # impossible (KV alone would be 32.5 GiB); see the note there.
     chat_template_kwargs:
       enable_thinking: false
-    model_role: qwen36_27b_mtp_q8_local
-    description: "System architecture — Qwen3.6-27B dense Q8 MTP on MI210 (ROCm0). 2026-07-31: 122B vacated to the new architect_critic role. PRIMARY for the :8083 GPU process; coder_escalation is an alias on it. Quality on the 27B not yet measured for the architect suite."
+    # 2026-08-20 Qwen3.6->Qwen3.8 swap: moved with model_path. See the note on coder_escalation —
+    # model_role is load-bearing, not documentation.
+    model_role: qwen38_27b_q8_local
+    description: "System architecture — Qwen3.8-27B dense Q8 MTP on MI210 (ROCm0). 2026-08-20: artifact swapped from Qwen3.6-27B-MTP-Q8_0 (rollback anchor: qwen36_27b_mtp_q8_local, retained). 2026-07-31: 122B vacated to the new architect_critic role. PRIMARY for the :8083 GPU process; coder_escalation is an alias on it."
     shared_with: [coder_escalation]  # 2026-07-31: the registry-native "one server, two roles"
                                      # declaration (src/registry/stack_priors.py:683-685). Without
                                      # it the alias exists only as a port collision.
@@ -1148,8 +1154,8 @@ server_mode:
     agent_file_compression_operating_point: none  # 2026-07-31 model swap: the `aggressive` gate
       # (Phase 3, 2026-05-07: 117% baseline compliance, 110% procedure, recall 0.93) was measured
       # on the 122B and does NOT transfer. RE-PROBE via tests/compliance/agent_file/runner.py.
-    model: /mnt/raid0/llm/models/Qwen3.6-27B-MTP-Q8_0.gguf
-    draft_model: /mnt/raid0/llm/models/Qwen3.6-27B-MTP-Q8_0.gguf  # MTP self-draft = same file; launcher omits -md
+    model: /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf
+    draft_model: /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf  # MTP self-draft = same file; launcher omits -md
     memory_gb: 27   # Qwen3.6-27B Q8 weights (27.05 GiB) — VRAM, not host RAM
     vram_gib: 36.70 # measured total incl. q8_0 KV at 262144 ctx, n_slots=4, kv_unified=true (MI210, 2026-07-31)
     # ⚠ 2026-08-02 — THE PROVENANCE STRING ABOVE IS INTERNALLY INCONSISTENT. Left as
@@ -1178,11 +1184,18 @@ server_mode:
       type: speculative_decoding   # matches roles.architect_general
       # CANONICAL: top-level speculative_decoding_policy. MTP self-draft ALONE = same-file draft
       # path; launcher omits -md.
-      # 2026-07-31 model swap 122B->27B: draft_max 4 is NOT inherited, it is the MEASURED optimum
+      # 2026-07-31 model swap 122B->27B: draft_max is NOT inherited, it is the MEASURED optimum
       # for THIS artifact (L8850 warns depth is per-model; the 122B-IQ2's was n-max 2).
+      # 2026-08-20 model swap Qwen3.6->Qwen3.8: RE-MEASURED, not carried over. 4 was correct for
+      # Qwen3.6-27B-MTP-Q8_0. Qwen3.8-27B sweep (np=1, 12 real olympiadbench prompts, v9
+      # 0db32c06e / build 10125, one flag varied): plain 27.78 / n2 39.77 / n3 46.61 / n4 51.03 /
+      # n6 55.22 / n8 55.46 / n12 51.14 t/s; draft acceptance 0.842 -> 0.482 across depth 2->8.
+      # Curve turns over: optimum 6-8 (n6 vs n8 inside noise), 8 chosen. MTP is worth 2.00x over
+      # plain at n-max 8. Evidence: epyc-inference-research/artifacts/architect-bench-gpu-20260814/
+      # mtp_nmax_sweep_20260819/ and mtp_ab_20260819/.
       spec_type: draft-mtp
-      draft_max: 4
-      draft_model: /mnt/raid0/llm/models/Qwen3.6-27B-MTP-Q8_0.gguf
+      draft_max: 8
+      draft_model: /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf
       lookup: false
     # 2026-07-31 GPU CUTOVER: no NUMA fanout. numa_instances/numa_ports are RETAINED as explicit
     # singletons pointing at the primary port — NOT deleted, because several dispatch paths fail
@@ -1902,10 +1915,10 @@ roles:
     tier: B
     description: "Coding escalation — Qwen3.6-27B dense Q8 MTP on MI210 (ROCm0). 2026-07-31: MOVED off frontdoor. Alias on architect_general's :8083 process; NO LONGER the same model as frontdoor and no longer shares its GGUF mmap. Absorbs the eliminated architect_coding role. Former Qwen2.5-Coder-32B-Q4 preserved as qwen25_coder_32b_q4km."
     model:
-      name: Qwen3.6-27B-MTP-Q8_0
-      path: /mnt/raid0/llm/models/Qwen3.6-27B-MTP-Q8_0.gguf
+      name: Qwen3.8-27B-Q8_0
+      path: /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf
       quant: Q8_0
-      size_gb: 27.05
+      size_gb: 27.05   # 29,047,086,048 B = 27.05 GiB — same size as the Qwen3.6 it replaces
       architecture: qwen35   # dense hybrid SSM, NOT the qwen35moe MoE
       attention_layers: 64
       n_embd: 5120
@@ -2116,10 +2129,10 @@ roles:
       # This visibly violates runtime_defaults L360 ("production roles MUST upgrade to mild or
       # higher") — deliberately, because a visible violation beats an invisible false attestation.
     model:
-      name: Qwen3.6-27B-MTP-Q8_0
-      path: /mnt/raid0/llm/models/Qwen3.6-27B-MTP-Q8_0.gguf
+      name: Qwen3.8-27B-Q8_0
+      path: /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf
       quant: Q8_0
-      size_gb: 27.05
+      size_gb: 27.05              # 29,047,086,048 B = 27.05 GiB — same size as the Qwen3.6 it replaces
       architecture: qwen35        # dense hybrid SSM (gated Delta Net + attention); all params active
       attention_layers: 64        # 64 layers, 5120 embd (see qwen36_27b_q8 L3150)
       n_embd: 5120
@@ -2144,11 +2157,12 @@ roles:
       type: speculative_decoding
       # CANONICAL: see top-level `speculative_decoding_policy`. MTP self-draft ALONE.
       spec_type: draft-mtp
-      draft_model: /mnt/raid0/llm/models/Qwen3.6-27B-MTP-Q8_0.gguf  # MTP self-draft = same file
-      draft_max: 4                                # MEASURED optimum for THIS artifact, not
-                                                  # inherited — L8850 warns depth is per-model
-                                                  # (the 122B-IQ2's optimum was n-max 2).
-      k: 4                                         # alias for draft_max (RegistryLoader)
+      draft_model: /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf  # MTP self-draft = same file
+      draft_max: 8                                # MEASURED optimum for THIS artifact (Qwen3.8-27B,
+                                                  # 2026-08-20 sweep; see the policy block above),
+                                                  # not inherited — L8850 warns depth is per-model.
+                                                  # Qwen3.6-27B-MTP-Q8_0's optimum was 4.
+      k: 8                                         # alias for draft_max (RegistryLoader)
       p_split: 0                                  # linear only — tree harmful on hybrid (27B is also hybrid)
       lookup: false                               # DISABLED: segfaults on Qwen3.5/3.6 hybrids (2026-03-24)
       notes: >
@@ -9786,6 +9800,72 @@ roles:
       cpu_only_candidate: true
       gpu_only_candidate: true
       hybrid_candidate: true
+
+  qwen38_27b_q8_local:
+    tier: A
+    description: "Qwen3.8-27B Q8_0 exact local artifact (unsloth build, embeds the nextn/MTP head).
+      2026-08-20: PROMOTED to the PRODUCTION model backing architect_general (:8083, MI210 ROCm0) and
+      its coder_escalation alias, replacing qwen36_27b_mtp_q8_local. That row is RETAINED unmodified as
+      the rollback anchor — do not delete it. Same-file MTP self-draft, exactly like the Qwen3.6 it
+      replaces; the ggml-org mtp-*.gguf sidecar is redundant for this base."
+    production_throughput:
+      # Every figure below was measured on THIS artifact. Nothing is inherited from
+      # qwen36_27b_mtp_q8_local: its 30.87 baseline / 36.70 vram belong to a different file and
+      # copying them across would be a false attestation.
+      optimized_tps: 55.46        # category=OPTIMUM, draft-mtp n-max 8 (the MEASURED optimum),
+                                  # np=1, 12 real olympiadbench prompts, 2048-tok cap, v9 10125
+      baseline_tps: 27.78         # category=BASELINE, spec OFF, same 12 prompts / same server.
+                                  # MTP is worth 2.00x over this at n-max 8. Never a headline.
+      optimized_tps_long_context: null  # NOT MEASURED at n-max 8. The ~45 t/s flat 2k-32k figure in
+                                  # the np-depth grid was taken at n-max 4; do not reuse it here.
+      contended_tps: null         # NOT MEASURED — no co-residency run for this artifact yet.
+      vram_gib: 37.22             # measured 2026-08-20 at n_slots=4, n_ctx 262144, q8_0 KV,
+                                  # kv_unified=true; 39,963,078,656 B sampled DURING residency
+                                  # (KFD llama-server pid, 58% VRAM). Qwen3.6's was 36.70.
+      attest: "epyc-inference-research/artifacts/architect-bench-gpu-20260814/ —
+        mtp_ab_20260819/ (plain-vs-MTP), mtp_nmax_sweep_20260819/ (depth sweep),
+        q38_vram_shape_20260820/ (VRAM at production shape). All OBSERVATIONS per MEASUREMENT.md."
+    model:
+      name: Qwen3.8-27B-Q8_0
+      path: /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf
+      quant: Q8_0
+      size_gb: 27.05
+      architecture: qwen35
+      mtp_capable: true           # blk.64.nextn.* embedded in the base (GGUF-header verified)
+    artifact_status:
+      download: present
+      observed_date: 2026-08-20
+      file_bytes: 29047086048
+      provenance: unsloth/Qwen3.8-27B-GGUF
+    candidate_roles:
+    - architect_general   # 2026-08-20: PRIMARY, :8083 MI210 ROCm0
+    - coder_escalation    # 2026-08-20: alias on the same :8083 process
+    - architect
+    - general
+    - reasoning
+    acceleration:
+      type: speculative_decoding
+      spec_type: native_mtp_candidate
+      optimal_gpu_serving:
+        # Measured optimum — launch with THIS, do not re-derive.
+        date: 2026-08-19
+        kernel: production-consolidated-v9
+        binary: /mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server
+        device: MI210 (ROCm0)
+        spec_type: draft-mtp
+        spec_draft_n_max: 8       # sweep: n4 51.03 / n6 55.22 / n8 55.46 / n12 51.14 t/s.
+                                  # Curve turns over past 8; n6 vs n8 is inside noise.
+        flags: >-
+          -np 1 -c 32768 -t 8 -tb 8 -b 2048 -ub 2048 -ctk f16 -ctv f16
+          --device ROCm0 -ngl all -fa on --reasoning off
+          --spec-type draft-mtp --spec-draft-n-max 8
+        decode_t_s: 55.46
+    memory:
+      residency: cold
+      pinned: false
+      cpu_only_candidate: false   # 29 GB dense Q8 — GPU-resident role
+      gpu_only_candidate: true
+      hybrid_candidate: false
 
   qwen36_35b_a3b_mtp_q8_local:
     tier: C
