@@ -1520,3 +1520,60 @@ class TestGpuDiscoveryRunCleanup(unittest.TestCase):
             governance = json.loads((root / "success/live-governance.json").read_text())
             self.assertEqual(governance["status"], "borrowed_phase_ended")
             self.assertNotIn("device_claim_released", governance)
+
+            # The graphs-on run owns a separate cross-arm output oracle.  It
+            # must pass the identical hidden seed to both arms regardless of
+            # the counterbalanced execution order; otherwise the reducer sees
+            # different input/output content banks, as live v18 did.
+            sealed["runtime_graphs"] = "on"
+            sealed["timed_output_oracle"] = {"enabled": False}
+            args.output_dir = str(root / "graphs-on-success")
+            claim.reset_mock()
+            claim.borrowed_outer_reservation = True
+            claim.receipt.return_value.to_dict.return_value = gpu.device_claim.ClaimReceipt(
+                claim_id="akd-outer", device_id="mi210_0", lock_path="/claim",
+                state="held", holder_pid=1, holder_start_ticks=1,
+                holder_boot_id="boot", host="host", holder_label="test",
+                purpose="outer", campaign_id="cleanup-test", acquired_at="now").to_dict()
+            claim.release.return_value = {
+                "schema": "epyc.autokernel.borrowed_device_claim_phase.v1",
+                "mode": "borrowed_outer_reservation", "outer_claim_id": "akd-outer",
+                "device_id": "mi210_0", "campaign_id": "cleanup-test",
+                "phase_ended_at": "done", "physical_release": False}
+            sampler.reset_mock(); sampler.start.return_value = sampler
+            sampler.stop.side_effect = None
+            sampler.stop.return_value.to_dict.return_value = {"samples": []}
+            graph_seeds = []
+            hashes = [f"{index:064x}" for index in range(9)]
+
+            def graphs_on_invocation(**kwargs):
+                arm = ("anchor" if kwargs["expected_source_commit"] == "a" * 40
+                       else "candidate")
+                graph_seeds.append((arm, kwargs["seed"]))
+                body = {
+                    "schema": "epyc.autokernel.graphs_on_output_integrity.v1",
+                    "instrument_commit": gpu.READY_CONTINUE_INSTRUMENT_COMMIT,
+                    "seed": kwargs["seed"], "repetitions": 9,
+                    "input_hashes": hashes, "output_hashes": hashes,
+                    "graph_environment": {"GGML_CUDA_DISABLE_GRAPHS": None},
+                    "reward_admissible": True,
+                }
+                return {**invocation, "graphs_on_output_integrity": {
+                    **body, "receipt_sha256": gpu.schemas.content_hash(body)}}
+
+            with mock.patch.object(gpu, "preflight", return_value=sealed), \
+                 mock.patch.object(gpu.storage, "assert_not_scratch",
+                                   return_value=root / "graphs-on-success"), \
+                 mock.patch.object(gpu, "_readiness_policy_for_arm", return_value=None), \
+                 mock.patch.object(gpu, "_kfd_pids", return_value=()), \
+                 mock.patch.object(gpu, "VRAM_USED", vram), \
+                 mock.patch.object(gpu.device_claim, "acquire_device_claim",
+                                   side_effect=AssertionError("nested physical claim")), \
+                 mock.patch.object(gpu.device_sampler, "RocmSmiSampler", return_value=sampler), \
+                 mock.patch.object(gpu, "invoke", side_effect=graphs_on_invocation), \
+                 mock.patch.object(gpu.autokernel_progression, "export_progression"):
+                graph_result = gpu.run(args)
+            self.assertEqual(graph_seeds, [("candidate", 8613), ("anchor", 8613)])
+            self.assertEqual(graph_result["graphs_on_output_oracle"]["seed"], 8613)
+            self.assertTrue(
+                graph_result["graphs_on_output_oracle"]["cross_arm_bitwise_equal"])
