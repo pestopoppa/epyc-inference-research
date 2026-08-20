@@ -38,6 +38,7 @@ from . import codex_container_actor
 from . import claude_fable5_critic_actor
 from . import discovery_telemetry
 from . import discovery_static_registry
+from . import discovery_supervisor
 from . import gpu_source_proofs
 from scripts.benchmark import autokernel_gpu_discovery_beliefs
 
@@ -322,6 +323,7 @@ def _execution_module_identity() -> dict[str, dict[str, str]]:
         "gpu_discovery_runner": Path(controller.gpu_discovery.__file__).resolve(strict=True),
         "gpu_source_adapter": Path(gpu_source_adapter.__file__).resolve(strict=True),
         "discovery_static_registry": Path(discovery_static_registry.__file__).resolve(strict=True),
+        "discovery_supervisor": Path(discovery_supervisor.__file__).resolve(strict=True),
         "discovery_deployment": Path(deployment.__file__).resolve(strict=True),
         "gpu_load_admission": Path(gpu_load_admission.__file__).resolve(strict=True),
         "split_runtime_verifier": Path(controller.gpu_discovery.split_runtime_verifier.__file__).resolve(strict=True),
