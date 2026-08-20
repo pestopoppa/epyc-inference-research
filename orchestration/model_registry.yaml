@@ -9870,6 +9870,30 @@ roles:
           --device ROCm0 -ngl all -fa on --reasoning off
           --spec-type draft-mtp --spec-draft-n-max 8
         decode_t_s: 55.46
+      # DECISION CONTEXT ONLY — the selection above is UNCHANGED and remains draft-mtp n-max 8.
+      challenger_under_evaluation:
+        name: dflash2-block8
+        status: np1_only_NOT_SELECTABLE
+        measured_2026_08_20:
+          np: 1
+          dflash2_block8_decode_t_s: 70.0
+          matched_mtp_n8_decode_t_s: 55.2      # fresh same-campaign arm; reproduces our 55.46 to 0.5%
+          gain_vs_matched_mtp_pct: 26.81
+          mean_draft_acceptance: 0.62804        # vs MTP n-max 8 at 0.48246
+          paired_identity: same 12 prompt fingerprints in order, 36/36 requests, zero errors
+        evidence:
+        - artifacts/architect-bench-gpu-20260814/dflash2_np1_20260820/campaign-summary.json
+        evidence_sha256: e4f9e21fd399c37fceca31e171be0299bcd4c35284d5a5828e3201a8bf50b053
+        manifest_sha256: ebfc55f5706d549e7c5e00cf814e968f299491fe9ab23466f83a7dfb6cb6be4e
+        build: "llama.cpp-experimental ak/dflash2-qwen38-20260820 @ 2046c64e (PR #27342 forward-port;
+          frozen v9 NOT edited). Requires this non-production binary — it cannot run on v9."
+        blocking_before_selection:
+        - np2/4/8 scaling (this role serves np up to 8; the np1 win does not transfer by assumption,
+          and the upstream PR's own reviewers report scaling problems at concurrency >1)
+        - exact greedy parity vs --spec-type none at temp 0 (losslessness is CLAIMED, not yet verified
+          here; an unverified-parity config must not become a serving selection however fast it is)
+        - block-verify dispatch proof (our gfx90a MMQ patch a6b4b5263 is MTP-verify-shaped, ne11<=1;
+          a block verify is ne11~8 and may miss that path)
     memory:
       residency: cold
       pinned: false
