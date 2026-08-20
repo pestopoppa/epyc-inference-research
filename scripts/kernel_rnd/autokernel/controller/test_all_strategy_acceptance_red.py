@@ -277,6 +277,40 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
         self.assertEqual(variants["gqa7_bulk_pairs"]["ncols2"], 2)
         self.assertEqual(variants["gqa7_scalar_tail"]["ncols2"], 1)
 
+    def test_all_four_accept_only_deployed_anchor_intents_and_fa_derives_subroutes(self):
+        records = {row["hypothesis_id"]: row
+                   for row in self.portfolio.eligible_hypotheses()}
+        for hypothesis_id, template_id, _op, _cases in ELIGIBLE:
+            with self.subTest(hypothesis=hypothesis_id):
+                record = records[hypothesis_id]
+                template = self.registry.templates[template_id]
+                authority = self.dispatch[hypothesis_id]
+                self.assertTrue(all(
+                    row["route_id"].startswith(f"{template_id}.anchor.")
+                    for row in authority))
+                intent = C.GpuSourceExperimentIntent(
+                    template.template_id, template.target_surface,
+                    record["target"]["source_symbols"][0],
+                    template.correctness_id, template.dispatch_id,
+                    tuple(C.BoundedDispatchExpectation(**row)
+                          for row in authority))
+                contract = template.bind_dispatch(intent)
+                self.assertGreaterEqual(len(contract.candidate_exact), 1)
+                self.assertGreaterEqual(len(contract.anchor_exact), 1)
+                if template_id == "cuda-fattn-tile-v1":
+                    self.assertEqual(
+                        [row.signature for row in contract.candidate_exact],
+                        ["cuda-fattn-tile-v1.candidate.gqa7_bulk_pairs",
+                         "cuda-fattn-tile-v1.candidate.gqa7_scalar_tail"])
+                    self.assertEqual(
+                        [(row.calls, row.grid, row.workgroup, row.lds_bytes)
+                         for row in contract.candidate_exact],
+                        [(3096, 3072, 64, 5120),
+                         (3096, 1024, 64, 5120)])
+                    self.assertEqual(
+                        [row.signature for row in contract.anchor_exact],
+                        ["cuda-fattn-tile-v1.anchor.0"])
+
     def test_q5_exact_duration_compares_the_same_three_routes(self):
         """RED: 3 candidate routes divided by 8 anchor routes is fake gain."""
         hypothesis_id = "akh-v2-q5-type-specific-dequant"

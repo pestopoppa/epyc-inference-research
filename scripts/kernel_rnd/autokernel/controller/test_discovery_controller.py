@@ -412,7 +412,9 @@ class Tests(unittest.TestCase):
                            "planner_context":{"reviewed_source_package_sha256":
                                               package.package_sha256}},workspace=root)
    self.assertEqual(captured["reviewed_source_package"]["package_sha256"],package.package_sha256)
-   self.assertEqual(captured["authoring_contract"]["expected_dispatch"],"array of 1..8 exact objects")
+   self.assertIn("deployed anchor objects",captured["authoring_contract"]["expected_dispatch"])
+   self.assertIn("Never substitute predicted candidate subroutes",
+                 captured["authoring_contract"]["expected_dispatch_rule"])
    estimate_rule=captured["authoring_contract"]["proposal_schema"]["estimated_diff_size_rule"]
    self.assertIn("added lines plus removed lines",estimate_rule)
    hunk_rule=captured["authoring_contract"]["source_manifest_schema"]["unified_diff_hunk_rule"]
@@ -423,6 +425,29 @@ class Tests(unittest.TestCase):
    declarations=captured["structural_example_only"]["plan.json"]["proposal"]["change"]["files_and_symbols"]
    self.assertIsInstance(declarations,list)
    self.assertEqual(declarations,["ggml/src/ggml-cuda/example.cu:example_symbol"])
+
+ def test_planner_catalog_hides_controller_owned_fa_geometry(self):
+  catalog={"cuda-fattn-tile-v1":{
+      "template_id":"cuda-fattn-tile-v1",
+      "semantics":{"candidate_dispatch_variants":{
+          "gqa7_bulk_pairs":{"calls":3096,"grid":3072},
+          "gqa7_scalar_tail":{"calls":3096,"grid":1024}}}}}
+  planner=D.CodexPlanner(wrapper=Path("/not-invoked"),environment={},
+                         template_catalog=catalog)
+  projected=planner._planner_catalog()
+  semantics=projected["cuda-fattn-tile-v1"]["semantics"]
+  self.assertNotIn("candidate_dispatch_variants",semantics)
+  self.assertEqual(semantics["candidate_dispatch_strategy"],{
+      "strategy_id":"gqa7_pair_tail",
+      "selection_authority":"controller_owned",
+      "expected_dispatch_source":
+          "controller_owned_portfolio_binding.expected_dispatch",
+      "instruction":(
+          "Author the bounded six-head pair plus one-head tail source mechanism. "
+          "Do not emit candidate route IDs, call counts, or geometry; the controller "
+          "derives and validates those after authorization.")})
+  self.assertNotIn("3072",json.dumps(projected))
+  self.assertIn("3072",json.dumps(planner.template_catalog))
  def _write_planner_artifacts(self, workspace, assignment, *, mode="valid"):
   relative="ggml/src/ggml-cuda/reviewed.cu"; symbol="reviewed_kernel"
   patch_bytes=(f"diff --git a/{relative} b/{relative}\n"
@@ -500,6 +525,56 @@ class Tests(unittest.TestCase):
                                              package.package_sha256}},
                  workspace=workspace,checkpoint_path=root/"operation"/"actor-result.json")
    self.assertNotIsInstance(caught.exception,D.PlannerOutputRefusal)
+
+ def test_v19_fa_candidate_subroutes_are_typed_secret_free_and_reopen_without_actor(self):
+  package=self.source_package()
+  assignment=D.AuthoringAssignment("ak-test","akp-test","akc-test","0"*40,"1"*40)
+  with tempfile.TemporaryDirectory() as t:
+   root=Path(t); workspace=root/"operation/workspace"; workspace.mkdir(parents=True)
+   wrapper=root/"codex"; wrapper.write_bytes(b"codex"); wrapper.chmod(0o700)
+   telemetry=D.discovery_telemetry.DiscoveryTelemetry(root/"live")
+   planner=D.CodexPlanner(wrapper=wrapper,environment={"PATH":"/usr/bin"},
+                          reviewed_sources=package,telemetry=telemetry)
+   calls=0
+   def actor(**_kwargs):
+    nonlocal calls
+    calls+=1
+    self._write_planner_artifacts(workspace,assignment)
+    plan=json.loads((workspace/"plan.json").read_text())
+    plan["experiment_intent"]={
+        "template_id":"cuda-fattn-tile-v1","target_surface":"gpu_decode",
+        "target_symbol":"launch_fattn_tile_switch_ncols2",
+        "correctness_id":"backend-ops-hip-v1",
+        "dispatch_id":"decode-tg128-rocprof-v3",
+        "expected_dispatch":[
+            {"route_id":"cuda-fattn-tile-v1.gqa7_bulk_pairs",
+             "kernel_name":"void flash_attn_tile<64, 64, 1, 2, false>",
+             "calls":3096,"grid":3072,"workgroup":64,"lds_bytes":5120},
+            {"route_id":"cuda-fattn-tile-v1.gqa7_scalar_tail",
+             "kernel_name":"void flash_attn_tile<64, 64, 2, 1, false>",
+             "calls":3096,"grid":1024,"workgroup":64,"lds_bytes":5120}]}
+    (workspace/"plan.json").write_text(json.dumps(plan))
+    return SimpleNamespace(returncode=0,stdout="",stderr="")
+   context={"authoring_assignment":assignment.to_dict(),
+            "planner_context":{"reviewed_source_package_sha256":package.package_sha256}}
+   checkpoint=root/"operation/actor-result.json"
+   with patch.object(D.codex_container_actor,"runtime_identity",return_value=RUNTIME), \
+        patch.object(D.codex_container_actor,"run_actor",side_effect=actor), \
+        self.assertRaisesRegex(D.PlannerOutputRefusal,
+                               "planner experiment intent violates deployed authority"):
+    planner.plan(context=context,workspace=workspace,checkpoint_path=checkpoint)
+   with patch.object(D.codex_container_actor,"runtime_identity",return_value=RUNTIME), \
+        patch.object(D.codex_container_actor,"run_actor",
+                     side_effect=AssertionError("completed actor replayed")), \
+        self.assertRaisesRegex(D.PlannerOutputRefusal,
+                               "planner experiment intent violates deployed authority"):
+    planner.resume_plan(context=context,workspace=workspace,checkpoint_path=checkpoint)
+   self.assertEqual(calls,1)
+   rows=[json.loads(line) for line in (root/"live/planner.jsonl").read_text().splitlines()]
+   self.assertEqual([row["event"] for row in rows],["planner_started","planner_refused"])
+   serialized=json.dumps(rows)
+   self.assertNotIn("gqa7_bulk_pairs",serialized)
+   self.assertNotIn("dispatch route id is not deployed authority",serialized)
  def test_planner_refusal_survives_telemetry_schema_or_io_failure(self):
   package=self.source_package()
   assignment=D.AuthoringAssignment("ak-test","akp-test","akc-test","0"*40,"1"*40)

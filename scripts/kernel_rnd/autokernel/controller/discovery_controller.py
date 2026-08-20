@@ -825,6 +825,44 @@ class CodexPlanner:
             raise DiscoveryControllerError("sealed Codex planner launcher/argv policy changed")
         return current
     def attest(self) -> Mapping[str, Any]: return {**SOL, "runtime": self._runtime()}
+
+    def _planner_catalog(self) -> dict[str, Any]:
+        """Return the actor-visible projection of reviewed template authority.
+
+        Candidate dispatch topology is controller-owned evidence authority.  It
+        is useful to the critic and evidence reducer, but exposing its literal
+        route/count/geometry cells to the planner invites those cells to be
+        copied into ``expected_dispatch`` even though that field is deliberately
+        the deployed anchor observation.  Preserve only the named authoring
+        strategy and make the ownership boundary executable in the prompt.
+        """
+        catalog = json.loads(json.dumps(self.template_catalog, sort_keys=True))
+        for template in catalog.values():
+            if not isinstance(template, dict):
+                continue
+            semantics = template.get("semantics")
+            if not isinstance(semantics, dict):
+                continue
+            variants = semantics.pop("candidate_dispatch_variants", None)
+            if variants is None:
+                continue
+            if (template.get("template_id") != "cuda-fattn-tile-v1"
+                    or not isinstance(variants, dict)
+                    or set(variants) != {"gqa7_bulk_pairs", "gqa7_scalar_tail"}):
+                raise DiscoveryControllerError(
+                    "planner template candidate strategy authority is malformed")
+            semantics["candidate_dispatch_strategy"] = {
+                "strategy_id": "gqa7_pair_tail",
+                "selection_authority": "controller_owned",
+                "expected_dispatch_source":
+                    "controller_owned_portfolio_binding.expected_dispatch",
+                "instruction": (
+                    "Author the bounded six-head pair plus one-head tail source mechanism. "
+                    "Do not emit candidate route IDs, call counts, or geometry; the controller "
+                    "derives and validates those after authorization."),
+            }
+        return catalog
+
     def plan(self, *, context: Mapping[str, Any], workspace: Path,
              checkpoint_path: Path | None = None) -> PlannedCandidate:
         return self._plan(context=context, workspace=workspace, resume=False,
@@ -868,7 +906,13 @@ class CodexPlanner:
                 str(example.get("id")) for example in
                 context.get("admission_policy", {}).get("examples", [])
                 if isinstance(example, Mapping) and isinstance(example.get("id"), str)}),
-            "expected_dispatch": "array of 1..8 exact objects",
+            "expected_dispatch": (
+                "array of 1..8 deployed anchor objects copied byte-for-byte from "
+                "controller_owned_portfolio_binding.expected_dispatch"),
+            "expected_dispatch_rule": (
+                "Never substitute predicted candidate subroutes, counts, names, or geometry. "
+                "Topology-changing candidate routes are controller-owned and derived only after "
+                "the planner's source proposal passes authorization."),
             "expected_dispatch_item_keys": ["route_id", "kernel_name", "calls", "grid", "workgroup", "lds_bytes"],
             "source_manifest_schema": {
                 "exact_keys": ["schema", "campaign_id", "proposal_id", "candidate_id",
@@ -961,7 +1005,7 @@ class CodexPlanner:
                 "patch_encoding": "base64",
                 "patch_base64": base64.b64encode(example_patch.encode()).decode("ascii")}}
         prompt = json.dumps({"role": SOL, "context": context,
-                             "experiment_template_catalog": self.template_catalog,
+                             "experiment_template_catalog": self._planner_catalog(),
                              "reviewed_source_package": source_package,
                              "authoring_contract": contract,
                              "controller_owned_portfolio_binding": binding,
@@ -1257,16 +1301,25 @@ def _load_plan(path: Path, root: Path, *, assignment: AuthoringAssignment | None
                 or not all(isinstance(row, Mapping) and set(row) == expected_keys
                            for row in expected)):
             raise PlannerOutputRefusal("planner bounded dispatch schema mismatch")
-        recommendation = intent_raw.get("load_mode_recommendation")
-        if recommendation is not None:
-            if not isinstance(recommendation, Mapping) or set(recommendation) != {"mode", "rationale", "example_ids"}:
-                raise PlannerOutputRefusal("planner load-mode recommendation schema mismatch")
-            recommendation = LoadModeRecommendation(
-                mode=recommendation["mode"], rationale=recommendation["rationale"],
-                example_ids=tuple(recommendation["example_ids"]))
-        intent = GpuSourceExperimentIntent(**{**intent_raw,
-            "expected_dispatch": tuple(BoundedDispatchExpectation(**row) for row in expected),
-            "load_mode_recommendation": recommendation})
+        try:
+            recommendation = intent_raw.get("load_mode_recommendation")
+            if recommendation is not None:
+                if not isinstance(recommendation, Mapping) or set(recommendation) != {"mode", "rationale", "example_ids"}:
+                    raise PlannerOutputRefusal("planner load-mode recommendation schema mismatch")
+                recommendation = LoadModeRecommendation(
+                    mode=recommendation["mode"], rationale=recommendation["rationale"],
+                    example_ids=tuple(recommendation["example_ids"]))
+            intent = GpuSourceExperimentIntent(**{**intent_raw,
+                "expected_dispatch": tuple(BoundedDispatchExpectation(**row) for row in expected),
+                "load_mode_recommendation": recommendation})
+        except PlannerOutputRefusal:
+            raise
+        except (DiscoveryControllerError, TypeError, ValueError) as exc:
+            # This is actor-authored plan content, not controller/deployment
+            # corruption.  Keep the durable reason bounded and secret-free;
+            # telemetry records only its class and digest.
+            raise PlannerOutputRefusal(
+                "planner experiment intent violates deployed authority") from exc
     else:
         intent = None
     raw_path = Path(_text(value.pop("source_manifest_path"), "source_manifest_path"))

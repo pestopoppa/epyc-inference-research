@@ -2604,8 +2604,10 @@ def materialize(config: deployment.DiscoveryDeployment, registry: Mapping[str, M
                      "profile_anchor_dispatch": [vars(row)
                                                  for row in template.dispatch.anchor_exact],
                      "candidate_dispatch_authoring": (
-                         "expected_dispatch is an array of exact rocprofv3 native literal name/geometry cells; "
-                         "include every geometry emitted by the changed kernel symbol"),
+                         "expected_dispatch is the exact deployed rocprofv3 anchor array from the "
+                         "controller-owned portfolio binding; never replace it with predicted "
+                         "candidate routes. Topology-changing candidate cells are derived and "
+                         "validated by the controller after authorization."),
                      "semantics": dict(template.semantics)}
                for key, template in templates.templates.items()}
     source_package = (_reviewed_source_package(config, templates)
