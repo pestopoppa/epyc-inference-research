@@ -45,14 +45,14 @@ class _CompileFailure(StaticRegistryError):
 _REWARD_FILES = ("llama-bench", "libllama-bench-impl.so", "libllama-common.so",
                  "libllama.so", "libggml.so", "libggml-cpu.so", "libggml-base.so")
 _HIP = "libggml-hip.so"
-_BUILDER_SCHEMA = "epyc.autokernel.static_gpu_source_builder.v4"
+_BUILDER_SCHEMA = "epyc.autokernel.static_gpu_source_builder.v5"
 _BUILD_KEY_SCHEMA = "epyc.autokernel.gpu_source_build_key.v1"
 _BUILD_REF_SCHEMA = "epyc.autokernel.gpu_source_build_ref.v1"
 _BUILD_INTENT_SCHEMA = "epyc.autokernel.gpu_source_build_intent.v1"
-_BUILD_TERMINAL_SCHEMA = "epyc.autokernel.gpu_source_build_terminal.v1"
-_BUILD_ATTEMPT_SCHEMA = "epyc.autokernel.gpu_source_build_attempt.v1"
-_BUILD_RECOVERY_SCHEMA = "epyc.autokernel.gpu_source_build_recovery.v1"
-_BUILD_TRANSACTION_OWNER_SCHEMA = "epyc.autokernel.gpu_source_build_transaction_owner.v1"
+_BUILD_TERMINAL_SCHEMA = "epyc.autokernel.gpu_source_build_terminal.v2"
+_BUILD_ATTEMPT_SCHEMA = "epyc.autokernel.gpu_source_build_attempt.v2"
+_BUILD_RECOVERY_SCHEMA = "epyc.autokernel.gpu_source_build_recovery.v2"
+_BUILD_TRANSACTION_OWNER_SCHEMA = "epyc.autokernel.gpu_source_build_transaction_owner.v2"
 _BUILD_TRANSACTION_RECOVERY_SCHEMA = "epyc.autokernel.gpu_source_build_transaction_recovery.v1"
 _TEARDOWN_SCHEMA = "epyc.autokernel.source_materialization_teardown.v2"
 _SOURCE_FAILURE_MESSAGE_MAX_BYTES = 2048
@@ -66,12 +66,92 @@ _BUILD_ENV_NAMES = (
     "CXX", "CFLAGS", "CXXFLAGS", "CPPFLAGS", "LDFLAGS", "MAKEFLAGS",
 )
 _SEALED_BUILD_PATH = "/opt/rocm/bin:/usr/local/bin:/usr/bin:/bin"
+_SUPERVISED_BUILD_AUTHORITY_SCHEMA = "epyc.autokernel.supervised_build_authority.v1"
+_HEX = frozenset("0123456789abcdef")
+
+
+def _stat_identity(value: os.stat_result) -> tuple[int, ...]:
+    return (value.st_dev, value.st_ino, value.st_uid, stat.S_IMODE(value.st_mode),
+            value.st_nlink, value.st_size, value.st_mtime_ns, value.st_ctime_ns)
+
+
+def _directory_identity(value: os.stat_result) -> tuple[int, ...]:
+    return (value.st_dev, value.st_ino, value.st_uid,
+            stat.S_IMODE(value.st_mode), value.st_nlink)
+
+
+def _read_bound_file(path: Path, label: str, *, receipt: bool = False) -> tuple[bytes, dict[str, int]]:
+    """Read and hash the inode actually opened, with parent/path barriers.
+
+    A pathname hash after close can attest replacement bytes rather than the
+    inode a producer wrote.  All recovery authority therefore stays on one fd
+    through the read and checks the parent directory plus pathname before and
+    after it.  Receipt files additionally have an exact private ownership
+    contract.
+    """
+    parent = path.parent.resolve(strict=True)
+    directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+    if hasattr(os, "O_NOFOLLOW"):
+        directory_flags |= os.O_NOFOLLOW
+    directory_fd = os.open(parent, directory_flags)
+    descriptor = -1
+    try:
+        parent_before = os.fstat(directory_fd)
+        path_parent = os.stat(parent, follow_symlinks=False)
+        if (not stat.S_ISDIR(parent_before.st_mode)
+                or _directory_identity(parent_before) != _directory_identity(path_parent)):
+            raise StaticRegistryError(f"{label} parent identity is not pinned")
+        flags = os.O_RDONLY
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        descriptor = os.open(path.name, flags, dir_fd=directory_fd)
+        before = os.fstat(descriptor)
+        linked_before = os.stat(path.name, dir_fd=directory_fd,
+                                follow_symlinks=False)
+        if (not stat.S_ISREG(before.st_mode)
+                or _stat_identity(before) != _stat_identity(linked_before)
+                or before.st_nlink != 1):
+            raise StaticRegistryError(f"{label} must have one stable regular-file link")
+        if receipt and (before.st_uid != os.geteuid()
+                        or stat.S_IMODE(before.st_mode) != 0o600):
+            raise StaticRegistryError(f"{label} must be owned mode-0600 authority")
+        chunks: list[bytes] = []
+        while True:
+            chunk = os.read(descriptor, 1024 * 1024)
+            if not chunk:
+                break
+            chunks.append(chunk)
+        after = os.fstat(descriptor)
+        linked_after = os.stat(path.name, dir_fd=directory_fd,
+                               follow_symlinks=False)
+        parent_after = os.fstat(directory_fd)
+        path_parent_after = os.stat(parent, follow_symlinks=False)
+        if (not (_stat_identity(before) == _stat_identity(after)
+                 == _stat_identity(linked_before) == _stat_identity(linked_after))
+                or not (_directory_identity(parent_before) == _directory_identity(parent_after)
+                        == _directory_identity(path_parent)
+                        == _directory_identity(path_parent_after))):
+            raise StaticRegistryError(f"{label} identity changed while being read")
+        raw = b"".join(chunks)
+        if len(raw) != after.st_size:
+            raise StaticRegistryError(f"{label} size changed while being read")
+        return raw, {
+            "device": after.st_dev, "inode": after.st_ino, "uid": after.st_uid,
+            "mode": stat.S_IMODE(after.st_mode), "nlink": after.st_nlink,
+            "size": after.st_size, "mtime_ns": after.st_mtime_ns,
+            "ctime_ns": after.st_ctime_ns,
+        }
+    except OSError as exc:
+        raise StaticRegistryError(f"{label} cannot be opened safely") from exc
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+        os.close(directory_fd)
 
 
 def _digest(path: Path) -> str:
-    if path.is_symlink() or not path.is_file():
-        raise StaticRegistryError(f"runtime artifact is not a regular file: {path}")
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    raw, _identity = _read_bound_file(path, f"runtime artifact {path}")
+    return hashlib.sha256(raw).hexdigest()
 
 
 def _source_failure_message(value: object) -> str | None:
@@ -92,6 +172,12 @@ def _canonical(value: Mapping[str, Any]) -> bytes:
                        ensure_ascii=False, allow_nan=False) + "\n").encode("utf-8")
 
 
+def _sealed_bytes(body: Mapping[str, Any]) -> bytes:
+    payload = dict(body)
+    payload["receipt_sha256"] = schemas.content_hash(payload)
+    return _canonical(payload)
+
+
 def _regular_directory(path: Path, label: str, *, create: bool = False) -> Path:
     if create and not path.exists() and not path.is_symlink():
         path.mkdir(parents=True)
@@ -105,65 +191,68 @@ def _sealed_write(path: Path, body: Mapping[str, Any]) -> tuple[Path, str]:
     if path.exists() or path.is_symlink():
         raise StaticRegistryError(f"sealed receipt already exists: {path}")
     parent = _regular_directory(path.parent, "receipt parent")
-    payload = dict(body)
-    payload["receipt_sha256"] = schemas.content_hash(payload)
-    raw = _canonical(payload)
-    temporary = parent / f".{path.name}.{os.getpid()}.tmp"
+    raw = _sealed_bytes(body)
+    temporary_name = f".{path.name}.{os.getpid()}.tmp"
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
     try:
-        descriptor = os.open(temporary, flags, 0o600)
+        directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+        if hasattr(os, "O_NOFOLLOW"):
+            directory_flags |= os.O_NOFOLLOW
+        directory_fd = os.open(parent, directory_flags)
+        parent_identity = _directory_identity(os.fstat(directory_fd))
+        descriptor = os.open(temporary_name, flags, 0o600, dir_fd=directory_fd)
         try:
-            with os.fdopen(descriptor, "wb") as handle:
+            with os.fdopen(descriptor, "wb", closefd=False) as handle:
                 handle.write(raw)
                 handle.flush()
                 os.fsync(handle.fileno())
+            written = os.fstat(descriptor)
+            if (written.st_uid != os.geteuid()
+                    or stat.S_IMODE(written.st_mode) != 0o600
+                    or written.st_nlink != 1 or written.st_size != len(raw)):
+                raise StaticRegistryError("temporary receipt identity is unsafe")
             # `replace` would silently overwrite a receipt installed between
             # the pre-check and publication.  A hard-link publication is
             # same-filesystem and fails atomically when the destination exists.
-            os.link(temporary, path, follow_symlinks=False)
-            temporary.unlink()
-            directory_fd = os.open(parent, os.O_RDONLY)
-            try:
-                os.fsync(directory_fd)
-            finally:
-                os.close(directory_fd)
+            os.link(temporary_name, path.name, src_dir_fd=directory_fd,
+                    dst_dir_fd=directory_fd, follow_symlinks=False)
+            linked = os.stat(path.name, dir_fd=directory_fd, follow_symlinks=False)
+            linked_fd = os.fstat(descriptor)
+            if (_stat_identity(linked_fd) != _stat_identity(linked)
+                    or linked_fd.st_nlink != 2
+                    or (linked_fd.st_dev, linked_fd.st_ino)
+                    != (written.st_dev, written.st_ino)):
+                raise StaticRegistryError("published receipt is not the written inode")
+            os.unlink(temporary_name, dir_fd=directory_fd)
+            os.fsync(directory_fd)
+            final_fd = os.fstat(descriptor)
+            final_path = os.stat(path.name, dir_fd=directory_fd,
+                                 follow_symlinks=False)
+            if (_directory_identity(os.fstat(directory_fd)) != parent_identity
+                    or _directory_identity(os.stat(parent, follow_symlinks=False)) != parent_identity
+                    or _stat_identity(final_fd) != _stat_identity(final_path)
+                    or final_fd.st_nlink != 1):
+                raise StaticRegistryError("receipt identity changed during publication")
         except BaseException:
-            if temporary.exists() and not temporary.is_symlink():
-                temporary.unlink()
+            try:
+                os.unlink(temporary_name, dir_fd=directory_fd)
+            except FileNotFoundError:
+                pass
             raise
+        finally:
+            os.close(descriptor)
+            os.close(directory_fd)
     except FileExistsError as exc:
-        raise StaticRegistryError(f"concurrent temporary receipt collision: {temporary}") from exc
+        raise StaticRegistryError(
+            f"concurrent temporary receipt collision: {parent / temporary_name}") from exc
     return path.resolve(strict=True), hashlib.sha256(raw).hexdigest()
 
 
 def _sealed_read(path: Path, *, schema: str, label: str) -> dict[str, Any]:
-    if path.is_symlink() or not path.is_file():
-        raise StaticRegistryError(f"{label} is absent or not a regular file")
-    flags = os.O_RDONLY
-    if hasattr(os, "O_NOFOLLOW"):
-        flags |= os.O_NOFOLLOW
     try:
-        descriptor = os.open(path, flags)
-        try:
-            before = os.fstat(descriptor)
-            if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
-                raise StaticRegistryError(f"{label} must have one regular-file link")
-            with os.fdopen(descriptor, "rb") as handle:
-                raw = handle.read()
-                after = os.fstat(handle.fileno())
-            if ((before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns,
-                 before.st_nlink) !=
-                    (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns,
-                     after.st_nlink)):
-                raise StaticRegistryError(f"{label} changed while being read")
-        except BaseException:
-            try:
-                os.close(descriptor)
-            except OSError:
-                pass
-            raise
+        raw, _identity = _read_bound_file(path, label, receipt=True)
         body = json.loads(raw.decode("utf-8", "strict"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise StaticRegistryError(f"{label} is not JSON") from exc
@@ -206,6 +295,176 @@ def _authority_path_identity(path: Path, label: str) -> dict[str, int | str]:
             "inode": facts.st_ino, "uid": facts.st_uid}
 
 
+def _require_hash(value: Any, label: str) -> str:
+    if (not isinstance(value, str) or len(value) != 64
+            or any(char not in _HEX for char in value)):
+        raise StaticRegistryError(f"{label} must be a lowercase SHA-256")
+    return value
+
+
+def _validate_supervised_build_authority(
+        value: Any, *, deployment_config_sha256: str,
+        require_current: bool = True) -> dict[str, Any]:
+    """Bind a build owner to the supervisor's immutable launch transaction."""
+    top_keys = {"schema", "launch_spec", "death_ledger", "spec_sha256",
+                "deployment_config_sha256", "supervisor", "controller",
+                "ledger_child_started_record_sha256"}
+    if (not isinstance(value, Mapping) or set(value) != top_keys
+            or value.get("schema") != _SUPERVISED_BUILD_AUTHORITY_SCHEMA):
+        raise StaticRegistryError("supervised build authority schema/keys mismatch")
+    if value.get("deployment_config_sha256") != deployment_config_sha256:
+        raise StaticRegistryError("supervised build authority changed deployment config")
+    _require_hash(value.get("spec_sha256"), "supervisor spec content hash")
+    target_record = _require_hash(
+        value.get("ledger_child_started_record_sha256"),
+        "supervisor child-start ledger record")
+    file_keys = {"path", "sha256", "device", "inode", "uid", "mode", "nlink"}
+    ledger_keys = file_keys - {"sha256"}
+    launch = value.get("launch_spec")
+    ledger = value.get("death_ledger")
+    if not isinstance(launch, Mapping) or set(launch) != file_keys:
+        raise StaticRegistryError("supervisor launch-spec identity is malformed")
+    if not isinstance(ledger, Mapping) or set(ledger) != ledger_keys:
+        raise StaticRegistryError("supervisor death-ledger identity is malformed")
+    launch_path = Path(str(launch.get("path", "")))
+    ledger_path = Path(str(ledger.get("path", "")))
+    if not launch_path.is_absolute() or not ledger_path.is_absolute():
+        raise StaticRegistryError("supervisor authority paths must be absolute")
+    launch_raw, launch_identity = _read_bound_file(
+        launch_path, "supervisor launch specification", receipt=True)
+    ledger_raw, ledger_identity = _read_bound_file(
+        ledger_path, "supervisor death ledger", receipt=True)
+    expected_launch_identity = {
+        key: launch_identity[key] for key in ("device", "inode", "uid", "mode", "nlink")}
+    expected_ledger_identity = {
+        key: ledger_identity[key] for key in ("device", "inode", "uid", "mode", "nlink")}
+    if ({key: launch[key] for key in expected_launch_identity} != expected_launch_identity
+            or {key: ledger[key] for key in expected_ledger_identity} != expected_ledger_identity
+            or _require_hash(launch.get("sha256"), "launch-spec file hash")
+            != hashlib.sha256(launch_raw).hexdigest()):
+        raise StaticRegistryError("supervisor authority file identity changed")
+    try:
+        spec = json.loads(launch_raw.decode("utf-8", "strict"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise StaticRegistryError("supervisor launch specification is not JSON") from exc
+    if (not isinstance(spec, Mapping)
+            or schemas.content_hash(dict(spec)) != value["spec_sha256"]):
+        raise StaticRegistryError("supervisor launch specification content hash changed")
+    supervisor = value.get("supervisor")
+    controller_identity = value.get("controller")
+    supervisor_keys = {"pid", "start_ticks", "boot_id", "host",
+                       "host_id_source", "host_id_sha256"}
+    controller_keys = supervisor_keys | {"pgid", "argv_sha256"}
+    if (not isinstance(supervisor, Mapping) or set(supervisor) != supervisor_keys
+            or not isinstance(controller_identity, Mapping)
+            or set(controller_identity) != controller_keys):
+        raise StaticRegistryError("supervised process identity schema changed")
+    _require_hash(supervisor.get("host_id_sha256"), "supervisor host identity")
+    _require_hash(controller_identity.get("host_id_sha256"), "controller host identity")
+    _require_hash(controller_identity.get("argv_sha256"), "controller argv identity")
+    if require_current:
+        current = device_claim.current_holder_identity(
+            "autokernel-build-authority-check")
+        for key in ("pid", "start_ticks", "boot_id", "host"):
+            if controller_identity.get(key) != current.get(key):
+                raise StaticRegistryError("supervised controller is not this build process")
+    supervisor_verdict = device_claim.assess_holder_liveness(supervisor)
+    if ((require_current and supervisor_verdict.state != device_claim.LIVE)
+            or supervisor_verdict.state not in {device_claim.LIVE, device_claim.DEAD}):
+        raise StaticRegistryError(
+            "build supervisor is not live and exact: " + supervisor_verdict.reason)
+    previous: str | None = None
+    found = False
+    authority_cgroup: str | None = None
+    for line in ledger_raw.decode("utf-8", "strict").splitlines():
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise StaticRegistryError("supervisor death ledger is malformed") from exc
+        if not isinstance(row, Mapping):
+            raise StaticRegistryError("supervisor death ledger row is not an object")
+        claimed = row.get("record_sha256")
+        payload = {key: item for key, item in row.items() if key != "record_sha256"}
+        if (claimed != schemas.content_hash(payload)
+                or row.get("previous_sha256") != previous):
+            raise StaticRegistryError("supervisor death ledger hash chain changed")
+        previous = str(claimed)
+        if claimed == target_record:
+            child = row.get("payload", {}).get("child") if isinstance(
+                row.get("payload"), Mapping) else None
+            if row.get("event") != "child_started" or child != controller_identity:
+                raise StaticRegistryError("supervisor child-start authority changed")
+            cgroup = row.get("payload", {}).get("cgroup")
+            if not isinstance(cgroup, str) or not Path(cgroup).is_absolute():
+                raise StaticRegistryError("supervisor child-start cgroup is malformed")
+            authority_cgroup = cgroup
+            found = True
+    if not found:
+        raise StaticRegistryError("supervisor child-start record is absent")
+    if require_current:
+        try:
+            membership = Path("/proc/self/cgroup").read_text(encoding="ascii")
+        except OSError as exc:
+            raise StaticRegistryError("cannot prove controller cgroup membership") from exc
+        unified = [line.split("::", 1)[1] for line in membership.splitlines()
+                   if "::" in line]
+        expected = str(Path("/sys/fs/cgroup") / str(unified[0]).lstrip("/")) \
+            if len(unified) == 1 else None
+        if authority_cgroup != expected:
+            raise StaticRegistryError("supervised controller is outside its exact cgroup")
+    return json.loads(json.dumps(value, sort_keys=True))
+
+
+def _stable_supervised_authority(value: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "schema": "epyc.autokernel.supervised_launch_authority.v1",
+        "launch_spec": dict(value["launch_spec"]),
+        "death_ledger": dict(value["death_ledger"]),
+        "spec_sha256": value["spec_sha256"],
+        "deployment_config_sha256": value["deployment_config_sha256"],
+    }
+
+
+def _owner_matches_supervised_authority(
+        owner: Mapping[str, Any], contract: Mapping[str, Any]) -> bool:
+    common = {"schema", "build_key", "holder", "locks",
+              "supervised_build_authority", "supervised_build_authority_sha256",
+              "promotion_claim", "receipt_sha256"}
+    if owner.get("schema") == _BUILD_ATTEMPT_SCHEMA:
+        expected_keys = common | {"attempt", "attempt_name", "cache_root", "build_root"}
+    elif owner.get("schema") == _BUILD_TRANSACTION_OWNER_SCHEMA:
+        expected_keys = common | {"intent", "intent_file_sha256"}
+    else:
+        return False
+    if set(owner) != expected_keys:
+        return False
+    authority = contract.get("supervised_build_authority")
+    holder = owner.get("holder")
+    if not isinstance(authority, Mapping) or not isinstance(holder, Mapping):
+        return False
+    embedded = owner.get("supervised_build_authority")
+    if not isinstance(embedded, Mapping):
+        return False
+    try:
+        validated = _validate_supervised_build_authority(
+            embedded,
+            deployment_config_sha256=str(contract.get("deployment_config_sha256")),
+            require_current=False)
+    except StaticRegistryError:
+        return False
+    controller_identity = validated.get("controller")
+    if not isinstance(controller_identity, Mapping):
+        return False
+    return (
+        owner.get("supervised_build_authority_sha256")
+        == schemas.content_hash(validated)
+        and _stable_supervised_authority(validated)
+        == contract.get("supervised_build_authority")
+        and all(holder.get(key) == controller_identity.get(key)
+                for key in ("pid", "start_ticks", "boot_id", "host"))
+    )
+
+
 def _attempt_directories(cache_root: Path) -> list[Path]:
     root = _regular_directory(cache_root / "attempts", "build attempt root")
     all_entries = list(root.iterdir())
@@ -221,11 +480,40 @@ def _attempt_directories(cache_root: Path) -> list[Path]:
     return entries
 
 
-def _epoch_processes(token: str) -> list[int]:
+def _discard_unpublished_owner_temps(attempts_root: Path, name: str) -> list[dict[str, Any]]:
+    """Classify and remove only never-published `_sealed_write` scratch inodes."""
+    prefix = f"..{name}.owner.json."
+    candidates = [
+        path for path in sorted(attempts_root.iterdir(), key=lambda item: item.name)
+        if path.name.startswith(prefix) and path.name.endswith(".tmp")]
+    if len(candidates) > 1:
+        raise StaticRegistryError("multiple unpublished attempt owner scratch files exist")
+    rows: list[dict[str, Any]] = []
+    for path in candidates:
+        pid_text = path.name[len(prefix):-4]
+        if not pid_text.isdigit() or path.is_symlink():
+            raise StaticRegistryError("unpublished attempt owner scratch name is malformed")
+        facts = path.lstat()
+        if (not stat.S_ISREG(facts.st_mode) or facts.st_uid != os.geteuid()
+                or facts.st_nlink != 1 or stat.S_IMODE(facts.st_mode) != 0o600):
+            raise StaticRegistryError("unpublished attempt owner scratch identity is unsafe")
+        # This inode was never linked at the reserved authority name.  Its
+        # contents may be partial and are intentionally not interpreted as an
+        # owner.  Under both build locks it is safe scratch, not append-only
+        # evidence; retain an in-memory classification for tests/audit.
+        rows.append({"name": path.name, "size": facts.st_size,
+                     "device": facts.st_dev, "inode": facts.st_ino,
+                     "state": "never_published_scratch"})
+        path.unlink()
+    return rows
+
+
+def _epoch_processes(token: str) -> tuple[list[int], list[int]]:
     if not isinstance(token, str) or len(token) != 64:
         raise StaticRegistryError("owned process epoch token is malformed")
     marker = f"AUTOKERNEL_OWNED_PROCESS_EPOCH={token}".encode("ascii")
     matches: list[int] = []
+    unreadable: list[int] = []
     for entry in Path("/proc").iterdir():
         if not entry.name.isdigit():
             continue
@@ -236,39 +524,45 @@ def _epoch_processes(token: str) -> list[int]:
         except (FileNotFoundError, ProcessLookupError):
             continue
         except PermissionError:
-            # The pre-activation child is our ordinary Python sandbox wrapper
-            # and remains dumpable.  Same-uid non-dumpable host daemons cannot
-            # be that wrapper; after activation the independently sealed
-            # sandbox receipt/cgroup is authoritative instead.
+            unreadable.append(int(entry.name))
             continue
         if marker in raw.split(b"\0"):
             matches.append(int(entry.name))
-    return sorted(matches)
+    return sorted(matches), sorted(unreadable)
 
 
-def _sandbox_activation_is_empty(intent: Mapping[str, Any], holder: Mapping[str, Any]) -> dict[str, Any] | None:
+def _sandbox_activation_is_empty(
+        intent: Mapping[str, Any], holder: Mapping[str, Any],
+        *, start: Mapping[str, Any] | None = None) -> dict[str, Any]:
     raw_path = intent.get("sandbox_receipt_path")
-    if raw_path is None:
-        return None
     if not isinstance(raw_path, str):
         raise StaticRegistryError("owned process intent has malformed sandbox receipt path")
     path = Path(raw_path)
-    if not path.exists() and not path.is_symlink():
-        return None
     stdout_path = intent.get("stdout_path")
     if not isinstance(stdout_path, str):
         raise StaticRegistryError("owned process intent has malformed stream path")
-    path = _within(path, Path(stdout_path).parent,
-                   "owned process sandbox activation", single_link=True)
-    try:
-        receipt = worktree.process_sandbox.read_receipt(path)
-    except worktree.process_sandbox.SandboxError as exc:
-        raise StaticRegistryError("owned process sandbox activation is invalid") from exc
-    pid, ticks = receipt.get("pid"), receipt.get("process_start_ticks")
+    receipt: Mapping[str, Any] | None = None
+    if path.exists() or path.is_symlink():
+        path = _within(path, Path(stdout_path).parent,
+                       "owned process sandbox activation", single_link=True)
+        try:
+            receipt = worktree.process_sandbox.read_receipt(path)
+        except worktree.process_sandbox.SandboxError as exc:
+            raise StaticRegistryError("owned process sandbox activation is invalid") from exc
+    pid = start.get("pid") if isinstance(start, Mapping) else None
+    ticks = start.get("process_start_ticks") if isinstance(start, Mapping) else None
+    if receipt is not None:
+        if pid is None:
+            pid, ticks = receipt.get("pid"), receipt.get("process_start_ticks")
+        if (receipt.get("pid") != pid or receipt.get("process_start_ticks") != ticks
+                or receipt.get("policy_sha256") != intent.get("sandbox_policy_sha256")):
+            raise StaticRegistryError("owned process sandbox activation differs from its start")
+    if (not isinstance(pid, int) or isinstance(pid, bool)
+            or not isinstance(ticks, int) or isinstance(ticks, bool)):
+        raise StaticRegistryError("owned process sandbox identity is incomplete")
     expected_cgroup = str(Path(str(intent.get("cgroup_root")),
                                f"autokernel-{pid}-{intent.get('sandbox_token')}"))
-    if (receipt.get("policy_sha256") != intent.get("sandbox_policy_sha256")
-            or receipt.get("cgroup_path") != expected_cgroup):
+    if receipt is not None and receipt.get("cgroup_path") != expected_cgroup:
         raise StaticRegistryError("owned process sandbox activation differs from its intent")
     verdict = device_claim.assess_holder_liveness({
         "pid": pid, "start_ticks": ticks,
@@ -277,7 +571,10 @@ def _sandbox_activation_is_empty(intent: Mapping[str, Any], holder: Mapping[str,
         raise StaticRegistryError(
             "incomplete build sandbox process is live or unverifiable: " + verdict.reason)
     cgroup = Path(expected_cgroup)
+    cgroup_state = "absent"
     if cgroup.exists():
+        if cgroup.is_symlink() or not cgroup.is_dir():
+            raise StaticRegistryError("owned build cgroup path is not a real directory")
         try:
             members = (cgroup / "cgroup.procs").read_text(encoding="ascii").split()
         except OSError as exc:
@@ -285,11 +582,17 @@ def _sandbox_activation_is_empty(intent: Mapping[str, Any], holder: Mapping[str,
         if members:
             raise StaticRegistryError(
                 f"owned build cgroup still contains descendants {members}")
-    return {"receipt": str(path.resolve()), "pid": pid,
-            "state": "activation_dead_cgroup_empty", "reason": verdict.reason}
+        cgroup_state = "empty"
+    return {"receipt": str(path.resolve()) if receipt is not None else None,
+            "receipt_present": receipt is not None, "pid": pid,
+            "process_start_ticks": ticks, "cgroup_path": expected_cgroup,
+            "cgroup_state": cgroup_state,
+            "state": "activation_dead_cgroup_drained", "reason": verdict.reason}
 
 
-def _owned_process_receipts_are_dead(attempt_root: Path, holder: Mapping[str, Any]) -> list[dict[str, Any]]:
+def _owned_process_receipts_are_dead(
+        attempt_root: Path, holder: Mapping[str, Any], *,
+        require_terminals: bool = False) -> list[dict[str, Any]]:
     logs = attempt_root / "logs"
     if not logs.exists() and not logs.is_symlink():
         return []
@@ -297,30 +600,50 @@ def _owned_process_receipts_are_dead(attempt_root: Path, holder: Mapping[str, An
     proofs: list[dict[str, Any]] = []
     intents = sorted(logs.glob("*-process-intent.json"))
     starts = sorted(logs.glob("*-process-start.json"))
+    terminals = sorted(logs.glob("*-process-terminal.json"))
     if len(intents) != len({path.name.replace("-intent.json", "") for path in intents}):
         raise StaticRegistryError("owned process intents are not unique")
     expected_starts = {path.name.replace("-intent.json", "-start.json") for path in intents}
     if any(path.name not in expected_starts for path in starts):
         raise StaticRegistryError("owned build process start has no durable pre-spawn intent")
+    expected_terminals = {
+        path.name.replace("-start.json", "-terminal.json") for path in starts}
+    if any(path.name not in expected_terminals for path in terminals):
+        raise StaticRegistryError("owned build process terminal has no durable start")
     for intent_path in intents:
         intent = _sealed_read(intent_path,
                               schema="epyc.autokernel.owned_process_intent.v1",
                               label="owned build process intent")
+        if set(intent) != {
+                "schema", "argv", "epoch_token", "stdout_path",
+                "sandbox_receipt_path", "sandbox_policy_sha256",
+                "sandbox_token", "cgroup_root", "receipt_sha256"}:
+            raise StaticRegistryError("owned build process intent keys changed")
         start_path = intent_path.with_name(
             intent_path.name.replace("-intent.json", "-start.json"))
         if not start_path.exists() and not start_path.is_symlink():
-            activation = _sandbox_activation_is_empty(intent, holder)
-            matches = _epoch_processes(str(intent.get("epoch_token")))
+            matches, unreadable = _epoch_processes(str(intent.get("epoch_token")))
             if matches:
                 raise StaticRegistryError(
                     f"durable pre-spawn epoch still has live processes {matches}")
+            if unreadable:
+                raise StaticRegistryError(
+                    "durable pre-spawn epoch scan is UNKNOWN for same-uid processes "
+                    f"{unreadable}")
             proofs.append({"intent": str(intent_path.resolve()), "start": None,
-                           "state": "pre_spawn_epoch_absent",
-                           "sandbox": activation})
+                           "state": "pre_spawn_epoch_absent", "sandbox": None})
+            if require_terminals:
+                raise StaticRegistryError(
+                    "terminal build cannot close a process intent without a start")
             continue
         start = _sealed_read(start_path,
                              schema="epyc.autokernel.owned_process_start.v1",
                              label="owned build process start")
+        if set(start) != {
+                "schema", "intent_receipt_sha256", "epoch_token", "argv",
+                "pid", "pgid", "process_start_ticks", "started_at",
+                "stdout_path", "sandbox_receipt_path", "receipt_sha256"}:
+            raise StaticRegistryError("owned build process start keys changed")
         if (start.get("intent_receipt_sha256") != _digest(intent_path)
                 or start.get("epoch_token") != intent.get("epoch_token")
                 or start.get("argv") != intent.get("argv")
@@ -335,8 +658,13 @@ def _owned_process_receipts_are_dead(attempt_root: Path, holder: Mapping[str, An
             start_path.name.replace("-start.json", "-terminal.json"))
         if terminal_path.exists() or terminal_path.is_symlink():
             terminal = _sealed_read(
-                terminal_path, schema="epyc.autokernel.owned_process_terminal.v1",
+                terminal_path, schema="epyc.autokernel.owned_process_terminal.v2",
                 label="owned build process terminal")
+            if set(terminal) != {
+                    "schema", "start_receipt_sha256", "disposition",
+                    "stdout_path", "stdout_sha256", "stdout_identity",
+                    "receipt_sha256"}:
+                raise StaticRegistryError("owned build process terminal keys changed")
             disposition = terminal.get("disposition")
             if (terminal.get("start_receipt_sha256") != _digest(start_path)
                     or not isinstance(disposition, Mapping)
@@ -350,22 +678,106 @@ def _owned_process_receipts_are_dead(attempt_root: Path, holder: Mapping[str, An
                 raise StaticRegistryError("owned build process terminal changed its stream")
             stream = _within(Path(stdout_path), attempt_root,
                              "owned build process stream", single_link=True)
-            if terminal.get("stdout_sha256") != _digest(stream):
+            stream_raw, stream_identity = _read_bound_file(
+                stream, "owned build process stream")
+            if (terminal.get("stdout_sha256") != hashlib.sha256(stream_raw).hexdigest()
+                    or terminal.get("stdout_identity") != stream_identity):
                 raise StaticRegistryError("owned build process stream changed")
+            sandbox = _sandbox_activation_is_empty(intent, holder, start=start)
+            disposition_sandbox = disposition.get("sandbox_receipt")
+            teardown = disposition.get("sandbox_teardown")
+            if (not isinstance(disposition_sandbox, Mapping)
+                    or disposition_sandbox.get("policy_sha256")
+                    != intent.get("sandbox_policy_sha256")
+                    or not isinstance(teardown, Mapping)
+                    or teardown.get("cgroup_path") != sandbox["cgroup_path"]
+                    or teardown.get("verified_empty") is not True
+                    or teardown.get("removed") is not True):
+                raise StaticRegistryError("owned build process terminal lacks exact sandbox closure")
             proofs.append({"start": str(start_path.resolve()),
                            "intent": str(intent_path.resolve()),
                            "terminal": str(terminal_path.resolve()),
-                           "state": "terminal_verified_dead"})
+                           "state": "terminal_verified_dead", "sandbox": sandbox})
         elif verdict.state == device_claim.DEAD:
+            sandbox = _sandbox_activation_is_empty(intent, holder, start=start)
+            matches, unreadable = _epoch_processes(str(intent.get("epoch_token")))
+            if matches:
+                raise StaticRegistryError(
+                    f"durable process epoch still has live processes {matches}")
+            if unreadable and not sandbox["receipt_present"]:
+                raise StaticRegistryError(
+                    "owned process epoch scan is UNKNOWN and no exact sandbox activation closes it")
             proofs.append({"start": str(start_path.resolve()),
                            "intent": str(intent_path.resolve()),
                            "terminal": None, "state": "observed_dead",
-                           "reason": verdict.reason})
+                           "reason": verdict.reason, "sandbox": sandbox})
+            if require_terminals:
+                raise StaticRegistryError(
+                    "terminal build cannot close a process start without its terminal")
         else:
             raise StaticRegistryError(
                 "incomplete build has a live or unverifiable owned child; refusing recovery: "
                 f"{verdict.reason}")
     return proofs
+
+
+def _process_receipt_closure(
+        attempt_root: Path, holder: Mapping[str, Any], *,
+        require_terminals: bool) -> dict[str, Any]:
+    proofs = _owned_process_receipts_are_dead(
+        attempt_root, holder, require_terminals=require_terminals)
+    logs = attempt_root / "logs"
+    rows: list[dict[str, Any]] = []
+    if logs.exists() or logs.is_symlink():
+        _regular_directory(logs, "build attempt logs")
+        for path in sorted(logs.iterdir(), key=lambda item: item.name):
+            if not path.is_file() or path.is_symlink():
+                raise StaticRegistryError("build log closure contains a non-regular entry")
+            # Every stream/result/activation/process receipt and combined log
+            # is authority.  Compiler-created state lives in the separate
+            # build root and is not admitted into this evaluator-owned tree.
+            raw, identity = _read_bound_file(path, f"build log closure {path.name}")
+            rows.append({"name": path.name,
+                         "sha256": hashlib.sha256(raw).hexdigest(),
+                         "identity": identity})
+    closure = {"schema": "epyc.autokernel.owned_process_closure.v1",
+               "entries": rows, "proofs": proofs,
+               "require_terminals": require_terminals}
+    closure["closure_sha256"] = schemas.content_hash(closure)
+    return closure
+
+
+def _attempt_artifact_epoch(
+        attempt_root: Path, owner_path: Path, holder: Mapping[str, Any], *,
+        build: controller.GpuSourceBuild | None,
+        require_terminals: bool = True) -> dict[str, Any]:
+    recovery = attempt_root / "recovery.json"
+    if recovery.exists() or recovery.is_symlink():
+        raise StaticRegistryError("final build attempt may not be quarantined")
+    process = _process_receipt_closure(
+        attempt_root, holder, require_terminals=require_terminals)
+    receipts = attempt_root / "receipts"
+    receipt_rows: list[dict[str, Any]] = []
+    if receipts.exists() or receipts.is_symlink():
+        _regular_directory(receipts, "build artifact receipts")
+        for path in sorted(receipts.iterdir(), key=lambda item: item.name):
+            raw, identity = _read_bound_file(
+                path, f"build artifact receipt {path.name}")
+            receipt_rows.append({"name": path.name,
+                                 "sha256": hashlib.sha256(raw).hexdigest(),
+                                 "identity": identity})
+    epoch: dict[str, Any] = {
+        "schema": "epyc.autokernel.build_artifact_epoch.v1",
+        "attempt": attempt_root.name,
+        "attempt_owner_sha256": _digest(owner_path),
+        "attempt_recovery": None,
+        "process_closure": process,
+        "artifact_receipts": receipt_rows,
+        "materialization_sha256": (
+            build.materialization_sha256 if build is not None else None),
+    }
+    epoch["artifact_epoch_sha256"] = schemas.content_hash(epoch)
+    return epoch
 
 
 @contextmanager
@@ -868,9 +1280,8 @@ def _source_tree_receipt(*, path: Path, root: Path, commit: str) -> tuple[Path, 
         "exclusions": [".git"],
         "tree": tree.to_dict(),
     }
-    body["receipt_sha256"] = schemas.content_hash(body)
-    path.write_text(json.dumps(body, sort_keys=True) + "\n", encoding="utf-8")
-    return path, _digest(path)
+    sealed, file_sha = _sealed_write(path, body)
+    return sealed, file_sha
 
 
 def _production_authority(*, production_path: Path, production_branch: str,
@@ -1138,9 +1549,8 @@ class SharedRewardRuntime:
                 "candidate_hip_sha256": _digest((loaders["candidate"] / "libggml-hip.so.0").resolve()),
                 "split_runtime_manifest": verified.to_dict(),
                 "promotion_claim": False}
-        body["receipt_sha256"] = schemas.content_hash(body)
         receipt = root / "reward-runtime.json"
-        receipt.write_text(json.dumps(body, sort_keys=True) + "\n", encoding="utf-8")
+        receipt, _receipt_file_sha = _sealed_write(receipt, body)
         return cls(root=root, measurement_binary=common / "llama-bench", common_loader_dir=common,
                    anchor_loader_dir=loaders["anchor"], candidate_loader_dir=loaders["candidate"],
                    receipt_path=receipt)
@@ -1181,6 +1591,9 @@ class StaticGpuSourceBuilder:
         if (not isinstance(deployment_sha, str) or len(deployment_sha) != 64
                 or any(char not in "0123456789abcdef" for char in deployment_sha)):
             raise StaticRegistryError("static source builder requires sealed deployment authority")
+        supervised_authority = _validate_supervised_build_authority(
+            permit.get("supervised_build_authority"),
+            deployment_config_sha256=deployment_sha)
         production_root = self.production_path.resolve(strict=True)
         instrument_root = self.instrument_path.resolve(strict=True)
         if production_root == instrument_root:
@@ -1222,6 +1635,10 @@ class StaticGpuSourceBuilder:
             "schema": _BUILD_KEY_SCHEMA,
             "builder_schema": _BUILDER_SCHEMA,
             "deployment_config_sha256": deployment_sha,
+            "supervised_build_authority": _stable_supervised_authority(
+                supervised_authority),
+            "supervised_build_authority_sha256": schemas.content_hash(
+                _stable_supervised_authority(supervised_authority)),
             "production_base_authority": production,
             "instrument_authority": instrument,
             "patch_bundle_sha256": candidate.source_manifest.patch_bundle_sha256,
@@ -1245,6 +1662,8 @@ class StaticGpuSourceBuilder:
         return schemas.content_hash({
             "schema": "epyc.autokernel.gpu_source_build_request.v1",
             "deployment_config_sha256": contract["deployment_config_sha256"],
+            "supervised_build_authority_sha256":
+                contract["supervised_build_authority_sha256"],
             "production_base_authority": contract["production_base_authority"],
             "instrument_authority": contract["instrument_authority"],
             "patch_bundle_sha256": contract["patch_bundle_sha256"],
@@ -1299,21 +1718,31 @@ class StaticGpuSourceBuilder:
     def _publish_cache_transaction(
             self, *, entries_root: Path, cache_root: Path,
             expected_intent: Mapping[str, Any], contract: Mapping[str, Any],
-            lock_paths: tuple[Path, Path]) -> str:
-        pending = entries_root / (
-            f".{contract['build_key']}.{os.getpid()}.{time.time_ns()}.pending")
-        pending.mkdir(mode=0o700)
-        _intent, intent_sha = _sealed_write(pending / "intent.json", expected_intent)
-        _sealed_write(pending / "transaction-owner.json", {
+            lock_paths: tuple[Path, Path],
+            supervised_authority: Mapping[str, Any]) -> str:
+        intent_sha = hashlib.sha256(_sealed_bytes(expected_intent)).hexdigest()
+        reservation = entries_root / f".{contract['build_key']}.transaction-owner.json"
+        _sealed_write(reservation, {
             "schema": _BUILD_TRANSACTION_OWNER_SCHEMA,
             "build_key": contract["build_key"],
             "holder": device_claim.current_holder_identity(
                 f"autokernel-build-transaction:{contract['build_key']}"),
             "locks": [_authority_path_identity(path, "held build lock")
                       for path in lock_paths],
+            "intent": dict(expected_intent),
             "intent_file_sha256": intent_sha, "promotion_claim": False,
+            "supervised_build_authority_sha256":
+                schemas.content_hash(dict(supervised_authority)),
+            "supervised_build_authority": dict(supervised_authority),
         })
-        os.rename(pending, cache_root)
+        cache_root.mkdir(mode=0o700)
+        os.rename(reservation, cache_root / "transaction-owner.json")
+        _sealed_write(cache_root / "intent.json", expected_intent)
+        cache_fd = os.open(cache_root, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(cache_fd)
+        finally:
+            os.close(cache_fd)
         directory_fd = os.open(entries_root, os.O_RDONLY)
         try:
             os.fsync(directory_fd)
@@ -1325,43 +1754,54 @@ class StaticGpuSourceBuilder:
             self, *, entries_root: Path, cache_root: Path,
             expected_intent: Mapping[str, Any], contract: Mapping[str, Any],
             lock_paths: tuple[Path, Path]) -> bool:
-        prefix = f".{contract['build_key']}."
-        pending = [path for path in entries_root.iterdir()
-                   if path.name.startswith(prefix)]
-        if not pending:
-            return False
-        if len(pending) != 1:
-            raise StaticRegistryError("multiple unpublished build cache transactions exist")
-        path = pending[0]
-        suffix = path.name[len(prefix):]
-        parts = suffix.removesuffix(".pending").split(".")
-        if (not suffix.endswith(".pending") or len(parts) != 2
-                or not all(part.isdigit() for part in parts)):
+        reservation = entries_root / f".{contract['build_key']}.transaction-owner.json"
+        matching = [path for path in entries_root.iterdir()
+                    if path.name.startswith(f".{contract['build_key']}.")]
+        if any(path != reservation for path in matching):
             raise StaticRegistryError("unpublished build cache transaction name is malformed")
-        _regular_directory(path, "unpublished build cache transaction")
-        if {item.name for item in path.iterdir()} != {
-                "intent.json", "transaction-owner.json"}:
-            raise StaticRegistryError("unpublished build cache transaction closure changed")
-        intent = _sealed_read(path / "intent.json", schema=_BUILD_INTENT_SCHEMA,
-                              label="unpublished build cache intent")
-        if any(intent.get(key) != value for key, value in expected_intent.items()):
+        owner_path = cache_root / "transaction-owner.json"
+        if reservation.exists() or reservation.is_symlink():
+            if cache_root.exists() or cache_root.is_symlink():
+                _regular_directory(cache_root, "partially published build cache transaction")
+                if any(cache_root.iterdir()):
+                    raise StaticRegistryError("unpublished build cache transaction closure changed")
+            else:
+                cache_root.mkdir(mode=0o700)
+            os.rename(reservation, owner_path)
+        if not owner_path.exists() and not owner_path.is_symlink():
+            return False
+        owner = _sealed_read(owner_path, schema=_BUILD_TRANSACTION_OWNER_SCHEMA,
+                             label="unpublished build transaction owner")
+        intent = owner.get("intent")
+        if not isinstance(intent, Mapping) or dict(intent) != dict(expected_intent):
             raise StaticRegistryError("unpublished build cache intent differs from contract")
-        owner = _sealed_read(
-            path / "transaction-owner.json", schema=_BUILD_TRANSACTION_OWNER_SCHEMA,
-            label="unpublished build transaction owner")
+        expected_intent_sha = hashlib.sha256(_sealed_bytes(expected_intent)).hexdigest()
         if (owner.get("build_key") != contract["build_key"]
-                or owner.get("intent_file_sha256") != _digest(path / "intent.json")
+                or owner.get("intent_file_sha256") != expected_intent_sha
                 or owner.get("locks") != [
                     _authority_path_identity(lock, "held build lock")
                     for lock in lock_paths]
-                or owner.get("promotion_claim") is not False):
+                or owner.get("promotion_claim") is not False
+                or not _owner_matches_supervised_authority(owner, contract)):
             raise StaticRegistryError("unpublished transaction owner differs from authority")
         verdict = device_claim.assess_holder_liveness(owner.get("holder"))
         if verdict.state != device_claim.DEAD:
             raise StaticRegistryError(
                 "unpublished build transaction owner is live or unverifiable: "
                 f"{verdict.reason}")
-        os.rename(path, cache_root)
+        intent_path = cache_root / "intent.json"
+        if intent_path.exists() or intent_path.is_symlink():
+            sealed_intent = _sealed_read(intent_path, schema=_BUILD_INTENT_SCHEMA,
+                                         label="unpublished build cache intent")
+            if dict(sealed_intent) != json.loads(_sealed_bytes(expected_intent)):
+                raise StaticRegistryError("unpublished build cache intent bytes changed")
+        else:
+            _sealed_write(intent_path, expected_intent)
+        cache_fd = os.open(cache_root, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(cache_fd)
+        finally:
+            os.close(cache_fd)
         directory_fd = os.open(entries_root, os.O_RDONLY)
         try:
             os.fsync(directory_fd)
@@ -1374,29 +1814,24 @@ class StaticGpuSourceBuilder:
             contract: Mapping[str, Any], lock_paths: tuple[Path, Path]) -> None:
         attempts_root = _regular_directory(
             cache_root / "attempts", "build attempt root")
-        published = [path for path in attempts_root.iterdir()
-                     if not path.name.startswith(".")]
+        published = sorted(
+            [path for path in attempts_root.iterdir()
+             if not path.name.startswith(".")], key=lambda path: path.name)
+        next_number = len(published) + 1
+        if published and not (published[-1] / "owner.json").exists():
+            next_number = len(published)
+        name = f"attempt-{next_number:06d}"
+        _discard_unpublished_owner_temps(attempts_root, name)
         pending = [path for path in attempts_root.iterdir()
                    if path.name.startswith(".")]
+        reservation = attempts_root / f".{name}.owner.json"
         if not pending:
             return
-        if len(pending) != 1:
+        if len(pending) != 1 or pending[0] != reservation:
             raise StaticRegistryError("multiple unpublished build attempts exist")
-        number = len(published) + 1
-        name = f"attempt-{number:06d}"
-        path = pending[0]
-        prefix = f".{name}."
-        suffix = path.name[len(prefix):] if path.name.startswith(prefix) else ""
-        parts = suffix.removesuffix(".pending").split(".")
-        if (not path.name.startswith(prefix) or not suffix.endswith(".pending")
-                or len(parts) != 2 or not all(part.isdigit() for part in parts)):
-            raise StaticRegistryError("unpublished build attempt name is malformed")
-        _regular_directory(path, "unpublished build attempt")
-        if {item.name for item in path.iterdir()} != {"owner.json"}:
-            raise StaticRegistryError("unpublished build attempt closure changed")
-        owner_path = path / "owner.json"
-        owner = _sealed_read(owner_path, schema=_BUILD_ATTEMPT_SCHEMA,
+        owner = _sealed_read(reservation, schema=_BUILD_ATTEMPT_SCHEMA,
                              label="unpublished build attempt owner")
+        number = next_number
         build_root = keyed_build_root / name
         if build_root.exists() or build_root.is_symlink():
             raise StaticRegistryError("unpublished attempt already has mutable build state")
@@ -1408,14 +1843,27 @@ class StaticGpuSourceBuilder:
                 or owner.get("locks") != [
                     _authority_path_identity(lock, "held build lock")
                     for lock in lock_paths]
-                or owner.get("promotion_claim") is not False):
+                or owner.get("promotion_claim") is not False
+                or not _owner_matches_supervised_authority(owner, contract)):
             raise StaticRegistryError("unpublished attempt owner differs from authority")
         verdict = device_claim.assess_holder_liveness(owner.get("holder"))
         if verdict.state != device_claim.DEAD:
             raise StaticRegistryError(
                 "unpublished build attempt owner is live or unverifiable: "
                 f"{verdict.reason}")
-        os.rename(path, attempts_root / name)
+        attempt_root = attempts_root / name
+        if attempt_root.exists() or attempt_root.is_symlink():
+            _regular_directory(attempt_root, "unpublished build attempt")
+            if any(attempt_root.iterdir()):
+                raise StaticRegistryError("unpublished build attempt closure changed")
+        else:
+            attempt_root.mkdir(mode=0o700)
+        os.rename(reservation, attempt_root / "owner.json")
+        attempt_fd = os.open(attempt_root, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(attempt_fd)
+        finally:
+            os.close(attempt_fd)
         directory_fd = os.open(attempts_root, os.O_RDONLY)
         try:
             os.fsync(directory_fd)
@@ -1431,10 +1879,16 @@ class StaticGpuSourceBuilder:
         intent_path = cache_root / "intent.json"
         if (owner.get("build_key") != contract["build_key"]
                 or owner.get("intent_file_sha256") != _digest(intent_path)
+                or owner.get("intent") != {
+                    key: value for key, value in _sealed_read(
+                        intent_path, schema=_BUILD_INTENT_SCHEMA,
+                        label="build transaction intent").items()
+                    if key != "receipt_sha256"}
                 or owner.get("locks") != [
                     _authority_path_identity(path, "held build lock")
                     for path in lock_paths]
-                or owner.get("promotion_claim") is not False):
+                or owner.get("promotion_claim") is not False
+                or not _owner_matches_supervised_authority(owner, contract)):
             raise StaticRegistryError("build transaction owner differs from held authority")
         recovery_path = cache_root / "transaction-recovery.json"
         if recovery_path.exists() or recovery_path.is_symlink():
@@ -1460,7 +1914,8 @@ class StaticGpuSourceBuilder:
         })
 
     def _new_attempt(self, *, cache_root: Path, keyed_build_root: Path,
-                     contract: Mapping[str, Any], lock_paths: tuple[Path, Path]) -> tuple[Path, Path, str]:
+                     contract: Mapping[str, Any], lock_paths: tuple[Path, Path],
+                     supervised_authority: Mapping[str, Any]) -> tuple[Path, Path, str]:
         attempts_root = cache_root / "attempts"
         allowed_cache = {"intent.json", "transaction-owner.json",
                          "transaction-recovery.json", "attempts"}
@@ -1469,6 +1924,9 @@ class StaticGpuSourceBuilder:
             raise StaticRegistryError(
                 f"incomplete build cache has unexpected entries {sorted(extras)}")
         if attempts_root.exists() or attempts_root.is_symlink():
+            self._promote_pending_attempt(
+                cache_root=cache_root, keyed_build_root=keyed_build_root,
+                contract=contract, lock_paths=lock_paths)
             attempts = _attempt_directories(cache_root)
         else:
             attempts_root.mkdir()
@@ -1481,20 +1939,28 @@ class StaticGpuSourceBuilder:
         if (attempt_root.exists() or attempt_root.is_symlink()
                 or build_attempt_root.exists() or build_attempt_root.is_symlink()):
             raise StaticRegistryError("fresh build attempt identity already exists")
-        pending = attempts_root / f".{name}.{os.getpid()}.{time.time_ns()}.pending"
-        pending.mkdir(mode=0o700)
+        reservation = attempts_root / f".{name}.owner.json"
         holder = device_claim.current_holder_identity(
             f"autokernel-build:{contract['build_key']}:{name}")
-        _sealed_write(pending / "owner.json", {
+        _sealed_write(reservation, {
             "schema": _BUILD_ATTEMPT_SCHEMA,
             "build_key": contract["build_key"], "attempt": number,
             "attempt_name": name, "holder": holder,
             "cache_root": str(cache_root.resolve(strict=True)),
             "build_root": str(build_attempt_root.resolve(strict=False)),
             "locks": [_authority_path_identity(path, "held build lock") for path in lock_paths],
+            "supervised_build_authority_sha256":
+                schemas.content_hash(dict(supervised_authority)),
+            "supervised_build_authority": dict(supervised_authority),
             "promotion_claim": False,
         })
-        os.rename(pending, attempt_root)
+        attempt_root.mkdir(mode=0o700)
+        os.rename(reservation, attempt_root / "owner.json")
+        attempt_fd = os.open(attempt_root, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(attempt_fd)
+        finally:
+            os.close(attempt_fd)
         directory_fd = os.open(attempts_root, os.O_RDONLY)
         try:
             os.fsync(directory_fd)
@@ -1539,6 +2005,7 @@ class StaticGpuSourceBuilder:
                 or owner.get("cache_root") != str(cache_root.resolve(strict=True))
                 or owner.get("build_root") != str(expected_build_root.resolve(strict=False))
                 or owner.get("promotion_claim") is not False
+                or not _owner_matches_supervised_authority(owner, contract)
                 or owner.get("locks") != [
                     _authority_path_identity(path, "held build lock") for path in lock_paths]):
             raise StaticRegistryError("incomplete build attempt owner differs from held authority")
@@ -1632,10 +2099,15 @@ class StaticGpuSourceBuilder:
             label="build transaction owner")
         if (transaction_owner.get("build_key") != contract["build_key"]
                 or transaction_owner.get("intent_file_sha256") != _digest(intent_path)
+                or transaction_owner.get("intent") != {
+                    key: value for key, value in intent.items()
+                    if key != "receipt_sha256"}
                 or transaction_owner.get("locks") != [
                     _authority_path_identity(path, "held build lock")
                     for path in lock_paths]
-                or transaction_owner.get("promotion_claim") is not False):
+                or transaction_owner.get("promotion_claim") is not False
+                or not _owner_matches_supervised_authority(
+                    transaction_owner, contract)):
             raise StaticRegistryError("build transaction owner differs from sealed intent")
         terminal_path = cache_root / "terminal.json"
         if not terminal_path.exists() and not terminal_path.is_symlink():
@@ -1658,10 +2130,27 @@ class StaticGpuSourceBuilder:
                         or owner.get("locks") != [
                             _authority_path_identity(path, "held build lock")
                             for path in lock_paths]
-                        or owner.get("promotion_claim") is not False):
+                        or owner.get("promotion_claim") is not False
+                        or not _owner_matches_supervised_authority(owner, contract)):
                     raise StaticRegistryError("build attempt chain differs from authority")
         terminal = _sealed_read(terminal_path, schema=_BUILD_TERMINAL_SCHEMA,
                                 label="build cache terminal")
+        common_terminal_keys = {
+            "schema", "build_key", "attempt_name", "intent_file_sha256",
+            "state", "attempt_owner_sha256", "process_closure_sha256",
+            "artifact_epoch", "promotion_claim", "receipt_sha256"}
+        if terminal.get("state") == "complete":
+            expected_terminal_keys = common_terminal_keys | {"build"}
+        elif terminal.get("state") == "failed":
+            expected_terminal_keys = common_terminal_keys | {"failure_type"}
+            if "failure_stage" in terminal:
+                expected_terminal_keys.add("failure_stage")
+            if "failure_message" in terminal:
+                expected_terminal_keys.add("failure_message")
+        else:
+            raise StaticRegistryError("build terminal state is unknown")
+        if set(terminal) != expected_terminal_keys:
+            raise StaticRegistryError("build terminal schema keys changed")
         if (terminal.get("build_key") != contract["build_key"]
                 or terminal.get("intent_file_sha256") != _digest(intent_path)):
             raise StaticRegistryError("build cache terminal does not close its intent")
@@ -1669,6 +2158,34 @@ class StaticGpuSourceBuilder:
         if (not attempts
                 or terminal.get("attempt_name") != attempts[-1].name):
             raise StaticRegistryError("build cache terminal does not close its final attempt")
+        for prior in attempts[:-1]:
+            prior_owner = prior / "owner.json"
+            prior_recovery = prior / "recovery.json"
+            recovery = _sealed_read(
+                prior_recovery, schema=_BUILD_RECOVERY_SCHEMA,
+                label="superseded build attempt recovery")
+            if (recovery.get("state") != "quarantined"
+                    or recovery.get("owner_sha256") != _digest(prior_owner)
+                    or recovery.get("attempt") != int(prior.name.removeprefix("attempt-"))
+                    or recovery.get("promotion_claim") is not False):
+                raise StaticRegistryError("superseded build attempt is not quarantined")
+        final_attempt = attempts[-1]
+        final_owner_path = final_attempt / "owner.json"
+        final_owner = _sealed_read(
+            final_owner_path, schema=_BUILD_ATTEMPT_SCHEMA,
+            label="terminal build attempt owner")
+        if (final_attempt / "recovery.json").exists() \
+                or (final_attempt / "recovery.json").is_symlink():
+            raise StaticRegistryError("terminal build final attempt is quarantined")
+        final_holder = final_owner.get("holder")
+        if not isinstance(final_holder, Mapping):
+            raise StaticRegistryError("terminal build attempt holder is malformed")
+        if (terminal.get("attempt_owner_sha256") != _digest(final_owner_path)
+                or not isinstance(terminal.get("artifact_epoch"), Mapping)
+                or terminal.get("process_closure_sha256")
+                != terminal["artifact_epoch"].get("process_closure", {}).get(
+                    "closure_sha256")):
+            raise StaticRegistryError("build terminal does not bind its final attempt epoch")
         if terminal.get("state") != "complete":
             failure_stage = terminal.get("failure_stage")
             if terminal.get("state") == "failed" and failure_stage in {
@@ -1682,6 +2199,10 @@ class StaticGpuSourceBuilder:
                 if terminal.get("failure_type") not in allowed_types[failure_stage]:
                     raise StaticRegistryError(
                         "failed build terminal stage/type classification changed")
+                expected_epoch = _attempt_artifact_epoch(
+                    final_attempt, final_owner_path, final_holder, build=None)
+                if terminal.get("artifact_epoch") != expected_epoch:
+                    raise StaticRegistryError("failed build artifact epoch changed")
                 # The ref, canonical intent, terminal self-hash, build key,
                 # and exact intent-file digest have all been revalidated above.
                 # Only that complete identity chain may recover the original
@@ -1746,6 +2267,10 @@ class StaticGpuSourceBuilder:
             raise StaticRegistryError("completed build projection is malformed") from exc
         if build.build_key != contract["build_key"]:
             raise StaticRegistryError("cached build identity is not keyed by its build contract")
+        expected_epoch = _attempt_artifact_epoch(
+            final_attempt, final_owner_path, final_holder, build=build)
+        if terminal.get("artifact_epoch") != expected_epoch:
+            raise StaticRegistryError("completed build artifact epoch changed")
         _within(build.anchor_build, build_root, "anchor build", directory=True)
         _within(build.candidate_build, build_root, "candidate build", directory=True)
         materialization_path = _within(
@@ -1928,8 +2453,25 @@ class StaticGpuSourceBuilder:
                 raise StaticRegistryError("cached build receipt is not successful")
             log = _within(Path(str(build_receipt.get("log_path", ""))), cache_root,
                           "cached build log", single_link=True)
-            if _digest(log) != build_receipt.get("log_sha256"):
+            log_raw, log_identity = _read_bound_file(log, "cached build log")
+            if (hashlib.sha256(log_raw).hexdigest() != build_receipt.get("log_sha256")
+                    or build_receipt.get("log_identity") != log_identity):
                 raise StaticRegistryError("cached build log changed")
+            result_path = _within(
+                Path(str(build_receipt.get("result_receipt_path", ""))),
+                cache_root, "cached build result receipt", single_link=True)
+            result = _sealed_read(
+                result_path, schema="epyc.autokernel.build_process_result.v1",
+                label="cached build result receipt")
+            if (_digest(result_path) != build_receipt.get("result_receipt_sha256")
+                    or result.get("log_path") != str(log)
+                    or result.get("log_sha256") != build_receipt.get("log_sha256")
+                    or result.get("log_identity") != log_identity
+                    or result.get("plan") != build_receipt.get("plan")
+                    or result.get("configure") != build_receipt.get("configure")
+                    or result.get("build") != build_receipt.get("build")
+                    or result.get("facts") != build_receipt.get("facts")):
+                raise StaticRegistryError("cached build result receipt changed")
             facts = build_receipt.get("facts")
             if (not isinstance(facts, Mapping)
                     or not set(_REQUIRED_TARGETS).issubset(set(facts.get("built_targets", [])))):
@@ -1956,6 +2498,9 @@ class StaticGpuSourceBuilder:
                 or any(char not in "0123456789abcdef" for char in operation_key)):
             raise StaticRegistryError("static builder requires the sealed controller operation key")
         contract, environment = self._contract(candidate, _permit)
+        supervised_authority = _validate_supervised_build_authority(
+            _permit.get("supervised_build_authority"),
+            deployment_config_sha256=str(contract["deployment_config_sha256"]))
         build_key = str(contract["build_key"])
         request_key = self._request_key(contract)
         cache_base = self.operations_root / "build-cache"
@@ -1987,6 +2532,12 @@ class StaticGpuSourceBuilder:
                         entries_root=entries_root, cache_root=cache_root,
                         expected_intent=expected_intent, contract=contract,
                         lock_paths=lock_paths)
+                elif (not (cache_root / "intent.json").exists()
+                      or not (cache_root / "transaction-owner.json").exists()):
+                    cache_present = self._promote_pending_cache_transaction(
+                        entries_root=entries_root, cache_root=cache_root,
+                        expected_intent=expected_intent, contract=contract,
+                        lock_paths=lock_paths)
                 if ref_path.exists() or ref_path.is_symlink():
                     self._validate_ref(ref_path, request_key=request_key, build_key=build_key)
                 else:
@@ -2010,7 +2561,8 @@ class StaticGpuSourceBuilder:
                         intent_file_sha = self._publish_cache_transaction(
                             entries_root=entries_root, cache_root=cache_root,
                             expected_intent=expected_intent, contract=contract,
-                            lock_paths=lock_paths)
+                            lock_paths=lock_paths,
+                            supervised_authority=supervised_authority)
                         cache_present = True
                         fresh_cache = True
                     _sealed_write(ref_path, {
@@ -2033,7 +2585,15 @@ class StaticGpuSourceBuilder:
                         "build ref exists without its cache transaction; refusing rebuild")
                 attempt_root, build_attempt_root, attempt_name = self._new_attempt(
                     cache_root=cache_root, keyed_build_root=keyed_build_root,
-                    contract=contract, lock_paths=lock_paths)
+                    contract=contract, lock_paths=lock_paths,
+                    supervised_authority=supervised_authority)
+                attempt_owner_path = attempt_root / "owner.json"
+                attempt_owner = _sealed_read(
+                    attempt_owner_path, schema=_BUILD_ATTEMPT_SCHEMA,
+                    label="final build attempt owner")
+                attempt_holder = attempt_owner.get("holder")
+                if not isinstance(attempt_holder, Mapping):
+                    raise StaticRegistryError("final build attempt has no holder")
                 try:
                     build = self._build_uncached(
                         candidate, _authorization,
@@ -2061,6 +2621,14 @@ class StaticGpuSourceBuilder:
                         message = _source_failure_message(str(exc))
                         if message is not None:
                             failure["failure_message"] = message
+                    failure_epoch = _attempt_artifact_epoch(
+                        attempt_root, attempt_owner_path, attempt_holder,
+                        build=None, require_terminals=True)
+                    failure["artifact_epoch"] = failure_epoch
+                    failure["attempt_owner_sha256"] = failure_epoch[
+                        "attempt_owner_sha256"]
+                    failure["process_closure_sha256"] = failure_epoch[
+                        "process_closure"]["closure_sha256"]
                     terminal_path, _terminal_file_sha = _sealed_write(
                         cache_root / "terminal.json", failure)
                     if failure_stage is not None:
@@ -2074,10 +2642,17 @@ class StaticGpuSourceBuilder:
                             str(exc), receipt_path=str(terminal_path),
                             receipt_sha256=_digest(terminal_path)) from exc
                     raise
+                complete_epoch = _attempt_artifact_epoch(
+                    attempt_root, attempt_owner_path, attempt_holder,
+                    build=build, require_terminals=True)
                 _sealed_write(cache_root / "terminal.json", {
                     "schema": _BUILD_TERMINAL_SCHEMA, "build_key": build_key,
                     "attempt_name": attempt_name,
                     "intent_file_sha256": intent_file_sha, "state": "complete",
+                    "attempt_owner_sha256": complete_epoch["attempt_owner_sha256"],
+                    "process_closure_sha256": complete_epoch[
+                        "process_closure"]["closure_sha256"],
+                    "artifact_epoch": complete_epoch,
                     "build": self._build_projection(build), "promotion_claim": False})
                 return self._reopen(cache_root=cache_root,
                                     build_root=keyed_build_root,
@@ -2305,9 +2880,9 @@ class StaticGpuSourceBuilder:
                 "reward_runtime_sha256": _digest(runtime.receipt_path),
                 "promotion_claim": False,
             }
-            materialization["receipt_sha256"] = schemas.content_hash(materialization)
             materialization_path = operation_dir / "materialization.json"
-            materialization_path.write_text(json.dumps(materialization, sort_keys=True) + "\n", encoding="utf-8")
+            materialization_path, _materialization_file_sha = _sealed_write(
+                materialization_path, materialization)
             completed = {
                 "anchor_build": Path(by_id["akc-anchor"][1].path),
                 "candidate_build": Path(by_id[candidate.source_manifest.candidate_id][1].path),
@@ -2350,9 +2925,9 @@ class StaticGpuSourceBuilder:
                         "operation_key": operation_key, "build_key": operation_key,
                         "receipts": receipts,
                         "errors": teardown_errors, "promotion_claim": False}
-            teardown["receipt_sha256"] = schemas.content_hash(teardown)
             receipt_path = operation_dir / "teardown.json"
-            receipt_path.write_text(json.dumps(teardown, sort_keys=True) + "\n", encoding="utf-8")
+            receipt_path, _teardown_file_sha = _sealed_write(
+                receipt_path, teardown)
             if teardown_errors:
                 raise StaticRegistryError("one or more governed worktrees could not be torn down")
         if completed is None:  # defensive: the originating build exception was re-raised by finally

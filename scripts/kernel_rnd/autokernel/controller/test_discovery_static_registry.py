@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 import json
 import hashlib
 import os
@@ -434,16 +435,32 @@ class _FakeBuildResult:
         self.plan = plan
         self.log_path = str(log.resolve())
         self.log_sha256 = sha(log.read_bytes())
+        _raw, self.log_identity = S._read_bound_file(log, "fixture build log")
         self.succeeded = True
         self.log_disagrees_with_exit_code = False
         self.facts = mock.Mock(built_targets=("llama-bench", "test-backend-ops"))
+        result, self.result_receipt_sha256 = _sealed_write(
+            log.with_name(log.name + ".result.json"), {
+                "schema": "epyc.autokernel.build_process_result.v1",
+                "plan": self.plan.to_dict(), "configure": None, "build": None,
+                "log_path": self.log_path, "log_sha256": self.log_sha256,
+                "log_identity": self.log_identity,
+                "facts": {"built_targets": ["llama-bench", "test-backend-ops"]},
+                "build_dir_pre_build_digest": S.integrity.EMPTY_TREE_SHA256,
+                "build_dir_created_for_this_build": True,
+                "load_average_at_start": None})
+        self.result_receipt_path = str(result)
 
     def to_dict(self):
         return {
-            "plan": self.plan.to_dict(), "log_path": self.log_path,
+            "plan": self.plan.to_dict(), "configure": None, "build": None,
+            "log_path": self.log_path,
             "log_sha256": self.log_sha256, "succeeded": True,
             "log_disagrees_with_exit_code": False, "exit_code": 0,
             "facts": {"built_targets": ["llama-bench", "test-backend-ops"]},
+            "log_identity": self.log_identity,
+            "result_receipt_path": self.result_receipt_path,
+            "result_receipt_sha256": self.result_receipt_sha256,
         }
 
 
@@ -547,9 +564,66 @@ class StaticBuildCacheTests(unittest.TestCase):
             log = Path(log_path); log.write_text("hardware-free build fixture\n")
             return _FakeBuildResult(plan, log)
 
+        launch_root = root / "supervisor"; launch_root.mkdir(mode=0o700)
+        spec = {"schema": "test.supervisor.spec.v1", "deployment": "fixture"}
+        spec_path = launch_root / "launch-spec.json"
+        spec_path.write_text(json.dumps(spec, sort_keys=True, separators=(",", ":")) + "\n")
+        spec_path.chmod(0o600)
+        holder = S.device_claim.current_holder_identity("test-supervisor")
+        machine_id = Path("/etc/machine-id").read_text().strip()
+        host_value = machine_id or holder["host"]
+        host_source = "machine-id" if machine_id else "kernel-hostname"
+        common_process = {
+            "pid": holder["pid"], "start_ticks": holder["start_ticks"],
+            "boot_id": holder["boot_id"], "host": holder["host"],
+            "host_id_source": host_source,
+            "host_id_sha256": sha(host_value.encode()),
+        }
+        controller_identity = {**common_process, "pgid": os.getpgid(os.getpid()),
+                               "argv_sha256": "a" * 64}
+        spec_sha = E.schemas.content_hash(spec)
+        unified = [line.split("::", 1)[1]
+                   for line in Path("/proc/self/cgroup").read_text().splitlines()
+                   if "::" in line]
+        controller_cgroup = str(
+            Path("/sys/fs/cgroup") / unified[0].lstrip("/"))
+        ledger_payload = {
+            "restart_count": 0, "child": controller_identity,
+            "stdout": str(launch_root / "controller.stdout.log"),
+            "stderr": str(launch_root / "controller.stderr.log"),
+            "cgroup": controller_cgroup}
+        ledger_row = {
+            "schema": "epyc.autokernel.discovery_supervisor_ledger.v1",
+            "sequence": 1, "previous_sha256": None,
+            "written_at": "2026-08-20T00:00:00Z",
+            "event": "child_started", "payload": ledger_payload}
+        ledger_row["record_sha256"] = E.schemas.content_hash(ledger_row)
+        ledger_path = launch_root / "death-ledger.jsonl"
+        ledger_path.write_text(json.dumps(
+            ledger_row, sort_keys=True, separators=(",", ":")) + "\n")
+        ledger_path.chmod(0o600)
+        spec_stat = spec_path.stat(); ledger_stat = ledger_path.stat()
+        authority = {
+            "schema": "epyc.autokernel.supervised_build_authority.v1",
+            "launch_spec": {
+                "path": str(spec_path), "sha256": sha(spec_path.read_bytes()),
+                "device": spec_stat.st_dev, "inode": spec_stat.st_ino,
+                "uid": spec_stat.st_uid, "mode": 0o600,
+                "nlink": spec_stat.st_nlink},
+            "death_ledger": {
+                "path": str(ledger_path), "device": ledger_stat.st_dev,
+                "inode": ledger_stat.st_ino, "uid": ledger_stat.st_uid,
+                "mode": 0o600, "nlink": ledger_stat.st_nlink},
+            "spec_sha256": spec_sha,
+            "deployment_config_sha256": "d" * 64,
+            "supervisor": common_process,
+            "controller": controller_identity,
+            "ledger_child_started_record_sha256": ledger_row["record_sha256"],
+        }
         permit = {"operation_key": "1" * 64,
                   "instrument_branch": "measurement-instrument",
-                  "deployment_config_sha256": "d" * 64}
+                  "deployment_config_sha256": "d" * 64,
+                  "supervised_build_authority": authority}
         production_before = (self.git(production, "rev-parse", "HEAD"),
                              self.git(production, "status", "--porcelain"),
                              source.read_bytes())
@@ -572,6 +646,20 @@ class StaticBuildCacheTests(unittest.TestCase):
         path.write_text(json.dumps(body, sort_keys=True) + "\n")
         return body
 
+    @staticmethod
+    @contextmanager
+    def dead_build_owner():
+        real = S.device_claim.assess_holder_liveness
+        def assess(value):
+            if (isinstance(value, dict)
+                    and str(value.get("label", "")).startswith("autokernel-build")):
+                return S.device_claim.Liveness(
+                    S.device_claim.DEAD, "fixture owner exited")
+            return real(value)
+        with mock.patch.object(
+                S.device_claim, "assess_holder_liveness", side_effect=assess):
+            yield
+
     def invoke(self, fixture, permit=None):
         with mock.patch(
                 "scripts.kernel_rnd.autokernel.controller.discovery_static_registry.worktree.run_build",
@@ -580,6 +668,24 @@ class StaticBuildCacheTests(unittest.TestCase):
                 side_effect=self.split_verifier):
             return fixture.builder.build(
                 fixture.candidate, object(), permit or fixture.permit)
+
+    def test_sealed_receipt_path_swap_is_never_accepted_as_written_bytes(self):
+        fixture = self.fixture()
+        target = fixture.root / "target.json"
+        rogue = fixture.root / "rogue.json"
+        rogue.write_bytes(b"forged\n"); rogue.chmod(0o600)
+        real_link = os.link
+        def swap_after_link(source, destination, **kwargs):
+            result = real_link(source, destination, **kwargs)
+            parent = Path(os.readlink(
+                f"/proc/self/fd/{kwargs['dst_dir_fd']}"))
+            published = parent / os.fspath(destination)
+            published.unlink(); rogue.rename(published)
+            return result
+        with mock.patch.object(os, "link", side_effect=swap_after_link), \
+                self.assertRaisesRegex(StaticRegistryError, "written inode"):
+            _sealed_write(target, {"schema": "test.receipt.v1", "value": 1})
+        self.assertEqual(target.read_bytes(), b"forged\n")
 
     def test_s1_s2_distinct_operation_keys_reuse_exact_build_once(self):
         fixture = self.fixture()
@@ -729,11 +835,9 @@ class StaticBuildCacheTests(unittest.TestCase):
                 fixture.builder.build(fixture.candidate, object(), fixture.permit)
         entry = next((fixture.root / "operations/build-cache/entries").iterdir())
         first = entry / "attempts/attempt-000001"
-        self.rewrite_receipt(
-            first / "owner.json",
-            lambda body: body["holder"].update(
-                start_ticks=body["holder"]["start_ticks"] + 1))
-        build = self.invoke(fixture, {**fixture.permit, "operation_key": "5" * 64})
+        with self.dead_build_owner():
+            build = self.invoke(
+                fixture, {**fixture.permit, "operation_key": "5" * 64})
         attempts = sorted((entry / "attempts").iterdir())
         self.assertEqual([path.name for path in attempts],
                          ["attempt-000001", "attempt-000002"])
@@ -756,15 +860,47 @@ class StaticBuildCacheTests(unittest.TestCase):
         self.assertFalse((entry / "attempts").exists())
         with self.assertRaisesRegex(StaticRegistryError, "transaction owner is live"):
             self.invoke(fixture, {**fixture.permit, "operation_key": "5" * 64})
-        self.rewrite_receipt(
-            entry / "transaction-owner.json",
-            lambda body: body["holder"].update(
-                start_ticks=body["holder"]["start_ticks"] + 1))
-        self.invoke(fixture, {**fixture.permit, "operation_key": "5" * 64})
+        with self.dead_build_owner():
+            self.invoke(fixture, {**fixture.permit, "operation_key": "5" * 64})
         recovery = json.loads((entry / "transaction-recovery.json").read_text())
         self.assertEqual(recovery["state"], "owner_dead")
         self.assertEqual([path.name for path in (entry / "attempts").iterdir()
                           if not path.name.startswith(".")], ["attempt-000001"])
+
+    def test_stale_prepublication_owner_tmp_is_classified_not_interpreted(self):
+        fixture = self.fixture()
+        with mock.patch.object(StaticGpuSourceBuilder, "_new_attempt",
+                               side_effect=KeyboardInterrupt("pre-attempt crash")):
+            with self.assertRaises(KeyboardInterrupt):
+                fixture.builder.build(
+                    fixture.candidate, object(), fixture.permit)
+        entry = next(path for path in
+                     (fixture.root / "operations/build-cache/entries").iterdir()
+                     if not path.name.startswith("."))
+        attempts = entry / "attempts"; attempts.mkdir()
+        scratch = attempts / "..attempt-000001.owner.json.999999.tmp"
+        scratch.write_bytes(b'{"partial":')
+        scratch.chmod(0o600)
+        with self.dead_build_owner():
+            self.invoke(fixture, {**fixture.permit, "operation_key": "5" * 64})
+        self.assertFalse(scratch.exists())
+        self.assertTrue((attempts / "attempt-000001/owner.json").is_file())
+
+    def test_same_uid_dead_owner_rewrite_cannot_manufacture_recovery(self):
+        fixture = self.fixture()
+        with mock.patch.object(StaticGpuSourceBuilder, "_build_uncached",
+                               side_effect=KeyboardInterrupt("crash")):
+            with self.assertRaises(KeyboardInterrupt):
+                fixture.builder.build(
+                    fixture.candidate, object(), fixture.permit)
+        entry = next((fixture.root / "operations/build-cache/entries").iterdir())
+        owner = entry / "attempts/attempt-000001/owner.json"
+        self.rewrite_receipt(
+            owner, lambda body: body["holder"].update(
+                start_ticks=body["holder"]["start_ticks"] + 1))
+        with self.assertRaisesRegex(StaticRegistryError, "owner differs"):
+            self.invoke(fixture, {**fixture.permit, "operation_key": "5" * 64})
+        self.assertFalse((owner.parent / "recovery.json").exists())
 
     def test_crash_before_attempt_publish_promotes_then_quarantines_exact_epoch(self):
         fixture = self.fixture()
@@ -783,11 +919,8 @@ class StaticBuildCacheTests(unittest.TestCase):
                        if path.name.startswith("."))
         with self.assertRaisesRegex(StaticRegistryError, "unpublished.*owner is live"):
             self.invoke(fixture, {**fixture.permit, "operation_key": "5" * 64})
-        self.rewrite_receipt(
-            pending / "owner.json",
-            lambda body: body["holder"].update(
-                start_ticks=body["holder"]["start_ticks"] + 1))
-        self.invoke(fixture, {**fixture.permit, "operation_key": "5" * 64})
+        with self.dead_build_owner():
+            self.invoke(fixture, {**fixture.permit, "operation_key": "5" * 64})
         attempts = sorted(path.name for path in (entry / "attempts").iterdir())
         self.assertEqual(attempts, ["attempt-000001", "attempt-000002"])
         self.assertTrue((entry / "attempts/attempt-000001/recovery.json").is_file())
@@ -810,13 +943,12 @@ class StaticBuildCacheTests(unittest.TestCase):
                              if not path.name.startswith("."))
                 pending = next((entry / "attempts").iterdir())
                 if case == "multiple":
-                    shutil.copytree(
-                        pending, pending.with_name(
-                            ".attempt-000001.999999.999999.pending"))
+                    shutil.copy2(
+                        pending, pending.with_name(".attempt-000001.extra.owner.json"))
                     pattern = "multiple unpublished"
                 else:
-                    pending.rename(pending.with_name(".malformed.pending"))
-                    pattern = "name is malformed"
+                    pending.rename(pending.with_name(".malformed.owner.json"))
+                    pattern = "multiple unpublished|name is malformed"
                 with self.assertRaisesRegex(StaticRegistryError, pattern):
                     self.invoke(fixture, {**fixture.permit,
                                           "operation_key": "5" * 64})
@@ -833,15 +965,13 @@ class StaticBuildCacheTests(unittest.TestCase):
             with self.assertRaises(KeyboardInterrupt):
                 fixture.builder.build(fixture.candidate, object(), fixture.permit)
         entries = fixture.root / "operations/build-cache/entries"
-        pending = next(entries.iterdir())
+        pending = next(path for path in entries.iterdir()
+                       if path.name.startswith("."))
         self.assertTrue(pending.name.startswith("."))
         with self.assertRaisesRegex(StaticRegistryError, "unpublished.*owner is live"):
             self.invoke(fixture, {**fixture.permit, "operation_key": "5" * 64})
-        self.rewrite_receipt(
-            pending / "transaction-owner.json",
-            lambda body: body["holder"].update(
-                start_ticks=body["holder"]["start_ticks"] + 1))
-        self.invoke(fixture, {**fixture.permit, "operation_key": "5" * 64})
+        with self.dead_build_owner():
+            self.invoke(fixture, {**fixture.permit, "operation_key": "5" * 64})
         published = [path for path in entries.iterdir() if not path.name.startswith(".")]
         self.assertEqual(len(published), 1)
         self.assertTrue((published[0] / "transaction-recovery.json").is_file())
@@ -899,11 +1029,8 @@ class StaticBuildCacheTests(unittest.TestCase):
             "started_at": "2026-08-20T00:00:00+00:00",
             "stdout_path": str(logs / "anchor.stream"),
             "sandbox_receipt_path": str(logs / "anchor.sandbox.json")})
-        self.rewrite_receipt(
-            first / "owner.json",
-            lambda body: body["holder"].update(
-                start_ticks=body["holder"]["start_ticks"] + 1))
-        with self.assertRaisesRegex(StaticRegistryError, "owned child"):
+        with self.dead_build_owner(), self.assertRaisesRegex(
+                StaticRegistryError, "owned child"):
             self.invoke(fixture, {**fixture.permit, "operation_key": "5" * 64})
         self.assertEqual(fixture.calls, [])
 
@@ -926,22 +1053,70 @@ class StaticBuildCacheTests(unittest.TestCase):
             "sandbox_receipt_path": None, "sandbox_policy_sha256": None,
             "sandbox_token": None, "cgroup_root": None})
         owner = json.loads((first / "owner.json").read_text())
-        self.rewrite_receipt(
-            first / "owner.json",
-            lambda body: body["holder"].update(
-                start_ticks=body["holder"]["start_ticks"] + 1))
         env = dict(os.environ); env["AUTOKERNEL_OWNED_PROCESS_EPOCH"] = token
         child = subprocess.Popen(
             ("/usr/bin/sleep", "30"), env=env, start_new_session=True)
         try:
-            with self.assertRaisesRegex(StaticRegistryError, "epoch still has live"):
+            with self.dead_build_owner(), self.assertRaisesRegex(
+                    StaticRegistryError, "epoch still has live"):
                 self.invoke(fixture, {**fixture.permit,
                                       "operation_key": "5" * 64})
             self.assertEqual(fixture.calls, [])
         finally:
             child.terminate(); child.wait(timeout=5)
-        self.invoke(fixture, {**fixture.permit, "operation_key": "5" * 64})
+        with self.dead_build_owner():
+            self.invoke(fixture, {**fixture.permit, "operation_key": "5" * 64})
         self.assertTrue((first / "recovery.json").is_file())
+
+    def test_permission_error_epoch_scan_is_unknown_without_sandbox_closure(self):
+        fixture = self.fixture()
+        with mock.patch.object(StaticGpuSourceBuilder, "_build_uncached",
+                               side_effect=KeyboardInterrupt("crash")):
+            with self.assertRaises(KeyboardInterrupt):
+                fixture.builder.build(
+                    fixture.candidate, object(), fixture.permit)
+        entry = next((fixture.root / "operations/build-cache/entries").iterdir())
+        first = entry / "attempts/attempt-000001"
+        logs = first / "logs"; logs.mkdir()
+        _sealed_write(logs / "anchor.configure-process-intent.json", {
+            "schema": "epyc.autokernel.owned_process_intent.v1",
+            "argv": ["cmake", "-S", "."], "epoch_token": "d" * 64,
+            "stdout_path": str(logs / "anchor.configure.stream"),
+            "sandbox_receipt_path": None, "sandbox_policy_sha256": None,
+            "sandbox_token": None, "cgroup_root": None})
+        with self.dead_build_owner(), mock.patch.object(
+                S, "_epoch_processes", return_value=([], [12345])), \
+                self.assertRaisesRegex(StaticRegistryError, "UNKNOWN"):
+            self.invoke(fixture, {**fixture.permit, "operation_key": "5" * 64})
+        self.assertFalse((first / "recovery.json").exists())
+
+    def test_terminal_rejects_orphan_process_receipt_and_final_quarantine(self):
+        for case in ("orphan", "quarantined"):
+            with self.subTest(case=case):
+                fixture = self.fixture(); build = self.invoke(fixture)
+                entry = next((fixture.root / "operations/build-cache/entries").iterdir())
+                final = entry / "attempts/attempt-000001"
+                if case == "orphan":
+                    _sealed_write(final / "logs/orphan-process-terminal.json", {
+                        "schema": "epyc.autokernel.owned_process_terminal.v2"})
+                else:
+                    _sealed_write(final / "recovery.json", {
+                        "schema": S._BUILD_RECOVERY_SCHEMA,
+                        "build_key": build.build_key, "attempt": 1,
+                        "owner_sha256": sha((final / "owner.json").read_bytes()),
+                        "state": "quarantined", "promotion_claim": False})
+                with self.assertRaises(StaticRegistryError):
+                    self.invoke(fixture, {**fixture.permit,
+                                          "operation_key": "5" * 64})
+
+    def test_terminal_attempt_owner_digest_cannot_be_rewritten(self):
+        fixture = self.fixture(); self.invoke(fixture)
+        entry = next((fixture.root / "operations/build-cache/entries").iterdir())
+        terminal = entry / "terminal.json"
+        self.rewrite_receipt(
+            terminal, lambda body: body.update(attempt_owner_sha256="0" * 64))
+        with self.assertRaisesRegex(StaticRegistryError, "final attempt epoch"):
+            self.invoke(fixture, {**fixture.permit, "operation_key": "5" * 64})
 
     def test_dead_attempt_tears_down_registered_actor_and_branch_before_retry(self):
         fixture = self.fixture()
@@ -960,11 +1135,8 @@ class StaticBuildCacheTests(unittest.TestCase):
             leaf="attempt-000001", root=campaign_root)
         actor_path = Path(actor.path.path)
         actor_branch = actor.branch
-        self.rewrite_receipt(
-            first / "owner.json",
-            lambda body: body["holder"].update(
-                start_ticks=body["holder"]["start_ticks"] + 1))
-        self.invoke(fixture, {**fixture.permit, "operation_key": "5" * 64})
+        with self.dead_build_owner():
+            self.invoke(fixture, {**fixture.permit, "operation_key": "5" * 64})
         self.assertFalse(actor_path.exists())
         self.assertFalse(S.worktree.GitRepo(fixture.instrument).branch_exists(actor_branch))
         recovery = json.loads((first / "recovery.json").read_text())

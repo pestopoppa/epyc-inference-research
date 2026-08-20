@@ -450,18 +450,65 @@ def _sha256_file(path: Any) -> str:
 
 def _exclusive_regular_sink(path: str):
     """Open a new evaluator-owned stream without following or replacing links."""
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    flags = os.O_RDWR | os.O_CREAT | os.O_EXCL
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
     descriptor = os.open(path, flags, 0o600)
     facts = os.fstat(descriptor)
-    if not stat.S_ISREG(facts.st_mode) or facts.st_nlink != 1:
+    if (not stat.S_ISREG(facts.st_mode) or facts.st_nlink != 1
+            or facts.st_uid != os.geteuid()
+            or stat.S_IMODE(facts.st_mode) != 0o600):
         os.close(descriptor)
         raise WorktreeError(f"stream sink is not a one-link regular file: {path}")
-    return os.fdopen(descriptor, "wb")
+    return os.fdopen(descriptor, "w+b")
 
 
-def _sealed_process_receipt(path: str, body: Mapping[str, Any]) -> None:
+def _stream_identity(value: os.stat_result) -> dict[str, int]:
+    return {
+        "device": value.st_dev, "inode": value.st_ino, "uid": value.st_uid,
+        "mode": stat.S_IMODE(value.st_mode), "nlink": value.st_nlink,
+        "size": value.st_size, "mtime_ns": value.st_mtime_ns,
+        "ctime_ns": value.st_ctime_ns,
+    }
+
+
+def _read_and_revalidate_open_stream(handle: Any, path: str) -> tuple[bytes, dict[str, int]]:
+    """Read the writer fd and prove the pathname still names that inode."""
+    handle.flush()
+    os.fsync(handle.fileno())
+    before = os.fstat(handle.fileno())
+    linked_before = os.stat(path, follow_symlinks=False)
+    if (_stream_identity(before) != _stream_identity(linked_before)
+            or before.st_nlink != 1 or before.st_uid != os.geteuid()
+            or stat.S_IMODE(before.st_mode) != 0o600):
+        raise WorktreeError(f"stream pathname no longer names its writer inode: {path}")
+    os.lseek(handle.fileno(), 0, os.SEEK_SET)
+    chunks: list[bytes] = []
+    while True:
+        chunk = os.read(handle.fileno(), 1024 * 1024)
+        if not chunk:
+            break
+        chunks.append(chunk)
+    after = os.fstat(handle.fileno())
+    linked_after = os.stat(path, follow_symlinks=False)
+    if (not (_stream_identity(before) == _stream_identity(after)
+             == _stream_identity(linked_before) == _stream_identity(linked_after))):
+        raise WorktreeError(f"stream changed during fd-bound read: {path}")
+    raw = b"".join(chunks)
+    if len(raw) != after.st_size:
+        raise WorktreeError(f"stream size changed during fd-bound read: {path}")
+    return raw, _stream_identity(after)
+
+
+def _revalidate_open_stream(handle: Any, path: str,
+                            expected: Mapping[str, int]) -> None:
+    current = _stream_identity(os.fstat(handle.fileno()))
+    linked = _stream_identity(os.stat(path, follow_symlinks=False))
+    if current != dict(expected) or linked != dict(expected):
+        raise WorktreeError(f"stream identity changed before receipt publication: {path}")
+
+
+def _sealed_process_receipt(path: str, body: Mapping[str, Any]) -> str:
     """Publish one append-only, self-hashed owned-process receipt."""
     payload = dict(body)
     payload["receipt_sha256"] = schemas.content_hash(payload)
@@ -469,22 +516,42 @@ def _sealed_process_receipt(path: str, body: Mapping[str, Any]) -> None:
                       ensure_ascii=False, allow_nan=False) + "\n").encode("utf-8")
     parent = os.path.dirname(path)
     os.makedirs(parent, exist_ok=True)
-    temporary = os.path.join(parent, f".{os.path.basename(path)}.{os.getpid()}.tmp")
+    name = os.path.basename(path)
+    temporary_name = f".{name}.{os.getpid()}.tmp"
+    directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+    if hasattr(os, "O_NOFOLLOW"):
+        directory_flags |= os.O_NOFOLLOW
+    directory_fd = os.open(parent, directory_flags)
+    handle = None
     try:
-        with _exclusive_regular_sink(temporary) as handle:
-            handle.write(raw)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.link(temporary, path, follow_symlinks=False)
-        os.unlink(temporary)
-        directory_fd = os.open(parent, os.O_RDONLY)
-        try:
-            os.fsync(directory_fd)
-        finally:
-            os.close(directory_fd)
+        temporary = os.path.join(parent, temporary_name)
+        handle = _exclusive_regular_sink(temporary)
+        handle.write(raw)
+        written, identity = _read_and_revalidate_open_stream(handle, temporary)
+        if written != raw:
+            raise WorktreeError("temporary process receipt bytes changed")
+        os.link(temporary_name, name, src_dir_fd=directory_fd,
+                dst_dir_fd=directory_fd, follow_symlinks=False)
+        linked = _stream_identity(os.stat(name, dir_fd=directory_fd,
+                                          follow_symlinks=False))
+        linked_fd = _stream_identity(os.fstat(handle.fileno()))
+        if (linked != linked_fd or linked["nlink"] != 2
+                or (linked["device"], linked["inode"])
+                != (identity["device"], identity["inode"])):
+            raise WorktreeError("published process receipt is not its writer inode")
+        os.unlink(temporary_name, dir_fd=directory_fd)
+        os.fsync(directory_fd)
+        final_identity = _stream_identity(os.fstat(handle.fileno()))
+        _revalidate_open_stream(handle, path, final_identity)
     finally:
-        if os.path.lexists(temporary) and not os.path.islink(temporary):
-            os.unlink(temporary)
+        if handle is not None:
+            handle.close()
+        try:
+            os.unlink(temporary_name, dir_fd=directory_fd)
+        except FileNotFoundError:
+            pass
+        os.close(directory_fd)
+    return hashlib.sha256(raw).hexdigest()
 
 
 def _read_single_link_stream(path: str) -> bytes:
@@ -1089,12 +1156,12 @@ def _run_owned(argv: Sequence[str], *, cwd: Optional[str] = None,
     started = time.monotonic()
     started_at = _utc_now_iso()
     sink = None
+    if stdout_path is not None:
+        sink = _exclusive_regular_sink(stdout_path)
+        stdout_target: Any = sink
+    else:
+        stdout_target = subprocess.PIPE
     try:
-        if stdout_path is not None:
-            sink = _exclusive_regular_sink(stdout_path)
-            stdout_target: Any = sink
-        else:
-            stdout_target = subprocess.PIPE
         with subprocess.Popen(
                 spawn_argv, cwd=cwd, env=executed_env,
                 stdout=stdout_target, stderr=subprocess.STDOUT,
@@ -1139,60 +1206,68 @@ def _run_owned(argv: Sequence[str], *, cwd: Optional[str] = None,
                     captured = b""
             exit_code = proc.poll()
             verified_dead = exit_code is not None
+
+        stream_raw: bytes | None = None
+        stream_identity: dict[str, int] | None = None
+        if stdout_path is not None:
+            assert sink is not None
+            stream_raw, stream_identity = _read_and_revalidate_open_stream(
+                sink, stdout_path)
+            text = stream_raw.decode("utf-8", "replace")
+        else:
+            text = (captured or b"").decode("utf-8", "replace")
+
+        if timed_out and not verified_dead:
+            raise ProcessEscalationFailed(
+                f"pid {pid} (pgid {pgid}) survived {list(signals_sent)}; running "
+                f"{' '.join(argv)}. Not reporting a clean teardown for a process still alive")
+
+        sandbox_receipt = None
+        sandbox_teardown = None
+        if sandbox_policy is not None:
+            try:
+                sandbox_receipt = process_sandbox.read_receipt(sandbox_receipt_path)
+                process_sandbox.verify_receipt(
+                    sandbox_receipt, policy=sandbox_policy, pid=pid, argv=argv)
+                sandbox_teardown = process_sandbox.cleanup_cgroup(sandbox_policy, pid)
+            except process_sandbox.SandboxError as exc:
+                cleanup_note = ""
+                cgroup_path = sandbox_policy.cgroup_path(pid)
+                if cgroup_path.exists():
+                    try:
+                        process_sandbox.cleanup_cgroup(sandbox_policy, pid)
+                        cleanup_note = "; the owned cgroup was drained after refusal"
+                    except process_sandbox.SandboxError as cleanup_exc:
+                        cleanup_note = (
+                            "; additionally, owned-cgroup cleanup failed: "
+                            f"{cleanup_exc}")
+                raise WorktreeError(
+                    "candidate build containment did not produce a verified activation "
+                    f"receipt and teardown: {exc}{cleanup_note}") from exc
+
+        disposition = ProcessDisposition(
+            argv=argv, pid=pid, pgid=pgid, exit_code=exit_code, timed_out=timed_out,
+            signals_sent=signals_sent, verified_dead=verified_dead,
+            duration_s=time.monotonic() - started, started_at=started_at,
+            sandbox_receipt=sandbox_receipt, sandbox_teardown=sandbox_teardown)
+        if process_receipt_prefix is not None:
+            _sealed_process_receipt(process_receipt_prefix + "-terminal.json", {
+                "schema": "epyc.autokernel.owned_process_terminal.v2",
+                "start_receipt_sha256": _sha256_file(
+                    process_receipt_prefix + "-start.json"),
+                "disposition": disposition.to_dict(),
+                "stdout_path": stdout_path,
+                "stdout_sha256": (hashlib.sha256(stream_raw).hexdigest()
+                                   if stream_raw is not None else None),
+                "stdout_identity": stream_identity,
+            })
+            if stdout_path is not None:
+                assert sink is not None and stream_identity is not None
+                _revalidate_open_stream(sink, stdout_path, stream_identity)
+        return disposition, text
     finally:
         if sink is not None:
             sink.close()
-
-    if stdout_path is not None:
-        text = _read_single_link_stream(stdout_path).decode("utf-8", "replace")
-    else:
-        text = (captured or b"").decode("utf-8", "replace")
-
-    if timed_out and not verified_dead:
-        raise ProcessEscalationFailed(
-            f"pid {pid} (pgid {pgid}) survived {list(signals_sent)}; running "
-            f"{' '.join(argv)}. Not reporting a clean teardown for a process still alive")
-
-    sandbox_receipt = None
-    sandbox_teardown = None
-    if sandbox_policy is not None:
-        try:
-            sandbox_receipt = process_sandbox.read_receipt(sandbox_receipt_path)
-            process_sandbox.verify_receipt(
-                sandbox_receipt, policy=sandbox_policy, pid=pid, argv=argv)
-            sandbox_teardown = process_sandbox.cleanup_cgroup(sandbox_policy, pid)
-        except process_sandbox.SandboxError as exc:
-            cleanup_note = ""
-            cgroup_path = sandbox_policy.cgroup_path(pid)
-            if cgroup_path.exists():
-                try:
-                    process_sandbox.cleanup_cgroup(sandbox_policy, pid)
-                    cleanup_note = "; the owned cgroup was drained after refusal"
-                except process_sandbox.SandboxError as cleanup_exc:
-                    cleanup_note = (
-                        "; additionally, owned-cgroup cleanup failed: "
-                        f"{cleanup_exc}")
-            raise WorktreeError(
-                "candidate build containment did not produce a verified activation "
-                f"receipt and teardown: {exc}{cleanup_note}") from exc
-
-    disposition = ProcessDisposition(
-        argv=argv, pid=pid, pgid=pgid, exit_code=exit_code, timed_out=timed_out,
-        signals_sent=signals_sent, verified_dead=verified_dead,
-        duration_s=time.monotonic() - started, started_at=started_at,
-        sandbox_receipt=sandbox_receipt, sandbox_teardown=sandbox_teardown)
-    if process_receipt_prefix is not None:
-        _sealed_process_receipt(process_receipt_prefix + "-terminal.json", {
-            "schema": "epyc.autokernel.owned_process_terminal.v1",
-            "start_receipt_sha256": _sha256_file(
-                process_receipt_prefix + "-start.json"),
-            "disposition": disposition.to_dict(),
-            "stdout_path": stdout_path,
-            "stdout_sha256": (hashlib.sha256(
-                _read_single_link_stream(stdout_path)).hexdigest()
-                               if stdout_path is not None else None),
-        })
-    return disposition, text
 
 
 def _run_guarded_patch_input(worktree: "Worktree", patch_bytes: bytes, *,
@@ -2412,6 +2487,9 @@ class BuildResult:
     #: 1-minute load average read immediately before configure, when a cap was
     #: declared. `None` means no cap was declared — never "the cap passed".
     load_average_at_start: Optional[float] = None
+    log_identity: Optional[Mapping[str, int]] = None
+    result_receipt_path: Optional[str] = None
+    result_receipt_sha256: Optional[str] = None
 
     @property
     def exit_code(self) -> Optional[int]:
@@ -2445,7 +2523,11 @@ class BuildResult:
                 "log_disagrees_with_exit_code": self.log_disagrees_with_exit_code,
                 "build_dir_pre_build_digest": self.build_dir_pre_build_digest,
                 "build_dir_created_for_this_build": self.build_dir_created_for_this_build,
-                "load_average_at_start": self.load_average_at_start}
+                "load_average_at_start": self.load_average_at_start,
+                "log_identity": (dict(self.log_identity)
+                                 if self.log_identity is not None else None),
+                "result_receipt_path": self.result_receipt_path,
+                "result_receipt_sha256": self.result_receipt_sha256}
 
 
 def run_build(plan: BuildPlan, *, log_path: Any,
@@ -2537,17 +2619,38 @@ def run_build(plan: BuildPlan, *, log_path: Any,
         sections.append(build_text)
 
     combined = "".join(sections)
-    with _exclusive_regular_sink(log) as handle:
+    handle = _exclusive_regular_sink(log)
+    try:
         handle.write(combined.encode("utf-8"))
-        handle.flush()
-        os.fsync(handle.fileno())
+        raw, log_identity = _read_and_revalidate_open_stream(handle, log)
+        if raw != combined.encode("utf-8"):
+            raise WorktreeError("combined build log differs from its writer bytes")
+        facts = parse_build_log(combined)
+        receipt_path = log + ".result.json"
+        receipt_body = {
+            "schema": "epyc.autokernel.build_process_result.v1",
+            "plan": plan.to_dict(),
+            "configure": configure_disp.to_dict() if configure_disp else None,
+            "build": build_disp.to_dict() if build_disp else None,
+            "log_path": log, "log_sha256": hashlib.sha256(raw).hexdigest(),
+            "log_identity": log_identity, "facts": facts.to_dict(),
+            "build_dir_pre_build_digest": pre_digest,
+            "build_dir_created_for_this_build": created,
+            "load_average_at_start": load_now,
+        }
+        receipt_sha = _sealed_process_receipt(receipt_path, receipt_body)
+        _revalidate_open_stream(handle, log, log_identity)
+    finally:
+        handle.close()
 
     return BuildResult(
         plan=plan, configure=configure_disp, build=build_disp, log_path=log,
-        log_sha256=_sha256_text(combined), facts=parse_build_log(combined),
+        log_sha256=hashlib.sha256(raw).hexdigest(), facts=facts,
         build_dir_pre_build_digest=pre_digest,
         build_dir_created_for_this_build=created,
-        load_average_at_start=load_now)
+        load_average_at_start=load_now, log_identity=log_identity,
+        result_receipt_path=receipt_path,
+        result_receipt_sha256=receipt_sha)
 
 
 # =============================================================================

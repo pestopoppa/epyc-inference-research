@@ -40,6 +40,7 @@ import ast
 import dataclasses
 import json
 import os
+from pathlib import Path
 import shutil
 import subprocess
 import sys
@@ -1473,6 +1474,46 @@ class TestOwnedProcessDiscipline(_TmpMixin):
                     process_receipt_prefix=os.path.join(self.tmp, "owned"))
         self.assertGreater(captured["pid"], 0)
         self.assertFalse(os.path.exists(f"/proc/{captured['pid']}"))
+
+    def test_process_receipt_path_swap_never_attests_the_replacement(self):
+        target = os.path.join(self.tmp, "receipt.json")
+        rogue = os.path.join(self.tmp, "rogue.json")
+        Path(rogue).write_bytes(b"forged\n")
+        Path(rogue).chmod(0o600)
+        real_link = os.link
+        def swap_after_link(src, dst, **kwargs):
+            result = real_link(src, dst, **kwargs)
+            directory_fd = kwargs["dst_dir_fd"]
+            parent = Path(os.readlink(f"/proc/self/fd/{directory_fd}"))
+            destination = parent / os.fspath(dst)
+            destination.unlink()
+            os.rename(rogue, destination)
+            return result
+        with mock.patch.object(os, "link", side_effect=swap_after_link), \
+                self.assertRaisesRegex(W.WorktreeError, "writer inode"):
+            W._sealed_process_receipt(target, {
+                "schema": "test.process.receipt.v1", "value": 1})
+        self.assertEqual(Path(target).read_bytes(), b"forged\n")
+
+    def test_stream_swap_during_terminal_publication_is_detected_by_writer_fd(self):
+        stream = os.path.join(self.tmp, "owned.stream")
+        prefix = os.path.join(self.tmp, "owned")
+        original = W._sealed_process_receipt
+        def swap(path, body):
+            if body["schema"] == "epyc.autokernel.owned_process_terminal.v2":
+                Path(stream).unlink()
+                Path(stream).write_bytes(b"forged stream\n")
+                Path(stream).chmod(0o600)
+            return original(path, body)
+        with mock.patch.object(W, "_sealed_process_receipt", side_effect=swap), \
+                self.assertRaisesRegex(W.WorktreeError, "stream identity changed"):
+            W._run_owned(
+                [sys.executable, "-c", "print('original stream')"],
+                stdout_path=stream, process_receipt_prefix=prefix)
+        terminal = json.loads(Path(prefix + "-terminal.json").read_text())
+        self.assertNotEqual(
+            terminal["stdout_sha256"],
+            __import__("hashlib").sha256(Path(stream).read_bytes()).hexdigest())
 
     def test_a_name_pattern_tool_cannot_be_launched(self):
         for bad in ("pkill", "/usr/bin/pgrep", "killall", "pidof"):
