@@ -362,12 +362,42 @@ def _validate_supervised_build_authority(
     _require_hash(supervisor.get("host_id_sha256"), "supervisor host identity")
     _require_hash(controller_identity.get("host_id_sha256"), "controller host identity")
     _require_hash(controller_identity.get("argv_sha256"), "controller argv identity")
+    try:
+        machine_id = Path("/etc/machine-id").read_text(encoding="ascii").strip()
+    except (OSError, UnicodeDecodeError) as exc:
+        raise StaticRegistryError("cannot verify supervised host identity") from exc
+    current_host = device_claim.current_holder_identity(
+        "autokernel-build-host-authority-check")["host"]
+    host_source, host_value = (
+        ("machine-id", machine_id) if machine_id
+        else ("kernel-hostname", current_host))
+    expected_host_identity = {
+        "host_id_source": host_source,
+        "host_id_sha256": hashlib.sha256(host_value.encode("utf-8")).hexdigest(),
+    }
+    if any(any(identity.get(key) != expected for key, expected in
+               expected_host_identity.items())
+           for identity in (supervisor, controller_identity)):
+        raise StaticRegistryError("supervised process host identity changed")
     if require_current:
         current = device_claim.current_holder_identity(
             "autokernel-build-authority-check")
         for key in ("pid", "start_ticks", "boot_id", "host"):
             if controller_identity.get(key) != current.get(key):
                 raise StaticRegistryError("supervised controller is not this build process")
+        try:
+            command_line = Path("/proc/self/cmdline").read_bytes()
+            argv = [part.decode("utf-8", "strict")
+                    for part in command_line.rstrip(b"\0").split(b"\0")]
+            pgid = os.getpgid(0)
+        except (OSError, UnicodeDecodeError) as exc:
+            raise StaticRegistryError(
+                "cannot verify supervised controller execution identity") from exc
+        if (not argv or controller_identity.get("pgid") != pgid
+                or controller_identity.get("argv_sha256")
+                != schemas.content_hash(argv)):
+            raise StaticRegistryError(
+                "supervised controller argv or process group changed")
     supervisor_verdict = device_claim.assess_holder_liveness(supervisor)
     if ((require_current and supervisor_verdict.state != device_claim.LIVE)
             or supervisor_verdict.state not in {device_claim.LIVE, device_claim.DEAD}):
@@ -376,13 +406,31 @@ def _validate_supervised_build_authority(
     previous: str | None = None
     found = False
     authority_cgroup: str | None = None
-    for line in ledger_raw.decode("utf-8", "strict").splitlines():
+    try:
+        ledger_lines = ledger_raw.decode("utf-8", "strict").splitlines()
+    except UnicodeDecodeError as exc:
+        raise StaticRegistryError("supervisor death ledger is not UTF-8") from exc
+    ledger_row_keys = {
+        "schema", "sequence", "previous_sha256", "written_at", "event",
+        "payload", "record_sha256",
+    }
+    for sequence, line in enumerate(ledger_lines, 1):
         try:
             row = json.loads(line)
         except json.JSONDecodeError as exc:
             raise StaticRegistryError("supervisor death ledger is malformed") from exc
-        if not isinstance(row, Mapping):
-            raise StaticRegistryError("supervisor death ledger row is not an object")
+        if (not isinstance(row, Mapping) or set(row) != ledger_row_keys
+                or row.get("schema")
+                != "epyc.autokernel.discovery_supervisor_ledger.v2"
+                or row.get("sequence") != sequence
+                or not isinstance(row.get("written_at"), str)
+                or not isinstance(row.get("event"), str)
+                or not isinstance(row.get("payload"), Mapping)):
+            raise StaticRegistryError("supervisor death ledger row schema changed")
+        canonical_row = json.dumps(
+            row, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        if line.encode("utf-8") != canonical_row:
+            raise StaticRegistryError("supervisor death ledger row is not canonical")
         claimed = row.get("record_sha256")
         payload = {key: item for key, item in row.items() if key != "record_sha256"}
         if (claimed != schemas.content_hash(payload)
@@ -501,6 +549,34 @@ def _discard_unpublished_owner_temps(attempts_root: Path, name: str) -> list[dic
         # contents may be partial and are intentionally not interpreted as an
         # owner.  Under both build locks it is safe scratch, not append-only
         # evidence; retain an in-memory classification for tests/audit.
+        rows.append({"name": path.name, "size": facts.st_size,
+                     "device": facts.st_dev, "inode": facts.st_ino,
+                     "state": "never_published_scratch"})
+        path.unlink()
+    return rows
+
+
+def _discard_unpublished_transaction_temps(
+        entries_root: Path, build_key: str) -> list[dict[str, Any]]:
+    """Classify only never-linked transaction-owner scratch inodes."""
+    prefix = f"..{build_key}.transaction-owner.json."
+    candidates = [
+        path for path in sorted(entries_root.iterdir(), key=lambda item: item.name)
+        if path.name.startswith(prefix) and path.name.endswith(".tmp")]
+    if len(candidates) > 1:
+        raise StaticRegistryError(
+            "multiple unpublished transaction owner scratch files exist")
+    rows: list[dict[str, Any]] = []
+    for path in candidates:
+        pid_text = path.name[len(prefix):-4]
+        if not pid_text.isdigit() or path.is_symlink():
+            raise StaticRegistryError(
+                "unpublished transaction owner scratch name is malformed")
+        facts = path.lstat()
+        if (not stat.S_ISREG(facts.st_mode) or facts.st_uid != os.geteuid()
+                or facts.st_nlink != 1 or stat.S_IMODE(facts.st_mode) != 0o600):
+            raise StaticRegistryError(
+                "unpublished transaction owner scratch identity is unsafe")
         rows.append({"name": path.name, "size": facts.st_size,
                      "device": facts.st_dev, "inode": facts.st_ino,
                      "state": "never_published_scratch"})
@@ -737,6 +813,10 @@ def _process_receipt_closure(
             # is authority.  Compiler-created state lives in the separate
             # build root and is not admitted into this evaluator-owned tree.
             raw, identity = _read_bound_file(path, f"build log closure {path.name}")
+            if (identity["uid"] != os.geteuid() or identity["mode"] != 0o600
+                    or identity["nlink"] != 1):
+                raise StaticRegistryError(
+                    "build log closure entry identity is not private and single-link")
             rows.append({"name": path.name,
                          "sha256": hashlib.sha256(raw).hexdigest(),
                          "identity": identity})
@@ -1720,6 +1800,8 @@ class StaticGpuSourceBuilder:
             expected_intent: Mapping[str, Any], contract: Mapping[str, Any],
             lock_paths: tuple[Path, Path],
             supervised_authority: Mapping[str, Any]) -> str:
+        _discard_unpublished_transaction_temps(
+            entries_root, str(contract["build_key"]))
         intent_sha = hashlib.sha256(_sealed_bytes(expected_intent)).hexdigest()
         reservation = entries_root / f".{contract['build_key']}.transaction-owner.json"
         _sealed_write(reservation, {
@@ -1735,7 +1817,14 @@ class StaticGpuSourceBuilder:
                 schemas.content_hash(dict(supervised_authority)),
             "supervised_build_authority": dict(supervised_authority),
         })
-        cache_root.mkdir(mode=0o700)
+        if cache_root.exists() or cache_root.is_symlink():
+            _regular_directory(
+                cache_root, "partially published build cache transaction")
+            if any(cache_root.iterdir()):
+                raise StaticRegistryError(
+                    "unowned partial build cache transaction is not empty")
+        else:
+            cache_root.mkdir(mode=0o700)
         os.rename(reservation, cache_root / "transaction-owner.json")
         _sealed_write(cache_root / "intent.json", expected_intent)
         cache_fd = os.open(cache_root, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
@@ -1754,6 +1843,8 @@ class StaticGpuSourceBuilder:
             self, *, entries_root: Path, cache_root: Path,
             expected_intent: Mapping[str, Any], contract: Mapping[str, Any],
             lock_paths: tuple[Path, Path]) -> bool:
+        _discard_unpublished_transaction_temps(
+            entries_root, str(contract["build_key"]))
         reservation = entries_root / f".{contract['build_key']}.transaction-owner.json"
         matching = [path for path in entries_root.iterdir()
                     if path.name.startswith(f".{contract['build_key']}.")]
@@ -2180,11 +2271,14 @@ class StaticGpuSourceBuilder:
         final_holder = final_owner.get("holder")
         if not isinstance(final_holder, Mapping):
             raise StaticRegistryError("terminal build attempt holder is malformed")
+        artifact_epoch = terminal.get("artifact_epoch")
+        process_closure = artifact_epoch.get("process_closure") \
+            if isinstance(artifact_epoch, Mapping) else None
         if (terminal.get("attempt_owner_sha256") != _digest(final_owner_path)
-                or not isinstance(terminal.get("artifact_epoch"), Mapping)
+                or not isinstance(artifact_epoch, Mapping)
+                or not isinstance(process_closure, Mapping)
                 or terminal.get("process_closure_sha256")
-                != terminal["artifact_epoch"].get("process_closure", {}).get(
-                    "closure_sha256")):
+                != process_closure.get("closure_sha256")):
             raise StaticRegistryError("build terminal does not bind its final attempt epoch")
         if terminal.get("state") != "complete":
             failure_stage = terminal.get("failure_stage")

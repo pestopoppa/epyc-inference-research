@@ -562,6 +562,7 @@ class StaticBuildCacheTests(unittest.TestCase):
             (bindir / "libggml-hip.so").symlink_to("libggml-hip.so.0")
             (build / "CMakeCache.txt").write_text("sealed cache fixture\n")
             log = Path(log_path); log.write_text("hardware-free build fixture\n")
+            log.chmod(0o600)
             return _FakeBuildResult(plan, log)
 
         launch_root = root / "supervisor"; launch_root.mkdir(mode=0o700)
@@ -579,8 +580,11 @@ class StaticBuildCacheTests(unittest.TestCase):
             "host_id_source": host_source,
             "host_id_sha256": sha(host_value.encode()),
         }
-        controller_identity = {**common_process, "pgid": os.getpgid(os.getpid()),
-                               "argv_sha256": "a" * 64}
+        current_argv = [part.decode("utf-8") for part in
+                        Path("/proc/self/cmdline").read_bytes().rstrip(b"\0").split(b"\0")]
+        controller_identity = {
+            **common_process, "pgid": os.getpgid(os.getpid()),
+            "argv_sha256": E.schemas.content_hash(current_argv)}
         spec_sha = E.schemas.content_hash(spec)
         unified = [line.split("::", 1)[1]
                    for line in Path("/proc/self/cgroup").read_text().splitlines()
@@ -593,7 +597,7 @@ class StaticBuildCacheTests(unittest.TestCase):
             "stderr": str(launch_root / "controller.stderr.log"),
             "cgroup": controller_cgroup}
         ledger_row = {
-            "schema": "epyc.autokernel.discovery_supervisor_ledger.v1",
+            "schema": "epyc.autokernel.discovery_supervisor_ledger.v2",
             "sequence": 1, "previous_sha256": None,
             "written_at": "2026-08-20T00:00:00Z",
             "event": "child_started", "payload": ledger_payload}
@@ -975,6 +979,34 @@ class StaticBuildCacheTests(unittest.TestCase):
         published = [path for path in entries.iterdir() if not path.name.startswith(".")]
         self.assertEqual(len(published), 1)
         self.assertTrue((published[0] / "transaction-recovery.json").is_file())
+
+    def test_crash_before_transaction_owner_link_discards_only_exact_scratch(self):
+        fixture = self.fixture()
+        real_rename = os.rename
+
+        def crash_cache(source, destination):
+            if Path(source).parent.name == "entries":
+                raise KeyboardInterrupt("cache publish crash")
+            return real_rename(source, destination)
+
+        with mock.patch.object(os, "rename", side_effect=crash_cache):
+            with self.assertRaises(KeyboardInterrupt):
+                fixture.builder.build(
+                    fixture.candidate, object(), fixture.permit)
+        entries = fixture.root / "operations/build-cache/entries"
+        reservation = next(
+            path for path in entries.iterdir()
+            if path.name.endswith(".transaction-owner.json"))
+        build_key = reservation.name[1:].removesuffix(".transaction-owner.json")
+        scratch = entries / (
+            f"..{build_key}.transaction-owner.json.999999.tmp")
+        reservation.rename(scratch)
+        self.invoke(fixture, {**fixture.permit, "operation_key": "5" * 64})
+        self.assertFalse(scratch.exists())
+        published = [
+            path for path in entries.iterdir() if not path.name.startswith(".")]
+        self.assertEqual(len(published), 1)
+        self.assertTrue((published[0] / "terminal.json").is_file())
 
     def test_incomplete_attempt_owner_tamper_and_hardlink_never_retry(self):
         for case in ("holder", "lock", "hardlink"):
