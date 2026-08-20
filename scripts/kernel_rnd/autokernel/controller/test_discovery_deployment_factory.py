@@ -745,6 +745,7 @@ class DeploymentFactoryTests(unittest.TestCase):
             self.assertEqual(timed_oracle["scope"], "integrity_discovery_only")
             self.assertFalse(timed_oracle["production_throughput_authority"])
             self.assertIn("discovery_telemetry", receipt["execution_modules"])
+            self.assertIn("discovery_supervisor", receipt["execution_modules"])
             self.assertIn("hypotheses", receipt["execution_modules"])
             self.assertIn("do_not_repeat", receipt["execution_modules"])
             self.assertIn("t0_provider", receipt["execution_modules"])
