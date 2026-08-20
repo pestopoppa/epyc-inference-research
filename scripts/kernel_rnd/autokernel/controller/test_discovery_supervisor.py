@@ -52,22 +52,74 @@ class ImmutableAuthorityTests(unittest.TestCase):
             self.assertFalse(any(path.suffix == ".pyc" for path in closure.rglob("*")))
             self.assertFalse(any(path.name == "__pycache__" for path in closure.rglob("*")))
             for directory in [closure, *(p for p in closure.rglob("*") if p.is_dir())]:
-                self.assertEqual(stat.S_IMODE(directory.stat().st_mode), 0o500)
+                self.assertEqual(directory.stat().st_uid, 0)
+                self.assertEqual(stat.S_IMODE(directory.stat().st_mode), 0o555)
+            for path in (path for path in closure.rglob("*") if path.is_file()):
+                self.assertEqual(path.stat().st_uid, 0)
+                self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o444)
             factory = Path(spec.body["execution_modules"]["deployment_factory"]["path"])
             self.assertEqual(
                 S._file_sha256(factory),
                 spec.body["execution_modules"]["deployment_factory"]["sha256"],
             )
 
-    def test_pyc_injection_is_refused_before_supervision(self):
+    def test_same_uid_cannot_replace_factory_before_import_or_execute_payload(self):
         with tempfile.TemporaryDirectory() as temporary:
             spec = self._spec(Path(temporary) / "runtime")
             closure = Path(spec.body["execution_closure"]["path"])
-            os.chmod(closure, 0o700)
-            injected = closure / "injected.pyc"
-            injected.write_bytes(b"bytecode")
-            with self.assertRaisesRegex(S.SupervisorError, "bytecode"):
-                S._verify_execution_closure(spec)
+            factory = (
+                closure / "scripts/kernel_rnd/autokernel/controller/discovery_deployment_factory.py"
+            )
+            marker = Path(temporary) / "injected-top-level-executed"
+            replacement = Path(temporary) / "replacement.py"
+            replacement.write_text(
+                f"from pathlib import Path\nPath({str(marker)!r}).write_text('EXECUTED')\n",
+                encoding="utf-8",
+            )
+            original_sha256 = S._file_sha256(factory)
+            program = """
+import importlib, os, pathlib, sys
+factory, replacement = map(pathlib.Path, sys.argv[1:3])
+results = []
+try:
+    os.chmod(factory, 0o644)
+    factory.write_text(replacement.read_text())
+    results.append('overwrite-succeeded')
+except OSError:
+    results.append('overwrite-refused')
+try:
+    os.replace(replacement, factory)
+    results.append('replace-succeeded')
+except OSError:
+    results.append('replace-refused')
+importlib.import_module(
+    'scripts.kernel_rnd.autokernel.controller.discovery_deployment_factory')
+print(','.join(results))
+"""
+            result = subprocess.run(
+                (
+                    str(Path(sys.executable).resolve()),
+                    "-B",
+                    "-c",
+                    program,
+                    str(factory),
+                    str(replacement),
+                ),
+                cwd="/",
+                env={
+                    **os.environ,
+                    "PYTHONDONTWRITEBYTECODE": "1",
+                    "PYTHONSAFEPATH": "1",
+                    "PYTHONPATH": str(closure),
+                },
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout.strip(), "overwrite-refused,replace-refused")
+            self.assertFalse(marker.exists())
+            self.assertEqual(S._file_sha256(factory), original_sha256)
 
     def test_stable_open_refuses_path_swap_and_never_follows_symlink(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -233,6 +285,49 @@ class ImmutableAuthorityTests(unittest.TestCase):
         source = Path(S.__file__).read_text(encoding="utf-8")
         self.assertNotIn("killpg", source)
         self.assertNotIn("start_new_session", source)
+
+    def test_public_status_and_stop_cli_require_both_bytecode_guards(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            argv = (
+                str(Path(sys.executable).resolve()),
+                "-m",
+                S.SUPERVISOR_MODULE,
+                "status",
+                "--runtime-root",
+                str(Path(temporary) / "runtime"),
+            )
+            environment = dict(os.environ)
+            environment.pop("PYTHONDONTWRITEBYTECODE", None)
+            refusal_cases = (
+                (argv, environment),
+                ((argv[0], "-B", *argv[1:]), environment),
+                (argv, {**environment, "PYTHONDONTWRITEBYTECODE": "1"}),
+                (
+                    (*argv[:3], "stop", *argv[4:]),
+                    environment,
+                ),
+            )
+            for command, command_environment in refusal_cases:
+                refused = subprocess.run(
+                    command,
+                    cwd=S._REPO_ROOT,
+                    env=command_environment,
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+                self.assertEqual(refused.returncode, 2, command)
+                self.assertIn("requires python -B", refused.stderr)
+            accepted = subprocess.run(
+                (argv[0], "-B", *argv[1:]),
+                cwd=S._REPO_ROOT,
+                env={**environment, "PYTHONDONTWRITEBYTECODE": "1"},
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(accepted.returncode, 0, accepted.stderr)
+            self.assertEqual(json.loads(accepted.stdout)["status"], "absent")
 
 
 @unittest.skipUnless(

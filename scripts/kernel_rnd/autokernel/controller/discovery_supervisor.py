@@ -18,6 +18,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import signal
 import socket
 import stat
@@ -42,6 +43,7 @@ SECURE_MODULE = "scripts.kernel_rnd.autokernel.controller.discovery_supervisor_s
 TMUX_SOCKET_NAME = "epyc-autokernel-supervisors"
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 _SOURCE_SCRIPTS_ROOT = _REPO_ROOT / "scripts"
+_IMMUTABLE_CLOSURE_BASE = Path("/var/lib/epyc-autokernel/execution-closures")
 _HEX64 = re.compile(r"[0-9a-f]{64}")
 _STATE_LIMIT = 64 * 1024 * 1024
 
@@ -169,8 +171,122 @@ def _read_json(root: secure.RuntimeRoot, name: str) -> dict[str, Any]:
     return value
 
 
+def _sudo(*argv: str) -> None:
+    result = subprocess.run(
+        ("/usr/bin/sudo", "-n", *argv),
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=False,
+    )
+    if result.returncode:
+        raise SupervisorError(f"immutable closure root operation failed: {result.stderr.strip()}")
+
+
+def _install_root_owned_closure(staging: Path, destination: Path) -> None:
+    """Publish one generated snapshot below a non-user-writable root parent."""
+    if destination.parent != _IMMUTABLE_CLOSURE_BASE or not _HEX64.fullmatch(destination.name):
+        raise SupervisorError("immutable closure destination escaped its base")
+    _sudo(
+        "/usr/bin/install",
+        "-d",
+        "-o",
+        "root",
+        "-g",
+        "root",
+        "-m",
+        "0755",
+        str(_IMMUTABLE_CLOSURE_BASE.parent),
+        str(_IMMUTABLE_CLOSURE_BASE),
+    )
+    for parent in (_IMMUTABLE_CLOSURE_BASE.parent, _IMMUTABLE_CLOSURE_BASE):
+        info = parent.stat(follow_symlinks=False)
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or stat.S_IMODE(info.st_mode) & 0o022:
+            raise SupervisorError("immutable closure parent is not root-owned and non-writable")
+    if destination.exists():
+        shutil.rmtree(staging)
+        return
+    _sudo("/usr/bin/chown", "-R", "--no-dereference", "root:root", str(staging))
+    _sudo("/usr/bin/chmod", "-R", "a+rX,a-w", str(staging))
+    result = subprocess.run(
+        (
+            "/usr/bin/sudo",
+            "-n",
+            "/usr/bin/mv",
+            "-T",
+            "--",
+            str(staging),
+            str(destination),
+        ),
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=False,
+    )
+    if result.returncode:
+        if not destination.exists():
+            raise SupervisorError(f"immutable closure publication failed: {result.stderr.strip()}")
+        _sudo(
+            "/usr/bin/rm",
+            "-rf",
+            "--one-file-system",
+            "--",
+            str(staging),
+        )
+
+
+def _sealed_closure_manifest(
+    closure: Path, expected: Mapping[str, Mapping[str, Any]]
+) -> dict[str, dict[str, Any]]:
+    """Require an exact root-owned 0555/0444 tree with no extra leaves."""
+    actual_files: set[str] = set()
+    actual: dict[str, dict[str, Any]] = {}
+    root_fd = os.open(closure, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        for path in closure.rglob("*"):
+            relative = path.relative_to(closure).as_posix()
+            info = path.stat(follow_symlinks=False)
+            if stat.S_ISLNK(info.st_mode):
+                raise SupervisorError("immutable closure contains a symlink")
+            if stat.S_ISDIR(info.st_mode):
+                if info.st_uid != 0 or stat.S_IMODE(info.st_mode) != 0o555:
+                    raise SupervisorError("immutable closure directory is not root-owned mode-0555")
+                continue
+            if not stat.S_ISREG(info.st_mode):
+                raise SupervisorError("immutable closure contains a special file")
+            actual_files.add(relative)
+        if actual_files != set(expected):
+            raise SupervisorError("immutable closure file set differs from manifest")
+        for relative, row in expected.items():
+            fd = secure.open_beneath(root_fd, relative)
+            try:
+                raw, identity = secure.read_stable_fd(fd, limit=_STATE_LIMIT)
+            finally:
+                os.close(fd)
+            if (
+                identity["uid"] != 0
+                or identity["nlink"] != 1
+                or identity["mode"] != 0o444
+                or hashlib.sha256(raw).hexdigest() != row["sha256"]
+            ):
+                raise SupervisorError("immutable closure file identity or bytes changed")
+            actual[relative] = {
+                "sha256": row["sha256"],
+                "source": row["source"],
+                "closure": identity,
+            }
+    finally:
+        os.close(root_fd)
+    root_identity = secure.directory_identity(os.stat(closure, follow_symlinks=False))
+    if root_identity["uid"] != 0 or root_identity["mode"] != 0o555:
+        raise SupervisorError("immutable closure root is not root-owned mode-0555")
+    return actual
+
+
 def _copy_execution_closure(root: secure.RuntimeRoot) -> dict[str, Any]:
-    """Copy exact fd-read source bytes, excluding all bytecode and symlinks."""
+    """Copy exact source bytes, then publish them under root-only authority."""
     closure = root.path / "execution-closure"
     if closure.exists():
         raise SupervisorError("execution closure already exists before spec creation")
@@ -195,48 +311,58 @@ def _copy_execution_closure(root: secure.RuntimeRoot) -> dict[str, Any]:
         Path("benchmark/autokernel_gpu_discovery_beliefs.py"),
         Path("benchmark/autokernel_progression.py"),
         Path("benchmark/run_autokernel_gpu_discovery.py"),
+        Path("lib/__init__.py"),
+        Path("lib/canonical_recipe.py"),
     ):
         if relative not in selected and (_SOURCE_SCRIPTS_ROOT / relative).exists():
             selected.append(relative)
-    for relative in sorted(selected, key=str):
-        try:
-            fd = secure.open_beneath(source_root_fd, relative.as_posix())
+    try:
+        for relative in sorted(selected, key=str):
             try:
-                raw, source_identity = secure.read_stable_fd(fd, limit=_STATE_LIMIT)
+                fd = secure.open_beneath(source_root_fd, relative.as_posix())
+                try:
+                    raw, source_identity = secure.read_stable_fd(fd, limit=_STATE_LIMIT)
+                finally:
+                    os.close(fd)
+            except secure.SecureRuntimeError as exc:
+                raise SupervisorError(str(exc)) from exc
+            destination = closure / "scripts" / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            out = os.open(
+                destination,
+                os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                0o400,
+            )
+            try:
+                view = memoryview(raw)
+                while view:
+                    written = os.write(out, view)
+                    view = view[written:]
+                os.fsync(out)
             finally:
-                os.close(fd)
-        except secure.SecureRuntimeError as exc:
-            raise SupervisorError(str(exc)) from exc
-        destination = closure / "scripts" / relative
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        out = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o400)
-        try:
-            view = memoryview(raw)
-            while view:
-                written = os.write(out, view)
-                view = view[written:]
-            os.fsync(out)
-        finally:
-            os.close(out)
-        os.chmod(destination, 0o400)
-        copied, closure_identity = _stable_path(destination)
-        if copied != raw:
-            raise SupervisorError("execution closure copy differs from opened source bytes")
-        manifest[f"scripts/{relative.as_posix()}"] = {
-            "sha256": hashlib.sha256(raw).hexdigest(),
-            "source": source_identity,
-            "closure": closure_identity,
-        }
-    os.close(source_root_fd)
-    for directory, subdirs, _files in os.walk(closure, topdown=False):
-        for subdir in subdirs:
-            os.chmod(Path(directory) / subdir, 0o500)
-        os.chmod(directory, 0o500)
+                os.close(out)
+            os.chmod(destination, 0o400)
+            copied, _identity = _stable_path(destination)
+            if copied != raw:
+                raise SupervisorError("execution closure copy differs from opened source bytes")
+            manifest[f"scripts/{relative.as_posix()}"] = {
+                "sha256": hashlib.sha256(raw).hexdigest(),
+                "source": source_identity,
+                "closure": None,
+            }
+    finally:
+        os.close(source_root_fd)
+    content_manifest = {relative: row["sha256"] for relative, row in manifest.items()}
+    content_sha256 = _content_hash(content_manifest)
+    destination = _IMMUTABLE_CLOSURE_BASE / content_sha256
+    _install_root_owned_closure(closure, destination)
+    sealed_manifest = _sealed_closure_manifest(destination, manifest)
     return {
-        "path": str(closure),
-        "manifest": manifest,
-        "manifest_sha256": _content_hash(manifest),
-        "root_identity": secure.directory_identity(os.stat(closure, follow_symlinks=False)),
+        "path": str(destination),
+        "content_sha256": content_sha256,
+        "manifest": sealed_manifest,
+        "manifest_sha256": _content_hash(sealed_manifest),
+        "root_identity": secure.directory_identity(os.stat(destination, follow_symlinks=False)),
     }
 
 
@@ -244,32 +370,19 @@ def _verify_execution_closure(spec: "LaunchSpec", *, require_self: bool = False)
     closure = Path(spec.body["execution_closure"]["path"])
     if not sys.dont_write_bytecode or os.environ.get("PYTHONDONTWRITEBYTECODE") != "1":
         raise SupervisorError("sealed execution requires bytecode-disabled Python")
-    if any(path.suffix == ".pyc" or path.name == "__pycache__" for path in closure.rglob("*")):
-        raise SupervisorError("sealed execution closure contains Python bytecode")
+    if closure.parent != _IMMUTABLE_CLOSURE_BASE:
+        raise SupervisorError("execution closure is outside its root-owned base")
     if (
         secure.directory_identity(os.stat(closure, follow_symlinks=False))
         != spec.body["execution_closure"]["root_identity"]
     ):
         raise SupervisorError("execution closure root object changed")
-    root_fd = os.open(closure, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-    actual: dict[str, dict[str, Any]] = {}
-    try:
-        for relative, expected in spec.body["execution_closure"]["manifest"].items():
-            fd = secure.open_beneath(root_fd, relative)
-            try:
-                raw, identity = secure.read_stable_fd(fd, limit=_STATE_LIMIT)
-            finally:
-                os.close(fd)
-            actual[relative] = {
-                "sha256": hashlib.sha256(raw).hexdigest(),
-                "source": expected["source"],
-                "closure": identity,
-            }
-    finally:
-        os.close(root_fd)
+    actual = _sealed_closure_manifest(closure, spec.body["execution_closure"]["manifest"])
     if (
         actual != spec.body["execution_closure"]["manifest"]
         or _content_hash(actual) != spec.body["execution_closure"]["manifest_sha256"]
+        or _content_hash({relative: row["sha256"] for relative, row in actual.items()})
+        != spec.body["execution_closure"]["content_sha256"]
     ):
         raise SupervisorError("execution closure bytes or identities changed")
     if not require_self:
@@ -403,11 +516,14 @@ class LaunchSpec:
             raise SupervisorError("execution module binding is invalid")
         if not isinstance(value["execution_closure"], dict) or set(value["execution_closure"]) != {
             "path",
+            "content_sha256",
             "manifest",
             "manifest_sha256",
             "root_identity",
         }:
             raise SupervisorError("execution closure binding is invalid")
+        if _HEX64.fullmatch(str(value["execution_closure"]["content_sha256"])) is None:
+            raise SupervisorError("execution closure content digest is invalid")
 
     def child_argv(
         self, config_fd: int | None = None, authority_fd: int | None = None
@@ -466,9 +582,8 @@ def _new_spec(
         if root.exists("launch-spec.json"):
             return LaunchSpec.read(root)
         closure = _copy_execution_closure(root)
-        # Creating the one direct closure subdirectory changes st_nlink once.
-        # Pin the final directory authority only after that structure exists;
-        # later state files do not alter this identity tuple.
+        # The staging subdirectory has been atomically moved below the
+        # root-owned closure base. Pin the runtime directory's final identity.
         root.identity = secure.directory_identity(os.fstat(root.fd))
         kind = "canary" if canary is not None else "deployment"
         config = None
@@ -1037,12 +1152,8 @@ def _launch_child(
         pass_fds = (config_fd,)
     authority_fd = None
     if spec.body["kind"] == "deployment":
-        authority_leaf = (
-            f"launch-authority.{os.getpid()}.{time.monotonic_ns()}.json"
-        )
-        authority_fd = root.open_leaf(
-            authority_leaf, os.O_RDWR | os.O_CREAT | os.O_EXCL, 0o600
-        )
+        authority_leaf = f"launch-authority.{os.getpid()}.{time.monotonic_ns()}.json"
+        authority_fd = root.open_leaf(authority_leaf, os.O_RDWR | os.O_CREAT | os.O_EXCL, 0o600)
         os.set_inheritable(authority_fd, True)
         pass_fds = (*pass_fds, authority_fd)
     argv = spec.child_argv(config_fd, authority_fd)
@@ -1460,8 +1571,20 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _require_cli_runtime() -> None:
+    if (
+        not sys.dont_write_bytecode
+        or "-B" not in sys.orig_argv[1:]
+        or os.environ.get("PYTHONDONTWRITEBYTECODE") != "1"
+    ):
+        raise SupervisorError(
+            "public supervisor CLI requires python -B and PYTHONDONTWRITEBYTECODE=1"
+        )
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
+    _require_cli_runtime()
     if args.command == "_run":
         return supervise(Path(args.runtime_root))
     if args.command == "_canary-child":
