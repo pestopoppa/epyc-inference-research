@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import hashlib
 import os
+import shutil
 import subprocess
 from dataclasses import replace
 from pathlib import Path
@@ -665,7 +666,9 @@ class StaticBuildCacheTests(unittest.TestCase):
         fixture = self.fixture(); build = self.invoke(fixture); calls = len(fixture.calls)
         rogue = build.materialization_receipt.parent.parent / "rogue-loader"
         rogue.mkdir()
-        terminal = build.materialization_receipt.parent.parent / "terminal.json"
+        terminal = next(
+            (fixture.root / "operations/build-cache/entries").iterdir()
+        ) / "terminal.json"
         self.rewrite_receipt(
             terminal, lambda body: body["build"].update({"common_loader_dir": str(rogue)}))
         with self.assertRaisesRegex(StaticRegistryError, "loader"):
@@ -679,7 +682,9 @@ class StaticBuildCacheTests(unittest.TestCase):
         self.rewrite_receipt(
             teardown, lambda body: body["receipts"][0].update(
                 {"worktree_path": str(missing)}))
-        terminal = build.materialization_receipt.parent.parent / "terminal.json"
+        terminal = next(
+            (fixture.root / "operations/build-cache/entries").iterdir()
+        ) / "terminal.json"
         new_sha = sha(teardown.read_bytes())
         self.rewrite_receipt(
             terminal, lambda body: body["build"].update({"teardown_sha256": new_sha}))
@@ -688,27 +693,283 @@ class StaticBuildCacheTests(unittest.TestCase):
         self.assertEqual(len(fixture.calls), calls)
 
     def test_authority_receipts_and_logs_must_have_one_hard_link(self):
-        for target in ("materialization", "log"):
+        for target in ("materialization", "log", "transaction-owner", "attempt-owner"):
             with self.subTest(target=target):
                 fixture = self.fixture(); build = self.invoke(fixture); calls = len(fixture.calls)
                 if target == "materialization":
                     authority = build.materialization_receipt
-                else:
+                elif target == "log":
                     authority = next((build.materialization_receipt.parent.parent / "logs").iterdir())
+                elif target == "transaction-owner":
+                    authority = next(
+                        (fixture.root / "operations/build-cache/entries").iterdir()
+                    ) / "transaction-owner.json"
+                else:
+                    authority = build.materialization_receipt.parent.parent / "owner.json"
                 os.link(authority, fixture.root / f"alias-{target}")
                 with self.assertRaisesRegex(StaticRegistryError, "one|hard link"):
                     self.invoke(fixture, {**fixture.permit, "operation_key": "e" * 64})
                 self.assertEqual(len(fixture.calls), calls)
 
-    def test_crash_after_intent_is_classified_incomplete_and_never_rebuilt(self):
+    def test_crash_after_intent_refuses_while_exact_owner_is_still_live(self):
         fixture = self.fixture()
         with mock.patch.object(StaticGpuSourceBuilder, "_build_uncached",
                                side_effect=KeyboardInterrupt("simulated crash")):
             with self.assertRaises(KeyboardInterrupt):
                 fixture.builder.build(fixture.candidate, object(), fixture.permit)
-        with self.assertRaisesRegex(StaticRegistryError, "incomplete"):
+        with self.assertRaisesRegex(StaticRegistryError, "owner is live"):
             self.invoke(fixture, {**fixture.permit, "operation_key": "5" * 64})
         self.assertEqual(fixture.calls, [])
+
+    def test_dead_owner_is_quarantined_and_retried_in_fresh_attempt(self):
+        fixture = self.fixture()
+        with mock.patch.object(StaticGpuSourceBuilder, "_build_uncached",
+                               side_effect=KeyboardInterrupt("simulated crash")):
+            with self.assertRaises(KeyboardInterrupt):
+                fixture.builder.build(fixture.candidate, object(), fixture.permit)
+        entry = next((fixture.root / "operations/build-cache/entries").iterdir())
+        first = entry / "attempts/attempt-000001"
+        self.rewrite_receipt(
+            first / "owner.json",
+            lambda body: body["holder"].update(
+                start_ticks=body["holder"]["start_ticks"] + 1))
+        build = self.invoke(fixture, {**fixture.permit, "operation_key": "5" * 64})
+        attempts = sorted((entry / "attempts").iterdir())
+        self.assertEqual([path.name for path in attempts],
+                         ["attempt-000001", "attempt-000002"])
+        recovery = json.loads((first / "recovery.json").read_text())
+        self.assertEqual((recovery["state"], recovery["attempt"]),
+                         ("quarantined", 1))
+        self.assertTrue(all("attempt-000002" in path for path in fixture.calls))
+        self.assertTrue(str(build.anchor_build).startswith(
+            str(fixture.root / "build")))
+
+    def test_crash_before_attempt_owner_is_recovered_from_atomic_transaction_owner(self):
+        fixture = self.fixture()
+        with mock.patch.object(StaticGpuSourceBuilder, "_new_attempt",
+                               side_effect=KeyboardInterrupt("pre-attempt crash")):
+            with self.assertRaises(KeyboardInterrupt):
+                fixture.builder.build(fixture.candidate, object(), fixture.permit)
+        entry = next(path for path in
+                     (fixture.root / "operations/build-cache/entries").iterdir()
+                     if not path.name.startswith("."))
+        self.assertFalse((entry / "attempts").exists())
+        with self.assertRaisesRegex(StaticRegistryError, "transaction owner is live"):
+            self.invoke(fixture, {**fixture.permit, "operation_key": "5" * 64})
+        self.rewrite_receipt(
+            entry / "transaction-owner.json",
+            lambda body: body["holder"].update(
+                start_ticks=body["holder"]["start_ticks"] + 1))
+        self.invoke(fixture, {**fixture.permit, "operation_key": "5" * 64})
+        recovery = json.loads((entry / "transaction-recovery.json").read_text())
+        self.assertEqual(recovery["state"], "owner_dead")
+        self.assertEqual([path.name for path in (entry / "attempts").iterdir()
+                          if not path.name.startswith(".")], ["attempt-000001"])
+
+    def test_crash_before_attempt_publish_promotes_then_quarantines_exact_epoch(self):
+        fixture = self.fixture()
+        real_rename = os.rename
+        def crash_attempt(source, destination):
+            if Path(source).parent.name == "attempts":
+                raise KeyboardInterrupt("attempt publish crash")
+            return real_rename(source, destination)
+        with mock.patch.object(os, "rename", side_effect=crash_attempt):
+            with self.assertRaises(KeyboardInterrupt):
+                fixture.builder.build(fixture.candidate, object(), fixture.permit)
+        entry = next(path for path in
+                     (fixture.root / "operations/build-cache/entries").iterdir()
+                     if not path.name.startswith("."))
+        pending = next(path for path in (entry / "attempts").iterdir()
+                       if path.name.startswith("."))
+        with self.assertRaisesRegex(StaticRegistryError, "unpublished.*owner is live"):
+            self.invoke(fixture, {**fixture.permit, "operation_key": "5" * 64})
+        self.rewrite_receipt(
+            pending / "owner.json",
+            lambda body: body["holder"].update(
+                start_ticks=body["holder"]["start_ticks"] + 1))
+        self.invoke(fixture, {**fixture.permit, "operation_key": "5" * 64})
+        attempts = sorted(path.name for path in (entry / "attempts").iterdir())
+        self.assertEqual(attempts, ["attempt-000001", "attempt-000002"])
+        self.assertTrue((entry / "attempts/attempt-000001/recovery.json").is_file())
+
+    def test_multiple_or_malformed_unpublished_attempts_fail_closed(self):
+        for case in ("multiple", "malformed"):
+            with self.subTest(case=case):
+                fixture = self.fixture()
+                real_rename = os.rename
+                def crash_attempt(source, destination):
+                    if Path(source).parent.name == "attempts":
+                        raise KeyboardInterrupt("attempt publish crash")
+                    return real_rename(source, destination)
+                with mock.patch.object(os, "rename", side_effect=crash_attempt):
+                    with self.assertRaises(KeyboardInterrupt):
+                        fixture.builder.build(
+                            fixture.candidate, object(), fixture.permit)
+                entry = next(path for path in
+                             (fixture.root / "operations/build-cache/entries").iterdir()
+                             if not path.name.startswith("."))
+                pending = next((entry / "attempts").iterdir())
+                if case == "multiple":
+                    shutil.copytree(
+                        pending, pending.with_name(
+                            ".attempt-000001.999999.999999.pending"))
+                    pattern = "multiple unpublished"
+                else:
+                    pending.rename(pending.with_name(".malformed.pending"))
+                    pattern = "name is malformed"
+                with self.assertRaisesRegex(StaticRegistryError, pattern):
+                    self.invoke(fixture, {**fixture.permit,
+                                          "operation_key": "5" * 64})
+                self.assertEqual(fixture.calls, [])
+
+    def test_crash_before_cache_publish_promotes_only_exact_dead_transaction(self):
+        fixture = self.fixture()
+        real_rename = os.rename
+        def crash_cache(source, destination):
+            if Path(source).parent.name == "entries":
+                raise KeyboardInterrupt("cache publish crash")
+            return real_rename(source, destination)
+        with mock.patch.object(os, "rename", side_effect=crash_cache):
+            with self.assertRaises(KeyboardInterrupt):
+                fixture.builder.build(fixture.candidate, object(), fixture.permit)
+        entries = fixture.root / "operations/build-cache/entries"
+        pending = next(entries.iterdir())
+        self.assertTrue(pending.name.startswith("."))
+        with self.assertRaisesRegex(StaticRegistryError, "unpublished.*owner is live"):
+            self.invoke(fixture, {**fixture.permit, "operation_key": "5" * 64})
+        self.rewrite_receipt(
+            pending / "transaction-owner.json",
+            lambda body: body["holder"].update(
+                start_ticks=body["holder"]["start_ticks"] + 1))
+        self.invoke(fixture, {**fixture.permit, "operation_key": "5" * 64})
+        published = [path for path in entries.iterdir() if not path.name.startswith(".")]
+        self.assertEqual(len(published), 1)
+        self.assertTrue((published[0] / "transaction-recovery.json").is_file())
+
+    def test_incomplete_attempt_owner_tamper_and_hardlink_never_retry(self):
+        for case in ("holder", "lock", "hardlink"):
+            with self.subTest(case=case):
+                fixture = self.fixture()
+                with mock.patch.object(StaticGpuSourceBuilder, "_build_uncached",
+                                       side_effect=KeyboardInterrupt("crash")):
+                    with self.assertRaises(KeyboardInterrupt):
+                        fixture.builder.build(
+                            fixture.candidate, object(), fixture.permit)
+                entry = next((fixture.root / "operations/build-cache/entries").iterdir())
+                owner = entry / "attempts/attempt-000001/owner.json"
+                if case == "holder":
+                    self.rewrite_receipt(
+                        owner, lambda body: body["holder"].update(boot_id=None))
+                elif case == "lock":
+                    self.rewrite_receipt(
+                        owner, lambda body: body["locks"][0].update(inode=1))
+                else:
+                    os.link(owner, fixture.root / "owner-alias.json")
+                with self.assertRaises(StaticRegistryError):
+                    self.invoke(fixture, {**fixture.permit,
+                                          "operation_key": "5" * 64})
+                self.assertEqual(fixture.calls, [])
+                self.assertEqual(len(list((entry / "attempts").iterdir())), 1)
+
+    def test_unclosed_owned_child_must_be_provably_dead_before_retry(self):
+        fixture = self.fixture()
+        with mock.patch.object(StaticGpuSourceBuilder, "_build_uncached",
+                               side_effect=KeyboardInterrupt("crash")):
+            with self.assertRaises(KeyboardInterrupt):
+                fixture.builder.build(fixture.candidate, object(), fixture.permit)
+        entry = next((fixture.root / "operations/build-cache/entries").iterdir())
+        first = entry / "attempts/attempt-000001"
+        owner = json.loads((first / "owner.json").read_text())
+        logs = first / "logs"; logs.mkdir()
+        intent_path, intent_sha = _sealed_write(
+            logs / "anchor.build-process-intent.json", {
+                "schema": "epyc.autokernel.owned_process_intent.v1",
+                "argv": ["cmake", "--build", "."],
+                "epoch_token": "e" * 64,
+                "stdout_path": str(logs / "anchor.stream"),
+                "sandbox_receipt_path": str(logs / "anchor.sandbox.json"),
+                "sandbox_policy_sha256": "f" * 64,
+                "sandbox_token": "fixture", "cgroup_root": "/sys/fs/cgroup"})
+        _sealed_write(logs / "anchor.build-process-start.json", {
+            "schema": "epyc.autokernel.owned_process_start.v1",
+            "intent_receipt_sha256": intent_sha, "epoch_token": "e" * 64,
+            "argv": ["cmake", "--build", "."],
+            "pid": owner["holder"]["pid"], "pgid": owner["holder"]["pid"],
+            "process_start_ticks": owner["holder"]["start_ticks"],
+            "started_at": "2026-08-20T00:00:00+00:00",
+            "stdout_path": str(logs / "anchor.stream"),
+            "sandbox_receipt_path": str(logs / "anchor.sandbox.json")})
+        self.rewrite_receipt(
+            first / "owner.json",
+            lambda body: body["holder"].update(
+                start_ticks=body["holder"]["start_ticks"] + 1))
+        with self.assertRaisesRegex(StaticRegistryError, "owned child"):
+            self.invoke(fixture, {**fixture.permit, "operation_key": "5" * 64})
+        self.assertEqual(fixture.calls, [])
+
+    def test_pre_spawn_epoch_without_start_receipt_blocks_while_child_lives(self):
+        fixture = self.fixture()
+        with mock.patch.object(StaticGpuSourceBuilder, "_build_uncached",
+                               side_effect=KeyboardInterrupt("crash")):
+            with self.assertRaises(KeyboardInterrupt):
+                fixture.builder.build(fixture.candidate, object(), fixture.permit)
+        entry = next(path for path in
+                     (fixture.root / "operations/build-cache/entries").iterdir()
+                     if not path.name.startswith("."))
+        first = entry / "attempts/attempt-000001"
+        logs = first / "logs"; logs.mkdir()
+        token = "d" * 64
+        _sealed_write(logs / "anchor.configure-process-intent.json", {
+            "schema": "epyc.autokernel.owned_process_intent.v1",
+            "argv": ["cmake", "-S", "."], "epoch_token": token,
+            "stdout_path": str(logs / "anchor.configure.stream"),
+            "sandbox_receipt_path": None, "sandbox_policy_sha256": None,
+            "sandbox_token": None, "cgroup_root": None})
+        owner = json.loads((first / "owner.json").read_text())
+        self.rewrite_receipt(
+            first / "owner.json",
+            lambda body: body["holder"].update(
+                start_ticks=body["holder"]["start_ticks"] + 1))
+        env = dict(os.environ); env["AUTOKERNEL_OWNED_PROCESS_EPOCH"] = token
+        child = subprocess.Popen(
+            ("/usr/bin/sleep", "30"), env=env, start_new_session=True)
+        try:
+            with self.assertRaisesRegex(StaticRegistryError, "epoch still has live"):
+                self.invoke(fixture, {**fixture.permit,
+                                      "operation_key": "5" * 64})
+            self.assertEqual(fixture.calls, [])
+        finally:
+            child.terminate(); child.wait(timeout=5)
+        self.invoke(fixture, {**fixture.permit, "operation_key": "5" * 64})
+        self.assertTrue((first / "recovery.json").is_file())
+
+    def test_dead_attempt_tears_down_registered_actor_and_branch_before_retry(self):
+        fixture = self.fixture()
+        with mock.patch.object(StaticGpuSourceBuilder, "_build_uncached",
+                               side_effect=KeyboardInterrupt("crash")):
+            with self.assertRaises(KeyboardInterrupt):
+                fixture.builder.build(fixture.candidate, object(), fixture.permit)
+        entry = next((fixture.root / "operations/build-cache/entries").iterdir())
+        first = entry / "attempts/attempt-000001"
+        campaign_root = first / "worktrees"; campaign_root.mkdir()
+        anchor = S.worktree.resolve_anchor(
+            fixture.instrument, "measurement-instrument",
+            expected_commit=fixture.instrument_commit)
+        actor, _proof = S.worktree.create_campaign_worktree(
+            anchor, fixture.candidate.source_manifest.campaign_id,
+            leaf="attempt-000001", root=campaign_root)
+        actor_path = Path(actor.path.path)
+        actor_branch = actor.branch
+        self.rewrite_receipt(
+            first / "owner.json",
+            lambda body: body["holder"].update(
+                start_ticks=body["holder"]["start_ticks"] + 1))
+        self.invoke(fixture, {**fixture.permit, "operation_key": "5" * 64})
+        self.assertFalse(actor_path.exists())
+        self.assertFalse(S.worktree.GitRepo(fixture.instrument).branch_exists(actor_branch))
+        recovery = json.loads((first / "recovery.json").read_text())
+        self.assertEqual(len(recovery["teardown"]), 1)
+        self.assertTrue(recovery["teardown"][0]["worktree_removed"])
 
     def test_failed_terminal_and_dangling_ref_are_never_rebuilt(self):
         fixture = self.fixture()

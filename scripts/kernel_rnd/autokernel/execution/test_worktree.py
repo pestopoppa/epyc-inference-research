@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import ast
 import dataclasses
+import json
 import os
 import shutil
 import subprocess
@@ -1146,6 +1147,41 @@ class TestRunBuildEndToEnd(_TmpMixin):
             self.assertTrue(disposition.sandbox_teardown["removed"])
         self.assertTrue(os.path.isfile(self.log + ".configure-sandbox.json"))
         self.assertTrue(os.path.isfile(self.log + ".build-sandbox.json"))
+        for phase in ("configure", "build"):
+            stream = self.log + f".{phase}.stream"
+            start = self.log + f".{phase}-process-start.json"
+            terminal = self.log + f".{phase}-process-terminal.json"
+            for path in (stream, start, terminal):
+                self.assertTrue(os.path.isfile(path), path)
+                self.assertEqual(os.stat(path).st_nlink, 1)
+            started = json.loads(_read_text(start))
+            completed = json.loads(_read_text(terminal))
+            for receipt in (started, completed):
+                expected = schemas.content_hash({
+                    key: value for key, value in receipt.items()
+                    if key != "receipt_sha256"})
+                self.assertEqual(receipt["receipt_sha256"], expected)
+            self.assertEqual(completed["start_receipt_sha256"],
+                             W._sha256_file(start))
+            self.assertTrue(completed["disposition"]["verified_dead"])
+            self.assertEqual(completed["stdout_sha256"],
+                             W._sha256_file(stream))
+
+    def test_existing_symlink_or_hardlinked_log_authority_refuses_before_spawn(self):
+        for case in ("symlink", "hardlink"):
+            with self.subTest(case=case):
+                target = os.path.join(self.tmp, f"attacker-{case}")
+                _write(target, "do not overwrite")
+                os.makedirs(os.path.dirname(self.log), exist_ok=True)
+                if case == "symlink":
+                    os.symlink(target, self.log)
+                else:
+                    os.link(target, self.log)
+                with self.assertRaisesRegex(W.WorktreeError, "already exists"):
+                    W.run_build(self.plan, log_path=self.log)
+                self.assertEqual(_read_text(target), "do not overwrite")
+                os.unlink(self.log)
+                shutil.rmtree(self.bld.path)
 
     def test_candidate_cmake_cannot_write_outside_the_build_tree(self):
         escaped = os.path.join(self.tmp, "escaped-by-candidate")
@@ -1419,6 +1455,24 @@ class TestOwnedProcessDiscipline(_TmpMixin):
         """`pgid == pid` is what makes the group kill provably ours."""
         disposition, _ = W._run_owned([sys.executable, "-c", "pass"], timeout_s=30.0)
         self.assertEqual(disposition.pgid, disposition.pid)
+
+    def test_start_receipt_publication_failure_kills_the_exact_child(self):
+        captured = {}
+        original = W._sealed_process_receipt
+        def refuse(path, body):
+            if body["schema"] == "epyc.autokernel.owned_process_intent.v1":
+                return original(path, body)
+            captured.update(body)
+            raise W.WorktreeError("receipt publication refused")
+        stream = os.path.join(self.tmp, "owned.stream")
+        with mock.patch.object(W, "_sealed_process_receipt", side_effect=refuse):
+            with self.assertRaisesRegex(W.WorktreeError, "publication refused"):
+                W._run_owned(
+                    [sys.executable, "-c", "import time; time.sleep(30)"],
+                    timeout_s=60.0, kill_grace_s=2.0, stdout_path=stream,
+                    process_receipt_prefix=os.path.join(self.tmp, "owned"))
+        self.assertGreater(captured["pid"], 0)
+        self.assertFalse(os.path.exists(f"/proc/{captured['pid']}"))
 
     def test_a_name_pattern_tool_cannot_be_launched(self):
         for bad in ("pkill", "/usr/bin/pgrep", "killall", "pidof"):

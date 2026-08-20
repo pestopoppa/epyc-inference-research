@@ -138,9 +138,12 @@ from __future__ import annotations
 
 import ast
 import hashlib
+import json
 import os
 import re
+import secrets
 import signal
+import stat
 import subprocess
 import time
 import dataclasses
@@ -443,6 +446,84 @@ def _sha256_file(path: Any) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _exclusive_regular_sink(path: str):
+    """Open a new evaluator-owned stream without following or replacing links."""
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    descriptor = os.open(path, flags, 0o600)
+    facts = os.fstat(descriptor)
+    if not stat.S_ISREG(facts.st_mode) or facts.st_nlink != 1:
+        os.close(descriptor)
+        raise WorktreeError(f"stream sink is not a one-link regular file: {path}")
+    return os.fdopen(descriptor, "wb")
+
+
+def _sealed_process_receipt(path: str, body: Mapping[str, Any]) -> None:
+    """Publish one append-only, self-hashed owned-process receipt."""
+    payload = dict(body)
+    payload["receipt_sha256"] = schemas.content_hash(payload)
+    raw = (json.dumps(payload, sort_keys=True, separators=(",", ":"),
+                      ensure_ascii=False, allow_nan=False) + "\n").encode("utf-8")
+    parent = os.path.dirname(path)
+    os.makedirs(parent, exist_ok=True)
+    temporary = os.path.join(parent, f".{os.path.basename(path)}.{os.getpid()}.tmp")
+    try:
+        with _exclusive_regular_sink(temporary) as handle:
+            handle.write(raw)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.link(temporary, path, follow_symlinks=False)
+        os.unlink(temporary)
+        directory_fd = os.open(parent, os.O_RDONLY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    finally:
+        if os.path.lexists(temporary) and not os.path.islink(temporary):
+            os.unlink(temporary)
+
+
+def _read_single_link_stream(path: str) -> bytes:
+    flags = os.O_RDONLY
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    descriptor = os.open(path, flags)
+    try:
+        before = os.fstat(descriptor)
+        if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
+            raise WorktreeError(f"stream is not a one-link regular file: {path}")
+        chunks = []
+        while True:
+            chunk = os.read(descriptor, 1024 * 1024)
+            if not chunk:
+                break
+            chunks.append(chunk)
+        after = os.fstat(descriptor)
+        if ((before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns,
+             before.st_nlink) !=
+                (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns,
+                 after.st_nlink)):
+            raise WorktreeError(f"stream changed while being read: {path}")
+        return b"".join(chunks)
+    finally:
+        os.close(descriptor)
+
+
+def _process_start_ticks(pid: int) -> int:
+    try:
+        with open(f"/proc/{pid}/stat", "rb") as handle:
+            raw = handle.read()
+    except OSError as exc:
+        raise WorktreeError(f"cannot bind owned child {pid} to /proc start ticks") from exc
+    close_paren = raw.rfind(b")")
+    fields = raw[close_paren + 1:].split() if close_paren >= 0 else []
+    if len(fields) < 20:
+        raise WorktreeError(f"cannot parse /proc/{pid}/stat for owned child")
+    return int(fields[19])
 
 
 # =============================================================================
@@ -962,7 +1043,8 @@ def _run_owned(argv: Sequence[str], *, cwd: Optional[str] = None,
                stdout_path: Optional[str] = None,
                kill_grace_s: float = 10.0,
                sandbox_policy: Optional[process_sandbox.SandboxPolicy] = None,
-               sandbox_receipt_path: Optional[str] = None) -> tuple:
+               sandbox_receipt_path: Optional[str] = None,
+               process_receipt_prefix: Optional[str] = None) -> tuple:
     """Run `argv` as an owned session leader. Returns `(disposition, output_text)`.
 
     Never `shell=True`: a shell would reintroduce word-splitting, globbing and
@@ -986,12 +1068,30 @@ def _run_owned(argv: Sequence[str], *, cwd: Optional[str] = None,
     if sandbox_policy is not None:
         spawn_argv = sandbox_policy.wrap(argv, receipt_path=sandbox_receipt_path)
         executed_env["PYTHONDONTWRITEBYTECODE"] = "1"
+    epoch_token = None
+    intent_path = None
+    if process_receipt_prefix is not None:
+        epoch_token = secrets.token_hex(32)
+        executed_env["AUTOKERNEL_OWNED_PROCESS_EPOCH"] = epoch_token
+        intent_path = process_receipt_prefix + "-intent.json"
+        _sealed_process_receipt(intent_path, {
+            "schema": "epyc.autokernel.owned_process_intent.v1",
+            "argv": list(argv), "epoch_token": epoch_token,
+            "stdout_path": stdout_path,
+            "sandbox_receipt_path": sandbox_receipt_path,
+            "sandbox_policy_sha256": (sandbox_policy.policy_sha256
+                                      if sandbox_policy is not None else None),
+            "sandbox_token": (sandbox_policy.token
+                              if sandbox_policy is not None else None),
+            "cgroup_root": (sandbox_policy.cgroup_root
+                            if sandbox_policy is not None else None),
+        })
     started = time.monotonic()
     started_at = _utc_now_iso()
     sink = None
     try:
         if stdout_path is not None:
-            sink = open(stdout_path, "wb")
+            sink = _exclusive_regular_sink(stdout_path)
             stdout_target: Any = sink
         else:
             stdout_target = subprocess.PIPE
@@ -1005,6 +1105,26 @@ def _run_owned(argv: Sequence[str], *, cwd: Optional[str] = None,
                 pgid = os.getpgid(pid)
             except ProcessLookupError:  # pragma: no cover - child already reaped
                 pgid = pid
+            if process_receipt_prefix is not None:
+                try:
+                    _sealed_process_receipt(process_receipt_prefix + "-start.json", {
+                        "schema": "epyc.autokernel.owned_process_start.v1",
+                        "intent_receipt_sha256": _sha256_file(intent_path),
+                        "epoch_token": epoch_token,
+                        "argv": list(argv), "pid": pid, "pgid": pgid,
+                        "process_start_ticks": _process_start_ticks(pid),
+                        "started_at": started_at,
+                        "stdout_path": stdout_path,
+                        "sandbox_receipt_path": sandbox_receipt_path,
+                    })
+                except BaseException:
+                    _terminate_owned(proc, pgid, grace_s=kill_grace_s)
+                    proc.wait()
+                    if sandbox_policy is not None:
+                        cgroup_path = sandbox_policy.cgroup_path(pid)
+                        if cgroup_path.exists():
+                            process_sandbox.cleanup_cgroup(sandbox_policy, pid)
+                    raise
             signals_sent: tuple = ()
             timed_out = False
             captured = b""
@@ -1024,8 +1144,7 @@ def _run_owned(argv: Sequence[str], *, cwd: Optional[str] = None,
             sink.close()
 
     if stdout_path is not None:
-        with open(stdout_path, "rb") as handle:
-            text = handle.read().decode("utf-8", "replace")
+        text = _read_single_link_stream(stdout_path).decode("utf-8", "replace")
     else:
         text = (captured or b"").decode("utf-8", "replace")
 
@@ -1062,6 +1181,17 @@ def _run_owned(argv: Sequence[str], *, cwd: Optional[str] = None,
         signals_sent=signals_sent, verified_dead=verified_dead,
         duration_s=time.monotonic() - started, started_at=started_at,
         sandbox_receipt=sandbox_receipt, sandbox_teardown=sandbox_teardown)
+    if process_receipt_prefix is not None:
+        _sealed_process_receipt(process_receipt_prefix + "-terminal.json", {
+            "schema": "epyc.autokernel.owned_process_terminal.v1",
+            "start_receipt_sha256": _sha256_file(
+                process_receipt_prefix + "-start.json"),
+            "disposition": disposition.to_dict(),
+            "stdout_path": stdout_path,
+            "stdout_sha256": (hashlib.sha256(
+                _read_single_link_stream(stdout_path)).hexdigest()
+                               if stdout_path is not None else None),
+        })
     return disposition, text
 
 
@@ -2382,26 +2512,35 @@ def run_build(plan: BuildPlan, *, log_path: Any,
                 f"{cap:.2f}. Refusing to start a {plan.parallelism.jobs}-way build: the "
                 "cap was recorded in the receipt, so it has to be the thing that happened")
 
-    sections: list = []
+    if os.path.lexists(log):
+        raise WorktreeError(f"build log already exists; refusing overwrite: {log}")
+    configure_stream = log + ".configure.stream"
+    build_stream = log + ".build.stream"
+    process_prefix = log + ".configure-process"
     configure_disp, configure_text = _run_owned(
         plan.configure_argv(), timeout_s=configure_timeout_s, env=build_env,
+        stdout_path=configure_stream, process_receipt_prefix=process_prefix,
         sandbox_policy=sandbox_policy,
         sandbox_receipt_path=configure_sandbox_receipt)
-    sections.append("=== configure: " + " ".join(plan.configure_argv()) + "\n")
-    sections.append(configure_text)
+    sections: list = ["=== configure: " + " ".join(plan.configure_argv()) + "\n",
+                      configure_text]
 
     build_disp = None
     if configure_disp.exit_code == 0:
         build_disp, build_text = _run_owned(
             plan.build_argv(), timeout_s=build_timeout_s, env=build_env,
+            stdout_path=build_stream,
+            process_receipt_prefix=log + ".build-process",
             sandbox_policy=sandbox_policy,
             sandbox_receipt_path=build_sandbox_receipt)
         sections.append("=== build: " + " ".join(plan.build_argv()) + "\n")
         sections.append(build_text)
 
     combined = "".join(sections)
-    with open(log, "w", encoding="utf-8") as handle:
-        handle.write(combined)
+    with _exclusive_regular_sink(log) as handle:
+        handle.write(combined.encode("utf-8"))
+        handle.flush()
+        os.fsync(handle.fileno())
 
     return BuildResult(
         plan=plan, configure=configure_disp, build=build_disp, log_path=log,
