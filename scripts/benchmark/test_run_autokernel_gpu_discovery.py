@@ -1,5 +1,6 @@
 from pathlib import Path
 import argparse
+import hashlib
 import json
 import tempfile
 import unittest
@@ -74,7 +75,97 @@ def _build(root: Path, *, rocwmma: str, mfma: str, graphs: str = "ON") -> Path:
     return build
 
 
+def _source_identity(build: Path, commit: str) -> dict[str, str]:
+    return {
+        "source_commit": commit,
+        "source_sha256": hashlib.sha256((commit + "-source").encode()).hexdigest(),
+        "binary_sha256": gpu.sha256_file(build / "bin/llama-bench"),
+        "hip_library_sha256": gpu.sha256_file(
+            (build / "bin/libggml-hip.so").resolve(strict=True)),
+        "config_sha256": gpu.sha256_file(build / "CMakeCache.txt"),
+        "linkage_sha256": hashlib.sha256((commit + "-linkage").encode()).hexdigest(),
+    }
+
+
 class TestGpuDiscoveryBuildIdentity(unittest.TestCase):
+    def test_cli_hydrates_exact_sealed_load_admission_frame(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            model = root / "model.gguf"; model.write_bytes(b"model")
+            profile = {
+                "profile_id": "mi210-test-v1", "model_path": str(model),
+                "model_sha256": gpu.sha256_file(model),
+                "model_bytes": model.stat().st_size,
+                "workload": "decode_tg128", "calls_per_arm": 9,
+                "device_id": gpu.DEVICE_ID,
+                "cold_load_host_bytes": model.stat().st_size,
+                "worst_case_loads_per_interval": 18,
+                "minimum_headroom_bytes_per_s": 1,
+                "telemetry_max_age_ms": 1000,
+                "evidence_sha256": "1" * 64,
+            }
+            examples = []
+            for identifier, polarity in (("positive", "positive"),
+                                         ("negative", "negative")):
+                examples.append({
+                    "id": identifier, "polarity": polarity,
+                    "facts": {"profile_id": profile["profile_id"],
+                              "state": identifier},
+                    "missing": [] if polarity == "positive" else ["telemetry"],
+                    "mode": ("cold_overlap" if polarity == "positive"
+                             else "cold_serialized"),
+                    "rationale": identifier,
+                    "disqualifiers": ([] if polarity == "positive"
+                                       else ["telemetry_missing"]),
+                    "counterfactual": "use exact facts",
+                    "evidence": ["sha256:" + ("2" if polarity == "positive"
+                                                else "3") * 64],
+                })
+            policy_body = {
+                "schema": gpu.gpu_load_admission.POLICY_SCHEMA,
+                "version": "test-v1", "profiles": [profile],
+                "examples": examples}
+            policy_body["policy_sha256"] = schemas.content_hash(policy_body)
+            policy = root / "policy.json"
+            policy.write_text(json.dumps(policy_body, sort_keys=True),
+                              encoding="utf-8")
+            policy_file_sha = gpu.sha256_file(policy)
+            corpus = gpu.gpu_load_admission.load_policy_corpus(
+                policy, expected_file_sha256=policy_file_sha)
+            effective = "4" * 64
+            request = gpu.gpu_load_admission.AdmissionRequest(
+                effective_context_sha256=effective,
+                model_path=str(model), model_sha256=gpu.sha256_file(model),
+                model_bytes=model.stat().st_size, workload="decode_tg128",
+                calls_per_arm=9, device_id=gpu.DEVICE_ID,
+                cold_load_host_bytes=model.stat().st_size,
+                worst_case_loads_per_interval=18,
+                telemetry_observed=False, telemetry_age_ms=None,
+                observed_headroom_bytes_per_s=None,
+                telemetry_receipt_sha256=None)
+            decision = gpu.gpu_load_admission.arbitrate(corpus, request).to_dict()
+            decision_path = root / "decision.json"
+            decision_path.write_text(json.dumps(decision, sort_keys=True),
+                                     encoding="utf-8")
+            argv = [
+                "--anchor-build", "/anchor", "--candidate-build", "/candidate",
+                "--model", str(model), "--output-dir", str(root / "output"),
+                "--campaign-id", "ak-cli-frame", "--workload", "decode_tg128",
+                "--calls", "9", "--load-admission-decision", str(decision_path),
+                "--load-admission-policy", str(policy),
+                "--load-admission-policy-sha256", policy_file_sha,
+                "--effective-context-sha256", effective]
+            hydrated = gpu._hydrate_cli_load_admission(
+                gpu.parser().parse_args(argv))
+            self.assertEqual(hydrated.load_admission_decision, decision)
+            self.assertEqual(hydrated.load_admission_policy_version,
+                             corpus.version)
+            self.assertEqual(hydrated.load_admission_policy_sha256,
+                             corpus.policy_sha256)
+            with self.assertRaisesRegex(RuntimeError, "CLI frame refused"):
+                gpu._hydrate_cli_load_admission(gpu.parser().parse_args([
+                    *argv[:-3], "0" * 64, *argv[-2:]]))
+
     def test_parser_and_preflight_preserve_sealed_arm_schedule(self) -> None:
         parsed = gpu.parser().parse_args([
             "--anchor-build", "/anchor", "--candidate-build", "/candidate",
@@ -122,12 +213,59 @@ class TestGpuDiscoveryBuildIdentity(unittest.TestCase):
                     common_loader_dir=str(anchor / "bin"), anchor_loader_dir=str(anchor / "bin"), candidate_loader_dir=str(candidate / "bin"),
                     device_id=gpu.DEVICE_ID,
                     inference_window_lock=None), mode="cold_overlap")
+                args._sealed_anchor_source_build_identity = _source_identity(
+                    anchor, gpu.READY_CONTINUE_INSTRUMENT_COMMIT)
+                args._sealed_candidate_source_build_identity = _source_identity(
+                    candidate, "b" * 40)
                 sealed = gpu.preflight(args)
             self.assertEqual(sealed["runtime_arms"]["measurement_binary_sha256"],
                              gpu.sha256_file(anchor / "bin" / "llama-bench"))
             self.assertNotEqual(sealed["runtime_arms"]["anchor_hip_sha256"],
                                 sealed["runtime_arms"]["candidate_hip_sha256"])
             self.assertTrue(sealed["timed_output_oracle"]["enabled"])
+
+    def test_source_patch_refuses_cli_identity_invention_and_live_drift(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            anchor = _build(root / "anchor", rocwmma="ON", mfma="OFF")
+            candidate = _build(root / "candidate", rocwmma="ON", mfma="OFF")
+            model = root / "model.gguf"; model.write_bytes(b"model")
+            for build, payload in ((anchor, b"anchor-hip"),
+                                   (candidate, b"candidate-hip")):
+                bindir = build / "bin"
+                (bindir / "libggml-hip.so").unlink()
+                versioned = bindir / "libggml-hip.so.0.16.0"
+                versioned.write_bytes(payload)
+                (bindir / "libggml-hip.so.0").symlink_to(versioned.name)
+                (bindir / "libggml-hip.so").symlink_to("libggml-hip.so.0")
+            args = _bind_admission(argparse.Namespace(
+                model=str(model), anchor_build=str(anchor),
+                candidate_build=str(candidate), factor="source_patch",
+                campaign_id="gpu-source-refusal", calls=3,
+                workload="prefill_pp512",
+                measurement_binary=str(anchor / "bin/llama-bench"),
+                common_loader_dir=str(anchor / "bin"),
+                anchor_loader_dir=str(anchor / "bin"),
+                candidate_loader_dir=str(candidate / "bin"),
+                device_id=gpu.DEVICE_ID, inference_window_lock=None),
+                mode="cold_overlap")
+            with self.assertRaisesRegex(RuntimeError, "sealed builder identity"):
+                gpu.preflight(args)
+            args._sealed_anchor_source_build_identity = _source_identity(
+                anchor, gpu.READY_CONTINUE_INSTRUMENT_COMMIT)
+            args._sealed_candidate_source_build_identity = _source_identity(
+                candidate, "b" * 40)
+            (candidate / "CMakeCache.txt").write_text(
+                "GGML_HIP_ROCWMMA_FATTN:BOOL=ON\n"
+                "GGML_HIP_MMQ_MFMA:BOOL=OFF\n"
+                "GGML_HIP_GRAPHS:BOOL=ON\n# drift\n", encoding="utf-8")
+            with self.assertRaisesRegex(RuntimeError, "live artifact differs"):
+                gpu.preflight(args)
+            parser_options = {
+                option for action in gpu.parser()._actions
+                for option in action.option_strings}
+            self.assertFalse(any("source-build-identity" in option
+                                 for option in parser_options))
 
     def test_preflight_records_cold_serialization_for_over_budget_cadence(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -494,15 +632,16 @@ class TestGpuDiscoveryBatchedSubprocess(unittest.TestCase):
     @staticmethod
     def _row(samples: list[float]) -> str:
         count = len(samples)
+        samples_ns = [max(1, round(512e9 / value)) for value in samples]
         input_hashes = [f"{index + 1:016x}" for index in range(count)]
         output_hashes = [f"{index + 101:016x}" for index in range(count)]
-        return __import__("json").dumps({
+        payload = __import__("json").dumps({
             "backends": "ROCm", "gpu_info": "AMD Instinct MI210",
             "build_commit": "0db32c0", "n_prompt": 512, "n_gen": 0,
             "flash_attn": 1, "n_threads": 8, "n_batch": 512, "n_ubatch": 512,
             "use_mmap": True, "no_op_offload": 0, "split_mode": "layer",
-            "no_kv_offload": False, "poll": 50, "avg_ts": sum(samples) / len(samples),
-            "samples_ts": samples,
+            "no_kv_offload": False, "poll": 50, "avg_ns": sum(samples_ns) // count,
+            "samples_ns": samples_ns, "avg_ts": "__AVG_TS__", "samples_ts": samples,
             "autokernel_hardened": True,
             "autokernel_output_invariant": True,
             "autokernel_hybrid_ab_complete": True,
@@ -523,7 +662,8 @@ class TestGpuDiscoveryBatchedSubprocess(unittest.TestCase):
                 ["00000000000000aa/00000000000000aa/"
                  "00000000000000aa/00000000000000aa"] * count),
             "autokernel_device_sync_mode": "hip_full_device",
-        }) + "\n"
+        })
+        return payload.replace('"__AVG_TS__"', f"{sum(samples) / count:.6f}") + "\n"
 
     def test_one_process_collects_exactly_nine_native_samples(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -539,10 +679,13 @@ class TestGpuDiscoveryBatchedSubprocess(unittest.TestCase):
                 kfd_pid_provider=lambda: (123,), vram_reader=lambda: 64,
                 pgid_provider=lambda pid: process.pid, sleep=lambda _: None)
         self.assertEqual(seen[0][0][seen[0][0].index("-r") + 1], "9")
-        self.assertEqual(result["samples"], [100.0 + i for i in range(9)])
+        for actual, reported in zip(result["samples"],
+                                    [100.0 + i for i in range(9)]):
+            self.assertAlmostEqual(actual, reported, places=6)
         self.assertEqual(result["sample_count"], 9)
-        self.assertEqual(result["metric"], 104.0)
-        self.assertEqual(result["raw_row"]["samples_ts"], result["samples"])
+        self.assertAlmostEqual(result["metric"], 104.0, places=6)
+        self.assertEqual(result["native_metric_diagnostic"]["samples_ns"],
+                         result["raw_row"]["samples_ns"])
         self.assertNotIn("AMD_SERIALIZE_KERNEL", seen[0][1]["env"])
         self.assertNotIn("AMD_SERIALIZE_COPY", seen[0][1]["env"])
         self.assertNotIn("GGML_CUDA_DISABLE_GRAPHS", seen[0][1]["env"])
@@ -551,6 +694,325 @@ class TestGpuDiscoveryBatchedSubprocess(unittest.TestCase):
             "scope": "legacy_nonpromotable_discovery",
             "production_throughput_authority": False,
         })
+
+    def test_native_decimal_contract_rederives_tg128_from_integer_nanoseconds(self) -> None:
+        row = {
+            "avg_ns": 380474161, "samples_ns": [380474161],
+            "avg_ts": "__AVG__", "samples_ts": [336.422],
+        }
+        payload = json.dumps(row).replace(
+            '"__AVG__"', "336.422320").encode() + b"\n"
+        _parsed, diagnostic = gpu._parse_native_measurement(
+            payload, repetitions=1, tokens_per_repetition=128)
+        self.assertEqual(diagnostic["reported_avg_ts_decimal"], "336.422320")
+        self.assertEqual(diagnostic["reported_samples_ts_decimal"], ["336.422"])
+        self.assertAlmostEqual(diagnostic["rederived_avg_ts"], 336.4223199,
+                               places=6)
+        self.assertEqual(diagnostic["integer_timing_authority"], "samples_ns")
+        _row, integer_sample = gpu._parse_native_measurement(
+            b'{"avg_ns":5120000000,"samples_ns":[5120000000],'
+            b'"avg_ts":100.000000,"samples_ts":[100]}\n',
+            repetitions=1, tokens_per_repetition=512)
+        self.assertEqual(integer_sample["reported_samples_ts_decimal"], ["100"])
+
+    def test_native_decimal_contract_refuses_rounding_nan_duplicate_and_truncation(self) -> None:
+        valid = (b'{"avg_ns":380474161,"samples_ns":[380474161],'
+                 b'"avg_ts":336.422320,"samples_ts":[336.422]}\n')
+        mutations = (
+            valid.replace(b"336.422320", b"336.422999"),
+            valid.replace(b"336.422]", b"336.499]"),
+            valid.replace(b'"avg_ns":380474161,',
+                          b'"avg_ns":380474161,"avg_ns":380474161,'),
+            valid.replace(b"336.422320", b"NaN"),
+            valid[:-1],
+            valid + b"\n",
+        )
+        for payload in mutations:
+            with self.subTest(payload=payload), self.assertRaises(RuntimeError):
+                gpu._parse_native_measurement(
+                    payload, repetitions=1, tokens_per_repetition=128)
+
+    def test_native_decimal_contract_covers_pp512_and_precision_boundaries(self) -> None:
+        for tokens, samples_ns in (
+                (512, [204893812, 204800000, 205010101]),
+                (128, [128001, 128000, 127999]),
+                (128, [10_368_071_631_799_082])):
+            with self.subTest(tokens=tokens, samples_ns=samples_ns):
+                exact = [1e9 * tokens / value for value in samples_ns]
+                payload = {
+                    "avg_ns": sum(samples_ns) // len(samples_ns),
+                    "samples_ns": samples_ns,
+                    "avg_ts": "__AVG__",
+                    "samples_ts": [
+                        float(format(value, ".6g")) for value in exact],
+                }
+                raw = json.dumps(payload).replace(
+                    '"__AVG__"', f"{sum(exact) / len(exact):.6f}").encode() + b"\n"
+                _row, diagnostic = gpu._parse_native_measurement(
+                    raw, repetitions=len(samples_ns),
+                    tokens_per_repetition=tokens)
+                self.assertEqual(diagnostic["tokens_per_repetition"], tokens)
+                self.assertEqual(diagnostic["samples_ns"], samples_ns)
+
+                changed = dict(payload)
+                changed["samples_ns"] = [
+                    samples_ns[0] + max(1000, samples_ns[0] // 100),
+                    *samples_ns[1:]]
+                changed["avg_ns"] = sum(changed["samples_ns"]) // len(samples_ns)
+                bad = json.dumps(changed).replace(
+                    '"__AVG__"', f"{sum(exact) / len(exact):.6f}").encode() + b"\n"
+                with self.assertRaises(RuntimeError):
+                    gpu._parse_native_measurement(
+                        bad, repetitions=len(samples_ns),
+                        tokens_per_repetition=tokens)
+                with self.assertRaises(RuntimeError):
+                    gpu._parse_native_measurement(
+                        raw, repetitions=len(samples_ns),
+                        tokens_per_repetition=tokens + 1)
+
+    def test_completed_process_checkpoint_resumes_without_process_replay(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            build = _build(root, rocwmma="ON", mfma="OFF")
+            model = root / "model.gguf"; model.write_bytes(b"model")
+            receipt_root = root / "process-anchor"
+            process = self._Process(self._row([100.0] * 3))
+            calls = []
+
+            def factory(*_args, **_kwargs):
+                calls.append("process")
+                return process
+
+            with self.assertRaisesRegex(RuntimeError, "crash after process"):
+                gpu._invoke_locked(
+                    build=build, model=model, seed=8613, baseline_vram=0,
+                    flash_attention=True,
+                    expected_source_commit=gpu.SOURCE_COMMIT,
+                    repetitions=3, process_factory=factory,
+                    kfd_pid_provider=lambda: (123,), vram_reader=lambda: 64,
+                    pgid_provider=lambda _pid: process.pid, sleep=lambda _: None,
+                    process_receipt_root=receipt_root,
+                    process_context={"operation": "test", "arm": "anchor"},
+                    process_resource_context={"claim_id": "akd-test"},
+                    after_process_checkpoint=lambda _path: (_ for _ in ()).throw(
+                        RuntimeError("crash after process")))
+            self.assertTrue((receipt_root / "stdout.bin").is_file())
+            result = gpu._invoke_locked(
+                build=build, model=model, seed=8613, baseline_vram=0,
+                flash_attention=True,
+                expected_source_commit=gpu.SOURCE_COMMIT,
+                repetitions=3,
+                process_factory=lambda *_args, **_kwargs: self.fail(
+                    "completed process was replayed"),
+                kfd_pid_provider=lambda: (), vram_reader=lambda: 0,
+                pgid_provider=lambda _pid: process.pid, sleep=lambda _: None,
+                process_receipt_root=receipt_root,
+                process_context={"operation": "test", "arm": "anchor"},
+                process_resource_context={"claim_id": "akd-new"})
+        self.assertEqual(calls, ["process"])
+        self.assertAlmostEqual(result["metric"], 100.0)
+
+    def test_malformed_completed_output_refusal_rederives_without_replay(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            build = _build(root, rocwmma="ON", mfma="OFF")
+            model = root / "model.gguf"; model.write_bytes(b"model")
+            receipt_root = root / "process-anchor"
+            malformed = self._row([100.0] * 3).replace(
+                '"avg_ts": 100.000000', '"avg_ts": 101.000000')
+            process = self._Process(malformed)
+            with self.assertRaises(gpu.MeasurementOutputRefusal) as first:
+                gpu._invoke_locked(
+                    build=build, model=model, seed=8613, baseline_vram=0,
+                    flash_attention=True,
+                    expected_source_commit=gpu.SOURCE_COMMIT,
+                    repetitions=3,
+                    process_factory=lambda *_args, **_kwargs: process,
+                    kfd_pid_provider=lambda: (123,), vram_reader=lambda: 64,
+                    pgid_provider=lambda _pid: process.pid, sleep=lambda _: None,
+                    process_receipt_root=receipt_root,
+                    process_context={"operation": "test", "arm": "anchor"})
+            with self.assertRaises(gpu.MeasurementOutputRefusal) as reopened:
+                gpu._invoke_locked(
+                    build=build, model=model, seed=8613, baseline_vram=0,
+                    flash_attention=True,
+                    expected_source_commit=gpu.SOURCE_COMMIT,
+                    repetitions=3,
+                    process_factory=lambda *_args, **_kwargs: self.fail(
+                        "refused process was replayed"),
+                    kfd_pid_provider=lambda: (), vram_reader=lambda: 0,
+                    pgid_provider=lambda _pid: process.pid, sleep=lambda _: None,
+                    process_receipt_root=receipt_root,
+                    process_context={"operation": "test", "arm": "anchor"})
+        self.assertEqual(first.exception.receipt_sha256,
+                         reopened.exception.receipt_sha256)
+
+    def test_output_refusal_projects_secret_free_native_timing_diagnostic(self) -> None:
+        class WithPrivateStderr(self._Process):
+            def communicate(self, timeout):
+                self.returncode = 0
+                return self._stdout, "private compiler or runtime detail"
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            build = _build(root, rocwmma="ON", mfma="OFF")
+            model = root / "model.gguf"; model.write_bytes(b"model")
+            malformed = self._row([100.0] * 3).replace(
+                '"avg_ts": 100.000000', '"avg_ts": 101.000000')
+            process = WithPrivateStderr(malformed)
+            with self.assertRaises(gpu.MeasurementOutputRefusal) as refused:
+                gpu._invoke_locked(
+                    build=build, model=model, seed=8613, baseline_vram=0,
+                    flash_attention=True,
+                    expected_source_commit=gpu.SOURCE_COMMIT,
+                    repetitions=3,
+                    process_factory=lambda *_args, **_kwargs: process,
+                    kfd_pid_provider=lambda: (123,), vram_reader=lambda: 64,
+                    pgid_provider=lambda _pid: process.pid,
+                    sleep=lambda _: None,
+                    process_receipt_root=root / "process-candidate",
+                    process_context={
+                        "arm": "candidate", "workload": "pp512",
+                        "metric": "decode_tokens_per_s",
+                        "runtime_graphs": "off", "prompt_tokens": 512,
+                        "generation_tokens": 0,
+                        "tokens_per_repetition": 512,
+                        "preflight_sha256": "1" * 64,
+                    })
+            receipt_bytes = Path(refused.exception.receipt_path).read_bytes()
+            refusal = json.loads(receipt_bytes)
+        diagnostic = refusal["diagnostic"]
+        self.assertTrue(diagnostic["diagnostic_available"])
+        self.assertEqual(diagnostic["measurement_identity"]["arm"],
+                         "candidate")
+        self.assertEqual(diagnostic["measurement_identity"]["workload"],
+                         "pp512")
+        self.assertEqual(diagnostic["native_fields"]["avg_ts_decimal"],
+                         "101.000000")
+        self.assertEqual(len(diagnostic["native_fields"]["samples_ns"]), 3)
+        self.assertAlmostEqual(diagnostic["rederived"]["avg_ts"], 100.0)
+        self.assertRegex(diagnostic["stdout"]["observed_sha256"],
+                         r"^[0-9a-f]{64}$")
+        self.assertRegex(diagnostic["stderr"]["observed_sha256"],
+                         r"^[0-9a-f]{64}$")
+        self.assertNotIn(b"private compiler or runtime detail", receipt_bytes)
+
+    def test_two_arm_resume_preserves_first_checkpoint_and_reversed_order(self) -> None:
+        for order in (("anchor", "candidate"), ("candidate", "anchor")):
+            with self.subTest(order=order), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                build = _build(root, rocwmma="ON", mfma="OFF")
+                model = root / "model.gguf"; model.write_bytes(b"model")
+                process_calls = []
+
+                def invoke_arm(arm, *, malformed=False, crash=False):
+                    row = self._row([100.0] * 3)
+                    if malformed:
+                        row = row.replace(
+                            '"avg_ts": 100.000000',
+                            '"avg_ts": 101.000000')
+
+                    def factory(*_args, **_kwargs):
+                        process_calls.append(arm)
+                        return self._Process(row)
+
+                    return gpu._invoke_locked(
+                        build=build, model=model, seed=8613,
+                        baseline_vram=0, flash_attention=True,
+                        expected_source_commit=gpu.SOURCE_COMMIT,
+                        repetitions=3, process_factory=factory,
+                        kfd_pid_provider=lambda: (123,),
+                        vram_reader=lambda: 64,
+                        pgid_provider=lambda _pid: 991, sleep=lambda _: None,
+                        process_receipt_root=root / f"process-{arm}",
+                        process_context={"operation": "two-arm", "arm": arm},
+                        after_process_checkpoint=(
+                            (lambda _path: (_ for _ in ()).throw(
+                                RuntimeError("crash after arm checkpoint")))
+                            if crash else None))
+
+                with self.assertRaisesRegex(RuntimeError,
+                                            "crash after arm checkpoint"):
+                    invoke_arm(order[0], crash=True)
+                # The completed first arm is reused.  The second process runs
+                # once, then its malformed output becomes a durable refusal.
+                invoke_arm(order[0])
+                with self.assertRaises(gpu.MeasurementOutputRefusal) as first:
+                    invoke_arm(order[1], malformed=True)
+                with self.assertRaises(gpu.MeasurementOutputRefusal) as reopened:
+                    invoke_arm(order[1], malformed=True)
+                self.assertEqual(process_calls, list(order))
+                self.assertEqual(first.exception.receipt_sha256,
+                                 reopened.exception.receipt_sha256)
+
+    def test_rehashed_output_refusal_reason_does_not_override_rederivation(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            build = _build(root, rocwmma="ON", mfma="OFF")
+            model = root / "model.gguf"; model.write_bytes(b"model")
+            receipt_root = root / "process-anchor"
+            malformed = self._row([100.0] * 3).replace(
+                '"avg_ts": 100.000000', '"avg_ts": 101.000000')
+            process = self._Process(malformed)
+            kwargs = dict(
+                build=build, model=model, seed=8613, baseline_vram=0,
+                flash_attention=True,
+                expected_source_commit=gpu.SOURCE_COMMIT,
+                repetitions=3,
+                kfd_pid_provider=lambda: (123,), vram_reader=lambda: 64,
+                pgid_provider=lambda _pid: process.pid, sleep=lambda _: None,
+                process_receipt_root=receipt_root,
+                process_context={"operation": "test", "arm": "anchor"})
+            with self.assertRaises(gpu.MeasurementOutputRefusal):
+                gpu._invoke_locked(
+                    **kwargs,
+                    process_factory=lambda *_args, **_kwargs: process)
+            refusal_path = root / "process-anchor-refusal.json"
+            refusal = json.loads(refusal_path.read_text())
+            refusal["reason_code"] = "samples_ts_rounding"
+            unsigned = {key: value for key, value in refusal.items()
+                        if key != "receipt_sha256"}
+            refusal["receipt_sha256"] = schemas.content_hash(unsigned)
+            refusal_path.write_text(json.dumps(refusal, sort_keys=True) + "\n")
+            with self.assertRaisesRegex(RuntimeError,
+                                        "refusal changed on reopen"):
+                gpu._invoke_locked(
+                    **kwargs,
+                    process_factory=lambda *_args, **_kwargs: self.fail(
+                        "tampered refusal replayed process"))
+
+    def test_nonzero_process_is_durable_typed_and_not_replayed(self) -> None:
+        class Nonzero(self._Process):
+            def communicate(self, timeout):
+                self.returncode = 2
+                return "", "argparse refused"
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            build = _build(root, rocwmma="ON", mfma="OFF")
+            model = root / "model.gguf"; model.write_bytes(b"model")
+            process = Nonzero("", running_polls=0)
+            kwargs = dict(
+                build=build, model=model, seed=8613, baseline_vram=0,
+                flash_attention=True,
+                expected_source_commit=gpu.SOURCE_COMMIT,
+                repetitions=3, kfd_pid_provider=lambda: (123,),
+                vram_reader=lambda: 64,
+                pgid_provider=lambda _pid: process.pid, sleep=lambda _: None,
+                process_receipt_root=root / "process-anchor",
+                process_context={"operation": "nonzero", "arm": "anchor"})
+            with self.assertRaises(gpu.MeasurementOutputRefusal) as first:
+                gpu._invoke_locked(
+                    **kwargs,
+                    process_factory=lambda *_args, **_kwargs: process)
+            self.assertIn("exited 2", str(first.exception))
+            with self.assertRaises(gpu.MeasurementOutputRefusal) as reopened:
+                gpu._invoke_locked(
+                    **kwargs,
+                    process_factory=lambda *_args, **_kwargs: self.fail(
+                        "nonzero completed process replayed"))
+            self.assertEqual(first.exception.receipt_sha256,
+                             reopened.exception.receipt_sha256)
 
     def test_timed_output_oracle_requires_exact_serialization_environment(self) -> None:
         row = json.loads(self._row([100.0] * 9))
@@ -735,7 +1197,7 @@ class TestGpuDiscoveryBatchedSubprocess(unittest.TestCase):
             build = _build(Path(directory), rocwmma="ON", mfma="OFF")
             model = Path(directory) / "model.gguf"; model.write_bytes(b"model")
             process = self._Process(self._row([1.0] * 8))
-            with self.assertRaisesRegex(RuntimeError, "exactly 9 finite raw samples"):
+            with self.assertRaisesRegex(RuntimeError, "exactly 9 positive integer samples_ns"):
                 gpu._invoke_locked(
                     build=build, model=model, seed=8613, baseline_vram=0,
                     flash_attention=True, expected_source_commit=gpu.SOURCE_COMMIT,
@@ -758,7 +1220,9 @@ class TestGpuDiscoveryBatchedSubprocess(unittest.TestCase):
             row = json.loads(self._row([1.0] * 9))
             row["autokernel_unsynchronized_samples_ns"] = ",".join(
                 [str(512_000_000_000)] * 8 + [str(1_024_000_000_000)])
-            process = self._Process(json.dumps(row) + "\n")
+            rendered = json.dumps(row).replace(
+                '"avg_ts": 1.0', '"avg_ts": 1.000000') + "\n"
+            process = self._Process(rendered)
             identity = {
                 "schema": "epyc.autokernel.split_reward_runtime_maps.v1",
                 "runtime_manifest_sha256": "d" * 64, "arm": "anchor",
@@ -912,6 +1376,31 @@ class TestGpuDiscoveryBatchedSubprocess(unittest.TestCase):
 
 
 class TestGpuDiscoveryRunCleanup(unittest.TestCase):
+    def test_cross_arm_output_oracles_use_one_seed_in_both_arm_orders(self) -> None:
+        for arm_order in (("anchor", "candidate"), ("candidate", "anchor")):
+            with self.subTest(arm_order=arm_order, oracle="graphs-on"):
+                seeds = {
+                    arm: gpu._invocation_seed(
+                        base_seed=8613, repetitions=9, arm=arm,
+                        timed_output_oracle_enabled=False,
+                        runtime_graphs="on")
+                    for arm in arm_order
+                }
+                self.assertEqual(seeds, {"anchor": 8613, "candidate": 8613})
+            with self.subTest(arm_order=arm_order, oracle="timed-output"):
+                seeds = {
+                    arm: gpu._invocation_seed(
+                        base_seed=8613, repetitions=9, arm=arm,
+                        timed_output_oracle_enabled=True,
+                        runtime_graphs="off")
+                    for arm in arm_order
+                }
+                self.assertEqual(seeds, {"anchor": 8613, "candidate": 8613})
+
+        self.assertEqual(gpu._invocation_seed(
+            base_seed=8613, repetitions=9, arm="candidate",
+            timed_output_oracle_enabled=False, runtime_graphs="off"), 8622)
+
     def test_sampler_stop_failure_never_prevents_device_claim_release(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -1031,3 +1520,60 @@ class TestGpuDiscoveryRunCleanup(unittest.TestCase):
             governance = json.loads((root / "success/live-governance.json").read_text())
             self.assertEqual(governance["status"], "borrowed_phase_ended")
             self.assertNotIn("device_claim_released", governance)
+
+            # The graphs-on run owns a separate cross-arm output oracle.  It
+            # must pass the identical hidden seed to both arms regardless of
+            # the counterbalanced execution order; otherwise the reducer sees
+            # different input/output content banks, as live v18 did.
+            sealed["runtime_graphs"] = "on"
+            sealed["timed_output_oracle"] = {"enabled": False}
+            args.output_dir = str(root / "graphs-on-success")
+            claim.reset_mock()
+            claim.borrowed_outer_reservation = True
+            claim.receipt.return_value.to_dict.return_value = gpu.device_claim.ClaimReceipt(
+                claim_id="akd-outer", device_id="mi210_0", lock_path="/claim",
+                state="held", holder_pid=1, holder_start_ticks=1,
+                holder_boot_id="boot", host="host", holder_label="test",
+                purpose="outer", campaign_id="cleanup-test", acquired_at="now").to_dict()
+            claim.release.return_value = {
+                "schema": "epyc.autokernel.borrowed_device_claim_phase.v1",
+                "mode": "borrowed_outer_reservation", "outer_claim_id": "akd-outer",
+                "device_id": "mi210_0", "campaign_id": "cleanup-test",
+                "phase_ended_at": "done", "physical_release": False}
+            sampler.reset_mock(); sampler.start.return_value = sampler
+            sampler.stop.side_effect = None
+            sampler.stop.return_value.to_dict.return_value = {"samples": []}
+            graph_seeds = []
+            hashes = [f"{index:064x}" for index in range(9)]
+
+            def graphs_on_invocation(**kwargs):
+                arm = ("anchor" if kwargs["expected_source_commit"] == "a" * 40
+                       else "candidate")
+                graph_seeds.append((arm, kwargs["seed"]))
+                body = {
+                    "schema": "epyc.autokernel.graphs_on_output_integrity.v1",
+                    "instrument_commit": gpu.READY_CONTINUE_INSTRUMENT_COMMIT,
+                    "seed": kwargs["seed"], "repetitions": 9,
+                    "input_hashes": hashes, "output_hashes": hashes,
+                    "graph_environment": {"GGML_CUDA_DISABLE_GRAPHS": None},
+                    "reward_admissible": True,
+                }
+                return {**invocation, "graphs_on_output_integrity": {
+                    **body, "receipt_sha256": gpu.schemas.content_hash(body)}}
+
+            with mock.patch.object(gpu, "preflight", return_value=sealed), \
+                 mock.patch.object(gpu.storage, "assert_not_scratch",
+                                   return_value=root / "graphs-on-success"), \
+                 mock.patch.object(gpu, "_readiness_policy_for_arm", return_value=None), \
+                 mock.patch.object(gpu, "_kfd_pids", return_value=()), \
+                 mock.patch.object(gpu, "VRAM_USED", vram), \
+                 mock.patch.object(gpu.device_claim, "acquire_device_claim",
+                                   side_effect=AssertionError("nested physical claim")), \
+                 mock.patch.object(gpu.device_sampler, "RocmSmiSampler", return_value=sampler), \
+                 mock.patch.object(gpu, "invoke", side_effect=graphs_on_invocation), \
+                 mock.patch.object(gpu.autokernel_progression, "export_progression"):
+                graph_result = gpu.run(args)
+            self.assertEqual(graph_seeds, [("candidate", 8613), ("anchor", 8613)])
+            self.assertEqual(graph_result["graphs_on_output_oracle"]["seed"], 8613)
+            self.assertTrue(
+                graph_result["graphs_on_output_oracle"]["cross_arm_bitwise_equal"])

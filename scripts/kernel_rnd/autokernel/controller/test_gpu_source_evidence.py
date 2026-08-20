@@ -2,6 +2,7 @@ import hashlib
 import json
 from dataclasses import replace
 from pathlib import Path
+import re
 import tempfile
 import unittest
 from unittest import mock
@@ -129,7 +130,8 @@ def plan(root: Path, *, shared_reward: bool = False) -> E.GpuSourceEvidencePlan:
                           "--binary", str(candidate_files.binary.path),
                           "--model", str(model.path), "--workload", str(workload.path),
                           "--config", str(runtime.path)),
-        correctness_summary_pattern=r"(?P<passed>\d+)/(?P<total>\d+) tests passed",
+        correctness_backend="ROCm0",
+        correctness_op="MUL_MAT_ID",
         expected_correctness_cases=3,
         candidate_rocprof_argv=(str(profiler.path), "-i", str(timestamp_input.path),
                                 "--candidate", str(shared.measurement_binary.path if shared else candidate_files.binary.path),
@@ -240,6 +242,27 @@ def csv_text(arm: str, *, inverse_bad=False, invariant_changed=False,
     return header + "\n".join(rows) + "\n"
 
 
+def correctness_console(summary: str = "3/3 tests passed", *,
+                        backend: str = "ROCm0",
+                        op: str = "MUL_MAT_ID") -> str:
+    match = re.fullmatch(r"(\d+)/(\d+) tests passed", summary)
+    if match is None:
+        return summary + "\n"
+    passed, total = (int(value) for value in match.groups())
+    cases = [
+        f"  {op}(case={index}): {'OK' if index < passed else 'FAIL'}"
+        for index in range(total)
+    ]
+    backend_status = "OK" if passed == total else "FAIL"
+    backends_passed = 2 if backend_status == "OK" else 1
+    overall = "OK" if backend_status == "OK" else "FAIL"
+    return "\n".join((
+        "Testing 2 devices", "", f"Backend 1/2: {backend}", *cases,
+        f"  {passed}/{total} tests passed", f"  Backend {backend}: {backend_status}",
+        "Backend 2/2: CPU", "  Skipping",
+        f"{backends_passed}/2 backends passed", overall, ""))
+
+
 class FakeExecutors:
     def __init__(self, *, correctness_exit=0, correctness_summary="3/3 tests passed",
                  non_overlap=False, inverse_bad=False, invariant_changed=False,
@@ -257,7 +280,7 @@ class FakeExecutors:
     def correctness(self, invocation):
         self.calls.append((invocation.kind, invocation.arm, invocation.argv,
                            invocation.environment))
-        invocation.stdout_path.write_text(self.correctness_summary + "\n")
+        invocation.stdout_path.write_text(correctness_console(self.correctness_summary))
         invocation.stderr_path.write_text("")
         return self._capture(invocation, self.correctness_exit)
 
@@ -491,7 +514,7 @@ class GpuSourceEvidenceTests(unittest.TestCase):
     def test_failed_exit_and_failed_correctness_never_mint_bundle(self):
         for executor, message in (
             (FakeExecutors(correctness_exit=7), "exited nonzero"),
-            (FakeExecutors(correctness_summary="2/3 tests passed"),
+            (FakeExecutors(correctness_summary="2/2 tests passed"),
              "exact expected case count"),
             (FakeExecutors(rocprof_exit=9), "rocprof command exited nonzero"),
         ):
@@ -501,6 +524,39 @@ class GpuSourceEvidenceTests(unittest.TestCase):
                     self.produce(directory, executors=executor, claims=claims)
                 self.assertTrue(all(claim.released for claim in claims.claims))
                 self.assertFalse((Path(directory) / "evidence/proof-bundle.json").exists())
+
+    def test_completed_correctness_survives_a_later_attribution_refusal(self):
+        with tempfile.TemporaryDirectory() as directory:
+            current = plan(Path(directory) / "inputs")
+            with self.assertRaisesRegex(
+                    E.EvidenceProducerError, "rocprof command exited nonzero"):
+                self.produce(
+                    directory, plan_=current,
+                    executors=FakeExecutors(rocprof_exit=9))
+            receipt = Path(directory) / "evidence/correctness/receipt.json"
+            self.assertTrue(receipt.is_file())
+            loaded = E.load_gpu_source_correctness_receipt(receipt, current)
+            self.assertEqual(loaded["body"]["result"], "PASS")
+            self.assertEqual(loaded["body"]["passed_cases"], 3)
+
+    def test_typed_parse_refusal_is_durable_and_releases_the_claim(self):
+        with tempfile.TemporaryDirectory() as directory:
+            current = plan(Path(directory) / "inputs")
+            claims = ClaimFactory()
+            with self.assertRaisesRegex(
+                    E.CorrectnessParseRefusal, "no test-backend-ops console frame"):
+                self.produce(
+                    directory, plan_=current, claims=claims,
+                    executors=FakeExecutors(correctness_summary="unparseable"))
+            self.assertEqual(len(claims.claims), 1)
+            self.assertTrue(claims.claims[0].released)
+            refusal = Path(directory) / "evidence/correctness/refusal.json"
+            self.assertTrue(refusal.is_file())
+            loaded = E.load_gpu_source_correctness_refusal(refusal, current)
+            self.assertEqual(
+                loaded["body"]["classification"], "output_parse_refusal")
+            self.assertFalse(
+                (Path(directory) / "evidence/correctness/receipt.json").exists())
 
     def test_missing_release_refuses(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -680,6 +736,95 @@ class GpuSourceEvidenceTests(unittest.TestCase):
             capture = executor(invocation)
             self.assertEqual(capture.runtime_maps_identity, {"maps": "captured"})
             self.assertEqual(seen, [("candidate", 9393, (9393,), {"sealed": "context"})])
+
+    def test_direct_executor_retries_only_typed_runtime_maps_startup_race(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            invocation = E.CommandInvocation(
+                kind="rocprof", arm="candidate", argv=("/bin/true",),
+                stdout_path=(root / "stdout").resolve(), stderr_path=(root / "stderr").resolve(),
+                timestamp_csv_path=(root / "timestamps.csv").resolve(),
+                working_directory=root.resolve(), environment=(("LD_LIBRARY_PATH", "/test/lib"),),
+                runtime_maps_required=True, runtime_maps_context={"sealed": "context"})
+
+            class Child:
+                pid = 9394; polls = 0
+                def poll(self):
+                    self.polls += 1
+                    return None if self.polls <= 2 else 0
+                def wait(self): return 0
+
+            attempts = []
+            def maps(_call, _child_pid, _sample):
+                attempts.append(len(attempts) + 1)
+                if len(attempts) == 1:
+                    raise E.RuntimeMapsNotReady("model mapping is not complete")
+                return {"maps": "captured-after-startup"}
+
+            executor = E.SubprocessCommandExecutor(
+                residency_sampler=lambda pid: E.GpuResidencySample(
+                    observed_monotonic_ns=__import__("time").monotonic_ns(), device_id="mi210_0",
+                    kfd_pids=(pid,), vram_bytes=4096), runtime_maps_sampler=maps,
+                sample_interval_s=.00001, popen=mock.Mock(return_value=Child()))
+            capture = executor(invocation)
+            self.assertEqual(attempts, [1, 2])
+            self.assertEqual(capture.runtime_maps_identity,
+                             {"maps": "captured-after-startup"})
+
+    def test_direct_executor_refuses_if_runtime_maps_never_become_ready(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            invocation = E.CommandInvocation(
+                kind="rocprof", arm="candidate", argv=("/bin/true",),
+                stdout_path=(root / "stdout").resolve(), stderr_path=(root / "stderr").resolve(),
+                timestamp_csv_path=(root / "timestamps.csv").resolve(),
+                working_directory=root.resolve(), environment=(("LD_LIBRARY_PATH", "/test/lib"),),
+                runtime_maps_required=True, runtime_maps_context={"sealed": "context"})
+
+            class Child:
+                pid = 9395; polls = 0
+                def poll(self): self.polls += 1; return None if self.polls == 1 else 0
+                def wait(self): return 0
+
+            executor = E.SubprocessCommandExecutor(
+                residency_sampler=lambda pid: E.GpuResidencySample(
+                    observed_monotonic_ns=__import__("time").monotonic_ns(), device_id="mi210_0",
+                    kfd_pids=(pid,), vram_bytes=4096),
+                runtime_maps_sampler=lambda *_args: (_ for _ in ()).throw(
+                    E.RuntimeMapsNotReady("model mapping is not complete")),
+                sample_interval_s=.00001, popen=mock.Mock(return_value=Child()))
+            with self.assertRaisesRegex(E.EvidenceProducerError,
+                                        "did not prove the sealed arm"):
+                executor(invocation)
+
+    def test_direct_executor_does_not_retry_untyped_runtime_maps_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            invocation = E.CommandInvocation(
+                kind="rocprof", arm="candidate", argv=("/bin/true",),
+                stdout_path=(root / "stdout").resolve(), stderr_path=(root / "stderr").resolve(),
+                timestamp_csv_path=(root / "timestamps.csv").resolve(),
+                working_directory=root.resolve(), environment=(("LD_LIBRARY_PATH", "/test/lib"),),
+                runtime_maps_required=True, runtime_maps_context={"sealed": "context"})
+
+            class Child:
+                pid = 9396; alive = True; terminated = False
+                def poll(self): return None if self.alive else -15
+                def terminate(self): self.terminated = True; self.alive = False
+                def wait(self, timeout=None): return -15
+
+            child = Child()
+            executor = E.SubprocessCommandExecutor(
+                residency_sampler=lambda pid: E.GpuResidencySample(
+                    observed_monotonic_ns=__import__("time").monotonic_ns(), device_id="mi210_0",
+                    kfd_pids=(pid,), vram_bytes=4096),
+                runtime_maps_sampler=lambda *_args: (_ for _ in ()).throw(
+                    E.EvidenceProducerError("runtime identity is ambiguous")),
+                sample_interval_s=.00001, popen=mock.Mock(return_value=child))
+            with self.assertRaisesRegex(E.EvidenceProducerError,
+                                        "runtime identity is ambiguous"):
+                executor(invocation)
+            self.assertTrue(child.terminated)
 
     def test_shared_rocprof_without_production_maps_callback_refuses(self):
         with tempfile.TemporaryDirectory() as directory:

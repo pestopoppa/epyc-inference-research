@@ -1,9 +1,9 @@
 """No-hardware replay tests for the typed discovery state machine."""
 from __future__ import annotations
-import argparse, base64, hashlib, json, tempfile, unittest
+import argparse, base64, dataclasses, hashlib, json, os, tempfile, unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from .. import hypothesis_portfolio
 from . import discovery_controller as D
 
@@ -11,15 +11,28 @@ H="a"*64
 RUNTIME={"kind":"docker_workspace_bind_only","docker_path":"/docker","docker_sha256":H,"image_id":"image","codex_native_sha256":H,"code_mode_host_sha256":H,"ca_certificate_sha256":H,"writable_host_binds":["/workspace"],"host_network_mode":"docker_bridge"}
 CLAUDE_RUNTIME={"kind":"claude_cli_structured_critic","provider":"claude","model":"claude-fable-5","effort":"high","wrapper_path":"/sealed/claude","wrapper_sha256":H,"argv_policy_sha256":H,"auth_staging_policy":"ephemeral_0600_copy_atomic_oauth_rotation_sync_no_secret_receipt"}
 class Manifest:
- campaign_id="ak-test"; proposal_id="akp-test"; candidate_id="akc-test"; source_tree="llama.cpp"; production_base_commit="0"*40; instrument_commit="0"*40; change_class="fusion"; declared_files=("ggml/src/ggml.c",); declared_symbols={"ggml/src/ggml.c":("<file-scope>",)}; mechanism_id="test"; patch_sha256="0"*64; patch_bundle_sha256=H; patch_bytes=b"diff --git a/ggml/src/ggml.c b/ggml/src/ggml.c\n--- a/ggml/src/ggml.c\n+++ b/ggml/src/ggml.c\n@@ -1 +1 @@\n-x\n+y\n"
+ campaign_id="ak-test"; proposal_id="akp-test"; candidate_id="akc-test"; source_tree="llama.cpp"; production_base_commit="0"*40; instrument_commit="0"*40; change_class="fusion"; declared_files=("ggml/src/ggml.c",); declared_symbols={"ggml/src/ggml.c":("<file-scope>",)}; mechanism_id="test"; patch_sha256="0"*64; patch_bytes=b"diff --git a/ggml/src/ggml.c b/ggml/src/ggml.c\n--- a/ggml/src/ggml.c\n+++ b/ggml/src/ggml.c\n@@ -1 +1 @@\n-x\n+y\n"
  patch_text=patch_bytes.decode("utf-8")
  def __init__(self, **values):
   for key, value in values.items(): setattr(self,key,value)
+ @property
+ def patch_bundle_sha256(self):
+  raw=json.dumps({"schema":D.source_candidate.SCHEMA_SOURCE_PATCH,
+      "campaign_id":self.campaign_id,"proposal_id":self.proposal_id,
+      "candidate_id":self.candidate_id,"source_tree":self.source_tree,
+      "production_base_commit":self.production_base_commit,
+      "instrument_commit":self.instrument_commit,"change_class":self.change_class,
+      "declared_files":list(self.declared_files),
+      "declared_symbols":{key:list(value) for key,value in self.declared_symbols.items()},
+      "mechanism_id":self.mechanism_id,"patch_sha256":self.patch_sha256,
+      "patch_encoding":"base64","patch_base64":base64.b64encode(self.patch_bytes).decode("ascii")},
+      sort_keys=True,separators=(",",":")).encode()
+  return hashlib.sha256(raw).hexdigest()
 class FakePlanner:
  def __init__(self): self.calls=[]
  def attest(self): return {**D.SOL,"runtime":RUNTIME}
  def plan(self,*,context,workspace):
-  self.calls.append(context); return D.PlannedCandidate("akh-test-"+str(len(self.calls)),"one-wave reduces cross-wave LDS","no speed improvement invalidates it",{"backend":"gpu","phase":"decode","mechanism":"one_wave"},{"id":"p"+str(len(self.calls))},Manifest(),H)
+  self.calls.append(context); manifest=Manifest(); return D.PlannedCandidate("akh-test-"+str(len(self.calls)),"one-wave reduces cross-wave LDS","no speed improvement invalidates it",{"backend":"gpu","phase":"decode","mechanism":"one_wave"},{"id":"p"+str(len(self.calls))},manifest,manifest.patch_bundle_sha256)
 class FakeCritic:
  def __init__(self,decisions): self.decisions=iter(decisions)
  def attest(self): return {**D.FABLE5_CRITIC,"runtime":CLAUDE_RUNTIME}
@@ -97,7 +110,9 @@ class Tests(unittest.TestCase):
    D._validate_portfolio_candidate(self.portfolio_candidate(first),first,
                                     config.hypothesis_portfolio)
    state["iterations"].append({"portfolio_hypothesis_id":"akh-first",
-                               "source_manifest_sha256":"1"*64})
+                               "source_manifest_sha256":"1"*64,
+                               "result_sha256":"2"*64,
+                               "evidence":{"source":"3"*64}})
    second=D._select_portfolio_binding(state,config)
    self.assertEqual(second["hypothesis_id"],"akh-lower")
    with self.assertRaisesRegex(D.DiscoveryControllerError,"controller-owned"):
@@ -128,17 +143,76 @@ class Tests(unittest.TestCase):
         base.template_id,base.target_surface,base.target_symbol,
         base.correctness_id,base.dispatch_id,
         (base.expected_dispatch[0],base.expected_dispatch[0]))
- def test_portfolio_exact_dnr_match_refuses_before_selected_binding(self):
+ def test_portfolio_exact_dnr_match_has_canonical_receipt(self):
   with tempfile.TemporaryDirectory() as t:
    record=self.portfolio_record(); config=self.portfolio_config(Path(t),[record])
    binding=D._select_portfolio_binding({"iterations":[]},config)
-   dnr={"mechanism":{"fingerprint_sha256":"e"*64},"regime":{"phase":"decode"}}
+   dnr={"dnr_id":"dnr-exact-test",
+        "mechanism":{"fingerprint_sha256":binding["mechanism_id"]},
+        "regime":dict(binding["regime"])}
    portfolio=hypothesis_portfolio.Portfolio(
        {**config.hypothesis_portfolio.body,"do_not_repeat":[dnr]},"f"*64)
-   with self.assertRaisesRegex(D.DiscoveryControllerError,"DNR"):
-    D._validate_portfolio_candidate(
-        self.portfolio_candidate(binding,mechanism_id="e"*64,
-                                 regime={"phase":"decode"}),binding,portfolio)
+   config=dataclasses.replace(config,hypothesis_portfolio=portfolio)
+   candidate=self.portfolio_candidate(binding)
+   receipt=D._portfolio_exact_dnr_check(config,candidate,binding)
+   self.assertEqual(receipt["outcome"],D.schemas.FAIL)
+   self.assertEqual(receipt["matched_dnr_ids"],["dnr-exact-test"])
+   self.assertEqual(receipt["candidate_mechanism_id"],binding["mechanism_id"])
+   self.assertEqual(receipt["canonical_regime_sha256"],
+                    D.schemas.content_hash(binding["regime"]))
+   self.assertEqual(receipt["receipt_sha256"],D.schemas.content_hash(
+       {key:value for key,value in receipt.items() if key!="receipt_sha256"}))
+
+ def test_portfolio_exact_dnr_refuses_with_zero_critic_auth_lease_or_screen(self):
+  class Planner(FakePlanner):
+   def __init__(self,candidate): super().__init__(); self.candidate=candidate
+   def plan(self,**kwargs): self.calls.append(kwargs); return self.candidate
+  class NeverCritic(FakeCritic):
+   def __init__(self): super().__init__([]); self.calls=0
+   def review(self,*args,**kwargs):
+    self.calls+=1; raise AssertionError("portfolio DNR reached critic")
+  class Never:
+   calls=0
+   def __getattr__(self,_name):
+    def called(*_args,**_kwargs):
+     self.calls+=1; raise AssertionError("portfolio DNR reached compute")
+    return called
+  with tempfile.TemporaryDirectory() as t:
+   record=self.portfolio_record(); config=self.portfolio_config(Path(t),[record])
+   binding=D._select_portfolio_binding({"iterations":[]},config)
+   dnr={"dnr_id":"dnr-exact-test",
+        "mechanism":{"fingerprint_sha256":binding["mechanism_id"]},
+        "regime":dict(binding["regime"])}
+   portfolio=hypothesis_portfolio.Portfolio(
+       {**config.hypothesis_portfolio.body,"do_not_repeat":[dnr]},"f"*64)
+   config=dataclasses.replace(config,hypothesis_portfolio=portfolio)
+   critic=NeverCritic(); lease=Never(); screen=Never()
+   with patch.object(D.hypotheses.HypothesisTracker,"authorize_claim",
+                     side_effect=AssertionError("portfolio DNR reached authorization")) as auth:
+    result=D.run_controller(config,
+        planner=Planner(self.portfolio_candidate(binding)),critic=critic,
+        screener=screen,lease=lease)
+   row=result["iterations"][0]
+   self.assertEqual(row["status"],"portfolio_dnr_refused")
+   self.assertEqual(row["portfolio_exact_dnr_check"]["matched_dnr_ids"],
+                    ["dnr-exact-test"])
+   self.assertEqual((critic.calls,auth.call_count,lease.calls,screen.calls),(0,0,0,0))
+
+ def test_new_portfolio_path_fails_closed_on_missing_or_mismatched_mechanism_and_receipt(self):
+  with tempfile.TemporaryDirectory() as t:
+   config=self.portfolio_config(Path(t),[self.portfolio_record()])
+   binding=D._select_portfolio_binding({"iterations":[]},config)
+   candidate=self.portfolio_candidate(binding)
+   missing=dict(binding); missing.pop("mechanism_id")
+   tracker=D._tracker(D.DurableState(config.output_root))
+   with self.assertRaisesRegex(D.DiscoveryControllerError,"structural mechanism"):
+    D._ensure_question(tracker,candidate,missing)
+   mismatched=self.portfolio_candidate(binding,mechanism_id="e"*64)
+   with self.assertRaisesRegex(D.DiscoveryControllerError,"structural mechanism"):
+    D._ensure_question(tracker,mismatched,binding)
+   row={"portfolio_binding":dict(binding)}
+   with self.assertRaisesRegex(D.DiscoveryControllerError,"receipt is missing"):
+    D._revalidate_portfolio_checkpoint(config,candidate,row)
  def test_portfolio_decision_floor_retains_one_percent_and_refuses_weak_conflicted_nonfinite(self):
   policy=self.portfolio_record()["decision_policy"]
   self.assertEqual(D.classify_screen_series(
@@ -196,7 +270,91 @@ class Tests(unittest.TestCase):
   self.assertEqual(critic.calls,0)
   self.assertEqual(lease.calls,0); self.assertEqual(screen.calls,0)
   self.assertTrue(result["complete"])
-  self.assertEqual(result["iterations"][0]["status"],"portfolio_refused")
+  self.assertEqual(result["iterations"][0]["status"],"planner_contract_refused")
+
+ def test_portfolio_dnr_receipt_round_trips_before_resumed_critic_and_authorization(self):
+  class Planner(FakePlanner):
+   def __init__(self,candidate): super().__init__(); self.candidate=candidate
+   def plan(self,**kwargs): self.calls.append(kwargs); return self.candidate
+  class CrashCritic(FakeCritic):
+   def __init__(self): super().__init__([])
+   def review(self,*_args,**_kwargs): raise RuntimeError("critic interrupted")
+  class NoReplan(FakePlanner):
+   def plan(self,**_kwargs): raise AssertionError("resume replanned a sealed candidate")
+  class Never:
+   def __getattr__(self,_name):
+    def called(*_args,**_kwargs): raise AssertionError("dry-run reached compute")
+    return called
+  with tempfile.TemporaryDirectory() as t:
+   record=self.portfolio_record(budget=1)
+   config=self.portfolio_config(Path(t),[record])
+   binding=D._select_portfolio_binding({"iterations":[]},config)
+   planner=Planner(self.portfolio_candidate(binding))
+   with self.assertRaisesRegex(RuntimeError,"critic interrupted"):
+    D.run_controller(config,planner=planner,critic=CrashCritic(),
+                     screener=Never(),lease=Never())
+   checkpoint=json.loads((config.output_root/"state.json").read_text())
+   receipt=dict(checkpoint["pending"]["row"]["portfolio_exact_dnr_check"])
+   self.assertEqual(receipt["outcome"],D.schemas.PASS)
+   result=D.run_controller(config,planner=NoReplan(),critic=FakeCritic(["accept"]),
+                           screener=Never(),lease=Never())
+   row=result["iterations"][0]
+   self.assertEqual(row["portfolio_exact_dnr_check"],receipt)
+   self.assertEqual(row["campaign_ledger_dnr_outcome"],D.schemas.PASS)
+   self.assertEqual(row["status"],"dry_run_authorized")
+   self.assertEqual(len(planner.calls),1)
+
+ def test_portfolio_family_budget_allows_two_distinct_candidates(self):
+  class Planner(FakePlanner):
+   def __init__(self,candidates): super().__init__(); self.candidates=iter(candidates)
+   def plan(self,**kwargs): self.calls.append(kwargs); return next(self.candidates)
+  class Never:
+   def __getattr__(self,_name):
+    def called(*_args,**_kwargs): raise AssertionError("dry-run reached compute")
+    return called
+  with tempfile.TemporaryDirectory() as t:
+   config=self.portfolio_config(Path(t),[self.portfolio_record(budget=2)])
+   binding=D._select_portfolio_binding({"iterations":[]},config)
+   first=self.portfolio_candidate(binding)
+   second_patch=first.source_manifest.patch_bytes.replace(b"+y\n",b"+z\n")
+   second_manifest=dataclasses.replace(
+       first.source_manifest,patch_bytes=second_patch,
+       patch_sha256=hashlib.sha256(second_patch).hexdigest())
+   second=D.PlannedCandidate(
+       first.hypothesis_id,first.statement,first.falsifier,first.regime,
+       first.proposal,second_manifest,second_manifest.patch_bundle_sha256,
+       first.experiment_intent)
+   result=D.run_controller(
+       config,planner=Planner([first,second]),
+       critic=FakeCritic(["accept","accept"]),screener=Never(),lease=Never())
+   rows=result["iterations"]
+   self.assertEqual([row["status"] for row in rows], ["dry_run_authorized"])
+   self.assertEqual(len({row["source_manifest_sha256"] for row in rows}),1)
+   self.assertEqual([row["campaign_ledger_dnr_outcome"] for row in rows],
+                    [D.schemas.PASS])
+   self.assertIn(binding["hypothesis_id"], result["portfolio_validations"])
+   self.assertNotIn(binding["hypothesis_id"], result.get("portfolio_skips", {}))
+   tracked=D._tracker(D.DurableState(config.output_root)).state()[
+       binding["hypothesis_id"]]
+   self.assertEqual(tracked.hypothesis.regime["mechanism"],
+                    binding["mechanism_id"])
+
+ def test_legacy_generic_question_without_mechanism_remains_could_not_check(self):
+  class Planner(FakePlanner):
+   def plan(self,*,context,workspace):
+    self.calls.append(context); manifest=Manifest()
+    return D.PlannedCandidate(
+        "akh-legacy-generic","legacy question without structural identity",
+        "no speed improvement invalidates it",{"backend":"gpu","phase":"decode"},
+        {"id":"legacy"},manifest,manifest.patch_bundle_sha256)
+  with tempfile.TemporaryDirectory() as t, \
+       patch.object(D.source_candidate,"SourcePatchManifest",Manifest), \
+       patch.object(D,"_write_projection"):
+   result=D.run_controller(
+       D.ControllerConfig(Path(t)/"out",1,dry_run=True),planner=Planner(),
+       critic=FakeCritic(["accept"]),screener=FakeScreen([.1]),lease=Lease())
+  self.assertEqual(result["iterations"][0]["campaign_ledger_dnr_outcome"],
+                   D.schemas.COULD_NOT_CHECK)
  def source_package(self):
   content=b"void reviewed_kernel() {}\n"; digest=hashlib.sha256(content).hexdigest()
   body={"schema":"epyc.autokernel.reviewed_source_package.v1","instrument_commit":"1"*40,
@@ -254,7 +412,9 @@ class Tests(unittest.TestCase):
                            "planner_context":{"reviewed_source_package_sha256":
                                               package.package_sha256}},workspace=root)
    self.assertEqual(captured["reviewed_source_package"]["package_sha256"],package.package_sha256)
-   self.assertEqual(captured["authoring_contract"]["expected_dispatch"],"array of 1..8 exact objects")
+   self.assertIn("deployed anchor objects",captured["authoring_contract"]["expected_dispatch"])
+   self.assertIn("Never substitute predicted candidate subroutes",
+                 captured["authoring_contract"]["expected_dispatch_rule"])
    estimate_rule=captured["authoring_contract"]["proposal_schema"]["estimated_diff_size_rule"]
    self.assertIn("added lines plus removed lines",estimate_rule)
    hunk_rule=captured["authoring_contract"]["source_manifest_schema"]["unified_diff_hunk_rule"]
@@ -265,6 +425,642 @@ class Tests(unittest.TestCase):
    declarations=captured["structural_example_only"]["plan.json"]["proposal"]["change"]["files_and_symbols"]
    self.assertIsInstance(declarations,list)
    self.assertEqual(declarations,["ggml/src/ggml-cuda/example.cu:example_symbol"])
+
+ def test_planner_catalog_hides_controller_owned_fa_geometry(self):
+  catalog={"cuda-fattn-tile-v1":{
+      "template_id":"cuda-fattn-tile-v1",
+      "semantics":{"candidate_dispatch_variants":{
+          "gqa7_bulk_pairs":{"calls":3096,"grid":3072},
+          "gqa7_scalar_tail":{"calls":3096,"grid":1024}}}}}
+  planner=D.CodexPlanner(wrapper=Path("/not-invoked"),environment={},
+                         template_catalog=catalog)
+  projected=planner._planner_catalog()
+  semantics=projected["cuda-fattn-tile-v1"]["semantics"]
+  self.assertNotIn("candidate_dispatch_variants",semantics)
+  self.assertEqual(semantics["candidate_dispatch_strategy"],{
+      "strategy_id":"gqa7_pair_tail",
+      "selection_authority":"controller_owned",
+      "expected_dispatch_source":
+          "controller_owned_portfolio_binding.expected_dispatch",
+      "instruction":(
+          "Author the bounded six-head pair plus one-head tail source mechanism. "
+          "Do not emit candidate route IDs, call counts, or geometry; the controller "
+          "derives and validates those after authorization.")})
+  self.assertNotIn("3072",json.dumps(projected))
+  self.assertIn("3072",json.dumps(planner.template_catalog))
+ def _write_planner_artifacts(self, workspace, assignment, *, mode="valid"):
+  relative="ggml/src/ggml-cuda/reviewed.cu"; symbol="reviewed_kernel"
+  patch_bytes=(f"diff --git a/{relative} b/{relative}\n"
+               f"--- a/{relative}\n+++ b/{relative}\n"
+               f"@@ -1 +1 @@ {symbol}()\n-old\n+new\n").encode()
+  if mode == "malformed_diff":
+   patch_bytes=(f"@@ -1 +1 @@ {symbol}()\n-old\n+new\n").encode()
+  if mode == "underestimated_diff_v16":
+   patch_bytes=(f"diff --git a/{relative} b/{relative}\n"
+                f"--- a/{relative}\n+++ b/{relative}\n"
+                f"@@ -1,8 +1,7 @@ {symbol}()\n"
+                "-old1\n-old2\n-old3\n-old4\n-old5\n-old6\n-old7\n-old8\n"
+                "+new1\n+new2\n+new3\n+new4\n+new5\n+new6\n+new7\n").encode()
+  manifest={"schema":D.source_candidate.SCHEMA_SOURCE_PATCH,
+      "campaign_id":"ak-off-assignment" if mode == "off_assignment" else assignment.campaign_id,
+      "proposal_id":assignment.proposal_id,"candidate_id":assignment.candidate_id,
+      "source_tree":"llama.cpp","production_base_commit":assignment.production_base_commit,
+      "instrument_commit":assignment.instrument_commit,"change_class":"arithmetic",
+      "declared_files":[relative],"declared_symbols":{relative:[symbol]},
+      "mechanism_id":"planner-fault-test",
+      "patch_sha256":hashlib.sha256(patch_bytes).hexdigest(),
+      "patch_encoding":"base64","patch_base64":base64.b64encode(patch_bytes).decode()}
+  plan={"hypothesis_id":"akh-planner-fault","statement":"bounded planner output",
+      "falsifier":"exact runtime does not improve","regime":{"phase":"decode"},
+      "proposal":{"proposal_id":assignment.proposal_id,"change_class":"arithmetic",
+                  "change":{"files_and_symbols":[f"{relative}:{symbol}"],
+                            "estimated_diff_size":(
+                                14 if mode == "underestimated_diff_v16" else 2)}},
+      "source_manifest_path":"source-patch.json"}
+  if mode != "missing_plan": (workspace/"plan.json").write_text(json.dumps(plan))
+  if mode not in {"missing_plan","missing_manifest"}:
+   (workspace/"source-patch.json").write_text(json.dumps(manifest))
+ def test_planner_output_faults_are_typed_but_off_assignment_stays_terminal(self):
+  package=self.source_package()
+  assignment=D.AuthoringAssignment("ak-test","akp-test","akc-test","0"*40,"1"*40)
+  for mode,pattern in (("malformed_diff","hunk.*file"),
+                       ("missing_plan","invalid actor artifact plan.json"),
+                       ("missing_manifest","invalid actor artifact source-patch.json"),
+                       ("underestimated_diff_v16", "14 < 15")):
+   with self.subTest(mode=mode), tempfile.TemporaryDirectory() as t:
+    root=Path(t); workspace=root/"operation"/"workspace"; workspace.mkdir(parents=True)
+    wrapper=root/"codex"; wrapper.write_bytes(b"codex"); wrapper.chmod(0o700)
+    telemetry=D.discovery_telemetry.DiscoveryTelemetry(root/"live")
+    planner=D.CodexPlanner(wrapper=wrapper,environment={"PATH":"/usr/bin"},
+                           reviewed_sources=package,telemetry=telemetry)
+    def actor(**_kwargs):
+     self._write_planner_artifacts(workspace,assignment,mode=mode)
+     return SimpleNamespace(returncode=0,stdout="",stderr="")
+    with patch.object(D.codex_container_actor,"runtime_identity",return_value=RUNTIME), \
+         patch.object(D.codex_container_actor,"run_actor",side_effect=actor), \
+         self.assertRaisesRegex(D.PlannerOutputRefusal,pattern) as caught:
+     planner.plan(context={"authoring_assignment":assignment.to_dict(),
+                           "planner_context":{"reviewed_source_package_sha256":
+                                              package.package_sha256}},
+                  workspace=workspace,checkpoint_path=root/"operation"/"actor-result.json")
+    events=[json.loads(line) for line in (root/"live/planner.jsonl").read_text().splitlines()]
+    self.assertEqual([row["event"] for row in events],
+                     ["planner_started","planner_refused"])
+    self.assertEqual(events[-1]["result"]["refusal_reason_sha256"],
+                     hashlib.sha256(str(caught.exception).encode()).hexdigest())
+    self.assertNotIn(str(caught.exception),json.dumps(events[-1]))
+  with tempfile.TemporaryDirectory() as t:
+   root=Path(t); workspace=root/"operation"/"workspace"; workspace.mkdir(parents=True)
+   wrapper=root/"codex"; wrapper.write_bytes(b"codex"); wrapper.chmod(0o700)
+   planner=D.CodexPlanner(wrapper=wrapper,environment={"PATH":"/usr/bin"},
+                          reviewed_sources=package)
+   def off_assignment(**_kwargs):
+    self._write_planner_artifacts(workspace,assignment,mode="off_assignment")
+    return SimpleNamespace(returncode=0,stdout="",stderr="")
+   with patch.object(D.codex_container_actor,"runtime_identity",return_value=RUNTIME), \
+        patch.object(D.codex_container_actor,"run_actor",side_effect=off_assignment), \
+        self.assertRaisesRegex(D.DiscoveryControllerError,"invent campaign") as caught:
+    planner.plan(context={"authoring_assignment":assignment.to_dict(),
+                          "planner_context":{"reviewed_source_package_sha256":
+                                             package.package_sha256}},
+                 workspace=workspace,checkpoint_path=root/"operation"/"actor-result.json")
+   self.assertNotIsInstance(caught.exception,D.PlannerOutputRefusal)
+
+ def test_v19_fa_candidate_subroutes_are_typed_secret_free_and_reopen_without_actor(self):
+  package=self.source_package()
+  assignment=D.AuthoringAssignment("ak-test","akp-test","akc-test","0"*40,"1"*40)
+  with tempfile.TemporaryDirectory() as t:
+   root=Path(t); workspace=root/"operation/workspace"; workspace.mkdir(parents=True)
+   wrapper=root/"codex"; wrapper.write_bytes(b"codex"); wrapper.chmod(0o700)
+   telemetry=D.discovery_telemetry.DiscoveryTelemetry(root/"live")
+   planner=D.CodexPlanner(wrapper=wrapper,environment={"PATH":"/usr/bin"},
+                          reviewed_sources=package,telemetry=telemetry)
+   calls=0
+   def actor(**_kwargs):
+    nonlocal calls
+    calls+=1
+    self._write_planner_artifacts(workspace,assignment)
+    plan=json.loads((workspace/"plan.json").read_text())
+    plan["experiment_intent"]={
+        "template_id":"cuda-fattn-tile-v1","target_surface":"gpu_decode",
+        "target_symbol":"launch_fattn_tile_switch_ncols2",
+        "correctness_id":"backend-ops-hip-v1",
+        "dispatch_id":"decode-tg128-rocprof-v3",
+        "expected_dispatch":[
+            {"route_id":"cuda-fattn-tile-v1.gqa7_bulk_pairs",
+             "kernel_name":"void flash_attn_tile<64, 64, 1, 2, false>",
+             "calls":3096,"grid":3072,"workgroup":64,"lds_bytes":5120},
+            {"route_id":"cuda-fattn-tile-v1.gqa7_scalar_tail",
+             "kernel_name":"void flash_attn_tile<64, 64, 2, 1, false>",
+             "calls":3096,"grid":1024,"workgroup":64,"lds_bytes":5120}]}
+    (workspace/"plan.json").write_text(json.dumps(plan))
+    return SimpleNamespace(returncode=0,stdout="",stderr="")
+   context={"authoring_assignment":assignment.to_dict(),
+            "planner_context":{"reviewed_source_package_sha256":package.package_sha256}}
+   checkpoint=root/"operation/actor-result.json"
+   with patch.object(D.codex_container_actor,"runtime_identity",return_value=RUNTIME), \
+        patch.object(D.codex_container_actor,"run_actor",side_effect=actor), \
+        self.assertRaisesRegex(D.PlannerOutputRefusal,
+                               "planner experiment intent violates deployed authority"):
+    planner.plan(context=context,workspace=workspace,checkpoint_path=checkpoint)
+   with patch.object(D.codex_container_actor,"runtime_identity",return_value=RUNTIME), \
+        patch.object(D.codex_container_actor,"run_actor",
+                     side_effect=AssertionError("completed actor replayed")), \
+        self.assertRaisesRegex(D.PlannerOutputRefusal,
+                               "planner experiment intent violates deployed authority"):
+    planner.resume_plan(context=context,workspace=workspace,checkpoint_path=checkpoint)
+   self.assertEqual(calls,1)
+   rows=[json.loads(line) for line in (root/"live/planner.jsonl").read_text().splitlines()]
+   self.assertEqual([row["event"] for row in rows],["planner_started","planner_refused"])
+   serialized=json.dumps(rows)
+   self.assertNotIn("gqa7_bulk_pairs",serialized)
+   self.assertNotIn("dispatch route id is not deployed authority",serialized)
+ def test_planner_refusal_survives_telemetry_schema_or_io_failure(self):
+  package=self.source_package()
+  assignment=D.AuthoringAssignment("ak-test","akp-test","akc-test","0"*40,"1"*40)
+  for failure in (D.discovery_telemetry.TelemetryError("schema drift"),
+                  OSError("telemetry disk unavailable")):
+   with self.subTest(failure=type(failure).__name__), tempfile.TemporaryDirectory() as t:
+    root=Path(t); workspace=root/"operation/workspace"; workspace.mkdir(parents=True)
+    wrapper=root/"codex"; wrapper.write_bytes(b"codex"); wrapper.chmod(0o700)
+    telemetry=Mock()
+    telemetry.emit.side_effect=lambda _channel,event,**_kwargs: (
+        (_ for _ in ()).throw(failure) if event == "planner_refused" else None)
+    planner=D.CodexPlanner(wrapper=wrapper,environment={"PATH":"/usr/bin"},
+                           reviewed_sources=package,telemetry=telemetry)
+    def actor(**_kwargs):
+     self._write_planner_artifacts(workspace,assignment,
+                                   mode="underestimated_diff_v16")
+     return SimpleNamespace(returncode=0,stdout="",stderr="")
+    with patch.object(D.codex_container_actor,"runtime_identity",return_value=RUNTIME), \
+         patch.object(D.codex_container_actor,"run_actor",side_effect=actor), \
+         self.assertRaisesRegex(D.PlannerOutputRefusal,"14 < 15") as caught:
+     planner.plan(context={"authoring_assignment":assignment.to_dict(),
+                           "planner_context":{"reviewed_source_package_sha256":
+                                              package.package_sha256}},
+                  workspace=workspace,
+                  checkpoint_path=root/"operation/actor-result.json")
+    self.assertEqual(caught.exception.telemetry_status,"emit_failed")
+    self.assertEqual(caught.exception.telemetry_failure["type"],
+                     type(failure).__name__)
+ def test_actor_telemetry_is_observational_for_success_and_primary_failures(self):
+  package=self.source_package()
+  assignment=D.AuthoringAssignment("ak-test","akp-test","akc-test","0"*40,"1"*40)
+  telemetry=Mock()
+  telemetry.emit.side_effect=OSError("telemetry unavailable")
+  with tempfile.TemporaryDirectory() as t:
+   root=Path(t); wrapper=root/"codex"; wrapper.write_bytes(b"codex"); wrapper.chmod(0o700)
+   success_workspace=root/"success/workspace"; success_workspace.mkdir(parents=True)
+   planner=D.CodexPlanner(wrapper=wrapper,environment={"PATH":"/usr/bin"},
+                          reviewed_sources=package,telemetry=telemetry)
+   def success(**_kwargs):
+    self._write_planner_artifacts(success_workspace,assignment)
+    return SimpleNamespace(returncode=0,stdout="ok",stderr="")
+   context={"authoring_assignment":assignment.to_dict(),
+            "planner_context":{"reviewed_source_package_sha256":
+                               package.package_sha256}}
+   with patch.object(D.codex_container_actor,"runtime_identity",return_value=RUNTIME), \
+        patch.object(D.codex_container_actor,"run_actor",side_effect=success):
+    candidate=planner.plan(
+        context=context,workspace=success_workspace,
+        checkpoint_path=root/"success/actor-result.json")
+   self.assertEqual(candidate.hypothesis_id,"akh-planner-fault")
+   failed_workspace=root/"failed/workspace"; failed_workspace.mkdir(parents=True)
+   with patch.object(D.codex_container_actor,"runtime_identity",return_value=RUNTIME), \
+        patch.object(D.codex_container_actor,"run_actor",
+                     side_effect=RuntimeError("planner transport primary")), \
+        self.assertRaisesRegex(RuntimeError,"planner transport primary"):
+    planner.plan(context=context,workspace=failed_workspace,
+                 checkpoint_path=root/"failed/actor-result.json")
+   claude=root/"claude"; claude.write_bytes(b"claude"); claude.chmod(0o700)
+   critic=D.ClaudeCritic(wrapper=claude,environment={"PATH":"/usr/bin"},
+                         telemetry=telemetry)
+   critic_result=SimpleNamespace(
+       decision="accept",reason="bounded",stdout_sha256="c"*64,
+       stderr_sha256="d"*64)
+   with patch.object(D.claude_fable5_critic_actor,"runtime_identity",
+                     return_value=CLAUDE_RUNTIME), \
+        patch.object(D.claude_fable5_critic_actor,"run_critic",
+                     return_value=critic_result):
+    self.assertEqual(critic.review(candidate,context=context,
+                                   workspace=root).decision,"accept")
+   with patch.object(D.claude_fable5_critic_actor,"runtime_identity",
+                     return_value=CLAUDE_RUNTIME), \
+        patch.object(D.claude_fable5_critic_actor,"run_critic",
+                     side_effect=RuntimeError("critic transport primary")), \
+        self.assertRaisesRegex(RuntimeError,"critic transport primary"):
+    critic.review(candidate,context=context,workspace=root)
+ def test_rc0_actor_checkpoint_resumes_without_rerunning_sol(self):
+  class StopAfterCheckpoint(BaseException): pass
+  package=self.source_package(); assignment=D.AuthoringAssignment(
+      "ak-test","akp-test","akc-test","0"*40,"1"*40)
+  with tempfile.TemporaryDirectory() as t:
+   root=Path(t); operation=root/"operation"; workspace=operation/"workspace"
+   workspace.mkdir(parents=True); checkpoint=operation/"actor-result.json"
+   wrapper=root/"codex"; wrapper.write_bytes(b"codex"); wrapper.chmod(0o700)
+   planner=D.CodexPlanner(wrapper=wrapper,environment={"PATH":"/usr/bin"},
+                          reviewed_sources=package)
+   def actor(**_kwargs):
+    self._write_planner_artifacts(workspace,assignment)
+    return SimpleNamespace(returncode=0,stdout="ok",stderr="")
+   context={"authoring_assignment":assignment.to_dict(),
+            "planner_context":{"reviewed_source_package_sha256":package.package_sha256}}
+   with patch.object(D.codex_container_actor,"runtime_identity",return_value=RUNTIME), \
+        patch.object(D.codex_container_actor,"run_actor",side_effect=actor), \
+        patch.object(D,"_load_plan",side_effect=StopAfterCheckpoint("stop")), \
+        self.assertRaises(StopAfterCheckpoint):
+    planner.plan(context=context,workspace=workspace,checkpoint_path=checkpoint)
+   self.assertTrue(checkpoint.is_file())
+   with patch.object(D.codex_container_actor,"runtime_identity",return_value=RUNTIME), \
+        patch.object(D.codex_container_actor,"run_actor",side_effect=AssertionError("Sol reran")):
+    candidate=planner.resume_plan(context=context,workspace=workspace,
+                                  checkpoint_path=checkpoint)
+   self.assertEqual(candidate.hypothesis_id,"akh-planner-fault")
+ def test_planner_refusals_retry_same_portfolio_without_science_attempt(self):
+  class RefusingPlanner:
+   def __init__(self): self.contexts=[]
+   def attest(self): return {**D.SOL,"runtime":RUNTIME}
+   def plan(self,*,context,workspace):
+    self.contexts.append(context)
+    raise D.PlannerOutputRefusal("SourceCandidateError: malformed unified diff")
+  class NeverCritic:
+   def __init__(self): self.calls=0
+   def attest(self): return {**D.FABLE5_CRITIC,"runtime":CLAUDE_RUNTIME}
+   def review(self,*_args,**_kwargs):
+    self.calls+=1; raise AssertionError("refused planner reached critic")
+  class NeverCompute:
+   def __init__(self): self.calls=0
+   def __getattr__(self,_name):
+    def called(*_args,**_kwargs):
+     self.calls+=1; raise AssertionError("refused planner reached compute")
+    return called
+  with tempfile.TemporaryDirectory() as t:
+   root=Path(t); planner=RefusingPlanner(); critic=NeverCritic()
+   lease=NeverCompute(); screen=NeverCompute()
+   base=self.portfolio_config(root,[self.portfolio_record(budget=3)])
+   config=D.ControllerConfig(
+       root,3,dry_run=True,planner_context=base.planner_context,
+       planner_context_sha256=base.planner_context_sha256,
+       production_base_commit="0"*40,instrument_commit="1"*40,
+       hypothesis_portfolio=base.hypothesis_portfolio,
+       hypothesis_portfolio_sha256=base.hypothesis_portfolio_sha256)
+   with patch.object(D,"_ensure_question",side_effect=AssertionError("hypothesis opened")):
+    result=D.run_controller(config,planner=planner,critic=critic,
+                            screener=screen,lease=lease)
+   self.assertTrue(result["complete"]); self.assertEqual(len(planner.contexts),3)
+   self.assertEqual(critic.calls,0); self.assertEqual(lease.calls,0)
+   self.assertEqual(screen.calls,0)
+   self.assertEqual([len(row["prior_authoring_refusals"])
+                     for row in planner.contexts],[0,1,2])
+   self.assertEqual({row["authoring_assignment"]["portfolio_binding"]["hypothesis_id"]
+                     for row in planner.contexts},{"akh-portfolio-q8"})
+   self.assertEqual([row["status"] for row in result["iterations"]],
+                    ["planner_refused"]*3)
+   self.assertTrue(all("source_manifest_sha256" not in row
+                       for row in result["iterations"]))
+   again=D.run_controller(config,planner=planner,critic=critic,
+                          screener=screen,lease=lease)
+   self.assertEqual(again,result); self.assertEqual(len(planner.contexts),3)
+ def test_concrete_v16_refusal_retries_are_bounded_without_science_or_compute(self):
+  outer=self; package=self.source_package()
+  class Never:
+   def attest(self): return {**D.FABLE5_CRITIC,"runtime":CLAUDE_RUNTIME}
+   def __getattr__(self,_name):
+    def called(*_args,**_kwargs):
+     raise AssertionError("planner refusal reached critic or compute")
+    return called
+  with tempfile.TemporaryDirectory() as t:
+   root=Path(t); wrapper=root/"codex"; wrapper.write_bytes(b"codex"); wrapper.chmod(0o700)
+   telemetry=D.discovery_telemetry.DiscoveryTelemetry(root/"live")
+   planner=D.CodexPlanner(wrapper=wrapper,environment={"PATH":"/usr/bin"},
+                          reviewed_sources=package,telemetry=telemetry)
+   actor_calls=[]
+   def actor(**kwargs):
+    prompt=json.loads(kwargs["prompt"])
+    assignment=D.AuthoringAssignment(
+        **prompt["context"]["authoring_assignment"])
+    actor_calls.append(assignment.candidate_id)
+    outer._write_planner_artifacts(
+        kwargs["workspace"],assignment,mode="underestimated_diff_v16")
+    return SimpleNamespace(returncode=0,stdout="",stderr="")
+   base=self.portfolio_config(root,[self.portfolio_record(
+       hypothesis_id="akh-v2-q5-type-specific-dequant",rank=1,budget=3)])
+   planner_context={**base.planner_context,
+       "reviewed_source_package_sha256":package.package_sha256}
+   config=dataclasses.replace(
+       base,planner_context=planner_context,
+       planner_context_sha256=D._sha(planner_context))
+   never=Never()
+   with patch.object(D.codex_container_actor,"runtime_identity",return_value=RUNTIME), \
+        patch.object(D.codex_container_actor,"run_actor",side_effect=actor):
+    result=D.run_controller(config,planner=planner,critic=never,
+                            screener=never,lease=never)
+   events=[json.loads(line)["event"]
+           for line in (root/"live/planner.jsonl").read_text().splitlines()]
+  self.assertEqual(actor_calls,
+                   ["akc-discovery-1","akc-discovery-2","akc-discovery-3"])
+  self.assertEqual(result["portfolio_authoring_failures"],{
+      "akh-v2-q5-type-specific-dequant":3})
+  self.assertEqual(result["portfolio_skips"][
+      "akh-v2-q5-type-specific-dequant"]["disposition"],
+      "bounded_authoring_skip")
+  self.assertEqual(result["scientific_attempts"],0)
+  self.assertEqual(result["terminal_reason"],"portfolio_exhausted")
+  self.assertTrue(all(row["status"] == "planner_refused"
+                      and row["scientific_budget_spent"] is False
+                      and row["telemetry_status"] == "emitted"
+                      for row in result["iterations"]))
+  self.assertEqual(events,["planner_started","planner_refused"]*3)
+ def test_four_bounded_planner_skips_reach_every_strategy_with_one_science_slot(self):
+  class RefusingPlanner:
+   def __init__(self): self.bindings=[]
+   def attest(self): return {**D.SOL,"runtime":RUNTIME}
+   def plan(self,*,context,workspace):
+    self.bindings.append(context["authoring_assignment"]["portfolio_binding"])
+    raise D.PlannerOutputRefusal("bounded authored artifact refusal")
+  class Never:
+   def attest(self): return {**D.FABLE5_CRITIC,"runtime":CLAUDE_RUNTIME}
+   def __getattr__(self,_name):
+    def called(*_args,**_kwargs):
+     raise AssertionError("refused portfolio reached critic or compute")
+    return called
+  with tempfile.TemporaryDirectory() as t:
+   records=[self.portfolio_record(
+       hypothesis_id=f"akh-strategy-{rank}",rank=rank,budget=3)
+       for rank in range(1,5)]
+   config=dataclasses.replace(self.portfolio_config(Path(t),records),
+                              max_iterations=1)
+   planner=RefusingPlanner(); never=Never()
+   result=D.run_controller(config,planner=planner,critic=never,
+                           screener=never,lease=never)
+  selected=[row["hypothesis_id"] for row in planner.bindings]
+  self.assertEqual(selected,
+                   [f"akh-strategy-{rank}" for rank in range(1,5)
+                    for _ in range(3)])
+  self.assertEqual([row["turn"] for row in result["iterations"]],
+                   list(range(1,13)))
+  self.assertEqual(len({row["planner_operation_key"]
+                        for row in result["iterations"]}),12)
+  self.assertEqual(result["scientific_attempts"],0)
+  self.assertEqual(result["terminal_reason"],"portfolio_exhausted")
+  self.assertTrue(result["complete"])
+ def test_completed_legacy_state_reentry_does_not_insert_science_counter(self):
+  class RefusingPlanner:
+   def attest(self): return {**D.SOL,"runtime":RUNTIME}
+   def plan(self,*,context,workspace):
+    raise D.PlannerOutputRefusal("legacy completed refusal")
+  class Never:
+   def attest(self): return {**D.FABLE5_CRITIC,"runtime":CLAUDE_RUNTIME}
+  with tempfile.TemporaryDirectory() as t:
+   root=Path(t); config=D.ControllerConfig(root,1,dry_run=True)
+   result=D.run_controller(config,planner=RefusingPlanner(),
+                           critic=Never(),screener=Never(),lease=Never())
+   self.assertTrue(result["complete"])
+   legacy=dict(result); legacy.pop("scientific_attempts")
+   legacy["state_sha256"]=D._sha({
+       key:value for key,value in legacy.items() if key != "state_sha256"})
+   D._atomic(root/"state.json",legacy)
+   before=(root/"state.json").read_bytes()
+   reopened=D.run_controller(config,planner=RefusingPlanner(),
+                             critic=Never(),screener=Never(),lease=Never())
+   self.assertNotIn("scientific_attempts",reopened)
+   self.assertEqual((root/"state.json").read_bytes(),before)
+ def test_controller_persists_visibility_degraded_without_masking_refusal(self):
+  outer=self; package=self.source_package()
+  class BrokenTelemetry:
+   def emit(self,*_args,**_kwargs):
+    raise OSError("injected telemetry transaction failure")
+  class Never:
+   def attest(self): return {**D.FABLE5_CRITIC,"runtime":CLAUDE_RUNTIME}
+   def __getattr__(self,_name):
+    def called(*_args,**_kwargs):
+     raise AssertionError("planner refusal reached critic or compute")
+    return called
+  with tempfile.TemporaryDirectory() as t:
+   root=Path(t); wrapper=root/"codex"; wrapper.write_bytes(b"codex"); wrapper.chmod(0o700)
+   planner=D.CodexPlanner(
+       wrapper=wrapper,environment={"PATH":"/usr/bin"},
+       reviewed_sources=package,telemetry=BrokenTelemetry())
+   def actor(**kwargs):
+    assignment=D.AuthoringAssignment(**json.loads(
+        kwargs["prompt"])["context"]["authoring_assignment"])
+    outer._write_planner_artifacts(
+        kwargs["workspace"],assignment,mode="underestimated_diff_v16")
+    return SimpleNamespace(returncode=0,stdout="",stderr="")
+   base=self.portfolio_config(root,[self.portfolio_record(
+       hypothesis_id="akh-visibility-q5",rank=1,budget=3)])
+   planner_context={**base.planner_context,
+       "reviewed_source_package_sha256":package.package_sha256}
+   config=dataclasses.replace(
+       base,max_iterations=1,planner_context=planner_context,
+       planner_context_sha256=D._sha(planner_context))
+   never=Never()
+   with patch.object(D.codex_container_actor,"runtime_identity",return_value=RUNTIME), \
+        patch.object(D.codex_container_actor,"run_actor",side_effect=actor):
+    result=D.run_controller(config,planner=planner,critic=never,
+                            screener=never,lease=never)
+  self.assertEqual(result["terminal_reason"],"portfolio_exhausted")
+  self.assertEqual({item["event"] for item in result["visibility_degraded"]},
+                   {"planner_started","planner_refused"})
+  self.assertTrue(all(row["status"] == "planner_refused"
+                      and row["visibility_degraded"] is True
+                      and row["telemetry_status"] == "emit_failed"
+                      for row in result["iterations"]))
+ def test_visibility_degradation_does_not_mask_successful_planner_or_critic(self):
+  outer=self
+  class Planner:
+   def __init__(self): self.telemetry_failures=[]
+   def attest(self): return {**D.SOL,"runtime":RUNTIME}
+   def plan(self,*,context,workspace):
+    self.telemetry_failures.append({
+        "event":"planner_completed","operation_key":"4"*64,
+        "error_type":"OSError","error_sha256":"5"*64})
+    return outer.portfolio_candidate(
+        context["authoring_assignment"]["portfolio_binding"])
+  class Critic:
+   def __init__(self): self.telemetry_failures=[]
+   def attest(self): return {**D.FABLE5_CRITIC,"runtime":CLAUDE_RUNTIME}
+   def review(self,*_args,**_kwargs):
+    self.telemetry_failures.append({
+        "event":"critic_completed","operation_key":"6"*64,
+        "error_type":"OSError","error_sha256":"7"*64})
+    return D.Critique("accept","bounded")
+  class Never:
+   def __getattr__(self,_name):
+    def called(*_args,**_kwargs):
+     raise AssertionError("dry run reached compute")
+    return called
+  with tempfile.TemporaryDirectory() as t:
+   config=dataclasses.replace(self.portfolio_config(
+       Path(t),[self.portfolio_record(rank=1,budget=1)]),max_iterations=1)
+   result=D.run_controller(config,planner=Planner(),critic=Critic(),
+                           screener=Never(),lease=Never())
+  row=result["iterations"][0]
+  self.assertEqual(row["status"],"dry_run_authorized")
+  self.assertTrue(row["visibility_degraded"])
+  self.assertEqual({item["event"] for item in row["telemetry_failures"]},
+                   {"planner_completed","critic_completed"})
+  self.assertEqual({item["event"] for item in result["visibility_degraded"]},
+                   {"planner_completed","critic_completed"})
+ def test_v16_telemetry_terminal_recovers_checkpoint_and_rederives_refusal(self):
+  outer=self
+  class StopAfterRefusal(BaseException): pass
+  class LegacyThenCurrentPlanner:
+   def __init__(self): self.plan_calls=0; self.resume_calls=0
+   def attest(self): return {**D.SOL,"runtime":RUNTIME}
+   def plan(self,*,context,workspace,checkpoint_path):
+    self.plan_calls+=1
+    assignment=D.AuthoringAssignment(**context["authoring_assignment"])
+    outer._write_planner_artifacts(
+        workspace,assignment,mode="underestimated_diff_v16")
+    D._seal_planner_actor_checkpoint(
+        workspace,checkpoint_path,context=context,
+        result={"returncode":0,"stdout_sha256":"a"*64,
+                "stderr_sha256":"b"*64})
+    raise D.discovery_telemetry.TelemetryError(
+        "telemetry result contains a non-allowlisted field")
+   def resume_plan(self,*,context,workspace,checkpoint_path):
+    self.resume_calls+=1
+    checkpoint=D._reopen_planner_actor_checkpoint(
+        workspace,checkpoint_path,context=context)
+    self.assert_checkpoint_rc=checkpoint["result"]["returncode"]
+    return D._load_plan(
+        workspace/"plan.json",workspace,
+        assignment=D.AuthoringAssignment(**context["authoring_assignment"]))
+  class Never:
+   def attest(self): return {**D.FABLE5_CRITIC,"runtime":CLAUDE_RUNTIME}
+   def __getattr__(self,_name):
+    def called(*_args,**_kwargs):
+     raise AssertionError("planner refusal reached critic or compute")
+    return called
+  with tempfile.TemporaryDirectory() as t:
+   root=Path(t); planner=LegacyThenCurrentPlanner(); never=Never()
+   config=dataclasses.replace(
+       self.portfolio_config(root,[self.portfolio_record(
+           hypothesis_id="akh-v2-q5-type-specific-dequant",rank=1,budget=3)]),
+       max_iterations=1)
+   with self.assertRaises(D.discovery_telemetry.TelemetryError):
+    D.run_controller(config,planner=planner,critic=never,
+                     screener=never,lease=never)
+   crashed=json.loads((root/"state.json").read_text())
+   self.assertEqual(crashed["planning"]["failure"],{
+       "type":"TelemetryError",
+       "message":"telemetry result contains a non-allowlisted field"})
+   original_save=D.DurableState.save
+   def stop_after_refusal(store,state,phase):
+    original_save(store,state,phase)
+    if phase == "planner_refused": raise StopAfterRefusal(phase)
+   with patch.object(D.DurableState,"save",new=stop_after_refusal), \
+        self.assertRaises(StopAfterRefusal):
+    D.run_controller(config,planner=planner,critic=never,
+                     screener=never,lease=never)
+   result=json.loads((root/"state.json").read_text())
+  self.assertEqual((planner.plan_calls,planner.resume_calls),(1,1))
+  self.assertEqual(planner.assert_checkpoint_rc,0)
+  self.assertEqual(result["next"],2)
+  self.assertEqual(result.get("planner_provider_attempt",0),0)
+  self.assertEqual(result["portfolio_authoring_failures"],{
+      "akh-v2-q5-type-specific-dequant":1})
+  self.assertNotIn("portfolio_terminals",result)
+  row=result["iterations"][0]
+  self.assertEqual(row["status"],"planner_refused")
+  self.assertEqual(row["refusal_type"],"planner_output_refusal")
+  self.assertFalse(row["scientific_budget_spent"])
+  self.assertEqual(row["portfolio_hypothesis_id"],
+                   "akh-v2-q5-type-specific-dequant")
+  self.assertTrue(row["planner_checkpoint_reused"])
+  self.assertEqual(row["telemetry_recovery"]["disposition"],
+                   "resume_checkpoint_and_rederive_refusal")
+  self.assertIn("14 < 15",row["reason"])
+ def test_v16_telemetry_terminal_refuses_missing_or_changed_checkpoint_closure(self):
+  # The legacy exception name alone is not recovery authority.  The private
+  # rc=0 checkpoint must still bind the exact actor artifact closure.
+  for mutation in ("missing_checkpoint","extra_artifact","hardlink_checkpoint",
+                   "result_rc1","extra_result","missing_stdout","bad_stdout",
+                   "extra_top_level","missing_top_level"):
+   with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as t:
+    root=Path(t); config=D.ControllerConfig(root,1,dry_run=True)
+    context=D._context({"iterations":[]},D._tracker(D.DurableState(root)),1,
+                       config,None)
+    planning=D._planning_intent(config,turn=1,context=context,
+                                portfolio_binding=None)
+    workspace=Path(planning["workspace"])
+    D._prepare_planner_workspace(config,planning["operation_key"],workspace)
+    (workspace/"plan.json").write_text("{}")
+    checkpoint=workspace.parent/"actor-result.json"
+    D._seal_planner_actor_checkpoint(
+        workspace,checkpoint,context=context,
+        result={"returncode":0,"stdout_sha256":"a"*64,
+                "stderr_sha256":"b"*64})
+    planning["phase"]="actor_entering"
+    planning["failure"]={"type":"TelemetryError","message":
+        "telemetry result contains a non-allowlisted field"}
+    if mutation == "missing_checkpoint": checkpoint.unlink()
+    elif mutation == "extra_artifact": (workspace/"extra").write_text("x")
+    elif mutation == "hardlink_checkpoint":
+     os.link(checkpoint,workspace.parent/"checkpoint-alias")
+    else:
+     value=json.loads(checkpoint.read_text())
+     if mutation == "result_rc1": value["result"]["returncode"]=1
+     elif mutation == "extra_result": value["result"]["unexpected"]=True
+     elif mutation == "missing_stdout": value["result"].pop("stdout_sha256")
+     elif mutation == "bad_stdout": value["result"]["stdout_sha256"]="bad"
+     elif mutation == "extra_top_level": value["unexpected_top_level"]=True
+     else: value.pop("assignment_sha256")
+     value["receipt_sha256"]=D._sha({
+         key:item for key,item in value.items() if key != "receipt_sha256"})
+     checkpoint.write_text(json.dumps(value))
+    state={"schema":D.SCHEMA,"authority":D.AUTHORITY,"roster":D.sealed_roster(),
+           "iterations":[],"next":1,"complete":False,"planning":planning}
+    store=D.DurableState(root); store.save(state,"fixture")
+    class Planner:
+     def attest(self): return {**D.SOL,"runtime":RUNTIME}
+    class Never:
+     def attest(self): return {**D.FABLE5_CRITIC,"runtime":CLAUDE_RUNTIME}
+    with self.assertRaises(D.DiscoveryControllerError):
+     D.run_controller(config,planner=Planner(),critic=Never(),
+                      screener=Never(),lease=Never())
+ def test_valid_plan_and_accepted_critic_checkpoints_skip_actors_on_restart(self):
+  class StopAfterSave(BaseException): pass
+  class CountingCritic(FakeCritic):
+   def __init__(self): super().__init__(["accept"]); self.calls=0
+   def review(self,*args,**kwargs):
+    self.calls+=1; return super().review(*args,**kwargs)
+  for crash_phase in ("planner_checkpointed","critic_checkpointed"):
+   with self.subTest(crash_phase=crash_phase), tempfile.TemporaryDirectory() as t, \
+        patch.object(D.source_candidate,"SourcePatchManifest",Manifest), \
+        patch.object(D,"_write_projection"):
+    root=Path(t); planner=FakePlanner(); critic=CountingCritic()
+    screen=FakeScreen([.01]); original=D.DurableState.save; crashed=[False]
+    def save_then_stop(store,state,phase):
+     original(store,state,phase)
+     if phase == crash_phase and not crashed[0]:
+      crashed[0]=True; raise StopAfterSave(phase)
+    with patch.object(D.DurableState,"save",new=save_then_stop), \
+         self.assertRaises(StopAfterSave):
+     D.run_controller(self.cfg(root,1),planner=planner,critic=critic,
+                      screener=screen,lease=Lease())
+    done=D.run_controller(self.cfg(root,1),planner=planner,critic=critic,
+                          screener=screen,lease=Lease())
+    self.assertTrue(done["complete"]); self.assertEqual(len(planner.calls),1)
+    self.assertEqual(critic.calls,1); self.assertEqual(screen.calls,1)
+ def test_late_source_candidate_error_remains_raw_and_ambiguous(self):
+  class LateSourceFailure(FakeScreen):
+   def screen(self,*_args):
+    self.calls+=1
+    raise D.source_candidate.SourceCandidateError("late non-planner failure")
+  with tempfile.TemporaryDirectory() as t, \
+       patch.object(D.source_candidate,"SourcePatchManifest",Manifest), \
+       patch.object(D,"_write_projection"):
+   root=Path(t); screen=LateSourceFailure([])
+   with self.assertRaisesRegex(D.source_candidate.SourceCandidateError,
+                               "late non-planner failure"):
+    D.run_controller(self.cfg(root,1),planner=FakePlanner(),
+                     critic=FakeCritic(["accept"]),screener=screen,lease=Lease())
+   state=json.loads((root/"out"/"state.json").read_text())
+   self.assertIn("inflight",state); self.assertNotIn("pending",state)
+   self.assertEqual(state["inflight"]["exception"]["type"],
+                    "SourceCandidateError")
  def test_load_plan_binds_exact_flat_manifest_symbols_before_critic(self):
   with tempfile.TemporaryDirectory() as t:
    root=Path(t); relative="ggml/src/ggml-cuda/vecdotq.cuh"
@@ -462,6 +1258,21 @@ class Tests(unittest.TestCase):
   with tempfile.TemporaryDirectory() as t, patch.object(D.source_candidate,"SourcePatchManifest",Manifest), patch.object(D,"_write_projection"):
    root=Path(t); p=FakePlanner(); r=D.run_controller(self.cfg(root,1),planner=p,critic=FakeCritic(["accept"]),screener=Bad([]),lease=Lease()); again=D.run_controller(self.cfg(root,1),planner=p,critic=FakeCritic(["accept"]),screener=Bad([]),lease=Lease())
    self.assertEqual(r["iterations"][0]["status"],"screen_refused"); self.assertEqual(again,r); self.assertEqual(len(p.calls),1)
+ def test_post_proof_transport_interruption_pauses_and_resumes_same_candidate(self):
+  class Interrupted(FakeScreen):
+   def screen(self,*args):
+    self.calls+=1
+    if self.calls==1:
+     raise D.ResumableScreenInterruption("runner parser exit 2")
+    return D.SealedScreen("receipt",H[:-1]+"1",.01,"candidate",H,H,H)
+  with tempfile.TemporaryDirectory() as t, patch.object(D.source_candidate,"SourcePatchManifest",Manifest), patch.object(D,"_write_projection"):
+   root=Path(t); planner=FakePlanner(); critic=FakeCritic(["accept"]); screen=Interrupted([])
+   first=D.run_controller(self.cfg(root,1),planner=planner,critic=critic,screener=screen,lease=Lease())
+   self.assertEqual(first["next"],1); self.assertEqual(first["iterations"],[])
+   self.assertTrue(first["inflight"]["interruption"]["resumable"])
+   second=D.run_controller(self.cfg(root,1),planner=planner,critic=critic,screener=screen,lease=Lease())
+   self.assertEqual(second["iterations"][0]["status"],"candidate")
+   self.assertEqual(len(planner.calls),1); self.assertEqual(screen.calls,2)
  def test_planner_result_field_is_impossible(self):
   with patch.object(D.source_candidate,"SourcePatchManifest",Manifest):
    with self.assertRaisesRegex(D.DiscoveryControllerError,"result"):
@@ -485,19 +1296,11 @@ class Tests(unittest.TestCase):
    candidate_identity=build.candidate_identity; anchor_identity=build.anchor_identity; material={"manifest_sha256":H,"candidate":candidate_identity,"anchor":anchor_identity,"workload_sha256":H,"correctness":{"file_sha256":source_hash,"native_sha256":H},"attribution":{"file_sha256":dispatch_hash,"native_sha256":H}}
    hashed={**material,"candidate":candidate_identity.__dict__,"anchor":anchor_identity.__dict__}; bundle=D.gpu_source_proofs.GpuSourceProofBundle(**material,bundle_sha256=D.gpu_source_proofs._hash(hashed))
    screen=D.GpuSourceScreener(build_source=lambda *_: events.append("build") or build,proof_bundle=lambda *_: events.extend(["source","dispatch"]) or bundle,args_factory=lambda *_:args)
-   with patch.object(D.autokernel_progression,"_gpu_screen",return_value={"stage":"candidate"}):
-    got=screen.screen(item,object(),{})
-   self.assertEqual(events,["build","source","dispatch","runner"]); self.assertEqual(got.dispatch_proof_sha256,dispatch_hash)
-   (root/"screen"/"live-governance.json").unlink()
-   with patch.object(D.autokernel_progression,"_gpu_screen",return_value={"stage":"candidate"}), self.assertRaisesRegex(D.DiscoveryControllerError,"governance"):
+   with self.assertRaisesRegex(
+           D.DiscoveryControllerError, "separate target-runtime stage"):
     screen.screen(item,object(),{})
-   wrong_phase={**phase,"outer_claim_id":"akd-wrong"}; wrong_opened={"claim_id":"akd-wrong"}
-   wrong={**raw,"device_claim_open":wrong_opened,"device_claim_borrowed_phase_end":wrong_phase}; wrong.pop("result_sha256"); wrong["result_sha256"]=D.gpu_source_proofs._hash(wrong)
-   (root/"screen"/"result.json").write_text(json.dumps(wrong))
-   (root/"screen"/"live-governance.json").write_text(json.dumps({**governance,"device_claim_open":wrong_opened,"device_claim_borrowed_phase_end":wrong_phase}))
-   run.side_effect=lambda _args: wrong
-   with patch.object(D.autokernel_progression,"_gpu_screen",return_value={"stage":"candidate"}), self.assertRaisesRegex(D.DiscoveryControllerError,"exact outer claim"):
-    screen.screen(item,object(),{})
+   self.assertEqual(events,["build","source","dispatch"])
+   run.assert_not_called()
  def test_lease_wait_is_durable_without_spending_iteration(self):
   class Wait:
    def admit(self,item,*,operation_key): return {"admitted":False,"reason":"CPU window busy","operation_key":operation_key}

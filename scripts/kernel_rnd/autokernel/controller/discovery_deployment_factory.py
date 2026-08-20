@@ -9,11 +9,13 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 import argparse
 import base64
+import contextlib
 import csv
 import hashlib
 import json
 import os
 import re
+import stat
 import subprocess
 from pathlib import Path
 from types import MappingProxyType
@@ -21,7 +23,7 @@ from typing import Any, Callable, Mapping
 
 from .. import schemas, source_candidate
 from .. import hypothesis_portfolio
-from ..execution import inference_window, device_sampler, worktree
+from ..execution import inference_window, device_sampler, t0_provider, worktree
 from ..execution import cpu_region_claim
 from ..execution import instrument_integrity
 from ..evaluator import integrity
@@ -63,7 +65,8 @@ class SourceBuilderBinding:
 
 @dataclass(frozen=True)
 class EvidencePlanBinding:
-    build: Callable[[controller.PlannedCandidate, controller.GpuSourceBuild, "ExperimentTemplate"], evidence.GpuSourceEvidencePlan]
+    build: Callable[[controller.PlannedCandidate, controller.GpuSourceBuild,
+                     "ExperimentTemplate", int], evidence.GpuSourceEvidencePlan]
 
 @dataclass(frozen=True)
 class RunnerArgsBinding:
@@ -115,7 +118,77 @@ class ExperimentTemplate:
         if (not isinstance(markers, list) or not markers
                 or not all(isinstance(value, str) and value for value in markers)):
             raise DeploymentFactoryError("template kernel literal markers are malformed")
+        variants = self.semantics.get("candidate_dispatch_variants")
+        if variants is not None:
+            # The only topology-changing template is the reviewed odd-GQA7
+            # pair+tail strategy.  The planner still has to bind the one exact
+            # observed anchor row, but it never authors the candidate route,
+            # call count, or geometry.  Those are derived here from the sealed
+            # 7 = 3*2 + 1 partition contract.
+            if (self.template_id != "cuda-fattn-tile-v1"
+                    or not isinstance(variants, Mapping)
+                    or set(variants) != {"gqa7_bulk_pairs", "gqa7_scalar_tail"}
+                    or len(expected_rows) != 1
+                    or len(self.dispatch.anchor_exact) != 1):
+                raise DeploymentFactoryError(
+                    "candidate dispatch variants are outside reviewed GQA7 authority")
+            expected = expected_rows[0]
+            anchor = self.dispatch.anchor_exact[0]
+            if (expected.route_id != anchor.signature
+                    or (expected.calls, expected.grid, expected.workgroup,
+                        expected.lds_bytes) !=
+                       (anchor.calls, anchor.grid, anchor.workgroup,
+                        anchor.lds_bytes)
+                    or re.fullmatch(anchor.kernel_pattern,
+                                    expected.kernel_name) is None):
+                raise DeploymentFactoryError(
+                    "GQA7 planner dispatch differs from reviewed anchor authority")
+            old = "<64, 64, 2, 1, false>"
+            new = "<64, 64, 1, 2, false>"
+            if expected.kernel_name.count(old) != 1:
+                raise DeploymentFactoryError(
+                    "GQA7 anchor kernel literal cannot derive reviewed bulk route")
+            bulk_name = expected.kernel_name.replace(old, new)
+            derived = {
+                "gqa7_bulk_pairs": (bulk_name, anchor.grid * 3 // 7, 2),
+                "gqa7_scalar_tail": (expected.kernel_name,
+                                      anchor.grid // 7, 1),
+            }
+            if anchor.grid % 7:
+                raise DeploymentFactoryError(
+                    "GQA7 anchor grid cannot be partitioned into 3 pairs plus tail")
+            candidate = []
+            for name in ("gqa7_bulk_pairs", "gqa7_scalar_tail"):
+                row = variants[name]
+                raw_name, grid, ncols2 = derived[name]
+                expected_row = {
+                    "kernel_name": raw_name.split("(", 1)[0],
+                    "calls": anchor.calls,
+                    "grid": grid,
+                    "workgroup": anchor.workgroup,
+                    "lds_bytes": anchor.lds_bytes,
+                    "gqa_ratio": 7,
+                    "head_size": 64,
+                    "ncols2": ncols2,
+                }
+                if any(row.get(key) != value
+                       for key, value in expected_row.items()):
+                    raise DeploymentFactoryError(
+                        "GQA7 candidate variant differs from relational authority")
+                candidate.append(evidence.ExactDispatch(
+                    signature=f"{self.template_id}.candidate.{name}",
+                    kernel_pattern="^" + re.escape(raw_name) + "$",
+                    calls=anchor.calls, grid=grid,
+                    workgroup=anchor.workgroup, lds_bytes=anchor.lds_bytes,
+                    blocks_per_call=grid // anchor.workgroup))
+            return evidence.DispatchContract(
+                candidate_exact=tuple(candidate),
+                anchor_exact=self.dispatch.anchor_exact,
+                candidate_forbidden=self.dispatch.candidate_forbidden,
+                anchor_forbidden=self.dispatch.anchor_forbidden,
+                invariants=self.dispatch.invariants)
         candidate = []
+        selected_anchors: list[evidence.ExactDispatch] = []
         for index, expected in enumerate(expected_rows):
             anchor = {row.signature: row for row in self.dispatch.anchor_exact}.get(
                 expected.route_id)
@@ -142,11 +215,18 @@ class ExperimentTemplate:
                 calls=expected.calls, grid=expected.grid, workgroup=expected.workgroup,
                 lds_bytes=expected.lds_bytes,
                 blocks_per_call=expected.grid // expected.workgroup))
+            selected_anchors.append(anchor)
+        selected_signatures = {row.signature for row in selected_anchors}
+        structural_only = tuple(evidence.InvariantDispatch(
+            signature=f"{row.signature}.structural",
+            kernel_pattern=row.kernel_pattern)
+            for row in self.dispatch.anchor_exact
+            if row.signature not in selected_signatures)
         return evidence.DispatchContract(candidate_exact=tuple(candidate),
-            anchor_exact=self.dispatch.anchor_exact,
+            anchor_exact=tuple(selected_anchors),
             candidate_forbidden=self.dispatch.candidate_forbidden,
             anchor_forbidden=self.dispatch.anchor_forbidden,
-            invariants=self.dispatch.invariants)
+            invariants=(*self.dispatch.invariants, *structural_only))
 
 
 @dataclass(frozen=True)
@@ -236,6 +316,8 @@ def _execution_module_identity() -> dict[str, dict[str, str]]:
     modules = {
         "deployment_factory": Path(__file__).resolve(strict=True),
         "discovery_controller": Path(controller.__file__).resolve(strict=True),
+        "hypotheses": Path(controller.hypotheses.__file__).resolve(strict=True),
+        "do_not_repeat": Path(controller.do_not_repeat.__file__).resolve(strict=True),
         "discovery_telemetry": Path(discovery_telemetry.__file__).resolve(strict=True),
         "gpu_discovery_runner": Path(controller.gpu_discovery.__file__).resolve(strict=True),
         "gpu_source_adapter": Path(gpu_source_adapter.__file__).resolve(strict=True),
@@ -248,6 +330,7 @@ def _execution_module_identity() -> dict[str, dict[str, str]]:
         "worktree": Path(worktree.__file__).resolve(strict=True),
         "source_candidate": Path(source_candidate.__file__).resolve(strict=True),
         "instrument_integrity": Path(instrument_integrity.__file__).resolve(strict=True),
+        "t0_provider": Path(t0_provider.__file__).resolve(strict=True),
         "evaluator_integrity": Path(integrity.__file__).resolve(strict=True),
         "gpu_source_evidence": Path(evidence.__file__).resolve(strict=True),
         "gpu_source_proofs": Path(gpu_source_proofs.__file__).resolve(strict=True),
@@ -281,18 +364,38 @@ _STATIC_IDS = MappingProxyType({
 })
 _LOAD_PROFILE_ID = "mi210-qwen05b-tg128-fallback-only-v1"
 _FALLBACK_ONLY_HEADROOM_SENTINEL = 1 << 60
-_ROCPROF_V1 = Path(
-    "/mnt/raid0/llm/autokernel/tools/rocprof6.2-extracted/opt/rocm-6.2.0/bin/rocprof")
-_ROCPROF_V1_SHA256 = "585e3e6034e3c0bd9e591f0aa72f6156686680911a0b47ed4ece3c9a8372a4b2"
-_ROCPROF_V1_INPUT = b"pmc:\n\ngpu:\nrange:\nkernel:\n"
-_ROCPROF_V1_PREFIX = ("--tool-version", "1", "--timestamp", "on",
-                       "--ctx-wait", "on", "--heartbeat", "30", "-i")
+_ROCPROF_V3_SDK = Path("/mnt/raid0/llm/tools/rocprofiler-sdk-6.2.0-66/opt/rocm-6.2.0")
+_ROCPROF_V3 = _ROCPROF_V3_SDK / "bin/rocprofv3"
+_ROCPROF_V3_SHA256 = "c753449eb635ecb4d8be794e8b66439b200b252c157555920d260df5cbac767a"
+_ROCPROF_V3_PACKAGE = Path(
+    "/mnt/raid0/llm/tools/rocprofiler-sdk-6.2.0-66/"
+    "rocprofiler-sdk_0.4.0-66~20.04_amd64.deb")
+_ROCPROF_V3_PACKAGE_SHA256 = "e22b4f30a45c18b9e90fe1abd032c102e1c706d119084d1ca8a48bcd5a1f7baa"
+_ROCPROF_V3_PYTHON = evidence.ROCPROF_V3_PYTHON
+_ROCPROF_V3_PYTHON_SHA256 = "efb29ce53d36ebaeee80e3aa44fd6c7f9d71bbded5fe1665240b2ed8ecaeee0e"
+_ROCPROF_V3_SDK_LIB = _ROCPROF_V3_SDK / "lib/librocprofiler-sdk.so.0.4.0"
+_ROCPROF_V3_SDK_LIB_SHA256 = "44d8548b9e31c7ab4ecad3023878d9b9d8bcf62b69350ba3837c01270d45639c"
+_ROCPROF_V3_TOOL_LIB = (
+    _ROCPROF_V3_SDK / "lib/rocprofiler-sdk/librocprofiler-sdk-tool.so.0.4.0")
+_ROCPROF_V3_TOOL_LIB_SHA256 = "5da10b776a105ab4dc013d5bbee606dd74855494224d4448c77e37dbcaa72670"
+_ROCPROF_V3_OLD_LIB = Path(
+    "/mnt/raid0/llm/tools/rocm-profilers-6.2/opt/rocm-6.2.0/lib")
+_ROCPROF_V3_AQL_LIB = _ROCPROF_V3_OLD_LIB / "libhsa-amd-aqlprofile64.so.1.0.60200"
+_ROCPROF_V3_AQL_LIB_SHA256 = "2b984d7f29b4477a80a056e4e343815592c4fa4b23623b8bd406ea04ae6797ed"
+_ROCPROF_V3_PCI_LIB_DIR = Path(
+    "/mnt/raid0/llm/tools/rocm-profilers-6.2/usr/lib/x86_64-linux-gnu")
+_ROCPROF_V3_PCI_LIB = _ROCPROF_V3_PCI_LIB_DIR / "libpciaccess.so.0.11.1"
+_ROCPROF_V3_PCI_LIB_SHA256 = "9b83c428c743cd3ce54a03d5eb6bc8879d272c2cee51e0b7094364ac8d8f7c8a"
+_ROCPROF_V3_HSA_LIB = Path("/opt/rocm/lib/libhsa-runtime64.so.1.14.60200")
+_ROCPROF_V3_HSA_LIB_SHA256 = "013887a0ee59a2a088c2b95875cae3f48d2d661b4a6badcaa0541f116619c068"
+_ROCPROF_V3_REGISTER_LIB = Path("/opt/rocm/lib/librocprofiler-register.so.0.4.0")
+_ROCPROF_V3_REGISTER_LIB_SHA256 = "4f095b333e6f4cb123f4ba2f59850304f51387a254acba89d457a6ff6a76dfc4"
 _CORRECTNESS_SUITE_SEED = 2026081301
 _INSTRUMENT_PATH = Path("/mnt/raid0/llm/llama.cpp-experimental")
-_INSTRUMENT_BRANCH = "codex/autokernel-ready-continue-instrument-20260814"
-_INSTRUMENT_COMMIT = "81bf32f11b4a421880e8f25faec3e4ba872363f0"
-_INSTRUMENT_DIFF_SHA256 = "3cf9178fcc00e8c1d3dfc0bfd6086edbff6a6eb6ac528aa4d88b23843b5599c2"
-_INSTRUMENT_TEST_SOURCE_SHA256 = "6acd4bf95594d5797a54c912630ec56d3e89fcb3a3a43ca96f95152d77589db4"
+_INSTRUMENT_BRANCH = "codex/autokernel-gqa7-correctness-instrument-20260818"
+_INSTRUMENT_COMMIT = "5bbcc5498e4732162356953b7be96a53073a6706"
+_INSTRUMENT_DIFF_SHA256 = "87122b4589d434c4275755640fbe2094d07ae4216315345bac16d68bed9703e0"
+_INSTRUMENT_TEST_SOURCE_SHA256 = "7571a536ba1305ad078948de2920aea33f9261ab9bb1b5714e55bd485ff335e9"
 _READY_CONTINUE_CONTRACT_SHA256 = "1411f5e81c1b0b3db6952523922c672d88a78aaff5945865c9ccc2b4fc5fd99f"
 _INSTRUMENT_BENCH_SOURCE_SHA256 = "b118e62cf452aa351a93f864bf4822d157dfc4af309f97b5f64cb6d1f31d2e07"
 _INSTRUMENT_BENCH_README_SHA256 = "6429015fe5025d35b65e6271520ea668267910f82922e618b27b80c909cec33f"
@@ -338,6 +441,12 @@ _PROFILE_TRACE_RECEIPT_SHA256 = "20742be4a69abf5bb70c228660ff0629bf416ed4452c4f6
 _PROFILE_TRACE_CSV = Path(
     "/mnt/raid0/llm/autokernel/screens/ak-gpu-qwen05b-tg128-rocprof-attribution-20260813/timestamps.csv")
 _PROFILE_TRACE_CSV_SHA256 = "a11bc20a03dfd5ca157990c1766ebbb5edb70a5c036d73d85d806e4f39a222a8"
+_PROFILE_V3_TRACE_CSV = Path(
+    "/mnt/raid0/llm/autokernel/diagnostics/"
+    "v13-rocprofv3-anchor-tg128-20260819/raw/v13_sdk_kernel_trace.csv")
+_PROFILE_V3_TRACE_CSV_SHA256 = "fb818d7b135becc5bfd773c1075cbdea91809d1f5c22ed8d8817560678b03c69"
+_PROFILE_V3_AGENT_CSV = _PROFILE_V3_TRACE_CSV.with_name("v13_sdk_agent_info.csv")
+_PROFILE_V3_AGENT_CSV_SHA256 = "50189a58f15ffb0008e840a8a6d18db1a88f73e3492b686b167d773de6b9323e"
 _PORTFOLIO_SEMANTIC_SHA256 = "c894690f56041ae355a50fffe23688abed1fa3eea9df4b7201faee2e565b4e78"
 _PORTFOLIO_FILE_SHA256 = "f9db2032d14e77f013e1a356d94a7cc7c5d0bc0d3c035368832066c9dfb66eb0"
 _PORTFOLIO_CONTRACT_SHA256 = "96f207733e5fc27a722763cf1b3c542f327eb70d41e04b9948aaec086b3facd4"
@@ -666,32 +775,76 @@ def _production_runtime_snapshot(root: Path) -> tuple[tuple[evidence.BoundInputF
     return tuple(files[path] for path in sorted(files)), semantics
 
 
-def _rocprof_v1_policy(config: deployment.DiscoveryDeployment) -> tuple[
-        evidence.BoundInputFile, evidence.BoundInputFile]:
-    profiler = _bound(_ROCPROF_V1, "executable")
-    if profiler.sha256 != _ROCPROF_V1_SHA256:
-        raise DeploymentFactoryError("fixed rocprof-v1 executable digest changed")
+def _checked_profiler_bound(path: Path, role: str, expected: str,
+                            ) -> evidence.BoundInputFile:
+    value = _bound(path, role)
+    if value.sha256 != expected:
+        raise DeploymentFactoryError(f"fixed rocprofv3 {role} digest changed")
+    return value
+
+
+def _rocprof_v3_policy(config: deployment.DiscoveryDeployment) -> tuple[
+        evidence.BoundInputFile, ...]:
+    """Seal the official SDK/package and every non-system mapped DSO."""
+    python = _checked_profiler_bound(
+        _ROCPROF_V3_PYTHON, "executable", _ROCPROF_V3_PYTHON_SHA256)
+    wrapper = _checked_profiler_bound(
+        _ROCPROF_V3, "profiler_wrapper", _ROCPROF_V3_SHA256)
+    package = _checked_profiler_bound(
+        _ROCPROF_V3_PACKAGE, "profiler_package", _ROCPROF_V3_PACKAGE_SHA256)
+    mapped = (
+        _checked_profiler_bound(
+            _ROCPROF_V3_SDK_LIB, "profiler_sdk_library",
+            _ROCPROF_V3_SDK_LIB_SHA256),
+        _checked_profiler_bound(
+            _ROCPROF_V3_TOOL_LIB, "profiler_sdk_tool_library",
+            _ROCPROF_V3_TOOL_LIB_SHA256),
+        _checked_profiler_bound(
+            _ROCPROF_V3_AQL_LIB, "profiler_aqlprofile_library",
+            _ROCPROF_V3_AQL_LIB_SHA256),
+        _checked_profiler_bound(
+            _ROCPROF_V3_HSA_LIB, "profiler_hsa_runtime_library",
+            _ROCPROF_V3_HSA_LIB_SHA256),
+        _checked_profiler_bound(
+            _ROCPROF_V3_REGISTER_LIB, "profiler_register_library",
+            _ROCPROF_V3_REGISTER_LIB_SHA256),
+        _checked_profiler_bound(
+            _ROCPROF_V3_PCI_LIB, "profiler_libpci_library",
+            _ROCPROF_V3_PCI_LIB_SHA256),
+    )
     root = config.operations_root / "config"
     root.mkdir(parents=True, exist_ok=True)
-    policy_path = root / "rocprof-v1-timestamps.txt"
-    if policy_path.exists():
-        if policy_path.is_symlink() or policy_path.read_bytes() != _ROCPROF_V1_INPUT:
-            raise DeploymentFactoryError("rocprof-v1 input policy differs from checked-in bytes")
-    else:
-        policy_path.write_bytes(_ROCPROF_V1_INPUT)
-    return profiler, evidence.BoundInputFile(
-        "timestamp_input", policy_path.resolve(),
-        hashlib.sha256(_ROCPROF_V1_INPUT).hexdigest())
+    manifests = []
+    for role, prefix, name in (
+        ("profiler_runtime_manifest", _ROCPROF_V3_SDK,
+         "rocprofv3-sdk-closure.json"),
+        ("profiler_aqlprofile_manifest", _ROCPROF_V3_OLD_LIB,
+         "rocprofv3-aqlprofile-closure.json"),
+        ("profiler_libpci_manifest", _ROCPROF_V3_PCI_LIB_DIR,
+         "rocprofv3-libpci-closure.json"),
+    ):
+        try:
+            snapshot = evidence.profiler_prefix_snapshot(prefix.resolve(strict=True))
+        except (OSError, evidence.EvidenceProducerError) as exc:
+            raise DeploymentFactoryError(
+                f"cannot snapshot {role}") from exc
+        path, digest = _json_artifact(root / name, snapshot)
+        manifests.append(evidence.BoundInputFile(role, path, digest))
+    return (python, wrapper, package, *manifests, *mapped)
 
 
 def _template_registry() -> ExperimentTemplateRegistry:
     if (_digest_regular(_PROFILE_TRACE_RECEIPT, "reviewed profile receipt")
             != _PROFILE_TRACE_RECEIPT_SHA256
             or _digest_regular(_PROFILE_TRACE_CSV, "reviewed profile timestamp CSV")
-            != _PROFILE_TRACE_CSV_SHA256):
+            != _PROFILE_TRACE_CSV_SHA256
+            or _digest_regular(_PROFILE_V3_TRACE_CSV, "reviewed v3 profile trace")
+            != _PROFILE_V3_TRACE_CSV_SHA256
+            or _digest_regular(_PROFILE_V3_AGENT_CSV, "reviewed v3 agent trace")
+            != _PROFILE_V3_AGENT_CSV_SHA256):
         raise DeploymentFactoryError("reviewed real-trace template authority changed")
     mmvq_pattern = lambda type_id, flags: (
-        rf"^void mul_mat_vec_q<\(ggml_type\){type_id}, 1, {flags}>\(.*\) \[clone \.kd\]$")
+        rf"^void mul_mat_vec_q<\(ggml_type\){type_id}, 1, {flags}>\(.*\)$")
     mmvq_anchor = (
         (mmvq_pattern(6, "true, true"), 6063, 57344, 128, 1024),
         (mmvq_pattern(6, "true, true"), 4644, 8192, 128, 1024),
@@ -703,27 +856,94 @@ def _template_registry() -> ExperimentTemplateRegistry:
         (mmvq_pattern(8, "false, true"), 129, 9723904, 256, 3072),
     )
     fattn_tile_anchor = ((
-        r"^void flash_attn_tile<64, 64, 2, 1, false>\(.*\) \[clone \.kd\]$",
+        r"^void flash_attn_tile<64, 64, 2, 1, false>\(.*\)$",
         3096, 7168, 64, 5120),)
     fattn_common_anchor = (*fattn_tile_anchor, (
-        r"^void flash_attn_combine_results<64>\(.*\) \[clone \.kd\]$",
+        r"^void flash_attn_combine_results<64>\(.*\)$",
         3096, 896, 64, 512))
     quantize_anchor = (
-        (r"^quantize_q8_1\(.*\) \[clone \.kd\]$", 15609, 1024, 256, 0),
-        (r"^quantize_q8_1\(.*\) \[clone \.kd\]$", 3096, 5120, 256, 0),
+        (r"^quantize_q8_1\(.*\)$", 15609, 1024, 256, 0),
+        (r"^quantize_q8_1\(.*\)$", 3096, 5120, 256, 0),
     )
     rope_anchor = (
-        (r"^void rope_neox<true, false, float, __half>\(.*\) \[clone \.kd\]$",
+        (r"^void rope_neox<true, false, float, __half>\(.*\)$",
          3096, 512, 256, 0),
-        (r"^void rope_neox<true, false, float, float>\(.*\) \[clone \.kd\]$",
+        (r"^void rope_neox<true, false, float, float>\(.*\)$",
          3096, 3584, 256, 0),
     )
     norm_anchor = ((
-        r"^void rms_norm_f32<256, true, false>\(.*\) \[clone \.kd\]$",
+        r"^void rms_norm_f32<256, true, false>\(.*\)$",
         6321, 256, 256, 512),)
     set_rows_anchor = ((
-        r"^void k_set_rows<float, long, __half>\(.*\) \[clone \.kd\]$",
+        r"^void k_set_rows<float, long, __half>\(.*\)$",
         3096, 256, 256, 0),)
+    target_runtime_screen = {
+        "stage_id": "target_runtime_graphs_on_screen",
+        "workload": "decode_tg128",
+        "hip_graphs": True,
+        "paired": True,
+        "decision_required": True,
+        "exact_invocations": 1,
+        "resume_without_repeat": True,
+        "authority": (
+            "whole-model reward direction only; graphs-off attribution remains "
+            "a separate route/device-time receipt"),
+    }
+    decision_evidence = {
+        "all_exact_routes_have_duration": True,
+        "exact_attribution_gain_required": True,
+        "target_runtime_graphs_on_gain_required": True,
+        "combination": "conjunction",
+        "direction": "lower_exact_duration_and_higher_throughput",
+        "short_circuit_graphs_on_when_exact_nonpositive": True,
+    }
+    stage_fsm = {
+        "stages": [
+            "correctness", "candidate_attribution", "anchor_attribution",
+            "measurement_graphs_off_screen",
+            "target_runtime_graphs_on_screen"],
+        "crash_after_test_points": [
+            "correctness", "candidate_attribution", "anchor_attribution",
+            "measurement_graphs_off_screen",
+            "target_runtime_graphs_on_screen"],
+        "completed_stage_policy": "revalidate_receipt_and_reuse",
+        "first_incomplete_stage_policy": "execute_once",
+        "reject_identity_drift": True,
+        "attribution_arm_order_schedule": {
+            "counterbalanced": True,
+            "s1": ["candidate", "anchor"],
+            "s2": ["anchor", "candidate"],
+            "authority": "deployment+manifest keyed; S2 reverses S1",
+        },
+    }
+    gqa7_candidate_variants = {
+        "gqa7_bulk_pairs": {
+            "kernel_name": "void flash_attn_tile<64, 64, 1, 2, false>",
+            "calls": 3096, "grid": 3072, "workgroup": 64,
+            "lds_bytes": 5120, "gqa_ratio": 7, "head_size": 64,
+            "ncols2": 2,
+        },
+        "gqa7_scalar_tail": {
+            "kernel_name": "void flash_attn_tile<64, 64, 2, 1, false>",
+            "calls": 3096, "grid": 1024, "workgroup": 64,
+            "lds_bytes": 5120, "gqa_ratio": 7, "head_size": 64,
+            "ncols2": 1,
+        },
+    }
+    gqa7_correctness_cases = [
+        {"op": "FLASH_ATTN_EXT", "hsk": 64, "hsv": 64,
+         "gqa_ratio": 7, "query_tokens": 1, "kv": 128,
+         "mask": False, "expected_matches": 1,
+         "params_pattern": r"^hsk=64,hsv=64,nh=2,nr23=\[7,1\],kv=128,nb=1,mask=0,"},
+        {"op": "FLASH_ATTN_EXT", "hsk": 64, "hsv": 64,
+         "gqa_ratio": 7, "query_tokens": 1, "kv": 512,
+         "mask": True, "expected_matches": 1,
+         "params_pattern": r"^hsk=64,hsv=64,nh=2,nr23=\[7,1\],kv=512,nb=1,mask=1,"},
+        {"op": "FLASH_ATTN_EXT", "hsk": 64, "hsv": 64,
+         "gqa_ratio": 7, "query_tokens": 1, "kv": 2048,
+         "mask": True, "expected_matches": 1,
+         "params_pattern": r"^hsk=64,hsv=64,nh=2,nr23=\[7,1\],kv=2048,nb=1,mask=1,"},
+    ]
     families = (
         {"id": "cuda-fattn-v2", "path": "ggml/src/ggml-cuda/fattn.cu",
          "primary": "ggml_cuda_get_best_fattn_kernel",
@@ -837,7 +1057,7 @@ def _template_registry() -> ExperimentTemplateRegistry:
             for index, row in enumerate(family["anchor"]))
         templates[template_id] = ExperimentTemplate(
             template_id=template_id, target_surface="gpu_decode", target_symbol=family["primary"],
-            correctness_id="backend-ops-hip-v1", dispatch_id="decode-tg128-rocprof-v1",
+            correctness_id="backend-ops-hip-v1", dispatch_id="decode-tg128-rocprof-v3",
             dispatch=evidence.DispatchContract(candidate_exact=tuple(
                 replace(row, signature=row.signature.replace(".anchor.", ".candidate-seed."))
                 for row in anchor), anchor_exact=anchor),
@@ -855,10 +1075,38 @@ def _template_registry() -> ExperimentTemplateRegistry:
                            "receipt": str(_PROFILE_TRACE_RECEIPT),
                            "receipt_sha256": _PROFILE_TRACE_RECEIPT_SHA256,
                            "timestamp_csv": str(_PROFILE_TRACE_CSV),
-                           "timestamp_csv_sha256": _PROFILE_TRACE_CSV_SHA256},
+                           "timestamp_csv_sha256": _PROFILE_TRACE_CSV_SHA256,
+                           "v3_kernel_trace": str(_PROFILE_V3_TRACE_CSV),
+                           "v3_kernel_trace_sha256": _PROFILE_V3_TRACE_CSV_SHA256,
+                           "v3_agent_info": str(_PROFILE_V3_AGENT_CSV),
+                           "v3_agent_info_sha256": _PROFILE_V3_AGENT_CSV_SHA256,
+                           "cross_profiler_projection_sha256":
+                               "8bf84656cd12eecf8e9881fd0f2b6f9f8da7e4485a0a668dcb08065e930fbc54"},
                        "manual_replay_traces": [dict(row, file=path) for row in family["replays"]],
                        "planner_target_exclusions": list(
                            family.get("planner_target_exclusions", ())),
+                       "target_runtime_screen": target_runtime_screen,
+                       "stage_fsm": stage_fsm,
+                       "decision_evidence": decision_evidence,
+                       **({"candidate_dispatch_variants": gqa7_candidate_variants,
+                           "required_correctness_cases": gqa7_correctness_cases,
+                           "correctness_invocations": [
+                               {"invocation_id": "generic_flash_attn_ext",
+                                "case_set": "generic_flash_attn_ext_v1",
+                                "expected_cases": 2868,
+                                "required_cases": [],
+                                "environment_overrides": []},
+                               {"invocation_id": "odd_gqa7_d64_q1",
+                                "case_set": "odd_gqa7_d64_q1_v1",
+                                "expected_cases": len(gqa7_correctness_cases),
+                                "required_cases": gqa7_correctness_cases,
+                                "environment_overrides": [[
+                                    "AUTOKERNEL_CORRECTNESS_CASE_SET",
+                                    "odd_gqa7_d64_q1_v1"]]},
+                           ],
+                           "candidate_dispatch_authority":
+                               "derived_from_anchor_by_exact_7_equals_3x2_plus_1_partition"}
+                          if template_id == "cuda-fattn-tile-v1" else {}),
                        "dispatch_bounds": {"calls": [1, 20000], "grid": [64, 16777216],
                                            "workgroup": [64, 1024], "lds_bytes": [0, 131072],
                                            "kernel_name_fragments": list(family["markers"])}})
@@ -994,13 +1242,19 @@ def _normalized_template_surfaces(
 def _portfolio_dispatch_authority(
         templates: ExperimentTemplateRegistry,
         portfolio: hypothesis_portfolio.Portfolio) -> dict[str, list[dict[str, Any]]]:
-    """Bind eligible shorthand geometry to exact raw literals from the sealed CSV."""
+    """Bind eligible shorthand geometry to exact native rocprofv3 literals."""
     aggregates: dict[tuple[str, int, int, int], int] = {}
-    with _PROFILE_TRACE_CSV.open(newline="", encoding="utf-8") as handle:
-        for row in csv.DictReader(handle):
-            identity = (row["KernelName"], int(row["grd"]), int(row["wgr"]),
-                        int(row["lds"]))
-            aggregates[identity] = aggregates.get(identity, 0) + 1
+    dispatches = evidence._load_dispatches(
+        _PROFILE_V3_TRACE_CSV,
+        profiler_trace_schema_id=evidence.ROCPROF_V3_TRACE_ID,
+        expected_rows=59925)
+    evidence._load_rocprofv3_agent_info(
+        _PROFILE_V3_AGENT_CSV,
+        trace_agent_ids={int(row["agent_id"]) for row in dispatches})
+    for row in dispatches:
+        identity = (str(row["kernel"]), int(row["grid"]),
+                    int(row["workgroup"]), int(row["lds"]))
+        aggregates[identity] = aggregates.get(identity, 0) + 1
     result: dict[str, list[dict[str, Any]]] = {}
     for record in portfolio.eligible_hypotheses():
         template_id = record["current_bundle_eligibility"]["template_ids"][0]
@@ -1119,6 +1373,18 @@ def _instrument_review_receipt(config: deployment.DiscoveryDeployment) -> tuple[
             "source_sha256": _READY_CONTINUE_CONTRACT_SHA256,
             "instrument_commit": _INSTRUMENT_COMMIT,
         },
+        "backend_ops_property_capability": {
+            "schema": "epyc.autokernel.backend_ops_property_capability_source.v1",
+            "source": "tests/test-backend-ops.cpp",
+            "source_sha256": _INSTRUMENT_TEST_SOURCE_SHA256,
+            "suite_seed": discovery_static_registry._CORRECTNESS_CAPABILITY_SEED,
+            "argv_suffix": list(t0_provider.backend_ops_property_self_test_argv(
+                "test-backend-ops",
+                discovery_static_registry._CORRECTNESS_CAPABILITY_SEED)[1:]),
+            "expected_stderr": (
+                "AUTOKERNEL_PROPERTY_SELF_TEST suite_seed=2026081301 "
+                "sensitivity=1.000 specificity=1.000 planted=5 clean=5\n"),
+        },
     }
     body["receipt_sha256"] = schemas.content_hash(body)
     raw = (json.dumps(body, sort_keys=True, indent=2) + "\n").encode()
@@ -1137,39 +1403,212 @@ def static_template_registry_sha256() -> str:
     return _template_registry().registry_sha256
 
 
+def _manifest_carrier_bytes(candidate: controller.PlannedCandidate) -> bytes:
+    raw = source_candidate.source_patch_manifest_bytes(candidate.source_manifest)
+    if hashlib.sha256(raw).hexdigest() != candidate.source_manifest_sha256:
+        raise DeploymentFactoryError("candidate manifest canonical carrier hash mismatch")
+    return raw
+
+
+def _directory_identity(value: os.stat_result) -> tuple[int, int, int, int]:
+    return (value.st_dev, value.st_ino, value.st_mode, value.st_uid)
+
+
+def _file_identity(value: os.stat_result) -> tuple[int, ...]:
+    return (value.st_dev, value.st_ino, value.st_mode, value.st_nlink,
+            value.st_uid, value.st_size, value.st_mtime_ns, value.st_ctime_ns)
+
+
+def _validate_directory(value: os.stat_result, label: str, *, private: bool) -> None:
+    if (not stat.S_ISDIR(value.st_mode) or value.st_uid != os.geteuid()
+            or (private and stat.S_IMODE(value.st_mode) & 0o077)):
+        qualifier = "private owner directory" if private else "owner directory"
+        raise DeploymentFactoryError(f"{label} is not a real {qualifier}")
+
+
+@contextlib.contextmanager
+def _pinned_operation_directory(config: deployment.DiscoveryDeployment,
+                                operation_key: str):
+    if not isinstance(operation_key, str) or not controller.HASH.fullmatch(operation_key):
+        raise DeploymentFactoryError("operation carrier requires an exact operation key")
+    operations_root = Path(config.operations_root)
+    if not operations_root.is_absolute():
+        raise DeploymentFactoryError("operations root must be absolute")
+    flags = (os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
+             | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0))
+    try:
+        root_descriptor = os.open(operations_root, flags)
+    except OSError as exc:
+        raise DeploymentFactoryError("operations root cannot be pinned") from exc
+    operation_descriptor = None
+    try:
+        root_identity = os.fstat(root_descriptor)
+        _validate_directory(root_identity, "operations root", private=False)
+        try:
+            operation_descriptor = os.open(
+                operation_key, flags, dir_fd=root_descriptor)
+        except OSError as exc:
+            raise DeploymentFactoryError("operation carrier root cannot be pinned") from exc
+        operation_identity = os.fstat(operation_descriptor)
+        _validate_directory(operation_identity, "operation carrier root", private=True)
+        try:
+            entry = os.stat(operation_key, dir_fd=root_descriptor,
+                            follow_symlinks=False)
+        except OSError as exc:
+            raise DeploymentFactoryError(
+                "operation carrier root entry changed while pinning") from exc
+        if _directory_identity(entry) != _directory_identity(operation_identity):
+            raise DeploymentFactoryError("operation carrier root entry changed while pinning")
+        yield (operations_root, root_descriptor, root_identity,
+               operation_descriptor, operation_identity)
+    finally:
+        if operation_descriptor is not None:
+            os.close(operation_descriptor)
+        os.close(root_descriptor)
+
+
+def _verify_operation_chain(operations_root: Path, root_descriptor: int,
+                            root_identity: os.stat_result, operation_key: str,
+                            operation_descriptor: int,
+                            operation_identity: os.stat_result) -> None:
+    current_root = os.fstat(root_descriptor)
+    current_operation = os.fstat(operation_descriptor)
+    try:
+        root_entry = os.stat(operations_root, follow_symlinks=False)
+        operation_entry = os.stat(
+            operation_key, dir_fd=root_descriptor, follow_symlinks=False)
+    except OSError as exc:
+        raise DeploymentFactoryError("operation carrier parent chain changed") from exc
+    if (_directory_identity(current_root) != _directory_identity(root_identity)
+            or _directory_identity(current_operation) != _directory_identity(operation_identity)
+            or _directory_identity(root_entry) != _directory_identity(root_identity)
+            or _directory_identity(operation_entry) != _directory_identity(operation_identity)):
+        raise DeploymentFactoryError("operation carrier parent chain changed")
+
+
+def _operation_carrier_root(config: deployment.DiscoveryDeployment,
+                            operation_key: str) -> Path:
+    with _pinned_operation_directory(config, operation_key) as pinned:
+        operations_root, root_fd, root_identity, operation_fd, operation_identity = pinned
+        _verify_operation_chain(
+            operations_root, root_fd, root_identity, operation_key,
+            operation_fd, operation_identity)
+        return operations_root / operation_key
+
+
+def _read_operation_carrier(descriptor: int, label: str) -> tuple[bytes, os.stat_result]:
+    before = os.fstat(descriptor)
+    if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1
+            or before.st_uid != os.geteuid()
+            or stat.S_IMODE(before.st_mode) & 0o077):
+        raise DeploymentFactoryError(
+            f"{label} is not a private, single-link regular file")
+    os.lseek(descriptor, 0, os.SEEK_SET)
+    chunks = []
+    size = 0
+    while True:
+        block = os.read(descriptor, 1024 * 1024)
+        if not block:
+            break
+        chunks.append(block)
+        size += len(block)
+    after = os.fstat(descriptor)
+    if _file_identity(before) != _file_identity(after) or size != after.st_size:
+        raise DeploymentFactoryError(f"{label} changed while it was reopened")
+    return b"".join(chunks), after
+
+
+def _write_operation_carrier(config: deployment.DiscoveryDeployment,
+                             operation_key: str, name: str, raw: bytes,
+                             label: str) -> Path:
+    if name not in {"source-manifest.json", "evidence-policy.json"}:
+        raise DeploymentFactoryError("operation carrier name is not allowlisted")
+    with _pinned_operation_directory(config, operation_key) as pinned:
+        operations_root, root_fd, root_identity, operation_fd, operation_identity = pinned
+        flags = (os.O_RDWR | os.O_CREAT | os.O_EXCL
+                 | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0))
+        try:
+            descriptor = os.open(name, flags, 0o600, dir_fd=operation_fd)
+        except FileExistsError:
+            try:
+                descriptor = os.open(
+                    name, os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
+                    | getattr(os, "O_NOFOLLOW", 0), dir_fd=operation_fd)
+            except OSError as exc:
+                raise DeploymentFactoryError(f"{label} cannot be reopened safely") from exc
+            created = False
+        except OSError as exc:
+            raise DeploymentFactoryError(f"{label} cannot be sealed safely") from exc
+        else:
+            created = True
+        try:
+            if created:
+                view = memoryview(raw)
+                while view:
+                    written = os.write(descriptor, view)
+                    if written <= 0:
+                        raise DeploymentFactoryError(f"{label} could not be sealed completely")
+                    view = view[written:]
+                os.fsync(descriptor)
+                os.fsync(operation_fd)
+            actual, file_identity = _read_operation_carrier(descriptor, label)
+            if actual != raw:
+                qualifier = "changed after it was sealed" if created else \
+                    "already exists with different bytes"
+                raise DeploymentFactoryError(f"{label} {qualifier}")
+            try:
+                entry = os.stat(name, dir_fd=operation_fd, follow_symlinks=False)
+            except OSError as exc:
+                raise DeploymentFactoryError(f"{label} directory entry changed") from exc
+            if (_file_identity(entry) != _file_identity(file_identity)
+                    or entry.st_nlink != 1):
+                raise DeploymentFactoryError(f"{label} directory entry changed")
+            _verify_operation_chain(
+                operations_root, root_fd, root_identity, operation_key,
+                operation_fd, operation_identity)
+            # This is the final namespace read before returning a path-based
+            # binding: it must still name the exact inode held by descriptor.
+            try:
+                final_entry = os.stat(
+                    name, dir_fd=operation_fd, follow_symlinks=False)
+            except OSError as exc:
+                raise DeploymentFactoryError(
+                    f"{label} final directory entry changed") from exc
+            if (_file_identity(final_entry) != _file_identity(file_identity)
+                    or final_entry.st_nlink != 1):
+                raise DeploymentFactoryError(f"{label} final directory entry changed")
+            _verify_operation_chain(
+                operations_root, root_fd, root_identity, operation_key,
+                operation_fd, operation_identity)
+            return operations_root / operation_key / name
+        finally:
+            os.close(descriptor)
+
+
+def _manifest_file_for_operation(config: deployment.DiscoveryDeployment,
+                                 candidate: controller.PlannedCandidate,
+                                 operation_key: str) -> evidence.BoundInputFile:
+    raw = _manifest_carrier_bytes(candidate)
+    path = _write_operation_carrier(
+        config, operation_key, "source-manifest.json", raw, "source manifest carrier")
+    return evidence.BoundInputFile("manifest", path, candidate.source_manifest_sha256)
+
+
 def _manifest_file(config: deployment.DiscoveryDeployment,
                    candidate: controller.PlannedCandidate,
                    build: controller.GpuSourceBuild) -> evidence.BoundInputFile:
-    manifest = candidate.source_manifest
-    value = {"schema": "epyc.autokernel.source_patch.v1",
-             "campaign_id": manifest.campaign_id, "proposal_id": manifest.proposal_id,
-             "candidate_id": manifest.candidate_id, "source_tree": manifest.source_tree,
-             "production_base_commit": manifest.production_base_commit,
-             "instrument_commit": manifest.instrument_commit,
-             "change_class": manifest.change_class,
-             "declared_files": list(manifest.declared_files),
-             "declared_symbols": {path: list(manifest.declared_symbols[path])
-                                  for path in manifest.declared_files},
-             "mechanism_id": manifest.mechanism_id, "patch_sha256": manifest.patch_sha256,
-             "patch_encoding": "base64",
-             "patch_base64": base64.b64encode(manifest.patch_bytes).decode("ascii")}
-    raw = schemas.canonical_bytes(value)
-    if hashlib.sha256(raw).hexdigest() != candidate.source_manifest_sha256:
-        raise DeploymentFactoryError("candidate manifest canonical carrier hash mismatch")
-    assert build.operation_key is not None
-    path = config.operations_root / "materialization" / build.operation_key / "source-manifest.json"
-    if path.exists():
-        if path.is_symlink() or path.read_bytes() != raw:
-            raise DeploymentFactoryError("source manifest carrier already exists with different bytes")
-    else:
-        path.write_bytes(raw)
-    return evidence.BoundInputFile("manifest", path.resolve(), candidate.source_manifest_sha256)
+    if build.operation_key is None:
+        raise DeploymentFactoryError("source build lacks an operation key")
+    return _manifest_file_for_operation(config, candidate, build.operation_key)
 
 
 def _evidence_binding(config: deployment.DiscoveryDeployment) -> EvidencePlanBinding:
-    profiler, timestamp_input = _rocprof_v1_policy(config)
+    profiler_policy = _rocprof_v3_policy(config)
+    policy_by_role = {item.role: item for item in profiler_policy}
+    python = policy_by_role["executable"]
+    profiler = policy_by_role["profiler_wrapper"]
     def build(candidate: controller.PlannedCandidate, build_: controller.GpuSourceBuild,
-              template: ExperimentTemplate) -> evidence.GpuSourceEvidencePlan:
+              template: ExperimentTemplate, repetition: int = 1) -> evidence.GpuSourceEvidencePlan:
         if build_.materialization_receipt is None or build_.operation_key is None:
             raise DeploymentFactoryError("source build lacks materialization identity")
         identities = discovery_static_registry.evidence_identity_files_for_build(
@@ -1181,29 +1620,26 @@ def _evidence_binding(config: deployment.DiscoveryDeployment) -> EvidencePlanBin
                 "runtime_config", config.runtime_config.path, config.runtime_config.sha256))
         if identities.shared_runtime is None:
             raise DeploymentFactoryError("source evidence lacks a shared reward runtime")
-        # Revalidate the profiler and timestamp carriers at the same binding
+        # Revalidate the profiler closure at the same binding
         # boundary as the source/runtime carriers.
-        if (_digest_regular(profiler.path, "rocprof-v1") != profiler.sha256
-                or _digest_regular(timestamp_input.path, "rocprof-v1 input")
-                != timestamp_input.sha256):
-            raise DeploymentFactoryError("rocprof-v1 policy changed before evidence binding")
-        correctness_tool = _bound(
-            build_.candidate_build / "bin" / "test-backend-ops", "executable")
-        # The reviewed instrument, not the planner, owns deterministic-suite
-        # capability.  Check the built tool before spending a device claim.
-        capability = subprocess.run((str(correctness_tool.path), "--help"),
-                                    check=False, stdin=subprocess.DEVNULL,
-                                    capture_output=True, text=True, env={
-                                        "HIP_VISIBLE_DEVICES": "0",
-                                        "LD_LIBRARY_PATH": (
-                                            f"{identities.candidate.hip_library.path.parent}:"
-                                            "/opt/rocm/lib"),
-                                        "PATH": "/opt/rocm/bin:/usr/bin:/bin",
-                                        "ROCM_PATH": "/opt/rocm"})
-        if (capability.returncode != 0
-                or "--suite-seed <u64>" not in capability.stdout):
+        if any(_digest_regular(item.path, item.role) != item.sha256
+               for item in profiler_policy):
             raise DeploymentFactoryError(
-                "candidate correctness tool lacks reviewed deterministic suite support")
+                "rocprofv3 policy changed before evidence binding")
+        for item in profiler_policy:
+            if item.role.endswith("_manifest"):
+                try:
+                    evidence._verify_profiler_runtime_manifest(item)
+                except evidence.EvidenceProducerError as exc:
+                    raise DeploymentFactoryError(
+                        "rocprofv3 closure changed before evidence binding") from exc
+        try:
+            correctness_tool, capability_receipt = (
+                discovery_static_registry.correctness_capability_files_for_build(
+                    build_, arm="candidate"))
+        except discovery_static_registry.StaticRegistryError as exc:
+            raise DeploymentFactoryError(
+                "candidate correctness tool lacks a sealed passing property self-test") from exc
         semantics = template.semantics
         op = semantics.get("correctness_op")
         cases = semantics.get("expected_correctness_cases")
@@ -1214,27 +1650,54 @@ def _evidence_binding(config: deployment.DiscoveryDeployment) -> EvidencePlanBin
         correctness_argv = (
             str(correctness_tool.path), "test", "-o", op, "-b", "ROCm0", "-j", "1",
             "--suite-seed", str(seed))
+        correctness_invocations: tuple[Mapping[str, Any], ...] = ()
+        if template.template_id == "cuda-fattn-tile-v1":
+            required_cases = [dict(row) for row in semantics["required_correctness_cases"]]
+            correctness_invocations = (
+                {"invocation_id": "generic_flash_attn_ext",
+                 "argv": list(correctness_argv), "backend": "ROCm0",
+                 "op": op, "case_set": "generic_flash_attn_ext_v1",
+                 "expected_cases": cases, "required_cases": []},
+                {"invocation_id": "odd_gqa7_d64_q1",
+                 "argv": [*correctness_argv, "-p",
+                          "hsk=64,hsv=64,nh=2,nr23=[7,1]"],
+                 "backend": "ROCm0", "op": op,
+                 "case_set": "odd_gqa7_d64_q1_v1",
+                 "expected_cases": len(required_cases),
+                 "required_cases": required_cases,
+                 "environment_overrides": [
+                     ["AUTOKERNEL_CORRECTNESS_CASE_SET",
+                      "odd_gqa7_d64_q1_v1"]]},
+            )
         shared = identities.shared_runtime
         reward_binary = shared.measurement_binary
         profile_argv = (
-            str(profiler.path), *_ROCPROF_V1_PREFIX, str(timestamp_input.path),
-            "-o", evidence.ROCPROF_TIMESTAMP_OUTPUT,
+            str(python.path), str(profiler.path), "--kernel-trace",
+            "-d", evidence.ROCPROF_OUTPUT_DIRECTORY,
+            "-o", evidence.ROCPROF_OUTPUT_BASENAME,
+            "--output-format", "csv", "--",
             "/usr/bin/taskset", "-c", "184-191", str(reward_binary.path),
             "-m", str(config.model.path), "-p", "0", "-n", "128", "-r", "1",
-            "-ngl", "99", "-fa", "on", "-t", "8")
-        profiler_prefix = _ROCPROF_V1.parents[1]
+            "-ngl", "99", "-fa", "on", "-t", "8", "-o", "json")
         common_environment = (
             ("GGML_CUDA_DISABLE_GRAPHS", "1"), ("HIP_VISIBLE_DEVICES", "0"),
-            ("PATH", f"{profiler_prefix / 'bin'}:/opt/rocm/bin:/usr/bin:/bin"),
-            ("ROCM_PATH", "/opt/rocm"),
-            ("ROCP_METRICS", str(profiler_prefix / "lib/rocprofiler/metrics.xml")))
+            ("PATH", f"{_ROCPROF_V3_SDK / 'bin'}:/opt/rocm/bin:/usr/bin:/bin"),
+            ("ROCM_PATH", "/opt/rocm"))
         def profile_environment(hip: evidence.BoundInputFile) -> tuple[tuple[str, str], ...]:
             return tuple(sorted((*common_environment, ("LD_LIBRARY_PATH",
-                f"{hip.path.parent}:{reward_binary.path.parent}:{profiler_prefix / 'lib'}:/opt/rocm/lib"))))
+                f"{hip.path.parent}:{reward_binary.path.parent}:"
+                f"{_ROCPROF_V3_SDK / 'lib'}:{_ROCPROF_V3_OLD_LIB}:"
+                f"{_ROCPROF_V3_PCI_LIB_DIR}:/opt/rocm/lib"))))
+        carrier_root = _operation_carrier_root(config, build_.operation_key)
+        order_seed, order_text = _arm_order_schedule(
+            deployment_config_sha256=config.config_sha256,
+            source_manifest_sha256=candidate.source_manifest_sha256,
+            repetition=repetition)
+        attribution_arm_order = tuple(order_text.split(","))
         placeholder = evidence.BoundInputFile(
-            "execution_policy",
-            (config.operations_root / "materialization" / build_.operation_key
-             / "evidence-policy.json").resolve(), "0" * 64)
+            "execution_policy", carrier_root / "evidence-policy.json", "0" * 64)
+        dispatch = template.bind_dispatch(candidate.experiment_intent)
+        candidate_rows, anchor_rows = _expected_rocprofv3_rows(dispatch)
         provisional = evidence.GpuSourceEvidencePlan(
             campaign_id=candidate.source_manifest.campaign_id,
             device_id=config.device_id,
@@ -1244,19 +1707,19 @@ def _evidence_binding(config: deployment.DiscoveryDeployment) -> EvidencePlanBin
             runtime_config_sha256=config.runtime_config.sha256,
             candidate=build_.candidate_identity, anchor=build_.anchor_identity,
             correctness_argv=correctness_argv,
-            correctness_summary_pattern=(
-                rf"(?s)(?P<passed>\d+)/(?P<total>\d+) tests passed.*"
-                rf"Backend ROCm0: .*OK.*1/1 backends passed"),
+            correctness_backend="ROCm0",
+            correctness_op=op,
             expected_correctness_cases=cases,
             candidate_rocprof_argv=profile_argv, anchor_rocprof_argv=profile_argv,
-            dispatch=template.bind_dispatch(candidate.experiment_intent),
+            dispatch=dispatch,
             identity_files=identities, policy=placeholder,
-            correctness_inputs=(correctness_tool, identities.candidate.binary,
+            correctness_inputs=(correctness_tool, capability_receipt,
+                                identities.candidate.binary,
                                 identities.candidate.config, identities.candidate.linkage),
-            candidate_rocprof_inputs=(profiler, timestamp_input, reward_binary,
+            candidate_rocprof_inputs=(*profiler_policy, reward_binary,
                                       identities.model, identities.workload,
                                       identities.runtime_config),
-            anchor_rocprof_inputs=(profiler, timestamp_input, reward_binary,
+            anchor_rocprof_inputs=(*profiler_policy, reward_binary,
                                    identities.model, identities.workload,
                                    identities.runtime_config),
             required_correctness_argv_paths=(correctness_tool.path,),
@@ -1264,26 +1727,44 @@ def _evidence_binding(config: deployment.DiscoveryDeployment) -> EvidencePlanBin
             required_anchor_rocprof_argv_paths=(reward_binary.path, identities.model.path),
             execution_cwd=build_.candidate_build.resolve(strict=True),
             correctness_environment=tuple(sorted((
+                ("AUTOKERNEL_CORRECTNESS_CASE_SET", ""),
                 ("GGML_CUDA_DISABLE_GRAPHS", "1"), ("HIP_VISIBLE_DEVICES", "0"),
                 ("LD_LIBRARY_PATH",
                  f"{identities.candidate.hip_library.path.parent}:/opt/rocm/lib"),
                 ("PATH", "/opt/rocm/bin:/usr/bin:/bin"), ("ROCM_PATH", "/opt/rocm")))),
             candidate_rocprof_environment=profile_environment(shared.candidate_hip_library),
             anchor_rocprof_environment=profile_environment(shared.anchor_hip_library),
-            shared_runtime=shared)
-        policy_path = placeholder.path
+            shared_runtime=shared,
+            correctness_invocations=correctness_invocations,
+            attribution_arm_order_seed_sha256=order_seed,
+            attribution_arm_order=attribution_arm_order,
+            profiler_trace_schema_id=evidence.ROCPROF_V3_TRACE_ID,
+            expected_candidate_profiler_dispatch_rows=candidate_rows,
+            expected_anchor_profiler_dispatch_rows=anchor_rows,
+            profiler_transport_policy=evidence.ROCPROF_V3_TRANSPORT_POLICY)
         raw = json.dumps(evidence._policy_payload(provisional), sort_keys=True,
                          separators=(",", ":")).encode()
-        if policy_path.exists():
-            if policy_path.is_symlink() or policy_path.read_bytes() != raw:
-                raise DeploymentFactoryError("sealed evidence policy changed for operation")
-        else:
-            policy_path.write_bytes(raw)
+        policy_path = _write_operation_carrier(
+            config, build_.operation_key, "evidence-policy.json", raw,
+            "sealed evidence policy")
         policy = evidence.BoundInputFile(
             "execution_policy", policy_path,
             hashlib.sha256(raw).hexdigest())
         return replace(provisional, policy=policy)
     return EvidencePlanBinding(build=build)
+
+
+def _expected_rocprofv3_rows(
+        dispatch: evidence.DispatchContract) -> tuple[int, int]:
+    """Derive each arm's exact cardinality from the sealed anchor trace."""
+    anchor_rows = 59_925
+    candidate_rows = (anchor_rows
+                      + sum(row.calls for row in dispatch.candidate_exact)
+                      - sum(row.calls for row in dispatch.anchor_exact))
+    if candidate_rows < 1:
+        raise DeploymentFactoryError(
+            "candidate profiler cardinality derivation is invalid")
+    return candidate_rows, anchor_rows
 
 
 def _arm_order_schedule(*, deployment_config_sha256: str,
@@ -1309,7 +1790,7 @@ def _runner_binding(config: deployment.DiscoveryDeployment) -> RunnerArgsBinding
         repetition = permit.get("repetition")
         if operation_key != build_.operation_key or repetition not in {1, 2}:
             raise DeploymentFactoryError("runner operation identity differs from sealed build")
-        output = config.operations_root / str(operation_key) / "runner" / f"s{repetition}"
+        stage_root = config.operations_root / str(operation_key) / "runner" / f"s{repetition}"
         decision = permit.get("load_admission")
         if not isinstance(decision, Mapping):
             raise DeploymentFactoryError("runner permit lacks sealed load-admission decision")
@@ -1323,7 +1804,7 @@ def _runner_binding(config: deployment.DiscoveryDeployment) -> RunnerArgsBinding
             expected_policy_sha256=corpus.policy_sha256,
             expected_policy_file_sha256=corpus.file_sha256,
             expected_effective_context_sha256=effective)
-        decision_path = output / "load-admission-decision.json"
+        decision_path = stage_root / "load-admission-decision.json"
         decision_path.parent.mkdir(parents=True, exist_ok=True)
         decision_raw = (json.dumps(dict(decision), sort_keys=True, indent=2) + "\n").encode()
         if decision_path.exists():
@@ -1335,8 +1816,8 @@ def _runner_binding(config: deployment.DiscoveryDeployment) -> RunnerArgsBinding
             deployment_config_sha256=config.config_sha256,
             source_manifest_sha256=candidate.source_manifest_sha256,
             repetition=repetition)
-        argv = ["--anchor-build", str(build_.anchor_build), "--candidate-build", str(build_.candidate_build),
-                "--model", str(config.model.path), "--output-dir", str(output),
+        common_argv = ["--anchor-build", str(build_.anchor_build), "--candidate-build", str(build_.candidate_build),
+                "--model", str(config.model.path),
                 "--campaign-id", f"ak-discovery-{config.config_sha256[:16]}",
                 "--factor", "source_patch", "--calls", "9", "--workload", "decode_tg128",
                 "--arm-order-schedule", arm_order,
@@ -1352,8 +1833,90 @@ def _runner_binding(config: deployment.DiscoveryDeployment) -> RunnerArgsBinding
                 "--candidate-loader-dir", str(build_.candidate_loader_dir),
                 "--cpu-claim-journal", str(config.operations_root / "claims" / "cpu.jsonl"),
                 "--device-claim-journal", str(config.operations_root / "claims" / "device.jsonl")]
-        return controller.gpu_discovery.parser().parse_args(argv)
+        try:
+            graphs_off = controller.gpu_discovery.parser().parse_args([
+                *common_argv, "--output-dir",
+                str(stage_root / "measurement-graphs-off"),
+                "--runtime-graphs", "off"])
+            graphs_on = controller.gpu_discovery.parser().parse_args([
+                *common_argv, "--output-dir",
+                str(stage_root / "target-runtime-graphs-on"),
+                "--runtime-graphs", "on"])
+        except SystemExit as exc:
+            # argparse is allowed to reject an invalid sealed contract, but it
+            # must not terminate the unified controller process.  This typed
+            # interruption leaves the already-sealed proof operation resumable.
+            raise controller.ResumableScreenInterruption(
+                f"governed runner argv parser refused with exit {exc.code}") from exc
+        sealed_identities = {
+            "anchor": dict(build_.anchor_identity.__dict__),
+            "candidate": dict(build_.candidate_identity.__dict__),
+        }
+        for current in (graphs_off, graphs_on):
+            for arm, identity in sealed_identities.items():
+                setattr(current, f"_sealed_{arm}_source_build_identity", identity)
+        setattr(graphs_off, "_target_runtime_args", graphs_on)
+        return graphs_off
     return RunnerArgsBinding(build=build)
+
+
+def _bind_runner_runtime_authority(
+        config: deployment.DiscoveryDeployment,
+        build_: controller.GpuSourceBuild,
+        permit: Mapping[str, Any], result: Any) -> Any:
+    """Install lease and source-build authority on both runner namespaces."""
+    decision = permit.get("load_admission")
+    if not isinstance(decision, Mapping):
+        raise DeploymentFactoryError(
+            "runner invocation lacks the sealed lease admission decision")
+    decision = dict(decision)
+    expected_admission = {
+        "load_admission_decision": decision,
+        "load_admission_policy_version": config.admission_policy.corpus.version,
+        "load_admission_policy_sha256": config.admission_policy.corpus.policy_sha256,
+        "load_admission_policy_file_sha256": config.admission_policy.corpus.file_sha256,
+        "load_admission_effective_context_sha256": decision.get(
+            "effective_context_sha256"),
+    }
+    target = getattr(result, "_target_runtime_args", None)
+    if target is None:
+        raise DeploymentFactoryError(
+            "runner arguments lack target-runtime graphs-on stage")
+    expected_build_identities = {
+        "anchor": dict(build_.anchor_identity.__dict__),
+        "candidate": dict(build_.candidate_identity.__dict__),
+    }
+    for current in (result, target):
+        for key, value in expected_admission.items():
+            existing = getattr(current, key, None)
+            if existing is not None and existing != value:
+                raise DeploymentFactoryError(
+                    f"runner arguments attempted to override {key}")
+            try:
+                setattr(current, key, value)
+            except (AttributeError, TypeError) as exc:
+                raise DeploymentFactoryError(
+                    "runner arguments cannot carry sealed load admission") from exc
+        for arm, identity in expected_build_identities.items():
+            if getattr(
+                    current,
+                    f"_sealed_{arm}_source_build_identity", None) != identity:
+                raise DeploymentFactoryError(
+                    "runner arguments changed sealed source build identity")
+        if (getattr(current, "factor", None) != "source_patch"
+                or str(getattr(current, "model", "")) != str(config.model.path)
+                or str(getattr(current, "anchor_build", "")) != str(build_.anchor_build)
+                or str(getattr(current, "candidate_build", "")) != str(build_.candidate_build)
+                or str(getattr(current, "measurement_binary", "")) != str(build_.measurement_binary)
+                or str(getattr(current, "common_loader_dir", "")) != str(build_.common_loader_dir)
+                or str(getattr(current, "anchor_loader_dir", "")) != str(build_.anchor_loader_dir)
+                or str(getattr(current, "candidate_loader_dir", "")) != str(build_.candidate_loader_dir)
+                or getattr(current, "promotion_claim", False) is not False
+                or str(getattr(current, "inference_window_lock", "")) != str(config.inference_window_lock)
+                or getattr(current, "load_admission_decision", None) != decision):
+            raise DeploymentFactoryError(
+                "runner arguments do not bind source builds/model/window/discovery authority")
+    return result
 
 
 def _static_registry(config: deployment.DiscoveryDeployment,
@@ -1415,6 +1978,8 @@ def _seal_graph_receipt(config: deployment.DiscoveryDeployment,
     critic_launcher = Path(claude_fable5_critic_actor.__file__).resolve(strict=True)
     surfaces = _normalized_template_surfaces(
         templates, config.hypothesis_portfolio.value)
+    profiler_runtime = [evidence._bound_reference(item)
+                        for item in _rocprof_v3_policy(config)]
     body = {"schema": "epyc.autokernel.static_discovery_graph.v4",
             "authority": "nonpromotable_candidate_only_discovery", "promotion_claim": False,
             "inference_executed": False, "config_sha256": config.config_sha256,
@@ -1436,7 +2001,20 @@ def _seal_graph_receipt(config: deployment.DiscoveryDeployment,
                 "receipt": str(_PROFILE_TRACE_RECEIPT),
                 "receipt_sha256": _PROFILE_TRACE_RECEIPT_SHA256,
                 "timestamp_csv": str(_PROFILE_TRACE_CSV),
-                "timestamp_csv_sha256": _PROFILE_TRACE_CSV_SHA256},
+                "timestamp_csv_sha256": _PROFILE_TRACE_CSV_SHA256,
+                "v3_kernel_trace": str(_PROFILE_V3_TRACE_CSV),
+                "v3_kernel_trace_sha256": _PROFILE_V3_TRACE_CSV_SHA256,
+                "v3_agent_info": str(_PROFILE_V3_AGENT_CSV),
+                "v3_agent_info_sha256": _PROFILE_V3_AGENT_CSV_SHA256,
+                "cross_profiler_projection_sha256":
+                    "8bf84656cd12eecf8e9881fd0f2b6f9f8da7e4485a0a668dcb08065e930fbc54"},
+            "profiler_runtime_authority": {
+                "trace_schema_id": evidence.ROCPROF_V3_TRACE_ID,
+                "transport_policy": evidence.ROCPROF_V3_TRANSPORT_POLICY,
+                "package": "rocprofiler-sdk 0.4.0-66~20.04 amd64",
+                "inputs": profiler_runtime,
+                "inputs_sha256": schemas.content_hash(profiler_runtime),
+            },
             "admission_policy_sha256": config.admission_policy.value["policy_sha256"],
             "load_admission_profile_id": _LOAD_PROFILE_ID,
             "actor_wrappers": {
@@ -2026,8 +2604,10 @@ def materialize(config: deployment.DiscoveryDeployment, registry: Mapping[str, M
                      "profile_anchor_dispatch": [vars(row)
                                                  for row in template.dispatch.anchor_exact],
                      "candidate_dispatch_authoring": (
-                         "expected_dispatch is an array of exact rocprof-v1 literal name/geometry cells; "
-                         "include every geometry emitted by the changed kernel symbol"),
+                         "expected_dispatch is the exact deployed rocprofv3 anchor array from the "
+                         "controller-owned portfolio binding; never replace it with predicted "
+                         "candidate routes. Topology-changing candidate cells are derived and "
+                         "validated by the controller after authorization."),
                      "semantics": dict(template.semantics)}
                for key, template in templates.templates.items()}
     source_package = (_reviewed_source_package(config, templates)
@@ -2067,8 +2647,21 @@ def materialize(config: deployment.DiscoveryDeployment, registry: Mapping[str, M
         permit = {**permit, "instrument_branch": config.instrument_branch,
                   "deployment_config_sha256": config.config_sha256}
         snapshot.revalidate()
+        operation_key = permit.get("operation_key")
+        if not isinstance(operation_key, str):
+            raise DeploymentFactoryError("source build permit lacks an operation key")
+        # Seal the exact manifest bytes in the adapter-owned operation namespace
+        # before an expensive source builder can be entered.  Evidence binding
+        # later reopens this same file and refuses any intervening mutation.
+        _manifest_file_for_operation(config, candidate, operation_key)
+        # Re-open the reviewed source-level capability before entering the
+        # expensive builder.  The builder still executes and receipts both
+        # exact binaries after compilation; this early gate prevents a known
+        # incompatible instrument source from consuming a build transaction.
+        _instrument_review_receipt(config)
         return source.build(candidate, authorization, permit)
-    def plan(candidate: controller.PlannedCandidate, build_: controller.GpuSourceBuild):
+    def plan(candidate: controller.PlannedCandidate, build_: controller.GpuSourceBuild,
+             permit: Mapping[str, Any]):
         config.revalidate()
         runner_attest()
         # Re-open the builder receipt at every evidence boundary.  In
@@ -2082,10 +2675,26 @@ def materialize(config: deployment.DiscoveryDeployment, registry: Mapping[str, M
             instrument_branch=config.instrument_branch,
             instrument_commit=config.instrument_commit)
         template = templates.resolve(candidate.experiment_intent)
-        result = plans.build(candidate, build_, template)
-        expected_dispatch = template.bind_dispatch(candidate.experiment_intent)
-        if result.dispatch != expected_dispatch or result.model_sha256 != config.model.sha256:
-            raise DeploymentFactoryError("evidence plan does not bind configured model/selected reviewed template")
+        try:
+            repetition = permit.get("repetition")
+            if repetition not in {1, 2}:
+                raise DeploymentFactoryError(
+                    "evidence plan lacks its controller-owned repetition")
+            result = plans.build(candidate, build_, template, repetition)
+            expected_dispatch = template.bind_dispatch(candidate.experiment_intent)
+            if (result.dispatch != expected_dispatch
+                    or result.model_sha256 != config.model.sha256):
+                raise DeploymentFactoryError(
+                    "evidence plan does not bind configured model/selected reviewed template")
+        except (DeploymentFactoryError,
+                discovery_static_registry.StaticRegistryError,
+                evidence.EvidenceProducerError) as exc:
+            # plan_factory is invoked before the adapter acquires the outer GPU
+            # reservation or creates a proof/runner artifact.  Preserve the
+            # completed build terminal, but classify this exact boundary as a
+            # safe typed refusal rather than an ambiguous operation crash.
+            raise controller.PostBuildEvidencePlanRefusal(
+                f"post-build evidence plan refused before execution: {exc}") from exc
         return result
     def args(candidate: controller.PlannedCandidate, build_: controller.GpuSourceBuild, permit: Mapping[str, Any]):
         config.revalidate()
@@ -2105,42 +2714,7 @@ def materialize(config: deployment.DiscoveryDeployment, registry: Mapping[str, M
                 or build_.teardown_receipt is None or build_.teardown_sha256 is None):
             raise DeploymentFactoryError("source build lacks sealed runtime/materialization/teardown receipts")
         result = runner.build(candidate, build_, permit)
-        decision = permit.get("load_admission")
-        if not isinstance(decision, Mapping):
-            raise DeploymentFactoryError("runner invocation lacks the sealed lease admission decision")
-        decision = dict(decision)
-        expected_admission = {
-            "load_admission_decision": decision,
-            "load_admission_policy_version": config.admission_policy.corpus.version,
-            "load_admission_policy_sha256": config.admission_policy.corpus.policy_sha256,
-            "load_admission_policy_file_sha256": config.admission_policy.corpus.file_sha256,
-            "load_admission_effective_context_sha256": decision.get("effective_context_sha256"),
-        }
-        # A trusted static runner binding may construct an argparse.Namespace or
-        # another mutable typed args holder, but it never gets to choose the
-        # admission frame.  Refuse pre-filled mismatches and install the exact
-        # lease receipt for the runner's preflight validator.
-        for key, value in expected_admission.items():
-            existing = getattr(result, key, None)
-            if existing is not None and existing != value:
-                raise DeploymentFactoryError(f"runner arguments attempted to override {key}")
-            try:
-                setattr(result, key, value)
-            except (AttributeError, TypeError) as exc:
-                raise DeploymentFactoryError("runner arguments cannot carry sealed load admission") from exc
-        if (getattr(result, "factor", None) != "source_patch"
-                or str(getattr(result, "model", "")) != str(config.model.path)
-                or str(getattr(result, "anchor_build", "")) != str(build_.anchor_build)
-                or str(getattr(result, "candidate_build", "")) != str(build_.candidate_build)
-                or str(getattr(result, "measurement_binary", "")) != str(build_.measurement_binary)
-                or str(getattr(result, "common_loader_dir", "")) != str(build_.common_loader_dir)
-                or str(getattr(result, "anchor_loader_dir", "")) != str(build_.anchor_loader_dir)
-                or str(getattr(result, "candidate_loader_dir", "")) != str(build_.candidate_loader_dir)
-                or getattr(result, "promotion_claim", False) is not False
-                or str(getattr(result, "inference_window_lock", "")) != str(config.inference_window_lock)
-                or getattr(result, "load_admission_decision", None) != decision):
-            raise DeploymentFactoryError("runner arguments do not bind source builds/model/window/discovery authority")
-        return result
+        return _bind_runner_runtime_authority(config, build_, permit, result)
     screener = gpu_source_adapter.build_governed_gpu_source_adapter(
         operations_root=config.operations_root, build_source=build, plan_factory=plan,
         args_factory=args, correctness_executor=correctness_executor,

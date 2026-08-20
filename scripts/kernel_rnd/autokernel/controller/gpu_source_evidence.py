@@ -17,29 +17,113 @@ import math
 import os
 from pathlib import Path
 import re
+import stat
 import subprocess
 import time
 from datetime import datetime, timezone
 from typing import Any, Callable, Mapping, Protocol, Sequence
 
 from .. import schemas
+from ..execution import microbench, t0_provider
 from ..resource import device_claim
 from . import gpu_source_proofs as proofs
 from . import split_runtime_verifier
 
 AUTHORITY = "nonpromotable_candidate_only_discovery"
 BORROWED_PHASE_SCHEMA = "epyc.autokernel.borrowed_device_claim_phase.v1"
-CORRECTNESS_SCHEMA = "epyc.autokernel.targeted_correctness_receipt.v2"
+CORRECTNESS_SCHEMA = "epyc.autokernel.targeted_correctness_receipt.v3"
+CORRECTNESS_REFUSAL_SCHEMA = "epyc.autokernel.targeted_correctness_refusal.v1"
+CORRECTNESS_PARSER_ID = "ak.t0.backend_ops_console/v1"
+EXECUTION_POLICY_SCHEMA = "epyc.autokernel.gpu_source_execution_policy.v2"
 ATTRIBUTION_SCHEMA = "epyc.autokernel.gpu_kernel_attribution.v2"
+ATTRIBUTION_REFUSAL_SCHEMA = "epyc.autokernel.gpu_kernel_attribution_refusal.v1"
+PROFILER_ATTEMPT_SCHEMA = "epyc.autokernel.rocprofiler_transport_attempt.v1"
+PROFILER_RUNTIME_SCHEMA = "epyc.autokernel.rocprofiler_runtime_closure.v1"
 PAIR_SCHEMA = "epyc.autokernel.gpu_kernel_attribution_pair.v1"
+PAIR_REFUSAL_SCHEMA = "epyc.autokernel.gpu_kernel_attribution_pair_refusal.v1"
 SEALED_BUNDLE_SCHEMA = "epyc.autokernel.gpu_source_evidence_bundle.v1"
 SHA = re.compile(r"^[0-9a-f]{64}$")
 SOURCE_TREE_SCHEMA = "epyc.autokernel.source_tree_identity.v1"
 ROCPROF_TIMESTAMP_OUTPUT = "{TIMESTAMP_CSV}"
+ROCPROF_OUTPUT_DIRECTORY = "{ROCPROF_OUTPUT_DIRECTORY}"
+ROCPROF_OUTPUT_BASENAME = "{ROCPROF_OUTPUT_BASENAME}"
+# Retained only to validate already-sealed historical receipts. New governed
+# evidence plans are emitted by the deployment factory with ROCPROF_V3_TRACE_ID.
+ROCPROF_V1_TRACE_ID = "rocprof-v1-timestamps-v1"
+ROCPROF_V3_TRACE_ID = "rocprof-v3-kernel-trace-csv-v1"
+ROCPROF_V3_TRANSPORT_POLICY = "require-zero-exit-v1"
+ROCPROF_V3_PYTHON = Path("/usr/bin/python3.13")
+ROCPROF_V3_COLUMNS = (
+    "Kind", "Agent_Id", "Queue_Id", "Kernel_Id", "Kernel_Name",
+    "Correlation_Id", "Start_Timestamp", "End_Timestamp",
+    "Private_Segment_Size", "Group_Segment_Size",
+    "Workgroup_Size_X", "Workgroup_Size_Y", "Workgroup_Size_Z",
+    "Grid_Size_X", "Grid_Size_Y", "Grid_Size_Z")
+ROCPROF_V3_AGENT_COLUMNS = (
+    "Node_Id", "Logical_Node_Id", "Agent_Type", "Cpu_Cores_Count",
+    "Simd_Count", "Cpu_Core_Id_Base", "Simd_Id_Base", "Max_Waves_Per_Simd",
+    "Lds_Size_In_Kb", "Gds_Size_In_Kb", "Num_Gws", "Wave_Front_Size",
+    "Num_Xcc", "Cu_Count", "Array_Count", "Num_Shader_Banks",
+    "Simd_Arrays_Per_Engine", "Cu_Per_Simd_Array", "Simd_Per_Cu",
+    "Max_Slots_Scratch_Cu", "Gfx_Target_Version", "Vendor_Id", "Device_Id",
+    "Location_Id", "Domain", "Drm_Render_Minor", "Num_Sdma_Engines",
+    "Num_Sdma_Xgmi_Engines", "Num_Sdma_Queues_Per_Engine", "Num_Cp_Queues",
+    "Max_Engine_Clk_Ccompute", "Max_Engine_Clk_Fcompute", "Sdma_Fw_Version",
+    "Fw_Version", "Capability", "Cu_Per_Engine", "Max_Waves_Per_Cu",
+    "Family_Id", "Workgroup_Max_Size", "Grid_Max_Size", "Local_Mem_Size",
+    "Hive_Id", "Gpu_Id", "Workgroup_Max_Dim_X", "Workgroup_Max_Dim_Y",
+    "Workgroup_Max_Dim_Z", "Grid_Max_Dim_X", "Grid_Max_Dim_Y",
+    "Grid_Max_Dim_Z", "Name", "Vendor_Name", "Product_Name", "Model_Name")
+PROFILER_MAPPED_ROLES = frozenset({
+    "profiler_sdk_library", "profiler_sdk_tool_library",
+    "profiler_aqlprofile_library", "profiler_hsa_runtime_library",
+    "profiler_register_library",
+})
+PROFILER_V3_INPUT_ROLES = frozenset({
+    "executable", "profiler_wrapper", "profiler_package",
+    "profiler_runtime_manifest", "profiler_aqlprofile_manifest",
+    # libpci is part of the sealed loader/provenance closure but is not a
+    # resident DSO in the governed rocprofv3 KFD child.  Requiring a mapping
+    # would reject the exact observed runtime; it remains byte-bound here.
+    "profiler_libpci_manifest", "profiler_libpci_library",
+    *PROFILER_MAPPED_ROLES,
+})
 
 
 class EvidenceProducerError(RuntimeError):
     """The producer refused to mint a success receipt."""
+
+
+class RuntimeMapsNotReady(RuntimeError):
+    """The owned GPU process has not mapped the complete sealed closure yet.
+
+    This is the sole retryable runtime-map outcome.  The direct executor may
+    retry it only while the exact captured child remains alive; every other
+    callback failure is terminal and tears the child down.
+    """
+
+
+class SealedEvidenceRefusal(EvidenceProducerError):
+    """A scientific stage ended durably without a passing receipt."""
+
+    def __init__(self, message: str, *, receipt_path: str | None = None,
+                 receipt_sha256: str | None = None) -> None:
+        super().__init__(message)
+        self.receipt_path = receipt_path
+        self.receipt_sha256 = receipt_sha256
+
+
+class CorrectnessParseRefusal(SealedEvidenceRefusal):
+    """The authoritative backend-op parser could not prove the targeted run."""
+
+
+class DispatchAttributionParseRefusal(SealedEvidenceRefusal):
+    """The measured profile violated the exact reviewed route contract."""
+
+
+def _durable_refusal_reason(exc: BaseException) -> str:
+    """ASCII-stable error text for the legacy proof receipt hash reducer."""
+    return str(exc).encode("ascii", "backslashreplace").decode("ascii")
 
 
 def _hash_file(path: Path, label: str, *, allow_empty: bool = True) -> str:
@@ -286,10 +370,19 @@ class SubprocessCommandExecutor:
                         if self.runtime_maps_sampler is None:
                             raise EvidenceProducerError(
                                 "shared reward invocation has no in-window maps sampler")
-                        runtime_maps_identity = self.runtime_maps_sampler(
-                            invocation, int(child.pid), sample)
-                        if not isinstance(runtime_maps_identity, Mapping):
-                            raise EvidenceProducerError("runtime maps sampler returned no typed identity")
+                        try:
+                            sampled_identity = self.runtime_maps_sampler(
+                                invocation, int(child.pid), sample)
+                        except RuntimeMapsNotReady:
+                            # A KFD client can become visible before llama-bench
+                            # has mapped its model and the sealed HIP/common
+                            # closure.  Retry only this typed startup state.
+                            sampled_identity = None
+                        if sampled_identity is not None:
+                            if not isinstance(sampled_identity, Mapping):
+                                raise EvidenceProducerError(
+                                    "runtime maps sampler returned no typed identity")
+                            runtime_maps_identity = sampled_identity
                     time.sleep(self.sample_interval_s)
                 exit_code = int(child.wait())
             except BaseException:
@@ -316,6 +409,9 @@ class SubprocessCommandExecutor:
             stderr.flush(); os.fsync(stderr.fileno())
         ended_ns = time.monotonic_ns()
         ended_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        if invocation.runtime_maps_required and runtime_maps_identity is None:
+            raise EvidenceProducerError(
+                "runtime maps did not prove the sealed arm during child execution")
         return ExecutionCapture(
             argv=invocation.argv, exit_code=exit_code, child_pid=int(child.pid),
             started_at=started_at, ended_at=ended_at,
@@ -403,7 +499,8 @@ class GpuSourceEvidencePlan:
     candidate: proofs.BuildIdentity
     anchor: proofs.BuildIdentity
     correctness_argv: tuple[str, ...]
-    correctness_summary_pattern: str
+    correctness_backend: str
+    correctness_op: str
     expected_correctness_cases: int
     candidate_rocprof_argv: tuple[str, ...]
     anchor_rocprof_argv: tuple[str, ...]
@@ -421,14 +518,60 @@ class GpuSourceEvidencePlan:
     candidate_rocprof_environment: tuple[tuple[str, str], ...] = ()
     anchor_rocprof_environment: tuple[tuple[str, str], ...] = ()
     shared_runtime: SharedRewardRuntimeFiles | None = None
+    # Empty means the legacy single command above.  Portfolio templates may
+    # instead seal an ordered multi-invocation correctness contract (FA uses a
+    # generic corpus plus a dedicated odd-GQA7 corpus).
+    correctness_invocations: tuple[Mapping[str, Any], ...] = ()
+    attribution_arm_order_seed_sha256: str = "0" * 64
+    attribution_arm_order: tuple[str, str] = ("candidate", "anchor")
+    profiler_trace_schema_id: str = ROCPROF_V1_TRACE_ID
+    expected_candidate_profiler_dispatch_rows: int | None = None
+    expected_anchor_profiler_dispatch_rows: int | None = None
+    profiler_transport_policy: str = "require-zero-exit"
 
     def __post_init__(self) -> None:
         if (not isinstance(self.campaign_id, str) or not self.campaign_id
                 or not isinstance(self.device_id, str) or not self.device_id):
             raise EvidenceProducerError("campaign and device identities are required")
         for name in ("manifest_sha256", "model_sha256", "workload_sha256",
-                     "runtime_config_sha256"):
+                     "runtime_config_sha256", "attribution_arm_order_seed_sha256"):
             _hash(getattr(self, name), name)
+        if (not isinstance(self.attribution_arm_order, tuple)
+                or len(self.attribution_arm_order) != 2
+                or set(self.attribution_arm_order) != {"candidate", "anchor"}):
+            raise EvidenceProducerError(
+                "attribution arm order must contain candidate and anchor exactly once")
+        if self.profiler_trace_schema_id not in {
+                ROCPROF_V1_TRACE_ID, ROCPROF_V3_TRACE_ID}:
+            raise EvidenceProducerError("profiler trace schema is not reviewed")
+        if self.profiler_trace_schema_id == ROCPROF_V3_TRACE_ID:
+            for value in (self.expected_candidate_profiler_dispatch_rows,
+                          self.expected_anchor_profiler_dispatch_rows):
+                if (isinstance(value, bool) or not isinstance(value, int)
+                        or value < 1):
+                    raise EvidenceProducerError(
+                        "rocprofv3 requires exact positive per-arm dispatch-row counts")
+            if self.profiler_transport_policy != ROCPROF_V3_TRANSPORT_POLICY:
+                raise EvidenceProducerError("rocprofv3 transport policy is not reviewed")
+        elif (self.expected_candidate_profiler_dispatch_rows is not None
+              or self.expected_anchor_profiler_dispatch_rows is not None
+              or self.profiler_transport_policy != "require-zero-exit"):
+            raise EvidenceProducerError("rocprof-v1 cannot claim rocprofv3 transport authority")
+        for invocation in self.correctness_invocations:
+            if (not isinstance(invocation, Mapping)
+                    or not isinstance(invocation.get("invocation_id"), str)
+                    or not invocation["invocation_id"]
+                    or not isinstance(invocation.get("argv"), (list, tuple))
+                    or not invocation["argv"]
+                    or isinstance(invocation.get("expected_cases"), bool)
+                    or not isinstance(invocation.get("expected_cases"), int)
+                    or invocation["expected_cases"] < 1
+                    or not isinstance(invocation.get("required_cases", []), list)):
+                raise EvidenceProducerError(
+                    "correctness invocation contract is malformed")
+        if len({row["invocation_id"] for row in self.correctness_invocations}) \
+                != len(self.correctness_invocations):
+            raise EvidenceProducerError("correctness invocation IDs must be unique")
         if not isinstance(self.candidate, proofs.BuildIdentity) or not isinstance(self.anchor, proofs.BuildIdentity):
             raise EvidenceProducerError("both build identities must be typed")
         if self.candidate == self.anchor:
@@ -440,12 +583,12 @@ class GpuSourceEvidencePlan:
                 or not isinstance(self.expected_correctness_cases, int)
                 or self.expected_correctness_cases < 1):
             raise EvidenceProducerError("expected correctness count must be positive")
-        try:
-            compiled = re.compile(self.correctness_summary_pattern)
-        except re.error as exc:
-            raise EvidenceProducerError("invalid correctness summary regex") from exc
-        if not {"passed", "total"}.issubset(compiled.groupindex):
-            raise EvidenceProducerError("correctness regex requires named passed and total groups")
+        if (not isinstance(self.correctness_backend, str)
+                or not self.correctness_backend
+                or not isinstance(self.correctness_op, str)
+                or not self.correctness_op):
+            raise EvidenceProducerError(
+                "correctness backend and operation must be explicit")
         if not isinstance(self.identity_files, EvidenceIdentityFiles):
             raise EvidenceProducerError("plan requires typed file-backed identities")
         if not isinstance(self.policy, BoundInputFile):
@@ -493,15 +636,40 @@ class GpuSourceEvidencePlan:
              (self.shared_runtime.measurement_binary.path if self.shared_runtime
               else self.identity_files.anchor.binary.path)),
         ):
-            timestamps = [item for item in inputs if item.role == "timestamp_input"]
-            if len(timestamps) != 1:
-                raise EvidenceProducerError(f"{label} requires one sealed timestamp input")
-            expected_pair = ("-i", str(timestamps[0].path))
-            if not any(tuple(command[index:index + 2]) == expected_pair
-                       for index in range(len(command) - 1)):
-                raise EvidenceProducerError(f"{label} does not bind rocprof -i input")
+            if self.profiler_trace_schema_id == ROCPROF_V1_TRACE_ID:
+                timestamps = [item for item in inputs if item.role == "timestamp_input"]
+                if len(timestamps) != 1:
+                    raise EvidenceProducerError(f"{label} requires one sealed timestamp input")
+                expected_pair = ("-i", str(timestamps[0].path))
+                if not any(tuple(command[index:index + 2]) == expected_pair
+                           for index in range(len(command) - 1)):
+                    raise EvidenceProducerError(f"{label} does not bind rocprof -i input")
+            else:
+                roles = {item.role for item in inputs}
+                wrappers = [item for item in inputs
+                            if item.role == "profiler_wrapper"]
+                if (len(wrappers) != 1 or str(wrappers[0].path) != command[1]
+                        or not {"profiler_runtime_manifest",
+                                "profiler_aqlprofile_manifest",
+                                "profiler_libpci_manifest"}.issubset(roles)):
+                    raise EvidenceProducerError(
+                        f"{label} requires the sealed rocprofv3 wrapper and closures")
+                _required_profiler_mapped_files(inputs)
+                _validate_rocprofv3_argv(command, target_binary=binary)
             if str(binary) not in command:
                 raise EvidenceProducerError(f"{label} does not execute its bound target binary")
+        if self.profiler_trace_schema_id == ROCPROF_V3_TRACE_ID:
+            def profiler_identity(inputs: Sequence[BoundInputFile]) -> dict[str, tuple[str, str]]:
+                selected = {item.role: (str(item.path), item.sha256) for item in inputs
+                            if item.role in PROFILER_V3_INPUT_ROLES}
+                if set(selected) != PROFILER_V3_INPUT_ROLES:
+                    raise EvidenceProducerError(
+                        "rocprofv3 input closure is incomplete")
+                return selected
+            if profiler_identity(self.candidate_rocprof_inputs) != profiler_identity(
+                    self.anchor_rocprof_inputs):
+                raise EvidenceProducerError(
+                    "rocprofv3 arms do not share one exact profiler closure")
         for label, command, required in (
             ("correctness", self.correctness_argv,
              self.required_correctness_argv_paths),
@@ -550,6 +718,24 @@ class GpuSourceEvidencePlan:
                     raise EvidenceProducerError("source rocprof arm does not use sealed split reward closure")
 
 
+def _validate_rocprofv3_argv(argv: tuple[str, ...], *, target_binary: Path) -> None:
+    prefix = ("--kernel-trace", "-d", ROCPROF_OUTPUT_DIRECTORY,
+              "-o", ROCPROF_OUTPUT_BASENAME, "--output-format", "csv", "--")
+    if len(argv) < 3 or Path(argv[0]) != ROCPROF_V3_PYTHON:
+        raise EvidenceProducerError("rocprofv3 must use the pinned Python interpreter")
+    if tuple(argv[2:2 + len(prefix)]) != prefix:
+        raise EvidenceProducerError("rocprofv3 command prefix is not exact kernel-trace CSV")
+    try:
+        target_index = argv.index(str(target_binary))
+    except ValueError as exc:
+        raise EvidenceProducerError("rocprofv3 command lacks its bound target") from exc
+    if tuple(argv[target_index + 1:]).count("json") != 1:
+        raise EvidenceProducerError("rocprofv3 target must emit one JSON result")
+    if not any(tuple(argv[index:index + 2]) == ("-o", "json")
+               for index in range(target_index + 1, len(argv) - 1)):
+        raise EvidenceProducerError("rocprofv3 target does not select JSON output")
+
+
 def _normalized_rocprof_argv(argv: tuple[str, ...]) -> tuple[str, ...]:
     """Normalize only the producer-owned rocprof ``-o`` output placeholder.
 
@@ -559,6 +745,12 @@ def _normalized_rocprof_argv(argv: tuple[str, ...]) -> tuple[str, ...]:
     admissible for source-patch reward attribution.
     """
     result = list(argv)
+    if ROCPROF_OUTPUT_DIRECTORY in result or ROCPROF_OUTPUT_BASENAME in result:
+        if (result.count(ROCPROF_OUTPUT_DIRECTORY) != 1
+                or result.count(ROCPROF_OUTPUT_BASENAME) != 1
+                or ROCPROF_TIMESTAMP_OUTPUT in result):
+            raise EvidenceProducerError("rocprofv3 output authority is ambiguous")
+        return tuple(result)
     if "-o" not in result:
         return tuple(result)
     index = result.index("-o")
@@ -571,11 +763,19 @@ def _normalized_rocprof_argv(argv: tuple[str, ...]) -> tuple[str, ...]:
 
 
 def _materialize_rocprof_argv(argv: tuple[str, ...], output: Path) -> tuple[str, ...]:
-    if ROCPROF_TIMESTAMP_OUTPUT not in argv:
-        return argv
     if not output.is_absolute():
         raise EvidenceProducerError("rocprof output substitution requires an absolute path")
-    return tuple(str(output) if item == ROCPROF_TIMESTAMP_OUTPUT else item for item in argv)
+    basename = output.stem
+    if ROCPROF_OUTPUT_BASENAME in argv:
+        if not output.name.endswith("_kernel_trace.csv"):
+            raise EvidenceProducerError("rocprofv3 output path lacks kernel-trace suffix")
+        basename = output.name[:-len("_kernel_trace.csv")]
+    replacements = {
+        ROCPROF_TIMESTAMP_OUTPUT: str(output),
+        ROCPROF_OUTPUT_DIRECTORY: str(output.parent),
+        ROCPROF_OUTPUT_BASENAME: basename,
+    }
+    return tuple(replacements.get(item, item) for item in argv)
 
 
 def _receipt_rocprof_template(body: Mapping[str, Any]) -> tuple[str, ...]:
@@ -585,6 +785,21 @@ def _receipt_rocprof_template(body: Mapping[str, Any]) -> tuple[str, ...]:
         output = str(body["timestamp_csv_path"])
     except (KeyError, TypeError) as exc:
         raise EvidenceProducerError("attribution receipt lacks command/output binding") from exc
+    if body.get("profiler_trace_schema_id") == ROCPROF_V3_TRACE_ID:
+        path = Path(output)
+        directory = str(path.parent)
+        if not path.name.endswith("_kernel_trace.csv"):
+            raise EvidenceProducerError("rocprofv3 receipt output suffix changed")
+        basename = path.name[:-len("_kernel_trace.csv")]
+        if (argv.count(directory) != 1 or argv.count(basename) != 1
+                or not any(tuple(argv[index:index + 2]) == ("-d", directory)
+                           for index in range(len(argv) - 1))
+                or not any(tuple(argv[index:index + 2]) == ("-o", basename)
+                           for index in range(len(argv) - 1))):
+            raise EvidenceProducerError("rocprofv3 receipt has unbound output authority")
+        argv[argv.index(directory)] = ROCPROF_OUTPUT_DIRECTORY
+        argv[argv.index(basename)] = ROCPROF_OUTPUT_BASENAME
+        return tuple(argv)
     if "-o" not in argv:
         return tuple(argv)
     index = argv.index("-o")
@@ -597,6 +812,17 @@ def _receipt_rocprof_template(body: Mapping[str, Any]) -> tuple[str, ...]:
 
 def _bound_reference(value: BoundInputFile) -> dict[str, Any]:
     return {"role": value.role, "path": str(value.path), "sha256": value.sha256}
+
+
+def _required_profiler_mapped_files(
+        inputs: Sequence[BoundInputFile]) -> dict[str, str]:
+    selected = [item for item in inputs if item.role in PROFILER_MAPPED_ROLES]
+    roles = {item.role for item in selected}
+    if (roles != PROFILER_MAPPED_ROLES or len(selected) != len(roles)
+            or len({item.path for item in selected}) != len(selected)):
+        raise EvidenceProducerError(
+            "rocprofv3 mapped DSO closure is incomplete or ambiguous")
+    return {str(item.path): item.sha256 for item in selected}
 
 
 def _shared_runtime_reference(value: SharedRewardRuntimeFiles | None) -> dict[str, Any] | None:
@@ -754,7 +980,7 @@ def _verify_source_tree_identity(carrier: BoundInputFile,
 
 def _policy_payload(plan: GpuSourceEvidencePlan) -> dict[str, Any]:
     return {
-        "schema": "epyc.autokernel.gpu_source_execution_policy.v1",
+        "schema": EXECUTION_POLICY_SCHEMA,
         "manifest_sha256": plan.manifest_sha256,
         "model_sha256": plan.model_sha256,
         "workload_sha256": plan.workload_sha256,
@@ -762,10 +988,21 @@ def _policy_payload(plan: GpuSourceEvidencePlan) -> dict[str, Any]:
         "candidate_build_identity": asdict(plan.candidate),
         "anchor_build_identity": asdict(plan.anchor),
         "correctness_argv": list(plan.correctness_argv),
-        "correctness_summary_pattern": plan.correctness_summary_pattern,
+        "correctness_parser_id": CORRECTNESS_PARSER_ID,
+        "correctness_backend": plan.correctness_backend,
+        "correctness_op": plan.correctness_op,
         "expected_correctness_cases": plan.expected_correctness_cases,
+        "correctness_invocations": [dict(row) for row in plan.correctness_invocations],
         "candidate_rocprof_argv": list(plan.candidate_rocprof_argv),
         "anchor_rocprof_argv": list(plan.anchor_rocprof_argv),
+        "profiler_trace_schema_id": plan.profiler_trace_schema_id,
+        "expected_candidate_profiler_dispatch_rows": (
+            plan.expected_candidate_profiler_dispatch_rows),
+        "expected_anchor_profiler_dispatch_rows": (
+            plan.expected_anchor_profiler_dispatch_rows),
+        "profiler_transport_policy": plan.profiler_transport_policy,
+        "attribution_arm_order_seed_sha256": plan.attribution_arm_order_seed_sha256,
+        "attribution_arm_order": list(plan.attribution_arm_order),
         "correctness_inputs": [_bound_reference(x) for x in plan.correctness_inputs],
         "candidate_rocprof_inputs": [_bound_reference(x) for x in plan.candidate_rocprof_inputs],
         "anchor_rocprof_inputs": [_bound_reference(x) for x in plan.anchor_rocprof_inputs],
@@ -823,6 +1060,20 @@ def _verify_plan_files(plan: GpuSourceEvidencePlan) -> None:
     for item in (plan.correctness_inputs + plan.candidate_rocprof_inputs
                  + plan.anchor_rocprof_inputs):
         _verify_bound(item)
+    if plan.profiler_trace_schema_id == ROCPROF_V3_TRACE_ID:
+        manifests = {
+            item.path: item for item in (
+                plan.candidate_rocprof_inputs + plan.anchor_rocprof_inputs)
+            if item.role in {"profiler_runtime_manifest",
+                             "profiler_aqlprofile_manifest",
+                             "profiler_libpci_manifest"}}
+        roles = {item.role for item in manifests.values()}
+        if roles != {"profiler_runtime_manifest", "profiler_aqlprofile_manifest",
+                     "profiler_libpci_manifest"}:
+            raise EvidenceProducerError(
+                "rocprofv3 arms do not bind the SDK and dependency closures")
+        for manifest in manifests.values():
+            _verify_profiler_runtime_manifest(manifest)
     _verify_executable(plan.correctness_argv, plan.correctness_inputs, "correctness")
     _verify_executable(plan.candidate_rocprof_argv,
                        plan.candidate_rocprof_inputs, "candidate rocprof")
@@ -835,6 +1086,87 @@ def _verify_plan_files(plan: GpuSourceEvidencePlan) -> None:
         raise EvidenceProducerError("sealed adapter policy is not JSON") from exc
     if policy != _policy_payload(plan):
         raise EvidenceProducerError("sealed adapter policy differs from execution plan")
+
+
+def profiler_prefix_snapshot(root: Path) -> dict[str, Any]:
+    """Hash every file/link in the side-loaded profiler prefix.
+
+    The prefix is intentionally outside the repository and package manager.
+    Binding only the wrapper would leave the injected tool, plugin and libpci
+    closure mutable after deployment validation.
+    """
+    if not root.is_absolute() or root.is_symlink() or not root.is_dir():
+        raise EvidenceProducerError("profiler prefix must be an absolute real directory")
+    entries: list[dict[str, Any]] = []
+    for path in sorted(root.rglob("*"), key=lambda item: item.relative_to(root).as_posix()):
+        relative = path.relative_to(root).as_posix()
+        if path.is_symlink():
+            try:
+                resolved = path.resolve(strict=True)
+                resolved.relative_to(root)
+            except (OSError, ValueError) as exc:
+                raise EvidenceProducerError(
+                    f"profiler prefix symlink escapes closure: {relative}") from exc
+            if not resolved.is_file() or resolved.is_symlink() \
+                    or resolved.stat().st_nlink != 1:
+                raise EvidenceProducerError(
+                    f"profiler prefix symlink target is not a single-link file: {relative}")
+            entries.append({"path": relative, "type": "symlink",
+                            "target": os.readlink(path),
+                            "target_sha256": _hash_file(
+                                resolved, f"profiler symlink target:{relative}"),
+                            "target_bytes": resolved.stat().st_size})
+        elif path.is_dir():
+            entries.append({"path": relative, "type": "directory"})
+        elif path.is_file():
+            if path.stat().st_nlink != 1:
+                raise EvidenceProducerError(
+                    f"profiler prefix contains a hardlinked file: {relative}")
+            entries.append({"path": relative, "type": "file",
+                            "sha256": _hash_file(path, f"profiler:{relative}"),
+                            "bytes": path.stat().st_size,
+                            "mode": path.stat().st_mode & 0o777})
+        else:
+            raise EvidenceProducerError(
+                f"profiler prefix contains a special file: {relative}")
+    return {"schema": PROFILER_RUNTIME_SCHEMA, "root": str(root),
+            "entries": entries, "entry_count": len(entries),
+            "complete_listing": True}
+
+
+def _verify_profiler_runtime_manifest(bound: BoundInputFile) -> None:
+    if bound.role not in {"profiler_runtime_manifest", "profiler_aqlprofile_manifest",
+                          "profiler_libpci_manifest"}:
+        raise EvidenceProducerError("profiler runtime manifest role changed")
+    try:
+        body = json.loads(bound.path.read_text(encoding="utf-8"))
+        root = Path(str(body["root"]))
+    except (OSError, json.JSONDecodeError, KeyError, TypeError) as exc:
+        raise EvidenceProducerError("profiler runtime manifest is malformed") from exc
+    if body != profiler_prefix_snapshot(root):
+        raise EvidenceProducerError("profiler runtime closure changed after sealing")
+    entries = body.get("entries")
+    if not isinstance(entries, list):
+        raise EvidenceProducerError("profiler runtime closure listing is malformed")
+    paths = {str(row.get("path")) for row in entries
+             if isinstance(row, Mapping) and row.get("type") in {"file", "symlink"}}
+    if bound.role == "profiler_runtime_manifest":
+        required_basenames = {
+            "rocprofv3", "librocprofiler-sdk.so.0.4.0",
+            "librocprofiler-sdk-tool.so.0.4.0",
+        }
+        if not required_basenames.issubset({Path(path).name for path in paths}):
+            raise EvidenceProducerError(
+                "rocprofv3 SDK closure omits its wrapper or injected libraries")
+    elif bound.role == "profiler_aqlprofile_manifest":
+        if "libhsa-amd-aqlprofile64.so.1.0.60200" not in {
+                Path(path).name for path in paths}:
+            raise EvidenceProducerError(
+                "aqlprofile closure omits the reviewed gfx90a DSO")
+    elif bound.role == "profiler_libpci_manifest":
+        if "libpciaccess.so.0.11.1" not in {Path(path).name for path in paths}:
+            raise EvidenceProducerError(
+                "profiler libpci closure omits the reviewed runtime DSO")
 
 
 def _verify_shared_runtime(runtime: SharedRewardRuntimeFiles,
@@ -1121,18 +1453,114 @@ def _output_hashes(invocation: CommandInvocation) -> dict[str, Any]:
     return result
 
 
-def _parse_summary(stdout: str, plan: GpuSourceEvidencePlan) -> str:
-    matches = list(re.finditer(plan.correctness_summary_pattern, stdout, re.MULTILINE))
-    if len(matches) != 1:
-        raise EvidenceProducerError("correctness stdout must contain exactly one summary")
-    match = matches[0]
+@dataclass(frozen=True)
+class _CorrectnessResult:
+    backend: str
+    operation: str
+    passed_cases: int
+    total_cases: int
+    skipped_backends: tuple[str, ...]
+    backends_passed: int
+    backends_total: int
+    overall: str
+
+    @property
+    def summary(self) -> str:
+        return f"{self.passed_cases}/{self.total_cases} tests passed"
+
+
+def _parse_correctness(
+        stdout: str, plan: GpuSourceEvidencePlan,
+        invocation_contract: Mapping[str, Any] | None = None,
+) -> _CorrectnessResult:
+    """Reduce console bytes through the T0 parser, then enforce this exact plan.
+
+    The tool counts skipped devices as passed backends.  Therefore neither its
+    final ``N/N backends passed`` line nor a regex spanning that line proves the
+    selected GPU ran anything.  The authoritative T0 parser attributes cases to
+    concrete backend frames, excludes unsupported cases, and reconciles its
+    parse with the tool's per-backend count before this reducer accepts it.
+    """
     try:
-        passed, total = int(match.group("passed")), int(match.group("total"))
-    except (ValueError, IndexError) as exc:
-        raise EvidenceProducerError("correctness summary counts are invalid") from exc
-    if passed != plan.expected_correctness_cases or total != plan.expected_correctness_cases:
-        raise EvidenceProducerError("correctness did not pass the exact expected case count")
-    return match.group(0)
+        run = t0_provider.parse_backend_ops_console(stdout)
+        run.reconcile()
+    except t0_provider.OutputParseError as exc:
+        raise CorrectnessParseRefusal(
+            f"correctness console parse refused: {exc}") from exc
+
+    backend = (plan.correctness_backend if invocation_contract is None
+               else invocation_contract["backend"])
+    operation = (plan.correctness_op if invocation_contract is None
+                 else invocation_contract["op"])
+    expected = (plan.expected_correctness_cases if invocation_contract is None
+                else invocation_contract["expected_cases"])
+    targets = tuple(row for row in run.backends if row.name == backend)
+    if len(targets) != 1:
+        raise CorrectnessParseRefusal(
+            "correctness output must contain exactly one target backend frame")
+    target = targets[0]
+    if target.skipped:
+        raise CorrectnessParseRefusal("target correctness backend was skipped")
+    if target.status != "OK":
+        raise CorrectnessParseRefusal("target correctness backend did not report OK")
+
+    compared = tuple(case for case in target.cases
+                     if case.status != "not_supported")
+    if not compared:
+        raise CorrectnessParseRefusal(
+            "target correctness backend exercised zero supported cases")
+    if any(case.op != operation for case in compared):
+        raise CorrectnessParseRefusal(
+            "target correctness backend exercised an unexpected operation")
+    if any(not case.passed for case in compared):
+        raise CorrectnessParseRefusal(
+            "target correctness backend contains a failed case")
+    if (len(compared) != expected
+            or target.reported_passed != expected
+            or target.reported_total != expected):
+        raise CorrectnessParseRefusal(
+            "correctness did not pass the exact expected case count")
+    if invocation_contract is not None:
+        required = invocation_contract.get("required_cases", [])
+        for requirement in required:
+            pattern = requirement.get("params_pattern")
+            expected_matches = requirement.get("expected_matches")
+            if (not isinstance(pattern, str) or not pattern
+                    or isinstance(expected_matches, bool)
+                    or not isinstance(expected_matches, int)
+                    or expected_matches < 1):
+                raise CorrectnessParseRefusal(
+                    "required correctness case matcher is malformed")
+            matches = [case for case in target.cases
+                       if case.op == requirement.get("op")
+                       and re.search(pattern, case.params)]
+            if len(matches) != expected_matches:
+                raise CorrectnessParseRefusal(
+                    "required correctness case was absent or duplicated")
+            if any(case.status == "not_supported" or not case.passed
+                   for case in matches):
+                raise CorrectnessParseRefusal(
+                    "required correctness case was unsupported or failed")
+
+    others = tuple(row for row in run.backends if row is not target)
+    if any(not row.skipped or row.cases for row in others):
+        raise CorrectnessParseRefusal(
+            "a non-target backend was exercised by targeted correctness")
+    if (run.backends_total != len(run.backends)
+            or run.backends_passed != run.backends_total
+            or run.overall != "OK"
+            or run.failing_tests):
+        raise CorrectnessParseRefusal(
+            "correctness backend/overall summaries do not prove a clean run")
+    return _CorrectnessResult(
+        backend=backend,
+        operation=operation,
+        passed_cases=expected,
+        total_cases=expected,
+        skipped_backends=tuple(row.name for row in others),
+        backends_passed=run.backends_passed,
+        backends_total=run.backends_total,
+        overall=run.overall)
 
 
 def _produce_correctness(
@@ -1140,6 +1568,11 @@ def _produce_correctness(
     claim_acquirer: Callable[..., Any], claim_verifier: Callable[[Mapping[str, Any]], object],
     claim_journal: Any, claim_timeout_s: float,
 ) -> Mapping[str, Any]:
+    if plan.correctness_invocations:
+        return _produce_correctness_invocations(
+            root, plan, executor, claim_acquirer=claim_acquirer,
+            claim_verifier=claim_verifier, claim_journal=claim_journal,
+            claim_timeout_s=claim_timeout_s)
     directory = root / "correctness"
     invocation = CommandInvocation(
         kind="correctness", arm="candidate", argv=plan.correctness_argv,
@@ -1152,7 +1585,41 @@ def _produce_correctness(
         claim_verifier=claim_verifier, claim_journal=claim_journal,
         claim_timeout_s=claim_timeout_s)
     outputs = _output_hashes(invocation)
-    summary = _parse_summary(invocation.stdout_path.read_text(encoding="utf-8"), plan)
+    try:
+        parsed = _parse_correctness(
+            invocation.stdout_path.read_text(encoding="utf-8"), plan)
+    except CorrectnessParseRefusal as exc:
+        refusal = _seal(directory / "refusal.json", {
+            "schema": CORRECTNESS_REFUSAL_SCHEMA,
+            "authority": AUTHORITY,
+            "promotion_claim": False,
+            "status": "refused",
+            "classification": "output_parse_refusal",
+            "error_type": type(exc).__name__,
+            "reason": _durable_refusal_reason(exc),
+            "campaign_id": plan.campaign_id,
+            "device_id": plan.device_id,
+            "manifest_sha256": plan.manifest_sha256,
+            "candidate_build_identity": asdict(plan.candidate),
+            "workload_sha256": plan.workload_sha256,
+            "command_argv": list(plan.correctness_argv),
+            "command_cwd": str(plan.execution_cwd),
+            "command_environment_sha256": schemas.content_hash(
+                [list(item) for item in plan.correctness_environment]),
+            "exit_code": capture.exit_code,
+            **outputs,
+            "started_at": capture.started_at,
+            "ended_at": capture.ended_at,
+            "correctness_parser_id": CORRECTNESS_PARSER_ID,
+            "correctness_backend": plan.correctness_backend,
+            "correctness_op": plan.correctness_op,
+            "expected_cases": plan.expected_correctness_cases,
+            **_claim_boundary_fields(opened, released, residency),
+            "residency_witness": residency,
+        })
+        raise CorrectnessParseRefusal(
+            str(exc), receipt_path=str(refusal["path"]),
+            receipt_sha256=str(refusal["file_sha256"])) from exc
     if capture.exit_code != 0:
         raise EvidenceProducerError("targeted correctness command exited nonzero")
     body = {
@@ -1179,8 +1646,14 @@ def _produce_correctness(
         **outputs,
         "started_at": capture.started_at,
         "ended_at": capture.ended_at,
-        "summary": summary,
-        "correctness_summary_pattern": plan.correctness_summary_pattern,
+        "summary": parsed.summary,
+        "correctness_parser_id": CORRECTNESS_PARSER_ID,
+        "correctness_backend": parsed.backend,
+        "correctness_op": parsed.operation,
+        "skipped_backends": list(parsed.skipped_backends),
+        "backends_passed": parsed.backends_passed,
+        "backends_total": parsed.backends_total,
+        "overall": parsed.overall,
         "expected_cases": plan.expected_correctness_cases,
         "passed_cases": plan.expected_correctness_cases,
         "exact_case_ok": True,
@@ -1188,6 +1661,261 @@ def _produce_correctness(
         "residency_witness": residency,
     }
     return _seal(directory / "receipt.json", body)
+
+
+def _validate_correctness_invocation_receipt(
+        loaded: Mapping[str, Any], plan: GpuSourceEvidencePlan,
+        contract: Mapping[str, Any]) -> None:
+    body = loaded["body"]
+    expected = {
+        "schema": CORRECTNESS_SCHEMA, "authority": AUTHORITY,
+        "non_promotable": True, "promotion_claim": False,
+        "status": "complete", "result": "PASS",
+        "campaign_id": plan.campaign_id, "device_id": plan.device_id,
+        "manifest_sha256": plan.manifest_sha256,
+        "candidate_build_identity": asdict(plan.candidate),
+        "workload_sha256": plan.workload_sha256,
+        "invocation_id": contract["invocation_id"],
+        "case_set": contract.get("case_set"),
+        "command_argv": list(contract["argv"]), "exit_code": 0,
+        "command_cwd": str(plan.execution_cwd),
+        "command_environment_sha256": schemas.content_hash(
+            [list(item) for item in _correctness_invocation_environment(
+                plan, contract)]),
+        "correctness_parser_id": CORRECTNESS_PARSER_ID,
+        "correctness_backend": contract["backend"],
+        "correctness_op": contract["op"],
+        "expected_cases": contract["expected_cases"],
+        "passed_cases": contract["expected_cases"],
+        "required_cases": list(contract.get("required_cases", [])),
+        "exact_case_ok": True,
+    }
+    if any(body.get(key) != value for key, value in expected.items()):
+        raise EvidenceProducerError(
+            "correctness invocation receipt identity/config/result mismatch")
+    _validate_claim_boundary(body, plan=plan)
+    for kind in ("stdout", "stderr"):
+        path = Path(str(body.get(f"{kind}_path", "")))
+        if _hash_file(path, kind, allow_empty=kind == "stderr") != body.get(
+                f"{kind}_sha256"):
+            raise EvidenceProducerError(
+                f"correctness invocation {kind} bytes changed")
+    parsed = _parse_correctness(
+        Path(str(body["stdout_path"])).read_text(encoding="utf-8"), plan,
+        contract)
+    if parsed.summary != body.get("summary"):
+        raise EvidenceProducerError("correctness invocation summary changed")
+    _validate_residency_witness(
+        body.get("residency_witness"), device_id=plan.device_id,
+        label=f"correctness {contract['invocation_id']}")
+
+
+def _correctness_invocation_environment(
+        plan: GpuSourceEvidencePlan,
+        contract: Mapping[str, Any]) -> tuple[tuple[str, str], ...]:
+    environment = dict(plan.correctness_environment)
+    overrides = contract.get("environment_overrides", [])
+    if (not isinstance(overrides, list)
+            or any(not isinstance(row, list) or len(row) != 2
+                   or not all(isinstance(value, str) for value in row)
+                   for row in overrides)):
+        raise EvidenceProducerError(
+            "correctness invocation environment overrides are malformed")
+    allowed = {"AUTOKERNEL_CORRECTNESS_CASE_SET"}
+    if any(row[0] not in allowed for row in overrides):
+        raise EvidenceProducerError(
+            "correctness invocation attempted an unreviewed environment override")
+    environment.update(dict(overrides))
+    return tuple(sorted(environment.items()))
+
+
+def _load_correctness_invocation_refusal(
+        path: Path, plan: GpuSourceEvidencePlan,
+        contract: Mapping[str, Any]) -> Mapping[str, Any]:
+    loaded = proofs.load_receipt(path, schema=CORRECTNESS_REFUSAL_SCHEMA)
+    body = loaded["body"]
+    expected = {
+        "authority": AUTHORITY, "promotion_claim": False,
+        "status": "refused", "classification": "output_parse_refusal",
+        "error_type": "CorrectnessParseRefusal",
+        "campaign_id": plan.campaign_id, "device_id": plan.device_id,
+        "manifest_sha256": plan.manifest_sha256,
+        "candidate_build_identity": asdict(plan.candidate),
+        "workload_sha256": plan.workload_sha256,
+        "invocation_id": contract["invocation_id"],
+        "case_set": contract.get("case_set"),
+        "command_argv": list(contract["argv"]),
+        "command_cwd": str(plan.execution_cwd),
+        "command_environment_sha256": schemas.content_hash([
+            list(item) for item in _correctness_invocation_environment(
+                plan, contract)]),
+        "correctness_parser_id": CORRECTNESS_PARSER_ID,
+        "correctness_backend": contract["backend"],
+        "correctness_op": contract["op"],
+        "expected_cases": contract["expected_cases"],
+        "required_cases": list(contract.get("required_cases", [])),
+    }
+    if (any(body.get(key) != value for key, value in expected.items())
+            or not isinstance(body.get("reason"), str) or not body["reason"]):
+        raise EvidenceProducerError(
+            "correctness invocation refusal identity changed")
+    _validate_claim_boundary(body, plan=plan)
+    for kind in ("stdout", "stderr"):
+        if _hash_file(Path(str(body.get(f"{kind}_path", ""))), kind,
+                      allow_empty=kind == "stderr") != body.get(f"{kind}_sha256"):
+            raise EvidenceProducerError(
+                f"correctness invocation refusal {kind} changed")
+    try:
+        _parse_correctness(
+            Path(str(body["stdout_path"])).read_text(encoding="utf-8"),
+            plan, contract)
+    except CorrectnessParseRefusal as exc:
+        if _durable_refusal_reason(exc) != body["reason"]:
+            raise EvidenceProducerError(
+                "correctness invocation refusal reason changed") from exc
+    else:
+        raise EvidenceProducerError(
+            "correctness invocation refusal now parses as a pass")
+    return loaded
+
+
+def _produce_correctness_invocations(
+        root: Path, plan: GpuSourceEvidencePlan, executor: CommandExecutor, *,
+        claim_acquirer: Callable[..., Any],
+        claim_verifier: Callable[[Mapping[str, Any]], object],
+        claim_journal: Any, claim_timeout_s: float) -> Mapping[str, Any]:
+    directory = root / "correctness"
+    references: list[dict[str, Any]] = []
+    for contract in plan.correctness_invocations:
+        invocation_id = str(contract["invocation_id"])
+        invocation_dir = directory / invocation_id
+        receipt_path = invocation_dir / "receipt.json"
+        refusal_path = invocation_dir / "refusal.json"
+        if receipt_path.exists() or receipt_path.is_symlink():
+            if refusal_path.exists() or refusal_path.is_symlink():
+                raise EvidenceProducerError(
+                    f"correctness invocation {invocation_id} has contradictory terminals")
+            loaded = proofs.load_receipt(receipt_path, schema=CORRECTNESS_SCHEMA)
+            _validate_correctness_invocation_receipt(loaded, plan, contract)
+            references.append(_reference(loaded))
+            continue
+        if refusal_path.exists() or refusal_path.is_symlink():
+            loaded = _load_correctness_invocation_refusal(
+                refusal_path, plan, contract)
+            raise CorrectnessParseRefusal(
+                str(loaded["body"]["reason"]),
+                receipt_path=str(loaded["path"]),
+                receipt_sha256=str(loaded["file_sha256"]))
+        if invocation_dir.exists() or invocation_dir.is_symlink():
+            raise EvidenceProducerError(
+                f"correctness invocation {invocation_id} is incomplete")
+        invocation = CommandInvocation(
+            kind="correctness", arm="candidate",
+            argv=tuple(contract["argv"]),
+            stdout_path=(invocation_dir / "stdout.txt").resolve(),
+            stderr_path=(invocation_dir / "stderr.txt").resolve(),
+            working_directory=plan.execution_cwd,
+            environment=_correctness_invocation_environment(plan, contract))
+        capture, opened, released, residency = _run_claimed(
+            invocation, plan=plan, executor=executor,
+            claim_acquirer=claim_acquirer, claim_verifier=claim_verifier,
+            claim_journal=claim_journal, claim_timeout_s=claim_timeout_s)
+        outputs = _output_hashes(invocation)
+        try:
+            parsed = _parse_correctness(
+                invocation.stdout_path.read_text(encoding="utf-8"), plan,
+                contract)
+        except CorrectnessParseRefusal as exc:
+            refusal = _seal(refusal_path, {
+                "schema": CORRECTNESS_REFUSAL_SCHEMA,
+                "authority": AUTHORITY, "promotion_claim": False,
+                "status": "refused",
+                "classification": "output_parse_refusal",
+                "error_type": type(exc).__name__,
+                "reason": _durable_refusal_reason(exc),
+                "campaign_id": plan.campaign_id,
+                "device_id": plan.device_id,
+                "manifest_sha256": plan.manifest_sha256,
+                "candidate_build_identity": asdict(plan.candidate),
+                "workload_sha256": plan.workload_sha256,
+                "invocation_id": invocation_id,
+                "case_set": contract.get("case_set"),
+                "command_argv": list(contract["argv"]),
+                "command_cwd": str(plan.execution_cwd),
+                "command_environment_sha256": schemas.content_hash([
+                    list(item) for item in _correctness_invocation_environment(
+                        plan, contract)]),
+                "exit_code": capture.exit_code, **outputs,
+                "started_at": capture.started_at, "ended_at": capture.ended_at,
+                "correctness_parser_id": CORRECTNESS_PARSER_ID,
+                "correctness_backend": contract["backend"],
+                "correctness_op": contract["op"],
+                "expected_cases": contract["expected_cases"],
+                "required_cases": list(contract.get("required_cases", [])),
+                **_claim_boundary_fields(opened, released, residency),
+                "residency_witness": residency,
+            })
+            raise CorrectnessParseRefusal(
+                str(exc), receipt_path=str(refusal["path"]),
+                receipt_sha256=str(refusal["file_sha256"])) from exc
+        if capture.exit_code != 0:
+            raise EvidenceProducerError(
+                f"correctness invocation {invocation_id} exited nonzero")
+        body = {
+            "schema": CORRECTNESS_SCHEMA, "authority": AUTHORITY,
+            "non_promotable": True, "promotion_claim": False,
+            "status": "complete", "result": "PASS",
+            "campaign_id": plan.campaign_id, "device_id": plan.device_id,
+            "manifest_sha256": plan.manifest_sha256,
+            "candidate_build_identity": asdict(plan.candidate),
+            "workload_sha256": plan.workload_sha256,
+            "invocation_id": invocation_id,
+            "case_set": contract.get("case_set"),
+            "command_argv": list(contract["argv"]),
+            "command_cwd": str(plan.execution_cwd),
+            "command_environment_sha256": schemas.content_hash(
+                [list(item) for item in _correctness_invocation_environment(
+                    plan, contract)]),
+            "exit_code": capture.exit_code, **outputs,
+            "started_at": capture.started_at, "ended_at": capture.ended_at,
+            "summary": parsed.summary,
+            "correctness_parser_id": CORRECTNESS_PARSER_ID,
+            "correctness_backend": parsed.backend,
+            "correctness_op": parsed.operation,
+            "expected_cases": contract["expected_cases"],
+            "passed_cases": contract["expected_cases"],
+            "required_cases": list(contract.get("required_cases", [])),
+            "exact_case_ok": True,
+            **_claim_boundary_fields(opened, released, residency),
+            "residency_witness": residency,
+        }
+        loaded = _seal(receipt_path, body)
+        references.append(_reference(loaded))
+    aggregate = {
+        "schema": CORRECTNESS_SCHEMA, "authority": AUTHORITY,
+        "non_promotable": True, "promotion_claim": False,
+        "status": "complete", "result": "PASS",
+        "campaign_id": plan.campaign_id, "device_id": plan.device_id,
+        "manifest_sha256": plan.manifest_sha256,
+        "candidate_build_identity": asdict(plan.candidate),
+        "identity_files": _identity_files_reference(plan.identity_files),
+        "shared_runtime": _shared_runtime_reference(plan.shared_runtime),
+        "execution_policy": _bound_reference(plan.policy),
+        "command_input_files": [_bound_reference(x)
+                                for x in plan.correctness_inputs],
+        "workload_sha256": plan.workload_sha256,
+        "command_argv": list(plan.correctness_argv),
+        "command_cwd": str(plan.execution_cwd),
+        "correctness_parser_id": CORRECTNESS_PARSER_ID,
+        "correctness_backend": plan.correctness_backend,
+        "correctness_op": plan.correctness_op,
+        "expected_cases": plan.expected_correctness_cases,
+        "correctness_invocation_contracts": [dict(row)
+                                             for row in plan.correctness_invocations],
+        "invocations": references,
+        "exact_case_ok": True,
+    }
+    return _seal(directory / "receipt.json", aggregate)
 
 
 def _integer(row: Mapping[str, str], key: str, *, minimum: int) -> int:
@@ -1200,10 +1928,100 @@ def _integer(row: Mapping[str, str], key: str, *, minimum: int) -> int:
     return value
 
 
-def _load_dispatches(path: Path) -> list[dict[str, Any]]:
+def _load_dispatches(
+        path: Path, *, profiler_trace_schema_id: str = ROCPROF_V1_TRACE_ID,
+        expected_rows: int | None = None) -> list[dict[str, Any]]:
     _hash_file(path, "timestamp CSV", allow_empty=False)
+    if profiler_trace_schema_id == ROCPROF_V3_TRACE_ID:
+        try:
+            raw = path.read_bytes()
+            text = raw.decode("utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            raise EvidenceProducerError(
+                "kernel trace CSV is not exact UTF-8") from exc
+        physical_lines = text.splitlines()
+        if (not raw.endswith(b"\n") or raw.endswith((b"\n\n", b"\r\n\r\n"))
+                or not physical_lines or any(not line for line in physical_lines)):
+            raise EvidenceProducerError(
+                "kernel trace CSV must have one trailing newline and no blank physical lines")
     with path.open("r", encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle)
+        if profiler_trace_schema_id == ROCPROF_V3_TRACE_ID:
+            if tuple(reader.fieldnames or ()) != ROCPROF_V3_COLUMNS:
+                raise EvidenceProducerError(
+                    "kernel trace CSV lacks the exact rocprofv3 columns")
+            dispatches = []
+            agent_ids: set[int] = set()
+            queue_ids: set[int] = set()
+            correlations: set[int] = set()
+            for index, row in enumerate(reader):
+                if None in row or any(value is None for value in row.values()):
+                    raise EvidenceProducerError("kernel trace CSV row shape changed")
+                if row["Kind"] != "KERNEL_DISPATCH":
+                    raise EvidenceProducerError("kernel trace CSV contains a non-dispatch row")
+                kernel = row["Kernel_Name"]
+                if not kernel or any(ord(ch) < 0x20 for ch in kernel):
+                    raise EvidenceProducerError("kernel trace CSV kernel name is malformed")
+                agent_id = _integer(row, "Agent_Id", minimum=0)
+                queue_id = _integer(row, "Queue_Id", minimum=0)
+                correlation_id = _integer(row, "Correlation_Id", minimum=1)
+                agent_ids.add(agent_id); queue_ids.add(queue_id)
+                if correlation_id in correlations:
+                    raise EvidenceProducerError(
+                        "kernel trace correlation IDs are not unique")
+                correlations.add(correlation_id)
+                workgroup_xyz = tuple(_integer(
+                    row, f"Workgroup_Size_{axis}", minimum=1) for axis in "XYZ")
+                grid_xyz = tuple(_integer(
+                    row, f"Grid_Size_{axis}", minimum=1) for axis in "XYZ")
+                workgroup = math.prod(workgroup_xyz)
+                grid = math.prod(grid_xyz)
+                raw_group_segment = _integer(
+                    row, "Group_Segment_Size", minimum=0)
+                # rocprofv3 reports the requested group segment while the
+                # reviewed gfx90a v1 authority reports its 512-byte allocation.
+                # The route contract is deliberately still in allocation
+                # bytes, so this mapping is architecture-bound and explicit.
+                allocated_lds = (0 if raw_group_segment == 0 else
+                                 ((raw_group_segment + 511) // 512) * 512)
+                values = {
+                    "agent_id": agent_id, "queue_id": queue_id,
+                    "kernel_id": _integer(row, "Kernel_Id", minimum=0),
+                    "correlation_id": correlation_id,
+                    "grid": grid, "grid_xyz": list(grid_xyz),
+                    "workgroup": workgroup,
+                    "workgroup_xyz": list(workgroup_xyz),
+                    "group_segment_size": raw_group_segment,
+                    "lds": allocated_lds,
+                    "private_segment_size": _integer(
+                        row, "Private_Segment_Size", minimum=0),
+                    "begin_ns": _integer(row, "Start_Timestamp", minimum=0),
+                    "end_ns": _integer(row, "End_Timestamp", minimum=1),
+                }
+                if (values["end_ns"] <= values["begin_ns"]
+                        or values["grid"] % values["workgroup"]):
+                    raise EvidenceProducerError(
+                        "kernel trace row has invalid duration or non-integral blocks")
+                dispatches.append({
+                    "index": index, "kernel": kernel, **values,
+                    "blocks_per_call": values["grid"] // values["workgroup"],
+                })
+            if not dispatches:
+                raise EvidenceProducerError("kernel trace CSV contains no dispatches")
+            if (expected_rows is None or len(dispatches) != expected_rows):
+                raise EvidenceProducerError(
+                    "kernel trace CSV does not have the exact expected row count")
+            if len(agent_ids) != 1:
+                raise EvidenceProducerError(
+                    "kernel trace does not bind one exact GPU agent")
+            if not queue_ids:
+                raise EvidenceProducerError("kernel trace contains no queue identity")
+            if correlations != set(range(1, expected_rows + 1)):
+                raise EvidenceProducerError(
+                    "kernel trace correlation IDs are not the exact contiguous domain")
+            return dispatches
+        if profiler_trace_schema_id != ROCPROF_V1_TRACE_ID:
+            raise EvidenceProducerError("profiler trace schema is not reviewed")
         required = {"KernelName", "grd", "wgr", "lds", "BeginNs", "EndNs"}
         if reader.fieldnames is None or not required.issubset(reader.fieldnames):
             raise EvidenceProducerError("timestamp CSV lacks required rocprof-v1 columns")
@@ -1232,18 +2050,183 @@ def _load_dispatches(path: Path) -> list[dict[str, Any]]:
     return dispatches
 
 
+def _profiler_structural_fingerprint(rows: Sequence[Mapping[str, Any]]) -> str:
+    """Order-independent v3 topology; excludes volatile kernel/correlation IDs."""
+    counts: dict[tuple[Any, ...], int] = {}
+    fields = ("agent_id", "queue_id", "kernel", "private_segment_size",
+              "group_segment_size", "workgroup_xyz", "grid_xyz")
+    for row in rows:
+        try:
+            key = tuple(tuple(row[field]) if isinstance(row[field], list)
+                        else row[field] for field in fields)
+        except KeyError as exc:
+            raise EvidenceProducerError(
+                "rocprofv3 row lacks a structural fingerprint field") from exc
+        counts[key] = counts.get(key, 0) + 1
+    canonical = []
+    for key, calls in sorted(counts.items(), key=lambda item: repr(item[0])):
+        row = dict(zip(fields, key)); row["calls"] = calls
+        for field in ("workgroup_xyz", "grid_xyz"):
+            row[field] = list(row[field])
+        canonical.append(row)
+    return schemas.content_hash(canonical)
+
+
+def _rocprofv3_agent_info_path(timestamp_csv: Path) -> Path:
+    suffix = "_kernel_trace.csv"
+    if not timestamp_csv.name.endswith(suffix):
+        raise EvidenceProducerError("rocprofv3 kernel trace suffix changed")
+    return timestamp_csv.with_name(
+        f"{timestamp_csv.name[:-len(suffix)]}_agent_info.csv")
+
+
+def _load_rocprofv3_agent_info(
+        path: Path, *, trace_agent_ids: set[int]) -> dict[str, Any]:
+    _hash_file(path, "rocprofv3 agent info", allow_empty=False)
+    try:
+        raw = path.read_bytes()
+        text = raw.decode("utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise EvidenceProducerError("rocprofv3 agent info is not UTF-8") from exc
+    physical_lines = text.splitlines()
+    if (not raw.endswith(b"\n") or raw.endswith((b"\n\n", b"\r\n\r\n"))
+            or not physical_lines or any(not line for line in physical_lines)):
+        raise EvidenceProducerError(
+            "rocprofv3 agent info must have one trailing newline and no blanks")
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        if tuple(reader.fieldnames or ()) != ROCPROF_V3_AGENT_COLUMNS:
+            raise EvidenceProducerError(
+                "rocprofv3 agent info lacks the exact reviewed columns")
+        rows = list(reader)
+    if any(None in row or any(value is None for value in row.values()) for row in rows):
+        raise EvidenceProducerError("rocprofv3 agent info row shape changed")
+    gpu = [row for row in rows if row.get("Agent_Type") == "GPU"]
+    if len(gpu) != 1:
+        raise EvidenceProducerError("rocprofv3 agent info must contain one GPU")
+    row = gpu[0]
+    try:
+        logical_node_id = int(row["Logical_Node_Id"])
+        node_id = int(row["Node_Id"])
+        gfx_target = int(row["Gfx_Target_Version"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise EvidenceProducerError(
+            "rocprofv3 GPU agent identity is malformed") from exc
+    if (trace_agent_ids != {logical_node_id} or node_id != logical_node_id
+            or gfx_target != 90010 or row.get("Name") != "gfx90a"
+            or row.get("Product_Name") != "AMD Instinct MI210"):
+        raise EvidenceProducerError(
+            "rocprofv3 trace does not bind the reviewed gfx90a MI210 agent")
+    return {
+        "agent_id": logical_node_id, "node_id": node_id,
+        "gfx_target_version": gfx_target, "name": row["Name"],
+        "product_name": row["Product_Name"],
+        "agent_info_sha256": _hash_file(path, "rocprofv3 agent info"),
+    }
+
+
+def _load_arm_dispatches(
+        path: Path, plan: GpuSourceEvidencePlan, *, arm: str) -> list[dict[str, Any]]:
+    if arm not in {"candidate", "anchor"}:
+        raise EvidenceProducerError("profiler dispatch arm is invalid")
+    return _load_dispatches(
+        path, profiler_trace_schema_id=plan.profiler_trace_schema_id,
+        expected_rows=(plan.expected_candidate_profiler_dispatch_rows
+                       if arm == "candidate"
+                       else plan.expected_anchor_profiler_dispatch_rows))
+
+
+def _profile_target_binary(plan: GpuSourceEvidencePlan, arm: str) -> Path:
+    if plan.shared_runtime is not None:
+        return plan.shared_runtime.measurement_binary.path
+    return (plan.identity_files.candidate.binary.path if arm == "candidate"
+            else plan.identity_files.anchor.binary.path)
+
+
+def _parse_profile_completion(
+        path: Path, *, expected_csv: Path, plan: GpuSourceEvidencePlan,
+        arm: str, argv: Sequence[str]) -> dict[str, Any]:
+    """Prove the target completed the exact tg128 JSON cell."""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise EvidenceProducerError("profiler target stdout is not UTF-8") from exc
+    try:
+        rows = microbench.parse_llama_bench_json(text)
+    except (TypeError, microbench.BenchOutputError) as exc:
+        raise EvidenceProducerError(
+            "profiler target did not emit one strict JSON benchmark payload") from exc
+    if len(rows) != 1:
+        raise EvidenceProducerError("profiler target must emit exactly one result row")
+    target = _profile_target_binary(plan, arm)
+    try:
+        target_index = tuple(argv).index(str(target))
+    except ValueError as exc:
+        raise EvidenceProducerError("profiler command lacks the sealed benchmark target") from exc
+    target_argv = list(argv[target_index + 1:])
+    def after(flag: str) -> str | None:
+        if target_argv.count(flag) != 1:
+            return None
+        index = target_argv.index(flag)
+        return target_argv[index + 1] if index + 1 < len(target_argv) else None
+    row = rows[0]
+    expected = {
+        "model_filename": str(plan.identity_files.model.path),
+        "n_prompt": 0, "n_gen": 128, "n_threads": 8,
+        "n_gpu_layers": 99, "flash_attn": True, "repetitions": 1,
+    }
+    try:
+        argv_expected = {
+            "model_filename": after("-m"), "n_prompt": int(after("-p") or ""),
+            "n_gen": int(after("-n") or ""), "n_threads": int(after("-t") or ""),
+            "n_gpu_layers": int(after("-ngl") or ""),
+            "flash_attn": after("-fa") in {"1", "on", "true"},
+            "repetitions": int(after("-r") or ""),
+        }
+    except ValueError as exc:
+        raise EvidenceProducerError("profiler target argv is not the sealed tg128 cell") from exc
+    if argv_expected != expected or after("-o") != "json":
+        raise EvidenceProducerError("profiler target argv is not the exact JSON tg128 cell")
+    actual = {
+        "model_filename": row.model_filename,
+        "n_prompt": row.n_prompt, "n_gen": row.n_gen,
+        "n_threads": row.n_threads, "n_gpu_layers": row.n_gpu_layers,
+        "flash_attn": row.flash_attn, "repetitions": len(row.samples_ts),
+    }
+    if actual != expected:
+        raise EvidenceProducerError("profiler target result does not match the tg128 argv")
+    return {"parser": "microbench.parse_llama_bench_json",
+            "result": row.to_dict(), "expected": expected,
+            "results_file": str(expected_csv), "complete": True}
+
+
 def _matching(rows: Sequence[Mapping[str, Any]], pattern: str) -> list[Mapping[str, Any]]:
     return [row for row in rows if re.search(pattern, str(row["kernel"]))]
 
 
 def _geometry_signature(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     counts: dict[tuple[int, int, int, int], int] = {}
+    durations: list[int] = []
     for row in rows:
         key = (int(row["grid"]), int(row["workgroup"]), int(row["lds"]),
                int(row["blocks_per_call"]))
         counts[key] = counts.get(key, 0) + 1
+        duration = int(row["end_ns"]) - int(row["begin_ns"])
+        if duration <= 0:
+            raise EvidenceProducerError("timestamp row has non-positive duration")
+        durations.append(duration)
+    ordered_durations = sorted(durations)
     return {
         "calls": len(rows),
+        "total_duration_ns": sum(durations),
+        "duration_ns": durations,
+        "duration_statistic": "median_per_dispatch_ns",
+        "median_duration_ns": (
+            None if not ordered_durations else
+            (ordered_durations[len(ordered_durations) // 2]
+             if len(ordered_durations) % 2 else
+             (ordered_durations[len(ordered_durations) // 2 - 1]
+              + ordered_durations[len(ordered_durations) // 2]) / 2)),
         "geometries": [
             {"grid": key[0], "workgroup": key[1], "lds_bytes": key[2],
              "blocks_per_call": key[3], "calls": count}
@@ -1274,7 +2257,8 @@ def _reduce_arm(
             "blocks_per_call": expectation.blocks_per_call,
             "calls": expectation.calls,
         }]
-        if geometry != {"calls": expectation.calls, "geometries": expected_geometry}:
+        if (geometry["calls"] != expectation.calls
+                or geometry["geometries"] != expected_geometry):
             raise EvidenceProducerError(
                 f"exact dispatch {expectation.signature} count/geometry mismatch")
         exact_result[expectation.signature] = geometry
@@ -1300,9 +2284,551 @@ def _reduce_arm(
         if not hits:
             raise EvidenceProducerError(
                 f"invariant dispatch {expectation.signature} has no calls")
-        invariant_result[expectation.signature] = _geometry_signature(hits)
+        invariant_result[expectation.signature] = {
+            key: value for key, value in _geometry_signature(hits).items()
+            if key in {"calls", "geometries"}}
     return {"exact": exact_result, "forbidden": forbidden_result,
             "invariants": invariant_result}
+
+
+def _rocprofv3_invocation(
+        directory: Path, attempt_number: int, arm: str,
+        plan: GpuSourceEvidencePlan) -> CommandInvocation:
+    attempt = directory / f"attempt-{attempt_number:02d}" / "raw"
+    output_csv = (attempt / "trace_kernel_trace.csv").resolve()
+    argv_template = (plan.candidate_rocprof_argv if arm == "candidate"
+                     else plan.anchor_rocprof_argv)
+    inputs = (plan.candidate_rocprof_inputs if arm == "candidate"
+              else plan.anchor_rocprof_inputs)
+    return CommandInvocation(
+        kind="rocprof", arm=arm,
+        argv=_materialize_rocprof_argv(argv_template, output_csv),
+        stdout_path=(attempt / "stdout.txt").resolve(),
+        stderr_path=(attempt / "stderr.txt").resolve(),
+        timestamp_csv_path=output_csv,
+        working_directory=plan.execution_cwd,
+        environment=(plan.candidate_rocprof_environment if arm == "candidate"
+                     else plan.anchor_rocprof_environment),
+        runtime_maps_required=plan.shared_runtime is not None,
+        runtime_maps_context=(None if plan.shared_runtime is None else {
+            "arm": arm, "shared_runtime": _shared_runtime_reference(plan.shared_runtime),
+            "model": _bound_reference(plan.identity_files.model),
+            "model_sha256": plan.model_sha256, "device_id": plan.device_id,
+            "required_profiler_mapped_files":
+                _required_profiler_mapped_files(inputs)}))
+
+
+def _profiler_attempt_expected_outcome(exit_code: int) -> tuple[str, bool]:
+    if exit_code == 0:
+        return "clean_exit", False
+    return "nonzero_exit", False
+
+
+def _rocprofv3_raw_artifacts(invocation: CommandInvocation) -> list[dict[str, Any]]:
+    assert invocation.timestamp_csv_path is not None
+    raw = invocation.timestamp_csv_path.parent
+    if not invocation.timestamp_csv_path.name.endswith("_kernel_trace.csv"):
+        raise EvidenceProducerError("rocprofv3 timestamp output name changed")
+    basename = invocation.timestamp_csv_path.name[:-len("_kernel_trace.csv")]
+    expected_paths = (
+        invocation.stdout_path, invocation.stderr_path,
+        invocation.timestamp_csv_path, raw / f"{basename}_agent_info.csv")
+    if (any(path.parent != raw for path in expected_paths)
+            or len({path.name for path in expected_paths}) != 4):
+        raise EvidenceProducerError(
+            "rocprofv3 raw output members must share one exact directory")
+    expected_files = {path.name for path in expected_paths}
+    metadata_name = ".rocprofv3"
+    expected_entries = expected_files | {metadata_name}
+    directory_flags = (os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
+                       | getattr(os, "O_DIRECTORY", 0)
+                       | getattr(os, "O_NOFOLLOW", 0))
+    file_flags = (os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
+                  | getattr(os, "O_NOFOLLOW", 0)
+                  | getattr(os, "O_NONBLOCK", 0))
+
+    def stable_identity(value: os.stat_result) -> tuple[int, ...]:
+        return (value.st_dev, value.st_ino, value.st_mode, value.st_nlink,
+                value.st_size, value.st_mtime_ns, value.st_ctime_ns)
+
+    def hash_member(directory_fd: int, name: str) -> tuple[str, int]:
+        try:
+            descriptor = os.open(name, file_flags, dir_fd=directory_fd)
+        except OSError as exc:
+            raise EvidenceProducerError(
+                f"rocprofv3 {name} is not an exact raw closure file") from exc
+        try:
+            before = os.fstat(descriptor)
+            if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
+                raise EvidenceProducerError(
+                    f"rocprofv3 {name} must be a single-link regular file")
+            if name != invocation.stderr_path.name and before.st_size == 0:
+                raise EvidenceProducerError(f"rocprofv3 {name} must not be empty")
+            digest = hashlib.sha256()
+            while True:
+                chunk = os.read(descriptor, 1024 * 1024)
+                if not chunk:
+                    break
+                digest.update(chunk)
+            after = os.fstat(descriptor)
+            if stable_identity(before) != stable_identity(after):
+                raise EvidenceProducerError(
+                    f"rocprofv3 {name} mutated while sealing raw output")
+            return digest.hexdigest(), before.st_size
+        finally:
+            os.close(descriptor)
+
+    try:
+        resolved_raw = raw.resolve(strict=True)
+        if raw.is_symlink() or resolved_raw != raw:
+            raise EvidenceProducerError(
+                "rocprofv3 raw output directory must be a real contained path")
+        raw_fd = os.open(raw, directory_flags)
+    except OSError as exc:
+        raise EvidenceProducerError("rocprofv3 raw output directory is unreadable") from exc
+    try:
+        raw_before = os.fstat(raw_fd)
+        raw_path = os.lstat(raw)
+        if (not stat.S_ISDIR(raw_before.st_mode)
+                or stable_identity(raw_before) != stable_identity(raw_path)):
+            raise EvidenceProducerError(
+                "rocprofv3 raw output directory identity changed before sealing")
+        actual = set(os.listdir(raw_fd))
+        if actual != expected_entries:
+            raise EvidenceProducerError(
+                "rocprofv3 raw output directory is not the exact two-CSV closure")
+        try:
+            metadata_fd = os.open(metadata_name, directory_flags, dir_fd=raw_fd)
+        except OSError as exc:
+            raise EvidenceProducerError(
+                "rocprofv3 metadata entry must be a real contained directory") from exc
+        try:
+            metadata_before = os.fstat(metadata_fd)
+            metadata_mode = stat.S_IMODE(metadata_before.st_mode)
+            if (not stat.S_ISDIR(metadata_before.st_mode)
+                    or metadata_before.st_nlink != 2
+                    or metadata_before.st_dev != raw_before.st_dev
+                    or metadata_before.st_uid != raw_before.st_uid
+                    or metadata_before.st_gid != raw_before.st_gid
+                    or metadata_mode & 0o7000
+                    or metadata_mode & 0o022
+                    or os.path.ismount(raw / metadata_name)
+                    or os.listdir(metadata_fd)):
+                raise EvidenceProducerError(
+                    "rocprofv3 metadata directory must be a safe empty peer")
+            metadata_artifact = {
+                "name": metadata_name,
+                "path": str(raw / metadata_name),
+                "kind": "profiler_bookkeeping_directory",
+                "scientific_evidence": False,
+                "device_major": os.major(metadata_before.st_dev),
+                "device_minor": os.minor(metadata_before.st_dev),
+                "inode": metadata_before.st_ino,
+                "uid": metadata_before.st_uid,
+                "gid": metadata_before.st_gid,
+                "mode": format(metadata_mode, "04o"),
+                "links": metadata_before.st_nlink,
+                "entries": 0,
+            }
+            metadata_artifact["metadata_sha256"] = schemas.content_hash(
+                metadata_artifact)
+            artifacts = [metadata_artifact]
+            for name in sorted(expected_files):
+                digest, size = hash_member(raw_fd, name)
+                artifacts.append({"name": name, "path": str(raw / name),
+                                  "kind": "regular_file",
+                                  "scientific_evidence": True,
+                                  "sha256": digest, "bytes": size})
+            metadata_after = os.fstat(metadata_fd)
+            if (stable_identity(metadata_before) != stable_identity(metadata_after)
+                    or os.listdir(metadata_fd)
+                    or os.path.ismount(raw / metadata_name)):
+                raise EvidenceProducerError(
+                    "rocprofv3 metadata directory mutated while sealing raw output")
+            if set(os.listdir(raw_fd)) != expected_entries:
+                raise EvidenceProducerError(
+                    "rocprofv3 raw output directory mutated while sealing")
+            raw_after = os.fstat(raw_fd)
+            if stable_identity(raw_before) != stable_identity(raw_after):
+                raise EvidenceProducerError(
+                    "rocprofv3 raw output directory mutated while sealing")
+            return artifacts
+        finally:
+            os.close(metadata_fd)
+    finally:
+        os.close(raw_fd)
+
+
+def _revalidate_rocprofv3_raw_artifacts(
+        invocation: CommandInvocation, sealed: object) -> list[dict[str, Any]]:
+    current = _rocprofv3_raw_artifacts(invocation)
+    if not isinstance(sealed, list) or sealed != current:
+        raise EvidenceProducerError(
+            "rocprofv3 raw artifact closure changed after sealing")
+    return current
+
+
+def _seal_profiler_failure_attempt(
+        *, directory: Path, attempt_number: int, arm: str,
+        plan: GpuSourceEvidencePlan, invocation: CommandInvocation,
+        capture: ExecutionCapture, opened: Mapping[str, Any],
+        released: Mapping[str, Any], residency: Mapping[str, Any]) -> Mapping[str, Any]:
+    artifacts = []
+    for path in (invocation.stdout_path, invocation.stderr_path,
+                 invocation.timestamp_csv_path):
+        if path is not None and path.exists() and not path.is_symlink() and path.is_file():
+            artifacts.append({"path": str(path),
+                              "sha256": _hash_file(path, "failed profiler output"),
+                              "bytes": path.stat().st_size})
+    runtime_maps = _validated_runtime_maps_identity(
+        capture, plan=plan, arm=arm, residency=residency)
+    return _seal(directory / f"attempt-{attempt_number:02d}" / "transport.json", {
+        "schema": PROFILER_ATTEMPT_SCHEMA, "authority": AUTHORITY,
+        "promotion_claim": False, "status": "refused", "arm": arm,
+        "attempt_number": attempt_number, "campaign_id": plan.campaign_id,
+        "device_id": plan.device_id, "manifest_sha256": plan.manifest_sha256,
+        "build_identity": asdict(plan.candidate if arm == "candidate" else plan.anchor),
+        "model_sha256": plan.model_sha256,
+        "workload_sha256": plan.workload_sha256,
+        "runtime_config_sha256": plan.runtime_config_sha256,
+        "profiler_trace_schema_id": plan.profiler_trace_schema_id,
+        "profiler_transport_policy": plan.profiler_transport_policy,
+        "command_argv": list(invocation.argv), "command_cwd": str(plan.execution_cwd),
+        "command_environment_sha256": schemas.content_hash(
+            [list(item) for item in invocation.environment]),
+        "exit_code": capture.exit_code, "transport_outcome": "nonzero_exit",
+        "retry_eligible": False, "evidence_complete": False,
+        "raw_artifacts": artifacts,
+        "started_at": capture.started_at, "ended_at": capture.ended_at,
+        **_claim_boundary_fields(opened, released, residency),
+        "residency_witness": residency, "runtime_maps_identity": runtime_maps,
+    })
+
+
+def _seal_profiler_attempt(
+        *, directory: Path, attempt_number: int, arm: str,
+        plan: GpuSourceEvidencePlan, invocation: CommandInvocation,
+        capture: ExecutionCapture, opened: Mapping[str, Any],
+        released: Mapping[str, Any], residency: Mapping[str, Any],
+        outputs: Mapping[str, Any], dispatches: Sequence[Mapping[str, Any]],
+        reduction: Mapping[str, Any], runtime_maps: Mapping[str, Any] | None,
+        completion: Mapping[str, Any],
+        agent_info: Mapping[str, Any]) -> Mapping[str, Any]:
+    outcome, retry_eligible = _profiler_attempt_expected_outcome(capture.exit_code)
+    return _seal(directory / f"attempt-{attempt_number:02d}" / "transport.json", {
+        "schema": PROFILER_ATTEMPT_SCHEMA, "authority": AUTHORITY,
+        "promotion_claim": False, "status": "complete",
+        "arm": arm, "attempt_number": attempt_number,
+        "campaign_id": plan.campaign_id, "device_id": plan.device_id,
+        "manifest_sha256": plan.manifest_sha256,
+        "build_identity": asdict(plan.candidate if arm == "candidate" else plan.anchor),
+        "model_sha256": plan.model_sha256,
+        "workload_sha256": plan.workload_sha256,
+        "runtime_config_sha256": plan.runtime_config_sha256,
+        "profiler_trace_schema_id": plan.profiler_trace_schema_id,
+        "profiler_transport_policy": plan.profiler_transport_policy,
+        "command_argv": list(invocation.argv), "command_cwd": str(plan.execution_cwd),
+        "command_environment_sha256": schemas.content_hash(
+            [list(item) for item in invocation.environment]),
+        "exit_code": capture.exit_code, "transport_outcome": outcome,
+        "retry_eligible": retry_eligible, "evidence_complete": True,
+        **outputs, "raw_artifacts": _rocprofv3_raw_artifacts(invocation),
+        "dispatch_row_count": len(dispatches),
+        "timestamp_reduction_sha256": schemas.content_hash(dispatches),
+        "structural_fingerprint_sha256": _profiler_structural_fingerprint(dispatches),
+        "exact_dispatch_signatures": reduction["exact"],
+        "forbidden_dispatch_signatures": reduction["forbidden"],
+        "invariant_signatures": reduction["invariants"],
+        "benchmark_completion": dict(completion),
+        "gpu_agent_identity": dict(agent_info),
+        "started_at": capture.started_at, "ended_at": capture.ended_at,
+        **_claim_boundary_fields(opened, released, residency),
+        "residency_witness": residency, "runtime_maps_identity": runtime_maps,
+    })
+
+
+def _load_profiler_attempt(
+        path: Path, *, attempt_number: int, arm: str,
+        plan: GpuSourceEvidencePlan) -> tuple[Mapping[str, Any], list[dict[str, Any]]]:
+    loaded = proofs.load_receipt(path, schema=PROFILER_ATTEMPT_SCHEMA)
+    body = loaded["body"]
+    identity = plan.candidate if arm == "candidate" else plan.anchor
+    output = Path(str(body.get("timestamp_csv_path", "")))
+    invocation = _rocprofv3_invocation(path.parent.parent, attempt_number, arm, plan)
+    if body.get("status") == "refused":
+        expected_failure = {
+            "authority": AUTHORITY, "promotion_claim": False,
+            "status": "refused", "arm": arm, "attempt_number": attempt_number,
+            "campaign_id": plan.campaign_id, "device_id": plan.device_id,
+            "manifest_sha256": plan.manifest_sha256,
+            "build_identity": asdict(identity), "model_sha256": plan.model_sha256,
+            "workload_sha256": plan.workload_sha256,
+            "runtime_config_sha256": plan.runtime_config_sha256,
+            "profiler_trace_schema_id": plan.profiler_trace_schema_id,
+            "profiler_transport_policy": plan.profiler_transport_policy,
+            "command_argv": list(invocation.argv),
+            "command_cwd": str(plan.execution_cwd),
+            "command_environment_sha256": schemas.content_hash(
+                [list(item) for item in invocation.environment]),
+            "transport_outcome": "nonzero_exit", "retry_eligible": False,
+            "evidence_complete": False,
+        }
+        if (any(body.get(key) != value for key, value in expected_failure.items())
+                or isinstance(body.get("exit_code"), bool)
+                or not isinstance(body.get("exit_code"), int)
+                or body["exit_code"] == 0
+                or not isinstance(body.get("raw_artifacts"), list)):
+            raise EvidenceProducerError("failed profiler transport receipt changed")
+        for artifact in body["raw_artifacts"]:
+            if (not isinstance(artifact, Mapping)
+                    or _hash_file(Path(str(artifact.get("path", ""))),
+                                  "failed profiler output") != artifact.get("sha256")):
+                raise EvidenceProducerError("failed profiler transport bytes changed")
+        _validate_claim_boundary(body, plan=plan)
+        _validate_residency_witness(body.get("residency_witness"),
+                                    device_id=plan.device_id, label=arm)
+        if plan.shared_runtime is not None:
+            _validate_runtime_maps_receipt(
+                body.get("runtime_maps_identity"), plan=plan, arm=arm,
+                residency=body.get("residency_witness"))
+        raise EvidenceProducerError(
+            f"{arm} rocprofv3 transport previously exited nonzero")
+    expected_outcome, retry_eligible = _profiler_attempt_expected_outcome(
+        int(body.get("exit_code", -1)))
+    expected = {
+        "authority": AUTHORITY, "promotion_claim": False, "status": "complete",
+        "arm": arm, "attempt_number": attempt_number,
+        "campaign_id": plan.campaign_id, "device_id": plan.device_id,
+        "manifest_sha256": plan.manifest_sha256, "build_identity": asdict(identity),
+        "model_sha256": plan.model_sha256,
+        "workload_sha256": plan.workload_sha256,
+        "runtime_config_sha256": plan.runtime_config_sha256,
+        "profiler_trace_schema_id": plan.profiler_trace_schema_id,
+        "profiler_transport_policy": plan.profiler_transport_policy,
+        "command_argv": list(invocation.argv), "command_cwd": str(plan.execution_cwd),
+        "command_environment_sha256": schemas.content_hash(
+            [list(item) for item in invocation.environment]),
+        "transport_outcome": expected_outcome, "retry_eligible": retry_eligible,
+        "evidence_complete": True,
+    }
+    if any(body.get(key) != value for key, value in expected.items()):
+        raise EvidenceProducerError("profiler transport attempt identity changed")
+    _validate_claim_boundary(body, plan=plan)
+    for kind in ("stdout", "stderr", "timestamp_csv"):
+        if (_hash_file(Path(str(body.get(f"{kind}_path", ""))), kind,
+                       allow_empty=kind == "stderr") != body.get(f"{kind}_sha256")):
+            raise EvidenceProducerError(f"profiler transport attempt {kind} changed")
+    if output != invocation.timestamp_csv_path:
+        raise EvidenceProducerError("profiler transport attempt output path changed")
+    dispatches = _load_arm_dispatches(output, plan, arm=arm)
+    agent_info = _load_rocprofv3_agent_info(
+        _rocprofv3_agent_info_path(output),
+        trace_agent_ids={int(row["agent_id"]) for row in dispatches})
+    exact = plan.dispatch.candidate_exact if arm == "candidate" else plan.dispatch.anchor_exact
+    forbidden = (plan.dispatch.candidate_forbidden if arm == "candidate"
+                 else plan.dispatch.anchor_forbidden)
+    reduction = _reduce_arm(
+        dispatches, exact=exact, forbidden=forbidden,
+        invariants=plan.dispatch.invariants)
+    completion = _parse_profile_completion(
+        Path(str(body["stdout_path"])), expected_csv=output,
+        plan=plan, arm=arm, argv=invocation.argv)
+    _revalidate_rocprofv3_raw_artifacts(invocation, body.get("raw_artifacts"))
+    if (body.get("dispatch_row_count") != len(dispatches)
+            or body.get("timestamp_reduction_sha256") != schemas.content_hash(dispatches)
+            or body.get("structural_fingerprint_sha256")
+            != _profiler_structural_fingerprint(dispatches)
+            or body.get("exact_dispatch_signatures") != reduction["exact"]
+            or body.get("forbidden_dispatch_signatures") != reduction["forbidden"]
+            or body.get("invariant_signatures") != reduction["invariants"]
+            or body.get("benchmark_completion") != completion
+            or body.get("gpu_agent_identity") != agent_info):
+        raise EvidenceProducerError("profiler transport attempt reduction changed")
+    _validate_residency_witness(body.get("residency_witness"),
+                                device_id=plan.device_id, label=arm)
+    if plan.shared_runtime is not None:
+        _validate_runtime_maps_receipt(
+            body.get("runtime_maps_identity"), plan=plan, arm=arm,
+            residency=body.get("residency_witness"))
+    return loaded, dispatches
+
+
+def _execute_profiler_attempt(
+        *, directory: Path, attempt_number: int, arm: str,
+        plan: GpuSourceEvidencePlan, executor: CommandExecutor,
+        claim_acquirer: Callable[..., Any],
+        claim_verifier: Callable[[Mapping[str, Any]], object], claim_journal: Any,
+        claim_timeout_s: float) -> tuple[Mapping[str, Any], list[dict[str, Any]]]:
+    invocation = _rocprofv3_invocation(directory, attempt_number, arm, plan)
+    capture, opened, released, residency = _run_claimed(
+        invocation, plan=plan, executor=executor, claim_acquirer=claim_acquirer,
+        claim_verifier=claim_verifier, claim_journal=claim_journal,
+        claim_timeout_s=claim_timeout_s)
+    if capture.exit_code != 0:
+        _seal_profiler_failure_attempt(
+            directory=directory, attempt_number=attempt_number, arm=arm,
+            plan=plan, invocation=invocation, capture=capture, opened=opened,
+            released=released, residency=residency)
+        raise EvidenceProducerError(f"{arm} rocprofv3 command exited nonzero")
+    # Map/CSV/completion authority is evaluated before minting a clean
+    # transport receipt; no malformed trace or wrong target cell can pass.
+    outputs = _output_hashes(invocation)
+    assert invocation.timestamp_csv_path is not None
+    dispatches = _load_arm_dispatches(invocation.timestamp_csv_path, plan, arm=arm)
+    agent_info = _load_rocprofv3_agent_info(
+        _rocprofv3_agent_info_path(invocation.timestamp_csv_path),
+        trace_agent_ids={int(row["agent_id"]) for row in dispatches})
+    exact = plan.dispatch.candidate_exact if arm == "candidate" else plan.dispatch.anchor_exact
+    forbidden = (plan.dispatch.candidate_forbidden if arm == "candidate"
+                 else plan.dispatch.anchor_forbidden)
+    runtime_maps = _validated_runtime_maps_identity(
+        capture, plan=plan, arm=arm, residency=residency)
+    completion = _parse_profile_completion(
+        invocation.stdout_path, expected_csv=invocation.timestamp_csv_path,
+        plan=plan, arm=arm, argv=invocation.argv)
+    try:
+        reduction = _reduce_arm(
+            dispatches, exact=exact, forbidden=forbidden,
+            invariants=plan.dispatch.invariants)
+    except EvidenceProducerError as exc:
+        identity = plan.candidate if arm == "candidate" else plan.anchor
+        refusal = _seal(directory / "refusal.json", {
+            "schema": ATTRIBUTION_REFUSAL_SCHEMA,
+            "authority": AUTHORITY, "promotion_claim": False,
+            "status": "refused",
+            "classification": "attribution_route_falsified",
+            "error_type": "DispatchAttributionParseRefusal",
+            "reason": _durable_refusal_reason(exc),
+            "arm": arm, "campaign_id": plan.campaign_id,
+            "device_id": plan.device_id,
+            "manifest_sha256": plan.manifest_sha256,
+            "build_identity": asdict(identity),
+            "model_sha256": plan.model_sha256,
+            "workload_sha256": plan.workload_sha256,
+            "runtime_config_sha256": plan.runtime_config_sha256,
+            "profiler_trace_schema_id": plan.profiler_trace_schema_id,
+            "profiler_transport_policy": plan.profiler_transport_policy,
+            "expected_profiler_dispatch_rows": (
+                plan.expected_candidate_profiler_dispatch_rows
+                if arm == "candidate" else
+                plan.expected_anchor_profiler_dispatch_rows),
+            "transport_outcome": "clean_exit", "retry_eligible": False,
+            "command_argv": list(invocation.argv),
+            "command_cwd": str(plan.execution_cwd),
+            "command_environment_sha256": schemas.content_hash(
+                [list(item) for item in invocation.environment]),
+            "exit_code": 0, **outputs,
+            "raw_artifacts": _rocprofv3_raw_artifacts(invocation),
+            "timestamp_reduction_sha256": schemas.content_hash(dispatches),
+            "structural_fingerprint_sha256":
+                _profiler_structural_fingerprint(dispatches),
+            "benchmark_completion": dict(completion),
+            "gpu_agent_identity": dict(agent_info),
+            "started_at": capture.started_at, "ended_at": capture.ended_at,
+            "expectations": _expectations(plan),
+            **_claim_boundary_fields(opened, released, residency),
+            "residency_witness": residency,
+            "runtime_maps_identity": runtime_maps,
+        })
+        raise DispatchAttributionParseRefusal(
+            str(exc), receipt_path=str(refusal["path"]),
+            receipt_sha256=str(refusal["file_sha256"])) from exc
+    loaded = _seal_profiler_attempt(
+        directory=directory, attempt_number=attempt_number, arm=arm,
+        plan=plan, invocation=invocation, capture=capture, opened=opened,
+        released=released, residency=residency, outputs=outputs,
+        dispatches=dispatches, reduction=reduction, runtime_maps=runtime_maps,
+        completion=completion, agent_info=agent_info)
+    return loaded, dispatches
+
+
+def _v3_attempt_or_execute(
+        *, directory: Path, attempt_number: int, arm: str,
+        plan: GpuSourceEvidencePlan, executor: CommandExecutor,
+        claim_acquirer: Callable[..., Any],
+        claim_verifier: Callable[[Mapping[str, Any]], object], claim_journal: Any,
+        claim_timeout_s: float) -> tuple[Mapping[str, Any], list[dict[str, Any]]]:
+    attempt_root = directory / f"attempt-{attempt_number:02d}"
+    receipt = attempt_root / "transport.json"
+    if receipt.exists() or receipt.is_symlink():
+        return _load_profiler_attempt(
+            receipt, attempt_number=attempt_number, arm=arm, plan=plan)
+    if attempt_root.exists() or attempt_root.is_symlink():
+        raise EvidenceProducerError(
+            "profiler attempt has raw bytes without a sealed transport outcome")
+    return _execute_profiler_attempt(
+        directory=directory, attempt_number=attempt_number, arm=arm,
+        plan=plan, executor=executor, claim_acquirer=claim_acquirer,
+        claim_verifier=claim_verifier, claim_journal=claim_journal,
+        claim_timeout_s=claim_timeout_s)
+
+
+def _produce_attribution_arm_v3(
+        root: Path, arm: str, plan: GpuSourceEvidencePlan,
+        executor: CommandExecutor, *, claim_acquirer: Callable[..., Any],
+        claim_verifier: Callable[[Mapping[str, Any]], object], claim_journal: Any,
+        claim_timeout_s: float) -> Mapping[str, Any]:
+    directory = root / f"attribution-{arm}"
+    attempt, dispatches = _v3_attempt_or_execute(
+        directory=directory, attempt_number=1, arm=arm, plan=plan,
+        executor=executor, claim_acquirer=claim_acquirer,
+        claim_verifier=claim_verifier, claim_journal=claim_journal,
+        claim_timeout_s=claim_timeout_s)
+    body_attempt = attempt["body"]
+    if (body_attempt.get("exit_code") != 0
+            or body_attempt.get("transport_outcome") != "clean_exit"):
+        raise EvidenceProducerError("rocprofv3 attribution lacks a clean transport")
+    identity = plan.candidate if arm == "candidate" else plan.anchor
+    inputs = (plan.candidate_rocprof_inputs if arm == "candidate"
+              else plan.anchor_rocprof_inputs)
+    body = {
+        "schema": ATTRIBUTION_SCHEMA, "authority": AUTHORITY,
+        "non_promotable": True, "promotion_claim": False,
+        "status": "complete", "result": "PASS", "arm": arm,
+        "campaign_id": plan.campaign_id, "device_id": plan.device_id,
+        "manifest_sha256": plan.manifest_sha256,
+        "build_identity": asdict(identity),
+        "identity_files": _identity_files_reference(plan.identity_files),
+        "shared_runtime": _shared_runtime_reference(plan.shared_runtime),
+        "execution_policy": _bound_reference(plan.policy),
+        "command_input_files": [_bound_reference(x) for x in inputs],
+        "model_sha256": plan.model_sha256,
+        "workload_sha256": plan.workload_sha256,
+        "runtime_config_sha256": plan.runtime_config_sha256,
+        "profiler_trace_schema_id": plan.profiler_trace_schema_id,
+        "profiler_transport_policy": plan.profiler_transport_policy,
+        "expected_profiler_dispatch_rows": (
+            plan.expected_candidate_profiler_dispatch_rows if arm == "candidate"
+            else plan.expected_anchor_profiler_dispatch_rows),
+        "command_argv": body_attempt["command_argv"],
+        "command_cwd": body_attempt["command_cwd"],
+        "command_environment_sha256": body_attempt["command_environment_sha256"],
+        "exit_code": 0, "transport_outcome": "clean_exit",
+        "transport_attempts": [_reference(attempt)],
+        "stdout_path": body_attempt["stdout_path"],
+        "stdout_sha256": body_attempt["stdout_sha256"],
+        "stderr_path": body_attempt["stderr_path"],
+        "stderr_sha256": body_attempt["stderr_sha256"],
+        "timestamp_csv_path": body_attempt["timestamp_csv_path"],
+        "timestamp_csv_sha256": body_attempt["timestamp_csv_sha256"],
+        "raw_artifacts": body_attempt["raw_artifacts"],
+        "timestamp_reduction_sha256": body_attempt["timestamp_reduction_sha256"],
+        "started_at": body_attempt["started_at"],
+        "ended_at": body_attempt["ended_at"], "dispatches": dispatches,
+        "exact_dispatch_signatures": body_attempt["exact_dispatch_signatures"],
+        "forbidden_dispatch_signatures": body_attempt["forbidden_dispatch_signatures"],
+        "invariant_signatures": body_attempt["invariant_signatures"],
+        "structural_fingerprint_sha256": body_attempt["structural_fingerprint_sha256"],
+        "benchmark_completion": body_attempt["benchmark_completion"],
+        "gpu_agent_identity": body_attempt["gpu_agent_identity"],
+        **{key: body_attempt[key] for key in (
+            "device_claim_open", "device_claim_mode",
+            "device_claim_released", "device_claim_borrowed_phase_end")
+           if key in body_attempt},
+        "residency_witness": body_attempt["residency_witness"],
+        "runtime_maps_identity": body_attempt["runtime_maps_identity"],
+    }
+    return _seal(directory / "receipt.json", body)
 
 
 def _produce_attribution_arm(
@@ -1311,6 +2837,11 @@ def _produce_attribution_arm(
     claim_verifier: Callable[[Mapping[str, Any]], object], claim_journal: Any,
     claim_timeout_s: float,
 ) -> Mapping[str, Any]:
+    if plan.profiler_trace_schema_id == ROCPROF_V3_TRACE_ID:
+        return _produce_attribution_arm_v3(
+            root, arm, plan, executor, claim_acquirer=claim_acquirer,
+            claim_verifier=claim_verifier, claim_journal=claim_journal,
+            claim_timeout_s=claim_timeout_s)
     directory = root / f"attribution-{arm}"
     argv_template = (plan.candidate_rocprof_argv if arm == "candidate"
                      else plan.anchor_rocprof_argv)
@@ -1344,9 +2875,40 @@ def _produce_attribution_arm(
         raise EvidenceProducerError(f"{arm} rocprof command exited nonzero")
     assert invocation.timestamp_csv_path is not None
     dispatches = _load_dispatches(invocation.timestamp_csv_path)
-    reduction = _reduce_arm(
-        dispatches, exact=exact, forbidden=forbidden,
-        invariants=plan.dispatch.invariants)
+    try:
+        reduction = _reduce_arm(
+            dispatches, exact=exact, forbidden=forbidden,
+            invariants=plan.dispatch.invariants)
+    except EvidenceProducerError as exc:
+        refusal = _seal(directory / "refusal.json", {
+            "schema": ATTRIBUTION_REFUSAL_SCHEMA,
+            "authority": AUTHORITY, "promotion_claim": False,
+            "status": "refused",
+            "classification": "attribution_route_falsified",
+            "error_type": "DispatchAttributionParseRefusal",
+            "reason": _durable_refusal_reason(exc),
+            "arm": arm, "campaign_id": plan.campaign_id,
+            "device_id": plan.device_id,
+            "manifest_sha256": plan.manifest_sha256,
+            "build_identity": asdict(identity),
+            "model_sha256": plan.model_sha256,
+            "workload_sha256": plan.workload_sha256,
+            "runtime_config_sha256": plan.runtime_config_sha256,
+            "command_argv": list(argv),
+            "command_cwd": str(plan.execution_cwd),
+            "command_environment_sha256": schemas.content_hash([
+                list(item) for item in (
+                    plan.candidate_rocprof_environment if arm == "candidate"
+                    else plan.anchor_rocprof_environment)]),
+            "exit_code": capture.exit_code, **outputs,
+            "started_at": capture.started_at, "ended_at": capture.ended_at,
+            "expectations": _expectations(plan),
+            **_claim_boundary_fields(opened, released, residency),
+            "residency_witness": residency,
+        })
+        raise DispatchAttributionParseRefusal(
+            str(exc), receipt_path=str(refusal["path"]),
+            receipt_sha256=str(refusal["file_sha256"])) from exc
     runtime_maps = _validated_runtime_maps_identity(
         capture, plan=plan, arm=arm, residency=residency)
     body = {
@@ -1390,6 +2952,96 @@ def _produce_attribution_arm(
     return _seal(directory / "receipt.json", body)
 
 
+def load_gpu_source_attribution_refusal(
+        path: Path, plan: GpuSourceEvidencePlan, *, arm: str) -> Mapping[str, Any]:
+    if arm not in {"candidate", "anchor"}:
+        raise EvidenceProducerError("attribution refusal arm is invalid")
+    _verify_plan_files(plan)
+    loaded = proofs.load_receipt(path, schema=ATTRIBUTION_REFUSAL_SCHEMA)
+    body = loaded["body"]
+    identity = plan.candidate if arm == "candidate" else plan.anchor
+    expected = {
+        "authority": AUTHORITY, "promotion_claim": False,
+        "status": "refused", "classification": "attribution_route_falsified",
+        "error_type": "DispatchAttributionParseRefusal", "arm": arm,
+        "campaign_id": plan.campaign_id, "device_id": plan.device_id,
+        "manifest_sha256": plan.manifest_sha256,
+        "build_identity": asdict(identity), "model_sha256": plan.model_sha256,
+        "workload_sha256": plan.workload_sha256,
+        "runtime_config_sha256": plan.runtime_config_sha256,
+        "expectations": _expectations(plan),
+    }
+    if plan.profiler_trace_schema_id == ROCPROF_V3_TRACE_ID:
+        expected.update({
+            "profiler_trace_schema_id": plan.profiler_trace_schema_id,
+            "profiler_transport_policy": plan.profiler_transport_policy,
+            "expected_profiler_dispatch_rows": (
+                plan.expected_candidate_profiler_dispatch_rows
+                if arm == "candidate" else
+                plan.expected_anchor_profiler_dispatch_rows),
+            "transport_outcome": "clean_exit", "retry_eligible": False,
+            "exit_code": 0,
+        })
+    if (any(body.get(key) != value for key, value in expected.items())
+            or not isinstance(body.get("reason"), str) or not body["reason"]):
+        raise EvidenceProducerError("attribution refusal identity changed")
+    _validate_claim_boundary(body, plan=plan)
+    for kind in ("stdout", "stderr", "timestamp_csv"):
+        if _hash_file(Path(str(body.get(f"{kind}_path", ""))), kind,
+                      allow_empty=kind == "stderr") != body.get(f"{kind}_sha256"):
+            raise EvidenceProducerError(f"attribution refusal {kind} changed")
+    # Re-derive the exact route failure from the original timestamp bytes.
+    # The refusal's self-hash is not allowed to turn a rewritten explanation
+    # into scientific evidence.
+    timestamp_path = Path(str(body["timestamp_csv_path"]))
+    dispatches = _load_arm_dispatches(timestamp_path, plan, arm=arm)
+    if plan.profiler_trace_schema_id == ROCPROF_V3_TRACE_ID:
+        invocation = _rocprofv3_invocation(path.parent, 1, arm, plan)
+        _revalidate_rocprofv3_raw_artifacts(
+            invocation, body.get("raw_artifacts"))
+        if (_receipt_rocprof_template(body) != (
+                plan.candidate_rocprof_argv if arm == "candidate"
+                else plan.anchor_rocprof_argv)
+                or body.get("timestamp_reduction_sha256")
+                != schemas.content_hash(dispatches)
+                or body.get("structural_fingerprint_sha256")
+                != _profiler_structural_fingerprint(dispatches)):
+            raise EvidenceProducerError(
+                "rocprofv3 attribution refusal transport reduction changed")
+        agent_info = _load_rocprofv3_agent_info(
+            _rocprofv3_agent_info_path(timestamp_path),
+            trace_agent_ids={int(row["agent_id"]) for row in dispatches})
+        completion = _parse_profile_completion(
+            Path(str(body["stdout_path"])), expected_csv=timestamp_path,
+            plan=plan, arm=arm, argv=invocation.argv)
+        if (body.get("gpu_agent_identity") != agent_info
+                or body.get("benchmark_completion") != completion):
+            raise EvidenceProducerError(
+                "rocprofv3 attribution refusal completion/agent changed")
+        _validate_residency_witness(
+            body.get("residency_witness"), device_id=plan.device_id,
+            label=f"{arm} refusal")
+        if plan.shared_runtime is not None:
+            _validate_runtime_maps_receipt(
+                body.get("runtime_maps_identity"), plan=plan, arm=arm,
+                residency=body.get("residency_witness"))
+    exact = (plan.dispatch.candidate_exact if arm == "candidate"
+             else plan.dispatch.anchor_exact)
+    forbidden = (plan.dispatch.candidate_forbidden if arm == "candidate"
+                 else plan.dispatch.anchor_forbidden)
+    try:
+        _reduce_arm(dispatches, exact=exact, forbidden=forbidden,
+                    invariants=plan.dispatch.invariants)
+    except EvidenceProducerError as exc:
+        if _durable_refusal_reason(exc) != body["reason"]:
+            raise EvidenceProducerError(
+                "attribution refusal reason differs from timestamp evidence") from exc
+    else:
+        raise EvidenceProducerError(
+            "attribution refusal timestamp now satisfies the route contract")
+    return loaded
+
+
 def _reference(loaded: Mapping[str, Any]) -> dict[str, Any]:
     return {key: loaded[key] for key in ("path", "file_sha256", "native_sha256", "body")}
 
@@ -1404,13 +3056,89 @@ def _expectations(plan: GpuSourceEvidencePlan) -> dict[str, Any]:
     }
 
 
+def _exact_duration_comparison(candidate_body: Mapping[str, Any],
+                               anchor_body: Mapping[str, Any]) -> dict[str, Any]:
+    """Reduce only contract-authorized routes into the decision-bearing pair."""
+    candidate_routes = candidate_body.get("exact_dispatch_signatures")
+    anchor_routes = anchor_body.get("exact_dispatch_signatures")
+    if not isinstance(candidate_routes, Mapping) or not isinstance(anchor_routes, Mapping):
+        raise EvidenceProducerError("attribution pair lacks exact route reductions")
+    def total(routes: Mapping[str, Any], label: str) -> int:
+        values: list[int] = []
+        for signature, row in routes.items():
+            if (not isinstance(signature, str) or not isinstance(row, Mapping)
+                    or isinstance(row.get("total_duration_ns"), bool)
+                    or not isinstance(row.get("total_duration_ns"), int)
+                    or row["total_duration_ns"] <= 0
+                    or isinstance(row.get("calls"), bool)
+                    or not isinstance(row.get("calls"), int)
+                    or row["calls"] <= 0):
+                raise EvidenceProducerError(
+                    f"{label} exact route lacks positive sealed duration/calls")
+            values.append(row["total_duration_ns"])
+        if not values:
+            raise EvidenceProducerError(f"{label} attribution has no exact routes")
+        return sum(values)
+    candidate_total = total(candidate_routes, "candidate")
+    anchor_total = total(anchor_routes, "anchor")
+    return {
+        "candidate_routes": dict(candidate_routes),
+        "anchor_routes": dict(anchor_routes),
+        "candidate_total_duration_ns": candidate_total,
+        "anchor_total_duration_ns": anchor_total,
+        "relative_improvement_fraction": (
+            anchor_total - candidate_total) / anchor_total,
+        "direction": ("improved" if candidate_total < anchor_total else
+                      "regressed" if candidate_total > anchor_total else "neutral"),
+        "all_candidate_routes_present": True,
+        "all_anchor_routes_present": True,
+        "statistic": "sum_exact_route_total_duration_ns",
+    }
+
+
+def _structural_signature_projection(value: object) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        raise EvidenceProducerError("invariant signature reduction is malformed")
+    projected: dict[str, Any] = {}
+    for signature, row in value.items():
+        if (not isinstance(signature, str) or not isinstance(row, Mapping)
+                or isinstance(row.get("calls"), bool)
+                or not isinstance(row.get("calls"), int)
+                or not isinstance(row.get("geometries"), list)):
+            raise EvidenceProducerError("invariant structural signature is malformed")
+        projected[signature] = {
+            "calls": row["calls"], "geometries": row["geometries"]}
+    return projected
+
+
 def _produce_pair(
     root: Path, plan: GpuSourceEvidencePlan, candidate: Mapping[str, Any],
     anchor: Mapping[str, Any],
 ) -> Mapping[str, Any]:
     candidate_body, anchor_body = candidate["body"], anchor["body"]
-    if candidate_body["invariant_signatures"] != anchor_body["invariant_signatures"]:
-        raise EvidenceProducerError("candidate changed an invariant hot signature")
+    candidate_invariants = _structural_signature_projection(
+        candidate_body["invariant_signatures"])
+    anchor_invariants = _structural_signature_projection(
+        anchor_body["invariant_signatures"])
+    if candidate_invariants != anchor_invariants:
+        reason = "candidate changed an invariant hot signature"
+        refusal = _seal(root / "attribution-pair-refusal.json", {
+            "schema": PAIR_REFUSAL_SCHEMA, "authority": AUTHORITY,
+            "promotion_claim": False, "status": "refused",
+            "classification": "attribution_route_falsified",
+            "error_type": "DispatchAttributionParseRefusal",
+            "reason": reason, "manifest_sha256": plan.manifest_sha256,
+            "model_sha256": plan.model_sha256,
+            "workload_sha256": plan.workload_sha256,
+            "runtime_config_sha256": plan.runtime_config_sha256,
+            "candidate": _reference(candidate), "anchor": _reference(anchor),
+            "candidate_invariant_signatures": candidate_invariants,
+            "anchor_invariant_signatures": anchor_invariants,
+            "expectations": _expectations(plan),
+        })
+        raise DispatchAttributionParseRefusal(
+            reason, receipt_path=str(refusal["path"]),
+            receipt_sha256=str(refusal["file_sha256"]))
     if plan.shared_runtime is not None:
         candidate_maps = candidate_body.get("runtime_maps_identity")
         anchor_maps = anchor_body.get("runtime_maps_identity")
@@ -1442,15 +3170,57 @@ def _produce_pair(
         "correctness_environment": [list(item) for item in plan.correctness_environment],
         "candidate_rocprof_environment": [list(item) for item in plan.candidate_rocprof_environment],
         "anchor_rocprof_environment": [list(item) for item in plan.anchor_rocprof_environment],
+        "attribution_arm_order_seed_sha256": plan.attribution_arm_order_seed_sha256,
+        "attribution_arm_order": list(plan.attribution_arm_order),
+        "profiler_trace_schema_id": plan.profiler_trace_schema_id,
+        "expected_candidate_profiler_dispatch_rows": (
+            plan.expected_candidate_profiler_dispatch_rows),
+        "expected_anchor_profiler_dispatch_rows": (
+            plan.expected_anchor_profiler_dispatch_rows),
+        "profiler_transport_policy": plan.profiler_transport_policy,
         "expectations": _expectations(plan),
         "candidate": _reference(candidate),
         "anchor": _reference(anchor),
-        "invariant_signatures": candidate_body["invariant_signatures"],
+        "invariant_signatures": candidate_invariants,
         "inverse_attribution_proved": True,
         "candidate_runtime_maps_identity": candidate_body.get("runtime_maps_identity"),
         "anchor_runtime_maps_identity": anchor_body.get("runtime_maps_identity"),
+        "exact_duration_comparison": _exact_duration_comparison(
+            candidate_body, anchor_body),
     }
     return _seal(root / "attribution-pair.json", body)
+
+
+def _load_gpu_source_attribution_pair_refusal(
+        path: Path, plan: GpuSourceEvidencePlan,
+        candidate: Mapping[str, Any], anchor: Mapping[str, Any]) -> Mapping[str, Any]:
+    loaded = proofs.load_receipt(path, schema=PAIR_REFUSAL_SCHEMA)
+    body = loaded["body"]
+    candidate_invariants = _structural_signature_projection(
+        candidate["body"].get("invariant_signatures"))
+    anchor_invariants = _structural_signature_projection(
+        anchor["body"].get("invariant_signatures"))
+    expected = {
+        "authority": AUTHORITY, "promotion_claim": False,
+        "status": "refused", "classification": "attribution_route_falsified",
+        "error_type": "DispatchAttributionParseRefusal",
+        "reason": "candidate changed an invariant hot signature",
+        "manifest_sha256": plan.manifest_sha256,
+        "model_sha256": plan.model_sha256,
+        "workload_sha256": plan.workload_sha256,
+        "runtime_config_sha256": plan.runtime_config_sha256,
+        "candidate": _reference(candidate), "anchor": _reference(anchor),
+        "candidate_invariant_signatures": candidate_invariants,
+        "anchor_invariant_signatures": anchor_invariants,
+        "expectations": _expectations(plan),
+    }
+    if any(body.get(key) != value for key, value in expected.items()):
+        raise EvidenceProducerError(
+            "attribution pair refusal identity/reduction changed")
+    if candidate_invariants == anchor_invariants:
+        raise EvidenceProducerError(
+            "attribution pair refusal no longer has invariant drift")
+    return loaded
 
 
 def _reload_reference(reference: Mapping[str, Any], *, schema: str) -> Mapping[str, Any]:
@@ -1495,6 +3265,16 @@ def _validate_attribution_body(body: Mapping[str, Any], *, plan: GpuSourceEviden
             plan.candidate_rocprof_inputs if arm == "candidate"
             else plan.anchor_rocprof_inputs)],
     }
+    if plan.profiler_trace_schema_id == ROCPROF_V3_TRACE_ID:
+        expected.update({
+            "profiler_trace_schema_id": plan.profiler_trace_schema_id,
+            "profiler_transport_policy": plan.profiler_transport_policy,
+            "expected_profiler_dispatch_rows": (
+                plan.expected_candidate_profiler_dispatch_rows
+                if arm == "candidate" else
+                plan.expected_anchor_profiler_dispatch_rows),
+            "transport_outcome": "clean_exit",
+        })
     if any(body.get(key) != value for key, value in expected.items()):
         raise EvidenceProducerError(f"{arm} attribution receipt identity/config mismatch")
     _validate_claim_boundary(body, plan=plan)
@@ -1502,7 +3282,8 @@ def _validate_attribution_body(body: Mapping[str, Any], *, plan: GpuSourceEviden
         path = Path(str(body.get(f"{kind}_path", "")))
         if _hash_file(path, kind, allow_empty=kind != "timestamp_csv") != body.get(f"{kind}_sha256"):
             raise EvidenceProducerError(f"{arm} {kind} bytes changed")
-    rows = _load_dispatches(Path(str(body["timestamp_csv_path"])))
+    rows = _load_arm_dispatches(
+        Path(str(body["timestamp_csv_path"])), plan, arm=arm)
     if rows != body.get("dispatches") or schemas.content_hash(rows) != body.get("timestamp_reduction_sha256"):
         raise EvidenceProducerError(f"{arm} timestamp reduction changed")
     exact = plan.dispatch.candidate_exact if arm == "candidate" else plan.dispatch.anchor_exact
@@ -1519,6 +3300,22 @@ def _validate_attribution_body(body: Mapping[str, Any], *, plan: GpuSourceEviden
     if plan.shared_runtime is not None:
         _validate_runtime_maps_receipt(body.get("runtime_maps_identity"), plan=plan, arm=arm,
                                        residency=body.get("residency_witness"))
+    if plan.profiler_trace_schema_id == ROCPROF_V3_TRACE_ID:
+        attempts = body.get("transport_attempts")
+        if not isinstance(attempts, list) or len(attempts) != 1:
+            raise EvidenceProducerError(f"{arm} rocprofv3 attempt receipt is missing")
+        loaded_attempt, attempt_rows = _load_profiler_attempt(
+            Path(str(attempts[0].get("path", ""))), attempt_number=1,
+            arm=arm, plan=plan)
+        if (_reference(loaded_attempt) != attempts[0] or attempt_rows != rows
+                or body.get("raw_artifacts") != loaded_attempt["body"].get("raw_artifacts")
+                or body.get("structural_fingerprint_sha256")
+                != loaded_attempt["body"].get("structural_fingerprint_sha256")
+                or body.get("benchmark_completion")
+                != loaded_attempt["body"].get("benchmark_completion")
+                or body.get("gpu_agent_identity")
+                != loaded_attempt["body"].get("gpu_agent_identity")):
+            raise EvidenceProducerError(f"{arm} rocprofv3 attempt projection changed")
 
 
 def _validated_runtime_maps_identity(capture: ExecutionCapture, *, plan: GpuSourceEvidencePlan,
@@ -1563,10 +3360,56 @@ def _validate_runtime_maps_receipt(value: object, *, plan: GpuSourceEvidencePlan
             or typed.model_sha256 != plan.model_sha256
             or typed.device_id != plan.device_id or typed.kfd_pid not in kfd_pids):
         raise EvidenceProducerError(f"{arm} runtime maps identity does not bind the sealed arm/run")
+    if plan.profiler_trace_schema_id == ROCPROF_V3_TRACE_ID:
+        inputs = (plan.candidate_rocprof_inputs if arm == "candidate"
+                  else plan.anchor_rocprof_inputs)
+        required_profiler = _required_profiler_mapped_files(inputs)
+        mapped = dict(typed.mapped_local_sha256)
+        if any(mapped.get(path) != digest
+               for path, digest in required_profiler.items()):
+            raise EvidenceProducerError(
+                f"{arm} runtime maps omit the sealed rocprofv3 DSO closure")
     return typed.to_dict()
 
 
 def _validate_correctness_body(body: Mapping[str, Any], plan: GpuSourceEvidencePlan) -> None:
+    if plan.correctness_invocations:
+        expected = {
+            "schema": CORRECTNESS_SCHEMA, "authority": AUTHORITY,
+            "non_promotable": True, "promotion_claim": False,
+            "status": "complete", "result": "PASS",
+            "campaign_id": plan.campaign_id, "device_id": plan.device_id,
+            "manifest_sha256": plan.manifest_sha256,
+            "candidate_build_identity": asdict(plan.candidate),
+            "identity_files": _identity_files_reference(plan.identity_files),
+            "shared_runtime": _shared_runtime_reference(plan.shared_runtime),
+            "execution_policy": _bound_reference(plan.policy),
+            "command_input_files": [_bound_reference(x)
+                                    for x in plan.correctness_inputs],
+            "workload_sha256": plan.workload_sha256,
+            "command_argv": list(plan.correctness_argv),
+            "command_cwd": str(plan.execution_cwd),
+            "correctness_parser_id": CORRECTNESS_PARSER_ID,
+            "correctness_backend": plan.correctness_backend,
+            "correctness_op": plan.correctness_op,
+            "expected_cases": plan.expected_correctness_cases,
+            "correctness_invocation_contracts": [dict(row)
+                                                 for row in plan.correctness_invocations],
+            "exact_case_ok": True,
+        }
+        if any(body.get(key) != value for key, value in expected.items()):
+            raise EvidenceProducerError(
+                "aggregate correctness receipt identity/config/result mismatch")
+        references = body.get("invocations")
+        if not isinstance(references, list) or len(references) != len(
+                plan.correctness_invocations):
+            raise EvidenceProducerError(
+                "aggregate correctness receipt has incomplete invocations")
+        for reference, contract in zip(references,
+                                       plan.correctness_invocations):
+            loaded = _reload_reference(reference, schema=CORRECTNESS_SCHEMA)
+            _validate_correctness_invocation_receipt(loaded, plan, contract)
+        return
     expected = {
         "schema": CORRECTNESS_SCHEMA, "authority": AUTHORITY,
         "non_promotable": True, "promotion_claim": False,
@@ -1582,7 +3425,9 @@ def _validate_correctness_body(body: Mapping[str, Any], plan: GpuSourceEvidenceP
         "shared_runtime": _shared_runtime_reference(plan.shared_runtime),
         "execution_policy": _bound_reference(plan.policy),
         "command_input_files": [_bound_reference(x) for x in plan.correctness_inputs],
-        "correctness_summary_pattern": plan.correctness_summary_pattern,
+        "correctness_parser_id": CORRECTNESS_PARSER_ID,
+        "correctness_backend": plan.correctness_backend,
+        "correctness_op": plan.correctness_op,
         "expected_cases": plan.expected_correctness_cases,
         "passed_cases": plan.expected_correctness_cases, "exact_case_ok": True,
     }
@@ -1593,11 +3438,171 @@ def _validate_correctness_body(body: Mapping[str, Any], plan: GpuSourceEvidenceP
         path = Path(str(body.get(f"{kind}_path", "")))
         if _hash_file(path, kind, allow_empty=kind == "stderr") != body.get(f"{kind}_sha256"):
             raise EvidenceProducerError(f"correctness {kind} bytes changed")
-    if _parse_summary(Path(str(body["stdout_path"])).read_text(encoding="utf-8"), plan) != body.get("summary"):
+    parsed = _parse_correctness(
+        Path(str(body["stdout_path"])).read_text(encoding="utf-8"), plan)
+    if (parsed.summary != body.get("summary")
+            or list(parsed.skipped_backends) != body.get("skipped_backends")
+            or parsed.backends_passed != body.get("backends_passed")
+            or parsed.backends_total != body.get("backends_total")
+            or parsed.overall != body.get("overall")):
         raise EvidenceProducerError("correctness summary changed")
     _validate_residency_witness(
         body.get("residency_witness"), device_id=plan.device_id,
         label="correctness")
+
+
+def load_gpu_source_correctness_receipt(
+        path: Path, plan: GpuSourceEvidencePlan) -> Mapping[str, Any]:
+    """Re-open one completed correctness phase without requiring later phases.
+
+    This is the durable phase boundary: a crash or refusal in attribution may
+    not turn a completed GPU correctness command back into an in-memory fact.
+    The loader recursively rechecks the plan's immutable inputs, receipt hash,
+    raw stdout/stderr bytes, typed backend-op parse, device claim and in-window
+    residency before returning the receipt.
+    """
+    _verify_plan_files(plan)
+    try:
+        loaded = proofs.load_receipt(path, schema=CORRECTNESS_SCHEMA)
+    except proofs.ProofError as exc:
+        raise EvidenceProducerError(
+            "completed correctness receipt is not durably recoverable") from exc
+    _validate_correctness_body(loaded["body"], plan)
+    return loaded
+
+
+def load_gpu_source_correctness_refusal(
+        path: Path, plan: GpuSourceEvidencePlan) -> Mapping[str, Any]:
+    """Validate a durable typed refusal without converting it into a pass."""
+    _verify_plan_files(plan)
+    try:
+        loaded = proofs.load_receipt(path, schema=CORRECTNESS_REFUSAL_SCHEMA)
+    except proofs.ProofError as exc:
+        raise EvidenceProducerError(
+            "correctness parse refusal is not durably recoverable") from exc
+    body = loaded["body"]
+    expected = {
+        "authority": AUTHORITY,
+        "promotion_claim": False,
+        "status": "refused",
+        "classification": "output_parse_refusal",
+        "error_type": "CorrectnessParseRefusal",
+        "campaign_id": plan.campaign_id,
+        "device_id": plan.device_id,
+        "manifest_sha256": plan.manifest_sha256,
+        "candidate_build_identity": asdict(plan.candidate),
+        "workload_sha256": plan.workload_sha256,
+        "command_argv": list(plan.correctness_argv),
+        "command_cwd": str(plan.execution_cwd),
+        "command_environment_sha256": schemas.content_hash(
+            [list(item) for item in plan.correctness_environment]),
+        "correctness_parser_id": CORRECTNESS_PARSER_ID,
+        "correctness_backend": plan.correctness_backend,
+        "correctness_op": plan.correctness_op,
+        "expected_cases": plan.expected_correctness_cases,
+    }
+    if (any(body.get(key) != value for key, value in expected.items())
+            or not isinstance(body.get("reason"), str)
+            or not body["reason"]):
+        raise EvidenceProducerError(
+            "correctness parse refusal identity/classification mismatch")
+    _validate_claim_boundary(body, plan=plan)
+    for kind in ("stdout", "stderr"):
+        path_ = Path(str(body.get(f"{kind}_path", "")))
+        if _hash_file(path_, kind, allow_empty=kind == "stderr") != body.get(
+                f"{kind}_sha256"):
+            raise EvidenceProducerError(
+                f"correctness refusal {kind} bytes changed")
+    try:
+        _parse_correctness(
+            Path(str(body["stdout_path"])).read_text(encoding="utf-8"), plan)
+    except CorrectnessParseRefusal as exc:
+        if _durable_refusal_reason(exc) != body["reason"]:
+            raise EvidenceProducerError(
+                "correctness parse refusal reason changed") from exc
+    else:
+        raise EvidenceProducerError(
+            "correctness parse refusal now parses as a pass")
+    _validate_residency_witness(
+        body.get("residency_witness"), device_id=plan.device_id,
+        label="correctness refusal")
+    return loaded
+
+
+def load_gpu_source_attribution_receipt(
+        path: Path, plan: GpuSourceEvidencePlan, *, arm: str) -> Mapping[str, Any]:
+    """Re-open one completed attribution arm as an exactly-once stage.
+
+    The raw timestamp CSV is part of the receipt graph, so reusing this stage
+    re-runs the authoritative dispatch and duration reduction over the original
+    bytes.  It never trusts the presence of a receipt filename alone.
+    """
+    if arm not in {"candidate", "anchor"}:
+        raise EvidenceProducerError("attribution receipt arm is invalid")
+    _verify_plan_files(plan)
+    try:
+        loaded = proofs.load_receipt(path, schema=ATTRIBUTION_SCHEMA)
+    except proofs.ProofError as exc:
+        raise EvidenceProducerError(
+            f"completed {arm} attribution receipt is not durably recoverable") from exc
+    _validate_attribution_body(loaded["body"], plan=plan, arm=arm)
+    return loaded
+
+
+def _load_gpu_source_attribution_pair(
+        path: Path, plan: GpuSourceEvidencePlan,
+        candidate: Mapping[str, Any], anchor: Mapping[str, Any]) -> Mapping[str, Any]:
+    try:
+        loaded = proofs.load_receipt(path, schema=PAIR_SCHEMA)
+    except proofs.ProofError as exc:
+        raise EvidenceProducerError(
+            "completed attribution pair is not durably recoverable") from exc
+    body = loaded["body"]
+    expected = {
+        "schema": PAIR_SCHEMA,
+        "authority": AUTHORITY,
+        "non_promotable": True,
+        "promotion_claim": False,
+        "manifest_sha256": plan.manifest_sha256,
+        "model_sha256": plan.model_sha256,
+        "workload_sha256": plan.workload_sha256,
+        "runtime_config_sha256": plan.runtime_config_sha256,
+        "candidate_build_identity": asdict(plan.candidate),
+        "anchor_build_identity": asdict(plan.anchor),
+        "identity_files": _identity_files_reference(plan.identity_files),
+        "shared_runtime": _shared_runtime_reference(plan.shared_runtime),
+        "execution_policy": _bound_reference(plan.policy),
+        "correctness_invocations": [dict(row) for row in plan.correctness_invocations],
+        "expectations": _expectations(plan),
+        "candidate": _reference(candidate),
+        "anchor": _reference(anchor),
+        "attribution_arm_order_seed_sha256": plan.attribution_arm_order_seed_sha256,
+        "attribution_arm_order": list(plan.attribution_arm_order),
+        "profiler_trace_schema_id": plan.profiler_trace_schema_id,
+        "expected_candidate_profiler_dispatch_rows": (
+            plan.expected_candidate_profiler_dispatch_rows),
+        "expected_anchor_profiler_dispatch_rows": (
+            plan.expected_anchor_profiler_dispatch_rows),
+        "profiler_transport_policy": plan.profiler_transport_policy,
+        "inverse_attribution_proved": True,
+    }
+    if any(body.get(key) != value for key, value in expected.items()):
+        raise EvidenceProducerError(
+            "completed attribution pair identity/contract changed")
+    candidate_body, anchor_body = candidate["body"], anchor["body"]
+    candidate_invariants = _structural_signature_projection(
+        candidate_body.get("invariant_signatures"))
+    anchor_invariants = _structural_signature_projection(
+        anchor_body.get("invariant_signatures"))
+    if (body.get("invariant_signatures") != candidate_invariants
+            or candidate_invariants != anchor_invariants):
+        raise EvidenceProducerError(
+            "completed attribution pair changed an invariant signature")
+    if body.get("exact_duration_comparison") != _exact_duration_comparison(
+            candidate_body, anchor_body):
+        raise EvidenceProducerError(
+            "completed attribution pair exact-duration comparison changed")
+    return loaded
 
 
 def _contract_from_dict(value: Mapping[str, Any]) -> DispatchContract:
@@ -1629,7 +3634,8 @@ def _plan_from_receipts(correctness: Mapping[str, Any], pair: Mapping[str, Any])
             candidate=proofs.BuildIdentity(**pair_body["candidate_build_identity"]),
             anchor=proofs.BuildIdentity(**pair_body["anchor_build_identity"]),
             correctness_argv=tuple(correct_body["command_argv"]),
-            correctness_summary_pattern=str(correct_body["correctness_summary_pattern"]),
+            correctness_backend=str(correct_body["correctness_backend"]),
+            correctness_op=str(correct_body["correctness_op"]),
             expected_correctness_cases=int(correct_body["expected_cases"]),
             candidate_rocprof_argv=_receipt_rocprof_template(candidate_body),
             anchor_rocprof_argv=_receipt_rocprof_template(anchor_body),
@@ -1647,6 +3653,19 @@ def _plan_from_receipts(correctness: Mapping[str, Any], pair: Mapping[str, Any])
             correctness_environment=tuple(tuple(x) for x in pair_body["correctness_environment"]),
             candidate_rocprof_environment=tuple(tuple(x) for x in pair_body["candidate_rocprof_environment"]),
             anchor_rocprof_environment=tuple(tuple(x) for x in pair_body["anchor_rocprof_environment"]),
+            attribution_arm_order_seed_sha256=str(
+                pair_body["attribution_arm_order_seed_sha256"]),
+            attribution_arm_order=tuple(pair_body["attribution_arm_order"]),
+            profiler_trace_schema_id=str(pair_body.get(
+                "profiler_trace_schema_id", ROCPROF_V1_TRACE_ID)),
+            expected_candidate_profiler_dispatch_rows=pair_body.get(
+                "expected_candidate_profiler_dispatch_rows"),
+            expected_anchor_profiler_dispatch_rows=pair_body.get(
+                "expected_anchor_profiler_dispatch_rows"),
+            profiler_transport_policy=str(pair_body.get(
+                "profiler_transport_policy", "require-zero-exit")),
+            correctness_invocations=tuple(
+                dict(row) for row in pair_body.get("correctness_invocations", [])),
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise EvidenceProducerError("sealed bundle cannot reconstruct its plan") from exc
@@ -1660,45 +3679,138 @@ def produce_gpu_source_evidence(
     claim_verifier: Callable[[Mapping[str, Any]], object] = _default_claim_verifier,
     claim_timeout_s: float = 300.0,
 ) -> proofs.GpuSourceProofBundle:
-    """Execute correctness, candidate attribution, and anchor inverse attribution.
+    """Execute or exactly-once resume the ordered GPU proof stages.
 
-    The root must be fresh.  Every command owns an independently acquired and
-    released device claim.  A failure leaves raw file-backed diagnostics but
-    never produces a success bundle.
+    Every completed stage is recursively revalidated and reused.  Only the
+    first incomplete stage may execute.  A directory containing raw output but
+    no terminal receipt is deliberately ambiguous: replaying it could perform
+    a GPU command twice, so the producer refuses instead.
     """
     root = output_root.resolve()
-    if root.exists() or output_root.is_symlink():
-        raise EvidenceProducerError("output_root must be a fresh path")
+    if output_root.is_symlink() or (root.exists() and (root.is_symlink()
+                                                       or not root.is_dir())):
+        raise EvidenceProducerError("output_root must be a real directory")
     if (isinstance(claim_timeout_s, bool) or not isinstance(claim_timeout_s, (int, float))
             or not math.isfinite(claim_timeout_s) or claim_timeout_s < 0):
         raise EvidenceProducerError("claim timeout must be finite and non-negative")
     _verify_plan_files(plan)
-    root.mkdir(parents=True)
-    correctness = _produce_correctness(
-        root, plan, correctness_executor, claim_acquirer=claim_acquirer,
-        claim_verifier=claim_verifier, claim_journal=claim_journal,
-        claim_timeout_s=float(claim_timeout_s))
-    candidate = _produce_attribution_arm(
-        root, "candidate", plan, rocprof_executor, claim_acquirer=claim_acquirer,
-        claim_verifier=claim_verifier, claim_journal=claim_journal,
-        claim_timeout_s=float(claim_timeout_s))
-    anchor = _produce_attribution_arm(
-        root, "anchor", plan, rocprof_executor, claim_acquirer=claim_acquirer,
-        claim_verifier=claim_verifier, claim_journal=claim_journal,
-        claim_timeout_s=float(claim_timeout_s))
-    pair = _produce_pair(root, plan, candidate, anchor)
+    bundle_path = root / "proof-bundle.json"
+    if bundle_path.exists() or bundle_path.is_symlink():
+        return load_gpu_source_evidence_bundle(bundle_path)
+    root.mkdir(parents=True, exist_ok=True)
+
+    correctness_dir = root / "correctness"
+    correctness_path = correctness_dir / "receipt.json"
+    refusal_path = correctness_dir / "refusal.json"
+    later_paths = (
+        root / "attribution-candidate", root / "attribution-anchor",
+        root / "attribution-pair.json", root / "attribution-pair-refusal.json")
+    if correctness_path.exists() or correctness_path.is_symlink():
+        if refusal_path.exists() or refusal_path.is_symlink():
+            raise EvidenceProducerError(
+                "correctness stage has contradictory pass/refusal receipts")
+        correctness = load_gpu_source_correctness_receipt(correctness_path, plan)
+    elif refusal_path.exists() or refusal_path.is_symlink():
+        loaded_refusal = load_gpu_source_correctness_refusal(refusal_path, plan)
+        raise CorrectnessParseRefusal(
+            str(loaded_refusal["body"]["reason"]),
+            receipt_path=str(loaded_refusal["path"]),
+            receipt_sha256=str(loaded_refusal["file_sha256"]))
+    else:
+        if ((correctness_dir.exists() or correctness_dir.is_symlink())
+                and not plan.correctness_invocations
+                or any(path.exists() or path.is_symlink() for path in later_paths)):
+            raise EvidenceProducerError(
+                "correctness stage is incomplete or later evidence exists out of order")
+        correctness = _produce_correctness(
+            root, plan, correctness_executor, claim_acquirer=claim_acquirer,
+            claim_verifier=claim_verifier, claim_journal=claim_journal,
+            claim_timeout_s=float(claim_timeout_s))
+
+    arm_receipts: dict[str, Mapping[str, Any]] = {}
+    for index, arm in enumerate(plan.attribution_arm_order):
+        arm_dir = root / f"attribution-{arm}"
+        arm_path = arm_dir / "receipt.json"
+        arm_refusal_path = arm_dir / "refusal.json"
+        if arm_path.exists() or arm_path.is_symlink():
+            if arm_refusal_path.exists() or arm_refusal_path.is_symlink():
+                raise EvidenceProducerError(
+                    f"{arm} attribution has contradictory terminals")
+            arm_receipts[arm] = load_gpu_source_attribution_receipt(
+                arm_path, plan, arm=arm)
+            continue
+        if arm_refusal_path.exists() or arm_refusal_path.is_symlink():
+            refusal = load_gpu_source_attribution_refusal(
+                arm_refusal_path, plan, arm=arm)
+            raise DispatchAttributionParseRefusal(
+                str(refusal["body"]["reason"]),
+                receipt_path=str(refusal["path"]),
+                receipt_sha256=str(refusal["file_sha256"]))
+        later_arms = plan.attribution_arm_order[index + 1:]
+        v3_transport = arm_dir / "attempt-01" / "transport.json"
+        if (plan.profiler_trace_schema_id == ROCPROF_V3_TRACE_ID
+                and (v3_transport.exists() or v3_transport.is_symlink())):
+            if (any((root / f"attribution-{later}").exists()
+                    or (root / f"attribution-{later}").is_symlink()
+                    for later in later_arms)
+                    or (root / "attribution-pair.json").exists()
+                    or (root / "attribution-pair-refusal.json").exists()):
+                raise EvidenceProducerError(
+                    f"{arm} attribution has later evidence out of order")
+            arm_receipts[arm] = _produce_attribution_arm(
+                root, arm, plan, rocprof_executor,
+                claim_acquirer=claim_acquirer,
+                claim_verifier=claim_verifier,
+                claim_journal=claim_journal,
+                claim_timeout_s=float(claim_timeout_s))
+            continue
+        if (arm_dir.exists() or arm_dir.is_symlink()
+                or any((root / f"attribution-{later}").exists()
+                       or (root / f"attribution-{later}").is_symlink()
+                       for later in later_arms)
+                or (root / "attribution-pair.json").exists()
+                or (root / "attribution-pair.json").is_symlink()
+                or (root / "attribution-pair-refusal.json").exists()
+                or (root / "attribution-pair-refusal.json").is_symlink()):
+            raise EvidenceProducerError(
+                f"{arm} attribution is incomplete or later evidence exists out of order")
+        arm_receipts[arm] = _produce_attribution_arm(
+            root, arm, plan, rocprof_executor,
+            claim_acquirer=claim_acquirer, claim_verifier=claim_verifier,
+            claim_journal=claim_journal, claim_timeout_s=float(claim_timeout_s))
+
+    candidate = arm_receipts["candidate"]
+    anchor = arm_receipts["anchor"]
+
+    pair_path = root / "attribution-pair.json"
+    pair_refusal_path = root / "attribution-pair-refusal.json"
+    if pair_path.exists() or pair_path.is_symlink():
+        if pair_refusal_path.exists() or pair_refusal_path.is_symlink():
+            raise EvidenceProducerError(
+                "attribution pair has contradictory terminals")
+        pair = _load_gpu_source_attribution_pair(
+            pair_path, plan, candidate, anchor)
+    elif pair_refusal_path.exists() or pair_refusal_path.is_symlink():
+        refusal = _load_gpu_source_attribution_pair_refusal(
+            pair_refusal_path, plan, candidate, anchor)
+        raise DispatchAttributionParseRefusal(
+            str(refusal["body"]["reason"]),
+            receipt_path=str(refusal["path"]),
+            receipt_sha256=str(refusal["file_sha256"]))
+    else:
+        pair = _produce_pair(root, plan, candidate, anchor)
     bundle = proofs.GpuSourceProofBundle.from_validated_paths(
         manifest_sha256=plan.manifest_sha256, candidate=plan.candidate,
         anchor=plan.anchor, workload_sha256=plan.workload_sha256,
         correctness=_reference(correctness), attribution=_reference(pair))
-    _seal(root / "proof-bundle.json", {
+    _seal(bundle_path, {
         "schema": SEALED_BUNDLE_SCHEMA,
         "authority": AUTHORITY,
         "promotion_claim": False,
         "bundle": bundle.to_dict(),
     })
     # Re-read the complete graph once before returning it to the controller.
-    return load_gpu_source_evidence_bundle(root / "proof-bundle.json")
+    return load_gpu_source_evidence_bundle(bundle_path)
 
 
 def load_gpu_source_evidence_bundle(path: Path) -> proofs.GpuSourceProofBundle:
@@ -1728,10 +3840,12 @@ def load_gpu_source_evidence_bundle(path: Path) -> proofs.GpuSourceProofBundle:
     anchor = _reload_reference(pair_body["anchor"], schema=ATTRIBUTION_SCHEMA)
     _validate_attribution_body(candidate["body"], plan=plan, arm="candidate")
     _validate_attribution_body(anchor["body"], plan=plan, arm="anchor")
-    if (candidate["body"]["invariant_signatures"]
-            != anchor["body"]["invariant_signatures"]
-            or pair_body.get("invariant_signatures")
-            != candidate["body"]["invariant_signatures"]
+    candidate_invariants = _structural_signature_projection(
+        candidate["body"]["invariant_signatures"])
+    anchor_invariants = _structural_signature_projection(
+        anchor["body"]["invariant_signatures"])
+    if (candidate_invariants != anchor_invariants
+            or pair_body.get("invariant_signatures") != candidate_invariants
             or pair_body.get("inverse_attribution_proved") is not True):
         raise EvidenceProducerError("inverse attribution or invariant signature mismatch")
     bundle = proofs.GpuSourceProofBundle(
@@ -1745,9 +3859,11 @@ def load_gpu_source_evidence_bundle(path: Path) -> proofs.GpuSourceProofBundle:
 
 
 __all__ = [
-    "AUTHORITY", "EvidenceProducerError", "GpuResidencySample",
+    "AUTHORITY", "EvidenceProducerError", "CorrectnessParseRefusal",
+    "CORRECTNESS_PARSER_ID", "GpuResidencySample",
     "ExecutionCapture", "CommandInvocation", "CommandExecutor",
     "ExactDispatch", "ForbiddenDispatch", "InvariantDispatch",
     "DispatchContract", "GpuSourceEvidencePlan", "produce_gpu_source_evidence",
+    "load_gpu_source_correctness_receipt", "load_gpu_source_correctness_refusal",
     "load_gpu_source_evidence_bundle",
 ]

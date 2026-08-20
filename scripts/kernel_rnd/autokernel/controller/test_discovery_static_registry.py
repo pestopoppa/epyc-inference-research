@@ -12,6 +12,7 @@ import time
 import unittest
 from unittest import mock
 
+from . import discovery_static_registry as S
 from .discovery_static_registry import (SharedRewardRuntime, StaticRegistryError,
                                         runtime_maps_sampler, evidence_identity_files_for_build,
                                         StaticGpuSourceBuilder, _instrument_authority,
@@ -44,6 +45,94 @@ def _bin(root: Path, *, hip: bytes) -> Path:
     (bindir / "libggml-hip.so.0").symlink_to(versioned.name)
     (bindir / "libggml-hip.so").symlink_to("libggml-hip.so.0")
     return root
+
+
+class CorrectnessCapabilityTests(unittest.TestCase):
+    MARKER = (b"AUTOKERNEL_PROPERTY_SELF_TEST suite_seed=2026081301 "
+              b"sensitivity=1.000 specificity=1.000 planted=5 clean=5\n")
+
+    def make_build(self, root: Path) -> Path:
+        build = _bin(root / "build", hip=b"candidate hip")
+        tool = build / "bin/test-backend-ops"
+        tool.write_bytes(b"diagnostic executable")
+        tool.chmod(0o755)
+        return build
+
+    def test_attestor_accepts_only_exact_hardware_free_behavior(self):
+        with tempfile.TemporaryDirectory() as directory:
+            build = self.make_build(Path(directory))
+            observed = {}
+            def runner(argv, **kwargs):
+                observed.update(argv=argv, kwargs=kwargs)
+                return subprocess.CompletedProcess(argv, 0, b"", self.MARKER)
+            record = S._attest_correctness_capability(
+                build, arm="candidate", runner=runner)
+            tool = build / "bin/test-backend-ops"
+            self.assertEqual(record["binary"], {
+                "path": str(tool), "sha256": sha(tool.read_bytes())})
+            self.assertEqual(record["result"], {
+                "suite_seed": 2026081301, "sensitivity": 1.0,
+                "specificity": 1.0, "planted": 5, "clean": 5})
+            self.assertEqual(observed["argv"], (
+                str(tool), "test", "--suite-seed", "2026081301",
+                "--autokernel-property-self-test"))
+            self.assertEqual(observed["kwargs"]["env"]["LD_LIBRARY_PATH"],
+                             f"{build / 'bin'}:/opt/rocm/lib")
+
+    def test_usage_rc1_malformed_stderr_and_wrong_seed_refuse(self):
+        cases = (
+            subprocess.CompletedProcess((), 1, b"Usage: --suite-seed <u64>\n", b""),
+            subprocess.CompletedProcess((), 0, b"", b"not a capability\n"),
+            subprocess.CompletedProcess((), 0, b"", b"\xff"),
+            subprocess.CompletedProcess(
+                (), 0, b"", self.MARKER.replace(b"2026081301", b"99")),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            build = self.make_build(Path(directory))
+            for completed in cases:
+                with self.subTest(completed=completed), self.assertRaises(
+                        StaticRegistryError):
+                    S._attest_correctness_capability(
+                        build, arm="candidate", runner=lambda *_args, **_kwargs: completed)
+
+    def test_wrong_binary_or_linkage_surface_refuses_before_capability(self):
+        with tempfile.TemporaryDirectory() as directory:
+            build = self.make_build(Path(directory))
+            tool = build / "bin/test-backend-ops"
+            tool.chmod(0o644)
+            with self.assertRaisesRegex(StaticRegistryError, "regular executable"):
+                S._attest_correctness_capability(build, arm="candidate")
+            tool.chmod(0o755)
+            (build / "bin/libggml-hip.so").unlink()
+            (build / "bin/libggml-hip.so.0").unlink()
+            with self.assertRaisesRegex(StaticRegistryError, "runtime artifact"):
+                S._attest_correctness_capability(
+                    build, arm="candidate",
+                    runner=lambda *_args, **_kwargs: subprocess.CompletedProcess(
+                        (), 0, b"", self.MARKER))
+
+    def test_sealed_receipt_reopens_with_exact_binary_identity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            build = self.make_build(root)
+            record = S._attest_correctness_capability(
+                build, arm="candidate",
+                runner=lambda *_args, **_kwargs: subprocess.CompletedProcess(
+                    (), 0, b"", self.MARKER))
+            receipt, receipt_sha = S._sealed_write(root / "capability.json", record)
+            tool = build / "bin/test-backend-ops"
+            reopened = S._verify_correctness_capability_receipt(
+                receipt=receipt, receipt_sha256=receipt_sha,
+                binary=tool, binary_sha256=sha(tool.read_bytes()),
+                build=build, arm="candidate")
+            self.assertEqual(reopened["result"]["suite_seed"], 2026081301)
+            tool.write_bytes(b"changed")
+            tool.chmod(0o755)
+            with self.assertRaisesRegex(StaticRegistryError, "identity mismatch"):
+                S._verify_correctness_capability_receipt(
+                    receipt=receipt, receipt_sha256=receipt_sha,
+                    binary=tool, binary_sha256=sha(tool.read_bytes()),
+                    build=build, arm="candidate")
 
 
 class SharedRewardRuntimeTests(unittest.TestCase):
@@ -164,7 +253,9 @@ class SharedRewardRuntimeTests(unittest.TestCase):
             identity = mock.Mock(to_dict=lambda: {"identity_sha256": "b" * 64})
             def verify_side_effect(*_args, **kwargs):
                 if kwargs["kfd_pid"] == 122:
-                    raise __import__("scripts.kernel_rnd.autokernel.controller.split_runtime_verifier", fromlist=["SplitRuntimeError"]).SplitRuntimeError("wrapper")
+                    raise __import__(
+                        "scripts.kernel_rnd.autokernel.controller.split_runtime_verifier",
+                        fromlist=["RuntimeMapsIncomplete"]).RuntimeMapsIncomplete("wrapper")
                 return identity
             with mock.patch("scripts.kernel_rnd.autokernel.controller.discovery_static_registry.split_runtime_verifier.verify_split_runtime", return_value=manifest), \
                  mock.patch("scripts.kernel_rnd.autokernel.controller.discovery_static_registry.split_runtime_verifier.verify_runtime_maps", side_effect=verify_side_effect) as verify:
@@ -172,6 +263,106 @@ class SharedRewardRuntimeTests(unittest.TestCase):
             self.assertEqual(result, {"identity_sha256": "b" * 64})
             self.assertEqual(verify.call_args.kwargs["kfd_pid"], pid)
             self.assertEqual(verify.call_args.kwargs["process_start_ticks"], 77)
+
+    def test_runtime_maps_sampler_types_incomplete_startup_as_retryable(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            proc = root / "proc"; (proc / "sys/kernel/random").mkdir(parents=True)
+            (proc / "sys/kernel/random/boot_id").write_text("boot-test\n")
+            pid = 123; (proc / str(pid)).mkdir()
+            (proc / str(pid) / "maps").write_text("startup mappings only\n")
+            (proc / str(pid) / "stat").write_text(
+                f"{pid} (rocprof) R " + " ".join(["0"] * 18 + ["77"]))
+            model = root / "model.gguf"; model.write_bytes(b"model")
+            runtime_dir = root / "runtime"; runtime_dir.mkdir()
+            runtime_receipt = root / "runtime.json"
+            runtime_receipt.write_text(json.dumps({"split_runtime_manifest": {
+                "root": str(runtime_dir)}}))
+            invocation = mock.Mock(runtime_maps_context={
+                "arm": "candidate", "shared_runtime": {
+                    "runtime_receipt": {"path": str(runtime_receipt)}},
+                "model": {"path": str(model)}, "model_sha256": "a" * 64,
+                "device_id": "mi210_0"})
+            residency = mock.Mock(kfd_pids=(pid,))
+            split_module = __import__(
+                "scripts.kernel_rnd.autokernel.controller.split_runtime_verifier",
+                fromlist=["RuntimeMapsIncomplete"])
+            with mock.patch(
+                    "scripts.kernel_rnd.autokernel.controller.discovery_static_registry."
+                    "split_runtime_verifier.verify_split_runtime", return_value=mock.Mock()), \
+                 mock.patch(
+                    "scripts.kernel_rnd.autokernel.controller.discovery_static_registry."
+                    "split_runtime_verifier.verify_runtime_maps",
+                    side_effect=split_module.RuntimeMapsIncomplete("model not mapped yet")):
+                with self.assertRaisesRegex(E.RuntimeMapsNotReady,
+                                            "not mapped the complete sealed arm"):
+                    runtime_maps_sampler(proc_root=proc)(invocation, 99, residency)
+
+    def test_runtime_maps_sampler_does_not_retry_contradictory_owned_maps(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            proc = root / "proc"; (proc / "sys/kernel/random").mkdir(parents=True)
+            (proc / "sys/kernel/random/boot_id").write_text("boot-test\n")
+            pid = 123; (proc / str(pid)).mkdir()
+            (proc / str(pid) / "maps").write_text("wrong-arm mapping\n")
+            (proc / str(pid) / "stat").write_text(
+                f"{pid} (llama-bench) R " + " ".join(["0"] * 18 + ["77"]))
+            model = root / "model.gguf"; model.write_bytes(b"model")
+            runtime_dir = root / "runtime"; runtime_dir.mkdir()
+            runtime_receipt = root / "runtime.json"
+            runtime_receipt.write_text(json.dumps({"split_runtime_manifest": {
+                "root": str(runtime_dir)}}))
+            invocation = mock.Mock(runtime_maps_context={
+                "arm": "candidate", "shared_runtime": {
+                    "runtime_receipt": {"path": str(runtime_receipt)}},
+                "model": {"path": str(model)}, "model_sha256": "a" * 64,
+                "device_id": "mi210_0"})
+            residency = mock.Mock(kfd_pids=(pid,))
+            split_module = __import__(
+                "scripts.kernel_rnd.autokernel.controller.split_runtime_verifier",
+                fromlist=["SplitRuntimeError"])
+            with mock.patch(
+                    "scripts.kernel_rnd.autokernel.controller.discovery_static_registry."
+                    "split_runtime_verifier.verify_split_runtime", return_value=mock.Mock()), \
+                 mock.patch(
+                    "scripts.kernel_rnd.autokernel.controller.discovery_static_registry."
+                    "split_runtime_verifier.verify_runtime_maps",
+                    side_effect=split_module.SplitRuntimeError("opposite HIP arm")):
+                with self.assertRaisesRegex(StaticRegistryError,
+                                            "violate the sealed arm"):
+                    runtime_maps_sampler(proc_root=proc)(invocation, 99, residency)
+
+    def test_runtime_maps_sampler_refuses_multiple_complete_owned_identities(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            proc = root / "proc"; (proc / "sys/kernel/random").mkdir(parents=True)
+            (proc / "sys/kernel/random/boot_id").write_text("boot-test\n")
+            for pid in (122, 123):
+                (proc / str(pid)).mkdir()
+                (proc / str(pid) / "maps").write_text("complete mappings\n")
+                (proc / str(pid) / "stat").write_text(
+                    f"{pid} (llama-bench) R " + " ".join(["0"] * 18 + ["77"]))
+            model = root / "model.gguf"; model.write_bytes(b"model")
+            runtime_dir = root / "runtime"; runtime_dir.mkdir()
+            runtime_receipt = root / "runtime.json"
+            runtime_receipt.write_text(json.dumps({"split_runtime_manifest": {
+                "root": str(runtime_dir)}}))
+            invocation = mock.Mock(runtime_maps_context={
+                "arm": "candidate", "shared_runtime": {
+                    "runtime_receipt": {"path": str(runtime_receipt)}},
+                "model": {"path": str(model)}, "model_sha256": "a" * 64,
+                "device_id": "mi210_0"})
+            residency = mock.Mock(kfd_pids=(122, 123))
+            identity = mock.Mock(to_dict=lambda: {"identity_sha256": "b" * 64})
+            with mock.patch(
+                    "scripts.kernel_rnd.autokernel.controller.discovery_static_registry."
+                    "split_runtime_verifier.verify_split_runtime", return_value=mock.Mock()), \
+                 mock.patch(
+                    "scripts.kernel_rnd.autokernel.controller.discovery_static_registry."
+                    "split_runtime_verifier.verify_runtime_maps", return_value=identity):
+                with self.assertRaisesRegex(StaticRegistryError,
+                                            "exactly one owned KFD process"):
+                    runtime_maps_sampler(proc_root=proc)(invocation, 99, residency)
 
     def test_materialization_reconstructs_file_backed_tree_identities_after_teardown(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -326,10 +517,15 @@ class StaticBuildCacheTests(unittest.TestCase):
             manifest.patch_bundle_sha256)
         operations = root / "operations"; operations.mkdir()
         build_root = root / "build"; build_root.mkdir()
+        def capability_runner(argv, **_kwargs):
+            marker = (b"AUTOKERNEL_PROPERTY_SELF_TEST suite_seed=2026081301 "
+                      b"sensitivity=1.000 specificity=1.000 planted=5 clean=5\n")
+            return subprocess.CompletedProcess(argv, 0, b"", marker)
         builder = StaticGpuSourceBuilder(
             production_path=production, production_branch="production-test",
             instrument_path=instrument, operations_root=operations,
-            build_root=build_root, cmake_defines=(("GGML_HIP", "ON"),))
+            build_root=build_root, cmake_defines=(("GGML_HIP", "ON"),),
+            correctness_capability_runner=capability_runner)
         calls = []
 
         def run_build(plan, *, log_path, **_kwargs):
@@ -341,6 +537,7 @@ class StaticBuildCacheTests(unittest.TestCase):
                          "test-backend-ops"):
                 (bindir / name).write_bytes(f"shared-{name}".encode())
             (bindir / "llama-bench").chmod(0o755)
+            (bindir / "test-backend-ops").chmod(0o755)
             hip = b"candidate-hip" if "akc-cache-test" in str(build) else b"anchor-hip"
             versioned = bindir / "libggml-hip.so.0.16.0"; versioned.write_bytes(hip)
             (bindir / "libggml-hip.so.0").symlink_to(versioned.name)
@@ -531,12 +728,90 @@ class StaticBuildCacheTests(unittest.TestCase):
         (cache / "entries").mkdir(); (cache / "locks").mkdir()
         _sealed_write(refs / f"{request_key}.json", {
             "schema": "epyc.autokernel.gpu_source_build_ref.v1",
-            "builder_schema": "epyc.autokernel.static_gpu_source_builder.v2",
+            "builder_schema": S._BUILDER_SCHEMA,
             "request_key": request_key, "build_key": contract["build_key"],
             "promotion_claim": False})
         with self.assertRaisesRegex(StaticRegistryError, "without its cache transaction"):
             self.invoke(other, {**other.permit, "operation_key": "9" * 64})
         self.assertEqual(other.calls, [])
+
+    def test_exact_source_candidate_failed_terminal_recovers_only_typed_refusal(self):
+        fixture = self.fixture()
+        with mock.patch.object(
+                StaticGpuSourceBuilder, "_build_uncached",
+                side_effect=source_candidate.SourceCandidateError(
+                    "committed diff derives undeclared symbols")):
+            with self.assertRaises(C.SourceApplyRefusal):
+                fixture.builder.build(
+                    fixture.candidate, object(), fixture.permit)
+
+        cache = fixture.root / "operations/build-cache"
+        terminal = next((cache / "entries").iterdir()) / "terminal.json"
+        sealed = json.loads(terminal.read_text())
+        self.assertEqual(
+            (sealed["state"], sealed["failure_stage"],
+             sealed["failure_type"], sealed["failure_message"]),
+            ("failed", "source_apply", "SourceCandidateError",
+             "committed diff derives undeclared symbols"))
+        with self.assertRaisesRegex(
+                C.SourceApplyRefusal,
+                "committed diff derives undeclared symbols"):
+            self.invoke(fixture, {**fixture.permit, "operation_key": "6" * 64})
+        self.assertEqual(fixture.calls, [])
+
+    def test_legacy_source_candidate_failed_terminal_without_message_is_typed(self):
+        fixture = self.fixture()
+        with mock.patch.object(
+                StaticGpuSourceBuilder, "_build_uncached",
+                side_effect=source_candidate.SourceCandidateError("legacy failure")):
+            with self.assertRaises(C.SourceApplyRefusal):
+                fixture.builder.build(
+                    fixture.candidate, object(), fixture.permit)
+        terminal = next(
+            (fixture.root / "operations/build-cache/entries").iterdir()
+        ) / "terminal.json"
+        self.rewrite_receipt(terminal, lambda body: body.pop("failure_message"))
+        with self.assertRaisesRegex(
+                C.SourceApplyRefusal,
+                "sealed prior build transaction rejected source_apply"):
+            self.invoke(fixture, {**fixture.permit, "operation_key": "a" * 64})
+        self.assertEqual(fixture.calls, [])
+
+    def test_failed_terminal_reclassification_refuses_other_or_tampered_identity(self):
+        cases = ("other_failure", "wrong_build_key", "tampered_hash",
+                 "malformed_message")
+        for case in cases:
+            with self.subTest(case=case):
+                fixture = self.fixture()
+                with mock.patch.object(
+                        StaticGpuSourceBuilder, "_build_uncached",
+                        side_effect=source_candidate.SourceCandidateError(
+                            "committed diff derives undeclared symbols")):
+                    with self.assertRaises(C.SourceApplyRefusal):
+                        fixture.builder.build(
+                            fixture.candidate, object(), fixture.permit)
+                terminal = next(
+                    (fixture.root / "operations/build-cache/entries").iterdir()
+                ) / "terminal.json"
+                if case == "other_failure":
+                    self.rewrite_receipt(
+                        terminal,
+                        lambda body: body.update(failure_type="RuntimeError"))
+                elif case == "wrong_build_key":
+                    self.rewrite_receipt(
+                        terminal, lambda body: body.update(build_key="0" * 64))
+                elif case == "malformed_message":
+                    self.rewrite_receipt(
+                        terminal,
+                        lambda body: body.update(failure_message="unsafe\nmessage"))
+                else:
+                    terminal.write_text(terminal.read_text().replace(
+                        "committed diff derives undeclared symbols",
+                        "committed diff derives changed symbols"))
+                with self.assertRaises(StaticRegistryError):
+                    self.invoke(
+                        fixture, {**fixture.permit, "operation_key": "7" * 64})
+                self.assertEqual(fixture.calls, [])
 
     def test_concurrent_repetitions_are_serialized_to_one_pair_build(self):
         fixture = self.fixture(); entered = threading.Event()

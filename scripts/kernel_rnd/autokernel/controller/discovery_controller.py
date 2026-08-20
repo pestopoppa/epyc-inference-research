@@ -39,6 +39,7 @@ SCHEMA = "epyc.autokernel.discovery_controller.v5"
 ROSTER_SCHEMA = "epyc.autokernel.discovery_roster.v3"
 AUTHORITY = "nonpromotable_candidate_only_discovery"
 HASH = __import__("re").compile(r"^[0-9a-f]{64}$")
+PORTFOLIO_DNR_CHECK_SCHEMA = "epyc.autokernel.portfolio_exact_dnr_check.v1"
 SOL = {"provider": "codex", "model": "gpt-5.6-sol", "effort": "high", "role": "planner"}
 FABLE5_CRITIC = {"provider": "claude", "model": "claude-fable-5", "effort": "high", "role": "critic"}
 
@@ -46,8 +47,97 @@ FABLE5_CRITIC = {"provider": "claude", "model": "claude-fable-5", "effort": "hig
 class DiscoveryControllerError(RuntimeError): pass
 
 
+class PlannerOutputRefusal(DiscoveryControllerError):
+    """A safe, bounded refusal of a completed planner's authored artifacts.
+
+    This type is deliberately narrower than ``DiscoveryControllerError``.  It
+    may be raised only after the Sol process returned successfully and while
+    validating files in its disposable workspace.  Runtime, authentication,
+    containment, and later source/build failures must retain their native
+    exception types.
+    """
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        # Telemetry is observational.  A telemetry failure must never replace
+        # the already-derived, controller-owned planner refusal.
+        self.telemetry_status = "not_attempted"
+        self.telemetry_failure: dict[str, str] | None = None
+
+    def note_telemetry_failure(self, exc: Exception) -> None:
+        self.telemetry_status = "emit_failed"
+        self.telemetry_failure = {
+            "type": type(exc).__name__,
+            "message_sha256": hashlib.sha256(str(exc).encode()).hexdigest(),
+        }
+
+
+class PlannerProviderTransient(PlannerOutputRefusal):
+    """A retryable provider/API interruption before candidate validation."""
+
+
+class GovernedStageRefusal(DiscoveryControllerError):
+    stage = ""
+    disposition = ""
+    scientific_budget_spent = False
+
+    def __init__(self, message: str, *, receipt_path: str,
+                 receipt_sha256: str) -> None:
+        super().__init__(message)
+        if (not isinstance(receipt_path, str) or not receipt_path
+                or not isinstance(receipt_sha256, str)
+                or not HASH.fullmatch(receipt_sha256)):
+            raise DiscoveryControllerError(
+                "governed stage refusal lacks a sealed receipt")
+        self.receipt_path = receipt_path
+        self.receipt_sha256 = receipt_sha256
+
+
+class SourceApplyRefusal(GovernedStageRefusal):
+    stage = "source_apply"
+    disposition = "authoring_refused"
+
+
+class CompileRefusal(GovernedStageRefusal):
+    stage = "compile"
+    disposition = "authoring_refused"
+
+
+class CorrectnessRefusal(GovernedStageRefusal):
+    stage = "correctness"
+    disposition = "correctness_falsified"
+
+
+class DispatchAttributionRefusal(GovernedStageRefusal):
+    stage = "dispatch_attribution"
+    disposition = "attribution_route_falsified"
+
+
+class MeasurementOutputRefusal(GovernedStageRefusal):
+    stage = "measurement_output"
+    disposition = "measurement_output_refused"
+
+
 class PrecomputeScreenRefusal(DiscoveryControllerError):
     """Typed adapter refusal proving that no governed operation was started."""
+
+
+class PostBuildEvidencePlanRefusal(PrecomputeScreenRefusal):
+    """A completed build was refused before claim/proof/runner execution.
+
+    The builder's exact terminal remains reusable by its sealed build key; the
+    controller may durably classify this screen without treating the operation
+    as an ambiguous GPU run.
+    """
+
+
+class ResumableScreenInterruption(DiscoveryControllerError):
+    """A pre-run transport failure after durable proof was checkpointed.
+
+    The current candidate and its scientific proof remain inflight.  The
+    controller pauses without consuming an iteration so a corrected/reloaded
+    runner can resume at the first incomplete stage.
+    """
 
 
 class ResourceWait(DiscoveryControllerError):
@@ -67,6 +157,32 @@ def _canon(value: object) -> bytes:
 
 
 def _sha(value: object) -> str: return hashlib.sha256(_canon(value)).hexdigest()
+
+
+def _emit_observational_telemetry(
+        telemetry: discovery_telemetry.DiscoveryTelemetry | None,
+        *args: Any, failure_sink: list[dict[str, str]] | None = None,
+        **kwargs: Any) -> Exception | None:
+    """Emit dashboard telemetry without granting it controller authority.
+
+    The durable state machine and actor result remain primary.  Returning the
+    telemetry exception lets a typed primary refusal record the visibility
+    degradation without allowing it to replace that refusal.
+    """
+    if telemetry is None:
+        return None
+    try:
+        telemetry.emit(*args, **kwargs)
+    except Exception as exc:
+        if failure_sink is not None:
+            failure_sink.append({
+                "event": str(args[1]) if len(args) > 1 else "unknown",
+                "operation_key": str(kwargs.get("operation_key", "")),
+                "error_type": type(exc).__name__,
+                "error_sha256": hashlib.sha256(str(exc).encode()).hexdigest(),
+            })
+        return exc
+    return None
 
 
 def _validated_resource_wait(exc: ResourceWait, operation_key: str) -> dict[str, Any]:
@@ -247,16 +363,16 @@ class BoundedDispatchExpectation:
     def __post_init__(self) -> None:
         if not re.fullmatch(r"[a-z0-9][a-z0-9_.-]*\.anchor\.[0-9]+", self.route_id):
             raise DiscoveryControllerError("dispatch route id is not deployed authority")
-        # rocprof-v1 reports the complete demangled HIP symbol, including spaces,
-        # pointers, template punctuation, and the ``[clone .kd]`` suffix.  This is
+        # The reviewed profilers report complete demangled HIP symbols: v1 adds
+        # ``[clone .kd]`` while v3 emits the native undecorated name.  This is
         # still a literal: the deployment factory escapes it before constructing
-        # an evidence matcher.  Bound bytes and control characters here instead
-        # of accidentally making real symbols inexpressible.
+        # an evidence matcher.  Punctuation is admitted only on function-shaped
+        # names; bare regex-like planner strings remain invalid.
         if (not isinstance(self.kernel_name, str)
                 or not 1 <= len(self.kernel_name.encode("utf-8")) <= 2048
                 or any(ord(ch) < 0x20 or ord(ch) == 0x7f for ch in self.kernel_name)
                 or (any(ch in self.kernel_name for ch in "*?[]|+\\^$")
-                    and not self.kernel_name.endswith(" [clone .kd]"))
+                    and "(" not in self.kernel_name)
                 or (" " in self.kernel_name and "(" not in self.kernel_name)):
             raise DiscoveryControllerError("dispatch kernel name must be a bounded literal")
         for label, value, maximum in (("calls", self.calls, 10_000_000), ("grid", self.grid, 1 << 31),
@@ -360,6 +476,8 @@ class SealedScreen:
     baseline_sha256: str
     source_proof_sha256: str
     dispatch_proof_sha256: str
+    exact_attribution_effect_fraction: float | None = None
+    target_runtime_effect_fraction: float | None = None
     candidate_only: bool = True
     promotion_claim: bool = False
     stages: tuple[str, ...] = ("materialized", "built", "correctness", "attribution", "screen")
@@ -378,8 +496,26 @@ class SealedScreen:
                 or not isinstance(self.effect_fraction, (int, float))
                 or not math.isfinite(float(self.effect_fraction))):
             raise DiscoveryControllerError("screen effect must be a finite measured number")
+        for label, value in (
+                ("exact attribution", self.exact_attribution_effect_fraction),
+                ("target runtime", self.target_runtime_effect_fraction)):
+            if (value is not None and (isinstance(value, bool)
+                    or not isinstance(value, (int, float))
+                    or not math.isfinite(float(value)))):
+                raise DiscoveryControllerError(
+                    f"{label} effect must be a finite measured number")
+        if (self.target_runtime_effect_fraction is not None
+                and float(self.effect_fraction)
+                != float(self.target_runtime_effect_fraction)):
+            raise DiscoveryControllerError(
+                "primary screen effect must be the target-runtime effect")
         if not self.candidate_only or self.promotion_claim: raise DiscoveryControllerError("discovery screen must remain nonpromotable")
-        if tuple(self.stages) != ("materialized", "built", "correctness", "attribution", "screen"):
+        if tuple(self.stages) not in {
+                ("materialized", "built", "correctness", "attribution", "screen"),
+                ("materialized", "built", "correctness", "attribution",
+                 "measurement_graphs_off_screen",
+                 "target_runtime_graphs_on_screen"),
+                ("materialized", "built", "correctness", "attribution")}:
             raise DiscoveryControllerError("screen did not prove the required fail-closed stage order")
         for value in (self.result_sha256, self.baseline_sha256, self.source_proof_sha256, self.dispatch_proof_sha256):
             if not HASH.fullmatch(value): raise DiscoveryControllerError("sealed result requires evidence hashes")
@@ -400,7 +536,10 @@ class SealedScreen:
 
 class Planner(Protocol):
     def attest(self) -> Mapping[str, Any]: ...
-    def plan(self, *, context: Mapping[str, Any], workspace: Path) -> PlannedCandidate: ...
+    def plan(self, *, context: Mapping[str, Any], workspace: Path,
+             checkpoint_path: Path | None = None) -> PlannedCandidate: ...
+    def resume_plan(self, *, context: Mapping[str, Any],
+                    workspace: Path, checkpoint_path: Path) -> PlannedCandidate: ...
 
 class Critic(Protocol):
     def attest(self) -> Mapping[str, Any]: ...
@@ -564,6 +703,98 @@ class ReviewedSourcePackage:
         return {**value, "context_sha256": _sha(value)}
 
 
+PLANNER_ACTOR_CHECKPOINT_SCHEMA = "epyc.autokernel.planner_actor_checkpoint.v1"
+
+
+def _planner_artifact_manifest(workspace: Path) -> dict[str, Any]:
+    """Hash every actor-owned artifact outside the immutable source package."""
+    root_info = workspace.lstat()
+    if (workspace.is_symlink() or not stat.S_ISDIR(root_info.st_mode)
+            or root_info.st_uid != os.getuid()):
+        raise DiscoveryControllerError("planner workspace is not an owned directory")
+    files: list[dict[str, Any]] = []
+    directories: list[str] = []
+    total = 0
+    for path in sorted(workspace.rglob("*"), key=lambda item: item.as_posix()):
+        relative = path.relative_to(workspace)
+        if relative.parts[0] == "reviewed-source":
+            continue
+        info = path.lstat()
+        if path.is_symlink() or info.st_uid != os.getuid():
+            raise DiscoveryControllerError(
+                "planner artifact tree contains a symlink or foreign owner")
+        if stat.S_ISDIR(info.st_mode):
+            directories.append(relative.as_posix())
+            continue
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            raise DiscoveryControllerError(
+                "planner artifact tree contains a special file or hardlink")
+        raw = path.read_bytes()
+        total += len(raw)
+        files.append({"path": relative.as_posix(), "size": len(raw),
+                      "sha256": hashlib.sha256(raw).hexdigest()})
+    if len(files) > 32 or len(directories) > 32 or total > 2 * 1024 * 1024:
+        raise DiscoveryControllerError("planner artifact tree exceeds its sealed bound")
+    return {"directories": directories, "files": files,
+            "total_bytes": total}
+
+
+def _seal_planner_actor_checkpoint(workspace: Path, checkpoint_path: Path, *,
+                                   context: Mapping[str, Any],
+                                   result: Mapping[str, Any]) -> Mapping[str, Any]:
+    path = checkpoint_path
+    if path.parent != workspace.parent or path.name != "actor-result.json":
+        raise DiscoveryControllerError(
+            "planner actor checkpoint is outside its controller operation")
+    ReviewedSourcePackage._require_owned_directory(
+        path.parent, "planner operation root")
+    if path.exists() or path.is_symlink():
+        raise DiscoveryControllerError("planner actor checkpoint already exists")
+    body = {
+        "schema": PLANNER_ACTOR_CHECKPOINT_SCHEMA,
+        "context_sha256": _sha(context),
+        "assignment_sha256": _sha(context.get("authoring_assignment")),
+        "result": dict(result),
+        "artifacts": _planner_artifact_manifest(workspace),
+    }
+    body["receipt_sha256"] = _sha(body)
+    _atomic(path, body)
+    return body
+
+
+def _reopen_planner_actor_checkpoint(workspace: Path, checkpoint_path: Path, *,
+                                     context: Mapping[str, Any]) -> Mapping[str, Any]:
+    path = checkpoint_path
+    if path.parent != workspace.parent or path.name != "actor-result.json":
+        raise DiscoveryControllerError(
+            "planner actor checkpoint is outside its controller operation")
+    ReviewedSourcePackage._require_owned_directory(
+        path.parent, "planner operation root")
+    if not path.exists():
+        raise PlannerOutputRefusal(
+            "planner invocation stopped without a completed actor artifact checkpoint")
+    info = path.lstat()
+    if (path.is_symlink() or not stat.S_ISREG(info.st_mode)
+            or info.st_uid != os.getuid() or info.st_nlink != 1):
+        raise DiscoveryControllerError("planner actor checkpoint file is unsafe")
+    checkpoint = _read_object(path, workspace.parent)
+    declared = checkpoint.get("receipt_sha256")
+    if (checkpoint.get("schema") != PLANNER_ACTOR_CHECKPOINT_SCHEMA
+            or not isinstance(declared, str)
+            or declared != _sha({key: value for key, value in checkpoint.items()
+                                 if key != "receipt_sha256"})
+            or checkpoint.get("context_sha256") != _sha(context)
+            or checkpoint.get("assignment_sha256") !=
+               _sha(context.get("authoring_assignment"))
+            or checkpoint.get("artifacts") !=
+               _planner_artifact_manifest(workspace)
+            or not isinstance(checkpoint.get("result"), Mapping)
+            or isinstance(checkpoint["result"].get("returncode"), bool)
+            or not isinstance(checkpoint["result"].get("returncode"), int)):
+        raise DiscoveryControllerError("planner actor checkpoint identity changed")
+    return checkpoint
+
+
 class CodexPlanner:
     """Concrete Sol actor. It may write only a plan and patch manifest in workspace."""
     def __init__(self, *, wrapper: Path, environment: Mapping[str, str],
@@ -580,6 +811,7 @@ class CodexPlanner:
         self.runtime_identity = None if runtime_identity is None else dict(runtime_identity)
         self.actor_launcher_sha256 = actor_launcher_sha256
         self.telemetry = telemetry
+        self.telemetry_failures: list[dict[str, str]] = []
     def _runtime(self) -> Mapping[str, Any]:
         if self.wrapper_sha256 is not None:
             if self.wrapper.is_symlink() or not self.wrapper.is_file() or hashlib.sha256(self.wrapper.read_bytes()).hexdigest() != self.wrapper_sha256:
@@ -593,12 +825,65 @@ class CodexPlanner:
             raise DiscoveryControllerError("sealed Codex planner launcher/argv policy changed")
         return current
     def attest(self) -> Mapping[str, Any]: return {**SOL, "runtime": self._runtime()}
-    def plan(self, *, context: Mapping[str, Any], workspace: Path) -> PlannedCandidate:
+
+    def _planner_catalog(self) -> dict[str, Any]:
+        """Return the actor-visible projection of reviewed template authority.
+
+        Candidate dispatch topology is controller-owned evidence authority.  It
+        is useful to the critic and evidence reducer, but exposing its literal
+        route/count/geometry cells to the planner invites those cells to be
+        copied into ``expected_dispatch`` even though that field is deliberately
+        the deployed anchor observation.  Preserve only the named authoring
+        strategy and make the ownership boundary executable in the prompt.
+        """
+        catalog = json.loads(json.dumps(self.template_catalog, sort_keys=True))
+        for template in catalog.values():
+            if not isinstance(template, dict):
+                continue
+            semantics = template.get("semantics")
+            if not isinstance(semantics, dict):
+                continue
+            variants = semantics.pop("candidate_dispatch_variants", None)
+            if variants is None:
+                continue
+            if (template.get("template_id") != "cuda-fattn-tile-v1"
+                    or not isinstance(variants, dict)
+                    or set(variants) != {"gqa7_bulk_pairs", "gqa7_scalar_tail"}):
+                raise DiscoveryControllerError(
+                    "planner template candidate strategy authority is malformed")
+            semantics["candidate_dispatch_strategy"] = {
+                "strategy_id": "gqa7_pair_tail",
+                "selection_authority": "controller_owned",
+                "expected_dispatch_source":
+                    "controller_owned_portfolio_binding.expected_dispatch",
+                "instruction": (
+                    "Author the bounded six-head pair plus one-head tail source mechanism. "
+                    "Do not emit candidate route IDs, call counts, or geometry; the controller "
+                    "derives and validates those after authorization."),
+            }
+        return catalog
+
+    def plan(self, *, context: Mapping[str, Any], workspace: Path,
+             checkpoint_path: Path | None = None) -> PlannedCandidate:
+        return self._plan(context=context, workspace=workspace, resume=False,
+                          checkpoint_path=checkpoint_path)
+
+    def resume_plan(self, *, context: Mapping[str, Any],
+                    workspace: Path, checkpoint_path: Path) -> PlannedCandidate:
+        return self._plan(context=context, workspace=workspace, resume=True,
+                          checkpoint_path=checkpoint_path)
+
+    def _plan(self, *, context: Mapping[str, Any], workspace: Path,
+              resume: bool, checkpoint_path: Path | None) -> PlannedCandidate:
         # The model gets a bounded source/profile brief plus a machine contract;
         # it never receives authority to select a campaign, base, executable,
         # argv, profile parser, or evidence regex.
-        source_package = (None if self.reviewed_sources is None
-                          else self.reviewed_sources.materialize(workspace))
+        if resume and self.reviewed_sources is not None:
+            self.reviewed_sources.revalidate_materialized(workspace)
+            source_package = self.reviewed_sources.manifest()
+        else:
+            source_package = (None if self.reviewed_sources is None
+                              else self.reviewed_sources.materialize(workspace))
         planner_context = context.get("planner_context")
         if (self.reviewed_sources is None or not isinstance(planner_context, Mapping)
                 or planner_context.get("reviewed_source_package_sha256")
@@ -621,7 +906,13 @@ class CodexPlanner:
                 str(example.get("id")) for example in
                 context.get("admission_policy", {}).get("examples", [])
                 if isinstance(example, Mapping) and isinstance(example.get("id"), str)}),
-            "expected_dispatch": "array of 1..8 exact objects",
+            "expected_dispatch": (
+                "array of 1..8 deployed anchor objects copied byte-for-byte from "
+                "controller_owned_portfolio_binding.expected_dispatch"),
+            "expected_dispatch_rule": (
+                "Never substitute predicted candidate subroutes, counts, names, or geometry. "
+                "Topology-changing candidate routes are controller-owned and derived only after "
+                "the planner's source proposal passes authorization."),
             "expected_dispatch_item_keys": ["route_id", "kernel_name", "calls", "grid", "workgroup", "lds_bytes"],
             "source_manifest_schema": {
                 "exact_keys": ["schema", "campaign_id", "proposal_id", "candidate_id",
@@ -700,7 +991,7 @@ class CodexPlanner:
                 "experiment_intent": {"template_id": example_template,
                     "target_surface": "gpu_decode", "target_symbol": example_symbol,
                     "correctness_id": "backend-ops-hip-v1",
-                    "dispatch_id": "decode-tg128-rocprof-v1",
+                    "dispatch_id": "decode-tg128-rocprof-v3",
                     "expected_dispatch": example_dispatch}},
             "source-patch.json": {"schema": source_candidate.SCHEMA_SOURCE_PATCH,
                 "campaign_id": assignment["campaign_id"], "proposal_id": assignment["proposal_id"],
@@ -714,48 +1005,117 @@ class CodexPlanner:
                 "patch_encoding": "base64",
                 "patch_base64": base64.b64encode(example_patch.encode()).decode("ascii")}}
         prompt = json.dumps({"role": SOL, "context": context,
-                             "experiment_template_catalog": self.template_catalog,
+                             "experiment_template_catalog": self._planner_catalog(),
                              "reviewed_source_package": source_package,
                              "authoring_contract": contract,
                              "controller_owned_portfolio_binding": binding,
                              "structural_example_only": example,
                              "output": "Write plan.json and source-patch.json in workspace."}, sort_keys=True)
+        checkpoint_operation_key = (
+            checkpoint_path.parent.name if checkpoint_path is not None else None)
+        telemetry_operation_key = (
+            checkpoint_operation_key
+            if isinstance(checkpoint_operation_key, str)
+            and HASH.fullmatch(checkpoint_operation_key)
+            else _sha({"context": context, "workspace": str(workspace)}))
         self._runtime()
-        if self.telemetry is not None:
-            self.telemetry.emit(
-                "planner", "planner_started",
-                campaign_id=assignment["campaign_id"],
-                hypothesis_id=example_hypothesis, provider=SOL["provider"],
-                model=SOL["model"], effort=SOL["effort"])
-        try:
-            result = codex_container_actor.run_actor(wrapper=self.wrapper, workspace=workspace, model=SOL["model"], effort=SOL["effort"], prompt=prompt, environment=self.environment,
-                expected_wrapper_sha256=self.wrapper_sha256,
-                expected_runtime_identity=self.runtime_identity,
-                expected_launcher_sha256=self.actor_launcher_sha256)
-        except Exception:
-            if self.telemetry is not None:
-                self.telemetry.emit(
+        # Re-emitting on resume is intentional: operation-key idempotence
+        # repairs a crash-partial planner projection without duplicating a
+        # previously committed start event.
+        _emit_observational_telemetry(
+            self.telemetry,
+            "planner", "planner_started",
+            campaign_id=assignment["campaign_id"],
+            hypothesis_id=example_hypothesis, provider=SOL["provider"],
+            model=SOL["model"], effort=SOL["effort"],
+            operation_key=telemetry_operation_key,
+            failure_sink=self.telemetry_failures)
+        if resume:
+            if checkpoint_path is None:
+                raise DiscoveryControllerError(
+                    "planner resume lacks its controller checkpoint path")
+            checkpoint = _reopen_planner_actor_checkpoint(
+                workspace, checkpoint_path, context=context)
+            result_facts = dict(checkpoint["result"])
+            actor_failure_message = None
+        else:
+            try:
+                result = codex_container_actor.run_actor(wrapper=self.wrapper, workspace=workspace, model=SOL["model"], effort=SOL["effort"], prompt=prompt, environment=self.environment,
+                    expected_wrapper_sha256=self.wrapper_sha256,
+                    expected_runtime_identity=self.runtime_identity,
+                    expected_launcher_sha256=self.actor_launcher_sha256)
+            except Exception:
+                _emit_observational_telemetry(
+                        self.telemetry,
+                        "planner", "planner_failed",
+                        campaign_id=assignment["campaign_id"],
+                        hypothesis_id=example_hypothesis, provider=SOL["provider"],
+                        model=SOL["model"], effort=SOL["effort"],
+                        operation_key=telemetry_operation_key,
+                        failure_sink=self.telemetry_failures)
+                raise
+            result_facts = {
+                "returncode": result.returncode,
+                "stdout_sha256": hashlib.sha256(
+                    getattr(result, "stdout", "").encode()).hexdigest(),
+                "stderr_sha256": hashlib.sha256(
+                    getattr(result, "stderr", "").encode()).hexdigest(),
+            }
+            actor_failure_message = (
+                f"Sol actor failed: {getattr(result, 'stderr', '')[-400:]}"
+                if result.returncode else None)
+            if checkpoint_path is not None:
+                _seal_planner_actor_checkpoint(
+                    workspace, checkpoint_path, context=context,
+                    result=result_facts)
+        if result_facts["returncode"]:
+            _emit_observational_telemetry(
+                    self.telemetry,
                     "planner", "planner_failed",
                     campaign_id=assignment["campaign_id"],
                     hypothesis_id=example_hypothesis, provider=SOL["provider"],
-                    model=SOL["model"], effort=SOL["effort"])
-            raise
-        if self.telemetry is not None:
-            result_facts = {
-                "returncode": result.returncode,
-                "stdout_sha256": hashlib.sha256(result.stdout.encode()).hexdigest(),
-                "stderr_sha256": hashlib.sha256(result.stderr.encode()).hexdigest(),
-            }
-            self.telemetry.emit(
-                "planner", "planner_failed" if result.returncode else "planner_completed",
-                campaign_id=assignment["campaign_id"],
-                hypothesis_id=example_hypothesis, provider=SOL["provider"],
-                model=SOL["model"], effort=SOL["effort"], result=result_facts)
-        if result.returncode: raise DiscoveryControllerError(f"Sol actor failed: {result.stderr[-400:]}")
+                    model=SOL["model"], effort=SOL["effort"],
+                    result=result_facts,
+                    operation_key=telemetry_operation_key,
+                    failure_sink=self.telemetry_failures)
+            raise PlannerProviderTransient(
+                actor_failure_message
+                or f"sealed Sol actor invocation failed with return code "
+                   f"{result_facts['returncode']}")
         if self.reviewed_sources is not None:
             self.reviewed_sources.revalidate_materialized(workspace)
-        return _load_plan(workspace / "plan.json", workspace,
-                          assignment=AuthoringAssignment(**assignment))
+        try:
+            candidate = _load_plan(
+                workspace / "plan.json", workspace,
+                assignment=AuthoringAssignment(**assignment))
+        except PlannerOutputRefusal as exc:
+            telemetry_exc = _emit_observational_telemetry(
+                self.telemetry, "planner", "planner_refused",
+                campaign_id=assignment["campaign_id"],
+                hypothesis_id=example_hypothesis,
+                provider=SOL["provider"], model=SOL["model"],
+                effort=SOL["effort"], operation_key=telemetry_operation_key,
+                failure_sink=self.telemetry_failures,
+                result={
+                    **result_facts,
+                    "refusal_type": "planner_output_refusal",
+                    "refusal_reason_sha256": hashlib.sha256(
+                        str(exc).encode()).hexdigest(),
+                })
+            if self.telemetry is not None and telemetry_exc is None:
+                exc.telemetry_status = "emitted"
+            elif telemetry_exc is not None:
+                exc.note_telemetry_failure(telemetry_exc)
+            raise
+        _emit_observational_telemetry(
+                self.telemetry,
+                "planner", "planner_completed",
+                campaign_id=assignment["campaign_id"],
+                hypothesis_id=example_hypothesis, provider=SOL["provider"],
+                model=SOL["model"], effort=SOL["effort"], result=result_facts,
+                operation_key=telemetry_operation_key,
+                failure_sink=self.telemetry_failures)
+        return candidate
 
 
 class ClaudeCritic:
@@ -775,6 +1135,7 @@ class ClaudeCritic:
         self.runtime_identity = None if runtime_identity is None else dict(runtime_identity)
         self.actor_launcher_sha256 = actor_launcher_sha256
         self.telemetry = telemetry
+        self.telemetry_failures: list[dict[str, str]] = []
         self.auth_root = auth_root
     def _runtime(self) -> Mapping[str, Any]:
         if self.wrapper_sha256 is not None:
@@ -825,12 +1186,15 @@ class ClaudeCritic:
             "output": "Return only the strict structured critique; do not edit files or use tools."}, sort_keys=True)
         self._runtime()
         campaign_id = manifest.campaign_id
-        if self.telemetry is not None:
-            self.telemetry.emit(
+        telemetry_operation_key = _sha(bindings)
+        _emit_observational_telemetry(
+                self.telemetry,
                 "autokernel", "critic_started", campaign_id=campaign_id,
                 hypothesis_id=candidate.hypothesis_id,
                 provider=FABLE5_CRITIC["provider"], model=FABLE5_CRITIC["model"],
-                effort=FABLE5_CRITIC["effort"])
+                effort=FABLE5_CRITIC["effort"],
+                operation_key=telemetry_operation_key,
+                failure_sink=self.telemetry_failures)
         try:
             result = claude_fable5_critic_actor.run_critic(
                 wrapper=self.wrapper, workspace=workspace, prompt=prompt,
@@ -840,23 +1204,28 @@ class ClaudeCritic:
                 expected_runtime_identity=self.runtime_identity,
                 expected_launcher_sha256=self.actor_launcher_sha256)
         except Exception:
-            if self.telemetry is not None:
-                self.telemetry.emit(
+            _emit_observational_telemetry(
+                    self.telemetry,
                     "autokernel", "critic_failed", campaign_id=campaign_id,
                     hypothesis_id=candidate.hypothesis_id,
                     provider=FABLE5_CRITIC["provider"], model=FABLE5_CRITIC["model"],
-                    effort=FABLE5_CRITIC["effort"])
+                    effort=FABLE5_CRITIC["effort"],
+                    operation_key=telemetry_operation_key,
+                    failure_sink=self.telemetry_failures)
             raise
         if self.telemetry is not None:
-            self.telemetry.emit(
-                "autokernel", "critic_completed", campaign_id=campaign_id,
-                hypothesis_id=candidate.hypothesis_id,
-                provider=FABLE5_CRITIC["provider"], model=FABLE5_CRITIC["model"],
-                effort=FABLE5_CRITIC["effort"], result={
-                    "stdout_sha256": result.stdout_sha256,
-                    "stderr_sha256": result.stderr_sha256,
-                    "decision": result.decision,
-                })
+            _emit_observational_telemetry(
+                    self.telemetry,
+                    "autokernel", "critic_completed", campaign_id=campaign_id,
+                    hypothesis_id=candidate.hypothesis_id,
+                    provider=FABLE5_CRITIC["provider"], model=FABLE5_CRITIC["model"],
+                    effort=FABLE5_CRITIC["effort"],
+                    operation_key=telemetry_operation_key,
+                    failure_sink=self.telemetry_failures, result={
+                        "stdout_sha256": result.stdout_sha256,
+                        "stderr_sha256": result.stderr_sha256,
+                        "decision": result.decision,
+                    })
         return Critique(result.decision, result.reason)
 
 
@@ -869,31 +1238,88 @@ def _read_object(path: Path, root: Path) -> dict[str, Any]:
     return value
 
 
+def _read_planner_object(path: Path, root: Path) -> dict[str, Any]:
+    """Read planner JSON while keeping containment violations terminal."""
+    try:
+        path.resolve().relative_to(root.resolve())
+    except ValueError as exc:
+        raise DiscoveryControllerError("actor artifact escaped workspace") from exc
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise PlannerOutputRefusal(f"invalid actor artifact {path.name}") from exc
+    if not isinstance(value, dict):
+        raise PlannerOutputRefusal("actor artifact must be object")
+    return value
+
+
+_RETRYABLE_PLANNER_SOURCE_ERRORS = (
+    "source patch manifest is not strict JSON:",
+    "source patch manifest fields must be exactly",
+    "source patch manifest schema/encoding is unsupported",
+    "patch_base64 is invalid:",
+    "patch_sha256 does not match the embedded patch bytes",
+    "patch is not strict UTF-8:",
+    "patch contains NUL bytes",
+    "patch is not an accounted unified diff:",
+    "hunk appears before a diff --git header",
+    "source patch contains no accounted hunk",
+    "patch bytes must end in a newline",
+)
+
+
+def _load_planner_manifest(path: Path) -> source_candidate.SourcePatchManifest:
+    """Classify only syntactic carrier/patch defects as retryable output.
+
+    Identity, path/symbol scope, change-class, reward-integrity, and instrument
+    policy errors intentionally retain ``SourceCandidateError`` and terminate
+    fail closed.
+    """
+    try:
+        return source_candidate.load_source_patch_manifest(path)
+    except source_candidate.SourceCandidateError as exc:
+        reason = str(exc)
+        if any(reason.startswith(prefix) for prefix in
+               _RETRYABLE_PLANNER_SOURCE_ERRORS):
+            raise PlannerOutputRefusal(
+                f"SourceCandidateError: {reason}") from exc
+        raise
+
+
 def _load_plan(path: Path, root: Path, *, assignment: AuthoringAssignment | None = None) -> PlannedCandidate:
-    value = _read_object(path, root)
+    value = _read_planner_object(path, root)
     allowed = {"hypothesis_id", "statement", "falsifier", "regime", "proposal", "source_manifest_path", "experiment_intent"}
-    if set(value) not in (allowed, allowed - {"experiment_intent"}): raise DiscoveryControllerError("planner output schema mismatch")
+    if set(value) not in (allowed, allowed - {"experiment_intent"}): raise PlannerOutputRefusal("planner output schema mismatch")
     intent_raw = value.pop("experiment_intent", None)
     if intent_raw is not None:
         allowed_intent = {"template_id", "target_surface", "target_symbol", "correctness_id", "dispatch_id", "expected_dispatch", "load_mode_recommendation"}
         if not isinstance(intent_raw, Mapping) or set(intent_raw) not in (allowed_intent, allowed_intent - {"load_mode_recommendation"}):
-            raise DiscoveryControllerError("planner experiment intent schema mismatch")
+            raise PlannerOutputRefusal("planner experiment intent schema mismatch")
         expected = intent_raw["expected_dispatch"]
         expected_keys = {"route_id", "kernel_name", "calls", "grid", "workgroup", "lds_bytes"}
         if (not isinstance(expected, list) or not 1 <= len(expected) <= 8
                 or not all(isinstance(row, Mapping) and set(row) == expected_keys
                            for row in expected)):
-            raise DiscoveryControllerError("planner bounded dispatch schema mismatch")
-        recommendation = intent_raw.get("load_mode_recommendation")
-        if recommendation is not None:
-            if not isinstance(recommendation, Mapping) or set(recommendation) != {"mode", "rationale", "example_ids"}:
-                raise DiscoveryControllerError("planner load-mode recommendation schema mismatch")
-            recommendation = LoadModeRecommendation(
-                mode=recommendation["mode"], rationale=recommendation["rationale"],
-                example_ids=tuple(recommendation["example_ids"]))
-        intent = GpuSourceExperimentIntent(**{**intent_raw,
-            "expected_dispatch": tuple(BoundedDispatchExpectation(**row) for row in expected),
-            "load_mode_recommendation": recommendation})
+            raise PlannerOutputRefusal("planner bounded dispatch schema mismatch")
+        try:
+            recommendation = intent_raw.get("load_mode_recommendation")
+            if recommendation is not None:
+                if not isinstance(recommendation, Mapping) or set(recommendation) != {"mode", "rationale", "example_ids"}:
+                    raise PlannerOutputRefusal("planner load-mode recommendation schema mismatch")
+                recommendation = LoadModeRecommendation(
+                    mode=recommendation["mode"], rationale=recommendation["rationale"],
+                    example_ids=tuple(recommendation["example_ids"]))
+            intent = GpuSourceExperimentIntent(**{**intent_raw,
+                "expected_dispatch": tuple(BoundedDispatchExpectation(**row) for row in expected),
+                "load_mode_recommendation": recommendation})
+        except PlannerOutputRefusal:
+            raise
+        except (DiscoveryControllerError, TypeError, ValueError) as exc:
+            # This is actor-authored plan content, not controller/deployment
+            # corruption.  Keep the durable reason bounded and secret-free;
+            # telemetry records only its class and digest.
+            raise PlannerOutputRefusal(
+                "planner experiment intent violates deployed authority") from exc
     else:
         intent = None
     raw_path = Path(_text(value.pop("source_manifest_path"), "source_manifest_path"))
@@ -901,10 +1327,16 @@ def _load_plan(path: Path, root: Path, *, assignment: AuthoringAssignment | None
         raise DiscoveryControllerError("source manifest path must be a workspace-relative path")
     manifest_path = root / raw_path
     try:
-        manifest_path.resolve(strict=True).relative_to(root.resolve())
-    except (OSError, ValueError) as exc:
-        raise DiscoveryControllerError("source manifest escaped disposable workspace") from exc
-    manifest = source_candidate.load_source_patch_manifest(manifest_path)
+        resolved_manifest = manifest_path.resolve(strict=True)
+    except OSError as exc:
+        raise PlannerOutputRefusal(
+            f"invalid actor artifact {manifest_path.name}") from exc
+    try:
+        resolved_manifest.relative_to(root.resolve())
+    except ValueError as exc:
+        raise DiscoveryControllerError(
+            "source manifest escaped disposable workspace") from exc
+    manifest = _load_planner_manifest(resolved_manifest)
     if assignment is not None:
         if (manifest.campaign_id, manifest.proposal_id, manifest.candidate_id,
                 manifest.production_base_commit, manifest.instrument_commit) != (
@@ -926,15 +1358,15 @@ def _load_plan(path: Path, root: Path, *, assignment: AuthoringAssignment | None
         change = proposal.get("change") if isinstance(proposal, Mapping) else None
         estimated = change.get("estimated_diff_size") if isinstance(change, Mapping) else None
         if isinstance(estimated, bool) or not isinstance(estimated, int) or estimated < 1:
-            raise DiscoveryControllerError("planner estimated_diff_size must be a positive integer")
+            raise PlannerOutputRefusal("planner estimated_diff_size must be a positive integer")
         try:
             actual_changed_lines = integrity.parse_unified_diff(
                 manifest.patch_bytes.decode("utf-8")).total_changed
         except (UnicodeDecodeError, integrity.DiffParseError) as exc:
-            raise DiscoveryControllerError(
+            raise PlannerOutputRefusal(
                 "planner patch cannot be counted as a complete UTF-8 unified diff") from exc
         if estimated < actual_changed_lines:
-            raise DiscoveryControllerError(
+            raise PlannerOutputRefusal(
                 "planner estimated_diff_size is smaller than the decoded patch's actual "
                 f"changed-line count ({estimated} < {actual_changed_lines})")
     return PlannedCandidate(**value, source_manifest=manifest, source_manifest_sha256=manifest.patch_bundle_sha256,
@@ -985,6 +1417,14 @@ class GpuSourceBuild:
     anchor_source_tree_sha256: str | None = None
     candidate_source_tree_receipt: Path | None = None
     candidate_source_tree_sha256: str | None = None
+    anchor_correctness_binary: Path | None = None
+    anchor_correctness_binary_sha256: str | None = None
+    candidate_correctness_binary: Path | None = None
+    candidate_correctness_binary_sha256: str | None = None
+    anchor_correctness_capability_receipt: Path | None = None
+    anchor_correctness_capability_sha256: str | None = None
+    candidate_correctness_capability_receipt: Path | None = None
+    candidate_correctness_capability_sha256: str | None = None
     teardown_receipt: Path | None = None
     teardown_sha256: str | None = None
     def __post_init__(self) -> None:
@@ -1010,6 +1450,10 @@ class GpuSourceBuild:
         for path, expected, label in ((self.materialization_receipt, self.materialization_sha256, "materialization"),
                                       (self.anchor_source_tree_receipt, self.anchor_source_tree_sha256, "anchor source tree"),
                                       (self.candidate_source_tree_receipt, self.candidate_source_tree_sha256, "candidate source tree"),
+                                      (self.anchor_correctness_binary, self.anchor_correctness_binary_sha256, "anchor correctness binary"),
+                                      (self.candidate_correctness_binary, self.candidate_correctness_binary_sha256, "candidate correctness binary"),
+                                      (self.anchor_correctness_capability_receipt, self.anchor_correctness_capability_sha256, "anchor correctness capability"),
+                                      (self.candidate_correctness_capability_receipt, self.candidate_correctness_capability_sha256, "candidate correctness capability"),
                                       (self.teardown_receipt, self.teardown_sha256, "teardown")):
             if (path is None) != (expected is None):
                 raise DiscoveryControllerError(f"GPU source build has incomplete {label} receipt")
@@ -1050,7 +1494,18 @@ class GpuSourceScreener:
         self.runner_attest = runner_attest
 
     def screen(self, candidate: PlannedCandidate, authorization: hypotheses.ClaimAuthorization, lease: Mapping[str, Any]) -> SealedScreen:
-        build = self.build_source(candidate, authorization, lease)
+        try:
+            build = self.build_source(candidate, authorization, lease)
+        except source_candidate.SourceCandidateError as exc:
+            # Source materialization re-derives the committed diff after the
+            # critic's review.  A mismatch here is an authoring rejection, not
+            # an ambiguous GPU operation: proof production, reservation, and
+            # the throughput runner are all strictly downstream of this call.
+            # Preserve that ordering as a typed precompute refusal so the
+            # controller durably records the failed iteration and advances.
+            raise PrecomputeScreenRefusal(
+                f"source candidate authoring rejected: {type(exc).__name__}: {exc}"
+            ) from exc
         bundle = self.proof_bundle(candidate, build)
         if not isinstance(bundle, gpu_source_proofs.GpuSourceProofBundle):
             raise DiscoveryControllerError("GPU source gate did not return a validated proof bundle")
@@ -1059,25 +1514,93 @@ class GpuSourceScreener:
         if bundle.candidate != build.candidate_identity or bundle.anchor != build.anchor_identity:
             raise DiscoveryControllerError("GPU proof bundle does not bind both sealed build identities")
         args = self.args_factory(candidate, build, lease)
+        target_args = getattr(args, "_target_runtime_args", None)
+        if target_args is None:
+            raise DiscoveryControllerError(
+                "GPU source runner lacks a separate target-runtime stage")
         # The established runner owns KFD/VRAM, device claims, paired samples,
         # and its durable result.  This controller does not spawn a shell.
-        if getattr(args, "factor", None) != "source_patch" or Path(getattr(args, "anchor_build", "")).resolve() != build.anchor_build or Path(getattr(args, "candidate_build", "")).resolve() != build.candidate_build:
+        if any(getattr(current, "factor", None) != "source_patch"
+               or Path(getattr(current, "anchor_build", "")).resolve()
+               != build.anchor_build
+               or Path(getattr(current, "candidate_build", "")).resolve()
+               != build.candidate_build
+               for current in (args, target_args)):
             raise DiscoveryControllerError("GPU source runner arguments are not bound to the typed build")
-        # Immediately-before-call byte attestation prevents a validated graph
-        # from silently executing a changed controller/factory/runner module.
-        self.runner_attest()
-        raw = gpu_discovery.run(args)
-        result_path = Path(args.output_dir).resolve() / "result.json"
-        durable = gpu_source_proofs.require_result_file(result_path, raw)["body"]
-        raw = durable
-        if not (raw.get("schema") == "epyc.autokernel.gpu_candidate_only_screen.v2" and raw.get("non_promotable") is True and raw.get("promotion_claim") is False and raw.get("hip_residency_proved") is True):
-            raise DiscoveryControllerError("GPU runner returned an unsealed or non-resident discovery result")
-        if (hasattr(args, "_device_claim_acquirer")
-                and raw.get("device_claim_mode") != "borrowed_outer_reservation"):
+        attribution_body = bundle.attribution.get("body")
+        comparison = (attribution_body.get("exact_duration_comparison")
+                      if isinstance(attribution_body, Mapping) else None)
+        if not isinstance(comparison, Mapping):
             raise DiscoveryControllerError(
-                "GPU runner did not bind throughput to the borrowed outer reservation")
-        if hasattr(args, "_device_claim_acquirer"):
-            expected_outer = getattr(args, "_expected_outer_claim_id", None)
+                "GPU source proof lacks exact-duration decision evidence")
+        exact_effect = float(comparison["relative_improvement_fraction"])
+        if exact_effect <= 0:
+            # A valid neutral/regressed exact-route measurement is a scientific
+            # outcome, not a refusal.  It terminates before any whole-model
+            # benchmark and therefore cannot consume a target-runtime call.
+            result_path = (Path(args.output_dir).resolve().parent /
+                           "exact-attribution-outcome.json")
+            body = {
+                "schema": "epyc.autokernel.exact_attribution_outcome.v1",
+                "authority": "nonpromotable_candidate_only_discovery",
+                "non_promotable": True, "promotion_claim": False,
+                "status": "complete", "classification": "screened_out",
+                "manifest_sha256": candidate.source_manifest_sha256,
+                "exact_attribution_effect_fraction": exact_effect,
+                "target_runtime_executed": False,
+                "target_runtime_reason": "nonpositive_exact_duration",
+                "dispatch_proof_sha256": bundle.attribution["file_sha256"],
+            }
+            body["result_sha256"] = schemas.content_hash(body)
+            if result_path.exists() or result_path.is_symlink():
+                if result_path.is_symlink() or json.loads(
+                        result_path.read_text(encoding="utf-8")) != body:
+                    raise DiscoveryControllerError(
+                        "exact-attribution outcome receipt changed")
+            else:
+                _atomic(result_path, body)
+            return SealedScreen(
+                receipt_path=str(result_path),
+                result_sha256=body["result_sha256"],
+                effect_fraction=exact_effect, classification="screened_out",
+                baseline_sha256=schemas.content_hash(
+                    comparison.get("anchor_routes", comparison)),
+                source_proof_sha256=bundle.correctness["file_sha256"],
+                dispatch_proof_sha256=bundle.attribution["file_sha256"],
+                exact_attribution_effect_fraction=exact_effect,
+                target_runtime_effect_fraction=None,
+                stages=("materialized", "built", "correctness", "attribution"))
+        def run_stage(current: Any, *, graph_mode: str) -> tuple[Path, Mapping[str, Any]]:
+            # Immediately-before-call byte attestation prevents a validated
+            # graph from silently executing changed controller/runner bytes.
+            self.runner_attest()
+            result_path = Path(current.output_dir).resolve() / "result.json"
+            if result_path.exists() and not result_path.is_symlink():
+                raw = gpu_source_proofs.load_receipt(
+                    result_path,
+                    schema="epyc.autokernel.gpu_candidate_only_screen.v2")["body"]
+            else:
+                try:
+                    raw = gpu_discovery.run(current)
+                except gpu_discovery.MeasurementOutputRefusal as exc:
+                    raise MeasurementOutputRefusal(
+                        str(exc), receipt_path=exc.receipt_path,
+                        receipt_sha256=exc.receipt_sha256) from exc
+            raw = gpu_source_proofs.require_result_file(result_path, raw)["body"]
+            if not (raw.get("schema") == "epyc.autokernel.gpu_candidate_only_screen.v2"
+                    and raw.get("non_promotable") is True
+                    and raw.get("promotion_claim") is False
+                    and raw.get("hip_residency_proved") is True
+                    and raw.get("runtime_graphs") == graph_mode):
+                raise DiscoveryControllerError(
+                    f"GPU {graph_mode} runner returned an unsealed/non-resident result")
+            if (hasattr(current, "_device_claim_acquirer")
+                    and raw.get("device_claim_mode") != "borrowed_outer_reservation"):
+                raise DiscoveryControllerError(
+                    "GPU runner did not bind throughput to the borrowed outer reservation")
+            if not hasattr(current, "_device_claim_acquirer"):
+                return result_path, raw
+            expected_outer = getattr(current, "_expected_outer_claim_id", None)
             opened = raw.get("device_claim_open")
             phase_end = raw.get("device_claim_borrowed_phase_end")
             if (not isinstance(expected_outer, str)
@@ -1092,7 +1615,7 @@ class GpuSourceScreener:
                     or raw.get("device_claim_released") is not None):
                 raise DiscoveryControllerError(
                     "GPU runner borrowed phase does not bind the exact outer claim")
-            governance_path = Path(args.output_dir).resolve() / "live-governance.json"
+            governance_path = Path(current.output_dir).resolve() / "live-governance.json"
             try:
                 governance = json.loads(governance_path.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError) as exc:
@@ -1106,9 +1629,14 @@ class GpuSourceScreener:
                     or governance.get("device_claim_released") is not None):
                 raise DiscoveryControllerError(
                     "GPU runner terminal governance differs from its borrowed phase")
+            return result_path, raw
+
+        _graphs_off_path, _graphs_off = run_stage(args, graph_mode="off")
+        result_path, raw = run_stage(target_args, graph_mode="on")
         projection = autokernel_progression._gpu_screen(result_path, raw)
         if projection is None: raise DiscoveryControllerError("GPU result failed canonical progression validation")
-        return SealedScreen(receipt_path=str(result_path), result_sha256=str(raw["result_sha256"]), effect_fraction=float(raw["median_relative"]), classification=str(projection["stage"]), baseline_sha256=str(raw["baseline_sha256"]), source_proof_sha256=bundle.correctness["file_sha256"], dispatch_proof_sha256=bundle.attribution["file_sha256"])
+        target_effect = float(raw["median_relative"])
+        return SealedScreen(receipt_path=str(result_path), result_sha256=str(raw["result_sha256"]), effect_fraction=target_effect, classification=str(projection["stage"]), baseline_sha256=str(raw["baseline_sha256"]), source_proof_sha256=bundle.correctness["file_sha256"], dispatch_proof_sha256=bundle.attribution["file_sha256"], exact_attribution_effect_fraction=exact_effect, target_runtime_effect_fraction=target_effect, stages=("materialized", "built", "correctness", "attribution", "measurement_graphs_off_screen", "target_runtime_graphs_on_screen"))
 
 
 @dataclass(frozen=True)
@@ -1180,7 +1708,7 @@ class DurableState:
     def __init__(self, root: Path) -> None:
         self.root=root; self.book=journal.Journal(str(root / "journal")); self.book.initialize(); self.path=root / "state.json"
     def load(self) -> dict[str, Any]:
-        if not self.path.exists(): return {"schema": SCHEMA, "authority": AUTHORITY, "roster": sealed_roster(), "iterations": [], "next": 1, "complete": False}
+        if not self.path.exists(): return {"schema": SCHEMA, "authority": AUTHORITY, "roster": sealed_roster(), "iterations": [], "next": 1, "scientific_attempts": 0, "complete": False}
         value=_read_object(self.path, self.root); _require_roster(value.get("roster", {}))
         if value.get("schema") != SCHEMA or value.get("authority") != AUTHORITY: raise DiscoveryControllerError("wrong controller journal")
         declared=value.get("state_sha256")
@@ -1207,8 +1735,32 @@ def _memory_block(tracker: hypotheses.HypothesisTracker, turn: int) -> Mapping[s
     ledger=do_not_repeat.compile_for_tracker(tracker); return do_not_repeat.planner_round_block(tracker, ledger, round_id=f"discovery-{turn}")
 
 
-def _ensure_question(tracker: hypotheses.HypothesisTracker, item: PlannedCandidate) -> None:
-    question=hypotheses.Hypothesis(hypothesis_id=item.hypothesis_id, statement=item.statement, falsifier=item.falsifier, origin=hypotheses.ORIGIN_PLANNER, author="gpt-5.6-sol", regime=item.regime, source={"manifest_sha256":item.source_manifest_sha256})
+def _ensure_question(tracker: hypotheses.HypothesisTracker, item: PlannedCandidate,
+                     portfolio_binding: Mapping[str, Any] | None = None) -> None:
+    """Open the exact question whose campaign-ledger DNR gate will authorize it.
+
+    Legacy/generic callers retain their original regime verbatim: an old question
+    which did not declare a structural mechanism must continue to read
+    ``COULD_NOT_CHECK`` rather than acquiring authority retroactively.  A sealed
+    portfolio candidate is different.  The controller already owns its exact
+    manifest mechanism, so omitting that key would make every new AutoKernel
+    authorization structurally incomparable to the campaign ledger.  On this path the
+    mechanism is mandatory, controller-derived, and any actor-authored disagreement is
+    refused rather than silently overwritten.
+    """
+    regime = dict(item.regime)
+    if portfolio_binding is not None:
+        mechanism = item.source_manifest.mechanism_id
+        if (not isinstance(mechanism, str) or not HASH.fullmatch(mechanism)
+                or mechanism != portfolio_binding.get("mechanism_id")):
+            raise DiscoveryControllerError(
+                "portfolio candidate lacks its controller-owned structural mechanism")
+        declared = regime.get("mechanism")
+        if declared is not None and declared != mechanism:
+            raise DiscoveryControllerError(
+                "portfolio candidate regime disagrees with its controller-owned mechanism")
+        regime["mechanism"] = mechanism
+    question=hypotheses.Hypothesis(hypothesis_id=item.hypothesis_id, statement=item.statement, falsifier=item.falsifier, origin=hypotheses.ORIGIN_PLANNER, author="gpt-5.6-sol", regime=regime, source={"manifest_sha256":item.source_manifest_sha256})
     try: tracker.open_hypothesis(question)
     except hypotheses.HypothesisAlreadyTracked: pass
 
@@ -1311,11 +1863,17 @@ def _select_portfolio_binding(state: Mapping[str, Any],
         raise DiscoveryControllerError("eligible portfolio priority is malformed") from exc
     for record in eligible:
         binding = _portfolio_binding(config, record)
-        if binding["hypothesis_id"] in state.get("portfolio_terminals", {}):
+        if (binding["hypothesis_id"] in state.get("portfolio_terminals", {})
+                or binding["hypothesis_id"] in state.get("portfolio_skips", {})
+                or binding["hypothesis_id"] in state.get(
+                    "portfolio_validations", {})):
             continue
         attempts = {row.get("source_manifest_sha256") for row in state["iterations"]
                     if row.get("portfolio_hypothesis_id") == binding["hypothesis_id"]
-                    and isinstance(row.get("source_manifest_sha256"), str)}
+                    and isinstance(row.get("source_manifest_sha256"), str)
+                    and isinstance(row.get("result_sha256"), str)
+                    and HASH.fullmatch(row["result_sha256"])
+                    and isinstance(row.get("evidence"), Mapping)}
         if len(attempts) < binding["decision_policy"]["max_distinct_candidates"]:
             return binding
     return None
@@ -1324,14 +1882,8 @@ def _select_portfolio_binding(state: Mapping[str, Any],
 def _validate_portfolio_candidate(item: PlannedCandidate, binding: Mapping[str, Any],
                                   portfolio: hypothesis_portfolio.Portfolio) -> None:
     """Refuse any actor attempt to rename or expand a reviewed question."""
-    for dnr in portfolio.do_not_repeat:
-        if not isinstance(dnr, Mapping):
-            raise DiscoveryControllerError("portfolio DNR record is malformed")
-        mechanism = dnr.get("mechanism")
-        if (isinstance(mechanism, Mapping)
-                and item.source_manifest.mechanism_id == mechanism.get("fingerprint_sha256")
-                and dict(item.regime) == dnr.get("regime")):
-            raise DiscoveryControllerError("candidate exactly repeats a sealed DNR mechanism/regime")
+    if not isinstance(portfolio, hypothesis_portfolio.Portfolio):
+        raise DiscoveryControllerError("portfolio candidate lacks typed portfolio authority")
     intent = item.experiment_intent
     manifest = item.source_manifest
     if (item.hypothesis_id != binding["hypothesis_id"]
@@ -1353,6 +1905,99 @@ def _validate_portfolio_candidate(item: PlannedCandidate, binding: Mapping[str, 
             "planner candidate differs from its controller-owned portfolio assignment")
 
 
+def _portfolio_exact_dnr_check(config: ControllerConfig, item: PlannedCandidate,
+                               binding: Mapping[str, Any]) -> dict[str, Any]:
+    """Return one canonical, candidate-bound receipt before critic or authorization.
+
+    This is intentionally separate from the campaign ledger.  The portfolio is sealed
+    input authority and can answer an exact mechanism/regime question directly; the
+    campaign ledger is derived runtime memory and may honestly answer
+    ``COULD_NOT_CHECK``.  Conflating the two outcomes makes a portfolio refusal vanish
+    into a generic authorization reason on restart.
+    """
+    portfolio = config.hypothesis_portfolio
+    semantic_sha256 = config.hypothesis_portfolio_sha256
+    if (not isinstance(portfolio, hypothesis_portfolio.Portfolio)
+            or not isinstance(semantic_sha256, str)
+            or portfolio.sha256 != semantic_sha256):
+        raise DiscoveryControllerError(
+            "portfolio exact-DNR check lacks sealed semantic authority")
+    mechanism_id = item.source_manifest.mechanism_id
+    if (not isinstance(mechanism_id, str) or not HASH.fullmatch(mechanism_id)
+            or mechanism_id != binding.get("mechanism_id")):
+        raise DiscoveryControllerError(
+            "portfolio exact-DNR check lacks the controller-owned candidate mechanism")
+    regime = dict(item.regime)
+    if regime != dict(binding.get("regime") or {}):
+        raise DiscoveryControllerError(
+            "portfolio exact-DNR check candidate regime differs from assignment")
+    matched: list[str] = []
+    for index, dnr in enumerate(portfolio.do_not_repeat):
+        if not isinstance(dnr, Mapping):
+            raise DiscoveryControllerError("portfolio DNR record is malformed")
+        dnr_id = dnr.get("dnr_id")
+        mechanism = dnr.get("mechanism")
+        dnr_regime = dnr.get("regime")
+        if (not isinstance(dnr_id, str) or not dnr_id.startswith("dnr-")
+                or not isinstance(mechanism, Mapping)
+                or not HASH.fullmatch(str(mechanism.get("fingerprint_sha256")))
+                or not isinstance(dnr_regime, Mapping)):
+            raise DiscoveryControllerError(
+                f"portfolio DNR record {index} lacks exact mechanism/regime identity")
+        if (mechanism_id == mechanism["fingerprint_sha256"]
+                and regime == dict(dnr_regime)):
+            matched.append(dnr_id)
+    body: dict[str, Any] = {
+        "schema": PORTFOLIO_DNR_CHECK_SCHEMA,
+        "portfolio_semantic_sha256": semantic_sha256,
+        "portfolio_hypothesis_id": binding.get("hypothesis_id"),
+        "candidate_source_manifest_sha256": item.source_manifest_sha256,
+        "candidate_mechanism_id": mechanism_id,
+        "canonical_regime_sha256": schemas.content_hash(regime),
+        "matched_dnr_ids": sorted(set(matched)),
+        "outcome": schemas.FAIL if matched else schemas.PASS,
+    }
+    body["receipt_sha256"] = schemas.content_hash(body)
+    return body
+
+
+def _revalidate_portfolio_checkpoint(config: ControllerConfig,
+                                     item: PlannedCandidate,
+                                     row: Mapping[str, Any]) -> None:
+    """Fail closed when a new portfolio checkpoint omitted or changed its DNR receipt."""
+    if config.hypothesis_portfolio is None:
+        # Legacy generic campaigns never had this receipt.  Their campaign-ledger
+        # COULD_NOT_CHECK semantics are preserved rather than rewritten on resume.
+        return
+    binding = row.get("portfolio_binding")
+    if not isinstance(binding, Mapping):
+        raise DiscoveryControllerError(
+            "portfolio pending candidate lacks controller-owned binding")
+    _validate_portfolio_candidate(item, binding, config.hypothesis_portfolio)
+    expected = _portfolio_exact_dnr_check(config, item, binding)
+    actual = row.get("portfolio_exact_dnr_check")
+    if not isinstance(actual, Mapping) or dict(actual) != expected:
+        raise DiscoveryControllerError(
+            "portfolio pending candidate DNR receipt is missing or changed")
+    if expected["outcome"] != schemas.PASS:
+        raise DiscoveryControllerError(
+            "portfolio pending candidate exactly matches a sealed DNR")
+
+
+def _bind_campaign_ledger_outcome(row: dict[str, Any],
+                                  authorization: hypotheses.ClaimAuthorization) -> None:
+    """Keep runtime-ledger disposition distinct from the sealed portfolio receipt."""
+    expected = authorization.do_not_repeat_outcome
+    reasons = list(authorization.do_not_repeat_reasons)
+    prior = row.get("campaign_ledger_dnr_outcome")
+    prior_reasons = row.get("campaign_ledger_dnr_reasons")
+    if prior is not None and (prior != expected or prior_reasons != reasons):
+        raise DiscoveryControllerError(
+            "campaign-ledger DNR outcome differs from durable authorization")
+    row["campaign_ledger_dnr_outcome"] = expected
+    row["campaign_ledger_dnr_reasons"] = reasons
+
+
 def _context(state: Mapping[str, Any], tracker: hypotheses.HypothesisTracker, turn: int,
              config: ControllerConfig,
              portfolio_binding: Mapping[str, Any] | None = None) -> dict[str, Any]:
@@ -1366,13 +2011,20 @@ def _context(state: Mapping[str, Any], tracker: hypotheses.HypothesisTracker, tu
             "falsifier", "experiment_intent", "mechanism_id", "target_surface",
             "target_symbol")})
     assignment = None
-    if config.production_base_commit is not None:
+    if config.production_base_commit is not None or portfolio_binding is not None:
         assignment = AuthoringAssignment(
             campaign_id=config.campaign_id, proposal_id=f"akp-discovery-{turn}",
             candidate_id=f"akc-discovery-{turn}",
-            production_base_commit=config.production_base_commit,
-            instrument_commit=config.instrument_commit or config.production_base_commit,
+            production_base_commit=config.production_base_commit or "0" * 40,
+            instrument_commit=(config.instrument_commit
+                               or config.production_base_commit or "0" * 40),
             portfolio_binding=portfolio_binding).to_dict()
+    prior_refusals = [
+        {key: row.get(key) for key in (
+            "turn", "status", "reason", "portfolio_hypothesis_id",
+            "context_sha256")}
+        for row in state["iterations"] if row.get("status") == "planner_refused"
+    ][-8:]
     return {"authority": AUTHORITY, "turn":turn, "roster":sealed_roster(),
             "planner_context": config.planner_context,
             "planner_context_sha256": config.planner_context_sha256,
@@ -1381,16 +2033,20 @@ def _context(state: Mapping[str, Any], tracker: hypotheses.HypothesisTracker, tu
             "deployment_identity_sha256": config.deployment_identity_sha256,
             "hypothesis_portfolio_sha256": config.hypothesis_portfolio_sha256,
             "authoring_assignment": assignment,
+            "prior_authoring_refusals": prior_refusals,
             "prior_results": prior, "do_not_repeat":_memory_block(tracker,turn)}
 
 
 def _pending_item(item: PlannedCandidate) -> dict[str, Any]:
     manifest = item.source_manifest
-    raw_manifest=json.dumps({"schema":source_candidate.SCHEMA_SOURCE_PATCH,"campaign_id":manifest.campaign_id,"proposal_id":manifest.proposal_id,"candidate_id":manifest.candidate_id,"source_tree":manifest.source_tree,"production_base_commit":manifest.production_base_commit,"instrument_commit":manifest.instrument_commit,"change_class":manifest.change_class,"declared_files":list(manifest.declared_files),"declared_symbols":{k:list(v) for k,v in manifest.declared_symbols.items()},"mechanism_id":manifest.mechanism_id,"patch_sha256":manifest.patch_sha256,"patch_encoding":"base64","patch_base64":base64.b64encode(manifest.patch_bytes).decode("ascii")},sort_keys=True,separators=(",",":")).encode()
+    raw_manifest=source_candidate.source_patch_manifest_bytes(manifest)
+    intent = (None if item.experiment_intent is None else
+              json.loads(json.dumps(asdict(item.experiment_intent),
+                                    sort_keys=True)))
     return {"hypothesis_id": item.hypothesis_id, "statement": item.statement,
             "falsifier": item.falsifier, "regime": dict(item.regime),
             "proposal": dict(item.proposal), "source_manifest_sha256": item.source_manifest_sha256,
-            "experiment_intent": asdict(item.experiment_intent) if item.experiment_intent else None,
+            "experiment_intent": intent,
             "manifest": {"campaign_id":manifest.campaign_id,"proposal_id":manifest.proposal_id,
                 "candidate_id":manifest.candidate_id,"source_tree":manifest.source_tree,
                 "production_base_commit":manifest.production_base_commit,"instrument_commit":manifest.instrument_commit,
@@ -1408,8 +2064,17 @@ def _restore_pending(value: Mapping[str, Any]) -> PlannedCandidate:
     try:
         manifest=source_candidate.SourcePatchManifest(campaign_id=m["campaign_id"],proposal_id=m["proposal_id"],candidate_id=m["candidate_id"],source_tree=m["source_tree"],production_base_commit=m["production_base_commit"],instrument_commit=m["instrument_commit"],change_class=m["change_class"],declared_files=tuple(m["declared_files"]),declared_symbols={k:tuple(v) for k,v in m["declared_symbols"].items()},mechanism_id=m["mechanism_id"],patch_sha256=m["patch_sha256"],patch_bytes=base64.b64decode(m["patch_base64"],validate=True))
     except (KeyError,TypeError,ValueError,source_candidate.SourceCandidateError) as exc: raise DiscoveryControllerError("pending candidate manifest is invalid") from exc
-    raw_bytes=base64.b64decode(raw.get("manifest_raw_base64",""),validate=True)
-    if hashlib.sha256(raw_bytes).hexdigest()!=raw.get("manifest_file_sha256") or manifest.patch_bundle_sha256!=raw.get("patch_bundle_sha256") or raw.get("source_manifest_sha256")!=manifest.patch_bundle_sha256: raise DiscoveryControllerError("pending manifest identity mismatch")
+    try:
+        raw_bytes=base64.b64decode(raw.get("manifest_raw_base64",""),validate=True)
+    except (TypeError, ValueError) as exc:
+        raise DiscoveryControllerError("pending manifest carrier is invalid") from exc
+    canonical_bytes=source_candidate.source_patch_manifest_bytes(manifest)
+    canonical_sha256=hashlib.sha256(canonical_bytes).hexdigest()
+    identities=(canonical_sha256, manifest.patch_bundle_sha256,
+                raw.get("manifest_file_sha256"), raw.get("patch_bundle_sha256"),
+                raw.get("source_manifest_sha256"))
+    if raw_bytes != canonical_bytes or any(value != canonical_sha256 for value in identities):
+        raise DiscoveryControllerError("pending manifest identity mismatch")
     intent = raw.get("experiment_intent")
     if intent is not None and not isinstance(intent, Mapping):
         raise DiscoveryControllerError("pending experiment intent is malformed")
@@ -1568,7 +2233,74 @@ def _classified_result(state: Mapping[str, Any], item: PlannedCandidate,
             decision_policy, "max_replication_spread_pct", 0.10),
         required_replications=_required_replications(decision_policy),
     )
-    return SealedScreen(receipt_path=result.receipt_path,result_sha256=result.result_sha256,effect_fraction=result.effect_fraction,classification=classification,baseline_sha256=result.baseline_sha256,source_proof_sha256=result.source_proof_sha256,dispatch_proof_sha256=result.dispatch_proof_sha256,candidate_only=result.candidate_only,promotion_claim=result.promotion_claim,stages=result.stages,series_key=series_key,component_series_keys=components,series_effect_fraction=float(statistics.median(effects)))
+    dual_effects_present = (result.exact_attribution_effect_fraction is not None
+                            or result.target_runtime_effect_fraction is not None)
+    if dual_effects_present and (
+            result.exact_attribution_effect_fraction is None
+            or result.target_runtime_effect_fraction is None
+            or result.exact_attribution_effect_fraction <= 0
+            or result.target_runtime_effect_fraction <= 0):
+        # Route/device-time and target-runtime throughput are conjunctive.  A
+        # disagreement is measured evidence, but never a candidate/nomination.
+        classification = "inconclusive"
+    return SealedScreen(receipt_path=result.receipt_path,result_sha256=result.result_sha256,effect_fraction=result.effect_fraction,classification=classification,baseline_sha256=result.baseline_sha256,source_proof_sha256=result.source_proof_sha256,dispatch_proof_sha256=result.dispatch_proof_sha256,exact_attribution_effect_fraction=result.exact_attribution_effect_fraction,target_runtime_effect_fraction=result.target_runtime_effect_fraction,candidate_only=result.candidate_only,promotion_claim=result.promotion_claim,stages=result.stages,series_key=series_key,component_series_keys=components,series_effect_fraction=float(statistics.median(effects)))
+
+
+def _screen_iteration_fields(result: SealedScreen, *, repetition: int) -> dict[str, Any]:
+    target_executed = result.target_runtime_effect_fraction is not None
+    return {
+        "status": result.classification,
+        "result_sha256": result.result_sha256,
+        "evidence": {"baseline": result.baseline_sha256,
+                     "source": result.source_proof_sha256,
+                     "dispatch": result.dispatch_proof_sha256},
+        "effect_fraction": result.effect_fraction,
+        "series_effect_fraction": result.series_effect_fraction,
+        "series_key": result.series_key,
+        "component_series_keys": list(result.component_series_keys),
+        "exact_attribution_effect_fraction":
+            result.exact_attribution_effect_fraction,
+        "target_runtime_effect_fraction":
+            result.target_runtime_effect_fraction,
+        "target_runtime_executed": target_executed,
+        "target_runtime_reason": (
+            None if target_executed else
+            "nonpositive_exact_duration"
+            if result.exact_attribution_effect_fraction is not None
+            and result.exact_attribution_effect_fraction <= 0
+            else "not_required_or_unavailable"),
+        "stages": list(result.stages),
+        "repetition": repetition,
+        "scientific_budget_spent": True,
+    }
+
+
+def _row_spends_scientific_budget(row: Mapping[str, Any]) -> bool:
+    return (row.get("scientific_budget_spent") is True
+            or isinstance(row.get("result_sha256"), str)
+            and HASH.fullmatch(row["result_sha256"])
+            and isinstance(row.get("evidence"), Mapping))
+
+
+def _derived_scientific_attempts(state: Mapping[str, Any]) -> int:
+    iterations = state.get("iterations", [])
+    if not isinstance(iterations, list):
+        raise DiscoveryControllerError("durable iterations are malformed")
+    return sum(1 for row in iterations
+               if isinstance(row, Mapping)
+               and _row_spends_scientific_budget(row))
+
+
+def _bind_scientific_attempt_counter(state: dict[str, Any]) -> int:
+    """Bind the persisted counter to the recursively sealed result rows."""
+    derived = _derived_scientific_attempts(state)
+    declared = state.get("scientific_attempts")
+    if declared is not None and (isinstance(declared, bool)
+                                 or declared != derived):
+        raise DiscoveryControllerError(
+            "durable scientific-attempt counter disagrees with result rows")
+    state["scientific_attempts"] = derived
+    return derived
 
 
 def _schedule_replication(state: dict[str, Any], *, item: PlannedCandidate,
@@ -1583,7 +2315,8 @@ def _schedule_replication(state: dict[str, Any], *, item: PlannedCandidate,
     a nomination without conflating unrelated source patches under the same
     hypothesis.
     """
-    if (result.classification != "candidate" or state["next"] > max_iterations
+    if (result.classification != "candidate"
+            or _derived_scientific_attempts(state) >= max_iterations
             or state.get("pending") is not None):
         return
     replica = dict(row)
@@ -1611,6 +2344,13 @@ def _apply_portfolio_outcome(state: dict[str, Any], row: dict[str, Any]) -> None
         return
     terminals = state.setdefault("portfolio_terminals", {})
     status = row.get("status")
+    # A scientific candidate budget counts measured, recursively sealed
+    # screens only.  Critic/source/authorization refusals have no result or
+    # evidence graph and cannot establish the terminal claim "no gain after N
+    # candidates" merely by carrying distinct proposed manifest hashes.
+    measured = _row_spends_scientific_budget(row)
+    if not measured:
+        return
     if status == "top_k_replicated_candidate":
         terminals[hypothesis_id] = {"disposition": "nominated",
                                     "policy": dict(policy)}
@@ -1625,12 +2365,293 @@ def _apply_portfolio_outcome(state: dict[str, Any], row: dict[str, Any]) -> None
             return
     attempts = {item.get("source_manifest_sha256") for item in state["iterations"]
                 if item.get("portfolio_hypothesis_id") == hypothesis_id
-                and isinstance(item.get("source_manifest_sha256"), str)}
+                and isinstance(item.get("source_manifest_sha256"), str)
+                and _row_spends_scientific_budget(item)}
     if len(attempts) >= policy["max_distinct_candidates"]:
         disposition = policy["terminal_rule"]
         terminals[hypothesis_id] = {"disposition": disposition,
                                     "policy": dict(policy)}
         row["portfolio_disposition"] = disposition
+
+
+def _record_precompute_refusal(state: dict[str, Any], row: dict[str, Any],
+                               exc: PrecomputeScreenRefusal) -> None:
+    """Commit one proven precompute rejection and consume its iteration."""
+    state.pop("inflight", None)
+    state.pop("pending", None)
+    row.update(status="screen_refused",
+               reason=f"{type(exc).__name__}: {exc}")
+    state["iterations"].append(row)
+    _apply_portfolio_outcome(state, row)
+    _note_portfolio_authoring_failure(state, row)
+    state["next"] += 1
+
+
+def _record_governed_stage_refusal(
+        state: dict[str, Any], row: dict[str, Any],
+        exc: GovernedStageRefusal) -> None:
+    """Consume one already-sealed stage terminal without replaying its work."""
+    state.pop("inflight", None)
+    state.pop("pending", None)
+    row.update(
+        status=exc.disposition, reason=str(exc), stage=exc.stage,
+        stage_receipt_path=exc.receipt_path,
+        stage_receipt_sha256=exc.receipt_sha256,
+        scientific_budget_spent=exc.scientific_budget_spent)
+    state["iterations"].append(row)
+    if exc.scientific_budget_spent:
+        state["scientific_attempts"] = _derived_scientific_attempts(state)
+    if exc.disposition == "authoring_refused":
+        _note_portfolio_authoring_failure(state, row)
+    hypothesis_id = row.get("portfolio_hypothesis_id")
+    terminals = state.setdefault("portfolio_terminals", {})
+    if (isinstance(hypothesis_id, str)
+            and exc.disposition == "correctness_falsified"):
+        terminals[hypothesis_id] = {
+            "disposition": exc.disposition,
+            "stage_receipt_path": exc.receipt_path,
+            "stage_receipt_sha256": exc.receipt_sha256,
+        }
+    elif (isinstance(hypothesis_id, str)
+          and exc.disposition == "attribution_route_falsified"):
+        manifest = row.get("source_manifest_sha256")
+        policy = row.get("portfolio_decision_policy")
+        if (isinstance(manifest, str) and HASH.fullmatch(manifest)
+                and isinstance(policy, Mapping)):
+            failures = state.setdefault(
+                "portfolio_attribution_failures", {}).setdefault(
+                    hypothesis_id, [])
+            if manifest not in failures:
+                failures.append(manifest)
+            budget = policy.get("max_distinct_candidates")
+            if (isinstance(budget, int) and not isinstance(budget, bool)
+                    and budget > 0 and len(failures) >= budget):
+                state.setdefault("portfolio_skips", {})[hypothesis_id] = {
+                    "disposition": "bounded_attribution_falsified",
+                    "scientific_terminal": False,
+                    "distinct_candidate_count": len(failures),
+                    "stage_receipt_path": exc.receipt_path,
+                    "stage_receipt_sha256": exc.receipt_sha256,
+                }
+    elif (isinstance(hypothesis_id, str)
+          and exc.disposition == "measurement_output_refused"):
+        manifest = row.get("source_manifest_sha256")
+        policy = row.get("portfolio_decision_policy")
+        if (isinstance(manifest, str) and HASH.fullmatch(manifest)
+                and isinstance(policy, Mapping)):
+            failures = state.setdefault(
+                "portfolio_measurement_output_failures", {}).setdefault(
+                    hypothesis_id, [])
+            if manifest not in failures:
+                failures.append(manifest)
+            budget = policy.get("max_distinct_candidates")
+            if (isinstance(budget, int) and not isinstance(budget, bool)
+                    and budget > 0 and len(failures) >= budget):
+                state.setdefault("portfolio_skips", {})[hypothesis_id] = {
+                    "disposition": "bounded_measurement_output_refused",
+                    "scientific_terminal": False,
+                    "distinct_candidate_count": len(failures),
+                    "stage_receipt_path": exc.receipt_path,
+                    "stage_receipt_sha256": exc.receipt_sha256,
+                }
+    state["next"] += 1
+
+
+def _note_portfolio_authoring_failure(state: dict[str, Any],
+                                      row: Mapping[str, Any]) -> None:
+    """Bound repeated non-scientific actor failures without retiring science."""
+    hypothesis_id = row.get("portfolio_hypothesis_id")
+    if not isinstance(hypothesis_id, str):
+        return
+    failures = state.setdefault("portfolio_authoring_failures", {})
+    count = int(failures.get(hypothesis_id, 0)) + 1
+    failures[hypothesis_id] = count
+    if count >= 3:
+        state.setdefault("portfolio_skips", {})[hypothesis_id] = {
+            "disposition": "bounded_authoring_skip",
+            "scientific_terminal": False,
+            "failure_count": count,
+        }
+
+
+def _drain_visibility_degradation(
+        state: dict[str, Any], actor: object,
+        row: dict[str, Any] | None = None) -> list[dict[str, str]]:
+    failures = getattr(actor, "telemetry_failures", None)
+    if not isinstance(failures, list) or not failures:
+        return []
+    drained = [dict(item) for item in failures]
+    failures.clear()
+    durable = state.setdefault("visibility_degraded", [])
+    for item in drained:
+        if item not in durable:
+            durable.append(item)
+    if row is not None:
+        row["visibility_degraded"] = True
+        row_failures = row.setdefault("telemetry_failures", [])
+        for item in drained:
+            if item not in row_failures:
+                row_failures.append(item)
+    return drained
+
+
+def _record_planner_refusal(state: dict[str, Any], *, turn: int,
+                            context: Mapping[str, Any],
+                            portfolio_binding: Mapping[str, Any] | None,
+                            exc: PlannerOutputRefusal) -> None:
+    """Persist one non-candidate authoring refusal without spending science budget."""
+    row: dict[str, Any] = {
+        "turn": turn,
+        "status": ("planner_transient" if isinstance(exc, PlannerProviderTransient)
+                   else "planner_refused"),
+        "reason": str(exc),
+        "refusal_type": ("planner_provider_transient"
+                         if isinstance(exc, PlannerProviderTransient)
+                         else "planner_output_refusal"),
+        "scientific_budget_spent": False,
+        "context_sha256": _sha(context),
+    }
+    if not isinstance(exc, PlannerProviderTransient):
+        row["telemetry_event"] = "planner_refused"
+        row["telemetry_status"] = exc.telemetry_status
+        if exc.telemetry_failure is not None:
+            row["telemetry_failure"] = dict(exc.telemetry_failure)
+    planning = state.pop("planning", None)
+    if isinstance(planning, Mapping):
+        row["planner_operation_key"] = planning.get("operation_key")
+        if isinstance(planning.get("telemetry_recovery"), Mapping):
+            row["planner_checkpoint_reused"] = True
+            row["telemetry_recovery"] = dict(
+                planning["telemetry_recovery"])
+    if portfolio_binding is not None:
+        row.update(
+            hypothesis_id=portfolio_binding["hypothesis_id"],
+            statement=portfolio_binding["statement"],
+            falsifier=portfolio_binding["falsifier"],
+            regime=dict(portfolio_binding["regime"]),
+            portfolio_hypothesis_id=portfolio_binding["hypothesis_id"],
+            portfolio_binding=dict(portfolio_binding),
+            portfolio_record_sha256=portfolio_binding["record_sha256"],
+            portfolio_decision_policy=dict(
+                portfolio_binding["decision_policy"]),
+        )
+    state["iterations"].append(row)
+    if isinstance(exc, PlannerProviderTransient):
+        # Provider/API availability is neither authored output nor a scientific
+        # attempt.  Keep the controller turn and portfolio assignment, but use
+        # a fresh sealed actor operation on the next pass.
+        state["planner_provider_attempt"] = int(
+            state.get("planner_provider_attempt", 0)) + 1
+    else:
+        _note_portfolio_authoring_failure(state, row)
+        state["next"] += 1
+
+
+def _planning_intent(config: ControllerConfig, *, turn: int,
+                     context: Mapping[str, Any],
+                     portfolio_binding: Mapping[str, Any] | None,
+                     provider_attempt: int = 0) -> dict[str, Any]:
+    if isinstance(provider_attempt, bool) or provider_attempt < 0:
+        raise DiscoveryControllerError("planner provider attempt is invalid")
+    context_sha256 = _sha(context)
+    operation_key = _sha({
+        "schema": "epyc.autokernel.planning_operation.v1",
+        "turn": turn,
+        "context_sha256": context_sha256,
+        "deployment_identity_sha256": config.deployment_identity_sha256,
+        "provider_attempt": provider_attempt,
+    })
+    workspace = (config.output_root / "planner-operations" /
+                 operation_key / "workspace")
+    return {
+        "phase": "intent", "turn": turn,
+        "provider_attempt": provider_attempt,
+        "operation_key": operation_key,
+        "context": dict(context), "context_sha256": context_sha256,
+        "portfolio_binding": (None if portfolio_binding is None
+                              else dict(portfolio_binding)),
+        "workspace": str(workspace),
+    }
+
+
+def _is_legacy_planner_refusal_telemetry_failure(
+        planning: Mapping[str, Any]) -> bool:
+    """Recognize only the v16 telemetry-schema crash after actor checkpoint.
+
+    The checkpoint and every actor artifact are independently revalidated by
+    the caller before this legacy marker may be cleared.
+    """
+    failure = planning.get("failure")
+    return (planning.get("phase") == "actor_entering"
+            and isinstance(failure, Mapping)
+            and set(failure) == {"type", "message"}
+            and failure.get("type") == "TelemetryError"
+            and failure.get("message") ==
+            "telemetry result contains a non-allowlisted field")
+
+
+def _require_legacy_planner_success_result(
+        checkpoint: Mapping[str, Any]) -> None:
+    """Bind the v16 recovery exception to the exact completed actor result."""
+    if set(checkpoint) != {
+            "schema", "context_sha256", "assignment_sha256", "result",
+            "artifacts", "receipt_sha256"}:
+        raise DiscoveryControllerError(
+            "legacy planner telemetry recovery checkpoint schema changed")
+    result = checkpoint.get("result")
+    required = {"returncode", "stdout_sha256", "stderr_sha256"}
+    if (not isinstance(result, Mapping) or set(result) != required
+            or result.get("returncode") != 0
+            or any(not isinstance(result.get(key), str)
+                   or not HASH.fullmatch(result[key])
+                   for key in ("stdout_sha256", "stderr_sha256"))):
+        raise DiscoveryControllerError(
+            "legacy planner telemetry recovery lacks its exact rc=0 actor result")
+
+
+def _prepare_planner_workspace(config: ControllerConfig, operation_key: str,
+                               workspace: Path) -> bool:
+    """Create the exact persistent actor workspace without following links."""
+    operations = config.output_root / "planner-operations"
+    operation = operations / operation_key
+    if workspace != operation / "workspace":
+        raise DiscoveryControllerError(
+            "durable planner workspace escaped its operation namespace")
+    ReviewedSourcePackage._require_owned_directory(
+        config.output_root, "controller state root")
+    if not operations.exists():
+        operations.mkdir(mode=0o700)
+    ReviewedSourcePackage._require_owned_directory(
+        operations, "planner operations root")
+    if not operation.exists():
+        operation.mkdir(mode=0o700)
+    ReviewedSourcePackage._require_owned_directory(
+        operation, "planner operation root")
+    if workspace.exists() or workspace.is_symlink():
+        ReviewedSourcePackage._require_owned_directory(
+            workspace, "planner workspace")
+        return False
+    workspace.mkdir(mode=0o700)
+    ReviewedSourcePackage._require_owned_directory(
+        workspace, "planner workspace")
+    return True
+
+
+def _reopen_planning_intent(state: Mapping[str, Any], *,
+                            turn: int) -> tuple[dict[str, Any],
+                                                Mapping[str, Any] | None]:
+    planning = state.get("planning")
+    if (not isinstance(planning, Mapping) or planning.get("turn") != turn
+            or planning.get("phase") not in {"intent", "actor_entering"}
+            or not isinstance(planning.get("context"), Mapping)
+            or planning.get("context_sha256") != _sha(planning["context"])
+            or not isinstance(planning.get("operation_key"), str)
+            or not HASH.fullmatch(planning["operation_key"])):
+        raise DiscoveryControllerError("durable planning intent is malformed")
+    binding = planning.get("portfolio_binding")
+    if binding is not None and not isinstance(binding, Mapping):
+        raise DiscoveryControllerError("durable planning portfolio binding is malformed")
+    return dict(planning["context"]), binding
 
 
 def run_controller(config: ControllerConfig, *, planner: Planner, critic: Critic, screener: Screener, lease: Lease) -> dict[str, Any]:
@@ -1654,7 +2675,8 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
     existing_deployment = state.get("deployment_identity_sha256")
     if (existing_deployment is None and config.deployment_identity_sha256 is not None
             and (state.get("iterations") or state.get("pending") is not None
-                 or state.get("inflight") is not None)):
+                 or state.get("inflight") is not None
+                 or state.get("planning") is not None)):
         raise DiscoveryControllerError("legacy durable state lacks deployment identity; refusing resume")
     if existing_deployment is not None and existing_deployment != config.deployment_identity_sha256:
         raise DiscoveryControllerError("sealed deployment identity changed; durable discovery cannot resume")
@@ -1689,9 +2711,18 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
     # A completed state is an acknowledged terminal checkpoint.  Re-entering it
     # must be a read, not another executor opportunity or a timestamp rewrite.
     if state["complete"]: return state
+    _bind_scientific_attempt_counter(state)
     tracker=_tracker(store)
     if state.get("inflight") is not None:
+        precompute_refused = False
         inflight=state["inflight"]; item=_restore_pending({"candidate":inflight["candidate"]}); authorization=hypotheses.ClaimAuthorization.from_dict(inflight["authorization"]); permit=inflight["lease"]
+        inflight_row = dict(inflight["row"])
+        _revalidate_portfolio_checkpoint(config, item, inflight_row)
+        _bind_campaign_ledger_outcome(inflight_row, authorization)
+        if (config.hypothesis_portfolio is not None
+                and inflight_row != dict(inflight["row"])):
+            raise DiscoveryControllerError(
+                "inflight DNR outcomes differ from durable authorization")
         if isinstance(inflight.get("result"),Mapping): result=SealedScreen(**inflight["result"])
         else:
             reconcile=getattr(screener,"reconcile",None)
@@ -1722,6 +2753,13 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                 store.save(state,"pre_screen_reacquired")
                 try:
                     result=screener.screen(item,authorization,permit)
+                except ResumableScreenInterruption as exc:
+                    inflight["interruption"] = {
+                        "type": type(exc).__name__, "message": str(exc),
+                        "resumable": True,
+                    }
+                    store.save(state, "screen_resumable_interruption")
+                    return state
                 except ResourceWait as exc:
                     wait_receipt=_validated_resource_wait(
                         exc,str(inflight["operation_key"]))
@@ -1736,40 +2774,185 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                         "parent_authorization":inflight.get("parent_authorization")}
                     store.save(state,"waiting_resource")
                     return state
-        if not isinstance(result,SealedScreen): raise DiscoveryControllerError("inflight recovery produced no sealed result")
-        row=dict(inflight["row"]); policy=row.get("portfolio_decision_policy")
-        result=_classified_result(state,item,result,policy); row.update(status=result.classification,result_sha256=result.result_sha256,evidence={"baseline":result.baseline_sha256,"source":result.source_proof_sha256,"dispatch":result.dispatch_proof_sha256},effect_fraction=result.effect_fraction,series_effect_fraction=result.series_effect_fraction,series_key=result.series_key,component_series_keys=list(result.component_series_keys))
-        _record_attempt_once(tracker,item,str(item.proposal.get("proposal_id",row["proposal_sha256"])),result)
-        state.pop("inflight",None); state.pop("pending",None); state["iterations"].append(row); _apply_portfolio_outcome(state,row); state["next"]+=1; _schedule_replication(state,item=item,authorization=authorization,row=row,result=result,max_iterations=config.max_iterations); _append_nomination(config.output_root,item,result,_decision_floor(policy,"nomination_floor_pct",config.nomination_threshold)); _write_projection(config.evidence_root or config.output_root); store.save(state,"recovered_screen")
-    while not state["complete"] and state["next"] <= config.max_iterations:
+                except PrecomputeScreenRefusal as exc:
+                    row = dict(inflight["row"])
+                    _record_precompute_refusal(state, row, exc)
+                    store.save(state, "screen_refused")
+                    precompute_refused = True
+                except GovernedStageRefusal as exc:
+                    row = dict(inflight["row"])
+                    _record_governed_stage_refusal(state, row, exc)
+                    store.save(state, exc.disposition)
+                    precompute_refused = True
+        if not precompute_refused:
+            if not isinstance(result,SealedScreen): raise DiscoveryControllerError("inflight recovery produced no sealed result")
+            row=dict(inflight["row"]); policy=row.get("portfolio_decision_policy")
+            result=_classified_result(state,item,result,policy); row.update(
+                _screen_iteration_fields(
+                    result, repetition=int(inflight["lease"].get(
+                        "repetition", 2 if inflight.get("confirmation") else 1))))
+            _record_attempt_once(tracker,item,str(item.proposal.get("proposal_id",row["proposal_sha256"])),result)
+            state.pop("inflight",None); state.pop("pending",None); state["iterations"].append(row); state["scientific_attempts"]=_derived_scientific_attempts(state); _apply_portfolio_outcome(state,row); state["next"]+=1; _schedule_replication(state,item=item,authorization=authorization,row=row,result=result,max_iterations=config.max_iterations); _append_nomination(config.output_root,item,result,_decision_floor(policy,"nomination_floor_pct",config.nomination_threshold)); _write_projection(config.evidence_root or config.output_root); store.save(state,"recovered_screen")
+    while (not state["complete"]
+           and (state["scientific_attempts"] < config.max_iterations
+                if config.hypothesis_portfolio is not None
+                else state["next"] <= config.max_iterations)):
         turn=state["next"]
         pending=state.get("pending")
-        portfolio_binding = (pending.get("row", {}).get("portfolio_binding")
-                             if pending is not None else
-                             _select_portfolio_binding(state, config))
-        if (pending is None and config.hypothesis_portfolio is not None
-                and portfolio_binding is None):
-            state["complete"] = True
-            state["terminal_reason"] = "portfolio_exhausted"
-            store.save(state, "portfolio_exhausted")
-            break
-        context=_context(state,tracker,turn,config,portfolio_binding)
+        planning=state.get("planning")
+        if pending is not None and planning is not None:
+            raise DiscoveryControllerError(
+                "controller cannot own pending candidate and planning intent together")
+        if planning is not None:
+            context, portfolio_binding = _reopen_planning_intent(
+                state, turn=turn)
+        else:
+            portfolio_binding = (pending.get("row", {}).get("portfolio_binding")
+                                 if pending is not None else
+                                 _select_portfolio_binding(state, config))
+            if (pending is None and config.hypothesis_portfolio is not None
+                    and portfolio_binding is None):
+                state["complete"] = True
+                state["terminal_reason"] = "portfolio_exhausted"
+                store.save(state, "portfolio_exhausted")
+                break
+            if (pending is not None and isinstance(pending.get("context"), Mapping)):
+                context = dict(pending["context"])
+                if pending.get("context_sha256") != _sha(context):
+                    raise DiscoveryControllerError(
+                        "pending actor context identity changed")
+            else:
+                context=_context(state,tracker,turn,config,portfolio_binding)
+            if pending is None:
+                state["planning"] = _planning_intent(
+                    config, turn=turn, context=context,
+                    portfolio_binding=portfolio_binding,
+                    provider_attempt=int(
+                        state.get("planner_provider_attempt", 0)))
+                store.save(state, "planner_intent")
+                planning = state["planning"]
         with tempfile.TemporaryDirectory(prefix=f"ak-discovery-{turn}-", dir=config.output_root) as temp:
             workspace=Path(temp)
+            pending_phase = pending.get("phase") if isinstance(pending, Mapping) else None
+            if pending is not None and pending_phase == "critic_pending":
+                item=_restore_pending(pending); row=dict(pending["row"])
+                _revalidate_portfolio_checkpoint(config, item, row)
+                try:
+                    review=critic.review(item,context=context,workspace=workspace)
+                except Exception:
+                    if _drain_visibility_degradation(state, critic, row):
+                        state["pending"]["row"] = row
+                        store.save(state, "visibility_degraded")
+                    raise
+                _drain_visibility_degradation(state, critic, row)
+                row["critic"]=asdict(review)
+                if review.decision != "accept":
+                    row["status"]="critic_"+review.decision
+                    state.pop("pending", None); state["iterations"].append(row)
+                    _apply_portfolio_outcome(state,row)
+                    _note_portfolio_authoring_failure(state, row)
+                    state["next"]+=1
+                    store.save(state,"critic_refused"); continue
+                state["pending"]={
+                    "phase":"critic_complete", "row":row,
+                    "candidate":pending["candidate"],
+                    "context":dict(context), "context_sha256":_sha(context),
+                    "confirmation":False, "parent_authorization":None}
+                store.save(state,"critic_checkpointed")
+                continue
             if pending is not None:
                 item=_restore_pending(pending); row=dict(pending["row"]); review=Critique(**row["critic"])
+                _revalidate_portfolio_checkpoint(config, item, row)
                 if "authorization" in pending:
                     authorization=hypotheses.ClaimAuthorization.from_dict(pending["authorization"])
+                    durable_row = dict(row)
+                    _bind_campaign_ledger_outcome(row, authorization)
+                    if config.hypothesis_portfolio is not None and row != durable_row:
+                        raise DiscoveryControllerError(
+                            "portfolio pending candidate lacks campaign-ledger DNR outcome")
+                elif pending_phase == "critic_complete":
+                    authorization=None
                 elif pending.get("confirmation") is True:
                     # A positive S1 is not a receipted negative.  Re-consult
                     # DNR and mint the explicit confirmation token before its
                     # own device claim, rather than reusing S1's token.
-                    _ensure_question(tracker,item)
+                    _ensure_question(
+                        tracker, item,
+                        row.get("portfolio_binding")
+                        if isinstance(row.get("portfolio_binding"), Mapping) else None)
                     authorization=tracker.authorize_claim(item.hypothesis_id,purpose="candidate_only_confirmation",authorized_by="discovery_controller",ledger=do_not_repeat.compile_for_tracker(tracker))
+                    _bind_campaign_ledger_outcome(row, authorization)
                 else:
                     raise DiscoveryControllerError("pending candidate lacks a sealed authorization")
             else:
-                item=planner.plan(context=context,workspace=workspace)
+                planning = state["planning"]
+                planner_workspace=Path(str(planning["workspace"]))
+                expected_workspace=(config.output_root / "planner-operations" /
+                                    planning["operation_key"] / "workspace")
+                if planner_workspace != expected_workspace:
+                    raise DiscoveryControllerError(
+                        "durable planner workspace escaped its operation namespace")
+                checkpoint_path=planner_workspace.parent / "actor-result.json"
+                if isinstance(planning.get("failure"), Mapping):
+                    if _is_legacy_planner_refusal_telemetry_failure(planning):
+                        # This exact historical failure occurred after rc=0 was
+                        # checkpointed and while emitting the typed refusal.
+                        # Validate the private, single-link actor closure now;
+                        # a missing/extra/tampered artifact stays terminal.
+                        checkpoint = _reopen_planner_actor_checkpoint(
+                            planner_workspace, checkpoint_path,
+                            context=context)
+                        _require_legacy_planner_success_result(checkpoint)
+                        planning.pop("failure")
+                        planning["telemetry_recovery"] = {
+                            "schema": "epyc.autokernel.planner_telemetry_recovery.v1",
+                            "disposition": "resume_checkpoint_and_rederive_refusal",
+                        }
+                        store.save(state, "planner_telemetry_recovery")
+                    else:
+                        raise DiscoveryControllerError(
+                            "prior planner infrastructure/authority failure remains terminal: "
+                            f"{planning['failure'].get('type')}: "
+                            f"{planning['failure'].get('message')}")
+                if planning["phase"] == "intent":
+                    planning["phase"] = "actor_entering"
+                    store.save(state, "planner_entering")
+                try:
+                    workspace_created=_prepare_planner_workspace(
+                        config, planning["operation_key"], planner_workspace)
+                    if not workspace_created:
+                        resume_plan=getattr(planner,"resume_plan",None)
+                        if not callable(resume_plan):
+                            raise PlannerOutputRefusal(
+                                "planner stopped before a reusable actor checkpoint")
+                        resume_kwargs={"context":context,"workspace":planner_workspace}
+                        if "checkpoint_path" in inspect.signature(resume_plan).parameters:
+                            resume_kwargs["checkpoint_path"]=checkpoint_path
+                        item=resume_plan(**resume_kwargs)
+                    else:
+                        plan_kwargs={"context":context,"workspace":planner_workspace}
+                        if "checkpoint_path" in inspect.signature(planner.plan).parameters:
+                            plan_kwargs["checkpoint_path"]=checkpoint_path
+                        item=planner.plan(**plan_kwargs)
+                except PlannerOutputRefusal as exc:
+                    _record_planner_refusal(
+                        state, turn=turn, context=context,
+                        portfolio_binding=portfolio_binding, exc=exc)
+                    _drain_visibility_degradation(
+                        state, planner, state["iterations"][-1])
+                    store.save(
+                        state,
+                        "planner_transient"
+                        if isinstance(exc, PlannerProviderTransient)
+                        else "planner_refused")
+                    continue
+                except Exception as exc:
+                    state["planning"]["failure"]={
+                        "type":type(exc).__name__, "message":str(exc)}
+                    _drain_visibility_degradation(
+                        state, planner, state["planning"])
+                    store.save(state,"planner_terminal_failure")
+                    raise
                 row={"turn":turn,"hypothesis_id":item.hypothesis_id,"statement":item.statement,
                      "falsifier":item.falsifier,"regime":dict(item.regime),
                      "proposal_sha256":_sha(item.proposal),"source_manifest_sha256":item.source_manifest_sha256,
@@ -1778,6 +2961,7 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                      "target_surface":item.experiment_intent.target_surface if item.experiment_intent else None,
                      "target_symbol":item.experiment_intent.target_symbol if item.experiment_intent else None,
                      "context_sha256":_sha(context)}
+                _drain_visibility_degradation(state, planner, row)
                 if portfolio_binding is not None:
                     row.update(portfolio_hypothesis_id=portfolio_binding["hypothesis_id"],
                                portfolio_binding=dict(portfolio_binding),
@@ -1789,29 +2973,76 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                             item, portfolio_binding,
                             config.hypothesis_portfolio)
                     except DiscoveryControllerError as exc:
-                        row.update(status="portfolio_refused", reason=str(exc))
-                        state["iterations"].append(row); state["next"] += 1
-                        state["complete"] = True
-                        state["terminal_reason"] = "portfolio_actor_contract_refused"
-                        store.save(state, "portfolio_refused")
-                        break
-                review=critic.review(item,context=context,workspace=workspace)
-                row["critic"]=asdict(review)
+                        row.update(status="planner_contract_refused",
+                                   reason=str(exc))
+                        state.pop("planning", None)
+                        state["iterations"].append(row)
+                        _note_portfolio_authoring_failure(state, row)
+                        state["next"] += 1
+                        store.save(state, "planner_contract_refused")
+                        continue
+                    receipt = _portfolio_exact_dnr_check(
+                        config, item, portfolio_binding)
+                    row["portfolio_exact_dnr_check"] = receipt
+                    if receipt["outcome"] == schemas.FAIL:
+                        row.update(
+                            status="portfolio_dnr_refused",
+                            reason="candidate exactly repeats sealed portfolio DNR "
+                                   + ", ".join(receipt["matched_dnr_ids"]))
+                        state.pop("planning", None)
+                        state["iterations"].append(row)
+                        state.setdefault("portfolio_terminals", {})[
+                            portfolio_binding["hypothesis_id"]] = {
+                                "disposition": "portfolio_dnr_refused",
+                                "policy": dict(portfolio_binding["decision_policy"]),
+                                "receipt_sha256": receipt["receipt_sha256"],
+                            }
+                        state["next"] += 1
+                        store.save(state, "portfolio_dnr_refused")
+                        continue
+                state.pop("planning", None)
+                state["pending"]={
+                    "phase":"critic_pending", "row":row,
+                    "candidate":_pending_item(item),
+                    "context":dict(context), "context_sha256":_sha(context),
+                    "confirmation":False, "parent_authorization":None}
+                store.save(state,"planner_checkpointed")
+                continue
             if review.decision != "accept":
-                row["status"]="critic_"+review.decision; state["iterations"].append(row); _apply_portfolio_outcome(state,row); state["next"]+=1; store.save(state,"critic_refused"); continue
-            if pending is None:
-                _ensure_question(tracker,item)
+                row["status"]="critic_"+review.decision; state["iterations"].append(row); _apply_portfolio_outcome(state,row); _note_portfolio_authoring_failure(state,row); state["next"]+=1; store.save(state,"critic_refused"); continue
+            if pending_phase == "critic_complete":
+                _ensure_question(
+                    tracker, item,
+                    row.get("portfolio_binding")
+                    if isinstance(row.get("portfolio_binding"), Mapping) else None)
                 ledger=do_not_repeat.compile_for_tracker(tracker)
-                try: authorization=tracker.authorize_claim(item.hypothesis_id,purpose="candidate_only_discovery",authorized_by="discovery_controller",ledger=ledger)
+                try:
+                    authorization=tracker.authorize_claim(item.hypothesis_id,purpose="candidate_only_discovery",authorized_by="discovery_controller",ledger=ledger)
+                    _bind_campaign_ledger_outcome(row, authorization)
+                except hypotheses.RepeatsAReceiptedNegative as exc:
+                    row.update(campaign_ledger_dnr_outcome=schemas.FAIL,
+                               campaign_ledger_dnr_reasons=[str(exc)],
+                               status="authorization_refused",reason=str(exc)); state.pop("pending",None); state["iterations"].append(row); _apply_portfolio_outcome(state,row); _note_portfolio_authoring_failure(state,row); state["next"]+=1; store.save(state,"authorization_refused"); continue
                 except hypotheses.HypothesisError as exc:
-                    row.update(status="authorization_refused",reason=str(exc)); state["iterations"].append(row); _apply_portfolio_outcome(state,row); state["next"]+=1; store.save(state,"authorization_refused"); continue
+                    row.update(status="authorization_refused",reason=str(exc)); state.pop("pending",None); state["iterations"].append(row); _apply_portfolio_outcome(state,row); _note_portfolio_authoring_failure(state,row); state["next"]+=1; store.save(state,"authorization_refused"); continue
             if config.dry_run:
                 # The dry-run still proves exact Sol/Terra actor attestation,
                 # plan schema, critic binding, and DNR authorization.  It
                 # deliberately never asks for a resource lease or starts a
                 # source build, correctness, attribution, or model call.
                 row.update(status="dry_run_authorized", authorization=authorization.to_dict())
-                state.pop("pending", None); state["iterations"].append(row); _apply_portfolio_outcome(state,row); state["next"] += 1
+                state.pop("pending", None); state["iterations"].append(row); _apply_portfolio_outcome(state,row)
+                dry_hypothesis = row.get("portfolio_hypothesis_id")
+                if isinstance(dry_hypothesis, str):
+                    state.setdefault("portfolio_validations", {})[dry_hypothesis] = {
+                        "disposition": "dry_run_validated",
+                        "scientific_terminal": False,
+                    }
+                state["next"] += 1
+                if (config.hypothesis_portfolio is not None
+                        and _select_portfolio_binding(state, config) is None):
+                    state["complete"] = True
+                    state["terminal_reason"] = "portfolio_exhausted"
                 store.save(state, "dry_run_authorized")
                 continue
             repetition=2 if pending and pending.get("confirmation") else 1
@@ -1828,9 +3059,17 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
             if permit.get("operation_key") != operation_key:
                 raise DiscoveryControllerError("resource lease did not bind the exact operation key")
             permit={**dict(permit), "repetition":repetition}
+            state.pop("pending",None)
             state["inflight"]={"operation_key":operation_key,"row":row,"candidate":_pending_item(item),"authorization":authorization.to_dict(),"lease":dict(permit),"confirmation":bool(pending and pending.get("confirmation")),"parent_authorization":pending.get("parent_authorization") if pending else None}
             store.save(state,"pre_screen_intent")
             try: result=screener.screen(item,authorization,permit)
+            except ResumableScreenInterruption as exc:
+                state["inflight"]["interruption"] = {
+                    "type": type(exc).__name__, "message": str(exc),
+                    "resumable": True,
+                }
+                store.save(state, "screen_resumable_interruption")
+                break
             except ResourceWait as exc:
                 wait_receipt=_validated_resource_wait(exc,operation_key)
                 _require_safe_resource_wait_recovery(screener,state["inflight"])
@@ -1840,7 +3079,12 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                 store.save(state,"waiting_resource")
                 break
             except PrecomputeScreenRefusal as exc:
-                state.pop("inflight",None); row.update(status="screen_refused",reason=f"{type(exc).__name__}: {exc}"); state["iterations"].append(row); _apply_portfolio_outcome(state,row); state["next"]+=1; store.save(state,"screen_refused"); continue
+                _record_precompute_refusal(state, row, exc)
+                store.save(state,"screen_refused"); continue
+            except GovernedStageRefusal as exc:
+                _record_governed_stage_refusal(state, row, exc)
+                store.save(state, exc.disposition)
+                continue
             except Exception as exc:
                 # The durable start intent has been written.  An ordinary
                 # exception may follow a build, claim, or model invocation, so
@@ -1851,12 +3095,19 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                 raise
             state["inflight"]["result"]=asdict(result); store.save(state,"post_screen_result")
             policy=row.get("portfolio_decision_policy")
-            result=_classified_result(state,item,result,policy); row.update(status=result.classification,result_sha256=result.result_sha256,evidence={"baseline":result.baseline_sha256,"source":result.source_proof_sha256,"dispatch":result.dispatch_proof_sha256},effect_fraction=result.effect_fraction,series_effect_fraction=result.series_effect_fraction,series_key=result.series_key,component_series_keys=list(result.component_series_keys))
+            result=_classified_result(state,item,result,policy); row.update(
+                _screen_iteration_fields(result, repetition=repetition))
             # Record the measured disposition before exposing it to the next
             # planner context.  This is the only source of repeat suppression.
             _record_attempt_once(tracker,item,str(item.proposal.get("proposal_id",row["proposal_sha256"])),result)
-            state.pop("inflight",None); state.pop("pending",None); state["iterations"].append(row); _apply_portfolio_outcome(state,row); state["next"]+=1; _schedule_replication(state,item=item,authorization=authorization,row=row,result=result,max_iterations=config.max_iterations); _append_nomination(config.output_root,item,result,_decision_floor(policy,"nomination_floor_pct",config.nomination_threshold)); _write_projection(config.evidence_root or config.output_root); store.save(state,"screened")
-    state["complete"]=bool(state.get("complete")) or state["next"]>config.max_iterations
+            state.pop("inflight",None); state.pop("pending",None); state["iterations"].append(row); state["scientific_attempts"]=_derived_scientific_attempts(state); _apply_portfolio_outcome(state,row); state["next"]+=1; _schedule_replication(state,item=item,authorization=authorization,row=row,result=result,max_iterations=config.max_iterations); _append_nomination(config.output_root,item,result,_decision_floor(policy,"nomination_floor_pct",config.nomination_threshold)); _write_projection(config.evidence_root or config.output_root); store.save(state,"screened")
+    if config.hypothesis_portfolio is not None:
+        if (not state.get("complete")
+                and state["scientific_attempts"] >= config.max_iterations):
+            state["complete"] = True
+            state["terminal_reason"] = "scientific_budget_exhausted"
+    else:
+        state["complete"]=bool(state.get("complete")) or state["next"]>config.max_iterations
     if state["complete"]: state.pop("pending",None)
     store.save(state,"complete" if state["complete"] else "paused"); return state
 

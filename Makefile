@@ -59,6 +59,7 @@ PYTEST_SMOKE += scripts/kernel_rnd/autokernel/evaluator/test_devices.py
 # modules that are each green disagree at the seam between them.
 PYTEST_SMOKE += scripts/kernel_rnd/autokernel/controller/test_hypotheses.py
 PYTEST_SMOKE += scripts/kernel_rnd/autokernel/controller/test_hypothesis_path_end_to_end.py
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/controller/test_gpu_source_correctness_parser.py
 # AK5/AK6 — the release plane (plan, readiness, T3 gate, packager) and AK8/AK9 —
 # the backend adapters. Same ordering rule again, and it earns itself here more
 # than anywhere else: `test_release_integration.py` is the only suite that can see

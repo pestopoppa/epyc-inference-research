@@ -7,13 +7,14 @@ import io
 import json
 import os
 import shutil
+import stat
 import unittest
 from unittest import mock
 from pathlib import Path
 from types import SimpleNamespace
 import tempfile
 
-from .. import hypothesis_portfolio
+from .. import hypothesis_portfolio, source_candidate
 from . import discovery_deployment_factory as F
 from . import discovery_controller as C
 
@@ -24,7 +25,183 @@ def template(path="ggml/src/ggml-cuda/fattn.cu", symbol="fattn_kernel"):
                                 {path: frozenset({symbol})}, {"kind": "fattn"})
 
 
+def planned_source_candidate() -> C.PlannedCandidate:
+    relative = "ggml/src/ggml-cuda/fattn.cu"
+    symbol = "fattn_kernel"
+    patch_bytes = (
+        f"diff --git a/{relative} b/{relative}\n"
+        f"--- a/{relative}\n+++ b/{relative}\n"
+        f"@@ -1 +1 @@ {symbol}\n-old\n+new\n"
+    ).encode()
+    manifest = source_candidate.SourcePatchManifest(
+        campaign_id="ak-test", proposal_id="akp-test", candidate_id="akc-test",
+        source_tree="llama.cpp", production_base_commit="0" * 40,
+        instrument_commit="1" * 40, change_class="arithmetic",
+        declared_files=(relative,), declared_symbols={relative: (symbol,)},
+        mechanism_id="manifest-carrier-regression",
+        patch_sha256=hashlib.sha256(patch_bytes).hexdigest(), patch_bytes=patch_bytes)
+    proposal = {
+        "proposal_id": manifest.proposal_id, "change_class": manifest.change_class,
+        "change": {"files_and_symbols": [f"{relative}:{symbol}"],
+                   "estimated_diff_size": 2}}
+    return C.PlannedCandidate(
+        "akh-manifest-carrier", "canonical manifest carrier",
+        "carrier identity mismatch", {"backend": "gpu"}, proposal, manifest,
+        manifest.patch_bundle_sha256)
+
+
 class DeploymentFactoryTests(unittest.TestCase):
+    def test_live_shape_manifest_and_policy_share_real_operation_namespace(self):
+        candidate = planned_source_candidate()
+        with tempfile.TemporaryDirectory() as directory:
+            operations = Path(directory).resolve() / "operations"
+            operation_key = "a" * 64
+            operation_root = operations / operation_key
+            operation_root.mkdir(mode=0o700, parents=True)
+            config = SimpleNamespace(operations_root=operations)
+
+            synchronized_modes = []
+            original_fsync = F.os.fsync
+            def recording_fsync(descriptor):
+                synchronized_modes.append(os.fstat(descriptor).st_mode)
+                return original_fsync(descriptor)
+            with mock.patch.object(F.os, "fsync", side_effect=recording_fsync):
+                manifest_file = F._manifest_file_for_operation(
+                    config, candidate, operation_key)
+            expected = source_candidate.source_patch_manifest_bytes(
+                candidate.source_manifest)
+            self.assertEqual(manifest_file.path.parent, operation_root)
+            self.assertEqual(manifest_file.path.read_bytes(), expected)
+            self.assertEqual(hashlib.sha256(expected).hexdigest(),
+                             candidate.source_manifest_sha256)
+            self.assertEqual(json.loads(expected)["schema"],
+                             source_candidate.SCHEMA_SOURCE_PATCH)
+            self.assertTrue(any(stat.S_ISREG(mode) for mode in synchronized_modes))
+            self.assertTrue(any(stat.S_ISDIR(mode) for mode in synchronized_modes))
+
+            policy = b'{"schema":"test-policy"}'
+            policy_path = F._write_operation_carrier(
+                config, operation_key, "evidence-policy.json", policy,
+                "sealed evidence policy")
+            self.assertEqual(policy_path.parent, operation_root)
+            self.assertEqual(policy_path.read_bytes(), policy)
+            build_key = "b" * 64
+            reopened = F._manifest_file(
+                config, candidate, SimpleNamespace(
+                    operation_key=operation_key, build_key=build_key))
+            self.assertEqual(reopened.path, manifest_file.path)
+            self.assertEqual(reopened.path.read_bytes(), expected)
+            self.assertFalse((operations / build_key).exists())
+            self.assertFalse((operations / "materialization").exists())
+
+            for index, link in enumerate(("hardlink", "symlink"), start=1):
+                unsafe_key = str(index) * 64
+                unsafe_root = operations / unsafe_key
+                unsafe_root.mkdir(mode=0o700)
+                target = Path(directory).resolve() / f"{link}-target.json"
+                target.write_bytes(expected)
+                target.chmod(0o600)
+                carrier = unsafe_root / "source-manifest.json"
+                if link == "hardlink":
+                    os.link(target, carrier)
+                else:
+                    carrier.symlink_to(target)
+                with self.subTest(link=link), self.assertRaisesRegex(
+                        F.DeploymentFactoryError,
+                        "(single-link regular file|reopened safely)"):
+                    F._manifest_file_for_operation(config, candidate, unsafe_key)
+
+    def test_manifest_carrier_refuses_missing_or_escaped_operation_namespace(self):
+        candidate = planned_source_candidate()
+        with tempfile.TemporaryDirectory() as directory:
+            operations = Path(directory).resolve() / "operations"
+            operations.mkdir()
+            config = SimpleNamespace(operations_root=operations)
+            with self.assertRaisesRegex(F.DeploymentFactoryError,
+                                        "operation carrier root"):
+                F._manifest_file_for_operation(config, candidate, "a" * 64)
+            insecure = operations / ("c" * 64)
+            insecure.mkdir(mode=0o700)
+            insecure.chmod(0o755)
+            with self.assertRaisesRegex(F.DeploymentFactoryError,
+                                        "private owner directory"):
+                F._manifest_file_for_operation(config, candidate, "c" * 64)
+            outside = Path(directory).resolve() / "outside"
+            outside.mkdir()
+            (operations / ("b" * 64)).symlink_to(outside, target_is_directory=True)
+            with self.assertRaisesRegex(F.DeploymentFactoryError,
+                                        "operation carrier root"):
+                F._manifest_file_for_operation(config, candidate, "b" * 64)
+
+    def test_manifest_carrier_pins_leaf_and_parent_namespace_against_races(self):
+        candidate = planned_source_candidate()
+        expected = source_candidate.source_patch_manifest_bytes(
+            candidate.source_manifest)
+
+        for attack in ("inode-replacement", "escaping-symlink", "late-hardlink"):
+            with self.subTest(attack=attack), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory).resolve()
+                operations = root / "operations"
+                operation_key = "d" * 64
+                operation = operations / operation_key
+                operation.mkdir(mode=0o700, parents=True)
+                config = SimpleNamespace(operations_root=operations)
+                carrier = operation / "source-manifest.json"
+                original_reader = F._read_operation_carrier
+                attacked = False
+
+                def mutate_after_fstat(descriptor, label):
+                    nonlocal attacked
+                    result = original_reader(descriptor, label)
+                    if not attacked:
+                        attacked = True
+                        if attack == "inode-replacement":
+                            carrier.unlink()
+                            carrier.write_bytes(expected)
+                            carrier.chmod(0o600)
+                        elif attack == "escaping-symlink":
+                            outside = root / "outside-manifest.json"
+                            outside.write_bytes(expected)
+                            carrier.unlink()
+                            carrier.symlink_to(outside)
+                        else:
+                            os.link(carrier, root / "late-hardlink.json")
+                    return result
+
+                with mock.patch.object(
+                        F, "_read_operation_carrier",
+                        side_effect=mutate_after_fstat), self.assertRaisesRegex(
+                            F.DeploymentFactoryError, "directory entry"):
+                    F._manifest_file_for_operation(config, candidate, operation_key)
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            operations = root / "operations"
+            operation_key = "e" * 64
+            operation = operations / operation_key
+            operation.mkdir(mode=0o700, parents=True)
+            outside = root / "outside"
+            outside.mkdir(mode=0o700)
+            parked = root / "parked-operation"
+            config = SimpleNamespace(operations_root=operations)
+            original_open = F.os.open
+            attacked = False
+
+            def replace_directory_before_leaf(path, flags, mode=0o777, *, dir_fd=None):
+                nonlocal attacked
+                if path == "source-manifest.json" and dir_fd is not None and not attacked:
+                    attacked = True
+                    operation.rename(parked)
+                    operation.symlink_to(outside, target_is_directory=True)
+                return original_open(path, flags, mode, dir_fd=dir_fd)
+
+            with mock.patch.object(F.os, "open",
+                                   side_effect=replace_directory_before_leaf), \
+                    self.assertRaisesRegex(F.DeploymentFactoryError,
+                                           "parent chain changed"):
+                F._manifest_file_for_operation(config, candidate, operation_key)
+            self.assertFalse((outside / "source-manifest.json").exists())
+
     def test_v2_templates_are_extracted_from_exact_sealed_profile(self):
         self.assertEqual(
             hashlib.sha256(F._PROFILE_TRACE_RECEIPT.read_bytes()).hexdigest(),
@@ -32,7 +209,13 @@ class DeploymentFactoryTests(unittest.TestCase):
         self.assertEqual(
             hashlib.sha256(F._PROFILE_TRACE_CSV.read_bytes()).hexdigest(),
             F._PROFILE_TRACE_CSV_SHA256)
-        rows = F.evidence._load_dispatches(F._PROFILE_TRACE_CSV)
+        self.assertEqual(
+            hashlib.sha256(F._PROFILE_V3_TRACE_CSV.read_bytes()).hexdigest(),
+            F._PROFILE_V3_TRACE_CSV_SHA256)
+        rows = F.evidence._load_dispatches(
+            F._PROFILE_V3_TRACE_CSV,
+            profiler_trace_schema_id=F.evidence.ROCPROF_V3_TRACE_ID,
+            expected_rows=59_925)
         self.assertEqual(len(rows), 59_925)
         registry = F._template_registry()
         self.assertEqual(registry.version, "gpu-source-templates-v2")
@@ -84,7 +267,10 @@ class DeploymentFactoryTests(unittest.TestCase):
                          [{"route_id": "cuda-vecdotq-v1.anchor.3",
                            "calls": 129, "grid": 57344,
                            "workgroup": 128, "lds_bytes": 512}])
-        rows = F.evidence._load_dispatches(F._PROFILE_TRACE_CSV)
+        rows = F.evidence._load_dispatches(
+            F._PROFILE_V3_TRACE_CSV,
+            profiler_trace_schema_id=F.evidence.ROCPROF_V3_TRACE_ID,
+            expected_rows=59_925)
         for hypothesis_id, template_id in (
                 ("akh-v2-q5-type-specific-dequant", "cuda-vecdotq-v1"),
                 ("akh-v2-q8-quantizer-new-mechanism", "cuda-quantize-q8-v1")):
@@ -102,6 +288,39 @@ class DeploymentFactoryTests(unittest.TestCase):
                 invariants=bound.invariants)
             self.assertEqual(len(reduced["exact"]), len(expected))
 
+    def test_rocprofv3_policy_and_per_arm_cardinality_cover_all_four_strategies(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config = SimpleNamespace(
+                operations_root=Path(directory).resolve() / "operations")
+            policy = F._rocprof_v3_policy(config)
+        roles = {item.role for item in policy}
+        self.assertTrue(F.evidence.PROFILER_MAPPED_ROLES.issubset(roles))
+        self.assertTrue({"executable", "profiler_wrapper", "profiler_package",
+                         "profiler_runtime_manifest",
+                         "profiler_aqlprofile_manifest",
+                         "profiler_libpci_manifest"}.issubset(roles))
+        portfolio = hypothesis_portfolio.load(hypothesis_portfolio.DEFAULT_PORTFOLIO)
+        registry = F._template_registry()
+        authority = F._portfolio_dispatch_authority(registry, portfolio)
+        observed = {}
+        for record in portfolio.eligible_hypotheses():
+            template_id = record["current_bundle_eligibility"]["template_ids"][0]
+            reviewed = registry.templates[template_id]
+            intent = C.GpuSourceExperimentIntent(
+                reviewed.template_id, reviewed.target_surface,
+                reviewed.target_symbol, reviewed.correctness_id,
+                reviewed.dispatch_id,
+                tuple(C.BoundedDispatchExpectation(**row)
+                      for row in authority[record["hypothesis_id"]]))
+            observed[template_id] = F._expected_rocprofv3_rows(
+                reviewed.bind_dispatch(intent))
+        self.assertEqual(observed, {
+            "cuda-vecdotq-v1": (59_925, 59_925),
+            "cuda-quantize-q8-v1": (59_925, 59_925),
+            "cuda-fattn-tile-v1": (63_021, 59_925),
+            "cuda-norm-v2": (59_925, 59_925),
+        })
+
     def test_balanced_arm_schedule_is_seeded_and_s2_exactly_reverses_s1(self):
         first_seed, first = F._arm_order_schedule(
             deployment_config_sha256="a" * 64,
@@ -112,6 +331,167 @@ class DeploymentFactoryTests(unittest.TestCase):
         self.assertEqual(first_seed, second_seed)
         self.assertEqual(second.split(","), list(reversed(first.split(","))))
         self.assertEqual(len(first_seed), 64)
+
+    def test_all_four_portfolio_strategies_materialize_exact_runner_cli(self):
+        """Every live strategy must parse and preflight both runner stages."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            model = root / "model.gguf"; model.write_bytes(b"model")
+            def make_build(name, hip_bytes):
+                build_root = root / name
+                bindir = build_root / "bin"; bindir.mkdir(parents=True)
+                cache = build_root / "CMakeCache.txt"
+                cache.write_text(
+                    "GGML_HIP_GRAPHS:BOOL=ON\n"
+                    "GGML_HIP_ROCWMMA_FATTN:BOOL=ON\n"
+                    "GGML_HIP_MMQ_MFMA:BOOL=OFF\n", encoding="utf-8")
+                binary = bindir / "llama-bench"
+                binary.write_bytes(b"shared-binary"); binary.chmod(0o755)
+                versioned = bindir / "libggml-hip.so.0.16.0"
+                versioned.write_bytes(hip_bytes)
+                (bindir / "libggml-hip.so.0").symlink_to(versioned.name)
+                (bindir / "libggml-hip.so").symlink_to("libggml-hip.so.0")
+                return build_root
+            anchor_build = make_build("anchor-build", b"anchor-hip")
+            candidate_build = make_build("candidate-build", b"candidate-hip")
+            policy_path = root / "admission-policy.json"
+            policy_path.write_text("{}\n", encoding="utf-8")
+            corpus = SimpleNamespace(
+                version="test-v1", policy_sha256="a" * 64,
+                file_sha256=hashlib.sha256(
+                    policy_path.read_bytes()).hexdigest())
+            config = SimpleNamespace(
+                operations_root=root / "operations",
+                config_sha256="b" * 64,
+                admission_policy=SimpleNamespace(
+                    corpus=corpus,
+                    input=SimpleNamespace(
+                        path=policy_path,
+                        sha256=corpus.file_sha256)),
+                planner_context=SimpleNamespace(
+                    value={"context_sha256": "c" * 64}),
+                model=SimpleNamespace(path=model),
+                inference_window_lock=root / "model-call.lock",
+                device_id="mi210_0")
+            def identity(build_root, commit):
+                return C.gpu_source_proofs.BuildIdentity(
+                    source_commit=commit,
+                    source_sha256=hashlib.sha256(
+                        (commit + "-source").encode()).hexdigest(),
+                    binary_sha256=hashlib.sha256(b"shared-binary").hexdigest(),
+                    hip_library_sha256=hashlib.sha256(
+                        (build_root / "bin/libggml-hip.so").resolve().read_bytes()
+                    ).hexdigest(),
+                    config_sha256=hashlib.sha256(
+                        (build_root / "CMakeCache.txt").read_bytes()).hexdigest(),
+                    linkage_sha256=hashlib.sha256(
+                        (commit + "-linkage").encode()).hexdigest())
+            build = SimpleNamespace(
+                operation_key="d" * 64,
+                anchor_build=anchor_build,
+                candidate_build=candidate_build,
+                measurement_binary=anchor_build / "bin/llama-bench",
+                common_loader_dir=anchor_build / "bin",
+                anchor_loader_dir=anchor_build / "bin",
+                candidate_loader_dir=candidate_build / "bin",
+                anchor_identity=identity(
+                    anchor_build, F.controller.gpu_discovery.READY_CONTINUE_INSTRUMENT_COMMIT),
+                candidate_identity=identity(candidate_build, "6" * 40))
+            effective = F.schemas.content_hash({
+                "planner_context_sha256": "c" * 64,
+                "admission_policy_sha256": corpus.policy_sha256,
+                "admission_policy_version": corpus.version})
+            decision = {
+                "effective_context_sha256": effective,
+                "mode": "cold_serialized",
+                "request": {
+                    "model_path": str(model),
+                    "model_sha256": hashlib.sha256(model.read_bytes()).hexdigest(),
+                    "model_bytes": model.stat().st_size,
+                    "workload": "decode_tg128", "calls_per_arm": 9,
+                    "device_id": "mi210_0"}}
+            binding = F._runner_binding(config)
+            for index, (hypothesis_id, _template, _op, _cases) in enumerate((
+                    ("akh-v2-q5-type-specific-dequant", "cuda-vecdotq-v1", "MUL_MAT", 1139),
+                    ("akh-v2-q8-quantizer-new-mechanism", "cuda-quantize-q8-v1", "MUL_MAT", 1139),
+                    ("akh-v2-fa-gqa7-pair-tail", "cuda-fattn-tile-v1", "FLASH_ATTN_EXT", 2868),
+                    ("akh-v2-rms-direct-load-reduction", "cuda-norm-v2", "RMS_NORM", 21),
+            ), start=1):
+                candidate = SimpleNamespace(
+                    hypothesis_id=hypothesis_id,
+                    source_manifest_sha256=f"{index}" * 64)
+                with mock.patch.object(
+                        F.gpu_load_admission, "validate_decision_receipt"):
+                    args = binding.build(candidate, build, {
+                        "operation_key": build.operation_key,
+                        "repetition": 1,
+                        "load_admission": decision})
+                args = F._bind_runner_runtime_authority(
+                    config, build, {"load_admission": decision}, args)
+                target = args._target_runtime_args
+                self.assertEqual((args.runtime_graphs, target.runtime_graphs),
+                                 ("off", "on"))
+                self.assertEqual(args.load_admission_decision_path,
+                                 str(root / "operations" / build.operation_key /
+                                     "runner/s1/load-admission-decision.json"))
+                self.assertEqual(args.load_admission_policy_path,
+                                 str(policy_path))
+                self.assertEqual(args.load_admission_policy_file_sha256,
+                                 corpus.file_sha256)
+                self.assertEqual(args.load_admission_effective_context_sha256,
+                                 decision["effective_context_sha256"])
+                self.assertEqual(
+                    args._sealed_candidate_source_build_identity,
+                    build.candidate_identity.__dict__)
+                self.assertEqual(
+                    target._sealed_anchor_source_build_identity,
+                    build.anchor_identity.__dict__)
+                with mock.patch.object(
+                        F.controller.gpu_discovery.gpu_load_admission,
+                        "validate_decision_receipt"):
+                    off = F.controller.gpu_discovery.preflight(args)
+                    on = F.controller.gpu_discovery.preflight(target)
+                self.assertEqual((off["runtime_graphs"], on["runtime_graphs"]),
+                                 ("off", "on"))
+                self.assertNotEqual(
+                    off["anchor_identity"]["source_commit"],
+                    off["candidate_identity"]["source_commit"])
+
+    def test_argparse_nonzero_is_an_ordinary_resumable_operation_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            config = SimpleNamespace(
+                operations_root=root / "operations", config_sha256="a" * 64,
+                admission_policy=SimpleNamespace(
+                    corpus=SimpleNamespace(
+                        version="test-v1", policy_sha256="b" * 64,
+                        file_sha256="c" * 64),
+                    input=SimpleNamespace(
+                        path=root / "policy.json", sha256="c" * 64)),
+                planner_context=SimpleNamespace(
+                    value={"context_sha256": "d" * 64}),
+                model=SimpleNamespace(path=root / "model"),
+                inference_window_lock=root / "lock", device_id="mi210_0")
+            binding = F._runner_binding(config)
+            parser = mock.Mock()
+            parser.parse_args.side_effect = SystemExit(2)
+            with mock.patch.object(F.gpu_load_admission,
+                                   "validate_decision_receipt"), \
+                    mock.patch.object(F.controller.gpu_discovery, "parser",
+                                      return_value=parser), self.assertRaisesRegex(
+                        C.ResumableScreenInterruption,
+                        "parser refused with exit 2"):
+                binding.build(
+                    SimpleNamespace(source_manifest_sha256="e" * 64),
+                    SimpleNamespace(
+                        operation_key="f" * 64, anchor_build=root / "anchor",
+                        candidate_build=root / "candidate",
+                        measurement_binary=root / "bench",
+                        common_loader_dir=root / "common",
+                        anchor_loader_dir=root / "anchor-lib",
+                        candidate_loader_dir=root / "candidate-lib"),
+                    {"operation_key": "f" * 64, "repetition": 1,
+                     "load_admission": {"effective_context_sha256": "0" * 64}})
 
     def static_config(self, root: Path):
         production = root / "production"
@@ -288,6 +668,23 @@ class DeploymentFactoryTests(unittest.TestCase):
              self.assertRaisesRegex(F.DeploymentFactoryError, "module bytes changed"):
             attest()
 
+    def test_t0_capability_contract_is_in_exact_graph_and_tamper_attested(self):
+        sealed = F._execution_module_identity()
+        self.assertEqual(
+            sealed["t0_provider"], {
+                "path": str(Path(F.t0_provider.__file__).resolve(strict=True)),
+                "sha256": F._digest_regular(
+                    Path(F.t0_provider.__file__).resolve(strict=True),
+                    "t0_provider"),
+            })
+        changed = json.loads(json.dumps(sealed))
+        changed["t0_provider"]["sha256"] = "0" * 64
+        attest = F._module_attestor(sealed)
+        with mock.patch.object(F, "_execution_module_identity", return_value=changed), \
+                self.assertRaisesRegex(
+                    F.DeploymentFactoryError, "module bytes changed"):
+            attest()
+
     def test_validate_only_materializes_static_graph_without_actor_or_hardware(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -320,6 +717,16 @@ class DeploymentFactoryTests(unittest.TestCase):
             receipt = json.loads(Path(payload["graph_receipt"]).read_text(encoding="utf-8"))
             self.assertFalse(receipt["inference_executed"])
             self.assertEqual(receipt["registry_ids"], dict(F._STATIC_IDS))
+            profiler = receipt["profiler_runtime_authority"]
+            self.assertEqual(profiler["trace_schema_id"],
+                             F.evidence.ROCPROF_V3_TRACE_ID)
+            package = next(row for row in profiler["inputs"]
+                           if row["role"] == "profiler_package")
+            self.assertEqual(package, {
+                "role": "profiler_package",
+                "path": str(F._ROCPROF_V3_PACKAGE.resolve()),
+                "sha256": F._ROCPROF_V3_PACKAGE_SHA256,
+            })
             self.assertEqual(receipt["actor_wrappers"]["planner"]["sha256"],
                              config.actor_wrapper.sha256)
             self.assertEqual(receipt["actor_wrappers"]["critic"]["sha256"],
@@ -338,10 +745,25 @@ class DeploymentFactoryTests(unittest.TestCase):
             self.assertEqual(timed_oracle["scope"], "integrity_discovery_only")
             self.assertFalse(timed_oracle["production_throughput_authority"])
             self.assertIn("discovery_telemetry", receipt["execution_modules"])
+            self.assertIn("hypotheses", receipt["execution_modules"])
+            self.assertIn("do_not_repeat", receipt["execution_modules"])
+            self.assertIn("t0_provider", receipt["execution_modules"])
             self.assertEqual(
                 receipt["execution_modules"]["discovery_telemetry"]["sha256"],
                 F._digest_regular(Path(F.discovery_telemetry.__file__).resolve(),
                                   "discovery_telemetry"))
+            self.assertEqual(
+                receipt["execution_modules"]["hypotheses"]["sha256"],
+                F._digest_regular(Path(C.hypotheses.__file__).resolve(),
+                                  "hypotheses"))
+            self.assertEqual(
+                receipt["execution_modules"]["do_not_repeat"]["sha256"],
+                F._digest_regular(Path(C.do_not_repeat.__file__).resolve(),
+                                  "do_not_repeat"))
+            self.assertEqual(
+                receipt["execution_modules"]["t0_provider"]["sha256"],
+                F._digest_regular(Path(F.t0_provider.__file__).resolve(),
+                                  "t0_provider"))
             self.assertTrue(receipt["critic_auth_source"]["validated"])
             self.assertFalse(receipt["critic_auth_source"]["secret_digest_persisted"])
             self.assertNotIn("sha256", receipt["critic_auth_source"])
@@ -640,9 +1062,19 @@ class DeploymentFactoryTests(unittest.TestCase):
             bound = F.evidence.BoundInputFile(
                 "production_artifact", artifact,
                 hashlib.sha256(artifact.read_bytes()).hexdigest())
+            operations = root / "operations"
+            operations.mkdir()
             calls = []
-            source = F.SourceBuilderBinding(
-                lambda _candidate, _authorization, permit: calls.append(dict(permit)) or dict(permit))
+            def source_build(_candidate, _authorization, permit):
+                carrier = operations / permit["operation_key"] / "source-manifest.json"
+                self.assertTrue(carrier.is_file())
+                self.assertEqual(
+                    carrier.read_bytes(),
+                    source_candidate.source_patch_manifest_bytes(
+                        _candidate.source_manifest))
+                calls.append(dict(permit))
+                return dict(permit)
+            source = F.SourceBuilderBinding(source_build)
             templates = mock.Mock(spec=F.ExperimentTemplateRegistry)
             templates.registry_sha256 = "e" * 64
             templates.templates = {}
@@ -663,10 +1095,12 @@ class DeploymentFactoryTests(unittest.TestCase):
                 critic_wrapper=SimpleNamespace(path=Path("/sealed/claude-fable5"),
                                                sha256="b" * 64),
                 production_path=protected, instrument_path=protected,
-                claim_timeout_s=0.0, instrument_branch="measurement-instrument")
+                operations_root=operations, claim_timeout_s=0.0,
+                production_head="0" * 40, instrument_commit="1" * 40,
+                instrument_branch="measurement-instrument")
             config.revalidate = mock.Mock()
-            candidate = mock.Mock(experiment_intent=mock.sentinel.intent,
-                                  source_manifest=mock.Mock())
+            candidate = planned_source_candidate()
+            restored = C._restore_pending({"candidate": C._pending_item(candidate)})
             adapters = {}
             def adapter_factory(**kwargs):
                 adapters.update(kwargs)
@@ -677,19 +1111,41 @@ class DeploymentFactoryTests(unittest.TestCase):
                                    side_effect=adapter_factory), \
                  mock.patch.object(F, "_production_runtime_snapshot",
                                    return_value=((bound,), {})), \
+                 mock.patch.object(F, "_reviewed_source_package", return_value=None), \
                  mock.patch.object(F.controller, "build_controller_adapters",
                                    side_effect=lambda **kwargs: kwargs), \
                  mock.patch.object(F.codex_container_actor, "runtime_identity",
                                    return_value={}), \
                  mock.patch.object(F.claude_fable5_critic_actor, "runtime_identity",
-                                   return_value={}):
+                                   return_value={}), \
+                 mock.patch.object(F, "_instrument_review_receipt",
+                                   return_value=(root / "instrument-review.json", "f" * 64)):
                 F.materialize(config, {}, correctness_executor=mock.Mock(),
                               rocprof_executor=mock.Mock(), claim_journal=mock.Mock())
                 build = adapters["build_source"]
+                (operations / ("1" * 64)).mkdir(mode=0o700)
                 first = build(candidate, object(), {"operation_key": "1" * 64})
-                second = build(candidate, object(), {"operation_key": "2" * 64})
+                (operations / ("2" * 64)).mkdir(mode=0o700)
+                second = build(restored, object(), {"operation_key": "2" * 64})
+                (operations / ("3" * 64)).mkdir(mode=0o700)
+                with mock.patch.object(
+                        source_candidate, "SCHEMA_SOURCE_PATCH",
+                        "epyc.autokernel.source_patch.v1"), self.assertRaisesRegex(
+                            F.DeploymentFactoryError,
+                            "canonical carrier hash mismatch"):
+                    build(restored, object(), {"operation_key": "3" * 64})
+                (operations / ("4" * 64)).mkdir(mode=0o700)
+                with mock.patch.object(
+                        F, "_instrument_review_receipt",
+                        side_effect=F.DeploymentFactoryError(
+                            "instrument capability changed")), self.assertRaisesRegex(
+                                F.DeploymentFactoryError,
+                                "instrument capability changed"):
+                    build(restored, object(), {"operation_key": "4" * 64})
             self.assertEqual(first["operation_key"], "1" * 64)
             self.assertEqual(second["operation_key"], "2" * 64)
+            self.assertFalse((operations / ("3" * 64) / "source-manifest.json").exists())
+            self.assertEqual(len(calls), 2)
             self.assertEqual([row["deployment_config_sha256"] for row in calls],
                              [config.config_sha256, config.config_sha256])
             self.assertEqual([row["instrument_branch"] for row in calls],

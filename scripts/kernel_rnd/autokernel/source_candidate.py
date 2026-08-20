@@ -25,7 +25,7 @@ from .execution import chain, instrument_integrity, reward_hack_scan, worktree
 
 __all__ = [
     "SCHEMA_SOURCE_PATCH", "SourceCandidateError", "SourcePatchManifest",
-    "AppliedSourceCandidate", "load_source_patch_manifest",
+    "AppliedSourceCandidate", "source_patch_manifest_bytes", "load_source_patch_manifest",
     "apply_source_candidate", "parameter_patch_bundle_sha256",
     "hunk_identities",
 ]
@@ -304,24 +304,7 @@ class SourcePatchManifest:
     @property
     def patch_bundle_sha256(self) -> str:
         """Content identity of bytes *and* their complete semantic binding."""
-        return schemas.content_hash({
-            "schema": SCHEMA_SOURCE_PATCH,
-            "campaign_id": self.campaign_id,
-            "proposal_id": self.proposal_id,
-            "candidate_id": self.candidate_id,
-            "source_tree": self.source_tree,
-            "production_base_commit": self.production_base_commit,
-            "instrument_commit": self.instrument_commit,
-            "change_class": self.change_class,
-            "declared_files": list(self.declared_files),
-            "declared_symbols": {
-                path: list(self.declared_symbols[path]) for path in self.declared_files
-            },
-            "mechanism_id": self.mechanism_id,
-            "patch_sha256": self.patch_sha256,
-            "patch_encoding": "base64",
-            "patch_base64": base64.b64encode(self.patch_bytes).decode("ascii"),
-        })
+        return hashlib.sha256(source_patch_manifest_bytes(self)).hexdigest()
 
     def bind(self, *, proposal: Mapping[str, Any], campaign_id: str,
              candidate_id: str, production_base_commit: str,
@@ -346,6 +329,30 @@ class SourcePatchManifest:
         if any(path in {p for paths in instrument_integrity.TRANSLATION_UNITS.values()
                         for p in paths} for path in self.declared_files):
             raise SourceCandidateError("a candidate may not patch a reward-instrument translation unit")
+
+
+def source_patch_manifest_bytes(manifest: SourcePatchManifest) -> bytes:
+    """Return the sole canonical byte carrier for a typed source patch."""
+    if not isinstance(manifest, SourcePatchManifest):
+        raise SourceCandidateError("source patch carrier requires a typed manifest")
+    return schemas.canonical_bytes({
+        "schema": SCHEMA_SOURCE_PATCH,
+        "campaign_id": manifest.campaign_id,
+        "proposal_id": manifest.proposal_id,
+        "candidate_id": manifest.candidate_id,
+        "source_tree": manifest.source_tree,
+        "production_base_commit": manifest.production_base_commit,
+        "instrument_commit": manifest.instrument_commit,
+        "change_class": manifest.change_class,
+        "declared_files": list(manifest.declared_files),
+        "declared_symbols": {
+            path: list(manifest.declared_symbols[path]) for path in manifest.declared_files
+        },
+        "mechanism_id": manifest.mechanism_id,
+        "patch_sha256": manifest.patch_sha256,
+        "patch_encoding": "base64",
+        "patch_base64": base64.b64encode(manifest.patch_bytes).decode("ascii"),
+    })
 
 
 def load_source_patch_manifest(path: Any) -> SourcePatchManifest:

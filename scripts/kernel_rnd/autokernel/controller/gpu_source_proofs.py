@@ -56,7 +56,7 @@ class CorrectnessPlan:
  def __post_init__(self):
   if not self.argv or any(not isinstance(x,str) or not x for x in self.argv) or not all(SHA.fullmatch(x) for x in (self.manifest_sha256,self.workload_sha256)): raise ProofError("invalid correctness plan")
 def load_and_validate_correctness(plan:CorrectnessPlan,path:Path)->dict:
- loaded=load_receipt(path,schema="epyc.autokernel.targeted_correctness_receipt.v2"); raw=loaded["body"]
+ loaded=load_receipt(path,schema="epyc.autokernel.targeted_correctness_receipt.v3"); raw=loaded["body"]
  required={"authority":"nonpromotable_candidate_only_discovery","non_promotable":True,"promotion_claim":False,"status":"complete","result":"PASS","manifest_sha256":plan.manifest_sha256,"workload_sha256":plan.workload_sha256,"command_argv":list(plan.argv),"summary":plan.expected_summary,"exit_code":0,"exact_case_ok":True}
  if any(raw.get(k)!=v for k,v in required.items()): raise ProofError("targeted correctness receipt does not bind its plan")
  if raw.get("candidate_build_identity") != plan.candidate.__dict__: raise ProofError("correctness build identity mismatch")

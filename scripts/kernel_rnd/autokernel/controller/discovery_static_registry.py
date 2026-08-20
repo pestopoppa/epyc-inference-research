@@ -21,7 +21,7 @@ from typing import Any, Mapping
 from .. import source_candidate
 from .. import schemas
 from ..evaluator import integrity
-from ..execution import worktree
+from ..execution import t0_provider, worktree
 from . import discovery_controller as controller
 from . import gpu_source_evidence as evidence
 from . import gpu_source_proofs
@@ -32,16 +32,27 @@ class StaticRegistryError(RuntimeError):
     pass
 
 
+class _SourceApplyFailure(StaticRegistryError):
+    """A planner-authored patch failed before compilation began."""
+
+
+class _CompileFailure(StaticRegistryError):
+    """A sealed source tree reached the compiler but did not build."""
+
+
 _REWARD_FILES = ("llama-bench", "libllama-bench-impl.so", "libllama-common.so",
                  "libllama.so", "libggml.so", "libggml-cpu.so", "libggml-base.so")
 _HIP = "libggml-hip.so"
-_BUILDER_SCHEMA = "epyc.autokernel.static_gpu_source_builder.v2"
+_BUILDER_SCHEMA = "epyc.autokernel.static_gpu_source_builder.v3"
 _BUILD_KEY_SCHEMA = "epyc.autokernel.gpu_source_build_key.v1"
 _BUILD_REF_SCHEMA = "epyc.autokernel.gpu_source_build_ref.v1"
 _BUILD_INTENT_SCHEMA = "epyc.autokernel.gpu_source_build_intent.v1"
 _BUILD_TERMINAL_SCHEMA = "epyc.autokernel.gpu_source_build_terminal.v1"
 _TEARDOWN_SCHEMA = "epyc.autokernel.source_materialization_teardown.v2"
+_SOURCE_FAILURE_MESSAGE_MAX_BYTES = 2048
 _REQUIRED_TARGETS = ("llama-bench", "test-backend-ops")
+_CORRECTNESS_CAPABILITY_SCHEMA = "epyc.autokernel.backend_ops_property_capability.v1"
+_CORRECTNESS_CAPABILITY_SEED = 2026081301
 _BUILD_ENV_NAMES = (
     "PATH", "HOME", "LANG", "LC_ALL", "ROCM_PATH", "HIP_PATH",
     "LD_LIBRARY_PATH", "LIBRARY_PATH", "CPATH", "C_INCLUDE_PATH",
@@ -55,6 +66,19 @@ def _digest(path: Path) -> str:
     if path.is_symlink() or not path.is_file():
         raise StaticRegistryError(f"runtime artifact is not a regular file: {path}")
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _source_failure_message(value: object) -> str | None:
+    """Return a bounded one-line diagnostic safe for a sealed terminal."""
+    if not isinstance(value, str) or not value or not value.isprintable():
+        return None
+    try:
+        encoded = value.encode("utf-8", "strict")
+    except UnicodeEncodeError:
+        return None
+    if len(encoded) > _SOURCE_FAILURE_MESSAGE_MAX_BYTES:
+        return None
+    return value
 
 
 def _canonical(value: Mapping[str, Any]) -> bytes:
@@ -225,6 +249,128 @@ def _write_linkage_carrier(path: Path, build: Path) -> tuple[Path, str]:
     return path, hashlib.sha256(raw).hexdigest()
 
 
+def _correctness_capability_environment(build: Path) -> dict[str, str]:
+    bindir = (build / "bin").resolve(strict=True)
+    return {
+        "HIP_VISIBLE_DEVICES": "-1",
+        "LD_LIBRARY_PATH": f"{bindir}:/opt/rocm/lib",
+        "PATH": "/opt/rocm/bin:/usr/bin:/bin",
+        "ROCM_PATH": "/opt/rocm",
+    }
+
+
+def _attest_correctness_capability(
+        build: Path, *, arm: str,
+        runner: Any | None = None) -> dict[str, Any]:
+    """Execute the reviewed planted-defect test before a build may be complete."""
+    if arm not in {"anchor", "candidate"}:
+        raise StaticRegistryError("correctness capability arm is invalid")
+    build = build.resolve(strict=True)
+    binary = build / "bin" / "test-backend-ops"
+    try:
+        lexical = binary.lstat()
+    except OSError as exc:
+        raise StaticRegistryError(f"{arm} correctness binary is absent") from exc
+    if (not stat.S_ISREG(lexical.st_mode) or lexical.st_nlink != 1
+            or not os.access(binary, os.X_OK) or binary.resolve(strict=True) != binary):
+        raise StaticRegistryError(
+            f"{arm} correctness binary is not a single-link regular executable")
+    hip = _resolved_regular(build / "bin" / _HIP)
+    argv = t0_provider.backend_ops_property_self_test_argv(
+        str(binary), _CORRECTNESS_CAPABILITY_SEED)
+    environment = _correctness_capability_environment(build)
+    if runner is None:
+        runner = subprocess.run
+    try:
+        completed = runner(
+            argv, check=False, stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            timeout=30, env=environment)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise StaticRegistryError(
+            f"{arm} correctness capability self-test could not execute") from exc
+    try:
+        stdout = completed.stdout.decode("utf-8", "strict")
+        stderr = completed.stderr.decode("utf-8", "strict")
+    except (AttributeError, UnicodeDecodeError) as exc:
+        raise StaticRegistryError(
+            f"{arm} correctness capability output is unreadable") from exc
+    if completed.returncode != 0 or stdout:
+        raise StaticRegistryError(
+            f"{arm} correctness capability self-test did not return its exact stderr contract")
+    try:
+        result = t0_provider.parse_backend_ops_property_self_test(
+            stderr, expected_suite_seed=_CORRECTNESS_CAPABILITY_SEED)
+    except t0_provider.InstrumentCapabilityError as exc:
+        raise StaticRegistryError(
+            f"{arm} correctness capability self-test failed: {exc}") from exc
+    return {
+        "schema": _CORRECTNESS_CAPABILITY_SCHEMA,
+        "arm": arm,
+        "binary": {"path": str(binary), "sha256": _digest(binary)},
+        "hip_library": {"path": str(hip), "sha256": _digest(hip)},
+        "argv": list(argv),
+        "environment": dict(sorted(environment.items())),
+        "exit_code": completed.returncode,
+        "stdout": stdout,
+        "stdout_sha256": hashlib.sha256(completed.stdout).hexdigest(),
+        "stderr": stderr,
+        "stderr_sha256": hashlib.sha256(completed.stderr).hexdigest(),
+        "result": {
+            "suite_seed": result.suite_seed,
+            "sensitivity": result.sensitivity,
+            "specificity": result.specificity,
+            "planted": result.planted,
+            "clean": result.clean,
+        },
+        "promotion_claim": False,
+    }
+
+
+def _verify_correctness_capability_receipt(
+        *, receipt: Path, receipt_sha256: str, binary: Path,
+        binary_sha256: str, build: Path, arm: str) -> dict[str, Any]:
+    reopened_binary = _within(
+        binary, build, f"{arm} correctness binary", single_link=True)
+    if (reopened_binary != binary or not os.access(reopened_binary, os.X_OK)
+            or _digest(reopened_binary) != binary_sha256):
+        raise StaticRegistryError(f"{arm} correctness binary identity changed")
+    if _digest(receipt) != receipt_sha256:
+        raise StaticRegistryError(f"{arm} correctness capability receipt changed")
+    body = _sealed_read(
+        receipt, schema=_CORRECTNESS_CAPABILITY_SCHEMA,
+        label=f"{arm} correctness capability receipt")
+    expected_argv = list(t0_provider.backend_ops_property_self_test_argv(
+        str(binary), _CORRECTNESS_CAPABILITY_SEED))
+    hip = _resolved_regular(build / "bin" / _HIP)
+    expected = {
+        "arm": arm,
+        "binary": {"path": str(binary), "sha256": binary_sha256},
+        "hip_library": {"path": str(hip), "sha256": _digest(hip)},
+        "argv": expected_argv,
+        "environment": dict(sorted(_correctness_capability_environment(build).items())),
+        "exit_code": 0,
+        "stdout": "",
+        "stdout_sha256": hashlib.sha256(b"").hexdigest(),
+        "stderr_sha256": hashlib.sha256(str(body.get("stderr", "")).encode()).hexdigest(),
+        "promotion_claim": False,
+    }
+    if any(body.get(key) != value for key, value in expected.items()):
+        raise StaticRegistryError(f"{arm} correctness capability receipt identity mismatch")
+    try:
+        parsed = t0_provider.parse_backend_ops_property_self_test(
+            str(body.get("stderr", "")), expected_suite_seed=_CORRECTNESS_CAPABILITY_SEED)
+    except t0_provider.InstrumentCapabilityError as exc:
+        raise StaticRegistryError(
+            f"{arm} correctness capability receipt is not a passing self-test") from exc
+    if body.get("result") != {
+            "suite_seed": parsed.suite_seed, "sensitivity": parsed.sensitivity,
+            "specificity": parsed.specificity, "planted": parsed.planted,
+            "clean": parsed.clean}:
+        raise StaticRegistryError(f"{arm} correctness capability result changed")
+    return body
+
+
 def _bound(path: Path, role: str) -> dict[str, str]:
     return {"role": role, "path": str(path.resolve()), "sha256": _digest(path)}
 
@@ -349,6 +495,11 @@ def runtime_maps_sampler(*, proc_root: Path = Path("/proc")) -> evidence.Runtime
             model_path = Path(str(model["path"])).resolve(strict=True)
             model_sha = str(context["model_sha256"])
             device_id = str(context["device_id"])
+            profiler_mapped = context.get("required_profiler_mapped_files", {})
+            if (not isinstance(profiler_mapped, Mapping)
+                    or any(not isinstance(key, str) or not isinstance(value, str)
+                           for key, value in profiler_mapped.items())):
+                raise TypeError("profiler mapping identities are malformed")
         except (KeyError, OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
             raise StaticRegistryError("runtime maps callback cannot load sealed context") from exc
         manifest = split_runtime_verifier.verify_split_runtime(runtime_root)
@@ -356,14 +507,30 @@ def runtime_maps_sampler(*, proc_root: Path = Path("/proc")) -> evidence.Runtime
         for kfd_pid in sorted(set(residency.kfd_pids)):
             try:
                 maps = (root / str(kfd_pid) / "maps").read_text(encoding="utf-8")
+                start_ticks = _start_ticks(root, kfd_pid)
+            except OSError:
+                # A short-lived profiler/helper KFD client may disappear
+                # between the residency and maps samples.
+                continue
+            except ValueError as exc:
+                raise StaticRegistryError(
+                    "owned KFD process has an invalid runtime identity") from exc
+            try:
                 identities.append(split_runtime_verifier.verify_runtime_maps(
                     manifest, arm=str(arm), maps_text=maps, model_path=model_path,
                     model_sha256=model_sha, device_id=device_id, kfd_pid=kfd_pid,
-                    boot_id=_boot_id(root), process_start_ticks=_start_ticks(root, kfd_pid)))
-            except (OSError, ValueError, split_runtime_verifier.SplitRuntimeError):
-                # rocprof and helper wrappers can be KFD clients themselves;
-                # only the uniquely proven full reward/model closure is valid.
+                    boot_id=_boot_id(root), process_start_ticks=start_ticks,
+                    required_mapped_files=dict(profiler_mapped)))
+            except split_runtime_verifier.RuntimeMapsIncomplete:
+                # rocprof and helper wrappers can be KFD clients themselves,
+                # and llama-bench maps the sealed closure incrementally.
                 continue
+            except (OSError, ValueError, split_runtime_verifier.SplitRuntimeError) as exc:
+                raise StaticRegistryError(
+                    "owned KFD runtime maps violate the sealed arm") from exc
+        if not identities:
+            raise evidence.RuntimeMapsNotReady(
+                "owned KFD process has not mapped the complete sealed arm yet")
         if len(identities) != 1:
             raise StaticRegistryError(
                 "runtime maps must prove exactly one owned KFD process for the sealed arm")
@@ -432,6 +599,30 @@ def evidence_identity_files_for_build(
         materialization=evidence.BoundInputFile("materialization", build.materialization_receipt,
                                                  build.materialization_sha256),
         shared_runtime=shared)
+
+
+def correctness_capability_files_for_build(
+        build: controller.GpuSourceBuild, *, arm: str,
+) -> tuple[evidence.BoundInputFile, evidence.BoundInputFile]:
+    """Reopen one builder-terminal capability and its exact diagnostic binary."""
+    if arm not in {"anchor", "candidate"}:
+        raise StaticRegistryError("correctness capability arm is invalid")
+    binary = getattr(build, f"{arm}_correctness_binary")
+    binary_sha256 = getattr(build, f"{arm}_correctness_binary_sha256")
+    receipt = getattr(build, f"{arm}_correctness_capability_receipt")
+    receipt_sha256 = getattr(build, f"{arm}_correctness_capability_sha256")
+    arm_build = build.anchor_build if arm == "anchor" else build.candidate_build
+    if (not isinstance(binary, Path) or not isinstance(binary_sha256, str)
+            or not isinstance(receipt, Path) or not isinstance(receipt_sha256, str)
+            or binary != arm_build / "bin" / "test-backend-ops"):
+        raise StaticRegistryError(
+            f"source build lacks its {arm} correctness capability identity")
+    _verify_correctness_capability_receipt(
+        receipt=receipt, receipt_sha256=receipt_sha256,
+        binary=binary, binary_sha256=binary_sha256,
+        build=arm_build, arm=arm)
+    return (evidence.BoundInputFile("executable", binary, binary_sha256),
+            evidence.BoundInputFile("instrument_capability", receipt, receipt_sha256))
 
 
 def verify_build_authority(build: controller.GpuSourceBuild, *, production_path: Path,
@@ -766,6 +957,7 @@ class StaticGpuSourceBuilder:
     operations_root: Path
     build_root: Path
     cmake_defines: tuple[tuple[str, str], ...]
+    correctness_capability_runner: Any | None = None
 
     def _sealed_cmake_defines(self) -> tuple[tuple[str, str], ...]:
         required = {
@@ -881,6 +1073,18 @@ class StaticGpuSourceBuilder:
             "anchor_source_tree_sha256": build.anchor_source_tree_sha256,
             "candidate_source_tree_receipt": str(build.candidate_source_tree_receipt),
             "candidate_source_tree_sha256": build.candidate_source_tree_sha256,
+            "anchor_correctness_binary": str(build.anchor_correctness_binary),
+            "anchor_correctness_binary_sha256": build.anchor_correctness_binary_sha256,
+            "candidate_correctness_binary": str(build.candidate_correctness_binary),
+            "candidate_correctness_binary_sha256": build.candidate_correctness_binary_sha256,
+            "anchor_correctness_capability_receipt": str(
+                build.anchor_correctness_capability_receipt),
+            "anchor_correctness_capability_sha256":
+                build.anchor_correctness_capability_sha256,
+            "candidate_correctness_capability_receipt": str(
+                build.candidate_correctness_capability_receipt),
+            "candidate_correctness_capability_sha256":
+                build.candidate_correctness_capability_sha256,
             "teardown_receipt": str(build.teardown_receipt),
             "teardown_sha256": build.teardown_sha256,
         }
@@ -910,6 +1114,38 @@ class StaticGpuSourceBuilder:
                 or terminal.get("intent_file_sha256") != _digest(intent_path)):
             raise StaticRegistryError("build cache terminal does not close its intent")
         if terminal.get("state") != "complete":
+            failure_stage = terminal.get("failure_stage")
+            if terminal.get("state") == "failed" and failure_stage in {
+                    "source_apply", "compile"}:
+                allowed_types = {
+                    "source_apply": {
+                        _SourceApplyFailure.__name__,
+                        source_candidate.SourceCandidateError.__name__},
+                    "compile": {_CompileFailure.__name__},
+                }
+                if terminal.get("failure_type") not in allowed_types[failure_stage]:
+                    raise StaticRegistryError(
+                        "failed build terminal stage/type classification changed")
+                # The ref, canonical intent, terminal self-hash, build key,
+                # and exact intent-file digest have all been revalidated above.
+                # Only that complete identity chain may recover the original
+                # typed authoring refusal; every other failed/tampered cache
+                # remains a non-reusable registry error.
+                failure_message = terminal.get("failure_message")
+                if (failure_message is not None
+                        and _source_failure_message(failure_message) is None):
+                    raise StaticRegistryError(
+                        "source candidate failed terminal has an unsafe diagnostic")
+                detail = (f": {failure_message}"
+                          if isinstance(failure_message, str) else "")
+                refusal_type = (controller.SourceApplyRefusal
+                                if failure_stage == "source_apply"
+                                else controller.CompileRefusal)
+                raise refusal_type(
+                    "sealed prior build transaction rejected "
+                    f"{failure_stage} for build {contract['build_key']}{detail}",
+                    receipt_path=str(terminal_path.resolve()),
+                    receipt_sha256=_digest(terminal_path))
             raise StaticRegistryError("prior build transaction is terminal but not reusable")
         raw = terminal.get("build")
         if not isinstance(raw, Mapping):
@@ -933,6 +1169,20 @@ class StaticGpuSourceBuilder:
                 anchor_source_tree_sha256=str(raw["anchor_source_tree_sha256"]),
                 candidate_source_tree_receipt=Path(str(raw["candidate_source_tree_receipt"])),
                 candidate_source_tree_sha256=str(raw["candidate_source_tree_sha256"]),
+                anchor_correctness_binary=Path(str(raw["anchor_correctness_binary"])),
+                anchor_correctness_binary_sha256=str(
+                    raw["anchor_correctness_binary_sha256"]),
+                candidate_correctness_binary=Path(str(raw["candidate_correctness_binary"])),
+                candidate_correctness_binary_sha256=str(
+                    raw["candidate_correctness_binary_sha256"]),
+                anchor_correctness_capability_receipt=Path(str(
+                    raw["anchor_correctness_capability_receipt"])),
+                anchor_correctness_capability_sha256=str(
+                    raw["anchor_correctness_capability_sha256"]),
+                candidate_correctness_capability_receipt=Path(str(
+                    raw["candidate_correctness_capability_receipt"])),
+                candidate_correctness_capability_sha256=str(
+                    raw["candidate_correctness_capability_sha256"]),
                 teardown_receipt=Path(str(raw["teardown_receipt"])),
                 teardown_sha256=str(raw["teardown_sha256"]),
             )
@@ -984,6 +1234,37 @@ class StaticGpuSourceBuilder:
             build.candidate_source_tree_receipt,
             expected_sha256=str(build.candidate_source_tree_sha256),
             identity=build.candidate_identity, cache_root=cache_root)
+        for arm in ("anchor", "candidate"):
+            binary = getattr(build, f"{arm}_correctness_binary")
+            binary_sha256 = getattr(build, f"{arm}_correctness_binary_sha256")
+            receipt = getattr(build, f"{arm}_correctness_capability_receipt")
+            receipt_sha256 = getattr(build, f"{arm}_correctness_capability_sha256")
+            assert isinstance(binary, Path) and isinstance(binary_sha256, str)
+            assert isinstance(receipt, Path) and isinstance(receipt_sha256, str)
+            arm_build = build.anchor_build if arm == "anchor" else build.candidate_build
+            expected_binary = arm_build / "bin" / "test-backend-ops"
+            if binary != expected_binary or _digest(binary) != binary_sha256:
+                raise StaticRegistryError(
+                    f"cached {arm} correctness binary identity changed")
+            _within(binary, build_root, f"{arm} correctness binary", single_link=True)
+            _within(receipt, cache_root, f"{arm} correctness capability", single_link=True)
+            _verify_correctness_capability_receipt(
+                receipt=receipt, receipt_sha256=receipt_sha256,
+                binary=binary, binary_sha256=binary_sha256,
+                build=arm_build, arm=arm)
+        capability_refs = materialization.get("correctness_capabilities")
+        if not isinstance(capability_refs, Mapping) or set(capability_refs) != {
+                "anchor", "candidate"}:
+            raise StaticRegistryError(
+                "materialization correctness capability map is malformed")
+        for arm in ("anchor", "candidate"):
+            receipt = getattr(build, f"{arm}_correctness_capability_receipt")
+            receipt_sha256 = getattr(build, f"{arm}_correctness_capability_sha256")
+            if capability_refs[arm] != {
+                    "role": "correctness_capability", "path": str(receipt.resolve()),
+                    "sha256": receipt_sha256}:
+                raise StaticRegistryError(
+                    f"materialization {arm} correctness capability binding changed")
         refs = materialization.get("build_identity_files")
         if not isinstance(refs, Mapping) or set(refs) != {"anchor", "candidate"}:
             raise StaticRegistryError("materialization build carrier map is malformed")
@@ -1171,10 +1452,35 @@ class StaticGpuSourceBuilder:
                          "build_contract": contract, "build_environment": environment,
                          "cache_root": str(cache_root)})
                 except Exception as exc:
-                    _sealed_write(cache_root / "terminal.json", {
+                    failure_stage = (
+                        "source_apply" if isinstance(
+                            exc, (_SourceApplyFailure,
+                                  source_candidate.SourceCandidateError))
+                        else "compile" if isinstance(exc, _CompileFailure)
+                        else None)
+                    failure = {
                         "schema": _BUILD_TERMINAL_SCHEMA, "build_key": build_key,
                         "intent_file_sha256": intent_file_sha, "state": "failed",
-                        "failure_type": type(exc).__name__, "promotion_claim": False})
+                        "failure_type": type(exc).__name__,
+                        **({"failure_stage": failure_stage}
+                           if failure_stage is not None else {}),
+                        "promotion_claim": False}
+                    if failure_stage is not None:
+                        message = _source_failure_message(str(exc))
+                        if message is not None:
+                            failure["failure_message"] = message
+                    terminal_path, _terminal_file_sha = _sealed_write(
+                        cache_root / "terminal.json", failure)
+                    if failure_stage is not None:
+                        terminal = _sealed_read(
+                            terminal_path, schema=_BUILD_TERMINAL_SCHEMA,
+                            label="build failure terminal")
+                        refusal_type = (controller.SourceApplyRefusal
+                                        if failure_stage == "source_apply"
+                                        else controller.CompileRefusal)
+                        raise refusal_type(
+                            str(exc), receipt_path=str(terminal_path),
+                            receipt_sha256=_digest(terminal_path)) from exc
                     raise
                 _sealed_write(cache_root / "terminal.json", {
                     "schema": _BUILD_TERMINAL_SCHEMA, "build_key": build_key,
@@ -1233,8 +1539,12 @@ class StaticGpuSourceBuilder:
         try:
             actor, actor_proof = worktree.create_campaign_worktree(
                 anchor, candidate.source_manifest.campaign_id, root=campaign_root)
-            applied = source_candidate.apply_source_candidate(candidate.source_manifest,
-                                                               proposal=candidate.proposal, actor=actor)
+            try:
+                applied = source_candidate.apply_source_candidate(
+                    candidate.source_manifest,
+                    proposal=candidate.proposal, actor=actor)
+            except source_candidate.SourceCandidateError as exc:
+                raise _SourceApplyFailure(str(exc)) from exc
             anchor_snapshot, _ = worktree.create_snapshot_worktree(
                 self.instrument_path, anchor.commit,
                 worktree.snapshot_worktree_path(candidate.source_manifest.campaign_id,
@@ -1264,11 +1574,28 @@ class StaticGpuSourceBuilder:
                                             env={str(key): str(value)
                                                  for key, value in environment.items()})
                 if not result.succeeded or result.log_disagrees_with_exit_code:
-                    raise StaticRegistryError(f"clean build did not succeed for {ident}")
+                    raise _CompileFailure(
+                        f"clean build did not succeed for {ident}")
                 if not set(_REQUIRED_TARGETS).issubset(set(result.facts.built_targets)):
-                    raise StaticRegistryError(f"build did not prove required targets for {ident}")
+                    raise _CompileFailure(
+                        f"build did not prove required targets for {ident}")
                 results.append((ident, snapshot, build_dir, result))
             by_id = {ident: (snapshot, build_dir, result) for ident, snapshot, build_dir, result in results}
+            arm_builds = {
+                "anchor": Path(by_id["akc-anchor"][1].path),
+                "candidate": Path(
+                    by_id[candidate.source_manifest.candidate_id][1].path),
+            }
+            correctness_capabilities: dict[str, tuple[Path, str, Path, str]] = {}
+            for arm, arm_build in arm_builds.items():
+                capability = _attest_correctness_capability(
+                    arm_build, arm=arm, runner=self.correctness_capability_runner)
+                capability_path, capability_sha = _sealed_write(
+                    operation_dir / f"{arm}-correctness-capability.json", capability)
+                correctness_binary = arm_build / "bin" / "test-backend-ops"
+                correctness_capabilities[arm] = (
+                    correctness_binary, _digest(correctness_binary),
+                    capability_path, capability_sha)
             anchor_root = Path(anchor_snapshot.path.path); candidate_root = Path(candidate_snapshot.path.path)
             anchor_identity = _identity(root=anchor_root, commit=anchor.commit,
                                         build=Path(by_id["akc-anchor"][1].path))
@@ -1361,6 +1688,9 @@ class StaticGpuSourceBuilder:
                     "candidate": _bound(candidate_source_receipt, "source_identity"),
                 },
                 "build_identity_files": {"anchor": anchor_files, "candidate": candidate_files},
+                "correctness_capabilities": {
+                    arm: _bound(values[2], "correctness_capability")
+                    for arm, values in correctness_capabilities.items()},
                 "shared_runtime": {
                     "measurement_binary": _bound(runtime.measurement_binary, "reward_binary"),
                     "runtime_receipt": _bound(runtime.receipt_path, "runtime_receipt"),
@@ -1394,6 +1724,14 @@ class StaticGpuSourceBuilder:
                 "anchor_source_tree_sha256": anchor_source_sha,
                 "candidate_source_tree_receipt": candidate_source_receipt,
                 "candidate_source_tree_sha256": candidate_source_sha,
+                "anchor_correctness_binary": correctness_capabilities["anchor"][0],
+                "anchor_correctness_binary_sha256": correctness_capabilities["anchor"][1],
+                "candidate_correctness_binary": correctness_capabilities["candidate"][0],
+                "candidate_correctness_binary_sha256": correctness_capabilities["candidate"][1],
+                "anchor_correctness_capability_receipt": correctness_capabilities["anchor"][2],
+                "anchor_correctness_capability_sha256": correctness_capabilities["anchor"][3],
+                "candidate_correctness_capability_receipt": correctness_capabilities["candidate"][2],
+                "candidate_correctness_capability_sha256": correctness_capabilities["candidate"][3],
             }
         finally:
             receipts = []

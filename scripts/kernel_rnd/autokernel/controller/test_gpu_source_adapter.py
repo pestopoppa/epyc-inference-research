@@ -13,6 +13,7 @@ from . import discovery_deployment_factory as F
 from . import gpu_source_adapter as A
 from . import gpu_source_evidence as E
 from .test_gpu_source_evidence import ClaimFactory, FakeExecutors, digest, plan
+from scripts.benchmark import run_autokernel_gpu_discovery as gpu_runner
 
 
 def screen_receipt(path: Path, effect: float, label: str) -> D.SealedScreen:
@@ -197,11 +198,181 @@ class GpuSourceAdapterTests(unittest.TestCase):
                 adapter.screen(candidate, authorization, lease)
             self.assertEqual(executors.calls, [])
 
+    def test_stop_after_proof_and_dual_runner_plan_resumes_without_reproof(self):
+        """A process stop at the exact v15 failure boundary is resumable."""
+        class StopAfterRunnerPlan(BaseException):
+            pass
+
+        class StopDelegate(FakeDelegate):
+            def screen(self, candidate, authorization, lease):
+                build = self.build_source(candidate, authorization, lease)
+                self.proof_bundle(candidate, build)
+                self.args_factory(candidate, build, lease)
+                raise StopAfterRunnerPlan("runner plan sealed")
+
+        with tempfile.TemporaryDirectory() as directory:
+            values = self.setup(directory)
+            adapter, candidate, authorization, lease, inflight, current, executors = values
+            operation = adapter._root(lease["operation_key"])
+
+            def dual_args(*_args):
+                off = SimpleNamespace(
+                    screen=current,
+                    output_dir=str(operation / "runner/measurement-graphs-off"))
+                on = SimpleNamespace(
+                    screen=current,
+                    output_dir=str(operation / "runner/target-runtime-graphs-on"))
+                off._target_runtime_args = on
+                return off
+
+            adapter.args_factory = dual_args
+            with mock.patch.object(D, "GpuSourceScreener", StopDelegate), \
+                    self.assertRaises(StopAfterRunnerPlan):
+                adapter.screen(candidate, authorization, lease)
+            self.assertTrue((operation / "proof/proof-bundle.json").is_file())
+            self.assertTrue((operation / "runner-plan.json").is_file())
+            self.assertEqual(len(executors.calls), 3)
+            self.assertEqual(adapter.reconcile(inflight).status, "safe_to_start")
+
+            with mock.patch.object(D, "GpuSourceScreener", FakeDelegate):
+                resumed = adapter.screen(candidate, authorization, lease)
+            self.assertEqual(resumed.result_sha256, current.result_sha256)
+            self.assertEqual(len(executors.calls), 3)
+            self.assertEqual(adapter.reconcile(inflight).status, "sealed_result")
+
+    def test_stop_after_admission_carrier_before_runner_plan_is_resumable(self):
+        """The exact v15 parser-failure boundary retains the measured proof."""
+        class ParserStopped(RuntimeError):
+            pass
+
+        with tempfile.TemporaryDirectory() as directory:
+            values = self.setup(directory)
+            adapter, candidate, authorization, lease, inflight, current, executors = values
+            operation = adapter._root(lease["operation_key"])
+            decision = {
+                "schema": "epyc.autokernel.gpu_load_admission_decision.v1",
+                "effective_context_sha256": digest("effective-context"),
+                "request": {"device_id": "mi210_0"},
+                "promotion_claim": False,
+            }
+            decision["decision_sha256"] = A.schemas.content_hash(decision)
+            lease.update(repetition=1, device_id="mi210_0",
+                         load_admission=decision,
+                         device_claim_probe_open={
+                             "campaign_id": "ak-gpu-source-evidence-test"})
+            adapter.reservation_manager = ReservationManager()
+
+            def stopped_args(*_args):
+                (operation / "evidence-policy.json").write_text(
+                    json.dumps({"schema": "test-execution-policy"}) + "\n",
+                    encoding="utf-8")
+                carrier_root = operation / "runner/s1"
+                carrier_root.mkdir(parents=True)
+                (carrier_root / "load-admission-decision.json").write_text(
+                    json.dumps(decision, sort_keys=True, indent=2) + "\n",
+                    encoding="utf-8")
+                raise ParserStopped("sealed runner parser refused")
+
+            adapter.args_factory = stopped_args
+            with mock.patch.object(D, "GpuSourceScreener", FakeDelegate), \
+                    self.assertRaises(ParserStopped):
+                adapter.screen(candidate, authorization, lease)
+            self.assertTrue((operation / "proof/proof-bundle.json").is_file())
+            self.assertFalse((operation / "runner-plan.json").exists())
+            self.assertEqual(len(executors.calls), 3)
+            self.assertEqual(adapter.reconcile(inflight).status, "safe_to_start")
+            carrier = operation / "runner/s1/load-admission-decision.json"
+            expected = carrier.read_bytes()
+
+            forged = dict(decision)
+            forged["effective_context_sha256"] = digest("wrong-context")
+            forged.pop("decision_sha256")
+            forged["decision_sha256"] = A.schemas.content_hash(forged)
+            carrier.write_text(
+                json.dumps(forged, sort_keys=True, indent=2) + "\n",
+                encoding="utf-8")
+            self.assertEqual(adapter.reconcile(inflight).status, "ambiguous")
+            carrier.write_bytes(expected)
+
+            s1 = operation / "runner/s1"; s2 = operation / "runner/s2"
+            s1.rename(s2)
+            self.assertEqual(adapter.reconcile(inflight).status, "ambiguous")
+            s2.rename(s1)
+
+            outside = Path(directory) / "hardlinked-decision.json"
+            outside.write_bytes(expected); carrier.unlink(); os.link(outside, carrier)
+            self.assertEqual(adapter.reconcile(inflight).status, "ambiguous")
+            carrier.unlink(); outside.unlink(); carrier.write_bytes(expected)
+
+            release_path = operation / "reservation-release.json"
+            original_release = release_path.read_bytes()
+            for field, value in (
+                    ("device_id", "wrong-device"),
+                    ("campaign_id", "wrong-campaign"),
+                    ("claim_id", "akd-wrong-claim"),
+                    ("holder_start_ticks", 999999)):
+                release = A._read_json(release_path, "release")
+                release["device_claim_released"][field] = value
+                release.pop("receipt_sha256")
+                release["receipt_sha256"] = schemas.content_hash(release)
+                release_path.write_text(json.dumps(release, sort_keys=True),
+                                        encoding="utf-8")
+                self.assertEqual(adapter.reconcile(inflight).status, "ambiguous")
+                release_path.write_bytes(original_release)
+            release = A._read_json(release_path, "release")
+            release["device_claim_released"]["campaign_id"] = "ak-coordinated-wrong"
+            release.pop("receipt_sha256")
+            release["receipt_sha256"] = schemas.content_hash(release)
+            release_path.write_text(json.dumps(release, sort_keys=True),
+                                    encoding="utf-8")
+            lease["device_claim_probe_open"]["campaign_id"] = \
+                "ak-coordinated-wrong"
+            self.assertEqual(adapter.reconcile(inflight).status, "ambiguous")
+            lease["device_claim_probe_open"]["campaign_id"] = \
+                "ak-gpu-source-evidence-test"
+            release_path.write_bytes(original_release)
+            release_path.unlink()
+            self.assertEqual(adapter.reconcile(inflight).status, "ambiguous")
+            release_path.write_bytes(original_release)
+            self.assertEqual(adapter.reconcile(inflight).status, "safe_to_start")
+
+            journal = operation / "reservation-releases"
+            journal.mkdir()
+            extra_path = journal / "release-0001.json"
+            extra = A._read_json(release_path, "release")
+            extra["device_claim_released"]["claim_id"] = "akd-legitimate-extra"
+            extra.pop("receipt_sha256")
+            extra["receipt_sha256"] = schemas.content_hash(extra)
+            extra_path.write_text(json.dumps(extra, sort_keys=True),
+                                  encoding="utf-8")
+            legitimate_extra = extra_path.read_bytes()
+            self.assertEqual(adapter.reconcile(inflight).status, "safe_to_start")
+            for field, value in (("campaign_id", "wrong-extra-campaign"),
+                                 ("device_id", "wrong-extra-device")):
+                forged_extra = A._read_json(extra_path, "extra release")
+                forged_extra["device_claim_released"][field] = value
+                forged_extra.pop("receipt_sha256")
+                forged_extra["receipt_sha256"] = schemas.content_hash(
+                    forged_extra)
+                extra_path.write_text(json.dumps(forged_extra, sort_keys=True),
+                                      encoding="utf-8")
+                self.assertEqual(adapter.reconcile(inflight).status, "ambiguous")
+                extra_path.write_bytes(legitimate_extra)
+            extra_path.unlink(); journal.rmdir()
+            self.assertEqual(adapter.reconcile(inflight).status, "safe_to_start")
+
     def test_race_after_build_is_resumable_wait_with_zero_gpu_executors(self):
         with tempfile.TemporaryDirectory() as directory:
             adapter, candidate, authorization, lease, inflight, current, executors = self.setup(directory)
             manager = ReservationManager(waits=1)
             adapter.reservation_manager = manager
+            original_build = adapter.build_source
+            def build_with_manifest(*args):
+                operation_root = adapter._root(lease["operation_key"])
+                (operation_root / "source-manifest.json").write_bytes(
+                    b"sealed manifest")
+                return original_build(*args)
+            adapter.build_source = build_with_manifest
             with mock.patch.object(D, "GpuSourceScreener", FakeDelegate), \
                     self.assertRaises(D.ResourceWait) as caught:
                 adapter.screen(candidate, authorization, lease)
@@ -210,6 +381,8 @@ class GpuSourceAdapterTests(unittest.TestCase):
             root = adapter._root(lease["operation_key"])
             self.assertFalse((root / "proof").exists())
             self.assertFalse((root / "runner-plan.json").exists())
+            self.assertEqual(
+                (root / "source-manifest.json").read_bytes(), b"sealed manifest")
             self.assertEqual(adapter.reconcile(inflight).status, "safe_to_start")
             with mock.patch.object(D, "GpuSourceScreener", FakeDelegate):
                 result = adapter.screen(candidate, authorization, lease)
@@ -352,7 +525,7 @@ class GpuSourceAdapterTests(unittest.TestCase):
                 return result
 
         for stage, expected_reserve, expected_release in (
-                ("plan", 0, 0), ("evidence", 1, 1),
+                ("plan", 0, 0), ("typed-plan", 0, 0), ("evidence", 1, 1),
                 ("runner", 1, 1), ("result", 1, 1)):
             with self.subTest(stage=stage), tempfile.TemporaryDirectory() as directory:
                 adapter, candidate, authorization, lease, _inflight, _current, _executors = \
@@ -361,6 +534,9 @@ class GpuSourceAdapterTests(unittest.TestCase):
                 adapter.reservation_manager = manager
                 if stage == "plan":
                     adapter.plan_factory = mock.Mock(side_effect=RuntimeError("plan failed"))
+                elif stage == "typed-plan":
+                    adapter.plan_factory = mock.Mock(side_effect=
+                        D.PostBuildEvidencePlanRefusal("typed plan refusal"))
                 elif stage == "evidence":
                     adapter.correctness_executor = mock.Mock(
                         side_effect=RuntimeError("evidence failed"))
@@ -370,6 +546,67 @@ class GpuSourceAdapterTests(unittest.TestCase):
                     adapter.screen(candidate, authorization, lease)
                 self.assertEqual(manager.reserve_calls, expected_reserve)
                 self.assertEqual(manager.release_calls, expected_release)
+
+    def test_public_reconcile_accepts_completed_arm_process_checkpoint_only(self):
+        class CrashAfterProcess(BaseException):
+            pass
+
+        class PartialRunnerDelegate(FakeDelegate):
+            def screen(self, candidate, authorization, lease):
+                build = self.build_source(candidate, authorization, lease)
+                self.proof_bundle(candidate, build)
+                args = self.args_factory(candidate, build, lease)
+                output = Path(args.output_dir)
+                output.mkdir(parents=True, mode=0o700)
+                preflight = {
+                    "runtime_graphs": "off",
+                    "arm_order_schedule": ["anchor", "candidate"],
+                }
+                gpu_runner.atomic_json(output / "preflight.json", preflight)
+                os.chmod(output / "preflight.json", 0o600)
+                opened = manager.outer.to_dict()
+                identity = {
+                    "runtime_graphs": "off", "runtime_arm": "anchor",
+                    "process_context": {
+                        "campaign_id": opened["campaign_id"],
+                        "arm": "anchor"},
+                }
+                gpu_runner._seal_process_capture(
+                    output / "process-anchor", identity=identity,
+                    returncode=0, stdout=b"{}\n", stderr=b"",
+                    residency=[{"owned_kfd_pids": [1],
+                                "vram_used_bytes": 1}],
+                    runtime_maps_identity=None, readiness_witness=None,
+                    elapsed_s=1.0, teardown={"death_proved": True},
+                    resource_context={
+                        "device_claim_open": opened,
+                        "device_claim_mode": "borrowed_outer_reservation"})
+                gpu_runner.atomic_json(output / "live-governance.json", {
+                    "status": "borrowed_phase_ended",
+                    "device_claim_open": opened,
+                    "device_claim_borrowed_phase_end": {
+                        "outer_claim_id": opened["claim_id"],
+                        "physical_release": False}})
+                os.chmod(output / "live-governance.json", 0o600)
+                raise CrashAfterProcess()
+
+        with tempfile.TemporaryDirectory() as directory:
+            adapter, candidate, authorization, lease, inflight, _current, _ = \
+                self.setup(directory)
+            operation_root = adapter._root(lease["operation_key"])
+            off = SimpleNamespace(
+                output_dir=str(operation_root / "runner/s1/measurement-graphs-off"))
+            on = SimpleNamespace(
+                output_dir=str(operation_root / "runner/s1/target-runtime-graphs-on"))
+            off._target_runtime_args = on
+            adapter.args_factory = lambda *_args: off
+            manager = ReservationManager()
+            adapter.reservation_manager = manager
+            with mock.patch.object(D, "GpuSourceScreener", PartialRunnerDelegate), \
+                    self.assertRaises(CrashAfterProcess):
+                adapter.screen(candidate, authorization, lease)
+            self.assertEqual(manager.release_calls, 1)
+            self.assertEqual(adapter.reconcile(inflight).status, "safe_to_start")
 
     def test_protected_tree_change_during_builder_refuses(self):
         with tempfile.TemporaryDirectory() as directory:

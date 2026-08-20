@@ -130,7 +130,9 @@ __all__ = [
     "HoldoutPlan", "T0ExecutionPlan",
     # parsers
     "BackendOpsReference", "BackendOpsCase", "BackendOpsBackend", "BackendOpsRun",
+    "BackendOpsPropertySelfTest", "backend_ops_property_self_test_argv",
     "parse_backend_ops_console", "parse_backend_ops_csv", "parse_backend_ops_help",
+    "parse_backend_ops_property_self_test",
     "LinkageRow", "LinkageReport", "parse_linkage_report",
     "parse_sanitizer_findings", "parse_compiler_diagnostics", "parse_sched_trace",
     "parse_delivered_tokens", "build_generation_invocation", "build_dispatch_trace_invocation",
@@ -1215,6 +1217,67 @@ def parse_backend_ops_help(text: str) -> BackendOpsCapabilities:
 
 
 @dataclass(frozen=True)
+class BackendOpsPropertySelfTest:
+    """Strict result of the instrument's planted-defect capability test.
+
+    This is stronger than a usage banner: an unknown flag can print the complete
+    usage text and return 1.  The self-test must instead execute the independent
+    host checker, catch all five planted defects, accept all five clean cases,
+    and echo the controller-selected deterministic seed.
+    """
+    suite_seed: int
+    sensitivity: float
+    specificity: float
+    planted: int
+    clean: int
+
+
+_BACKEND_OPS_PROPERTY_SELF_TEST_RE = re.compile(
+    r"AUTOKERNEL_PROPERTY_SELF_TEST suite_seed=(?P<suite_seed>[0-9]+) "
+    r"sensitivity=(?P<sensitivity>[0-9]+\.[0-9]{3}) "
+    r"specificity=(?P<specificity>[0-9]+\.[0-9]{3}) "
+    r"planted=(?P<planted>[0-9]+) clean=(?P<clean>[0-9]+)\n?")
+
+
+def backend_ops_property_self_test_argv(binary: str, suite_seed: int) -> tuple[str, ...]:
+    """Construct the one non-backend capability invocation owned by T0."""
+    if not isinstance(binary, str) or not binary:
+        raise TypeError("test-backend-ops binary must be a non-empty str")
+    if (isinstance(suite_seed, bool) or not isinstance(suite_seed, int)
+            or suite_seed < 0 or suite_seed > (2 ** 64 - 1)):
+        raise TypeError("property self-test suite seed must be a uint64")
+    return (binary, "test", "--suite-seed", str(suite_seed),
+            "--autokernel-property-self-test")
+
+
+def parse_backend_ops_property_self_test(
+        text: str, *, expected_suite_seed: int) -> BackendOpsPropertySelfTest:
+    """Parse the exact planted-defect self-test line and require a perfect gate."""
+    if not isinstance(text, str):
+        raise TypeError("test-backend-ops property self-test output must be a str")
+    if (isinstance(expected_suite_seed, bool) or not isinstance(expected_suite_seed, int)
+            or expected_suite_seed < 0 or expected_suite_seed > (2 ** 64 - 1)):
+        raise TypeError("expected property self-test suite seed must be a uint64")
+    match = _BACKEND_OPS_PROPERTY_SELF_TEST_RE.fullmatch(text)
+    if match is None:
+        raise InstrumentCapabilityError(
+            "test-backend-ops did not emit the exact planted-defect property self-test result")
+    result = BackendOpsPropertySelfTest(
+        suite_seed=int(match.group("suite_seed")),
+        sensitivity=float(match.group("sensitivity")),
+        specificity=float(match.group("specificity")),
+        planted=int(match.group("planted")), clean=int(match.group("clean")))
+    if result.suite_seed != expected_suite_seed:
+        raise InstrumentCapabilityError(
+            "test-backend-ops property self-test echoed a different suite seed")
+    if ((result.sensitivity, result.specificity, result.planted, result.clean)
+            != (1.0, 1.0, 5, 5)):
+        raise InstrumentCapabilityError(
+            "test-backend-ops property self-test did not prove the reviewed 5/5 gate")
+    return result
+
+
+@dataclass(frozen=True)
 class OpSuitePlan:
     """`test-backend-ops` parameters. The backend filter is REQUIRED, and here is why.
 
@@ -2031,19 +2094,34 @@ def parse_backend_ops_console(text: str) -> BackendOpsRun:
             continue
         tests = _TESTS_PASSED_RE.match(line)
         if tests and name is not None:
+            if reported != (None, None):
+                raise OutputParseError(
+                    f"backend {name!r} emitted more than one tests-passed summary")
             reported = (int(tests.group(1)), int(tests.group(2)))
             continue
         bstatus = _BACKEND_STATUS_RE.match(line)
         if bstatus:
+            if name is None or bstatus.group(1) != name:
+                raise OutputParseError(
+                    "backend status summary does not name the active backend frame")
+            if status is not None:
+                raise OutputParseError(
+                    f"backend {bstatus.group(1)!r} emitted more than one status summary")
             status = bstatus.group(2)
             continue
         summary = _BACKENDS_PASSED_RE.match(line)
         if summary:
+            if backends_total is not None:
+                raise OutputParseError(
+                    "test-backend-ops emitted more than one backends-passed summary")
             saw_frame = True
             flush()
             backends_passed, backends_total = int(summary.group(1)), int(summary.group(2))
             continue
-        if line.strip() in ("OK", "FAIL") and backends_total is not None and overall is None:
+        if line.strip() in ("OK", "FAIL") and backends_total is not None:
+            if overall is not None:
+                raise OutputParseError(
+                    "test-backend-ops emitted more than one overall verdict")
             overall = line.strip()
             continue
         if line.strip() == "Failing tests:":
