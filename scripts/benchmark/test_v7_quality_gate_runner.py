@@ -617,3 +617,15 @@ def test_effective_request_records_what_was_sent_not_what_was_asked(monkeypatch)
     assert chat["top_k"] == 20 and chat["top_p"] == 0.95
     assert chat["enable_thinking"] is False
     assert chat.get("greedy") is not True
+
+
+if __name__ == "__main__":
+    # These tests use pytest fixtures (tmp_path, monkeypatch, capsys), so running
+    # this file directly executes NOTHING and exits 0 -- a green result that means
+    # nothing ran. That vacuous pass was mistaken for a real one on 2026-08-20.
+    # Fail loudly instead of passing silently.
+    raise SystemExit(
+        "REFUSING: this suite is pytest-fixture based; `python3 "
+        "test_v7_quality_gate_runner.py` would execute zero tests and exit 0.\n"
+        "Run it properly:  python -m pytest test_v7_quality_gate_runner.py -q"
+    )
