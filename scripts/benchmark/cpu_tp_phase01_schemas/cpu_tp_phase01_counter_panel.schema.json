@@ -1,0 +1,17 @@
+{
+  "$id": "https://epyc.local/schemas/cpu_tp_phase01_counter_panel.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "claim_status": {"const": "OBSERVATION"},
+    "kind": {"type": "string"},
+    "parsed": {"type": "object"},
+    "protocol_id": {"const": "P-BENCH-NUMA-TP-1"},
+    "receipt_sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+    "schema": {"const": "epyc.cpu_tp.phase01_counter_panel.v1"},
+    "source": {"type": "object"}
+  },
+  "required": ["schema", "kind", "source", "parsed", "claim_status", "protocol_id", "receipt_sha256"],
+  "title": "CPU TP Phase 0/1 parsed counter panel",
+  "type": "object"
+}

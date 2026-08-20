@@ -1,0 +1,22 @@
+{
+  "$id": "https://epyc.local/schemas/cpu_tp_phase01_ratification.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "protocol_id": {"const": "P-BENCH-NUMA-TP-1"},
+    "protocol_sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+    "ratified_at": {"format": "date-time", "type": "string"},
+    "ratified_by": {"minLength": 1, "type": "string"},
+    "receipt_sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+    "runner_sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+    "schema": {"const": "epyc.measurement.protocol_ratification.v1"},
+    "schema_manifest_sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+    "status": {"const": "ratified"}
+  },
+  "required": [
+    "schema", "status", "protocol_id", "protocol_sha256", "runner_sha256",
+    "schema_manifest_sha256", "ratified_at", "ratified_by", "receipt_sha256"
+  ],
+  "title": "Human-only CPU TP protocol ratification binding",
+  "type": "object"
+}

@@ -1,0 +1,22 @@
+{
+  "$id": "https://epyc.local/schemas/cpu_tp_phase01_n25_attestation.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "orchestrator_commit": {"pattern": "^[0-9a-f]{40}$", "type": "string"},
+    "ratified_by": {"minLength": 1, "type": "string"},
+    "receipt_sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+    "reloaded_at": {"format": "date-time", "type": "string"},
+    "research_commit": {"pattern": "^[0-9a-f]{40}$", "type": "string"},
+    "root_commit": {"pattern": "^[0-9a-f]{40}$", "type": "string"},
+    "schema": {"const": "epyc.cpu_tp.n25_attestation.v1"},
+    "status": {"const": "landed_reloaded"},
+    "topology_sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"}
+  },
+  "required": [
+    "schema", "status", "topology_sha256", "root_commit", "orchestrator_commit",
+    "research_commit", "reloaded_at", "ratified_by", "receipt_sha256"
+  ],
+  "title": "N25 landed-and-reloaded prerequisite attestation",
+  "type": "object"
+}

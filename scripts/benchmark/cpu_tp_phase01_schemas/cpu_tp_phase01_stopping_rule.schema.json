@@ -1,0 +1,16 @@
+{
+  "$id": "https://epyc.local/schemas/cpu_tp_phase01_stopping_rule.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "later": {"type": "object"},
+    "phase0": {"type": "object"},
+    "phase1": {"type": "object"},
+    "schema": {"const": "epyc.cpu_tp.phase01_stopping_rule.v1"},
+    "seed": {"type": "integer"},
+    "stopping_rule_sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"}
+  },
+  "required": ["schema", "seed", "phase0", "phase1", "later", "stopping_rule_sha256"],
+  "title": "CPU TP fixed seeded schedule and stopping rules",
+  "type": "object"
+}

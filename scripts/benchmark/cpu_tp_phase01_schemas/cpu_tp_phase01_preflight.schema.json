@@ -1,0 +1,36 @@
+{
+  "$id": "https://epyc.local/schemas/cpu_tp_phase01_preflight.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "blockers": {"items": {"type": "string"}, "type": "array", "uniqueItems": true},
+    "claim_status": {"const": "OBSERVATION"},
+    "execution_authorized": {"const": false},
+    "generated_at": {"format": "date-time", "type": "string"},
+    "host": {"type": "object"},
+    "mode": {"const": "validate_only"},
+    "model": {"type": "object"},
+    "n25": {"type": "object"},
+    "n25_handoff": {"type": "object"},
+    "production": {"type": "object"},
+    "protocol": {"type": "object"},
+    "ratification": {"type": "object"},
+    "receipt_sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+    "region_lock": {"type": "object"},
+    "runner": {"type": "object"},
+    "schema": {"const": "epyc.cpu_tp.phase01_preflight.v1"},
+    "schemas": {"type": "object"},
+    "status": {"enum": ["blocked", "ready_for_human_ratified_execution"]},
+    "stopping_rules": {"type": "object"},
+    "tools": {"type": "object"},
+    "topology": {"type": "object"}
+  },
+  "required": [
+    "schema", "generated_at", "mode", "claim_status", "protocol", "ratification",
+    "runner", "schemas", "host", "topology", "production", "model", "tools",
+    "region_lock", "n25", "n25_handoff", "stopping_rules", "execution_authorized",
+    "status", "blockers", "receipt_sha256"
+  ],
+  "title": "CPU TP Phase 0/1 validate-only preflight receipt",
+  "type": "object"
+}
