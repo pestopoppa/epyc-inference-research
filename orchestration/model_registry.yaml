@@ -8597,10 +8597,6 @@ roles:
           artifact: data/ternary_q2_g64_throughput_20260717Tcodex/cpu_p512_tg128_r1.json
           prompt_tps: 25.268101
           decode_tps: 8.3872
-      evidence:
-      - /mnt/raid0/llm/epyc-inference-research/data/ternary_q2_g64_quality_gate/ternary_q2_g64_quality_20260717Tcodex/summary.json
-      - /mnt/raid0/llm/epyc-inference-research/data/ternary_q2_g64_quality_gate/ternary_q2_g64_mi210_short_instruction_current_v7_20260718T151711Z/summary.json
-      - /mnt/raid0/llm/epyc-inference-research/data/bonsai_current_v7/ternary_bonsai_q2_g64_mi210_llama_bench_20260718T150707Z/summary.json
       realistic_structured_copy_cli_observation:
         class: observation
         note: "120-row JSON-copy prompt; speed-only because both MI210 arms retained empty <think> tags despite reasoning-off."
@@ -8619,12 +8615,26 @@ roles:
           artifact: data/ternary_q2_g64_throughput_20260717Tcodex/cli_realistic/cpu_cli_baseline.stdout
           result: timed_out_before_timing_line
           timeout_s: 600
+      # 2026-08-20: this key was DUPLICATED in this same mapping (two `evidence:` siblings under
+      # `performance:`, both at 6-space indent). PyYAML keeps the LAST, so the earlier list was
+      # silently discarded on every parse and the registry validator failed closed on the whole
+      # file — no registry change anywhere could be validated. The two lists are merged here,
+      # deduplicated, and normalised to repo-relative paths. Two paths were being lost:
+      # the mi210_short_instruction summary and the bonsai_current_v7 llama_bench summary. The
+      # quality_20260717Tcodex summary appeared in BOTH, once absolute and once relative — one
+      # entry now. Nothing consumes performance.evidence (device_model.py:475 reads a Mapping
+      # from VRAM priors, not this list), so the shape is unchanged and no consumer moves.
+      # Merged flat rather than nested under the two *_observation blocks above: which artifact
+      # belongs to which observation is not recoverable from the file, and guessing would assert
+      # provenance that was never written down.
       evidence:
       - data/ternary_q2_g64_smoke_20260717T113848Z/cpu.stdout
       - data/ternary_q2_g64_smoke_20260717T113848Z/mi210.stdout
       - data/ternary_q2_g64_smoke_20260717T113848Z/version.pinned.txt
       - data/ternary_q2_g64_quality_gate/ternary_q2_g64_quality_20260717Tcodex/summary.json
       - data/ternary_q2_g64_quality_gate/ternary_q2_g64_quality_20260717Tcodex/throughput_observation.json
+      - data/ternary_q2_g64_quality_gate/ternary_q2_g64_mi210_short_instruction_current_v7_20260718T151711Z/summary.json
+      - data/bonsai_current_v7/ternary_bonsai_q2_g64_mi210_llama_bench_20260718T150707Z/summary.json
     memory:
       residency: cold
       pinned: false
