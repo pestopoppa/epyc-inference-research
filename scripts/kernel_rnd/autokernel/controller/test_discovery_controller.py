@@ -70,8 +70,17 @@ class Tests(unittest.TestCase):
  def portfolio_config(self, root, records):
   portfolio=hypothesis_portfolio.Portfolio(
       {"hypotheses":records,"frames":[],"do_not_repeat":[]},"f"*64)
+  symbol_authority={}
+  for row in records:
+   if not row["current_bundle_eligibility"]["eligible"]:
+    continue
+   template_id=row["current_bundle_eligibility"]["template_ids"][0]
+   symbol_authority[template_id]={
+       path:list(row["target"]["source_symbols"])
+       for path in row["target"]["source_files"]}
   return D.ControllerConfig(root,3,dry_run=True,
-      planner_context={"portfolio_dispatch_authority": {
+      planner_context={"template_symbol_authority":symbol_authority,
+       "portfolio_dispatch_authority": {
           row["hypothesis_id"]: [{"route_id":"cuda-quantize-q8-v1.anchor.0",
                                   "kernel_name":"quantize_q8_1", "calls":18705,
                                   "grid":1024,"workgroup":256,"lds_bytes":0}]
@@ -80,18 +89,23 @@ class Tests(unittest.TestCase):
       hypothesis_portfolio=portfolio,
       hypothesis_portfolio_sha256="f"*64)
  def portfolio_candidate(self, binding, *, hypothesis_id=None, mechanism_id=None,
-                         regime=None):
-  path=binding["target_file"]; symbols=tuple(binding["target_symbols"])
-  patch=(f"diff --git a/{path} b/{path}\n--- a/{path}\n+++ b/{path}\n"
-         f"@@ -1 +1 @@ {symbols[0]}()\n-x\n+y\n").encode()
+                         regime=None, new_line="y"):
+  paths=tuple(binding["target_files"])
+  symbols_by_file={
+      path:tuple(binding["target_symbols_by_file"][path]) for path in paths}
+  patch="".join(
+      f"diff --git a/{path} b/{path}\n--- a/{path}\n+++ b/{path}\n"
+      f"@@ -1 +1 @@ {symbols_by_file[path][0]}()\n-x\n+{new_line}\n"
+      for path in paths).encode()
   manifest=D.source_candidate.SourcePatchManifest(
       campaign_id="ak-test",proposal_id="akp-test",candidate_id="akc-test",
       source_tree="llama.cpp",production_base_commit="0"*40,
-      instrument_commit="1"*40,change_class=binding["change_class"],declared_files=(path,),
-      declared_symbols={path:symbols},
+      instrument_commit="1"*40,change_class=binding["change_class"],declared_files=paths,
+      declared_symbols=symbols_by_file,
       mechanism_id=mechanism_id or binding["mechanism_id"],
       patch_sha256=hashlib.sha256(patch).hexdigest(),patch_bytes=patch)
-  intent=D.GpuSourceExperimentIntent(binding["template_id"],"gpu_decode",symbols[0],
+  intent=D.GpuSourceExperimentIntent(binding["template_id"],"gpu_decode",
+      binding["target_symbols"][0],
       "backend-ops-hip-v1","decode-tg128-rocprof-v1",
       tuple(D.BoundedDispatchExpectation(**row)
             for row in binding["expected_dispatch"]))
@@ -99,6 +113,31 @@ class Tests(unittest.TestCase):
       binding["statement"],binding["falsifier"],regime or binding["regime"],
       {"proposal_id":"akp-test","change_class":binding["change_class"]},
       manifest,manifest.patch_bundle_sha256,intent)
+ def reseal_carry_forward(self, value):
+  body={key:item for key,item in value.items()
+        if key!="carry_forward_sha256"}
+  receipt_sha256=D._sha(body)
+  return {**body,"carry_forward_sha256":receipt_sha256},receipt_sha256
+ def carry_forward(self, *, patch_sha256=None,
+                   cross_campaign_sha256=None):
+  digest=lambda label:hashlib.sha256(label.encode()).hexdigest()
+  body={"schema":"epyc.autokernel.discovery_carry_forward.v1",
+      "predecessor_state_file_sha256":digest("state-file"),
+      "predecessor_journal_file_sha256":digest("journal-file"),
+      "predecessor_state_semantic_sha256":digest("state-semantic"),
+      "portfolio_outcomes":{
+          "akh-v2-q5-type-specific-dequant":"nominated",
+          "akh-v2-q8-quantizer-new-mechanism":"retire",
+          "akh-v2-fa-gqa7-pair-tail":"bounded_authoring_skip",
+          "akh-v2-rms-direct-load-reduction":"bounded_authoring_skip"},
+      "candidate_semantic_sha256":sorted(digest(f"semantic-{i}") for i in range(12)),
+      "candidate_patch_sha256":sorted(
+          [patch_sha256 or digest("patch-repeat")]+
+          [digest(f"patch-{i}") for i in range(6)]),
+      "cross_campaign_candidate_sha256":sorted(
+          [cross_campaign_sha256 or digest("cross-repeat")]+
+          [digest(f"cross-{i}") for i in range(6)])}
+  return self.reseal_carry_forward(body)
  def test_portfolio_scheduler_owns_rank_budget_and_exact_candidate_binding(self):
   with tempfile.TemporaryDirectory() as t:
    config=self.portfolio_config(Path(t),[
@@ -119,6 +158,160 @@ class Tests(unittest.TestCase):
     D._validate_portfolio_candidate(
         self.portfolio_candidate(second,hypothesis_id="akh-invented"),second,
         config.hypothesis_portfolio)
+ def test_portfolio_scheduler_round_robins_negative_science_before_second_candidate(self):
+  with tempfile.TemporaryDirectory() as t:
+   config=self.portfolio_config(Path(t),[
+       self.portfolio_record(hypothesis_id="akh-first",rank=1,budget=2),
+       self.portfolio_record(hypothesis_id="akh-second",rank=2,budget=2)])
+   state={"iterations":[{
+       "portfolio_hypothesis_id":"akh-first",
+       "candidate_semantic_sha256":"1"*64,
+       "result_sha256":"2"*64,
+       "evidence":{"source":"3"*64}}]}
+   self.assertEqual(
+       D._select_portfolio_binding(state,config)["hypothesis_id"],
+       "akh-second")
+   state["iterations"].append({
+       "portfolio_hypothesis_id":"akh-second",
+       "candidate_semantic_sha256":"4"*64,
+       "result_sha256":"5"*64,
+       "evidence":{"source":"6"*64}})
+   self.assertEqual(
+       D._select_portfolio_binding(state,config)["hypothesis_id"],
+       "akh-first")
+ def test_portfolio_scheduler_yields_after_non_scientific_authoring_failure(self):
+  with tempfile.TemporaryDirectory() as t:
+   config=self.portfolio_config(Path(t),[
+       self.portfolio_record(hypothesis_id="akh-first",rank=1,budget=2),
+       self.portfolio_record(hypothesis_id="akh-second",rank=2,budget=2)])
+   state={"iterations":[{
+       "status":"planner_refused",
+       "portfolio_hypothesis_id":"akh-first"}],
+       "portfolio_authoring_failures":{"akh-first":1}}
+   self.assertEqual(
+       D._select_portfolio_binding(state,config)["hypothesis_id"],
+       "akh-second")
+ def test_portfolio_binding_requires_exact_template_symbol_authority(self):
+  with tempfile.TemporaryDirectory() as t:
+   config=self.portfolio_config(Path(t),[self.portfolio_record()])
+   context=dict(config.planner_context)
+   context["template_symbol_authority"]={}
+   malformed=dataclasses.replace(config,planner_context=context)
+   with self.assertRaisesRegex(D.DiscoveryControllerError,
+                               "per-file symbol authority"):
+    D._select_portfolio_binding({"iterations":[]},malformed)
+ def test_predecessor_carry_forward_refuses_terminal_family_and_patch_repeat(self):
+  with tempfile.TemporaryDirectory() as t:
+   root=Path(t)
+   record=self.portfolio_record()
+   config=self.portfolio_config(root,[record])
+   binding=D._select_portfolio_binding({"iterations":[]},config)
+   candidate=self.portfolio_candidate(binding)
+   carry,carry_sha=self.carry_forward(
+       patch_sha256=candidate.source_manifest.patch_sha256)
+   config=dataclasses.replace(config,carry_forward=carry,
+                              carry_forward_sha256=carry_sha)
+   with self.assertRaisesRegex(D.DiscoveryControllerError,
+                               "repeats predecessor source semantics"):
+    D._validate_portfolio_candidate(candidate,binding,
+                                    config.hypothesis_portfolio,carry)
+   terminal_record=self.portfolio_record(
+       hypothesis_id="akh-v2-q8-quantizer-new-mechanism")
+   terminal_config=self.portfolio_config(root, [terminal_record])
+   terminal_binding=D._select_portfolio_binding(
+       {"iterations":[]},terminal_config)
+   terminal_candidate=self.portfolio_candidate(terminal_binding)
+   with self.assertRaisesRegex(D.DiscoveryControllerError,
+                               "predecessor-terminal hypothesis"):
+    D._validate_portfolio_candidate(
+        terminal_candidate,terminal_binding,
+        terminal_config.hypothesis_portfolio,carry)
+ def test_predecessor_carry_forward_exact_grammar_and_hash_are_required(self):
+  with tempfile.TemporaryDirectory() as t:
+   config=self.portfolio_config(Path(t),[self.portfolio_record()])
+   valid,_valid_sha=self.carry_forward()
+   mutations={}
+   missing=dict(valid); missing.pop("predecessor_state_file_sha256")
+   mutations["missing_key"]=self.reseal_carry_forward(missing)
+   extra={**valid,"unexpected":"closed"}
+   mutations["extra_key"]=self.reseal_carry_forward(extra)
+   bad_lengths={**valid,"candidate_semantic_sha256":
+                valid["candidate_semantic_sha256"][:-1]}
+   mutations["bad_lengths"]=self.reseal_carry_forward(bad_lengths)
+   bad_outcomes={**valid,"portfolio_outcomes":{
+       **valid["portfolio_outcomes"],
+       "akh-v2-q8-quantizer-new-mechanism":"nominated"}}
+   mutations["bad_outcomes"]=self.reseal_carry_forward(bad_outcomes)
+   mutations["bad_hash"]=({**valid,"carry_forward_sha256":H},H)
+   for label,(value,receipt_sha256) in mutations.items():
+    with self.subTest(label=label), self.assertRaisesRegex(
+            D.DiscoveryControllerError,
+            "invalid predecessor carry-forward authority"):
+     dataclasses.replace(config,carry_forward=value,
+                         carry_forward_sha256=receipt_sha256)
+ def test_predecessor_cross_campaign_repeat_refuses_but_new_patch_passes(self):
+  with tempfile.TemporaryDirectory() as t:
+   config=self.portfolio_config(Path(t),[self.portfolio_record()])
+   binding=D._select_portfolio_binding({"iterations":[]},config)
+   repeated=self.portfolio_candidate(binding)
+   carry,carry_sha=self.carry_forward(
+       cross_campaign_sha256=D._cross_campaign_candidate_identity(repeated))
+   config=dataclasses.replace(config,carry_forward=carry,
+                              carry_forward_sha256=carry_sha)
+   with self.assertRaisesRegex(D.DiscoveryControllerError,
+                               "repeats predecessor source semantics"):
+    D._validate_portfolio_candidate(
+        repeated,binding,config.hypothesis_portfolio,carry)
+   novel=self.portfolio_candidate(binding,new_line="genuinely_new")
+   D._validate_portfolio_candidate(
+       novel,binding,config.hypothesis_portfolio,carry)
+ def test_durable_v6_resume_binds_carry_digest_and_refuses_legacy_state(self):
+  class RefusingPlanner(FakePlanner):
+   def plan(self,**_kwargs):
+    raise D.PlannerOutputRefusal("bounded legacy authoring refusal")
+  class Never:
+   def attest(self): return {**D.FABLE5_CRITIC,"runtime":CLAUDE_RUNTIME}
+   def __getattr__(self,_name):
+    def called(*_args,**_kwargs):
+     raise AssertionError("carry-forward fixture reached compute")
+    return called
+  with tempfile.TemporaryDirectory() as t:
+   root=Path(t); carry,carry_sha=self.carry_forward()
+   base=self.portfolio_config(
+       root,[self.portfolio_record(eligible=False)])
+   config=dataclasses.replace(base,carry_forward=carry,
+                              carry_forward_sha256=carry_sha)
+   result=D.run_controller(
+       config,planner=FakePlanner(),critic=FakeCritic([]),
+       screener=FakeScreen([.01]),lease=Lease())
+   self.assertEqual(result["schema"],D.SCHEMA)
+   self.assertEqual(result["carry_forward_sha256"],carry_sha)
+   changed=dict(carry)
+   changed["predecessor_state_file_sha256"]="9"*64
+   changed,changed_sha=self.reseal_carry_forward(changed)
+   changed_config=dataclasses.replace(
+       base,carry_forward=changed,carry_forward_sha256=changed_sha)
+   with self.assertRaisesRegex(D.DiscoveryControllerError,
+                               "predecessor carry-forward changed"):
+    D.run_controller(
+        changed_config,planner=FakePlanner(),critic=FakeCritic([]),
+        screener=FakeScreen([.01]),lease=Lease())
+  with tempfile.TemporaryDirectory() as t:
+   root=Path(t); legacy=self.portfolio_config(
+       root,[self.portfolio_record(budget=3)])
+   never=Never()
+   result=D.run_controller(
+       legacy,planner=RefusingPlanner(),critic=never,
+       screener=never,lease=never)
+   self.assertTrue(result["iterations"])
+   carry,carry_sha=self.carry_forward()
+   upgraded=dataclasses.replace(
+       legacy,carry_forward=carry,carry_forward_sha256=carry_sha)
+   with self.assertRaisesRegex(D.DiscoveryControllerError,
+                               "legacy durable state lacks predecessor"):
+    D.run_controller(
+        upgraded,planner=RefusingPlanner(),critic=never,
+        screener=never,lease=never)
  def test_portfolio_dispatch_rows_refuse_missing_extra_and_duplicate_precompute(self):
   with tempfile.TemporaryDirectory() as t:
    config=self.portfolio_config(Path(t),[self.portfolio_record()])
@@ -427,15 +620,15 @@ class Tests(unittest.TestCase):
    self.assertEqual(declarations,["ggml/src/ggml-cuda/example.cu:example_symbol"])
 
  def test_planner_catalog_hides_controller_owned_fa_geometry(self):
-  catalog={"cuda-fattn-tile-v1":{
-      "template_id":"cuda-fattn-tile-v1",
+  catalog={"cuda-fattn-gqa7-common-v1":{
+      "template_id":"cuda-fattn-gqa7-common-v1",
       "semantics":{"candidate_dispatch_variants":{
           "gqa7_bulk_pairs":{"calls":3096,"grid":3072},
           "gqa7_scalar_tail":{"calls":3096,"grid":1024}}}}}
   planner=D.CodexPlanner(wrapper=Path("/not-invoked"),environment={},
                          template_catalog=catalog)
   projected=planner._planner_catalog()
-  semantics=projected["cuda-fattn-tile-v1"]["semantics"]
+  semantics=projected["cuda-fattn-gqa7-common-v1"]["semantics"]
   self.assertNotIn("candidate_dispatch_variants",semantics)
   self.assertEqual(semantics["candidate_dispatch_strategy"],{
       "strategy_id":"gqa7_pair_tail",
@@ -771,7 +964,7 @@ class Tests(unittest.TestCase):
                       and row["telemetry_status"] == "emitted"
                       for row in result["iterations"]))
   self.assertEqual(events,["planner_started","planner_refused"]*3)
- def test_four_bounded_planner_skips_reach_every_strategy_with_one_science_slot(self):
+ def test_six_bounded_planner_skips_reach_every_strategy_with_one_science_slot(self):
   class RefusingPlanner:
    def __init__(self): self.bindings=[]
    def attest(self): return {**D.SOL,"runtime":RUNTIME}
@@ -787,7 +980,7 @@ class Tests(unittest.TestCase):
   with tempfile.TemporaryDirectory() as t:
    records=[self.portfolio_record(
        hypothesis_id=f"akh-strategy-{rank}",rank=rank,budget=3)
-       for rank in range(1,5)]
+       for rank in range(1,7)]
    config=dataclasses.replace(self.portfolio_config(Path(t),records),
                               max_iterations=1)
    planner=RefusingPlanner(); never=Never()
@@ -795,12 +988,12 @@ class Tests(unittest.TestCase):
                            screener=never,lease=never)
   selected=[row["hypothesis_id"] for row in planner.bindings]
   self.assertEqual(selected,
-                   [f"akh-strategy-{rank}" for rank in range(1,5)
-                    for _ in range(3)])
+                   [f"akh-strategy-{rank}" for _ in range(3)
+                    for rank in range(1,7)])
   self.assertEqual([row["turn"] for row in result["iterations"]],
-                   list(range(1,13)))
+                   list(range(1,19)))
   self.assertEqual(len({row["planner_operation_key"]
-                        for row in result["iterations"]}),12)
+                        for row in result["iterations"]}),18)
   self.assertEqual(result["scientific_attempts"],0)
   self.assertEqual(result["terminal_reason"],"portfolio_exhausted")
   self.assertTrue(result["complete"])
@@ -1132,7 +1325,9 @@ class Tests(unittest.TestCase):
     result=critic.review(candidate,context={"sealed":"context"},workspace=root)
   self.assertEqual(result.decision,"accept")
   prompt=json.loads(captured["prompt"])
-  source=prompt["context"]["selected_source_preimage"]
+  sources=prompt["context"]["selected_source_preimage"]
+  self.assertEqual(len(sources),1)
+  source=sources[0]
   self.assertEqual(source["source_sha256"],digest)
   self.assertIn("quantize_q8_1",source["excerpts"][0]["text"])
   self.assertEqual(captured["bindings"]["context_sha256"],

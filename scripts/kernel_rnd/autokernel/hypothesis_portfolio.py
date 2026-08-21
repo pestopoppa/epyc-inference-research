@@ -1167,7 +1167,7 @@ def validate_template_authorability(
                 f"{row['hypothesis_id']} dispatch geometry differs from template authority")
 
 
-DEFAULT_PORTFOLIO = Path(__file__).with_name("discovery_hypothesis_portfolio_v2.json")
+DEFAULT_PORTFOLIO = Path(__file__).with_name("discovery_hypothesis_portfolio_v26.json")
 
 
 def main(argv: list[str] | None = None) -> int:

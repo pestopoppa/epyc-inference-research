@@ -35,7 +35,7 @@ from . import gpu_source_proofs
 from scripts.benchmark import autokernel_progression
 from scripts.benchmark import run_autokernel_gpu_discovery as gpu_discovery
 
-SCHEMA = "epyc.autokernel.discovery_controller.v5"
+SCHEMA = "epyc.autokernel.discovery_controller.v6"
 ROSTER_SCHEMA = "epyc.autokernel.discovery_roster.v3"
 AUTHORITY = "nonpromotable_candidate_only_discovery"
 HASH = __import__("re").compile(r"^[0-9a-f]{64}$")
@@ -361,7 +361,8 @@ class AuthoringAssignment:
         if self.portfolio_binding is not None:
             required = {"portfolio_sha256", "record_sha256", "hypothesis_id",
                         "statement", "falsifier", "mechanism_id", "regime",
-                        "target_file", "target_symbols", "template_id",
+                        "target_files", "target_symbols", "target_symbols_by_file",
+                        "template_id",
                         "change_class", "decision_policy", "expected_dispatch"}
             value = self.portfolio_binding
             if (not isinstance(value, Mapping) or set(value) != required
@@ -369,13 +370,25 @@ class AuthoringAssignment:
                     or not HASH.fullmatch(str(value.get("record_sha256")))
                     or not all(isinstance(value.get(key), str) and value[key]
                                for key in ("hypothesis_id", "statement", "falsifier",
-                                           "mechanism_id", "target_file", "template_id",
+                                           "mechanism_id", "template_id",
                                            "change_class"))
                     or not isinstance(value.get("regime"), Mapping)
+                    or not isinstance(value.get("target_files"), (list, tuple))
+                    or not 1 <= len(value["target_files"]) <= 2
+                    or not all(isinstance(item, str) and item
+                               for item in value["target_files"])
                     or not isinstance(value.get("target_symbols"), (list, tuple))
                     or not value["target_symbols"]
                     or not all(isinstance(item, str) and item
                                for item in value["target_symbols"])
+                    or not isinstance(value.get("target_symbols_by_file"), Mapping)
+                    or set(value["target_symbols_by_file"]) != set(value["target_files"])
+                    or any(not isinstance(symbols, (list, tuple)) or not symbols
+                           or not all(isinstance(item, str) and item for item in symbols)
+                           for symbols in value["target_symbols_by_file"].values())
+                    or set().union(*(set(symbols) for symbols in
+                                     value["target_symbols_by_file"].values())) !=
+                       set(value["target_symbols"])
                     or not isinstance(value.get("decision_policy"), Mapping)
                     or not isinstance(value.get("expected_dispatch"), (list, tuple))
                     or not 1 <= len(value["expected_dispatch"]) <= 8
@@ -885,7 +898,7 @@ class CodexPlanner:
             variants = semantics.pop("candidate_dispatch_variants", None)
             if variants is None:
                 continue
-            if (template.get("template_id") != "cuda-fattn-tile-v1"
+            if (template.get("template_id") != "cuda-fattn-gqa7-common-v1"
                     or not isinstance(variants, dict)
                     or set(variants) != {"gqa7_bulk_pairs", "gqa7_scalar_tail"}):
                 raise DiscoveryControllerError(
@@ -988,7 +1001,8 @@ class CodexPlanner:
         binding = assignment.get("portfolio_binding")
         if binding is not None:
             AuthoringAssignment(**assignment)
-            example_file = binding["target_file"]
+            example_files = list(binding["target_files"])
+            example_file = example_files[0]
             example_symbol = binding["target_symbols"][0]
             example_symbols = list(binding["target_symbols"])
             example_hypothesis = binding["hypothesis_id"]
@@ -999,7 +1013,11 @@ class CodexPlanner:
             example_mechanism = binding["mechanism_id"]
             example_change_class = binding["change_class"]
             example_dispatch = list(binding["expected_dispatch"])
+            example_symbols_by_file = {
+                relative: list(symbols) for relative, symbols in
+                binding["target_symbols_by_file"].items()}
         else:
+            example_files = ["ggml/src/ggml-cuda/example.cu"]
             example_file = "ggml/src/ggml-cuda/example.cu"
             example_symbol = "example_symbol"
             example_symbols = [example_symbol]
@@ -1010,21 +1028,25 @@ class CodexPlanner:
             example_template = "replace-with-reviewed-id"
             example_mechanism = "bounded-example"
             example_change_class = "dispatcher"
+            example_symbols_by_file = {example_file: example_symbols}
             example_dispatch = [{"kernel_name": "exact rocprof demangled literal",
                                  "route_id": "replace-with-reviewed-id.anchor.0",
                                  "calls": 1, "grid": 64,
                                  "workgroup": 64, "lds_bytes": 0}]
-        example_patch = (f"diff --git a/{example_file} b/{example_file}\n"
-                         f"--- a/{example_file}\n+++ b/{example_file}\n"
-                         f"@@ -1 +1 @@ {example_symbol}()\n-old\n+new\n")
+        example_patch = "".join(
+            f"diff --git a/{relative} b/{relative}\n"
+            f"--- a/{relative}\n+++ b/{relative}\n"
+            f"@@ -1 +1 @@ {example_symbols_by_file[relative][0]}()\n-old\n+new\n"
+            for relative in example_files)
         example = {
             "plan.json": {"hypothesis_id": example_hypothesis,
                 "statement": example_statement,
                 "falsifier": example_falsifier, "regime": example_regime,
                 "proposal": {"proposal_id": assignment["proposal_id"], "change_class": example_change_class,
                     "change": {"files_and_symbols": [
-                                   f"{example_file}:{symbol}"
-                                   for symbol in example_symbols],
+                                   f"{relative}:{symbol}"
+                                   for relative in example_files
+                                   for symbol in example_symbols_by_file[relative]],
                                "estimated_diff_size": 2}},
                 "source_manifest_path": "source-patch.json",
                 "experiment_intent": {"template_id": example_template,
@@ -1037,8 +1059,8 @@ class CodexPlanner:
                 "candidate_id": assignment["candidate_id"], "source_tree": "llama.cpp",
                 "production_base_commit": assignment["production_base_commit"],
                 "instrument_commit": assignment["instrument_commit"], "change_class": example_change_class,
-                "declared_files": [example_file],
-                "declared_symbols": {example_file: example_symbols},
+                "declared_files": example_files,
+                "declared_symbols": example_symbols_by_file,
                 "mechanism_id": example_mechanism,
                 "patch_sha256": hashlib.sha256(example_patch.encode()).hexdigest(),
                 "patch_encoding": "base64",
@@ -1195,11 +1217,14 @@ class ClaudeCritic:
             raise DiscoveryControllerError("candidate patch exceeds bounded critic visibility")
         source_context = None
         if self.reviewed_sources is not None:
-            if len(manifest.declared_files) != 1:
-                raise DiscoveryControllerError("critic requires one exact reviewed source preimage")
-            relative = manifest.declared_files[0]
-            source_context = self.reviewed_sources.critic_context(
-                relative, manifest.declared_symbols[relative])
+            if not 1 <= len(manifest.declared_files) <= 2:
+                raise DiscoveryControllerError(
+                    "critic requires one or two exact reviewed source preimages")
+            source_context = [
+                self.reviewed_sources.critic_context(
+                    relative, manifest.declared_symbols[relative])
+                for relative in manifest.declared_files
+            ]
         critic_context = {**context, "selected_source_preimage": source_context}
         bindings = {
             "proposal_sha256": _sha(candidate.proposal),
@@ -1715,6 +1740,8 @@ class ControllerConfig:
     deployment_identity_sha256: str | None = None
     hypothesis_portfolio: hypothesis_portfolio.Portfolio | None = None
     hypothesis_portfolio_sha256: str | None = None
+    carry_forward: Mapping[str, Any] | None = None
+    carry_forward_sha256: str | None = None
     def __post_init__(self) -> None:
         if (not self.output_root.is_absolute() or not 1 <= self.max_iterations <= 1000
                 or isinstance(self.nomination_threshold, bool)
@@ -1745,10 +1772,58 @@ class ControllerConfig:
                      or self.hypothesis_portfolio.sha256 != self.hypothesis_portfolio_sha256)):
             raise DiscoveryControllerError(
                 "controller portfolio must be one loader-validated immutable authority")
+        carry_keys = {
+            "schema", "predecessor_state_file_sha256",
+            "predecessor_journal_file_sha256",
+            "predecessor_state_semantic_sha256", "portfolio_outcomes",
+            "candidate_semantic_sha256", "candidate_patch_sha256",
+            "cross_campaign_candidate_sha256", "carry_forward_sha256",
+        }
+        expected_outcomes = {
+            "akh-v2-q5-type-specific-dequant": "nominated",
+            "akh-v2-q8-quantizer-new-mechanism": "retire",
+            "akh-v2-fa-gqa7-pair-tail": "bounded_authoring_skip",
+            "akh-v2-rms-direct-load-reduction": "bounded_authoring_skip",
+        }
+        if ((self.carry_forward is None) != (self.carry_forward_sha256 is None)
+                or self.carry_forward_sha256 is not None
+                and not HASH.fullmatch(self.carry_forward_sha256)
+                or self.carry_forward is not None
+                and (set(self.carry_forward) != carry_keys
+                     or self.carry_forward.get("schema") !=
+                     "epyc.autokernel.discovery_carry_forward.v1"
+                     or self.carry_forward.get("portfolio_outcomes") !=
+                        expected_outcomes
+                     or any(not isinstance(self.carry_forward.get(key), str)
+                            or not HASH.fullmatch(self.carry_forward[key])
+                            for key in (
+                                "predecessor_state_file_sha256",
+                                "predecessor_journal_file_sha256",
+                                "predecessor_state_semantic_sha256"))
+                     or any(not isinstance(self.carry_forward.get(key), list)
+                            or self.carry_forward[key] !=
+                               sorted(set(self.carry_forward[key]))
+                            or not self.carry_forward[key]
+                            or any(not isinstance(value, str)
+                                   or not HASH.fullmatch(value)
+                                   for value in self.carry_forward[key])
+                            for key in (
+                                "candidate_semantic_sha256",
+                                "candidate_patch_sha256",
+                                "cross_campaign_candidate_sha256"))
+                     or tuple(len(self.carry_forward[key]) for key in (
+                         "candidate_semantic_sha256", "candidate_patch_sha256",
+                         "cross_campaign_candidate_sha256")) != (12, 7, 7)
+                     or self.carry_forward.get("carry_forward_sha256") !=
+                        self.carry_forward_sha256
+                     or _sha({key: value for key, value in self.carry_forward.items()
+                              if key != "carry_forward_sha256"}) !=
+                        self.carry_forward_sha256)):
+            raise DiscoveryControllerError("invalid predecessor carry-forward authority")
         sealed = (self.planner_context_sha256, self.production_base_commit,
                   self.instrument_commit, self.experiment_template_registry_sha256,
                   self.admission_corpus_sha256, self.admission_corpus_version,
-                  self.deployment_identity_sha256)
+                  self.deployment_identity_sha256, self.carry_forward_sha256)
         if (not self.dry_run and any(value is not None for value in sealed)
                 and not all(value is not None for value in sealed)):
             raise DiscoveryControllerError("live sealed controller configuration has incomplete deployment authority")
@@ -1849,7 +1924,7 @@ def _portfolio_binding(config: ControllerConfig,
                    "sign_policy", "conflict_policy", "max_distinct_candidates",
                    "terminal_rule"}
     facets = mechanism.get("facets") if isinstance(mechanism, Mapping) else None
-    if (not isinstance(files, (list, tuple)) or len(files) != 1
+    if (not isinstance(files, (list, tuple)) or not 1 <= len(files) <= 2
             or not isinstance(symbols, (list, tuple)) or not symbols
             or not all(isinstance(value, str) and value for value in files + symbols)
             or not isinstance(templates, (list, tuple)) or len(templates) != 1
@@ -1870,6 +1945,23 @@ def _portfolio_binding(config: ControllerConfig,
                                                     "needs_review"}):
         raise DiscoveryControllerError(
             "eligible portfolio record is not expressible by one exact reviewed template")
+    symbol_authority = (config.planner_context or {}).get(
+        "template_symbol_authority", {}).get(templates[0])
+    if (not isinstance(symbol_authority, Mapping)
+            or set(symbol_authority) != set(files)):
+        raise DiscoveryControllerError(
+            "eligible portfolio record lacks exact per-file symbol authority")
+    symbols_by_file = {
+        path: sorted(set(symbols) & set(symbol_authority[path]))
+        for path in files
+    }
+    if (any(not values for values in symbols_by_file.values())
+            or set().union(*(set(values) for values in symbols_by_file.values()))
+               != set(symbols)
+            or any(sum(symbol in values for values in symbols_by_file.values()) != 1
+                   for symbol in symbols)):
+        raise DiscoveryControllerError(
+            "eligible portfolio symbols do not map exactly to reviewed files")
     binding = {
         "portfolio_sha256": config.hypothesis_portfolio_sha256,
         "record_sha256": hypothesis_portfolio.content_sha256(record),
@@ -1879,8 +1971,9 @@ def _portfolio_binding(config: ControllerConfig,
         "mechanism_id": mechanism["fingerprint_sha256"],
         "change_class": facets["change_class"],
         "regime": dict(record["regime"]),
-        "target_file": files[0],
+        "target_files": list(files),
         "target_symbols": list(symbols),
+        "target_symbols_by_file": symbols_by_file,
         "template_id": templates[0],
         "decision_policy": dict(policy),
     }
@@ -1911,6 +2004,8 @@ def _select_portfolio_binding(state: Mapping[str, Any],
                                        str(row["hypothesis_id"])))
     except (KeyError, TypeError, ValueError) as exc:
         raise DiscoveryControllerError("eligible portfolio priority is malformed") from exc
+    scheduled: list[tuple[int, int, str, dict[str, Any]]] = []
+    authoring_failures = _validate_portfolio_authoring_failures(state)
     for record in eligible:
         binding = _portfolio_binding(config, record)
         if (binding["hypothesis_id"] in state.get("portfolio_terminals", {})
@@ -1918,22 +2013,75 @@ def _select_portfolio_binding(state: Mapping[str, Any],
                 or binding["hypothesis_id"] in state.get(
                     "portfolio_validations", {})):
             continue
-        attempts = {(row.get("candidate_semantic_sha256")
-                     or row.get("source_manifest_sha256"))
-                    for row in state["iterations"]
-                    if row.get("portfolio_hypothesis_id") == binding["hypothesis_id"]
-                    and isinstance((row.get("candidate_semantic_sha256")
-                                    or row.get("source_manifest_sha256")), str)
-                    and isinstance(row.get("result_sha256"), str)
-                    and HASH.fullmatch(row["result_sha256"])
-                    and isinstance(row.get("evidence"), Mapping)}
-        if len(attempts) < binding["decision_policy"]["max_distinct_candidates"]:
-            return binding
-    return None
+        attempts: set[str] = set()
+        for row in state["iterations"]:
+            if (not isinstance(row, Mapping)
+                    or row.get("portfolio_hypothesis_id") != binding["hypothesis_id"]
+                    or not _row_spends_scientific_budget(row)):
+                continue
+            identity = (row.get("candidate_semantic_sha256")
+                        or row.get("source_manifest_sha256"))
+            if not isinstance(identity, str) or not HASH.fullmatch(identity):
+                raise DiscoveryControllerError(
+                    "scientific portfolio row lacks candidate identity")
+            attempts.add(identity)
+        if len(attempts) >= binding["decision_policy"]["max_distinct_candidates"]:
+            continue
+        failures = authoring_failures.get(binding["hypothesis_id"], 0)
+        if (not isinstance(failures, int) or isinstance(failures, bool)
+                or failures < 0):
+            raise DiscoveryControllerError(
+                "portfolio authoring-failure count is malformed")
+        # Opportunity-cost scheduling: give every lower-exposure scientific
+        # question a turn before draining another candidate from one family.
+        # Rank remains the deterministic evidence/ROI tiebreaker.  Scientific
+        # S2 reuses the same semantic candidate identity, while non-scientific
+        # authoring failures still represent actor time and therefore yield the
+        # lane after one failure.
+        exposure = len(attempts) + failures
+        scheduled.append((exposure, int(record["priority"]["rank"]),
+                          binding["hypothesis_id"], binding))
+    if not scheduled:
+        return None
+    return min(scheduled, key=lambda item: item[:3])[3]
 
 
-def _validate_portfolio_candidate(item: PlannedCandidate, binding: Mapping[str, Any],
-                                  portfolio: hypothesis_portfolio.Portfolio) -> None:
+def _derived_portfolio_authoring_failures(
+        state: Mapping[str, Any]) -> dict[str, int]:
+    authoring_statuses = {
+        "planner_refused", "critic_revise", "critic_reject",
+        "screen_refused", "authoring_refused", "planner_contract_refused",
+        "candidate_semantic_repeat_refused", "authorization_refused",
+    }
+    iterations = state.get("iterations", [])
+    if not isinstance(iterations, list):
+        raise DiscoveryControllerError("durable iterations are malformed")
+    derived: dict[str, int] = {}
+    for row in iterations:
+        if (isinstance(row, Mapping)
+                and row.get("status") in authoring_statuses
+                and isinstance(row.get("portfolio_hypothesis_id"), str)):
+            hypothesis_id = row["portfolio_hypothesis_id"]
+            derived[hypothesis_id] = derived.get(hypothesis_id, 0) + 1
+    return derived
+
+
+def _validate_portfolio_authoring_failures(
+        state: Mapping[str, Any]) -> Mapping[str, int]:
+    declared = state.get("portfolio_authoring_failures", {})
+    derived = _derived_portfolio_authoring_failures(state)
+    if (not isinstance(declared, Mapping) or dict(declared) != derived
+            or any(not isinstance(value, int) or isinstance(value, bool)
+                   or value <= 0 for value in declared.values())):
+        raise DiscoveryControllerError(
+            "portfolio authoring-failure accounting differs from durable rows")
+    return derived
+
+
+def _validate_portfolio_candidate(
+        item: PlannedCandidate, binding: Mapping[str, Any],
+        portfolio: hypothesis_portfolio.Portfolio,
+        carry_forward: Mapping[str, Any] | None = None) -> None:
     """Refuse any actor attempt to rename or expand a reviewed question."""
     if not isinstance(portfolio, hypothesis_portfolio.Portfolio):
         raise DiscoveryControllerError("portfolio candidate lacks typed portfolio authority")
@@ -1946,9 +2094,11 @@ def _validate_portfolio_candidate(item: PlannedCandidate, binding: Mapping[str, 
             or manifest.mechanism_id != binding["mechanism_id"]
             or manifest.change_class != binding["change_class"]
             or item.proposal.get("change_class") != binding["change_class"]
-            or tuple(manifest.declared_files) != (binding["target_file"],)
-            or set(manifest.declared_symbols.get(binding["target_file"], ())) !=
-               set(binding["target_symbols"])
+            or tuple(manifest.declared_files) != tuple(binding["target_files"])
+            or {path: sorted(manifest.declared_symbols.get(path, ()))
+                for path in binding["target_files"]} !=
+               {path: sorted(symbols) for path, symbols in
+                binding["target_symbols_by_file"].items()}
             or intent is None
             or intent.template_id != binding["template_id"]
             or intent.target_symbol not in binding["target_symbols"]
@@ -1956,6 +2106,24 @@ def _validate_portfolio_candidate(item: PlannedCandidate, binding: Mapping[str, 
                != list(binding["expected_dispatch"])):
         raise DiscoveryControllerError(
             "planner candidate differs from its controller-owned portfolio assignment")
+    if carry_forward is not None:
+        outcomes = carry_forward.get("portfolio_outcomes")
+        exact = carry_forward.get("candidate_semantic_sha256")
+        patches = carry_forward.get("candidate_patch_sha256")
+        stable = carry_forward.get("cross_campaign_candidate_sha256")
+        if (not isinstance(outcomes, Mapping)
+                or not all(isinstance(values, list) for values in
+                           (exact, patches, stable))):
+            raise DiscoveryControllerError(
+                "predecessor carry-forward candidate authority is malformed")
+        if item.hypothesis_id in outcomes:
+            raise DiscoveryControllerError(
+                "planner selected a predecessor-terminal hypothesis")
+        if (_candidate_semantic_identity(item) in exact
+                or item.source_manifest.patch_sha256 in patches
+                or _cross_campaign_candidate_identity(item) in stable):
+            raise DiscoveryControllerError(
+                "planner candidate repeats predecessor source semantics")
 
 
 def _portfolio_exact_dnr_check(config: ControllerConfig, item: PlannedCandidate,
@@ -2026,7 +2194,8 @@ def _revalidate_portfolio_checkpoint(config: ControllerConfig,
     if not isinstance(binding, Mapping):
         raise DiscoveryControllerError(
             "portfolio pending candidate lacks controller-owned binding")
-    _validate_portfolio_candidate(item, binding, config.hypothesis_portfolio)
+    _validate_portfolio_candidate(
+        item, binding, config.hypothesis_portfolio, config.carry_forward)
     expected = _portfolio_exact_dnr_check(config, item, binding)
     actual = row.get("portfolio_exact_dnr_check")
     if not isinstance(actual, Mapping) or dict(actual) != expected:
@@ -2347,6 +2516,22 @@ def _candidate_semantic_identity(item: PlannedCandidate) -> str:
         "source_tree": manifest.source_tree,
         "production_base_commit": manifest.production_base_commit,
         "instrument_commit": manifest.instrument_commit,
+        "change_class": manifest.change_class,
+        "declared_files": sorted(manifest.declared_files),
+        "declared_symbols": {
+            key: sorted(value)
+            for key, value in sorted(manifest.declared_symbols.items())},
+        "mechanism_id": manifest.mechanism_id,
+        "patch_sha256": manifest.patch_sha256,
+    })
+
+
+def _cross_campaign_candidate_identity(item: PlannedCandidate) -> str:
+    """Stable candidate identity that deliberately excludes instrument epochs."""
+    manifest = item.source_manifest
+    return _sha({
+        "schema": "epyc.autokernel.cross_campaign_candidate_semantics.v1",
+        "production_base_commit": manifest.production_base_commit,
         "change_class": manifest.change_class,
         "declared_files": sorted(manifest.declared_files),
         "declared_symbols": {
@@ -2774,7 +2959,11 @@ def _note_portfolio_authoring_failure(state: dict[str, Any],
     if not isinstance(hypothesis_id, str):
         return
     failures = state.setdefault("portfolio_authoring_failures", {})
-    count = int(failures.get(hypothesis_id, 0)) + 1
+    prior = failures.get(hypothesis_id, 0)
+    if not isinstance(prior, int) or isinstance(prior, bool) or prior < 0:
+        raise DiscoveryControllerError(
+            "portfolio authoring-failure accounting is malformed")
+    count = prior + 1
     failures[hypothesis_id] = count
     if count >= 3:
         state.setdefault("portfolio_skips", {})[hypothesis_id] = {
@@ -3018,6 +3207,19 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
             "sealed hypothesis portfolio changed; durable discovery cannot resume")
     if existing_portfolio is None and config.hypothesis_portfolio_sha256 is not None:
         state["hypothesis_portfolio_sha256"] = config.hypothesis_portfolio_sha256
+    existing_carry_forward = state.get("carry_forward_sha256")
+    if (existing_carry_forward is not None
+            and existing_carry_forward != config.carry_forward_sha256):
+        raise DiscoveryControllerError(
+            "predecessor carry-forward changed; durable discovery cannot resume")
+    if existing_carry_forward is None and config.carry_forward_sha256 is not None:
+        if (state.get("iterations") or state.get("pending") is not None
+                or state.get("inflight") is not None
+                or state.get("planning") is not None):
+            raise DiscoveryControllerError(
+                "legacy durable state lacks predecessor carry-forward")
+        state["carry_forward_sha256"] = config.carry_forward_sha256
+    _validate_portfolio_authoring_failures(state)
     _validate_attempted_candidate_identities(state)
     _validate_infrastructure_ambiguities(state)
     # A completed state is an acknowledged terminal checkpoint.  Re-entering it
@@ -3306,7 +3508,8 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                     try:
                         _validate_portfolio_candidate(
                             item, portfolio_binding,
-                            config.hypothesis_portfolio)
+                            config.hypothesis_portfolio,
+                            config.carry_forward)
                     except DiscoveryControllerError as exc:
                         row.update(status="planner_contract_refused",
                                    reason=str(exc))

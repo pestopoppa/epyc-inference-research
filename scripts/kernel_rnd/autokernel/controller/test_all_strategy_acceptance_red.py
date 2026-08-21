@@ -28,10 +28,12 @@ from .test_gpu_source_evidence import ClaimFactory, FakeExecutors, plan
 
 
 ELIGIBLE = (
-    ("akh-v2-q5-type-specific-dequant", "cuda-vecdotq-v1", "MUL_MAT", 1139),
-    ("akh-v2-q8-quantizer-new-mechanism", "cuda-quantize-q8-v1", "MUL_MAT", 1139),
-    ("akh-v2-fa-gqa7-pair-tail", "cuda-fattn-tile-v1", "FLASH_ATTN_EXT", 2868),
-    ("akh-v2-rms-direct-load-reduction", "cuda-norm-v2", "RMS_NORM", 21),
+    ("akh-v26-q4k-branchless-sixbit-scale", "cuda-vecdotq-q4k-v1", "MUL_MAT", 1139),
+    ("akh-v26-rms-scale-broadcast", "cuda-norm-v2", "RMS_NORM", 21),
+    ("akh-v26-rope-neox-index-strength-reduction", "cuda-rope-v2", "ROPE", 428),
+    ("akh-v26-fa-combine-wave-normalization", "cuda-fattn-combine-v1", "FLASH_ATTN_EXT", 2868),
+    ("akh-v26-q6k-packed-decode", "cuda-vecdotq-q6k-v1", "MUL_MAT", 1139),
+    ("akh-v26-fa-gqa7-common-map", "cuda-fattn-gqa7-common-v1", "FLASH_ATTN_EXT", 2868),
 )
 
 
@@ -46,7 +48,7 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
         cls.surfaces = F._normalized_template_surfaces(
             cls.registry, cls.portfolio)
 
-    def test_all_four_planner_source_and_current_dispatch_bindings_exist(self):
+    def test_all_six_planner_source_and_current_dispatch_bindings_exist(self):
         records = sorted(
             self.portfolio.eligible_hypotheses(),
             key=lambda row: row["priority"]["rank"])
@@ -61,8 +63,16 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
                 self.assertEqual(
                     tuple(record["target"]["source_files"]),
                     tuple(sorted(template.allowed_files)))
-                self.assertTrue(set(record["target"]["source_symbols"]).issubset(
-                    template.allowed_symbols[record["target"]["source_files"][0]]))
+                target_symbols = set(record["target"]["source_symbols"])
+                symbols_by_file = {
+                    path: target_symbols & set(template.allowed_symbols[path])
+                    for path in record["target"]["source_files"]}
+                self.assertTrue(all(symbols_by_file.values()))
+                self.assertEqual(
+                    set().union(*symbols_by_file.values()), target_symbols)
+                self.assertTrue(all(
+                    sum(symbol in symbols for symbols in symbols_by_file.values()) == 1
+                    for symbol in target_symbols))
                 self.assertIn(
                     record["mechanism"]["facets"]["change_class"],
                     self.surfaces[template_id]["change_classes"])
@@ -75,7 +85,10 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
         config = SimpleNamespace(
             hypothesis_portfolio=self.portfolio,
             hypothesis_portfolio_sha256=self.portfolio.sha256,
-            planner_context={"portfolio_dispatch_authority": self.dispatch})
+            planner_context={
+                "portfolio_dispatch_authority": self.dispatch,
+                "template_symbol_authority": self._symbol_authority(
+                    self.portfolio.eligible_hypotheses())})
         state = {"iterations": [], "portfolio_terminals": {}}
         for hypothesis_id, _template_id, _op, _cases in ELIGIBLE:
             selected = C._select_portfolio_binding(state, config)
@@ -88,16 +101,54 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
                 "disposition": policy["terminal_rule"], "policy": policy}
         self.assertIsNone(C._select_portfolio_binding(state, config))
 
+    def _symbol_authority(self, records):
+        template_ids = {
+            row["current_bundle_eligibility"]["template_ids"][0]
+            for row in records}
+        return {
+            template_id: {
+                path: sorted(symbols)
+                for path, symbols in
+                self.registry.templates[template_id].allowed_symbols.items()}
+            for template_id in template_ids}
+
+    def _dispatch_for_record(self, record):
+        existing = self.dispatch.get(record["hypothesis_id"])
+        if existing is not None:
+            return existing
+        frame_id = self.portfolio.body["current_bundle"]["frame_id"]
+        anchor = next(row for row in record["dispatch_anchors"]
+                      if row["frame_id"] == frame_id)
+        return [{
+            "route_id": row["route_id"],
+            "kernel_name": row["kernel_literal"],
+            "calls": row["calls"], "grid": row["grid"],
+            "workgroup": row["workgroup"], "lds_bytes": row["lds_bytes"],
+        } for row in anchor["signatures"]]
+
+    def _historical_record(self, hypothesis_id: str, fixture_id: str):
+        record = json.loads(json.dumps(
+            self.portfolio.hypothesis(hypothesis_id),
+            default=lambda item: dict(item)))
+        record["hypothesis_id"] = fixture_id
+        record["current_bundle_eligibility"] = {
+            **dict(record["current_bundle_eligibility"]), "eligible": True,
+            "blocking_conditions": [], "reason": "historical regression fixture"}
+        return record
+
     def _real_portfolio_config(self, root: Path, records, *, iterations: int):
         portfolio = hypothesis_portfolio.Portfolio(
             {"hypotheses": list(records), "frames": [], "do_not_repeat": []},
             "f" * 64)
         authority = {
-            row["hypothesis_id"]: self.dispatch[row["hypothesis_id"]]
+            row["hypothesis_id"]: self._dispatch_for_record(row)
             for row in records}
+        carry, carry_sha = TD.Tests(methodName="runTest").carry_forward()
         return C.ControllerConfig(
             root, iterations, dry_run=False,
-            planner_context={"portfolio_dispatch_authority": authority},
+            planner_context={
+                "portfolio_dispatch_authority": authority,
+                "template_symbol_authority": self._symbol_authority(records)},
             planner_context_sha256="e" * 64,
             production_base_commit="0" * 40,
             instrument_commit="1" * 40,
@@ -106,7 +157,8 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
             admission_corpus_version="test-v1",
             deployment_identity_sha256="d" * 64,
             hypothesis_portfolio=portfolio,
-            hypothesis_portfolio_sha256=portfolio.sha256)
+            hypothesis_portfolio_sha256=portfolio.sha256,
+            carry_forward=carry, carry_forward_sha256=carry_sha)
 
     @staticmethod
     def _bound_candidate(fixture, binding, context, sequence):
@@ -129,7 +181,7 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
             source_manifest_sha256=manifest.patch_bundle_sha256)
 
     def test_measured_terminal_automatically_selects_next_then_exhausts(self):
-        """All four ranks must advance without an operator/controller restart."""
+        """All six ranks must advance without an operator/controller restart."""
         fixture = TD.Tests(methodName="runTest")
         records = sorted(
             self.portfolio.eligible_hypotheses(),
@@ -165,8 +217,11 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
 
         expected = [
             row["hypothesis_id"]
+            for exposure in range(max(
+                row["decision_policy"]["max_distinct_candidates"]
+                for row in records))
             for row in records
-            for _ in range(row["decision_policy"]["max_distinct_candidates"])]
+            if exposure < row["decision_policy"]["max_distinct_candidates"]]
         with tempfile.TemporaryDirectory() as directory:
             config = self._real_portfolio_config(
                 Path(directory), records, iterations=len(expected) + 1)
@@ -187,14 +242,12 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
     def test_v24_timed_output_divergence_spends_once_and_advances_strategy(self):
         """A sealed 9/9 candidate divergence is final, visible, and idempotent."""
         fixture = TD.Tests(methodName="runTest")
-        records_by_id = {
-            row["hypothesis_id"]: row
-            for row in self.portfolio.eligible_hypotheses()}
-        first = dict(records_by_id["akh-v2-q8-quantizer-new-mechanism"])
+        first = self._historical_record(
+            "akh-v2-q8-quantizer-new-mechanism", "akh-v24-q8-divergence-fixture")
         first["decision_policy"] = {
             **first["decision_policy"], "max_distinct_candidates": 2}
-        records = [first,
-                   records_by_id["akh-v2-rms-direct-load-reduction"]]
+        records = [first, self._historical_record(
+            "akh-v2-rms-direct-load-reduction", "akh-v24-rms-advance-fixture")]
 
         class Planner:
             def __init__(self):
@@ -261,13 +314,13 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
 
         self.assertEqual(planner.selected,
                          [records[0]["hypothesis_id"],
-                          records[0]["hypothesis_id"],
-                          records[1]["hypothesis_id"]])
+                          records[1]["hypothesis_id"],
+                          records[0]["hypothesis_id"]])
         self.assertEqual(screen.calls,
                          [records[0]["hypothesis_id"],
-                          records[0]["hypothesis_id"],
-                          records[1]["hypothesis_id"]])
-        self.assertEqual(len(set(screen.manifests[:2])), 2)
+                          records[1]["hypothesis_id"],
+                          records[0]["hypothesis_id"]])
+        self.assertNotEqual(screen.manifests[0], screen.manifests[2])
         self.assertEqual((planner.selected, screen.calls), before)
         self.assertEqual(
             json.loads(json.dumps(result["iterations"], sort_keys=True)),
@@ -296,7 +349,7 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
         fixture = TD.Tests(methodName="runTest")
         record = next(
             row for row in self.portfolio.eligible_hypotheses()
-            if row["hypothesis_id"] == "akh-v2-q8-quantizer-new-mechanism")
+            if row["hypothesis_id"] == "akh-v26-q4k-branchless-sixbit-scale")
 
         class Planner:
             def __init__(self): self.calls = 0
@@ -385,7 +438,7 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
         fixture = TD.Tests(methodName="runTest")
         record = next(
             row for row in self.portfolio.eligible_hypotheses()
-            if row["hypothesis_id"] == "akh-v2-q8-quantizer-new-mechanism")
+            if row["hypothesis_id"] == "akh-v26-q4k-branchless-sixbit-scale")
         record = {**record, "decision_policy": dict(record["decision_policy"])}
         record["decision_policy"]["max_distinct_candidates"] = 2
 
@@ -519,7 +572,7 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
 
     def test_fa_has_sealed_distinct_bulk_and_tail_candidate_routes(self):
         """RED: a pair+tail mutation cannot be forced through the anchor route."""
-        template = self.registry.templates["cuda-fattn-tile-v1"]
+        template = self.registry.templates["cuda-fattn-gqa7-common-v1"]
         variants = template.semantics.get("candidate_dispatch_variants")
         self.assertIsInstance(variants, dict)
         self.assertEqual(set(variants), {"gqa7_bulk_pairs", "gqa7_scalar_tail"})
@@ -536,7 +589,7 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
         self.assertEqual(variants["gqa7_bulk_pairs"]["ncols2"], 2)
         self.assertEqual(variants["gqa7_scalar_tail"]["ncols2"], 1)
 
-    def test_all_four_accept_only_deployed_anchor_intents_and_fa_derives_subroutes(self):
+    def test_all_six_accept_only_deployed_anchor_intents_and_fa_derives_subroutes(self):
         records = {row["hypothesis_id"]: row
                    for row in self.portfolio.eligible_hypotheses()}
         for hypothesis_id, template_id, _op, _cases in ELIGIBLE:
@@ -556,28 +609,29 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
                 contract = template.bind_dispatch(intent)
                 self.assertGreaterEqual(len(contract.candidate_exact), 1)
                 self.assertGreaterEqual(len(contract.anchor_exact), 1)
-                if template_id == "cuda-fattn-tile-v1":
+                if template_id == "cuda-fattn-gqa7-common-v1":
                     self.assertEqual(
                         [row.signature for row in contract.candidate_exact],
-                        ["cuda-fattn-tile-v1.candidate.gqa7_bulk_pairs",
-                         "cuda-fattn-tile-v1.candidate.gqa7_scalar_tail"])
+                        ["cuda-fattn-gqa7-common-v1.candidate.gqa7_bulk_pairs",
+                         "cuda-fattn-gqa7-common-v1.candidate.gqa7_scalar_tail",
+                         "cuda-fattn-gqa7-common-v1.candidate.combine_unchanged"])
                     self.assertEqual(
                         [(row.calls, row.grid, row.workgroup, row.lds_bytes)
                          for row in contract.candidate_exact],
                         [(3096, 3072, 64, 5120),
-                         (3096, 1024, 64, 5120)])
+                         (3096, 1024, 64, 5120),
+                         (3096, 896, 64, 512)])
                     self.assertEqual(
                         [row.signature for row in contract.anchor_exact],
-                        ["cuda-fattn-tile-v1.anchor.0"])
+                        ["cuda-fattn-gqa7-common-v1.anchor.0",
+                         "cuda-fattn-gqa7-common-v1.anchor.1"])
 
     def test_q5_exact_duration_compares_the_same_three_routes(self):
         """RED: 3 candidate routes divided by 8 anchor routes is fake gain."""
         hypothesis_id = "akh-v2-q5-type-specific-dequant"
-        record = next(
-            row for row in self.portfolio.eligible_hypotheses()
-            if row["hypothesis_id"] == hypothesis_id)
+        record = self.portfolio.hypothesis(hypothesis_id)
         template = self.registry.templates["cuda-vecdotq-v1"]
-        authority = self.dispatch[hypothesis_id]
+        authority = self._dispatch_for_record(record)
         intent = C.GpuSourceExperimentIntent(
             template.template_id, template.target_surface,
             record["target"]["source_symbols"][0],
@@ -605,7 +659,7 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
 
     def test_fa_correctness_requires_and_receipts_exact_odd_gqa7_cases(self):
         """RED: metadata alone cannot make the generic total a GQA7 proof."""
-        template = self.registry.templates["cuda-fattn-tile-v1"]
+        template = self.registry.templates["cuda-fattn-gqa7-common-v1"]
         required = template.semantics.get("required_correctness_cases")
         self.assertIsInstance(required, list)
         self.assertGreaterEqual(len(required), 1)
@@ -1227,10 +1281,10 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
             planner = BoundPlanner()
             result = C.run_controller(
                 config, planner=planner,
-                critic=TD.FakeCritic(["reject", "reject", "reject", "accept"]),
+                critic=TD.FakeCritic(["reject", "accept", "reject", "reject"]),
                 screener=Never(), lease=Never())
             self.assertEqual(planner.selected,
-                             ["akh-first", "akh-first", "akh-first", "akh-second"])
+                             ["akh-first", "akh-second", "akh-first", "akh-first"])
             self.assertIn("akh-first", result["portfolio_skips"])
             self.assertNotIn("akh-first", result["portfolio_terminals"])
 
@@ -1268,7 +1322,9 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
             config = C.ControllerConfig(
                 root, len(ELIGIBLE) + 1, dry_run=True,
                 planner_context={
-                    "portfolio_dispatch_authority": self.dispatch},
+                    "portfolio_dispatch_authority": self.dispatch,
+                    "template_symbol_authority": self._symbol_authority(
+                        self.portfolio.eligible_hypotheses())},
                 planner_context_sha256="e" * 64,
                 production_base_commit="0" * 40,
                 instrument_commit="1" * 40,
@@ -1863,7 +1919,7 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
                 record = next(
                     row for row in self.portfolio.eligible_hypotheses()
                     if row["hypothesis_id"] ==
-                    "akh-v2-q8-quantizer-new-mechanism")
+                    "akh-v26-q4k-branchless-sixbit-scale")
                 config = self._real_portfolio_config(
                     Path(directory), [record], iterations=1)
                 planner = BoundPlanner()
@@ -1972,7 +2028,7 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
                 record = next(
                     row for row in self.portfolio.eligible_hypotheses()
                     if row["hypothesis_id"] ==
-                    "akh-v2-q8-quantizer-new-mechanism")
+                    "akh-v26-q4k-branchless-sixbit-scale")
                 config = self._real_portfolio_config(
                     root, [record], iterations=1)
                 planner, screen = Planner(), Screen()
@@ -2011,8 +2067,8 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
         records_by_id = {
             row["hypothesis_id"]: row
             for row in self.portfolio.eligible_hypotheses()}
-        first = records_by_id["akh-v2-q8-quantizer-new-mechanism"]
-        second = records_by_id["akh-v2-rms-direct-load-reduction"]
+        first = records_by_id["akh-v26-q4k-branchless-sixbit-scale"]
+        second = records_by_id["akh-v26-rms-scale-broadcast"]
         route_budget = first["decision_policy"]["max_distinct_candidates"]
 
         class Planner:

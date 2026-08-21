@@ -511,7 +511,9 @@ class DetachedCanaryTests(unittest.TestCase):
             command, cwd=S._REPO_ROOT, env=environment,
             text=True, capture_output=True, check=False, timeout=60)
         self.assertNotEqual(refused.returncode, 0)
-        self.assertIn("legacy path-bound deployment graph v4", refused.stderr)
+        self.assertIn(
+            "legacy deployment graph cannot authorize successor execution",
+            refused.stderr)
 
     def test_bounded_canary_restart_is_exact(self):
         _pid, launcher = self._launcher(

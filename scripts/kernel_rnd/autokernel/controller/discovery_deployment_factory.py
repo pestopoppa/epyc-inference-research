@@ -9,8 +9,8 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 import argparse
 import base64
+import binascii
 import contextlib
-import csv
 import hashlib
 import json
 import os
@@ -124,28 +124,42 @@ class ExperimentTemplate:
         variants = self.semantics.get("candidate_dispatch_variants")
         if variants is not None:
             # The only topology-changing template is the reviewed odd-GQA7
-            # pair+tail strategy.  The planner still has to bind the one exact
-            # observed anchor row, but it never authors the candidate route,
-            # call count, or geometry.  Those are derived here from the sealed
-            # 7 = 3*2 + 1 partition contract.
-            if (self.template_id != "cuda-fattn-tile-v1"
+            # pair+tail strategy.  The planner binds the exact observed tile
+            # and combine rows, but never authors candidate route geometry.
+            # The controller derives 7 = 3*2 + 1 and preserves combine.
+            if (self.template_id != "cuda-fattn-gqa7-common-v1"
                     or not isinstance(variants, Mapping)
                     or set(variants) != {"gqa7_bulk_pairs", "gqa7_scalar_tail"}
-                    or len(expected_rows) != 1
-                    or len(self.dispatch.anchor_exact) != 1):
+                    or len(expected_rows) != 2
+                    or len(self.dispatch.anchor_exact) != 2):
                 raise DeploymentFactoryError(
                     "candidate dispatch variants are outside reviewed GQA7 authority")
-            expected = expected_rows[0]
-            anchor = self.dispatch.anchor_exact[0]
-            if (expected.route_id != anchor.signature
-                    or (expected.calls, expected.grid, expected.workgroup,
-                        expected.lds_bytes) !=
-                       (anchor.calls, anchor.grid, anchor.workgroup,
-                        anchor.lds_bytes)
-                    or re.fullmatch(anchor.kernel_pattern,
-                                    expected.kernel_name) is None):
+            anchors = {row.signature: row for row in self.dispatch.anchor_exact}
+            expected_by_route = {row.route_id: row for row in expected_rows}
+            if set(expected_by_route) != set(anchors):
                 raise DeploymentFactoryError(
-                    "GQA7 planner dispatch differs from reviewed anchor authority")
+                    "GQA7 planner routes differ from reviewed anchor authority")
+            for route_id, anchor_row in anchors.items():
+                observed = expected_by_route[route_id]
+                if ((observed.calls, observed.grid, observed.workgroup,
+                     observed.lds_bytes) !=
+                    (anchor_row.calls, anchor_row.grid, anchor_row.workgroup,
+                     anchor_row.lds_bytes)
+                        or re.fullmatch(anchor_row.kernel_pattern,
+                                        observed.kernel_name) is None):
+                    raise DeploymentFactoryError(
+                        "GQA7 planner dispatch differs from reviewed anchor authority")
+            tile_routes = [row for row in anchors.values()
+                           if "flash_attn_tile" in row.kernel_pattern]
+            combine_routes = [row for row in anchors.values()
+                              if "flash_attn_combine_results" in row.kernel_pattern]
+            if len(tile_routes) != 1 or len(combine_routes) != 1:
+                raise DeploymentFactoryError(
+                    "GQA7 authority lacks exact tile and combine routes")
+            anchor = tile_routes[0]
+            expected = expected_by_route[anchor.signature]
+            combine = combine_routes[0]
+            expected_combine = expected_by_route[combine.signature]
             old = "<64, 64, 2, 1, false>"
             new = "<64, 64, 1, 2, false>"
             if expected.kernel_name.count(old) != 1:
@@ -184,6 +198,12 @@ class ExperimentTemplate:
                     calls=anchor.calls, grid=grid,
                     workgroup=anchor.workgroup, lds_bytes=anchor.lds_bytes,
                     blocks_per_call=grid // anchor.workgroup))
+            candidate.append(evidence.ExactDispatch(
+                signature=f"{self.template_id}.candidate.combine_unchanged",
+                kernel_pattern="^" + re.escape(expected_combine.kernel_name) + "$",
+                calls=combine.calls, grid=combine.grid,
+                workgroup=combine.workgroup, lds_bytes=combine.lds_bytes,
+                blocks_per_call=combine.grid // combine.workgroup))
             return evidence.DispatchContract(
                 candidate_exact=tuple(candidate),
                 anchor_exact=self.dispatch.anchor_exact,
@@ -429,7 +449,7 @@ _STATIC_IDS = MappingProxyType({
     "source_builder": "gpu-source-v1",
     "evidence_plan": "reviewed-gpu-source-evidence-v1",
     "runner_args": "qwen05b-tg128",
-    "experiment_template_registry": "gpu-source-templates-v2",
+    "experiment_template_registry": "gpu-source-templates-v3",
     "inference_window_lease": "mi210-window-v1",
     "production_snapshot": "llama-v9-artifacts",
 })
@@ -518,9 +538,26 @@ _PROFILE_V3_TRACE_CSV = Path(
 _PROFILE_V3_TRACE_CSV_SHA256 = "fb818d7b135becc5bfd773c1075cbdea91809d1f5c22ed8d8817560678b03c69"
 _PROFILE_V3_AGENT_CSV = _PROFILE_V3_TRACE_CSV.with_name("v13_sdk_agent_info.csv")
 _PROFILE_V3_AGENT_CSV_SHA256 = "50189a58f15ffb0008e840a8a6d18db1a88f73e3492b686b167d773de6b9323e"
-_PORTFOLIO_SEMANTIC_SHA256 = "c894690f56041ae355a50fffe23688abed1fa3eea9df4b7201faee2e565b4e78"
-_PORTFOLIO_FILE_SHA256 = "f9db2032d14e77f013e1a356d94a7cc7c5d0bc0d3c035368832066c9dfb66eb0"
+_PORTFOLIO_SEMANTIC_SHA256 = "814fa65c62bcbbb3f4d9cff7349f2322760580513b0f267f53c879ae905c0f2c"
+_PORTFOLIO_FILE_SHA256 = "64790d94bb8dd5a3ea75e8db9cc45403a90066b4efe28e1665d5940e2537d42b"
 _PORTFOLIO_CONTRACT_SHA256 = "96f207733e5fc27a722763cf1b3c542f327eb70d41e04b9948aaec086b3facd4"
+_V25_STATE_FILE_SHA256 = "7ce6e5561572390e0a1a31ff8a059be3b68c8cfc809a9233c2e22a8ca730ef3c"
+_V25_JOURNAL_FILE_SHA256 = "a715dbbf8a8e089ea9e356339ceaf8f007bf6191ee0ea699d445c1560ddc5b69"
+_V25_STATE_SEMANTIC_SHA256 = "9d2d58bfa0d7df68107529c5e29b37c978d53efd78803537eb709ffba37ffd64"
+_V25_CANDIDATE_SEMANTICS = frozenset({
+    "0e8d73812c098b69c2db1bd606db7e464c1e1a7e70941582355687fb8de493dd",
+    "239ff98a74859d16121e728688a1b69cd7cfd0d433a1b7b99a240ba11469636f",
+    "294a22d78513b9a01300edc0c5de0cf634fa84ed7b102cdd796cdea062fb7151",
+    "29cd306bffd15001a8c81ca580a95ab45edd83a2f3c12b406a091c4c088e6a8a",
+    "387ef69bae89a278be40083f2bd5c400a3d813f1d91a0d96c5ee1c8833ff16c5",
+    "437767ef970ab3b66e6dd329af1d4f39fe04e3a8f9c8bf4919be2271ad21e4d6",
+    "7c9ca0be68b3685f120e672965a3a78806cd93be02b381b8c8d4a079fad7d219",
+    "93bf487ffe73b39338d56f32e6d57b320cac70365d10e5dc400c38221d1043d6",
+    "a8e514d69a62c2eaf38f6e03056f09787a015b47b884bbe31f3997d4dfe3f980",
+    "b04756eb0238eb99b6a614e457c4d334939f8e5a19db76ac3bec5bd4b39d862e",
+    "e99d0c0fc7e1edfbc21d83e279f52601580cea313de22f7c3f185ebfc578c62c",
+    "eb6af5d3196546b100134f85d5e78f168bda9363dab4940b5b61f62368d36f08",
+})
 _SITE_WINDOW_LOCK = Path("/mnt/raid0/llm/tmp/model-call.lock")
 _SITE_ACTOR_WRAPPER = Path(
     "/usr/local/share/npm-global/lib/node_modules/@openai/codex/bin/codex.js")
@@ -560,6 +597,265 @@ def _plain(value: Any) -> Any:
     if isinstance(value, (list, tuple)):
         return [_plain(item) for item in value]
     return value
+
+
+def _read_private_bound_bytes(path: Path, expected_sha256: str,
+                              label: str) -> bytes:
+    """Read one bundle-owned carrier through a stable no-follow descriptor."""
+    fd: int | None = None
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+        before = os.fstat(fd)
+        if (not stat.S_ISREG(before.st_mode) or before.st_uid != os.geteuid()
+                or before.st_nlink != 1 or before.st_mode & 0o077):
+            raise OSError("carrier identity is not private and single-link")
+        chunks: list[bytes] = []
+        while True:
+            chunk = os.read(fd, 1024 * 1024)
+            if not chunk:
+                break
+            chunks.append(chunk)
+        raw = b"".join(chunks)
+        after = os.fstat(fd)
+        path_after = os.stat(path, follow_symlinks=False)
+    except OSError as exc:
+        raise DeploymentFactoryError(
+            f"{label} is not a stable private carrier") from exc
+    finally:
+        if fd is not None:
+            os.close(fd)
+    keys = ("st_dev", "st_ino", "st_uid", "st_nlink", "st_mode", "st_size",
+            "st_mtime_ns", "st_ctime_ns")
+    if (any(getattr(before, key) != getattr(after, key) for key in keys)
+            or any(getattr(after, key) != getattr(path_after, key) for key in keys)
+            or len(raw) != before.st_size
+            or hashlib.sha256(raw).hexdigest() != expected_sha256):
+        raise DeploymentFactoryError(f"{label} changed while it was read")
+    return raw
+
+
+def _source_manifest_from_canonical_bytes(
+        raw: bytes) -> source_candidate.SourcePatchManifest:
+    """Parse one already-bound canonical source-manifest carrier."""
+    try:
+        payload = json.loads(
+            raw.decode("utf-8", "strict"),
+            parse_constant=lambda value: (_ for _ in ()).throw(
+                ValueError(value)))
+        required = {
+            "schema", "campaign_id", "proposal_id", "candidate_id",
+            "source_tree", "production_base_commit", "instrument_commit",
+            "change_class", "declared_files", "declared_symbols",
+            "mechanism_id", "patch_sha256", "patch_encoding", "patch_base64",
+        }
+        if (not isinstance(payload, Mapping) or set(payload) != required
+                or payload["schema"] != source_candidate.SCHEMA_SOURCE_PATCH
+                or payload["patch_encoding"] != "base64"
+                or not isinstance(payload["declared_symbols"], Mapping)):
+            raise ValueError("source manifest grammar changed")
+        patch_bytes = base64.b64decode(payload["patch_base64"], validate=True)
+        manifest = source_candidate.SourcePatchManifest(
+            campaign_id=payload["campaign_id"],
+            proposal_id=payload["proposal_id"],
+            candidate_id=payload["candidate_id"],
+            source_tree=payload["source_tree"],
+            production_base_commit=payload["production_base_commit"],
+            instrument_commit=payload["instrument_commit"],
+            change_class=payload["change_class"],
+            declared_files=tuple(payload["declared_files"]),
+            declared_symbols={
+                key: tuple(value)
+                for key, value in payload["declared_symbols"].items()},
+            mechanism_id=payload["mechanism_id"],
+            patch_sha256=payload["patch_sha256"],
+            patch_bytes=patch_bytes)
+    except (UnicodeError, ValueError, TypeError, KeyError, binascii.Error,
+            json.JSONDecodeError, source_candidate.SourceCandidateError) as exc:
+        raise DeploymentFactoryError(
+            "v25 source manifest is malformed") from exc
+    if source_candidate.source_patch_manifest_bytes(manifest) != raw:
+        raise DeploymentFactoryError(
+            "v25 source manifest is not canonical")
+    return manifest
+
+
+def _cross_campaign_manifest_identity(
+        manifest: source_candidate.SourcePatchManifest) -> str:
+    """Recompute the controller's instrument-epoch-independent identity."""
+    return schemas.content_hash({
+        "schema": "epyc.autokernel.cross_campaign_candidate_semantics.v1",
+        "production_base_commit": manifest.production_base_commit,
+        "change_class": manifest.change_class,
+        "declared_files": sorted(manifest.declared_files),
+        "declared_symbols": {
+            key: sorted(value)
+            for key, value in sorted(manifest.declared_symbols.items())},
+        "mechanism_id": manifest.mechanism_id,
+        "patch_sha256": manifest.patch_sha256,
+    })
+
+
+def _candidate_manifest_identity(
+        manifest: source_candidate.SourcePatchManifest) -> str:
+    """Recompute the controller's exact source semantic identity."""
+    return schemas.content_hash({
+        "schema": "epyc.autokernel.candidate_source_semantics.v1",
+        "source_tree": manifest.source_tree,
+        "production_base_commit": manifest.production_base_commit,
+        "instrument_commit": manifest.instrument_commit,
+        "change_class": manifest.change_class,
+        "declared_files": sorted(manifest.declared_files),
+        "declared_symbols": {
+            key: sorted(value)
+            for key, value in sorted(manifest.declared_symbols.items())},
+        "mechanism_id": manifest.mechanism_id,
+        "patch_sha256": manifest.patch_sha256,
+    })
+
+
+def _v25_carry_forward(
+        config: deployment.DiscoveryDeployment) -> Mapping[str, Any]:
+    """Derive successor replay authority from the exact vendored v25 terminal."""
+    evidence_rows = config.hypothesis_evidence_manifest.value["evidence"]
+    try:
+        state_row = evidence_rows["ev-v25-terminal-state"]
+        journal_row = evidence_rows["ev-v25-terminal-journal"]
+    except KeyError as exc:
+        raise DeploymentFactoryError(
+            "successor portfolio lacks v25 terminal carry-forward") from exc
+    if (state_row.get("sha256") != _V25_STATE_FILE_SHA256
+            or journal_row.get("sha256") != _V25_JOURNAL_FILE_SHA256):
+        raise DeploymentFactoryError("v25 carry-forward file identity changed")
+    try:
+        state_raw = _read_private_bound_bytes(
+            Path(state_row["path"]), _V25_STATE_FILE_SHA256,
+            "v25 terminal state")
+        journal_raw = _read_private_bound_bytes(
+            Path(journal_row["path"]), _V25_JOURNAL_FILE_SHA256,
+            "v25 terminal journal")
+        state = json.loads(state_raw.decode("utf-8"),
+                           parse_constant=lambda value: (_ for _ in ()).throw(
+                               ValueError(value)))
+        lines = journal_raw.splitlines(keepends=True)
+        events = [json.loads(line, parse_constant=lambda value: (_ for _ in ()).throw(
+            ValueError(value))) for line in lines]
+    except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+        raise DeploymentFactoryError("v25 carry-forward is not strict JSON") from exc
+    if (not isinstance(state, Mapping)
+            or state.get("schema") != "epyc.autokernel.discovery_controller.v5"
+            or state.get("authority") != "nonpromotable_candidate_only_discovery"
+            or state.get("complete") is not True
+            or state.get("terminal_reason") != "portfolio_exhausted"
+            or state.get("next") != 15
+            or state.get("scientific_attempts") != 5
+            or not isinstance(state.get("deployment_identity_sha256"), str)
+            or not controller.HASH.fullmatch(
+                state["deployment_identity_sha256"])
+            or state.get("state_sha256") != _V25_STATE_SEMANTIC_SHA256
+            or hashlib.sha256(json.dumps(
+                {key: value for key, value in state.items()
+                 if key != "state_sha256"},
+                sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+               != _V25_STATE_SEMANTIC_SHA256):
+        raise DeploymentFactoryError("v25 terminal state semantics changed")
+    suffix = events[-3:]
+    expected_suffix = (
+        (72, "akj-000000000072-9897f8cf5610",
+         "discovery_authoring_refused",
+         "c7d6d7153be419346dd2f1c31b457ecd2b893460f02b653b288882b8afd2df1d"),
+        (73, "akj-000000000073-420cd88678ed",
+         "discovery_portfolio_exhausted",
+         "2ba9ea65dc150bd99df9f236ee33b5178b8537e042476bb41952d05760df5b49"),
+        (74, "akj-000000000074-b0d0bbb12b4f",
+         "discovery_complete", _V25_STATE_SEMANTIC_SHA256),
+    )
+    observed_suffix = tuple(
+        (event.get("seq"), event.get("event_id"),
+         (event.get("payload") or {}).get("state"),
+         (event.get("payload") or {}).get("controller_state_sha256"))
+        for event in suffix if isinstance(event, Mapping))
+    if (len(events) != 74 or observed_suffix != expected_suffix
+            or any((json.dumps(event, sort_keys=True, separators=(",", ":"))
+                    + "\n").encode() != line
+                   for event, line in zip(events, lines))):
+        raise DeploymentFactoryError("v25 terminal journal chain changed")
+    terminals = state.get("portfolio_terminals")
+    skips = state.get("portfolio_skips")
+    outcomes = {
+        "akh-v2-q5-type-specific-dequant": "nominated",
+        "akh-v2-q8-quantizer-new-mechanism": "retire",
+        "akh-v2-fa-gqa7-pair-tail": "bounded_authoring_skip",
+        "akh-v2-rms-direct-load-reduction": "bounded_authoring_skip",
+    }
+    if (not isinstance(terminals, Mapping) or set(terminals) != set(list(outcomes)[:2])
+            or {key: terminals[key].get("disposition") for key in terminals}
+               != {key: outcomes[key] for key in list(outcomes)[:2]}
+            or not isinstance(skips, Mapping) or set(skips) != set(list(outcomes)[2:])
+            or any(skips[key] != {"disposition": "bounded_authoring_skip",
+                                  "scientific_terminal": False,
+                                  "failure_count": 3}
+                   for key in skips)):
+        raise DeploymentFactoryError("v25 portfolio outcomes changed")
+    iterations = state.get("iterations")
+    if not isinstance(iterations, list):
+        raise DeploymentFactoryError("v25 iterations are malformed")
+    semantics = {row.get("candidate_semantic_sha256") for row in iterations
+                 if isinstance(row, Mapping)
+                 and row.get("candidate_semantic_sha256") is not None}
+    if semantics != _V25_CANDIDATE_SEMANTICS:
+        raise DeploymentFactoryError("v25 candidate semantic set changed")
+    selected = [row for row in iterations
+                if isinstance(row, Mapping)
+                and row.get("status") in {
+                    "candidate", "inconclusive", "authoring_refused"}]
+    if ({row.get("turn") for row in selected} != {2, 4, 6, 8, 12, 13, 14}
+            or len(selected) != 7):
+        raise DeploymentFactoryError(
+            "v25 materialized candidate set changed")
+    patch_sha256: set[str] = set()
+    cross_campaign_sha256: set[str] = set()
+    for row in selected:
+        turn = row["turn"]
+        evidence_id = f"ev-v25-source-manifest-turn{turn:02d}"
+        source_row = evidence_rows.get(evidence_id)
+        expected_manifest_sha256 = row.get("source_manifest_sha256")
+        if (not isinstance(source_row, Mapping)
+                or source_row.get("sha256") != expected_manifest_sha256
+                or not isinstance(expected_manifest_sha256, str)
+                or not isinstance(source_row.get("path"), str)):
+            raise DeploymentFactoryError(
+                "v25 source manifest does not join its controller row")
+        source_raw = _read_private_bound_bytes(
+            Path(source_row["path"]), expected_manifest_sha256,
+            f"v25 turn {turn} source manifest")
+        manifest = _source_manifest_from_canonical_bytes(source_raw)
+        if (manifest.campaign_id !=
+                f"ak-discovery-{state['deployment_identity_sha256'][:16]}"
+                or manifest.production_base_commit !=
+                   deployment.FROZEN_PRODUCTION_HEAD
+                or manifest.instrument_commit != _INSTRUMENT_COMMIT
+                or _candidate_manifest_identity(manifest) !=
+                   row.get("candidate_semantic_sha256")):
+            raise DeploymentFactoryError(
+                "v25 source manifest semantics differ from controller state")
+        patch_sha256.add(manifest.patch_sha256)
+        cross_campaign_sha256.add(
+            _cross_campaign_manifest_identity(manifest))
+    if len(patch_sha256) != 7 or len(cross_campaign_sha256) != 7:
+        raise DeploymentFactoryError(
+            "v25 source manifests do not derive seven distinct candidates")
+    body: dict[str, Any] = {
+        "schema": "epyc.autokernel.discovery_carry_forward.v1",
+        "predecessor_state_file_sha256": _V25_STATE_FILE_SHA256,
+        "predecessor_journal_file_sha256": _V25_JOURNAL_FILE_SHA256,
+        "predecessor_state_semantic_sha256": _V25_STATE_SEMANTIC_SHA256,
+        "portfolio_outcomes": outcomes,
+        "candidate_semantic_sha256": sorted(_V25_CANDIDATE_SEMANTICS),
+        "candidate_patch_sha256": sorted(patch_sha256),
+        "cross_campaign_candidate_sha256": sorted(cross_campaign_sha256),
+    }
+    body["carry_forward_sha256"] = schemas.content_hash(body)
+    return MappingProxyType(body)
 
 
 def _validate_critic_auth_source() -> Mapping[str, Any]:
@@ -615,7 +911,7 @@ def initialize_static_deployment_bundle(root: Path) -> Path:
                                "checked-in hypothesis portfolio")
             != _PORTFOLIO_FILE_SHA256):
         raise DeploymentFactoryError("checked-in hypothesis portfolio identity changed")
-    portfolio_path = config_dir / "discovery-hypothesis-portfolio-v2.json"
+    portfolio_path = config_dir / "discovery-hypothesis-portfolio-v26.json"
     _atomic_bytes(portfolio_path, hypothesis_portfolio.DEFAULT_PORTFOLIO.read_bytes())
     portfolio_file_sha = _digest_regular(portfolio_path, "hypothesis portfolio")
     contract_source = hypothesis_portfolio.DEFAULT_PORTFOLIO.with_name(
@@ -745,8 +1041,8 @@ def initialize_static_deployment_bundle(root: Path) -> Path:
                "runtime_config_sha256": runtime_sha,
                "profile_receipts": [{"path": str(source_plan.path), "sha256": source_plan.sha256}],
                "hotspots": hotspots,
-               "source_constraints": {"template_registry": "gpu-source-templates-v2",
-                                      "one_reviewed_file_per_candidate": True,
+               "source_constraints": {"template_registry": "gpu-source-templates-v3",
+                                      "max_reviewed_files_per_candidate": 2,
                                       "excluded_source_plan_fields": ["planner_posture", "current_execution",
                                                                        "max_overlap_bytes", "overlap_policy"]},
                "initial_strategies": [
@@ -765,6 +1061,11 @@ def initialize_static_deployment_bundle(root: Path) -> Path:
                "hypothesis_evidence": vendored_evidence,
                "reviewed_source_package_sha256": schemas.content_hash(reviewed_source_body),
                "template_registry_sha256": templates.registry_sha256,
+               "template_symbol_authority": {
+                   template_id: {
+                       path: sorted(symbols)
+                       for path, symbols in template.allowed_symbols.items()}
+                   for template_id, template in sorted(templates.templates.items())},
                "template_surfaces_sha256": schemas.content_hash(template_surfaces),
                "template_surfaces": template_surfaces,
                "portfolio_dispatch_authority": portfolio_dispatch_authority}
@@ -1071,6 +1372,24 @@ def _template_registry() -> ExperimentTemplateRegistry:
             "flash_attn_stream_k_fixup_general", "flash_attn_combine_results", "launch_fattn"),
          "markers": ("flash_attn_tile<", "flash_attn_combine_results<"),
          "op": "FLASH_ATTN_EXT", "cases": 2868, "anchor": fattn_common_anchor, "replays": ()},
+        {"id": "cuda-fattn-combine-v1", "path": "ggml/src/ggml-cuda/fattn-common.cuh",
+         "primary": "flash_attn_combine_results",
+         "symbols": ("flash_attn_combine_results",),
+         "markers": ("flash_attn_combine_results<",),
+         "op": "FLASH_ATTN_EXT", "cases": 2868,
+         "anchor": (fattn_common_anchor[1],), "replays": ()},
+        {"id": "cuda-fattn-gqa7-common-v1",
+         "paths": ("ggml/src/ggml-cuda/fattn-common.cuh",
+                   "ggml/src/ggml-cuda/fattn-tile.cuh"),
+         "primary": "launch_fattn",
+         "symbols_by_path": {
+             "ggml/src/ggml-cuda/fattn-common.cuh": ("launch_fattn",),
+             "ggml/src/ggml-cuda/fattn-tile.cuh": (
+                 "launch_fattn_tile_switch_ncols1",
+                 "launch_fattn_tile_switch_ncols2")},
+         "markers": ("flash_attn_tile<", "flash_attn_combine_results<"),
+         "op": "FLASH_ATTN_EXT", "cases": 2868,
+         "anchor": fattn_common_anchor, "replays": (), "gqa7": True},
         {"id": "cuda-mmvq-v2", "path": "ggml/src/ggml-cuda/mmvq.cu",
          "primary": "ggml_cuda_op_mul_mat_vec_q",
          "symbols": ("ggml_cuda_op_mul_mat_vec_q", "ggml_cuda_mul_mat_vec_q",
@@ -1105,6 +1424,16 @@ def _template_registry() -> ExperimentTemplateRegistry:
              "kernel_pattern": mmvq_anchor[3][0], "calls": 129,
              "grid": 57344, "workgroup": 128, "lds_bytes": 512,
              "reason": "Q5 false/true tail is not the reviewed true/true dequant route"},)},
+        {"id": "cuda-vecdotq-q4k-v1", "path": "ggml/src/ggml-cuda/vecdotq.cuh",
+         "primary": "vec_dot_q4_K_q8_1",
+         "symbols": ("vec_dot_q4_K_q8_1", "vec_dot_q4_K_q8_1_impl_vmmq"),
+         "markers": ("mul_mat_vec_q<",), "op": "MUL_MAT", "cases": 1139,
+         "anchor": (mmvq_anchor[4],), "replays": ()},
+        {"id": "cuda-vecdotq-q6k-v1", "path": "ggml/src/ggml-cuda/vecdotq.cuh",
+         "primary": "vec_dot_q6_K_q8_1",
+         "symbols": ("vec_dot_q6_K_q8_1", "vec_dot_q6_K_q8_1_impl_mmvq"),
+         "markers": ("mul_mat_vec_q<",), "op": "MUL_MAT", "cases": 1139,
+         "anchor": (mmvq_anchor[5],), "replays": ()},
         {"id": "cuda-quantize-q8-v1", "path": "ggml/src/ggml-cuda/quantize.cu",
          "primary": "quantize_q8_1",
          "symbols": ("quantize_q8_1", "quantize_mmq_nvfp4", "quantize_mmq_mxfp4",
@@ -1140,7 +1469,15 @@ def _template_registry() -> ExperimentTemplateRegistry:
     )
     templates = {}
     for family in families:
-        template_id, path = family["id"], family["path"]
+        template_id = family["id"]
+        paths = tuple(family.get("paths", (family.get("path"),)))
+        if not paths or any(not isinstance(path, str) for path in paths):
+            raise DeploymentFactoryError("template family paths are malformed")
+        path = paths[0]
+        symbols_by_path = family.get(
+            "symbols_by_path", {path: family.get("symbols", ())})
+        if set(symbols_by_path) != set(paths):
+            raise DeploymentFactoryError("template family symbols do not match paths")
         anchor = tuple(evidence.ExactDispatch(
             signature=f"{template_id}.anchor.{index}", kernel_pattern=row[0],
             calls=row[1], grid=row[2], workgroup=row[3], lds_bytes=row[4],
@@ -1152,8 +1489,9 @@ def _template_registry() -> ExperimentTemplateRegistry:
             dispatch=evidence.DispatchContract(candidate_exact=tuple(
                 replace(row, signature=row.signature.replace(".anchor.", ".candidate-seed."))
                 for row in anchor), anchor_exact=anchor),
-            allowed_files=frozenset({path}),
-            allowed_symbols={path: frozenset(family["symbols"])},
+            allowed_files=frozenset(paths),
+            allowed_symbols={relative: frozenset(symbols)
+                             for relative, symbols in symbols_by_path.items()},
             semantics={"workload": "decode_tg128", "calls_per_arm": 9,
                        "load_admission_profile_id": _LOAD_PROFILE_ID,
                        "correctness_op": family["op"],
@@ -1161,7 +1499,9 @@ def _template_registry() -> ExperimentTemplateRegistry:
                        "suite_seed": _CORRECTNESS_SUITE_SEED,
                        "test_source_commit": _INSTRUMENT_COMMIT,
                        "test_source_sha256": _INSTRUMENT_TEST_SOURCE_SHA256,
-                       "production_instrument_target_sha256": _TARGET_SOURCE_SHA256[path],
+                       "production_instrument_target_sha256_by_file": {
+                           relative: _TARGET_SOURCE_SHA256[relative]
+                           for relative in paths},
                        "profile_anchor_source": {
                            "receipt": str(_PROFILE_TRACE_RECEIPT),
                            "receipt_sha256": _PROFILE_TRACE_RECEIPT_SHA256,
@@ -1197,14 +1537,14 @@ def _template_registry() -> ExperimentTemplateRegistry:
                            ],
                            "candidate_dispatch_authority":
                                "derived_from_anchor_by_exact_7_equals_3x2_plus_1_partition"}
-                          if template_id == "cuda-fattn-tile-v1" else {}),
+                          if family.get("gqa7") is True else {}),
                        "dispatch_bounds": {"calls": [1, 20000], "grid": [64, 16777216],
                                            "workgroup": [64, 1024], "lds_bytes": [0, 131072],
                                            "kernel_name_fragments": list(family["markers"])}})
     provisional = object.__new__(ExperimentTemplateRegistry)
-    object.__setattr__(provisional, "version", "gpu-source-templates-v2")
+    object.__setattr__(provisional, "version", "gpu-source-templates-v3")
     object.__setattr__(provisional, "templates", MappingProxyType(templates))
-    body = {"version": "gpu-source-templates-v2", "templates": {
+    body = {"version": "gpu-source-templates-v3", "templates": {
         key: {"template_id": value.template_id, "target_surface": value.target_surface,
               "target_symbol": value.target_symbol, "correctness_id": value.correctness_id,
               "dispatch_id": value.dispatch_id, "allowed_files": sorted(value.allowed_files),
@@ -1218,7 +1558,7 @@ def _template_registry() -> ExperimentTemplateRegistry:
         for key, value in sorted(templates.items())}}
     digest = hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":"),
                                        ensure_ascii=False, allow_nan=False).encode()).hexdigest()
-    return ExperimentTemplateRegistry("gpu-source-templates-v2", digest, templates)
+    return ExperimentTemplateRegistry("gpu-source-templates-v3", digest, templates)
 
 
 def _reviewed_source_package(
@@ -1252,8 +1592,12 @@ _TEMPLATE_CHANGE_CLASSES = {
     "cuda-fattn-tile-v1": ("dispatcher",),
     "cuda-fattn-tile-entry-v1": ("dispatcher",),
     "cuda-fattn-common-v1": ("arithmetic", "fusion"),
+    "cuda-fattn-combine-v1": ("arithmetic",),
+    "cuda-fattn-gqa7-common-v1": ("dispatcher",),
     "cuda-mmvq-v2": ("arithmetic", "dispatcher"),
     "cuda-vecdotq-v1": ("arithmetic",),
+    "cuda-vecdotq-q4k-v1": ("arithmetic",),
+    "cuda-vecdotq-q6k-v1": ("arithmetic",),
     "cuda-quantize-q8-v1": ("arithmetic",),
     "cuda-rope-v2": ("arithmetic",),
     "cuda-norm-v2": ("arithmetic",),
@@ -1742,7 +2086,7 @@ def _evidence_binding(config: deployment.DiscoveryDeployment) -> EvidencePlanBin
             str(correctness_tool.path), "test", "-o", op, "-b", "ROCm0", "-j", "1",
             "--suite-seed", str(seed))
         correctness_invocations: tuple[Mapping[str, Any], ...] = ()
-        if template.template_id == "cuda-fattn-tile-v1":
+        if template.template_id == "cuda-fattn-gqa7-common-v1":
             required_cases = [dict(row) for row in semantics["required_correctness_cases"]]
             correctness_invocations = (
                 {"invocation_id": "generic_flash_attn_ext",
@@ -2076,12 +2420,13 @@ def _seal_graph_receipt(config: deployment.DiscoveryDeployment,
                         source_package: controller.ReviewedSourcePackage,
                         execution_modules: Mapping[str, Mapping[str, str]],
                         production_runtime_sha256: str,
-                        critic_auth: Mapping[str, Any]) -> tuple[Path, str]:
+                        critic_auth: Mapping[str, Any],
+                        carry_forward: Mapping[str, Any]) -> tuple[Path, str]:
     surfaces = _normalized_template_surfaces(
         templates, config.hypothesis_portfolio.value)
     profiler_runtime = [evidence._bound_reference(item)
                         for item in _rocprof_v3_policy(config)]
-    body = {"schema": "epyc.autokernel.static_discovery_graph.v5",
+    body = {"schema": "epyc.autokernel.static_discovery_graph.v6",
             "authority": "nonpromotable_candidate_only_discovery", "promotion_claim": False,
             "inference_executed": False, "config_sha256": config.config_sha256,
             "registry_ids": dict(_STATIC_IDS), "template_registry_sha256": templates.registry_sha256,
@@ -2097,6 +2442,7 @@ def _seal_graph_receipt(config: deployment.DiscoveryDeployment,
                 "evidence_manifest_sha256":
                     config.hypothesis_evidence_manifest.value["manifest_sha256"],
                 "contract_sha256": config.hypothesis_portfolio_contract.sha256},
+            "carry_forward_sha256": carry_forward["carry_forward_sha256"],
             "reviewed_source_package": source_package.manifest(),
             "profile_trace_authority": {
                 "receipt": str(_PROFILE_TRACE_RECEIPT),
@@ -2211,10 +2557,12 @@ def _seal_graph_receipt(config: deployment.DiscoveryDeployment,
             durable = json.loads(path.read_bytes())
         except (json.JSONDecodeError, UnicodeDecodeError) as exc:
             raise DeploymentFactoryError("durable deployment graph is malformed") from exc
-        if durable.get("schema") == "epyc.autokernel.static_discovery_graph.v4":
+        if durable.get("schema") in {
+                "epyc.autokernel.static_discovery_graph.v4",
+                "epyc.autokernel.static_discovery_graph.v5"}:
             raise DeploymentFactoryError(
-                "legacy path-bound deployment graph v4 cannot authorize execution; "
-                "initialize a fresh v5 deployment")
+                "legacy deployment graph cannot authorize successor execution; "
+                "initialize a fresh v6 deployment")
         if path.read_bytes() != encoded:
             raise DeploymentFactoryError("durable deployment graph differs from current sealed graph")
     else:
@@ -2234,6 +2582,10 @@ def build_static_deployment_graph(config: deployment.DiscoveryDeployment) -> Sta
             != _PORTFOLIO_CONTRACT_SHA256):
         raise DeploymentFactoryError(
             "deployment selected an unreviewed hypothesis portfolio authority")
+    # Validate the exact predecessor terminal during validation as well as
+    # execution.  The graph binds its projection so a graph-only dry run cannot
+    # silently omit the cross-campaign replay authority used by the controller.
+    carry_forward = _v25_carry_forward(config)
     target_equality = _target_source_equality_receipt(config)
     instrument_review = _instrument_review_receipt(config)
     execution_runtime_provenance = _execution_module_runtime_provenance()
@@ -2252,12 +2604,19 @@ def build_static_deployment_graph(config: deployment.DiscoveryDeployment) -> Sta
     source_package = (_reviewed_source_package(config, templates)
                       if isinstance(config.instrument_commit, str) else None)
     surfaces = _normalized_template_surfaces(templates, config.hypothesis_portfolio.value)
+    symbol_authority = {
+        template_id: {
+            path: sorted(symbols)
+            for path, symbols in template.allowed_symbols.items()}
+        for template_id, template in sorted(templates.templates.items())}
     dispatch_authority = _portfolio_dispatch_authority(
         templates, config.hypothesis_portfolio.value)
     if (config.planner_context.value["reviewed_source_package_sha256"]
             != source_package.package_sha256
             or config.planner_context.value["template_registry_sha256"]
             != templates.registry_sha256
+            or config.planner_context.value["template_symbol_authority"]
+            != symbol_authority
             or config.planner_context.value["template_surfaces"] != surfaces
             or config.planner_context.value["template_surfaces_sha256"]
             != schemas.content_hash(surfaces)
@@ -2311,7 +2670,8 @@ def build_static_deployment_graph(config: deployment.DiscoveryDeployment) -> Sta
         source_package,
         execution_modules,
         production_snapshot.runtime_semantics_sha256,
-        critic_auth)
+        critic_auth,
+        carry_forward)
     return StaticDeploymentGraph(config=config, adapters=MappingProxyType(adapters),
                                  registry_ids=_STATIC_IDS, graph_receipt=receipt,
                                  graph_sha256=digest)
@@ -2667,9 +3027,11 @@ def _validate_source_scope(candidate: controller.PlannedCandidate,
     manifest = candidate.source_manifest
     if manifest.source_tree != "llama.cpp":
         raise DeploymentFactoryError("discovery source patch must target the allowlisted llama.cpp scope")
-    if template is None or len(manifest.declared_files) != 1:
+    if (template is None
+            or not 1 <= len(manifest.declared_files) <= 2
+            or set(manifest.declared_files) != set(template.allowed_files)):
         raise DeploymentFactoryError(
-            "discovery intent must select one exact reviewed file")
+            "discovery intent must select the exact reviewed file set")
     for path in manifest.declared_files:
         if (path.startswith(_FORBIDDEN_MUTATION_PREFIXES) or template is None
                 or path not in template.allowed_files
@@ -2852,6 +3214,7 @@ def materialize(config: deployment.DiscoveryDeployment, registry: Mapping[str, M
 def controller_config(config: deployment.DiscoveryDeployment, *, dry_run: bool = False) -> controller.ControllerConfig:
     """The deployment receipt is the sole source of controller configuration."""
     config.revalidate()
+    carry_forward = _v25_carry_forward(config)
     return controller.ControllerConfig(
         output_root=config.state_root, evidence_root=config.evidence_root,
         max_iterations=config.max_iterations,
@@ -2871,6 +3234,8 @@ def controller_config(config: deployment.DiscoveryDeployment, *, dry_run: bool =
         deployment_identity_sha256=config.config_sha256,
         hypothesis_portfolio=config.hypothesis_portfolio.value,
         hypothesis_portfolio_sha256=config.hypothesis_portfolio.value.sha256,
+        carry_forward=carry_forward,
+        carry_forward_sha256=carry_forward["carry_forward_sha256"],
         # The sealed deployment digest, not a caller argument, namespaces all
         # controller/worktree/receipt identities across concurrent deployments.
         campaign_id=f"ak-discovery-{config.config_sha256[:16]}")

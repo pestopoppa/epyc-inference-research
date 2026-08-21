@@ -120,6 +120,7 @@ class DeploymentConfigTests(unittest.TestCase):
             "hypothesis_evidence": evidence,
             "reviewed_source_package_sha256": "e" * 64,
             "template_registry_sha256": "d" * 64,
+            "template_symbol_authority": {"test": {"ggml.cu": ["kernel"]}},
             "template_surfaces_sha256": D.schemas.content_hash(template_surfaces),
             "template_surfaces": template_surfaces,
             "portfolio_dispatch_authority": {
@@ -158,7 +159,7 @@ class DeploymentConfigTests(unittest.TestCase):
             "source_plan": {"source_builder_id": "gpu-source-v1",
                             "evidence_plan_id": "reviewed-gpu-source-evidence-v1",
                             "runner_args_id": "qwen05b-tg128",
-                            "experiment_template_registry_id": "gpu-source-templates-v2",
+                            "experiment_template_registry_id": "gpu-source-templates-v3",
                             "experiment_template_registry_sha256": "d" * 64,
                             "production_snapshot_id": "llama-v9-artifacts"},
         }
@@ -181,6 +182,36 @@ class DeploymentConfigTests(unittest.TestCase):
             self.assertEqual(loaded.source_builder_id, "gpu-source-v1")
             self.assertEqual(loaded.nomination_threshold, 0.03)
             self.assertEqual(loaded.build_root, (Path(temp) / "builds").resolve())
+            self.assertEqual(loaded.planner_context.value["schema"],
+                             "epyc.autokernel.discovery_planner_context.v3")
+            self.assertEqual(
+                loaded.planner_context.value["template_symbol_authority"],
+                {"test": {"ggml.cu": ["kernel"]}},
+            )
+
+    def test_planner_context_requires_exact_template_symbol_authority(self):
+        for replacement in (None, {}, {"test": {"ggml.cu": []}},
+                            {"test": {"ggml.cu": ["kernel", "kernel"]}}):
+            with self.subTest(replacement=replacement), tempfile.TemporaryDirectory() as temp:
+                path, raw = self.config(Path(temp))
+                planner_path = Path(raw["planner_context"]["path"])
+                planner = json.loads(planner_path.read_text(encoding="utf-8"))
+                if replacement is None:
+                    del planner["template_symbol_authority"]
+                else:
+                    planner["template_symbol_authority"] = replacement
+                planner["context_sha256"] = D.schemas.content_hash(
+                    {key: item for key, item in planner.items()
+                     if key != "context_sha256"})
+                planner_path.write_text(json.dumps(planner), encoding="utf-8")
+                raw["planner_context"]["sha256"] = digest(planner_path)
+                seal(raw)
+                path.write_text(json.dumps(raw), encoding="utf-8")
+                with self.assertRaisesRegex(
+                        D.DeploymentConfigError,
+                        "planner_context has an unknown or incomplete schema|"
+                        "planner_context template symbol authority is malformed"):
+                    self.load(path)
 
     def test_rejects_untrusted_code_command_and_environment_keys(self):
         for section, key, value in (
@@ -257,7 +288,7 @@ class DeploymentConfigTests(unittest.TestCase):
                 "evidence_plan": {"reviewed-gpu-source-evidence-v1":
                                       lambda: sentinels["evidence_plan"]},
                 "runner_args": {"qwen05b-tg128": lambda: sentinels["runner_args"]},
-                "experiment_template_registry": {"gpu-source-templates-v2": {"id": sentinels["experiment_template_registry"]}},
+                "experiment_template_registry": {"gpu-source-templates-v3": {"id": sentinels["experiment_template_registry"]}},
                 "inference_window_lease": {"mi210-window-v1": lambda: None},
                 "production_snapshot": {"llama-v9-artifacts": object()},
             }
@@ -316,7 +347,7 @@ class DeploymentConfigTests(unittest.TestCase):
                 "source_builder": {"gpu-source-v1": lambda: None},
                 "evidence_plan": {"reviewed-gpu-source-evidence-v1": lambda: None},
                 "runner_args": {"qwen05b-tg128": lambda: None},
-                "experiment_template_registry": {"gpu-source-templates-v2": {}},
+                "experiment_template_registry": {"gpu-source-templates-v3": {}},
                 "inference_window_lease": {"mi210-window-v1": lambda: None},
                 "production_snapshot": {"llama-v9-artifacts": object()},
             }

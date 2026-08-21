@@ -112,7 +112,7 @@ class ImmutableInput:
         _digest_file(self.path, self.sha256, label)
 
 
-PLANNER_CONTEXT_SCHEMA = "epyc.autokernel.discovery_planner_context.v2"
+PLANNER_CONTEXT_SCHEMA = "epyc.autokernel.discovery_planner_context.v3"
 EVIDENCE_MANIFEST_SCHEMA = "epyc.autokernel.hypothesis_evidence_manifest.v1"
 ADMISSION_POLICY_SCHEMA = gpu_load_admission.POLICY_SCHEMA
 _PLANNER_CONTEXT_LIMIT = 512 * 1024
@@ -247,6 +247,7 @@ def _planner_context(value: object, *, model: ImmutableInput,
                 "do_not_repeat", "incumbents", "ineligible_hypotheses",
                 "hypothesis_evidence_manifest_sha256", "hypothesis_evidence",
                 "reviewed_source_package_sha256", "template_registry_sha256",
+                "template_symbol_authority",
                 "template_surfaces_sha256", "template_surfaces",
                 "portfolio_dispatch_authority"}
     if not isinstance(body, Mapping) or set(body) != required:
@@ -271,6 +272,19 @@ def _planner_context(value: object, *, model: ImmutableInput,
             or schemas.content_hash(body.get("template_surfaces"))
             != body.get("template_surfaces_sha256")):
         raise DeploymentConfigError("planner_context source/template authority is malformed")
+    symbol_authority = body.get("template_symbol_authority")
+    if (not isinstance(symbol_authority, Mapping) or not symbol_authority
+            or any(not isinstance(template_id, str)
+                   or not isinstance(by_file, Mapping) or not by_file
+                   or any(not isinstance(path, str)
+                          or not isinstance(symbols, list) or not symbols
+                          or symbols != sorted(set(symbols))
+                          or any(not isinstance(symbol, str) or not symbol
+                                 for symbol in symbols)
+                          for path, symbols in by_file.items())
+                   for template_id, by_file in symbol_authority.items())):
+        raise DeploymentConfigError(
+            "planner_context template symbol authority is malformed")
     if body.get("hypothesis_evidence") != evidence_manifest.value["evidence"]:
         raise DeploymentConfigError("planner_context evidence projection differs from vendored manifest")
     if not all(isinstance(body.get(key), list) for key in (

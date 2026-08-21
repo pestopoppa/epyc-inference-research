@@ -13,6 +13,7 @@ from pathlib import Path
 from unittest import mock
 
 from . import hypothesis_portfolio as P
+from . import generate_discovery_hypothesis_portfolio_v26 as generate_v26
 
 
 class HypothesisPortfolioTest(unittest.TestCase):
@@ -28,6 +29,9 @@ class HypothesisPortfolioTest(unittest.TestCase):
         self.assertEqual(portfolio.body["schema"], P.SCHEMA)
         self.assertFalse(portfolio.body["promotion_authority"])
         self.assertEqual(portfolio.sha256, P.content_sha256(portfolio.body))
+
+    def test_v26_corpus_is_exact_generator_output(self):
+        self.assertEqual(self.raw, generate_v26.generate())
 
     def test_frames_are_exact_and_large_models_are_not_collapsed(self):
         portfolio = P.load(P.DEFAULT_PORTFOLIO)
@@ -86,7 +90,7 @@ class HypothesisPortfolioTest(unittest.TestCase):
     def test_dispatch_anchor_must_cover_each_exact_target_frame(self):
         body = self.body()
         body["hypotheses"][0]["dispatch_anchors"].pop()
-        with self.assertRaisesRegex(P.PortfolioError, "one dispatch anchor"):
+        with self.assertRaisesRegex(P.PortfolioError, "dispatch_anchors must be non-empty"):
             P.validate(body)
 
     def test_bad_rfc3339_timestamp_is_refused(self):
@@ -105,7 +109,8 @@ class HypothesisPortfolioTest(unittest.TestCase):
 
     def test_interaction_target_must_exist(self):
         body = self.body()
-        body["hypotheses"][0]["interactions"][0]["with"] = "akh-missing"
+        row = next(row for row in body["hypotheses"] if row["interactions"])
+        row["interactions"][0]["with"] = "akh-missing"
         with self.assertRaisesRegex(P.PortfolioError, "invalid interaction"):
             P.validate(body)
 
@@ -225,8 +230,12 @@ class HypothesisPortfolioTest(unittest.TestCase):
         portfolio = P.load(P.DEFAULT_PORTFOLIO)
         self.assertEqual(
             {row["hypothesis_id"] for row in portfolio.eligible_projection()},
-            {"akh-v2-q5-type-specific-dequant", "akh-v2-q8-quantizer-new-mechanism",
-             "akh-v2-fa-gqa7-pair-tail", "akh-v2-rms-direct-load-reduction"},
+            {"akh-v26-q4k-branchless-sixbit-scale",
+             "akh-v26-rms-scale-broadcast",
+             "akh-v26-rope-neox-index-strength-reduction",
+             "akh-v26-fa-combine-wave-normalization",
+             "akh-v26-q6k-packed-decode",
+             "akh-v26-fa-gqa7-common-map"},
         )
         projection = portfolio.eligible_projection()[0]
         with self.assertRaises(TypeError):
@@ -286,30 +295,12 @@ class HypothesisPortfolioTest(unittest.TestCase):
                 **dict(zip(("calls", "grid", "workgroup", "lds_bytes"), row)),
             ) for offset, row in enumerate(rows)]
         surfaces = {
-            "cuda-vecdotq-v1": {
+            "cuda-vecdotq-q4k-v1": {
                 "source_files": ["ggml/src/ggml-cuda/vecdotq.cuh"],
-                "source_symbols": ["vec_dot_q5_0_q8_1", "vec_dot_q5_0_q8_1_impl"],
+                "source_symbols": ["vec_dot_q4_K_q8_1", "vec_dot_q4_K_q8_1_impl_vmmq"],
                 "change_classes": ["arithmetic"],
-                "dispatch_signatures": geometry("cuda-vecdotq-v1", 0,
-                    (6063, 57344, 128, 1024), (4644, 8192, 128, 1024),
-                    (3096, 311296, 128, 1024)),
-                "excluded_signatures": geometry(
-                    "cuda-vecdotq-v1", 3, (129, 57344, 128, 512)),
-            },
-            "cuda-quantize-q8-v1": {
-                "source_files": ["ggml/src/ggml-cuda/quantize.cu"],
-                "source_symbols": ["quantize_q8_1"],
-                "change_classes": ["arithmetic"],
-                "dispatch_signatures": geometry("cuda-quantize-q8-v1", 0,
-                    (15609, 1024, 256, 0), (3096, 5120, 256, 0)),
-                "excluded_signatures": [],
-            },
-            "cuda-fattn-tile-v1": {
-                "source_files": ["ggml/src/ggml-cuda/fattn-tile.cuh"],
-                "source_symbols": ["launch_fattn_tile_switch_ncols2"],
-                "change_classes": ["dispatcher"],
                 "dispatch_signatures": geometry(
-                    "cuda-fattn-tile-v1", 0, (3096, 7168, 64, 5120)),
+                    "cuda-vecdotq-q4k-v1", 0, (1548, 114688, 128, 512)),
                 "excluded_signatures": [],
             },
             "cuda-norm-v2": {
@@ -320,23 +311,57 @@ class HypothesisPortfolioTest(unittest.TestCase):
                     "cuda-norm-v2", 0, (6321, 256, 256, 512)),
                 "excluded_signatures": [],
             },
+            "cuda-rope-v2": {
+                "source_files": ["ggml/src/ggml-cuda/rope.cu"],
+                "source_symbols": ["rope_neox", "rope_neox_cuda"],
+                "change_classes": ["arithmetic"],
+                "dispatch_signatures": geometry("cuda-rope-v2", 0,
+                    (3096, 512, 256, 0), (3096, 3584, 256, 0)),
+                "excluded_signatures": [],
+            },
+            "cuda-fattn-combine-v1": {
+                "source_files": ["ggml/src/ggml-cuda/fattn-common.cuh"],
+                "source_symbols": ["flash_attn_combine_results"],
+                "change_classes": ["arithmetic"],
+                "dispatch_signatures": geometry(
+                    "cuda-fattn-combine-v1", 0, (3096, 896, 64, 512)),
+                "excluded_signatures": [],
+            },
+            "cuda-vecdotq-q6k-v1": {
+                "source_files": ["ggml/src/ggml-cuda/vecdotq.cuh"],
+                "source_symbols": ["vec_dot_q6_K_q8_1", "vec_dot_q6_K_q8_1_impl_mmvq"],
+                "change_classes": ["arithmetic"],
+                "dispatch_signatures": geometry(
+                    "cuda-vecdotq-q6k-v1", 0, (1548, 114688, 128, 512)),
+                "excluded_signatures": [],
+            },
+            "cuda-fattn-gqa7-common-v1": {
+                "source_files": ["ggml/src/ggml-cuda/fattn-common.cuh",
+                                 "ggml/src/ggml-cuda/fattn-tile.cuh"],
+                "source_symbols": ["launch_fattn", "launch_fattn_tile_switch_ncols1",
+                                   "launch_fattn_tile_switch_ncols2"],
+                "change_classes": ["dispatcher"],
+                "dispatch_signatures": geometry("cuda-fattn-gqa7-common-v1", 0,
+                    (3096, 7168, 64, 5120), (3096, 896, 64, 512)),
+                "excluded_signatures": [],
+            },
         }
-        P.validate_template_authorability(portfolio, "gpu-source-templates-v2", surfaces)
+        P.validate_template_authorability(portfolio, "gpu-source-templates-v3", surfaces)
         surfaces["cuda-norm-v2"]["source_symbols"] = ["not_rms"]
         with self.assertRaisesRegex(P.PortfolioError, "target symbols"):
             P.validate_template_authorability(
-                portfolio, "gpu-source-templates-v2", surfaces)
+                portfolio, "gpu-source-templates-v3", surfaces)
         surfaces["cuda-norm-v2"]["source_symbols"] = ["rms_norm_f32"]
         surfaces["cuda-norm-v2"]["dispatch_signatures"] = geometry(
             "cuda-norm-v2", 0, (6321, 999, 256, 512))
         with self.assertRaisesRegex(P.PortfolioError, "dispatch geometry"):
             P.validate_template_authorability(
-                portfolio, "gpu-source-templates-v2", surfaces)
+                portfolio, "gpu-source-templates-v3", surfaces)
         surfaces["cuda-norm-v2"]["dispatch_signatures"] = geometry(
             "cuda-norm-v2", 1, (6321, 256, 256, 512))
         with self.assertRaisesRegex(P.PortfolioError, "dispatch geometry"):
             P.validate_template_authorability(
-                portfolio, "gpu-source-templates-v2", surfaces)
+                portfolio, "gpu-source-templates-v3", surfaces)
 
     def test_q4_branchless_economics_are_frame_scoped(self):
         row = P.load(P.DEFAULT_PORTFOLIO).hypothesis("akh-v2-q4k-branchless-scale-min")
@@ -547,15 +572,15 @@ class HypothesisPortfolioTest(unittest.TestCase):
         with redirect_stdout(stdout):
             self.assertEqual(P.main(["validate", str(P.DEFAULT_PORTFOLIO)]), 0)
         result = json.loads(stdout.getvalue())
-        self.assertEqual(result["hypotheses"], 21)
+        self.assertEqual(result["hypotheses"], 27)
         self.assertEqual(result["do_not_repeat"], 22)
-        self.assertEqual(result["eligible"], 4)
+        self.assertEqual(result["eligible"], 6)
         stdout = StringIO()
         with redirect_stdout(stdout):
             self.assertEqual(P.main(["summarize", str(P.DEFAULT_PORTFOLIO)]), 0)
         summary = json.loads(stdout.getvalue())
         self.assertEqual(summary["sha256"], result["sha256"])
-        self.assertEqual(len(summary["eligible_records"]), 4)
+        self.assertEqual(len(summary["eligible_records"]), 6)
         self.assertEqual(len(summary["do_not_repeat"]), 22)
 
     def test_duplicate_json_key_is_refused(self):
