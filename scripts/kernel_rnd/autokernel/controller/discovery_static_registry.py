@@ -528,60 +528,57 @@ def _attempt_directories(cache_root: Path) -> list[Path]:
     return entries
 
 
-def _discard_unpublished_owner_temps(attempts_root: Path, name: str) -> list[dict[str, Any]]:
-    """Classify and remove only never-published `_sealed_write` scratch inodes."""
-    prefix = f"..{name}.owner.json."
+def _discard_sealed_write_temps(
+        parent: Path, target_name: str, label: str) -> list[dict[str, Any]]:
+    """Classify interrupted `_sealed_write` scratch, including post-link death."""
+    prefix = f".{target_name}."
     candidates = [
-        path for path in sorted(attempts_root.iterdir(), key=lambda item: item.name)
+        path for path in sorted(parent.iterdir(), key=lambda item: item.name)
         if path.name.startswith(prefix) and path.name.endswith(".tmp")]
     if len(candidates) > 1:
-        raise StaticRegistryError("multiple unpublished attempt owner scratch files exist")
+        raise StaticRegistryError(f"multiple {label} scratch files exist")
     rows: list[dict[str, Any]] = []
+    target = parent / target_name
     for path in candidates:
         pid_text = path.name[len(prefix):-4]
         if not pid_text.isdigit() or path.is_symlink():
-            raise StaticRegistryError("unpublished attempt owner scratch name is malformed")
+            raise StaticRegistryError(f"{label} scratch name is malformed")
         facts = path.lstat()
         if (not stat.S_ISREG(facts.st_mode) or facts.st_uid != os.geteuid()
-                or facts.st_nlink != 1 or stat.S_IMODE(facts.st_mode) != 0o600):
-            raise StaticRegistryError("unpublished attempt owner scratch identity is unsafe")
-        # This inode was never linked at the reserved authority name.  Its
-        # contents may be partial and are intentionally not interpreted as an
-        # owner.  Under both build locks it is safe scratch, not append-only
-        # evidence; retain an in-memory classification for tests/audit.
+                or facts.st_nlink not in {1, 2}
+                or stat.S_IMODE(facts.st_mode) != 0o600):
+            raise StaticRegistryError(f"{label} scratch identity is unsafe")
+        state = "never_published_scratch"
+        if facts.st_nlink == 2:
+            if target.is_symlink():
+                raise StaticRegistryError(f"{label} published target is unsafe")
+            try:
+                target_facts = target.stat()
+            except OSError as exc:
+                raise StaticRegistryError(
+                    f"{label} post-link scratch has no exact published target") from exc
+            if ((facts.st_dev, facts.st_ino) !=
+                    (target_facts.st_dev, target_facts.st_ino)):
+                raise StaticRegistryError(
+                    f"{label} scratch is linked to an unknown object")
+            state = "published_inode_temp_link"
         rows.append({"name": path.name, "size": facts.st_size,
                      "device": facts.st_dev, "inode": facts.st_ino,
-                     "state": "never_published_scratch"})
+                     "state": state})
         path.unlink()
     return rows
+
+
+def _discard_unpublished_owner_temps(attempts_root: Path, name: str) -> list[dict[str, Any]]:
+    return _discard_sealed_write_temps(
+        attempts_root, f".{name}.owner.json", "unpublished attempt owner")
 
 
 def _discard_unpublished_transaction_temps(
         entries_root: Path, build_key: str) -> list[dict[str, Any]]:
-    """Classify only never-linked transaction-owner scratch inodes."""
-    prefix = f"..{build_key}.transaction-owner.json."
-    candidates = [
-        path for path in sorted(entries_root.iterdir(), key=lambda item: item.name)
-        if path.name.startswith(prefix) and path.name.endswith(".tmp")]
-    if len(candidates) > 1:
-        raise StaticRegistryError(
-            "multiple unpublished transaction owner scratch files exist")
-    rows: list[dict[str, Any]] = []
-    for path in candidates:
-        pid_text = path.name[len(prefix):-4]
-        if not pid_text.isdigit() or path.is_symlink():
-            raise StaticRegistryError(
-                "unpublished transaction owner scratch name is malformed")
-        facts = path.lstat()
-        if (not stat.S_ISREG(facts.st_mode) or facts.st_uid != os.geteuid()
-                or facts.st_nlink != 1 or stat.S_IMODE(facts.st_mode) != 0o600):
-            raise StaticRegistryError(
-                "unpublished transaction owner scratch identity is unsafe")
-        rows.append({"name": path.name, "size": facts.st_size,
-                     "device": facts.st_dev, "inode": facts.st_ino,
-                     "state": "never_published_scratch"})
-        path.unlink()
-    return rows
+    return _discard_sealed_write_temps(
+        entries_root, f".{build_key}.transaction-owner.json",
+        "unpublished transaction owner")
 
 
 def _epoch_processes(token: str) -> tuple[list[int], list[int]]:
@@ -851,6 +848,13 @@ def _attempt_artifact_epoch(
         "attempt": attempt_root.name,
         "attempt_owner_sha256": _digest(owner_path),
         "attempt_recovery": None,
+        "prior_recoveries": [
+            {"attempt": prior.name,
+             "recovery_sha256": _digest(prior / "recovery.json")}
+            for prior in sorted(attempt_root.parent.iterdir(), key=lambda path: path.name)
+            if prior.name < attempt_root.name
+            and (prior / "recovery.json").is_file()
+        ],
         "process_closure": process,
         "artifact_receipts": receipt_rows,
         "materialization_sha256": (
@@ -1881,6 +1885,8 @@ class StaticGpuSourceBuilder:
                 "unpublished build transaction owner is live or unverifiable: "
                 f"{verdict.reason}")
         intent_path = cache_root / "intent.json"
+        _discard_sealed_write_temps(
+            cache_root, "intent.json", "unpublished build cache intent")
         if intent_path.exists() or intent_path.is_symlink():
             sealed_intent = _sealed_read(intent_path, schema=_BUILD_INTENT_SCHEMA,
                                          label="unpublished build cache intent")
@@ -2104,12 +2110,11 @@ class StaticGpuSourceBuilder:
         if recovery_path.exists() or recovery_path.is_symlink():
             recovery = _sealed_read(recovery_path, schema=_BUILD_RECOVERY_SCHEMA,
                                     label="build attempt recovery")
-            if (recovery.get("build_key") != contract["build_key"]
-                    or recovery.get("attempt") != number
-                    or recovery.get("owner_sha256") != _digest(owner_path)
-                    or recovery.get("state") != "quarantined"
-                    or recovery.get("promotion_claim") is not False):
-                raise StaticRegistryError("build attempt recovery identity changed")
+            self._validate_quarantined_attempt(
+                attempt_root=attempt_root, owner_path=owner_path,
+                holder=owner.get("holder"), recovery=recovery,
+                contract=contract, expected_number=number,
+                expected_build_root=expected_build_root)
             return
         holder = owner.get("holder")
         verdict = device_claim.assess_holder_liveness(holder)
@@ -2117,8 +2122,9 @@ class StaticGpuSourceBuilder:
             raise StaticRegistryError(
                 "incomplete build owner is live or unverifiable; refusing recovery: "
                 f"{verdict.reason}")
-        process_proofs = _owned_process_receipts_are_dead(
-            attempt_root, holder if isinstance(holder, Mapping) else {})
+        process_closure = _process_receipt_closure(
+            attempt_root, holder if isinstance(holder, Mapping) else {},
+            require_terminals=False)
 
         campaign_root = attempt_root / "worktrees"
         teardown_rows: list[dict[str, Any]] = []
@@ -2168,12 +2174,70 @@ class StaticGpuSourceBuilder:
             "build_key": contract["build_key"], "attempt": number,
             "owner_sha256": _digest(owner_path), "state": "quarantined",
             "owner_liveness": {"state": verdict.state, "reason": verdict.reason},
-            "owned_processes": process_proofs, "teardown": teardown_rows,
+            "owned_processes": process_closure["proofs"],
+            "process_closure_sha256": process_closure["closure_sha256"],
+            "teardown": teardown_rows,
             "abandoned_build_root": str(expected_build_root.resolve(strict=False)),
             "recovered_by": device_claim.current_holder_identity(
                 f"autokernel-build-recovery:{contract['build_key']}:{expected_name}"),
             "promotion_claim": False,
         })
+
+    def _validate_quarantined_attempt(
+            self, *, attempt_root: Path, owner_path: Path, holder: Any,
+            recovery: Mapping[str, Any], contract: Mapping[str, Any],
+            expected_number: int, expected_build_root: Path) -> None:
+        expected_keys = {
+            "schema", "build_key", "attempt", "owner_sha256", "state",
+            "owner_liveness", "owned_processes", "process_closure_sha256",
+            "teardown", "abandoned_build_root", "recovered_by",
+            "promotion_claim", "receipt_sha256",
+        }
+        owner_liveness = recovery.get("owner_liveness")
+        recovered_by = recovery.get("recovered_by")
+        teardown = recovery.get("teardown")
+        if (set(recovery) != expected_keys
+                or recovery.get("build_key") != contract["build_key"]
+                or recovery.get("attempt") != expected_number
+                or recovery.get("owner_sha256") != _digest(owner_path)
+                or recovery.get("state") != "quarantined"
+                or recovery.get("promotion_claim") is not False
+                or recovery.get("abandoned_build_root")
+                != str(expected_build_root.resolve(strict=False))
+                or not isinstance(owner_liveness, Mapping)
+                or set(owner_liveness) != {"state", "reason"}
+                or owner_liveness.get("state") != device_claim.DEAD
+                or not isinstance(owner_liveness.get("reason"), str)
+                or not isinstance(recovered_by, Mapping)
+                or set(recovered_by)
+                != {"pid", "start_ticks", "boot_id", "host", "label"}
+                or not isinstance(teardown, list)):
+            raise StaticRegistryError("build attempt recovery identity changed")
+        if not isinstance(holder, Mapping):
+            raise StaticRegistryError("quarantined build owner is malformed")
+        process_closure = _process_receipt_closure(
+            attempt_root, holder, require_terminals=False)
+        if (recovery.get("owned_processes") != process_closure["proofs"]
+                or recovery.get("process_closure_sha256")
+                != process_closure["closure_sha256"]):
+            raise StaticRegistryError("quarantined process closure changed")
+        repo = worktree.GitRepo(self.instrument_path)
+        for row in teardown:
+            if not isinstance(row, Mapping):
+                raise StaticRegistryError("quarantine teardown row is malformed")
+            worktree_path = row.get("worktree_path")
+            branch = row.get("branch")
+            if isinstance(worktree_path, str) and (
+                    Path(worktree_path).exists() or Path(worktree_path).is_symlink()):
+                raise StaticRegistryError("quarantined worktree reappeared")
+            if isinstance(branch, str) and repo.branch_exists(
+                    worktree.SafeBranch(branch)):
+                raise StaticRegistryError("quarantined branch reappeared")
+            if worktree_path is not None and (
+                    row.get("worktree_removed") is not True
+                    or row.get("branch_exists_after") is not False
+                    or row.get("all_production_trees_unchanged") is not True):
+                raise StaticRegistryError("quarantine teardown proof is incomplete")
 
     def _reopen(self, *, cache_root: Path, build_root: Path, operation_key: str,
                 expected_intent: Mapping[str, Any], contract: Mapping[str, Any],
@@ -2252,14 +2316,18 @@ class StaticGpuSourceBuilder:
         for prior in attempts[:-1]:
             prior_owner = prior / "owner.json"
             prior_recovery = prior / "recovery.json"
+            owner = _sealed_read(
+                prior_owner, schema=_BUILD_ATTEMPT_SCHEMA,
+                label="superseded build attempt owner")
             recovery = _sealed_read(
                 prior_recovery, schema=_BUILD_RECOVERY_SCHEMA,
                 label="superseded build attempt recovery")
-            if (recovery.get("state") != "quarantined"
-                    or recovery.get("owner_sha256") != _digest(prior_owner)
-                    or recovery.get("attempt") != int(prior.name.removeprefix("attempt-"))
-                    or recovery.get("promotion_claim") is not False):
-                raise StaticRegistryError("superseded build attempt is not quarantined")
+            self._validate_quarantined_attempt(
+                attempt_root=prior, owner_path=prior_owner,
+                holder=owner.get("holder"), recovery=recovery,
+                contract=contract,
+                expected_number=int(prior.name.removeprefix("attempt-")),
+                expected_build_root=build_root / prior.name)
         final_attempt = attempts[-1]
         final_owner_path = final_attempt / "owner.json"
         final_owner = _sealed_read(

@@ -852,6 +852,23 @@ class StaticBuildCacheTests(unittest.TestCase):
         self.assertTrue(str(build.anchor_build).startswith(
             str(fixture.root / "build")))
 
+    def test_terminal_binds_superseded_quarantine_receipt_bytes(self):
+        fixture = self.fixture()
+        with mock.patch.object(StaticGpuSourceBuilder, "_build_uncached",
+                               side_effect=KeyboardInterrupt("simulated crash")):
+            with self.assertRaises(KeyboardInterrupt):
+                fixture.builder.build(
+                    fixture.candidate, object(), fixture.permit)
+        entry = next((fixture.root / "operations/build-cache/entries").iterdir())
+        with self.dead_build_owner():
+            self.invoke(fixture, {**fixture.permit, "operation_key": "5" * 64})
+        recovery = entry / "attempts/attempt-000001/recovery.json"
+        self.rewrite_receipt(
+            recovery,
+            lambda body: body["owner_liveness"].update(reason="forged-dead-proof"))
+        with self.assertRaisesRegex(StaticRegistryError, "artifact epoch changed"):
+            self.invoke(fixture, {**fixture.permit, "operation_key": "5" * 64})
+
     def test_crash_before_attempt_owner_is_recovered_from_atomic_transaction_owner(self):
         fixture = self.fixture()
         with mock.patch.object(StaticGpuSourceBuilder, "_new_attempt",
@@ -889,6 +906,28 @@ class StaticBuildCacheTests(unittest.TestCase):
             self.invoke(fixture, {**fixture.permit, "operation_key": "5" * 64})
         self.assertFalse(scratch.exists())
         self.assertTrue((attempts / "attempt-000001/owner.json").is_file())
+
+    def test_post_link_attempt_owner_temp_is_closed_before_recovery(self):
+        fixture = self.fixture()
+        with mock.patch.object(StaticGpuSourceBuilder, "_build_uncached",
+                               side_effect=KeyboardInterrupt("crash")):
+            with self.assertRaises(KeyboardInterrupt):
+                fixture.builder.build(
+                    fixture.candidate, object(), fixture.permit)
+        entry = next((fixture.root / "operations/build-cache/entries").iterdir())
+        first = entry / "attempts/attempt-000001"
+        owner = first / "owner.json"
+        mutable_build_root = Path(json.loads(owner.read_text())["build_root"])
+        reservation = first.parent / ".attempt-000001.owner.json"
+        owner.rename(reservation)
+        scratch = first.parent / "..attempt-000001.owner.json.999999.tmp"
+        os.link(reservation, scratch)
+        first.rmdir()
+        mutable_build_root.rmdir()
+        with self.dead_build_owner():
+            self.invoke(fixture, {**fixture.permit, "operation_key": "5" * 64})
+        self.assertFalse(scratch.exists())
+        self.assertTrue((first / "recovery.json").is_file())
 
     def test_same_uid_dead_owner_rewrite_cannot_manufacture_recovery(self):
         fixture = self.fixture()
@@ -1002,6 +1041,33 @@ class StaticBuildCacheTests(unittest.TestCase):
             f"..{build_key}.transaction-owner.json.999999.tmp")
         reservation.rename(scratch)
         self.invoke(fixture, {**fixture.permit, "operation_key": "5" * 64})
+        self.assertFalse(scratch.exists())
+        published = [
+            path for path in entries.iterdir() if not path.name.startswith(".")]
+        self.assertEqual(len(published), 1)
+        self.assertTrue((published[0] / "terminal.json").is_file())
+
+    def test_post_link_transaction_owner_temp_is_closed_before_recovery(self):
+        fixture = self.fixture()
+        real_rename = os.rename
+
+        def crash_cache(source, destination):
+            if Path(source).parent.name == "entries":
+                raise KeyboardInterrupt("cache publish crash")
+            return real_rename(source, destination)
+
+        with mock.patch.object(os, "rename", side_effect=crash_cache):
+            with self.assertRaises(KeyboardInterrupt):
+                fixture.builder.build(
+                    fixture.candidate, object(), fixture.permit)
+        entries = fixture.root / "operations/build-cache/entries"
+        reservation = next(
+            path for path in entries.iterdir()
+            if path.name.endswith(".transaction-owner.json"))
+        scratch = entries / f".{reservation.name}.999999.tmp"
+        os.link(reservation, scratch)
+        with self.dead_build_owner():
+            self.invoke(fixture, {**fixture.permit, "operation_key": "5" * 64})
         self.assertFalse(scratch.exists())
         published = [
             path for path in entries.iterdir() if not path.name.startswith(".")]
