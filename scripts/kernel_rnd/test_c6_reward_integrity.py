@@ -493,6 +493,19 @@ class TestRatifiedNumericalPolicy(_Base):
             c6.PrecisionContract(
                 "float16", "float32", required_matched_ratio=0.94,
                 lowbit=True)
+        for value in (1, "false", None):
+            with self.subTest(lowbit=value), self.assertRaisesRegex(
+                    c6.EvaluatorPolicyError, "exact bool"):
+                c6.PrecisionContract("float32", "float32", lowbit=value)
+
+    def test_empty_numeric_output_is_never_a_vacuous_pass(self):
+        verdict = c6.evaluate_numerics(
+            [], [], structural=self.evidence(),
+            policy=c6.PrecisionContract("float32", "float32"))
+        self.assertFalse(verdict.correct)
+        self.assertEqual(verdict.reason, "empty_output")
+        self.assertEqual(verdict.total_elements, 0)
+        self.assertIsNone(verdict.matched_ratio)
 
     def test_nonfinite_refusal_and_max_errors_are_recorded(self):
         policy = c6.PrecisionContract("float32", "float32")
@@ -603,6 +616,30 @@ def wrapper(kernel, reference, x):
         verdict, output = c6.run_three_bitwise_isolated(inputs, candidate)
         self.assertTrue(verdict.correct)
         self.assertEqual(output, 1)
+        self.assertEqual(inputs, ([0],))
+
+    def test_reference_runs_first_and_all_four_inputs_are_pristine_clones(self):
+        inputs = ([0],)
+        events = []
+
+        def reference(reference_inputs):
+            events.append(("reference", reference_inputs[0][0]))
+            reference_inputs[0][0] = 7
+            return 42
+
+        def candidate(candidate_inputs):
+            events.append(("candidate", candidate_inputs[0][0]))
+            candidate_inputs[0][0] = 9
+            return 5
+
+        want, verdict, got = c6.run_reference_then_three_bitwise_isolated(
+            inputs, reference, candidate)
+        self.assertEqual(want, 42)
+        self.assertEqual(got, 5)
+        self.assertTrue(verdict.correct)
+        self.assertEqual(events, [
+            ("reference", 0), ("candidate", 0),
+            ("candidate", 0), ("candidate", 0)])
         self.assertEqual(inputs, ([0],))
 
     def test_structural_precision_allowlist_refuses_source_or_ast_drift(self):
@@ -781,6 +818,17 @@ class TestSeparableRecords(_Base):
         ).to_dict()
         self.assertAlmostEqual(record["estimate_error_fraction"], -0.3 / 1.3)
         self.assertEqual(record["lessons"], ["counter premise was wrong"])
+
+    def test_round_reflexion_refuses_nonfinite_derived_error(self):
+        with self.assertRaisesRegex(c6.EvaluatorPolicyError, "must be finite"):
+            c6.RoundReflexionRecord(
+                round_id="r-overflow", candidate_commit="a" * 40,
+                was_diagnosis_correct=False, was_fix_effective=False,
+                expected_outcome="tiny estimate", actual_outcome="huge result",
+                estimated_speedup=5e-324, achieved_speedup=1e308,
+                lessons=("overflow",), avoid_patterns=("unbounded ratio",),
+                try_patterns=("finite derived metric",),
+            ).to_dict()
 
 
 if __name__ == "__main__":
