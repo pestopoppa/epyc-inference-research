@@ -209,7 +209,7 @@ class DeploymentConfigTests(unittest.TestCase):
             )
             self.assertEqual(
                 loaded.q5_lds0_attribution_erratum.sha256,
-                "25a4578db9ac1285b3254c8ea9981efb3f32487c0b512631ce9fe4204a19b992")
+                "22f23f769bd7e10e24d2c642846fa0b739c5ff03b457c56e374d941f01b60a98")
 
     def test_planner_context_requires_exact_template_symbol_authority(self):
         for replacement in (None, {}, {"test": {"ggml.cu": []}},

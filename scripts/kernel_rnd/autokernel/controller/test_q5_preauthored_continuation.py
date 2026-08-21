@@ -230,7 +230,7 @@ class Q5PreauthoredContinuationTests(unittest.TestCase):
             hashlib.sha256(D._Q5_LDS0_ERRATUM_CARRIER.read_bytes()).hexdigest(),
             D._Q5_LDS0_ERRATUM_FILE_SHA256)
         self.assertEqual(erratum["erratum_sha256"],
-                         "a0eab4fee2cb7450a590f161b359d479ecbab49bf3ee7686bb205b67bffb2ebd")
+                         "21f5f1c25c337275293a0c701e23c9da8c5efb835c6803f4c58daa789f2f0b6b")
         self.assertEqual(set(erratum["corrected_candidate_lds_bytes"].values()),
                          {0})
         self.assertEqual(
@@ -246,11 +246,25 @@ class Q5PreauthoredContinuationTests(unittest.TestCase):
             root = Path(directory)
             mutations: list[tuple[str, bytes]] = []
             for key in ("operation_key", "correctness_receipt_sha256",
-                        "candidate_semantic_sha256", "compiler_metadata_proof"):
+                        "candidate_semantic_sha256", "compiler_metadata_proof",
+                        "bundle_index", "section_sha256", "target",
+                        "mangled_name_set"):
                 body = copy.deepcopy(original)
                 if key == "compiler_metadata_proof":
                     body[key]["rows"][0][
                         "candidate_group_segment_fixed_size"] = 512
+                elif key == "bundle_index":
+                    body["compiler_metadata_proof"]["bundle_parser"][
+                        "selected_bundle_index"] = 34
+                elif key == "section_sha256":
+                    body["compiler_metadata_proof"]["bundle_parser"][
+                        "candidate"]["section_sha256"] = "0" * 64
+                elif key == "target":
+                    body["compiler_metadata_proof"]["bundle_parser"][
+                        "selected_target"] = "hipv4-amdgcn-amd-amdhsa--gfx942"
+                elif key == "mangled_name_set":
+                    body["compiler_metadata_proof"][
+                        "selected_mangled_name_set"][0] += "_tampered"
                 else:
                     body[key] = "0" * 64
                 body["erratum_sha256"] = _canonical_hash({
@@ -895,9 +909,47 @@ class Q5PreauthoredContinuationTests(unittest.TestCase):
                  for row in metadata["rows"]},
                 {(0, 1024), (0, 512)})
             self.assertEqual(metadata["candidate_code_object_sha256"],
-                             "d40bbb57a78c4474904518a9267370b78f0ae05bfe1dc76c79a86ab589eb2cff")
+                             "53c63348f3e1797c6c27a82e887bb0b20649636c725fb04d85af3e2038838bd6")
             self.assertEqual(metadata["anchor_code_object_sha256"],
-                             "7a1390f93dda7e5624f0621b00632b7af67fe832d61e9fab16dc64369cf28c0b")
+                             "ba878a186026165135705597b1c4966c06c7af6a46a5dd99c3194dc76e7d8ab0")
+            self.assertEqual(metadata["section_extraction_command"], [
+                "/opt/rocm/llvm/bin/llvm-objcopy",
+                "--dump-section=.hip_fatbin=<section-output>",
+                "<hip-library>",
+            ])
+            self.assertEqual(metadata["metadata_command"], [
+                "/opt/rocm/llvm/bin/llvm-readobj", "--notes",
+                "<gfx90a-code-object>",
+            ])
+            self.assertEqual(metadata["symbol_command"], [
+                "/opt/rocm/llvm/bin/llvm-readelf", "-sW",
+                "<gfx90a-code-object>",
+            ])
+            parser = metadata["bundle_parser"]
+            self.assertEqual(
+                (parser["container_count"], parser["selected_bundle_index"],
+                 parser["bundle_index_base"], parser["selected_target_index"],
+                 parser["target_index_base"], parser["selected_target"],
+                 parser["payload_offset_within_container"]),
+                (135, 35, 0, 1, 0,
+                 "hipv4-amdgcn-amd-amdhsa--gfx90a", 4096))
+            self.assertEqual(parser["candidate"], {
+                "section_sha256":
+                    "2a3f08d4af9fcbab5d1cc8a09adf409f0ae63a29a0b66a498cedc596dae5a7e1",
+                "section_size": 52221816,
+                "container_offset": 5079040,
+                "code_object_size": 1873976,
+            })
+            self.assertEqual(parser["anchor"], {
+                "section_sha256":
+                    "0f15fd0835b6dbf9908f5104e35f83a64423e80f690530618daca1d41763d106",
+                "section_size": 52225912,
+                "container_offset": 5079040,
+                "code_object_size": 1877048,
+            })
+            self.assertEqual(
+                metadata["selected_mangled_name_set"],
+                sorted(row["mangled_name"] for row in metadata["rows"]))
             self.assertEqual(config.max_iterations, 10)
             fresh = D.DurableState(config.output_root).load()
             self.assertEqual(

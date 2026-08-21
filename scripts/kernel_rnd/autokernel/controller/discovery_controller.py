@@ -204,7 +204,7 @@ _Q5_LDS0_ERRATUM_CARRIER = (
     Path(__file__).resolve().parents[1]
     / "q5_lds0_attribution_erratum_v1.json")
 _Q5_LDS0_ERRATUM_FILE_SHA256 = (
-    "25a4578db9ac1285b3254c8ea9981efb3f32487c0b512631ce9fe4204a19b992")
+    "22f23f769bd7e10e24d2c642846fa0b739c5ff03b457c56e374d941f01b60a98")
 
 
 def _expected_q5_lds0_attribution_erratum() -> dict[str, Any]:
@@ -280,17 +280,76 @@ def _expected_q5_lds0_attribution_erratum() -> dict[str, Any]:
             "candidate-structural-excluded": 0,
         },
         "compiler_metadata_proof": {
-            "schema": "epyc.autokernel.amdgpu_group_segment_proof.v1",
+            "schema": "epyc.autokernel.amdgpu_group_segment_proof.v2",
             "llvm_objcopy_sha256":
                 "895474f91e7db238db54745673294eea93cd855d93a084ce94200103104b145b",
+            "llvm_objcopy_version": (
+                "llvm-objcopy, compatible with GNU objcopy\n"
+                "AMD LLVM version 18.0.0git\n  Optimized build."),
+            "section_extraction_command": [
+                "/opt/rocm/llvm/bin/llvm-objcopy",
+                "--dump-section=.hip_fatbin=<section-output>",
+                "<hip-library>",
+            ],
             "clang_offload_bundler_sha256":
                 "4a455de48ee5c739f74e26e1979241a8b4e52ea9e57a316186c2425fae615cfe",
+            "clang_offload_bundler_version": (
+                "AMD clang-offload-bundler version 18.0.0git "
+                "(https://github.com/RadeonOpenCompute/llvm-project "
+                "roc-6.2.0 24292 "
+                "26466ce804ac523b398608f17388eb6d605a3f09)"),
             "llvm_readobj_sha256":
                 "3f8e3f02ef3cca007a82490eb204c08f7a714806b41e054d3faad2d2e0e95afd",
+            "llvm_readobj_version": (
+                "AMD LLVM version 18.0.0git\n  Optimized build."),
+            "metadata_command": [
+                "/opt/rocm/llvm/bin/llvm-readobj", "--notes",
+                "<gfx90a-code-object>",
+            ],
+            "symbol_command": [
+                "/opt/rocm/llvm/bin/llvm-readelf", "-sW",
+                "<gfx90a-code-object>",
+            ],
+            "bundle_parser": {
+                "format": "clang_offload_bundle_header_little_endian_v1",
+                "container_count": 135,
+                "selected_bundle_index": 35,
+                "bundle_index_base": 0,
+                "selected_target_index": 1,
+                "target_index_base": 0,
+                "selected_target": "hipv4-amdgcn-amd-amdhsa--gfx90a",
+                "payload_offset_within_container": 4096,
+                "candidate": {
+                    "section_sha256":
+                        "2a3f08d4af9fcbab5d1cc8a09adf409f0ae63a29a0b66a498cedc596dae5a7e1",
+                    "section_size": 52221816,
+                    "container_offset": 5079040,
+                    "code_object_size": 1873976,
+                },
+                "anchor": {
+                    "section_sha256":
+                        "0f15fd0835b6dbf9908f5104e35f83a64423e80f690530618daca1d41763d106",
+                    "section_size": 52225912,
+                    "container_offset": 5079040,
+                    "code_object_size": 1877048,
+                },
+            },
             "candidate_code_object_sha256":
-                "d40bbb57a78c4474904518a9267370b78f0ae05bfe1dc76c79a86ab589eb2cff",
+                "53c63348f3e1797c6c27a82e887bb0b20649636c725fb04d85af3e2038838bd6",
             "anchor_code_object_sha256":
-                "7a1390f93dda7e5624f0621b00632b7af67fe832d61e9fab16dc64369cf28c0b",
+                "ba878a186026165135705597b1c4966c06c7af6a46a5dd99c3194dc76e7d8ab0",
+            "selected_mangled_name_set": [
+                (
+                    "_ZL13mul_mat_vec_qIL9ggml_type6ELi1ELb0ELb1EEvPKvS2_"
+                    "PKi31ggml_cuda_mm_fusion_args_devicePfj15HIP_vector_type"
+                    "IjLj3EEjjjS8_jjjS8_jjjj"
+                ),
+                (
+                    "_ZL13mul_mat_vec_qIL9ggml_type6ELi1ELb1ELb1EEvPKvS2_"
+                    "PKi31ggml_cuda_mm_fusion_args_devicePfj15HIP_vector_type"
+                    "IjLj3EEjjjS8_jjjS8_jjjj"
+                ),
+            ],
             "rows": [
                 {
                     "mangled_name": (
