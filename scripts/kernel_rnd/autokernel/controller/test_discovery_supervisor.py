@@ -107,6 +107,12 @@ class ImmutableAuthorityTests(unittest.TestCase):
                 spec.body["graph_execution_modules"][
                     "c6_reward_integrity"]["sha256"],
             )
+            c6_harness = (
+                closure / "scripts/kernel_rnd/autokernel/native/c6_mul_mat_harness.cpp")
+            live_harness = (
+                S._SOURCE_SCRIPTS_ROOT / "kernel_rnd/autokernel/native/c6_mul_mat_harness.cpp")
+            self.assertTrue(c6_harness.is_file())
+            self.assertEqual(S._file_sha256(c6_harness), S._file_sha256(live_harness))
 
     def test_same_uid_cannot_replace_factory_before_import_or_execute_payload(self):
         with tempfile.TemporaryDirectory() as temporary:

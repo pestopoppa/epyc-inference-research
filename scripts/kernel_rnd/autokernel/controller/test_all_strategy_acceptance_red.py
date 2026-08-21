@@ -1256,6 +1256,7 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
             self.assertEqual(
                 [call[:2] for call in executors.calls],
                 [("correctness", "candidate"),
+                 ("correctness", "candidate"),
                  ("rocprof", "candidate"), ("rocprof", "anchor")])
             self.assertGreater(result.exact_attribution_effect_fraction, 0)
             self.assertEqual(result.target_runtime_effect_fraction, .04)
@@ -1709,7 +1710,7 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
                     self.assertRaises(C.CorrectnessRefusal) as reopened:
                 adapter.screen(candidate, authorization, lease)
             self.assertEqual(executors.calls, calls_after_terminal)
-            self.assertEqual(len(executors.calls), 1)
+            self.assertEqual(len(executors.calls), 2)
             self.assertEqual(
                 (reopened.exception.receipt_path,
                  reopened.exception.receipt_sha256),
@@ -1737,7 +1738,9 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
             self.assertEqual(executors.calls, calls_after_terminal)
             self.assertEqual(
                 [call[:2] for call in executors.calls],
-                [("correctness", "candidate"), ("rocprof", "candidate")])
+                [("correctness", "candidate"),
+                 ("correctness", "candidate"),
+                 ("rocprof", "candidate")])
             self.assertEqual(
                 (reopened.exception.receipt_path,
                  reopened.exception.receipt_sha256),
@@ -1766,6 +1769,7 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
             self.assertEqual(
                 [call[:2] for call in executors.calls],
                 [("correctness", "candidate"),
+                 ("correctness", "candidate"),
                  ("rocprof", "candidate"), ("rocprof", "anchor")])
             self.assertEqual(
                 (reopened.exception.receipt_path,
@@ -2210,7 +2214,8 @@ class EvidenceStageResumeRedGate(unittest.TestCase):
                     self._produce(output, current, first_exec, first_claims)
             self.assertTrue((output / "correctness/receipt.json").is_file())
             self.assertEqual([row[:2] for row in first_exec.calls],
-                             [("correctness", "candidate")])
+                             [("correctness", "candidate"),
+                              ("correctness", "candidate")])
 
             resumed_exec, resumed_claims = FakeExecutors(), ClaimFactory()
             bundle = self._produce(
@@ -2241,7 +2246,9 @@ class EvidenceStageResumeRedGate(unittest.TestCase):
             self.assertTrue(
                 (output / "attribution-candidate/receipt.json").is_file())
             self.assertEqual([row[:2] for row in first_exec.calls], [
-                ("correctness", "candidate"), ("rocprof", "candidate")])
+                ("correctness", "candidate"),
+                ("correctness", "candidate"),
+                ("rocprof", "candidate")])
 
             resumed_exec, resumed_claims = FakeExecutors(), ClaimFactory()
             bundle = self._produce(
@@ -2266,7 +2273,9 @@ class EvidenceStageResumeRedGate(unittest.TestCase):
             self.assertTrue(
                 (output / "attribution-anchor/receipt.json").is_file())
             self.assertEqual([row[:2] for row in first_exec.calls], [
-                ("correctness", "candidate"), ("rocprof", "candidate"),
+                ("correctness", "candidate"),
+                ("correctness", "candidate"),
+                ("rocprof", "candidate"),
                 ("rocprof", "anchor")])
 
             resumed_exec, resumed_claims = FakeExecutors(), ClaimFactory()
@@ -2311,6 +2320,7 @@ class EvidenceStageResumeRedGate(unittest.TestCase):
             bundle = self._produce(
                 base / "evidence", current, executors, ClaimFactory())
             self.assertEqual([row[:2] for row in executors.calls], [
+                ("correctness", "candidate"),
                 ("correctness", "candidate"),
                 ("rocprof", "anchor"),
                 ("rocprof", "candidate"),
@@ -2383,6 +2393,7 @@ class AdapterStageResumeRedGate(unittest.TestCase):
                 resumed = adapter.screen(candidate, authorization, lease)
             self.assertEqual(resumed.result_sha256, current.result_sha256)
             self.assertEqual([row[:2] for row in executors.calls], [
+                ("correctness", "candidate"),
                 ("correctness", "candidate"),
                 ("rocprof", "candidate"),
                 ("rocprof", "anchor"),

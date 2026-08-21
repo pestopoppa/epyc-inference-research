@@ -2850,7 +2850,8 @@ def _read_operation_carrier(descriptor: int, label: str) -> tuple[bytes, os.stat
 def _write_operation_carrier(config: deployment.DiscoveryDeployment,
                              operation_key: str, name: str, raw: bytes,
                              label: str) -> Path:
-    if name not in {"source-manifest.json", "evidence-policy.json"}:
+    if name not in {"source-manifest.json", "evidence-policy.json",
+                    "c6-native-capability.json"}:
         raise DeploymentFactoryError("operation carrier name is not allowlisted")
     with _pinned_operation_directory(config, operation_key) as pinned:
         operations_root, root_fd, root_identity, operation_fd, operation_identity = pinned
@@ -2929,6 +2930,239 @@ def _manifest_file(config: deployment.DiscoveryDeployment,
     if build.operation_key is None:
         raise DeploymentFactoryError("source build lacks an operation key")
     return _manifest_file_for_operation(config, candidate, build.operation_key)
+
+
+def _c6_mul_mat_type(template_id: str) -> str:
+    for marker, value in (("q4k", "q4_K"), ("q5", "q5_K"),
+                          ("q6k", "q6_K"), ("q8", "q8_0")):
+        if marker in template_id:
+            return value
+    raise DeploymentFactoryError(
+        "native C6 MUL_MAT harness lacks a reviewed quant type for template")
+
+
+def _c6_structural_precision(
+        config: deployment.DiscoveryDeployment,
+        candidate: controller.PlannedCandidate,
+        template: ExperimentTemplate) -> tuple[dict[str, str], dict[str, Any]]:
+    """Prove the patch did not introduce an accumulator-width downgrade.
+
+    The reviewed base blobs and declared-symbol limiter already establish the
+    native route.  This extra structural reducer rejects any added precision
+    type/cast token not present on the corresponding removed patch lines.  It
+    is a source-diff proof, not a candidate-authored AST or wrapper assertion.
+    """
+    manifests = [candidate.source_manifest]
+    composition = getattr(candidate, "composition_plan", None)
+    if composition is not None:
+        manifests = [row.manifest for row in composition.candidate.accepted]
+    forbidden = re.compile(
+        r"(?i)(?:__half|\bhalf\b|fp16|float16|f16|bf16|bfloat16|half2)")
+    patch_hashes: list[str] = []
+    changed_lines: list[str] = []
+    for manifest in manifests:
+        patch_hashes.append(manifest.patch_sha256)
+        text = manifest.patch_bytes.decode("utf-8", "strict")
+        added = [line[1:] for line in text.splitlines()
+                 if line.startswith("+") and not line.startswith("+++")]
+        removed = [line[1:] for line in text.splitlines()
+                   if line.startswith("-") and not line.startswith("---")]
+        changed_lines.extend([*added, *removed])
+        added_tokens = sorted(token.lower() for line in added
+                              for token in forbidden.findall(line))
+        removed_tokens = sorted(token.lower() for line in removed
+                                for token in forbidden.findall(line))
+        if added_tokens != removed_tokens:
+            raise DeploymentFactoryError(
+                "candidate precision patch changes a reviewed narrow-type token")
+        if any("mul_mat_vec_q" == symbol for symbols in
+               manifest.declared_symbols.values() for symbol in symbols):
+            raise DeploymentFactoryError(
+                "candidate scope includes the trusted operator accumulator kernel")
+
+    # The final MUL_MAT reduction is a float array in the reviewed native
+    # kernel.  Its symbol is deliberately outside every admitted C6 template;
+    # exact source bytes and both load/add carrier fragments are sealed here.
+    accumulator_path = "ggml/src/ggml-cuda/mmvq.cu"
+    committed = subprocess.run(
+        ("git", "-C", str(config.instrument_path), "show",
+         f"{config.instrument_commit}:{accumulator_path}"),
+        stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE, check=False)
+    accumulator_fragments = (
+        "float tmp[ncols_dst][rows_per_cuda_block] = {{0.0f}};",
+        "tmp[j][i] += vec_dot_q_cuda(",
+    )
+    if (committed.returncode != 0
+            or any(committed.stdout.count(fragment.encode()) != 1
+                   for fragment in accumulator_fragments)
+            or any(any(fragment in line for fragment in accumulator_fragments)
+                   for line in changed_lines)):
+        raise DeploymentFactoryError(
+            "trusted f32 operator accumulator carrier is absent or changed")
+
+    # Q4_K/Q6_K arithmetic templates may edit their float-returning vec-dot
+    # symbol.  They may optimize unpacking, but cannot touch its accumulator
+    # variables or return path.  Other admitted templates cannot edit vecdotq.
+    if template.template_id in {"cuda-vecdotq-q4k-v1",
+                                "cuda-vecdotq-q6k-v1"}:
+        protected = ("sumf", "return")
+        if any(any(token in line for token in protected)
+               for line in changed_lines):
+            raise DeploymentFactoryError(
+                "candidate changes the reviewed vec-dot accumulator or return path")
+    proof = {
+        "schema": "epyc.autokernel.c6_structural_precision_source_diff.v1",
+        "template_id": template.template_id,
+        "candidate_id": candidate.source_manifest.candidate_id,
+        "patch_sha256": patch_hashes,
+        "allowed_files": sorted(template.allowed_files),
+        "allowed_symbols": {key: sorted(value) for key, value in
+                            sorted(template.allowed_symbols.items())},
+        "base_source_sha256": dict(template.semantics[
+            "production_instrument_target_sha256_by_file"]),
+        "required_output_dtype": "f32",
+        "required_accumulator_dtype": "f32",
+        "accumulator_authority": {
+            "instrument_commit": config.instrument_commit,
+            "path": accumulator_path,
+            "source_sha256": hashlib.sha256(committed.stdout).hexdigest(),
+            "required_fragments": list(accumulator_fragments),
+            "excluded_symbol": "mul_mat_vec_q",
+        },
+        "rule": "sealed-f32-operator-accumulator-plus-no-narrowing/v2",
+        "result": "PASS",
+    }
+    structural = {
+        "output_dtype": "f32", "accumulator_dtype": "f32",
+        "evidence_sha256": schemas.content_hash(proof),
+    }
+    return structural, proof
+
+
+def _c6_native_capability(
+        config: deployment.DiscoveryDeployment,
+        candidate: controller.PlannedCandidate,
+        build: controller.GpuSourceBuild,
+        template: ExperimentTemplate) -> evidence.C6CorrectnessPlan:
+    if build.operation_key is None or template.semantics.get("correctness_op") != "MUL_MAT":
+        raise DeploymentFactoryError(
+            "native C6 capability currently requires a governed MUL_MAT template")
+    source = (Path(__file__).resolve().parent.parent / "native" /
+              "c6_mul_mat_harness.cpp")
+    if source.is_symlink() or not source.is_file():
+        raise DeploymentFactoryError("native C6 harness source is unavailable")
+    source_sha = _digest_regular(source, "native C6 harness source")
+    compiler = Path("/usr/bin/c++").resolve(strict=True)
+    compiler_sha = _digest_regular(compiler, "native C6 compiler")
+    root = _operation_carrier_root(config, build.operation_key)
+    executable = root / "c6-mul-mat-harness"
+    partial = root / ".c6-mul-mat-harness.partial"
+    bin_dir = build.candidate_build.resolve(strict=True) / "bin"
+    header_root = config.instrument_path.resolve(strict=True)
+    header_paths = (
+        "ggml/include/ggml.h", "ggml/include/ggml-backend.h",
+        "ggml/include/ggml-cpp.h", "ggml/include/ggml-cpu.h")
+    header_bindings: list[tuple[str, Path, str]] = []
+    for relative in header_paths:
+        path = header_root / relative
+        raw = path.read_bytes()
+        committed = subprocess.run(
+            ("git", "-C", str(header_root), "show",
+             f"{config.instrument_commit}:{relative}"),
+            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, check=False)
+        if committed.returncode != 0 or committed.stdout != raw:
+            raise DeploymentFactoryError(
+                "native C6 public header differs from exact instrument commit")
+        header_bindings.append((relative, path, hashlib.sha256(raw).hexdigest()))
+    command = (
+        str(compiler), "-std=c++17", "-O2", "-fno-fast-math",
+        f"-I{header_root / 'ggml/include'}", f"-I{header_root / 'include'}",
+        str(source), f"-L{bin_dir}", f"-Wl,-rpath,{bin_dir}",
+        "-lggml", "-lggml-cpu", "-lggml-base", "-o", str(partial))
+    if not executable.exists():
+        if partial.exists() or partial.is_symlink():
+            raise DeploymentFactoryError(
+                "native C6 harness has an ambiguous partial build")
+        completed = subprocess.run(
+            command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, check=False,
+            env={"PATH": "/usr/bin:/bin", "LANG": "C", "LC_ALL": "C"})
+        if completed.returncode != 0:
+            raise DeploymentFactoryError(
+                "native C6 harness did not compile against candidate build: " +
+                completed.stderr.decode("utf-8", "replace")[-1000:])
+        partial.chmod(0o500)
+        try:
+            os.link(partial, executable, follow_symlinks=False)
+            partial.unlink()
+        except OSError as exc:
+            raise DeploymentFactoryError(
+                "native C6 harness could not be atomically published") from exc
+    if (executable.is_symlink() or not executable.is_file()
+            or executable.stat().st_nlink != 1
+            or not os.access(executable, os.X_OK)):
+        raise DeploymentFactoryError("native C6 harness executable is not sealed")
+    executable_sha = _digest_regular(executable, "native C6 harness")
+    structural, structural_proof = _c6_structural_precision(
+        config, candidate, template)
+    capability = {
+        "schema": "epyc.autokernel.c6_native_capability.v1",
+        "instrument_commit": config.instrument_commit,
+        "candidate_commit": build.candidate_identity.source_commit,
+        "candidate_source_sha256": build.candidate_identity.source_sha256,
+        "source": {"path": str(source), "sha256": source_sha},
+        "public_headers": {relative: {"path": str(path), "sha256": digest}
+                           for relative, path, digest in header_bindings},
+        "compiler": {"path": str(compiler), "sha256": compiler_sha},
+        "compile_argv": list(command),
+        "executable": {"path": str(executable), "sha256": executable_sha},
+        "candidate_libraries": {
+            name: {"path": str((bin_dir / name).resolve(strict=True)),
+                   "sha256": _digest_regular(
+                       (bin_dir / name).resolve(strict=True), name)}
+            for name in ("libggml.so", "libggml-base.so", "libggml-cpu.so",
+                         "libggml-hip.so")},
+        "operation": "MUL_MAT", "type_a": _c6_mul_mat_type(template.template_id),
+        "precision_contract": {
+            "required_output_dtype": "f32",
+            "required_accumulator_dtype": "f32",
+            "atol": 0.01, "rtol": 0.01,
+            "required_matched_ratio": 0.95, "lowbit": True,
+        },
+        "structural_precision_proof": structural_proof,
+        "structural_precision_evidence": structural,
+        "semantic_judge_verdicts": {},
+        "native_execution": True, "wrapper_used": False,
+        "promotion_claim": False,
+    }
+    capability_path = _write_operation_carrier(
+        config, build.operation_key, "c6-native-capability.json",
+        json.dumps(capability, sort_keys=True, separators=(",", ":")).encode(),
+        "native C6 capability")
+    capability_sha = _digest_regular(capability_path, "native C6 capability")
+    seed = int(template.semantics["suite_seed"])
+    argv = (str(executable), "--backend", "ROCm0", "--type-a",
+            capability["type_a"], "--m", "32", "--n", "1", "--k", "256",
+            "--seed", str(seed), "--sidecar", evidence.C6_SIDECAR_OUTPUT)
+    inputs = (
+        evidence.BoundInputFile("executable", executable, executable_sha),
+        evidence.BoundInputFile("c6_source", source, source_sha),
+        evidence.BoundInputFile("c6_compiler", compiler, compiler_sha),
+        evidence.BoundInputFile("c6_capability", capability_path, capability_sha),
+        *(evidence.BoundInputFile(
+            "c6_header_" + relative.rsplit("/", 1)[-1].replace(".", "_"),
+            path, digest) for relative, path, digest in header_bindings),
+        evidence.BoundInputFile("c6_candidate_hip",
+                                (bin_dir / "libggml-hip.so").resolve(strict=True),
+                                capability["candidate_libraries"]["libggml-hip.so"]["sha256"]),
+    )
+    return evidence.C6CorrectnessPlan(
+        argv=argv, inputs=inputs,
+        precision_contract=capability["precision_contract"],
+        structural_precision_evidence=structural,
+        semantic_judge_verdicts={})
 
 
 def _evidence_binding(config: deployment.DiscoveryDeployment) -> EvidencePlanBinding:
@@ -3026,6 +3260,9 @@ def _evidence_binding(config: deployment.DiscoveryDeployment) -> EvidencePlanBin
         placeholder = evidence.BoundInputFile(
             "execution_policy", carrier_root / "evidence-policy.json", "0" * 64)
         dispatch = template.bind_dispatch(candidate.experiment_intent)
+        c6_correctness = (
+            _c6_native_capability(config, candidate, build_, template)
+            if op == "MUL_MAT" else None)
         candidate_rows, anchor_rows = _expected_rocprofv3_rows(dispatch)
         provisional = evidence.GpuSourceEvidencePlan(
             campaign_id=candidate.source_manifest.campaign_id,
@@ -3064,6 +3301,7 @@ def _evidence_binding(config: deployment.DiscoveryDeployment) -> EvidencePlanBin
             candidate_rocprof_environment=profile_environment(shared.candidate_hip_library),
             anchor_rocprof_environment=profile_environment(shared.anchor_hip_library),
             shared_runtime=shared,
+            c6_correctness=c6_correctness,
             correctness_invocations=correctness_invocations,
             attribution_arm_order_seed_sha256=order_seed,
             attribution_arm_order=attribution_arm_order,

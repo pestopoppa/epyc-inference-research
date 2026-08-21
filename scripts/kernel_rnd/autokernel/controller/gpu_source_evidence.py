@@ -18,6 +18,7 @@ import os
 from pathlib import Path
 import re
 import stat
+import struct
 import subprocess
 import time
 from datetime import datetime, timezone
@@ -26,12 +27,16 @@ from typing import Any, Callable, Mapping, Protocol, Sequence
 from .. import schemas
 from ..execution import microbench, t0_provider
 from ..resource import device_claim
+from ... import c6_reward_integrity
 from . import gpu_source_proofs as proofs
 from . import split_runtime_verifier
 
 AUTHORITY = "nonpromotable_candidate_only_discovery"
 BORROWED_PHASE_SCHEMA = "epyc.autokernel.borrowed_device_claim_phase.v1"
 CORRECTNESS_SCHEMA = "epyc.autokernel.targeted_correctness_receipt.v3"
+C6_CORRECTNESS_SCHEMA = "epyc.autokernel.c6_correctness_receipt.v1"
+C6_SIDECAR_SCHEMA = "epyc.autokernel.c6_native_mul_mat_sidecar.v1"
+C6_SIDECAR_OUTPUT = "{C6_SIDECAR_OUTPUT}"
 CORRECTNESS_REFUSAL_SCHEMA = "epyc.autokernel.targeted_correctness_refusal.v1"
 CORRECTNESS_PARSER_ID = "ak.t0.backend_ops_console/v1"
 EXECUTION_POLICY_SCHEMA = "epyc.autokernel.gpu_source_execution_policy.v2"
@@ -178,6 +183,32 @@ def _argv(value: Sequence[str], label: str) -> tuple[str, ...]:
     return result
 
 
+def _c6_case_identity_from_argv(argv: Sequence[str]) -> dict[str, Any]:
+    """Reduce the sealed native argv to one exact seeded case identity."""
+    if len(argv) != 15 or not isinstance(argv[0], str):
+        raise EvidenceProducerError("native C6 argv is not the canonical case shape")
+    expected_keys = (
+        "--backend", "--type-a", "--m", "--n", "--k", "--seed", "--sidecar")
+    keys = tuple(argv[index] for index in range(1, len(argv), 2))
+    if keys != expected_keys:
+        raise EvidenceProducerError("native C6 argv option order changed")
+    values = {argv[index]: argv[index + 1] for index in range(1, len(argv), 2)}
+    if (not values["--backend"] or not values["--type-a"]
+            or values["--sidecar"] != C6_SIDECAR_OUTPUT):
+        raise EvidenceProducerError("native C6 argv identity is incomplete")
+    try:
+        dimensions = {key[2:]: int(values[key]) for key in ("--m", "--n", "--k")}
+        seed = int(values["--seed"])
+    except ValueError as exc:
+        raise EvidenceProducerError("native C6 dimensions/seed are not integers") from exc
+    if any(value < 1 for value in dimensions.values()) or seed < 0:
+        raise EvidenceProducerError("native C6 dimensions/seed are out of range")
+    return {
+        "backend": values["--backend"], "type_a": values["--type-a"],
+        **dimensions, "seed": seed,
+    }
+
+
 @dataclass(frozen=True)
 class GpuResidencySample:
     observed_monotonic_ns: int
@@ -308,6 +339,41 @@ class SharedRewardRuntimeFiles:
     runtime_receipt: BoundInputFile
     anchor_hip_library: BoundInputFile
     candidate_hip_library: BoundInputFile
+
+
+@dataclass(frozen=True)
+class C6CorrectnessPlan:
+    """Producer-owned native C6 witness and pre-tolerance precision policy."""
+
+    argv: tuple[str, ...]
+    inputs: tuple[BoundInputFile, ...]
+    precision_contract: Mapping[str, Any]
+    structural_precision_evidence: Mapping[str, Any]
+    semantic_judge_verdicts: Mapping[str, str]
+
+    def __post_init__(self) -> None:
+        _argv(self.argv, "C6 correctness argv")
+        _c6_case_identity_from_argv(self.argv)
+        if (self.argv.count(C6_SIDECAR_OUTPUT) != 1
+                or not Path(self.argv[0]).is_absolute()
+                or not any(item.role == "executable"
+                           and item.path == Path(self.argv[0])
+                           for item in self.inputs)):
+            raise EvidenceProducerError(
+                "C6 correctness must bind one native executable and sidecar")
+        if any(not isinstance(item, BoundInputFile) for item in self.inputs):
+            raise EvidenceProducerError("C6 correctness inputs must be typed")
+        try:
+            c6_reward_integrity.PrecisionContract(**dict(self.precision_contract))
+            c6_reward_integrity.StructuralPrecisionEvidence(
+                **dict(self.structural_precision_evidence))
+            calibration = c6_reward_integrity.calibrate_semantic_judge(
+                self.semantic_judge_verdicts)
+        except (TypeError, c6_reward_integrity.EvaluatorPolicyError) as exc:
+            raise EvidenceProducerError("C6 correctness policy is invalid") from exc
+        if calibration.gating:
+            raise EvidenceProducerError(
+                "semantic judge must remain non-gating until separate ratification")
 
 
 @dataclass(frozen=True)
@@ -522,6 +588,7 @@ class GpuSourceEvidencePlan:
     candidate_rocprof_environment: tuple[tuple[str, str], ...] = ()
     anchor_rocprof_environment: tuple[tuple[str, str], ...] = ()
     shared_runtime: SharedRewardRuntimeFiles | None = None
+    c6_correctness: C6CorrectnessPlan | None = None
     # Empty means the legacy single command above.  Portfolio templates may
     # instead seal an ordered multi-invocation correctness contract (FA uses a
     # generic corpus plus a dedicated odd-GQA7 corpus).
@@ -616,6 +683,14 @@ class GpuSourceEvidencePlan:
                     f"plan requires sealed {label} LD_LIBRARY_PATH environment")
         if self.shared_runtime != self.identity_files.shared_runtime:
             raise EvidenceProducerError("shared reward runtime must be carried by the typed identity files")
+        if self.c6_correctness is not None:
+            if self.correctness_op != "MUL_MAT":
+                raise EvidenceProducerError(
+                    "reviewed native C6 capability currently covers MUL_MAT only")
+            if (dict(self.correctness_environment).get("LD_LIBRARY_PATH", "").split(":")[0]
+                    != str(self.identity_files.candidate.hip_library.path.parent)):
+                raise EvidenceProducerError(
+                    "native C6 LD_LIBRARY_PATH must load the exact candidate backend first")
         for label, command, inputs in (
             ("correctness", self.correctness_argv, self.correctness_inputs),
             ("candidate rocprof", self.candidate_rocprof_argv,
@@ -997,6 +1072,15 @@ def _policy_payload(plan: GpuSourceEvidencePlan) -> dict[str, Any]:
         "correctness_op": plan.correctness_op,
         "expected_correctness_cases": plan.expected_correctness_cases,
         "correctness_invocations": [dict(row) for row in plan.correctness_invocations],
+        "c6_correctness": (None if plan.c6_correctness is None else {
+            "argv": list(plan.c6_correctness.argv),
+            "inputs": [_bound_reference(x) for x in plan.c6_correctness.inputs],
+            "precision_contract": dict(plan.c6_correctness.precision_contract),
+            "structural_precision_evidence": dict(
+                plan.c6_correctness.structural_precision_evidence),
+            "semantic_judge_verdicts": dict(
+                plan.c6_correctness.semantic_judge_verdicts),
+        }),
         "candidate_rocprof_argv": list(plan.candidate_rocprof_argv),
         "anchor_rocprof_argv": list(plan.anchor_rocprof_argv),
         "profiler_trace_schema_id": plan.profiler_trace_schema_id,
@@ -1023,6 +1107,8 @@ def _policy_payload(plan: GpuSourceEvidencePlan) -> dict[str, Any]:
 
 
 def _verify_plan_files(plan: GpuSourceEvidencePlan) -> None:
+    if plan.c6_correctness is None:
+        raise EvidenceProducerError("production evidence plan lacks native C6 correctness")
     _verify_build_files(plan.identity_files.candidate, plan.candidate, "candidate")
     _verify_build_files(plan.identity_files.anchor, plan.anchor, "anchor")
     for item, digest, label in (
@@ -1062,8 +1148,12 @@ def _verify_plan_files(plan: GpuSourceEvidencePlan) -> None:
     if plan.shared_runtime is not None:
         _verify_shared_runtime(plan.shared_runtime, plan=plan)
     for item in (plan.correctness_inputs + plan.candidate_rocprof_inputs
-                 + plan.anchor_rocprof_inputs):
+                 + plan.anchor_rocprof_inputs
+                 + plan.c6_correctness.inputs):
         _verify_bound(item)
+    _verify_executable(
+        plan.c6_correctness.argv, plan.c6_correctness.inputs,
+        "C6 correctness")
     if plan.profiler_trace_schema_id == ROCPROF_V3_TRACE_ID:
         manifests = {
             item.path: item for item in (
@@ -1441,6 +1531,221 @@ def _run_claimed(
     return capture, opened, released, residency
 
 
+def _run_claimed_sequence(
+    invocations: Sequence[CommandInvocation], *, plan: GpuSourceEvidencePlan,
+    executor: CommandExecutor, claim_acquirer: Callable[..., Any],
+    claim_verifier: Callable[[Mapping[str, Any]], object], claim_journal: Any,
+    claim_timeout_s: float,
+) -> tuple[list[ExecutionCapture], dict[str, Any], dict[str, Any],
+           list[dict[str, Any]]]:
+    """Execute an ordered correctness sequence inside one exact GPU claim."""
+    if len(invocations) < 2 or any(item.kind != "correctness"
+                                   or item.arm != "candidate"
+                                   for item in invocations):
+        raise EvidenceProducerError(
+            "claimed correctness sequence requires at least two candidate commands")
+    _verify_plan_files(plan)
+    output_paths = [path for invocation in invocations
+                    for path in (invocation.stdout_path, invocation.stderr_path)]
+    if len(output_paths) != len(set(output_paths)) or any(
+            path.exists() or path.is_symlink() for path in output_paths):
+        raise EvidenceProducerError("sequence outputs must be fresh unique paths")
+    for path in output_paths:
+        path.parent.mkdir(parents=True, exist_ok=True)
+    claim = None
+    borrowed_outer = False
+    opened = released = None
+    captures: list[ExecutionCapture] = []
+    verified_before = verified_after = False
+    failure: BaseException | None = None
+    try:
+        claim = claim_acquirer(
+            plan.device_id,
+            purpose="AutoKernel GPU source evidence correctness/candidate",
+            campaign_id=plan.campaign_id, journal=claim_journal,
+            holder_label="gpu_source_evidence.py", timeout_s=claim_timeout_s,
+            max_hold_s=3600.0)
+        borrowed_outer = bool(getattr(claim, "borrowed_outer_reservation", False))
+        opened = _receipt_dict(claim.receipt(), "opened claim")
+        verified_before = _check_result_passed(claim_verifier(opened))
+        if not verified_before:
+            raise EvidenceProducerError(
+                "device claim was not verifiably held before execution")
+        for invocation in invocations:
+            _verify_plan_files(plan)
+            capture = executor(invocation)
+            if not isinstance(capture, ExecutionCapture) \
+                    or capture.argv != invocation.argv:
+                raise EvidenceProducerError(
+                    "executor did not attest an exact correctness argv")
+            captures.append(capture)
+        verified_after = _check_result_passed(claim_verifier(opened))
+        if not verified_after:
+            raise EvidenceProducerError(
+                "device claim was not verifiably held after correctness sequence")
+    except BaseException as exc:
+        failure = exc
+    try:
+        if claim is not None:
+            released = _receipt_dict(claim.release(), "released claim")
+    except BaseException as exc:
+        failure = failure or exc
+    if failure is not None:
+        if isinstance(failure, EvidenceProducerError):
+            raise failure
+        raise EvidenceProducerError(
+            f"correctness sequence execution failed: {failure}") from failure
+    if opened is None or released is None or len(captures) != len(invocations):
+        raise EvidenceProducerError(
+            "claimed correctness sequence did not produce complete evidence")
+    _validate_claim_pair(opened, released, plan=plan)
+    residencies = []
+    for capture in captures:
+        residency = _residency(capture, plan.device_id)
+        residency.update({
+            "claim_verified_before": verified_before,
+            "claim_verified_after": verified_after,
+            "device_claim_mode": (
+                "borrowed_outer_reservation" if borrowed_outer
+                else "direct_device_claim"),
+            "outer_claim_id": opened["claim_id"] if borrowed_outer else None,
+        })
+        residencies.append(residency)
+    return captures, opened, released, residencies
+
+
+def _materialize_c6_argv(argv: tuple[str, ...], sidecar: Path) -> tuple[str, ...]:
+    if not sidecar.is_absolute() or argv.count(C6_SIDECAR_OUTPUT) != 1:
+        raise EvidenceProducerError("C6 sidecar substitution is invalid")
+    return tuple(str(sidecar) if item == C6_SIDECAR_OUTPUT else item
+                 for item in argv)
+
+
+def _decode_f32le_hex(value: object, label: str) -> tuple[bytes, list[float]]:
+    if not isinstance(value, str) or len(value) == 0 or len(value) % 8:
+        raise EvidenceProducerError(f"{label} is not non-empty f32le hex")
+    try:
+        raw = bytes.fromhex(value)
+    except ValueError as exc:
+        raise EvidenceProducerError(f"{label} is not hex") from exc
+    return raw, list(struct.unpack("<" + "f" * (len(raw) // 4), raw))
+
+
+def _validate_c6_sidecar_identity(
+        value: object, case_identity: Mapping[str, Any], *, label: str) -> None:
+    expected = {
+        "schema": C6_SIDECAR_SCHEMA,
+        "sequence": ["reference", "candidate-1", "candidate-2", "candidate-3"],
+        **dict(case_identity), "operation": "MUL_MAT", "type_b": "f32",
+        "output_dtype": "f32",
+        "candidate_clone_ids": ["candidate-1", "candidate-2", "candidate-3"],
+    }
+    payload_keys = {
+        "input_witness", "reference_output_f32le_hex",
+        "candidate_outputs_f32le_hex"}
+    if (not isinstance(value, Mapping)
+            or set(value) != set(expected) | payload_keys
+            or any(type(value.get(key)) is not type(item)
+                   or value.get(key) != item for key, item in expected.items())):
+        raise EvidenceProducerError(
+            f"{label} identity/ordering/clone contract changed")
+
+
+def _evaluate_c6_sidecar(
+        sidecar: Path, plan: GpuSourceEvidencePlan,
+        invocation: CommandInvocation, capture: ExecutionCapture,
+        opened: Mapping[str, Any], released: Mapping[str, Any],
+        residency: Mapping[str, Any]) -> Mapping[str, Any]:
+    c6 = plan.c6_correctness
+    if c6 is None:
+        raise EvidenceProducerError("production correctness lacks C6 capability")
+    try:
+        raw = sidecar.read_bytes()
+        value = json.loads(raw)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise EvidenceProducerError("native C6 sidecar is unreadable") from exc
+    case_identity = _c6_case_identity_from_argv(c6.argv)
+    _validate_c6_sidecar_identity(value, case_identity, label="native C6 sidecar")
+    if plan.correctness_op != "MUL_MAT":
+        raise EvidenceProducerError("native C6 harness currently admits MUL_MAT only")
+    witness = value.get("input_witness")
+    if not isinstance(witness, Mapping) or set(witness) != {
+            "weights_hex", "activations_f32le_hex"}:
+        raise EvidenceProducerError("native C6 input witness is incomplete")
+    try:
+        weights_hex = witness["weights_hex"]
+        if not isinstance(weights_hex, str) or not weights_hex:
+            raise ValueError("empty weights")
+        weights = bytes.fromhex(weights_hex)
+    except ValueError as exc:
+        raise EvidenceProducerError("native C6 weights witness is not hex") from exc
+    activations_raw, _ = _decode_f32le_hex(
+        witness["activations_f32le_hex"], "native C6 activations")
+    reference_raw, reference = _decode_f32le_hex(
+        value.get("reference_output_f32le_hex"), "native C6 reference")
+    output_values = value.get("candidate_outputs_f32le_hex")
+    if not isinstance(output_values, list) or len(output_values) != 3:
+        raise EvidenceProducerError("native C6 requires exactly three candidate outputs")
+    decoded = [_decode_f32le_hex(item, f"native C6 candidate {index}")
+               for index, item in enumerate(output_values, 1)]
+    candidate_raw = [item[0] for item in decoded]
+    candidates = [item[1] for item in decoded]
+    element_count = case_identity["m"] * case_identity["n"]
+    if (len(activations_raw) != case_identity["k"] * case_identity["n"] * 4
+            or any(len(row) != element_count
+                                for row in [reference, *candidates])):
+        raise EvidenceProducerError("native C6 input/output shape is inconsistent")
+    policy = c6_reward_integrity.PrecisionContract(**dict(c6.precision_contract))
+    structural = c6_reward_integrity.StructuralPrecisionEvidence(
+        **dict(c6.structural_precision_evidence))
+    numerical = [c6_reward_integrity.evaluate_numerics(
+        reference, candidate, structural=structural, policy=policy)
+        for candidate in candidates]
+    determinism = c6_reward_integrity.determinism_from_recorded_outputs(
+        candidate_raw)
+    semantic = c6_reward_integrity.calibrate_semantic_judge(
+        c6.semantic_judge_verdicts)
+    if (capture.exit_code != 0 or not all(row.correct for row in numerical)
+            or not determinism.correct or semantic.gating):
+        raise EvidenceProducerError(
+            "native C6 correctness/determinism/semantic policy refused candidate")
+    dispatch_sha = schemas.content_hash(_expectations(plan))
+    body = {
+        "schema": C6_CORRECTNESS_SCHEMA, "authority": AUTHORITY,
+        "status": "complete", "result": "PASS", "non_promotable": True,
+        "promotion_claim": False, "campaign_id": plan.campaign_id,
+        "device_id": plan.device_id, "manifest_sha256": plan.manifest_sha256,
+        "candidate_build_identity": asdict(plan.candidate),
+        "command_argv": list(invocation.argv),
+        "command_cwd": str(plan.execution_cwd),
+        "command_environment_sha256": schemas.content_hash(
+            [list(item) for item in invocation.environment]),
+        "exit_code": capture.exit_code,
+        **_output_hashes(invocation),
+        "sidecar": {"path": str(sidecar),
+                    "sha256": hashlib.sha256(raw).hexdigest()},
+        "seeded_case_identity": case_identity,
+        "input_identity_sha256": hashlib.sha256(
+            weights + activations_raw).hexdigest(),
+        "reference_output_sha256": hashlib.sha256(reference_raw).hexdigest(),
+        "candidate_output_sha256": [hashlib.sha256(row).hexdigest()
+                                     for row in candidate_raw],
+        "precision_contract": asdict(policy),
+        "structural_precision_evidence": asdict(structural),
+        "numeric_verdicts": [asdict(row) for row in numerical],
+        "determinism": json.loads(json.dumps(asdict(determinism))),
+        "semantic_judge_calibration": json.loads(json.dumps(asdict(semantic))),
+        "semantic_judge_gating": False,
+        "native_execution": True, "wrapper_used": False,
+        "dispatch_expectations_sha256": dispatch_sha,
+        "c6_inputs": [_bound_reference(item) for item in c6.inputs],
+        "started_at": capture.started_at, "ended_at": capture.ended_at,
+        **_claim_boundary_fields(opened, released, residency),
+        "residency_witness": dict(residency),
+    }
+    return _seal(sidecar.parent / "c6-receipt.json", body)
+
+
 def _output_hashes(invocation: CommandInvocation) -> dict[str, Any]:
     result = {
         "stdout_path": str(invocation.stdout_path),
@@ -1578,16 +1883,35 @@ def _produce_correctness(
             claim_verifier=claim_verifier, claim_journal=claim_journal,
             claim_timeout_s=claim_timeout_s)
     directory = root / "correctness"
+    c6 = plan.c6_correctness
+    if c6 is None:
+        raise EvidenceProducerError("production correctness lacks C6 capability")
+    c6_sidecar = (directory / "c6-sidecar.json").resolve()
+    c6_invocation = CommandInvocation(
+        kind="correctness", arm="candidate",
+        argv=_materialize_c6_argv(c6.argv, c6_sidecar),
+        stdout_path=(directory / "c6-stdout.txt").resolve(),
+        stderr_path=(directory / "c6-stderr.txt").resolve(),
+        working_directory=plan.execution_cwd,
+        environment=plan.correctness_environment)
     invocation = CommandInvocation(
         kind="correctness", arm="candidate", argv=plan.correctness_argv,
         stdout_path=(directory / "stdout.txt").resolve(),
         stderr_path=(directory / "stderr.txt").resolve(),
         working_directory=plan.execution_cwd,
         environment=plan.correctness_environment)
-    capture, opened, released, residency = _run_claimed(
-        invocation, plan=plan, executor=executor, claim_acquirer=claim_acquirer,
+    captures, opened, released, residencies = _run_claimed_sequence(
+        (c6_invocation, invocation), plan=plan, executor=executor,
+        claim_acquirer=claim_acquirer,
         claim_verifier=claim_verifier, claim_journal=claim_journal,
         claim_timeout_s=claim_timeout_s)
+    c6_capture, capture = captures
+    c6_residency, residency = residencies
+    if not c6_sidecar.exists() or c6_sidecar.is_symlink():
+        raise EvidenceProducerError("native C6 command did not emit its sidecar")
+    c6_receipt = _evaluate_c6_sidecar(
+        c6_sidecar, plan, c6_invocation, c6_capture,
+        opened, released, c6_residency)
     outputs = _output_hashes(invocation)
     try:
         parsed = _parse_correctness(
@@ -1661,6 +1985,7 @@ def _produce_correctness(
         "expected_cases": plan.expected_correctness_cases,
         "passed_cases": plan.expected_correctness_cases,
         "exact_case_ok": True,
+        "c6_correctness": _reference(c6_receipt),
         **_claim_boundary_fields(opened, released, residency),
         "residency_witness": residency,
     }
@@ -3146,6 +3471,12 @@ def _produce_pair(
     root: Path, plan: GpuSourceEvidencePlan, candidate: Mapping[str, Any],
     anchor: Mapping[str, Any],
 ) -> Mapping[str, Any]:
+    correctness_loaded = proofs.load_receipt(
+        root / "correctness" / "receipt.json", schema=CORRECTNESS_SCHEMA)
+    _validate_correctness_body(correctness_loaded["body"], plan)
+    c6_reference = correctness_loaded["body"]["c6_correctness"]
+    c6_loaded = _reload_reference(c6_reference, schema=C6_CORRECTNESS_SCHEMA)
+    _validate_c6_correctness_receipt(c6_loaded, plan)
     candidate_body, anchor_body = candidate["body"], anchor["body"]
     candidate_invariants = _structural_signature_projection(
         candidate_body["invariant_signatures"])
@@ -3192,6 +3523,17 @@ def _produce_pair(
         "shared_runtime": _shared_runtime_reference(plan.shared_runtime),
         "execution_policy": _bound_reference(plan.policy),
         "correctness_inputs": [_bound_reference(x) for x in plan.correctness_inputs],
+        "correctness_invocations": [dict(row) for row in plan.correctness_invocations],
+        "c6_correctness": dict(c6_reference),
+        "c6_correctness_plan": {
+            "argv": list(plan.c6_correctness.argv),
+            "inputs": [_bound_reference(x) for x in plan.c6_correctness.inputs],
+            "precision_contract": dict(plan.c6_correctness.precision_contract),
+            "structural_precision_evidence": dict(
+                plan.c6_correctness.structural_precision_evidence),
+            "semantic_judge_verdicts": dict(
+                plan.c6_correctness.semantic_judge_verdicts),
+        },
         "candidate_rocprof_inputs": [_bound_reference(x) for x in plan.candidate_rocprof_inputs],
         "anchor_rocprof_inputs": [_bound_reference(x) for x in plan.anchor_rocprof_inputs],
         "required_correctness_argv_paths": [str(x) for x in plan.required_correctness_argv_paths],
@@ -3468,6 +3810,11 @@ def _validate_correctness_body(body: Mapping[str, Any], plan: GpuSourceEvidenceP
     }
     if any(body.get(key) != value for key, value in expected.items()):
         raise EvidenceProducerError("correctness receipt identity/config/result mismatch")
+    c6_reference = body.get("c6_correctness")
+    if not isinstance(c6_reference, Mapping):
+        raise EvidenceProducerError("targeted correctness lacks sealed C6 receipt")
+    c6_loaded = _reload_reference(c6_reference, schema=C6_CORRECTNESS_SCHEMA)
+    _validate_c6_correctness_receipt(c6_loaded, plan)
     _validate_claim_boundary(body, plan=plan)
     for kind in ("stdout", "stderr"):
         path = Path(str(body.get(f"{kind}_path", "")))
@@ -3484,6 +3831,105 @@ def _validate_correctness_body(body: Mapping[str, Any], plan: GpuSourceEvidenceP
     _validate_residency_witness(
         body.get("residency_witness"), device_id=plan.device_id,
         label="correctness")
+
+
+def _validate_c6_correctness_receipt(
+        loaded: Mapping[str, Any], plan: GpuSourceEvidencePlan) -> None:
+    c6 = plan.c6_correctness
+    if c6 is None:
+        raise EvidenceProducerError("C6 receipt cannot reopen without capability")
+    body = loaded["body"]
+    expected = {
+        "schema": C6_CORRECTNESS_SCHEMA, "authority": AUTHORITY,
+        "status": "complete", "result": "PASS", "non_promotable": True,
+        "promotion_claim": False, "campaign_id": plan.campaign_id,
+        "device_id": plan.device_id, "manifest_sha256": plan.manifest_sha256,
+        "candidate_build_identity": asdict(plan.candidate),
+        "command_cwd": str(plan.execution_cwd), "exit_code": 0,
+        "seeded_case_identity": _c6_case_identity_from_argv(c6.argv),
+        "precision_contract": asdict(c6_reward_integrity.PrecisionContract(
+            **dict(c6.precision_contract))),
+        "structural_precision_evidence": asdict(
+            c6_reward_integrity.StructuralPrecisionEvidence(
+                **dict(c6.structural_precision_evidence))),
+        "semantic_judge_calibration": json.loads(json.dumps(asdict(
+            c6_reward_integrity.calibrate_semantic_judge(
+                c6.semantic_judge_verdicts)))),
+        "semantic_judge_gating": False, "native_execution": True,
+        "wrapper_used": False,
+        "dispatch_expectations_sha256": schemas.content_hash(_expectations(plan)),
+        "c6_inputs": [_bound_reference(item) for item in c6.inputs],
+    }
+    if any(body.get(key) != value for key, value in expected.items()):
+        raise EvidenceProducerError("sealed C6 correctness identity/policy changed")
+    argv = body.get("command_argv")
+    if (not isinstance(argv, list) or len(argv) != len(c6.argv)
+            or any(actual != planned for actual, planned in zip(argv, c6.argv)
+                   if planned != C6_SIDECAR_OUTPUT)):
+        raise EvidenceProducerError("sealed C6 command differs from capability")
+    for kind in ("stdout", "stderr"):
+        path = Path(str(body.get(f"{kind}_path", "")))
+        if _hash_file(path, f"C6 {kind}", allow_empty=kind == "stderr") \
+                != body.get(f"{kind}_sha256"):
+            raise EvidenceProducerError(f"sealed C6 {kind} changed")
+    sidecar = body.get("sidecar")
+    if not isinstance(sidecar, Mapping):
+        raise EvidenceProducerError("sealed C6 sidecar reference is malformed")
+    sidecar_path = Path(str(sidecar.get("path", "")))
+    if _hash_file(sidecar_path, "C6 sidecar", allow_empty=False) != sidecar.get("sha256"):
+        raise EvidenceProducerError("sealed C6 sidecar changed")
+    try:
+        value = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise EvidenceProducerError("sealed C6 sidecar is unreadable") from exc
+    case_identity = _c6_case_identity_from_argv(c6.argv)
+    _validate_c6_sidecar_identity(value, case_identity, label="sealed C6 sidecar")
+    witness = value.get("input_witness")
+    if not isinstance(witness, Mapping) or set(witness) != {
+            "weights_hex", "activations_f32le_hex"}:
+        raise EvidenceProducerError("sealed C6 input witness is malformed")
+    try:
+        weights_hex = witness["weights_hex"]
+        if not isinstance(weights_hex, str) or not weights_hex:
+            raise ValueError("empty weights")
+        weights = bytes.fromhex(weights_hex)
+    except ValueError as exc:
+        raise EvidenceProducerError("sealed C6 weights witness is not hex") from exc
+    activations_raw, _ = _decode_f32le_hex(
+        witness["activations_f32le_hex"], "sealed C6 activations")
+    ref_raw, reference = _decode_f32le_hex(
+        value.get("reference_output_f32le_hex"), "sealed C6 reference")
+    outputs = value.get("candidate_outputs_f32le_hex")
+    if not isinstance(outputs, list) or len(outputs) != 3:
+        raise EvidenceProducerError("sealed C6 sidecar lost its three outputs")
+    decoded = [_decode_f32le_hex(item, "sealed C6 candidate") for item in outputs]
+    raw_outputs, candidate_outputs = zip(*decoded)
+    element_count = case_identity["m"] * case_identity["n"]
+    if (len(activations_raw) != case_identity["k"] * case_identity["n"] * 4
+            or any(len(row) != element_count
+                   for row in [reference, *candidate_outputs])):
+        raise EvidenceProducerError("sealed C6 input/output shape changed")
+    policy = c6_reward_integrity.PrecisionContract(**dict(c6.precision_contract))
+    structural = c6_reward_integrity.StructuralPrecisionEvidence(
+        **dict(c6.structural_precision_evidence))
+    numerical = [c6_reward_integrity.evaluate_numerics(
+        reference, candidate, structural=structural, policy=policy)
+        for candidate in candidate_outputs]
+    deterministic = c6_reward_integrity.determinism_from_recorded_outputs(
+        list(raw_outputs))
+    if (body.get("input_identity_sha256") != hashlib.sha256(
+                weights + activations_raw).hexdigest()
+            or body.get("reference_output_sha256") != hashlib.sha256(ref_raw).hexdigest()
+            or body.get("candidate_output_sha256") != [
+                hashlib.sha256(item).hexdigest() for item in raw_outputs]
+            or body.get("numeric_verdicts") != [asdict(item) for item in numerical]
+            or body.get("determinism") != json.loads(json.dumps(asdict(deterministic)))
+            or not all(item.correct for item in numerical)
+            or not deterministic.correct):
+        raise EvidenceProducerError("sealed C6 reductions changed or no longer pass")
+    _validate_claim_boundary(body, plan=plan)
+    _validate_residency_witness(
+        body.get("residency_witness"), device_id=plan.device_id, label="C6")
 
 
 def load_gpu_source_correctness_receipt(
@@ -3593,6 +4039,17 @@ def _load_gpu_source_attribution_pair(
         raise EvidenceProducerError(
             "completed attribution pair is not durably recoverable") from exc
     body = loaded["body"]
+    c6_plan = plan.c6_correctness
+    if c6_plan is None:
+        raise EvidenceProducerError("attribution pair lacks native C6 plan")
+    expected_c6_plan = {
+        "argv": list(c6_plan.argv),
+        "inputs": [_bound_reference(x) for x in c6_plan.inputs],
+        "precision_contract": dict(c6_plan.precision_contract),
+        "structural_precision_evidence": dict(
+            c6_plan.structural_precision_evidence),
+        "semantic_judge_verdicts": dict(c6_plan.semantic_judge_verdicts),
+    }
     expected = {
         "schema": PAIR_SCHEMA,
         "authority": AUTHORITY,
@@ -3608,6 +4065,7 @@ def _load_gpu_source_attribution_pair(
         "shared_runtime": _shared_runtime_reference(plan.shared_runtime),
         "execution_policy": _bound_reference(plan.policy),
         "correctness_invocations": [dict(row) for row in plan.correctness_invocations],
+        "c6_correctness_plan": expected_c6_plan,
         "expectations": _expectations(plan),
         "candidate": _reference(candidate),
         "anchor": _reference(anchor),
@@ -3624,6 +4082,9 @@ def _load_gpu_source_attribution_pair(
     if any(body.get(key) != value for key, value in expected.items()):
         raise EvidenceProducerError(
             "completed attribution pair identity/contract changed")
+    c6_loaded = _reload_reference(
+        body.get("c6_correctness", {}), schema=C6_CORRECTNESS_SCHEMA)
+    _validate_c6_correctness_receipt(c6_loaded, plan)
     candidate_body, anchor_body = candidate["body"], anchor["body"]
     candidate_invariants = _structural_signature_projection(
         candidate_body.get("invariant_signatures"))
@@ -3705,6 +4166,16 @@ def _plan_from_receipts(correctness: Mapping[str, Any], pair: Mapping[str, Any])
                 "profiler_transport_policy", "require-zero-exit")),
             correctness_invocations=tuple(
                 dict(row) for row in pair_body.get("correctness_invocations", [])),
+            c6_correctness=C6CorrectnessPlan(
+                argv=tuple(pair_body["c6_correctness_plan"]["argv"]),
+                inputs=tuple(_bound_from_dict(x) for x in
+                             pair_body["c6_correctness_plan"]["inputs"]),
+                precision_contract=dict(pair_body[
+                    "c6_correctness_plan"]["precision_contract"]),
+                structural_precision_evidence=dict(pair_body[
+                    "c6_correctness_plan"]["structural_precision_evidence"]),
+                semantic_judge_verdicts=dict(pair_body[
+                    "c6_correctness_plan"]["semantic_judge_verdicts"])),
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise EvidenceProducerError("sealed bundle cannot reconstruct its plan") from exc
