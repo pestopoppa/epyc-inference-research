@@ -56,6 +56,7 @@ def _lever(index: int, **manifest_kwargs) -> C.ReplicatedPositiveLever:
             build_identity_sha256=_h(("build", index)),
             correctness_receipt_sha256=_h(("correct", index, repetition)),
             attribution_receipt_sha256=_h(("attrib", index, repetition)),
+            graphs_off_receipt_sha256=_h(("graphs-off", index, repetition)),
             graphs_on_receipt_sha256=_h(("graphs", index, repetition)),
             effect_fraction=.01 + index / 10000,
         )
@@ -130,10 +131,12 @@ def _comparison(pair: C.CumulativeBuildPair, correctness: C.FullCorrectness,
     return C.IncrementalComparison.create(
         pair, correctness,
         exact_route_receipt_sha256=_h(("route", pair.operation_key)),
+        graphs_off_receipt_sha256=_h(("graphs-off", pair.operation_key)),
         expected_route_set_sha256=_h(("route-set", pair.operation_key)),
         graphs_on_receipt_sha256=_h(("graphs", pair.operation_key)),
         target_runtime_frame_sha256=_h(("frame", pair.operation_key)),
         exact_route_effect_fraction=route,
+        graphs_off_effect_fraction=route,
         graphs_on_effect_fraction=graphs,
     )
 
@@ -308,6 +311,29 @@ class CumulativeCompositionTests(unittest.TestCase):
                 final["terminals"][0]["isolated_result_sha256s"],
                 [row.result_sha256 for row in second.replications])
             self.assertEqual(ledger.record_correctness(failed), final)
+
+    def test_attribution_refusal_is_scientific_and_preserves_anchor(self):
+        plan = _plan(_authority(_lever(1)), _lever(2))
+        pair = _build_pair(plan)
+        correct = _correctness(pair)
+        receipt = _h("attribution-refusal")
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = C.CompositionLedger(Path(directory) / "state.json")
+            ledger.create(plan.anchor)
+            ledger.begin(plan)
+            ledger.record_build_pair(pair)
+            ledger.record_correctness(correct)
+            final = ledger.rollback_attribution(
+                plan.operation_key, receipt_sha256=receipt)
+            self.assertEqual(final["scientific_attempts"], 1)
+            terminal = final["terminals"][0]
+            self.assertEqual(terminal["disposition"], "attribution_rollback")
+            self.assertEqual(terminal["attribution_receipt_sha256"], receipt)
+            self.assertEqual(
+                C.CompositionAuthority.from_dict(final["authority"]),
+                plan.anchor)
+            self.assertEqual(ledger.rollback_attribution(
+                plan.operation_key, receipt_sha256=receipt), final)
 
     def test_nonpositive_incremental_result_rolls_back_without_losing_anchor(self):
         plan = _plan(_authority(_lever(1)), _lever(2))

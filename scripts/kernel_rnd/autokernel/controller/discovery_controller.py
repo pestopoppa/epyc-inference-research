@@ -12,7 +12,7 @@ from __future__ import annotations
 import argparse
 import base64
 import fcntl
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, replace
 from datetime import datetime, timezone
 import hashlib
 import importlib
@@ -27,7 +27,7 @@ import stat
 import tempfile
 from typing import Any, Callable, Mapping, Protocol, Sequence
 
-from .. import (campaign, hypothesis_portfolio, journal,
+from .. import (campaign, cumulative_composition, hypothesis_portfolio, journal,
                 preauthored_continuation, schemas, source_candidate)
 from ..evaluator import integrity
 from . import (claude_fable5_critic_actor, codex_container_actor,
@@ -36,7 +36,7 @@ from . import gpu_source_proofs
 from scripts.benchmark import autokernel_progression
 from scripts.benchmark import run_autokernel_gpu_discovery as gpu_discovery
 
-SCHEMA = "epyc.autokernel.discovery_controller.v7"
+SCHEMA = "epyc.autokernel.discovery_controller.v8"
 ROSTER_SCHEMA = "epyc.autokernel.discovery_roster.v3"
 AUTHORITY = "nonpromotable_candidate_only_discovery"
 HASH = __import__("re").compile(r"^[0-9a-f]{64}$")
@@ -109,6 +109,31 @@ class CorrectnessRefusal(GovernedStageRefusal):
     disposition = "correctness_falsified"
 
 
+class CumulativeCorrectnessRefusal(CorrectnessRefusal):
+    """Current full-stack correctness failed after a cumulative pair build."""
+
+    scientific_budget_spent = True
+
+    def __init__(
+            self, message: str, *, receipt_path: str, receipt_sha256: str,
+            build_pair: cumulative_composition.CumulativeBuildPair,
+            correctness: cumulative_composition.FullCorrectness) -> None:
+        super().__init__(message, receipt_path=receipt_path,
+                         receipt_sha256=receipt_sha256)
+        if (not isinstance(build_pair,
+                           cumulative_composition.CumulativeBuildPair)
+                or not isinstance(correctness,
+                                  cumulative_composition.FullCorrectness)):
+            raise DiscoveryControllerError(
+                "cumulative correctness refusal lacks typed evidence")
+        correctness.bind_pair(build_pair)
+        if correctness.passed:
+            raise DiscoveryControllerError(
+                "cumulative correctness refusal claims a passing suite")
+        self.build_pair = build_pair
+        self.correctness = correctness
+
+
 class TimedOutputCorrectnessRefusal(CorrectnessRefusal):
     """A measured same-input candidate divergence; science was consumed."""
 
@@ -134,6 +159,29 @@ class DispatchAttributionRefusal(GovernedStageRefusal):
     stage = "dispatch_attribution"
     disposition = "attribution_route_falsified"
     scientific_budget_spent = True
+
+
+class CumulativeAttributionRefusal(DispatchAttributionRefusal):
+    """A cumulative build passed correctness but failed route authority."""
+
+    def __init__(
+            self, message: str, *, receipt_path: str, receipt_sha256: str,
+            build_pair: cumulative_composition.CumulativeBuildPair,
+            correctness: cumulative_composition.FullCorrectness) -> None:
+        super().__init__(message, receipt_path=receipt_path,
+                         receipt_sha256=receipt_sha256)
+        if (not isinstance(build_pair,
+                           cumulative_composition.CumulativeBuildPair)
+                or not isinstance(correctness,
+                                  cumulative_composition.FullCorrectness)):
+            raise DiscoveryControllerError(
+                "cumulative attribution refusal lacks typed evidence")
+        correctness.bind_pair(build_pair)
+        if not correctness.passed:
+            raise DiscoveryControllerError(
+                "cumulative attribution refusal lacks passing correctness")
+        self.build_pair = build_pair
+        self.correctness = correctness
 
 
 class MeasurementOutputRefusal(GovernedStageRefusal):
@@ -922,6 +970,7 @@ class PlannedCandidate:
     source_manifest: source_candidate.SourcePatchManifest
     source_manifest_sha256: str
     experiment_intent: GpuSourceExperimentIntent | None = None
+    composition_plan: cumulative_composition.CompositionPlan | None = None
 
     def __post_init__(self) -> None:
         _text(self.hypothesis_id, "hypothesis_id"); _text(self.statement, "statement"); _text(self.falsifier, "falsifier")
@@ -932,6 +981,17 @@ class PlannedCandidate:
         # Planner-owned effect fields are structurally impossible.
         if any("effect" in str(key).lower() or "result" in str(key).lower() for key in self.proposal):
             raise DiscoveryControllerError("planner proposal may not carry measured result fields")
+        if (self.composition_plan is not None
+                and not isinstance(
+                    self.composition_plan,
+                    cumulative_composition.CompositionPlan)):
+            raise DiscoveryControllerError(
+                "candidate cumulative composition plan must be typed")
+        if (self.composition_plan is not None
+                and self.composition_plan.candidate.accepted[-1].manifest !=
+                    self.source_manifest):
+            raise DiscoveryControllerError(
+                "candidate source manifest differs from cumulative new lever")
 
 
 @dataclass(frozen=True)
@@ -965,6 +1025,14 @@ class SealedScreen:
     # Pooled only by the controller after exact-series verification.  Adapter
     # receipts report their individual measured effect; they cannot nominate.
     series_effect_fraction: float | None = None
+    build_identity_sha256: str | None = None
+    correctness_receipt_sha256: str | None = None
+    attribution_receipt_sha256: str | None = None
+    graphs_off_receipt_sha256: str | None = None
+    graphs_on_receipt_sha256: str | None = None
+    composition_build_pair: cumulative_composition.CumulativeBuildPair | None = None
+    composition_correctness: cumulative_composition.FullCorrectness | None = None
+    composition_comparison: cumulative_composition.IncrementalComparison | None = None
 
     def __post_init__(self) -> None:
         if self.classification not in {"candidate", "screened_out", "inconclusive", "failed", "top_k_replicated_candidate", "replicated_but_subadditive"}: raise DiscoveryControllerError("unknown screen class")
@@ -985,29 +1053,97 @@ class SealedScreen:
                 != float(self.target_runtime_effect_fraction)):
             raise DiscoveryControllerError(
                 "primary screen effect must be the target-runtime effect")
-        if not self.candidate_only or self.promotion_claim: raise DiscoveryControllerError("discovery screen must remain nonpromotable")
+        receipts = (
+            self.build_identity_sha256, self.correctness_receipt_sha256,
+            self.attribution_receipt_sha256,
+            self.graphs_off_receipt_sha256, self.graphs_on_receipt_sha256)
+        if any(value is not None for value in receipts):
+            if not all(isinstance(value, str) and HASH.fullmatch(value)
+                       for value in receipts):
+                raise DiscoveryControllerError(
+                    "screen replication evidence is incomplete")
+        composition = (
+            self.composition_build_pair, self.composition_correctness,
+            self.composition_comparison)
+        if any(value is not None for value in composition):
+            if (not isinstance(self.composition_build_pair,
+                               cumulative_composition.CumulativeBuildPair)
+                    or not isinstance(self.composition_correctness,
+                                      cumulative_composition.FullCorrectness)
+                    or not isinstance(self.composition_comparison,
+                                      cumulative_composition.IncrementalComparison)):
+                raise DiscoveryControllerError(
+                    "screen cumulative evidence is incomplete")
+            self.composition_correctness.bind_pair(
+                self.composition_build_pair)
+            if (self.composition_comparison.operation_key !=
+                    self.composition_build_pair.operation_key
+                    or self.composition_comparison.build_pair_sha256 !=
+                       self.composition_build_pair.pair_sha256
+                    or self.composition_comparison.correctness_result_sha256 !=
+                       self.composition_correctness.result_sha256):
+                raise DiscoveryControllerError(
+                    "screen cumulative evidence bindings changed")
+        if not self.candidate_only or self.promotion_claim:
+            raise DiscoveryControllerError(
+                "discovery screen must remain nonpromotable")
         if tuple(self.stages) not in {
                 ("materialized", "built", "correctness", "attribution", "screen"),
                 ("materialized", "built", "correctness", "attribution",
                  "measurement_graphs_off_screen",
                  "target_runtime_graphs_on_screen"),
                 ("materialized", "built", "correctness", "attribution")}:
-            raise DiscoveryControllerError("screen did not prove the required fail-closed stage order")
-        for value in (self.result_sha256, self.baseline_sha256, self.source_proof_sha256, self.dispatch_proof_sha256):
-            if not HASH.fullmatch(value): raise DiscoveryControllerError("sealed result requires evidence hashes")
+            raise DiscoveryControllerError(
+                "screen did not prove the required fail-closed stage order")
+        for value in (self.result_sha256, self.baseline_sha256,
+                      self.source_proof_sha256, self.dispatch_proof_sha256):
+            if not HASH.fullmatch(value):
+                raise DiscoveryControllerError(
+                    "sealed result requires evidence hashes")
         if self.series_key is not None and not HASH.fullmatch(self.series_key):
-            raise DiscoveryControllerError("screen series key must be a sealed hash")
+            raise DiscoveryControllerError(
+                "screen series key must be a sealed hash")
         # JSON recovery naturally turns a tuple into a list; normalize it at
         # the durable boundary, then keep the in-memory receipt immutable.
         if isinstance(self.component_series_keys, list):
-            object.__setattr__(self, "component_series_keys", tuple(self.component_series_keys))
-        if not isinstance(self.component_series_keys, tuple) or not all(HASH.fullmatch(value) for value in self.component_series_keys):
-            raise DiscoveryControllerError("component series provenance must be sealed hashes")
+            object.__setattr__(self, "component_series_keys",
+                               tuple(self.component_series_keys))
+        if (not isinstance(self.component_series_keys, tuple)
+                or not all(HASH.fullmatch(value)
+                           for value in self.component_series_keys)):
+            raise DiscoveryControllerError(
+                "component series provenance must be sealed hashes")
         if (self.series_effect_fraction is not None
                 and (isinstance(self.series_effect_fraction, bool)
                      or not isinstance(self.series_effect_fraction, (int, float))
                      or not math.isfinite(float(self.series_effect_fraction)))):
-            raise DiscoveryControllerError("pooled series effect must be finite")
+            raise DiscoveryControllerError(
+                "pooled series effect must be finite")
+
+
+def _sealed_screen_from_dict(value: Mapping[str, Any]) -> SealedScreen:
+    if not isinstance(value, Mapping):
+        raise DiscoveryControllerError("sealed screen checkpoint is malformed")
+    body = dict(value)
+    body["stages"] = tuple(body.get("stages", ()))
+    body["component_series_keys"] = tuple(
+        body.get("component_series_keys", ()))
+    constructors = (
+        ("composition_build_pair",
+         cumulative_composition.CumulativeBuildPair.from_dict),
+        ("composition_correctness",
+         cumulative_composition.FullCorrectness.from_dict),
+        ("composition_comparison",
+         cumulative_composition.IncrementalComparison.from_dict),
+    )
+    try:
+        for key, constructor in constructors:
+            if body.get(key) is not None:
+                body[key] = constructor(body[key])
+        return SealedScreen(**body)
+    except (TypeError, cumulative_composition.CompositionError) as exc:
+        raise DiscoveryControllerError(
+            "sealed screen checkpoint evidence is invalid") from exc
 
 
 class Planner(Protocol):
@@ -1919,6 +2055,7 @@ class GpuSourceBuild:
     candidate_correctness_capability_sha256: str | None = None
     teardown_receipt: Path | None = None
     teardown_sha256: str | None = None
+    composition_build_pair: cumulative_composition.CumulativeBuildPair | None = None
     def __post_init__(self) -> None:
         for path in (self.anchor_build, self.candidate_build):
             if not path.is_absolute() or not path.is_dir():
@@ -1956,6 +2093,12 @@ class GpuSourceBuild:
                 assert isinstance(path, Path) and isinstance(expected, str)
                 if hashlib.sha256(path.read_bytes()).hexdigest() != expected:
                     raise DiscoveryControllerError(f"GPU source {label} receipt bytes changed")
+        if (self.composition_build_pair is not None
+                and not isinstance(
+                    self.composition_build_pair,
+                    cumulative_composition.CumulativeBuildPair)):
+            raise DiscoveryControllerError(
+                "GPU source build cumulative pair must be typed")
 
 
 @dataclass(frozen=True)
@@ -1998,7 +2141,26 @@ class GpuSourceScreener:
             raise PrecomputeScreenRefusal(
                 f"source candidate authoring rejected: {type(exc).__name__}: {exc}"
             ) from exc
-        bundle = self.proof_bundle(candidate, build)
+        try:
+            bundle = self.proof_bundle(candidate, build)
+        except CorrectnessRefusal as exc:
+            if getattr(candidate, "composition_plan", None) is None:
+                raise
+            pair = build.composition_build_pair
+            if pair is None:
+                raise DiscoveryControllerError(
+                    "cumulative correctness refusal lacks its build pair") from exc
+            pair.bind_plan(candidate.composition_plan)
+            correctness = cumulative_composition.FullCorrectness.create(
+                pair, suite_id="current-gpu-source-full-correctness-v1",
+                cases_sha256=schemas.content_hash({
+                    "stage": exc.stage,
+                    "receipt_sha256": exc.receipt_sha256}),
+                receipt_sha256=exc.receipt_sha256, passed=False)
+            raise CumulativeCorrectnessRefusal(
+                str(exc), receipt_path=exc.receipt_path,
+                receipt_sha256=exc.receipt_sha256,
+                build_pair=pair, correctness=correctness) from exc
         if not isinstance(bundle, gpu_source_proofs.GpuSourceProofBundle):
             raise DiscoveryControllerError("GPU source gate did not return a validated proof bundle")
         if bundle.manifest_sha256 != candidate.source_manifest_sha256:
@@ -2026,7 +2188,8 @@ class GpuSourceScreener:
             raise DiscoveryControllerError(
                 "GPU source proof lacks exact-duration decision evidence")
         exact_effect = float(comparison["relative_improvement_fraction"])
-        if exact_effect <= 0:
+        if (exact_effect <= 0
+                and getattr(candidate, "composition_plan", None) is None):
             # A valid neutral/regressed exact-route measurement is a scientific
             # outcome, not a refusal.  It terminates before any whole-model
             # benchmark and therefore cannot consume a target-runtime call.
@@ -2134,12 +2297,53 @@ class GpuSourceScreener:
                     "GPU runner terminal governance differs from its borrowed phase")
             return result_path, raw
 
-        _graphs_off_path, _graphs_off = run_stage(args, graph_mode="off")
+        graphs_off_path, graphs_off = run_stage(args, graph_mode="off")
         result_path, raw = run_stage(target_args, graph_mode="on")
         projection = autokernel_progression._gpu_screen(result_path, raw)
         if projection is None: raise DiscoveryControllerError("GPU result failed canonical progression validation")
         target_effect = float(raw["median_relative"])
-        return SealedScreen(receipt_path=str(result_path), result_sha256=str(raw["result_sha256"]), effect_fraction=target_effect, classification=str(projection["stage"]), baseline_sha256=str(raw["baseline_sha256"]), source_proof_sha256=bundle.correctness["file_sha256"], dispatch_proof_sha256=bundle.attribution["file_sha256"], exact_attribution_effect_fraction=exact_effect, target_runtime_effect_fraction=target_effect, stages=("materialized", "built", "correctness", "attribution", "measurement_graphs_off_screen", "target_runtime_graphs_on_screen"))
+        graphs_off_effect = float(graphs_off["median_relative"])
+        build_identity_sha256 = schemas.content_hash(
+            vars(build.candidate_identity))
+        graphs_off_file_sha256 = hashlib.sha256(
+            graphs_off_path.read_bytes()).hexdigest()
+        graphs_on_file_sha256 = hashlib.sha256(
+            result_path.read_bytes()).hexdigest()
+        composition_correctness = None
+        composition_comparison = None
+        if getattr(candidate, "composition_plan", None) is not None:
+            pair = build.composition_build_pair
+            if pair is None:
+                raise DiscoveryControllerError(
+                    "cumulative source build lacks its typed build pair")
+            pair.bind_plan(candidate.composition_plan)
+            correctness_body = bundle.correctness.get("body")
+            if not isinstance(correctness_body, Mapping):
+                raise DiscoveryControllerError(
+                    "cumulative correctness proof body is missing")
+            composition_correctness = cumulative_composition.FullCorrectness.create(
+                pair, suite_id="current-gpu-source-full-correctness-v1",
+                cases_sha256=schemas.content_hash(correctness_body),
+                receipt_sha256=bundle.correctness["file_sha256"], passed=True)
+            expected_routes = comparison.get("candidate_routes")
+            if not isinstance(expected_routes, (list, tuple, Mapping)):
+                expected_routes = comparison
+            composition_comparison = cumulative_composition.IncrementalComparison.create(
+                pair, composition_correctness,
+                exact_route_receipt_sha256=bundle.attribution["file_sha256"],
+                expected_route_set_sha256=schemas.content_hash(expected_routes),
+                graphs_off_receipt_sha256=graphs_off_file_sha256,
+                graphs_on_receipt_sha256=graphs_on_file_sha256,
+                target_runtime_frame_sha256=schemas.content_hash({
+                    "baseline_sha256": raw["baseline_sha256"],
+                    "runtime_graphs": raw["runtime_graphs"],
+                    "factor": raw.get("factor"),
+                    "technical_workload": raw.get("technical_workload"),
+                }),
+                exact_route_effect_fraction=exact_effect,
+                graphs_off_effect_fraction=graphs_off_effect,
+                graphs_on_effect_fraction=target_effect)
+        return SealedScreen(receipt_path=str(result_path), result_sha256=str(raw["result_sha256"]), effect_fraction=target_effect, classification=str(projection["stage"]), baseline_sha256=str(raw["baseline_sha256"]), source_proof_sha256=bundle.correctness["file_sha256"], dispatch_proof_sha256=bundle.attribution["file_sha256"], exact_attribution_effect_fraction=exact_effect, target_runtime_effect_fraction=target_effect, stages=("materialized", "built", "correctness", "attribution", "measurement_graphs_off_screen", "target_runtime_graphs_on_screen"), build_identity_sha256=build_identity_sha256, correctness_receipt_sha256=bundle.correctness["file_sha256"], attribution_receipt_sha256=bundle.attribution["file_sha256"], graphs_off_receipt_sha256=graphs_off_file_sha256, graphs_on_receipt_sha256=graphs_on_file_sha256, composition_build_pair=build.composition_build_pair, composition_correctness=composition_correctness, composition_comparison=composition_comparison)
 
 
 @dataclass(frozen=True)
@@ -2303,9 +2507,11 @@ class DurableState:
     def load(self) -> dict[str, Any]:
         if not self.path.exists(): return {"schema": SCHEMA, "authority": AUTHORITY, "roster": sealed_roster(), "iterations": [], "next": 1, "scientific_attempts": 0, "complete": False}
         value=_read_object(self.path, self.root); _require_roster(value.get("roster", {}))
-        if value.get("schema") == "epyc.autokernel.discovery_controller.v6":
+        if value.get("schema") in {
+                "epyc.autokernel.discovery_controller.v6",
+                "epyc.autokernel.discovery_controller.v7"}:
             raise DiscoveryControllerError(
-                "legacy v6 controller state lacks preauthored continuation authority; initialize a fresh v7 campaign")
+                "legacy controller state lacks cumulative composition authority; initialize a fresh v8 campaign")
         if value.get("schema") != SCHEMA or value.get("authority") != AUTHORITY: raise DiscoveryControllerError("wrong controller journal")
         declared=value.get("state_sha256")
         if not isinstance(declared,str) or declared != _sha({k:v for k,v in value.items() if k!="state_sha256"}): raise DiscoveryControllerError("durable controller state hash mismatch")
@@ -2816,10 +3022,13 @@ def _pending_item(item: PlannedCandidate) -> dict[str, Any]:
     intent = (None if item.experiment_intent is None else
               json.loads(json.dumps(asdict(item.experiment_intent),
                                     sort_keys=True)))
+    composition = (None if item.composition_plan is None else
+                   item.composition_plan.to_dict())
     return {"hypothesis_id": item.hypothesis_id, "statement": item.statement,
             "falsifier": item.falsifier, "regime": dict(item.regime),
             "proposal": dict(item.proposal), "source_manifest_sha256": item.source_manifest_sha256,
             "experiment_intent": intent,
+            "composition_plan": composition,
             "manifest": {"campaign_id":manifest.campaign_id,"proposal_id":manifest.proposal_id,
                 "candidate_id":manifest.candidate_id,"source_tree":manifest.source_tree,
                 "production_base_commit":manifest.production_base_commit,"instrument_commit":manifest.instrument_commit,
@@ -2961,6 +3170,16 @@ def _restore_pending(
                 "preauthored row changed its original authoring turn")
         item = _preauthored_candidate(
             config, value["row"]["portfolio_binding"], authoring_turn)
+        composition_raw = raw.get("composition_plan")
+        if composition_raw is not None:
+            try:
+                item = replace(
+                    item, composition_plan=
+                    cumulative_composition.CompositionPlan.from_dict(
+                        composition_raw))
+            except cumulative_composition.CompositionError as exc:
+                raise DiscoveryControllerError(
+                    "preauthored cumulative plan is invalid") from exc
         expected = _preauthored_checkpoint_authority(config, item)
         if dict(preauthored) != expected or _pending_item(item) != dict(raw):
             raise DiscoveryControllerError(
@@ -2998,7 +3217,15 @@ def _restore_pending(
         intent = {**intent, "expected_dispatch": tuple(
                       BoundedDispatchExpectation(**row) for row in expected),
                   "load_mode_recommendation": recommendation}
-    return PlannedCandidate(hypothesis_id=raw["hypothesis_id"],statement=raw["statement"],falsifier=raw["falsifier"],regime=raw["regime"],proposal=raw["proposal"],source_manifest=manifest,source_manifest_sha256=raw["source_manifest_sha256"],experiment_intent=GpuSourceExperimentIntent(**intent) if intent else None)
+    composition_raw = raw.get("composition_plan")
+    try:
+        composition_plan = (
+            None if composition_raw is None else
+            cumulative_composition.CompositionPlan.from_dict(composition_raw))
+    except cumulative_composition.CompositionError as exc:
+        raise DiscoveryControllerError(
+            "pending cumulative composition plan is invalid") from exc
+    return PlannedCandidate(hypothesis_id=raw["hypothesis_id"],statement=raw["statement"],falsifier=raw["falsifier"],regime=raw["regime"],proposal=raw["proposal"],source_manifest=manifest,source_manifest_sha256=raw["source_manifest_sha256"],experiment_intent=GpuSourceExperimentIntent(**intent) if intent else None,composition_plan=composition_plan)
 
 
 def _decision_floor(policy: Mapping[str, Any] | None, key: str,
@@ -3114,6 +3341,20 @@ def _pooled_component_effects(state: Mapping[str, Any], component_keys: Sequence
 def _classified_result(state: Mapping[str, Any], item: PlannedCandidate,
                        result: SealedScreen,
                        decision_policy: Mapping[str, Any] | None = None) -> SealedScreen:
+    if getattr(item, "composition_plan", None) is not None:
+        comparison = result.composition_comparison
+        if comparison is None:
+            raise DiscoveryControllerError(
+                "cumulative result lacks incremental comparison authority")
+        components = tuple(sorted({
+            replication.series_key
+            for lever in item.composition_plan.anchor.accepted
+            for replication in lever.replications}))
+        return replace(
+            result, classification=comparison.classification,
+            series_key=item.composition_plan.candidate.ordered_patch_set_sha256,
+            component_series_keys=components,
+            series_effect_fraction=result.effect_fraction)
     series_key = _screen_series_key(item, result)
     prior = [float(row["effect_fraction"]) for row in state["iterations"]
              if row.get("series_key") == series_key
@@ -3149,7 +3390,10 @@ def _classified_result(state: Mapping[str, Any], item: PlannedCandidate,
         # Route/device-time and target-runtime throughput are conjunctive.  A
         # disagreement is measured evidence, but never a candidate/nomination.
         classification = "inconclusive"
-    return SealedScreen(receipt_path=result.receipt_path,result_sha256=result.result_sha256,effect_fraction=result.effect_fraction,classification=classification,baseline_sha256=result.baseline_sha256,source_proof_sha256=result.source_proof_sha256,dispatch_proof_sha256=result.dispatch_proof_sha256,exact_attribution_effect_fraction=result.exact_attribution_effect_fraction,target_runtime_effect_fraction=result.target_runtime_effect_fraction,candidate_only=result.candidate_only,promotion_claim=result.promotion_claim,stages=result.stages,series_key=series_key,component_series_keys=components,series_effect_fraction=float(statistics.median(effects)))
+    return replace(
+        result, classification=classification, series_key=series_key,
+        component_series_keys=components,
+        series_effect_fraction=float(statistics.median(effects)))
 
 
 def _screen_iteration_fields(result: SealedScreen, *, repetition: int) -> dict[str, Any]:
@@ -3176,6 +3420,11 @@ def _screen_iteration_fields(result: SealedScreen, *, repetition: int) -> dict[s
             and result.exact_attribution_effect_fraction <= 0
             else "not_required_or_unavailable"),
         "stages": list(result.stages),
+        "build_identity_sha256": result.build_identity_sha256,
+        "correctness_receipt_sha256": result.correctness_receipt_sha256,
+        "attribution_receipt_sha256": result.attribution_receipt_sha256,
+        "graphs_off_receipt_sha256": result.graphs_off_receipt_sha256,
+        "graphs_on_receipt_sha256": result.graphs_on_receipt_sha256,
         "repetition": repetition,
         "scientific_budget_spent": True,
     }
@@ -3191,6 +3440,16 @@ def _row_spends_scientific_budget(row: Mapping[str, Any]) -> bool:
 def _candidate_semantic_identity(item: PlannedCandidate) -> str:
     """Hash source semantics while excluding per-turn envelope identities."""
     manifest = item.source_manifest
+    if item.composition_plan is not None:
+        return _sha({
+            "schema": "epyc.autokernel.cumulative_candidate_semantics.v1",
+            "anchor_patch_set_sha256":
+                item.composition_plan.anchor.ordered_patch_set_sha256,
+            "candidate_patch_set_sha256":
+                item.composition_plan.candidate.ordered_patch_set_sha256,
+            "new_lever_sha256":
+                item.composition_plan.candidate.accepted[-1].lever_sha256,
+        })
     return _sha({
         "schema": "epyc.autokernel.candidate_source_semantics.v1",
         "source_tree": manifest.source_tree,
@@ -3209,6 +3468,15 @@ def _candidate_semantic_identity(item: PlannedCandidate) -> str:
 def _cross_campaign_candidate_identity(item: PlannedCandidate) -> str:
     """Stable candidate identity that deliberately excludes instrument epochs."""
     manifest = item.source_manifest
+    if item.composition_plan is not None:
+        return _sha({
+            "schema": "epyc.autokernel.cross_campaign_composition.v1",
+            "production_base_commit": manifest.production_base_commit,
+            "anchor_patch_set_sha256":
+                item.composition_plan.anchor.ordered_patch_set_sha256,
+            "candidate_patch_set_sha256":
+                item.composition_plan.candidate.ordered_patch_set_sha256,
+        })
     return _sha({
         "schema": "epyc.autokernel.cross_campaign_candidate_semantics.v1",
         "production_base_commit": manifest.production_base_commit,
@@ -3463,6 +3731,470 @@ def _bind_scientific_attempt_counter(state: dict[str, Any]) -> int:
     return derived
 
 
+def _record_replicated_positive_lever(
+        state: dict[str, Any], item: PlannedCandidate,
+        result: SealedScreen) \
+        -> cumulative_composition.ReplicatedPositiveLever | None:
+    """Freeze a controller nomination into executable composition authority.
+
+    Old replay fixtures intentionally lack the five receipt identities.  They
+    remain useful for classifier tests, but can never become executable source
+    composition authority.
+    """
+    if (item.composition_plan is not None
+            or result.classification != "top_k_replicated_candidate"
+            or result.series_key is None):
+        return None
+    rows = [row for row in state.get("iterations", [])
+            if row.get("series_key") == result.series_key
+            and row.get("status") in {
+                "candidate", "top_k_replicated_candidate"}]
+    required = (
+        "result_sha256", "series_key", "build_identity_sha256",
+        "correctness_receipt_sha256", "attribution_receipt_sha256",
+        "graphs_off_receipt_sha256", "graphs_on_receipt_sha256")
+    if len(rows) < 2 or any(
+            not all(isinstance(row.get(key), str)
+                    and HASH.fullmatch(row[key]) for key in required)
+            or not isinstance(row.get("effect_fraction"), (int, float))
+            or isinstance(row.get("effect_fraction"), bool)
+            or not math.isfinite(float(row["effect_fraction"]))
+            or float(row["effect_fraction"]) <= 0
+            for row in rows):
+        return None
+    replications = tuple(
+        cumulative_composition.IsolatedReplication(
+            result_sha256=row["result_sha256"],
+            series_key=row["series_key"],
+            build_identity_sha256=row["build_identity_sha256"],
+            correctness_receipt_sha256=row["correctness_receipt_sha256"],
+            attribution_receipt_sha256=row["attribution_receipt_sha256"],
+            graphs_off_receipt_sha256=row["graphs_off_receipt_sha256"],
+            graphs_on_receipt_sha256=row["graphs_on_receipt_sha256"],
+            effect_fraction=float(row["effect_fraction"]))
+        for row in rows)
+    lever = cumulative_composition.ReplicatedPositiveLever(
+        hypothesis_id=item.hypothesis_id,
+        cross_campaign_candidate_sha256=
+            _cross_campaign_candidate_identity(item),
+        manifest=item.source_manifest, replications=replications)
+    registry = state.setdefault("replicated_positive_levers", {})
+    if not isinstance(registry, dict):
+        raise DiscoveryControllerError(
+            "durable replicated-positive registry is malformed")
+    prior = registry.get(lever.cross_campaign_candidate_sha256)
+    if prior is not None and prior != lever.to_dict():
+        raise DiscoveryControllerError(
+            "replicated-positive lever changed on restart")
+    registry[lever.cross_campaign_candidate_sha256] = lever.to_dict()
+    state["replicated_positive_lever_schema"] = (
+        "epyc.autokernel.replicated_positive_registry.v1")
+    return lever
+
+
+def _validate_replicated_positive_levers(
+        state: Mapping[str, Any]) -> None:
+    marker = state.get("replicated_positive_lever_schema")
+    registry = state.get("replicated_positive_levers", {})
+    if marker is None and not registry:
+        return
+    if (marker != "epyc.autokernel.replicated_positive_registry.v1"
+            or not isinstance(registry, Mapping)):
+        raise DiscoveryControllerError(
+            "durable replicated-positive registry is malformed")
+    iterations = state.get("iterations")
+    if not isinstance(iterations, list):
+        raise DiscoveryControllerError(
+            "durable iterations are malformed")
+    for key, value in registry.items():
+        try:
+            lever = cumulative_composition.ReplicatedPositiveLever.from_dict(
+                value)
+        except cumulative_composition.CompositionError as exc:
+            raise DiscoveryControllerError(
+                "durable replicated-positive lever is invalid") from exc
+        if key != lever.cross_campaign_candidate_sha256:
+            raise DiscoveryControllerError(
+                "replicated-positive registry key changed")
+        for replication in lever.replications:
+            matches = []
+            for row in iterations:
+                effect = row.get("effect_fraction")
+                if (isinstance(effect, bool)
+                        or not isinstance(effect, (int, float))
+                        or not math.isfinite(float(effect))):
+                    continue
+                if (row.get("result_sha256") == replication.result_sha256
+                        and row.get("series_key") == replication.series_key
+                        and row.get("build_identity_sha256") ==
+                            replication.build_identity_sha256
+                        and row.get("correctness_receipt_sha256") ==
+                            replication.correctness_receipt_sha256
+                        and row.get("attribution_receipt_sha256") ==
+                            replication.attribution_receipt_sha256
+                        and row.get("graphs_off_receipt_sha256") ==
+                            replication.graphs_off_receipt_sha256
+                        and row.get("graphs_on_receipt_sha256") ==
+                            replication.graphs_on_receipt_sha256
+                        and float(effect) == replication.effect_fraction):
+                    matches.append(row)
+            if len(matches) != 1:
+                raise DiscoveryControllerError(
+                    "replicated-positive lever differs from scientific rows")
+
+
+def _composition_ledger(config: ControllerConfig) \
+        -> cumulative_composition.CompositionLedger:
+    return cumulative_composition.CompositionLedger(
+        config.output_root / "cumulative-composition.json")
+
+
+def _checkpoint_composition_plan(
+        holder: object) -> cumulative_composition.CompositionPlan | None:
+    if not isinstance(holder, Mapping):
+        return None
+    candidate = holder.get("candidate")
+    if not isinstance(candidate, Mapping):
+        return None
+    raw = candidate.get("composition_plan")
+    if raw is None:
+        return None
+    try:
+        return cumulative_composition.CompositionPlan.from_dict(raw)
+    except cumulative_composition.CompositionError as exc:
+        raise DiscoveryControllerError(
+            "durable cumulative candidate plan is invalid") from exc
+
+
+def _validate_cumulative_composition_state(
+        config: ControllerConfig, state: Mapping[str, Any]) -> None:
+    """Join the append-only composition ledger to controller checkpoints.
+
+    A controller checkpoint may precede the lazy ledger begin.  Conversely, a
+    ledger terminal may precede the controller's terminal-row save by one
+    crash window, but only for the exact currently pending/inflight plan.
+    """
+    ledger_path = config.output_root / "cumulative-composition.json"
+    holders = tuple(
+        plan for plan in (
+            _checkpoint_composition_plan(state.get("pending")),
+            _checkpoint_composition_plan(state.get("inflight")))
+        if plan is not None)
+    if len(holders) > 1:
+        raise DiscoveryControllerError(
+            "controller owns multiple cumulative composition checkpoints")
+    iteration_rows = [row for row in state.get("iterations", [])
+                      if isinstance(row, Mapping)
+                      and row.get("composition_terminal_sha256") is not None]
+    if not ledger_path.exists() and not ledger_path.is_symlink():
+        if iteration_rows:
+            raise DiscoveryControllerError(
+                "controller composition terminals lack their ledger")
+        return
+    if ledger_path.is_symlink() or not ledger_path.is_file():
+        raise DiscoveryControllerError(
+            "cumulative composition ledger path is unsafe")
+    try:
+        ledger_state = _composition_ledger(config).load()
+        initial = cumulative_composition.CompositionAuthority.from_dict(
+            ledger_state["initial_authority"])
+    except cumulative_composition.CompositionError as exc:
+        raise DiscoveryControllerError(
+            "cumulative composition ledger is invalid") from exc
+    production = config.production_base_commit
+    instrument = config.instrument_commit
+    if (initial.campaign_id != config.campaign_id
+            or production is not None
+               and initial.production_base_commit != production
+            or instrument is not None
+               and initial.instrument_commit != instrument):
+        raise DiscoveryControllerError(
+            "cumulative composition ledger names another deployment")
+    terminal_by_operation = {
+        row["operation_key"]: row for row in ledger_state["terminals"]}
+    if len(terminal_by_operation) != len(ledger_state["terminals"]):
+        raise DiscoveryControllerError(
+            "cumulative composition terminal operations are duplicated")
+    joined: set[str] = set()
+    for row in iteration_rows:
+        operation = row.get("composition_operation_key")
+        terminal = terminal_by_operation.get(operation)
+        if (terminal is None
+                or row.get("composition_terminal_sha256") !=
+                   terminal["terminal_sha256"]
+                or row.get("composition_disposition") !=
+                   terminal["disposition"]
+                or row.get("composition_scientific_budget_spent") !=
+                   terminal["scientific_budget_spent"]):
+            raise DiscoveryControllerError(
+                "controller composition result differs from its ledger")
+        joined.add(str(operation))
+    holder = holders[0] if holders else None
+    ahead = set(terminal_by_operation) - joined
+    if ahead:
+        if (len(ahead) != 1 or holder is None
+                or holder.operation_key not in ahead
+                or terminal_by_operation[holder.operation_key]["plan"] !=
+                   holder.to_dict()):
+            raise DiscoveryControllerError(
+                "composition ledger has an unowned terminal")
+    pending = ledger_state["pending"]
+    if pending is not None:
+        pending_plan = cumulative_composition.CompositionPlan.from_dict(
+            pending["plan"])
+        if holder is None or pending_plan != holder:
+            raise DiscoveryControllerError(
+                "composition ledger pending plan lacks controller ownership")
+
+
+def _schedule_cumulative_composition(
+        state: dict[str, Any], *, config: ControllerConfig,
+        item: PlannedCandidate, result: SealedScreen) -> None:
+    if state.get("pending") is not None:
+        return
+    lever = _record_replicated_positive_lever(state, item, result)
+    if lever is None:
+        return
+    if _derived_scientific_attempts(state) >= config.max_iterations:
+        return
+    production_commit = (config.production_base_commit
+                         or item.source_manifest.production_base_commit)
+    instrument_commit = (config.instrument_commit
+                         or item.source_manifest.instrument_commit)
+    ledger = _composition_ledger(config)
+    initial = cumulative_composition.CompositionAuthority(
+        campaign_id=config.campaign_id,
+        production_base_commit=production_commit,
+        instrument_commit=instrument_commit)
+    composition_state = ledger.create(
+        initial, max_scientific_attempts=config.max_iterations)
+    if composition_state["pending"] is not None:
+        pending_plan = cumulative_composition.CompositionPlan.from_dict(
+            composition_state["pending"]["plan"])
+        if (pending_plan.candidate.accepted[-1].lever_sha256 !=
+                lever.lever_sha256):
+            raise DiscoveryControllerError(
+                "another cumulative operation is already pending")
+        plan = pending_plan
+    else:
+        anchor = cumulative_composition.CompositionAuthority.from_dict(
+            composition_state["authority"])
+        if any(existing.lever_sha256 == lever.lever_sha256
+               for existing in anchor.accepted):
+            return
+        checked = {
+            existing.cross_campaign_candidate_sha256
+            for existing in anchor.accepted}
+        checked.update(
+            terminal["cross_campaign_candidate_sha256"]
+            for terminal in composition_state["terminals"]
+            if terminal["cross_campaign_candidate_sha256"] !=
+               lever.cross_campaign_candidate_sha256)
+        candidate_authority = anchor.append(lever)
+        registry_body = {
+            "schema": "epyc.autokernel.composition_dnr_registry.v1",
+            "controller_candidate_registry_sha256": _sha(
+                state.get("attempted_candidate_identities", {})),
+            "checked_cross_campaign_candidate_sha256s": sorted(checked),
+        }
+        dnr = cumulative_composition.DnrAuthority.pass_for(
+            anchor=anchor, candidate=candidate_authority,
+            registry_sha256=_sha(registry_body),
+            checked_cross_campaign_candidate_sha256s=sorted(checked))
+        attempt_id = _sha({
+            "schema": "epyc.autokernel.composition_attempt.v1",
+            "turn": state["next"], "lever_sha256": lever.lever_sha256,
+            "ledger_generation": composition_state["generation"],
+        })
+        plan = cumulative_composition.CompositionPlan.create(
+            anchor=anchor, lever=lever, dnr=dnr, attempt_id=attempt_id)
+    cumulative_item = replace(item, composition_plan=plan)
+    row = {
+        key: value for key, value in state["iterations"][-1].items()
+        if key in {
+            "hypothesis_id", "statement", "falsifier", "regime",
+            "proposal_sha256", "source_manifest_sha256",
+            "experiment_intent", "mechanism_id", "target_surface",
+            "target_symbol", "context_sha256", "authoring_turn",
+            "portfolio_binding",
+            "portfolio_record_sha256", "portfolio_decision_policy",
+            "portfolio_exact_dnr_check",
+            "preauthored_continuation", "hypothesis_origin",
+            "hypothesis_author", "historical_correctness_authority",
+            "modern_governed_correctness_required"}}
+    row.update({
+        "turn": state["next"], "status": "cumulative_composition_pending",
+        "candidate_semantic_sha256":
+            _candidate_semantic_identity(cumulative_item),
+        "composition_plan_sha256": plan.plan_sha256,
+        "composition_operation_key": plan.operation_key,
+        "anchor_patch_set_sha256": plan.anchor.ordered_patch_set_sha256,
+        "candidate_patch_set_sha256": plan.candidate.ordered_patch_set_sha256,
+        "composition_new_lever_sha256": lever.lever_sha256,
+        "composition_hypothesis_id": item.hypothesis_id,
+    })
+    state["pending"] = {
+        "phase": "cumulative_ready", "row": row,
+        "candidate": _pending_item(cumulative_item),
+        "confirmation": False, "parent_authorization": None,
+        **_preauthored_pending_fields(row)}
+
+
+def _finalize_cumulative_screen(
+        config: ControllerConfig, item: PlannedCandidate,
+        result: SealedScreen) -> Mapping[str, Any] | None:
+    if item.composition_plan is None:
+        return None
+    pair = result.composition_build_pair
+    correctness = result.composition_correctness
+    comparison = result.composition_comparison
+    if pair is None or correctness is None or comparison is None:
+        raise DiscoveryControllerError(
+            "cumulative screen lacks build/correctness/comparison evidence")
+    pair.bind_plan(item.composition_plan)
+    ledger = _composition_ledger(config)
+    existing = [row for row in ledger.load()["terminals"]
+                if row["operation_key"] == item.composition_plan.operation_key]
+    if existing:
+        if (len(existing) != 1
+                or existing[0]["build_pair"] != pair.to_dict()
+                or existing[0]["correctness"] != correctness.to_dict()
+                or existing[0]["comparison"] != comparison.to_dict()):
+            raise DiscoveryControllerError(
+                "cumulative screen differs from its durable terminal")
+        return existing[0]
+    ledger.begin(item.composition_plan)
+    ledger.record_build_pair(pair)
+    ledger.record_correctness(correctness)
+    ledger.record_comparison(comparison)
+    state = ledger.finalize(item.composition_plan.operation_key)
+    matches = [row for row in state["terminals"]
+               if row["operation_key"] == item.composition_plan.operation_key]
+    if len(matches) != 1:
+        raise DiscoveryControllerError(
+            "cumulative ledger lacks one exact terminal")
+    return matches[0]
+
+
+def _terminalize_cumulative_refusal(
+        config: ControllerConfig, item: PlannedCandidate,
+        exc: GovernedStageRefusal) -> Mapping[str, Any] | None:
+    if item.composition_plan is None:
+        return None
+    ledger = _composition_ledger(config)
+    existing = [row for row in ledger.load()["terminals"]
+                if row["operation_key"] == item.composition_plan.operation_key]
+    if existing:
+        if len(existing) != 1:
+            raise DiscoveryControllerError(
+                "cumulative refusal has duplicate durable terminals")
+        terminal = existing[0]
+        if isinstance(exc, CumulativeCorrectnessRefusal):
+            expected = (
+                "correctness_rollback", exc.build_pair.to_dict(),
+                exc.correctness.to_dict(), None)
+        elif isinstance(exc, CumulativeAttributionRefusal):
+            expected = (
+                "attribution_rollback", exc.build_pair.to_dict(),
+                exc.correctness.to_dict(), exc.receipt_sha256)
+        elif not exc.scientific_budget_spent:
+            expected = (
+                "infrastructure_rollback", None, None, exc.receipt_sha256)
+        else:
+            raise DiscoveryControllerError(
+                "scientific cumulative refusal lacks typed incremental evidence")
+        observed_receipt = (terminal["attribution_receipt_sha256"]
+                            if expected[0] == "attribution_rollback" else
+                            terminal["infrastructure_receipt_sha256"])
+        if (terminal["disposition"], terminal["build_pair"],
+                terminal["correctness"], observed_receipt) != expected:
+            raise DiscoveryControllerError(
+                "cumulative refusal differs from its durable terminal")
+        return terminal
+    ledger.begin(item.composition_plan)
+    if isinstance(exc, CumulativeCorrectnessRefusal):
+        ledger.record_build_pair(exc.build_pair)
+        state = ledger.record_correctness(exc.correctness)
+    elif isinstance(exc, CumulativeAttributionRefusal):
+        ledger.record_build_pair(exc.build_pair)
+        ledger.record_correctness(exc.correctness)
+        state = ledger.rollback_attribution(
+            item.composition_plan.operation_key,
+            receipt_sha256=exc.receipt_sha256)
+    elif not exc.scientific_budget_spent:
+        state = ledger.rollback_infrastructure(
+            item.composition_plan.operation_key,
+            reason_code=f"governed_{exc.stage}_refusal",
+            receipt_sha256=exc.receipt_sha256)
+    else:
+        raise DiscoveryControllerError(
+            "scientific cumulative refusal lacks typed incremental evidence")
+    matches = [row for row in state["terminals"]
+               if row["operation_key"] == item.composition_plan.operation_key]
+    if len(matches) != 1:
+        raise DiscoveryControllerError(
+            "cumulative refusal did not produce one ledger terminal")
+    return matches[0]
+
+
+def _record_cumulative_infrastructure_ambiguity(
+        state: dict[str, Any], *, config: ControllerConfig,
+        item: PlannedCandidate, row: dict[str, Any],
+        exc: ScreenInfrastructureAmbiguity) -> None:
+    plan = item.composition_plan
+    if plan is None:
+        _record_screen_infrastructure_ambiguity(state, row, exc)
+        return
+    _record_screen_infrastructure_ambiguity(state, row, exc)
+    ledger = _composition_ledger(config)
+    ledger.begin(plan)
+    terminal_state = ledger.rollback_infrastructure(
+        plan.operation_key, reason_code="screen_infrastructure_ambiguity",
+        receipt_sha256=exc.receipt_sha256)
+    matches = [terminal for terminal in terminal_state["terminals"]
+               if terminal["operation_key"] == plan.operation_key]
+    if len(matches) != 1:
+        raise DiscoveryControllerError(
+            "cumulative infrastructure rollback lacks one terminal")
+    retry_epoch = state["pending"].get("infrastructure_retry_epoch")
+    if (isinstance(retry_epoch, bool)
+            or not isinstance(retry_epoch, int) or retry_epoch <= 0):
+        raise DiscoveryControllerError(
+            "cumulative infrastructure retry epoch is malformed")
+    retry_plan = cumulative_composition.CompositionPlan.create(
+        anchor=plan.anchor, lever=plan.candidate.accepted[-1], dnr=plan.dnr,
+        attempt_id=_sha({
+            "schema": "epyc.autokernel.composition_retry_attempt.v1",
+            "prior_operation_key": plan.operation_key,
+            "retry_epoch": retry_epoch,
+            "stage_receipt_sha256": exc.receipt_sha256,
+        }))
+    retry_item = replace(item, composition_plan=retry_plan)
+    retry_row = dict(state["pending"]["row"])
+    retry_row.update(
+        composition_plan_sha256=retry_plan.plan_sha256,
+        composition_operation_key=retry_plan.operation_key,
+        anchor_patch_set_sha256=
+            retry_plan.anchor.ordered_patch_set_sha256,
+        candidate_patch_set_sha256=
+            retry_plan.candidate.ordered_patch_set_sha256,
+        composition_infrastructure_terminal_sha256=
+            matches[0]["terminal_sha256"])
+    state["pending"]["row"] = retry_row
+    state["pending"]["candidate"] = _pending_item(retry_item)
+
+
+def _bind_cumulative_terminal_row(
+        row: dict[str, Any], terminal: Mapping[str, Any] | None) -> None:
+    if terminal is None:
+        return
+    row.update(
+        composition_disposition=terminal["disposition"],
+        composition_terminal_sha256=terminal["terminal_sha256"],
+        composition_scientific_budget_spent=
+            terminal["scientific_budget_spent"])
+
+
 def _schedule_replication(state: dict[str, Any], *, item: PlannedCandidate,
                           authorization: hypotheses.ClaimAuthorization,
                           row: Mapping[str, Any], result: SealedScreen,
@@ -3475,7 +4207,8 @@ def _schedule_replication(state: dict[str, Any], *, item: PlannedCandidate,
     a nomination without conflating unrelated source patches under the same
     hypothesis.
     """
-    if (result.classification != "candidate"
+    if (item.composition_plan is not None
+            or result.classification != "candidate"
             or _derived_scientific_attempts(state) >= max_iterations
             or state.get("pending") is not None):
         return
@@ -3576,6 +4309,11 @@ def _record_governed_stage_refusal(
             classification="screened_out",
             result_sha256=exc.receipt_sha256,
             evidence={"dispatch_attribution": exc.receipt_sha256})
+    if isinstance(exc, CumulativeCorrectnessRefusal):
+        row.update(
+            classification="screened_out",
+            result_sha256=exc.correctness.result_sha256,
+            evidence={"full_stack_correctness": exc.receipt_sha256})
     candidate_divergence = isinstance(exc, TimedOutputCorrectnessRefusal)
     if candidate_divergence:
         # This is a typed source-screen result, not an infrastructure refusal.
@@ -3960,6 +4698,8 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
     _validate_portfolio_authoring_failures(state)
     _validate_attempted_candidate_identities(state)
     _validate_infrastructure_ambiguities(state)
+    _validate_replicated_positive_levers(state)
+    _validate_cumulative_composition_state(config, state)
     # A completed state is an acknowledged terminal checkpoint.  Re-entering it
     # must be a read, not another executor opportunity or a timestamp rewrite.
     if state["complete"]: return state
@@ -3978,7 +4718,8 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                 and inflight_row != dict(inflight["row"])):
             raise DiscoveryControllerError(
                 "inflight DNR outcomes differ from durable authorization")
-        if isinstance(inflight.get("result"),Mapping): result=SealedScreen(**inflight["result"])
+        if isinstance(inflight.get("result"),Mapping):
+            result=_sealed_screen_from_dict(inflight["result"])
         else:
             reconcile=getattr(screener,"reconcile",None)
             if not callable(reconcile): raise DiscoveryControllerError("inflight operation has no reconciliation adapter")
@@ -4043,7 +4784,8 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                     return state
                 except ScreenInfrastructureAmbiguity as exc:
                     row = dict(inflight["row"])
-                    _record_screen_infrastructure_ambiguity(state, row, exc)
+                    _record_cumulative_infrastructure_ambiguity(
+                        state, config=config, item=item, row=row, exc=exc)
                     store.save(state, "screen_infrastructure_ambiguity")
                     return state
                 except PrecomputeScreenRefusal as exc:
@@ -4053,6 +4795,9 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                     precompute_refused = True
                 except GovernedStageRefusal as exc:
                     row = dict(inflight["row"])
+                    _bind_cumulative_terminal_row(
+                        row, _terminalize_cumulative_refusal(
+                            config, item, exc))
                     _record_governed_stage_refusal(state, row, exc)
                     store.save(state, exc.disposition)
                     precompute_refused = True
@@ -4060,15 +4805,25 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
             if not isinstance(result,SealedScreen): raise DiscoveryControllerError("inflight recovery produced no sealed result")
             row=dict(inflight["row"]); policy=row.get("portfolio_decision_policy")
             row["operation_key"] = inflight["operation_key"]
+            composition_terminal = _finalize_cumulative_screen(
+                config, item, result)
             result=_classified_result(state,item,result,policy); row.update(
                 _screen_iteration_fields(
                     result, repetition=int(inflight["lease"].get(
                         "repetition", 2 if inflight.get("confirmation") else 1))))
+            if composition_terminal is not None:
+                row.update(
+                    composition_disposition=
+                        composition_terminal["disposition"],
+                    composition_terminal_sha256=
+                        composition_terminal["terminal_sha256"],
+                    composition_scientific_budget_spent=
+                        composition_terminal["scientific_budget_spent"])
             _record_attempt_once(tracker,item,str(item.proposal.get("proposal_id",row["proposal_sha256"])),result)
             state.pop("inflight",None); state.pop("pending",None); state["iterations"].append(row)
             if isinstance(row.get("portfolio_hypothesis_id"), str):
                 _record_attempted_candidate_identity(state, row)
-            state["scientific_attempts"]=_derived_scientific_attempts(state); _apply_portfolio_outcome(state,row); state["next"]+=1; _schedule_replication(state,item=item,authorization=authorization,row=row,result=result,max_iterations=config.max_iterations); _append_nomination(config.output_root,item,result,_decision_floor(policy,"nomination_floor_pct",config.nomination_threshold)); _write_projection(config.evidence_root or config.output_root); store.save(state,"recovered_screen")
+            state["scientific_attempts"]=_derived_scientific_attempts(state); _apply_portfolio_outcome(state,row); state["next"]+=1; _schedule_replication(state,item=item,authorization=authorization,row=row,result=result,max_iterations=config.max_iterations); _schedule_cumulative_composition(state,config=config,item=item,result=result); _append_nomination(config.output_root,item,result,_decision_floor(policy,"nomination_floor_pct",config.nomination_threshold)); _write_projection(config.evidence_root or config.output_root); store.save(state,"recovered_screen")
     while (not state["complete"]
            and (state["scientific_attempts"] < config.max_iterations
                 if config.hypothesis_portfolio is not None
@@ -4215,7 +4970,11 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                 continue
             if pending is not None:
                 item=_restore_pending(pending, config); row=dict(pending["row"])
-                review = (Critique("accept", "controller-owned reviewed preauthored continuation")
+                review = (Critique(
+                              "accept",
+                              "controller-owned cumulative composition authority")
+                          if pending_phase == "cumulative_ready" else
+                          Critique("accept", "controller-owned reviewed preauthored continuation")
                           if pending_phase == "preauthored_ready" else
                           Critique(**row["critic"]))
                 _revalidate_portfolio_checkpoint(config, item, row)
@@ -4229,7 +4988,9 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                     if config.hypothesis_portfolio is not None and row != durable_row:
                         raise DiscoveryControllerError(
                             "portfolio pending candidate lacks campaign-ledger DNR outcome")
-                elif pending_phase in {"critic_complete", "preauthored_ready"}:
+                elif pending_phase in {
+                        "critic_complete", "preauthored_ready",
+                        "cumulative_ready"}:
                     authorization=None
                 elif pending.get("confirmation") is True:
                     # A positive S1 is not a receipted negative.  Re-consult
@@ -4388,7 +5149,9 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                 continue
             if review.decision != "accept":
                 row["status"]="critic_"+review.decision; state["iterations"].append(row); _apply_portfolio_outcome(state,row); _note_portfolio_authoring_failure(state,row); state["next"]+=1; store.save(state,"critic_refused"); continue
-            if pending_phase in {"critic_complete", "preauthored_ready"}:
+            if pending_phase in {
+                    "critic_complete", "preauthored_ready",
+                    "cumulative_ready"}:
                 _ensure_question(
                     tracker, item,
                     row.get("portfolio_binding")
@@ -4398,7 +5161,12 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                     else None)
                 ledger=do_not_repeat.compile_for_tracker(tracker)
                 try:
-                    authorization=tracker.authorize_claim(item.hypothesis_id,purpose="candidate_only_discovery",authorized_by="discovery_controller",ledger=ledger)
+                    authorization=tracker.authorize_claim(
+                        item.hypothesis_id,
+                        purpose=("cumulative_composition"
+                                 if item.composition_plan is not None else
+                                 "candidate_only_discovery"),
+                        authorized_by="discovery_controller",ledger=ledger)
                     _bind_campaign_ledger_outcome(row, authorization)
                 except hypotheses.RepeatsAReceiptedNegative as exc:
                     row.update(campaign_ledger_dnr_outcome=schemas.FAIL,
@@ -4437,6 +5205,9 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                                   "manifest":item.source_manifest_sha256,
                                   "authorization":authorization.to_dict(),
                                   "repetition":repetition}
+            if item.composition_plan is not None:
+                operation_identity["composition_plan_sha256"] = (
+                    item.composition_plan.plan_sha256)
             if retry_epoch:
                 operation_identity["infrastructure_retry_epoch"] = retry_epoch
             operation_key=_sha(operation_identity)
@@ -4500,13 +5271,17 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                 store.save(state,"waiting_resource")
                 break
             except ScreenInfrastructureAmbiguity as exc:
-                _record_screen_infrastructure_ambiguity(state, row, exc)
+                _record_cumulative_infrastructure_ambiguity(
+                    state, config=config, item=item, row=row, exc=exc)
                 store.save(state, "screen_infrastructure_ambiguity")
                 break
             except PrecomputeScreenRefusal as exc:
                 _record_precompute_refusal(state, row, exc)
                 store.save(state,"screen_refused"); continue
             except GovernedStageRefusal as exc:
+                _bind_cumulative_terminal_row(
+                    row, _terminalize_cumulative_refusal(
+                        config, item, exc))
                 _record_governed_stage_refusal(state, row, exc)
                 store.save(state, exc.disposition)
                 continue
@@ -4519,16 +5294,26 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                 store.save(state,"screen_ambiguous")
                 raise
             state["inflight"]["result"]=asdict(result); store.save(state,"post_screen_result")
+            composition_terminal = _finalize_cumulative_screen(
+                config, item, result)
             policy=row.get("portfolio_decision_policy")
             result=_classified_result(state,item,result,policy); row.update(
                 _screen_iteration_fields(result, repetition=repetition))
+            if composition_terminal is not None:
+                row.update(
+                    composition_disposition=
+                        composition_terminal["disposition"],
+                    composition_terminal_sha256=
+                        composition_terminal["terminal_sha256"],
+                    composition_scientific_budget_spent=
+                        composition_terminal["scientific_budget_spent"])
             # Record the measured disposition before exposing it to the next
             # planner context.  This is the only source of repeat suppression.
             _record_attempt_once(tracker,item,str(item.proposal.get("proposal_id",row["proposal_sha256"])),result)
             state.pop("inflight",None); state.pop("pending",None); state["iterations"].append(row)
             if isinstance(row.get("portfolio_hypothesis_id"), str):
                 _record_attempted_candidate_identity(state, row)
-            state["scientific_attempts"]=_derived_scientific_attempts(state); _apply_portfolio_outcome(state,row); state["next"]+=1; _schedule_replication(state,item=item,authorization=authorization,row=row,result=result,max_iterations=config.max_iterations); _append_nomination(config.output_root,item,result,_decision_floor(policy,"nomination_floor_pct",config.nomination_threshold)); _write_projection(config.evidence_root or config.output_root); store.save(state,"screened")
+            state["scientific_attempts"]=_derived_scientific_attempts(state); _apply_portfolio_outcome(state,row); state["next"]+=1; _schedule_replication(state,item=item,authorization=authorization,row=row,result=result,max_iterations=config.max_iterations); _schedule_cumulative_composition(state,config=config,item=item,result=result); _append_nomination(config.output_root,item,result,_decision_floor(policy,"nomination_floor_pct",config.nomination_threshold)); _write_projection(config.evidence_root or config.output_root); store.save(state,"screened")
     if config.hypothesis_portfolio is not None:
         if (not state.get("complete")
                 and state["scientific_attempts"] >= config.max_iterations):
