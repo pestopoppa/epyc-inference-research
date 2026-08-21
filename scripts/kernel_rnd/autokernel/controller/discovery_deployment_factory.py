@@ -12,11 +12,13 @@ import base64
 import binascii
 import contextlib
 import hashlib
+import io
 import json
 import os
 import re
 import stat
 import subprocess
+import tarfile
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Callable, Mapping
@@ -634,6 +636,21 @@ _SITE_ACTOR_WRAPPER = Path(
     "/usr/local/share/npm-global/lib/node_modules/@openai/codex/bin/codex.js")
 _SITE_CRITIC_WRAPPER = Path("/home/node/.local/share/claude/versions/2.1.231")
 _SITE_CLAUDE_AUTH_ROOT = Path("/home/node/.claude")
+_SITE_GOVERNANCE_ROOT = Path("/workspace")
+_FROZEN_PROVENANCE = (
+    ("build", "artifacts/operator/v9-qualification-20260810T235723Z-0db32c06e/summary.json",
+     cumulative_composition.FROZEN_BUILD_RECEIPT_SHA256,
+     "epyc.kernel_promotion_qualification.v1"),
+    ("linkage", "artifacts/operator/v9-runtime-packaging-20260810T224026Z-0db32c06e/summary.json",
+     cumulative_composition.FROZEN_LINKAGE_RECEIPT_SHA256,
+     "epyc.kernel_v9.runtime_packaging.v1"),
+    ("runtime", "artifacts/operator/v9-cutover-20260810T235900Z-0db32c06e/journal.json",
+     cumulative_composition.FROZEN_RUNTIME_RECEIPT_SHA256,
+     "epyc.kernel_cutover_journal.v1"),
+    ("measurement", "artifacts/operator/ratify_v9_final_freeze_20260811.json",
+     cumulative_composition.FROZEN_MEASUREMENT_RECEIPT_SHA256,
+     "epyc.operator_v9_final_freeze_attestation.v1"),
+)
 
 
 def _digest_regular(path: Path, label: str) -> str:
@@ -1090,14 +1107,100 @@ def _preauthored_historical_evidence(
     return body
 
 
+def _stable_public_bytes(
+        path: Path, expected_sha256: str | None, label: str,
+) -> bytes:
+    fd: int | None = None
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+        before = os.fstat(fd)
+        if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1
+                or before.st_mode & 0o022):
+            raise OSError("not a single-link non-writable regular file")
+        chunks = []
+        while True:
+            chunk = os.read(fd, 1024 * 1024)
+            if not chunk:
+                break
+            chunks.append(chunk)
+        raw = b"".join(chunks)
+        after = os.fstat(fd)
+        linked = os.stat(path, follow_symlinks=False)
+    except OSError as exc:
+        raise DeploymentFactoryError(f"{label} is not a stable carrier") from exc
+    finally:
+        if fd is not None:
+            os.close(fd)
+    fields = ("st_dev", "st_ino", "st_uid", "st_nlink", "st_mode",
+              "st_size", "st_mtime_ns", "st_ctime_ns")
+    if (any(getattr(before, key) != getattr(after, key) for key in fields)
+            or any(getattr(after, key) != getattr(linked, key) for key in fields)
+            or (expected_sha256 is not None
+                and hashlib.sha256(raw).hexdigest() != expected_sha256)):
+        raise DeploymentFactoryError(f"{label} changed while read")
+    return raw
+
+
+def _frozen_source_archive_sha256(production_path: Path) -> str:
+    completed = subprocess.run(
+        ("git", "-C", str(production_path), "archive",
+         deployment.FROZEN_PRODUCTION_HEAD),
+        check=True, stdin=subprocess.DEVNULL, capture_output=True)
+    entries = []
+    with tarfile.open(fileobj=io.BytesIO(completed.stdout), mode="r:") as archive:
+        for member in archive.getmembers():
+            if member.isdir():
+                continue
+            if member.issym():
+                mode, raw = "120000", member.linkname.encode()
+            elif member.isfile():
+                stream = archive.extractfile(member)
+                if stream is None:
+                    raise DeploymentFactoryError("frozen source archive is incomplete")
+                mode, raw = ("100755" if member.mode & 0o111 else "100644"), stream.read()
+            else:
+                raise DeploymentFactoryError("frozen source archive has unsupported entry")
+            entries.append((member.name, mode, hashlib.sha256(raw).hexdigest()))
+    manifest = "".join(
+        f"{mode}\t{digest}\t{name}\n"
+        for name, mode, digest in sorted(entries)).encode()
+    return hashlib.sha256(manifest).hexdigest()
+
+
+def _deployment_workload_body() -> dict[str, Any]:
+    return {"schema": "epyc.autokernel.discovery_workload.v1",
+            "workload": "decode_tg128", "prompt_tokens": 0,
+            "generation_tokens": 128, "calls_per_arm": 9,
+            "device_id": "mi210_0", "promotion_claim": False}
+
+
+def _deployment_runtime_body() -> dict[str, Any]:
+    return {"schema": "epyc.autokernel.discovery_runtime.v1",
+            "architecture": "gfx90a", "gpu_layers": 99,
+            "flash_attention": True, "hip_graphs": True,
+            "cpu_list": "184-191", "threads": 8,
+            "promotion_claim": False}
+
+
+def _pretty_json_sha256(value: Mapping[str, Any]) -> str:
+    return hashlib.sha256(
+        (json.dumps(dict(value), sort_keys=True, indent=2) + "\n").encode()
+    ).hexdigest()
+
+
 def _load_frozen_production_comparator(
         path: Path) -> cumulative_composition.FrozenProductionComparator:
-    if path.is_symlink() or not path.is_file():
-        raise DeploymentFactoryError(
-            "frozen production comparator must be a regular receipt")
     try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-        return cumulative_composition.FrozenProductionComparator.from_dict(raw)
+        carrier = _stable_public_bytes(
+            path, None, "frozen production comparator")
+        raw = json.loads(carrier.decode("utf-8", "strict"))
+        comparator = cumulative_composition.FrozenProductionComparator.from_dict(raw)
+        canonical = (json.dumps(
+            comparator.to_dict(), sort_keys=True, indent=2) + "\n").encode()
+        if carrier != canonical:
+            raise DeploymentFactoryError(
+                "frozen production comparator is not canonical JSON")
+        return comparator
     except (OSError, UnicodeDecodeError, json.JSONDecodeError,
             cumulative_composition.CompositionError) as exc:
         raise DeploymentFactoryError(
@@ -1107,6 +1210,8 @@ def _load_frozen_production_comparator(
 def _verify_frozen_production_comparator(
         comparator: cumulative_composition.FrozenProductionComparator,
         production_path: Path, runtime_semantics: Mapping[str, Any],
+        *, model_path: Path, workload_sha256: str,
+        runtime_config_sha256: str,
 ) -> None:
     """Join the static comparator to the exact live frozen-v9 closure.
 
@@ -1139,9 +1244,156 @@ def _verify_frozen_production_comparator(
                cumulative_composition.FROZEN_PRODUCTION_SOURCE_SHA256
             or identity.binary_sha256 != binary_sha
             or identity.hip_library_sha256 != hip_sha
-            or identity.linkage_sha256 != linkage_sha):
+            or identity.linkage_sha256 != linkage_sha
+            or identity.config_sha256 != comparator.build_receipt_sha256
+            or identity.config_sha256 !=
+               cumulative_composition.FROZEN_BUILD_RECEIPT_SHA256):
         raise DeploymentFactoryError(
             "frozen production comparator build/linkage identity changed")
+    protocol = cumulative_composition.frozen_production_protocol_binding(
+        model_sha256=comparator.model_sha256,
+        build_identity=identity)
+    model_sha = _digest_regular(model_path, "frozen comparator model")
+    expected_receipts = (
+        cumulative_composition.FROZEN_BUILD_RECEIPT_SHA256,
+        cumulative_composition.FROZEN_LINKAGE_RECEIPT_SHA256,
+        cumulative_composition.FROZEN_RUNTIME_RECEIPT_SHA256,
+        cumulative_composition.FROZEN_MEASUREMENT_RECEIPT_SHA256,
+    )
+    if ((comparator.build_receipt_sha256,
+         comparator.linkage_receipt_sha256,
+         comparator.runtime_receipt_sha256,
+         comparator.measurement_receipt_sha256) != expected_receipts
+            or comparator.workload_sha256 != workload_sha256
+            or comparator.runtime_config_sha256 != runtime_config_sha256
+            or comparator.model_sha256 != model_sha
+            or comparator.measurement_protocol_sha256 !=
+               protocol["measurement_protocol_sha256"]
+            or comparator.observed_workload_sha256 !=
+               protocol["observed_workload_sha256"]
+            or comparator.observed_runtime_config_sha256 !=
+               protocol["observed_runtime_config_sha256"]
+            or comparator.frame_sha256 != protocol["frame_sha256"]):
+        raise DeploymentFactoryError(
+            "frozen production comparator provenance/protocol changed")
+
+
+def derive_frozen_production_comparator(
+        *, production_path: Path = deployment.FROZEN_PRODUCTION_PATH,
+        model_path: Path = _SITE_MODEL,
+        governance_root: Path = _SITE_GOVERNANCE_ROOT,
+) -> cumulative_composition.FrozenProductionComparator:
+    """Derive the canonical comparator from real frozen-v9 authority only."""
+    if (_frozen_source_archive_sha256(production_path) !=
+            cumulative_composition.FROZEN_PRODUCTION_SOURCE_SHA256):
+        raise DeploymentFactoryError("frozen v9 source archive digest changed")
+    provenance = {}
+    for role, relative, expected_sha, expected_schema in _FROZEN_PROVENANCE:
+        raw = _stable_public_bytes(
+            governance_root / relative, expected_sha,
+            f"frozen production {role} provenance")
+        try:
+            body = json.loads(raw.decode("utf-8", "strict"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise DeploymentFactoryError(
+                f"frozen production {role} provenance is invalid") from exc
+        if (not isinstance(body, Mapping) or body.get("schema") != expected_schema
+                or body.get("status") not in {
+                    None, "preproduction_qualification_pass", "sealed",
+                    "production_promoted_frozen"}):
+            raise DeploymentFactoryError(
+                f"frozen production {role} provenance semantics changed")
+        provenance[role] = expected_sha
+    snapshot_files, runtime_semantics = _production_runtime_snapshot(production_path)
+    del snapshot_files
+    runtime_snapshot_sha = schemas.content_hash(runtime_semantics)
+    build = production_path / "build-hip"
+    identity = gpu_source_proofs.BuildIdentity(
+        source_commit=deployment.FROZEN_PRODUCTION_HEAD,
+        source_sha256=cumulative_composition.FROZEN_PRODUCTION_SOURCE_SHA256,
+        binary_sha256=_digest_regular(
+            build / "bin/llama-bench", "frozen production binary"),
+        hip_library_sha256=_digest_regular(
+            (build / "bin/libggml-hip.so").resolve(strict=True),
+            "frozen production HIP library"),
+        config_sha256=provenance["build"],
+        linkage_sha256=discovery_static_registry._linkage_sha(build))
+    model_sha = _digest_regular(model_path, "frozen comparator model")
+    workload_sha = _pretty_json_sha256(_deployment_workload_body())
+    runtime_sha = _pretty_json_sha256(_deployment_runtime_body())
+    protocol = cumulative_composition.frozen_production_protocol_binding(
+        model_sha256=model_sha,
+        build_identity=identity)
+    comparator = cumulative_composition.FrozenProductionComparator.create(
+        build_identity=identity,
+        build_receipt_sha256=provenance["build"],
+        linkage_receipt_sha256=provenance["linkage"],
+        runtime_receipt_sha256=provenance["runtime"],
+        runtime_snapshot_sha256=runtime_snapshot_sha,
+        measurement_receipt_sha256=provenance["measurement"],
+        model_sha256=model_sha, workload_sha256=workload_sha,
+        runtime_config_sha256=runtime_sha,
+        observed_workload_sha256=protocol["observed_workload_sha256"],
+        observed_runtime_config_sha256=
+            protocol["observed_runtime_config_sha256"],
+        frame_sha256=protocol["frame_sha256"],
+        measurement_protocol_sha256=
+            protocol["measurement_protocol_sha256"])
+    _verify_frozen_production_comparator(
+        comparator, production_path, runtime_semantics,
+        model_path=model_path.resolve(), workload_sha256=workload_sha,
+        runtime_config_sha256=runtime_sha)
+    return comparator
+
+
+def seal_frozen_production_comparator(
+        output: Path, **kwargs: Any,
+) -> cumulative_composition.FrozenProductionComparator:
+    _validate_comparator_output_path(output)
+    comparator = derive_frozen_production_comparator(**kwargs)
+    raw = (json.dumps(
+        comparator.to_dict(), sort_keys=True, indent=2) + "\n").encode()
+    if output.exists() or output.is_symlink():
+        reopened = _load_frozen_production_comparator(output)
+        if reopened != comparator:
+            raise DeploymentFactoryError(
+                "existing comparator differs from frozen authority")
+        return reopened
+    _atomic_bytes(output, raw)
+    output.chmod(0o400)
+    reopened = _load_frozen_production_comparator(output)
+    if reopened != comparator:
+        raise DeploymentFactoryError("sealed comparator did not reopen exactly")
+    return reopened
+
+
+def _validate_comparator_output_path(output: Path) -> None:
+    if not output.is_absolute() or output != Path(os.path.abspath(output)):
+        raise DeploymentFactoryError(
+            "comparator output must be an absolute normalized path")
+    if ".git" in output.parts:
+        raise DeploymentFactoryError(
+            "comparator output cannot be inside git metadata")
+    production = deployment.FROZEN_PRODUCTION_PATH.resolve(strict=True)
+    try:
+        output.relative_to(production)
+    except ValueError:
+        pass
+    else:
+        raise DeploymentFactoryError(
+            "comparator output cannot modify frozen production")
+    current = Path(output.anchor)
+    for component in output.parts[1:]:
+        current /= component
+        if not current.exists() and not current.is_symlink():
+            continue
+        try:
+            if stat.S_ISLNK(current.lstat().st_mode):
+                raise DeploymentFactoryError(
+                    "comparator output cannot traverse an alias")
+        except OSError as exc:
+            raise DeploymentFactoryError(
+                "comparator output ancestry is unavailable") from exc
 
 
 def initialize_static_deployment_bundle(
@@ -1240,14 +1492,10 @@ def initialize_static_deployment_bundle(
     wrapper = _bound(wrapper_path, "actor_wrapper")
     critic_path = _SITE_CRITIC_WRAPPER.resolve(strict=True)
     critic = _bound(critic_path, "critic_wrapper")
-    workload_path, workload_sha = _json_artifact(config_dir / "workload.json", {
-        "schema": "epyc.autokernel.discovery_workload.v1", "workload": "decode_tg128",
-        "prompt_tokens": 0, "generation_tokens": 128, "calls_per_arm": 9,
-        "device_id": "mi210_0", "promotion_claim": False})
-    runtime_path, runtime_sha = _json_artifact(config_dir / "runtime.json", {
-        "schema": "epyc.autokernel.discovery_runtime.v1", "architecture": "gfx90a",
-        "gpu_layers": 99, "flash_attention": True, "hip_graphs": True,
-        "cpu_list": "184-191", "threads": 8, "promotion_claim": False})
+    workload_path, workload_sha = _json_artifact(
+        config_dir / "workload.json", _deployment_workload_body())
+    runtime_path, runtime_sha = _json_artifact(
+        config_dir / "runtime.json", _deployment_runtime_body())
     if (comparator.model_sha256 != model.sha256
             or comparator.workload_sha256 != workload_sha
             or comparator.runtime_config_sha256 != runtime_sha):
@@ -1256,7 +1504,9 @@ def initialize_static_deployment_bundle(
     _snapshot_files, snapshot_semantics = _production_runtime_snapshot(
         deployment.FROZEN_PRODUCTION_PATH)
     _verify_frozen_production_comparator(
-        comparator, deployment.FROZEN_PRODUCTION_PATH, snapshot_semantics)
+        comparator, deployment.FROZEN_PRODUCTION_PATH, snapshot_semantics,
+        model_path=model.path, workload_sha256=workload_sha,
+        runtime_config_sha256=runtime_sha)
     comparator_path = config_dir / "frozen-production-comparator.json"
     _atomic_bytes(
         comparator_path, frozen_production_comparator.read_bytes())
@@ -2872,7 +3122,10 @@ def _static_registry(config: deployment.DiscoveryDeployment,
     snapshot_files, snapshot_semantics = _production_runtime_snapshot(
         config.production_path)
     _verify_frozen_production_comparator(
-        comparator, config.production_path, snapshot_semantics)
+        comparator, config.production_path, snapshot_semantics,
+        model_path=config.model.path,
+        workload_sha256=config.workload.sha256,
+        runtime_config_sha256=config.runtime_config.sha256)
     source_builder = discovery_static_registry.StaticGpuSourceBuilder(
         production_path=config.production_path,
         production_branch=deployment.FROZEN_PRODUCTION_BRANCH,

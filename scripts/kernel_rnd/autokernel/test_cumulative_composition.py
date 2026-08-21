@@ -146,7 +146,10 @@ def _production(*, frame_sha256: str = _h("matched-on-frame"),
                 measurement_receipt_sha256: str = _h(("production", "on")),
                 model_sha256: str = _h("model"),
                 workload_sha256: str = _h("workload"),
-                runtime_config_sha256: str = _h("runtime-config")) \
+                runtime_config_sha256: str = _h("runtime-config"),
+                observed_workload_sha256: str = _h("observed-workload"),
+                observed_runtime_config_sha256: str =
+                    _h("observed-runtime-config")) \
         -> C.FrozenProductionAuthority:
     identity = replace(_identity("production"), source_commit=BASE)
     return C.FrozenProductionAuthority.create(
@@ -158,6 +161,8 @@ def _production(*, frame_sha256: str = _h("matched-on-frame"),
         measurement_receipt_sha256=measurement_receipt_sha256,
         model_sha256=model_sha256, workload_sha256=workload_sha256,
         runtime_config_sha256=runtime_config_sha256,
+        observed_workload_sha256=observed_workload_sha256,
+        observed_runtime_config_sha256=observed_runtime_config_sha256,
         metric="tokens_per_second", direction="higher_is_better")
 
 
@@ -228,7 +233,7 @@ def _measurement(
             "n_prompt": 0, "n_gen": 128, "model": "/models/test.gguf",
             "model_sha256": _h("model"),
             "source_commit": pair.candidate.build_identity.source_commit,
-            "cpu_list": "0-7", "device": "AMD Instinct MI210",
+            "cpu_list": "184-191", "device": "AMD Instinct MI210",
             "architecture": "gfx90a",
         },
         "sole_factor": {"name": factor},
@@ -582,8 +587,11 @@ class CumulativeCompositionTests(unittest.TestCase):
                 production_descriptor["protocol_frame_sha256"],
             measurement_receipt_sha256=_h("production-on-file"),
             model_sha256=production_descriptor["model_sha256"],
-            workload_sha256=production_descriptor["workload_sha256"],
-            runtime_config_sha256=
+            workload_sha256=_h("deployment-workload-file"),
+            runtime_config_sha256=_h("deployment-runtime-file"),
+            observed_workload_sha256=
+                production_descriptor["workload_sha256"],
+            observed_runtime_config_sha256=
                 production_descriptor["runtime_config_sha256"])
         performance = C.performance_from_measurements(
             plan, pair, correct, comparison,
@@ -593,6 +601,12 @@ class CumulativeCompositionTests(unittest.TestCase):
             production_graphs_on=production_on,
             production_graphs_on_receipt_sha256=_h("production-on-file"))
         self.assertTrue(performance.promotion_eligible)
+        self.assertEqual(performance.workload_sha256,
+                         _h("deployment-workload-file"))
+        self.assertEqual(performance.runtime_config_sha256,
+                         _h("deployment-runtime-file"))
+        self.assertNotEqual(performance.runtime_config_sha256,
+                            production_descriptor["runtime_config_sha256"])
         self.assertEqual(
             C.CumulativePerformance.from_dict(performance.to_dict()),
             performance)
@@ -628,6 +642,39 @@ class CumulativeCompositionTests(unittest.TestCase):
                 incremental_graphs_off=incremental_off,
                 incremental_graphs_on=incremental_on,
                 production_graphs_on=protocol_changed,
+                production_graphs_on_receipt_sha256=
+                    _h("production-on-file"))
+
+        observed_runtime_changed = C.FrozenProductionAuthority.create(
+            production_commit=production.production_commit,
+            build_identity=production.build_identity,
+            runtime_snapshot_sha256=
+                production.runtime_snapshot_sha256,
+            comparator_receipt_sha256=
+                production.comparator_receipt_sha256,
+            graphs_mode=production.graphs_mode,
+            frame_sha256=production.frame_sha256,
+            measurement_protocol_sha256=
+                production.measurement_protocol_sha256,
+            measurement_receipt_sha256=
+                production.measurement_receipt_sha256,
+            model_sha256=production.model_sha256,
+            workload_sha256=production.workload_sha256,
+            runtime_config_sha256=
+                production.runtime_config_sha256,
+            observed_workload_sha256=
+                production.observed_workload_sha256,
+            observed_runtime_config_sha256=
+                _h("foreign-observed-runtime"),
+            metric=production.metric, direction=production.direction)
+        with self.assertRaisesRegex(
+                C.CompositionError, "sealed protocol"):
+            C.performance_from_measurements(
+                plan, pair, correct, comparison,
+                frozen_production=observed_runtime_changed,
+                incremental_graphs_off=incremental_off,
+                incremental_graphs_on=incremental_on,
+                production_graphs_on=production_on,
                 production_graphs_on_receipt_sha256=
                     _h("production-on-file"))
 
@@ -684,6 +731,8 @@ class CumulativeCompositionTests(unittest.TestCase):
             measurement_receipt_sha256=_h("measurement"),
             model_sha256=_h("model"), workload_sha256=_h("workload"),
             runtime_config_sha256=_h("runtime-config"),
+            observed_workload_sha256=_h("observed-workload"),
+            observed_runtime_config_sha256=_h("observed-runtime-config"),
             frame_sha256=_h("production-frame"),
             measurement_protocol_sha256=_h("protocol"))
         reopened = C.FrozenProductionComparator.from_dict(

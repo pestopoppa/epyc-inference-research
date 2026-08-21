@@ -41,6 +41,14 @@ FROZEN_PRODUCTION_BRANCH = "production-consolidated-v9"
 FROZEN_PRODUCTION_COMMIT = "0db32c06e3e550065b78311a6031ef3dd2c4f27c"
 FROZEN_PRODUCTION_SOURCE_SHA256 = \
     "48663678dad691ba046cc3d3e9a70d42046d92602db94704b3707e3fadb82ca8"
+FROZEN_BUILD_RECEIPT_SHA256 = \
+    "04344a3624247646d0ebd795c12abfa4db48be895ebc8ccc465867917e7da679"
+FROZEN_LINKAGE_RECEIPT_SHA256 = \
+    "8c4f507a2072fdb170ad4ac7bfa9ca4867bd20023587615b5f960eab9e21580b"
+FROZEN_RUNTIME_RECEIPT_SHA256 = \
+    "e5374f054d0c1be12fe6d511c32c5e24fcac9fb79bc954c82f42bc28e8822d48"
+FROZEN_MEASUREMENT_RECEIPT_SHA256 = \
+    "21c396477c1cdcc71dbaffd7452dd43e7bbf5941b1f199c8a5d217da830945ed"
 HUNK = re.compile(
     r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(?: .*)?$"
 )
@@ -1028,6 +1036,8 @@ class FrozenProductionComparator:
     model_sha256: str
     workload_sha256: str
     runtime_config_sha256: str
+    observed_workload_sha256: str
+    observed_runtime_config_sha256: str
     frame_sha256: str
     graphs_mode: str
     metric: str
@@ -1042,6 +1052,8 @@ class FrozenProductionComparator:
             runtime_receipt_sha256: str, runtime_snapshot_sha256: str,
             measurement_receipt_sha256: str, model_sha256: str,
             workload_sha256: str, runtime_config_sha256: str,
+            observed_workload_sha256: str,
+            observed_runtime_config_sha256: str,
             frame_sha256: str, measurement_protocol_sha256: str,
     ) -> "FrozenProductionComparator":
         values = {
@@ -1056,6 +1068,8 @@ class FrozenProductionComparator:
             "model_sha256": model_sha256,
             "workload_sha256": workload_sha256,
             "runtime_config_sha256": runtime_config_sha256,
+            "observed_workload_sha256": observed_workload_sha256,
+            "observed_runtime_config_sha256": observed_runtime_config_sha256,
             "frame_sha256": frame_sha256,
             "graphs_mode": "graphs_on",
             "metric": "tokens_per_second",
@@ -1063,7 +1077,7 @@ class FrozenProductionComparator:
             "measurement_protocol_sha256": measurement_protocol_sha256,
         }
         body = {
-            "schema": "epyc.autokernel.frozen_production_comparator.v1",
+            "schema": "epyc.autokernel.frozen_production_comparator.v2",
             **{key: (asdict(value)
                      if isinstance(value, gpu_source_proofs.BuildIdentity)
                      else value)
@@ -1087,6 +1101,8 @@ class FrozenProductionComparator:
                 "runtime_receipt_sha256", "runtime_snapshot_sha256",
                 "measurement_receipt_sha256", "model_sha256",
                 "workload_sha256", "runtime_config_sha256", "frame_sha256",
+                "observed_workload_sha256",
+                "observed_runtime_config_sha256",
                 "measurement_protocol_sha256", "receipt_sha256"):
             _require_sha(getattr(self, label), label)
         if self.receipt_sha256 != _sha(self._body()):
@@ -1095,7 +1111,7 @@ class FrozenProductionComparator:
 
     def _body(self) -> dict[str, Any]:
         return {
-            "schema": "epyc.autokernel.frozen_production_comparator.v1",
+            "schema": "epyc.autokernel.frozen_production_comparator.v2",
             **{key: (asdict(value)
                      if isinstance(value, gpu_source_proofs.BuildIdentity)
                      else value)
@@ -1114,13 +1130,14 @@ class FrozenProductionComparator:
             "linkage_receipt_sha256", "runtime_receipt_sha256",
             "runtime_snapshot_sha256", "measurement_receipt_sha256",
             "model_sha256", "workload_sha256", "runtime_config_sha256",
+            "observed_workload_sha256", "observed_runtime_config_sha256",
             "frame_sha256", "graphs_mode", "metric", "direction",
             "measurement_protocol_sha256", "receipt_sha256",
         }
         if (not isinstance(value, Mapping)
                 or set(value) != fields | {"schema"}
                 or value.get("schema") !=
-                   "epyc.autokernel.frozen_production_comparator.v1"):
+                   "epyc.autokernel.frozen_production_comparator.v2"):
             raise CompositionError(
                 "frozen production comparator has an inexact schema")
         try:
@@ -1146,6 +1163,9 @@ class FrozenProductionComparator:
             model_sha256=self.model_sha256,
             workload_sha256=self.workload_sha256,
             runtime_config_sha256=self.runtime_config_sha256,
+            observed_workload_sha256=self.observed_workload_sha256,
+            observed_runtime_config_sha256=
+                self.observed_runtime_config_sha256,
             metric=self.metric, direction=self.direction)
 
 
@@ -1165,6 +1185,8 @@ class FrozenProductionAuthority:
     model_sha256: str
     workload_sha256: str
     runtime_config_sha256: str
+    observed_workload_sha256: str
+    observed_runtime_config_sha256: str
     metric: str
     direction: str
     authority_sha256: str
@@ -1181,6 +1203,8 @@ class FrozenProductionAuthority:
             measurement_receipt_sha256: str,
             model_sha256: str, workload_sha256: str,
             runtime_config_sha256: str, metric: str, direction: str,
+            observed_workload_sha256: str,
+            observed_runtime_config_sha256: str,
     ) -> "FrozenProductionAuthority":
         if not isinstance(build_identity, gpu_source_proofs.BuildIdentity):
             raise CompositionError("frozen production build identity must be typed")
@@ -1189,7 +1213,8 @@ class FrozenProductionAuthority:
             comparator_receipt_sha256, graphs_mode, frame_sha256,
             measurement_protocol_sha256, measurement_receipt_sha256,
             model_sha256, workload_sha256, runtime_config_sha256,
-            metric, direction)
+            metric, direction, observed_workload_sha256,
+            observed_runtime_config_sha256)
         return cls(
             production_commit=production_commit,
             build_identity=build_identity,
@@ -1201,6 +1226,8 @@ class FrozenProductionAuthority:
             measurement_receipt_sha256=measurement_receipt_sha256,
             model_sha256=model_sha256, workload_sha256=workload_sha256,
             runtime_config_sha256=runtime_config_sha256,
+            observed_workload_sha256=observed_workload_sha256,
+            observed_runtime_config_sha256=observed_runtime_config_sha256,
             metric=metric, direction=direction,
             authority_sha256=_sha(body))
 
@@ -1215,9 +1242,11 @@ class FrozenProductionAuthority:
             measurement_receipt_sha256: str,
             model_sha256: str, workload_sha256: str,
             runtime_config_sha256: str, metric: str, direction: str,
+            observed_workload_sha256: str,
+            observed_runtime_config_sha256: str,
     ) -> dict[str, Any]:
         return {
-            "schema": "epyc.autokernel.frozen_production_authority.v1",
+            "schema": "epyc.autokernel.frozen_production_authority.v2",
             "production_commit": _require_commit(
                 production_commit, "production_commit"),
             "build_identity": asdict(build_identity),
@@ -1239,6 +1268,11 @@ class FrozenProductionAuthority:
                 workload_sha256, "workload_sha256"),
             "runtime_config_sha256": _require_sha(
                 runtime_config_sha256, "runtime_config_sha256"),
+            "observed_workload_sha256": _require_sha(
+                observed_workload_sha256, "observed_workload_sha256"),
+            "observed_runtime_config_sha256": _require_sha(
+                observed_runtime_config_sha256,
+                "observed_runtime_config_sha256"),
             "metric": metric, "direction": direction,
         }
 
@@ -1252,7 +1286,8 @@ class FrozenProductionAuthority:
             self.frame_sha256, self.measurement_protocol_sha256,
             self.measurement_receipt_sha256, self.model_sha256,
             self.workload_sha256, self.runtime_config_sha256,
-            self.metric, self.direction)
+            self.metric, self.direction, self.observed_workload_sha256,
+            self.observed_runtime_config_sha256)
         if (self.production_commit != FROZEN_PRODUCTION_COMMIT
                 or self.build_identity.source_commit != self.production_commit
                 or self.graphs_mode != "graphs_on"
@@ -1276,7 +1311,8 @@ class FrozenProductionAuthority:
             self.frame_sha256, self.measurement_protocol_sha256,
             self.measurement_receipt_sha256, self.model_sha256,
             self.workload_sha256, self.runtime_config_sha256,
-            self.metric, self.direction),
+            self.metric, self.direction, self.observed_workload_sha256,
+            self.observed_runtime_config_sha256),
             "authority_sha256": self.authority_sha256}
 
     @classmethod
@@ -1288,6 +1324,7 @@ class FrozenProductionAuthority:
             "measurement_protocol_sha256",
             "measurement_receipt_sha256", "model_sha256",
             "workload_sha256", "runtime_config_sha256", "metric",
+            "observed_workload_sha256", "observed_runtime_config_sha256",
             "direction",
             "authority_sha256",
         }
@@ -1295,7 +1332,7 @@ class FrozenProductionAuthority:
             raise CompositionError(
                 "frozen production authority has an inexact schema")
         if value.get("schema") != \
-                "epyc.autokernel.frozen_production_authority.v1":
+                "epyc.autokernel.frozen_production_authority.v2":
             raise CompositionError("frozen production authority schema changed")
         try:
             identity = gpu_source_proofs.BuildIdentity(
@@ -1317,6 +1354,9 @@ class FrozenProductionAuthority:
             model_sha256=value["model_sha256"],
             workload_sha256=value["workload_sha256"],
             runtime_config_sha256=value["runtime_config_sha256"],
+            observed_workload_sha256=value["observed_workload_sha256"],
+            observed_runtime_config_sha256=
+                value["observed_runtime_config_sha256"],
             metric=value["metric"], direction=value["direction"],
             authority_sha256=value["authority_sha256"])
 
@@ -1782,6 +1822,49 @@ _RUNTIME_ROW_FIELDS = (
 )
 
 
+def frozen_production_protocol_binding(
+        *, model_sha256: str,
+        build_identity: gpu_source_proofs.BuildIdentity,
+) -> dict[str, str]:
+    """Derive the exact future graphs-on descriptor without measurement."""
+    _require_sha(model_sha256, "model_sha256")
+    if not isinstance(build_identity, gpu_source_proofs.BuildIdentity):
+        raise CompositionError("frozen protocol requires typed build identity")
+    workload = {
+        "backend": "llama_gpu", "recipe": "tg128-ngl99",
+        "n_prompt": 0, "n_gen": 128,
+    }
+    runtime = {
+        "n_threads": 8, "n_batch": 512, "n_ubatch": 512,
+        "use_mmap": True, "no_op_offload": 0,
+        "split_mode": "layer", "no_kv_offload": False,
+        "poll": 50, "n_prompt": 0, "n_gen": 128,
+        "flash_attn": 1,
+    }
+    protocol = {
+        **workload, "model_sha256": model_sha256,
+        "metric": "decode_tokens_per_s",
+        "metric_direction": "higher_better",
+        "cpu_list": "184-191", "device": "AMD Instinct MI210",
+        "architecture": "gfx90a", "runtime_config_sha256": _sha(runtime),
+        "graphs_mode": "on", "candidate_invocations": 9,
+        "candidate_processes": 1,
+    }
+    frame = {
+        "schema": "epyc.autokernel.measurement_arm_frame.v1",
+        "arm": "anchor", "protocol": protocol,
+        "source_commit": build_identity.source_commit,
+        "build_identity": asdict(build_identity),
+        "factor_name": "cumulative_production",
+    }
+    return {
+        "observed_workload_sha256": _sha(workload),
+        "observed_runtime_config_sha256": _sha(runtime),
+        "measurement_protocol_sha256": _sha(protocol),
+        "frame_sha256": _sha(frame),
+    }
+
+
 def _measurement_descriptor(
         value: Mapping[str, Any], *, graph_mode: str,
         candidate: BuildBinding, anchor_identity: gpu_source_proofs.BuildIdentity,
@@ -1855,7 +1938,7 @@ def _measurement_descriptor(
     }
     stable_protocol = {
         **workload,
-        "model": frame["model"], "model_sha256": frame["model_sha256"],
+        "model_sha256": frame["model_sha256"],
         "metric": metric,
         "metric_direction": frame["metric_direction"],
         "cpu_list": frame["cpu_list"], "device": frame["device"],
@@ -1926,6 +2009,23 @@ def performance_from_measurements(
         candidate=pair.candidate,
         anchor_identity=frozen_production.build_identity,
         factor_name="cumulative_production")
+    sealed_protocol = frozen_production_protocol_binding(
+        model_sha256=frozen_production.model_sha256,
+        build_identity=frozen_production.build_identity)
+    if (production_row["workload_sha256"] !=
+            sealed_protocol["observed_workload_sha256"]
+            or frozen_production.observed_workload_sha256 !=
+               production_row["workload_sha256"]
+            or production_row["runtime_config_sha256"] !=
+               sealed_protocol["observed_runtime_config_sha256"]
+            or frozen_production.observed_runtime_config_sha256 !=
+               production_row["runtime_config_sha256"]
+            or production_row["protocol_frame_sha256"] !=
+               sealed_protocol["measurement_protocol_sha256"]
+            or production_row["anchor_frame_sha256"] !=
+               sealed_protocol["frame_sha256"]):
+        raise CompositionError(
+            "cumulative production measurement differs from sealed protocol")
     common_fields = (
         "model_sha256", "workload_sha256",
         "runtime_config_sha256", "metric", "metric_direction",
@@ -1950,9 +2050,9 @@ def performance_from_measurements(
     return CumulativePerformance.create(
         plan, pair, correctness, incremental,
         frozen_production=frozen_production,
-        model_sha256=shared["model_sha256"],
-        workload_sha256=shared["workload_sha256"],
-        runtime_config_sha256=shared["runtime_config_sha256"],
+        model_sha256=frozen_production.model_sha256,
+        workload_sha256=frozen_production.workload_sha256,
+        runtime_config_sha256=frozen_production.runtime_config_sha256,
         protocol_frame_sha256=
             incremental_rows[1]["protocol_frame_sha256"],
         metric=shared["metric"],

@@ -165,7 +165,10 @@ def _production(*, frame_sha256: str = _sha("matched-on"),
                 measurement_receipt_sha256: str = _sha("production-on"),
                 model_sha256: str = _sha("model"),
                 workload_sha256: str = _sha("workload"),
-                runtime_config_sha256: str = _sha("runtime")) \
+                runtime_config_sha256: str = _sha("runtime"),
+                observed_workload_sha256: str = _sha("observed-workload"),
+                observed_runtime_config_sha256: str =
+                    _sha("observed-runtime")) \
         -> composition.FrozenProductionAuthority:
     identity = replace(_identity("production"), source_commit=BASE)
     return composition.FrozenProductionAuthority.create(
@@ -177,6 +180,8 @@ def _production(*, frame_sha256: str = _sha("matched-on"),
         measurement_receipt_sha256=measurement_receipt_sha256,
         model_sha256=model_sha256, workload_sha256=workload_sha256,
         runtime_config_sha256=runtime_config_sha256,
+        observed_workload_sha256=observed_workload_sha256,
+        observed_runtime_config_sha256=observed_runtime_config_sha256,
         metric="tokens_per_second", direction="higher_is_better")
 
 
@@ -235,7 +240,7 @@ def _measurement(
             "n_prompt": 0, "n_gen": 128,
             "model": "/models/test.gguf", "model_sha256": _sha("model"),
             "source_commit": pair.candidate.build_identity.source_commit,
-            "cpu_list": "0-7", "device": "AMD Instinct MI210",
+            "cpu_list": "184-191", "device": "AMD Instinct MI210",
             "architecture": "gfx90a",
         },
         "sole_factor": {"name": factor},
@@ -366,8 +371,11 @@ class CumulativeControllerIntegrationTests(unittest.TestCase):
             measurement_receipt_sha256=hashlib.sha256(
                 (outputs[2] / "result.json").read_bytes()).hexdigest(),
             model_sha256=production_descriptor["model_sha256"],
-            workload_sha256=production_descriptor["workload_sha256"],
-            runtime_config_sha256=
+            workload_sha256=_sha("deployment-workload-file"),
+            runtime_config_sha256=_sha("deployment-runtime-file"),
+            observed_workload_sha256=
+                production_descriptor["workload_sha256"],
+            observed_runtime_config_sha256=
                 production_descriptor["runtime_config_sha256"])
         runner_body = {
             "schema": gpu_source_adapter.RUNNER_PLAN_SCHEMA,

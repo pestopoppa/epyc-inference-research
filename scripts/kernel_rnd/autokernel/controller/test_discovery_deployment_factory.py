@@ -20,26 +20,12 @@ from . import discovery_controller as C
 
 
 def frozen_production_comparator(
-        root: Path, *, production_path: Path | None = None) -> Path:
+        root: Path, *, production_path: Path | None = None,
+        model_path: Path | None = None) -> Path:
     production_path = (
         F.deployment.FROZEN_PRODUCTION_PATH
         if production_path is None else production_path)
-    workload = {
-        "schema": "epyc.autokernel.discovery_workload.v1",
-        "workload": "decode_tg128", "prompt_tokens": 0,
-        "generation_tokens": 128, "calls_per_arm": 9,
-        "device_id": "mi210_0", "promotion_claim": False,
-    }
-    runtime = {
-        "schema": "epyc.autokernel.discovery_runtime.v1",
-        "architecture": "gfx90a", "gpu_layers": 99,
-        "flash_attention": True, "hip_graphs": True,
-        "cpu_list": "184-191", "threads": 8,
-        "promotion_claim": False,
-    }
-    digest = lambda value: hashlib.sha256(
-        (json.dumps(value, sort_keys=True, indent=2) + "\n").encode()
-    ).hexdigest()
+    model_path = F._SITE_MODEL if model_path is None else model_path
     production_build = production_path / "build-hip"
     _files, runtime_semantics = F._production_runtime_snapshot(production_path)
     identity = F.gpu_source_proofs.BuildIdentity(
@@ -50,17 +36,31 @@ def frozen_production_comparator(
         F._digest_regular(
             (production_build / "bin/libggml-hip.so").resolve(strict=True),
             "fixture production HIP library"),
-        hashlib.sha256(b"externally sealed v9 configuration").hexdigest(),
+        F.cumulative_composition.FROZEN_BUILD_RECEIPT_SHA256,
         F.discovery_static_registry._linkage_sha(production_build))
+    model_sha = F._digest_regular(model_path, "fixture model")
+    protocol = F.cumulative_composition.frozen_production_protocol_binding(
+        model_sha256=model_sha,
+        build_identity=identity)
     comparator = F.cumulative_composition.FrozenProductionComparator.create(
-        build_identity=identity, build_receipt_sha256="6" * 64,
-        linkage_receipt_sha256="7" * 64,
-        runtime_receipt_sha256="8" * 64,
+        build_identity=identity,
+        build_receipt_sha256=
+            F.cumulative_composition.FROZEN_BUILD_RECEIPT_SHA256,
+        linkage_receipt_sha256=
+            F.cumulative_composition.FROZEN_LINKAGE_RECEIPT_SHA256,
+        runtime_receipt_sha256=
+            F.cumulative_composition.FROZEN_RUNTIME_RECEIPT_SHA256,
         runtime_snapshot_sha256=F.schemas.content_hash(runtime_semantics),
-        measurement_receipt_sha256="a" * 64,
-        model_sha256=F._digest_regular(F._SITE_MODEL, "fixture model"),
-        workload_sha256=digest(workload), runtime_config_sha256=digest(runtime),
-        frame_sha256="b" * 64, measurement_protocol_sha256="c" * 64)
+        measurement_receipt_sha256=
+            F.cumulative_composition.FROZEN_MEASUREMENT_RECEIPT_SHA256,
+        model_sha256=model_sha,
+        workload_sha256=F._pretty_json_sha256(F._deployment_workload_body()),
+        runtime_config_sha256=F._pretty_json_sha256(F._deployment_runtime_body()),
+        observed_workload_sha256=protocol["observed_workload_sha256"],
+        observed_runtime_config_sha256=
+            protocol["observed_runtime_config_sha256"],
+        frame_sha256=protocol["frame_sha256"],
+        measurement_protocol_sha256=protocol["measurement_protocol_sha256"])
     path = root / "frozen-production-comparator.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
@@ -541,6 +541,8 @@ class DeploymentFactoryTests(unittest.TestCase):
                     measurement_receipt_sha256="b" * 64,
                     model_sha256="c" * 64, workload_sha256="d" * 64,
                     runtime_config_sha256="e" * 64,
+                    observed_workload_sha256="f" * 64,
+                    observed_runtime_config_sha256="0" * 64,
                     metric="tokens_per_second",
                     direction="higher_is_better")
             effective = F.schemas.content_hash({
@@ -725,9 +727,13 @@ class DeploymentFactoryTests(unittest.TestCase):
         model = root / "model.gguf"
         model.write_bytes(b"small model")
         workload = root / "workload.json"
-        workload.write_text('{"workload":"decode_tg128"}', encoding="utf-8")
+        workload.write_text(
+            json.dumps(F._deployment_workload_body(), sort_keys=True, indent=2)
+            + "\n", encoding="utf-8")
         runtime = root / "runtime.json"
-        runtime.write_text("{}", encoding="utf-8")
+        runtime.write_text(
+            json.dumps(F._deployment_runtime_body(), sort_keys=True, indent=2)
+            + "\n", encoding="utf-8")
         policy = root / "policy.json"
         policy.write_text("{}", encoding="utf-8")
         planner = root / "planner.json"
@@ -790,7 +796,8 @@ class DeploymentFactoryTests(unittest.TestCase):
         carry_forward_input = immutable(carry_forward_path)
         comparator_input = immutable(
             frozen_production_comparator(
-                root / "production-authority", production_path=production))
+                root / "production-authority", production_path=production,
+                model_path=model))
         config = SimpleNamespace(
             config_sha256="c" * 64, production_path=production.resolve(),
             production_branch=F.deployment.FROZEN_PRODUCTION_BRANCH,
@@ -966,6 +973,180 @@ class DeploymentFactoryTests(unittest.TestCase):
                 F.initialize_static_deployment_bundle(
                     root / "bundle",
                     frozen_production_comparator=comparator)
+
+    def test_canonical_frozen_v9_comparator_sealer_and_validate_only(self):
+        from . import seal_frozen_production_comparator as sealer
+
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary).resolve() / "frozen-v9-comparator.json"
+            stream = io.StringIO()
+            with contextlib.redirect_stdout(stream):
+                self.assertEqual(sealer.main(["--output", str(output)]), 0)
+            result = json.loads(stream.getvalue())
+            self.assertEqual(result["status"], "sealed")
+            self.assertFalse(result["inference_executed"])
+            self.assertEqual(stat.S_IMODE(output.stat().st_mode), 0o400)
+            self.assertEqual(output.stat().st_nlink, 1)
+            comparator = F._load_frozen_production_comparator(output)
+            self.assertEqual(
+                comparator.build_identity.source_sha256,
+                F.cumulative_composition.FROZEN_PRODUCTION_SOURCE_SHA256)
+            self.assertEqual(
+                comparator.build_identity.config_sha256,
+                comparator.build_receipt_sha256)
+            self.assertEqual(
+                (comparator.build_receipt_sha256,
+                 comparator.linkage_receipt_sha256,
+                 comparator.runtime_receipt_sha256,
+                 comparator.measurement_receipt_sha256),
+                (F.cumulative_composition.FROZEN_BUILD_RECEIPT_SHA256,
+                 F.cumulative_composition.FROZEN_LINKAGE_RECEIPT_SHA256,
+                 F.cumulative_composition.FROZEN_RUNTIME_RECEIPT_SHA256,
+                 F.cumulative_composition.FROZEN_MEASUREMENT_RECEIPT_SHA256))
+            self.assertNotEqual(comparator.workload_sha256,
+                                comparator.observed_workload_sha256)
+            self.assertNotEqual(comparator.runtime_config_sha256,
+                                comparator.observed_runtime_config_sha256)
+            stream = io.StringIO()
+            with contextlib.redirect_stdout(stream):
+                self.assertEqual(sealer.main([
+                    "--output", str(output), "--validate-only"]), 0)
+            self.assertFalse(json.loads(stream.getvalue())["inference_executed"])
+
+    def test_comparator_sealer_refuses_tamper_placeholder_and_aliases(self):
+        from . import seal_frozen_production_comparator as sealer
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            output = root / "frozen-v9-comparator.json"
+            with contextlib.redirect_stdout(io.StringIO()):
+                sealer.main(["--output", str(output)])
+            output.chmod(0o600)
+            body = json.loads(output.read_text(encoding="utf-8"))
+            body["measurement_protocol_sha256"] = "0" * 64
+            body["receipt_sha256"] = F.schemas.content_hash({
+                key: value for key, value in body.items()
+                if key != "receipt_sha256"})
+            output.write_text(
+                json.dumps(body, sort_keys=True, indent=2) + "\n",
+                encoding="utf-8")
+            output.chmod(0o400)
+            with self.assertRaisesRegex(
+                    F.DeploymentFactoryError, "differs from current"):
+                sealer.main(["--output", str(output), "--validate-only"])
+
+            canonical = root / "canonical.json"
+            with contextlib.redirect_stdout(io.StringIO()):
+                sealer.main(["--output", str(canonical)])
+            alias = root / "alias.json"
+            alias.symlink_to(canonical)
+            with self.assertRaisesRegex(
+                    F.DeploymentFactoryError, "alias|stable carrier"):
+                sealer.main(["--output", str(alias)])
+            hardlink = root / "hardlink.json"
+            os.link(canonical, hardlink)
+            with self.assertRaisesRegex(
+                    F.DeploymentFactoryError, "stable carrier"):
+                sealer.main(["--output", str(hardlink)])
+            alias_parent = root / "alias-parent"
+            actual_parent = root / "actual-parent"
+            actual_parent.mkdir()
+            alias_parent.symlink_to(actual_parent, target_is_directory=True)
+            with self.assertRaisesRegex(
+                    F.DeploymentFactoryError, "alias"):
+                sealer.main(["--output", str(alias_parent / "new.json")])
+            with self.assertRaisesRegex(
+                    F.DeploymentFactoryError, "git metadata"):
+                F._validate_comparator_output_path(
+                    root / ".git" / "comparator.json")
+            with self.assertRaisesRegex(
+                    F.DeploymentFactoryError, "frozen production"):
+                F._validate_comparator_output_path(
+                    F.deployment.FROZEN_PRODUCTION_PATH /
+                    "build-hip/comparator.json")
+
+    def test_comparator_loader_refuses_noncanonical_carrier(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            canonical = frozen_production_comparator(root / "authority")
+            compact = root / "compact.json"
+            compact.write_text(
+                json.dumps(json.loads(canonical.read_text(encoding="utf-8")),
+                           sort_keys=True, separators=(",", ":")) + "\n",
+                encoding="utf-8")
+            with self.assertRaisesRegex(
+                    F.DeploymentFactoryError, "canonical JSON"):
+                F._load_frozen_production_comparator(compact)
+            real_stat = os.stat
+
+            def swapped_stat(path, *args, **kwargs):
+                observed = real_stat(path, *args, **kwargs)
+                if Path(path) != canonical:
+                    return observed
+                values = {
+                    key: getattr(observed, key) for key in (
+                        "st_dev", "st_ino", "st_uid", "st_nlink", "st_mode",
+                        "st_size", "st_mtime_ns", "st_ctime_ns")}
+                values["st_ino"] += 1
+                return SimpleNamespace(**values)
+            with mock.patch.object(F.os, "stat", side_effect=swapped_stat), \
+                    self.assertRaisesRegex(
+                        F.DeploymentFactoryError, "changed while read"):
+                F._load_frozen_production_comparator(canonical)
+
+    def test_historical_provenance_tamper_refuses_exact_digest(self):
+        role, relative, expected_sha, _schema = F._FROZEN_PROVENANCE[-1]
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            carrier = root / relative
+            carrier.parent.mkdir(parents=True)
+            carrier.write_bytes(
+                (F._SITE_GOVERNANCE_ROOT / relative).read_bytes() + b"\n")
+            carrier.chmod(0o400)
+            with self.assertRaisesRegex(
+                    F.DeploymentFactoryError, "changed while read"):
+                F._stable_public_bytes(
+                    carrier, expected_sha,
+                    f"frozen production {role} provenance")
+
+    def test_initializer_refuses_coherently_resealed_build_config_identity(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            comparator = frozen_production_comparator(root / "authority")
+            body = json.loads(comparator.read_text(encoding="utf-8"))
+            body["build_identity"]["config_sha256"] = "0" * 64
+            body["receipt_sha256"] = F.schemas.content_hash({
+                key: value for key, value in body.items()
+                if key != "receipt_sha256"})
+            comparator.write_text(
+                json.dumps(body, sort_keys=True, indent=2) + "\n",
+                encoding="utf-8")
+            with self.assertRaisesRegex(
+                    F.DeploymentFactoryError,
+                    "build/linkage identity changed"):
+                F.initialize_static_deployment_bundle(
+                    root / "bundle", frozen_production_comparator=comparator)
+
+    def test_initializer_refuses_foreign_deployment_runtime_hash(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            comparator = frozen_production_comparator(root / "authority")
+            body = json.loads(comparator.read_text(encoding="utf-8"))
+            self.assertNotEqual(
+                body["runtime_config_sha256"],
+                body["observed_runtime_config_sha256"])
+            body["runtime_config_sha256"] = "0" * 64
+            body["receipt_sha256"] = F.schemas.content_hash({
+                key: value for key, value in body.items()
+                if key != "receipt_sha256"})
+            comparator.write_text(
+                json.dumps(body, sort_keys=True, indent=2) + "\n",
+                encoding="utf-8")
+            with self.assertRaisesRegex(
+                    F.DeploymentFactoryError,
+                    "another immutable frame"):
+                F.initialize_static_deployment_bundle(
+                    root / "bundle", frozen_production_comparator=comparator)
 
     def test_static_registry_refuses_coherently_resealed_linkage_identity(self):
         with tempfile.TemporaryDirectory() as temporary:
