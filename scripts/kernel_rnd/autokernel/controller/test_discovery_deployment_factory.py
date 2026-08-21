@@ -427,10 +427,14 @@ class DeploymentFactoryTests(unittest.TestCase):
                         "repetition": 1,
                         "load_admission": decision})
                 args = F._bind_runner_runtime_authority(
-                    config, build, {"load_admission": decision}, args)
+                    config, build,
+                    {"load_admission": decision, "repetition": 1}, args)
                 target = args._target_runtime_args
                 self.assertEqual(args._operation_key, build.operation_key)
                 self.assertEqual(target._operation_key, build.operation_key)
+                self.assertEqual(args._operations_root,
+                                 str(config.operations_root))
+                self.assertEqual(target._operation_repetition, 1)
                 self.assertEqual((args.runtime_graphs, target.runtime_graphs),
                                  ("off", "on"))
                 self.assertEqual(args.load_admission_decision_path,

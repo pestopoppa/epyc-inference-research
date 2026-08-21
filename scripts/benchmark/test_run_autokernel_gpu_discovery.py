@@ -213,11 +213,19 @@ class TestGpuDiscoveryBuildIdentity(unittest.TestCase):
                     common_loader_dir=str(anchor / "bin"), anchor_loader_dir=str(anchor / "bin"), candidate_loader_dir=str(candidate / "bin"),
                     device_id=gpu.DEVICE_ID,
                     inference_window_lock=None), mode="cold_overlap")
+                operations_root = root / "operations"
+                output_root = (operations_root / ("9" * 64) / "runner" /
+                               "s1" / "measurement-graphs-off")
+                output_root.parent.mkdir(parents=True)
+                args.output_dir = str(output_root)
+                args.runtime_graphs = "off"
                 args._sealed_anchor_source_build_identity = _source_identity(
                     anchor, gpu.READY_CONTINUE_INSTRUMENT_COMMIT)
                 args._sealed_candidate_source_build_identity = _source_identity(
                     candidate, "b" * 40)
                 args._operation_key = "9" * 64
+                args._operations_root = str(operations_root)
+                args._operation_repetition = 1
                 sealed = gpu.preflight(args)
             self.assertEqual(sealed["runtime_arms"]["measurement_binary_sha256"],
                              gpu.sha256_file(anchor / "bin" / "llama-bench"))
@@ -250,7 +258,15 @@ class TestGpuDiscoveryBuildIdentity(unittest.TestCase):
                 candidate_loader_dir=str(candidate / "bin"),
                 device_id=gpu.DEVICE_ID, inference_window_lock=None),
                 mode="cold_overlap")
+            operations_root = root / "operations"
+            output_root = (operations_root / ("9" * 64) / "runner" /
+                           "s1" / "measurement-graphs-off")
+            output_root.parent.mkdir(parents=True)
+            args.output_dir = str(output_root)
+            args.runtime_graphs = "off"
             args._operation_key = "9" * 64
+            args._operations_root = str(operations_root)
+            args._operation_repetition = 1
             with self.assertRaisesRegex(RuntimeError, "sealed builder identity"):
                 gpu.preflight(args)
             args._sealed_anchor_source_build_identity = _source_identity(
@@ -1179,6 +1195,10 @@ class TestGpuDiscoveryBatchedSubprocess(unittest.TestCase):
             output_root = (root / operation_key / "runner" / "s1" /
                            "measurement-graphs-off")
             output_root.mkdir(parents=True)
+            operation_namespace = gpu._operation_namespace(
+                operations_root=root, output_root=output_root,
+                operation_key=operation_key, repetition=1,
+                runtime_graphs="off")
 
             def semantics(outputs):
                 body = {
@@ -1228,6 +1248,7 @@ class TestGpuDiscoveryBatchedSubprocess(unittest.TestCase):
                     output_root, anchor=runs["anchor"], candidate=runs["candidate"],
                     runtime_graphs="off", campaign_id="ak-v24-replay",
                     operation_key=operation_key,
+                    operation_namespace=operation_namespace,
                     anchor_identity={"source_commit": "a" * 40},
                     candidate_identity={"source_commit": "b" * 40})
             with self.assertRaises(gpu.CandidateCorrectnessDivergence) as reopened:
@@ -1235,6 +1256,7 @@ class TestGpuDiscoveryBatchedSubprocess(unittest.TestCase):
                     output_root, anchor=runs["anchor"], candidate=runs["candidate"],
                     runtime_graphs="off", campaign_id="ak-v24-replay",
                     operation_key=operation_key,
+                    operation_namespace=operation_namespace,
                     anchor_identity={"source_commit": "a" * 40},
                     candidate_identity={"source_commit": "b" * 40})
             self.assertEqual(first.exception.receipt_sha256,
@@ -1267,8 +1289,60 @@ class TestGpuDiscoveryBatchedSubprocess(unittest.TestCase):
                     output_root, anchor=runs["anchor"], candidate=escaped,
                     runtime_graphs="off", campaign_id="ak-v24-replay",
                     operation_key=operation_key,
+                    operation_namespace=operation_namespace,
                     anchor_identity={"source_commit": "a" * 40},
                     candidate_identity={"source_commit": "b" * 40})
+            wrong_roots = (
+                root / ("8" * 64) / "runner/s1/measurement-graphs-off",
+                root / operation_key / "runner/s2/measurement-graphs-off",
+                root / operation_key / "runner/s1/target-runtime-graphs-on",
+                root / operation_key / "s1/measurement-graphs-off",
+            )
+            for wrong_root in wrong_roots:
+                with self.subTest(wrong_root=wrong_root), \
+                        self.assertRaisesRegex(
+                            RuntimeError, "exact operation namespace"):
+                    gpu._operation_namespace(
+                        operations_root=root, output_root=wrong_root,
+                        operation_key=operation_key, repetition=1,
+                        runtime_graphs="off")
+            counterexample_root = (root / "not-the-operation-key" /
+                                   "measurement-graphs-off")
+            with self.assertRaisesRegex(
+                    RuntimeError, "sealed runner operation namespace changed"):
+                gpu._seal_candidate_correctness_divergence(
+                    counterexample_root, anchor=runs["anchor"],
+                    candidate=runs["candidate"], runtime_graphs="off",
+                    campaign_id="ak-v24-replay",
+                    operation_key=operation_key,
+                    operation_namespace=operation_namespace,
+                    anchor_identity={"source_commit": "a" * 40},
+                    candidate_identity={"source_commit": "b" * 40})
+            wrong_repetition = dict(operation_namespace)
+            wrong_repetition["repetition"] = 2
+            with self.assertRaisesRegex(RuntimeError,
+                                        "exact operation namespace"):
+                gpu._revalidate_operation_namespace(
+                    wrong_repetition, output_root=output_root,
+                    operation_key=operation_key, runtime_graphs="off")
+            alias = root.parent / f"{root.name}-alias"
+            alias.symlink_to(root, target_is_directory=True)
+            with self.assertRaisesRegex(RuntimeError, "malformed or aliased"):
+                gpu._operation_namespace(
+                    operations_root=alias,
+                    output_root=(alias / operation_key / "runner/s1" /
+                                 "measurement-graphs-off"),
+                    operation_key=operation_key, repetition=1,
+                    runtime_graphs="off")
+            alias.unlink()
+            operation_dir = root / operation_key
+            prior_operation_dir = root / f"{operation_key}.prior"
+            operation_dir.rename(prior_operation_dir)
+            (operation_dir / "runner/s1").mkdir(parents=True)
+            with self.assertRaisesRegex(RuntimeError, "identity changed"):
+                gpu._revalidate_operation_namespace(
+                    operation_namespace, output_root=output_root,
+                    operation_key=operation_key, runtime_graphs="off")
 
     def test_serialized_readiness_does_not_unlock_on_maps_without_instrument_barrier(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -1579,7 +1653,7 @@ class TestGpuDiscoveryRunCleanup(unittest.TestCase):
                 "model_size_bytes": model.stat().st_size,
                 "anchor_build": str(build), "candidate_build": str(build),
                 "anchor_identity": anchor_identity, "candidate_identity": candidate_identity,
-                "sole_factor": {"name": "source_patch", "anchor": "a", "candidate": "b"},
+                "sole_factor": {"name": "test_source_patch", "anchor": "a", "candidate": "b"},
                 "serialized_readiness": {"ready_continue": {"enabled": False}},
                 "host_transfer": {"mode": "cold_serialized"},
                 "cpu_overlap_policy": "cold_serialized_load_window",
@@ -1692,7 +1766,15 @@ class TestGpuDiscoveryRunCleanup(unittest.TestCase):
             # once; no result may make the mismatched throughput admissible.
             sealed["runtime_graphs"] = "off"
             sealed["timed_output_oracle"] = {"enabled": True}
-            args.output_dir = str(root / "v24-divergence")
+            sealed["sole_factor"]["name"] = "source_patch"
+            v24_output = (root / "operations" / sealed["operation_key"] /
+                          "runner/s1/measurement-graphs-off")
+            v24_output.parent.mkdir(parents=True)
+            sealed["operation_namespace"] = gpu._operation_namespace(
+                operations_root=root / "operations", output_root=v24_output,
+                operation_key=sealed["operation_key"], repetition=1,
+                runtime_graphs="off")
+            args.output_dir = str(v24_output)
             claim.reset_mock()
             claim.borrowed_outer_reservation = True
             claim.receipt.return_value.to_dict.return_value = gpu.device_claim.ClaimReceipt(
@@ -1753,7 +1835,7 @@ class TestGpuDiscoveryRunCleanup(unittest.TestCase):
 
             with mock.patch.object(gpu, "preflight", return_value=sealed), \
                  mock.patch.object(gpu.storage, "assert_not_scratch",
-                                   return_value=root / "v24-divergence"), \
+                                   return_value=v24_output), \
                  mock.patch.object(gpu, "_readiness_policy_for_arm", return_value=None), \
                  mock.patch.object(gpu, "_kfd_pids", return_value=()), \
                  mock.patch.object(gpu, "VRAM_USED", vram), \
@@ -1766,8 +1848,8 @@ class TestGpuDiscoveryRunCleanup(unittest.TestCase):
                 gpu.run(args)
             claim.release.assert_called_once_with()
             sampler.stop.assert_called_once_with()
-            self.assertTrue((root / "v24-divergence/correctness-divergence.json").is_file())
-            self.assertFalse((root / "v24-divergence/result.json").exists())
+            self.assertTrue((v24_output / "correctness-divergence.json").is_file())
+            self.assertFalse((v24_output / "result.json").exists())
 
             # The graphs-on run owns a separate cross-arm output oracle.  It
             # must pass the identical hidden seed to both arms regardless of
@@ -1775,6 +1857,8 @@ class TestGpuDiscoveryRunCleanup(unittest.TestCase):
             # different input/output content banks, as live v18 did.
             sealed["runtime_graphs"] = "on"
             sealed["timed_output_oracle"] = {"enabled": False}
+            sealed["sole_factor"]["name"] = "test_source_patch"
+            sealed.pop("operation_namespace")
             args.output_dir = str(root / "graphs-on-success")
             claim.reset_mock()
             claim.borrowed_outer_reservation = True

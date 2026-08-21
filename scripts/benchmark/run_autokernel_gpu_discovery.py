@@ -611,10 +611,90 @@ def _seal_timed_output_infrastructure_ambiguity(
         receipt_sha256=binding["sha256"], operation_key=operation_key)
 
 
+def _directory_namespace_identity(path: Path, label: str) -> dict[str, Any]:
+    try:
+        info = path.lstat()
+    except OSError as exc:
+        raise RuntimeError(f"{label} is unavailable") from exc
+    if (path.is_symlink() or not stat.S_ISDIR(info.st_mode)
+            or info.st_uid != os.getuid()
+            or stat.S_IMODE(info.st_mode) & 0o022):
+        raise RuntimeError(f"{label} is not a trusted operation directory")
+    return {
+        "path": str(path), "device": info.st_dev, "inode": info.st_ino,
+        "uid": info.st_uid, "mode": stat.S_IMODE(info.st_mode),
+    }
+
+
+def _operation_namespace(
+        *, operations_root: Path, output_root: Path, operation_key: str,
+        repetition: int, runtime_graphs: str) -> dict[str, Any]:
+    if (not isinstance(operation_key, str)
+            or re.fullmatch(r"[0-9a-f]{64}", operation_key) is None
+            or isinstance(repetition, bool) or repetition not in {1, 2}
+            or runtime_graphs not in {"off", "on"}
+            or not operations_root.is_absolute()
+            or not output_root.is_absolute()
+            or operations_root.resolve() != operations_root
+            or output_root.resolve(strict=False) != output_root):
+        raise RuntimeError("runner operation namespace is malformed or aliased")
+    stage = ("measurement-graphs-off" if runtime_graphs == "off"
+             else "target-runtime-graphs-on")
+    operation_dir = operations_root / operation_key
+    runner_dir = operation_dir / "runner"
+    repetition_dir = runner_dir / f"s{repetition}"
+    expected_output = repetition_dir / stage
+    if output_root != expected_output:
+        raise RuntimeError(
+            "runner output does not belong to its exact operation namespace")
+    directories = [operations_root, operation_dir, runner_dir, repetition_dir]
+    identities = [
+        _directory_namespace_identity(path, label)
+        for path, label in zip(
+            directories,
+            ("operations root", "operation root", "runner root",
+             "runner repetition root"), strict=True)]
+    return {
+        "schema": "epyc.autokernel.gpu_runner_operation_namespace.v1",
+        "operation_key": operation_key,
+        "repetition": repetition,
+        "runtime_graphs": runtime_graphs,
+        "stage": stage,
+        "output_root": str(output_root),
+        "directories": identities,
+    }
+
+
+def _revalidate_operation_namespace(
+        namespace: Mapping[str, Any], *, output_root: Path,
+        operation_key: str, runtime_graphs: str) -> None:
+    if (not isinstance(namespace, Mapping)
+            or set(namespace) != {
+                "schema", "operation_key", "repetition", "runtime_graphs",
+                "stage", "output_root", "directories"}
+            or namespace.get("schema") !=
+               "epyc.autokernel.gpu_runner_operation_namespace.v1"
+            or namespace.get("operation_key") != operation_key
+            or namespace.get("runtime_graphs") != runtime_graphs
+            or namespace.get("output_root") != str(output_root)
+            or not isinstance(namespace.get("directories"), list)
+            or len(namespace["directories"]) != 4):
+        raise RuntimeError("sealed runner operation namespace changed")
+    directories = namespace["directories"]
+    operations_root = Path(str(directories[0].get("path", "")))
+    current = _operation_namespace(
+        operations_root=operations_root, output_root=output_root,
+        operation_key=operation_key,
+        repetition=namespace.get("repetition"), runtime_graphs=runtime_graphs)
+    if current != dict(namespace):
+        raise RuntimeError("sealed runner operation namespace identity changed")
+
+
 def _seal_candidate_correctness_divergence(
         output_root: Path, *, anchor: Mapping[str, Any],
         candidate: Mapping[str, Any], runtime_graphs: str,
         campaign_id: str, operation_key: str,
+        operation_namespace: Mapping[str, Any],
         anchor_identity: Mapping[str, Any],
         candidate_identity: Mapping[str, Any]
         ) -> CandidateCorrectnessDivergence:
@@ -626,6 +706,9 @@ def _seal_candidate_correctness_divergence(
             or re.fullmatch(r"[0-9a-f]{64}", operation_key) is None):
         raise RuntimeError(
             "candidate correctness divergence lacks operation identity")
+    _revalidate_operation_namespace(
+        operation_namespace, output_root=output_root,
+        operation_key=operation_key, runtime_graphs=runtime_graphs)
     semantics = []
     processes = []
     preflight_sha256 = None
@@ -2458,11 +2541,21 @@ def preflight(args: argparse.Namespace) -> dict:
     anchor_identity = build_identity(anchor_build)
     candidate_identity = build_identity(candidate_build)
     operation_key = getattr(args, "_operation_key", None)
+    operation_namespace = None
     if args.factor == "source_patch":
         if (not isinstance(operation_key, str)
                 or re.fullmatch(r"[0-9a-f]{64}", operation_key) is None):
             raise RuntimeError(
                 "source patch runner lacks its private operation identity")
+        operations_root_value = getattr(args, "_operations_root", None)
+        repetition = getattr(args, "_operation_repetition", None)
+        if not isinstance(operations_root_value, str):
+            raise RuntimeError(
+                "source patch runner lacks its private operations root")
+        operation_namespace = _operation_namespace(
+            operations_root=Path(operations_root_value),
+            output_root=Path(args.output_dir), operation_key=operation_key,
+            repetition=repetition, runtime_graphs=args.runtime_graphs)
         anchor_identity = _sealed_source_build_identity(
             args, arm="anchor", build=anchor_build,
             observed=anchor_identity)
@@ -2540,6 +2633,8 @@ def preflight(args: argparse.Namespace) -> dict:
         "schema": "epyc.autokernel.gpu_discovery_preflight.v1",
         "campaign_id": args.campaign_id,
         **({"operation_key": operation_key}
+           if args.factor == "source_patch" else {}),
+        **({"operation_namespace": operation_namespace}
            if args.factor == "source_patch" else {}),
         "authority": "nonpromotable_candidate_only_discovery",
         "model": str(model),
@@ -2742,6 +2837,11 @@ def run(args: argparse.Namespace) -> dict:
     sealed = preflight(args)
     started_at = utc_now()
     out = Path(storage.assert_not_scratch(args.output_dir, what="GPU discovery output"))
+    if sealed.get("sole_factor", {}).get("name") == "source_patch":
+        _revalidate_operation_namespace(
+            sealed["operation_namespace"], output_root=out,
+            operation_key=sealed["operation_key"],
+            runtime_graphs=sealed["runtime_graphs"])
     resumed = _prepare_runner_output(out, sealed)
     model = Path(sealed["model"])
     anchor_build = Path(sealed["anchor_build"])
@@ -2892,6 +2992,7 @@ def run(args: argparse.Namespace) -> dict:
                     runtime_graphs=str(sealed.get("runtime_graphs", "off")),
                     campaign_id=args.campaign_id,
                     operation_key=str(sealed.get("operation_key", "")),
+                    operation_namespace=sealed.get("operation_namespace", {}),
                     anchor_identity=anchor_identity,
                     candidate_identity=candidate_identity)
         if sealed.get("runtime_graphs") == "on":

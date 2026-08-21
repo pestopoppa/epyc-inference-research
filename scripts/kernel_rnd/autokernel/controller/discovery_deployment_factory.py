@@ -1945,6 +1945,8 @@ def _runner_binding(config: deployment.DiscoveryDeployment) -> RunnerArgsBinding
         }
         for current in (graphs_off, graphs_on):
             setattr(current, "_operation_key", operation_key)
+            setattr(current, "_operations_root", str(config.operations_root))
+            setattr(current, "_operation_repetition", repetition)
             for arm, identity in sealed_identities.items():
                 setattr(current, f"_sealed_{arm}_source_build_identity", identity)
         setattr(graphs_off, "_target_runtime_args", graphs_on)
@@ -1982,6 +1984,12 @@ def _bind_runner_runtime_authority(
         if getattr(current, "_operation_key", None) != build_.operation_key:
             raise DeploymentFactoryError(
                 "runner arguments changed private operation identity")
+        if (getattr(current, "_operations_root", None)
+                != str(config.operations_root)
+                or getattr(current, "_operation_repetition", None)
+                != permit.get("repetition")):
+            raise DeploymentFactoryError(
+                "runner arguments changed private operation namespace")
         for key, value in expected_admission.items():
             existing = getattr(current, key, None)
             if existing is not None and existing != value:
