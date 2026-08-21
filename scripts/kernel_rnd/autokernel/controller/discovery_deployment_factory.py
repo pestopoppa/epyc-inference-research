@@ -160,7 +160,7 @@ class ExperimentTemplate:
                 expected_variant = {
                     "kernel_name": derived_name, "calls": anchor.calls,
                     "grid": anchor.grid, "workgroup": 64,
-                    "lds_bytes": anchor.lds_bytes // 2,
+                    "lds_bytes": 0,
                 }
                 if dict(variant) != expected_variant:
                     raise DeploymentFactoryError(
@@ -169,7 +169,7 @@ class ExperimentTemplate:
                     signature=f"{route_id}.candidate-onewave",
                     kernel_pattern="^" + re.escape(derived_name) + "$",
                     calls=anchor.calls, grid=anchor.grid, workgroup=64,
-                    lds_bytes=anchor.lds_bytes // 2,
+                    lds_bytes=0,
                     blocks_per_call=anchor.grid // 64))
                 selected.append(anchor)
             tail = self.dispatch.anchor_exact[3]
@@ -181,7 +181,7 @@ class ExperimentTemplate:
                     signature=f"{tail.signature}.candidate-structural-excluded",
                     kernel_pattern=candidate_tail_pattern,
                     calls=tail.calls, grid=tail.grid, workgroup=64,
-                    lds_bytes=tail.lds_bytes // 2,
+                    lds_bytes=0,
                     blocks_per_call=tail.grid // 64),),
                 anchor_structural_exact=(replace(
                     tail, signature=f"{tail.signature}.anchor-structural-excluded"),),
@@ -784,7 +784,7 @@ def _candidate_manifest_identity(
 
 def _v25_carry_forward(
         config: deployment.DiscoveryDeployment) -> Mapping[str, Any]:
-    """Derive successor replay authority from the exact vendored v25 terminal."""
+    """Derive successor replay authority plus the sealed v26 Q5 erratum."""
     evidence_rows = config.hypothesis_evidence_manifest.value["evidence"]
     try:
         state_row = evidence_rows["ev-v25-terminal-state"]
@@ -913,15 +913,25 @@ def _v25_carry_forward(
     if len(patch_sha256) != 7 or len(cross_campaign_sha256) != 7:
         raise DeploymentFactoryError(
             "v25 source manifests do not derive seven distinct candidates")
+    erratum = controller._q5_lds0_attribution_erratum(
+        config.q5_lds0_attribution_erratum.path)
+    # Import the invalid v26 attempt into the replay set, then let the
+    # controller exempt only the exact triple bound by the erratum.  This
+    # preserves every prior replay prohibition without treating the bad
+    # expectation as science or a DNR result.
+    semantics.add(erratum["candidate_semantic_sha256"])
+    patch_sha256.add(erratum["candidate_patch_sha256"])
+    cross_campaign_sha256.add(erratum["cross_campaign_candidate_sha256"])
     body: dict[str, Any] = {
-        "schema": "epyc.autokernel.discovery_carry_forward.v1",
+        "schema": "epyc.autokernel.discovery_carry_forward.v2",
         "predecessor_state_file_sha256": _V25_STATE_FILE_SHA256,
         "predecessor_journal_file_sha256": _V25_JOURNAL_FILE_SHA256,
         "predecessor_state_semantic_sha256": _V25_STATE_SEMANTIC_SHA256,
         "portfolio_outcomes": outcomes,
-        "candidate_semantic_sha256": sorted(_V25_CANDIDATE_SEMANTICS),
+        "candidate_semantic_sha256": sorted(semantics),
         "candidate_patch_sha256": sorted(patch_sha256),
         "cross_campaign_candidate_sha256": sorted(cross_campaign_sha256),
+        "attribution_expectation_erratum": erratum,
     }
     body["carry_forward_sha256"] = schemas.content_hash(body)
     return MappingProxyType(body)
@@ -1104,6 +1114,17 @@ def initialize_static_deployment_bundle(root: Path) -> Path:
     continuation_path.chmod(0o400)
     continuation_file_sha = _digest_regular(
         continuation_path, "preauthored continuation")
+    erratum = controller._q5_lds0_attribution_erratum()
+    erratum_path = config_dir / "q5-lds0-attribution-erratum-v1.json"
+    _atomic_bytes(
+        erratum_path, controller._Q5_LDS0_ERRATUM_CARRIER.read_bytes())
+    erratum_path.chmod(0o400)
+    erratum_file_sha = _digest_regular(
+        erratum_path, "Q5 LDS0 attribution erratum")
+    if (erratum_file_sha != controller._Q5_LDS0_ERRATUM_FILE_SHA256
+            or controller._q5_lds0_attribution_erratum(erratum_path) != erratum):
+        raise DeploymentFactoryError(
+            "vendored Q5 LDS0 attribution erratum changed")
     vendored_evidence: dict[str, dict[str, str]] = {}
     for row in portfolio.body["evidence"]:
         evidence_id = row["evidence_id"]
@@ -1296,7 +1317,10 @@ def initialize_static_deployment_bundle(root: Path) -> Path:
                                       "sha256": contract_sha},
                                   "preauthored_continuation": {
                                       "path": str(continuation_path.resolve()),
-                                      "sha256": continuation_file_sha}},
+                                      "sha256": continuation_file_sha},
+                                  "q5_lds0_attribution_erratum": {
+                                      "path": str(erratum_path.resolve()),
+                                      "sha256": erratum_file_sha}},
              "planner_context": {"path": str(context_path), "sha256": context_sha},
              "source_plan": {"source_builder_id": _STATIC_IDS["source_builder"],
                              "evidence_plan_id": _STATIC_IDS["evidence_plan"],
@@ -1724,7 +1748,7 @@ def _template_registry() -> ExperimentTemplateRegistry:
                        **({"preauthored_q5_candidate_dispatch": {
                            f"cuda-mmvq-q5-onewave-continuation-v1.anchor.{index}": {
                                "kernel_name": "", "calls": row[1], "grid": row[2],
-                               "workgroup": 64, "lds_bytes": row[4] // 2}
+                               "workgroup": 64, "lds_bytes": 0}
                            for index, row in enumerate(mmvq_anchor[:3])}}
                           if family.get("q5_preauthored") is True else {}),
                        "target_runtime_screen": target_runtime_screen,
@@ -1780,7 +1804,7 @@ def _template_registry() -> ExperimentTemplateRegistry:
             q5_rows[anchor.signature] = {
                 "kernel_name": name, "calls": anchor.calls,
                 "grid": anchor.grid, "workgroup": 64,
-                "lds_bytes": anchor.lds_bytes // 2}
+                "lds_bytes": 0}
         semantics = dict(q5_template.semantics)
         semantics["preauthored_q5_candidate_dispatch"] = q5_rows
         templates[q5_template.template_id] = replace(
@@ -2673,7 +2697,7 @@ def _seal_graph_receipt(config: deployment.DiscoveryDeployment,
     historical_q5_evidence = _preauthored_historical_evidence(
         config.preauthored_continuation.value,
         config.hypothesis_evidence_manifest.value["evidence"])
-    body = {"schema": "epyc.autokernel.static_discovery_graph.v7",
+    body = {"schema": "epyc.autokernel.static_discovery_graph.v9",
             "authority": "nonpromotable_candidate_only_discovery", "promotion_claim": False,
             "inference_executed": False, "config_sha256": config.config_sha256,
             "registry_ids": dict(_STATIC_IDS), "template_registry_sha256": templates.registry_sha256,
@@ -2703,6 +2727,23 @@ def _seal_graph_receipt(config: deployment.DiscoveryDeployment,
                     historical_q5_evidence["receipt_sha256"],
                 "historical_correctness_authority": "provenance_only",
                 "modern_governed_correctness_required": True,
+            },
+            "attribution_expectation_erratum": {
+                "schema":
+                    "epyc.autokernel.attribution_expectation_erratum_source.v1",
+                "erratum_schema": carry_forward[
+                    "attribution_expectation_erratum"]["schema"],
+                "erratum_sha256": carry_forward[
+                    "attribution_expectation_erratum"]["erratum_sha256"],
+                "file_sha256": config.q5_lds0_attribution_erratum.sha256,
+                "operation_key": carry_forward[
+                    "attribution_expectation_erratum"]["operation_key"],
+                "attribution_refusal_file_sha256": carry_forward[
+                    "attribution_expectation_erratum"][
+                        "attribution_refusal_file_sha256"],
+                "candidate_semantic_sha256": carry_forward[
+                    "attribution_expectation_erratum"][
+                        "candidate_semantic_sha256"],
             },
             "reviewed_source_package": source_package.manifest(),
             "profile_trace_authority": {
@@ -2821,10 +2862,12 @@ def _seal_graph_receipt(config: deployment.DiscoveryDeployment,
         if durable.get("schema") in {
                 "epyc.autokernel.static_discovery_graph.v4",
                 "epyc.autokernel.static_discovery_graph.v5",
-                "epyc.autokernel.static_discovery_graph.v6"}:
+                "epyc.autokernel.static_discovery_graph.v6",
+                "epyc.autokernel.static_discovery_graph.v7",
+                "epyc.autokernel.static_discovery_graph.v8"}:
             raise DeploymentFactoryError(
                 "legacy deployment graph cannot authorize successor execution; "
-                "initialize a fresh v7 deployment")
+                "initialize a fresh v9 deployment")
         if path.read_bytes() != encoded:
             raise DeploymentFactoryError("durable deployment graph differs from current sealed graph")
     else:

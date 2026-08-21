@@ -200,6 +200,194 @@ def _canon(value: object) -> bytes:
 def _sha(value: object) -> str: return hashlib.sha256(_canon(value)).hexdigest()
 
 
+_Q5_LDS0_ERRATUM_CARRIER = (
+    Path(__file__).resolve().parents[1]
+    / "q5_lds0_attribution_erratum_v1.json")
+_Q5_LDS0_ERRATUM_FILE_SHA256 = (
+    "25a4578db9ac1285b3254c8ea9981efb3f32487c0b512631ce9fe4204a19b992")
+
+
+def _expected_q5_lds0_attribution_erratum() -> dict[str, Any]:
+    """Return the one sealed predecessor attribution correction.
+
+    v26 measured the exact preauthored Q5 candidate successfully, but its
+    reviewed dispatch contract fabricated half-anchor LDS values (512/256)
+    for a one-wave specialization whose static group segment is exactly zero.
+    This is an infrastructure-expectation correction, not a scientific result.
+    """
+    body: dict[str, Any] = {
+        "schema": "epyc.autokernel.attribution_expectation_erratum.v1",
+        "predecessor_campaign_id": "ak-discovery-03fc1b1230487a35",
+        "operation_key":
+            "fdfbf8434c361a32cd07d86ac247f61c62f9f840bc3ed8b437053f089e33f837",
+        "hypothesis_id": "akh-v2-q5-onewave-preauthored",
+        "candidate_semantic_sha256":
+            "06973eb2e4f643b76de198d6cae5e2e9f1b915773dafdf5efd08682bf0df2b63",
+        "candidate_patch_sha256":
+            "f4cc49cd11cdfd93a2d5d2e00e653f503b6a16ce675bfb12c034fbbfae3e7a77",
+        "cross_campaign_candidate_sha256":
+            "d5671a1dc197e5d0d53f34f9c4d25f640e0e410d6917b3099459bc40064581b2",
+        "source_manifest_file_sha256":
+            "cb93f92256a828b82a1a780bc5895f317b5ad9b8ffe8e17e3dd03d9d73474d1c",
+        "correctness_receipt_file_sha256":
+            "800e510a18b2aca292a032e54ec7e4279bfef921e483d2e30b1e5503b59b1a7f",
+        "correctness_receipt_sha256":
+            "851ce7904290c3a18cc1cf3dafb44471cde5e1058817c18674ca4bf7f1274267",
+        "evidence_policy_file_sha256":
+            "6aeb9d46a8721d91cd92d5ef4156ec455e7b26cc78d1a569226d1ab5eb2339c8",
+        "attribution_refusal_file_sha256":
+            "40707008b6fceae9749dfca56253836e07ce51b19eb7fb003377c3340503eb86",
+        "attribution_refusal_receipt_sha256":
+            "5e4767276dc107c638c92191789cf5d9ac6e58e96d740ae32f313e58f7bec5e3",
+        "classification": "attribution_route_falsified",
+        "candidate_source_commit":
+            "9044b96d072c009709962092c20a3c9f1fbae4ad",
+        "candidate_binary_sha256":
+            "f14e72ae6c784e56917254c4f315eff33dbd1361da631a35b278f1309d4a025f",
+        "candidate_hip_library_sha256":
+            "dcd847b61c1f4e55c1a3a785dd07f9bc199d1ed547dc69529cf0302019cbb5a7",
+        "anchor_hip_library_sha256":
+            "1a8468e83dcf1fdb8e35e57cf182e029618d2af795cc9ca9cf1bfe6a60c95791",
+        "profiler_trace_sha256":
+            "18341bec0013da91245d279eaaa6113db443802dfbb1ebb20c919126bb69d9e5",
+        "reason": (
+            "exact dispatch cuda-mmvq-q5-onewave-continuation-v1.anchor.0."
+            "candidate-onewave count/geometry mismatch"),
+        "invalidated_predecessor_projection": {
+            "turn": 1,
+            "result_file_sha256":
+                "40707008b6fceae9749dfca56253836e07ce51b19eb7fb003377c3340503eb86",
+            "removed_effects": [
+                "scientific_attempt",
+                "attempted_candidate_identity",
+                "portfolio_skip",
+                "cross_campaign_do_not_repeat",
+            ],
+            "history_retained": True,
+        },
+        "stale_candidate_lds_bytes": {
+            "cuda-mmvq-q5-onewave-continuation-v1.anchor.0.candidate-onewave": 512,
+            "cuda-mmvq-q5-onewave-continuation-v1.anchor.1.candidate-onewave": 512,
+            "cuda-mmvq-q5-onewave-continuation-v1.anchor.2.candidate-onewave": 512,
+            "cuda-mmvq-q5-onewave-continuation-v1.anchor.3."
+            "candidate-structural-excluded": 256,
+        },
+        "corrected_candidate_lds_bytes": {
+            "cuda-mmvq-q5-onewave-continuation-v1.anchor.0.candidate-onewave": 0,
+            "cuda-mmvq-q5-onewave-continuation-v1.anchor.1.candidate-onewave": 0,
+            "cuda-mmvq-q5-onewave-continuation-v1.anchor.2.candidate-onewave": 0,
+            "cuda-mmvq-q5-onewave-continuation-v1.anchor.3."
+            "candidate-structural-excluded": 0,
+        },
+        "compiler_metadata_proof": {
+            "schema": "epyc.autokernel.amdgpu_group_segment_proof.v1",
+            "llvm_objcopy_sha256":
+                "895474f91e7db238db54745673294eea93cd855d93a084ce94200103104b145b",
+            "clang_offload_bundler_sha256":
+                "4a455de48ee5c739f74e26e1979241a8b4e52ea9e57a316186c2425fae615cfe",
+            "llvm_readobj_sha256":
+                "3f8e3f02ef3cca007a82490eb204c08f7a714806b41e054d3faad2d2e0e95afd",
+            "candidate_code_object_sha256":
+                "d40bbb57a78c4474904518a9267370b78f0ae05bfe1dc76c79a86ab589eb2cff",
+            "anchor_code_object_sha256":
+                "7a1390f93dda7e5624f0621b00632b7af67fe832d61e9fab16dc64369cf28c0b",
+            "rows": [
+                {
+                    "mangled_name": (
+                        "_ZL13mul_mat_vec_qIL9ggml_type6ELi1ELb1ELb1EEvPKvS2_"
+                        "PKi31ggml_cuda_mm_fusion_args_devicePfj15HIP_vector_type"
+                        "IjLj3EEjjjS8_jjjS8_jjjj"),
+                    "candidate_group_segment_fixed_size": 0,
+                    "anchor_group_segment_fixed_size": 1024,
+                },
+                {
+                    "mangled_name": (
+                        "_ZL13mul_mat_vec_qIL9ggml_type6ELi1ELb0ELb1EEvPKvS2_"
+                        "PKi31ggml_cuda_mm_fusion_args_devicePfj15HIP_vector_type"
+                        "IjLj3EEjjjS8_jjjS8_jjjj"),
+                    "candidate_group_segment_fixed_size": 0,
+                    "anchor_group_segment_fixed_size": 512,
+                },
+            ],
+        },
+        "preserved_evidence": ["source_manifest", "governed_correctness"],
+        "scientific_budget_spent": False,
+        "do_not_repeat": False,
+        "replay_authorized": True,
+        "replacement_disposition": "attribution_expectation_invalid",
+        "resolution": "unresolved_retry_eligible",
+    }
+    body["erratum_sha256"] = _sha(body)
+    return body
+
+
+def _q5_lds0_attribution_erratum(
+        path: Path = _Q5_LDS0_ERRATUM_CARRIER) -> dict[str, Any]:
+    """Load the exact immutable Q5 attribution-expectation correction.
+
+    The self-hash makes the payload internally coherent; the fixed file hash
+    and exact expected projection prevent a coherently rewritten carrier from
+    authorizing a different predecessor result or replay identity.  Deployment
+    initialization copies these same bytes into the sealed bundle and binds
+    that copy as an immutable input.
+    """
+    try:
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+        descriptor = os.open(path, flags)
+        try:
+            before = os.fstat(descriptor)
+            if (not stat.S_ISREG(before.st_mode)
+                    or before.st_uid != os.geteuid()
+                    or before.st_nlink != 1
+                    or before.st_mode & 0o022):
+                raise DiscoveryControllerError(
+                    "Q5 attribution erratum has unsafe file authority")
+            handle = os.fdopen(descriptor, "rb")
+            descriptor = -1
+            with handle:
+                raw = handle.read()
+                after = os.fstat(handle.fileno())
+            if ((before.st_dev, before.st_ino, before.st_size,
+                 before.st_mtime_ns, before.st_ctime_ns, before.st_nlink)
+                    != (after.st_dev, after.st_ino, after.st_size,
+                        after.st_mtime_ns, after.st_ctime_ns, after.st_nlink)):
+                raise DiscoveryControllerError(
+                    "Q5 attribution erratum changed while read")
+        finally:
+            if descriptor >= 0:
+                os.close(descriptor)
+        if hashlib.sha256(raw).hexdigest() != _Q5_LDS0_ERRATUM_FILE_SHA256:
+            raise DiscoveryControllerError(
+                "Q5 attribution erratum file identity changed")
+
+        def reject_duplicate(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+            result: dict[str, Any] = {}
+            for key, value in pairs:
+                if key in result:
+                    raise ValueError("duplicate key")
+                result[key] = value
+            return result
+
+        body = json.loads(
+            raw.decode("utf-8", "strict"),
+            object_pairs_hook=reject_duplicate,
+            parse_constant=lambda value: (_ for _ in ()).throw(
+                ValueError(value)))
+    except (OSError, UnicodeDecodeError, ValueError, json.JSONDecodeError) as exc:
+        raise DiscoveryControllerError(
+            "Q5 attribution erratum is not strict immutable JSON") from exc
+    expected = _expected_q5_lds0_attribution_erratum()
+    if (not isinstance(body, dict)
+            or body != expected
+            or body.get("erratum_sha256") != _sha({
+                key: value for key, value in body.items()
+                if key != "erratum_sha256"})
+            or raw != _canon(body) + b"\n"):
+        raise DiscoveryControllerError(
+            "Q5 attribution erratum semantic authority changed")
+    return body
+
+
 def _emit_observational_telemetry(
         telemetry: discovery_telemetry.DiscoveryTelemetry | None,
         *args: Any, failure_sink: list[dict[str, str]] | None = None,
@@ -1781,7 +1969,8 @@ class ControllerConfig:
             "predecessor_journal_file_sha256",
             "predecessor_state_semantic_sha256", "portfolio_outcomes",
             "candidate_semantic_sha256", "candidate_patch_sha256",
-            "cross_campaign_candidate_sha256", "carry_forward_sha256",
+            "cross_campaign_candidate_sha256",
+            "attribution_expectation_erratum", "carry_forward_sha256",
         }
         expected_outcomes = {
             "akh-v2-q5-type-specific-dequant": "nominated",
@@ -1795,7 +1984,7 @@ class ControllerConfig:
                 or self.carry_forward is not None
                 and (set(self.carry_forward) != carry_keys
                      or self.carry_forward.get("schema") !=
-                     "epyc.autokernel.discovery_carry_forward.v1"
+                     "epyc.autokernel.discovery_carry_forward.v2"
                      or self.carry_forward.get("portfolio_outcomes") !=
                         expected_outcomes
                      or any(not isinstance(self.carry_forward.get(key), str)
@@ -1817,7 +2006,10 @@ class ControllerConfig:
                                 "cross_campaign_candidate_sha256"))
                      or tuple(len(self.carry_forward[key]) for key in (
                          "candidate_semantic_sha256", "candidate_patch_sha256",
-                         "cross_campaign_candidate_sha256")) != (12, 7, 7)
+                         "cross_campaign_candidate_sha256")) != (13, 8, 8)
+                     or self.carry_forward.get(
+                         "attribution_expectation_erratum") !=
+                        _expected_q5_lds0_attribution_erratum()
                      or self.carry_forward.get("carry_forward_sha256") !=
                         self.carry_forward_sha256
                      or _sha({key: value for key, value in self.carry_forward.items()
@@ -2211,17 +2403,30 @@ def _validate_portfolio_candidate(
         exact = carry_forward.get("candidate_semantic_sha256")
         patches = carry_forward.get("candidate_patch_sha256")
         stable = carry_forward.get("cross_campaign_candidate_sha256")
+        erratum = carry_forward.get("attribution_expectation_erratum")
         if (not isinstance(outcomes, Mapping)
                 or not all(isinstance(values, list) for values in
-                           (exact, patches, stable))):
+                           (exact, patches, stable))
+                or erratum != _expected_q5_lds0_attribution_erratum()):
             raise DiscoveryControllerError(
                 "predecessor carry-forward candidate authority is malformed")
         if item.hypothesis_id in outcomes:
             raise DiscoveryControllerError(
                 "planner selected a predecessor-terminal hypothesis")
-        if (_candidate_semantic_identity(item) in exact
-                or item.source_manifest.patch_sha256 in patches
-                or _cross_campaign_candidate_identity(item) in stable):
+        semantic = _candidate_semantic_identity(item)
+        patch = item.source_manifest.patch_sha256
+        cross_campaign = _cross_campaign_candidate_identity(item)
+        corrected_q5_retry = (
+            item.hypothesis_id == erratum["hypothesis_id"]
+            and semantic == erratum["candidate_semantic_sha256"]
+            and patch == erratum["candidate_patch_sha256"]
+            and cross_campaign == erratum["cross_campaign_candidate_sha256"]
+            and erratum["scientific_budget_spent"] is False
+            and erratum["do_not_repeat"] is False
+            and erratum["replay_authorized"] is True)
+        if (not corrected_q5_retry
+                and (semantic in exact or patch in patches
+                     or cross_campaign in stable)):
             raise DiscoveryControllerError(
                 "planner candidate repeats predecessor source semantics")
 

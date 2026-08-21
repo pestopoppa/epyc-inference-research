@@ -121,7 +121,8 @@ class Tests(unittest.TestCase):
  def carry_forward(self, *, patch_sha256=None,
                    cross_campaign_sha256=None):
   digest=lambda label:hashlib.sha256(label.encode()).hexdigest()
-  body={"schema":"epyc.autokernel.discovery_carry_forward.v1",
+  erratum=D._q5_lds0_attribution_erratum()
+  body={"schema":"epyc.autokernel.discovery_carry_forward.v2",
       "predecessor_state_file_sha256":digest("state-file"),
       "predecessor_journal_file_sha256":digest("journal-file"),
       "predecessor_state_semantic_sha256":digest("state-semantic"),
@@ -130,13 +131,18 @@ class Tests(unittest.TestCase):
           "akh-v2-q8-quantizer-new-mechanism":"retire",
           "akh-v2-fa-gqa7-pair-tail":"bounded_authoring_skip",
           "akh-v2-rms-direct-load-reduction":"bounded_authoring_skip"},
-      "candidate_semantic_sha256":sorted(digest(f"semantic-{i}") for i in range(12)),
+      "candidate_semantic_sha256":sorted({
+          *(digest(f"semantic-{i}") for i in range(12)),
+          erratum["candidate_semantic_sha256"]}),
       "candidate_patch_sha256":sorted(
           [patch_sha256 or digest("patch-repeat")]+
-          [digest(f"patch-{i}") for i in range(6)]),
+          [digest(f"patch-{i}") for i in range(6)]+
+          [erratum["candidate_patch_sha256"]]),
       "cross_campaign_candidate_sha256":sorted(
           [cross_campaign_sha256 or digest("cross-repeat")]+
-          [digest(f"cross-{i}") for i in range(6)])}
+          [digest(f"cross-{i}") for i in range(6)]+
+          [erratum["cross_campaign_candidate_sha256"]]),
+      "attribution_expectation_erratum":erratum}
   return self.reseal_carry_forward(body)
  def test_portfolio_scheduler_owns_rank_budget_and_exact_candidate_binding(self):
   with tempfile.TemporaryDirectory() as t:

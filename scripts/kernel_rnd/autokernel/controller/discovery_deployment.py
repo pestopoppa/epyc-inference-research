@@ -24,7 +24,7 @@ from .. import hypothesis_portfolio, preauthored_continuation, schemas
 from . import gpu_load_admission
 
 
-SCHEMA = "epyc.autokernel.discovery_deployment.v5"
+SCHEMA = "epyc.autokernel.discovery_deployment.v6"
 FROZEN_PRODUCTION_PATH = Path("/mnt/raid0/llm/llama.cpp")
 FROZEN_PRODUCTION_HEAD = "0db32c06e3e550065b78311a6031ef3dd2c4f27c"
 FROZEN_PRODUCTION_BRANCH = "production-consolidated-v9"
@@ -414,6 +414,7 @@ class DiscoveryDeployment:
     hypothesis_portfolio: HypothesisPortfolioInput
     hypothesis_evidence_manifest: HypothesisEvidenceManifest
     preauthored_continuation: PreauthoredContinuationInput
+    q5_lds0_attribution_erratum: ImmutableInput
     hypothesis_portfolio_contract: ImmutableInput
     planner_context: PlannerContext
     source_builder_id: str
@@ -438,6 +439,8 @@ class DiscoveryDeployment:
         self.hypothesis_portfolio.revalidate()
         self.hypothesis_evidence_manifest.revalidate(self.hypothesis_portfolio.value)
         self.preauthored_continuation.revalidate()
+        self.q5_lds0_attribution_erratum.revalidate(
+            "q5_lds0_attribution_erratum")
         self.hypothesis_portfolio_contract.revalidate("hypothesis_portfolio_contract")
         self.planner_context.revalidate()
 
@@ -611,7 +614,8 @@ def load_deployment_config(path: Path, *, sealed_bytes: bytes | None = None
     inputs = _exact(top["immutable_inputs"], {
         "model", "workload", "runtime_config", "admission_policy",
         "hypothesis_portfolio", "hypothesis_evidence_manifest",
-        "hypothesis_portfolio_contract", "preauthored_continuation"},
+        "hypothesis_portfolio_contract", "preauthored_continuation",
+        "q5_lds0_attribution_erratum"},
         "immutable_inputs")
     source = _exact(top["source_plan"], {"source_builder_id", "evidence_plan_id",
                                            "runner_args_id", "experiment_template_registry_id", "experiment_template_registry_sha256",
@@ -633,6 +637,9 @@ def load_deployment_config(path: Path, *, sealed_bytes: bytes | None = None
                                 "hypothesis_portfolio_contract")
     continuation_input = _input(
         inputs["preauthored_continuation"], "preauthored_continuation")
+    q5_erratum = _input(
+        inputs["q5_lds0_attribution_erratum"],
+        "q5_lds0_attribution_erratum")
     try:
         continuation = PreauthoredContinuationInput(
             continuation_input,
@@ -655,6 +662,7 @@ def load_deployment_config(path: Path, *, sealed_bytes: bytes | None = None
                           ("hypothesis_evidence_manifest", evidence_manifest.input),
                           ("hypothesis_portfolio_contract", portfolio_contract),
                           ("preauthored_continuation", continuation.input),
+                          ("q5_lds0_attribution_erratum", q5_erratum),
                           ("planner_context", planner_context.input)):
         if any(_overlaps(input_.path, protected)
                for protected in (*roots.values(), production_path, instrument_path)):
@@ -677,6 +685,7 @@ def load_deployment_config(path: Path, *, sealed_bytes: bytes | None = None
         hypothesis_portfolio=portfolio_input,
         hypothesis_evidence_manifest=evidence_manifest,
         preauthored_continuation=continuation,
+        q5_lds0_attribution_erratum=q5_erratum,
         hypothesis_portfolio_contract=portfolio_contract,
         planner_context=planner_context,
         source_builder_id=_identifier(source["source_builder_id"], "source_plan.source_builder_id"),

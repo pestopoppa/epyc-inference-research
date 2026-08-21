@@ -164,8 +164,13 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
             root, iterations, dry_run=False,
             planner_context=context,
             planner_context_sha256="e" * 64,
-            production_base_commit="0" * 40,
-            instrument_commit="1" * 40,
+            production_base_commit=(
+                F.deployment.FROZEN_PRODUCTION_HEAD
+                if requires_q5 else "0" * 40),
+            instrument_commit=(
+                continuation.compatibility_bridge[
+                    "current_instrument_commit"]
+                if requires_q5 else "1" * 40),
             experiment_template_registry_sha256=self.registry.registry_sha256,
             admission_corpus_sha256="c" * 64,
             admission_corpus_version="test-v1",

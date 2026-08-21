@@ -9,6 +9,7 @@ import os
 import subprocess
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -129,8 +130,9 @@ class Q5PreauthoredContinuationTests(unittest.TestCase):
         carry_forward_sha256 = None
         if not dry_run:
             digest = lambda label: hashlib.sha256(label.encode()).hexdigest()
+            erratum = D._q5_lds0_attribution_erratum()
             carry_forward = {
-                "schema": "epyc.autokernel.discovery_carry_forward.v1",
+                "schema": "epyc.autokernel.discovery_carry_forward.v2",
                 "predecessor_state_file_sha256": digest("predecessor-state"),
                 "predecessor_journal_file_sha256": digest("predecessor-journal"),
                 "predecessor_state_semantic_sha256": digest("predecessor-semantic"),
@@ -140,12 +142,16 @@ class Q5PreauthoredContinuationTests(unittest.TestCase):
                     "akh-v2-fa-gqa7-pair-tail": "bounded_authoring_skip",
                     "akh-v2-rms-direct-load-reduction": "bounded_authoring_skip",
                 },
-                "candidate_semantic_sha256":
-                    sorted(digest(f"semantic-{index}") for index in range(12)),
-                "candidate_patch_sha256":
-                    sorted(digest(f"patch-{index}") for index in range(7)),
-                "cross_campaign_candidate_sha256":
-                    sorted(digest(f"cross-{index}") for index in range(7)),
+                "candidate_semantic_sha256": sorted({
+                    *(digest(f"semantic-{index}") for index in range(12)),
+                    erratum["candidate_semantic_sha256"]}),
+                "candidate_patch_sha256": sorted({
+                    *(digest(f"patch-{index}") for index in range(7)),
+                    erratum["candidate_patch_sha256"]}),
+                "cross_campaign_candidate_sha256": sorted({
+                    *(digest(f"cross-{index}") for index in range(7)),
+                    erratum["cross_campaign_candidate_sha256"]}),
+                "attribution_expectation_erratum": erratum,
             }
             carry_forward_sha256 = _canonical_hash(carry_forward)
             carry_forward["carry_forward_sha256"] = carry_forward_sha256
@@ -153,7 +159,7 @@ class Q5PreauthoredContinuationTests(unittest.TestCase):
             output_root=root, max_iterations=10, dry_run=dry_run,
             planner_context=context,
             planner_context_sha256=_canonical_hash(context),
-            production_base_commit="0" * 40,
+            production_base_commit=F.deployment.FROZEN_PRODUCTION_HEAD,
             instrument_commit=carrier.compatibility_bridge[
                 "current_instrument_commit"],
             experiment_template_registry_sha256=(
@@ -217,6 +223,74 @@ class Q5PreauthoredContinuationTests(unittest.TestCase):
             "bridge_waives_current_correctness": False,
             "scientific_boundary": "dispatch_attribution",
         })
+
+    def test_q5_lds0_erratum_carrier_is_exact_and_file_authoritative(self):
+        erratum = D._q5_lds0_attribution_erratum()
+        self.assertEqual(
+            hashlib.sha256(D._Q5_LDS0_ERRATUM_CARRIER.read_bytes()).hexdigest(),
+            D._Q5_LDS0_ERRATUM_FILE_SHA256)
+        self.assertEqual(erratum["erratum_sha256"],
+                         "a0eab4fee2cb7450a590f161b359d479ecbab49bf3ee7686bb205b67bffb2ebd")
+        self.assertEqual(set(erratum["corrected_candidate_lds_bytes"].values()),
+                         {0})
+        self.assertEqual(
+            set(erratum["stale_candidate_lds_bytes"].values()), {256, 512})
+        self.assertFalse(erratum["scientific_budget_spent"])
+        self.assertFalse(erratum["do_not_repeat"])
+        self.assertTrue(erratum["replay_authorized"])
+
+    def test_q5_lds0_erratum_transport_and_coherent_rewrites_refuse(self):
+        canonical = D._Q5_LDS0_ERRATUM_CARRIER.read_bytes()
+        original = json.loads(canonical)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            mutations: list[tuple[str, bytes]] = []
+            for key in ("operation_key", "correctness_receipt_sha256",
+                        "candidate_semantic_sha256", "compiler_metadata_proof"):
+                body = copy.deepcopy(original)
+                if key == "compiler_metadata_proof":
+                    body[key]["rows"][0][
+                        "candidate_group_segment_fixed_size"] = 512
+                else:
+                    body[key] = "0" * 64
+                body["erratum_sha256"] = _canonical_hash({
+                    item: value for item, value in body.items()
+                    if item != "erratum_sha256"})
+                mutations.append((key, (json.dumps(
+                    body, sort_keys=True, separators=(",", ":")) + "\n").encode()))
+            mutations.extend((
+                ("duplicate", canonical.replace(
+                    b'{"anchor_hip_library_sha256":',
+                    b'{"anchor_hip_library_sha256":"0",'
+                    b'"anchor_hip_library_sha256":', 1)),
+                ("noncanonical", json.dumps(original, indent=2).encode() + b"\n"),
+                ("nonfinite", canonical.replace(
+                    b'"candidate_group_segment_fixed_size":0',
+                    b'"candidate_group_segment_fixed_size":NaN', 1)),
+            ))
+            for label, raw in mutations:
+                with self.subTest(label=label):
+                    path = root / f"{label}.json"
+                    path.write_bytes(raw)
+                    path.chmod(0o600)
+                    with self.assertRaises(D.DiscoveryControllerError):
+                        D._q5_lds0_attribution_erratum(path)
+
+            target = root / "target.json"
+            target.write_bytes(canonical)
+            target.chmod(0o600)
+            link = root / "link.json"
+            link.symlink_to(target)
+            with self.assertRaises(D.DiscoveryControllerError):
+                D._q5_lds0_attribution_erratum(link)
+            hardlink = root / "hardlink.json"
+            os.link(target, hardlink)
+            with self.assertRaises(D.DiscoveryControllerError):
+                D._q5_lds0_attribution_erratum(target)
+            hardlink.unlink()
+            target.chmod(0o622)
+            with self.assertRaises(D.DiscoveryControllerError):
+                D._q5_lds0_attribution_erratum(target)
 
     def test_controller_reconstructs_without_actor_and_resume_rederives_exact_manifest(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -775,13 +849,99 @@ class Q5PreauthoredContinuationTests(unittest.TestCase):
             tuple((row.calls, row.grid, row.workgroup, row.lds_bytes,
                    row.blocks_per_call)
                   for row in contract.candidate_structural_exact),
-            ((129, 57344, 64, 256, 896),))
+            ((129, 57344, 64, 0, 896),))
+        self.assertEqual({row.lds_bytes for row in contract.candidate_exact}, {0})
         tail = D.BoundedDispatchExpectation(**carrier.excluded_dispatch[0])
         with self.assertRaises(F.DeploymentFactoryError):
             template.bind_dispatch(D.GpuSourceExperimentIntent(
                 carrier.template_id, "gpu_decode", "calc_nwarps",
                 carrier.correctness_id, carrier.dispatch_id,
                 (*intent.expected_dispatch, tail)))
+
+    def test_sealed_v26_lds_erratum_authorizes_only_the_exact_q5_retry(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config = self._preauthored_config(
+                Path(directory) / "state", dry_run=False)
+            erratum = D._q5_lds0_attribution_erratum()
+            carry = config.carry_forward
+            self.assertEqual(carry["schema"],
+                             "epyc.autokernel.discovery_carry_forward.v2")
+            self.assertEqual(carry["attribution_expectation_erratum"], erratum)
+            self.assertIn(erratum["candidate_semantic_sha256"],
+                          carry["candidate_semantic_sha256"])
+            self.assertIn(erratum["candidate_patch_sha256"],
+                          carry["candidate_patch_sha256"])
+            self.assertIn(erratum["cross_campaign_candidate_sha256"],
+                          carry["cross_campaign_candidate_sha256"])
+            self.assertFalse(erratum["scientific_budget_spent"])
+            self.assertFalse(erratum["do_not_repeat"])
+            self.assertTrue(erratum["replay_authorized"])
+            self.assertEqual(erratum["replacement_disposition"],
+                             "attribution_expectation_invalid")
+            self.assertEqual(
+                erratum["invalidated_predecessor_projection"], {
+                    "turn": 1,
+                    "result_file_sha256":
+                        "40707008b6fceae9749dfca56253836e07ce51b19eb7fb003377c3340503eb86",
+                    "removed_effects": [
+                        "scientific_attempt", "attempted_candidate_identity",
+                        "portfolio_skip", "cross_campaign_do_not_repeat"],
+                    "history_retained": True,
+                })
+            metadata = erratum["compiler_metadata_proof"]
+            self.assertEqual(
+                {(row["candidate_group_segment_fixed_size"],
+                  row["anchor_group_segment_fixed_size"])
+                 for row in metadata["rows"]},
+                {(0, 1024), (0, 512)})
+            self.assertEqual(metadata["candidate_code_object_sha256"],
+                             "d40bbb57a78c4474904518a9267370b78f0ae05bfe1dc76c79a86ab589eb2cff")
+            self.assertEqual(metadata["anchor_code_object_sha256"],
+                             "7a1390f93dda7e5624f0621b00632b7af67fe832d61e9fab16dc64369cf28c0b")
+            self.assertEqual(config.max_iterations, 10)
+            fresh = D.DurableState(config.output_root).load()
+            self.assertEqual(
+                (fresh["iterations"], fresh["next"],
+                 fresh["scientific_attempts"], fresh["complete"]),
+                ([], 1, 0, False))
+
+            binding = self._q5_binding(config)
+            candidate = D._preauthored_candidate(config, binding, 1)
+            # The exact semantic/patch/cross-campaign triple is in the imported
+            # replay sets, but this one receipt-bound erratum authorizes a fresh
+            # operation.  The normal portfolio/source checks still run.
+            D._validate_portfolio_candidate(
+                candidate, binding, config.hypothesis_portfolio, carry)
+
+            for path, replacement in (
+                    (("operation_key",), "0" * 64),
+                    (("attribution_refusal_file_sha256",), "0" * 64),
+                    (("attribution_refusal_receipt_sha256",), "0" * 64),
+                    (("correctness_receipt_file_sha256",), "0" * 64),
+                    (("profiler_trace_sha256",), "0" * 64),
+                    (("scientific_budget_spent",), True),
+                    (("stale_candidate_lds_bytes",
+                      "cuda-mmvq-q5-onewave-continuation-v1.anchor.0."
+                      "candidate-onewave"), 0)):
+                with self.subTest(path=path):
+                    changed = copy.deepcopy(carry)
+                    changed_erratum = changed[
+                        "attribution_expectation_erratum"]
+                    target = changed_erratum
+                    for key in path[:-1]:
+                        target = target[key]
+                    target[path[-1]] = replacement
+                    changed_erratum["erratum_sha256"] = _canonical_hash({
+                        key: value for key, value in changed_erratum.items()
+                        if key != "erratum_sha256"})
+                    changed["carry_forward_sha256"] = _canonical_hash({
+                        key: value for key, value in changed.items()
+                        if key != "carry_forward_sha256"})
+                    with self.assertRaises(D.DiscoveryControllerError):
+                        replace(
+                            config, carry_forward=changed,
+                            carry_forward_sha256=changed[
+                                "carry_forward_sha256"])
 
     def test_structural_tail_is_exact_but_never_enters_reward_duration(self):
         carrier = P.load(P.DEFAULT_CARRIER)
@@ -865,6 +1025,22 @@ class Q5PreauthoredContinuationTests(unittest.TestCase):
         with self.assertRaisesRegex(E.EvidenceProducerError, "count/geometry"):
             E._reduce_arm(
                 [*candidate_reward, *wrong_tail],
+                exact=contract.candidate_exact,
+                structural_exact=contract.candidate_structural_exact,
+                forbidden=contract.candidate_forbidden,
+                invariants=contract.invariants)
+        stale_reward_lds = [dict(row, lds=512) for row in candidate_reward]
+        with self.assertRaisesRegex(E.EvidenceProducerError, "count/geometry"):
+            E._reduce_arm(
+                [*stale_reward_lds, *candidate_tail],
+                exact=contract.candidate_exact,
+                structural_exact=contract.candidate_structural_exact,
+                forbidden=contract.candidate_forbidden,
+                invariants=contract.invariants)
+        stale_tail_lds = [dict(row, lds=256) for row in candidate_tail]
+        with self.assertRaisesRegex(E.EvidenceProducerError, "count/geometry"):
+            E._reduce_arm(
+                [*candidate_reward, *stale_tail_lds],
                 exact=contract.candidate_exact,
                 structural_exact=contract.candidate_structural_exact,
                 forbidden=contract.candidate_forbidden,

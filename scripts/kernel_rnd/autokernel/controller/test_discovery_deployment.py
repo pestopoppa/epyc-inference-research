@@ -83,6 +83,13 @@ class DeploymentConfigTests(unittest.TestCase):
         inputs["preauthored_continuation"] = {
             "path": str(continuation_path),
             "sha256": digest(continuation_path)}
+        erratum_path = config_dir / "q5-lds0-attribution-erratum-v1.json"
+        erratum_path.write_bytes(
+            (Path(D.__file__).resolve().parents[1]
+             / "q5_lds0_attribution_erratum_v1.json").read_bytes())
+        erratum_path.chmod(0o600)
+        inputs["q5_lds0_attribution_erratum"] = {
+            "path": str(erratum_path), "sha256": digest(erratum_path)}
         evidence = {}
         evidence_root = root / "portfolio-evidence"
         evidence_root.mkdir()
@@ -200,6 +207,9 @@ class DeploymentConfigTests(unittest.TestCase):
                 loaded.planner_context.value["template_symbol_authority"],
                 {"test": {"ggml.cu": ["kernel"]}},
             )
+            self.assertEqual(
+                loaded.q5_lds0_attribution_erratum.sha256,
+                "25a4578db9ac1285b3254c8ea9981efb3f32487c0b512631ce9fe4204a19b992")
 
     def test_planner_context_requires_exact_template_symbol_authority(self):
         for replacement in (None, {}, {"test": {"ggml.cu": []}},
@@ -248,6 +258,19 @@ class DeploymentConfigTests(unittest.TestCase):
             path.write_text(json.dumps(raw), encoding="utf-8")
             with self.assertRaisesRegex(D.DeploymentConfigError, "schema mismatch"):
                 self.load(path)
+
+    def test_old_v5_bundle_and_missing_erratum_refuse(self):
+        for mutation in ("legacy", "missing"):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temp:
+                path, raw = self.config(Path(temp))
+                if mutation == "legacy":
+                    raw["schema"] = "epyc.autokernel.discovery_deployment.v5"
+                else:
+                    del raw["immutable_inputs"]["q5_lds0_attribution_erratum"]
+                seal(raw)
+                path.write_text(json.dumps(raw), encoding="utf-8")
+                with self.assertRaises(D.DeploymentConfigError):
+                    self.load(path)
 
     def test_rejects_production_output_path_and_tampered_input(self):
         with tempfile.TemporaryDirectory() as temp:

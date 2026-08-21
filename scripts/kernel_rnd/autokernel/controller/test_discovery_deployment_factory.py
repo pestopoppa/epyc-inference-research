@@ -59,8 +59,9 @@ def template_symbol_authority(registry):
 
 
 def mocked_v25_carry_forward():
+    erratum = C._q5_lds0_attribution_erratum()
     body = {
-        "schema": "epyc.autokernel.discovery_carry_forward.v1",
+        "schema": "epyc.autokernel.discovery_carry_forward.v2",
         "predecessor_state_file_sha256": F._V25_STATE_FILE_SHA256,
         "predecessor_journal_file_sha256": F._V25_JOURNAL_FILE_SHA256,
         "predecessor_state_semantic_sha256": F._V25_STATE_SEMANTIC_SHA256,
@@ -70,8 +71,10 @@ def mocked_v25_carry_forward():
             "akh-v2-fa-gqa7-pair-tail": "bounded_authoring_skip",
             "akh-v2-rms-direct-load-reduction": "bounded_authoring_skip",
         },
-        "candidate_semantic_sha256": sorted(F._V25_CANDIDATE_SEMANTICS),
-        "candidate_patch_sha256": [
+        "candidate_semantic_sha256": sorted({
+            *F._V25_CANDIDATE_SEMANTICS,
+            erratum["candidate_semantic_sha256"]}),
+        "candidate_patch_sha256": sorted({
             "00787755e680f56e82af4f5f2a8ebc7e58f8cc3a84cc806732d62b2019f9916e",
             "7529a82f6210a4a5afe25a7903354d5ed4e32d82185d0a8355956138ae32768f",
             "b40ed0a83b9b2891283736f870c7c07e1d9153eec28bd1f79f51ff3e49581d02",
@@ -79,8 +82,9 @@ def mocked_v25_carry_forward():
             "c38ef7bdab57be586092cb568fac733ca05edb76992551c680cabffc5f0a6bdf",
             "f7ced7defb40d08224b3f904586b732f41f68b23b00241622cea02fe404bdba4",
             "ffc7046ce2758fe4d72aac0fae11d612c48711bed49809c22b44bfd185255942",
-        ],
-        "cross_campaign_candidate_sha256": [
+            erratum["candidate_patch_sha256"],
+        }),
+        "cross_campaign_candidate_sha256": sorted({
             "15757d6c7a5466f62f75fcc520d0f5a11f9edd842463438889cc189c8fd141f0",
             "583a174d6dbd04061277ec3802ddfb9cd522143fd29817246760a256732ba51f",
             "93d7eb1790fb57e47db15db811574575515a90b7b59020902a063f99c80063a6",
@@ -88,7 +92,9 @@ def mocked_v25_carry_forward():
             "c64dbe5f27171e45b79301cd8d3702671e9567275c746b9534319dc4c47a37d9",
             "d639dfe011775c87359b1b93afbd08a3f3dd194adbf48fc861ae25099d128e67",
             "dc299de155757172d160f9ac59ccd36e83dacf1d003da73ca3a91a6fe8c364db",
-        ],
+            erratum["cross_campaign_candidate_sha256"],
+        }),
+        "attribution_expectation_erratum": erratum,
     }
     body["carry_forward_sha256"] = F.schemas.content_hash(body)
     return body
@@ -636,6 +642,9 @@ class DeploymentFactoryTests(unittest.TestCase):
         portfolio_input = immutable(hypothesis_portfolio.DEFAULT_PORTFOLIO)
         continuation = preauthored_continuation.load(
             preauthored_continuation.DEFAULT_CARRIER)
+        erratum_path = root / "q5-lds0-attribution-erratum-v1.json"
+        shutil.copyfile(C._Q5_LDS0_ERRATUM_CARRIER, erratum_path)
+        erratum_path.chmod(0o600)
         carry_forward_root = root / "v25-carry-forward"
         carry_forward_root.mkdir(mode=0o700)
         portfolio_evidence = {
@@ -703,6 +712,8 @@ class DeploymentFactoryTests(unittest.TestCase):
             preauthored_continuation=SimpleNamespace(
                 value=continuation,
                 input=immutable(preauthored_continuation.DEFAULT_CARRIER)),
+            q5_lds0_attribution_erratum=immutable(
+                erratum_path),
             hypothesis_evidence_manifest=SimpleNamespace(value=evidence_manifest),
             hypothesis_portfolio_contract=SimpleNamespace(
                 sha256=F._PORTFOLIO_CONTRACT_SHA256),
@@ -761,7 +772,18 @@ class DeploymentFactoryTests(unittest.TestCase):
                 tuple(len(controller_config.carry_forward[key]) for key in (
                     "candidate_semantic_sha256", "candidate_patch_sha256",
                     "cross_campaign_candidate_sha256")),
-                (12, 7, 7))
+                (13, 8, 8))
+            self.assertEqual(
+                controller_config.carry_forward[
+                    "attribution_expectation_erratum"],
+                C._q5_lds0_attribution_erratum())
+            self.assertEqual(
+                loaded.q5_lds0_attribution_erratum.sha256,
+                C._Q5_LDS0_ERRATUM_FILE_SHA256)
+            self.assertEqual(
+                loaded.q5_lds0_attribution_erratum.path,
+                (root / "config" /
+                 "q5-lds0-attribution-erratum-v1.json").resolve())
             ineligible = {
                 row["hypothesis_id"]: row for row in context["ineligible_hypotheses"]
             }
@@ -792,6 +814,26 @@ class DeploymentFactoryTests(unittest.TestCase):
             carrier.chmod(0o400)
             with self.assertRaises(F.deployment.DeploymentConfigError):
                 F.deployment.load_deployment_config(path)
+
+    def test_q5_erratum_vendored_carrier_refuses_coherent_substitution(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            config, _site, _docker, _ca = self.static_config(Path(temporary))
+            carrier = config.q5_lds0_attribution_erratum.path
+            body = json.loads(carrier.read_text(encoding="utf-8"))
+            body["operation_key"] = "0" * 64
+            body["erratum_sha256"] = F.schemas.content_hash({
+                key: value for key, value in body.items()
+                if key != "erratum_sha256"})
+            carrier.write_text(
+                json.dumps(body, sort_keys=True, separators=(",", ":")) + "\n",
+                encoding="utf-8")
+            config.q5_lds0_attribution_erratum = SimpleNamespace(
+                path=carrier,
+                sha256=hashlib.sha256(carrier.read_bytes()).hexdigest())
+            with self.assertRaisesRegex(
+                    C.DiscoveryControllerError,
+                    "erratum file identity changed"):
+                F._v25_carry_forward(config)
 
     def test_v25_manifest_evidence_must_join_its_exact_controller_turn(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -894,7 +936,9 @@ class DeploymentFactoryTests(unittest.TestCase):
                 sealed_graph = graph_path.read_bytes()
                 for legacy_schema in (
                         "epyc.autokernel.static_discovery_graph.v5",
-                        "epyc.autokernel.static_discovery_graph.v6"):
+                        "epyc.autokernel.static_discovery_graph.v6",
+                        "epyc.autokernel.static_discovery_graph.v7",
+                        "epyc.autokernel.static_discovery_graph.v8"):
                     with self.subTest(legacy_schema=legacy_schema):
                         graph_path.write_text(json.dumps({
                             "schema": legacy_schema,
@@ -945,7 +989,24 @@ class DeploymentFactoryTests(unittest.TestCase):
             self.assertIn("t0_provider", receipt["execution_modules"])
             self.assertIn("codex_container_actor", receipt["execution_modules"])
             self.assertEqual(receipt["schema"],
-                             "epyc.autokernel.static_discovery_graph.v7")
+                             "epyc.autokernel.static_discovery_graph.v9")
+            self.assertEqual(receipt["attribution_expectation_erratum"], {
+                "schema":
+                    "epyc.autokernel.attribution_expectation_erratum_source.v1",
+                "erratum_schema":
+                    "epyc.autokernel.attribution_expectation_erratum.v1",
+                "erratum_sha256":
+                    C._q5_lds0_attribution_erratum()["erratum_sha256"],
+                "file_sha256": C._Q5_LDS0_ERRATUM_FILE_SHA256,
+                "operation_key":
+                    C._q5_lds0_attribution_erratum()["operation_key"],
+                "attribution_refusal_file_sha256":
+                    C._q5_lds0_attribution_erratum()[
+                        "attribution_refusal_file_sha256"],
+                "candidate_semantic_sha256":
+                    C._q5_lds0_attribution_erratum()[
+                        "candidate_semantic_sha256"],
+            })
             self.assertTrue(all(
                 set(row) == {"logical_path", "sha256"}
                 and row["logical_path"].startswith("scripts/")
