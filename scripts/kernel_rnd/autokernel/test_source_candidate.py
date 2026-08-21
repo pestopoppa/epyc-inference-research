@@ -7,6 +7,7 @@ import os
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 from . import schemas
@@ -64,6 +65,87 @@ class SourceCase(unittest.TestCase):
             "@@ -1,1 +1,1 @@ if (\n-old\n+new\n")
         _hunks, symbols = S.hunk_identities(patch)
         self.assertEqual(symbols, (S.FILE_SCOPE,))
+
+    def test_caller_truncated_parameter_context_remains_file_scope(self):
+        patch = (
+            "diff --git a/ggml/src/ggml-cuda/norm.cu b/ggml/src/ggml-cuda/norm.cu\n"
+            "--- a/ggml/src/ggml-cuda/norm.cu\n"
+            "+++ b/ggml/src/ggml-cuda/norm.cu\n"
+            "@@ -126,1 +126,2 @@ static __global__ void rms_norm_f32(const float * x,\n"
+            "     float tmp = 0.0f;\n"
+            "+    float x0 = 0.0f;\n"
+            "@@ -141,1 +142,2 @@ static __global__ void rms_norm_f32(const float * x,\n"
+            "     const float scale = rsqrtf(mean + eps);\n"
+            "+    float xi = x[tid];\n"
+        )
+        _hunks, symbols = S.hunk_identities(patch)
+        self.assertEqual(symbols, (S.FILE_SCOPE,))
+
+    def test_source_backed_parameter_fragment_derives_rms_function(self):
+        patch = (
+            "diff --git a/ggml/src/ggml-cuda/norm.cu b/ggml/src/ggml-cuda/norm.cu\n"
+            "--- a/ggml/src/ggml-cuda/norm.cu\n"
+            "+++ b/ggml/src/ggml-cuda/norm.cu\n"
+            "@@ -78,3 +78,4 @@ stale_header\n"
+            " template <int block_size, bool do_multiply = false>\n"
+            " static __global__ void rms_norm_f32(const float * x,\n"
+            "+    float x0 = 0.0f;\n"
+        )
+        rows = S._hunk_rows(patch, source_backed_declarations=True)
+        self.assertEqual(tuple(row[2] for row in rows), ("rms_norm_f32",))
+
+    def test_source_backed_context_recovers_truncated_q5_identifier(self):
+        patch = (
+            "diff --git a/vecdotq.cuh b/vecdotq.cuh\n"
+            "--- a/vecdotq.cuh\n+++ b/vecdotq.cuh\n"
+            "@@ -1,3 +1,4 @@ template <int vdr> static __device__ "
+            "__forceinline__ float vec_dot_q5_0_q8_1_imp\n"
+            " template <int vdr>\n"
+            " static __device__ __forceinline__ float "
+            "vec_dot_q5_0_q8_1_impl(\n"
+            "+    int cached = 0;\n"
+        )
+        rows = S._hunk_rows(patch, source_backed_declarations=True)
+        self.assertEqual(tuple(row[2] for row in rows),
+                         ("vec_dot_q5_0_q8_1_impl",))
+
+    def test_truncated_call_expression_context_remains_file_scope(self):
+        prefix = "diff --git a/x.cu b/x.cu\n--- a/x.cu\n+++ b/x.cu\n"
+        for context in (
+                "return helper(value,",
+                "result = helper(value,",
+                "object.helper(value,"):
+            with self.subTest(context=context):
+                _hunks, symbols = S.hunk_identities(
+                    prefix + f"@@ -1,1 +1,1 @@ {context}\n-old\n+new\n")
+                self.assertEqual(symbols, (S.FILE_SCOPE,))
+
+    def test_source_backed_calls_and_added_declarations_are_not_authority(self):
+        prefix = "diff --git a/x.cu b/x.cu\n--- a/x.cu\n+++ b/x.cu\n"
+        for body in (
+                " return helper(value,\n+changed\n",
+                " result = helper(value,\n+changed\n",
+                " object.helper(value,\n+changed\n",
+                " if (helper(value,\n+changed\n",
+                " #define helper(value,\n+changed\n",
+                "+static void fake_kernel(const float * x,\n context\n"):
+            with self.subTest(body=body):
+                rows = S._hunk_rows(
+                    prefix + "@@ -1,2 +1,3 @@ stale_header\n" + body,
+                    source_backed_declarations=True)
+                self.assertEqual(tuple(row[2] for row in rows),
+                                 ("stale_header",))
+
+    def test_deleted_source_declaration_is_scope_authority(self):
+        patch = (
+            "diff --git a/x.cu b/x.cu\n--- a/x.cu\n+++ b/x.cu\n"
+            "@@ -1,2 +1,2 @@ stale_header\n"
+            "-static void old_kernel(const float * x,\n"
+            "+static void renamed_kernel(const float * x,\n"
+            "  int y) {}\n"
+        )
+        rows = S._hunk_rows(patch, source_backed_declarations=True)
+        self.assertEqual(tuple(row[2] for row in rows), ("old_kernel",))
 
     def test_exact_bare_hunk_symbol_is_accepted_but_control_word_is_not(self):
         prefix = "diff --git a/a.cu b/a.cu\n--- a/a.cu\n+++ b/a.cu\n"
@@ -173,11 +255,22 @@ class SourceCase(unittest.TestCase):
         applied = S.apply_source_candidate(
             manifest, proposal=self.proposal(), actor=self.actor)
         self.assertEqual(applied.actual_files, (PATH,))
-        self.assertEqual(applied.actual_symbols, (f"{PATH}:{S.FILE_SCOPE}",))
+        self.assertEqual(applied.actual_symbols, (f"{PATH}:{SYMBOL}",))
         self.assertTrue(all(value.startswith("akhunk:") for value in applied.actual_hunk_ids))
         self.assertIn(("--", PATH), tuple(zip(applied.commit_argv, applied.commit_argv[1:])))
         self.assertTrue(self.actor.is_clean())
         self.assertEqual(self.actor.head_commit(), applied.candidate_commit)
+
+    def test_scope_view_changed_lines_must_equal_canonical_diff(self):
+        manifest = self.manifest()
+        forged_scope = self.patch.replace("+    return x + 2;",
+                                          "+    return x + 200;")
+        with mock.patch.object(
+                W.Worktree, "function_context_diff_from_source",
+                return_value=forged_scope), self.assertRaisesRegex(
+                    S.SourceCandidateError, "changed lines differ"):
+            S.apply_source_candidate(
+                manifest, proposal=self.proposal(), actor=self.actor)
 
     def test_phase_graph_and_content_specialization_refuse_before_apply(self):
         probes = (

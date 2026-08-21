@@ -1644,7 +1644,14 @@ class Worktree:
     def unified_diff_from_source(self) -> str:
         """Committed candidate delta from the immutable worktree source commit."""
         return self._git(
-            "diff", "--no-ext-diff", "--unified=3",
+            "diff", "--no-ext-diff", "--no-textconv", "--unified=3",
+            f"{self.source_commit}..{self.head_commit()}", "--")
+
+    def function_context_diff_from_source(self) -> str:
+        """Source-backed function context for committed-surface authorization."""
+        return self._git(
+            "diff", "--no-ext-diff", "--no-textconv", "--unified=3",
+            "--function-context",
             f"{self.source_commit}..{self.head_commit()}", "--")
 
     def apply_patch_bytes(self, patch_bytes: bytes) -> dict:

@@ -46,7 +46,13 @@ _HUNK = re.compile(
 _FUNC = re.compile(r"(?P<name>[A-Za-z_~][A-Za-z0-9_:~<>]*)\s*\([^()]*\)\s*(?:const\s*)?(?:\{|$)")
 _TRUNCATED_FUNC = re.compile(
     r"(?P<name>[A-Za-z_~][A-Za-z0-9_:~<>]*)\s*\(\s*$")
+_SOURCE_DECLARATION_FRAGMENT = re.compile(
+    r"(?P<name>[A-Za-z_~][A-Za-z0-9_:~<>]*)\s*\([^(){};]*,\s*$")
 _CONTROL_WORDS = frozenset({"if", "for", "while", "switch", "catch"})
+_NON_DECLARATION_PREFIXES = (
+    "if ", "for ", "while ", "switch ", "catch ", "return ",
+    "co_return ", "throw ", "case ",
+)
 _MODE_LINE = re.compile(r"^(?:old|new|deleted file|new file) mode (?P<mode>\d+)$")
 _ALLOWED_MODES = frozenset({"100644", "100755"})
 
@@ -94,7 +100,24 @@ def _symbol_from_context(context: str) -> str:
     return FILE_SCOPE
 
 
-def _symbol_from_hunk(context: str, body: Sequence[str]) -> str:
+def _symbol_from_source_declaration(normalized: str) -> str:
+    """Recognize declarations only in Git's source-backed function context."""
+    matches = list(_FUNC.finditer(normalized))
+    match = matches[-1] if matches else _TRUNCATED_FUNC.search(normalized)
+    if match is None:
+        match = _SOURCE_DECLARATION_FRAGMENT.search(normalized)
+    if match is None or match.group("name") in _CONTROL_WORDS:
+        return FILE_SCOPE
+    prefix = normalized[:match.start("name")].strip()
+    if (not prefix or prefix.startswith("#")
+            or normalized.startswith(_NON_DECLARATION_PREFIXES)
+            or any(char in prefix for char in "=;{}.?")):
+        return FILE_SCOPE
+    return match.group("name")
+
+
+def _symbol_from_hunk(context: str, body: Sequence[str], *,
+                      source_backed_declarations: bool = False) -> str:
     """Derive a function from source-backed hunk lines before header prose.
 
     Diff may label a hunk with the preceding function when the hunk begins on
@@ -105,22 +128,24 @@ def _symbol_from_hunk(context: str, body: Sequence[str]) -> str:
     header_symbol = _symbol_from_context(context)
     body_symbols: list[str] = []
     for line in body:
-        # Only leading unchanged source can identify the declaration whose
-        # body the hunk enters.  Later context may begin the *next* function.
-        if not line or line[0] != " ":
+        allowed_prefixes = ((" ", "-") if source_backed_declarations
+                            else (" ",))
+        if not line or line[0] not in allowed_prefixes:
             break
         normalized = line[1:].strip()
-        match = _TRUNCATED_FUNC.search(normalized)
-        if match is None or match.group("name") in _CONTROL_WORDS:
+        if source_backed_declarations:
+            symbol = _symbol_from_source_declaration(normalized)
+        else:
+            match = _TRUNCATED_FUNC.search(normalized)
+            if match is None or match.group("name") in _CONTROL_WORDS:
+                continue
+            prefix = normalized[:match.start("name")].strip()
+            if (not prefix or prefix in _CONTROL_WORDS
+                    or any(char in prefix for char in "=;{}")):
+                continue
+            symbol = match.group("name")
+        if symbol == FILE_SCOPE:
             continue
-        # A body line is stronger than GNU diff's sometimes-stale header only
-        # when it is a truncated declaration/definition, not an ordinary call.
-        # Require a declaration-like prefix and reject expression punctuation.
-        prefix = normalized[:match.start("name")].strip()
-        if (not prefix or prefix in _CONTROL_WORDS
-                or any(char in prefix for char in "=;{}")):
-            continue
-        symbol = match.group("name")
         if symbol not in body_symbols:
             body_symbols.append(symbol)
     if len(body_symbols) == 1:
@@ -132,7 +157,9 @@ def _symbol_from_hunk(context: str, body: Sequence[str]) -> str:
     return header_symbol
 
 
-def _hunk_rows(diff_text: str) -> tuple[tuple[str, str, str], ...]:
+def _hunk_rows(diff_text: str, *,
+               source_backed_declarations: bool = False,
+               ) -> tuple[tuple[str, str, str], ...]:
     """Return stable hunk ids and content-derived enclosing symbols.
 
     Each id hashes file, old/new ranges, normalized context, and the complete
@@ -154,7 +181,9 @@ def _hunk_rows(diff_text: str) -> tuple[tuple[str, str, str], ...]:
             "context": " ".join(current_context.split()), "body": normalized,
         }
         rows.append((current_file, f"akhunk:{schemas.content_hash(material)}",
-                     _symbol_from_hunk(current_context, body)))
+                     _symbol_from_hunk(
+                         current_context, body,
+                         source_backed_declarations=source_backed_declarations)))
         current_header, current_context, body = None, "", []
 
     for line in diff_text.splitlines():
@@ -192,6 +221,7 @@ def hunk_identities(diff_text: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
 
 def _validate_patch_text(
         patch_bytes: bytes,
+        *, source_backed_declarations: bool = False,
 ) -> tuple[str, tuple[str, ...], tuple[str, ...], tuple[str, ...],
            Mapping[str, tuple[str, ...]], tuple[str, ...]]:
     try:
@@ -215,7 +245,8 @@ def _validate_patch_text(
     if any(item.is_binary for item in parsed.files):
         raise SourceCandidateError("binary patch members are forbidden")
     paths = tuple(sorted(_safe_path(path, "patch path") for path in parsed.paths()))
-    rows = _hunk_rows(text)
+    rows = _hunk_rows(
+        text, source_backed_declarations=source_backed_declarations)
     hunk_ids = tuple(sorted(row[1] for row in rows))
     symbols = tuple(sorted({row[2] for row in rows}))
     symbols_by_file = {
@@ -224,6 +255,27 @@ def _validate_patch_text(
     }
     deleted = tuple(sorted(item.path for item in parsed.files if item.is_deleted_file))
     return text, paths, hunk_ids, symbols, symbols_by_file, deleted
+
+
+def _changed_line_identity(diff_text: str) -> tuple[tuple[str, str], ...]:
+    """Bind different Git context views to the same ordered changed lines."""
+    current_file: Optional[str] = None
+    in_hunk = False
+    rows: list[tuple[str, str]] = []
+    for line in diff_text.splitlines():
+        if line.startswith("diff --git a/"):
+            match = re.match(r"^diff --git a/(.+) b/(.+)$", line)
+            current_file = (None if match is None
+                            else _safe_path(match.group(2), "patch path"))
+            in_hunk = False
+            continue
+        if _HUNK.match(line):
+            in_hunk = True
+            continue
+        if (in_hunk and current_file is not None
+                and line.startswith(("+", "-"))):
+            rows.append((current_file, line))
+    return tuple(rows)
 
 
 @dataclass(frozen=True)
@@ -468,12 +520,24 @@ def apply_source_candidate(manifest: SourcePatchManifest, *, proposal: Mapping[s
     if not actor.is_clean():
         raise SourceCandidateError("actor worktree is not clean after exact-path commit")
     diff_text = actor.unified_diff_from_source()
+    scope_diff_text = actor.function_context_diff_from_source()
     text, paths, hunk_ids, symbols, symbols_by_file, _deleted = \
         _validate_patch_text(diff_text.encode("utf-8"))
+    scope_text, scope_paths, _scope_hunks, _scope_symbols, \
+        scope_symbols_by_file, _scope_deleted = _validate_patch_text(
+            scope_diff_text.encode("utf-8"),
+            source_backed_declarations=True)
     if paths != manifest.declared_files:
         raise SourceCandidateError("committed diff paths differ from the authorized manifest")
+    if scope_paths != paths:
+        raise SourceCandidateError(
+            "function-context diff paths differ from the canonical committed diff")
+    if _changed_line_identity(scope_text) != _changed_line_identity(text):
+        raise SourceCandidateError(
+            "function-context diff changed lines differ from the canonical committed diff")
     for path in manifest.declared_files:
-        outside = sorted(set(symbols_by_file[path]) - set(manifest.declared_symbols[path]))
+        outside = sorted(
+            set(scope_symbols_by_file[path]) - set(manifest.declared_symbols[path]))
         if outside:
             raise SourceCandidateError(
                 f"committed diff in {path!r} derives undeclared symbols {outside}")
@@ -496,8 +560,8 @@ def apply_source_candidate(manifest: SourcePatchManifest, *, proposal: Mapping[s
         manifest=manifest, candidate_commit=commit, diff_text=text,
         actual_files=paths, actual_hunk_ids=hunk_ids,
         actual_symbols=tuple(sorted(
-            f"{path}:{symbol}" for path in symbols_by_file
-            for symbol in symbols_by_file[path])),
+            f"{path}:{symbol}" for path in scope_symbols_by_file
+            for symbol in scope_symbols_by_file[path])),
         commit_argv=commit_argv, mutation_receipt=dict(mutation),
         diff_evidence=diff_evidence)
 
