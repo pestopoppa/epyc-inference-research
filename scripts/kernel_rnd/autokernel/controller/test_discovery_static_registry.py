@@ -488,7 +488,7 @@ class StaticBuildCacheTests(unittest.TestCase):
                                 text=True, check=True)
         return result.stdout.strip()
 
-    def fixture(self):
+    def fixture(self, *, real_run_build_probe: bool = False):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         root = Path(temporary.name).resolve()
@@ -549,10 +549,39 @@ class StaticBuildCacheTests(unittest.TestCase):
             correctness_capability_runner=capability_runner)
         calls = []
         sandbox_roots = []
+        probe_results = []
+        real_run_build = S.worktree.run_build
 
         def run_build(plan, *, log_path, **_kwargs):
             calls.append(str(plan.build_dir.path))
             sandbox_roots.append(_kwargs.get("sandbox_cgroup_root"))
+            if real_run_build_probe and not probe_results:
+                probe_source = S.worktree.SandboxPath.create(
+                    str(root / "probe-source"),
+                    production_trees=S.worktree.PRODUCTION_TREES)
+                probe_build = S.worktree.SandboxPath.create(
+                    str(root / "probe-build"),
+                    production_trees=S.worktree.PRODUCTION_TREES)
+                probe_actor = S.worktree.SandboxPath.create(
+                    str(root / "probe-actor"),
+                    production_trees=S.worktree.PRODUCTION_TREES)
+                Path(probe_source.path).mkdir()
+                Path(probe_actor.path).mkdir()
+                (Path(probe_source.path) / "CMakeLists.txt").write_text(
+                    "cmake_minimum_required(VERSION 3.16)\n"
+                    "project(ak_supervised_probe C)\n"
+                    "add_executable(ak_supervised_probe main.c)\n")
+                (Path(probe_source.path) / "main.c").write_text(
+                    "int main(void) { return 0; }\n")
+                probe_plan = S.worktree.BuildPlan(
+                    source_root=probe_source, build_dir=probe_build,
+                    actor_worktree=probe_actor,
+                    parallelism=S.worktree.BuildParallelism(jobs=1),
+                    targets=("ak_supervised_probe",),
+                    cmake_defines=(("GGML_CCACHE", "OFF"),))
+                probe_results.append(real_run_build(
+                    probe_plan, log_path=str(root / "probe-logs/build.log"),
+                    sandbox_cgroup_root=_kwargs.get("sandbox_cgroup_root")))
             build = Path(plan.build_dir.path); bindir = build / "bin"
             bindir.mkdir(parents=True)
             for name in ("llama-bench", "libllama-bench-impl.so", "libllama-common.so",
@@ -671,6 +700,7 @@ class StaticBuildCacheTests(unittest.TestCase):
                          production_before=production_before, builder=builder,
                          candidate=candidate, permit=permit, calls=calls,
                          sandbox_roots=sandbox_roots, run_build=run_build,
+                         probe_results=probe_results,
                          canonical_sha256=sha(config_raw),
                          semantic_sha256=semantic_sha256)
 
@@ -904,6 +934,23 @@ class StaticBuildCacheTests(unittest.TestCase):
         expected = fixture.permit["supervised_build_authority"]
         cgroup = S._supervised_controller_cgroup(expected)["path"]
         self.assertEqual(fixture.sandbox_roots, [cgroup, cgroup])
+
+    @unittest.skipUnless(shutil.which("cmake") and shutil.which("cc"),
+                         "cmake/cc are not available")
+    def test_static_build_source_enters_real_runner_with_supervised_cgroup(self):
+        fixture = self.fixture(real_run_build_probe=True)
+        self.invoke(fixture)
+        self.assertEqual(len(fixture.probe_results), 1)
+        self.assertTrue(fixture.probe_results[0].succeeded)
+        expected = S._supervised_controller_cgroup(
+            fixture.permit["supervised_build_authority"])["path"]
+        for disposition in (
+                fixture.probe_results[0].configure,
+                fixture.probe_results[0].build):
+            self.assertEqual(
+                str(Path(disposition.sandbox_receipt["cgroup_path"]).parent),
+                expected)
+            self.assertTrue(disposition.sandbox_teardown["removed"])
 
     def test_supervised_authority_keeps_canonical_and_semantic_identities_distinct(self):
         fixture = self.fixture()

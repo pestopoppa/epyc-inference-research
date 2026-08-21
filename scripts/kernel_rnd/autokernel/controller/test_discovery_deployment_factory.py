@@ -1153,7 +1153,13 @@ class DeploymentFactoryTests(unittest.TestCase):
             def adapter_factory(**kwargs):
                 adapters.update(kwargs)
                 return mock.sentinel.screener
+            supervised_authority = {
+                "schema": "epyc.autokernel.supervised_build_authority.v2",
+                "deployment_config_canonical_sha256": "c" * 64,
+                "deployment_config_semantic_sha256": config.config_sha256}
             with mock.patch.object(F.deployment, "resolve_registry", return_value=resolved), \
+                 mock.patch.object(F, "_SUPERVISED_BUILD_AUTHORITY",
+                                   supervised_authority), \
                  mock.patch.object(F, "_validate_source_scope"), \
                  mock.patch.object(F.gpu_source_adapter, "build_governed_gpu_source_adapter",
                                    side_effect=adapter_factory), \
@@ -1196,6 +1202,10 @@ class DeploymentFactoryTests(unittest.TestCase):
             self.assertEqual(len(calls), 2)
             self.assertEqual([row["deployment_config_semantic_sha256"] for row in calls],
                              [config.config_sha256, config.config_sha256])
+            self.assertEqual([row["deployment_config_canonical_sha256"] for row in calls],
+                             ["c" * 64, "c" * 64])
+            self.assertEqual([row["supervised_build_authority"] for row in calls],
+                             [supervised_authority, supervised_authority])
             self.assertEqual([row["instrument_branch"] for row in calls],
                              [config.instrument_branch, config.instrument_branch])
             with self.assertRaisesRegex(F.DeploymentFactoryError, "operation identity"):

@@ -51,6 +51,7 @@ import unittest
 from unittest import mock
 
 from .. import schemas
+from ..controller import discovery_supervisor_secure as supervisor_secure
 from ..evaluator import integrity
 from . import worktree as W
 
@@ -1168,6 +1169,49 @@ class TestRunBuildEndToEnd(_TmpMixin):
             self.assertEqual(completed["stdout_sha256"],
                              W._sha256_file(stream))
 
+    def test_real_build_accepts_and_uses_an_explicit_nested_cgroup_root(self):
+        """Exercise the supervised build argument through the real runner."""
+        rows = [line.split("::", 1)[1] for line in
+                Path("/proc/self/cgroup").read_text().splitlines()
+                if "::" in line]
+        self.assertEqual(len(rows), 1)
+        original = Path("/sys/fs/cgroup") / rows[0].lstrip("/")
+        controller = supervisor_secure.OwnedCgroup(
+            f"epyc-autokernel-worktree-test-{os.getpid()}-{time.time_ns()}",
+            base=original)
+        controller.create()
+        controller.add(os.getpid())
+        parent = controller.path
+        try:
+            result = W.run_build(
+                self.plan, log_path=self.log,
+                sandbox_cgroup_root=str(parent))
+        finally:
+            (original / "cgroup.procs").write_text(f"{os.getpid()}\n")
+            self.assertTrue(controller.wait_empty(2.0))
+            controller.close_and_remove()
+        self.assertTrue(result.succeeded, result.facts.errors)
+        self.assertFalse(parent.exists())
+        for disposition in (result.configure, result.build):
+            self.assertEqual(
+                Path(disposition.sandbox_receipt["cgroup_path"]).parent,
+                parent)
+            self.assertTrue(disposition.verified_dead)
+            self.assertTrue(disposition.sandbox_teardown["verified_empty"])
+            self.assertTrue(disposition.sandbox_teardown["removed"])
+        self.assertTrue(Path(self.bld.path, "ak_probe").is_file())
+        self.assertTrue(result.facts.succeeded_by_log)
+        for phase in ("configure", "build"):
+            for suffix in ("process-start.json", "process-terminal.json"):
+                receipt_path = Path(f"{self.log}.{phase}-{suffix}")
+                self.assertEqual(receipt_path.stat().st_nlink, 1)
+                self.assertEqual(receipt_path.stat().st_mode & 0o777, 0o600)
+                receipt = json.loads(receipt_path.read_text())
+                self.assertEqual(
+                    receipt["receipt_sha256"],
+                    schemas.content_hash({key: value for key, value in receipt.items()
+                                          if key != "receipt_sha256"}))
+
     def test_existing_symlink_or_hardlinked_log_authority_refuses_before_spawn(self):
         for case in ("symlink", "hardlink"):
             with self.subTest(case=case):
@@ -1182,6 +1226,27 @@ class TestRunBuildEndToEnd(_TmpMixin):
                     W.run_build(self.plan, log_path=self.log)
                 self.assertEqual(_read_text(target), "do not overwrite")
                 os.unlink(self.log)
+                shutil.rmtree(self.bld.path)
+
+    def test_invalid_explicit_cgroup_roots_refuse_before_spawn(self):
+        symlink = Path(self.tmp) / "cgroup-link"
+        symlink.symlink_to(W.process_sandbox.default_cgroup_root())
+        cases = (
+            "relative-cgroup",
+            str(Path(self.tmp) / "missing-cgroup"),
+            str(symlink),
+        )
+        for cgroup_root in cases:
+            with self.subTest(cgroup_root=cgroup_root), \
+                 mock.patch.object(
+                     W, "_run_owned",
+                     side_effect=AssertionError("must refuse before spawn")), \
+                 self.assertRaisesRegex(W.WorktreeError, "exact directory"):
+                W.run_build(
+                    self.plan, log_path=self.log,
+                    sandbox_cgroup_root=cgroup_root)
+            self.assertFalse(Path(self.log).exists())
+            if Path(self.bld.path).exists():
                 shutil.rmtree(self.bld.path)
 
     def test_candidate_cmake_cannot_write_outside_the_build_tree(self):
