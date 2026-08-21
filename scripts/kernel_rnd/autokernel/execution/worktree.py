@@ -138,9 +138,13 @@ from __future__ import annotations
 
 import ast
 import hashlib
+import json
 import os
+from pathlib import Path
 import re
+import secrets
 import signal
+import stat
 import subprocess
 import time
 import dataclasses
@@ -443,6 +447,151 @@ def _sha256_file(path: Any) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _exclusive_regular_sink(path: str):
+    """Open a new evaluator-owned stream without following or replacing links."""
+    flags = os.O_RDWR | os.O_CREAT | os.O_EXCL
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    descriptor = os.open(path, flags, 0o600)
+    facts = os.fstat(descriptor)
+    if (not stat.S_ISREG(facts.st_mode) or facts.st_nlink != 1
+            or facts.st_uid != os.geteuid()
+            or stat.S_IMODE(facts.st_mode) != 0o600):
+        os.close(descriptor)
+        raise WorktreeError(f"stream sink is not a one-link regular file: {path}")
+    return os.fdopen(descriptor, "w+b")
+
+
+def _stream_identity(value: os.stat_result) -> dict[str, int]:
+    return {
+        "device": value.st_dev, "inode": value.st_ino, "uid": value.st_uid,
+        "mode": stat.S_IMODE(value.st_mode), "nlink": value.st_nlink,
+        "size": value.st_size, "mtime_ns": value.st_mtime_ns,
+        "ctime_ns": value.st_ctime_ns,
+    }
+
+
+def _read_and_revalidate_open_stream(handle: Any, path: str) -> tuple[bytes, dict[str, int]]:
+    """Read the writer fd and prove the pathname still names that inode."""
+    handle.flush()
+    os.fsync(handle.fileno())
+    before = os.fstat(handle.fileno())
+    linked_before = os.stat(path, follow_symlinks=False)
+    if (_stream_identity(before) != _stream_identity(linked_before)
+            or before.st_nlink != 1 or before.st_uid != os.geteuid()
+            or stat.S_IMODE(before.st_mode) != 0o600):
+        raise WorktreeError(f"stream pathname no longer names its writer inode: {path}")
+    os.lseek(handle.fileno(), 0, os.SEEK_SET)
+    chunks: list[bytes] = []
+    while True:
+        chunk = os.read(handle.fileno(), 1024 * 1024)
+        if not chunk:
+            break
+        chunks.append(chunk)
+    after = os.fstat(handle.fileno())
+    linked_after = os.stat(path, follow_symlinks=False)
+    if (not (_stream_identity(before) == _stream_identity(after)
+             == _stream_identity(linked_before) == _stream_identity(linked_after))):
+        raise WorktreeError(f"stream changed during fd-bound read: {path}")
+    raw = b"".join(chunks)
+    if len(raw) != after.st_size:
+        raise WorktreeError(f"stream size changed during fd-bound read: {path}")
+    return raw, _stream_identity(after)
+
+
+def _revalidate_open_stream(handle: Any, path: str,
+                            expected: Mapping[str, int]) -> None:
+    current = _stream_identity(os.fstat(handle.fileno()))
+    linked = _stream_identity(os.stat(path, follow_symlinks=False))
+    if current != dict(expected) or linked != dict(expected):
+        raise WorktreeError(f"stream identity changed before receipt publication: {path}")
+
+
+def _sealed_process_receipt(path: str, body: Mapping[str, Any]) -> str:
+    """Publish one append-only, self-hashed owned-process receipt."""
+    payload = dict(body)
+    payload["receipt_sha256"] = schemas.content_hash(payload)
+    raw = (json.dumps(payload, sort_keys=True, separators=(",", ":"),
+                      ensure_ascii=False, allow_nan=False) + "\n").encode("utf-8")
+    parent = os.path.dirname(path)
+    os.makedirs(parent, exist_ok=True)
+    name = os.path.basename(path)
+    temporary_name = f".{name}.{os.getpid()}.tmp"
+    directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+    if hasattr(os, "O_NOFOLLOW"):
+        directory_flags |= os.O_NOFOLLOW
+    directory_fd = os.open(parent, directory_flags)
+    handle = None
+    try:
+        temporary = os.path.join(parent, temporary_name)
+        handle = _exclusive_regular_sink(temporary)
+        handle.write(raw)
+        written, identity = _read_and_revalidate_open_stream(handle, temporary)
+        if written != raw:
+            raise WorktreeError("temporary process receipt bytes changed")
+        os.link(temporary_name, name, src_dir_fd=directory_fd,
+                dst_dir_fd=directory_fd, follow_symlinks=False)
+        linked = _stream_identity(os.stat(name, dir_fd=directory_fd,
+                                          follow_symlinks=False))
+        linked_fd = _stream_identity(os.fstat(handle.fileno()))
+        if (linked != linked_fd or linked["nlink"] != 2
+                or (linked["device"], linked["inode"])
+                != (identity["device"], identity["inode"])):
+            raise WorktreeError("published process receipt is not its writer inode")
+        os.unlink(temporary_name, dir_fd=directory_fd)
+        os.fsync(directory_fd)
+        final_identity = _stream_identity(os.fstat(handle.fileno()))
+        _revalidate_open_stream(handle, path, final_identity)
+    finally:
+        if handle is not None:
+            handle.close()
+        try:
+            os.unlink(temporary_name, dir_fd=directory_fd)
+        except FileNotFoundError:
+            pass
+        os.close(directory_fd)
+    return hashlib.sha256(raw).hexdigest()
+
+
+def _read_single_link_stream(path: str) -> bytes:
+    flags = os.O_RDONLY
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    descriptor = os.open(path, flags)
+    try:
+        before = os.fstat(descriptor)
+        if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
+            raise WorktreeError(f"stream is not a one-link regular file: {path}")
+        chunks = []
+        while True:
+            chunk = os.read(descriptor, 1024 * 1024)
+            if not chunk:
+                break
+            chunks.append(chunk)
+        after = os.fstat(descriptor)
+        if ((before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns,
+             before.st_nlink) !=
+                (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns,
+                 after.st_nlink)):
+            raise WorktreeError(f"stream changed while being read: {path}")
+        return b"".join(chunks)
+    finally:
+        os.close(descriptor)
+
+
+def _process_start_ticks(pid: int) -> int:
+    try:
+        with open(f"/proc/{pid}/stat", "rb") as handle:
+            raw = handle.read()
+    except OSError as exc:
+        raise WorktreeError(f"cannot bind owned child {pid} to /proc start ticks") from exc
+    close_paren = raw.rfind(b")")
+    fields = raw[close_paren + 1:].split() if close_paren >= 0 else []
+    if len(fields) < 20:
+        raise WorktreeError(f"cannot parse /proc/{pid}/stat for owned child")
+    return int(fields[19])
 
 
 # =============================================================================
@@ -962,7 +1111,8 @@ def _run_owned(argv: Sequence[str], *, cwd: Optional[str] = None,
                stdout_path: Optional[str] = None,
                kill_grace_s: float = 10.0,
                sandbox_policy: Optional[process_sandbox.SandboxPolicy] = None,
-               sandbox_receipt_path: Optional[str] = None) -> tuple:
+               sandbox_receipt_path: Optional[str] = None,
+               process_receipt_prefix: Optional[str] = None) -> tuple:
     """Run `argv` as an owned session leader. Returns `(disposition, output_text)`.
 
     Never `shell=True`: a shell would reintroduce word-splitting, globbing and
@@ -986,15 +1136,33 @@ def _run_owned(argv: Sequence[str], *, cwd: Optional[str] = None,
     if sandbox_policy is not None:
         spawn_argv = sandbox_policy.wrap(argv, receipt_path=sandbox_receipt_path)
         executed_env["PYTHONDONTWRITEBYTECODE"] = "1"
+    epoch_token = None
+    intent_path = None
+    if process_receipt_prefix is not None:
+        epoch_token = secrets.token_hex(32)
+        executed_env["AUTOKERNEL_OWNED_PROCESS_EPOCH"] = epoch_token
+        intent_path = process_receipt_prefix + "-intent.json"
+        _sealed_process_receipt(intent_path, {
+            "schema": "epyc.autokernel.owned_process_intent.v1",
+            "argv": list(argv), "epoch_token": epoch_token,
+            "stdout_path": stdout_path,
+            "sandbox_receipt_path": sandbox_receipt_path,
+            "sandbox_policy_sha256": (sandbox_policy.policy_sha256
+                                      if sandbox_policy is not None else None),
+            "sandbox_token": (sandbox_policy.token
+                              if sandbox_policy is not None else None),
+            "cgroup_root": (sandbox_policy.cgroup_root
+                            if sandbox_policy is not None else None),
+        })
     started = time.monotonic()
     started_at = _utc_now_iso()
     sink = None
+    if stdout_path is not None:
+        sink = _exclusive_regular_sink(stdout_path)
+        stdout_target: Any = sink
+    else:
+        stdout_target = subprocess.PIPE
     try:
-        if stdout_path is not None:
-            sink = open(stdout_path, "wb")
-            stdout_target: Any = sink
-        else:
-            stdout_target = subprocess.PIPE
         with subprocess.Popen(
                 spawn_argv, cwd=cwd, env=executed_env,
                 stdout=stdout_target, stderr=subprocess.STDOUT,
@@ -1005,6 +1173,26 @@ def _run_owned(argv: Sequence[str], *, cwd: Optional[str] = None,
                 pgid = os.getpgid(pid)
             except ProcessLookupError:  # pragma: no cover - child already reaped
                 pgid = pid
+            if process_receipt_prefix is not None:
+                try:
+                    _sealed_process_receipt(process_receipt_prefix + "-start.json", {
+                        "schema": "epyc.autokernel.owned_process_start.v1",
+                        "intent_receipt_sha256": _sha256_file(intent_path),
+                        "epoch_token": epoch_token,
+                        "argv": list(argv), "pid": pid, "pgid": pgid,
+                        "process_start_ticks": _process_start_ticks(pid),
+                        "started_at": started_at,
+                        "stdout_path": stdout_path,
+                        "sandbox_receipt_path": sandbox_receipt_path,
+                    })
+                except BaseException:
+                    _terminate_owned(proc, pgid, grace_s=kill_grace_s)
+                    proc.wait()
+                    if sandbox_policy is not None:
+                        cgroup_path = sandbox_policy.cgroup_path(pid)
+                        if cgroup_path.exists():
+                            process_sandbox.cleanup_cgroup(sandbox_policy, pid)
+                    raise
             signals_sent: tuple = ()
             timed_out = False
             captured = b""
@@ -1019,50 +1207,68 @@ def _run_owned(argv: Sequence[str], *, cwd: Optional[str] = None,
                     captured = b""
             exit_code = proc.poll()
             verified_dead = exit_code is not None
+
+        stream_raw: bytes | None = None
+        stream_identity: dict[str, int] | None = None
+        if stdout_path is not None:
+            assert sink is not None
+            stream_raw, stream_identity = _read_and_revalidate_open_stream(
+                sink, stdout_path)
+            text = stream_raw.decode("utf-8", "replace")
+        else:
+            text = (captured or b"").decode("utf-8", "replace")
+
+        if timed_out and not verified_dead:
+            raise ProcessEscalationFailed(
+                f"pid {pid} (pgid {pgid}) survived {list(signals_sent)}; running "
+                f"{' '.join(argv)}. Not reporting a clean teardown for a process still alive")
+
+        sandbox_receipt = None
+        sandbox_teardown = None
+        if sandbox_policy is not None:
+            try:
+                sandbox_receipt = process_sandbox.read_receipt(sandbox_receipt_path)
+                process_sandbox.verify_receipt(
+                    sandbox_receipt, policy=sandbox_policy, pid=pid, argv=argv)
+                sandbox_teardown = process_sandbox.cleanup_cgroup(sandbox_policy, pid)
+            except process_sandbox.SandboxError as exc:
+                cleanup_note = ""
+                cgroup_path = sandbox_policy.cgroup_path(pid)
+                if cgroup_path.exists():
+                    try:
+                        process_sandbox.cleanup_cgroup(sandbox_policy, pid)
+                        cleanup_note = "; the owned cgroup was drained after refusal"
+                    except process_sandbox.SandboxError as cleanup_exc:
+                        cleanup_note = (
+                            "; additionally, owned-cgroup cleanup failed: "
+                            f"{cleanup_exc}")
+                raise WorktreeError(
+                    "candidate build containment did not produce a verified activation "
+                    f"receipt and teardown: {exc}{cleanup_note}") from exc
+
+        disposition = ProcessDisposition(
+            argv=argv, pid=pid, pgid=pgid, exit_code=exit_code, timed_out=timed_out,
+            signals_sent=signals_sent, verified_dead=verified_dead,
+            duration_s=time.monotonic() - started, started_at=started_at,
+            sandbox_receipt=sandbox_receipt, sandbox_teardown=sandbox_teardown)
+        if process_receipt_prefix is not None:
+            _sealed_process_receipt(process_receipt_prefix + "-terminal.json", {
+                "schema": "epyc.autokernel.owned_process_terminal.v2",
+                "start_receipt_sha256": _sha256_file(
+                    process_receipt_prefix + "-start.json"),
+                "disposition": disposition.to_dict(),
+                "stdout_path": stdout_path,
+                "stdout_sha256": (hashlib.sha256(stream_raw).hexdigest()
+                                   if stream_raw is not None else None),
+                "stdout_identity": stream_identity,
+            })
+            if stdout_path is not None:
+                assert sink is not None and stream_identity is not None
+                _revalidate_open_stream(sink, stdout_path, stream_identity)
+        return disposition, text
     finally:
         if sink is not None:
             sink.close()
-
-    if stdout_path is not None:
-        with open(stdout_path, "rb") as handle:
-            text = handle.read().decode("utf-8", "replace")
-    else:
-        text = (captured or b"").decode("utf-8", "replace")
-
-    if timed_out and not verified_dead:
-        raise ProcessEscalationFailed(
-            f"pid {pid} (pgid {pgid}) survived {list(signals_sent)}; running "
-            f"{' '.join(argv)}. Not reporting a clean teardown for a process still alive")
-
-    sandbox_receipt = None
-    sandbox_teardown = None
-    if sandbox_policy is not None:
-        try:
-            sandbox_receipt = process_sandbox.read_receipt(sandbox_receipt_path)
-            process_sandbox.verify_receipt(
-                sandbox_receipt, policy=sandbox_policy, pid=pid, argv=argv)
-            sandbox_teardown = process_sandbox.cleanup_cgroup(sandbox_policy, pid)
-        except process_sandbox.SandboxError as exc:
-            cleanup_note = ""
-            cgroup_path = sandbox_policy.cgroup_path(pid)
-            if cgroup_path.exists():
-                try:
-                    process_sandbox.cleanup_cgroup(sandbox_policy, pid)
-                    cleanup_note = "; the owned cgroup was drained after refusal"
-                except process_sandbox.SandboxError as cleanup_exc:
-                    cleanup_note = (
-                        "; additionally, owned-cgroup cleanup failed: "
-                        f"{cleanup_exc}")
-            raise WorktreeError(
-                "candidate build containment did not produce a verified activation "
-                f"receipt and teardown: {exc}{cleanup_note}") from exc
-
-    disposition = ProcessDisposition(
-        argv=argv, pid=pid, pgid=pgid, exit_code=exit_code, timed_out=timed_out,
-        signals_sent=signals_sent, verified_dead=verified_dead,
-        duration_s=time.monotonic() - started, started_at=started_at,
-        sandbox_receipt=sandbox_receipt, sandbox_teardown=sandbox_teardown)
-    return disposition, text
 
 
 def _run_guarded_patch_input(worktree: "Worktree", patch_bytes: bytes, *,
@@ -2282,6 +2488,9 @@ class BuildResult:
     #: 1-minute load average read immediately before configure, when a cap was
     #: declared. `None` means no cap was declared — never "the cap passed".
     load_average_at_start: Optional[float] = None
+    log_identity: Optional[Mapping[str, int]] = None
+    result_receipt_path: Optional[str] = None
+    result_receipt_sha256: Optional[str] = None
 
     @property
     def exit_code(self) -> Optional[int]:
@@ -2315,14 +2524,19 @@ class BuildResult:
                 "log_disagrees_with_exit_code": self.log_disagrees_with_exit_code,
                 "build_dir_pre_build_digest": self.build_dir_pre_build_digest,
                 "build_dir_created_for_this_build": self.build_dir_created_for_this_build,
-                "load_average_at_start": self.load_average_at_start}
+                "load_average_at_start": self.load_average_at_start,
+                "log_identity": (dict(self.log_identity)
+                                 if self.log_identity is not None else None),
+                "result_receipt_path": self.result_receipt_path,
+                "result_receipt_sha256": self.result_receipt_sha256}
 
 
 def run_build(plan: BuildPlan, *, log_path: Any,
               configure_timeout_s: float = 900.0,
               build_timeout_s: float = 14400.0,
               env: Optional[Mapping[str, str]] = None,
-              require_fresh_build_dir: bool = True) -> BuildResult:
+              require_fresh_build_dir: bool = True,
+              sandbox_cgroup_root: Optional[str] = None) -> BuildResult:
     """Configure, build, capture the log, and return the facts.
 
     The build directory is created here and its pre-build digest is taken with
@@ -2361,8 +2575,15 @@ def run_build(plan: BuildPlan, *, log_path: Any,
     build_env = dict(os.environ if env is None else env)
     build_env["TMPDIR"] = candidate_tmp
     build_env["PYTHONDONTWRITEBYTECODE"] = "1"
+    if sandbox_cgroup_root is not None:
+        cgroup_root = Path(sandbox_cgroup_root)
+        if (not cgroup_root.is_absolute() or cgroup_root.is_symlink()
+                or not cgroup_root.is_dir()):
+            raise WorktreeError("sandbox cgroup root is not an exact directory")
     sandbox_policy = process_sandbox.SandboxPolicy(
-        writable_root=plan.build_dir.path)
+        writable_root=plan.build_dir.path,
+        **({"cgroup_root": sandbox_cgroup_root}
+           if sandbox_cgroup_root is not None else {}))
     configure_sandbox_receipt = log + ".configure-sandbox.json"
     build_sandbox_receipt = log + ".build-sandbox.json"
 
@@ -2382,33 +2603,63 @@ def run_build(plan: BuildPlan, *, log_path: Any,
                 f"{cap:.2f}. Refusing to start a {plan.parallelism.jobs}-way build: the "
                 "cap was recorded in the receipt, so it has to be the thing that happened")
 
-    sections: list = []
+    if os.path.lexists(log):
+        raise WorktreeError(f"build log already exists; refusing overwrite: {log}")
+    configure_stream = log + ".configure.stream"
+    build_stream = log + ".build.stream"
+    process_prefix = log + ".configure-process"
     configure_disp, configure_text = _run_owned(
         plan.configure_argv(), timeout_s=configure_timeout_s, env=build_env,
+        stdout_path=configure_stream, process_receipt_prefix=process_prefix,
         sandbox_policy=sandbox_policy,
         sandbox_receipt_path=configure_sandbox_receipt)
-    sections.append("=== configure: " + " ".join(plan.configure_argv()) + "\n")
-    sections.append(configure_text)
+    sections: list = ["=== configure: " + " ".join(plan.configure_argv()) + "\n",
+                      configure_text]
 
     build_disp = None
     if configure_disp.exit_code == 0:
         build_disp, build_text = _run_owned(
             plan.build_argv(), timeout_s=build_timeout_s, env=build_env,
+            stdout_path=build_stream,
+            process_receipt_prefix=log + ".build-process",
             sandbox_policy=sandbox_policy,
             sandbox_receipt_path=build_sandbox_receipt)
         sections.append("=== build: " + " ".join(plan.build_argv()) + "\n")
         sections.append(build_text)
 
     combined = "".join(sections)
-    with open(log, "w", encoding="utf-8") as handle:
-        handle.write(combined)
+    handle = _exclusive_regular_sink(log)
+    try:
+        handle.write(combined.encode("utf-8"))
+        raw, log_identity = _read_and_revalidate_open_stream(handle, log)
+        if raw != combined.encode("utf-8"):
+            raise WorktreeError("combined build log differs from its writer bytes")
+        facts = parse_build_log(combined)
+        receipt_path = log + ".result.json"
+        receipt_body = {
+            "schema": "epyc.autokernel.build_process_result.v1",
+            "plan": plan.to_dict(),
+            "configure": configure_disp.to_dict() if configure_disp else None,
+            "build": build_disp.to_dict() if build_disp else None,
+            "log_path": log, "log_sha256": hashlib.sha256(raw).hexdigest(),
+            "log_identity": log_identity, "facts": facts.to_dict(),
+            "build_dir_pre_build_digest": pre_digest,
+            "build_dir_created_for_this_build": created,
+            "load_average_at_start": load_now,
+        }
+        receipt_sha = _sealed_process_receipt(receipt_path, receipt_body)
+        _revalidate_open_stream(handle, log, log_identity)
+    finally:
+        handle.close()
 
     return BuildResult(
         plan=plan, configure=configure_disp, build=build_disp, log_path=log,
-        log_sha256=_sha256_text(combined), facts=parse_build_log(combined),
+        log_sha256=hashlib.sha256(raw).hexdigest(), facts=facts,
         build_dir_pre_build_digest=pre_digest,
         build_dir_created_for_this_build=created,
-        load_average_at_start=load_now)
+        load_average_at_start=load_now, log_identity=log_identity,
+        result_receipt_path=receipt_path,
+        result_receipt_sha256=receipt_sha)
 
 
 # =============================================================================

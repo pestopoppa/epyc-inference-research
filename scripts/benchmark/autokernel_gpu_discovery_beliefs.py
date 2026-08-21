@@ -124,6 +124,21 @@ def _common(receipt: Mapping[str, Any], *, producer: Mapping[str, Any],
     }
 
 
+def _baseline_center(receipt: Mapping[str, Any], *, samples: list[float],
+                     run: Mapping[str, Any]) -> float:
+    frame = _mapping(receipt.get("frame"), "frame")
+    contract = frame.get("metric_contract")
+    if (isinstance(contract, Mapping)
+            and contract.get("schema") ==
+            "epyc.autokernel.serialized_pair_max_metric.v1"):
+        metric = run.get("metric")
+        if (isinstance(metric, bool) or not isinstance(metric, (int, float))
+                or not math.isfinite(float(metric)) or float(metric) <= 0):
+            raise BeliefRefused("serialized pair-max run lacks tokens/mean-latency metric")
+        return float(metric)
+    return sum(samples) / len(samples)
+
+
 def attach_baseline_beliefs(receipt: Mapping[str, Any], *, producer_path: Path) -> dict:
     """Seal the three-anchor bank and its prospective baseline ClaimTuple row."""
     if receipt.get("schema") != BANK_SCHEMA or receipt.get("status") != "complete":
@@ -135,16 +150,17 @@ def attach_baseline_beliefs(receipt: Mapping[str, Any], *, producer_path: Path) 
         raise BeliefRefused("anchor_invocations must be one of 3, 5, or 9")
     samples = _samples(receipt.get("anchor_samples"), "anchor_samples", expected=reps)
     runs = receipt.get("anchor_runs")
-    if not isinstance(runs, list) or len(runs) != reps \
-            or any(not isinstance(run, dict) or run.get("metric") != sample
-                   or run.get("hip_residency_proved") is not True
-                   for run, sample in zip(runs, samples)):
-        raise BeliefRefused("anchor runs do not bind the three resident samples")
+    if (not isinstance(runs, list) or len(runs) != 1
+            or not isinstance(runs[0], dict)
+            or runs[0].get("samples") != samples
+            or runs[0].get("sample_count") != reps
+            or runs[0].get("hip_residency_proved") is not True):
+        raise BeliefRefused("anchor process does not bind the native raw sample vector")
     producer = _producer(producer_path)
     common = _common(receipt, producer=producer, samples=samples)
     identity = _mapping(receipt.get("anchor_identity"), "anchor_identity")
     common.update({"arm": "anchor", "build_identity": dict(identity)})
-    center = sum(samples) / len(samples)
+    center = _baseline_center(receipt, samples=samples, run=runs[0])
     recipe = receipt["frame"]["recipe"]
     label = "pp512" if recipe == "pp512-ngl99" else "tg128"
     metric = receipt["frame"]["metric"]
@@ -156,8 +172,13 @@ def attach_baseline_beliefs(receipt: Mapping[str, Any], *, producer_path: Path) 
         category="BASELINE",
         claim=(f"Non-promotable GPU discovery anchor observed median {label} throughput "
                f"{median(samples):.9g} tokens/s"),
-        reps_basis=f"scored:{reps} anchor-bank MI210 llama-bench invocations",
-        extra={**common, "arithmetic_baseline_center": center},
+        reps_basis=f"scored:{reps} anchor-bank MI210 llama-bench native repetitions",
+        extra={**common, "sealed_baseline_center": center,
+               "baseline_center_method": (
+                   "tokens_per_mean_protected_latency"
+                   if receipt["frame"].get("metric_contract", {}).get("schema") ==
+                   "epyc.autokernel.serialized_pair_max_metric.v1"
+                   else "arithmetic_mean_native_samples")},
         protocol_id=BANK_SCHEMA, reps=reps)]
     result["baseline_sha256"] = schemas.content_hash(result)
     return result
@@ -183,11 +204,12 @@ def attach_result_beliefs(receipt: Mapping[str, Any], *, bank: Mapping[str, Any]
     samples = _samples(receipt.get("candidate_samples"), "candidate_samples",
                        expected=reps)
     runs = receipt.get("candidate_runs")
-    if not isinstance(runs, list) or len(runs) != reps \
-            or any(not isinstance(run, dict) or run.get("metric") != sample
-                   or run.get("hip_residency_proved") is not True
-                   for run, sample in zip(runs, samples)):
-        raise BeliefRefused("candidate runs do not bind the three resident samples")
+    if (not isinstance(runs, list) or len(runs) != 1
+            or not isinstance(runs[0], dict)
+            or runs[0].get("samples") != samples
+            or runs[0].get("sample_count") != reps
+            or runs[0].get("hip_residency_proved") is not True):
+        raise BeliefRefused("candidate process does not bind the native raw sample vector")
     baseline_center = receipt.get("baseline_center")
     if isinstance(baseline_center, bool) or not isinstance(baseline_center, (int, float)) \
             or not math.isfinite(baseline_center) or baseline_center <= 0:
@@ -196,7 +218,12 @@ def attach_result_beliefs(receipt: Mapping[str, Any], *, bank: Mapping[str, Any]
         raise BeliefRefused("candidate invocation count differs from sealed bank")
     bank_samples = _samples(bank.get("anchor_samples"), "bank.anchor_samples",
                             expected=reps)
-    if not math.isclose(float(baseline_center), sum(bank_samples) / len(bank_samples),
+    bank_runs = bank.get("anchor_runs")
+    if (not isinstance(bank_runs, list) or len(bank_runs) != 1
+            or not isinstance(bank_runs[0], Mapping)):
+        raise BeliefRefused("bank anchor run is malformed")
+    expected_center = _baseline_center(bank, samples=bank_samples, run=bank_runs[0])
+    if not math.isclose(float(baseline_center), expected_center,
                         rel_tol=1e-12, abs_tol=1e-12):
         raise BeliefRefused("baseline_center does not rederive from the sealed bank")
     effects = [(sample - float(baseline_center)) / float(baseline_center)

@@ -23,7 +23,7 @@ import signal
 import subprocess
 import sys
 import tempfile
-from typing import Mapping, Sequence
+from typing import Any, Mapping, Sequence
 
 
 EXECUTABLE_MODULE = (
@@ -121,6 +121,9 @@ def build_docker_argv(
 def run_actor(
     *, wrapper: Path, workspace: Path, model: str, effort: str,
     prompt: str, environment: Mapping[str, str],
+    expected_wrapper_sha256: str | None = None,
+    expected_runtime_identity: Mapping[str, Any] | None = None,
+    expected_launcher_sha256: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Stage read-only assets, run one container, then erase staged auth."""
     if not isinstance(prompt, str) or not prompt.strip():
@@ -131,6 +134,21 @@ def run_actor(
         raise CodexContainerError("host CA certificate bundle is unavailable or unsafe")
     if not ASSET_TEMP_ROOT.is_dir() or ASSET_TEMP_ROOT.is_symlink():
         raise CodexContainerError("container asset staging root is unavailable or unsafe")
+    if wrapper.is_symlink() or not wrapper.is_file() or not os.access(wrapper, os.X_OK):
+        raise CodexContainerError("Codex wrapper must remain an executable regular file")
+    if (expected_wrapper_sha256 is not None
+            and _sha256_file(wrapper) != expected_wrapper_sha256):
+        raise CodexContainerError("Codex wrapper bytes changed after deployment validation")
+    # This runs in the same function immediately before staging and spawn.  A
+    # launcher-side check alone would leave a check/use gap for Docker, the
+    # native Codex executable, code-mode host, image, and CA bundle.
+    current_runtime = runtime_identity(wrapper)
+    if (expected_runtime_identity is not None
+            and current_runtime != dict(expected_runtime_identity)):
+        raise CodexContainerError("Codex actor runtime identity changed before spawn")
+    if (expected_launcher_sha256 is not None
+            and _sha256_file(Path(__file__).resolve()) != expected_launcher_sha256):
+        raise CodexContainerError("Codex actor launcher/argv policy bytes changed before spawn")
     native, code_mode_host = _codex_native_assets(wrapper)
     auth = _auth_file(environment)
     with tempfile.TemporaryDirectory(
@@ -184,6 +202,8 @@ def run_actor(
 
 def runtime_identity(wrapper: Path) -> dict[str, object]:
     """Return non-secret hashes describing the external actor boundary."""
+    if wrapper.is_symlink() or not wrapper.is_file() or not os.access(wrapper, os.X_OK):
+        raise CodexContainerError("Codex wrapper must be an executable regular file")
     native, code_mode_host = _codex_native_assets(wrapper)
     return {
         "kind": "docker_workspace_bind_only",

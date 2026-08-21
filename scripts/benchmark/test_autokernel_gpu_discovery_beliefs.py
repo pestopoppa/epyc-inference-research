@@ -36,9 +36,10 @@ def frame() -> dict:
 
 
 def runs(samples: list[float]) -> list[dict]:
-    return [{"metric": sample, "hip_residency_proved": True,
-             "raw_row": {"avg_ts": sample}, "residency": [{"owned_kfd_pids": [1]}]}
-            for sample in samples]
+    return [{"metric": sum(samples) / len(samples), "samples": samples,
+             "sample_count": len(samples), "hip_residency_proved": True,
+             "raw_row": {"avg_ts": sum(samples) / len(samples), "samples_ts": samples},
+             "residency": [{"owned_kfd_pids": [1]}]}]
 
 
 def baseline_body() -> dict:
@@ -124,6 +125,28 @@ class TestGpuDiscoveryBeliefs(unittest.TestCase):
                 row["measurement_sha256"] = claimed
                 self.assertFalse(row["extra"]["promotion_authority"])
 
+    def test_serialized_pair_max_center_uses_tokens_per_mean_latency(self) -> None:
+        body = baseline_body()
+        body["frame"]["metric_contract"] = {
+            "schema": "epyc.autokernel.serialized_pair_max_metric.v1",
+            "scope": "integrity_discovery_only",
+            "production_throughput_authority": False,
+        }
+        body["anchor_runs"][0]["metric"] = 99.0
+        bank = beliefs.attach_baseline_beliefs(body, producer_path=PRODUCER)
+        row = bank["belief_measurements"][0]
+        self.assertEqual(row["extra"]["sealed_baseline_center"], 99.0)
+        self.assertEqual(row["extra"]["baseline_center_method"],
+                         "tokens_per_mean_protected_latency")
+        candidate = result_body(bank)
+        candidate["baseline_center"] = 99.0
+        candidate["relative_effects"] = [
+            (sample - 99.0) / 99.0 for sample in candidate["candidate_samples"]]
+        candidate["median_relative"] = sorted(candidate["relative_effects"])[1]
+        result = beliefs.attach_result_beliefs(
+            candidate, bank=bank, producer_path=PRODUCER)
+        self.assertEqual(result["baseline_center"], 99.0)
+
     def test_pre_hook_receipts_are_not_modified_or_backfilled(self) -> None:
         old = baseline_body()
         old["campaign_id"] = "ak-gpu-screen-s2-pre-hook"
@@ -168,8 +191,8 @@ class TestGpuDiscoveryBeliefs(unittest.TestCase):
 
     def test_refuses_missing_gpu_residency_and_authority_upgrade(self) -> None:
         bad = baseline_body()
-        bad["anchor_runs"][1]["hip_residency_proved"] = False
-        with self.assertRaisesRegex(beliefs.BeliefRefused, "resident samples"):
+        bad["anchor_runs"][0]["hip_residency_proved"] = False
+        with self.assertRaisesRegex(beliefs.BeliefRefused, "native raw sample"):
             beliefs.attach_baseline_beliefs(bad, producer_path=PRODUCER)
 
         bad = baseline_body()

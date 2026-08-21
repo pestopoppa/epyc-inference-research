@@ -13,10 +13,12 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
+import hashlib
 import json
 import math
 import os
 from pathlib import Path
+import re
 from typing import Any, Mapping, Sequence
 
 from . import journal, schemas
@@ -24,7 +26,7 @@ from .controller import hypotheses
 from .evaluator import recipes
 
 
-SCHEMA = "epyc.autokernel.least_commitment_heldout_outcome.v2"
+SCHEMA = "epyc.autokernel.least_commitment_heldout_outcome.v3"
 AUTHORITY = "observe_only_journal_projection"
 CAPTURE_MODE = "measured"
 _RECEIPT_FIELDS = frozenset({
@@ -42,6 +44,7 @@ _FRAME_FIELDS = (
     "measurement_commit", "provider_reference", "changed_factor",
     "anchor_parameter_surface",
 )
+_ASLR_SUFFIX = re.compile(r"\s+\(0x[0-9a-fA-F]+\)\s*$")
 
 
 class HeldoutProjectionError(ValueError):
@@ -259,6 +262,152 @@ def _parameter_surface(proposal: Mapping[str, Any], label: str) -> Mapping[str, 
     return surface
 
 
+def _file_sha256(path: Path, label: str, *, allow_symlink: bool = False) -> str:
+    if (path.is_symlink() and not allow_symlink) or not path.is_file():
+        kind = "file" if allow_symlink else "non-symlink file"
+        raise HeldoutProjectionError(f"{label}: expected an existing {kind}")
+    digest = hashlib.sha256()
+    try:
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+    except OSError as exc:
+        raise HeldoutProjectionError(f"{label}: cannot hash file: {exc}") from exc
+    return digest.hexdigest()
+
+
+def _calibration_root(frame_source: Mapping[str, Any], label: str) -> Path:
+    calibration = frame_source.get("calibration")
+    if not isinstance(calibration, Mapping):
+        raise HeldoutProjectionError(
+            f"{label}: candidate frame has no calibration receipt")
+    root = Path(_text(calibration.get("evidence_ref"),
+                      f"{label}.calibration.evidence_ref"))
+    if not root.is_absolute() or root.is_symlink() or not root.is_dir():
+        raise HeldoutProjectionError(
+            f"{label}.calibration.evidence_ref must be an existing absolute "
+            "non-symlink directory")
+    return root
+
+
+def _stable_linkage_identity(linkage_path: Path) -> dict[str, Any]:
+    """Resolve an ldd receipt to address-independent DSO path/content identity."""
+    try:
+        lines = linkage_path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError) as exc:
+        raise HeldoutProjectionError(
+            f"provider linkage receipt cannot be read as UTF-8: {exc}") from exc
+    entries: list[dict[str, Any]] = []
+    names: set[str] = set()
+    for line_number, raw in enumerate(lines, 1):
+        normalized = _ASLR_SUFFIX.sub("", raw.strip())
+        if not normalized:
+            continue
+        if "=>" in normalized:
+            name, target = (part.strip() for part in normalized.split("=>", 1))
+            if not name or target == "not found":
+                raise HeldoutProjectionError(
+                    f"provider linkage receipt line {line_number} is unresolved")
+            path = Path(target)
+            if not path.is_absolute():
+                raise HeldoutProjectionError(
+                    f"provider linkage receipt line {line_number} is not absolute")
+            try:
+                resolved_path = str(path.resolve(strict=True))
+            except OSError as exc:
+                raise HeldoutProjectionError(
+                    f"provider DSO {name!r}: cannot resolve path: {exc}") from exc
+            entry = {
+                "name": name,
+                "path": str(path),
+                "resolved_path": resolved_path,
+                "content_sha256": _file_sha256(
+                    path, f"provider DSO {name!r}", allow_symlink=True),
+            }
+        elif normalized == "linux-vdso.so.1":
+            entry = {
+                "name": normalized, "path": None, "resolved_path": None,
+                "content_sha256": None}
+        elif Path(normalized).is_absolute():
+            path = Path(normalized)
+            try:
+                resolved_path = str(path.resolve(strict=True))
+            except OSError as exc:
+                raise HeldoutProjectionError(
+                    f"provider loader {path.name!r}: cannot resolve path: {exc}") from exc
+            entry = {
+                "name": path.name,
+                "path": str(path),
+                "resolved_path": resolved_path,
+                "content_sha256": _file_sha256(
+                    path, f"provider loader {path.name!r}", allow_symlink=True),
+            }
+        else:
+            raise HeldoutProjectionError(
+                f"provider linkage receipt line {line_number} has unknown syntax")
+        if entry["name"] in names:
+            raise HeldoutProjectionError(
+                f"provider linkage receipt repeats DSO {entry['name']!r}")
+        names.add(entry["name"])
+        entries.append(entry)
+    if not entries:
+        raise HeldoutProjectionError("provider linkage receipt has no DSO entries")
+    entries.sort(key=lambda item: (item["name"], item["path"] or ""))
+    return {
+        "schema": "epyc.autokernel.stable_linkage_identity.v1",
+        "entries": entries,
+        "identity_sha256": schemas.content_hash(entries),
+    }
+
+
+def _stable_provider_reference(
+        provider: Mapping[str, Any], frame_source: Mapping[str, Any],
+        label: str) -> dict[str, Any]:
+    """Project exact provider receipts without treating ldd ASLR as identity.
+
+    The proposal and completed journal retain the original provider object and
+    raw linkage hash.  This projection first verifies those exact receipts,
+    then replaces only the ASLR-volatile raw ldd hash in the cross-regime frame
+    with the resolved DSO path/content identity.
+    """
+    root = _calibration_root(frame_source, label)
+    source = _load(root / "runtime-source-label.json",
+                   f"{label} calibration runtime source label")
+    if source.get("schema") != "epyc.autokernel.runtime_source_label.v1":
+        raise HeldoutProjectionError(
+            f"{label}: calibration runtime source label has the wrong schema")
+    source_body = dict(source)
+    source_sha = source_body.pop("source_sha256", None)
+    if source_sha != schemas.content_hash(source_body):
+        raise HeldoutProjectionError(
+            f"{label}: calibration runtime source label hash does not verify")
+    declaration = _load(root / "campaign_declaration.json",
+                        f"{label} calibration declaration")
+    if declaration.get("source_sha256") != source_sha:
+        raise HeldoutProjectionError(
+            f"{label}: calibration declaration is not bound to its source label")
+    bindings = {
+        "artifact_sha256": "measurement_binary_sha256",
+        "linkage_manifest_sha256": "measurement_linkage_sha256",
+        "toolchain_manifest_sha256": "measurement_toolchain_manifest_sha256",
+        "source_commit": "measurement_instrument_commit",
+    }
+    for provider_key, source_key in bindings.items():
+        if provider.get(provider_key) != source.get(source_key):
+            raise HeldoutProjectionError(
+                f"{label}: provider {provider_key} differs from its exact "
+                "calibration receipt")
+    linkage_path = root / "linkage.instrument.txt"
+    if _file_sha256(linkage_path, f"{label} provider linkage receipt") \
+            != provider.get("linkage_manifest_sha256"):
+        raise HeldoutProjectionError(
+            f"{label}: provider linkage receipt hash does not verify")
+    stable = dict(provider)
+    stable.pop("linkage_manifest_sha256", None)
+    stable["linkage_identity"] = _stable_linkage_identity(linkage_path)
+    return json.loads(schemas.canonical_json(stable))
+
+
 def candidate_frame_from_factors(
         factors: Mapping[str, Any], proposal: Mapping[str, Any]) -> dict[str, Any]:
     """Derive the cross-regime frame from a prospective matched campaign."""
@@ -278,7 +427,8 @@ def candidate_frame_from_factors(
              if key not in {"provider_reference", "changed_factor",
                             "anchor_parameter_surface"}}
     frame.update({
-        "provider_reference": proposal.get("provider_reference"),
+        "provider_reference": _stable_provider_reference(
+            provider, factors, "target matched factors"),
         "changed_factor": "ggml_iqk",
         "anchor_parameter_surface": dict(surface["anchor"]),
     })
@@ -307,7 +457,8 @@ def _candidate_frame_from_evidence(
              if key not in {"provider_reference", "changed_factor",
                             "anchor_parameter_surface"}}
     frame.update({
-        "provider_reference": evidence.proposal.get("provider_reference"),
+        "provider_reference": _stable_provider_reference(
+            provider, spec, "completed campaign spec"),
         "changed_factor": "ggml_iqk",
         "anchor_parameter_surface": dict(surface["anchor"]),
     })

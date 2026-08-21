@@ -30,6 +30,89 @@ def _git(*args, cwd):
 
 
 class SourceCase(unittest.TestCase):
+    def test_truncated_cpp_hunk_context_derives_exact_function_symbols(self):
+        patch_bytes = (
+            b"diff --git a/ggml/src/ggml-cuda/vecdotq.cuh b/ggml/src/ggml-cuda/vecdotq.cuh\n"
+            b"--- a/ggml/src/ggml-cuda/vecdotq.cuh\n"
+            b"+++ b/ggml/src/ggml-cuda/vecdotq.cuh\n"
+            b"@@ -176,1 +176,1 @@ template <int vdr> static __device__ __forceinline__ float vec_dot_q5_0_q8_1_impl(\n"
+            b"-old_impl\n"
+            b"+new_impl\n"
+            b"@@ -764,1 +764,1 @@ static __device__ __forceinline__ float vec_dot_q5_0_q8_1(\n"
+            b"-old_entry\n"
+            b"+new_entry\n"
+        )
+        manifest = S.SourcePatchManifest(
+            campaign_id="ak-inaugural", proposal_id="akp-inaugural",
+            candidate_id="akc-inaugural", source_tree="llama.cpp",
+            production_base_commit="0" * 40, instrument_commit="1" * 40,
+            change_class="arithmetic",
+            declared_files=("ggml/src/ggml-cuda/vecdotq.cuh",),
+            declared_symbols={"ggml/src/ggml-cuda/vecdotq.cuh": (
+                "vec_dot_q5_0_q8_1", "vec_dot_q5_0_q8_1_impl")},
+            mechanism_id="inaugural-live-artifact",
+            patch_sha256=hashlib.sha256(patch_bytes).hexdigest(),
+            patch_bytes=patch_bytes)
+        _hunks, symbols = S.hunk_identities(manifest.patch_text)
+        self.assertEqual(symbols, (
+            "vec_dot_q5_0_q8_1", "vec_dot_q5_0_q8_1_impl"))
+
+    def test_truncated_control_flow_context_remains_file_scope(self):
+        patch = (
+            "diff --git a/ggml/src/ggml-cuda/x.cu b/ggml/src/ggml-cuda/x.cu\n"
+            "--- a/ggml/src/ggml-cuda/x.cu\n+++ b/ggml/src/ggml-cuda/x.cu\n"
+            "@@ -1,1 +1,1 @@ if (\n-old\n+new\n")
+        _hunks, symbols = S.hunk_identities(patch)
+        self.assertEqual(symbols, (S.FILE_SCOPE,))
+
+    def test_exact_bare_hunk_symbol_is_accepted_but_control_word_is_not(self):
+        prefix = "diff --git a/a.cu b/a.cu\n--- a/a.cu\n+++ b/a.cu\n"
+        _hunks, symbols = S.hunk_identities(
+            prefix + "@@ -1,1 +1,1 @@ reviewed_kernel\n-old\n+new\n")
+        self.assertEqual(symbols, ("reviewed_kernel",))
+        _hunks, symbols = S.hunk_identities(
+            prefix + "@@ -1,1 +1,1 @@ while\n-old\n+new\n")
+        self.assertEqual(symbols, (S.FILE_SCOPE,))
+
+    def test_hunk_body_function_overrides_stale_preceding_function_header(self):
+        patch_bytes = (
+            b"diff --git a/ggml/src/ggml-cuda/vecdotq.cuh b/ggml/src/ggml-cuda/vecdotq.cuh\n"
+            b"--- a/ggml/src/ggml-cuda/vecdotq.cuh\n"
+            b"+++ b/ggml/src/ggml-cuda/vecdotq.cuh\n"
+            b"@@ -170,3 +170,3 @@ static __device__ float vec_dot_q4_1_q8_1_impl(\n"
+            b" template <int vdr> static __device__ float vec_dot_q5_0_q8_1_impl(\n"
+            b"-old_impl\n"
+            b"+new_impl\n"
+            b" context\n"
+        )
+        manifest = S.SourcePatchManifest(
+            campaign_id="ak-inaugural", proposal_id="akp-inaugural",
+            candidate_id="akc-inaugural", source_tree="llama.cpp",
+            production_base_commit="0" * 40, instrument_commit="1" * 40,
+            change_class="arithmetic",
+            declared_files=("ggml/src/ggml-cuda/vecdotq.cuh",),
+            declared_symbols={"ggml/src/ggml-cuda/vecdotq.cuh": (
+                "vec_dot_q5_0_q8_1_impl",)},
+            mechanism_id="stale-diff-header",
+            patch_sha256=hashlib.sha256(patch_bytes).hexdigest(),
+            patch_bytes=patch_bytes)
+        _hunks, symbols = S.hunk_identities(manifest.patch_text)
+        self.assertEqual(symbols, ("vec_dot_q5_0_q8_1_impl",))
+
+    def test_trailing_next_function_cannot_override_hunk_header(self):
+        patch = (
+            "diff --git a/ggml/src/ggml-cuda/vecdotq.cuh b/ggml/src/ggml-cuda/vecdotq.cuh\n"
+            "--- a/ggml/src/ggml-cuda/vecdotq.cuh\n"
+            "+++ b/ggml/src/ggml-cuda/vecdotq.cuh\n"
+            "@@ -764,4 +764,4 @@ static float vec_dot_q5_0_q8_1(\n"
+            "-old_impl\n"
+            "+new_impl\n"
+            " }\n"
+            " static float vec_dot_q5_1_q8_1(\n"
+        )
+        _hunks, symbols = S.hunk_identities(patch)
+        self.assertEqual(symbols, ("vec_dot_q5_0_q8_1",))
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(prefix="ak-source-candidate-")
         self.addCleanup(self.tmp.cleanup)
@@ -95,6 +178,29 @@ class SourceCase(unittest.TestCase):
         self.assertIn(("--", PATH), tuple(zip(applied.commit_argv, applied.commit_argv[1:])))
         self.assertTrue(self.actor.is_clean())
         self.assertEqual(self.actor.head_commit(), applied.candidate_commit)
+
+    def test_phase_graph_and_content_specialization_refuse_before_apply(self):
+        probes = (
+            "if (hipStreamIsCapturing(stream, &status)) return x;",
+            "auto graph = torch.cuda.CUDAGraph();",
+            "auto input_fingerprint = checksum_input(input);",
+        )
+        for probe in probes:
+            patch = (
+                f"diff --git a/{PATH} b/{PATH}\n"
+                f"--- a/{PATH}\n+++ b/{PATH}\n"
+                "@@ -2,3 +2,4 @@ int kernel_step(int x) {\n"
+                " int kernel_step(int x) {\n"
+                f"+    {probe}\n"
+                "-    return x + 1;\n"
+                "+    return x + 2;\n"
+                " }\n"
+            ).encode()
+            with self.subTest(probe=probe), self.assertRaisesRegex(
+                    S.SourceCandidateError, "pre-build reward-integrity"):
+                self.manifest(
+                    patch_sha256=hashlib.sha256(patch).hexdigest(),
+                    patch_bytes=patch)
 
     def test_digest_and_every_identity_mismatch_refuse(self):
         with self.assertRaisesRegex(S.SourceCandidateError, "patch_sha256"):

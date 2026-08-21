@@ -1,0 +1,111 @@
+{
+  "schema": "epyc.autokernel.c5_rocm_correctness_provider.v2",
+  "provider_id": "sol-execbench-rocm-c5-gfx90a-correctness-v2",
+  "source": {
+    "url": "https://github.com/williamqwu/sol-execbench-rocm",
+    "commit": "7e751eccb8e45a0d0efbcb8c0db8f6eac57a837e",
+    "license": "Apache-2.0"
+  },
+  "source_runtime_provenance": {
+    "container_image": "rocm/pytorch:rocm7.2_ubuntu24.04_py3.12_pytorch_release_2.9.1",
+    "rocm_version": "7.2.0",
+    "torch_version": "2.9.1+rocm7.2.0.git7e1940d4",
+    "torch_hip_version": "7.2.26015-fc0010cf6a"
+  },
+  "target": {
+    "hardware": "LOCAL",
+    "architecture": "gfx90a",
+    "compile_arch_source": "torch.cuda.get_device_properties(0).gcnArchName",
+    "compile_flag": "--offload-arch=gfx90a"
+  },
+  "correctness": {
+    "enabled": true,
+    "rounds": 10,
+    "fresh_inputs_each_round": true,
+    "live_reference_each_round": true,
+    "authority": "correctness_oracle_only"
+  },
+  "scoring": {
+    "enabled": false,
+    "authority": "none",
+    "reason": "no_measured_gfx90a_t_sol_t_b_or_tolerances",
+    "source_constant_architectures": ["gfx950"],
+    "import_source_constants": false
+  },
+  "primary_artifacts": {
+    "manifest_path": "artifacts/09/manifest-v1.2.json",
+    "manifest_sha256": "9e59c3b753398d1b32f45a48f90ad18ccbd0d5219abee7d4a60316123c789484",
+    "problem_packager_path": "src/sol_execbench/driver/problem_packager.py",
+    "problem_packager_sha256": "1d3c042bc956d358c44a441a1f6eb78e916d58060389fa50a332595b02cef2ff",
+    "build_template_path": "src/sol_execbench/driver/templates/build_ext.py",
+    "build_template_sha256": "269181b9a9782f2b6679a08fb67b5791bbed6ab7a812febce4557bf440313a03",
+    "eval_template_path": "src/sol_execbench/driver/templates/eval_driver.py",
+    "eval_template_sha256": "83d133f004ae70374b61b28fec239a787e2833134220a497c15ae9a731ba845c"
+  },
+  "seeds": [
+    {
+      "seed_id": "k138",
+      "problem_id": "L2__044_mamba_discretization_and_segsum",
+      "workload_count": 16,
+      "oracle_workload_dtypes": ["bf16"],
+      "workload_path": "artifacts/05/workloads/L2/044_mamba_discretization_and_segsum/workload.jsonl",
+      "workload_sha256": "52421924a8c20f0f660b4c9af20a915d5657fbe3d1e656f717306b67aa93349b"
+    },
+    {
+      "seed_id": "k145",
+      "problem_id": "L2__051_seqlen-finetuned-reconstructed_hyena_complete_forward_block",
+      "workload_count": 16,
+      "oracle_workload_dtypes": ["fp32"],
+      "workload_path": "artifacts/05/workloads/L2/051_seqlen-finetuned-reconstructed_hyena_complete_forward_block/workload.jsonl",
+      "workload_sha256": "1678edfe5c242d58dc427876e4f712e583ea120cca915f7768147abc5cacca52"
+    },
+    {
+      "seed_id": "k154",
+      "problem_id": "L2__060_chunk_gated_delta_rule_linear_attention",
+      "workload_count": 16,
+      "oracle_workload_dtypes": ["bf16"],
+      "workload_path": "artifacts/05/workloads/L2/060_chunk_gated_delta_rule_linear_attention/workload.jsonl",
+      "workload_sha256": "02cb6a3c77bfb6910082c4eb9b768645da8a085577cba1ebe5cf076bb9bfa306"
+    },
+    {
+      "seed_id": "k175",
+      "problem_id": "L2__081_moe_sparse_expert_dispatch",
+      "workload_count": 16,
+      "oracle_workload_dtypes": ["bf16"],
+      "workload_path": "artifacts/05/workloads/L2/081_moe_sparse_expert_dispatch/workload.jsonl",
+      "workload_sha256": "83e2da68966f5ebac3cfda3d829b85bac232aadba87cafe12d057b3871977dc7"
+    },
+    {
+      "seed_id": "k215",
+      "problem_id": "FlashInfer-Bench__006_gemm_n2048_k4096",
+      "workload_count": 29,
+      "oracle_workload_dtypes": ["fp16"],
+      "workload_path": "artifacts/05/workloads/FlashInfer-Bench/006_gemm_n2048_k4096/workload.jsonl",
+      "workload_sha256": "cf2574292a59638afa823ec749fdffa1abed7e6b9933a8e79fe6b02be341003b"
+    },
+    {
+      "seed_id": "k225",
+      "problem_id": "FlashInfer-Bench__016_gqa_ragged_prefill_causal_h32_kv4_d128",
+      "workload_count": 15,
+      "oracle_workload_dtypes": ["bf16"],
+      "workload_path": "artifacts/05/workloads/FlashInfer-Bench/016_gqa_ragged_prefill_causal_h32_kv4_d128/workload.jsonl",
+      "workload_sha256": "d42f919fa18de46e2482e632e0d8763d220578e1e79440d0d8b50b7adb15b25c"
+    },
+    {
+      "seed_id": "k227",
+      "problem_id": "FlashInfer-Bench__018_mla_paged_decode_h16_ckv512_kpe64_ps1",
+      "workload_count": 47,
+      "oracle_workload_dtypes": ["bf16"],
+      "workload_path": "artifacts/05/workloads/FlashInfer-Bench/018_mla_paged_decode_h16_ckv512_kpe64_ps1/workload.jsonl",
+      "workload_sha256": "020690ab4e73cec1c77b4c4905ac9e993612aca27f29dc4f3ac9205af852e62b"
+    },
+    {
+      "seed_id": "k228",
+      "problem_id": "FlashInfer-Bench__019_mla_paged_prefill_causal_h16_ckv512_kpe64_ps1",
+      "workload_count": 38,
+      "oracle_workload_dtypes": ["bf16"],
+      "workload_path": "artifacts/05/workloads/FlashInfer-Bench/019_mla_paged_prefill_causal_h16_ckv512_kpe64_ps1/workload.jsonl",
+      "workload_sha256": "b343738aa67918af32fcaa5a6079feb40951bc8ab5df712f98ff792c987cd0e3"
+    }
+  ]
+}

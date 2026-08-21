@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import contextlib
+import hashlib
 import io
 import json
 import tempfile
@@ -63,7 +64,38 @@ class _NoPriorMatches:
         return ()
 
 
+_TEST_FRAME_CALIBRATIONS: dict[tuple[str, ...], Path] = {}
+
+
 def _frame_factors(value: dict) -> dict:
+    provider = value["provider_reference"]
+    calibration_key = tuple(str(provider[key]) for key in (
+        "artifact_sha256", "source_commit", "toolchain_manifest_sha256",
+        "isolation_root", "target_backend"))
+    calibration = _TEST_FRAME_CALIBRATIONS.get(calibration_key)
+    if calibration is None:
+        calibration = Path(tempfile.mkdtemp(prefix="ak-heldout-calibration-"))
+        _TEST_FRAME_CALIBRATIONS[calibration_key] = calibration
+    linkage = calibration / "linkage.instrument.txt"
+    linkage.write_text(
+        "libc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 "
+        "(0x00007f0012345000)\n",
+        encoding="utf-8")
+    provider["linkage_manifest_sha256"] = hashlib.sha256(
+        linkage.read_bytes()).hexdigest()
+    source = {
+        "schema": "epyc.autokernel.runtime_source_label.v1",
+        "measurement_binary_sha256": provider["artifact_sha256"],
+        "measurement_instrument_commit": provider["source_commit"],
+        "measurement_linkage_sha256": provider["linkage_manifest_sha256"],
+        "measurement_toolchain_manifest_sha256": provider[
+            "toolchain_manifest_sha256"],
+    }
+    source_sha = C.schemas.content_hash(source)
+    (calibration / "runtime-source-label.json").write_text(
+        json.dumps({**source, "source_sha256": source_sha}), encoding="utf-8")
+    (calibration / "campaign_declaration.json").write_text(
+        json.dumps({"source_sha256": source_sha}), encoding="utf-8")
     return {
         "candidate_ref": "registered:ggml_iqk",
         "backend": "llama_cpu",
@@ -76,9 +108,39 @@ def _frame_factors(value: dict) -> dict:
         "production_commit": "b" * 40,
         "measurement_commit": "c" * 40,
         "provider_reference": copy.deepcopy(value["provider_reference"]),
+        "calibration": {"evidence_ref": str(calibration)},
         "ggml_iqk": value["change"]["parameter_surface"]["candidate"]["ggml_iqk"],
         "threads": 96,
     }
+
+
+def _bind_test_frame_calibration(value: dict, factors: dict) -> None:
+    """Give external calibration fixtures an exact, stable linkage receipt."""
+    calibration = factors.get("calibration")
+    if not isinstance(calibration, dict) or not calibration.get("evidence_ref"):
+        return
+    root = Path(calibration["evidence_ref"])
+    source_path = root / "runtime-source-label.json"
+    declaration_path = root / "campaign_declaration.json"
+    if not source_path.is_file() or not declaration_path.is_file():
+        return
+    linkage = root / "linkage.instrument.txt"
+    linkage.write_text(
+        "libc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 "
+        "(0x00007f0012345000)\n",
+        encoding="utf-8")
+    linkage_sha = hashlib.sha256(linkage.read_bytes()).hexdigest()
+    source = json.loads(source_path.read_text(encoding="utf-8"))
+    source.pop("source_sha256", None)
+    source["measurement_linkage_sha256"] = linkage_sha
+    source_sha = C.schemas.content_hash(source)
+    source_path.write_text(
+        json.dumps({**source, "source_sha256": source_sha}), encoding="utf-8")
+    declaration = json.loads(declaration_path.read_text(encoding="utf-8"))
+    declaration["source_sha256"] = source_sha
+    declaration_path.write_text(json.dumps(declaration), encoding="utf-8")
+    value["provider_reference"]["linkage_manifest_sha256"] = linkage_sha
+    factors["provider_reference"] = copy.deepcopy(value["provider_reference"])
 
 
 def _heldout_receipt(value: dict, *, factors: dict, effect: float) -> dict:
@@ -152,7 +214,7 @@ def _heldout_receipt(value: dict, *, factors: dict, effect: float) -> dict:
                 **{key: factors[key] for key in (
                     "candidate_ref", "backend", "model_sha256", "cpu_list",
                     "devices", "device_names", "device_index", "n_gpu_layers",
-                    "production_commit", "measurement_commit")},
+                    "production_commit", "measurement_commit", "calibration")},
             },
             "decision": {"keep": effect > 0.03, "median_relative": effect},
             "production_unchanged": {"outcome": C.schemas.PASS},
@@ -175,6 +237,7 @@ def plan(value: dict, *, role: str = "intervention",
          matched_control: str | None = "akp-20260812-1000",
          factors_override: dict | None = None) -> dict:
     factors = copy.deepcopy(factors_override or _frame_factors(value))
+    _bind_test_frame_calibration(value, factors)
     heldout = _heldout_receipt(
         value, factors=factors,
         effect=0.02 if role == "intervention" else 0.0)

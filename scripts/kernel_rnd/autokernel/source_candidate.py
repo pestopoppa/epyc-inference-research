@@ -21,11 +21,11 @@ from typing import Any, Mapping, Optional, Sequence
 
 from . import schemas
 from .evaluator import correctness, integrity
-from .execution import chain, instrument_integrity, worktree
+from .execution import chain, instrument_integrity, reward_hack_scan, worktree
 
 __all__ = [
     "SCHEMA_SOURCE_PATCH", "SourceCandidateError", "SourcePatchManifest",
-    "AppliedSourceCandidate", "load_source_patch_manifest",
+    "AppliedSourceCandidate", "source_patch_manifest_bytes", "load_source_patch_manifest",
     "apply_source_candidate", "parameter_patch_bundle_sha256",
     "hunk_identities",
 ]
@@ -44,6 +44,9 @@ _HUNK = re.compile(
     r"^@@ -(?P<old>\d+)(?:,(?P<oldn>\d+))? \+(?P<new>\d+)"
     r"(?:,(?P<newn>\d+))? @@(?P<context>.*)$")
 _FUNC = re.compile(r"(?P<name>[A-Za-z_~][A-Za-z0-9_:~<>]*)\s*\([^()]*\)\s*(?:const\s*)?(?:\{|$)")
+_TRUNCATED_FUNC = re.compile(
+    r"(?P<name>[A-Za-z_~][A-Za-z0-9_:~<>]*)\s*\(\s*$")
+_CONTROL_WORDS = frozenset({"if", "for", "while", "switch", "catch"})
 _MODE_LINE = re.compile(r"^(?:old|new|deleted file|new file) mode (?P<mode>\d+)$")
 _ALLOWED_MODES = frozenset({"100644", "100755"})
 
@@ -75,10 +78,58 @@ def _sha256(data: bytes) -> str:
 
 
 def _symbol_from_context(context: str) -> str:
-    matches = list(_FUNC.finditer(context.strip()))
+    normalized = context.strip()
+    if (_PLAIN_ID.fullmatch(normalized) is not None
+            and normalized not in _CONTROL_WORDS):
+        return normalized
+    matches = list(_FUNC.finditer(normalized))
     if matches:
         return matches[-1].group("name")
+    # GNU diff truncates long C/C++ function context at the opening parenthesis.
+    # Accept that exact suffix form while continuing to reject control-flow
+    # statements as enclosing source symbols.
+    match = _TRUNCATED_FUNC.search(normalized)
+    if match is not None and match.group("name") not in _CONTROL_WORDS:
+        return match.group("name")
     return FILE_SCOPE
+
+
+def _symbol_from_hunk(context: str, body: Sequence[str]) -> str:
+    """Derive a function from source-backed hunk lines before header prose.
+
+    Diff may label a hunk with the preceding function when the hunk begins on
+    macros or a template declaration.  Unchanged/deleted body lines, unlike
+    caller-authored hunk prose, are checked against the source when applied.
+    A single function definition there is therefore the stronger scope signal.
+    """
+    header_symbol = _symbol_from_context(context)
+    body_symbols: list[str] = []
+    for line in body:
+        # Only leading unchanged source can identify the declaration whose
+        # body the hunk enters.  Later context may begin the *next* function.
+        if not line or line[0] != " ":
+            break
+        normalized = line[1:].strip()
+        match = _TRUNCATED_FUNC.search(normalized)
+        if match is None or match.group("name") in _CONTROL_WORDS:
+            continue
+        # A body line is stronger than GNU diff's sometimes-stale header only
+        # when it is a truncated declaration/definition, not an ordinary call.
+        # Require a declaration-like prefix and reject expression punctuation.
+        prefix = normalized[:match.start("name")].strip()
+        if (not prefix or prefix in _CONTROL_WORDS
+                or any(char in prefix for char in "=;{}")):
+            continue
+        symbol = match.group("name")
+        if symbol not in body_symbols:
+            body_symbols.append(symbol)
+    if len(body_symbols) == 1:
+        return body_symbols[0]
+    if header_symbol in body_symbols:
+        return header_symbol
+    if body_symbols:
+        return FILE_SCOPE
+    return header_symbol
 
 
 def _hunk_rows(diff_text: str) -> tuple[tuple[str, str, str], ...]:
@@ -103,7 +154,7 @@ def _hunk_rows(diff_text: str) -> tuple[tuple[str, str, str], ...]:
             "context": " ".join(current_context.split()), "body": normalized,
         }
         rows.append((current_file, f"akhunk:{schemas.content_hash(material)}",
-                     _symbol_from_context(current_context)))
+                     _symbol_from_hunk(current_context, body)))
         current_header, current_context, body = None, "", []
 
     for line in diff_text.splitlines():
@@ -224,6 +275,17 @@ class SourcePatchManifest:
         schemas.require.str(self.mechanism_id, "mechanism_id", error=SourceCandidateError)
         text, paths, _hunks, _actual_symbols, actual_by_file, _deleted = \
             _validate_patch_text(self.patch_bytes)
+        scan = reward_hack_scan.scan_unified_diff(text)
+        prebuild_findings = {
+            "phase_detection": scan.phase_detection_findings,
+            "capture_replay": scan.capture_replay_findings,
+            "content_specialization": scan.content_specialization_findings,
+        }
+        detected = {name: rows for name, rows in prebuild_findings.items() if rows}
+        if detected:
+            raise SourceCandidateError(
+                "source patch violates the pre-build reward-integrity policy: "
+                f"{sorted(detected)}")
         if paths != files:
             raise SourceCandidateError(
                 f"patch paths {list(paths)} do not exactly equal declared_files {list(files)}")
@@ -242,24 +304,7 @@ class SourcePatchManifest:
     @property
     def patch_bundle_sha256(self) -> str:
         """Content identity of bytes *and* their complete semantic binding."""
-        return schemas.content_hash({
-            "schema": SCHEMA_SOURCE_PATCH,
-            "campaign_id": self.campaign_id,
-            "proposal_id": self.proposal_id,
-            "candidate_id": self.candidate_id,
-            "source_tree": self.source_tree,
-            "production_base_commit": self.production_base_commit,
-            "instrument_commit": self.instrument_commit,
-            "change_class": self.change_class,
-            "declared_files": list(self.declared_files),
-            "declared_symbols": {
-                path: list(self.declared_symbols[path]) for path in self.declared_files
-            },
-            "mechanism_id": self.mechanism_id,
-            "patch_sha256": self.patch_sha256,
-            "patch_encoding": "base64",
-            "patch_base64": base64.b64encode(self.patch_bytes).decode("ascii"),
-        })
+        return hashlib.sha256(source_patch_manifest_bytes(self)).hexdigest()
 
     def bind(self, *, proposal: Mapping[str, Any], campaign_id: str,
              candidate_id: str, production_base_commit: str,
@@ -284,6 +329,30 @@ class SourcePatchManifest:
         if any(path in {p for paths in instrument_integrity.TRANSLATION_UNITS.values()
                         for p in paths} for path in self.declared_files):
             raise SourceCandidateError("a candidate may not patch a reward-instrument translation unit")
+
+
+def source_patch_manifest_bytes(manifest: SourcePatchManifest) -> bytes:
+    """Return the sole canonical byte carrier for a typed source patch."""
+    if not isinstance(manifest, SourcePatchManifest):
+        raise SourceCandidateError("source patch carrier requires a typed manifest")
+    return schemas.canonical_bytes({
+        "schema": SCHEMA_SOURCE_PATCH,
+        "campaign_id": manifest.campaign_id,
+        "proposal_id": manifest.proposal_id,
+        "candidate_id": manifest.candidate_id,
+        "source_tree": manifest.source_tree,
+        "production_base_commit": manifest.production_base_commit,
+        "instrument_commit": manifest.instrument_commit,
+        "change_class": manifest.change_class,
+        "declared_files": list(manifest.declared_files),
+        "declared_symbols": {
+            path: list(manifest.declared_symbols[path]) for path in manifest.declared_files
+        },
+        "mechanism_id": manifest.mechanism_id,
+        "patch_sha256": manifest.patch_sha256,
+        "patch_encoding": "base64",
+        "patch_base64": base64.b64encode(manifest.patch_bytes).decode("ascii"),
+    })
 
 
 def load_source_patch_manifest(path: Any) -> SourcePatchManifest:

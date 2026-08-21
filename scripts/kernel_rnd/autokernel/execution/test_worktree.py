@@ -38,7 +38,9 @@ from __future__ import annotations
 
 import ast
 import dataclasses
+import json
 import os
+from pathlib import Path
 import shutil
 import subprocess
 import sys
@@ -49,6 +51,7 @@ import unittest
 from unittest import mock
 
 from .. import schemas
+from ..controller import discovery_supervisor_secure as supervisor_secure
 from ..evaluator import integrity
 from . import worktree as W
 
@@ -1146,6 +1149,105 @@ class TestRunBuildEndToEnd(_TmpMixin):
             self.assertTrue(disposition.sandbox_teardown["removed"])
         self.assertTrue(os.path.isfile(self.log + ".configure-sandbox.json"))
         self.assertTrue(os.path.isfile(self.log + ".build-sandbox.json"))
+        for phase in ("configure", "build"):
+            stream = self.log + f".{phase}.stream"
+            start = self.log + f".{phase}-process-start.json"
+            terminal = self.log + f".{phase}-process-terminal.json"
+            for path in (stream, start, terminal):
+                self.assertTrue(os.path.isfile(path), path)
+                self.assertEqual(os.stat(path).st_nlink, 1)
+            started = json.loads(_read_text(start))
+            completed = json.loads(_read_text(terminal))
+            for receipt in (started, completed):
+                expected = schemas.content_hash({
+                    key: value for key, value in receipt.items()
+                    if key != "receipt_sha256"})
+                self.assertEqual(receipt["receipt_sha256"], expected)
+            self.assertEqual(completed["start_receipt_sha256"],
+                             W._sha256_file(start))
+            self.assertTrue(completed["disposition"]["verified_dead"])
+            self.assertEqual(completed["stdout_sha256"],
+                             W._sha256_file(stream))
+
+    def test_real_build_accepts_and_uses_an_explicit_nested_cgroup_root(self):
+        """Exercise the supervised build argument through the real runner."""
+        rows = [line.split("::", 1)[1] for line in
+                Path("/proc/self/cgroup").read_text().splitlines()
+                if "::" in line]
+        self.assertEqual(len(rows), 1)
+        original = Path("/sys/fs/cgroup") / rows[0].lstrip("/")
+        controller = supervisor_secure.OwnedCgroup(
+            f"epyc-autokernel-worktree-test-{os.getpid()}-{time.time_ns()}",
+            base=original)
+        controller.create()
+        controller.add(os.getpid())
+        parent = controller.path
+        try:
+            result = W.run_build(
+                self.plan, log_path=self.log,
+                sandbox_cgroup_root=str(parent))
+        finally:
+            (original / "cgroup.procs").write_text(f"{os.getpid()}\n")
+            self.assertTrue(controller.wait_empty(2.0))
+            controller.close_and_remove()
+        self.assertTrue(result.succeeded, result.facts.errors)
+        self.assertFalse(parent.exists())
+        for disposition in (result.configure, result.build):
+            self.assertEqual(
+                Path(disposition.sandbox_receipt["cgroup_path"]).parent,
+                parent)
+            self.assertTrue(disposition.verified_dead)
+            self.assertTrue(disposition.sandbox_teardown["verified_empty"])
+            self.assertTrue(disposition.sandbox_teardown["removed"])
+        self.assertTrue(Path(self.bld.path, "ak_probe").is_file())
+        self.assertTrue(result.facts.succeeded_by_log)
+        for phase in ("configure", "build"):
+            for suffix in ("process-start.json", "process-terminal.json"):
+                receipt_path = Path(f"{self.log}.{phase}-{suffix}")
+                self.assertEqual(receipt_path.stat().st_nlink, 1)
+                self.assertEqual(receipt_path.stat().st_mode & 0o777, 0o600)
+                receipt = json.loads(receipt_path.read_text())
+                self.assertEqual(
+                    receipt["receipt_sha256"],
+                    schemas.content_hash({key: value for key, value in receipt.items()
+                                          if key != "receipt_sha256"}))
+
+    def test_existing_symlink_or_hardlinked_log_authority_refuses_before_spawn(self):
+        for case in ("symlink", "hardlink"):
+            with self.subTest(case=case):
+                target = os.path.join(self.tmp, f"attacker-{case}")
+                _write(target, "do not overwrite")
+                os.makedirs(os.path.dirname(self.log), exist_ok=True)
+                if case == "symlink":
+                    os.symlink(target, self.log)
+                else:
+                    os.link(target, self.log)
+                with self.assertRaisesRegex(W.WorktreeError, "already exists"):
+                    W.run_build(self.plan, log_path=self.log)
+                self.assertEqual(_read_text(target), "do not overwrite")
+                os.unlink(self.log)
+                shutil.rmtree(self.bld.path)
+
+    def test_invalid_explicit_cgroup_roots_refuse_before_spawn(self):
+        symlink = Path(self.tmp) / "cgroup-link"
+        symlink.symlink_to(W.process_sandbox.default_cgroup_root())
+        cases = (
+            "relative-cgroup",
+            str(Path(self.tmp) / "missing-cgroup"),
+            str(symlink),
+        )
+        for cgroup_root in cases:
+            with self.subTest(cgroup_root=cgroup_root), \
+                 mock.patch.object(
+                     W, "_run_owned",
+                     side_effect=AssertionError("must refuse before spawn")), \
+                 self.assertRaisesRegex(W.WorktreeError, "exact directory"):
+                W.run_build(
+                    self.plan, log_path=self.log,
+                    sandbox_cgroup_root=cgroup_root)
+            self.assertFalse(Path(self.log).exists())
+            if Path(self.bld.path).exists():
+                shutil.rmtree(self.bld.path)
 
     def test_candidate_cmake_cannot_write_outside_the_build_tree(self):
         escaped = os.path.join(self.tmp, "escaped-by-candidate")
@@ -1419,6 +1521,64 @@ class TestOwnedProcessDiscipline(_TmpMixin):
         """`pgid == pid` is what makes the group kill provably ours."""
         disposition, _ = W._run_owned([sys.executable, "-c", "pass"], timeout_s=30.0)
         self.assertEqual(disposition.pgid, disposition.pid)
+
+    def test_start_receipt_publication_failure_kills_the_exact_child(self):
+        captured = {}
+        original = W._sealed_process_receipt
+        def refuse(path, body):
+            if body["schema"] == "epyc.autokernel.owned_process_intent.v1":
+                return original(path, body)
+            captured.update(body)
+            raise W.WorktreeError("receipt publication refused")
+        stream = os.path.join(self.tmp, "owned.stream")
+        with mock.patch.object(W, "_sealed_process_receipt", side_effect=refuse):
+            with self.assertRaisesRegex(W.WorktreeError, "publication refused"):
+                W._run_owned(
+                    [sys.executable, "-c", "import time; time.sleep(30)"],
+                    timeout_s=60.0, kill_grace_s=2.0, stdout_path=stream,
+                    process_receipt_prefix=os.path.join(self.tmp, "owned"))
+        self.assertGreater(captured["pid"], 0)
+        self.assertFalse(os.path.exists(f"/proc/{captured['pid']}"))
+
+    def test_process_receipt_path_swap_never_attests_the_replacement(self):
+        target = os.path.join(self.tmp, "receipt.json")
+        rogue = os.path.join(self.tmp, "rogue.json")
+        Path(rogue).write_bytes(b"forged\n")
+        Path(rogue).chmod(0o600)
+        real_link = os.link
+        def swap_after_link(src, dst, **kwargs):
+            result = real_link(src, dst, **kwargs)
+            directory_fd = kwargs["dst_dir_fd"]
+            parent = Path(os.readlink(f"/proc/self/fd/{directory_fd}"))
+            destination = parent / os.fspath(dst)
+            destination.unlink()
+            os.rename(rogue, destination)
+            return result
+        with mock.patch.object(os, "link", side_effect=swap_after_link), \
+                self.assertRaisesRegex(W.WorktreeError, "writer inode"):
+            W._sealed_process_receipt(target, {
+                "schema": "test.process.receipt.v1", "value": 1})
+        self.assertEqual(Path(target).read_bytes(), b"forged\n")
+
+    def test_stream_swap_during_terminal_publication_is_detected_by_writer_fd(self):
+        stream = os.path.join(self.tmp, "owned.stream")
+        prefix = os.path.join(self.tmp, "owned")
+        original = W._sealed_process_receipt
+        def swap(path, body):
+            if body["schema"] == "epyc.autokernel.owned_process_terminal.v2":
+                Path(stream).unlink()
+                Path(stream).write_bytes(b"forged stream\n")
+                Path(stream).chmod(0o600)
+            return original(path, body)
+        with mock.patch.object(W, "_sealed_process_receipt", side_effect=swap), \
+                self.assertRaisesRegex(W.WorktreeError, "stream identity changed"):
+            W._run_owned(
+                [sys.executable, "-c", "print('original stream')"],
+                stdout_path=stream, process_receipt_prefix=prefix)
+        terminal = json.loads(Path(prefix + "-terminal.json").read_text())
+        self.assertNotEqual(
+            terminal["stdout_sha256"],
+            __import__("hashlib").sha256(Path(stream).read_bytes()).hexdigest())
 
     def test_a_name_pattern_tool_cannot_be_launched(self):
         for bad in ("pkill", "/usr/bin/pgrep", "killall", "pidof"):
