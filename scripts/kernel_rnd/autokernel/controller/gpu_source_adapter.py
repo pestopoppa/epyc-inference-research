@@ -22,12 +22,13 @@ from typing import Any, Callable, Mapping, Sequence
 from .. import schemas
 from ..resource import device_claim
 from . import discovery_controller as controller
+from .. import cumulative_composition
 from . import gpu_source_evidence as evidence
 from . import gpu_source_proofs
 from scripts.benchmark import autokernel_progression
 
-OPERATION_SCHEMA = "epyc.autokernel.gpu_source_operation.v1"
-RESULT_SCHEMA = "epyc.autokernel.gpu_source_operation_result.v1"
+OPERATION_SCHEMA = "epyc.autokernel.gpu_source_operation.v2"
+RESULT_SCHEMA = "epyc.autokernel.gpu_source_operation_result.v2"
 RESOURCE_WAIT_SCHEMA = "epyc.autokernel.gpu_source_resource_wait.v1"
 POSTBUILD_CHECKPOINT_SCHEMA = "epyc.autokernel.gpu_source_postbuild_checkpoint.v1"
 RESERVATION_RELEASE_SCHEMA = "epyc.autokernel.gpu_source_reservation_release.v1"
@@ -96,6 +97,23 @@ def _candidate_manifest(value: object) -> str:
     return digest
 
 
+def _candidate_composition_plan_sha256(value: object) -> str | None:
+    plan = getattr(value, "composition_plan", None)
+    if isinstance(value, Mapping):
+        nested = value.get("candidate")
+        carrier = nested if isinstance(nested, Mapping) else value
+        plan = carrier.get("composition_plan")
+    if plan is None:
+        return None
+    try:
+        typed = (plan if isinstance(plan, cumulative_composition.CompositionPlan)
+                 else cumulative_composition.CompositionPlan.from_dict(plan))
+    except (TypeError, cumulative_composition.CompositionError) as exc:
+        raise GpuSourceAdapterError(
+            "candidate cumulative plan is invalid") from exc
+    return typed.plan_sha256
+
+
 def _read_json(path: Path, label: str) -> dict[str, Any]:
     if path.is_symlink() or not path.is_file():
         raise GpuSourceAdapterError(f"{label} must be a regular non-symlink file")
@@ -139,10 +157,7 @@ def _typed_screen(value: object) -> controller.SealedScreen:
     if not isinstance(value, Mapping):
         raise GpuSourceAdapterError("sealed screen payload is malformed")
     try:
-        prepared = dict(value)
-        if isinstance(prepared.get("stages"), list):
-            prepared["stages"] = tuple(prepared["stages"])
-        result = controller.SealedScreen(**prepared)
+        result = controller._sealed_screen_from_dict(value)
     except (TypeError, ValueError, controller.DiscoveryControllerError) as exc:
         raise GpuSourceAdapterError("sealed screen payload is invalid") from exc
     _load_screen_receipt(result)
@@ -161,6 +176,8 @@ def _intent_body(*, operation_key: str, candidate: object,
         "promotion_claim": False,
         "operation_key": operation_key,
         "manifest_sha256": _candidate_manifest(candidate),
+        "composition_plan_sha256":
+            _candidate_composition_plan_sha256(candidate),
         "authorization_sha256": schemas.content_hash(authorization_raw),
         "lease_sha256": schemas.content_hash(_lease_identity(lease_raw)),
     }
@@ -184,6 +201,8 @@ def _inflight_identity(inflight: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "operation_key": operation_key,
         "manifest_sha256": _candidate_manifest(candidate),
+        "composition_plan_sha256":
+            _candidate_composition_plan_sha256(candidate),
         "authorization_sha256": schemas.content_hash(authorization),
         "lease_sha256": schemas.content_hash(_lease_identity(lease)),
     }
@@ -1036,7 +1055,10 @@ def _validate_intent(intent: Mapping[str, Any], expected: Mapping[str, Any]) -> 
         "promotion_claim": False,
         **expected,
     }
-    if any(intent.get(key) != value for key, value in required.items()):
+    if (set(intent) != set(required) | {"receipt_sha256"}
+            or any(intent.get(key) != value
+                   for key, value in required.items())
+            or intent.get("receipt_sha256") != schemas.content_hash(required)):
         raise GpuSourceAdapterError("operation intent differs from inflight identity")
 
 
@@ -1320,6 +1342,25 @@ class GovernedGpuSourceAdapter:
                 if not exc.receipt_path or not exc.receipt_sha256:
                     raise GpuSourceAdapterError(
                         "attribution refusal lacks its durable terminal") from exc
+                if getattr(candidate, "composition_plan", None) is not None:
+                    pair = build.composition_build_pair
+                    if pair is None:
+                        raise GpuSourceAdapterError(
+                            "cumulative attribution refusal lacks its build pair") from exc
+                    pair.bind_plan(candidate.composition_plan)
+                    correctness = evidence.load_gpu_source_correctness_receipt(
+                        operation_root / "proof/correctness/receipt.json", plan)
+                    full_correctness = cumulative_composition.FullCorrectness.create(
+                        pair,
+                        suite_id="current-gpu-source-full-correctness-v1",
+                        cases_sha256=schemas.content_hash(correctness["body"]),
+                        receipt_sha256=str(correctness["file_sha256"]),
+                        passed=True)
+                    raise controller.CumulativeAttributionRefusal(
+                        str(exc), receipt_path=exc.receipt_path,
+                        receipt_sha256=exc.receipt_sha256,
+                        build_pair=pair,
+                        correctness=full_correctness) from exc
                 raise controller.DispatchAttributionRefusal(
                     str(exc), receipt_path=exc.receipt_path,
                     receipt_sha256=exc.receipt_sha256) from exc
@@ -1376,7 +1417,8 @@ class GovernedGpuSourceAdapter:
             operation_key=operation_key, candidate=candidate,
             authorization=authorization, lease=lease)
         identity = {key: intent[key] for key in (
-            "operation_key", "manifest_sha256", "authorization_sha256", "lease_sha256")}
+            "operation_key", "manifest_sha256", "composition_plan_sha256",
+            "authorization_sha256", "lease_sha256")}
         if operation_root.exists() or operation_root.is_symlink():
             if operation_root.is_symlink() or not operation_root.is_dir():
                 raise GpuSourceAdapterError("operation root is not a real directory")
@@ -1518,6 +1560,8 @@ class GovernedGpuSourceAdapter:
                 "promotion_claim": False,
                 "operation_key": operation_key,
                 "manifest_sha256": candidate.source_manifest_sha256,
+                "composition_plan_sha256":
+                    _candidate_composition_plan_sha256(candidate),
                 "screen": _screen_dict(result),
                 "receipt_series": rows,
                 "effects": effects,
@@ -1526,7 +1570,10 @@ class GovernedGpuSourceAdapter:
             recovered = self.reconcile({
                 "operation_key": operation_key,
                 "candidate": {"candidate": {
-                    "source_manifest_sha256": candidate.source_manifest_sha256}},
+                    "source_manifest_sha256": candidate.source_manifest_sha256,
+                    "composition_plan": (
+                        None if getattr(candidate, "composition_plan", None) is None else
+                        candidate.composition_plan.to_dict())}},
                 "authorization": _mapping(authorization, "claim authorization"),
                 "lease": dict(lease),
             })
@@ -1622,6 +1669,8 @@ class GovernedGpuSourceAdapter:
                     "promotion_claim": False,
                     "operation_key": identity["operation_key"],
                     "manifest_sha256": identity["manifest_sha256"],
+                    "composition_plan_sha256":
+                        identity["composition_plan_sha256"],
                     "screen": _screen_dict(result),
                     "receipt_series": rows,
                     "effects": effects,
@@ -1638,8 +1687,16 @@ class GovernedGpuSourceAdapter:
                 "promotion_claim": False,
                 "operation_key": identity["operation_key"],
                 "manifest_sha256": identity["manifest_sha256"],
+                "composition_plan_sha256":
+                    identity["composition_plan_sha256"],
             }
-            if any(raw.get(key) != value for key, value in required.items()):
+            if (set(raw) != set(required) | {
+                    "screen", "receipt_series", "effects", "receipt_sha256"}
+                    or any(raw.get(key) != value
+                           for key, value in required.items())
+                    or raw.get("receipt_sha256") != schemas.content_hash({
+                        key: value for key, value in raw.items()
+                        if key != "receipt_sha256"})):
                 raise GpuSourceAdapterError("operation result identity mismatch")
             rows = raw.get("receipt_series")
             effects = raw.get("effects")

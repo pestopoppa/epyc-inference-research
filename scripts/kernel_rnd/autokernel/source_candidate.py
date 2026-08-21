@@ -27,6 +27,7 @@ __all__ = [
     "SCHEMA_SOURCE_PATCH", "SourceCandidateError", "SourcePatchManifest",
     "AppliedSourceCandidate", "source_patch_manifest_bytes", "load_source_patch_manifest",
     "apply_source_candidate", "parameter_patch_bundle_sha256",
+    "AppliedSourceComposition", "apply_source_composition",
     "hunk_identities", "source_backed_symbol_map",
     "source_backed_source_patch_manifest",
 ]
@@ -586,6 +587,135 @@ class AppliedSourceCandidate:
     commit_argv: tuple[str, ...]
     mutation_receipt: Mapping[str, Any]
     diff_evidence: chain.DiffEvidence
+
+
+@dataclass(frozen=True)
+class AppliedSourceComposition:
+    """One exact ordered patch stack committed from a clean instrument base."""
+
+    manifests: tuple[SourcePatchManifest, ...]
+    candidate_commit: str
+    diff_text: str
+    actual_files: tuple[str, ...]
+    actual_hunk_ids: tuple[str, ...]
+    actual_symbols: tuple[str, ...]
+    commit_argv: tuple[str, ...]
+    mutation_receipt: Mapping[str, Any]
+
+
+def apply_source_composition(
+        components: Sequence[tuple[SourcePatchManifest, Mapping[str, Any]]], *,
+        actor: worktree.Worktree, composition_id: str) \
+        -> AppliedSourceComposition:
+    """Apply an already-reviewed, nonoverlapping ordered stack fail closed.
+
+    This is deliberately separate from :func:`apply_source_candidate`.
+    Actor-authored candidates can never opt into stack authority: only a caller
+    already holding typed manifests and the controller-owned composition plan
+    can invoke this API.
+    """
+    if not isinstance(actor, worktree.Worktree):
+        raise TypeError("actor must be an execution.worktree.Worktree")
+    if (not isinstance(composition_id, str) or not composition_id
+            or "\x00" in composition_id):
+        raise SourceCandidateError("composition_id is invalid")
+    if not isinstance(components, Sequence) or not components:
+        raise SourceCandidateError("composition requires at least one component")
+    manifests: list[SourcePatchManifest] = []
+    proposals: list[Mapping[str, Any]] = []
+    for component in components:
+        if (not isinstance(component, tuple) or len(component) != 2
+                or not isinstance(component[0], SourcePatchManifest)
+                or not isinstance(component[1], Mapping)):
+            raise SourceCandidateError(
+                "composition components must be typed manifest/proposal pairs")
+        manifest, proposal = component
+        manifest.bind(
+            proposal=proposal, campaign_id=manifest.campaign_id,
+            candidate_id=manifest.candidate_id,
+            production_base_commit=manifest.production_base_commit,
+            instrument_commit=manifest.instrument_commit)
+        manifests.append(manifest)
+        proposals.append(proposal)
+    base = manifests[0]
+    if any((row.source_tree, row.production_base_commit,
+            row.instrument_commit) !=
+           (base.source_tree, base.production_base_commit,
+            base.instrument_commit) for row in manifests):
+        raise SourceCandidateError(
+            "composition manifests do not share one source era")
+    if actor.source_commit != base.instrument_commit \
+            or actor.head_commit() != actor.source_commit:
+        raise SourceCandidateError(
+            "composition actor is not at the clean instrument base")
+    if not actor.is_clean():
+        raise SourceCandidateError(
+            "composition actor is dirty before source patch application")
+    declared_files = tuple(sorted({
+        path for manifest in manifests for path in manifest.declared_files}))
+    declared_symbols = {
+        path: tuple(sorted({
+            symbol for manifest in manifests
+            for symbol in manifest.declared_symbols.get(path, ())}))
+        for path in declared_files}
+    mutations: list[Mapping[str, Any]] = []
+    for manifest in manifests:
+        text, _paths, _hunks, _symbols, _by_file, deleted = \
+            _validate_patch_text(manifest.patch_bytes)
+        new_files = tuple(
+            item.path for item in integrity.parse_unified_diff(text).files
+            if item.is_new_file)
+        _assert_regular_paths(
+            actor.path.path, manifest.declared_files,
+            missing_allowed=new_files)
+        mutations.append(dict(actor.apply_patch_bytes(manifest.patch_bytes)))
+        _assert_regular_paths(
+            actor.path.path, manifest.declared_files,
+            missing_allowed=deleted)
+    message = f"{composition_id}: cumulative-source-stack"
+    commit_argv = actor.commit_argv_for_paths(declared_files, message)
+    commit = actor.commit_paths(declared_files, message)
+    if commit is None:
+        raise SourceCandidateError(
+            "composition produced no committable source change")
+    if not actor.is_clean():
+        raise SourceCandidateError(
+            "composition actor is not clean after exact-path commit")
+    diff_text = actor.unified_diff_from_source()
+    scope_diff = actor.function_context_diff_from_source()
+    text, paths, hunk_ids, _symbols, _by_file, _deleted = \
+        _validate_patch_text(diff_text.encode("utf-8"))
+    scope_text, scope_paths, _scope_hunks, _scope_symbols, \
+        scope_symbols_by_file, _scope_deleted = _validate_patch_text(
+            scope_diff.encode("utf-8"), source_backed_declarations=True)
+    if tuple(sorted(paths)) != declared_files or tuple(sorted(scope_paths)) != \
+            declared_files:
+        raise SourceCandidateError(
+            "composition committed paths differ from ordered authority")
+    if _changed_line_identity(scope_text) != _changed_line_identity(text):
+        raise SourceCandidateError(
+            "composition function-context diff changed line identity")
+    for path in declared_files:
+        actual = set(scope_symbols_by_file[path])
+        expected = set(declared_symbols[path])
+        if actual != expected:
+            raise SourceCandidateError(
+                f"composition scope in {path!r} differs from ordered authority")
+    return AppliedSourceComposition(
+        manifests=tuple(manifests), candidate_commit=commit,
+        diff_text=text, actual_files=tuple(paths),
+        actual_hunk_ids=tuple(hunk_ids),
+        actual_symbols=tuple(sorted(
+            f"{path}:{symbol}" for path in scope_symbols_by_file
+            for symbol in scope_symbols_by_file[path])),
+        commit_argv=commit_argv,
+        mutation_receipt={
+            "schema": "epyc.autokernel.source_composition_mutation.v1",
+            "composition_id": composition_id,
+            "ordered_manifest_sha256s": [
+                row.patch_bundle_sha256 for row in manifests],
+            "component_mutations": mutations,
+        })
 
 
 def _assert_regular_paths(root: str, paths: Sequence[str], *,

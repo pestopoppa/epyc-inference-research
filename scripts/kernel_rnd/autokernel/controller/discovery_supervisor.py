@@ -94,6 +94,8 @@ GRAPH_EXECUTION_MODULES = {
     "hypothesis_portfolio": "scripts/kernel_rnd/autokernel/hypothesis_portfolio.py",
     "preauthored_continuation":
         "scripts/kernel_rnd/autokernel/preauthored_continuation.py",
+    "cumulative_composition":
+        "scripts/kernel_rnd/autokernel/cumulative_composition.py",
 }
 
 
