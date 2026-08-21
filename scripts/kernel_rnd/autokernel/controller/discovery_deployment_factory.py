@@ -19,7 +19,7 @@ import re
 import stat
 import subprocess
 import tarfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from types import MappingProxyType
 from typing import Any, Callable, Mapping
 
@@ -640,9 +640,9 @@ _SITE_GOVERNANCE_ROOT = Path("/workspace")
 _FROZEN_CLOSURE_MANIFEST = (
     Path(__file__).with_name("frozen_v9_closure_manifest.json"))
 _FROZEN_CLOSURE_MANIFEST_FILE_SHA256 = \
-    "0c4e3673600b124521f8c1dd2a4a0536c2c2a4ef0bd17c2d157b62d1c44be3ea"
+    "625c84a582e6e3e706dee1f1ebc2ae6705e8520e701e2de1db959b4b9d1b3fa3"
 _FROZEN_CLOSURE_MANIFEST_SHA256 = \
-    "0bc362df7a6a204ee8b08bbf6f97e03a88f8dccb1048d7cf5d3be2e58c831d09"
+    "e01ea9392bb8300b4d222581da7bb48b03636883d7c8c8a36a2c3acbe1f17da4"
 
 
 def _digest_regular(path: Path, label: str) -> str:
@@ -1152,12 +1152,17 @@ def _frozen_v9_closure_manifest(
         "hip_library_sha256", "linkage_sha256",
         "runtime_snapshot_sha256"}
     provenance_keys = {"path", "file_sha256", "schema", "required"}
+    inventory = value.get("runtime_inventory")
+    inventory_rows = (
+        inventory.get("objects") if isinstance(inventory, dict) else None)
+    readelf = (
+        inventory.get("readelf") if isinstance(inventory, dict) else None)
     if (not isinstance(value, dict)
             or set(value) != {
-                "schema", "production", "runtime", "provenance",
+                "schema", "production", "runtime", "runtime_inventory", "provenance",
                 "manifest_sha256"}
             or value.get("schema") !=
-               "epyc.autokernel.frozen_v9_closure_manifest.v1"
+               "epyc.autokernel.frozen_v9_closure_manifest.v2"
             or raw != canonical
             or not isinstance(value.get("production"), dict)
             or set(value["production"]) != production_keys
@@ -1169,6 +1174,42 @@ def _frozen_v9_closure_manifest(
                "version: 10125 (0db32c06e)"
             or not isinstance(value.get("runtime"), dict)
             or set(value["runtime"]) != runtime_keys
+            or not isinstance(inventory, dict)
+            or set(inventory) != {"schema", "readelf", "objects"}
+            or inventory.get("schema") !=
+               "epyc.autokernel.runtime_inventory.v1"
+            or not isinstance(readelf, dict)
+            or set(readelf) != {"path", "sha256", "version"}
+            or readelf.get("path") !=
+               "/usr/bin/x86_64-linux-gnu-readelf"
+            or not isinstance(readelf.get("version"), str)
+            or not readelf["version"]
+            or re.fullmatch(r"[0-9a-f]{64}", str(readelf.get("sha256")))
+               is None
+            or not isinstance(inventory_rows, list)
+            or not inventory_rows
+            or any(not isinstance(row, dict)
+                   or set(row) != {
+                       "relative_path", "sha256", "symlink_target"}
+                   or not isinstance(row.get("relative_path"), str)
+                   or PurePosixPath(row["relative_path"]).is_absolute()
+                   or row["relative_path"] !=
+                      PurePosixPath(row["relative_path"]).as_posix()
+                   or any(part in {"", ".", ".."} for part in
+                          PurePosixPath(row["relative_path"]).parts)
+                   or PurePosixPath(row["relative_path"]).parts[:2]
+                      not in {("build", "bin"), ("build-hip", "bin")}
+                   or re.fullmatch(r"[0-9a-f]{64}",
+                                   str(row.get("sha256"))) is None
+                   or (row.get("symlink_target") is not None
+                       and (not isinstance(row["symlink_target"], str)
+                            or PurePosixPath(row["symlink_target"]).name !=
+                               row["symlink_target"]))
+                   for row in inventory_rows)
+            or inventory_rows != sorted(
+                inventory_rows, key=lambda row: row["relative_path"])
+            or len({row["relative_path"] for row in inventory_rows}) !=
+               len(inventory_rows)
             or not isinstance(value.get("provenance"), dict)
             or set(value["provenance"]) != {
                 "build", "linkage", "runtime", "measurement"}
@@ -1236,6 +1277,8 @@ def _verify_frozen_v9_runtime_closure(
         manifest: Mapping[str, Any], production_path: Path,
         runtime_semantics: Mapping[str, Any],
 ) -> None:
+    _verify_expected_runtime_inventory(
+        production_path, manifest["runtime_inventory"])
     build = production_path / "build-hip"
     try:
         observed = {
@@ -1379,6 +1422,13 @@ def _verify_frozen_production_comparator(
     and runtime closure instead of trusting current-disk values by themselves.
     """
     manifest = _frozen_v9_closure_manifest()
+    _inventory_files, observed_runtime_semantics = \
+        _production_runtime_snapshot(
+            production_path, closure_manifest=manifest)
+    if dict(runtime_semantics) != observed_runtime_semantics:
+        raise DeploymentFactoryError(
+            "frozen production comparator topology observation changed")
+    runtime_semantics = observed_runtime_semantics
     provenance = _authenticate_frozen_v9_closure(
         manifest, production_path, runtime_semantics, governance_root)
     if comparator.runtime_snapshot_sha256 != \
@@ -1431,7 +1481,8 @@ def derive_frozen_production_comparator(
 ) -> cumulative_composition.FrozenProductionComparator:
     """Derive the canonical comparator from real frozen-v9 authority only."""
     manifest = _frozen_v9_closure_manifest()
-    snapshot_files, runtime_semantics = _production_runtime_snapshot(production_path)
+    snapshot_files, runtime_semantics = _production_runtime_snapshot(
+        production_path, closure_manifest=manifest)
     del snapshot_files
     provenance = _authenticate_frozen_v9_closure(
         manifest, production_path, runtime_semantics, governance_root)
@@ -1822,49 +1873,140 @@ def _bound(path: Path, role: str) -> evidence.BoundInputFile:
                                    sha256=_digest_regular(path, role))
 
 
-def _production_runtime_snapshot(root: Path) -> tuple[tuple[evidence.BoundInputFile, ...], dict[str, Any]]:
-    """Bind CPU/HIP server+bench and their complete local runtime topology."""
+def _verify_expected_runtime_inventory(
+        root: Path, inventory: Mapping[str, Any],
+) -> tuple[tuple[evidence.BoundInputFile, ...], tuple[dict[str, Any], ...]]:
+    """Authenticate every expected runtime object without executing a parser."""
+    expected = inventory.get("objects") if isinstance(inventory, Mapping) else None
+    if not isinstance(expected, list) or not expected:
+        raise DeploymentFactoryError("frozen runtime inventory is unavailable")
+    observed: list[dict[str, Any]] = []
     files: dict[Path, evidence.BoundInputFile] = {}
-    semantics: dict[str, Any] = {"production_head": deployment.FROZEN_PRODUCTION_HEAD,
-                                 "closures": {}}
-    for flavor, required in (("build", frozenset()), ("build-hip", frozenset({"libggml-hip.so.0"}))):
-        directory = root / flavor / "bin"
-        todo = [directory / "llama-server", directory / "llama-bench",
-                *(directory / name for name in sorted(required))]
-        topology: dict[str, Any] = {}
-        seen_names: set[str] = set()
-        while todo:
-            lexical = todo.pop()
-            if lexical.name in seen_names:
-                continue
-            seen_names.add(lexical.name)
-            if not lexical.exists():
-                raise DeploymentFactoryError(f"production runtime closure lacks {lexical}")
+    for row in expected:
+        relative = row.get("relative_path") if isinstance(row, Mapping) else None
+        if not isinstance(relative, str):
+            raise DeploymentFactoryError("frozen runtime inventory path is invalid")
+        lexical = root / relative
+        try:
+            facts = lexical.lstat()
+            symlink_target = os.readlink(lexical) \
+                if stat.S_ISLNK(facts.st_mode) else None
             resolved = lexical.resolve(strict=True)
-            files.setdefault(resolved, _bound(resolved, f"production-runtime:{flavor}:{lexical.name}"))
-            completed = subprocess.run(("/usr/bin/readelf", "-dW", str(resolved)),
-                                       check=False, stdin=subprocess.DEVNULL,
-                                       capture_output=True, text=True)
+            if root.resolve(strict=True) not in (resolved, *resolved.parents):
+                raise OSError("runtime object escapes production root")
+            if (symlink_target is None and not stat.S_ISREG(facts.st_mode)) \
+                    or (symlink_target is not None
+                        and PurePosixPath(symlink_target).name != symlink_target):
+                raise OSError("runtime object is not a local regular file or alias")
+            digest = _digest_regular(resolved, f"production runtime {relative}")
+        except OSError as exc:
+            raise DeploymentFactoryError(
+                f"production runtime inventory lacks {relative}") from exc
+        observed.append({
+            "relative_path": relative,
+            "sha256": digest,
+            "symlink_target": symlink_target,
+        })
+        files.setdefault(
+            resolved, evidence.BoundInputFile(
+                role=f"production-runtime:{relative}", path=resolved,
+                sha256=digest))
+    if observed != expected:
+        raise DeploymentFactoryError(
+            "production runtime inventory differs from manifest")
+    return (tuple(files[path] for path in sorted(files)),
+            tuple(observed))
+
+
+def _approved_readelf(
+        inventory: Mapping[str, Any], *, runner: Any,
+) -> Path:
+    """Authenticate the exact parser bytes and version before topology use."""
+    authority = inventory.get("readelf") \
+        if isinstance(inventory, Mapping) else None
+    if not isinstance(authority, Mapping):
+        raise DeploymentFactoryError("approved readelf authority is unavailable")
+    path = Path(str(authority.get("path")))
+    try:
+        if (not path.is_absolute() or path != path.resolve(strict=True)
+                or _digest_regular(path, "approved readelf") !=
+                   authority.get("sha256")):
+            raise OSError("readelf identity differs")
+        completed = runner(
+            (str(path), "--version"), check=False,
+            stdin=subprocess.DEVNULL, capture_output=True, text=True,
+            env={"LANG": "C.UTF-8", "LC_ALL": "C.UTF-8",
+                 "PATH": "/usr/bin:/bin"})
+        first_line = completed.stdout.splitlines()[0]
+    except (OSError, IndexError, subprocess.SubprocessError) as exc:
+        raise DeploymentFactoryError("approved readelf is unavailable") from exc
+    if completed.returncode or first_line != authority.get("version"):
+        raise DeploymentFactoryError("approved readelf version differs")
+    return path
+
+
+def _production_runtime_snapshot(
+        root: Path, *, closure_manifest: Mapping[str, Any] | None = None,
+        runner: Any | None = None,
+) -> tuple[tuple[evidence.BoundInputFile, ...], dict[str, Any]]:
+    """Bind raw CPU/HIP inventory before approved topology inspection."""
+    manifest = (_frozen_v9_closure_manifest()
+                if closure_manifest is None else closure_manifest)
+    inventory = manifest.get("runtime_inventory") \
+        if isinstance(manifest, Mapping) else None
+    if not isinstance(inventory, Mapping):
+        raise DeploymentFactoryError("frozen runtime inventory is unavailable")
+    files, rows = _verify_expected_runtime_inventory(root, inventory)
+    run = subprocess.run if runner is None else runner
+    readelf = _approved_readelf(inventory, runner=run)
+    by_flavor: dict[str, dict[str, dict[str, Any]]] = {
+        "build": {}, "build-hip": {}}
+    for row in rows:
+        path = PurePosixPath(row["relative_path"])
+        by_flavor[path.parts[0]][path.name] = row
+    semantics: dict[str, Any] = {
+        "production_head": deployment.FROZEN_PRODUCTION_HEAD,
+        "closures": {},
+    }
+    for flavor, required in (
+            ("build", frozenset()),
+            ("build-hip", frozenset({"libggml-hip.so.0"}))):
+        entries = by_flavor[flavor]
+        required_names = {"llama-server", "llama-bench", *required}
+        if not required_names.issubset(entries):
+            raise DeploymentFactoryError(
+                f"{flavor} production runtime lacks its reviewed entrypoints")
+        directory = root / flavor / "bin"
+        topology: dict[str, Any] = {}
+        for name, row in sorted(entries.items()):
+            resolved = (directory / name).resolve(strict=True)
+            completed = run(
+                (str(readelf), "-dW", str(resolved)), check=False,
+                stdin=subprocess.DEVNULL, capture_output=True, text=True)
             if completed.returncode:
-                raise DeploymentFactoryError(f"cannot inspect production runtime object {resolved}")
-            needed = sorted(re.findall(r"Shared library: \[(.+?)\]", completed.stdout))
-            local = []
-            for name in needed:
-                target = directory / name
-                if target.exists():
-                    local.append(name); todo.append(target)
-            topology[lexical.name] = {
+                raise DeploymentFactoryError(
+                    f"cannot inspect production runtime object {resolved}")
+            needed = sorted(re.findall(
+                r"Shared library: \[(.+?)\]", completed.stdout))
+            unknown_local = sorted(
+                dependency for dependency in needed
+                if (directory / dependency).exists()
+                and dependency not in entries)
+            if unknown_local:
+                raise DeploymentFactoryError(
+                    f"{flavor} topology contains unbound local objects")
+            topology[name] = {
                 "resolved_name": resolved.name,
-                "sha256": hashlib.sha256(resolved.read_bytes()).hexdigest(),
-                "needed_local": local,
-                "symlink": os.readlink(lexical) if lexical.is_symlink() else None}
-        if not required.issubset(seen_names):
-            raise DeploymentFactoryError(f"{flavor} production runtime lacks its reviewed backend")
+                "sha256": row["sha256"],
+                "needed_local": sorted(set(needed) & set(entries)),
+                "symlink": row["symlink_target"],
+            }
         semantics["closures"][flavor] = {
             "configuration": "cpu" if flavor == "build" else "rocm-gfx90a",
             "entrypoints": ["llama-bench", "llama-server"],
-            "topology": topology}
-    return tuple(files[path] for path in sorted(files)), semantics
+            "topology": topology,
+        }
+    return files, semantics
 
 
 def _checked_profiler_bound(path: Path, role: str, expected: str,

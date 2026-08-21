@@ -1163,6 +1163,125 @@ class DeploymentFactoryTests(unittest.TestCase):
             F._verify_frozen_v9_provenance(
                 manifest, F._SITE_GOVERNANCE_ROOT)
 
+    def test_runtime_inventory_fixture_matches_before_approved_readelf(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            source = Path("/usr/bin/true").resolve(strict=True)
+            relative_paths = (
+                "build/bin/llama-bench",
+                "build/bin/llama-server",
+                "build-hip/bin/llama-bench",
+                "build-hip/bin/llama-server",
+            )
+            rows = []
+            for relative in relative_paths:
+                target = root / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(source, target)
+                rows.append({
+                    "relative_path": relative,
+                    "sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
+                    "symlink_target": None,
+                })
+            hip_real = root / "build-hip/bin/libggml-hip.so.0.16.0"
+            shutil.copyfile(source, hip_real)
+            hip_alias = root / "build-hip/bin/libggml-hip.so.0"
+            hip_alias.symlink_to(hip_real.name)
+            rows.append({
+                "relative_path": "build-hip/bin/libggml-hip.so.0",
+                "sha256": hashlib.sha256(hip_real.read_bytes()).hexdigest(),
+                "symlink_target": hip_real.name,
+            })
+            rows.sort(key=lambda row: row["relative_path"])
+            inventory = {
+                "schema": "epyc.autokernel.runtime_inventory.v1",
+                "readelf": {
+                    "path": str(source),
+                    "sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+                    "version": "fixture readelf 1",
+                },
+                "objects": rows,
+            }
+            commands = []
+
+            def inspect(argv, **_kwargs):
+                commands.append(tuple(argv))
+                return SimpleNamespace(
+                    returncode=0,
+                    stdout=("fixture readelf 1\n" if argv[1] == "--version"
+                            else ""), stderr="")
+
+            files, semantics = F._production_runtime_snapshot(
+                root, closure_manifest={"runtime_inventory": inventory},
+                runner=inspect)
+            self.assertEqual(len(files), 5)
+            self.assertEqual(commands[0], (str(source), "--version"))
+            self.assertEqual(
+                set(semantics["closures"]), {"build", "build-hip"})
+            self.assertEqual(
+                set(semantics["closures"]["build-hip"]["topology"]),
+                {"libggml-hip.so.0", "llama-bench", "llama-server"})
+
+    def test_runtime_inventory_fixture_refuses_before_readelf(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            path = root / "build/bin/llama-bench"
+            path.parent.mkdir(parents=True)
+            path.write_bytes(b"fixture-runtime-object")
+            inventory = {
+                "schema": "epyc.autokernel.runtime_inventory.v1",
+                "readelf": {
+                    "path": str(Path("/usr/bin/true").resolve(strict=True)),
+                    "sha256": hashlib.sha256(
+                        Path("/usr/bin/true").resolve(strict=True).read_bytes()
+                    ).hexdigest(),
+                    "version": "fixture readelf 1",
+                },
+                "objects": [{
+                    "relative_path": "build/bin/llama-bench",
+                    "sha256": "0" * 64,
+                    "symlink_target": None,
+                }],
+            }
+            runner = mock.Mock()
+            with self.assertRaisesRegex(
+                    F.DeploymentFactoryError,
+                    "runtime inventory differs from manifest"):
+                F._production_runtime_snapshot(
+                    root,
+                    closure_manifest={"runtime_inventory": inventory},
+                    runner=runner)
+            runner.assert_not_called()
+
+            inventory["objects"][0]["sha256"] = hashlib.sha256(
+                path.read_bytes()).hexdigest()
+            inventory["objects"][0]["symlink_target"] = "unexpected-target"
+            with self.assertRaisesRegex(
+                    F.DeploymentFactoryError,
+                    "runtime inventory differs from manifest"):
+                F._production_runtime_snapshot(
+                    root,
+                    closure_manifest={"runtime_inventory": inventory},
+                    runner=runner)
+            runner.assert_not_called()
+
+    def test_approved_readelf_requires_exact_bytes_and_version(self):
+        inventory = json.loads(json.dumps(
+            F._frozen_v9_closure_manifest()["runtime_inventory"]))
+        inventory["readelf"]["sha256"] = "0" * 64
+        runner = mock.Mock()
+        with self.assertRaisesRegex(
+                F.DeploymentFactoryError, "approved readelf is unavailable"):
+            F._approved_readelf(inventory, runner=runner)
+        runner.assert_not_called()
+
+        inventory = F._frozen_v9_closure_manifest()["runtime_inventory"]
+        runner.return_value = SimpleNamespace(
+            returncode=0, stdout="foreign readelf\n", stderr="")
+        with self.assertRaisesRegex(
+                F.DeploymentFactoryError, "readelf version differs"):
+            F._approved_readelf(inventory, runner=runner)
+
     def test_disposable_v9_runtime_mutations_refuse_frozen_closure(self):
         mutations = {
             "binary": lambda production: (
@@ -1193,7 +1312,7 @@ class DeploymentFactoryTests(unittest.TestCase):
                     stream.write(b"coherent-current-disk-substitution")
                 with self.assertRaisesRegex(
                         F.DeploymentFactoryError,
-                        "runtime closure differs from manifest"):
+                        "runtime (?:inventory|closure) differs from manifest"):
                     F.derive_frozen_production_comparator(
                         production_path=production)
         with tempfile.TemporaryDirectory(
@@ -1205,7 +1324,7 @@ class DeploymentFactoryTests(unittest.TestCase):
             alias.symlink_to("libggml-hip.so.0.16.0")
             with self.assertRaisesRegex(
                     F.DeploymentFactoryError,
-                    "runtime closure differs from manifest"):
+                    "runtime (?:inventory|closure) differs from manifest"):
                 F.derive_frozen_production_comparator(
                     production_path=production)
 
@@ -1248,7 +1367,7 @@ class DeploymentFactoryTests(unittest.TestCase):
                 check=True, stdin=subprocess.DEVNULL, capture_output=True)
             with self.assertRaisesRegex(
                     F.DeploymentFactoryError,
-                    "runtime closure differs from manifest"):
+                    "runtime (?:inventory|closure) differs from manifest"):
                 F.derive_frozen_production_comparator(
                     production_path=production)
             self.assertFalse(marker.exists())
@@ -1302,7 +1421,7 @@ class DeploymentFactoryTests(unittest.TestCase):
                         F.subprocess, "run", side_effect=record_command), \
                     self.assertRaisesRegex(
                         F.DeploymentFactoryError,
-                        "runtime closure differs from manifest"):
+                        "runtime (?:inventory|closure) differs from manifest"):
                 F.derive_frozen_production_comparator(
                     production_path=production)
             self.assertEqual(authenticated, [True])
