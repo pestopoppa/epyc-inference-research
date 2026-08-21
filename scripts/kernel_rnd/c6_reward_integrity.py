@@ -177,6 +177,8 @@ class PrecisionContract:
     lowbit: bool = False
 
     def __post_init__(self):
+        if type(self.lowbit) is not bool:
+            raise EvaluatorPolicyError("lowbit must be an exact bool")
         object.__setattr__(self, "required_output_dtype",
                            _normal_dtype(self.required_output_dtype))
         object.__setattr__(self, "required_accumulator_dtype",
@@ -296,7 +298,8 @@ def evaluate_numerics(reference: object, candidate: object, *,
     got = _flat_values(candidate)
     if not refs:
         return NumericalVerdict(
-            True, "numeric", "matched", **precision, matched_ratio=1.0)
+            False, "numeric", "empty_output", **precision,
+            total_elements=0, matched_ratio=None)
     try:
         refs_f = [float(item) for item in refs]
         got_f = [float(item) for item in got]
@@ -422,6 +425,24 @@ def run_three_bitwise_isolated(
     snapshot = _clone_isolated_input(inputs)
     return run_three_bitwise(
         lambda: run_once(_clone_isolated_input(snapshot)))
+
+
+def run_reference_then_three_bitwise_isolated(
+        inputs: object,
+        reference_once: Callable[[object], object],
+        run_once: Callable[[object], object]) -> tuple[
+            object, DeterminismVerdict, object]:
+    """Evaluate the reference first, then exactly three isolated trials.
+
+    Every invocation receives a fresh clone of one trusted snapshot.  The
+    reference therefore cannot observe candidate mutation or candidate-owned
+    global ordering effects, while each candidate trial remains independent.
+    """
+    snapshot = _clone_isolated_input(inputs)
+    reference = reference_once(_clone_isolated_input(snapshot))
+    deterministic, candidate = run_three_bitwise(
+        lambda: run_once(_clone_isolated_input(snapshot)))
+    return reference, deterministic, candidate
 
 
 def structural_precision_from_allowlist(
@@ -908,6 +929,10 @@ class RoundReflexionRecord:
     def to_dict(self) -> dict:
         estimated = float(self.estimated_speedup)
         achieved = float(self.achieved_speedup)
+        estimate_error = (achieved - estimated) / estimated
+        if not math.isfinite(estimate_error):
+            raise EvaluatorPolicyError(
+                "estimate_error_fraction must be finite")
         return {
             "schema": "epyc.autokernel.round_reflexion.v1",
             "round_id": self.round_id,
@@ -918,7 +943,7 @@ class RoundReflexionRecord:
             "actual_outcome": self.actual_outcome,
             "estimated_speedup": estimated,
             "achieved_speedup": achieved,
-            "estimate_error_fraction": (achieved - estimated) / estimated,
+            "estimate_error_fraction": estimate_error,
             "lessons": list(self.lessons),
             "avoid_patterns": list(self.avoid_patterns),
             "try_patterns": list(self.try_patterns),
@@ -1821,7 +1846,9 @@ __all__ = [
     "C6_GATE_TIERS", "C6_DROPPED_TIERS", "C6_SEMANTIC_CALIBRATION_MUTANTS",
     "PrecisionContract", "StructuralPrecisionEvidence", "NumericalVerdict",
     "evaluate_numerics", "DeterminismVerdict", "run_three_bitwise",
-    "run_three_bitwise_isolated", "structural_precision_from_allowlist",
+    "run_three_bitwise_isolated",
+    "run_reference_then_three_bitwise_isolated",
+    "structural_precision_from_allowlist",
     "FallbackProbe", "replace_fallback_returns_with_raise",
     "probe_fallback_laundering", "SemanticJudgeCalibration",
     "calibrate_semantic_judge", "SUPPORTED_GPU_PARTS",
