@@ -217,6 +217,33 @@ class CumulativeCompositionTests(unittest.TestCase):
                     second.cross_campaign_candidate_sha256,
                 ))
 
+    def test_dnr_history_cannot_omit_a_prior_rolled_back_candidate(self):
+        first, second = _lever(1), _lever(2)
+        initial = _authority()
+        first_plan = _plan(initial, first)
+        first_pair = _build_pair(first_plan)
+        first_correctness = _correctness(first_pair)
+        first_comparison = _comparison(
+            first_pair, first_correctness, route=-.01, graphs=-.01)
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = C.CompositionLedger(Path(directory) / "state.json")
+            ledger.create(initial)
+            ledger.begin(first_plan)
+            ledger.record_build_pair(first_pair)
+            ledger.record_correctness(first_correctness)
+            ledger.record_comparison(first_comparison)
+            ledger.finalize(first_plan.operation_key)
+            omitted = C.DnrAuthority.pass_for(
+                anchor=initial, candidate=initial.append(second),
+                registry_sha256=_h("omitted-registry"),
+                checked_cross_campaign_candidate_sha256s=())
+            second_plan = C.CompositionPlan.create(
+                anchor=initial, lever=second, dnr=omitted,
+                attempt_id=_h("omitted-attempt"))
+            with self.assertRaisesRegex(
+                    C.CompositionError, "omits or invents"):
+                ledger.begin(second_plan)
+
     def test_build_pair_binds_exact_anchor_and_candidate_source_stacks(self):
         plan = _plan(_authority(_lever(1)), _lever(2))
         pair = _build_pair(plan)
