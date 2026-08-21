@@ -42,8 +42,45 @@ class ImmutableAuthorityTests(unittest.TestCase):
         for name, module in (("discovery_supervisor", S), ("discovery_supervisor_secure", R)):
             path = Path(module.__file__).resolve(strict=True)
             self.assertEqual(
-                identity[name], {"path": str(path), "sha256": F._digest_regular(path, name)}
+                identity[name], {
+                    "logical_path": (
+                        "scripts/kernel_rnd/autokernel/controller/"
+                        f"{path.name}"),
+                    "sha256": F._digest_regular(path, name),
+                }
             )
+
+    def test_live_module_provenance_refuses_identical_user_owned_source_tree(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            runtime = Path(temporary) / "runtime"
+            spec = self._spec(runtime)
+            root = R.RuntimeRoot.create_or_open(runtime)
+            try:
+                S._persist_spec(root, spec)
+            finally:
+                root.close()
+            with self.assertRaisesRegex(
+                    S.SupervisorError,
+                    "supervisor/factory execution module bytes changed|escaped sealed closure"):
+                S.verify_imported_execution_modules(
+                    runtime, F._execution_module_runtime_provenance())
+
+    def test_live_module_set_refuses_missing_extra_and_wrong_logical_path(self):
+        expected = {
+            "runner": {"logical_path": "scripts/runner.py", "sha256": "a" * 64}}
+        good = {"runner": {
+            **expected["runner"], "path": "/closure/scripts/runner.py"}}
+        S._validate_imported_module_set(expected, good)
+        cases = (
+            {},
+            {**good, "extra": {**good["runner"]}},
+            {"runner": {**good["runner"],
+                        "logical_path": "scripts/other.py"}},
+        )
+        for case in cases:
+            with self.subTest(case=case), self.assertRaisesRegex(
+                    S.SupervisorError, "empty|differs from launch authority"):
+                S._validate_imported_module_set(expected, case)
 
     def test_closure_excludes_pyc_and_binds_exact_factory_digest(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -412,6 +449,48 @@ class DetachedCanaryTests(unittest.TestCase):
         self.assertEqual(identity["tmux"]["pane_pid"], identity["supervisor"]["pid"])
         terminal = self._wait_identity(lambda row: row["state"] == "stopped")
         self.assertEqual(terminal["exit_code"], 0)
+
+    def test_direct_validate_graph_reopens_byte_identically_from_root_closure(self):
+        bundle = Path(self.temporary.name) / "deployment"
+        deployment = F.initialize_static_deployment_bundle(bundle)
+        command = (
+            str(Path(sys.executable).resolve()), "-B", "-m",
+            F.__name__, "--deployment", str(deployment), "--validate-only")
+        environment = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
+        direct_payloads = []
+        for _ in range(2):
+            result = subprocess.run(
+                command, cwd=S._REPO_ROOT, env=environment,
+                text=True, capture_output=True, check=False, timeout=60)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            direct_payloads.append(json.loads(result.stdout))
+        self.assertEqual(direct_payloads[0], direct_payloads[1])
+        graph_path = Path(direct_payloads[0]["graph_receipt"])
+        direct_bytes = graph_path.read_bytes()
+        direct_sha = direct_payloads[0]["graph_sha256"]
+
+        spec = S._new_spec(
+            runtime_root=self.root, deployment=deployment,
+            validate_only=True, canary=None, max_restarts=0,
+            restart_delay=0.0, term_grace=0.2, kill_grace=1.0)
+        launched = S.start_detached(spec, start_timeout=20.0)
+        self.assertEqual(launched["launch_result"], "started")
+        terminal = self._wait_identity(lambda row: row["state"] == "stopped", timeout=60)
+        self.assertEqual(terminal["exit_code"], 0)
+        self.assertEqual(graph_path.read_bytes(), direct_bytes)
+        supervised = json.loads((self.root / "controller.stdout.log").read_text())
+        self.assertEqual(supervised["graph_sha256"], direct_sha)
+        self.assertEqual(supervised["graph_receipt"], str(graph_path.resolve()))
+        self.assertEqual(list((bundle / "operations" / "claims").iterdir()), [])
+
+        legacy = json.loads(direct_bytes)
+        legacy["schema"] = "epyc.autokernel.static_discovery_graph.v4"
+        graph_path.write_text(json.dumps(legacy, sort_keys=True, indent=2) + "\n")
+        refused = subprocess.run(
+            command, cwd=S._REPO_ROOT, env=environment,
+            text=True, capture_output=True, check=False, timeout=60)
+        self.assertNotEqual(refused.returncode, 0)
+        self.assertIn("legacy path-bound deployment graph v4", refused.stderr)
 
     def test_bounded_canary_restart_is_exact(self):
         _pid, launcher = self._launcher(

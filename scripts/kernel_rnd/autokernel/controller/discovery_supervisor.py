@@ -34,7 +34,7 @@ class SupervisorError(RuntimeError):
     pass
 
 
-SPEC_SCHEMA = "epyc.autokernel.discovery_supervisor_spec.v2"
+SPEC_SCHEMA = "epyc.autokernel.discovery_supervisor_spec.v3"
 IDENTITY_SCHEMA = "epyc.autokernel.discovery_supervisor_identity.v2"
 LEDGER_SCHEMA = "epyc.autokernel.discovery_supervisor_ledger.v2"
 FACTORY_MODULE = "scripts.kernel_rnd.autokernel.controller.discovery_deployment_factory"
@@ -46,6 +46,53 @@ _SOURCE_SCRIPTS_ROOT = _REPO_ROOT / "scripts"
 _IMMUTABLE_CLOSURE_BASE = Path("/var/lib/epyc-autokernel/execution-closures")
 _HEX64 = re.compile(r"[0-9a-f]{64}")
 _STATE_LIMIT = 64 * 1024 * 1024
+GRAPH_EXECUTION_MODULES = {
+    "deployment_factory":
+        "scripts/kernel_rnd/autokernel/controller/discovery_deployment_factory.py",
+    "discovery_controller":
+        "scripts/kernel_rnd/autokernel/controller/discovery_controller.py",
+    "hypotheses": "scripts/kernel_rnd/autokernel/controller/hypotheses.py",
+    "do_not_repeat": "scripts/kernel_rnd/autokernel/controller/do_not_repeat.py",
+    "discovery_telemetry":
+        "scripts/kernel_rnd/autokernel/controller/discovery_telemetry.py",
+    "gpu_discovery_runner": "scripts/benchmark/run_autokernel_gpu_discovery.py",
+    "gpu_source_adapter":
+        "scripts/kernel_rnd/autokernel/controller/gpu_source_adapter.py",
+    "discovery_static_registry":
+        "scripts/kernel_rnd/autokernel/controller/discovery_static_registry.py",
+    "discovery_supervisor":
+        "scripts/kernel_rnd/autokernel/controller/discovery_supervisor.py",
+    "discovery_supervisor_secure":
+        "scripts/kernel_rnd/autokernel/controller/discovery_supervisor_secure.py",
+    "discovery_deployment":
+        "scripts/kernel_rnd/autokernel/controller/discovery_deployment.py",
+    "gpu_load_admission":
+        "scripts/kernel_rnd/autokernel/controller/gpu_load_admission.py",
+    "split_runtime_verifier":
+        "scripts/kernel_rnd/autokernel/controller/split_runtime_verifier.py",
+    "inference_window": "scripts/kernel_rnd/autokernel/execution/inference_window.py",
+    "cpu_region_claim": "scripts/kernel_rnd/autokernel/execution/cpu_region_claim.py",
+    "worktree": "scripts/kernel_rnd/autokernel/execution/worktree.py",
+    "source_candidate": "scripts/kernel_rnd/autokernel/source_candidate.py",
+    "instrument_integrity":
+        "scripts/kernel_rnd/autokernel/execution/instrument_integrity.py",
+    "t0_provider": "scripts/kernel_rnd/autokernel/execution/t0_provider.py",
+    "evaluator_integrity": "scripts/kernel_rnd/autokernel/evaluator/integrity.py",
+    "gpu_source_evidence":
+        "scripts/kernel_rnd/autokernel/controller/gpu_source_evidence.py",
+    "gpu_source_proofs":
+        "scripts/kernel_rnd/autokernel/controller/gpu_source_proofs.py",
+    "gpu_discovery_beliefs": "scripts/benchmark/autokernel_gpu_discovery_beliefs.py",
+    "device_claim": "scripts/kernel_rnd/autokernel/resource/device_claim.py",
+    "device_sampler": "scripts/kernel_rnd/autokernel/execution/device_sampler.py",
+    "gpu_residency_sampler":
+        "scripts/kernel_rnd/autokernel/controller/gpu_residency_sampler.py",
+    "codex_container_actor":
+        "scripts/kernel_rnd/autokernel/controller/codex_container_actor.py",
+    "claude_fable5_critic_actor":
+        "scripts/kernel_rnd/autokernel/controller/claude_fable5_critic_actor.py",
+    "hypothesis_portfolio": "scripts/kernel_rnd/autokernel/hypothesis_portfolio.py",
+}
 
 
 def _utc_now() -> str:
@@ -461,6 +508,7 @@ class LaunchSpec:
             "termination_policy",
             "execution_closure",
             "execution_modules",
+            "graph_execution_modules",
             "cgroup",
         }
         if set(value) != expected or value.get("schema") != SPEC_SCHEMA:
@@ -514,6 +562,17 @@ class LaunchSpec:
             "secure_runtime",
         }:
             raise SupervisorError("execution module binding is invalid")
+        graph_modules = value["graph_execution_modules"]
+        if (not isinstance(graph_modules, dict)
+                or set(graph_modules) != set(GRAPH_EXECUTION_MODULES)):
+            raise SupervisorError("graph execution module binding is invalid")
+        for name, logical in GRAPH_EXECUTION_MODULES.items():
+            row = graph_modules[name]
+            if (not isinstance(row, dict)
+                    or set(row) != {"logical_path", "sha256"}
+                    or row["logical_path"] != logical
+                    or _HEX64.fullmatch(str(row["sha256"])) is None):
+                raise SupervisorError("graph execution module identity is malformed")
         if not isinstance(value["execution_closure"], dict) or set(value["execution_closure"]) != {
             "path",
             "content_sha256",
@@ -524,6 +583,11 @@ class LaunchSpec:
             raise SupervisorError("execution closure binding is invalid")
         if _HEX64.fullmatch(str(value["execution_closure"]["content_sha256"])) is None:
             raise SupervisorError("execution closure content digest is invalid")
+        manifest = value["execution_closure"]["manifest"]
+        if any(logical not in manifest
+               or manifest[logical].get("sha256") != graph_modules[name]["sha256"]
+               for name, logical in GRAPH_EXECUTION_MODULES.items()):
+            raise SupervisorError("graph modules differ from execution closure manifest")
 
     def child_argv(
         self, config_fd: int | None = None, authority_fd: int | None = None
@@ -602,6 +666,11 @@ def _new_spec(
         }.items():
             path = module_base / filename
             modules[name] = {"path": str(path), "sha256": _file_sha256(path)}
+        graph_modules = {
+            name: {"logical_path": logical,
+                   "sha256": closure["manifest"][logical]["sha256"]}
+            for name, logical in GRAPH_EXECUTION_MODULES.items()
+        }
         body = {
             "schema": SPEC_SCHEMA,
             "kind": kind,
@@ -618,6 +687,7 @@ def _new_spec(
             },
             "execution_closure": closure,
             "execution_modules": modules,
+            "graph_execution_modules": graph_modules,
             "cgroup": {
                 "name": f"epyc-autokernel-{hashlib.sha256(str(root.path).encode()).hexdigest()[:24]}",
                 "base": "/sys/fs/cgroup",
@@ -1029,6 +1099,81 @@ def verified_supervised_launch(
             raise SupervisorError("live identity differs from supervised build authority")
         return config, authority
     finally:
+        root.close()
+
+
+def _validate_imported_module_set(
+    expected: Mapping[str, Mapping[str, str]],
+    modules: Mapping[str, Mapping[str, Any]],
+) -> None:
+    if not isinstance(modules, Mapping) or not modules:
+        raise SupervisorError("imported execution module provenance is empty")
+    semantic = {
+        name: {"logical_path": row.get("logical_path"),
+               "sha256": row.get("sha256")}
+        for name, row in modules.items() if isinstance(row, Mapping)
+    }
+    if semantic != expected:
+        raise SupervisorError(
+            "imported execution module set differs from launch authority")
+
+
+def verify_imported_execution_modules(
+    runtime_root: Path, modules: Mapping[str, Mapping[str, Any]]
+) -> None:
+    """Bind imported module objects to the exact root-sealed closure manifest."""
+    root = _runtime(runtime_root)
+    closure_fd = -1
+    try:
+        spec = LaunchSpec.read(root)
+        _verify_execution_closure(spec, require_self=True)
+        closure = Path(spec.body["execution_closure"]["path"])
+        manifest = spec.body["execution_closure"]["manifest"]
+        closure_fd = os.open(closure, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        required = {
+            "logical_path", "path", "sha256", "dev", "ino", "uid", "mode",
+            "nlink", "size", "mtime_ns", "ctime_ns",
+        }
+        _validate_imported_module_set(spec.body["graph_execution_modules"], modules)
+        seen: set[str] = set()
+        for name, row in modules.items():
+            if not isinstance(name, str) or not isinstance(row, Mapping) \
+                    or set(row) != required:
+                raise SupervisorError("imported execution module provenance is malformed")
+            logical = row["logical_path"]
+            if (not isinstance(logical, str) or logical in seen
+                    or logical.startswith("/") or ".." in Path(logical).parts
+                    or not logical.startswith("scripts/") or logical not in manifest):
+                raise SupervisorError("imported execution module logical path is invalid")
+            seen.add(logical)
+            expected_path = closure / logical
+            if row["path"] != str(expected_path):
+                raise SupervisorError("imported execution module escaped sealed closure")
+            try:
+                fd = secure.open_beneath(closure_fd, logical)
+                raw, identity = secure.read_stable_fd(fd, limit=_STATE_LIMIT)
+                opened = os.fstat(fd)
+            except secure.SecureRuntimeError as exc:
+                raise SupervisorError(str(exc)) from exc
+            finally:
+                if "fd" in locals():
+                    os.close(fd)
+                    del fd
+            facts = {
+                "dev": identity["dev"], "ino": identity["ino"],
+                "uid": identity["uid"], "mode": identity["mode"],
+                "nlink": identity["nlink"], "size": identity["size"],
+                "mtime_ns": opened.st_mtime_ns, "ctime_ns": opened.st_ctime_ns,
+            }
+            if ({key: row[key] for key in facts} != facts
+                    or row["sha256"] != hashlib.sha256(raw).hexdigest()
+                    or row["sha256"] != manifest[logical]["sha256"]
+                    or identity != manifest[logical]["closure"]):
+                raise SupervisorError(
+                    "imported execution module object differs from sealed manifest")
+    finally:
+        if closure_fd >= 0:
+            os.close(closure_fd)
         root.close()
 
 

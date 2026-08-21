@@ -659,11 +659,11 @@ class DeploymentFactoryTests(unittest.TestCase):
                 F.deployment.load_deployment_config(path)
 
     def test_execution_module_attestor_refuses_any_live_byte_drift(self):
-        sealed = {"runner": {"path": "/sealed/runner.py", "sha256": "a" * 64}}
+        sealed = {"runner": {"logical_path": "scripts/runner.py", "sha256": "a" * 64}}
         attest = F._module_attestor(sealed)
         with mock.patch.object(F, "_execution_module_identity", return_value=sealed):
             attest()
-        changed = {"runner": {"path": "/sealed/runner.py", "sha256": "b" * 64}}
+        changed = {"runner": {"logical_path": "scripts/runner.py", "sha256": "b" * 64}}
         with mock.patch.object(F, "_execution_module_identity", return_value=changed), \
              self.assertRaisesRegex(F.DeploymentFactoryError, "module bytes changed"):
             attest()
@@ -672,7 +672,7 @@ class DeploymentFactoryTests(unittest.TestCase):
         sealed = F._execution_module_identity()
         self.assertEqual(
             sealed["t0_provider"], {
-                "path": str(Path(F.t0_provider.__file__).resolve(strict=True)),
+                "logical_path": "scripts/kernel_rnd/autokernel/execution/t0_provider.py",
                 "sha256": F._digest_regular(
                     Path(F.t0_provider.__file__).resolve(strict=True),
                     "t0_provider"),
@@ -684,6 +684,39 @@ class DeploymentFactoryTests(unittest.TestCase):
                 self.assertRaisesRegex(
                     F.DeploymentFactoryError, "module bytes changed"):
             attest()
+
+    def test_module_runtime_provenance_refuses_alias_symlink_and_hardlink(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "runner.py"
+            source.write_bytes(b"trusted module\n")
+            runtime = F._runtime_module_file(
+                "scripts/runner.py", source, "runner")
+            semantic = {"runner": {
+                "logical_path": runtime["logical_path"],
+                "sha256": runtime["sha256"]}}
+            attest = F._module_attestor(semantic, {"runner": runtime})
+            alias = root / "same-bytes.py"
+            alias.write_bytes(source.read_bytes())
+            alias_runtime = F._runtime_module_file(
+                "scripts/runner.py", alias, "runner")
+            with mock.patch.object(F, "_execution_module_identity",
+                                   return_value=semantic), \
+                    mock.patch.object(F, "_execution_module_runtime_provenance",
+                                      return_value={"runner": alias_runtime}), \
+                    self.assertRaisesRegex(
+                        F.DeploymentFactoryError, "runtime provenance changed"):
+                attest()
+            symlink = root / "symlink.py"
+            symlink.symlink_to(source)
+            with self.assertRaisesRegex(
+                    F.DeploymentFactoryError, "single-link regular non-symlink"):
+                F._runtime_module_file("scripts/runner.py", symlink, "runner")
+            hardlink = root / "hardlink.py"
+            os.link(source, hardlink)
+            with self.assertRaisesRegex(
+                    F.DeploymentFactoryError, "single-link regular non-symlink"):
+                F._runtime_module_file("scripts/runner.py", hardlink, "runner")
 
     def test_validate_only_materializes_static_graph_without_actor_or_hardware(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -749,6 +782,20 @@ class DeploymentFactoryTests(unittest.TestCase):
             self.assertIn("hypotheses", receipt["execution_modules"])
             self.assertIn("do_not_repeat", receipt["execution_modules"])
             self.assertIn("t0_provider", receipt["execution_modules"])
+            self.assertIn("codex_container_actor", receipt["execution_modules"])
+            self.assertEqual(receipt["schema"],
+                             "epyc.autokernel.static_discovery_graph.v5")
+            self.assertTrue(all(
+                set(row) == {"logical_path", "sha256"}
+                and row["logical_path"].startswith("scripts/")
+                and not Path(row["logical_path"]).is_absolute()
+                for row in receipt["execution_modules"].values()))
+            self.assertEqual(
+                receipt["actor_argv_authority"]["planner"]["module_id"],
+                "codex_container_actor")
+            self.assertEqual(
+                receipt["actor_argv_authority"]["critic"]["module_id"],
+                "claude_fable5_critic_actor")
             self.assertEqual(
                 receipt["execution_modules"]["discovery_telemetry"]["sha256"],
                 F._digest_regular(Path(F.discovery_telemetry.__file__).resolve(),

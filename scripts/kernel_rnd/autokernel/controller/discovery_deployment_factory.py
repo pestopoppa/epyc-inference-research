@@ -315,47 +315,112 @@ class StaticDeploymentGraph:
     graph_sha256: str
 
 
-def _execution_module_identity() -> dict[str, dict[str, str]]:
-    modules = {
-        "deployment_factory": Path(__file__).resolve(strict=True),
-        "discovery_controller": Path(controller.__file__).resolve(strict=True),
-        "hypotheses": Path(controller.hypotheses.__file__).resolve(strict=True),
-        "do_not_repeat": Path(controller.do_not_repeat.__file__).resolve(strict=True),
-        "discovery_telemetry": Path(discovery_telemetry.__file__).resolve(strict=True),
-        "gpu_discovery_runner": Path(controller.gpu_discovery.__file__).resolve(strict=True),
-        "gpu_source_adapter": Path(gpu_source_adapter.__file__).resolve(strict=True),
-        "discovery_static_registry": Path(discovery_static_registry.__file__).resolve(strict=True),
-        "discovery_supervisor": Path(discovery_supervisor.__file__).resolve(strict=True),
-        "discovery_supervisor_secure": Path(
-            discovery_supervisor_secure.__file__).resolve(strict=True),
-        "discovery_deployment": Path(deployment.__file__).resolve(strict=True),
-        "gpu_load_admission": Path(gpu_load_admission.__file__).resolve(strict=True),
-        "split_runtime_verifier": Path(controller.gpu_discovery.split_runtime_verifier.__file__).resolve(strict=True),
-        "inference_window": Path(inference_window.__file__).resolve(strict=True),
-        "cpu_region_claim": Path(cpu_region_claim.__file__).resolve(strict=True),
-        "worktree": Path(worktree.__file__).resolve(strict=True),
-        "source_candidate": Path(source_candidate.__file__).resolve(strict=True),
-        "instrument_integrity": Path(instrument_integrity.__file__).resolve(strict=True),
-        "t0_provider": Path(t0_provider.__file__).resolve(strict=True),
-        "evaluator_integrity": Path(integrity.__file__).resolve(strict=True),
-        "gpu_source_evidence": Path(evidence.__file__).resolve(strict=True),
-        "gpu_source_proofs": Path(gpu_source_proofs.__file__).resolve(strict=True),
-        "gpu_discovery_beliefs": Path(autokernel_gpu_discovery_beliefs.__file__).resolve(strict=True),
-        "device_claim": Path(device_claim.__file__).resolve(strict=True),
-        "device_sampler": Path(device_sampler.__file__).resolve(strict=True),
-        "gpu_residency_sampler": Path(gpu_residency_sampler.__file__).resolve(strict=True),
-        "claude_fable5_critic_actor": Path(claude_fable5_critic_actor.__file__).resolve(strict=True),
-        "hypothesis_portfolio": Path(hypothesis_portfolio.__file__).resolve(strict=True),
+def _execution_module_sources() -> dict[str, tuple[str, Path]]:
+    """Return stable repo-logical names plus this process's physical sources."""
+    paths = {
+        "deployment_factory": Path(__file__),
+        "discovery_controller": Path(controller.__file__),
+        "hypotheses": Path(controller.hypotheses.__file__),
+        "do_not_repeat": Path(controller.do_not_repeat.__file__),
+        "discovery_telemetry": Path(discovery_telemetry.__file__),
+        "gpu_discovery_runner": Path(controller.gpu_discovery.__file__),
+        "gpu_source_adapter": Path(gpu_source_adapter.__file__),
+        "discovery_static_registry": Path(discovery_static_registry.__file__),
+        "discovery_supervisor": Path(discovery_supervisor.__file__),
+        "discovery_supervisor_secure": Path(discovery_supervisor_secure.__file__),
+        "discovery_deployment": Path(deployment.__file__),
+        "gpu_load_admission": Path(gpu_load_admission.__file__),
+        "split_runtime_verifier": Path(
+            controller.gpu_discovery.split_runtime_verifier.__file__),
+        "inference_window": Path(inference_window.__file__),
+        "cpu_region_claim": Path(cpu_region_claim.__file__),
+        "worktree": Path(worktree.__file__),
+        "source_candidate": Path(source_candidate.__file__),
+        "instrument_integrity": Path(instrument_integrity.__file__),
+        "t0_provider": Path(t0_provider.__file__),
+        "evaluator_integrity": Path(integrity.__file__),
+        "gpu_source_evidence": Path(evidence.__file__),
+        "gpu_source_proofs": Path(gpu_source_proofs.__file__),
+        "gpu_discovery_beliefs": Path(autokernel_gpu_discovery_beliefs.__file__),
+        "device_claim": Path(device_claim.__file__),
+        "device_sampler": Path(device_sampler.__file__),
+        "gpu_residency_sampler": Path(gpu_residency_sampler.__file__),
+        "codex_container_actor": Path(codex_container_actor.__file__),
+        "claude_fable5_critic_actor": Path(claude_fable5_critic_actor.__file__),
+        "hypothesis_portfolio": Path(hypothesis_portfolio.__file__),
     }
-    return {name: {"path": str(path), "sha256": _digest_regular(path, name)}
-            for name, path in modules.items()}
+    if set(paths) != set(discovery_supervisor.GRAPH_EXECUTION_MODULES):
+        raise DeploymentFactoryError("execution module role closure changed")
+    return {
+        name: (discovery_supervisor.GRAPH_EXECUTION_MODULES[name], path)
+        for name, path in paths.items()
+    }
 
 
-def _module_attestor(expected: Mapping[str, Mapping[str, str]]) -> Callable[[], None]:
+def _runtime_module_file(logical_path: str, path: Path, label: str) -> dict[str, Any]:
+    """Bind this process's source object without putting its location in the graph."""
+    absolute = Path(os.path.abspath(path))
+    try:
+        before = absolute.lstat()
+    except OSError as exc:
+        raise DeploymentFactoryError(f"{label} runtime module path is unavailable") from exc
+    if (not stat.S_ISREG(before.st_mode) or absolute.is_symlink()
+            or before.st_nlink != 1):
+        raise DeploymentFactoryError(
+            f"{label} runtime module must be a single-link regular non-symlink file")
+    digest = _digest_regular(absolute, label)
+    try:
+        after = absolute.lstat()
+    except OSError as exc:
+        raise DeploymentFactoryError(f"{label} runtime module path changed") from exc
+    stable = ("st_dev", "st_ino", "st_uid", "st_nlink", "st_mode",
+              "st_size", "st_mtime_ns", "st_ctime_ns")
+    if any(getattr(before, key) != getattr(after, key) for key in stable):
+        raise DeploymentFactoryError(f"{label} runtime module object changed")
+    return {
+        "logical_path": logical_path,
+        "path": str(absolute),
+        "sha256": digest,
+        "dev": after.st_dev,
+        "ino": after.st_ino,
+        "uid": after.st_uid,
+        "mode": stat.S_IMODE(after.st_mode),
+        "nlink": after.st_nlink,
+        "size": after.st_size,
+        "mtime_ns": after.st_mtime_ns,
+        "ctime_ns": after.st_ctime_ns,
+    }
+
+
+def _execution_module_runtime_provenance() -> dict[str, dict[str, Any]]:
+    return {
+        name: _runtime_module_file(logical_path, path, name)
+        for name, (logical_path, path) in _execution_module_sources().items()
+    }
+
+
+def _execution_module_identity() -> dict[str, dict[str, str]]:
+    runtime = _execution_module_runtime_provenance()
+    return {
+        name: {"logical_path": row["logical_path"], "sha256": row["sha256"]}
+        for name, row in runtime.items()
+    }
+
+
+def _module_attestor(
+        expected: Mapping[str, Mapping[str, str]],
+        runtime_provenance: Mapping[str, Mapping[str, Any]] | None = None,
+        ) -> Callable[[], None]:
     sealed = json.loads(json.dumps(dict(expected), sort_keys=True))
+    sealed_runtime = json.loads(json.dumps(
+        dict(runtime_provenance or _execution_module_runtime_provenance()),
+        sort_keys=True))
     def attest() -> None:
         if _execution_module_identity() != sealed:
             raise DeploymentFactoryError("live execution module bytes changed after graph validation")
+        if _execution_module_runtime_provenance() != sealed_runtime:
+            raise DeploymentFactoryError(
+                "live execution module runtime provenance changed after graph validation")
     return attest
 
 
@@ -2000,13 +2065,11 @@ def _seal_graph_receipt(config: deployment.DiscoveryDeployment,
                         execution_modules: Mapping[str, Mapping[str, str]],
                         production_runtime_sha256: str,
                         critic_auth: Mapping[str, Any]) -> tuple[Path, str]:
-    planner_launcher = Path(codex_container_actor.__file__).resolve(strict=True)
-    critic_launcher = Path(claude_fable5_critic_actor.__file__).resolve(strict=True)
     surfaces = _normalized_template_surfaces(
         templates, config.hypothesis_portfolio.value)
     profiler_runtime = [evidence._bound_reference(item)
                         for item in _rocprof_v3_policy(config)]
-    body = {"schema": "epyc.autokernel.static_discovery_graph.v4",
+    body = {"schema": "epyc.autokernel.static_discovery_graph.v5",
             "authority": "nonpromotable_candidate_only_discovery", "promotion_claim": False,
             "inference_executed": False, "config_sha256": config.config_sha256,
             "registry_ids": dict(_STATIC_IDS), "template_registry_sha256": templates.registry_sha256,
@@ -2052,14 +2115,14 @@ def _seal_graph_receipt(config: deployment.DiscoveryDeployment,
                                "critic": dict(critic_runtime)},
             "actor_cells": [dict(controller.SOL), dict(controller.FABLE5_CRITIC)],
             "actor_argv_authority": {
-                "planner": {"module": str(planner_launcher),
-                            "module_sha256": _digest_regular(
-                                planner_launcher, "Codex actor launcher"),
+                "planner": {"module_id": "codex_container_actor",
+                            "module_sha256": execution_modules[
+                                "codex_container_actor"]["sha256"],
                             "constructor": "codex_container_actor.build_docker_argv",
                             "image_id": codex_container_actor.CONTAINER_IMAGE_ID},
-                "critic": {"module": str(critic_launcher),
-                           "module_sha256": _digest_regular(
-                               critic_launcher, "Claude critic launcher"),
+                "critic": {"module_id": "claude_fable5_critic_actor",
+                           "module_sha256": execution_modules[
+                               "claude_fable5_critic_actor"]["sha256"],
                            "constructor": "claude_fable5_critic_actor.build_argv",
                            "tools": [], "permission_mode": "plan"}},
             "critic_auth_source": dict(critic_auth),
@@ -2130,7 +2193,17 @@ def _seal_graph_receipt(config: deployment.DiscoveryDeployment,
     path.parent.mkdir(parents=True, exist_ok=True)
     encoded = (json.dumps(body, sort_keys=True, indent=2) + "\n").encode()
     if path.exists():
-        if path.is_symlink() or path.read_bytes() != encoded:
+        if path.is_symlink():
+            raise DeploymentFactoryError("durable deployment graph is a symlink")
+        try:
+            durable = json.loads(path.read_bytes())
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            raise DeploymentFactoryError("durable deployment graph is malformed") from exc
+        if durable.get("schema") == "epyc.autokernel.static_discovery_graph.v4":
+            raise DeploymentFactoryError(
+                "legacy path-bound deployment graph v4 cannot authorize execution; "
+                "initialize a fresh v5 deployment")
+        if path.read_bytes() != encoded:
             raise DeploymentFactoryError("durable deployment graph differs from current sealed graph")
     else:
         temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
@@ -2151,7 +2224,11 @@ def build_static_deployment_graph(config: deployment.DiscoveryDeployment) -> Sta
             "deployment selected an unreviewed hypothesis portfolio authority")
     target_equality = _target_source_equality_receipt(config)
     instrument_review = _instrument_review_receipt(config)
-    execution_modules = _execution_module_identity()
+    execution_runtime_provenance = _execution_module_runtime_provenance()
+    execution_modules = {
+        name: {"logical_path": row["logical_path"], "sha256": row["sha256"]}
+        for name, row in execution_runtime_provenance.items()
+    }
     templates = _template_registry()
     try:
         hypothesis_portfolio.validate_template_authorability(
@@ -2196,7 +2273,8 @@ def build_static_deployment_graph(config: deployment.DiscoveryDeployment) -> Sta
     journal = device_claim.ClaimJournal(config.operations_root / "claims" / "device.jsonl")
     adapters = materialize(config, registry, correctness_executor=executor,
                            rocprof_executor=executor, claim_journal=journal,
-                           runner_attest=_module_attestor(execution_modules))
+                           runner_attest=_module_attestor(
+                               execution_modules, execution_runtime_provenance))
     # Replace generic actor instances with byte/runtime-pinned equivalents.
     catalog = adapters["planner"].template_catalog
     telemetry = discovery_telemetry.DiscoveryTelemetry(config.operations_root / "live")
@@ -2820,6 +2898,9 @@ def deployment_main(argv: list[str] | None = None) -> int:
             Path(args.supervisor_runtime_root), args.supervised_config_fd,
             args.supervised_authority_fd)
         _SUPERVISED_BUILD_AUTHORITY = authority
+        discovery_supervisor.verify_imported_execution_modules(
+            Path(args.supervisor_runtime_root),
+            _execution_module_runtime_provenance())
     config = deployment.load_deployment_config(
         Path(args.deployment), sealed_bytes=sealed_bytes)
     graph = build_static_deployment_graph(config)

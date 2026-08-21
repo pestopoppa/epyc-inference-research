@@ -300,7 +300,7 @@ class V8DeterministicCorrectnessCapabilityAcceptance(unittest.TestCase):
         sealed = F._execution_module_identity()
         provider = Path(t0_provider.__file__).resolve(strict=True)
         self.assertEqual(sealed["t0_provider"], {
-            "path": str(provider),
+            "logical_path": "scripts/kernel_rnd/autokernel/execution/t0_provider.py",
             "sha256": hashlib.sha256(provider.read_bytes()).hexdigest(),
         })
         attest = F._module_attestor(sealed)
