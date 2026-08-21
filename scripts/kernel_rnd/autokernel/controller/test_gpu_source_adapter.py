@@ -150,6 +150,10 @@ class GpuSourceAdapterTests(unittest.TestCase):
             with mock.patch.object(D, "GpuSourceScreener", FakeDelegate):
                 screened = adapter.screen(candidate, authorization, lease)
             self.assertEqual(screened.result_sha256, current.result_sha256)
+            intent = A._read_json(
+                adapter._root(lease["operation_key"]) / "intent.json",
+                "operation intent")
+            self.assertIsNone(intent["composition_plan_sha256"])
             if "series_key" in screened.__dataclass_fields__:
                 self.assertRegex(screened.series_key, r"^[0-9a-f]{64}$")
             recovered = adapter.reconcile(inflight)

@@ -681,6 +681,10 @@ class Q5PreauthoredContinuationTests(unittest.TestCase):
             self.assertEqual(row["evidence"], {
                 "dispatch_attribution": "c" * 64})
             self.assertEqual(row["operation_key"], lease.operation_keys[0])
+            self.assertNotIn("composition_disposition", row)
+            self.assertNotIn("cumulative_performance_result_sha256", row)
+            self.assertNotIn("cumulative_composition_terminal", state)
+            self.assertNotIn("cumulative_performance", state)
             semantic = row["candidate_semantic_sha256"]
             self.assertEqual(
                 state["attempted_candidate_identities"][semantic]["attempts"][0]

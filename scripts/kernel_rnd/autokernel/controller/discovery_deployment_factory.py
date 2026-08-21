@@ -1104,6 +1104,46 @@ def _load_frozen_production_comparator(
             "frozen production comparator receipt is invalid") from exc
 
 
+def _verify_frozen_production_comparator(
+        comparator: cumulative_composition.FrozenProductionComparator,
+        production_path: Path, runtime_semantics: Mapping[str, Any],
+) -> None:
+    """Join the static comparator to the exact live frozen-v9 closure.
+
+    ``source_sha256`` is the integrity-tree digest of ``git archive`` for the
+    exact frozen commit.  It intentionally does not hash the serving worktree,
+    whose ignored operator tooling is outside the Git/source-build authority.
+    The comparator's build/linkage/runtime receipt digests remain immutable
+    provenance inside its deployment-bound self-hash; promotion authority comes
+    from the independently revalidated source, executable, linkage and runtime
+    facts below rather than merely trusting those historical receipt labels.
+    """
+    if schemas.content_hash(dict(runtime_semantics)) != \
+            comparator.runtime_snapshot_sha256:
+        raise DeploymentFactoryError(
+            "frozen production comparator runtime snapshot changed")
+    build = production_path / "build-hip"
+    identity = comparator.build_identity
+    try:
+        binary_sha = _digest_regular(
+            build / "bin" / "llama-bench", "frozen production binary")
+        hip_sha = _digest_regular(
+            (build / "bin" / "libggml-hip.so").resolve(strict=True),
+            "frozen production HIP library")
+        linkage_sha = discovery_static_registry._linkage_sha(build)
+    except (OSError, discovery_static_registry.StaticRegistryError) as exc:
+        raise DeploymentFactoryError(
+            "frozen production comparator runtime linkage is unavailable") from exc
+    if (identity.source_commit != deployment.FROZEN_PRODUCTION_HEAD
+            or identity.source_sha256 !=
+               cumulative_composition.FROZEN_PRODUCTION_SOURCE_SHA256
+            or identity.binary_sha256 != binary_sha
+            or identity.hip_library_sha256 != hip_sha
+            or identity.linkage_sha256 != linkage_sha):
+        raise DeploymentFactoryError(
+            "frozen production comparator build/linkage identity changed")
+
+
 def initialize_static_deployment_bundle(
         root: Path, *, frozen_production_comparator: Path) -> Path:
     """Emit the one reviewed site bundle; no caller supplies code or argv authority."""
@@ -1213,6 +1253,10 @@ def initialize_static_deployment_bundle(
             or comparator.runtime_config_sha256 != runtime_sha):
         raise DeploymentFactoryError(
             "frozen production comparator names another immutable frame")
+    _snapshot_files, snapshot_semantics = _production_runtime_snapshot(
+        deployment.FROZEN_PRODUCTION_PATH)
+    _verify_frozen_production_comparator(
+        comparator, deployment.FROZEN_PRODUCTION_PATH, snapshot_semantics)
     comparator_path = config_dir / "frozen-production-comparator.json"
     _atomic_bytes(
         comparator_path, frozen_production_comparator.read_bytes())
@@ -2823,6 +2867,12 @@ def _static_registry(config: deployment.DiscoveryDeployment,
     if len(profiles) != 1:
         raise DeploymentFactoryError("sealed admission corpus lacks one exact runner profile")
     environment = EnvironmentProfile(_SAFE_ACTOR_ENVIRONMENT)
+    comparator = _load_frozen_production_comparator(
+        config.frozen_production_comparator.path)
+    snapshot_files, snapshot_semantics = _production_runtime_snapshot(
+        config.production_path)
+    _verify_frozen_production_comparator(
+        comparator, config.production_path, snapshot_semantics)
     source_builder = discovery_static_registry.StaticGpuSourceBuilder(
         production_path=config.production_path,
         production_branch=deployment.FROZEN_PRODUCTION_BRANCH,
@@ -2830,28 +2880,15 @@ def _static_registry(config: deployment.DiscoveryDeployment,
         operations_root=config.operations_root,
         build_root=config.build_root,
         cmake_defines=(("GGML_HIP", "ON"), ("AMDGPU_TARGETS", "gfx90a"),
-                       ("GGML_NATIVE", "OFF")))
-    comparator = _load_frozen_production_comparator(
-        config.frozen_production_comparator.path)
-
-    def build_source(candidate: controller.PlannedCandidate,
-                     authorization: Any,
-                     lease: Mapping[str, Any]) -> controller.GpuSourceBuild:
-        built = source_builder.build(candidate, authorization, lease)
-        if candidate.composition_plan is None:
-            return built
-        authority = comparator.authority()
-        authority.bind_plan(candidate.composition_plan)
-        return replace(
-            built, composition_production_authority=authority)
-    snapshot_files, snapshot_semantics = _production_runtime_snapshot(config.production_path)
+                       ("GGML_NATIVE", "OFF")),
+        composition_production_authority=comparator.authority())
     snapshot = ProductionSnapshotBinding(
         config.production_path, snapshot_files, snapshot_semantics,
         schemas.content_hash(snapshot_semantics))
     return MappingProxyType({
         "environment_profile": MappingProxyType({_STATIC_IDS["environment_profile"]: environment}),
         "source_builder": MappingProxyType({_STATIC_IDS["source_builder"]:
-                                               SourceBuilderBinding(build_source)}),
+                                               SourceBuilderBinding(source_builder.build)}),
         "evidence_plan": MappingProxyType({_STATIC_IDS["evidence_plan"]: _evidence_binding(config)}),
         "runner_args": MappingProxyType({_STATIC_IDS["runner_args"]: _runner_binding(config)}),
         "experiment_template_registry": MappingProxyType({_STATIC_IDS["experiment_template_registry"]: templates}),

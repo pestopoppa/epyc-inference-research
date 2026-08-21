@@ -26,7 +26,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from scripts.kernel_rnd.autokernel import schemas, storage
+from scripts.kernel_rnd.autokernel import cumulative_composition, schemas, storage
 from scripts.kernel_rnd.autokernel.execution import (
     cpu_region_claim, device_sampler, inference_window)
 from scripts.kernel_rnd.autokernel.resource import device_claim
@@ -1344,6 +1344,24 @@ def build_identity(build: Path) -> dict:
     return identity
 
 
+def _source_linkage_sha(build: Path) -> str:
+    """Hash the same live binary/HIP topology sealed by the static builder."""
+    binary = build / "bin" / "llama-bench"
+    hip = (build / "bin" / "libggml-hip.so").resolve(strict=True)
+    topology = {
+        name: os.readlink(build / "bin" / name)
+        for name in ("libggml-hip.so", "libggml-hip.so.0")
+        if (build / "bin" / name).is_symlink()
+    }
+    body = {
+        "binary": sha256_file(binary),
+        "hip": sha256_file(hip),
+        "topology": topology,
+    }
+    return hashlib.sha256(json.dumps(
+        body, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
 def _sealed_source_build_identity(
         args: argparse.Namespace, *, arm: str, build: Path,
         observed: dict) -> dict:
@@ -1370,7 +1388,6 @@ def _sealed_source_build_identity(
                    or any(ch not in "0123456789abcdef" for ch in raw[key])
                    for key in required - {"source_commit"})):
         raise RuntimeError(f"source patch {arm} builder identity is malformed")
-    cache = build / "CMakeCache.txt"
     binary = build / "bin" / "llama-bench"
     hip = build / "bin" / "libggml-hip.so"
     try:
@@ -1379,10 +1396,40 @@ def _sealed_source_build_identity(
         raise RuntimeError(
             f"source patch {arm} HIP artifact cannot be resolved") from exc
     live = {
-        "config_sha256": sha256_file(cache),
         "binary_sha256": sha256_file(binary),
         "hip_library_sha256": sha256_file(hip_resolved),
+        "linkage_sha256": _source_linkage_sha(build),
     }
+    cache = build / "CMakeCache.txt"
+    frozen_production = (
+        getattr(args, "factor", None) == "cumulative_production"
+        and arm == "anchor"
+    )
+    if cache.is_file() and not cache.is_symlink():
+        live["config_sha256"] = sha256_file(cache)
+    elif frozen_production:
+        try:
+            authority = cumulative_composition.FrozenProductionAuthority.from_dict(
+                getattr(args, "_frozen_production_authority", None))
+        except cumulative_composition.CompositionError as exc:
+            raise RuntimeError(
+                "frozen production arm lacks sealed comparator authority") from exc
+        if dict(authority.build_identity.__dict__) != raw:
+            raise RuntimeError(
+                "frozen production arm differs from sealed comparator build identity")
+        if (authority.production_commit != SOURCE_COMMIT
+                or authority.build_identity.source_sha256 !=
+                   cumulative_composition.FROZEN_PRODUCTION_SOURCE_SHA256):
+            raise RuntimeError(
+                "frozen production arm lacks exact v9 source authority")
+        # The immutable v9 runtime snapshot is deliberately bin-only.  Its
+        # externally sealed comparator owns the historical configuration
+        # identity; live preflight still re-hashes every executable/linkage
+        # artifact that actually survives in that runtime closure.
+        live["config_sha256"] = authority.build_identity.config_sha256
+    else:
+        raise RuntimeError(
+            f"source patch {arm} build lacks its sealed CMake configuration")
     if any(raw[key] != value for key, value in live.items()):
         raise RuntimeError(
             f"source patch {arm} live artifact differs from sealed builder identity")

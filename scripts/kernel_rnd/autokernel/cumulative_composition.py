@@ -39,6 +39,8 @@ SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 COMMIT = re.compile(r"[0-9a-f]{40}\Z")
 FROZEN_PRODUCTION_BRANCH = "production-consolidated-v9"
 FROZEN_PRODUCTION_COMMIT = "0db32c06e3e550065b78311a6031ef3dd2c4f27c"
+FROZEN_PRODUCTION_SOURCE_SHA256 = \
+    "48663678dad691ba046cc3d3e9a70d42046d92602db94704b3707e3fadb82ca8"
 HUNK = re.compile(
     r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(?: .*)?$"
 )

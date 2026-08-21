@@ -7,7 +7,7 @@ path, argv, CMake flag, or production path is accepted from planner output.
 from __future__ import annotations
 
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import fcntl
 import hashlib
 import json
@@ -1881,6 +1881,40 @@ class StaticGpuSourceBuilder:
     build_root: Path
     cmake_defines: tuple[tuple[str, str], ...]
     correctness_capability_runner: Any | None = None
+    composition_production_authority: (
+        cumulative_composition.FrozenProductionAuthority | None) = None
+
+    def __post_init__(self) -> None:
+        if (self.composition_production_authority is not None
+                and not isinstance(
+                    self.composition_production_authority,
+                    cumulative_composition.FrozenProductionAuthority)):
+            raise StaticRegistryError(
+                "static builder production authority must be typed")
+
+    def _bind_composition_production_authority(
+            self, candidate: controller.PlannedCandidate,
+            build: controller.GpuSourceBuild | None,
+    ) -> controller.GpuSourceBuild:
+        if not isinstance(build, controller.GpuSourceBuild):
+            raise StaticRegistryError(
+                "completed build did not reopen its typed result")
+        plan = getattr(candidate, "composition_plan", None)
+        if plan is None:
+            return build
+        authority = self.composition_production_authority
+        if authority is None:
+            # The builder is independently unit-testable as a materializer.
+            # The only live registry factory always supplies this authority;
+            # without it the typed build pair remains nonpromotable and the
+            # downstream cumulative runner refuses before measurement.
+            return build
+        authority.bind_plan(plan)
+        if build.composition_build_pair is None:
+            raise StaticRegistryError(
+                "cumulative build lacks its typed build pair")
+        build.composition_build_pair.bind_plan(plan)
+        return replace(build, composition_production_authority=authority)
 
     def _sealed_cmake_defines(self) -> tuple[tuple[str, str], ...]:
         required = {
@@ -3068,7 +3102,8 @@ class StaticGpuSourceBuilder:
                         candidate=candidate, lock_paths=lock_paths,
                         current_supervised_authority=supervised_authority)
                     if reopened is not None:
-                        return reopened
+                        return self._bind_composition_production_authority(
+                            candidate, reopened)
                     intent_file_sha = _digest(cache_root / "intent.json")
                 elif not created_ref:
                     raise StaticRegistryError(
@@ -3144,12 +3179,15 @@ class StaticGpuSourceBuilder:
                         "process_closure"]["closure_sha256"],
                     "artifact_epoch": complete_epoch,
                     "build": self._build_projection(build), "promotion_claim": False})
-                return self._reopen(cache_root=cache_root,
-                                    build_root=keyed_build_root,
-                                    operation_key=operation_key,
-                                    expected_intent=expected_intent, contract=contract,
-                                    candidate=candidate, lock_paths=lock_paths,
-                                    current_supervised_authority=supervised_authority)
+                reopened = self._reopen(
+                    cache_root=cache_root,
+                    build_root=keyed_build_root,
+                    operation_key=operation_key,
+                    expected_intent=expected_intent, contract=contract,
+                    candidate=candidate, lock_paths=lock_paths,
+                    current_supervised_authority=supervised_authority)
+                return self._bind_composition_production_authority(
+                    candidate, reopened)
 
     def _build_uncached(self, candidate: controller.PlannedCandidate, _authorization: Any,
                         _permit: Mapping[str, Any]) -> controller.GpuSourceBuild:
