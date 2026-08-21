@@ -177,6 +177,42 @@ class SandboxKernelProbeTest(unittest.TestCase):
                     broker_peer_start_ticks=456,
                     writable_device_paths=("/dev/kfd", "/dev/dri/renderD128", "/dev/null"))
 
+    def test_oracle_profile_is_private_read_no_device_and_network_denied(self):
+        with tempfile.TemporaryDirectory(prefix="ak-oracle-profile-") as outer:
+            root = Path(outer)
+            golden = root / "golden"
+            pristine = root / "pristine"
+            cgroup = root / "cgroup"
+            golden.mkdir()
+            pristine.mkdir()
+            cgroup.mkdir()
+            policy = S.SandboxPolicy(
+                str(golden), cgroup_root=str(cgroup), token="oracleprofile1",
+                profile=S.ORACLE_PROFILE,
+                readable_roots=(str(pristine),))
+            document = policy.policy_document()
+            self.assertEqual(document["profile"], S.ORACLE_PROFILE)
+            self.assertEqual(document["network_profile"], S.NETWORK_DENY_ALL)
+            self.assertEqual(document["writable_device_paths"], [])
+            self.assertTrue(document["read_allowlist_enforced"])
+            self.assertEqual(document["readable_roots"], [str(pristine)])
+
+    def test_oracle_profile_rejects_any_device(self):
+        with tempfile.TemporaryDirectory(prefix="ak-oracle-profile-") as outer:
+            root = Path(outer)
+            golden = root / "golden"
+            pristine = root / "pristine"
+            cgroup = root / "cgroup"
+            golden.mkdir()
+            pristine.mkdir()
+            cgroup.mkdir()
+            with self.assertRaisesRegex(S.SandboxError, "cannot access GPU or other"):
+                S.SandboxPolicy(
+                    str(golden), cgroup_root=str(cgroup),
+                    profile=S.ORACLE_PROFILE,
+                    readable_roots=(str(pristine),),
+                    writable_device_paths=("/dev/null",))
+
     def test_controller_profile_enforces_read_devices_signals_and_client_network(self):
         with tempfile.TemporaryDirectory(prefix="ak-controller-profile-") as outer:
             root = Path(outer)
