@@ -1220,9 +1220,38 @@ class DeploymentFactoryTests(unittest.TestCase):
                 check=True, capture_output=True)
             with self.assertRaisesRegex(
                     F.DeploymentFactoryError,
-                    "source/version (observation is unavailable|differs from manifest)"):
+                    "source identity (observation is unavailable|differs from manifest)"):
                 F.derive_frozen_production_comparator(
                     production_path=production)
+
+    def test_substituted_server_is_not_executed_before_closure_authentication(
+            self):
+        with tempfile.TemporaryDirectory(
+                dir="/mnt/raid0/llm/tmp") as temporary:
+            root = Path(temporary).resolve()
+            production = disposable_v9_clone(root)
+            marker = root / "substituted-server-executed"
+            server = production / "build-hip/bin/llama-server"
+            source = root / "substituted-server.c"
+            source.write_text(
+                "#include <stdio.h>\n"
+                "int main(void) {\n"
+                f'  FILE *marker = fopen("{marker}", "w");\n'
+                "  if (marker != NULL) { fputs(\"executed\", marker); "
+                "fclose(marker); }\n"
+                '  puts("version: 10125 (0db32c06e)");\n'
+                "  return 0;\n"
+                "}\n",
+                encoding="utf-8")
+            subprocess.run(
+                ("/usr/bin/cc", str(source), "-o", str(server)),
+                check=True, stdin=subprocess.DEVNULL, capture_output=True)
+            with self.assertRaisesRegex(
+                    F.DeploymentFactoryError,
+                    "runtime closure differs from manifest"):
+                F.derive_frozen_production_comparator(
+                    production_path=production)
+            self.assertFalse(marker.exists())
 
     def test_initializer_refuses_coherently_resealed_build_config_identity(self):
         with tempfile.TemporaryDirectory() as temporary:

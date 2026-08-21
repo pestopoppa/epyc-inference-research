@@ -1285,7 +1285,7 @@ def _frozen_source_archive_sha256(production_path: Path) -> str:
     return hashlib.sha256(manifest).hexdigest()
 
 
-def _verify_frozen_v9_source_and_version(
+def _verify_frozen_v9_source_identity(
         manifest: Mapping[str, Any], production_path: Path,
 ) -> None:
     try:
@@ -1297,6 +1297,23 @@ def _verify_frozen_v9_source_and_version(
             ("git", "-C", str(production_path), "symbolic-ref", "--short",
              "HEAD"), check=True, stdin=subprocess.DEVNULL,
             capture_output=True, text=True).stdout.strip()
+        source_archive_sha256 = _frozen_source_archive_sha256(production_path)
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise DeploymentFactoryError(
+            "frozen v9 source identity observation is unavailable") from exc
+    production = manifest["production"]
+    if (head != production["commit"]
+            or branch != production["branch"]
+            or source_archive_sha256 != production["source_archive_sha256"]):
+        raise DeploymentFactoryError(
+            "frozen v9 source identity differs from manifest")
+
+
+def _verify_frozen_v9_server_version(
+        manifest: Mapping[str, Any], production_path: Path,
+) -> None:
+    """Execute only the server already authenticated by the closure manifest."""
+    try:
         version_run = subprocess.run(
             (str(production_path / "build-hip/bin/llama-server"),
              "--version"), check=True, stdin=subprocess.DEVNULL,
@@ -1310,15 +1327,23 @@ def _verify_frozen_v9_source_and_version(
         version = (version_run.stdout + version_run.stderr).splitlines()[0]
     except (OSError, subprocess.SubprocessError, IndexError) as exc:
         raise DeploymentFactoryError(
-            "frozen v9 source/version observation is unavailable") from exc
-    production = manifest["production"]
-    if (head != production["commit"]
-            or branch != production["branch"]
-            or version != production["version"]
-            or _frozen_source_archive_sha256(production_path) !=
-               production["source_archive_sha256"]):
+            "authenticated frozen v9 server version is unavailable") from exc
+    if version != manifest["production"]["version"]:
         raise DeploymentFactoryError(
-            "frozen v9 source/version differs from manifest")
+            "authenticated frozen v9 server version differs from manifest")
+
+
+def _authenticate_frozen_v9_closure(
+        manifest: Mapping[str, Any], production_path: Path,
+        runtime_semantics: Mapping[str, Any], governance_root: Path,
+) -> dict[str, str]:
+    """Authenticate every passive closure fact before executing the server."""
+    _verify_frozen_v9_source_identity(manifest, production_path)
+    provenance = _verify_frozen_v9_provenance(manifest, governance_root)
+    _verify_frozen_v9_runtime_closure(
+        manifest, production_path, runtime_semantics)
+    _verify_frozen_v9_server_version(manifest, production_path)
+    return provenance
 
 
 def _deployment_workload_body() -> dict[str, Any]:
@@ -1379,10 +1404,8 @@ def _verify_frozen_production_comparator(
     and runtime closure instead of trusting current-disk values by themselves.
     """
     manifest = _frozen_v9_closure_manifest()
-    _verify_frozen_v9_source_and_version(manifest, production_path)
-    provenance = _verify_frozen_v9_provenance(manifest, governance_root)
-    _verify_frozen_v9_runtime_closure(
-        manifest, production_path, runtime_semantics)
+    provenance = _authenticate_frozen_v9_closure(
+        manifest, production_path, runtime_semantics, governance_root)
     if comparator.runtime_snapshot_sha256 != \
             manifest["runtime"]["runtime_snapshot_sha256"]:
         raise DeploymentFactoryError(
@@ -1433,12 +1456,10 @@ def derive_frozen_production_comparator(
 ) -> cumulative_composition.FrozenProductionComparator:
     """Derive the canonical comparator from real frozen-v9 authority only."""
     manifest = _frozen_v9_closure_manifest()
-    _verify_frozen_v9_source_and_version(manifest, production_path)
-    provenance = _verify_frozen_v9_provenance(manifest, governance_root)
     snapshot_files, runtime_semantics = _production_runtime_snapshot(production_path)
     del snapshot_files
-    _verify_frozen_v9_runtime_closure(
-        manifest, production_path, runtime_semantics)
+    provenance = _authenticate_frozen_v9_closure(
+        manifest, production_path, runtime_semantics, governance_root)
     runtime_snapshot_sha = manifest["runtime"]["runtime_snapshot_sha256"]
     identity = gpu_source_proofs.BuildIdentity(
         source_commit=deployment.FROZEN_PRODUCTION_HEAD,
