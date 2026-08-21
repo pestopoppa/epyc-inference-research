@@ -38,6 +38,7 @@ authorize production. The operator alone authorizes any production push.
 from __future__ import annotations
 
 import ast
+import copy
 import fcntl
 import hashlib
 import json
@@ -152,6 +153,9 @@ def _normal_dtype(value: object) -> str:
     for prefix in ("torch.", "tl.", "numpy.", "np."):
         if text.startswith(prefix):
             text = text[len(prefix):]
+    if not re.fullmatch(r"[a-z][a-z0-9_]*", text):
+        raise EvaluatorPolicyError(
+            "dtype must be a concrete normalized dtype token")
     return text
 
 
@@ -324,12 +328,16 @@ def evaluate_numerics(reference: object, candidate: object, *,
     ratio = matched / total
     budget = policy.allowed_outliers(total)
     correct = ratio >= policy.required_matched_ratio
+    max_abs = max(abs_errors)
+    max_rel = max(rel_errors)
     return NumericalVerdict(
         correct, "numeric", "matched" if correct else "outlier_budget_exceeded",
         **precision, total_elements=total, matched_elements=matched,
         outlier_elements=outliers, allowed_outliers=budget,
-        matched_ratio=ratio, max_absolute_error=max(abs_errors),
-        max_relative_error=max(rel_errors), nonfinite_count=0)
+        matched_ratio=ratio,
+        max_absolute_error=max_abs if math.isfinite(max_abs) else "inf",
+        max_relative_error=max_rel if math.isfinite(max_rel) else "inf",
+        nonfinite_count=0)
 
 
 def _bitwise_bytes(value: object) -> bytes:
@@ -387,33 +395,110 @@ def run_three_bitwise(run_once: Callable[[], object]) -> tuple[
             outputs[0])
 
 
-class _FallbackReturnRaiser(ast.NodeTransformer):
+def _clone_isolated_input(value: object) -> object:
+    """Clone trusted harness inputs so candidate executions cannot share state."""
+    if hasattr(value, "detach") and hasattr(value, "clone"):
+        return value.detach().clone()
+    if isinstance(value, tuple):
+        return tuple(_clone_isolated_input(item) for item in value)
+    if isinstance(value, list):
+        return [_clone_isolated_input(item) for item in value]
+    if isinstance(value, Mapping):
+        return type(value)(
+            (key, _clone_isolated_input(item)) for key, item in value.items())
+    return copy.deepcopy(value)
+
+
+def run_three_bitwise_isolated(
+        inputs: object,
+        run_once: Callable[[object], object]) -> tuple[
+            DeterminismVerdict, object]:
+    """Run exactly three times from separately cloned copies of one snapshot.
+
+    The caller retains its pristine ``inputs`` for the reference execution.
+    Candidate mutation in one trial therefore cannot affect another trial or
+    move the reference target after the fact.
+    """
+    snapshot = _clone_isolated_input(inputs)
+    return run_three_bitwise(
+        lambda: run_once(_clone_isolated_input(snapshot)))
+
+
+def structural_precision_from_allowlist(
+        source_path: str | Path, *, function_name: str,
+        expected_source_sha256: str, expected_function_ast_sha256: str,
+        observed_output_dtype: str,
+        observed_accumulator_dtype: str) -> StructuralPrecisionEvidence:
+    """Build precision evidence only for an exactly allowlisted source/function.
+
+    The trusted evaluator owns the expected source and normalized function-AST
+    digests.  A task declaration or candidate cannot turn its required
+    accumulator dtype into its observed dtype by assertion.
+    """
+    path = Path(source_path)
+    source = path.read_bytes()
+    source_sha256 = hashlib.sha256(source).hexdigest()
+    if not _SHA256_RE.fullmatch(expected_source_sha256) \
+            or source_sha256 != expected_source_sha256:
+        raise EvaluatorPolicyError(
+            "structural precision source is not the trusted allowlisted source")
+    if not _SHA256_RE.fullmatch(expected_function_ast_sha256):
+        raise EvaluatorPolicyError(
+            "structural precision function requires an exact AST sha256")
+    function_name = _required_text(function_name, "function_name")
+    tree = ast.parse(source, filename=str(path))
+    matches = [
+        node for node in ast.walk(tree)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and node.name == function_name
+    ]
+    if len(matches) != 1:
+        raise EvaluatorPolicyError(
+            f"structural precision requires exactly one {function_name!r}")
+    function_sha256 = hashlib.sha256(ast.dump(
+        matches[0], annotate_fields=True,
+        include_attributes=False).encode()).hexdigest()
+    if function_sha256 != expected_function_ast_sha256:
+        raise EvaluatorPolicyError(
+            "structural precision function AST is not allowlisted")
+    output_dtype = _normal_dtype(observed_output_dtype)
+    accumulator_dtype = _normal_dtype(observed_accumulator_dtype)
+    evidence = {
+        "schema": "epyc.autokernel.structural_precision_allowlist.v1",
+        "source_sha256": source_sha256,
+        "function_name": function_name,
+        "function_ast_sha256": function_sha256,
+        "output_dtype": output_dtype,
+        "accumulator_dtype": accumulator_dtype,
+    }
+    return StructuralPrecisionEvidence(
+        output_dtype=output_dtype,
+        accumulator_dtype=accumulator_dtype,
+        evidence_sha256=sha256_json(evidence))
+
+
+class _FallbackPathRaiser(ast.NodeTransformer):
     def __init__(self):
         self.replaced = 0
-        self._inside_handler = 0
 
     def visit_ExceptHandler(self, node):  # noqa: N802 - ast API spelling
-        self._inside_handler += 1
-        node = self.generic_visit(node)
-        self._inside_handler -= 1
-        return node
-
-    def visit_Return(self, node):  # noqa: N802 - ast API spelling
-        if not self._inside_handler:
-            return node
+        # Replace the *whole* exception path.  Looking only for a Return node
+        # inside the handler misses `value = reference(...); return value`
+        # after the try/except and other fall-through laundering shapes.
         self.replaced += 1
-        return ast.copy_location(ast.Raise(
+        node.body = [ast.copy_location(ast.Raise(
             exc=ast.Call(func=ast.Name(id="RuntimeError", ctx=ast.Load()),
                          args=[ast.Constant(
-                             value="C6 fallback return disabled for re-run")],
+                             value="C6 fallback path disabled for re-run")],
                          keywords=[]),
-            cause=None), node)
+            cause=None), node)]
+        return node
 
 
 def replace_fallback_returns_with_raise(source: str) -> tuple[str, int]:
-    """Mutation probe: turn every exception-handler return into a hard raise."""
+    """Mutation probe: turn every exception-handler path into a hard raise."""
     tree = ast.parse(source)
-    transformer = _FallbackReturnRaiser()
+    transformer = _FallbackPathRaiser()
     tree = transformer.visit(tree)
     ast.fix_missing_locations(tree)
     return ast.unparse(tree) + "\n", transformer.replaced
@@ -581,6 +666,9 @@ def build_admission_receipt(
         "verification_candidate_latency_ms", positive=True)
     first_speedup = ft_anchor / ft_candidate
     verify_speedup = vr_anchor / vr_candidate
+    if not math.isfinite(first_speedup) or not math.isfinite(verify_speedup):
+        raise EvaluatorPolicyError(
+            "derived admission speedups must be finite")
     threshold = max(policy.beta, policy.alpha * first_speedup)
     implausible = (
         first_speedup > policy.implausible_speedup_cap
@@ -1733,6 +1821,7 @@ __all__ = [
     "C6_GATE_TIERS", "C6_DROPPED_TIERS", "C6_SEMANTIC_CALIBRATION_MUTANTS",
     "PrecisionContract", "StructuralPrecisionEvidence", "NumericalVerdict",
     "evaluate_numerics", "DeterminismVerdict", "run_three_bitwise",
+    "run_three_bitwise_isolated", "structural_precision_from_allowlist",
     "FallbackProbe", "replace_fallback_returns_with_raise",
     "probe_fallback_laundering", "SemanticJudgeCalibration",
     "calibrate_semantic_judge", "SUPPORTED_GPU_PARTS",

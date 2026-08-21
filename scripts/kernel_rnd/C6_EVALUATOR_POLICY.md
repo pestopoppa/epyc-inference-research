@@ -29,10 +29,20 @@ and is content-hashed; a candidate self-report is not evidence.
 
 Three repeated executions are required and compared bitwise. Three is exact,
 not a minimum: an implementation cannot stop on the first matching pair or the
-first mismatch. Exception-handler fallback returns are mutation-tested by
-replacing them with a hard raise and re-running the wrapper. This records the
-ninth vacuous-verification shape, **wrapper launders a kernel failure into the
+first mismatch. Every execution receives a distinct clone of one pristine
+input snapshot, and the reference retains an independent pristine input; a
+candidate cannot move the oracle by mutating shared inputs. Exception-handler
+fallback paths are mutation-tested by replacing each entire handler with a
+hard raise and re-running the wrapper, including assignment-plus-fall-through
+returns. This records the ninth vacuous-verification shape, **wrapper launders
+a kernel failure into the
 reference**.
+
+The fixed mutant driver accepts accumulator evidence only when the complete
+source digest and normalized kernel-function AST digest match its trusted
+allowlist. The observed accumulator dtype comes from that allowlist, not from
+the task's required dtype field. Any source or function drift refuses before
+the numerical gate.
 
 ## Gate topology
 

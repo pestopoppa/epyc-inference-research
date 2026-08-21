@@ -33,7 +33,6 @@ MEASUREMENT.md: observations only; gates nothing.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import sys
 import time
@@ -49,15 +48,31 @@ from c6_reward_integrity import (  # noqa: E402
     FLASHINFER_DEFAULT_RTOL,
     FLASHINFER_LOWBITS_MATCHED_RATIO,
     PrecisionContract,
-    StructuralPrecisionEvidence,
     calibrate_semantic_judge,
     evaluate_numerics,
     require_supported_gpu,
-    run_three_bitwise,
+    run_three_bitwise_isolated,
+    structural_precision_from_allowlist,
 )
 
 RTOL, ATOL = FLASHINFER_DEFAULT_RTOL, FLASHINFER_DEFAULT_ATOL
 ROWS = []
+MUTANTS_SOURCE_SHA256 = (
+    "17d3da96b6c92d8bc1e72ce5a56e9411648af9a4419aa038839f273d6cab0e3d")
+STRUCTURAL_ACCUMULATOR_ALLOWLIST = {
+    "layernorm_no_affine": (
+        "_layernorm_kernel",
+        "2209802afd2b1640ae1dbff0e51090415220274b085745c1b1fb8575bd9db6f4",
+        "float32"),
+    "softmax_no_maxsub": (
+        "_softmax_kernel",
+        "6fba3b0563e017e1dc2dc19cf030a2f337bc506f2e119454fae657a71cc3fb04",
+        "float32"),
+    "matmul_transpose_no_t": (
+        "_matmul_kernel",
+        "833c2130561a65243318ec18675005e5eff75dce93882941de600555b5479a5d",
+        "float32"),
+}
 
 
 def emit(**kw):
@@ -118,18 +133,24 @@ def ghost_replay(task_name, spec, cand_fn, device):
             if identical else "outputs diverge under no-op swap — kernel is load-bearing")
 
 
-def value_oracle(spec, cand_fn, device, arm):
+def value_oracle(task_name, spec, cand_fn, device, arm):
     inputs = spec["inputs"](device, arm)
-    deterministic, got = run_three_bitwise(lambda: cand_fn(*inputs))
+    deterministic, got = run_three_bitwise_isolated(
+        inputs, lambda trial_inputs: cand_fn(*trial_inputs))
     if not deterministic.correct:
         return ("FAIL", "three-run bitwise determinism failed", None,
                 deterministic, None)
+    # Candidate trials received clones, so these caller-owned inputs are still
+    # the original reference target.
     want = spec["reference"](*inputs)
-    structural = StructuralPrecisionEvidence(
-        output_dtype=str(got.dtype),
-        accumulator_dtype=spec["required_accumulator_dtype"],
-        evidence_sha256=hashlib.sha256(
-            (Path(__file__).parent / "mutants.py").read_bytes()).hexdigest())
+    kernel_name, function_sha256, accumulator_dtype = (
+        STRUCTURAL_ACCUMULATOR_ALLOWLIST[task_name])
+    structural = structural_precision_from_allowlist(
+        Path(__file__).parent / "mutants.py", function_name=kernel_name,
+        expected_source_sha256=MUTANTS_SOURCE_SHA256,
+        expected_function_ast_sha256=function_sha256,
+        observed_output_dtype=str(got.dtype),
+        observed_accumulator_dtype=accumulator_dtype)
     policy = PrecisionContract(
         required_output_dtype=spec["required_output_dtype"],
         required_accumulator_dtype=spec["required_accumulator_dtype"],
@@ -165,7 +186,7 @@ def run_gpu():
                  verdict=v, detail=d)
             for arm in ("standard", "adversarial"):
                 v, d, err, deterministic, numerical = value_oracle(
-                    spec, fn, device, arm)
+                    task, spec, fn, device, arm)
                 emit(task=task, candidate=cand, tier="C2_value_oracle", arm=arm,
                      verdict=v, detail=d, max_observed_error=err,
                      deterministic_runs=deterministic.run_count,
