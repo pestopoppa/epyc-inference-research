@@ -15,6 +15,8 @@ Or via pytest:
 """
 from __future__ import annotations
 
+import ast
+import hashlib
 import json
 import math
 import os
@@ -506,6 +508,17 @@ class TestRatifiedNumericalPolicy(_Base):
             structural=self.evidence(), policy=policy)
         self.assertTrue(math.isclose(finite.max_absolute_error, 0.03))
         self.assertIsInstance(finite.max_relative_error, float)
+        overflow = c6.evaluate_numerics(
+            [-1e308], [1e308], structural=self.evidence(), policy=policy)
+        self.assertFalse(overflow.correct)
+        self.assertEqual(overflow.max_absolute_error, "inf")
+        self.assertEqual(overflow.max_relative_error, "inf")
+
+    def test_dtype_tokens_cannot_normalize_to_empty_or_markup(self):
+        for dtype in ("torch.", "float32;fallback", "float 32"):
+            with self.subTest(dtype=dtype), self.assertRaisesRegex(
+                    c6.EvaluatorPolicyError, "concrete normalized"):
+                c6.PrecisionContract(dtype, "float32")
 
 
 class TestDeterminismAndFallback(_Base):
@@ -552,7 +565,7 @@ def wrapper(kernel, reference, x):
                     lambda _x: (_ for _ in ()).throw(RuntimeError("kernel")),
                     lambda _x: "laundered", 1)
             except RuntimeError as exc:
-                return str(exc) == "C6 fallback return disabled for re-run"
+                return str(exc) == "C6 fallback path disabled for re-run"
             return False
 
         probe = c6.probe_fallback_laundering(source, rerun)
@@ -561,10 +574,71 @@ def wrapper(kernel, reference, x):
         self.assertEqual(len(seen), 1)
         self.assertNotIn("return reference(x)", seen[0])
 
+    def test_fallback_assignment_then_outer_return_is_replaced(self):
+        source = """
+def wrapper(kernel, reference, x):
+    try:
+        value = kernel(x)
+    except Exception:
+        value = reference(x)
+    return value
+"""
+        mutated, count = c6.replace_fallback_returns_with_raise(source)
+        self.assertEqual(count, 1)
+        self.assertNotIn("value = reference(x)", mutated)
+        namespace = {}
+        exec(mutated, namespace)
+        with self.assertRaisesRegex(RuntimeError, "fallback path disabled"):
+            namespace["wrapper"](
+                lambda _x: (_ for _ in ()).throw(RuntimeError("kernel")),
+                lambda _x: "laundered", 1)
+
+    def test_isolated_determinism_prevents_candidate_input_mutation(self):
+        inputs = ([0],)
+
+        def candidate(trial_inputs):
+            trial_inputs[0][0] = 1
+            return trial_inputs[0][0]
+
+        verdict, output = c6.run_three_bitwise_isolated(inputs, candidate)
+        self.assertTrue(verdict.correct)
+        self.assertEqual(output, 1)
+        self.assertEqual(inputs, ([0],))
+
+    def test_structural_precision_allowlist_refuses_source_or_ast_drift(self):
+        source = "def kernel(x):\n    return x + 1\n"
+        path = os.path.join(self.tmp, "kernel.py")
+        with open(path, "w") as stream:
+            stream.write(source)
+        tree = ast.parse(source)
+        function_sha256 = hashlib.sha256(ast.dump(
+            tree.body[0], annotate_fields=True,
+            include_attributes=False).encode()).hexdigest()
+        source_sha256 = hashlib.sha256(source.encode()).hexdigest()
+        evidence = c6.structural_precision_from_allowlist(
+            path, function_name="kernel",
+            expected_source_sha256=source_sha256,
+            expected_function_ast_sha256=function_sha256,
+            observed_output_dtype="float32",
+            observed_accumulator_dtype="float32")
+        self.assertEqual(evidence.accumulator_dtype, "float32")
+        with open(path, "w") as stream:
+            stream.write("def kernel(x):\n    return x + 2\n")
+        with self.assertRaisesRegex(
+                c6.EvaluatorPolicyError, "trusted allowlisted source"):
+            c6.structural_precision_from_allowlist(
+                path, function_name="kernel",
+                expected_source_sha256=source_sha256,
+                expected_function_ast_sha256=function_sha256,
+                observed_output_dtype="float32",
+                observed_accumulator_dtype="float32")
+
     def test_laundering_is_detected_when_mutated_rerun_does_not_pass(self):
         source = "try:\n    result = kernel()\nexcept Exception:\n    return_value = 1\n"
         probe = c6.probe_fallback_laundering(source, lambda _source: True)
-        self.assertEqual(probe.reason, "no_fallback_return")
+        self.assertTrue(probe.correct)
+        self.assertEqual(probe.mutated_returns, 1)
+        self.assertEqual(probe.reason, "fallback_free_rerun_passed")
         laundering = "def f():\n try:\n  return kernel()\n except:\n  return reference()\n"
         probe = c6.probe_fallback_laundering(laundering, lambda _source: False)
         self.assertFalse(probe.correct)
@@ -646,6 +720,11 @@ class TestAdmissionReceipts(_Base):
             self.receipt(reopen_when="")
         with self.assertRaisesRegex(c6.EvaluatorPolicyError, ">= 1.2"):
             c6.AdmissionPolicy(implausible_speedup_cap=32.0, alpha=1.1)
+        with self.assertRaisesRegex(
+                c6.EvaluatorPolicyError, "derived admission speedups"):
+            self.receipt(
+                first_turn_anchor_latency_ms=1e308,
+                first_turn_candidate_latency_ms=5e-324)
 
     def test_receipt_tamper_and_extra_fields_refuse(self):
         receipt = self.receipt()

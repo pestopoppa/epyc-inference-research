@@ -11,6 +11,7 @@ Run: python3 -m pytest test_static.py -q   (or python3 test_static.py)
 """
 import ast
 import contextlib
+import hashlib
 import io
 import json
 import sys
@@ -21,6 +22,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from l1_scan import CANDIDATE_FUNCTIONS, scan_source  # noqa: E402
 
 MUTANTS_SRC = (Path(__file__).parent / "mutants.py").read_text()
+DRIVER_SRC = (Path(__file__).parent / "run_falsification.py").read_text()
 
 # --- planted-dirty samples: every blacklist class must fire ------------------
 DIRTY_SAMPLES = {
@@ -102,6 +104,15 @@ def test_every_task_declares_structural_precision_before_value_tolerance():
     assert MUTANTS_SRC.count('required_output_dtype="float32"') == 3
     assert MUTANTS_SRC.count('required_accumulator_dtype="float32"') == 3
     assert MUTANTS_SRC.count("lowbit=False") == 3
+
+
+def test_driver_uses_allowlisted_accumulator_evidence_and_isolated_inputs():
+    assert 'observed_accumulator_dtype=spec["required_accumulator_dtype"]' not in DRIVER_SRC
+    assert "StructuralPrecisionEvidence(" not in DRIVER_SRC
+    assert "structural_precision_from_allowlist(" in DRIVER_SRC
+    assert "run_three_bitwise_isolated(" in DRIVER_SRC
+    source_sha256 = hashlib.sha256(MUTANTS_SRC.encode()).hexdigest()
+    assert f'"{source_sha256}"' in DRIVER_SRC
 
 
 def test_driver_semantic_calibration_is_non_gating_until_full_corpus():
