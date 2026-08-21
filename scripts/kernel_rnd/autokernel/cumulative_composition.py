@@ -625,6 +625,23 @@ def _validate_dnr(
         raise CompositionError("DNR receipt does not bind the cumulative plan")
 
 
+def _validate_dnr_history(
+        plan: CompositionPlan, prior_cross_campaign_candidates: Sequence[str],
+) -> None:
+    proposed = plan.candidate.accepted[-1].cross_campaign_candidate_sha256
+    expected = {
+        lever.cross_campaign_candidate_sha256
+        for lever in plan.anchor.accepted
+    }
+    expected.update(
+        candidate for candidate in prior_cross_campaign_candidates
+        if candidate != proposed)
+    if plan.dnr.checked_cross_campaign_candidate_sha256s != \
+            tuple(sorted(expected)):
+        raise CompositionError(
+            "composition DNR registry omits or invents prior candidates")
+
+
 @dataclass(frozen=True)
 class BuildBinding:
     patch_set_sha256: str
@@ -1073,6 +1090,10 @@ class CompositionLedger:
             if state["scientific_attempts"] >= state["max_scientific_attempts"]:
                 raise CompositionError("composition scientific budget is exhausted")
             proposed = plan.candidate.accepted[-1]
+            _validate_dnr_history(
+                plan,
+                [row["cross_campaign_candidate_sha256"]
+                 for row in state["terminals"]])
             for terminal in state["terminals"]:
                 if (terminal["scientific_budget_spent"] is True
                         and terminal["cross_campaign_candidate_sha256"] ==
@@ -1363,6 +1384,7 @@ class CompositionLedger:
             raise CompositionError("composition state counters are malformed")
         terminal_keys: set[str] = set()
         scientific_candidates: set[str] = set()
+        prior_cross_campaign_candidates: list[str] = []
         derived_authority = initial
         science = 0
         for terminal in state["terminals"]:
@@ -1380,6 +1402,9 @@ class CompositionLedger:
             plan = CompositionPlan.from_dict(terminal["plan"])
             if plan.anchor != derived_authority:
                 raise CompositionError("composition terminal chain has a stale anchor")
+            _validate_dnr_history(plan, prior_cross_campaign_candidates)
+            prior_cross_campaign_candidates.append(
+                terminal["cross_campaign_candidate_sha256"])
             if terminal["disposition"] == "admitted":
                 derived_authority = plan.candidate
         if authority != derived_authority:
@@ -1389,7 +1414,9 @@ class CompositionLedger:
         if state["scientific_attempts"] > state["max_scientific_attempts"]:
             raise CompositionError("composition state exceeds its scientific budget")
         if state["pending"] is not None:
-            self._validate_pending(state["pending"], authority, terminal_keys)
+            self._validate_pending(
+                state["pending"], authority, terminal_keys,
+                prior_cross_campaign_candidates)
         return state
 
     def _write_unlocked(self, state: dict[str, Any]) -> dict[str, Any]:
@@ -1416,6 +1443,7 @@ class CompositionLedger:
     def _validate_pending(
             pending: Mapping[str, Any], authority: CompositionAuthority,
             terminal_keys: set[str],
+            prior_cross_campaign_candidates: Sequence[str],
     ) -> None:
         if not isinstance(pending, Mapping) or set(pending) != {
             "stage", "plan", "build_pair", "correctness", "comparison",
@@ -1424,6 +1452,7 @@ class CompositionLedger:
         plan = CompositionPlan.from_dict(pending["plan"])
         if plan.anchor != authority or plan.operation_key in terminal_keys:
             raise CompositionError("composition pending authority is stale")
+        _validate_dnr_history(plan, prior_cross_campaign_candidates)
         stage = pending["stage"]
         allowed = {"planned", "built", "correctness_passed", "measured"}
         if stage not in allowed:

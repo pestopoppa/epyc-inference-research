@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import tempfile
 import unittest
 from dataclasses import replace
@@ -10,9 +11,11 @@ from pathlib import Path
 from unittest import mock
 
 from .. import cumulative_composition as composition
+from .. import schemas
 from .. import source_candidate
 from . import discovery_controller as controller
 from . import gpu_source_adapter
+from . import gpu_source_evidence
 from . import gpu_source_proofs
 
 
@@ -188,6 +191,105 @@ class CumulativeControllerIntegrationTests(unittest.TestCase):
             state, config=config, item=item, result=second)
         return config, state, controller._restore_pending(
             state["pending"], config)
+
+    def _completed_adapter_recovery(self, root: Path):
+        config, state, item = self._scheduled(root)
+        plan = item.composition_plan
+        assert plan is not None
+        pair = composition.CumulativeBuildPair.create(
+            plan,
+            anchor=composition.BuildBinding.create(
+                plan.anchor.ordered_patch_set_sha256,
+                _identity("recovery-anchor"),
+                source_materialization_receipt_sha256=
+                    _sha("recovery-anchor-source")),
+            candidate=composition.BuildBinding.create(
+                plan.candidate.ordered_patch_set_sha256,
+                _identity("recovery-candidate"),
+                source_materialization_receipt_sha256=
+                    _sha("recovery-candidate-source")))
+        correctness_body = {"status": "PASS", "cases": 1139}
+        correctness_ref = {
+            "path": str(root / "proof/correctness.json"),
+            "file_sha256": _sha("recovery-correctness-file"),
+            "native_sha256": _sha("recovery-correctness-native"),
+            "body": correctness_body,
+        }
+        attribution_ref = {
+            "path": str(root / "proof/attribution.json"),
+            "file_sha256": _sha("recovery-attribution-file"),
+            "native_sha256": _sha("recovery-attribution-native"),
+            "body": {"exact_duration_comparison": {
+                "relative_improvement_fraction": .03,
+                "candidate_routes": [{"kernel": "exact-route"}],
+            }},
+        }
+        bundle = gpu_source_proofs.GpuSourceProofBundle.from_validated_paths(
+            manifest_sha256=item.source_manifest_sha256,
+            candidate=pair.candidate.build_identity,
+            anchor=pair.anchor.build_identity,
+            workload_sha256=_sha("recovery-workload"),
+            correctness=correctness_ref, attribution=attribution_ref)
+        correctness = composition.FullCorrectness.create(
+            pair, suite_id="current-gpu-source-full-correctness-v1",
+            cases_sha256=schemas.content_hash(correctness_body),
+            receipt_sha256=correctness_ref["file_sha256"], passed=True)
+        adapter_operation = _sha("adapter-recovery-operation")
+        operations = root / "operations"
+        operation = operations / adapter_operation
+        operation.mkdir(parents=True)
+        authorization = {"claim": "sealed-composition"}
+        lease = {"operation_key": adapter_operation,
+                 "mode": "hardware-free", "repetition": 1}
+        gpu_source_evidence._seal(
+            operation / "intent.json", gpu_source_adapter._intent_body(
+                operation_key=adapter_operation, candidate=item,
+                authorization=authorization, lease=lease))
+        outputs = []
+        for graph_mode, effect in (("off", .02), ("on", .01)):
+            output = operation / "runner" / graph_mode
+            output.mkdir(parents=True)
+            body = {
+                "schema": "epyc.autokernel.gpu_candidate_only_screen.v2",
+                "non_promotable": True, "promotion_claim": False,
+                "hip_residency_proved": True,
+                "runtime_graphs": graph_mode,
+                "median_relative": effect,
+                "baseline_sha256": _sha("recovery-baseline"),
+                "factor": "source_patch",
+                "technical_workload": {"tokens": 32},
+            }
+            body["result_sha256"] = schemas.content_hash(body)
+            (output / "result.json").write_text(
+                json.dumps(body, sort_keys=True) + "\n", encoding="utf-8")
+            outputs.append(output)
+        runner_body = {
+            "schema": gpu_source_adapter.RUNNER_PLAN_SCHEMA,
+            "authority": gpu_source_adapter.AUTHORITY,
+            "promotion_claim": False,
+            "operation_key": adapter_operation,
+            "composition_plan_sha256": plan.plan_sha256,
+            "composition_build_pair": pair.to_dict(),
+            "composition_correctness": correctness.to_dict(),
+            "measurement_graphs_off_output_dir": str(outputs[0]),
+            "target_runtime_graphs_on_output_dir": str(outputs[1]),
+        }
+        gpu_source_evidence._seal(
+            operation / "runner-plan.json", runner_body)
+        adapter = object.__new__(
+            gpu_source_adapter.GovernedGpuSourceAdapter)
+        adapter.operations_root = operations
+        adapter.runner_attest = lambda: None
+        adapter.reservation_manager = None
+        inflight = {
+            "operation_key": adapter_operation,
+            "candidate": {"candidate": {
+                "source_manifest_sha256": item.source_manifest_sha256,
+                "composition_plan": plan.to_dict()}},
+            "authorization": authorization, "lease": lease,
+        }
+        return (config, state, item, pair, correctness, bundle, adapter,
+                inflight, operation)
 
     def test_replicated_positive_queues_exact_anchor_plus_one_without_actor(self):
         item = _candidate()
@@ -568,6 +670,143 @@ class CumulativeControllerIntegrationTests(unittest.TestCase):
             altered["candidate"]["composition_plan"]["plan_sha256"] = "0" * 64
             with self.assertRaises(gpu_source_adapter.GpuSourceAdapterError):
                 gpu_source_adapter._inflight_identity(altered)
+
+    def test_missing_wrapper_reconstructs_typed_screen_and_terminal_once(self):
+        with tempfile.TemporaryDirectory() as directory:
+            values = self._completed_adapter_recovery(
+                Path(directory).resolve())
+            (config, _state, item, pair, correctness, bundle, adapter,
+             inflight, operation) = values
+            with mock.patch.object(
+                    gpu_source_adapter.evidence,
+                    "load_gpu_source_evidence_bundle",
+                    return_value=bundle), mock.patch.object(
+                    gpu_source_adapter, "_source_frame",
+                    return_value=(_sha("recovery-series"), bundle)), \
+                    mock.patch.object(
+                        gpu_source_adapter.autokernel_progression,
+                        "_gpu_screen", return_value={"stage": "candidate"}):
+                first = adapter.reconcile(inflight)
+                second = adapter.reconcile(inflight)
+            self.assertEqual(first.status, "sealed_result")
+            self.assertEqual(second, first)
+            self.assertTrue((operation / "screen-result.json").is_file())
+            result = first.result
+            self.assertEqual(result.composition_build_pair, pair)
+            self.assertEqual(result.composition_correctness, correctness)
+            self.assertIsNotNone(result.composition_comparison)
+            terminal = controller._finalize_cumulative_screen(
+                config, item, result)
+            repeated = controller._finalize_cumulative_screen(
+                config, item, result)
+            self.assertEqual(repeated, terminal)
+            self.assertEqual(terminal["scientific_budget_spent"], True)
+            ledger = composition.CompositionLedger(
+                config.output_root / "cumulative-composition.json").load()
+            self.assertEqual(ledger["scientific_attempts"], 1)
+            self.assertEqual(len(ledger["terminals"]), 1)
+
+    def test_recovery_refuses_swapped_builds_and_partial_result_wrapper(self):
+        with tempfile.TemporaryDirectory() as directory:
+            values = self._completed_adapter_recovery(
+                Path(directory).resolve())
+            (_config, _state, item, pair, _correctness, bundle, adapter,
+             inflight, operation) = values
+            plan = item.composition_plan
+            assert plan is not None
+            runner = operation / "runner-plan.json"
+            runner.unlink()
+            swapped = composition.CumulativeBuildPair.create(
+                plan,
+                anchor=composition.BuildBinding.create(
+                    plan.anchor.ordered_patch_set_sha256,
+                    pair.candidate.build_identity,
+                    source_materialization_receipt_sha256=
+                        pair.candidate.source_materialization_receipt_sha256),
+                candidate=composition.BuildBinding.create(
+                    plan.candidate.ordered_patch_set_sha256,
+                    pair.anchor.build_identity,
+                    source_materialization_receipt_sha256=
+                        pair.anchor.source_materialization_receipt_sha256))
+            swapped_correctness = composition.FullCorrectness.create(
+                swapped,
+                suite_id="current-gpu-source-full-correctness-v1",
+                cases_sha256=schemas.content_hash(
+                    bundle.correctness["body"]),
+                receipt_sha256=bundle.correctness["file_sha256"],
+                passed=True)
+            gpu_source_evidence._seal(runner, {
+                "schema": gpu_source_adapter.RUNNER_PLAN_SCHEMA,
+                "authority": gpu_source_adapter.AUTHORITY,
+                "promotion_claim": False,
+                "operation_key": inflight["operation_key"],
+                "composition_plan_sha256": plan.plan_sha256,
+                "composition_build_pair": swapped.to_dict(),
+                "composition_correctness": swapped_correctness.to_dict(),
+                "measurement_graphs_off_output_dir":
+                    str(operation / "runner/off"),
+                "target_runtime_graphs_on_output_dir":
+                    str(operation / "runner/on"),
+            })
+            with mock.patch.object(
+                    gpu_source_adapter.evidence,
+                    "load_gpu_source_evidence_bundle",
+                    return_value=bundle), mock.patch.object(
+                    gpu_source_adapter, "_source_frame",
+                    return_value=(_sha("recovery-series"), bundle)), \
+                    mock.patch.object(
+                        gpu_source_adapter.autokernel_progression,
+                        "_gpu_screen", return_value={"stage": "candidate"}):
+                self.assertEqual(
+                    adapter.reconcile(inflight).status, "ambiguous")
+
+        with tempfile.TemporaryDirectory() as directory:
+            values = self._completed_adapter_recovery(
+                Path(directory).resolve())
+            (_config, _state, _item, _pair, _correctness, bundle, adapter,
+             inflight, operation) = values
+            with mock.patch.object(
+                    gpu_source_adapter.evidence,
+                    "load_gpu_source_evidence_bundle",
+                    return_value=bundle), mock.patch.object(
+                    gpu_source_adapter, "_source_frame",
+                    return_value=(_sha("recovery-series"), bundle)), \
+                    mock.patch.object(
+                        gpu_source_adapter.autokernel_progression,
+                        "_gpu_screen", return_value={"stage": "candidate"}):
+                recovered = adapter.reconcile(inflight)
+                self.assertEqual(recovered.status, "sealed_result")
+                wrapper = operation / "screen-result.json"
+                raw = json.loads(wrapper.read_text(encoding="utf-8"))
+                raw.pop("receipt_sha256")
+                for holder in (raw["screen"], raw["receipt_series"][-1]):
+                    holder["composition_build_pair"] = None
+                    holder["composition_correctness"] = None
+                    holder["composition_comparison"] = None
+                wrapper.unlink()
+                gpu_source_evidence._seal(wrapper, raw)
+                self.assertEqual(
+                    adapter.reconcile(inflight).status, "ambiguous")
+
+    def test_runner_plan_partial_composition_carrier_refuses(self):
+        with tempfile.TemporaryDirectory() as directory:
+            values = self._completed_adapter_recovery(
+                Path(directory).resolve())
+            (_config, _state, item, _pair, _correctness, _bundle, _adapter,
+             inflight, operation) = values
+            runner = operation / "runner-plan.json"
+            raw = json.loads(runner.read_text(encoding="utf-8"))
+            raw.pop("receipt_sha256")
+            raw["composition_correctness"] = None
+            runner.unlink()
+            gpu_source_evidence._seal(runner, raw)
+            identity = gpu_source_adapter._inflight_identity(inflight)
+            with self.assertRaisesRegex(
+                    gpu_source_adapter.GpuSourceAdapterError,
+                    "cumulative recovery evidence"):
+                gpu_source_adapter._validated_runner_plan(
+                    runner, identity,
+                    composition_plan=item.composition_plan)
 
     def test_full_loop_executes_cumulative_third_science_and_rolls_back(self):
         item = _candidate()
