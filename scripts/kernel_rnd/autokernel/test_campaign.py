@@ -896,6 +896,7 @@ class TestEveryFailurePathReleases(unittest.TestCase):
         ops = SpyOps(preflight_outcome=schemas.FAIL)
         result = campaign.run_campaign(spec(), ops)
         self.assertEqual(result.state, campaign.STATE_PREFLIGHT_REFUSED)
+        self.assertFalse(result.ok)
         self.assertNotIn("acquire_claim", ops.calls)
 
     def test_a_keyboard_interrupt_still_releases_the_claim(self):

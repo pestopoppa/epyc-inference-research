@@ -5119,7 +5119,7 @@ class CampaignResult:
         defaults_conceal_their_own_corruption`). A composition pass is exempt
         because it fingerprinted nothing and claims nothing.
         """
-        if self.state == STATE_ERROR:
+        if self.state in {STATE_ERROR, STATE_PREFLIGHT_REFUSED}:
             return False
         # A result that could not be written down is a result AutoPilot lost 232
         # trials / ~16 days to. The journal failure was printed to stderr and the
