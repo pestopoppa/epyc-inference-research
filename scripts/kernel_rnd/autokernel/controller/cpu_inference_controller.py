@@ -41,8 +41,8 @@ from typing import Any, Mapping, Protocol, Sequence
 from .. import campaign, journal, storage
 
 
-SCHEMA = "epyc.autokernel.cpu_inference_controller_manifest.v1"
-CANDIDATE_SCHEMA = "epyc.autokernel.cpu_inference_candidate.v1"
+SCHEMA = "epyc.autokernel.cpu_inference_controller_manifest.v2"
+CANDIDATE_SCHEMA = "epyc.autokernel.cpu_inference_candidate.v2"
 STATE_SCHEMA = "epyc.autokernel.cpu_inference_controller_state.v2"
 RECEIPT_SCHEMA = "epyc.autokernel.cpu_inference_controller_receipt.v2"
 HASH = re.compile(r"^[0-9a-f]{64}$")
@@ -78,8 +78,21 @@ _REQUIRED_FLAGS = frozenset({
     "--campaign-id", "--candidate-id", "--candidate",
     "--proposal-manifest", "--source-patch-manifest",
     "--calibration-bundle", "--backend", "--model",
-    "--nominal-khz", "--journal-root", "--hypothesis",
+    "--blocks", "--recipe", "--reps", "--nominal-khz",
+    "--journal-root", "--hypothesis",
     "--hypothesis-store",
+})
+_SPEC_KEYS = frozenset({
+    "campaign_id", "candidate_id", "candidate_ref", "backend", "model_sha256",
+    "production_commit", "measurement_commit", "blocks_precommitted", "recipe_id",
+    "metric", "drift_bound", "drift_bound_evidence", "calibration", "model", "reps",
+    "n_gen", "n_prompt", "fresh_pairs_per_block", "suite_seed", "schedule_seed",
+    "holdout_selection_seed", "matched_experiment_id", "t0_ops", "devices",
+    "device_names", "device_index", "n_gpu_layers", "cpu_list", "worktree", "build_dir",
+    "journal_root", "created_at", "proposal", "source_patch_bundle_sha256",
+    "source_prerequisite_package_sha256", "fresh_source_prerequisite_plan_sha256",
+    "least_commitment_capture_plan_sha256", "physical_envelope", "ranked_units",
+    "hypothesis", "claim_purpose", "anchor", "measurement_instrument",
 })
 _CAMPAIGN_RESULT_KEYS = frozenset({
     "schema", "state", "campaign_id", "candidate_id", "spec", "steps",
@@ -91,6 +104,36 @@ _DECISION_KEYS = frozenset({
     "keep", "reason", "blocks", "min_delta", "median_relative",
     "contribution_floor", "calibration_evidence_ref", "drift_bound",
     "anchor_drift", "deltas", "relatives", "anchors", "orders",
+})
+_NUMERIC_FIELD_NAMES = frozenset({
+    "blocks_precommitted", "blocks", "reps", "n_gen", "n_prompt",
+    "fresh_pairs_per_block", "suite_seed", "schedule_seed",
+    "holdout_selection_seed", "device_index", "n_gpu_layers", "drift_bound",
+    "contribution_floor", "b_min_blocks", "max_blocks", "noise_floor_phi", "mde",
+    "anchor_motion_bound", "anchor_motion_window_blocks", "block_index", "anchor",
+    "candidate", "delta", "relative", "min_delta", "median_relative",
+    "anchor_drift", "flops_per_unit", "bytes_per_unit", "peak_compute_flops_s",
+    "peak_memory_bytes_s", "compute_time_floor_s", "memory_time_floor_s",
+    "time_floor_s", "throughput_ceiling_units_s", "index",
+    "ledger_seq",
+})
+_RUNTIME_CREATED_AT = "<runtime-created-at>"
+_RUNTIME_AUTHORIZED_AT = "<runtime-authorized-at>"
+_RUNTIME_LEDGER_SEQ = "<runtime-ledger-seq>"
+_AUTHORIZATION_KEYS = frozenset({
+    "hypothesis_id", "falsifier", "falsifier_source", "origin", "purpose",
+    "authorized_by", "authorized_at", "ledger_seq", "do_not_repeat_outcome",
+    "do_not_repeat_reasons", "campaign_id", "entry_evidence_grade",
+})
+_POST_CLAIM_STEPS = frozenset({
+    "acquire_claim", "create_worktree", "apply_candidate", "build", "run_t0",
+    "settle_after_t0", "admit_t1_after_t0", "run_paired_blocks", "keep_or_revert",
+    "close_evaluation_window", "prepare_durable_records",
+})
+_WORKTREE_STEPS = frozenset({
+    "create_worktree", "apply_candidate", "build", "run_t0", "settle_after_t0",
+    "admit_t1_after_t0", "run_paired_blocks", "keep_or_revert",
+    "close_evaluation_window", "prepare_durable_records",
 })
 
 
@@ -114,6 +157,22 @@ def _canonical(value: object) -> bytes:
 
 def _sha(value: object) -> str:
     return hashlib.sha256(_canonical(value)).hexdigest()
+
+
+def _reject_bool_numeric(value: Any, path: str = "result") -> None:
+    if isinstance(value, Mapping):
+        for key, item in value.items():
+            if key in _NUMERIC_FIELD_NAMES and type(item) is bool:
+                raise CpuInferenceControllerError(
+                    f"{path}.{key} uses bool for a numeric field")
+            if key in {"deltas", "relatives", "anchors"} and isinstance(item, list) \
+                    and any(type(number) is bool for number in item):
+                raise CpuInferenceControllerError(
+                    f"{path}.{key} uses bool for a numeric field")
+            _reject_bool_numeric(item, f"{path}.{key}")
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            _reject_bool_numeric(item, f"{path}[{index}]")
 
 
 def _strict_json(data: bytes, label: str) -> Any:
@@ -427,18 +486,161 @@ def _parse_args(args: tuple[str, ...]) -> dict[str, str]:
     return parsed
 
 
+def _strict_int(value: Any, label: str, *, minimum: int | None = None) -> int:
+    if type(value) is not int or minimum is not None and value < minimum:
+        raise CpuInferenceControllerError(f"{label} is not an exact integer")
+    return value
+
+
+def _strict_number(value: Any, label: str, *, positive: bool = False) -> float:
+    if type(value) not in {int, float} or not math.isfinite(value) \
+            or positive and value <= 0:
+        raise CpuInferenceControllerError(f"{label} is not an exact finite number")
+    return float(value)
+
+
+def _normalize_result_spec(value: Mapping[str, Any], *, reviewed: bool) -> dict[str, Any]:
+    normalized = json.loads(_canonical(value).decode("utf-8"))
+    created_at = normalized.get("created_at")
+    if reviewed:
+        if created_at != _RUNTIME_CREATED_AT:
+            raise CpuInferenceControllerError(
+                "reviewed spec must explicitly mark runtime created_at")
+    elif not isinstance(created_at, str) or not created_at.strip():
+        raise CpuInferenceControllerError("campaign spec created_at is malformed")
+    normalized["created_at"] = _RUNTIME_CREATED_AT
+    hypothesis = normalized.get("hypothesis")
+    authorization = (hypothesis.get("authorization")
+                     if isinstance(hypothesis, Mapping) else None)
+    if not isinstance(authorization, Mapping) or set(authorization) != _AUTHORIZATION_KEYS:
+        raise CpuInferenceControllerError(
+            "campaign spec hypothesis authorization schema is not exact")
+    authorized_at = authorization.get("authorized_at")
+    ledger_seq = authorization.get("ledger_seq")
+    if reviewed:
+        if (authorized_at != _RUNTIME_AUTHORIZED_AT
+                or ledger_seq != _RUNTIME_LEDGER_SEQ):
+            raise CpuInferenceControllerError(
+                "reviewed spec must explicitly mark runtime authorization identity")
+    else:
+        if (not isinstance(authorized_at, str) or not authorized_at.strip()
+                or type(ledger_seq) is not int or ledger_seq < 1):
+            raise CpuInferenceControllerError(
+                "campaign runtime authorization identity is malformed")
+    authorization["authorized_at"] = _RUNTIME_AUTHORIZED_AT
+    authorization["ledger_seq"] = _RUNTIME_LEDGER_SEQ
+    return normalized
+
+
+def _validate_reviewed_spec(value: Any, parsed: Mapping[str, str]) -> dict[str, Any]:
+    if not isinstance(value, Mapping) or set(value) != _SPEC_KEYS:
+        raise CpuInferenceControllerError("reviewed result spec schema is not exact")
+    normalized = _normalize_result_spec(value, reviewed=True)
+    _reject_bool_numeric(value, "reviewed_result_spec")
+    recipe_id = parsed["--recipe"]
+    try:
+        recipe = campaign.recipes.get_recipe(recipe_id)
+    except (KeyError, ValueError, TypeError, campaign.recipes.RecipeError) as exc:
+        raise CpuInferenceControllerError("reviewed CPU recipe is unavailable") from exc
+    model_path = Path(parsed["--model"])
+    expected_anchor = {
+        "repo": campaign.PRODUCTION_REPO,
+        "branch": campaign.PRODUCTION_BRANCH,
+        "expected_commit": campaign.PRODUCTION_COMMIT,
+    }
+    expected_instrument = {
+        "repo": campaign.MEASUREMENT_REPO,
+        "branch": campaign.MEASUREMENT_BRANCH,
+        "expected_commit": campaign.MEASUREMENT_COMMIT,
+        "parent_production_commit": campaign.PRODUCTION_COMMIT,
+        "build_root": campaign.MEASUREMENT_BUILD_ROOT,
+    }
+    hypothesis = value.get("hypothesis")
+    if (value.get("campaign_id") != parsed["--campaign-id"]
+            or value.get("candidate_id") != parsed["--candidate-id"]
+            or value.get("candidate_ref") != parsed["--candidate"]
+            or value.get("backend") != campaign.BACKEND_CPU
+            or value.get("model") != parsed["--model"]
+            or value.get("model_sha256") != _hash_path(model_path, "file")
+            or value.get("production_commit") != campaign.PRODUCTION_COMMIT
+            or value.get("measurement_commit") != campaign.MEASUREMENT_COMMIT
+            or value.get("recipe_id") != recipe_id
+            or value.get("metric") != recipe.metric
+            or value.get("journal_root") != parsed["--journal-root"]
+            or value.get("anchor") != expected_anchor
+            or value.get("measurement_instrument") != expected_instrument
+            or value.get("devices") != [] or value.get("device_names") != []
+            or not isinstance(hypothesis, Mapping)
+            or hypothesis.get("bound") is not True
+            or hypothesis.get("hypothesis_id") != parsed["--hypothesis"]
+            or not isinstance(value.get("claim_purpose"), str)
+            or not value["claim_purpose"].strip()):
+        raise CpuInferenceControllerError(
+            "reviewed result spec differs from normalized CPU operation/recipe")
+    for key, minimum in (("blocks_precommitted", 2), ("reps", 1),
+                         ("n_gen", 1), ("n_prompt", 1),
+                         ("fresh_pairs_per_block", 1), ("suite_seed", 0),
+                         ("schedule_seed", 0), ("holdout_selection_seed", 0),
+                         ("device_index", 0), ("n_gpu_layers", 0)):
+        _strict_int(value.get(key), f"reviewed spec {key}", minimum=minimum)
+    if (value["blocks_precommitted"] != int(parsed["--blocks"])
+            or value["reps"] != int(parsed["--reps"])):
+        raise CpuInferenceControllerError(
+            "reviewed blocks/repetitions differ from normalized campaign arguments")
+    _strict_number(value.get("drift_bound"), "reviewed spec drift_bound", positive=True)
+    calibration = value.get("calibration")
+    calibration_keys = {
+        "contribution_floor", "b_min_blocks", "max_blocks", "noise_floor_phi",
+        "mde", "evidence_ref", "anchor_motion_bound",
+        "anchor_motion_window_blocks", "anchor_motion_evidence_ref",
+    }
+    if not isinstance(calibration, Mapping) or set(calibration) != calibration_keys:
+        raise CpuInferenceControllerError("reviewed calibration schema is not exact")
+    for key in ("contribution_floor", "noise_floor_phi", "mde",
+                "anchor_motion_bound"):
+        _strict_number(calibration.get(key), f"reviewed calibration {key}", positive=True)
+    for key in ("b_min_blocks", "max_blocks", "anchor_motion_window_blocks"):
+        _strict_int(calibration.get(key), f"reviewed calibration {key}", minimum=1)
+    if (not calibration["b_min_blocks"] <= value["blocks_precommitted"]
+            <= calibration["max_blocks"]
+            or value["drift_bound"] != calibration["anchor_motion_bound"]
+            or any(not isinstance(calibration[key], str) or not calibration[key].strip()
+                   for key in ("evidence_ref", "anchor_motion_evidence_ref"))):
+        raise CpuInferenceControllerError("reviewed calibration does not govern the operation")
+    if (not isinstance(value.get("t0_ops"), list) or not value["t0_ops"]
+            or any(not isinstance(item, str) or not item for item in value["t0_ops"])
+            or not isinstance(value.get("ranked_units"), list)
+            or not isinstance(value.get("created_at"), str) or not value["created_at"]
+            or not isinstance(value.get("cpu_list"), str) or not value["cpu_list"]):
+        raise CpuInferenceControllerError("reviewed CPU spec carries malformed runtime fields")
+    if ("--physical-envelope" in parsed
+            and (not isinstance(value.get("physical_envelope"), Mapping)
+                 or value["ranked_units"] != [])
+            or "--ranked-units" in parsed
+            and (value.get("physical_envelope") is not None
+                 or not value["ranked_units"])):
+        raise CpuInferenceControllerError(
+            "reviewed physical/ranked authority differs from normalized arguments")
+    for key in ("worktree", "build_dir"):
+        if not isinstance(value.get(key), str):
+            raise CpuInferenceControllerError(f"reviewed spec {key} is malformed")
+        _lexically_safe_absolute(Path(value[key]), f"reviewed spec {key}")
+    return normalized
+
+
 @dataclass(frozen=True)
 class CpuCandidate:
     candidate_id: str
     hypothesis_id: str
     campaign_args: tuple[str, ...]
     artifacts: tuple[ArtifactBinding, ...]
+    reviewed_result_spec: Mapping[str, Any]
     candidate_sha256: str
 
     @classmethod
     def from_mapping(cls, value: Mapping[str, Any]) -> "CpuCandidate":
         required = {"schema", "candidate_id", "hypothesis_id", "campaign_args",
-                    "artifacts", "candidate_sha256"}
+                    "artifacts", "reviewed_result_spec", "candidate_sha256"}
         if not isinstance(value, Mapping) or set(value) != required:
             raise CpuInferenceControllerError("CPU candidate schema is not exact")
         if (value.get("schema") != CANDIDATE_SCHEMA
@@ -453,6 +655,8 @@ class CpuCandidate:
             raise CpuInferenceControllerError("CPU candidate identity is malformed")
         args = tuple(value["campaign_args"])
         parsed = _parse_args(args)
+        reviewed_result_spec = _validate_reviewed_spec(
+            value.get("reviewed_result_spec"), parsed)
         if (parsed["--candidate-id"] != value["candidate_id"]
                 or parsed["--hypothesis"] != value["hypothesis_id"]):
             raise CpuInferenceControllerError(
@@ -485,7 +689,7 @@ class CpuCandidate:
         if _sha(body) != value["candidate_sha256"]:
             raise CpuInferenceControllerError("candidate self-hash mismatch")
         return cls(value["candidate_id"], value["hypothesis_id"], args,
-                   artifacts, value["candidate_sha256"])
+                   artifacts, reviewed_result_spec, value["candidate_sha256"])
 
     @property
     def parsed_args(self) -> dict[str, str]:
@@ -493,14 +697,26 @@ class CpuCandidate:
 
     def revalidate(self, output_root: Path) -> None:
         parsed = self.parsed_args
+        for artifact in self.artifacts:
+            artifact.revalidate()
+        reviewed = _validate_reviewed_spec(self.reviewed_result_spec, parsed)
+        body = {
+            "schema": CANDIDATE_SCHEMA,
+            "candidate_id": self.candidate_id,
+            "hypothesis_id": self.hypothesis_id,
+            "campaign_args": list(self.campaign_args),
+            "artifacts": [artifact.to_dict() for artifact in self.artifacts],
+            "reviewed_result_spec": reviewed,
+        }
+        if _sha(body) != self.candidate_sha256:
+            raise CpuInferenceControllerError(
+                "candidate operation changed after manifest validation")
         expected_journal = output_root / "campaign-journal"
         if Path(parsed["--journal-root"]) != expected_journal:
             raise CpuInferenceControllerError(
                 "candidate journal root differs from controller-owned root")
         _validate_controller_path(expected_journal, "campaign journal root",
                                   root=output_root)
-        for artifact in self.artifacts:
-            artifact.revalidate()
 
     def operation_key(self, controller_id: str) -> str:
         return _sha({
@@ -650,12 +866,6 @@ class StateStore:
                 or len(value["iterations"]) != value["next_index"]
                 or not isinstance(value.get("complete"), bool)):
             raise CpuInferenceControllerError("controller state counters are malformed")
-        derived = sum(1 for row in value["iterations"]
-                      if isinstance(row, Mapping)
-                      and row.get("scientific_budget_spent") is True)
-        if derived != value["scientific_attempts"]:
-            raise CpuInferenceControllerError(
-                "controller science counter is not derived from dispositions")
         self._validate_semantics(value)
         return dict(value)
 
@@ -670,7 +880,11 @@ class StateStore:
             "candidate": True, "screened_out": False,
             "correctness_falsified": False,
         }
+        derived_science = 0
         for index, row in enumerate(value["iterations"]):
+            if derived_science >= self.config.max_scientific_attempts:
+                raise CpuInferenceControllerError(
+                    "controller has an iteration after its scientific budget was reached")
             candidate = self.config.candidates[index]
             if (not isinstance(row, Mapping) or set(row) != row_keys
                     or row.get("candidate_id") != candidate.candidate_id
@@ -782,6 +996,11 @@ class StateStore:
                     if row.get(key) != disposition[key]:
                         raise CpuInferenceControllerError(
                             "controller iteration differs from rederived result disposition")
+            if row.get("scientific_budget_spent") is True:
+                derived_science += 1
+        if derived_science != value["scientific_attempts"]:
+            raise CpuInferenceControllerError(
+                "controller final science counter is not derived from typed terminals")
         inflight = value.get("inflight")
         if inflight is not None:
             keys = {"candidate_index", "candidate_id", "candidate_sha256",
@@ -865,15 +1084,48 @@ def _t0_gates(value: Any) -> tuple[tuple[str, str, tuple[str, ...]], ...]:
                 or any(not isinstance(reason, str) for reason in row[2])):
             raise CpuInferenceControllerError("T0 gate row is malformed")
         rows.append((row[0], row[1], tuple(row[2])))
-        if row[1] != campaign.schemas.PASS and not row[2]:
+        if row[1] != campaign.schemas.PASS and (
+                not row[2] or any(not reason.strip() or reason != reason.strip()
+                                  for reason in row[2])):
             raise CpuInferenceControllerError(
-                "T0 FAIL/COULD_NOT_CHECK gate must carry a reason")
+                "T0 FAIL/COULD_NOT_CHECK gate must carry nonempty normalized reasons")
     if len({row[0] for row in rows}) != len(rows):
         raise CpuInferenceControllerError("T0 gate identities are repeated")
     expected_all = all(row[1] == campaign.schemas.PASS for row in rows)
     if value["all_pass"] is not expected_all:
         raise CpuInferenceControllerError("T0 all_pass disagrees with typed gates")
     return tuple(rows)
+
+
+def _typed_check(value: Any, label: str) -> tuple[str, tuple[str, ...]]:
+    if (not isinstance(value, Mapping) or set(value) != {"outcome", "reasons"}
+            or value.get("outcome") not in {
+                campaign.schemas.PASS, campaign.schemas.FAIL,
+                campaign.schemas.COULD_NOT_CHECK}
+            or not isinstance(value.get("reasons"), list)
+            or any(not isinstance(reason, str) for reason in value["reasons"])
+            or value["outcome"] != campaign.schemas.PASS
+            and (not value["reasons"]
+                 or any(not reason.strip() or reason != reason.strip()
+                        for reason in value["reasons"]))):
+        raise CpuInferenceControllerError(f"{label} is not an exact typed check")
+    return value["outcome"], tuple(value["reasons"])
+
+
+def _step_names(value: Any) -> tuple[str, ...]:
+    if not isinstance(value, list):
+        raise CpuInferenceControllerError("campaign steps are malformed")
+    names: list[str] = []
+    for index, row in enumerate(value):
+        if (not isinstance(row, Mapping)
+                or set(row) != {"index", "name", "what", "detail"}
+                or type(row.get("index")) is not int or row["index"] != index + 1
+                or not isinstance(row.get("name"), str) or not row["name"].strip()
+                or not isinstance(row.get("what"), str) or not row["what"].strip()
+                or not isinstance(row.get("detail"), Mapping)):
+            raise CpuInferenceControllerError("campaign step ledger is not exact")
+        names.append(row["name"])
+    return tuple(names)
 
 
 def _exact_decision(spec: Mapping[str, Any], t0: Mapping[str, Any],
@@ -889,11 +1141,12 @@ def _exact_decision(spec: Mapping[str, Any], t0: Mapping[str, Any],
         if (not isinstance(row, Mapping)
                 or set(row) != {"block_index", "anchor", "candidate", "order",
                                     "delta", "relative"}
+                or type(row.get("block_index")) is not int
                 or row.get("block_index") != index):
             raise CpuInferenceControllerError("CPU pair geometry is not exact")
         for field in ("anchor", "candidate", "delta", "relative"):
             value = row.get(field)
-            if (isinstance(value, bool) or not isinstance(value, (int, float))
+            if (type(value) not in {int, float}
                     or not math.isfinite(value)):
                 raise CpuInferenceControllerError("CPU pair contains a non-finite value")
         try:
@@ -912,13 +1165,13 @@ def _exact_decision(spec: Mapping[str, Any], t0: Mapping[str, Any],
             pairs,
             t0=campaign.T0Outcome(all_pass=True),
             blocks_precommitted=blocks,
-            drift_bound=decision.get("drift_bound"),
-            contribution_floor=decision.get("contribution_floor"),
-            calibration_evidence_ref=decision.get("calibration_evidence_ref"),
+            drift_bound=spec.get("drift_bound"),
+            contribution_floor=spec["calibration"].get("contribution_floor"),
+            calibration_evidence_ref=spec["calibration"].get("evidence_ref"),
         ).to_dict()
     except (TypeError, ValueError, campaign.AcceptRuleMisuse) as exc:
         raise CpuInferenceControllerError("CPU decision cannot be rederived") from exc
-    if dict(decision) != expected:
+    if _canonical(decision) != _canonical(expected):
         raise CpuInferenceControllerError(
             "CPU decision/effect differs from the exact paired observations")
     return float(expected["median_relative"])
@@ -927,11 +1180,14 @@ def _exact_decision(spec: Mapping[str, Any], t0: Mapping[str, Any],
 def _result_disposition(candidate: CpuCandidate, result: Mapping[str, Any],
                         output_root: Path, operation_key: str) -> dict[str, Any]:
     _canonical(result)
+    _reject_bool_numeric(result)
     parsed = candidate.parsed_args
     spec = result.get("spec")
     if (set(result) != _CAMPAIGN_RESULT_KEYS
             or result.get("schema") != "epyc.autokernel.campaign_result.v1"
             or not isinstance(spec, Mapping)
+            or _canonical(_normalize_result_spec(spec, reviewed=False)) !=
+               _canonical(candidate.reviewed_result_spec)
             or result.get("campaign_id") != parsed["--campaign-id"]
             or result.get("candidate_id") != candidate.candidate_id
             or spec.get("campaign_id") != parsed["--campaign-id"]
@@ -944,30 +1200,30 @@ def _result_disposition(candidate: CpuCandidate, result: Mapping[str, Any],
             or result.get("non_promotable") is not False
             or result.get("screening_report") is not None
             or result.get("grammar") != "SEARCH RECORD, NOT A CLAIM"
-            or not isinstance(result.get("steps"), list)
             or not isinstance(result.get("pairs"), list)):
         raise CpuInferenceControllerError(
             "campaign result differs from the selected full CPU operation")
     if not HASH.fullmatch(operation_key) or operation_key != candidate.operation_key(
             parsed["--campaign-id"]):
         raise CpuInferenceControllerError("campaign result operation binding changed")
-    blocks = spec.get("blocks_precommitted")
-    if (isinstance(blocks, bool) or not isinstance(blocks, int) or blocks < 2
-            or "--blocks" in parsed and blocks != int(parsed["--blocks"])
-            or "--reps" in parsed and spec.get("reps") != int(parsed["--reps"])
-            or spec.get("model") != parsed["--model"]):
-        raise CpuInferenceControllerError(
-            "campaign result spec differs from normalized candidate arguments")
+    step_names = _step_names(result.get("steps"))
     state = result.get("state")
+    if result.get("preflight") is None and state == campaign.STATE_ERROR:
+        preflight_outcome, preflight_reasons = None, ()
+    else:
+        preflight_outcome, preflight_reasons = _typed_check(
+            result.get("preflight"), "campaign preflight")
+    if result.get("journal_error") is not None:
+        raise CpuInferenceControllerError("CPU result was not durably journaled")
     decision = result.get("decision")
     if state == campaign.STATE_DECIDED:
         t0 = result.get("t0")
         if (not isinstance(decision, Mapping) or set(decision) != _DECISION_KEYS
                 or not isinstance(decision.get("keep"), bool)
                 or not result["pairs"]
-                or result.get("journal_error") is not None
                 or result.get("ok") is not True
-                or result.get("error") is not None):
+                or result.get("error") is not None
+                or preflight_outcome != campaign.schemas.PASS):
             raise CpuInferenceControllerError("decided CPU result lacks an exact decision")
         gates = _t0_gates(t0)
         if any(row[1] != campaign.schemas.PASS for row in gates):
@@ -980,8 +1236,8 @@ def _result_disposition(candidate: CpuCandidate, result: Mapping[str, Any],
         t0 = result.get("t0")
         if (decision is not None
                 or result["pairs"]
-                or result.get("journal_error") is not None
-                or result.get("ok") is not True):
+                or result.get("ok") is not True
+                or preflight_outcome != campaign.schemas.PASS):
             raise CpuInferenceControllerError("T0 failure unexpectedly carries speed decision")
         gates = _t0_gates(t0)
         outcomes = {row[1] for row in gates}
@@ -1007,11 +1263,28 @@ def _result_disposition(candidate: CpuCandidate, result: Mapping[str, Any],
         else:
             raise CpuInferenceControllerError("T0 failure has no typed failure")
         effect = None
-    elif state in {campaign.STATE_PREFLIGHT_REFUSED, campaign.STATE_ERROR}:
-        if (decision is not None or result["pairs"]
-                or state == campaign.STATE_ERROR and result.get("ok") is not False):
+    elif state == campaign.STATE_PREFLIGHT_REFUSED:
+        if (decision is not None or result["pairs"] or result.get("t0") is not None
+                or result.get("ok") is not False or result.get("releases") != []
+                or preflight_outcome not in {
+                    campaign.schemas.FAIL, campaign.schemas.COULD_NOT_CHECK}
+                or not isinstance(result.get("error"), str)
+                or result["error"] != "; ".join(preflight_reasons)
+                or _POST_CLAIM_STEPS.intersection(step_names)):
             raise CpuInferenceControllerError(
-                "infrastructure terminal unexpectedly carries speed decision")
+                "preflight-refused CPU result is not an exact pre-claim refusal")
+        classification = "infrastructure_ambiguous"
+        science = False
+        keep = None
+        effect = None
+    elif state == campaign.STATE_ERROR:
+        if (decision is not None or result["pairs"]
+                or result.get("ok") is not False
+                or not isinstance(result.get("error"), str)
+                or not result["error"].strip()
+                or preflight_outcome not in {None, campaign.schemas.PASS}):
+            raise CpuInferenceControllerError(
+                "STATE_ERROR CPU result lacks its exact typed error")
         classification = "infrastructure_ambiguous"
         science = False
         keep = None
@@ -1035,6 +1308,13 @@ def _result_disposition(candidate: CpuCandidate, result: Mapping[str, Any],
         if not {"cpu_region_claim", "campaign_worktree"} <= names:
             raise CpuInferenceControllerError(
                 "CPU post-claim terminal lacks claim/worktree release evidence")
+    release_names = {row["name"] for row in releases}
+    if (_POST_CLAIM_STEPS.intersection(step_names)
+            and "cpu_region_claim" not in release_names
+            or _WORKTREE_STEPS.intersection(step_names)
+            and "campaign_worktree" not in release_names):
+        raise CpuInferenceControllerError(
+            "STATE_ERROR/post-claim result lacks matching release evidence")
     unchanged = result.get("production_unchanged")
     if (not isinstance(unchanged, Mapping)
             or set(unchanged) != {"outcome", "reasons"}
