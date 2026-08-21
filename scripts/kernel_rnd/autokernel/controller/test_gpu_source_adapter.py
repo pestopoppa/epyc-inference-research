@@ -1,3 +1,5 @@
+import dataclasses
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -367,25 +369,87 @@ class GpuSourceAdapterTests(unittest.TestCase):
             manager = ReservationManager(waits=1)
             adapter.reservation_manager = manager
             original_build = adapter.build_source
+            original_plan = adapter.plan_factory
+            materialization = (Path(directory).resolve() /
+                               "materialization-receipt.json")
+            materialization.write_text("sealed materialization\n")
+            materialization_sha256 = hashlib.sha256(
+                materialization.read_bytes()).hexdigest()
+            build_key = digest("sealed build cache key")
             def build_with_manifest(*args):
                 operation_root = adapter._root(lease["operation_key"])
                 (operation_root / "source-manifest.json").write_bytes(
                     b"sealed manifest")
-                return original_build(*args)
+                return dataclasses.replace(
+                    original_build(*args),
+                    operation_key=lease["operation_key"],
+                    build_key=build_key,
+                    materialization_receipt=materialization.resolve(),
+                    materialization_sha256=materialization_sha256)
+            def plan_with_policy(*args):
+                value = original_plan(*args)
+                policy_path = (adapter._root(lease["operation_key"]) /
+                               "evidence-policy.json")
+                policy_bytes = json.dumps(
+                    E._policy_payload(value), sort_keys=True,
+                    separators=(",", ":")).encode()
+                if policy_path.exists():
+                    self.assertEqual(policy_path.read_bytes(), policy_bytes)
+                else:
+                    policy_path.write_bytes(policy_bytes)
+                    policy_path.chmod(0o600)
+                return value
             adapter.build_source = build_with_manifest
+            adapter.plan_factory = plan_with_policy
             with mock.patch.object(D, "GpuSourceScreener", FakeDelegate), \
                     self.assertRaises(D.ResourceWait) as caught:
                 adapter.screen(candidate, authorization, lease)
             self.assertEqual(executors.calls, [])
             self.assertEqual(caught.exception.receipt["phase"], "pre_executor_reservation")
+            self.assertEqual(caught.exception.receipt["reason"], "device_busy")
             root = adapter._root(lease["operation_key"])
             self.assertFalse((root / "proof").exists())
             self.assertFalse((root / "runner-plan.json").exists())
             self.assertEqual(
                 (root / "source-manifest.json").read_bytes(), b"sealed manifest")
-            self.assertEqual(adapter.reconcile(inflight).status, "safe_to_start")
+            wait = A._read_json(
+                root / "resource-waits/wait-0001.json", "resource wait")
+            self.assertEqual(
+                (wait["build_key"], wait["materialization_sha256"]),
+                (build_key, materialization_sha256))
+            self.assertTrue((root / "evidence-policy.json").is_file())
+            recovery = adapter.reconcile(inflight)
+            self.assertEqual(recovery.status, "resource_wait")
+            self.assertEqual(
+                recovery.wait_receipt, dict(caught.exception.receipt))
+            checkpoint = root / "postbuild-checkpoint.json"
+            checkpoint_bytes = checkpoint.read_bytes()
+            forged = A._read_json(checkpoint, "postbuild checkpoint")
+            forged["operation_key"] = digest("another operation")
+            forged.pop("receipt_sha256")
+            forged["receipt_sha256"] = schemas.content_hash(forged)
+            checkpoint.write_text(json.dumps(forged, sort_keys=True))
+            self.assertEqual(adapter.reconcile(inflight).status, "ambiguous")
+            checkpoint.write_bytes(checkpoint_bytes)
+            policy_path = root / "evidence-policy.json"
+            policy_bytes = policy_path.read_bytes()
+            policy = json.loads(policy_bytes)
+            policy["manifest_sha256"] = digest("another manifest")
+            policy_path.write_text(json.dumps(policy, sort_keys=True))
+            self.assertEqual(adapter.reconcile(inflight).status, "ambiguous")
+            policy_path.write_bytes(policy_bytes)
+            materialization_bytes = materialization.read_bytes()
+            materialization.write_text("tampered materialization\n")
+            self.assertEqual(adapter.reconcile(inflight).status, "ambiguous")
+            materialization.write_bytes(materialization_bytes)
+            wait_path = root / "resource-waits/wait-0001.json"
+            wait_bytes = wait_path.read_bytes()
+            wait_path.write_bytes(wait_bytes.replace(b"device_busy", b"device_free", 1))
+            self.assertEqual(adapter.reconcile(inflight).status, "ambiguous")
+            wait_path.write_bytes(wait_bytes)
             with mock.patch.object(D, "GpuSourceScreener", FakeDelegate):
                 result = adapter.screen(candidate, authorization, lease)
+            self.assertEqual(checkpoint.read_bytes(), checkpoint_bytes)
             self.assertEqual(result.result_sha256, current.result_sha256)
             self.assertEqual(len(executors.calls), 3)
             self.assertEqual(manager.borrow_calls, 3)

@@ -535,15 +535,124 @@ def _validated_resource_wait(exc: ResourceWait, operation_key: str) -> dict[str,
     return receipt
 
 
+RESOURCE_WAIT_CHECKPOINT_SCHEMA = \
+    "epyc.autokernel.controller_resource_wait_checkpoint.v1"
+
+
 def _require_safe_resource_wait_recovery(screener: Screener,
-                                         inflight: Mapping[str, Any]) -> None:
+                                         inflight: Mapping[str, Any],
+                                         wait_receipt: Mapping[str, Any]
+                                         | None = None) -> "Recovery":
     reconcile = getattr(screener, "reconcile", None)
     if not callable(reconcile):
         raise DiscoveryControllerError("resource wait lacks reconciliation authority")
     recovery = reconcile(inflight)
-    if not isinstance(recovery, Recovery) or recovery.status != "safe_to_start":
+    if not isinstance(recovery, Recovery) or recovery.status != "resource_wait":
         raise DiscoveryControllerError(
             "resource wait conflicts with current operation artifacts")
+    if (wait_receipt is not None
+            and dict(recovery.wait_receipt or {}) != dict(wait_receipt)):
+        raise DiscoveryControllerError(
+            "resource wait reconciliation mixed stage receipts")
+    return recovery
+
+
+def _resource_wait_pending(inflight: Mapping[str, Any],
+                           wait_receipt: Mapping[str, Any]) -> dict[str, Any]:
+    """Atomically demote one exact post-build inflight operation to pending."""
+    source = dict(inflight)
+    operation_key = source.get("operation_key")
+    if not isinstance(operation_key, str) or not HASH.fullmatch(operation_key):
+        raise DiscoveryControllerError(
+            "resource wait inflight operation key is malformed")
+    prior_lease = source.get("lease")
+    if (not isinstance(prior_lease, Mapping)
+            or prior_lease.get("admitted") is not True
+            or prior_lease.get("operation_key") != operation_key):
+        raise DiscoveryControllerError(
+            "resource wait lost its admitted inflight lease")
+    wait = dict(wait_receipt)
+    resume_permit = {**dict(prior_lease), **wait}
+    checkpoint = {
+        "schema": RESOURCE_WAIT_CHECKPOINT_SCHEMA,
+        "authority": AUTHORITY,
+        "promotion_claim": False,
+        "operation_key": operation_key,
+        "inflight": source,
+        "inflight_sha256": _sha(source),
+        "wait_receipt": wait,
+        "wait_receipt_sha256": _sha(wait),
+        "resume_permit": resume_permit,
+    }
+    checkpoint["checkpoint_sha256"] = _sha(checkpoint)
+    row = dict(source["row"])
+    row.update(status="waiting_resource", lease=wait)
+    pending = {
+        "row": row,
+        "candidate": source["candidate"],
+        "authorization": source["authorization"],
+        "confirmation": bool(source.get("confirmation")),
+        "parent_authorization": source.get("parent_authorization"),
+        "infrastructure_retry_epoch": source.get(
+            "infrastructure_retry_epoch", 0),
+        "resource_wait": checkpoint,
+        **_preauthored_pending_fields(row),
+    }
+    if isinstance(source.get("preauthored_continuation"), Mapping):
+        pending["preauthored_continuation"] = dict(
+            source["preauthored_continuation"])
+    return pending
+
+
+def _validated_resource_wait_checkpoint(
+        pending: Mapping[str, Any], operation_key: str) -> Mapping[str, Any]:
+    checkpoint = pending.get("resource_wait")
+    required = {
+        "schema", "authority", "promotion_claim", "operation_key",
+        "inflight", "inflight_sha256", "wait_receipt",
+        "wait_receipt_sha256", "resume_permit", "checkpoint_sha256",
+    }
+    if (not isinstance(checkpoint, Mapping) or set(checkpoint) != required
+            or checkpoint.get("schema") != RESOURCE_WAIT_CHECKPOINT_SCHEMA
+            or checkpoint.get("authority") != AUTHORITY
+            or checkpoint.get("promotion_claim") is not False
+            or checkpoint.get("operation_key") != operation_key
+            or checkpoint.get("checkpoint_sha256") != _sha({
+                key: value for key, value in checkpoint.items()
+                if key != "checkpoint_sha256"})):
+        raise DiscoveryControllerError(
+            "pending resource-wait checkpoint is malformed")
+    inflight = checkpoint.get("inflight")
+    wait = checkpoint.get("wait_receipt")
+    resume_permit = checkpoint.get("resume_permit")
+    if (not isinstance(inflight, Mapping)
+            or checkpoint.get("inflight_sha256") != _sha(inflight)
+            or inflight.get("operation_key") != operation_key
+            or not isinstance(wait, Mapping)
+            or checkpoint.get("wait_receipt_sha256") != _sha(wait)
+            or not isinstance(resume_permit, Mapping)
+            or not isinstance(inflight.get("lease"), Mapping)
+            or dict(resume_permit) != {
+                **dict(inflight["lease"]), **dict(wait)}):
+        raise DiscoveryControllerError(
+            "pending resource-wait identity changed")
+    validated_wait = _validated_resource_wait(
+        ResourceWait("reopen durable resource wait", receipt=wait),
+        operation_key)
+    expected_row = dict(inflight.get("row", {}))
+    expected_row.update(status="waiting_resource", lease=validated_wait)
+    for key, value in (
+            ("candidate", inflight.get("candidate")),
+            ("authorization", inflight.get("authorization")),
+            ("confirmation", bool(inflight.get("confirmation"))),
+            ("parent_authorization", inflight.get("parent_authorization")),
+            ("infrastructure_retry_epoch",
+             inflight.get("infrastructure_retry_epoch", 0)),
+            ("row", expected_row)):
+        if pending.get(key) != value:
+            raise DiscoveryControllerError(
+                f"pending resource-wait {key} identity changed")
+    return checkpoint
 
 
 def _atomic(path: Path, value: Mapping[str, Any]) -> None:
@@ -859,9 +968,13 @@ class Screener(Protocol):
 class Recovery:
     status: str
     result: SealedScreen | None = None
+    wait_receipt: Mapping[str, Any] | None = None
     def __post_init__(self) -> None:
-        if self.status not in {"safe_to_start", "sealed_result", "ambiguous"}: raise DiscoveryControllerError("unknown recovery status")
+        if self.status not in {"safe_to_start", "resource_wait", "sealed_result", "ambiguous"}: raise DiscoveryControllerError("unknown recovery status")
         if (self.status == "sealed_result") != isinstance(self.result, SealedScreen): raise DiscoveryControllerError("recovery result binding is invalid")
+        if (self.status == "resource_wait") != isinstance(self.wait_receipt, Mapping): raise DiscoveryControllerError("recovery wait binding is invalid")
+        if self.wait_receipt is not None:
+            object.__setattr__(self, "wait_receipt", dict(self.wait_receipt))
 
 
 @dataclass(frozen=True)
@@ -3807,6 +3920,18 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
             if not isinstance(recovery,Recovery) or recovery.status == "ambiguous": raise DiscoveryControllerError("inflight operation cannot be safely reconciled")
             if recovery.status == "sealed_result":
                 result=recovery.result
+            elif recovery.status == "resource_wait":
+                wait_receipt = _validated_resource_wait(
+                    ResourceWait(
+                        "reopen durable resource wait",
+                        receipt=dict(recovery.wait_receipt or {})),
+                    str(inflight["operation_key"]))
+                pending_wait = _resource_wait_pending(
+                    inflight, wait_receipt)
+                state.pop("inflight", None)
+                state["pending"] = pending_wait
+                store.save(state, "waiting_resource")
+                return state
             else:
                 resume=getattr(lease,"resume",None)
                 if not callable(resume):
@@ -3842,18 +3967,12 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                 except ResourceWait as exc:
                     wait_receipt=_validated_resource_wait(
                         exc,str(inflight["operation_key"]))
-                    _require_safe_resource_wait_recovery(screener,inflight)
-                    row=dict(inflight["row"]); row.update(
-                        status="waiting_resource",lease=wait_receipt)
+                    _require_safe_resource_wait_recovery(
+                        screener, inflight, wait_receipt)
+                    pending_wait = _resource_wait_pending(
+                        inflight, wait_receipt)
                     state.pop("inflight",None)
-                    state["pending"]={
-                        "row":row,"candidate":inflight["candidate"],
-                        "authorization":inflight["authorization"],
-                        "confirmation":bool(inflight.get("confirmation")),
-                        "parent_authorization":inflight.get("parent_authorization"),
-                        "infrastructure_retry_epoch":inflight.get(
-                            "infrastructure_retry_epoch", 0),
-                        **_preauthored_pending_fields(row)}
+                    state["pending"] = pending_wait
                     store.save(state,"waiting_resource")
                     return state
                 except ScreenInfrastructureAmbiguity as exc:
@@ -4256,12 +4375,32 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                 operation_identity["infrastructure_retry_epoch"] = retry_epoch
             operation_key=_sha(operation_identity)
             row["operation_key"] = operation_key
-            permit=lease.admit(item, operation_key=operation_key)
+            wait_checkpoint = (pending.get("resource_wait")
+                               if isinstance(pending, Mapping) else None)
+            if wait_checkpoint is not None:
+                checkpoint = _validated_resource_wait_checkpoint(
+                    pending, operation_key)
+                _require_safe_resource_wait_recovery(
+                    screener, checkpoint["inflight"],
+                    checkpoint["wait_receipt"])
+                resume = getattr(lease, "resume", None)
+                if not callable(resume):
+                    raise DiscoveryControllerError(
+                        "pending resource wait lacks resource re-admission")
+                permit = resume(item, checkpoint["resume_permit"])
+            else:
+                permit=lease.admit(item, operation_key=operation_key)
             if not bool(permit.get("admitted")):
                 # Waiting is durable but is not an experiment and cannot spend an
                 # iteration budget.  Planning/critique may continue elsewhere;
                 # this exact candidate is retried only after a new lease admits it.
-                row.update(status="waiting_resource",lease=dict(permit)); state["pending"]={"row":row,"candidate":_pending_item(item),"authorization":authorization.to_dict(),"confirmation":bool(pending and pending.get("confirmation")),"parent_authorization":pending.get("parent_authorization") if pending else None,"infrastructure_retry_epoch":retry_epoch, **_preauthored_pending_fields(row)}; store.save(state,"waiting_resource"); break
+                if wait_checkpoint is None:
+                    row.update(status="waiting_resource",lease=dict(permit)); state["pending"]={"row":row,"candidate":_pending_item(item),"authorization":authorization.to_dict(),"confirmation":bool(pending and pending.get("confirmation")),"parent_authorization":pending.get("parent_authorization") if pending else None,"infrastructure_retry_epoch":retry_epoch, **_preauthored_pending_fields(row)}
+                # A post-build wait remains bound to its original admitted
+                # lease and durable stage receipt.  A failed re-admission is
+                # observational only; preserving the same checkpoint makes
+                # any number of fresh supervisor epochs idempotent.
+                store.save(state,"waiting_resource"); break
             # The governed GPU adapter owns an operation-key-bound receipt
             # namespace.  It refuses an unkeyed lease, making recovery and
             # result reconciliation refer to the same durable operation.
@@ -4281,10 +4420,12 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                 break
             except ResourceWait as exc:
                 wait_receipt=_validated_resource_wait(exc,operation_key)
-                _require_safe_resource_wait_recovery(screener,state["inflight"])
+                _require_safe_resource_wait_recovery(
+                    screener, state["inflight"], wait_receipt)
+                pending_wait = _resource_wait_pending(
+                    state["inflight"], wait_receipt)
                 state.pop("inflight",None)
-                row.update(status="waiting_resource",lease=wait_receipt)
-                state["pending"]={"row":row,"candidate":_pending_item(item),"authorization":authorization.to_dict(),"confirmation":bool(pending and pending.get("confirmation")),"parent_authorization":pending.get("parent_authorization") if pending else None,"infrastructure_retry_epoch":retry_epoch, **_preauthored_pending_fields(row)}
+                state["pending"] = pending_wait
                 store.save(state,"waiting_resource")
                 break
             except ScreenInfrastructureAmbiguity as exc:

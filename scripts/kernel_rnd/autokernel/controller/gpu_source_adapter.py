@@ -29,6 +29,7 @@ from scripts.benchmark import autokernel_progression
 OPERATION_SCHEMA = "epyc.autokernel.gpu_source_operation.v1"
 RESULT_SCHEMA = "epyc.autokernel.gpu_source_operation_result.v1"
 RESOURCE_WAIT_SCHEMA = "epyc.autokernel.gpu_source_resource_wait.v1"
+POSTBUILD_CHECKPOINT_SCHEMA = "epyc.autokernel.gpu_source_postbuild_checkpoint.v1"
 RESERVATION_RELEASE_SCHEMA = "epyc.autokernel.gpu_source_reservation_release.v1"
 AUTHORITY = evidence.AUTHORITY
 SHA = re.compile(r"^[0-9a-f]{64}$")
@@ -44,17 +45,26 @@ class CompatibleRecovery:
 
     status: str
     result: Any | None = None
+    wait_receipt: Mapping[str, Any] | None = None
 
     def __post_init__(self) -> None:
-        if self.status not in {"safe_to_start", "sealed_result", "ambiguous"}:
+        if self.status not in {
+                "safe_to_start", "resource_wait", "sealed_result", "ambiguous"}:
             raise GpuSourceAdapterError("unknown recovery status")
         if (self.status == "sealed_result") != (self.result is not None):
             raise GpuSourceAdapterError("recovery result binding is invalid")
+        if (self.status == "resource_wait") != isinstance(
+                self.wait_receipt, Mapping):
+            raise GpuSourceAdapterError("recovery wait binding is invalid")
+        if self.wait_receipt is not None:
+            object.__setattr__(self, "wait_receipt", dict(self.wait_receipt))
 
 
-def _recovery(status: str, result: Any | None = None) -> Any:
+def _recovery(status: str, result: Any | None = None,
+              wait_receipt: Mapping[str, Any] | None = None) -> Any:
     recovery_type = getattr(controller, "Recovery", CompatibleRecovery)
-    return recovery_type(status=status, result=result)
+    return recovery_type(
+        status=status, result=result, wait_receipt=wait_receipt)
 
 
 def _mapping(value: object, label: str) -> dict[str, Any]:
@@ -192,6 +202,11 @@ def _safe_wait_receipts(root: Path, identity: Mapping[str, Any]) -> tuple[dict[s
     for path in sorted(waits.iterdir()):
         if path.is_symlink() or not path.is_file() or not re.fullmatch(r"wait-[0-9]{4}\.json", path.name):
             raise GpuSourceAdapterError("resource-wait history contains an unsafe entry")
+        facts = path.stat(follow_symlinks=False)
+        if (facts.st_uid != os.geteuid() or facts.st_nlink != 1
+                or stat.S_IMODE(facts.st_mode) & 0o022):
+            raise GpuSourceAdapterError(
+                "resource-wait receipt has unsafe file authority")
         row = _read_json(path, "resource-wait receipt")
         required = {
             "schema": RESOURCE_WAIT_SCHEMA,
@@ -206,12 +221,252 @@ def _safe_wait_receipts(root: Path, identity: Mapping[str, Any]) -> tuple[dict[s
         }
         if any(row.get(key) != value for key, value in required.items()):
             raise GpuSourceAdapterError("resource-wait receipt does not prove a pre-executor stop")
+        if set(row) != {
+                *required, "build_key", "materialization_sha256",
+                "contention", "receipt_sha256"}:
+            raise GpuSourceAdapterError(
+                "resource-wait receipt has an inexact schema")
+        contention = row.get("contention")
+        if not isinstance(contention, Mapping):
+            raise GpuSourceAdapterError("resource-wait receipt lacks typed contention")
+        reason = contention.get("reason")
+        common = {
+            "admitted", "phase", "reason", "device_id", "operation_key",
+            "promotion_claim",
+        }
+        allowed = (common | {"foreign_kfd_pids"}
+                   if isinstance(reason, str) and reason.startswith("foreign_kfd_")
+                   else common | {"detail"})
+        if (set(contention) not in ({*common}, allowed)
+                or contention.get("admitted") is not False
+                or contention.get("phase") != "pre_executor_reservation"
+                or contention.get("operation_key") != identity["operation_key"]
+                or contention.get("promotion_claim") is not False
+                or not isinstance(contention.get("device_id"), str)
+                or not contention["device_id"]
+                or reason not in {
+                    "device_busy", "foreign_kfd_busy",
+                    "foreign_kfd_inventory_invalid",
+                    "foreign_kfd_inventory_unreadable",
+                }
+                or any("claim" in str(key).lower()
+                       for key in contention if key != "promotion_claim")):
+            raise GpuSourceAdapterError(
+                "resource-wait contention is not an exact claim-free boundary")
+        if reason.startswith("foreign_kfd_"):
+            pids = contention.get("foreign_kfd_pids")
+            if (not isinstance(pids, list)
+                    or pids != sorted(set(pids))
+                    or any(isinstance(pid, bool) or not isinstance(pid, int)
+                           or pid <= 0 for pid in pids)
+                    or reason == "foreign_kfd_busy" and not pids
+                    or reason != "foreign_kfd_busy" and pids):
+                raise GpuSourceAdapterError(
+                    "resource-wait KFD inventory is malformed")
+        elif ("detail" in contention
+              and not isinstance(contention.get("detail"), str)):
+            raise GpuSourceAdapterError(
+                "resource-wait device contention detail is malformed")
+        build_key = row.get("build_key")
+        materialization = row.get("materialization_sha256")
+        if ((build_key is None) != (materialization is None)
+                or build_key is not None
+                and (not isinstance(build_key, str) or not SHA.fullmatch(build_key)
+                     or not isinstance(materialization, str)
+                     or not SHA.fullmatch(materialization))):
+            raise GpuSourceAdapterError(
+                "resource-wait build identity is incomplete")
         rows.append(row)
     return tuple(rows)
 
 
+_BUILD_PATH_FIELDS = (
+    "anchor_build", "candidate_build", "measurement_binary",
+    "common_loader_dir", "anchor_loader_dir", "candidate_loader_dir",
+    "materialization_receipt", "anchor_source_tree_receipt",
+    "candidate_source_tree_receipt", "anchor_correctness_binary",
+    "candidate_correctness_binary", "anchor_correctness_capability_receipt",
+    "candidate_correctness_capability_receipt", "teardown_receipt",
+)
+_BUILD_SCALAR_FIELDS = (
+    "reward_runtime_sha256", "operation_key", "build_key",
+    "materialization_sha256", "anchor_source_tree_sha256",
+    "candidate_source_tree_sha256", "anchor_correctness_binary_sha256",
+    "candidate_correctness_binary_sha256",
+    "anchor_correctness_capability_sha256",
+    "candidate_correctness_capability_sha256", "teardown_sha256",
+)
+
+
+def _build_projection(build: controller.GpuSourceBuild) -> dict[str, Any]:
+    if not isinstance(build, controller.GpuSourceBuild):
+        raise GpuSourceAdapterError("postbuild checkpoint requires a typed build")
+    return {
+        "candidate_identity": asdict(build.candidate_identity),
+        "anchor_identity": asdict(build.anchor_identity),
+        **{name: (None if getattr(build, name) is None
+                  else str(getattr(build, name)))
+           for name in _BUILD_PATH_FIELDS},
+        **{name: getattr(build, name) for name in _BUILD_SCALAR_FIELDS},
+    }
+
+
+def _build_from_projection(value: Mapping[str, Any]) -> controller.GpuSourceBuild:
+    required = {"candidate_identity", "anchor_identity",
+                *_BUILD_PATH_FIELDS, *_BUILD_SCALAR_FIELDS}
+    if not isinstance(value, Mapping) or set(value) != required:
+        raise GpuSourceAdapterError("postbuild projection has an inexact schema")
+    try:
+        return controller.GpuSourceBuild(
+            candidate_identity=gpu_source_proofs.BuildIdentity(
+                **value["candidate_identity"]),
+            anchor_identity=gpu_source_proofs.BuildIdentity(
+                **value["anchor_identity"]),
+            **{name: (None if value[name] is None else Path(value[name]))
+               for name in _BUILD_PATH_FIELDS},
+            **{name: value[name] for name in _BUILD_SCALAR_FIELDS},
+        )
+    except (TypeError, ValueError, controller.DiscoveryControllerError,
+            gpu_source_proofs.ProofError) as exc:
+        raise GpuSourceAdapterError(
+            "postbuild projection does not reconstruct a typed build") from exc
+
+
+def _postbuild_body(*, build: controller.GpuSourceBuild,
+                    identity: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "schema": POSTBUILD_CHECKPOINT_SCHEMA,
+        "authority": AUTHORITY,
+        "promotion_claim": False,
+        "operation_key": identity["operation_key"],
+        "manifest_sha256": identity["manifest_sha256"],
+        "build": _build_projection(build),
+    }
+
+
+def _validate_postbuild_checkpoint(
+        path: Path, identity: Mapping[str, Any], *,
+        expected_build: controller.GpuSourceBuild | None = None,
+) -> controller.GpuSourceBuild:
+    facts = path.stat(follow_symlinks=False)
+    if (path.is_symlink() or not path.is_file()
+            or facts.st_uid != os.geteuid() or facts.st_nlink != 1
+            or stat.S_IMODE(facts.st_mode) & 0o022):
+        raise GpuSourceAdapterError(
+            "postbuild checkpoint has unsafe file authority")
+    row = _read_json(path, "postbuild checkpoint")
+    required = {
+        "schema", "authority", "promotion_claim", "operation_key",
+        "manifest_sha256", "build", "receipt_sha256",
+    }
+    if (set(row) != required
+            or row.get("schema") != POSTBUILD_CHECKPOINT_SCHEMA
+            or row.get("authority") != AUTHORITY
+            or row.get("promotion_claim") is not False
+            or row.get("operation_key") != identity["operation_key"]
+            or row.get("manifest_sha256") != identity["manifest_sha256"]):
+        raise GpuSourceAdapterError("postbuild checkpoint identity changed")
+    build = _build_from_projection(row["build"])
+    if build.operation_key not in {None, identity["operation_key"]}:
+        raise GpuSourceAdapterError(
+            "postbuild checkpoint names another controller operation")
+    for name in ("anchor_build", "candidate_build", "common_loader_dir",
+                 "anchor_loader_dir", "candidate_loader_dir"):
+        current = getattr(build, name)
+        if current is not None and current.is_symlink():
+            raise GpuSourceAdapterError(
+                "postbuild checkpoint contains a symlinked build directory")
+    if (expected_build is not None
+            and _build_projection(build) != _build_projection(expected_build)):
+        raise GpuSourceAdapterError(
+            "reopened builder result differs from its postbuild checkpoint")
+    return build
+
+
+def _validate_evidence_policy(path: Path,
+                              identity: Mapping[str, Any]) -> None:
+    binding = _regular_binding(path, "evidence-policy.json")
+    facts = path.stat(follow_symlinks=False)
+    if facts.st_uid != os.geteuid() or stat.S_IMODE(facts.st_mode) & 0o022:
+        raise GpuSourceAdapterError(
+            "evidence policy has unsafe write authority")
+    try:
+        raw = path.read_bytes()
+        if hashlib.sha256(raw).hexdigest() != binding["sha256"]:
+            raise GpuSourceAdapterError("evidence policy changed while read")
+        policy = json.loads(
+            raw.decode("utf-8", "strict"),
+            parse_constant=lambda token: (_ for _ in ()).throw(
+                ValueError(f"non-finite JSON token {token}")),
+        )
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+        raise GpuSourceAdapterError("evidence policy is not strict JSON") from exc
+    if (not isinstance(policy, Mapping)
+            or policy.get("schema") != evidence.EXECUTION_POLICY_SCHEMA
+            or policy.get("manifest_sha256") != identity["manifest_sha256"]):
+        raise GpuSourceAdapterError("evidence policy identity changed")
+    try:
+        candidate = gpu_source_proofs.BuildIdentity(
+            **policy["candidate_build_identity"])
+        anchor = gpu_source_proofs.BuildIdentity(
+            **policy["anchor_build_identity"])
+    except (KeyError, TypeError, ValueError, gpu_source_proofs.ProofError) as exc:
+        raise GpuSourceAdapterError(
+            "evidence policy build identities are malformed") from exc
+    if candidate == anchor:
+        raise GpuSourceAdapterError("evidence policy reused one build identity")
+    references: list[evidence.BoundInputFile] = []
+    try:
+        for key in ("correctness_inputs", "candidate_rocprof_inputs",
+                    "anchor_rocprof_inputs"):
+            rows = policy[key]
+            if not isinstance(rows, list) or not rows:
+                raise TypeError(f"{key} is not a non-empty list")
+            references.extend(evidence._bound_from_dict(row) for row in rows)
+        shared = policy.get("shared_runtime")
+        if shared is not None:
+            if not isinstance(shared, Mapping) or set(shared) != {
+                    "measurement_binary", "runtime_receipt",
+                    "anchor_hip_library", "candidate_hip_library"}:
+                raise TypeError("shared runtime is incomplete")
+            references.extend(
+                evidence._bound_from_dict(shared[key]) for key in sorted(shared))
+        for bound in references:
+            evidence._verify_bound(bound)
+    except (KeyError, TypeError, ValueError,
+            evidence.EvidenceProducerError) as exc:
+        raise GpuSourceAdapterError(
+            "evidence policy bound artifact closure changed") from exc
+
+
+def _postbuild_wait_root(root: Path, identity: Mapping[str, Any],
+                         waits: Sequence[Mapping[str, Any]]) -> bool:
+    checkpoint = root / "postbuild-checkpoint.json"
+    policy = root / "evidence-policy.json"
+    if not waits:
+        return False
+    if not checkpoint.exists() and not checkpoint.is_symlink():
+        return False
+    if policy.exists() or policy.is_symlink():
+        _validate_evidence_policy(policy, identity)
+        if any(row.get("build_key") is None
+               or row.get("materialization_sha256") is None for row in waits):
+            return False
+    build = _validate_postbuild_checkpoint(checkpoint, identity)
+    if (build.build_key is not None
+            and not policy.exists() and not policy.is_symlink()):
+        return False
+    return all(
+        row.get("build_key") == build.build_key
+        and row.get("materialization_sha256") == build.materialization_sha256
+        for row in waits)
+
+
 def _is_resumable_wait_root(root: Path, identity: Mapping[str, Any]) -> bool:
-    allowed = {"intent.json", "source-manifest.json", "resource-waits"}
+    allowed = {
+        "intent.json", "source-manifest.json", "evidence-policy.json",
+        "postbuild-checkpoint.json", "resource-waits",
+    }
     if any(path.name not in allowed for path in root.iterdir()):
         return False
     manifest = root / "source-manifest.json"
@@ -222,7 +477,9 @@ def _is_resumable_wait_root(root: Path, identity: Mapping[str, Any]) -> bool:
             return False
         if binding["sha256"] != identity.get("manifest_sha256"):
             return False
-    _safe_wait_receipts(root, identity)
+    waits = _safe_wait_receipts(root, identity)
+    if waits and not _postbuild_wait_root(root, identity, waits):
+        return False
     # Intent plus the canonical prebuild manifest means the process stopped no
     # later than reservation.  With no proof, policy, or runner carrier,
     # re-entering the sealed builder/cache seam cannot repeat a GPU command.
@@ -260,12 +517,15 @@ def _is_resumable_stage_root(
     """
     allowed_root = {
         "intent.json", "source-manifest.json", "evidence-policy.json",
-        "resource-waits", "proof",
+        "postbuild-checkpoint.json", "resource-waits", "proof",
         "runner-plan.json", "runner",
         "reservation-release.json", "reservation-releases",
     }
     if any(path.name not in allowed_root for path in root.iterdir()):
         return False
+    checkpoint = root / "postbuild-checkpoint.json"
+    if checkpoint.exists() or checkpoint.is_symlink():
+        _validate_postbuild_checkpoint(checkpoint, identity)
     if schemas.content_hash(_lease_identity(lease)) != identity["lease_sha256"]:
         return False
     proof = root / "proof"
@@ -1080,6 +1340,32 @@ class GovernedGpuSourceAdapter:
             raise GpuSourceAdapterError("source builder changed protected production tree")
         if not isinstance(build, controller.GpuSourceBuild):
             raise GpuSourceAdapterError("source builder returned no typed GPU build")
+        operation_key = _operation_key(lease.get("operation_key"))
+        operation_root = self._root(operation_key)
+        expected_intent = _intent_body(
+            operation_key=operation_key, candidate=candidate,
+            authorization=authorization, lease=lease)
+        identity = {key: expected_intent[key] for key in (
+            "operation_key", "manifest_sha256", "authorization_sha256",
+            "lease_sha256")}
+        _validate_intent(
+            _read_json(operation_root / "intent.json", "operation intent"),
+            identity)
+        checkpoint = operation_root / "postbuild-checkpoint.json"
+        if checkpoint.exists() or checkpoint.is_symlink():
+            _validate_postbuild_checkpoint(
+                checkpoint, identity, expected_build=build)
+        else:
+            evidence._seal(
+                checkpoint, _postbuild_body(build=build, identity=identity))
+        waits = _safe_wait_receipts(operation_root, identity)
+        if waits:
+            latest = waits[-1]
+            if (latest.get("build_key") != build.build_key
+                    or latest.get("materialization_sha256") !=
+                        build.materialization_sha256):
+                raise GpuSourceAdapterError(
+                    "reopened build differs from its resource-wait identity")
         return build
 
     def screen(self, candidate: controller.PlannedCandidate, authorization: Any,
@@ -1274,6 +1560,18 @@ class GovernedGpuSourceAdapter:
             result_path = root / "screen-result.json"
             if not result_path.exists() and not result_path.is_symlink():
                 if _is_resumable_wait_root(root, identity):
+                    waits = _safe_wait_receipts(root, identity)
+                    if waits:
+                        paths = sorted((root / "resource-waits").iterdir())
+                        wait_path = paths[-1]
+                        return _recovery(
+                            "resource_wait",
+                            wait_receipt={
+                                **dict(waits[-1]["contention"]),
+                                "stage_receipt_path": str(wait_path.resolve()),
+                                "stage_receipt_sha256": hashlib.sha256(
+                                    wait_path.read_bytes()).hexdigest(),
+                            })
                     return _recovery("safe_to_start")
                 if _is_resumable_stage_root(
                         root, identity,
