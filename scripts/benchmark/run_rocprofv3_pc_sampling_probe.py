@@ -15,6 +15,7 @@ import io
 import json
 import math
 import os
+import re
 import subprocess
 import sys
 import time
@@ -33,11 +34,23 @@ HIPCC = Path("/opt/rocm/bin/hipcc")
 PROBE_SOURCE = REPO_ROOT / "scripts/benchmark/rocprofv3_pc_sampling_probe.cpp"
 MAX_TOTAL_SECONDS = 1800.0
 SCHEMA = "epyc.rvp.rocprofv3_pc_sampling_probe.v1"
-BASE_HOST_TRAP_FIELDS = {
+HOST_TRAP_FIELDS = (
     "Sample_Timestamp", "Exec_Mask", "Dispatch_Id", "Instruction",
     "Instruction_Comment", "Correlation_Id",
-}
-STALL_FIELDS = {"Wave_Issued_Instruction", "Instruction_Type", "Stall_Reason"}
+)
+STALL_FIELDS = ("Wave_Issued_Instruction", "Instruction_Type", "Stall_Reason")
+HOST_TRAP_WITH_STALL_FIELDS = HOST_TRAP_FIELDS + STALL_FIELDS
+PC_SAMPLING_OPTIONS = (
+    "--pc-sampling-beta-enabled", "--pc-sampling-method",
+    "--pc-sampling-unit", "--pc-sampling-interval",
+)
+CLI_OPTION_REFUSAL = re.compile(
+    r"\b(?:unrecognized (?:argument|arguments|option)|unknown option|"
+    r"invalid option|no such option)\b\s*:?\s*[\"']?"
+    r"(--pc-sampling-(?:beta-enabled|method|unit|interval))[\"']?(?:\s|$)",
+    re.IGNORECASE,
+)
+SHA256_HEX = re.compile(r"[0-9a-f]{64}")
 
 
 class ProbeContractError(RuntimeError):
@@ -64,6 +77,32 @@ def write_json_atomic(path: Path, value: dict[str, Any]) -> None:
         stream.flush()
         os.fsync(stream.fileno())
     os.replace(temporary, path)
+
+
+def canonical_json_bytes(value: Any) -> bytes:
+    return json.dumps(
+        value, sort_keys=True, separators=(",", ":"), ensure_ascii=True,
+        allow_nan=False).encode("ascii")
+
+
+def seal_receipt(value: dict[str, Any]) -> dict[str, Any]:
+    unsigned = dict(value)
+    unsigned.pop("receipt_sha256", None)
+    sealed = dict(unsigned)
+    sealed["receipt_sha256"] = hashlib.sha256(
+        canonical_json_bytes(unsigned)).hexdigest()
+    return sealed
+
+
+def validate_receipt_self_hash(value: dict[str, Any]) -> None:
+    observed = value.get("receipt_sha256")
+    if not isinstance(observed, str) or SHA256_HEX.fullmatch(observed) is None:
+        raise ProbeContractError("receipt_sha256 must be exact lowercase SHA-256")
+    unsigned = dict(value)
+    del unsigned["receipt_sha256"]
+    expected = hashlib.sha256(canonical_json_bytes(unsigned)).hexdigest()
+    if observed != expected:
+        raise ProbeContractError("receipt_sha256 does not match canonical receipt")
 
 
 def git_output(*args: str) -> str:
@@ -140,46 +179,67 @@ def prepared_plan(output_dir: Path) -> dict[str, Any]:
             "profile": profile_command(binary, output_dir / "raw"),
         },
         "claim_rule": "exclusive mi210_0 device claim required",
+        "residency_claim": (
+            "none; this probe does not bind both KFD and VRAM residency"),
         "interpretation_rule": (
             "classify only emitted records or an exact CLI refusal; documentation "
             "alone is not evidence of absence"),
     }
 
 
-def classify_cli_failure(stderr: str) -> str:
-    folded = stderr.casefold()
-    flag_named = "pc-sampling" in folded
-    exact_option_failure = any(token in folded for token in (
-        "unrecognized argument", "unrecognized option", "unknown option",
-        "invalid option", "no such option"))
-    return (
-        "pc_sampling_cli_unavailable_on_rocm_6_2"
-        if flag_named and exact_option_failure else
-        "inconclusive_profiler_failure")
+def is_exact_profile_invocation(command: Sequence[str]) -> bool:
+    if len(command) != 14:
+        return False
+    expected = profile_command(Path(command[13]), Path(command[11]))
+    return tuple(command) == tuple(expected)
+
+
+def classify_cli_failure(stderr: str, *, command: Sequence[str]) -> str:
+    if not is_exact_profile_invocation(command):
+        return "infrastructure_profiler_failure"
+    match = CLI_OPTION_REFUSAL.search(stderr)
+    if match is not None and match.group(1).casefold() in PC_SAMPLING_OPTIONS:
+        return "pc_sampling_cli_unavailable_on_rocm_6_2"
+    return "infrastructure_profiler_failure"
 
 
 def classify_host_trap_csv(text: str) -> dict[str, Any]:
+    if not isinstance(text, str) or not text:
+        raise ProbeContractError("PC-sampling CSV must not be blank")
+    if "\r" in text:
+        raise ProbeContractError("PC-sampling CSV must use exact LF newlines")
+    if not text.endswith("\n") or text.endswith("\n\n"):
+        raise ProbeContractError(
+            "PC-sampling CSV must have exactly one trailing LF")
     try:
-        reader = csv.DictReader(io.StringIO(text))
-        fieldnames = tuple(reader.fieldnames or ())
-        rows = list(reader)
+        parsed = list(csv.reader(io.StringIO(text), strict=True))
     except (csv.Error, UnicodeError) as exc:
         raise ProbeContractError("PC-sampling CSV is malformed") from exc
-    if not BASE_HOST_TRAP_FIELDS.issubset(fieldnames):
-        return {
-            "classification": "inconclusive_schema_mismatch",
-            "record_count": len(rows), "fields": list(fieldnames)}
+    if not parsed or any(not row for row in parsed):
+        raise ProbeContractError("PC-sampling CSV contains a blank row")
+    fieldnames = tuple(parsed[0])
+    if fieldnames not in (HOST_TRAP_FIELDS, HOST_TRAP_WITH_STALL_FIELDS):
+        raise ProbeContractError("PC-sampling CSV header is not an exact schema")
+    rows = parsed[1:]
+    for row in rows:
+        if len(row) != len(fieldnames):
+            raise ProbeContractError("PC-sampling CSV row width is not exact")
+        if any(not row[index].strip() for index in range(len(HOST_TRAP_FIELDS))):
+            raise ProbeContractError(
+                "PC-sampling CSV required base field is blank")
     if not rows:
         return {
             "classification": "inconclusive_no_samples",
             "record_count": 0, "fields": list(fieldnames)}
-    present_stall_fields = STALL_FIELDS.intersection(fieldnames)
+    present_stall_fields = (
+        STALL_FIELDS if fieldnames == HOST_TRAP_WITH_STALL_FIELDS else ())
     if not present_stall_fields:
         classification = "host_trap_hotspot_only_no_stall_reason_fields"
     else:
         populated = any(
-            str(row.get(field, "")).strip() not in {"", "0", "N/A", "None"}
-            for row in rows for field in present_stall_fields)
+            row[index].strip() not in {"", "0", "N/A", "None"}
+            for row in rows
+            for index in range(len(HOST_TRAP_FIELDS), len(fieldnames)))
         classification = (
             "unexpected_stall_reason_input_review_required" if populated else
             "host_trap_stall_reason_fields_unpopulated")
@@ -187,7 +247,7 @@ def classify_host_trap_csv(text: str) -> dict[str, Any]:
         "classification": classification,
         "record_count": len(rows),
         "fields": list(fieldnames),
-        "stall_fields": sorted(present_stall_fields),
+        "stall_fields": list(present_stall_fields),
     }
 
 
@@ -293,7 +353,7 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
         if profile_rc != 0:
             classification = classify_cli_failure(
                 (output_dir / "profile.stderr.txt").read_text(
-                    encoding="utf-8", errors="replace"))
+                    encoding="utf-8", errors="replace"), command=profile)
             analysis = {"classification": classification, "record_count": 0}
         else:
             candidates = [
@@ -335,7 +395,9 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
             "analysis": analysis,
             "claim_boundary": (
                 "This result describes only the captured in-window run. It does "
-                "not infer absent fields from documentation or from a missed window."),
+                "not infer absent fields from documentation or from a missed window. "
+                "Device sampling is telemetry only: this probe does not bind both "
+                "KFD and VRAM residency and makes no HIP-residency claim."),
             "device_claim": {"opened": opened},
         }
     except BaseException as exc:
@@ -364,6 +426,8 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
         payload["status"] = "failed"
         payload["failure"] = repr(failure)
     payload["artifacts"] = inventory(output_dir)
+    payload = seal_receipt(payload)
+    validate_receipt_self_hash(payload)
     write_json_atomic(output_dir / "receipt.json", payload)
     if failure is not None:
         raise failure

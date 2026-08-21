@@ -31,6 +31,10 @@ def csv_text(*, stall_fields: bool = False, populated: bool = False) -> str:
     return ",".join(fields) + "\n" + ",".join(values) + "\n"
 
 
+def profile_command() -> list[str]:
+    return MODULE.profile_command(Path("/tmp/probe"), Path("/tmp/raw"))
+
+
 class PcSamplingProbeContractTests(unittest.TestCase):
     def test_default_invocation_is_plan_only(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -71,21 +75,104 @@ class PcSamplingProbeContractTests(unittest.TestCase):
             populated["classification"],
             "unexpected_stall_reason_input_review_required")
 
-    def test_empty_or_wrong_schema_is_inconclusive(self):
-        empty = MODULE.classify_host_trap_csv(
+    def test_exact_header_only_is_inconclusive(self):
+        result = MODULE.classify_host_trap_csv(
             "Sample_Timestamp,Exec_Mask,Dispatch_Id,Instruction,"
             "Instruction_Comment,Correlation_Id\n")
-        self.assertEqual(empty["classification"], "inconclusive_no_samples")
-        wrong = MODULE.classify_host_trap_csv("a,b\n1,2\n")
-        self.assertEqual(wrong["classification"],
-                         "inconclusive_schema_mismatch")
+        self.assertEqual(result["classification"], "inconclusive_no_samples")
+
+    def test_blank_and_noncanonical_newlines_refuse(self):
+        for text in ("", "\n", csv_text().replace("\n", "\r\n"),
+                     csv_text().rstrip("\n"), csv_text() + "\n"):
+            with self.subTest(text=repr(text)):
+                with self.assertRaises(MODULE.ProbeContractError):
+                    MODULE.classify_host_trap_csv(text)
+
+    def test_blank_internal_row_refuses(self):
+        lines = csv_text().splitlines()
+        with self.assertRaisesRegex(MODULE.ProbeContractError, "blank row"):
+            MODULE.classify_host_trap_csv(
+                lines[0] + "\n\n" + lines[1] + "\n")
+
+    def test_row_width_must_be_exact(self):
+        for text in (csv_text().replace(",3\n", ",3,extra\n"),
+                     csv_text().replace(",3\n", "\n")):
+            with self.subTest(text=text):
+                with self.assertRaisesRegex(
+                        MODULE.ProbeContractError, "row width"):
+                    MODULE.classify_host_trap_csv(text)
+
+    def test_header_must_be_exact_and_unique(self):
+        fields = list(MODULE.HOST_TRAP_FIELDS)
+        variants = (
+            fields + ["Extra"],
+            fields[:-1],
+            fields[:-1] + [fields[0]],
+            [fields[1], fields[0], *fields[2:]],
+        )
+        for header in variants:
+            with self.subTest(header=header):
+                with self.assertRaisesRegex(
+                        MODULE.ProbeContractError, "exact schema"):
+                    MODULE.classify_host_trap_csv(",".join(header) + "\n")
+
+    def test_required_base_cells_must_be_populated(self):
+        for index in range(len(MODULE.HOST_TRAP_FIELDS)):
+            values = ["1", "255", "2", "s_waitcnt", "probe.cpp:1", "3"]
+            values[index] = ""
+            text = ",".join(MODULE.HOST_TRAP_FIELDS) + "\n"
+            text += ",".join(values) + "\n"
+            with self.subTest(index=index):
+                with self.assertRaisesRegex(
+                        MODULE.ProbeContractError, "base field"):
+                    MODULE.classify_host_trap_csv(text)
 
     def test_only_exact_option_failure_closes_on_rocm_6_2(self):
         self.assertEqual(MODULE.classify_cli_failure(
-            "error: unrecognized option --pc-sampling-beta-enabled"),
+            "error: unrecognized option --pc-sampling-beta-enabled",
+            command=profile_command()),
             "pc_sampling_cli_unavailable_on_rocm_6_2")
-        self.assertEqual(MODULE.classify_cli_failure("segmentation fault"),
-                         "inconclusive_profiler_failure")
+        self.assertEqual(MODULE.classify_cli_failure(
+            "segmentation fault", command=profile_command()),
+            "infrastructure_profiler_failure")
+
+    def test_unrelated_unknown_option_cannot_launder_into_unavailable(self):
+        diagnostic = (
+            "error: unknown option --foo; usage includes "
+            "--pc-sampling-beta-enabled")
+        self.assertEqual(MODULE.classify_cli_failure(
+            diagnostic, command=profile_command()),
+            "infrastructure_profiler_failure")
+
+    def test_nonexact_invocation_cannot_claim_unavailable(self):
+        command = profile_command()
+        command[7] = "2"
+        self.assertEqual(MODULE.classify_cli_failure(
+            "error: unknown option --pc-sampling-beta-enabled",
+            command=command), "infrastructure_profiler_failure")
+
+    def test_receipt_self_hash_is_canonical_and_tamper_evident(self):
+        first = MODULE.seal_receipt({"z": [1, 2], "a": {"b": True}})
+        second = MODULE.seal_receipt({"a": {"b": True}, "z": [1, 2]})
+        self.assertEqual(first["receipt_sha256"], second["receipt_sha256"])
+        MODULE.validate_receipt_self_hash(first)
+
+        tampered = dict(first)
+        tampered["z"] = [1, 3]
+        with self.assertRaisesRegex(
+                MODULE.ProbeContractError, "does not match"):
+            MODULE.validate_receipt_self_hash(tampered)
+
+        tampered["receipt_sha256"] = "A" * 64
+        with self.assertRaisesRegex(MODULE.ProbeContractError, "lowercase"):
+            MODULE.validate_receipt_self_hash(tampered)
+
+    def test_coherent_reseal_is_valid_but_changes_identity(self):
+        original = MODULE.seal_receipt({"analysis": {"record_count": 1}})
+        changed = MODULE.seal_receipt({"analysis": {"record_count": 2}})
+        MODULE.validate_receipt_self_hash(changed)
+        self.assertNotEqual(
+            original["receipt_sha256"], changed["receipt_sha256"])
 
     def test_static_governance_and_exact_arch_refusal(self):
         runner = RUNNER.read_text(encoding="utf-8")
@@ -95,6 +182,8 @@ class PcSamplingProbeContractTests(unittest.TestCase):
         self.assertIn("assert_source_identity", runner)
         self.assertIn("MAX_TOTAL_SECONDS = 1800.0", runner)
         self.assertIn('authority": "diagnostic_only"', runner)
+        self.assertIn("makes no HIP-residency claim", runner)
+        self.assertIn("validate_receipt_self_hash(payload)", runner)
         self.assertNotIn("torch", runner.casefold())
         self.assertIn("expected exact gfx90a", source)
         self.assertIn("pc_sampling_spin", source)

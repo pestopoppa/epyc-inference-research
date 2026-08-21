@@ -26,11 +26,11 @@ whole-stack rewrite. AutoKernel should nominate candidates in that shape.
 ## Isolated-to-end-to-end attenuation
 
 The primary [Kernel-Smith report](https://arxiv.org/html/2603.28342v2) and the
-merged PRs provide the second independent datum required by AK-PM-13:
+merged PRs provide the audited cases required by AK-PM-13:
 
 - SGLang: `4.78x` isolated at the target shape. Across the 24 end-to-end rows
   printed in the PR, relative latency change ranges from a `0.35%` regression to
-  a `1.75%` improvement; the paper's mostly-positive subset is `0.11%-1.75%`.
+  a `1.75%` improvement; the positive rows span `0.11%-1.75%`.
   The previously filed `0.28%-0.87%` range is only a subset, not the full table.
 - LMDeploy: `1.36x` isolated. The paper's six end-to-end rows are
   `1.85%-3.00%`; the previously filed `2.03%-3.00%` range omits the `1.85%`
@@ -38,12 +38,21 @@ merged PRs provide the second independent datum required by AK-PM-13:
 - DLBlas: `14.59x` isolated in the paper and no end-to-end deployment number.
   It cannot contribute an attenuation ratio.
 
-The conservative lesson is stronger than “roughly 100x”: a local speedup can
-shrink by tens to hundreds of times at system level, can regress in some
-workloads, and cannot be promoted without a measured full-stack wall share.
-AutoKernel's headline and production decision must therefore use cumulative
-end-to-end performance against frozen production; isolated speedup is supporting
-evidence only.
+For a metric-specific descriptive calculation, let `L = 1 - 1/s` be the local
+fractional runtime reduction implied by isolated speedup `s`, and let `E` be a
+reported positive end-to-end relative gain. Define attenuation `A = L / E`.
+SGLang has `L = 79.0795%`; against its positive end-to-end *latency-reduction*
+rows, `A = 45.19x-718.90x`. Its `-0.35%` regression has no positive attenuation
+factor. LMDeploy has `L = 26.4706%`; against its end-to-end *throughput-gain*
+rows, `A = 8.82x-14.31x`. These two ranges are not pooled because latency
+reduction and throughput gain are different metrics. They are a precise
+description of the reported rows, not a general constant.
+
+The conservative lesson is that a local speedup can shrink substantially at
+system level, can regress in some workloads, and cannot be promoted without a
+measured full-stack wall share. AutoKernel's headline and production decision
+must therefore use cumulative end-to-end performance against frozen production;
+isolated speedup is supporting evidence only.
 
 ## C5-14 harvest boundary
 
@@ -70,11 +79,16 @@ Do not harvest:
 
 ## C5-16 CDNA2 context supplied to every authoring round
 
-[CodegenBench](https://arxiv.org/html/2606.04023v1) controls the task while
-changing architecture. Its Table 2 reports Pass@1 `0.74 -> 0.48` for one model
-and `0.53 -> 0.00` for another between x86 BLAS and the thinly documented
-Sunway target. This is evidence that missing context can be expensive; it is not
-evidence that every non-x86 architecture is harder.
+[CodegenBench](https://arxiv.org/html/2606.04023v1) reports cross-suite/platform
+Pass@1 differences: for example, `0.74` on BLAS-x86 versus `0.48` on
+LeetSunway for one model, and `0.53` versus `0.00` for another. Those values do
+not hold the tasks or platform constant. The 20-task LeetSunway/LeetKunpeng
+comparison is a closer paired-task observation, but hardware, toolchain,
+documentation availability, and likely training exposure still co-vary. The
+paper therefore supports a documentation-scarcity *risk prior*, not a causal
+effect or a numeric documentation effect size. The gfx90a context-pack policy
+below remains a testable intervention: measure the same gfx90a authoring tasks
+with and without the pinned pack before claiming benefit.
 
 Every gfx90a authoring prompt must therefore carry a short, pinned context pack:
 
@@ -99,9 +113,10 @@ substitute a neighboring CDNA generation when CDNA2 documentation is silent.
 `scripts/benchmark/run_rocprofv3_pc_sampling_probe.py` defaults to plan-only.
 It cannot execute without both `--execute` and
 `--i-have-exclusive-gpu-window`; live mode then acquires the governed MI210
-claim, samples device residency during the run, binds a clean exact source
-commit, and enforces a 30-minute total ceiling. The companion HIP program
-refuses any part other than exact `gfx90a`.
+claim, records in-window device telemetry, binds a clean exact source commit,
+and enforces a 30-minute total ceiling. It does not bind both KFD and VRAM and
+therefore makes no HIP-residency claim. The companion HIP program refuses any
+part other than exact `gfx90a`.
 
 The only decision-grade outcomes are:
 
@@ -112,7 +127,11 @@ The only decision-grade outcomes are:
   `host_trap_stall_reason_fields_unpopulated`;
 - populated stall data: `unexpected_stall_reason_input_review_required`.
 
-All other failures and empty/malformed captures are inconclusive. No result may
-be inferred from documentation or from a sample taken outside the kernel window.
-The GPU was occupied while this package was authored, so no probe command was
-run.
+The CSV parser accepts only one of two exact ordered schemas and refuses blank,
+under-wide, over-wide, duplicate-header, unknown-header, or malformed input.
+CLI unavailability requires both the exact prepared invocation and a typed
+diagnostic naming the refused PC-sampling option; an unrelated unknown option is
+an infrastructure failure. Every receipt carries a canonical JSON self-hash.
+No result may be inferred from documentation or from a sample taken outside the
+kernel window. The GPU was occupied while this package was authored, so no live
+probe command was run.
