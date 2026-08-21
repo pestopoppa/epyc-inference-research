@@ -43,3 +43,18 @@ gfx90a agent. The CLI flag does not exist. GPA's input class is unobtainable at 
 
 Load-generator lesson: submit-and-sync EVERY op — an async backlog past the phase edge halved the
 realized wave frequency (measured, exactly −50% FFT peak) before the fix.
+
+## Follow-on 2026-08-21 (late): token-cadence phase-lock on REAL decode — BOUNDED NEGATIVE
+
+Two llama-bench tg-only decode runs (production b10125 binary, own libs), sampler concurrent:
+gemma-4-e2b Q8 @ **122.4 tok/s** and Qwen3.8-27B Q8 @ **30.5 tok/s**. In the settled steady window
+(>6 s past load start), averaged field vs energy-counter ground truth: **−0.86% and −0.84%** —
+**unchanged across a 4× cadence change, which is the decisive test: a phase effect must move with
+cadence.** The token cadence is essentially invisible in the dE/dt spectrum (0.4 dB at 122 Hz,
+−1.1 dB at 30 Hz): steady decode is back-to-back compute, near-DC at the token scale, so the
+modulation that could phase-lock barely exists. **Scope of the all-clear: STEADY, SETTLED decode
+only.** The measured hazards stand where the square waves put them — transitions (~190 ms delay,
+~4 s rise) and duty-cycled/bursty loads (request gaps, prefill/decode alternation), where dE/dt
+remains the only instrument. Ops note: this build's llama-cli is a chat REPL that ignores `-no-cnv`
+and floods stdout (0.9 GB of redraw in one hung run, orphaned llama-cli killed + verified);
+llama-bench is the right decode-load generator.

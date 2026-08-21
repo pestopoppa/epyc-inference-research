@@ -1,0 +1,27 @@
+{
+ "tag": "slow",
+ "tok_s": 30.451717,
+ "n_tok": 800,
+ "idle_W": 61.5,
+ "window_s": 48.3,
+ "true_mean_W": 273.99,
+ "avg_field_mean_W": 271.69,
+ "avg_field_std_W": 5.3,
+ "discrepancy_W": -2.3,
+ "discrepancy_pct": -0.84,
+ "discrepancy_per_octant_W": [
+  -7.65,
+  -2.3,
+  -1.83,
+  -0.99,
+  -1.23,
+  -1.83,
+  -1.84,
+  -0.75
+ ],
+ "discrepancy_octant_std_W": 2.08,
+ "fft_peak_hz": 2.1,
+ "expected_cadence_hz": 30.5,
+ "peak_vs_cadence_pct": -93.3,
+ "cadence_peak_over_floor_db": -1.1
+}
