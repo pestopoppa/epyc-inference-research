@@ -1,0 +1,18 @@
+{
+ "idle_W": 59.8,
+ "active_plateau_W": 224.1,
+ "avg_t_d_ms": 192.7,
+ "avg_t_r_10_90_ms": 4418.3,
+ "avg_t_f_90_10_ms": 3566.2,
+ "avg_settle_to_th10_after_off_ms": 3704.3,
+ "derived_t_d_ms": 12.0,
+ "derived_t_r_10_90_ms": 0.0,
+ "fft_500hz": {
+  "commanded": 500.0,
+  "peak_hz": 187.7,
+  "shift_pct": -62.5,
+  "peak_over_floor_db": 2.8,
+  "note": "BIN=2ms puts Nyquist at 250 Hz for the DERIVED trace - a 500 Hz command MUST alias here; the question is the signature"
+ },
+ "sampler_median_us": 107.3
+}

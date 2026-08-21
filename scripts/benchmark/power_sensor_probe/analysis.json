@@ -1,0 +1,37 @@
+{
+ "idle_W_derived": 59.6,
+ "active_W_derived_p90": 224.6,
+ "avg_field_t_d_ms": {
+  "median": 0.1,
+  "n": 8
+ },
+ "avg_field_t_r_10_90_ms": "th90 NEVER REACHED within 1 s active phase",
+ "avg_field_t_f_90_10_ms": "n/a",
+ "avg_field_peak_W_in_wave": 165.0,
+ "avg_field_reaches_th90": false,
+ "derived_t_d_ms": {
+  "median": 1.2,
+  "n": 8
+ },
+ "derived_t_r_10_90_ms": {
+  "median": 2.0,
+  "n": 8
+ },
+ "fft_10hz": {
+  "commanded_hz": 10.0,
+  "peak_hz": 9.9,
+  "peak_shift_pct": -1.0,
+  "peak_over_floor_db": 34.3
+ },
+ "fft_250hz": {
+  "commanded_hz": 250.0,
+  "peak_hz": 249.94,
+  "peak_shift_pct": -0.0,
+  "peak_over_floor_db": 32.2
+ },
+ "sampler": {
+  "median_us": 107.8,
+  "p99_us": 303.4,
+  "max_ms": 74.0
+ }
+}
