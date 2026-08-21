@@ -86,6 +86,16 @@ class CpuInferenceControllerTests(unittest.TestCase):
             kind = "tree" if path == calibration else "file"
             artifacts.append({"path": str(path), "kind": kind,
                               "sha256": C._hash_path(path, kind)})
+        seed_spec = C.campaign.CampaignSpec(
+            campaign_id=self.controller_id, candidate_id=candidate_id,
+            candidate_ref=f"reviewed-cpu-patch-{index}",
+            backend=C.campaign.BACKEND_CPU, blocks=2,
+            recipe_id="t1b.llama_cpu.llama_bench_prefill.v1",
+            model=str(files["model.gguf"]), reps=5,
+            journal_root=str(self.output / "campaign-journal"),
+            build_root=str(self.root / "campaign-builds"),
+            created_at="2026-08-21T00:00:00Z")
+        seed_record = seed_spec.to_dict()
         reviewed_spec = {
             "campaign_id": self.controller_id, "candidate_id": candidate_id,
             "candidate_ref": f"reviewed-cpu-patch-{index}",
@@ -105,7 +115,9 @@ class CpuInferenceControllerTests(unittest.TestCase):
             },
             "model": str(files["model.gguf"]), "reps": 5,
             "n_gen": 128, "n_prompt": 512, "fresh_pairs_per_block": 1,
-            "suite_seed": 1, "schedule_seed": 2, "holdout_selection_seed": 3,
+            "suite_seed": seed_record["suite_seed"],
+            "schedule_seed": f"{self.controller_id}/{C._RUNTIME_CREATED_AT}",
+            "holdout_selection_seed": seed_record["holdout_selection_seed"],
             "matched_experiment_id": None,
             "t0_ops": ["MUL_MAT", "MUL_MAT_ID"], "devices": [],
             "device_names": [], "device_index": 0, "n_gpu_layers": 99,
@@ -236,6 +248,8 @@ class CpuInferenceControllerTests(unittest.TestCase):
                              ["output mismatch"]]]}
         result_spec = json.loads(json.dumps(candidate["reviewed_result_spec"]))
         result_spec["created_at"] = "2026-08-21T00:00:00Z"
+        result_spec["schedule_seed"] = (
+            f"{result_spec['campaign_id']}/{result_spec['created_at']}")
         result_spec["hypothesis"]["authorization"]["authorized_at"] = (
             "2026-08-21T00:00:00Z")
         result_spec["hypothesis"]["authorization"]["ledger_seq"] = 7
@@ -645,8 +659,9 @@ class CpuInferenceControllerTests(unittest.TestCase):
         result = self._result(raw["candidates"][0],
                               C.campaign.STATE_DECIDED, keep=True)
         result["spec"]["recipe_id"] = "t1b.llama_cpu.llama_bench_decode.v1"
-        with self.assertRaisesRegex(C.CpuInferenceControllerError,
-                                    "selected full CPU operation"):
+        with self.assertRaisesRegex(
+                C.CpuInferenceControllerError,
+                "selected full CPU operation|suite_seed differs"):
             C.run_controller(config, runner=FakeRunner([(0, result)]))
 
         self.output = self.root / "durable-foreign-recipe-restart"
@@ -658,9 +673,74 @@ class CpuInferenceControllerTests(unittest.TestCase):
         self._rewrite_completed_receipt(
             config, lambda value: value["spec"].__setitem__(
                 "recipe_id", "t1b.llama_cpu.llama_bench_decode.v1"))
-        with self.assertRaisesRegex(C.CpuInferenceControllerError,
-                                    "selected full CPU operation"):
+        with self.assertRaisesRegex(
+                C.CpuInferenceControllerError,
+                "selected full CPU operation|suite_seed differs"):
             C.run_controller(config, runner=NeverRunner())
+
+    def test_real_campaign_spec_seed_contract_round_trips_result_and_restart(self):
+        path, raw = self._manifest(count=1)
+        candidate = raw["candidates"][0]
+        reviewed = candidate["reviewed_result_spec"]
+        parsed = C._parse_args(tuple(candidate["campaign_args"]))
+        real_spec = C.campaign.CampaignSpec(
+            campaign_id=self.controller_id,
+            candidate_id=candidate["candidate_id"],
+            candidate_ref=parsed["--candidate"],
+            backend=C.campaign.BACKEND_CPU,
+            blocks=int(parsed["--blocks"]), recipe_id=parsed["--recipe"],
+            model=parsed["--model"], reps=int(parsed["--reps"]),
+            journal_root=parsed["--journal-root"],
+            build_root=str(self.root / "real-campaign-builds"),
+            created_at="2026-08-21T01:02:03Z")
+        real_record = real_spec.to_dict()
+        self.assertIs(type(real_record["suite_seed"]), int)
+        self.assertIs(type(real_record["schedule_seed"]), str)
+        self.assertIs(type(real_record["holdout_selection_seed"]), str)
+        self.assertEqual(reviewed["suite_seed"], real_record["suite_seed"])
+        self.assertEqual(reviewed["holdout_selection_seed"],
+                         real_record["holdout_selection_seed"])
+        runtime_hypothesis = json.loads(json.dumps(reviewed["hypothesis"]))
+        runtime_hypothesis["authorization"]["authorized_at"] = (
+            "2026-08-21T01:02:03Z")
+        runtime_hypothesis["authorization"]["ledger_seq"] = 1
+        self.assertEqual(
+            C._normalize_result_spec(real_record | {
+                "hypothesis": runtime_hypothesis,
+            }, reviewed=False)["schedule_seed"],
+            reviewed["schedule_seed"])
+
+        config = C.ControllerManifest.load(path)
+        result = self._result(candidate, C.campaign.STATE_DECIDED, keep=True)
+        state = C.run_controller(config, runner=FakeRunner([(0, result)]))
+        self.assertTrue(state["complete"])
+        restarted = C.run_controller(config, runner=NeverRunner())
+        self.assertEqual(restarted["state_sha256"], state["state_sha256"])
+
+    def test_campaign_spec_seed_wrong_types_refuse_manifest_and_result(self):
+        wrong = (
+            ("suite_seed", "1", "suite_seed"),
+            ("schedule_seed", 1, "schedule/holdout"),
+            ("holdout_selection_seed", 1, "schedule/holdout"),
+        )
+        for field, value, message in wrong:
+            with self.subTest(plane="manifest", field=field):
+                self.output = self.root / f"durable-seed-manifest-{field}"
+                path, raw = self._manifest(count=1)
+                raw["candidates"][0]["reviewed_result_spec"][field] = value
+                self._write_manifest(path, raw)
+                with self.assertRaisesRegex(C.CpuInferenceControllerError, message):
+                    C.ControllerManifest.load(path)
+
+            with self.subTest(plane="result", field=field):
+                self.output = self.root / f"durable-seed-result-{field}"
+                path, raw = self._manifest(count=1)
+                config = C.ControllerManifest.load(path)
+                result = self._result(
+                    raw["candidates"][0], C.campaign.STATE_DECIDED, keep=True)
+                result["spec"][field] = value
+                with self.assertRaisesRegex(C.CpuInferenceControllerError, message):
+                    C.run_controller(config, runner=FakeRunner([(0, result)]))
 
     def test_t0_could_not_check_requires_normalized_nonempty_reasons(self):
         for reason in ("", " ", " padded "):
