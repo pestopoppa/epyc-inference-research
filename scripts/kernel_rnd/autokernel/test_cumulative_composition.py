@@ -125,19 +125,74 @@ def _correctness(pair: C.CumulativeBuildPair, passed: bool = True) \
     )
 
 
+def _write_receipt(path: Path, body: dict, native_key: str) -> str:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    body.pop(native_key, None)
+    body[native_key] = C._sha(body)
+    raw = (json.dumps(body, sort_keys=True, indent=2) + "\n").encode()
+    path.write_bytes(raw)
+    return hashlib.sha256(raw).hexdigest()
+
+
+def _exact_carrier(effect: float) -> dict:
+    anchor_total = 1_000_000
+    candidate_total = round(anchor_total * (1.0 - effect))
+    derived = (anchor_total - candidate_total) / anchor_total
+    comparison = {
+        "candidate_routes": {
+            "candidate": {"total_duration_ns": candidate_total, "calls": 9}},
+        "anchor_routes": {
+            "anchor": {"total_duration_ns": anchor_total, "calls": 9}},
+        "candidate_total_duration_ns": candidate_total,
+        "anchor_total_duration_ns": anchor_total,
+        "relative_improvement_fraction": derived,
+        "direction": ("improved" if derived > 0 else
+                      "regressed" if derived < 0 else "neutral"),
+        "all_candidate_routes_present": True,
+        "all_anchor_routes_present": True,
+        "statistic": "sum_exact_route_total_duration_ns",
+    }
+    return {
+        "schema": "epyc.autokernel.gpu_kernel_attribution_pair.v2",
+        "authority": "nonpromotable_candidate_only_discovery",
+        "non_promotable": True, "promotion_claim": False,
+        "exact_duration_comparison": comparison,
+    }
+
+
 def _comparison(pair: C.CumulativeBuildPair, correctness: C.FullCorrectness,
                 route: float = .01, graphs: float = .01) \
         -> C.IncrementalComparison:
+    root = Path(tempfile.mkdtemp(prefix="autokernel-comparison-")) / \
+        pair.operation_key
+    exact_path = root / "proof/attribution-pair.json"
+    off_path = root / "runner/s1/measurement-graphs-off/result.json"
+    on_path = root / "runner/s1/target-runtime-graphs-on/result.json"
+    exact = _exact_carrier(route)
+    off = _measurement(
+        pair=pair, anchor=pair.anchor.build_identity, graph_mode="off",
+        factor="source_patch", effect=route)
+    on = _measurement(
+        pair=pair, anchor=pair.anchor.build_identity, graph_mode="on",
+        factor="source_patch", effect=graphs)
+    exact_sha = _write_receipt(exact_path, exact, "receipt_sha256")
+    off_sha = _write_receipt(off_path, off, "result_sha256")
+    on_sha = _write_receipt(on_path, on, "result_sha256")
     return C.IncrementalComparison.create(
         pair, correctness,
-        exact_route_receipt_sha256=_h(("route", pair.operation_key)),
-        graphs_off_receipt_sha256=_h(("graphs-off", pair.operation_key)),
+        exact_route_receipt_sha256=exact_sha,
+        exact_route_receipt_path=exact_path,
+        graphs_off_receipt_sha256=off_sha,
+        graphs_off_receipt_path=off_path,
         expected_route_set_sha256=_h(("route-set", pair.operation_key)),
-        graphs_on_receipt_sha256=_h(("graphs", pair.operation_key)),
+        graphs_on_receipt_sha256=on_sha,
+        graphs_on_receipt_path=on_path,
         target_runtime_frame_sha256=_h(("frame", pair.operation_key)),
-        exact_route_effect_fraction=route,
-        graphs_off_effect_fraction=route,
-        graphs_on_effect_fraction=graphs,
+        exact_route_effect_fraction=
+            exact["exact_duration_comparison"][
+                "relative_improvement_fraction"],
+        graphs_off_effect_fraction=off["median_relative"],
+        graphs_on_effect_fraction=on["median_relative"],
     )
 
 
@@ -173,6 +228,14 @@ def _performance(
         cumulative_on: float = .02,
 ) -> tuple[C.CumulativePerformance, C.CumulativePerformanceRef]:
     off_frame, on_frame = _h("matched-off-frame"), _h("matched-on-frame")
+    production_path = (comparison.operation_root / "runner" /
+                       comparison.repetition /
+                       "cumulative-vs-production-graphs-on/result.json")
+    production_body = _measurement(
+        pair=pair, anchor=_production().build_identity, graph_mode="on",
+        factor="cumulative_production", effect=cumulative_on)
+    production_sha = _write_receipt(
+        production_path, production_body, "result_sha256")
     performance = C.CumulativePerformance.create(
         plan, pair, correctness, comparison,
         frozen_production=_production(
@@ -182,13 +245,15 @@ def _performance(
         runtime_config_sha256=_h("runtime-config"),
         protocol_frame_sha256=_h("protocol-frame"),
         metric="decode_tokens_per_s", metric_direction="higher_better",
-        cumulative_graphs_on_effect_fraction=cumulative_on,
-        production_graphs_on_receipt_sha256=_h(("production", "on")),
+        cumulative_graphs_on_effect_fraction=
+            production_body["median_relative"],
+        production_graphs_on_receipt_sha256=production_sha,
+        production_graphs_on_receipt_path=production_path,
         incremental_graphs_off_frame_sha256=off_frame,
         incremental_graphs_on_frame_sha256=on_frame,
         production_graphs_on_frame_sha256=on_frame)
     reference = C.seal_cumulative_performance(
-        Path(directory) / f"performance-{plan.operation_key}.json",
+        comparison.operation_root / "cumulative-performance.json",
         performance)
     return performance, reference
 
@@ -220,11 +285,20 @@ def _measurement(
         "split_mode": "layer", "no_kv_offload": False, "poll": 50,
         "n_prompt": 0, "n_gen": 128, "flash_attn": 1,
     }
+    baseline_center = 1_000_000.0
+    candidate_samples = [baseline_center * (1.0 + effect)]
+    relative_effects = [
+        (value - baseline_center) / baseline_center
+        for value in candidate_samples]
     body = {
         "schema": "epyc.autokernel.gpu_candidate_only_screen.v2",
+        "authority": "nonpromotable_candidate_only_discovery",
         "promotion_claim": False, "non_promotable": True,
         "hip_residency_proved": True, "runtime_graphs": graph_mode,
-        "median_relative": effect,
+        "baseline_center": baseline_center,
+        "candidate_samples": candidate_samples,
+        "relative_effects": relative_effects,
+        "median_relative": relative_effects[0],
         "frame": {
             "backend": "llama_gpu", "recipe": "tg128-ngl99",
             "metric": "decode_tokens_per_s",
@@ -242,7 +316,6 @@ def _measurement(
         "candidate_runs": [{"raw_row": raw_row}],
         "candidate_invocations": 9, "candidate_processes": 1,
     }
-    body["result_sha256"] = C._sha(body)
     return body
 
 
@@ -416,6 +489,9 @@ class CumulativeCompositionTests(unittest.TestCase):
                 "incremental_measured")
             performance = _record_performance(
                 ledger, directory, plan, pair, correct, comparison)
+            self.assertEqual(
+                C.CompositionLedger(path).load()["pending"]["stage"],
+                "measured")
             final = C.CompositionLedger(path).finalize(plan.operation_key)
             self.assertIsNone(final["pending"])
             self.assertEqual(final["scientific_attempts"], 1)
@@ -437,6 +513,100 @@ class CumulativeCompositionTests(unittest.TestCase):
                 [row.result_sha256 for row in second.replications])
             with self.assertRaisesRegex(C.CompositionError, "already considered"):
                 _plan(plan.candidate, second, attempt=2)
+
+    def test_effect_summaries_are_rederived_and_alias_carriers_refuse(self):
+        plan = _plan(_authority(), _lever(1))
+        pair = _build_pair(plan)
+        correct = _correctness(pair)
+        comparison = _comparison(pair, correct)
+
+        changed = comparison.to_dict()
+        changed["graphs_on_effect_fraction"] += .01
+        changed["result_sha256"] = C._sha({
+            key: value for key, value in changed.items()
+            if key != "result_sha256"})
+        with self.assertRaisesRegex(
+                C.CompositionError, "incremental comparison identity"):
+            C.IncrementalComparison.from_dict(changed)
+
+        original_path = Path(comparison.graphs_on_receipt_ref.path)
+        alias_path = (comparison.operation_root / "copied" / "runner/s1" /
+                      "target-runtime-graphs-on/result.json")
+        alias_path.parent.mkdir(parents=True)
+        alias_path.write_bytes(original_path.read_bytes())
+        aliased = comparison.to_dict()
+        aliased["graphs_on_receipt_ref"]["path"] = str(alias_path)
+        aliased["result_sha256"] = C._sha({
+            key: value for key, value in aliased.items()
+            if key != "result_sha256"})
+        with self.assertRaisesRegex(
+                C.CompositionError, "locations or hashes"):
+            C.IncrementalComparison.from_dict(aliased)
+
+        carrier = comparison.graphs_on_receipt_ref.load()
+        carrier["median_relative"] += .01
+        changed_sha = _write_receipt(
+            original_path, carrier, "result_sha256")
+        laundered = comparison.to_dict()
+        laundered["graphs_on_receipt_sha256"] = changed_sha
+        laundered["graphs_on_receipt_ref"]["sha256"] = changed_sha
+        laundered["graphs_on_effect_fraction"] = carrier["median_relative"]
+        laundered["result_sha256"] = C._sha({
+            key: value for key, value in laundered.items()
+            if key != "result_sha256"})
+        with self.assertRaisesRegex(
+                C.CompositionError, "not derived from samples"):
+            C.IncrementalComparison.from_dict(laundered)
+
+    def test_restart_rederives_pending_and_terminal_cumulative_effects(self):
+        plan = _plan(_authority(), _lever(1))
+        pair = _build_pair(plan)
+        correct = _correctness(pair)
+        comparison = _comparison(pair, correct)
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = Path(directory) / "state.json"
+            ledger = C.CompositionLedger(state_path)
+            ledger.create(plan.anchor)
+            ledger.begin(plan)
+            ledger.record_build_pair(pair)
+            ledger.record_correctness(correct)
+            ledger.record_comparison(comparison)
+            performance = _record_performance(
+                ledger, directory, plan, pair, correct, comparison)
+            self.assertEqual(
+                C.CompositionLedger(state_path).load()["pending"]["stage"],
+                "measured")
+
+            changed = performance.to_dict()
+            changed["cumulative_graphs_on_effect_fraction"] += .01
+            changed["result_sha256"] = C._sha({
+                key: value for key, value in changed.items()
+                if key != "result_sha256"})
+            with self.assertRaisesRegex(
+                    C.CompositionError,
+                    "measurement carriers changed"):
+                C.CumulativePerformance.from_dict(changed)
+
+            changed = performance.to_dict()
+            changed["incremental_graphs_on_effect_fraction"] += .01
+            changed["result_sha256"] = C._sha({
+                key: value for key, value in changed.items()
+                if key != "result_sha256"})
+            with self.assertRaisesRegex(
+                    C.CompositionError,
+                    "measurement carriers changed"):
+                C.CumulativePerformance.from_dict(changed)
+
+            ledger.finalize(plan.operation_key)
+            self.assertIsNone(C.CompositionLedger(state_path).load()["pending"])
+            production_path = Path(
+                performance.production_graphs_on_receipt_ref.path)
+            production = performance.production_graphs_on_receipt_ref.load()
+            production["candidate_samples"][0] *= 1.01
+            _write_receipt(production_path, production, "result_sha256")
+            with self.assertRaisesRegex(
+                    C.CompositionError, "measurement receipt bytes changed"):
+                C.CompositionLedger(state_path).load()
 
     def test_correctness_failure_rolls_back_but_preserves_isolated_science(self):
         first, second = _lever(1), _lever(2)
@@ -568,15 +738,16 @@ class CumulativeCompositionTests(unittest.TestCase):
         comparison = _comparison(pair, correct)
         production_identity = replace(
             _identity("production"), source_commit=BASE)
-        incremental_off = _measurement(
-            pair=pair, anchor=pair.anchor.build_identity, graph_mode="off",
-            factor="source_patch", effect=.02)
-        incremental_on = _measurement(
-            pair=pair, anchor=pair.anchor.build_identity, graph_mode="on",
-            factor="source_patch", effect=.01)
+        incremental_off = comparison.graphs_off_receipt_ref.load()
+        incremental_on = comparison.graphs_on_receipt_ref.load()
         production_on = _measurement(
             pair=pair, anchor=production_identity, graph_mode="on",
             factor="cumulative_production", effect=.03)
+        production_path = (
+            comparison.operation_root / "runner" / comparison.repetition /
+            "cumulative-vs-production-graphs-on/result.json")
+        production_sha = _write_receipt(
+            production_path, production_on, "result_sha256")
         production_descriptor = C._measurement_descriptor(
             production_on, graph_mode="on", candidate=pair.candidate,
             anchor_identity=production_identity,
@@ -585,7 +756,7 @@ class CumulativeCompositionTests(unittest.TestCase):
             frame_sha256=production_descriptor["anchor_frame_sha256"],
             protocol_sha256=
                 production_descriptor["protocol_frame_sha256"],
-            measurement_receipt_sha256=_h("production-on-file"),
+            measurement_receipt_sha256=production_sha,
             model_sha256=production_descriptor["model_sha256"],
             workload_sha256=_h("deployment-workload-file"),
             runtime_config_sha256=_h("deployment-runtime-file"),
@@ -599,7 +770,8 @@ class CumulativeCompositionTests(unittest.TestCase):
             incremental_graphs_off=incremental_off,
             incremental_graphs_on=incremental_on,
             production_graphs_on=production_on,
-            production_graphs_on_receipt_sha256=_h("production-on-file"))
+            production_graphs_on_receipt_sha256=production_sha,
+            production_graphs_on_receipt_path=production_path)
         self.assertTrue(performance.promotion_eligible)
         self.assertEqual(performance.workload_sha256,
                          _h("deployment-workload-file"))
@@ -620,7 +792,8 @@ class CumulativeCompositionTests(unittest.TestCase):
                 incremental_graphs_off=incremental_off,
                 incremental_graphs_on=incremental_on,
                 production_graphs_on=mixed,
-                production_graphs_on_receipt_sha256=_h("production-on-file"))
+                production_graphs_on_receipt_sha256=production_sha,
+                production_graphs_on_receipt_path=production_path)
 
         mismatched = copy.deepcopy(production_on)
         mismatched["frame"]["model_sha256"] = _h("different-model")
@@ -631,7 +804,8 @@ class CumulativeCompositionTests(unittest.TestCase):
                 incremental_graphs_off=incremental_off,
                 incremental_graphs_on=incremental_on,
                 production_graphs_on=mismatched,
-                production_graphs_on_receipt_sha256=_h("production-on-file"))
+                production_graphs_on_receipt_sha256=production_sha,
+                production_graphs_on_receipt_path=production_path)
 
         protocol_changed = copy.deepcopy(production_on)
         protocol_changed["frame"]["cpu_list"] = "176-183"
@@ -642,8 +816,8 @@ class CumulativeCompositionTests(unittest.TestCase):
                 incremental_graphs_off=incremental_off,
                 incremental_graphs_on=incremental_on,
                 production_graphs_on=protocol_changed,
-                production_graphs_on_receipt_sha256=
-                    _h("production-on-file"))
+                production_graphs_on_receipt_sha256=production_sha,
+                production_graphs_on_receipt_path=production_path)
 
         observed_runtime_changed = C.FrozenProductionAuthority.create(
             production_commit=production.production_commit,
@@ -675,8 +849,8 @@ class CumulativeCompositionTests(unittest.TestCase):
                 incremental_graphs_off=incremental_off,
                 incremental_graphs_on=incremental_on,
                 production_graphs_on=production_on,
-                production_graphs_on_receipt_sha256=
-                    _h("production-on-file"))
+                production_graphs_on_receipt_sha256=production_sha,
+                production_graphs_on_receipt_path=production_path)
 
         candidate_changed = copy.deepcopy(production_on)
         replacement_identity = _identity("replacement-candidate")
@@ -707,8 +881,8 @@ class CumulativeCompositionTests(unittest.TestCase):
                 incremental_graphs_off=incremental_off,
                 incremental_graphs_on=incremental_on,
                 production_graphs_on=candidate_changed,
-                production_graphs_on_receipt_sha256=
-                    _h("production-on-file"))
+                production_graphs_on_receipt_sha256=production_sha,
+                production_graphs_on_receipt_path=production_path)
 
         with self.assertRaisesRegex(
                 C.CompositionError, "three distinct runs"):
@@ -719,7 +893,8 @@ class CumulativeCompositionTests(unittest.TestCase):
                 incremental_graphs_on=incremental_on,
                 production_graphs_on=production_on,
                 production_graphs_on_receipt_sha256=
-                    comparison.graphs_on_receipt_sha256)
+                    comparison.graphs_on_receipt_sha256,
+                production_graphs_on_receipt_path=production_path)
 
     def test_static_frozen_comparator_exact_schema_and_tamper_refusal(self):
         identity = replace(_identity("production-static"), source_commit=BASE)
@@ -755,6 +930,7 @@ class CumulativeCompositionTests(unittest.TestCase):
         correct = _correctness(pair)
         comparison = _comparison(pair, correct)
         with tempfile.TemporaryDirectory() as directory:
+            comparison = _comparison(pair, correct)
             performance, reference = _performance(
                 directory, plan, pair, correct, comparison)
             reopened, digest = C.load_cumulative_performance(
@@ -774,6 +950,7 @@ class CumulativeCompositionTests(unittest.TestCase):
                     path, expected_file_sha256=reference.sha256)
 
         with tempfile.TemporaryDirectory() as directory:
+            comparison = _comparison(pair, correct)
             performance, reference = _performance(
                 directory, plan, pair, correct, comparison)
             path = Path(reference.path)
