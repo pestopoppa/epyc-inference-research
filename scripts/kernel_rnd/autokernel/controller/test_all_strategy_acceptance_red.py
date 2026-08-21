@@ -2299,6 +2299,10 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
                         screener=screen, lease=TD.Lease())
                 result = C.DurableState(config.output_root).load()
                 self.assertEqual(result["iterations"][0]["status"], disposition)
+                self.assertNotIn(
+                    "composition_disposition", result["iterations"][0])
+                self.assertNotIn("cumulative_composition_terminal", result)
+                self.assertNotIn("cumulative_performance", result)
                 self.assertEqual((planner.calls, screen.executor_calls), (1, 1))
                 self.assertEqual(screen.calls, 2)
                 self.assertNotIn("inflight", result)

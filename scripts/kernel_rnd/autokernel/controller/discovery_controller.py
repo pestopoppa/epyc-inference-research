@@ -5625,9 +5625,10 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                     precompute_refused = True
                 except GovernedStageRefusal as exc:
                     row = dict(inflight["row"])
-                    _bind_cumulative_terminal_row(
-                        state, row, _terminalize_cumulative_refusal(
-                            config, item, exc))
+                    if item.composition_plan is not None:
+                        _bind_cumulative_terminal_row(
+                            state, row, _terminalize_cumulative_refusal(
+                                config, item, exc))
                     _record_governed_stage_refusal(state, row, exc)
                     store.save(state, exc.disposition)
                     precompute_refused = True
