@@ -1713,8 +1713,8 @@ class GovernedGpuSourceAdapter:
             operation_key=operation_key, candidate=candidate,
             authorization=authorization, lease=lease)
         identity = {key: expected_intent[key] for key in (
-            "operation_key", "manifest_sha256", "authorization_sha256",
-            "lease_sha256")}
+            "operation_key", "manifest_sha256", "composition_plan_sha256",
+            "authorization_sha256", "lease_sha256")}
         _validate_intent(
             _read_json(operation_root / "intent.json", "operation intent"),
             identity)

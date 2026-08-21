@@ -84,7 +84,7 @@ def _source_identity(build: Path, commit: str) -> dict[str, str]:
         "hip_library_sha256": gpu.sha256_file(
             (build / "bin/libggml-hip.so").resolve(strict=True)),
         "config_sha256": gpu.sha256_file(build / "CMakeCache.txt"),
-        "linkage_sha256": hashlib.sha256((commit + "-linkage").encode()).hexdigest(),
+        "linkage_sha256": gpu._source_linkage_sha(build),
     }
 
 
@@ -285,6 +285,54 @@ class TestGpuDiscoveryBuildIdentity(unittest.TestCase):
                 for option in action.option_strings}
             self.assertFalse(any("source-build-identity" in option
                                  for option in parser_options))
+
+    def test_frozen_v9_bin_only_runtime_uses_typed_authority_and_live_linkage(self) -> None:
+        build = Path("/mnt/raid0/llm/llama.cpp/build-hip")
+        self.assertTrue((build / "bin/llama-bench").is_file())
+        self.assertFalse((build / "CMakeCache.txt").exists())
+        identity = gpu.cumulative_composition.gpu_source_proofs.BuildIdentity(
+            source_commit=gpu.SOURCE_COMMIT,
+            source_sha256=(gpu.cumulative_composition.
+                           FROZEN_PRODUCTION_SOURCE_SHA256),
+            binary_sha256=gpu.sha256_file(build / "bin/llama-bench"),
+            hip_library_sha256=gpu.sha256_file(
+                (build / "bin/libggml-hip.so").resolve(strict=True)),
+            config_sha256=hashlib.sha256(
+                b"sealed-external-v9-config").hexdigest(),
+            linkage_sha256=gpu._source_linkage_sha(build))
+        def authority(current):
+            return gpu.cumulative_composition.FrozenProductionAuthority.create(
+                production_commit=gpu.SOURCE_COMMIT,
+                build_identity=current,
+                runtime_snapshot_sha256="1" * 64,
+                comparator_receipt_sha256="2" * 64,
+                graphs_mode="graphs_on", frame_sha256="3" * 64,
+                measurement_protocol_sha256="4" * 64,
+                measurement_receipt_sha256="5" * 64,
+                model_sha256="6" * 64, workload_sha256="7" * 64,
+                runtime_config_sha256="8" * 64,
+                metric="tokens_per_second", direction="higher_is_better")
+        raw = dict(identity.__dict__)
+        args = argparse.Namespace(
+            factor="cumulative_production",
+            _sealed_anchor_source_build_identity=raw,
+            _frozen_production_authority=authority(identity).to_dict())
+        sealed = gpu._sealed_source_build_identity(
+            args, arm="anchor", build=build, observed={"arm": "anchor"})
+        self.assertEqual(sealed["linkage_sha256"], gpu._source_linkage_sha(build))
+
+        del args._frozen_production_authority
+        with self.assertRaisesRegex(RuntimeError, "comparator authority"):
+            gpu._sealed_source_build_identity(
+                args, arm="anchor", build=build, observed={})
+
+        fake = gpu.cumulative_composition.gpu_source_proofs.BuildIdentity(
+            **{**raw, "linkage_sha256": "f" * 64})
+        args._sealed_anchor_source_build_identity = dict(fake.__dict__)
+        args._frozen_production_authority = authority(fake).to_dict()
+        with self.assertRaisesRegex(RuntimeError, "live artifact differs"):
+            gpu._sealed_source_build_identity(
+                args, arm="anchor", build=build, observed={})
 
     def test_preflight_records_cold_serialization_for_over_budget_cadence(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

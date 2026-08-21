@@ -19,7 +19,11 @@ from . import discovery_deployment_factory as F
 from . import discovery_controller as C
 
 
-def frozen_production_comparator(root: Path) -> Path:
+def frozen_production_comparator(
+        root: Path, *, production_path: Path | None = None) -> Path:
+    production_path = (
+        F.deployment.FROZEN_PRODUCTION_PATH
+        if production_path is None else production_path)
     workload = {
         "schema": "epyc.autokernel.discovery_workload.v1",
         "workload": "decode_tg128", "prompt_tokens": 0,
@@ -36,14 +40,23 @@ def frozen_production_comparator(root: Path) -> Path:
     digest = lambda value: hashlib.sha256(
         (json.dumps(value, sort_keys=True, indent=2) + "\n").encode()
     ).hexdigest()
+    production_build = production_path / "build-hip"
+    _files, runtime_semantics = F._production_runtime_snapshot(production_path)
     identity = F.gpu_source_proofs.BuildIdentity(
         F.deployment.FROZEN_PRODUCTION_HEAD,
-        "1" * 64, "2" * 64, "3" * 64, "4" * 64, "5" * 64)
+        F.cumulative_composition.FROZEN_PRODUCTION_SOURCE_SHA256,
+        F._digest_regular(
+            production_build / "bin/llama-bench", "fixture production binary"),
+        F._digest_regular(
+            (production_build / "bin/libggml-hip.so").resolve(strict=True),
+            "fixture production HIP library"),
+        hashlib.sha256(b"externally sealed v9 configuration").hexdigest(),
+        F.discovery_static_registry._linkage_sha(production_build))
     comparator = F.cumulative_composition.FrozenProductionComparator.create(
         build_identity=identity, build_receipt_sha256="6" * 64,
         linkage_receipt_sha256="7" * 64,
         runtime_receipt_sha256="8" * 64,
-        runtime_snapshot_sha256="9" * 64,
+        runtime_snapshot_sha256=F.schemas.content_hash(runtime_semantics),
         measurement_receipt_sha256="a" * 64,
         model_sha256=F._digest_regular(F._SITE_MODEL, "fixture model"),
         workload_sha256=digest(workload), runtime_config_sha256=digest(runtime),
@@ -502,8 +515,8 @@ class DeploymentFactoryTests(unittest.TestCase):
                     ).hexdigest(),
                     config_sha256=hashlib.sha256(
                         (build_root / "CMakeCache.txt").read_bytes()).hexdigest(),
-                    linkage_sha256=hashlib.sha256(
-                        (commit + "-linkage").encode()).hexdigest())
+                    linkage_sha256=F.discovery_static_registry._linkage_sha(
+                        build_root))
             build = SimpleNamespace(
                 operation_key="d" * 64,
                 anchor_build=anchor_build,
@@ -687,6 +700,8 @@ class DeploymentFactoryTests(unittest.TestCase):
                 shutil.copyfile("/bin/true", binary_dir / name)
             if flavor == "build-hip":
                 shutil.copyfile("/bin/true", binary_dir / "libggml-hip.so.0")
+                (binary_dir / "libggml-hip.so").symlink_to(
+                    "libggml-hip.so.0")
         package = root / "codex-package"
         wrapper = package / "bin/codex.js"
         wrapper.parent.mkdir(parents=True)
@@ -774,7 +789,8 @@ class DeploymentFactoryTests(unittest.TestCase):
         carry_forward_path.chmod(0o600)
         carry_forward_input = immutable(carry_forward_path)
         comparator_input = immutable(
-            frozen_production_comparator(root / "production-authority"))
+            frozen_production_comparator(
+                root / "production-authority", production_path=production))
         config = SimpleNamespace(
             config_sha256="c" * 64, production_path=production.resolve(),
             production_branch=F.deployment.FROZEN_PRODUCTION_BRANCH,
@@ -878,6 +894,7 @@ class DeploymentFactoryTests(unittest.TestCase):
             self.assertEqual(
                 controller_config.carry_forward["carry_forward_sha256"],
                 controller_config.carry_forward_sha256)
+
             self.assertEqual(
                 tuple(len(controller_config.carry_forward[key]) for key in (
                     "candidate_semantic_sha256", "candidate_patch_sha256",
@@ -931,6 +948,64 @@ class DeploymentFactoryTests(unittest.TestCase):
             carrier.chmod(0o400)
             with self.assertRaises(F.deployment.DeploymentConfigError):
                 F.deployment.load_deployment_config(path)
+
+    def test_initializer_refuses_coherently_resealed_runtime_snapshot(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            comparator = frozen_production_comparator(root / "authority")
+            body = json.loads(comparator.read_text(encoding="utf-8"))
+            body["runtime_snapshot_sha256"] = "0" * 64
+            body["receipt_sha256"] = F.schemas.content_hash({
+                key: value for key, value in body.items()
+                if key != "receipt_sha256"})
+            comparator.write_text(
+                json.dumps(body, sort_keys=True, indent=2) + "\n",
+                encoding="utf-8")
+            with self.assertRaisesRegex(
+                    F.DeploymentFactoryError, "runtime snapshot changed"):
+                F.initialize_static_deployment_bundle(
+                    root / "bundle",
+                    frozen_production_comparator=comparator)
+
+    def test_static_registry_refuses_coherently_resealed_linkage_identity(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            config, _site, _docker, _ca = self.static_config(root)
+            comparator = config.frozen_production_comparator.path
+            body = json.loads(comparator.read_text(encoding="utf-8"))
+            body["build_identity"]["linkage_sha256"] = "0" * 64
+            body["receipt_sha256"] = F.schemas.content_hash({
+                key: value for key, value in body.items()
+                if key != "receipt_sha256"})
+            comparator.write_text(
+                json.dumps(body, sort_keys=True, indent=2) + "\n",
+                encoding="utf-8")
+            config.frozen_production_comparator = SimpleNamespace(
+                path=comparator,
+                sha256=hashlib.sha256(comparator.read_bytes()).hexdigest())
+            with self.assertRaisesRegex(
+                    F.DeploymentFactoryError, "build/linkage identity changed"):
+                F._static_registry(config, F._template_registry())
+
+    def test_static_registry_refuses_coherently_resealed_source_identity(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            config, _site, _docker, _ca = self.static_config(root)
+            comparator = config.frozen_production_comparator.path
+            body = json.loads(comparator.read_text(encoding="utf-8"))
+            body["build_identity"]["source_sha256"] = "0" * 64
+            body["receipt_sha256"] = F.schemas.content_hash({
+                key: value for key, value in body.items()
+                if key != "receipt_sha256"})
+            comparator.write_text(
+                json.dumps(body, sort_keys=True, indent=2) + "\n",
+                encoding="utf-8")
+            config.frozen_production_comparator = SimpleNamespace(
+                path=comparator,
+                sha256=hashlib.sha256(comparator.read_bytes()).hexdigest())
+            with self.assertRaisesRegex(
+                    F.DeploymentFactoryError, "build/linkage identity changed"):
+                F._static_registry(config, F._template_registry())
 
     def test_q5_erratum_vendored_carrier_refuses_coherent_substitution(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -1617,6 +1692,10 @@ class DeploymentFactoryTests(unittest.TestCase):
             binding = registry["source_builder"][F._STATIC_IDS["source_builder"]]
             self.assertIsInstance(binding, F.SourceBuilderBinding)
             builder = binding.build.__self__
+            self.assertIs(binding.build.__self__, builder)
+            self.assertIsInstance(
+                builder.composition_production_authority,
+                F.cumulative_composition.FrozenProductionAuthority)
             manifest = SimpleNamespace(
                 production_base_commit=config.production_head,
                 instrument_commit=config.instrument_commit,
