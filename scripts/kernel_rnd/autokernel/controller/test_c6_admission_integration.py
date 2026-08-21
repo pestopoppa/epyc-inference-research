@@ -104,6 +104,18 @@ class GatedScreens:
         result["result_sha256"] = D.schemas.content_hash(result)
         result_path = output / "result.json"
         result_file_sha256 = _write_json(result_path, result)
+        c6_body = {
+            "schema": "epyc.autokernel.c6_correctness_receipt.v1",
+            "result": "PASS", "native_execution": True,
+            "wrapper_used": False, "semantic_judge_gating": False,
+            "determinism": {"correct": True},
+            "numeric_verdicts": [{"correct": True}] * 3,
+        }
+        c6_body["receipt_sha256"] = D.gpu_source_proofs._hash(c6_body)
+        c6_path = output / "c6-receipt.json"
+        _write_json(c6_path, c6_body)
+        c6_ref = D.gpu_source_proofs.load_receipt(
+            c6_path, schema="epyc.autokernel.c6_correctness_receipt.v1")
         digest = lambda label: hashlib.sha256(label.encode()).hexdigest()
         return D.SealedScreen(
             receipt_path=str(result_path),
@@ -119,6 +131,8 @@ class GatedScreens:
                     "target_runtime_graphs_on_screen"),
             build_identity_sha256=digest("build"),
             correctness_receipt_sha256=digest("correctness"),
+            c6_correctness_receipt_sha256=c6_ref["file_sha256"],
+            c6_correctness_ref=c6_ref,
             attribution_receipt_sha256=digest("attribution"),
             graphs_off_receipt_sha256=digest("off"),
             graphs_on_receipt_sha256=result_file_sha256)
@@ -234,6 +248,42 @@ class TestC6AdmissionIntegration(unittest.TestCase):
             with self.assertRaisesRegex(
                     D.DiscoveryControllerError,
                     "C6 admission store failed validation"):
+                D.run_controller(
+                    config, planner=Planner(), critic=FakeCritic([]),
+                    screener=GatedScreens(root / "unused"), lease=Lease())
+
+    def test_capture_bound_to_exact_live_producer_digest_on_restart(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = _config(root)
+            D.run_controller(
+                config, planner=Planner(), critic=FakeCritic(["accept"]),
+                screener=GatedScreens(root / "screens"), lease=Lease())
+            path = config.c6_admission_store_path
+            envelope = json.loads(path.read_text(encoding="utf-8"))
+            capture = envelope["belief_capture"]
+            capture["producer_sha256"] = "f" * 64
+            capture["capture_sha256"] = D.c6_reward_integrity.sha256_json({
+                key: value for key, value in capture.items()
+                if key != "capture_sha256"})
+            path.write_text(json.dumps(envelope) + "\n", encoding="utf-8")
+            with self.assertRaisesRegex(
+                    D.DiscoveryControllerError, "live module"):
+                D.run_controller(
+                    config, planner=Planner(), critic=FakeCritic([]),
+                    screener=GatedScreens(root / "unused"), lease=Lease())
+
+    def test_restart_recursively_reopens_both_native_c6_legs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = _config(root)
+            state = D.run_controller(
+                config, planner=Planner(), critic=FakeCritic(["accept"]),
+                screener=GatedScreens(root / "screens"), lease=Lease())
+            first = state["iterations"][1]["c6_admission_first_leg"]
+            Path(first["c6_correctness_ref"]["path"]).unlink()
+            with self.assertRaisesRegex(
+                    D.DiscoveryControllerError, "cannot reopen"):
                 D.run_controller(
                     config, planner=Planner(), critic=FakeCritic([]),
                     screener=GatedScreens(root / "unused"), lease=Lease())

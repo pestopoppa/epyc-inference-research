@@ -151,6 +151,56 @@ def mocked_v25_carry_forward():
 
 
 class DeploymentFactoryTests(unittest.TestCase):
+    def test_c6_quant_type_and_structural_accumulator_authority_fail_closed(self):
+        self.assertEqual(F._c6_mul_mat_type("cuda-vecdotq-q4k-v1"), "q4_K")
+        self.assertEqual(F._c6_mul_mat_type("cuda-mmvq-q5-onewave-continuation-v1"),
+                         "q5_K")
+        self.assertEqual(F._c6_mul_mat_type("cuda-vecdotq-q6k-v1"), "q6_K")
+        self.assertEqual(F._c6_mul_mat_type("cuda-quantize-q8-v1"), "q8_0")
+        with self.assertRaisesRegex(F.DeploymentFactoryError, "reviewed quant type"):
+            F._c6_mul_mat_type("cuda-mmvq-unbounded")
+
+        relative = "ggml/src/ggml-cuda/vecdotq.cuh"
+        def candidate(changed: str) -> C.PlannedCandidate:
+            patch = (
+                f"diff --git a/{relative} b/{relative}\n"
+                f"--- a/{relative}\n+++ b/{relative}\n"
+                "@@ -510 +510 @@ vec_dot_q4_K_q8_1_impl_vmmq\n"
+                f"-old\n+{changed}\n").encode()
+            manifest = source_candidate.SourcePatchManifest(
+                campaign_id="ak-c6-test", proposal_id="akp-c6-test",
+                candidate_id="akc-c6-test", source_tree="llama.cpp",
+                production_base_commit="0" * 40, instrument_commit="1" * 40,
+                change_class="arithmetic", declared_files=(relative,),
+                declared_symbols={relative: ("vec_dot_q4_K_q8_1_impl_vmmq",)},
+                mechanism_id="c6-structural-test",
+                patch_sha256=hashlib.sha256(patch).hexdigest(), patch_bytes=patch)
+            return C.PlannedCandidate(
+                "akh-c6-test", "c6 structural test", "test", {}, {}, manifest,
+                manifest.patch_bundle_sha256)
+
+        reviewed = F.ExperimentTemplate(
+            "cuda-vecdotq-q4k-v1", "gpu_decode", "vec_dot_q4_K_q8_1",
+            "backend-mul-mat", "dispatch", mock.Mock(), frozenset({relative}),
+            {relative: frozenset({"vec_dot_q4_K_q8_1_impl_vmmq"})},
+            {"production_instrument_target_sha256_by_file": {relative: "a" * 64}})
+        carrier = (
+            b"float tmp[ncols_dst][rows_per_cuda_block] = {{0.0f}};\n"
+            b"tmp[j][i] += vec_dot_q_cuda(\n")
+        config = SimpleNamespace(
+            instrument_path=Path("/reviewed/instrument"), instrument_commit="1" * 40)
+        completed = SimpleNamespace(returncode=0, stdout=carrier, stderr=b"")
+        with mock.patch.object(F.subprocess, "run", return_value=completed):
+            structural, proof = F._c6_structural_precision(
+                config, candidate("new_unpack"), reviewed)
+            self.assertEqual(structural["accumulator_dtype"], "f32")
+            self.assertEqual(proof["accumulator_authority"]["excluded_symbol"],
+                             "mul_mat_vec_q")
+            with self.assertRaisesRegex(F.DeploymentFactoryError,
+                                        "vec-dot accumulator"):
+                F._c6_structural_precision(
+                    config, candidate("sumf_d = narrow_accumulator"), reviewed)
+
     def test_live_shape_manifest_and_policy_share_real_operation_namespace(self):
         candidate = planned_source_candidate()
         with tempfile.TemporaryDirectory() as directory:

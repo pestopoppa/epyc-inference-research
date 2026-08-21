@@ -722,6 +722,8 @@ class TestAdmissionReceipts(_Base):
             verification_anchor_latency_ms=156.0,
             verification_candidate_latency_ms=100.0,
             first_turn_correct=True, verification_correct=True,
+            first_turn_c6_correctness_receipt_sha256="1" * 64,
+            verification_c6_correctness_receipt_sha256="2" * 64,
             reopen_when="candidate or evaluator commit changes",
             policy=c6.AdmissionPolicy(implausible_speedup_cap=32.0),
         )

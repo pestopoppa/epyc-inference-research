@@ -1139,7 +1139,7 @@ class Q5PreauthoredContinuationTests(unittest.TestCase):
                 claim_acquirer=first_claims, claim_verifier=lambda _row: True,
                 claim_journal=object(), claim_timeout_s=0)
             self.assertEqual([row[0] for row in first_executor.calls],
-                             ["correctness"])
+                             ["correctness", "correctness"])
             self.assertEqual(len(first_claims.claims), 1)
 
             resumed_executor, resumed_claims = FakeExecutors(), ClaimFactory()

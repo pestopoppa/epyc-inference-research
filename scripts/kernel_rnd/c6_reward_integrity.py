@@ -400,6 +400,19 @@ def run_three_bitwise(run_once: Callable[[], object]) -> tuple[
             outputs[0])
 
 
+def determinism_from_recorded_outputs(outputs: object) -> DeterminismVerdict:
+    """Independently reduce exactly three already-recorded native outputs."""
+    if not isinstance(outputs, (list, tuple)) or len(outputs) != 3:
+        raise EvaluatorPolicyError(
+            "recorded determinism requires exactly three outputs")
+    digests = tuple(
+        hashlib.sha256(_bitwise_bytes(item)).hexdigest() for item in outputs)
+    correct = len(set(digests)) == 1
+    return DeterminismVerdict(
+        correct, 3, digests,
+        "bitwise_identical" if correct else "nondeterministic_output")
+
+
 def _clone_isolated_input(value: object) -> object:
     """Clone trusted harness inputs so candidate executions cannot share state."""
     if hasattr(value, "detach") and hasattr(value, "clone"):
@@ -628,14 +641,16 @@ def require_supported_gpu(part: str) -> dict:
 # =============================================================================
 # AK-PM-12 execution-gated write-side admission
 # =============================================================================
-ADMISSION_RECEIPT_SCHEMA = "epyc.autokernel.c6_admission_receipt.v1"
-ADMISSION_CAPTURE_SCHEMA = "epyc.vidya.autokernel_c6_admission_capture.v1"
+ADMISSION_RECEIPT_SCHEMA = "epyc.autokernel.c6_admission_receipt.v2"
+ADMISSION_CAPTURE_SCHEMA = "epyc.vidya.autokernel_c6_admission_capture.v2"
 _ADMISSION_KEYS = {
     "schema", "task_id", "candidate_commit", "anchor_commit",
     "evaluator_commit", "metric", "metric_direction",
     "first_turn_anchor_latency_ms", "first_turn_candidate_latency_ms",
     "verification_anchor_latency_ms", "verification_candidate_latency_ms",
     "first_turn_correct", "verification_correct",
+    "first_turn_c6_correctness_receipt_sha256",
+    "verification_c6_correctness_receipt_sha256",
     "first_turn_speedup", "verification_speedup", "required_speedup",
     "alpha", "beta", "implausible_speedup_cap", "admitted", "reason",
     "reopen_when", "receipt_sha256",
@@ -645,6 +660,8 @@ _CAPTURE_KEYS = {
     "candidate_commit", "anchor_commit", "evaluator_commit", "metric",
     "metric_direction", "value", "unit", "category", "protocol_id",
     "reps", "producer_sha256", "capture_sha256",
+    "first_turn_c6_correctness_receipt_sha256",
+    "verification_c6_correctness_receipt_sha256",
 }
 
 
@@ -684,6 +701,8 @@ def build_admission_receipt(
         verification_anchor_latency_ms: float,
         verification_candidate_latency_ms: float, first_turn_correct: bool,
         verification_correct: bool, reopen_when: str,
+        first_turn_c6_correctness_receipt_sha256: str,
+        verification_c6_correctness_receipt_sha256: str,
         policy: AdmissionPolicy) -> dict:
     """Seal every admission attempt, including threshold/cap refusals.
 
@@ -696,6 +715,13 @@ def build_admission_receipt(
     anchor_commit = _commit(anchor_commit, "anchor_commit")
     evaluator_commit = _commit(evaluator_commit, "evaluator_commit")
     reopen_when = _required_text(reopen_when, "reopen_when")
+    for label, value in (
+            ("first_turn_c6_correctness_receipt_sha256",
+             first_turn_c6_correctness_receipt_sha256),
+            ("verification_c6_correctness_receipt_sha256",
+             verification_c6_correctness_receipt_sha256)):
+        if not isinstance(value, str) or not _SHA256_RE.fullmatch(value):
+            raise EvaluatorPolicyError(f"{label} must be exact")
     if type(first_turn_correct) is not bool or type(verification_correct) is not bool:
         raise EvaluatorPolicyError("admission correctness fields must be exact bools")
     ft_anchor = _finite_number(
@@ -743,6 +769,10 @@ def build_admission_receipt(
         "verification_candidate_latency_ms": vr_candidate,
         "first_turn_correct": first_turn_correct,
         "verification_correct": verification_correct,
+        "first_turn_c6_correctness_receipt_sha256":
+            first_turn_c6_correctness_receipt_sha256,
+        "verification_c6_correctness_receipt_sha256":
+            verification_c6_correctness_receipt_sha256,
         "first_turn_speedup": first_speedup,
         "verification_speedup": verify_speedup,
         "required_speedup": threshold,
@@ -780,6 +810,10 @@ def validate_admission_receipt(receipt: Mapping[str, object]) -> dict:
                 receipt["verification_candidate_latency_ms"],
             first_turn_correct=receipt["first_turn_correct"],
             verification_correct=receipt["verification_correct"],
+            first_turn_c6_correctness_receipt_sha256=receipt[
+                "first_turn_c6_correctness_receipt_sha256"],
+            verification_c6_correctness_receipt_sha256=receipt[
+                "verification_c6_correctness_receipt_sha256"],
             reopen_when=receipt["reopen_when"],
             policy=AdmissionPolicy(
                 alpha=receipt["alpha"], beta=receipt["beta"],
@@ -818,6 +852,10 @@ def build_admission_claim_capture(
         "category": "CANDIDATE",
         "protocol_id": ADMISSION_RECEIPT_SCHEMA,
         "reps": 1,
+        "first_turn_c6_correctness_receipt_sha256": valid[
+            "first_turn_c6_correctness_receipt_sha256"],
+        "verification_c6_correctness_receipt_sha256": valid[
+            "verification_c6_correctness_receipt_sha256"],
         "producer_sha256": producer_sha256,
     }
     capture["capture_sha256"] = sha256_json(capture)

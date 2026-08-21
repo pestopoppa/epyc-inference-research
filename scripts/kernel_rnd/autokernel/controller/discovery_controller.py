@@ -1028,6 +1028,8 @@ class SealedScreen:
     series_effect_fraction: float | None = None
     build_identity_sha256: str | None = None
     correctness_receipt_sha256: str | None = None
+    c6_correctness_receipt_sha256: str | None = None
+    c6_correctness_ref: Mapping[str, Any] | None = None
     attribution_receipt_sha256: str | None = None
     graphs_off_receipt_sha256: str | None = None
     graphs_on_receipt_sha256: str | None = None
@@ -1065,6 +1067,10 @@ class SealedScreen:
                        for value in receipts):
                 raise DiscoveryControllerError(
                     "screen replication evidence is incomplete")
+        if self.c6_correctness_ref is not None and not isinstance(
+                self.c6_correctness_ref, Mapping):
+            raise DiscoveryControllerError(
+                "screen C6 correctness reference must be typed")
         composition = (
             self.composition_build_pair, self.composition_correctness,
             self.composition_comparison, self.cumulative_performance,
@@ -2419,7 +2425,12 @@ class GpuSourceScreener:
             cumulative_performance_ref = \
                 cumulative_composition.seal_cumulative_performance(
                     Path(performance_path), cumulative_performance)
-        return SealedScreen(receipt_path=str(result_path), result_sha256=str(raw["result_sha256"]), effect_fraction=target_effect, classification=str(projection["stage"]), baseline_sha256=str(raw["baseline_sha256"]), source_proof_sha256=bundle.correctness["file_sha256"], dispatch_proof_sha256=bundle.attribution["file_sha256"], exact_attribution_effect_fraction=exact_effect, target_runtime_effect_fraction=target_effect, stages=("materialized", "built", "correctness", "attribution", "measurement_graphs_off_screen", "target_runtime_graphs_on_screen"), build_identity_sha256=build_identity_sha256, correctness_receipt_sha256=bundle.correctness["file_sha256"], attribution_receipt_sha256=bundle.attribution["file_sha256"], graphs_off_receipt_sha256=graphs_off_file_sha256, graphs_on_receipt_sha256=graphs_on_file_sha256, composition_build_pair=build.composition_build_pair, composition_correctness=composition_correctness, composition_comparison=composition_comparison, cumulative_performance=cumulative_performance, cumulative_performance_ref=cumulative_performance_ref)
+        c6_ref = (bundle.correctness.get("body", {}).get("c6_correctness")
+                  if isinstance(bundle.correctness, Mapping) else None)
+        if c6_ref is not None and not isinstance(c6_ref, Mapping):
+            raise DiscoveryControllerError(
+                "source proof carries a malformed C6 correctness reference")
+        return SealedScreen(receipt_path=str(result_path), result_sha256=str(raw["result_sha256"]), effect_fraction=target_effect, classification=str(projection["stage"]), baseline_sha256=str(raw["baseline_sha256"]), source_proof_sha256=bundle.correctness["file_sha256"], dispatch_proof_sha256=bundle.attribution["file_sha256"], exact_attribution_effect_fraction=exact_effect, target_runtime_effect_fraction=target_effect, stages=("materialized", "built", "correctness", "attribution", "measurement_graphs_off_screen", "target_runtime_graphs_on_screen"), build_identity_sha256=build_identity_sha256, correctness_receipt_sha256=bundle.correctness["file_sha256"], c6_correctness_receipt_sha256=(None if c6_ref is None else str(c6_ref["file_sha256"])), c6_correctness_ref=(None if c6_ref is None else dict(c6_ref)), attribution_receipt_sha256=bundle.attribution["file_sha256"], graphs_off_receipt_sha256=graphs_off_file_sha256, graphs_on_receipt_sha256=graphs_on_file_sha256, composition_build_pair=build.composition_build_pair, composition_correctness=composition_correctness, composition_comparison=composition_comparison, cumulative_performance=cumulative_performance, cumulative_performance_ref=cumulative_performance_ref)
 
 
 @dataclass(frozen=True)
@@ -3533,6 +3544,9 @@ def _screen_iteration_fields(result: SealedScreen, *, repetition: int) -> dict[s
         "stages": list(result.stages),
         "build_identity_sha256": result.build_identity_sha256,
         "correctness_receipt_sha256": result.correctness_receipt_sha256,
+        "c6_correctness_receipt_sha256": result.c6_correctness_receipt_sha256,
+        "c6_correctness_ref": (None if result.c6_correctness_ref is None else
+                               dict(result.c6_correctness_ref)),
         "attribution_receipt_sha256": result.attribution_receipt_sha256,
         "graphs_off_receipt_sha256": result.graphs_off_receipt_sha256,
         "graphs_on_receipt_sha256": result.graphs_on_receipt_sha256,
@@ -3541,7 +3555,7 @@ def _screen_iteration_fields(result: SealedScreen, *, repetition: int) -> dict[s
     }
 
 
-_C6_ADMISSION_LEG_SCHEMA = "epyc.autokernel.c6_admission_leg.v1"
+_C6_ADMISSION_LEG_SCHEMA = "epyc.autokernel.c6_admission_leg.v2"
 
 
 def _c6_admission_enabled(config: ControllerConfig) -> bool:
@@ -3570,28 +3584,65 @@ def _c6_full_gate_reached(result: SealedScreen) -> bool:
         "measurement_graphs_off_screen", "target_runtime_graphs_on_screen")
 
 
+def _reopen_c6_admission_correctness(
+        reference: object, expected_sha256: object) -> Mapping[str, Any]:
+    """Reopen the exact native C6 pass used by an admission leg."""
+    if (not isinstance(reference, Mapping)
+            or not isinstance(expected_sha256, str)
+            or HASH.fullmatch(expected_sha256) is None):
+        raise DiscoveryControllerError(
+            "C6 admission native correctness reference is malformed")
+    try:
+        loaded = gpu_source_proofs.load_receipt(
+            Path(str(reference.get("path", ""))),
+            schema="epyc.autokernel.c6_correctness_receipt.v1")
+    except (gpu_source_proofs.ProofError, OSError) as exc:
+        raise DiscoveryControllerError(
+            "C6 admission cannot reopen its native correctness receipt") from exc
+    if (any(loaded.get(key) != reference.get(key)
+            for key in ("path", "file_sha256", "native_sha256", "body"))
+            or loaded["file_sha256"] != expected_sha256
+            or loaded["body"].get("result") != "PASS"
+            or loaded["body"].get("native_execution") is not True
+            or loaded["body"].get("wrapper_used") is not False
+            or loaded["body"].get("semantic_judge_gating") is not False
+            or loaded["body"].get("determinism", {}).get("correct") is not True
+            or not isinstance(loaded["body"].get("numeric_verdicts"), list)
+            or not loaded["body"]["numeric_verdicts"]
+            or any(not isinstance(row, Mapping)
+                   or row.get("correct") is not True for row in
+                   loaded["body"]["numeric_verdicts"])):
+        raise DiscoveryControllerError(
+            "C6 admission native correctness receipt is not an exact pass")
+    return loaded
+
+
 def _c6_admission_leg(
         item: PlannedCandidate, result: SealedScreen, *,
         evaluator_commit: str) -> dict[str, Any]:
     """Reopen one fully-gated screen as an immutable C6 admission leg.
 
     The leg is built only after source materialization, build, correctness,
-    exact-route attribution, cross-arm bitwise output semantics and the target
-    runtime throughput screen have all completed.  It converts throughput to
-    latency-per-1000-tokens; the ratio is therefore exactly the native
+    exact-route attribution, native same-input three-run bitwise determinism,
+    and the target runtime throughput screen have all completed.  It converts
+    throughput to latency-per-1000-tokens; the ratio is therefore exactly the native
     candidate/anchor throughput ratio used by the controller.
     """
     if (item.composition_plan is not None or not _c6_full_gate_reached(result)
             or result.target_runtime_effect_fraction is None
+            or not isinstance(result.c6_correctness_ref, Mapping)
             or not all(isinstance(value, str) and HASH.fullmatch(value)
                        for value in (
                            result.build_identity_sha256,
                            result.correctness_receipt_sha256,
+                           result.c6_correctness_receipt_sha256,
                            result.attribution_receipt_sha256,
                            result.graphs_off_receipt_sha256,
                            result.graphs_on_receipt_sha256))):
         raise DiscoveryControllerError(
             "C6 admission cannot precede the complete governed screen gate")
+    _reopen_c6_admission_correctness(
+        result.c6_correctness_ref, result.c6_correctness_receipt_sha256)
     result_path = Path(result.receipt_path)
     if (not result_path.is_absolute() or result_path.is_symlink()
             or not result_path.is_file()):
@@ -3621,36 +3672,6 @@ def _c6_admission_leg(
                float(result.target_runtime_effect_fraction)):
         raise DiscoveryControllerError(
             "C6 admission result differs from the sealed screen")
-    oracle = raw.get("graphs_on_output_oracle")
-    if not isinstance(oracle, Mapping):
-        raise DiscoveryControllerError(
-            "C6 admission lacks the semantic/determinism oracle")
-    unsigned_oracle = {key: value for key, value in oracle.items()
-                       if key != "receipt_sha256"}
-    oracle_repetitions = oracle.get("repetitions")
-    oracle_inputs = oracle.get("input_hashes")
-    oracle_outputs = oracle.get("output_hashes")
-    if (oracle.get("schema") !=
-            "epyc.autokernel.cross_arm_graphs_on_output_oracle.v1"
-            or oracle.get("cross_arm_bitwise_equal") is not True
-            or oracle.get("reward_admissible") is not True
-            or isinstance(oracle_repetitions, bool)
-            or oracle_repetitions not in {3, 5, 9}
-            or not isinstance(oracle_inputs, list)
-            or len(oracle_inputs) != oracle_repetitions
-            or len(set(oracle_inputs)) != oracle_repetitions
-            or any(not isinstance(value, str)
-                   or re.fullmatch(r"[0-9a-f]{16}", value) is None
-                   for value in oracle_inputs)
-            or not isinstance(oracle_outputs, list)
-            or len(oracle_outputs) != oracle_repetitions
-            or any(not isinstance(value, str)
-                   or re.fullmatch(r"[0-9a-f]{16}", value) is None
-                   for value in oracle_outputs)
-            or oracle.get("receipt_sha256") !=
-               schemas.content_hash(unsigned_oracle)):
-        raise DiscoveryControllerError(
-            "C6 admission semantic/determinism oracle is invalid")
     baseline_path = result_path.with_name("baseline-bank.json")
     if baseline_path.is_symlink() or not baseline_path.is_file():
         raise DiscoveryControllerError("C6 admission lacks its baseline bank")
@@ -3718,7 +3739,9 @@ def _c6_admission_leg(
         "anchor_latency_ms": 1000.0 / float(center),
         "candidate_latency_ms": 1000.0 / candidate_center,
         "correctness_receipt_sha256": result.correctness_receipt_sha256,
-        "semantic_determinism_receipt_sha256": oracle["receipt_sha256"],
+        "c6_correctness_receipt_sha256":
+            result.c6_correctness_receipt_sha256,
+        "c6_correctness_ref": dict(result.c6_correctness_ref),
         "throughput_result_sha256": result.result_sha256,
         "throughput_result_file_sha256": loaded["file_sha256"],
     }
@@ -3758,6 +3781,10 @@ def _emit_c6_admission(
             verification_candidate_latency_ms=
                 float(verification["candidate_latency_ms"]),
             first_turn_correct=True, verification_correct=True,
+            first_turn_c6_correctness_receipt_sha256=str(
+                first["c6_correctness_receipt_sha256"]),
+            verification_c6_correctness_receipt_sha256=str(
+                verification["c6_correctness_receipt_sha256"]),
             reopen_when=str(config.c6_reopen_when), policy=policy)
         producer_path = Path(c6_reward_integrity.__file__).resolve(strict=True)
         producer_sha256 = hashlib.sha256(producer_path.read_bytes()).hexdigest()
@@ -3770,7 +3797,7 @@ def _emit_c6_admission(
             "C6 admission store failed closed") from exc
     capture = envelope["belief_capture"]
     return {
-        "schema": "epyc.autokernel.c6_admission_controller_binding.v1",
+        "schema": "epyc.autokernel.c6_admission_controller_binding.v2",
         "store_path": str(config.c6_admission_store_path),
         "first_leg_sha256": first["leg_sha256"],
         "verification_leg_sha256": verification["leg_sha256"],
@@ -3803,6 +3830,7 @@ def _apply_c6_admission(
     if not isinstance(first, Mapping):
         raise DiscoveryControllerError(
             "C6 verification lacks its durable first-turn leg")
+    row["c6_admission_first_leg"] = dict(first)
     row["c6_admission_verification_leg"] = leg
     row["c6_admission"] = _emit_c6_admission(
         config, first=first, verification=leg)
@@ -3827,6 +3855,12 @@ def _validate_c6_admission_state(
     except (c6_reward_integrity.AdmissionReceiptError, OSError) as exc:
         raise DiscoveryControllerError(
             "durable C6 admission store failed validation") from exc
+    producer_path = Path(c6_reward_integrity.__file__).resolve(strict=True)
+    live_producer_sha256 = hashlib.sha256(producer_path.read_bytes()).hexdigest()
+    if any(record["belief_capture"].get("producer_sha256") !=
+           live_producer_sha256 for record in records):
+        raise DiscoveryControllerError(
+            "durable C6 capture producer differs from the live module")
     by_receipt = {
         row["receipt"]["receipt_sha256"]: row for row in records}
     if len(by_receipt) != len(records):
@@ -3842,11 +3876,24 @@ def _validate_c6_admission_state(
             continue
         receipt_sha256 = binding.get("receipt_sha256")
         envelope = by_receipt.get(receipt_sha256)
+        first_leg = row.get("c6_admission_first_leg")
+        verification_leg = row.get("c6_admission_verification_leg")
         if (binding.get("schema") !=
-                "epyc.autokernel.c6_admission_controller_binding.v1"
+                "epyc.autokernel.c6_admission_controller_binding.v2"
                 or binding.get("store_path") !=
                    str(config.c6_admission_store_path)
                 or envelope is None
+                or not isinstance(first_leg, Mapping)
+                or not isinstance(verification_leg, Mapping)
+                or first_leg.get("leg_sha256") != binding.get("first_leg_sha256")
+                or verification_leg.get("leg_sha256") !=
+                   binding.get("verification_leg_sha256")
+                or first_leg.get("leg_sha256") != _sha({
+                    key: value for key, value in first_leg.items()
+                    if key != "leg_sha256"})
+                or verification_leg.get("leg_sha256") != _sha({
+                    key: value for key, value in verification_leg.items()
+                    if key != "leg_sha256"})
                 or binding.get("capture_sha256") !=
                    envelope["belief_capture"]["capture_sha256"]
                 or binding.get("admitted") is not
@@ -3854,6 +3901,42 @@ def _validate_c6_admission_state(
                 or binding.get("reason") != envelope["receipt"]["reason"]):
             raise DiscoveryControllerError(
                 "durable C6 admission row differs from its store")
+        _reopen_c6_admission_correctness(
+            first_leg.get("c6_correctness_ref"),
+            first_leg.get("c6_correctness_receipt_sha256"))
+        _reopen_c6_admission_correctness(
+            verification_leg.get("c6_correctness_ref"),
+            verification_leg.get("c6_correctness_receipt_sha256"))
+        try:
+            rebuilt = c6_reward_integrity.build_admission_receipt(
+                task_id=str(first_leg["task_id"]),
+                candidate_commit=str(first_leg["candidate_commit"]),
+                anchor_commit=str(first_leg["anchor_commit"]),
+                evaluator_commit=str(first_leg["evaluator_commit"]),
+                first_turn_anchor_latency_ms=float(first_leg["anchor_latency_ms"]),
+                first_turn_candidate_latency_ms=float(first_leg["candidate_latency_ms"]),
+                verification_anchor_latency_ms=float(
+                    verification_leg["anchor_latency_ms"]),
+                verification_candidate_latency_ms=float(
+                    verification_leg["candidate_latency_ms"]),
+                first_turn_correct=True, verification_correct=True,
+                first_turn_c6_correctness_receipt_sha256=str(
+                    first_leg["c6_correctness_receipt_sha256"]),
+                verification_c6_correctness_receipt_sha256=str(
+                    verification_leg["c6_correctness_receipt_sha256"]),
+                reopen_when=str(config.c6_reopen_when),
+                policy=c6_reward_integrity.AdmissionPolicy(
+                    alpha=config.c6_admission_alpha,
+                    beta=config.c6_admission_beta,
+                    implausible_speedup_cap=
+                        config.c6_implausible_speedup_cap))
+        except (KeyError, TypeError, ValueError,
+                c6_reward_integrity.EvaluatorPolicyError) as exc:
+            raise DiscoveryControllerError(
+                "durable C6 admission legs cannot rebuild their receipt") from exc
+        if rebuilt != envelope["receipt"]:
+            raise DiscoveryControllerError(
+                "durable C6 admission receipt differs from rebuilt legs")
         claimed.add(str(receipt_sha256))
     unowned = set(by_receipt) - claimed
     if unowned:

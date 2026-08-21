@@ -3,6 +3,7 @@ import json
 from dataclasses import replace
 from pathlib import Path
 import re
+import struct
 import tempfile
 import unittest
 from unittest import mock
@@ -120,18 +121,35 @@ def plan(root: Path, *, shared_reward: bool = False) -> E.GpuSourceEvidencePlan:
         shared = E.SharedRewardRuntimeFiles(
             measurement_binary=reward, runtime_receipt=runtime_receipt,
             anchor_hip_library=anchor_hip, candidate_hip_library=candidate_hip)
+    c6_tool = write_bound(root, "c6-harness", b"c6 tool", "executable")
+    c6_tool.path.chmod(0o700)
+    c6_source = write_bound(root, "c6-harness.cpp", b"source", "c6_source")
+    c6_capability = write_bound(root, "c6-capability.json", b"capability", "c6_capability")
+    c6 = E.C6CorrectnessPlan(
+        argv=(str(c6_tool.path), "--backend", "ROCm0", "--type-a", "q4_K",
+              "--m", "32", "--n", "1", "--k", "256", "--seed", "42",
+              "--sidecar", E.C6_SIDECAR_OUTPUT),
+        inputs=(c6_tool, c6_source, c6_capability),
+        precision_contract={
+            "required_output_dtype": "f32", "required_accumulator_dtype": "f32",
+            "atol": .01, "rtol": .01, "required_matched_ratio": .95,
+            "lowbit": True},
+        structural_precision_evidence={
+            "output_dtype": "f32", "accumulator_dtype": "f32",
+            "evidence_sha256": digest("c6-structural")},
+        semantic_judge_verdicts={})
     result = E.GpuSourceEvidencePlan(
         campaign_id="ak-gpu-source-evidence-test",
         device_id="mi210_0",
         manifest_sha256=manifest.sha256, model_sha256=model.sha256,
         workload_sha256=workload.sha256, runtime_config_sha256=runtime.sha256,
         candidate=candidate, anchor=anchor,
-        correctness_argv=(str(correctness_tool.path), "--op", "MUL_MAT_ID",
+        correctness_argv=(str(correctness_tool.path), "--op", "MUL_MAT",
                           "--binary", str(candidate_files.binary.path),
                           "--model", str(model.path), "--workload", str(workload.path),
                           "--config", str(runtime.path)),
         correctness_backend="ROCm0",
-        correctness_op="MUL_MAT_ID",
+        correctness_op="MUL_MAT",
         expected_correctness_cases=3,
         candidate_rocprof_argv=(str(profiler.path), "-i", str(timestamp_input.path),
                                 "--candidate", str(shared.measurement_binary.path if shared else candidate_files.binary.path),
@@ -174,7 +192,7 @@ def plan(root: Path, *, shared_reward: bool = False) -> E.GpuSourceEvidencePlan:
                                        ("LD_LIBRARY_PATH", (str(shared.candidate_hip_library.path.parent) + ":" + str(shared.measurement_binary.path.parent)) if shared else str(candidate_files.hip_library.path.parent))),
         anchor_rocprof_environment=(("HIP_VISIBLE_DEVICES", "0"),
                                     ("LD_LIBRARY_PATH", (str(shared.anchor_hip_library.path.parent) + ":" + str(shared.measurement_binary.path.parent)) if shared else str(anchor_files.hip_library.path.parent))),
-        shared_runtime=shared)
+        shared_runtime=shared, c6_correctness=c6)
     policy_path = placeholder_policy.path
     policy_path.write_text(json.dumps(E._policy_payload(result), sort_keys=True))
     policy = E.BoundInputFile(
@@ -244,7 +262,7 @@ def csv_text(arm: str, *, inverse_bad=False, invariant_changed=False,
 
 def correctness_console(summary: str = "3/3 tests passed", *,
                         backend: str = "ROCm0",
-                        op: str = "MUL_MAT_ID") -> str:
+                        op: str = "MUL_MAT") -> str:
     match = re.fullmatch(r"(\d+)/(\d+) tests passed", summary)
     if match is None:
         return summary + "\n"
@@ -266,7 +284,9 @@ def correctness_console(summary: str = "3/3 tests passed", *,
 class FakeExecutors:
     def __init__(self, *, correctness_exit=0, correctness_summary="3/3 tests passed",
                  non_overlap=False, inverse_bad=False, invariant_changed=False,
-                 forbidden=False, rocprof_exit=0, runtime_maps=None):
+                 forbidden=False, rocprof_exit=0, runtime_maps=None,
+                 c6_nondeterministic=False, c6_partial=False,
+                 c6_wrong_seed=False):
         self.calls = []
         self.correctness_exit = correctness_exit
         self.correctness_summary = correctness_summary
@@ -276,13 +296,41 @@ class FakeExecutors:
         self.forbidden = forbidden
         self.rocprof_exit = rocprof_exit
         self.runtime_maps = runtime_maps or {}
+        self.c6_nondeterministic = c6_nondeterministic
+        self.c6_partial = c6_partial
+        self.c6_wrong_seed = c6_wrong_seed
 
     def correctness(self, invocation):
         self.calls.append((invocation.kind, invocation.arm, invocation.argv,
                            invocation.environment))
-        invocation.stdout_path.write_text(correctness_console(self.correctness_summary))
+        if "--sidecar" in invocation.argv:
+            sidecar = Path(invocation.argv[invocation.argv.index("--sidecar") + 1])
+            output = struct.pack("<32f", *[float(index) / 32 for index in range(32)])
+            sidecar.write_text(json.dumps({
+                "schema": E.C6_SIDECAR_SCHEMA,
+                "sequence": ["reference", "candidate-1", "candidate-2", "candidate-3"],
+                "backend": "ROCm0", "operation": "MUL_MAT", "type_a": "q4_K",
+                "type_b": "f32", "output_dtype": "f32", "m": 32, "n": 1,
+                "k": 256, "seed": 41 if self.c6_wrong_seed else 42,
+                "input_witness": {"weights_hex": "00" * 128,
+                                  "activations_f32le_hex": "00" * 1024},
+                "reference_output_f32le_hex": output.hex(),
+                "candidate_outputs_f32le_hex": (
+                    [output.hex()] * 2 if self.c6_partial else
+                    [output.hex(), output.hex(),
+                     (output[:-1] + bytes([output[-1] ^ 1])).hex()]
+                    if self.c6_nondeterministic else [output.hex()] * 3),
+                "candidate_clone_ids": (
+                    ["candidate-1", "candidate-2"] if self.c6_partial else
+                    ["candidate-1", "candidate-2", "candidate-3"]),
+            }, sort_keys=True))
+            invocation.stdout_path.write_text("native C6 complete\n")
+        else:
+            invocation.stdout_path.write_text(correctness_console(self.correctness_summary))
         invocation.stderr_path.write_text("")
-        return self._capture(invocation, self.correctness_exit)
+        return self._capture(
+            invocation, 0 if "--sidecar" in invocation.argv
+            else self.correctness_exit)
 
     def rocprof(self, invocation):
         self.calls.append((invocation.kind, invocation.arm, invocation.argv,
@@ -382,16 +430,17 @@ class GpuSourceEvidenceTests(unittest.TestCase):
             bundle, executors, claims = self.produce(directory)
             self.assertEqual(
                 [row[:2] for row in executors.calls],
-                [("correctness", "candidate"), ("rocprof", "candidate"),
+                [("correctness", "candidate"), ("correctness", "candidate"),
+                 ("rocprof", "candidate"),
                  ("rocprof", "anchor")])
             self.assertTrue(all(claim.released for claim in claims.claims))
             self.assertEqual(len(claims.claims), 3)
-            self.assertNotEqual(executors.calls[1][3], executors.calls[2][3])
-            self.assertEqual(
-                Path(dict(executors.calls[1][3])["LD_LIBRARY_PATH"]).name,
-                "candidate")
+            self.assertNotEqual(executors.calls[2][3], executors.calls[3][3])
             self.assertEqual(
                 Path(dict(executors.calls[2][3])["LD_LIBRARY_PATH"]).name,
+                "candidate")
+            self.assertEqual(
+                Path(dict(executors.calls[3][3])["LD_LIBRARY_PATH"]).name,
                 "anchor")
             root = Path(directory) / "evidence"
             loaded = E.load_gpu_source_evidence_bundle(root / "proof-bundle.json")
@@ -415,6 +464,39 @@ class GpuSourceEvidenceTests(unittest.TestCase):
                 "attribution-anchor/timestamps.csv"):
                 self.assertTrue((root / relative).is_file())
 
+    def test_native_c6_refuses_partial_or_nondeterministic_three_run_witness(self):
+        for label, executor in (
+                ("partial", FakeExecutors(c6_partial=True)),
+                ("nondeterministic", FakeExecutors(c6_nondeterministic=True)),
+                ("wrong-seed", FakeExecutors(c6_wrong_seed=True))):
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as directory:
+                with self.assertRaises(E.EvidenceProducerError):
+                    self.produce(directory, executors=executor)
+                self.assertFalse((Path(directory) / "evidence" /
+                                  "correctness" / "receipt.json").exists())
+
+    def test_native_c6_sidecar_tamper_refuses_restart(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.produce(directory)
+            sidecar = (Path(directory) / "evidence" / "correctness" /
+                       "c6-sidecar.json")
+            sidecar.write_text(sidecar.read_text() + " ")
+            with self.assertRaisesRegex(E.EvidenceProducerError, "sidecar changed"):
+                E.load_gpu_source_evidence_bundle(
+                    Path(directory) / "evidence" / "proof-bundle.json")
+
+    def test_production_evidence_refuses_missing_native_c6_plan(self):
+        with tempfile.TemporaryDirectory() as directory:
+            current = replace(plan(Path(directory) / "inputs"),
+                              c6_correctness=None)
+            policy_path = current.policy.path
+            policy_path.write_text(json.dumps(E._policy_payload(current), sort_keys=True))
+            current = replace(current, policy=E.BoundInputFile(
+                "execution_policy", policy_path,
+                hashlib.sha256(policy_path.read_bytes()).hexdigest()))
+            with self.assertRaisesRegex(E.EvidenceProducerError, "lacks native C6"):
+                self.produce(directory, plan_=current)
+
     def test_shared_reward_rocprof_uses_one_binary_with_separate_hashed_hip_arms(self):
         with tempfile.TemporaryDirectory() as directory:
             current = plan(Path(directory) / "inputs", shared_reward=True)
@@ -432,10 +514,10 @@ class GpuSourceEvidenceTests(unittest.TestCase):
                     executors=FakeExecutors(runtime_maps={
                         "candidate": runtime_maps_for(current, "candidate"),
                         "anchor": runtime_maps_for(current, "anchor")}))
-            self.assertEqual(executors.calls[1][2], executors.calls[2][2])
-            self.assertIn(str(current.shared_runtime.measurement_binary.path), executors.calls[1][2])
-            self.assertNotEqual(dict(executors.calls[1][3])["LD_LIBRARY_PATH"],
-                                dict(executors.calls[2][3])["LD_LIBRARY_PATH"])
+            self.assertEqual(executors.calls[2][2], executors.calls[3][2])
+            self.assertIn(str(current.shared_runtime.measurement_binary.path), executors.calls[2][2])
+            self.assertNotEqual(dict(executors.calls[2][3])["LD_LIBRARY_PATH"],
+                                dict(executors.calls[3][3])["LD_LIBRARY_PATH"])
             pair = json.loads((Path(directory) / "evidence" / "attribution-pair.json").read_text())
             self.assertEqual(pair["shared_runtime"], E._shared_runtime_reference(current.shared_runtime))
             self.assertEqual(bundle.candidate.hip_library_sha256,
@@ -465,7 +547,7 @@ class GpuSourceEvidenceTests(unittest.TestCase):
                     executors=FakeExecutors(runtime_maps={
                         "candidate": runtime_maps_for(current, "candidate"),
                         "anchor": runtime_maps_for(current, "anchor")}))
-            candidate_argv, anchor_argv = executors.calls[1][2], executors.calls[2][2]
+            candidate_argv, anchor_argv = executors.calls[2][2], executors.calls[3][2]
             self.assertNotEqual(candidate_argv, anchor_argv)
             self.assertEqual(
                 E._receipt_rocprof_template({"command_argv": candidate_argv,
