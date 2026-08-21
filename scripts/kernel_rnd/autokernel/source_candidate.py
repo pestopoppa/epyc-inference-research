@@ -116,6 +116,31 @@ def _symbol_from_source_declaration(normalized: str) -> str:
     return match.group("name")
 
 
+def _symbols_from_source_hunk(body: Sequence[str]) -> tuple[str, ...]:
+    """Attribute every changed row to source-backed preimage declarations."""
+    current_symbol: Optional[str] = None
+    changed_symbols: list[str] = []
+    for line in body:
+        if not line or line[0] not in (" ", "-", "+"):
+            continue
+        sign = line[0]
+        source = line[1:]
+        normalized = source.strip()
+        declaration = _symbol_from_source_declaration(normalized)
+        if sign in (" ", "-") and declaration != FILE_SCOPE:
+            current_symbol = declaration
+        # Candidate-added declarations never create or replace authority.  If
+        # the immediately preceding immutable preimage row was a deleted
+        # declaration, its symbol continues to own the replacement row.
+        if sign in ("-", "+"):
+            changed_symbols.append(current_symbol or FILE_SCOPE)
+        # Top-level function closure in the immutable preimage ends authority;
+        # indented nested-block braces deliberately do not.
+        if sign in (" ", "-") and source in ("}", "};"):
+            current_symbol = None
+    return tuple(sorted(set(changed_symbols or (FILE_SCOPE,))))
+
+
 def _symbol_from_hunk(context: str, body: Sequence[str], *,
                       source_backed_declarations: bool = False) -> str:
     """Derive a function from source-backed hunk lines before header prose.
@@ -180,10 +205,14 @@ def _hunk_rows(diff_text: str, *,
             "file": current_file, "range": current_header,
             "context": " ".join(current_context.split()), "body": normalized,
         }
-        rows.append((current_file, f"akhunk:{schemas.content_hash(material)}",
-                     _symbol_from_hunk(
-                         current_context, body,
-                         source_backed_declarations=source_backed_declarations)))
+        hunk_id = f"akhunk:{schemas.content_hash(material)}"
+        if source_backed_declarations:
+            rows.extend(
+                (current_file, hunk_id, symbol)
+                for symbol in _symbols_from_source_hunk(body))
+        else:
+            rows.append((current_file, hunk_id,
+                         _symbol_from_hunk(current_context, body)))
         current_header, current_context, body = None, "", []
 
     for line in diff_text.splitlines():
@@ -257,11 +286,15 @@ def _validate_patch_text(
     return text, paths, hunk_ids, symbols, symbols_by_file, deleted
 
 
-def _changed_line_identity(diff_text: str) -> tuple[tuple[str, str], ...]:
-    """Bind different Git context views to the same ordered changed lines."""
+def _changed_line_identity(
+        diff_text: str,
+) -> tuple[tuple[str, str, Optional[int], Optional[int], str], ...]:
+    """Bind context views to the exact coordinates and bytes of each edit."""
     current_file: Optional[str] = None
     in_hunk = False
-    rows: list[tuple[str, str]] = []
+    old_line: Optional[int] = None
+    new_line: Optional[int] = None
+    rows: list[tuple[str, str, Optional[int], Optional[int], str]] = []
     for line in diff_text.splitlines():
         if line.startswith("diff --git a/"):
             match = re.match(r"^diff --git a/(.+) b/(.+)$", line)
@@ -269,12 +302,24 @@ def _changed_line_identity(diff_text: str) -> tuple[tuple[str, str], ...]:
                             else _safe_path(match.group(2), "patch path"))
             in_hunk = False
             continue
-        if _HUNK.match(line):
+        hunk = _HUNK.match(line)
+        if hunk:
             in_hunk = True
+            old_line = int(hunk.group("old"))
+            new_line = int(hunk.group("new"))
             continue
-        if (in_hunk and current_file is not None
-                and line.startswith(("+", "-"))):
-            rows.append((current_file, line))
+        if not in_hunk or current_file is None \
+                or old_line is None or new_line is None:
+            continue
+        if line.startswith(" "):
+            old_line += 1
+            new_line += 1
+        elif line.startswith("-"):
+            rows.append((current_file, "-", old_line, None, line[1:]))
+            old_line += 1
+        elif line.startswith("+"):
+            rows.append((current_file, "+", None, new_line, line[1:]))
+            new_line += 1
     return tuple(rows)
 
 

@@ -516,7 +516,7 @@ class StaticBuildCacheTests(unittest.TestCase):
             b"diff --git a/ggml/src/ggml-cuda/fattn.cu b/ggml/src/ggml-cuda/fattn.cu\n"
             b"--- a/ggml/src/ggml-cuda/fattn.cu\n"
             b"+++ b/ggml/src/ggml-cuda/fattn.cu\n"
-            b"@@ -1,3 +1,3 @@\n"
+            b"@@ -1,3 +1,3 @@ int kernel() {\n"
             b" int kernel() {\n"
             b"-    return 1;\n"
             b"+    return 2;\n"
@@ -527,10 +527,10 @@ class StaticBuildCacheTests(unittest.TestCase):
             candidate_id="akc-cache-test", source_tree="llama.cpp",
             production_base_commit=production_commit, instrument_commit=instrument_commit,
             change_class="arithmetic", declared_files=(path,),
-            declared_symbols={path: ("<file-scope>",)}, mechanism_id="cache-test",
+            declared_symbols={path: ("kernel",)}, mechanism_id="cache-test",
             patch_sha256=sha(patch_bytes), patch_bytes=patch_bytes)
         proposal = {"proposal_id": "akp-cache-test", "change_class": "arithmetic",
-                    "change": {"files_and_symbols": [f"{path}:<file-scope>"],
+                    "change": {"files_and_symbols": [f"{path}:kernel"],
                                "estimated_diff_size": 4}}
         candidate = C.PlannedCandidate(
             "akh-cache-test", "reuse one sealed candidate build",

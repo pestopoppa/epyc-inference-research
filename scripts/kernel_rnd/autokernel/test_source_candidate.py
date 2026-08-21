@@ -134,7 +134,7 @@ class SourceCase(unittest.TestCase):
                     prefix + "@@ -1,2 +1,3 @@ stale_header\n" + body,
                     source_backed_declarations=True)
                 self.assertEqual(tuple(row[2] for row in rows),
-                                 ("stale_header",))
+                                 (S.FILE_SCOPE,))
 
     def test_deleted_source_declaration_is_scope_authority(self):
         patch = (
@@ -146,6 +146,71 @@ class SourceCase(unittest.TestCase):
         )
         rows = S._hunk_rows(patch, source_backed_declarations=True)
         self.assertEqual(tuple(row[2] for row in rows), ("old_kernel",))
+
+    def test_source_scope_reports_every_changed_adjacent_function(self):
+        patch = (
+            "diff --git a/x.cpp b/x.cpp\n--- a/x.cpp\n+++ b/x.cpp\n"
+            "@@ -1,9 +1,9 @@ first\n"
+            " static int allowed(int x) {\n-old_a\n+new_a\n }\n"
+            " \n"
+            " static int forbidden(int x) {\n-old_b\n+new_b\n }\n"
+        )
+        rows = S._hunk_rows(patch, source_backed_declarations=True)
+        self.assertEqual(tuple(row[2] for row in rows),
+                         ("allowed", "forbidden"))
+
+    def test_real_git_function_context_reports_both_adjacent_changed_functions(self):
+        with tempfile.TemporaryDirectory(prefix="ak-source-adjacent-") as raw:
+            repo = Path(raw)
+            _git("init", "-b", "test", cwd=repo)
+            _git("config", "user.name", "AutoKernel Test", cwd=repo)
+            _git("config", "user.email", "ak@test.invalid", cwd=repo)
+            source = repo / "x.cpp"
+            source.write_text(
+                "static int allowed(int x) {\n"
+                "    return x + 1;\n"
+                "}\n\n"
+                "static int forbidden(int x) {\n"
+                "    return x + 2;\n"
+                "}\n")
+            _git("add", "--", "x.cpp", cwd=repo)
+            _git("commit", "-m", "base", "--", "x.cpp", cwd=repo)
+            source.write_text(
+                "static int allowed(int x) {\n"
+                "    return x + 3;\n"
+                "}\n\n"
+                "static int forbidden(int x) {\n"
+                "    return x + 4;\n"
+                "}\n")
+            patch = _git(
+                "diff", "--no-ext-diff", "--no-textconv", "--unified=3",
+                "--function-context", "--", "x.cpp", cwd=repo) + "\n"
+        rows = S._hunk_rows(patch, source_backed_declarations=True)
+        self.assertEqual(len({row[1] for row in rows}), 1)
+        self.assertEqual(tuple(row[2] for row in rows),
+                         ("allowed", "forbidden"))
+
+    def test_unchanged_trailing_function_does_not_expand_scope(self):
+        patch = (
+            "diff --git a/x.cpp b/x.cpp\n--- a/x.cpp\n+++ b/x.cpp\n"
+            "@@ -1,9 +1,9 @@ first\n"
+            " static int allowed(int x) {\n-old_a\n+new_a\n }\n"
+            " \n"
+            " static int trailing(int x) {\n body\n }\n"
+        )
+        rows = S._hunk_rows(patch, source_backed_declarations=True)
+        self.assertEqual(tuple(row[2] for row in rows), ("allowed",))
+
+    def test_added_function_after_allowed_function_is_file_scope(self):
+        patch = (
+            "diff --git a/x.cpp b/x.cpp\n--- a/x.cpp\n+++ b/x.cpp\n"
+            "@@ -1,4 +1,7 @@ first\n"
+            " static int allowed(int x) {\n-old\n+new\n }\n"
+            "+static int injected(int x) {\n+    return x;\n+}\n"
+        )
+        rows = S._hunk_rows(patch, source_backed_declarations=True)
+        self.assertEqual(tuple(row[2] for row in rows),
+                         (S.FILE_SCOPE, "allowed"))
 
     def test_exact_bare_hunk_symbol_is_accepted_but_control_word_is_not(self):
         prefix = "diff --git a/a.cu b/a.cu\n--- a/a.cu\n+++ b/a.cu\n"
@@ -271,6 +336,22 @@ class SourceCase(unittest.TestCase):
                     S.SourceCandidateError, "changed lines differ"):
             S.apply_source_candidate(
                 manifest, proposal=self.proposal(), actor=self.actor)
+
+    def test_changed_line_identity_binds_coordinates_and_duplicate_edits(self):
+        prefix = "diff --git a/x.cu b/x.cu\n--- a/x.cu\n+++ b/x.cu\n"
+        first = prefix + (
+            "@@ -2,3 +2,3 @@ first\n context\n-old\n+new\n context\n"
+            "@@ -20,3 +20,3 @@ second\n context\n-old\n+new\n context\n")
+        relocated = prefix + (
+            "@@ -2,3 +2,3 @@ first\n context\n-old\n+new\n context\n"
+            "@@ -200,3 +200,3 @@ other\n context\n-old\n+new\n context\n")
+        swapped = prefix + (
+            "@@ -20,3 +20,3 @@ second\n context\n-old\n+new\n context\n"
+            "@@ -2,3 +2,3 @@ first\n context\n-old\n+new\n context\n")
+        self.assertNotEqual(S._changed_line_identity(first),
+                            S._changed_line_identity(relocated))
+        self.assertNotEqual(S._changed_line_identity(first),
+                            S._changed_line_identity(swapped))
 
     def test_phase_graph_and_content_specialization_refuse_before_apply(self):
         probes = (
