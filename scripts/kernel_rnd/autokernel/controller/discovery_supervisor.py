@@ -79,6 +79,9 @@ GRAPH_EXECUTION_MODULES = {
         "scripts/kernel_rnd/autokernel/execution/instrument_integrity.py",
     "t0_provider": "scripts/kernel_rnd/autokernel/execution/t0_provider.py",
     "evaluator_integrity": "scripts/kernel_rnd/autokernel/evaluator/integrity.py",
+    "hawkeye_measurement":
+        "scripts/kernel_rnd/autokernel/evaluator/hawkeye_measurement.py",
+    "candidate_sandbox": "scripts/kernel_rnd/autokernel/execution/sandbox.py",
     "gpu_source_evidence":
         "scripts/kernel_rnd/autokernel/controller/gpu_source_evidence.py",
     "gpu_source_proofs":

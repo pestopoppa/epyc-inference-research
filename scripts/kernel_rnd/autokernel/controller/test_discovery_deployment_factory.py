@@ -11,7 +11,7 @@ import stat
 import unittest
 from unittest import mock
 from pathlib import Path
-from types import SimpleNamespace
+from types import MappingProxyType, SimpleNamespace
 import tempfile
 
 from .. import hypothesis_portfolio, preauthored_continuation, source_candidate
@@ -151,14 +151,76 @@ def mocked_v25_carry_forward():
 
 
 class DeploymentFactoryTests(unittest.TestCase):
+    def test_ghost_replay_calibration_lifts_exact_existing_driver(self):
+        receipt, inputs = F._c6_ghost_replay_calibration()
+        self.assertEqual(receipt["result"], "PASS")
+        self.assertEqual(receipt["expected_rows"], 6)
+        self.assertEqual(
+            receipt["mechanism"],
+            "triton.runtime.jit.JITFunction.run-no-op")
+        self.assertEqual(
+            {item.role for item in inputs},
+            {"c6_ghost_replay_driver", "c6_ghost_replay_results"})
+        self.assertTrue(all(F._digest_regular(item.path, item.role) == item.sha256
+                            for item in inputs))
+
+    def test_native_c6_seed_is_run_perturbed_and_identity_bound(self):
+        manifest = SimpleNamespace(
+            campaign_id="ak-seed-campaign", candidate_id="akc-seed")
+        candidate = SimpleNamespace(
+            source_manifest=manifest, source_manifest_sha256="a" * 64)
+        build = SimpleNamespace(operation_key="b" * 64)
+        reviewed = SimpleNamespace(
+            template_id="cuda-vecdotq-q4k-v1",
+            semantics={"suite_seed": 4711})
+        first, first_receipt = F._c6_run_seed(
+            candidate, build, reviewed, 1)
+        second, second_receipt = F._c6_run_seed(
+            candidate, build, reviewed, 2)
+        self.assertNotEqual(first, second)
+        self.assertEqual(first_receipt["derived_seed"], first)
+        self.assertEqual(second_receipt["derived_seed"], second)
+        self.assertEqual(first_receipt["base_suite_seed"], 4711)
+        self.assertEqual(first_receipt["source_manifest_sha256"], "a" * 64)
+        self.assertEqual(first_receipt["operation_key"], "b" * 64)
+        with self.assertRaisesRegex(F.DeploymentFactoryError, "S1/S2"):
+            F._c6_run_seed(candidate, build, reviewed, 3)
+
+    def test_native_c6_capacity_is_static_s1_only_and_refuses_mul_only(self):
+        portfolio = hypothesis_portfolio.load(
+            hypothesis_portfolio.DEFAULT_PORTFOLIO)
+        templates = F._template_registry()
+        self.assertEqual(F._native_c6_portfolio_capacity(
+            portfolio, templates), 11)
+        mul_only = MappingProxyType({
+            key: (value if key == "MUL_MAT" else "typed_precompute_refusal")
+            for key, value in F._C6_OPERATOR_POLICY.items()})
+        with mock.patch.object(F, "_C6_OPERATOR_POLICY", mul_only):
+            self.assertEqual(F._native_c6_portfolio_capacity(
+                portfolio, templates), 5)
+
     def test_c6_quant_type_and_structural_accumulator_authority_fail_closed(self):
-        self.assertEqual(F._c6_mul_mat_type("cuda-vecdotq-q4k-v1"), "q4_K")
-        self.assertEqual(F._c6_mul_mat_type("cuda-mmvq-q5-onewave-continuation-v1"),
-                         "q5_K")
-        self.assertEqual(F._c6_mul_mat_type("cuda-vecdotq-q6k-v1"), "q6_K")
-        self.assertEqual(F._c6_mul_mat_type("cuda-quantize-q8-v1"), "q8_0")
-        with self.assertRaisesRegex(F.DeploymentFactoryError, "reviewed quant type"):
+        routes = {
+            "cuda-mmvq-q5-onewave-continuation-v1": ("q5_0", 6),
+            "cuda-vecdotq-q4k-v1": ("q4_K", 12),
+            "cuda-vecdotq-q6k-v1": ("q6_K", 14),
+            "cuda-quantize-q8-v1": ("q8_0", 8),
+        }
+        self.assertEqual(
+            {template: F._c6_mul_mat_route_type(template)
+             for template in routes}, routes)
+        for template, (type_a, type_enum) in routes.items():
+            with self.subTest(template=template):
+                self.assertEqual(F._c6_mul_mat_type(template), type_a)
+                if template != "cuda-quantize-q8-v1":
+                    self.assertTrue(any(
+                        f"\\(ggml_type\\){type_enum}" in row.kernel_pattern
+                        for row in F._template_registry().templates[
+                            template].dispatch.anchor_exact))
+        with self.assertRaisesRegex(F.DeploymentFactoryError, "reviewed quant route"):
             F._c6_mul_mat_type("cuda-mmvq-unbounded")
+        with self.assertRaisesRegex(F.DeploymentFactoryError, "reviewed quant route"):
+            F._c6_mul_mat_type("cuda-mmvq-q5k-unreviewed")
 
         relative = "ggml/src/ggml-cuda/vecdotq.cuh"
         def candidate(changed: str) -> C.PlannedCandidate:
@@ -183,7 +245,8 @@ class DeploymentFactoryTests(unittest.TestCase):
             "cuda-vecdotq-q4k-v1", "gpu_decode", "vec_dot_q4_K_q8_1",
             "backend-mul-mat", "dispatch", mock.Mock(), frozenset({relative}),
             {relative: frozenset({"vec_dot_q4_K_q8_1_impl_vmmq"})},
-            {"production_instrument_target_sha256_by_file": {relative: "a" * 64}})
+            {"correctness_op": "MUL_MAT",
+             "production_instrument_target_sha256_by_file": {relative: "a" * 64}})
         carrier = (
             b"float tmp[ncols_dst][rows_per_cuda_block] = {{0.0f}};\n"
             b"tmp[j][i] += vec_dot_q_cuda(\n")
@@ -194,7 +257,7 @@ class DeploymentFactoryTests(unittest.TestCase):
             structural, proof = F._c6_structural_precision(
                 config, candidate("new_unpack"), reviewed)
             self.assertEqual(structural["accumulator_dtype"], "f32")
-            self.assertEqual(proof["accumulator_authority"]["excluded_symbol"],
+            self.assertEqual(proof["accumulator_authority"]["protected_symbol"],
                              "mul_mat_vec_q")
             with self.assertRaisesRegex(F.DeploymentFactoryError,
                                         "vec-dot accumulator"):
@@ -1441,9 +1504,11 @@ class DeploymentFactoryTests(unittest.TestCase):
             result.c6_admission_store_path,
             Path("/evidence/c6-admission.jsonl"))
         self.assertEqual(
-            (result.c6_admission_alpha, result.c6_admission_beta,
-             result.c6_implausible_speedup_cap),
-            (1.2, 1.2, 32.0))
+            (result.c6_admission_alpha, result.c6_admission_beta),
+            (1.2, 1.2))
+        self.assertEqual(result.c6_roofline_authority["gpu_part"], "gfx90a")
+        self.assertEqual(result.c6_roofline_authority["workload"],
+                         "decode_tg128")
         self.assertEqual(result.c6_evaluator_commit,
                          config.instrument_commit)
         self.assertIn("candidate_commit", result.c6_reopen_when)
@@ -1666,7 +1731,8 @@ class DeploymentFactoryTests(unittest.TestCase):
             templates = mock.Mock(spec=F.ExperimentTemplateRegistry)
             templates.registry_sha256 = "e" * 64
             templates.templates = {}
-            templates.resolve.return_value = mock.sentinel.template
+            templates.resolve.return_value = SimpleNamespace(
+                semantics={"correctness_op": "MUL_MAT"})
             resolved = SimpleNamespace(
                 environment_profile=F.EnvironmentProfile({"PATH": "/usr/bin"}),
                 source_builder=source,
@@ -1736,9 +1802,17 @@ class DeploymentFactoryTests(unittest.TestCase):
                                 F.DeploymentFactoryError,
                                 "instrument capability changed"):
                     build(restored, object(), {"operation_key": "4" * 64})
+                templates.resolve.return_value = SimpleNamespace(
+                    semantics={"correctness_op": "ROPE"})
+                (operations / ("5" * 64)).mkdir(mode=0o700)
+                with self.assertRaisesRegex(
+                        C.C6OperatorUnsupportedRefusal,
+                        "before build/evidence execution"):
+                    build(restored, object(), {"operation_key": "5" * 64})
             self.assertEqual(first["operation_key"], "1" * 64)
             self.assertEqual(second["operation_key"], "2" * 64)
             self.assertFalse((operations / ("3" * 64) / "source-manifest.json").exists())
+            self.assertFalse((operations / ("5" * 64) / "source-manifest.json").exists())
             self.assertEqual(len(calls), 2)
             self.assertEqual([row["deployment_config_semantic_sha256"] for row in calls],
                              [config.config_sha256, config.config_sha256])

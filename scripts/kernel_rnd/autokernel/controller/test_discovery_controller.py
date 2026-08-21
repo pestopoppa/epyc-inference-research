@@ -1459,6 +1459,20 @@ class Tests(unittest.TestCase):
   with tempfile.TemporaryDirectory() as t, patch.object(D.source_candidate,"SourcePatchManifest",Manifest), patch.object(D,"_write_projection"):
    root=Path(t); p=FakePlanner(); r=D.run_controller(self.cfg(root,1),planner=p,critic=FakeCritic(["accept"]),screener=Bad([]),lease=Lease()); again=D.run_controller(self.cfg(root,1),planner=p,critic=FakeCritic(["accept"]),screener=Bad([]),lease=Lease())
    self.assertEqual(r["iterations"][0]["status"],"screen_refused"); self.assertEqual(again,r); self.assertEqual(len(p.calls),1)
+ def test_typed_c6_operator_refusal_advances_loop_without_science_debit(self):
+  class UnsupportedThenNegative(FakeScreen):
+   def screen(self,*args):
+    if self.calls == 0:
+     self.calls += 1
+     raise D.C6OperatorUnsupportedRefusal(
+         "ROPE lacks a sealed native two-route witness")
+    return super().screen(*args)
+  with tempfile.TemporaryDirectory() as t, patch.object(D.source_candidate,"SourcePatchManifest",Manifest), patch.object(D,"_write_projection"):
+   root=Path(t); screen=UnsupportedThenNegative([-.01])
+   result=D.run_controller(self.cfg(root,2),planner=FakePlanner(),critic=FakeCritic(["accept","accept"]),screener=screen,lease=Lease())
+   self.assertEqual([row["status"] for row in result["iterations"]],["screen_refused","screened_out"])
+   self.assertEqual(result["scientific_attempts"],1)
+   self.assertNotIn("result_sha256",result["iterations"][0])
  def test_post_proof_transport_interruption_pauses_and_resumes_same_candidate(self):
   class Interrupted(FakeScreen):
    def screen(self,*args):

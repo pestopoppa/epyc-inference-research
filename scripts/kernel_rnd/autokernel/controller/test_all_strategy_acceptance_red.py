@@ -1319,6 +1319,65 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
             self.assertIn("akh-first", result["portfolio_skips"])
             self.assertNotIn("akh-first", result["portfolio_terminals"])
 
+    def test_ten_unique_nonpositive_s1_rows_exhaust_science_without_s2(self):
+        fixture = TD.Tests(methodName="runTest")
+        with tempfile.TemporaryDirectory() as directory:
+            supported_ids = {
+                "akh-v26-q4k-branchless-sixbit-scale",
+                "akh-v26-rms-scale-broadcast",
+                "akh-v26-fa-combine-wave-normalization",
+                "akh-v26-q6k-packed-decode",
+                "akh-v26-fa-gqa7-common-map",
+            }
+            records = [json.loads(json.dumps(
+                record, default=lambda item: dict(item))) for record in
+                       self.portfolio.eligible_hypotheses()
+                       if record["hypothesis_id"] in supported_ids]
+            self.assertEqual(len(records), 5)
+            for record in records:
+                record["decision_policy"]["max_distinct_candidates"] = 2
+            config = self._real_portfolio_config(
+                Path(directory), records, iterations=10)
+
+            class BoundPlanner:
+                def __init__(self):
+                    self.calls = 0
+
+                def attest(self):
+                    return {**C.SOL, "runtime": TD.RUNTIME}
+
+                def plan(self, *, context, workspace):
+                    self.calls += 1
+                    binding = context["authoring_assignment"]["portfolio_binding"]
+                    return AllStrategyAcceptanceRedGate._bound_candidate(
+                        fixture, binding, context, self.calls)
+
+            class NegativeScreen:
+                def __init__(self):
+                    self.calls = 0
+
+                def reconcile(self, _inflight):
+                    return C.Recovery("safe_to_start")
+
+                def screen(self, *_args):
+                    self.calls += 1
+                    return C.SealedScreen(
+                        "receipt", f"{self.calls:064x}", -.01, "candidate",
+                        "a" * 64, "b" * 64, "c" * 64)
+
+            result = C.run_controller(
+                config, planner=BoundPlanner(),
+                critic=TD.FakeCritic(["accept"] * 10),
+                screener=NegativeScreen(), lease=TD.Lease())
+            self.assertEqual(result["scientific_attempts"], 10)
+            self.assertEqual(len(result["iterations"]), 10)
+            self.assertTrue(all(row["status"] == "screened_out"
+                                for row in result["iterations"]))
+            self.assertFalse(any("confirmation_of" in row
+                                 for row in result["iterations"]))
+            self.assertEqual(len({row["candidate_semantic_sha256"]
+                                  for row in result["iterations"]}), 10)
+
     def test_dry_run_advances_through_every_eligible_strategy_once(self):
         """RED: authorization-only validation must not spin on rank one."""
         fixture = TD.Tests(methodName="runTest")
@@ -1866,7 +1925,9 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
             original_correctness = executors.correctness
 
             def fail_dedicated(invocation):
-                if sum(call[0] == "correctness" for call in executors.calls):
+                # C6 is now the first correctness invocation; fail only the
+                # dedicated targeted invocation after C6 + generic are sealed.
+                if sum(call[0] == "correctness" for call in executors.calls) >= 2:
                     executors.correctness_summary = "2/3 tests passed"
                 return original_correctness(invocation)
 
@@ -1877,6 +1938,7 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
             self.assertEqual(
                 [call[:2] for call in executors.calls],
                 [("correctness", "candidate"),
+                 ("correctness", "candidate"),
                  ("correctness", "candidate")])
             calls_after_terminal = list(executors.calls)
             receipt = Path(first.exception.receipt_path)
@@ -1886,9 +1948,14 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
             forged["receipt_sha256"] = E.schemas.content_hash(forged)
             receipt.write_text(__import__("json").dumps(
                 forged, sort_keys=True) + "\n")
-            with mock.patch.object(C, "GpuSourceScreener", TA.FakeDelegate), \
-                    self.assertRaises(E.EvidenceProducerError):
-                adapter.screen(candidate, authorization, lease)
+            with self.assertRaises(E.EvidenceProducerError):
+                E.produce_gpu_source_evidence(
+                    output_root=(adapter._root(lease["operation_key"]) / "proof"),
+                    plan=evidence_plan,
+                    correctness_executor=executors.correctness,
+                    rocprof_executor=executors.rocprof,
+                    claim_journal=object(), claim_acquirer=ClaimFactory(),
+                    claim_verifier=lambda _receipt: True, claim_timeout_s=0)
             self.assertEqual(executors.calls, calls_after_terminal)
 
     def test_controller_accounts_each_typed_stage_refusal_without_ambiguity(self):

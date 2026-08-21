@@ -8,9 +8,11 @@ import tempfile
 import unittest
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from . import discovery_controller as D
+from . import test_gpu_source_evidence as TE
 from .test_discovery_controller import FakeCritic, Lease
 
 
@@ -93,12 +95,16 @@ class GatedScreens:
             "state": "decided", "ok": True, "non_promotable": True,
             "promotion_claim": False, "hip_residency_proved": True,
             "runtime_graphs": "on", "baseline_center": 100.0,
+            "model_size_bytes": 1_000_000_000,
             "candidate_samples": samples,
             "median_relative": measured_effect,
             "baseline_sha256": baseline["baseline_sha256"],
             "candidate_identity": candidate_identity,
             "graphs_on_output_oracle": oracle,
-            "frame": {"metric": "tokens_per_second", "model": "fixture"},
+            "frame": {
+                "backend": "llama_gpu", "recipe": "decode_tg128",
+                "metric": "tokens_per_second", "n_prompt": 0, "n_gen": 128,
+                "model": "fixture", "architecture": "gfx90a"},
             "sole_factor": {"kind": "source_patch"},
         }
         result["result_sha256"] = D.schemas.content_hash(result)
@@ -112,7 +118,7 @@ class GatedScreens:
             "numeric_verdicts": [{"correct": True}] * 3,
         }
         c6_body["receipt_sha256"] = D.gpu_source_proofs._hash(c6_body)
-        c6_path = output / "c6-receipt.json"
+        c6_path = output / "proof" / "correctness" / "c6-receipt.json"
         _write_json(c6_path, c6_body)
         c6_ref = D.gpu_source_proofs.load_receipt(
             c6_path, schema="epyc.autokernel.c6_correctness_receipt.v1")
@@ -140,11 +146,18 @@ class GatedScreens:
 
 def _config(root: Path) -> D.ControllerConfig:
     evidence = root / "evidence"
+    facts = (Path(D.__file__).resolve().parent.parent /
+             "substrate_facts.json").resolve()
     return D.ControllerConfig(
         root / "state", max_iterations=2, evidence_root=evidence,
         c6_admission_store_path=evidence / "c6-admission.jsonl",
         c6_admission_alpha=1.2, c6_admission_beta=1.2,
-        c6_implausible_speedup_cap=32.0,
+        c6_roofline_authority={
+            "schema": "epyc.autokernel.c6_roofline_authority.v1",
+            "gpu_part": "gfx90a", "facts_path": str(facts),
+            "facts_sha256": hashlib.sha256(facts.read_bytes()).hexdigest(),
+            "workload": "decode_tg128", "batch_size": 1,
+            "dense_model_bytes_per_token": True},
         c6_reopen_when=(
             "candidate_commit, anchor_commit, evaluator_commit, or exact "
             "measurement frame changes"),
@@ -152,6 +165,21 @@ def _config(root: Path) -> D.ControllerConfig:
 
 
 class TestC6AdmissionIntegration(unittest.TestCase):
+    def setUp(self):
+        def reopen_fixture_bundle(path):
+            c6_path = Path(path).parent / "correctness" / "c6-receipt.json"
+            c6_ref = D.gpu_source_proofs.load_receipt(
+                c6_path, schema="epyc.autokernel.c6_correctness_receipt.v1")
+            return SimpleNamespace(
+                correctness={"body": {"c6_correctness": c6_ref}})
+
+        self.real_bundle_loader = D.gpu_source_evidence.load_gpu_source_evidence_bundle
+        self.bundle_loader = patch.object(
+            D.gpu_source_evidence, "load_gpu_source_evidence_bundle",
+            side_effect=reopen_fixture_bundle)
+        self.bundle_loader.start()
+        self.addCleanup(self.bundle_loader.stop)
+
     def test_real_controller_writes_only_after_two_fully_gated_screens(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -172,7 +200,7 @@ class TestC6AdmissionIntegration(unittest.TestCase):
             self.assertEqual(receipt["evaluator_commit"], "d" * 40)
             self.assertEqual(receipt["alpha"], 1.2)
             self.assertEqual(receipt["beta"], 1.2)
-            self.assertEqual(receipt["implausible_speedup_cap"], 32.0)
+            self.assertEqual(receipt["implausible_speedup_cap"], 14.333)
             self.assertEqual(receipt["reopen_when"], config.c6_reopen_when)
             self.assertAlmostEqual(receipt["first_turn_speedup"], 1.01)
             self.assertAlmostEqual(receipt["required_speedup"], 1.212)
@@ -287,6 +315,43 @@ class TestC6AdmissionIntegration(unittest.TestCase):
                 D.run_controller(
                     config, planner=Planner(), critic=FakeCritic([]),
                     screener=GatedScreens(root / "unused"), lease=Lease())
+
+    def test_roofline_carrier_tamper_and_unknown_gpu_fail_closed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = _config(root)
+            state = D.run_controller(
+                config, planner=Planner(), critic=FakeCritic(["accept"]),
+                screener=GatedScreens(root / "screens"), lease=Lease())
+            carrier = dict(state["iterations"][1][
+                "c6_admission_first_leg"]["roofline_speedup_cap"])
+            carrier["max_speedup"] = 999.0
+            with self.assertRaisesRegex(
+                    D.DiscoveryControllerError, "roofline carrier"):
+                D._validate_c6_roofline_carrier(carrier)
+            with self.assertRaisesRegex(
+                    D.DiscoveryControllerError, "roofline authority"):
+                replace(config, c6_roofline_authority={
+                    **config.c6_roofline_authority, "gpu_part": "gfx999"})
+
+    def test_admission_restart_refuses_recursive_native_sidecar_tamper(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bundle, _, _ = TE.GpuSourceEvidenceTests().produce(root)
+            c6_ref = bundle.correctness["body"]["c6_correctness"]
+            with patch.object(
+                    D.gpu_source_evidence, "load_gpu_source_evidence_bundle",
+                    side_effect=self.real_bundle_loader):
+                reopened = D._reopen_c6_admission_correctness(
+                    c6_ref, c6_ref["file_sha256"])
+                self.assertEqual(reopened, c6_ref)
+                sidecar = Path(c6_ref["body"]["sidecar"]["path"])
+                sidecar.write_bytes(sidecar.read_bytes() + b" ")
+                with self.assertRaisesRegex(
+                        D.DiscoveryControllerError,
+                        "recursively reopen its full evidence bundle"):
+                    D._reopen_c6_admission_correctness(
+                        c6_ref, c6_ref["file_sha256"])
 
 
 if __name__ == "__main__":

@@ -27,7 +27,7 @@ from .. import (cumulative_composition, hypothesis_portfolio,
 from ..execution import inference_window, device_sampler, t0_provider, worktree
 from ..execution import cpu_region_claim
 from ..execution import instrument_integrity
-from ..evaluator import integrity
+from ..evaluator import integrity, hawkeye_measurement
 from ..resource import device_claim
 from . import discovery_controller as controller
 from . import discovery_deployment as deployment
@@ -429,6 +429,8 @@ def _execution_module_sources() -> dict[str, tuple[str, Path]]:
         "instrument_integrity": Path(instrument_integrity.__file__),
         "t0_provider": Path(t0_provider.__file__),
         "evaluator_integrity": Path(integrity.__file__),
+        "hawkeye_measurement": Path(hawkeye_measurement.__file__),
+        "candidate_sandbox": Path(hawkeye_measurement.candidate_sandbox.__file__),
         "gpu_source_evidence": Path(evidence.__file__),
         "gpu_source_proofs": Path(gpu_source_proofs.__file__),
         "gpu_discovery_beliefs": Path(autokernel_gpu_discovery_beliefs.__file__),
@@ -2415,13 +2417,64 @@ def _manifest_file(config: deployment.DiscoveryDeployment,
     return _manifest_file_for_operation(config, candidate, build.operation_key)
 
 
+_C6_OPERATOR_POLICY = MappingProxyType({
+    "MUL_MAT": "native_c6_mul_mat_v1",
+    "RMS_NORM": "native_c6_rms_norm_v1",
+    "ROPE": "typed_precompute_refusal",
+    "FLASH_ATTN_EXT": "native_c6_flash_attn_ext_v1",
+})
+
+
+def _c6_operator_policy(operation: object) -> str:
+    if not isinstance(operation, str) or operation not in _C6_OPERATOR_POLICY:
+        return "typed_precompute_refusal"
+    return _C6_OPERATOR_POLICY[operation]
+
+
+def _native_c6_portfolio_capacity(
+        portfolio: hypothesis_portfolio.Portfolio,
+        templates: ExperimentTemplateRegistry) -> int:
+    """Count independently eligible S1 slots with a sealed native C6 path."""
+    capacity = 0
+    for record in portfolio.eligible_hypotheses():
+        template_ids = record["current_bundle_eligibility"]["template_ids"]
+        if (not isinstance(template_ids, (list, tuple))
+                or len(template_ids) != 1):
+            raise DeploymentFactoryError(
+                "eligible C6 capacity row lacks one exact template")
+        template = templates.templates.get(template_ids[0])
+        if template is None:
+            raise DeploymentFactoryError(
+                "eligible C6 capacity row escaped the template registry")
+        if (_c6_operator_policy(template.semantics.get("correctness_op")) ==
+                "typed_precompute_refusal"):
+            continue
+        slots = record.get("decision_policy", {}).get("max_distinct_candidates")
+        if isinstance(slots, bool) or not isinstance(slots, int) or slots < 1:
+            raise DeploymentFactoryError(
+                "eligible C6 capacity row has an invalid candidate budget")
+        capacity += slots
+    return capacity
+
+
+_C6_MUL_MAT_ROUTE_TYPES = MappingProxyType({
+    "cuda-mmvq-q5-onewave-continuation-v1": ("q5_0", 6),
+    "cuda-vecdotq-q4k-v1": ("q4_K", 12),
+    "cuda-vecdotq-q6k-v1": ("q6_K", 14),
+    "cuda-quantize-q8-v1": ("q8_0", 8),
+})
+
+
+def _c6_mul_mat_route_type(template_id: str) -> tuple[str, int]:
+    try:
+        return _C6_MUL_MAT_ROUTE_TYPES[template_id]
+    except KeyError as exc:
+        raise DeploymentFactoryError(
+            "native C6 MUL_MAT harness lacks a reviewed quant route for template") from exc
+
+
 def _c6_mul_mat_type(template_id: str) -> str:
-    for marker, value in (("q4k", "q4_K"), ("q5", "q5_K"),
-                          ("q6k", "q6_K"), ("q8", "q8_0")):
-        if marker in template_id:
-            return value
-    raise DeploymentFactoryError(
-        "native C6 MUL_MAT harness lacks a reviewed quant type for template")
+    return _c6_mul_mat_route_type(template_id)[0]
 
 
 def _c6_structural_precision(
@@ -2458,15 +2511,38 @@ def _c6_structural_precision(
         if added_tokens != removed_tokens:
             raise DeploymentFactoryError(
                 "candidate precision patch changes a reviewed narrow-type token")
-        if any("mul_mat_vec_q" == symbol for symbols in
-               manifest.declared_symbols.values() for symbol in symbols):
+        if (template.semantics.get("correctness_op") == "MUL_MAT"
+                and any("mul_mat_vec_q" == symbol for symbols in
+                        manifest.declared_symbols.values() for symbol in symbols)):
             raise DeploymentFactoryError(
                 "candidate scope includes the trusted operator accumulator kernel")
 
-    # The final MUL_MAT reduction is a float array in the reviewed native
-    # kernel.  Its symbol is deliberately outside every admitted C6 template;
-    # exact source bytes and both load/add carrier fragments are sealed here.
-    accumulator_path = "ggml/src/ggml-cuda/mmvq.cu"
+    operation = template.semantics.get("correctness_op")
+    accumulator_contracts = {
+        "MUL_MAT": (
+            "ggml/src/ggml-cuda/mmvq.cu",
+            ("float tmp[ncols_dst][rows_per_cuda_block] = {{0.0f}};",
+             "tmp[j][i] += vec_dot_q_cuda("),
+            "mul_mat_vec_q"),
+        "RMS_NORM": (
+            "ggml/src/ggml-cuda/norm.cu",
+            ("const float xi = x[col];\n        tmp += xi * xi;",
+             "const float scale = rsqrtf(mean + eps);",
+             "dst[col]          = scale * x[col] * mul[mul_col];"),
+            "rms_norm_f32"),
+        "FLASH_ATTN_EXT": (
+            "ggml/src/ggml-cuda/fattn-common.cuh",
+            ("float VKQ_numerator   = 0.0f;",
+             "float VKQ_denominator = 0.0f;",
+             "dst[tid] = VKQ_numerator / VKQ_denominator;"),
+            "flash_attn_combine_results"),
+    }
+    try:
+        accumulator_path, accumulator_fragments, accumulator_symbol = (
+            accumulator_contracts[operation])
+    except KeyError as exc:
+        raise DeploymentFactoryError(
+            "native C6 structural precision lacks an operator contract") from exc
     committed = subprocess.run(
         ("git", "-C", str(config.instrument_path), "show",
          f"{config.instrument_commit}:{accumulator_path}"),
@@ -2479,8 +2555,9 @@ def _c6_structural_precision(
     if (committed.returncode != 0
             or any(committed.stdout.count(fragment.encode()) != 1
                    for fragment in accumulator_fragments)
-            or any(any(fragment in line for fragment in accumulator_fragments)
-                   for line in changed_lines)):
+            or (operation in {"MUL_MAT", "FLASH_ATTN_EXT"}
+                and any(any(fragment in line for fragment in accumulator_fragments)
+                        for line in changed_lines))):
         raise DeploymentFactoryError(
             "trusted f32 operator accumulator carrier is absent or changed")
 
@@ -2494,9 +2571,22 @@ def _c6_structural_precision(
                for line in changed_lines):
             raise DeploymentFactoryError(
                 "candidate changes the reviewed vec-dot accumulator or return path")
+    reviewed_route = None
+    if operation == "MUL_MAT":
+        type_a, type_enum = _c6_mul_mat_route_type(template.template_id)
+        reviewed_route = {"type_a": type_a, "ggml_type_enum": type_enum}
+    elif operation == "RMS_NORM":
+        reviewed_route = {"type_a": "f32", "ncols": 256}
+    else:
+        reviewed_route = {
+            "type_a": "f16", "head_dimension": 64,
+            "kv_heads": 2, "query_heads": 14,
+            "requires_exact_dispatch_attribution": True,
+        }
     proof = {
         "schema": "epyc.autokernel.c6_structural_precision_source_diff.v1",
         "template_id": template.template_id,
+        "reviewed_operator_route": reviewed_route,
         "candidate_id": candidate.source_manifest.candidate_id,
         "patch_sha256": patch_hashes,
         "allowed_files": sorted(template.allowed_files),
@@ -2511,7 +2601,7 @@ def _c6_structural_precision(
             "path": accumulator_path,
             "source_sha256": hashlib.sha256(committed.stdout).hexdigest(),
             "required_fragments": list(accumulator_fragments),
-            "excluded_symbol": "mul_mat_vec_q",
+            "protected_symbol": accumulator_symbol,
         },
         "rule": "sealed-f32-operator-accumulator-plus-no-narrowing/v2",
         "result": "PASS",
@@ -2523,14 +2613,89 @@ def _c6_structural_precision(
     return structural, proof
 
 
+def _c6_run_seed(
+        candidate: controller.PlannedCandidate,
+        build: controller.GpuSourceBuild,
+        template: ExperimentTemplate,
+        repetition: int) -> tuple[int, dict[str, Any]]:
+    if isinstance(repetition, bool) or not isinstance(repetition, int) \
+            or repetition not in {1, 2}:
+        raise DeploymentFactoryError(
+            "native C6 repetition must be the governed S1/S2 index")
+    if not isinstance(build.operation_key, str) or not build.operation_key:
+        raise DeploymentFactoryError("native C6 run seed lacks operation identity")
+    authority = {
+        "schema": "epyc.autokernel.c6_run_seed_derivation.v1",
+        "campaign_id": candidate.source_manifest.campaign_id,
+        "candidate_id": candidate.source_manifest.candidate_id,
+        "source_manifest_sha256": candidate.source_manifest_sha256,
+        "operation_key": build.operation_key,
+        "template_id": template.template_id,
+        "repetition": repetition,
+        "base_suite_seed": int(template.semantics["suite_seed"]),
+    }
+    digest = schemas.content_hash(authority)
+    seed = int(digest[:16], 16) or 1
+    return seed, {**authority, "seed_sha256": digest, "derived_seed": seed}
+
+
+def _c6_ghost_replay_calibration() -> tuple[dict[str, Any], tuple[
+        evidence.BoundInputFile, evidence.BoundInputFile]]:
+    """Bind the reviewed Ghost Replay falsification without reimplementing it.
+
+    The native ggml harness is not Triton and must not pretend that another
+    no-op mechanism is equivalent.  This receipt therefore identifies the
+    standing evaluator calibration only; exact route attribution remains the
+    per-candidate native load-bearing proof.
+    """
+    root = Path(__file__).resolve().parent.parent.parent / "c6_mutants"
+    driver = root / "run_falsification.py"
+    results = root / "results_20260821.jsonl"
+    driver_sha = _digest_regular(driver, "C6 Ghost Replay driver")
+    results_sha = _digest_regular(results, "C6 Ghost Replay results")
+    rows: list[dict[str, Any]] = []
+    try:
+        for line in results.read_text(encoding="utf-8").splitlines():
+            value = json.loads(line)
+            if (value.get("tier") == "L2_ghost_replay"
+                    and value.get("arm") == "standard"):
+                rows.append(value)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise DeploymentFactoryError(
+            "C6 Ghost Replay calibration is unreadable") from exc
+    expected = {(task, candidate) for task in (
+        "layernorm_no_affine", "softmax_no_maxsub", "matmul_transpose_no_t")
+        for candidate in ("honest", "mutant")}
+    observed = {(row.get("task"), row.get("candidate")) for row in rows}
+    if (len(rows) != 6 or observed != expected
+            or any(row.get("verdict") != "PASS" for row in rows)):
+        raise DeploymentFactoryError(
+            "C6 Ghost Replay standing calibration is incomplete or failed")
+    receipt = {
+        "schema": "epyc.autokernel.c6_ghost_replay_calibration.v1",
+        "mechanism": "triton.runtime.jit.JITFunction.run-no-op",
+        "scope": "evaluator_calibration_not_native_candidate_execution",
+        "driver_sha256": driver_sha,
+        "results_sha256": results_sha,
+        "expected_rows": 6,
+        "result": "PASS",
+    }
+    return receipt, (
+        evidence.BoundInputFile("c6_ghost_replay_driver", driver, driver_sha),
+        evidence.BoundInputFile("c6_ghost_replay_results", results, results_sha))
+
+
 def _c6_native_capability(
         config: deployment.DiscoveryDeployment,
         candidate: controller.PlannedCandidate,
         build: controller.GpuSourceBuild,
-        template: ExperimentTemplate) -> evidence.C6CorrectnessPlan:
-    if build.operation_key is None or template.semantics.get("correctness_op") != "MUL_MAT":
+        template: ExperimentTemplate,
+        repetition: int) -> evidence.C6CorrectnessPlan:
+    operation = template.semantics.get("correctness_op")
+    if (build.operation_key is None
+            or _c6_operator_policy(operation) == "typed_precompute_refusal"):
         raise DeploymentFactoryError(
-            "native C6 capability currently requires a governed MUL_MAT template")
+            "native C6 capability lacks a governed operator template")
     source = (Path(__file__).resolve().parent.parent / "native" /
               "c6_mul_mat_harness.cpp")
     if source.is_symlink() or not source.is_file():
@@ -2539,8 +2704,8 @@ def _c6_native_capability(
     compiler = Path("/usr/bin/c++").resolve(strict=True)
     compiler_sha = _digest_regular(compiler, "native C6 compiler")
     root = _operation_carrier_root(config, build.operation_key)
-    executable = root / "c6-mul-mat-harness"
-    partial = root / ".c6-mul-mat-harness.partial"
+    executable = root / "c6-native-operator-harness"
+    partial = root / ".c6-native-operator-harness.partial"
     bin_dir = build.candidate_build.resolve(strict=True) / "bin"
     header_root = config.instrument_path.resolve(strict=True)
     header_paths = (
@@ -2590,11 +2755,23 @@ def _c6_native_capability(
     executable_sha = _digest_regular(executable, "native C6 harness")
     structural, structural_proof = _c6_structural_precision(
         config, candidate, template)
+    ghost_replay, ghost_inputs = _c6_ghost_replay_calibration()
+    if operation == "MUL_MAT":
+        type_a, ggml_type_enum = _c6_mul_mat_route_type(template.template_id)
+        dimensions = (32, 1, 256)
+    elif operation == "RMS_NORM":
+        type_a, ggml_type_enum = "f32", 0
+        dimensions = (256, 1, 1)
+    else:
+        type_a, ggml_type_enum = "f16", 1
+        dimensions = (64, 1, (4096 if template.template_id ==
+                              "cuda-fattn-combine-v1" else 128))
     capability = {
         "schema": "epyc.autokernel.c6_native_capability.v1",
         "instrument_commit": config.instrument_commit,
         "candidate_commit": build.candidate_identity.source_commit,
         "candidate_source_sha256": build.candidate_identity.source_sha256,
+        "template_id": template.template_id,
         "source": {"path": str(source), "sha256": source_sha},
         "public_headers": {relative: {"path": str(path), "sha256": digest}
                            for relative, path, digest in header_bindings},
@@ -2607,27 +2784,48 @@ def _c6_native_capability(
                        (bin_dir / name).resolve(strict=True), name)}
             for name in ("libggml.so", "libggml-base.so", "libggml-cpu.so",
                          "libggml-hip.so")},
-        "operation": "MUL_MAT", "type_a": _c6_mul_mat_type(template.template_id),
+        "operation": operation, "type_a": type_a,
+        "ggml_type_enum": ggml_type_enum,
         "precision_contract": {
             "required_output_dtype": "f32",
             "required_accumulator_dtype": "f32",
-            "atol": 0.01, "rtol": 0.01,
-            "required_matched_ratio": 0.95, "lowbit": True,
+            "atol": 0.01 if operation == "MUL_MAT" else 0.001,
+            "rtol": 0.01 if operation == "MUL_MAT" else 0.001,
+            "required_matched_ratio": (0.95 if operation == "MUL_MAT" else 1.0),
+            "lowbit": operation == "MUL_MAT",
+        },
+        "precision_equivalence_policy": {
+            "operator_id": operation,
+            "template_id": template.template_id,
+            "input_dtype": (
+                "float16" if operation == "FLASH_ATTN_EXT" else "float32"),
+            "required_output_dtype": "f32",
+            "required_accumulator_dtype": "f32",
+            "reduce_dimension": (
+                dimensions[2] if operation in {"MUL_MAT", "FLASH_ATTN_EXT"}
+                else dimensions[0]),
+            "structural_evidence_sha256": structural["evidence_sha256"],
+            "bound_multiplier": 1.0,
         },
         "structural_precision_proof": structural_proof,
         "structural_precision_evidence": structural,
         "semantic_judge_verdicts": {},
+        "ghost_replay_calibration": ghost_replay,
         "native_execution": True, "wrapper_used": False,
         "promotion_claim": False,
     }
+    seed, seed_authority = _c6_run_seed(
+        candidate, build, template, repetition)
+    capability["run_seed_derivation"] = seed_authority
     capability_path = _write_operation_carrier(
         config, build.operation_key, "c6-native-capability.json",
         json.dumps(capability, sort_keys=True, separators=(",", ":")).encode(),
         "native C6 capability")
     capability_sha = _digest_regular(capability_path, "native C6 capability")
-    seed = int(template.semantics["suite_seed"])
-    argv = (str(executable), "--backend", "ROCm0", "--type-a",
-            capability["type_a"], "--m", "32", "--n", "1", "--k", "256",
+    argv = (str(executable), "--operation", str(operation),
+            "--backend", "ROCm0", "--type-a", capability["type_a"],
+            "--m", str(dimensions[0]), "--n", str(dimensions[1]),
+            "--k", str(dimensions[2]),
             "--seed", str(seed), "--sidecar", evidence.C6_SIDECAR_OUTPUT)
     inputs = (
         evidence.BoundInputFile("executable", executable, executable_sha),
@@ -2637,13 +2835,18 @@ def _c6_native_capability(
         *(evidence.BoundInputFile(
             "c6_header_" + relative.rsplit("/", 1)[-1].replace(".", "_"),
             path, digest) for relative, path, digest in header_bindings),
-        evidence.BoundInputFile("c6_candidate_hip",
-                                (bin_dir / "libggml-hip.so").resolve(strict=True),
-                                capability["candidate_libraries"]["libggml-hip.so"]["sha256"]),
+        *ghost_inputs,
+        *(evidence.BoundInputFile(
+            "c6_candidate_" + name.removeprefix("lib").removesuffix(".so")
+            .replace("-", "_"),
+            Path(record["path"]), str(record["sha256"]))
+          for name, record in sorted(capability["candidate_libraries"].items())),
     )
     return evidence.C6CorrectnessPlan(
         argv=argv, inputs=inputs,
         precision_contract=capability["precision_contract"],
+        precision_equivalence_policy=capability[
+            "precision_equivalence_policy"],
         structural_precision_evidence=structural,
         semantic_judge_verdicts={})
 
@@ -2744,8 +2947,9 @@ def _evidence_binding(config: deployment.DiscoveryDeployment) -> EvidencePlanBin
             "execution_policy", carrier_root / "evidence-policy.json", "0" * 64)
         dispatch = template.bind_dispatch(candidate.experiment_intent)
         c6_correctness = (
-            _c6_native_capability(config, candidate, build_, template)
-            if op == "MUL_MAT" else None)
+            _c6_native_capability(
+                config, candidate, build_, template, repetition)
+            if _c6_operator_policy(op) != "typed_precompute_refusal" else None)
         candidate_rows, anchor_rows = _expected_rocprofv3_rows(dispatch)
         provisional = evidence.GpuSourceEvidencePlan(
             campaign_id=candidate.source_manifest.campaign_id,
@@ -3909,6 +4113,12 @@ def materialize(config: deployment.DiscoveryDeployment, registry: Mapping[str, M
         runner_attest()
         template = templates.resolve(candidate.experiment_intent)
         _validate_source_scope(candidate, template)
+        correctness_op = template.semantics.get("correctness_op")
+        c6_policy = _c6_operator_policy(correctness_op)
+        if c6_policy == "typed_precompute_refusal":
+            raise controller.C6OperatorUnsupportedRefusal(
+                "native C6 operator policy refuses unsupported operator "
+                f"{correctness_op!r} ({c6_policy}) before build/evidence execution")
         candidate.source_manifest.bind(
             proposal=candidate.proposal, campaign_id=candidate.source_manifest.campaign_id,
             candidate_id=candidate.source_manifest.candidate_id,
@@ -4010,6 +4220,12 @@ def controller_config(config: deployment.DiscoveryDeployment, *, dry_run: bool =
     preauthored_continuation.verify_git_authority(
         config.preauthored_continuation.value, config.instrument_path,
         config.instrument_commit)
+    c6_capacity = _native_c6_portfolio_capacity(
+        config.hypothesis_portfolio.value, _template_registry())
+    if c6_capacity < config.max_iterations:
+        raise DeploymentFactoryError(
+            "sealed native C6 S1 capacity is below max_iterations: "
+            f"{c6_capacity} < {config.max_iterations}")
     return controller.ControllerConfig(
         output_root=config.state_root, evidence_root=config.evidence_root,
         max_iterations=config.max_iterations,
@@ -4038,7 +4254,16 @@ def controller_config(config: deployment.DiscoveryDeployment, *, dry_run: bool =
         c6_admission_store_path=config.evidence_root / "c6-admission.jsonl",
         c6_admission_alpha=1.2,
         c6_admission_beta=1.2,
-        c6_implausible_speedup_cap=32.0,
+        c6_roofline_authority=(lambda facts_path: {
+            "schema": "epyc.autokernel.c6_roofline_authority.v1",
+            "gpu_part": "gfx90a",
+            "facts_path": str(facts_path),
+            "facts_sha256": _digest_regular(
+                facts_path, "AutoKernel substrate facts"),
+            "workload": "decode_tg128",
+            "batch_size": 1,
+            "dense_model_bytes_per_token": True,
+        })((Path(__file__).resolve().parent.parent / "substrate_facts.json").resolve()),
         c6_reopen_when=(
             "candidate_commit, anchor_commit, evaluator_commit, or exact "
             "measurement frame changes"),
