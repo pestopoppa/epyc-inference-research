@@ -411,6 +411,7 @@ def _execution_module_sources() -> dict[str, tuple[str, Path]]:
     paths = {
         "deployment_factory": Path(__file__),
         "discovery_controller": Path(controller.__file__),
+        "c6_reward_integrity": Path(controller.c6_reward_integrity.__file__),
         "hypotheses": Path(controller.hypotheses.__file__),
         "do_not_repeat": Path(controller.do_not_repeat.__file__),
         "discovery_telemetry": Path(discovery_telemetry.__file__),
@@ -4316,6 +4317,14 @@ def controller_config(config: deployment.DiscoveryDeployment, *, dry_run: bool =
             config.preauthored_continuation.value.hypothesis_id:
                 config.preauthored_continuation.value,
         },
+        c6_admission_store_path=config.evidence_root / "c6-admission.jsonl",
+        c6_admission_alpha=1.2,
+        c6_admission_beta=1.2,
+        c6_implausible_speedup_cap=32.0,
+        c6_reopen_when=(
+            "candidate_commit, anchor_commit, evaluator_commit, or exact "
+            "measurement frame changes"),
+        c6_evaluator_commit=config.instrument_commit,
         # The sealed deployment digest, not a caller argument, namespaces all
         # controller/worktree/receipt identities across concurrent deployments.
         campaign_id=f"ak-discovery-{config.config_sha256[:16]}")

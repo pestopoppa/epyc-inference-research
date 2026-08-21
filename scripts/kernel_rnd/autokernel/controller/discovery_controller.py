@@ -27,6 +27,7 @@ import stat
 import tempfile
 from typing import Any, Callable, Mapping, Protocol, Sequence
 
+from scripts.kernel_rnd import c6_reward_integrity
 from .. import (campaign, cumulative_composition, hypothesis_portfolio, journal,
                 preauthored_continuation, schemas, source_candidate)
 from ..evaluator import integrity
@@ -2451,6 +2452,12 @@ class ControllerConfig:
     carry_forward_sha256: str | None = None
     preauthored_continuations: Mapping[
         str, preauthored_continuation.PreauthoredContinuation] | None = None
+    c6_admission_store_path: Path | None = None
+    c6_admission_alpha: float | None = None
+    c6_admission_beta: float | None = None
+    c6_implausible_speedup_cap: float | None = None
+    c6_reopen_when: str | None = None
+    c6_evaluator_commit: str | None = None
     def __post_init__(self) -> None:
         if (not self.output_root.is_absolute() or not 1 <= self.max_iterations <= 1000
                 or isinstance(self.nomination_threshold, bool)
@@ -2567,6 +2574,35 @@ class ControllerConfig:
                             "akh-v2-q5-onewave-preauthored"].source_backed_diff_sha256)):
             raise DiscoveryControllerError(
                 "planner context differs from preauthored continuation authority")
+        c6_values = (
+            self.c6_admission_store_path, self.c6_admission_alpha,
+            self.c6_admission_beta, self.c6_implausible_speedup_cap,
+            self.c6_reopen_when, self.c6_evaluator_commit)
+        if any(value is not None for value in c6_values):
+            if not all(value is not None for value in c6_values):
+                raise DiscoveryControllerError(
+                    "C6 admission configuration is incomplete")
+            if (self.evidence_root is None
+                    or not isinstance(self.c6_admission_store_path, Path)
+                    or not self.c6_admission_store_path.is_absolute()
+                    or self.c6_admission_store_path !=
+                       self.evidence_root / "c6-admission.jsonl"
+                    or not isinstance(self.c6_reopen_when, str)
+                    or not self.c6_reopen_when.strip()
+                    or not isinstance(self.c6_evaluator_commit, str)
+                    or not re.fullmatch(
+                        r"[0-9a-f]{40}", self.c6_evaluator_commit)):
+                raise DiscoveryControllerError(
+                    "C6 admission store/reopen authority is invalid")
+            try:
+                c6_reward_integrity.AdmissionPolicy(
+                    alpha=self.c6_admission_alpha,
+                    beta=self.c6_admission_beta,
+                    implausible_speedup_cap=
+                        self.c6_implausible_speedup_cap)
+            except c6_reward_integrity.EvaluatorPolicyError as exc:
+                raise DiscoveryControllerError(
+                    "C6 admission policy is invalid") from exc
         sealed = (self.planner_context_sha256, self.production_base_commit,
                   self.instrument_commit, self.experiment_template_registry_sha256,
                   self.admission_corpus_sha256, self.admission_corpus_version,
@@ -3503,6 +3539,339 @@ def _screen_iteration_fields(result: SealedScreen, *, repetition: int) -> dict[s
         "repetition": repetition,
         "scientific_budget_spent": True,
     }
+
+
+_C6_ADMISSION_LEG_SCHEMA = "epyc.autokernel.c6_admission_leg.v1"
+
+
+def _c6_admission_enabled(config: ControllerConfig) -> bool:
+    return config.c6_admission_store_path is not None
+
+
+def _c6_admission_config(config: ControllerConfig) -> dict[str, Any] | None:
+    if not _c6_admission_enabled(config):
+        return None
+    body = {
+        "schema": "epyc.autokernel.c6_admission_controller_config.v1",
+        "store_path": str(config.c6_admission_store_path),
+        "alpha": config.c6_admission_alpha,
+        "beta": config.c6_admission_beta,
+        "implausible_speedup_cap": config.c6_implausible_speedup_cap,
+        "reopen_when": config.c6_reopen_when,
+        "evaluator_commit": config.c6_evaluator_commit,
+    }
+    body["config_sha256"] = _sha(body)
+    return body
+
+
+def _c6_full_gate_reached(result: SealedScreen) -> bool:
+    return tuple(result.stages) == (
+        "materialized", "built", "correctness", "attribution",
+        "measurement_graphs_off_screen", "target_runtime_graphs_on_screen")
+
+
+def _c6_admission_leg(
+        item: PlannedCandidate, result: SealedScreen, *,
+        evaluator_commit: str) -> dict[str, Any]:
+    """Reopen one fully-gated screen as an immutable C6 admission leg.
+
+    The leg is built only after source materialization, build, correctness,
+    exact-route attribution, cross-arm bitwise output semantics and the target
+    runtime throughput screen have all completed.  It converts throughput to
+    latency-per-1000-tokens; the ratio is therefore exactly the native
+    candidate/anchor throughput ratio used by the controller.
+    """
+    if (item.composition_plan is not None or not _c6_full_gate_reached(result)
+            or result.target_runtime_effect_fraction is None
+            or not all(isinstance(value, str) and HASH.fullmatch(value)
+                       for value in (
+                           result.build_identity_sha256,
+                           result.correctness_receipt_sha256,
+                           result.attribution_receipt_sha256,
+                           result.graphs_off_receipt_sha256,
+                           result.graphs_on_receipt_sha256))):
+        raise DiscoveryControllerError(
+            "C6 admission cannot precede the complete governed screen gate")
+    result_path = Path(result.receipt_path)
+    if (not result_path.is_absolute() or result_path.is_symlink()
+            or not result_path.is_file()):
+        raise DiscoveryControllerError(
+            "C6 admission result path is not immutable authority")
+    try:
+        loaded = gpu_source_proofs.require_result_file(
+            result_path,
+            {"result_sha256": result.result_sha256})
+    except gpu_source_proofs.ProofError as exc:
+        raise DiscoveryControllerError(
+            "C6 admission result receipt is invalid") from exc
+    raw = loaded["body"]
+    raw_effect = raw.get("median_relative")
+    if (isinstance(raw_effect, bool)
+            or not isinstance(raw_effect, (int, float))
+            or not math.isfinite(float(raw_effect))):
+        raise DiscoveryControllerError(
+            "C6 admission result carries a malformed throughput effect")
+    if (loaded["file_sha256"] != result.graphs_on_receipt_sha256
+            or raw.get("result_sha256") != result.result_sha256
+            or raw.get("baseline_sha256") != result.baseline_sha256
+            or raw.get("runtime_graphs") != "on"
+            or raw.get("ok") is not True
+            or raw.get("hip_residency_proved") is not True
+            or float(raw_effect) !=
+               float(result.target_runtime_effect_fraction)):
+        raise DiscoveryControllerError(
+            "C6 admission result differs from the sealed screen")
+    oracle = raw.get("graphs_on_output_oracle")
+    if not isinstance(oracle, Mapping):
+        raise DiscoveryControllerError(
+            "C6 admission lacks the semantic/determinism oracle")
+    unsigned_oracle = {key: value for key, value in oracle.items()
+                       if key != "receipt_sha256"}
+    oracle_repetitions = oracle.get("repetitions")
+    oracle_inputs = oracle.get("input_hashes")
+    oracle_outputs = oracle.get("output_hashes")
+    if (oracle.get("schema") !=
+            "epyc.autokernel.cross_arm_graphs_on_output_oracle.v1"
+            or oracle.get("cross_arm_bitwise_equal") is not True
+            or oracle.get("reward_admissible") is not True
+            or isinstance(oracle_repetitions, bool)
+            or oracle_repetitions not in {3, 5, 9}
+            or not isinstance(oracle_inputs, list)
+            or len(oracle_inputs) != oracle_repetitions
+            or len(set(oracle_inputs)) != oracle_repetitions
+            or any(not isinstance(value, str)
+                   or re.fullmatch(r"[0-9a-f]{16}", value) is None
+                   for value in oracle_inputs)
+            or not isinstance(oracle_outputs, list)
+            or len(oracle_outputs) != oracle_repetitions
+            or any(not isinstance(value, str)
+                   or re.fullmatch(r"[0-9a-f]{16}", value) is None
+                   for value in oracle_outputs)
+            or oracle.get("receipt_sha256") !=
+               schemas.content_hash(unsigned_oracle)):
+        raise DiscoveryControllerError(
+            "C6 admission semantic/determinism oracle is invalid")
+    baseline_path = result_path.with_name("baseline-bank.json")
+    if baseline_path.is_symlink() or not baseline_path.is_file():
+        raise DiscoveryControllerError("C6 admission lacks its baseline bank")
+    try:
+        baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise DiscoveryControllerError(
+            "C6 admission baseline bank is unreadable") from exc
+    if not isinstance(baseline, Mapping):
+        raise DiscoveryControllerError("C6 admission baseline bank is malformed")
+    unsigned_baseline = {key: value for key, value in baseline.items()
+                         if key != "baseline_sha256"}
+    if (baseline.get("schema") !=
+            "epyc.autokernel.gpu_screening_baseline.v2"
+            or baseline.get("baseline_sha256") !=
+               schemas.content_hash(unsigned_baseline)
+            or baseline.get("baseline_sha256") != result.baseline_sha256
+            or raw.get("candidate_identity") !=
+               baseline.get("candidate_identity")):
+        raise DiscoveryControllerError(
+            "C6 admission baseline identity is invalid")
+    center = raw.get("baseline_center")
+    samples = raw.get("candidate_samples")
+    if (isinstance(center, bool) or not isinstance(center, (int, float))
+            or not math.isfinite(float(center)) or float(center) <= 0
+            or not isinstance(samples, list) or not samples
+            or any(isinstance(value, bool)
+                   or not isinstance(value, (int, float))
+                   or not math.isfinite(float(value)) or float(value) <= 0
+                   for value in samples)):
+        raise DiscoveryControllerError(
+            "C6 admission throughput samples are malformed")
+    effects = [(float(value) - float(center)) / float(center)
+               for value in samples]
+    if float(raw_effect) != float(statistics.median(effects)):
+        raise DiscoveryControllerError(
+            "C6 admission throughput reduction changed")
+    candidate_identity = raw.get("candidate_identity")
+    anchor_identity = baseline.get("anchor_identity")
+    candidate_commit = (candidate_identity.get("source_commit")
+                        if isinstance(candidate_identity, Mapping) else None)
+    anchor_commit = (anchor_identity.get("source_commit")
+                     if isinstance(anchor_identity, Mapping) else None)
+    if not all(isinstance(value, str) and re.fullmatch(r"[0-9a-f]{40}", value)
+               for value in (candidate_commit, anchor_commit,
+                             evaluator_commit)):
+        raise DiscoveryControllerError(
+            "C6 admission lacks exact candidate/anchor/evaluator commits")
+    candidate_center = float(statistics.median(float(v) for v in samples))
+    frame_sha256 = _sha({
+        "frame": raw.get("frame"),
+        "sole_factor": raw.get("sole_factor"),
+        "baseline_sha256": result.baseline_sha256,
+    })
+    body = {
+        "schema": _C6_ADMISSION_LEG_SCHEMA,
+        "task_id": _sha({
+            "candidate_semantic_sha256": _candidate_semantic_identity(item),
+            "frame_sha256": frame_sha256,
+        }),
+        "candidate_commit": candidate_commit,
+        "anchor_commit": anchor_commit,
+        "evaluator_commit": evaluator_commit,
+        "frame_sha256": frame_sha256,
+        "anchor_latency_ms": 1000.0 / float(center),
+        "candidate_latency_ms": 1000.0 / candidate_center,
+        "correctness_receipt_sha256": result.correctness_receipt_sha256,
+        "semantic_determinism_receipt_sha256": oracle["receipt_sha256"],
+        "throughput_result_sha256": result.result_sha256,
+        "throughput_result_file_sha256": loaded["file_sha256"],
+    }
+    body["leg_sha256"] = _sha(body)
+    return body
+
+
+def _emit_c6_admission(
+        config: ControllerConfig, *, first: Mapping[str, Any],
+        verification: Mapping[str, Any]) -> dict[str, Any]:
+    for leg in (first, verification):
+        if (not isinstance(leg, Mapping)
+                or leg.get("schema") != _C6_ADMISSION_LEG_SCHEMA
+                or leg.get("leg_sha256") !=
+                   _sha({key: value for key, value in leg.items()
+                         if key != "leg_sha256"})):
+            raise DiscoveryControllerError("C6 admission leg is invalid")
+    stable = ("task_id", "candidate_commit", "anchor_commit",
+              "evaluator_commit", "frame_sha256")
+    if any(first.get(key) != verification.get(key) for key in stable):
+        raise DiscoveryControllerError(
+            "C6 verification rerun changed candidate or frame authority")
+    try:
+        policy = c6_reward_integrity.AdmissionPolicy(
+            alpha=config.c6_admission_alpha,
+            beta=config.c6_admission_beta,
+            implausible_speedup_cap=config.c6_implausible_speedup_cap)
+        receipt = c6_reward_integrity.build_admission_receipt(
+            task_id=str(first["task_id"]),
+            candidate_commit=str(first["candidate_commit"]),
+            anchor_commit=str(first["anchor_commit"]),
+            evaluator_commit=str(first["evaluator_commit"]),
+            first_turn_anchor_latency_ms=float(first["anchor_latency_ms"]),
+            first_turn_candidate_latency_ms=float(first["candidate_latency_ms"]),
+            verification_anchor_latency_ms=
+                float(verification["anchor_latency_ms"]),
+            verification_candidate_latency_ms=
+                float(verification["candidate_latency_ms"]),
+            first_turn_correct=True, verification_correct=True,
+            reopen_when=str(config.c6_reopen_when), policy=policy)
+        producer_path = Path(c6_reward_integrity.__file__).resolve(strict=True)
+        producer_sha256 = hashlib.sha256(producer_path.read_bytes()).hexdigest()
+        envelope = c6_reward_integrity.AdmissionReceiptStore(
+            config.c6_admission_store_path).append(
+                receipt, producer_sha256=producer_sha256)
+    except (c6_reward_integrity.EvaluatorPolicyError,
+            c6_reward_integrity.AdmissionReceiptError, OSError) as exc:
+        raise DiscoveryControllerError(
+            "C6 admission store failed closed") from exc
+    capture = envelope["belief_capture"]
+    return {
+        "schema": "epyc.autokernel.c6_admission_controller_binding.v1",
+        "store_path": str(config.c6_admission_store_path),
+        "first_leg_sha256": first["leg_sha256"],
+        "verification_leg_sha256": verification["leg_sha256"],
+        "receipt_sha256": receipt["receipt_sha256"],
+        "capture_sha256": capture["capture_sha256"],
+        "admitted": receipt["admitted"],
+        "reason": receipt["reason"],
+    }
+
+
+def _apply_c6_admission(
+        config: ControllerConfig, item: PlannedCandidate,
+        result: SealedScreen, row: dict[str, Any], *,
+        confirmation: bool) -> None:
+    if not _c6_admission_enabled(config) or item.composition_plan is not None:
+        return
+    first = row.pop("c6_admission_leg", None) if confirmation else None
+    if not _c6_full_gate_reached(result):
+        if confirmation:
+            row["c6_admission"] = {
+                "schema": "epyc.autokernel.c6_admission_not_reached.v1",
+                "reason": "verification_stopped_before_target_throughput_gate",
+            }
+        return
+    leg = _c6_admission_leg(
+        item, result, evaluator_commit=str(config.c6_evaluator_commit))
+    if not confirmation:
+        row["c6_admission_leg"] = leg
+        return
+    if not isinstance(first, Mapping):
+        raise DiscoveryControllerError(
+            "C6 verification lacks its durable first-turn leg")
+    row["c6_admission_verification_leg"] = leg
+    row["c6_admission"] = _emit_c6_admission(
+        config, first=first, verification=leg)
+
+
+def _validate_c6_admission_state(
+        config: ControllerConfig, state: Mapping[str, Any]) -> None:
+    expected = _c6_admission_config(config)
+    if state.get("c6_admission_config") != expected:
+        raise DiscoveryControllerError(
+            "durable C6 admission configuration changed")
+    if expected is None:
+        if any(isinstance(row, Mapping)
+               and ("c6_admission" in row or "c6_admission_leg" in row)
+               for row in state.get("iterations", [])):
+            raise DiscoveryControllerError(
+                "durable C6 admission evidence lacks configuration authority")
+        return
+    try:
+        records = c6_reward_integrity.AdmissionReceiptStore(
+            config.c6_admission_store_path).records()
+    except (c6_reward_integrity.AdmissionReceiptError, OSError) as exc:
+        raise DiscoveryControllerError(
+            "durable C6 admission store failed validation") from exc
+    by_receipt = {
+        row["receipt"]["receipt_sha256"]: row for row in records}
+    if len(by_receipt) != len(records):
+        raise DiscoveryControllerError(
+            "durable C6 admission store duplicates a receipt")
+    claimed: set[str] = set()
+    for row in state.get("iterations", []):
+        if not isinstance(row, Mapping):
+            continue
+        binding = row.get("c6_admission")
+        if not isinstance(binding, Mapping) or binding.get("schema") == \
+                "epyc.autokernel.c6_admission_not_reached.v1":
+            continue
+        receipt_sha256 = binding.get("receipt_sha256")
+        envelope = by_receipt.get(receipt_sha256)
+        if (binding.get("schema") !=
+                "epyc.autokernel.c6_admission_controller_binding.v1"
+                or binding.get("store_path") !=
+                   str(config.c6_admission_store_path)
+                or envelope is None
+                or binding.get("capture_sha256") !=
+                   envelope["belief_capture"]["capture_sha256"]
+                or binding.get("admitted") is not
+                   envelope["receipt"]["admitted"]
+                or binding.get("reason") != envelope["receipt"]["reason"]):
+            raise DiscoveryControllerError(
+                "durable C6 admission row differs from its store")
+        claimed.add(str(receipt_sha256))
+    unowned = set(by_receipt) - claimed
+    if unowned:
+        inflight = state.get("inflight")
+        inflight_row = (inflight.get("row")
+                        if isinstance(inflight, Mapping) else None)
+        first = (inflight_row.get("c6_admission_leg")
+                 if isinstance(inflight_row, Mapping) else None)
+        recoverable = [
+            digest for digest in unowned
+            if (isinstance(inflight, Mapping)
+                and inflight.get("confirmation") is True
+                and isinstance(first, Mapping)
+                and by_receipt[digest]["receipt"]["task_id"] ==
+                    first.get("task_id"))]
+        if len(unowned) != 1 or len(recoverable) != 1:
+            raise DiscoveryControllerError(
+                "C6 admission store contains an unowned receipt")
 
 
 def _row_spends_scientific_budget(row: Mapping[str, Any]) -> bool:
@@ -4761,6 +5130,15 @@ def run_controller(config: ControllerConfig, *, planner: Planner, critic: Critic
 
 def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic: Critic, screener: Screener, lease: Lease, store: DurableState) -> dict[str, Any]:
     state=store.load()
+    configured_c6 = _c6_admission_config(config)
+    if configured_c6 is not None and "c6_admission_config" not in state:
+        if (state.get("iterations") or state.get("pending") is not None
+                or state.get("inflight") is not None
+                or state.get("planning") is not None):
+            raise DiscoveryControllerError(
+                "legacy durable state lacks C6 admission authority")
+        state["c6_admission_config"] = configured_c6
+    _validate_c6_admission_state(config, state)
     existing_deployment = state.get("deployment_identity_sha256")
     if (existing_deployment is None and config.deployment_identity_sha256 is not None
             and (state.get("iterations") or state.get("pending") is not None
@@ -4963,6 +5341,9 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                 _screen_iteration_fields(
                     result, repetition=int(inflight["lease"].get(
                         "repetition", 2 if inflight.get("confirmation") else 1))))
+            _apply_c6_admission(
+                config, item, result, row,
+                confirmation=bool(inflight.get("confirmation")))
             if composition_terminal is not None:
                 _bind_cumulative_terminal_row(
                     state, row, composition_terminal)
@@ -5447,6 +5828,9 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
             policy=row.get("portfolio_decision_policy")
             result=_classified_result(state,item,result,policy); row.update(
                 _screen_iteration_fields(result, repetition=repetition))
+            _apply_c6_admission(
+                config, item, result, row,
+                confirmation=bool(state["inflight"].get("confirmation")))
             if composition_terminal is not None:
                 _bind_cumulative_terminal_row(
                     state, row, composition_terminal)

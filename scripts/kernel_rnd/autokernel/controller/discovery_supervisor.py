@@ -51,6 +51,7 @@ GRAPH_EXECUTION_MODULES = {
         "scripts/kernel_rnd/autokernel/controller/discovery_deployment_factory.py",
     "discovery_controller":
         "scripts/kernel_rnd/autokernel/controller/discovery_controller.py",
+    "c6_reward_integrity": "scripts/kernel_rnd/c6_reward_integrity.py",
     "hypotheses": "scripts/kernel_rnd/autokernel/controller/hypotheses.py",
     "do_not_repeat": "scripts/kernel_rnd/autokernel/controller/do_not_repeat.py",
     "discovery_telemetry":
@@ -358,6 +359,7 @@ def _copy_execution_closure(root: secure.RuntimeRoot) -> dict[str, Any]:
     for relative in (
         Path("__init__.py"),
         Path("kernel_rnd/__init__.py"),
+        Path("kernel_rnd/c6_reward_integrity.py"),
         Path("benchmark/__init__.py"),
         Path("benchmark/autokernel_gpu_discovery_beliefs.py"),
         Path("benchmark/autokernel_progression.py"),

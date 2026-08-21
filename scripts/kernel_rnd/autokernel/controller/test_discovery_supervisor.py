@@ -100,6 +100,13 @@ class ImmutableAuthorityTests(unittest.TestCase):
                 S._file_sha256(factory),
                 spec.body["execution_modules"]["deployment_factory"]["sha256"],
             )
+            c6_writer = closure / "scripts/kernel_rnd/c6_reward_integrity.py"
+            self.assertTrue(c6_writer.is_file())
+            self.assertEqual(
+                S._file_sha256(c6_writer),
+                spec.body["graph_execution_modules"][
+                    "c6_reward_integrity"]["sha256"],
+            )
 
     def test_same_uid_cannot_replace_factory_before_import_or_execute_payload(self):
         with tempfile.TemporaryDirectory() as temporary:

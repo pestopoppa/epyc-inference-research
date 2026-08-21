@@ -1626,6 +1626,17 @@ class DeploymentFactoryTests(unittest.TestCase):
                     F.DeploymentFactoryError, "single-link regular non-symlink"):
                 F._runtime_module_file("scripts/runner.py", hardlink, "runner")
 
+    def test_c6_writer_is_in_exact_execution_module_closure(self):
+        sealed = F._execution_module_identity()
+        self.assertEqual(
+            sealed["c6_reward_integrity"], {
+                "logical_path": "scripts/kernel_rnd/c6_reward_integrity.py",
+                "sha256": F._digest_regular(
+                    Path(F.controller.c6_reward_integrity.__file__).resolve(
+                        strict=True),
+                    "c6_reward_integrity"),
+            })
+
     def test_validate_only_materializes_static_graph_without_actor_or_hardware(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -1704,6 +1715,7 @@ class DeploymentFactoryTests(unittest.TestCase):
             self.assertFalse(timed_oracle["production_throughput_authority"])
             self.assertIn("discovery_telemetry", receipt["execution_modules"])
             self.assertIn("discovery_supervisor", receipt["execution_modules"])
+            self.assertIn("c6_reward_integrity", receipt["execution_modules"])
             self.assertIn("hypotheses", receipt["execution_modules"])
             self.assertIn("do_not_repeat", receipt["execution_modules"])
             self.assertIn("t0_provider", receipt["execution_modules"])
@@ -1879,6 +1891,18 @@ class DeploymentFactoryTests(unittest.TestCase):
         self.assertEqual(result.carry_forward, carry_forward)
         self.assertEqual(result.carry_forward_sha256,
                          carry_forward["carry_forward_sha256"])
+        self.assertEqual(
+            result.c6_admission_store_path,
+            Path("/evidence/c6-admission.jsonl"))
+        self.assertEqual(
+            (result.c6_admission_alpha, result.c6_admission_beta,
+             result.c6_implausible_speedup_cap),
+            (1.2, 1.2, 32.0))
+        self.assertEqual(result.c6_evaluator_commit,
+                         config.instrument_commit)
+        self.assertIn("candidate_commit", result.c6_reopen_when)
+        self.assertIn("anchor_commit", result.c6_reopen_when)
+        self.assertIn("evaluator_commit", result.c6_reopen_when)
         derive.assert_called_once_with(config)
         verify.assert_called_once_with(
             continuation, config.instrument_path, config.instrument_commit)

@@ -798,12 +798,22 @@ class TestAdmissionReceipts(_Base):
         receipt = self.receipt()
         capture = c6.build_admission_claim_capture(
             receipt, producer_sha256="d" * 64)
+        self.assertEqual(capture["category"], "CANDIDATE")
         self.assertEqual(
             c6.validate_admission_claim_capture(capture, receipt), capture)
         path = os.path.join(self.tmp, "admission.jsonl")
         store = c6.AdmissionReceiptStore(path)
         envelope = store.append(receipt, producer_sha256="d" * 64)
         self.assertEqual(store.records(), [envelope])
+        self.assertEqual(
+            store.append(receipt, producer_sha256="d" * 64), envelope)
+        self.assertEqual(store.records(), [envelope])
+        changed = self.receipt(
+            verification_anchor_latency_ms=157.0)
+        with self.assertRaisesRegex(
+                c6.AdmissionReceiptError,
+                "already has different sealed evidence"):
+            store.append(changed, producer_sha256="d" * 64)
         with open(path, "r+") as stream:
             payload = json.loads(stream.readline())
             payload["belief_capture"]["value"] = 999.0
