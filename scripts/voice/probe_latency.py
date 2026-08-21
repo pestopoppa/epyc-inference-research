@@ -11,7 +11,7 @@ Tests:
 Target: <500ms first-token latency for warm requests
 
 Usage:
-    python test_latency.py [--server http://localhost:9000]
+    python probe_latency.py [--server http://localhost:9000]
 """
 
 import argparse
@@ -72,7 +72,7 @@ def generate_tone_wav(duration_ms: int = 1000, freq: int = 440) -> bytes:
     return buffer.getvalue()
 
 
-def test_health(server_url: str) -> bool:
+def probe_health(server_url: str) -> bool:
     """Test server health endpoint."""
     print("Testing health endpoint...")
     try:
@@ -91,7 +91,7 @@ def test_health(server_url: str) -> bool:
         return False
 
 
-def test_transcription_latency(server_url: str, audio_data: bytes, label: str) -> float | None:
+def probe_transcription_latency(server_url: str, audio_data: bytes, label: str) -> float | None:
     """
     Test transcription latency.
 
@@ -120,7 +120,7 @@ def test_transcription_latency(server_url: str, audio_data: bytes, label: str) -
         return None
 
 
-def test_code_switching(server_url: str) -> bool:
+def probe_code_switching(server_url: str) -> bool:
     """
     Test code-switching detection.
 
@@ -180,7 +180,7 @@ def run_tts_test(server_url: str) -> float | None:
         with open(tmp_path, "rb") as f:
             audio_data = f.read()
 
-        latency = test_transcription_latency(server_url, audio_data, "TTS test")
+        latency = probe_transcription_latency(server_url, audio_data, "TTS test")
         return latency
 
     finally:
@@ -216,7 +216,7 @@ def main():
     print("=" * 50)
 
     # Test health
-    if not test_health(server):
+    if not probe_health(server):
         print("\nFAIL: Server not responding")
         sys.exit(1)
 
@@ -228,23 +228,23 @@ def main():
     print("\nTesting transcription latency...")
 
     # Cold start (first request after server start might be slower)
-    cold_latency = test_transcription_latency(server, short_audio, "Cold (0.5s audio)")
+    cold_latency = probe_transcription_latency(server, short_audio, "Cold (0.5s audio)")
 
     # Warm requests
     latencies = []
     for i in range(3):
-        lat = test_transcription_latency(server, short_audio, f"Warm #{i+1} (0.5s audio)")
+        lat = probe_transcription_latency(server, short_audio, f"Warm #{i+1} (0.5s audio)")
         if lat:
             latencies.append(lat)
 
     # Medium audio
-    med_lat = test_transcription_latency(server, medium_audio, "Medium (2s audio)")
+    med_lat = probe_transcription_latency(server, medium_audio, "Medium (2s audio)")
 
     # Long audio
-    long_lat = test_transcription_latency(server, long_audio, "Long (5s audio)")
+    long_lat = probe_transcription_latency(server, long_audio, "Long (5s audio)")
 
     # Code-switching
-    test_code_switching(server)
+    probe_code_switching(server)
 
     # TTS test (if available)
     tts_lat = run_tts_test(server)

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-"""Test summarization with different models."""
+"""Probe: summarization throughput/output against a live server (no pass/fail criterion)."""
 
 import json
 import time
@@ -45,7 +45,7 @@ SUMMARIZATION_PROMPT = """Based on the document analysis above, write a concise 
 
 Write the summary directly, without any thinking or reasoning steps. Be concise and professional."""
 
-def test_summarization(server_url: str, model_name: str):
+def probe_summarization(server_url: str, model_name: str):
     """Run summarization test against a server."""
     context = load_context()
     full_prompt = f"{context}\n\n---\n\n{SUMMARIZATION_PROMPT}"
@@ -108,7 +108,7 @@ if __name__ == "__main__":
     server_url = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8091"
     model_name = sys.argv[2] if len(sys.argv) > 2 else "Qwen2.5-Coder-32B"
 
-    result = test_summarization(server_url, model_name)
+    result = probe_summarization(server_url, model_name)
 
     if result:
         # Save result

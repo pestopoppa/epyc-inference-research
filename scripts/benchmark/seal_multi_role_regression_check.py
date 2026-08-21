@@ -4,8 +4,15 @@
 Tests each role-model with and without its SEAL concise reasoning cvector.
 Measures: token reduction %, answer correctness, generation speed.
 
+Exit status is load-bearing: 1 if ANY role regressed or failed to run, 0 otherwise.
+It previously printed "Regression: YES -- accuracy dropped!" and exited 0, so every
+caller read a real regression as a pass. The JSON payload is unchanged.
+
+NOT a pytest suite -- running it starts llama-server benchmarks, which a bare
+`pytest` must never trigger. Hence the non-collectable filename.
+
 Usage:
-    python seal_multi_role_test.py
+    python seal_multi_role_regression_check.py
 """
 
 import subprocess, os, time, requests, json, sys
@@ -184,3 +191,15 @@ if __name__ == "__main__":
     with open(out, "w") as f:
         json.dump(all_results, f, indent=2)
     print(f"\nSaved to {out}")
+
+    # Honest exit status. A printed "YES!" that exits 0 is a vacuous pass.
+    regressed = [r["name"] for r in all_results
+                 if r.get("status") == "OK" and r["cv_correct"] < r["base_correct"]]
+    failed = [r.get("name", "?") for r in all_results if r.get("status") == "FAILED"]
+    if regressed or failed:
+        if regressed:
+            print(f"FAIL: accuracy regression in role(s): {', '.join(regressed)}")
+        if failed:
+            print(f"FAIL: role(s) did not run: {', '.join(failed)}")
+        sys.exit(1)
+    print("PASS: no accuracy regression in any role that ran.")

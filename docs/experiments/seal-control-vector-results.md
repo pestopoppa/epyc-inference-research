@@ -118,7 +118,7 @@ All stored at `/mnt/raid0/llm/models/`:
 | File | Description |
 |------|-------------|
 | `scripts/seal/eval_cvectors.py` | Per-model cvector evaluation |
-| `scripts/benchmark/seal_multi_role_test.py` | Multi-role comparison test |
+| `scripts/benchmark/seal_multi_role_regression_check.py` | Multi-role comparison test (exit 1 on regression) |
 
 ### Result Files
 
