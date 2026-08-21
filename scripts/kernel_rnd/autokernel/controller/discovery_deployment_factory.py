@@ -2749,8 +2749,11 @@ def materialize(config: deployment.DiscoveryDeployment, registry: Mapping[str, M
             production_base_commit=config.production_head,
             instrument_commit=config.instrument_commit)
         permit = {**permit, "instrument_branch": config.instrument_branch,
-                  "deployment_config_sha256": config.config_sha256}
+                  "deployment_config_semantic_sha256": config.config_sha256}
         if _SUPERVISED_BUILD_AUTHORITY is not None:
+            permit["deployment_config_canonical_sha256"] = (
+                _SUPERVISED_BUILD_AUTHORITY[
+                    "deployment_config_canonical_sha256"])
             permit["supervised_build_authority"] = json.loads(json.dumps(
                 dict(_SUPERVISED_BUILD_AUTHORITY), sort_keys=True))
         snapshot.revalidate()

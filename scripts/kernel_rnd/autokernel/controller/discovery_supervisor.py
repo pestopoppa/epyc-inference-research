@@ -34,7 +34,7 @@ class SupervisorError(RuntimeError):
     pass
 
 
-SPEC_SCHEMA = "epyc.autokernel.discovery_supervisor_spec.v3"
+SPEC_SCHEMA = "epyc.autokernel.discovery_supervisor_spec.v4"
 IDENTITY_SCHEMA = "epyc.autokernel.discovery_supervisor_identity.v2"
 LEDGER_SCHEMA = "epyc.autokernel.discovery_supervisor_ledger.v2"
 FACTORY_MODULE = "scripts.kernel_rnd.autokernel.controller.discovery_deployment_factory"
@@ -452,6 +452,13 @@ def _canonical_config(root: secure.RuntimeRoot, deployment: Path) -> dict[str, A
     except json.JSONDecodeError as exc:
         raise SupervisorError("deployment config is not JSON") from exc
     canonical = _canonical_bytes(value) + b"\n"
+    semantic_sha256 = value.get("config_sha256") if isinstance(value, dict) else None
+    if not isinstance(semantic_sha256, str) or _HEX64.fullmatch(semantic_sha256) is None:
+        raise SupervisorError("deployment config lacks a semantic config identity")
+    if _content_hash({
+            key: item for key, item in value.items()
+            if key != "config_sha256"}) != semantic_sha256:
+        raise SupervisorError("deployment config semantic identity is invalid")
     root.atomic_bytes("deployment-config.json", canonical)
     fd = root.open_leaf("deployment-config.json", os.O_RDONLY)
     try:
@@ -465,6 +472,7 @@ def _canonical_config(root: secure.RuntimeRoot, deployment: Path) -> dict[str, A
         "source_identity": source_identity,
         "runtime_leaf": "deployment-config.json",
         "canonical_sha256": hashlib.sha256(canonical).hexdigest(),
+        "semantic_sha256": semantic_sha256,
         "canonical_size": len(canonical),
         "identity": identity,
     }
@@ -528,6 +536,7 @@ class LaunchSpec:
                 "source_identity",
                 "runtime_leaf",
                 "canonical_sha256",
+                "semantic_sha256",
                 "canonical_size",
                 "identity",
             }
@@ -535,6 +544,7 @@ class LaunchSpec:
                 not isinstance(config, dict)
                 or set(config) != config_keys
                 or _HEX64.fullmatch(str(config["canonical_sha256"])) is None
+                or _HEX64.fullmatch(str(config["semantic_sha256"])) is None
             ):
                 raise SupervisorError("deployment config binding is malformed")
         elif config is not None:
@@ -997,8 +1007,15 @@ def _validate_config_fd(spec: LaunchSpec, fd: int) -> bytes:
     ):
         raise SupervisorError("deployment config object differs from launch spec")
     try:
-        if raw != _canonical_bytes(json.loads(raw)) + b"\n":
+        value = json.loads(raw)
+        if raw != _canonical_bytes(value) + b"\n":
             raise SupervisorError("deployment config bytes are not canonical")
+        if (not isinstance(value, dict)
+                or value.get("config_sha256") != expected["semantic_sha256"]
+                or _content_hash({key: item for key, item in value.items()
+                                  if key != "config_sha256"})
+                != expected["semantic_sha256"]):
+            raise SupervisorError("deployment config semantic identity differs from launch spec")
     except json.JSONDecodeError as exc:
         raise SupervisorError("deployment config bytes are not JSON") from exc
     return raw
@@ -1035,17 +1052,20 @@ def verified_supervised_launch(
             "launch_spec",
             "death_ledger",
             "spec_sha256",
-            "deployment_config_sha256",
+            "deployment_config_canonical_sha256",
+            "deployment_config_semantic_sha256",
             "supervisor",
             "controller",
             "ledger_child_started_record_sha256",
         }
         if (
             set(authority) != expected_keys
-            or authority["schema"] != "epyc.autokernel.supervised_build_authority.v1"
+            or authority["schema"] != "epyc.autokernel.supervised_build_authority.v2"
             or authority["spec_sha256"] != spec.sha256
-            or authority["deployment_config_sha256"]
+            or authority["deployment_config_canonical_sha256"]
             != spec.body["deployment_config"]["canonical_sha256"]
+            or authority["deployment_config_semantic_sha256"]
+            != spec.body["deployment_config"]["semantic_sha256"]
         ):
             raise SupervisorError("supervised build authority binding is invalid")
         spec_fd = root.open_leaf("launch-spec.json", os.O_RDONLY)
@@ -1385,13 +1405,16 @@ def _publish_launch_authority(
         return row
 
     value = {
-        "schema": "epyc.autokernel.supervised_build_authority.v1",
+        "schema": "epyc.autokernel.supervised_build_authority.v2",
         "launch_spec": carrier(
             root.path / "launch-spec.json", spec_identity, hashlib.sha256(spec_raw).hexdigest()
         ),
         "death_ledger": carrier(root.path / "death-ledger.jsonl", ledger_identity),
         "spec_sha256": spec.sha256,
-        "deployment_config_sha256": spec.body["deployment_config"]["canonical_sha256"],
+        "deployment_config_canonical_sha256":
+            spec.body["deployment_config"]["canonical_sha256"],
+        "deployment_config_semantic_sha256":
+            spec.body["deployment_config"]["semantic_sha256"],
         "supervisor": dict(supervisor),
         "controller": dict(controller),
         "ledger_child_started_record_sha256": child_record["record_sha256"],

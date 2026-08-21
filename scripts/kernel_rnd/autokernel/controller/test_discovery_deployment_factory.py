@@ -1194,7 +1194,7 @@ class DeploymentFactoryTests(unittest.TestCase):
             self.assertEqual(second["operation_key"], "2" * 64)
             self.assertFalse((operations / ("3" * 64) / "source-manifest.json").exists())
             self.assertEqual(len(calls), 2)
-            self.assertEqual([row["deployment_config_sha256"] for row in calls],
+            self.assertEqual([row["deployment_config_semantic_sha256"] for row in calls],
                              [config.config_sha256, config.config_sha256])
             self.assertEqual([row["instrument_branch"] for row in calls],
                              [config.instrument_branch, config.instrument_branch])
@@ -1224,19 +1224,24 @@ class DeploymentFactoryTests(unittest.TestCase):
                 proposal={"proposal_id": "akp-static-build-root",
                           "change_class": "dispatch"})
             validated_authority = {
-                "schema": "epyc.autokernel.supervised_build_authority.v1",
+                "schema": "epyc.autokernel.supervised_build_authority.v2",
                 "launch_spec": {}, "death_ledger": {},
                 "spec_sha256": "1" * 64,
-                "deployment_config_sha256": config.config_sha256}
+                "deployment_config_canonical_sha256": "c" * 64,
+                "deployment_config_semantic_sha256": config.config_sha256}
             with mock.patch.object(
                     F.discovery_static_registry,
                     "_validate_supervised_build_authority",
                     return_value=validated_authority):
                 contract, _environment = builder._contract(candidate, {
                     "instrument_branch": config.instrument_branch,
-                    "deployment_config_sha256": config.config_sha256,
+                    "deployment_config_canonical_sha256": "c" * 64,
+                    "deployment_config_semantic_sha256": config.config_sha256,
                 })
             self.assertEqual(Path(contract["operations_root"]), config.operations_root)
+            self.assertEqual(contract["deployment_config_canonical_sha256"], "c" * 64)
+            self.assertEqual(
+                contract["deployment_config_semantic_sha256"], config.config_sha256)
             self.assertEqual(Path(contract["build_root"]), config.build_root)
             self.assertEqual(config.build_root, bundle_root / "builds")
             self.assertNotEqual(config.build_root, config.operations_root)

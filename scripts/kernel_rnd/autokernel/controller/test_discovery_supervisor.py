@@ -203,14 +203,33 @@ print(','.join(results))
         with tempfile.TemporaryDirectory() as temporary:
             parent = Path(temporary)
             deployment = parent / "deployment.json"
-            deployment.write_text('{\n  "b": 2, "a": 1\n}\n', encoding="utf-8")
+            semantic_sha256 = S._content_hash({"a": 1, "b": 2})
+            deployment.write_text(
+                '{\n  "b": 2, "a": 1, "config_sha256": "'
+                + semantic_sha256 + '"\n}\n',
+                encoding="utf-8")
             spec = self._spec(parent / "runtime", deployment=deployment, canary=None)
             root = R.RuntimeRoot.create_or_open(spec.runtime_root)
             try:
                 fd = root.open_leaf("deployment-config.json", os.O_RDONLY)
                 try:
                     raw = S._validate_config_fd(spec, fd)
-                    self.assertEqual(raw, b'{"a":1,"b":2}\n')
+                    self.assertEqual(
+                        raw,
+                        ('{"a":1,"b":2,"config_sha256":"'
+                         + semantic_sha256 + '"}\n').encode())
+                    self.assertEqual(
+                        spec.body["deployment_config"]["semantic_sha256"],
+                        semantic_sha256)
+                    self.assertNotEqual(
+                        spec.body["deployment_config"]["canonical_sha256"],
+                        spec.body["deployment_config"]["semantic_sha256"])
+                    confused_body = json.loads(json.dumps(spec.body))
+                    confused_body["deployment_config"]["semantic_sha256"] = (
+                        confused_body["deployment_config"]["canonical_sha256"])
+                    with self.assertRaisesRegex(
+                            S.SupervisorError, "semantic identity"):
+                        S._validate_config_fd(S.LaunchSpec(confused_body), fd)
                     os.fchmod(fd, 0o400)
                     with self.assertRaisesRegex(S.SupervisorError, "differs from launch spec"):
                         S._validate_config_fd(spec, fd)
@@ -223,7 +242,9 @@ print(','.join(results))
         with tempfile.TemporaryDirectory() as temporary:
             parent = Path(temporary)
             deployment = parent / "deployment.json"
-            deployment.write_text("{}\n", encoding="utf-8")
+            deployment.write_text(
+                json.dumps({"config_sha256": S._content_hash({})}) + "\n",
+                encoding="utf-8")
             with self.assertRaisesRegex(S.SupervisorError, "typed reconciliation"):
                 self._spec(
                     parent / "runtime",

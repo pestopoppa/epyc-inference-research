@@ -45,8 +45,8 @@ class _CompileFailure(StaticRegistryError):
 _REWARD_FILES = ("llama-bench", "libllama-bench-impl.so", "libllama-common.so",
                  "libllama.so", "libggml.so", "libggml-cpu.so", "libggml-base.so")
 _HIP = "libggml-hip.so"
-_BUILDER_SCHEMA = "epyc.autokernel.static_gpu_source_builder.v5"
-_BUILD_KEY_SCHEMA = "epyc.autokernel.gpu_source_build_key.v1"
+_BUILDER_SCHEMA = "epyc.autokernel.static_gpu_source_builder.v6"
+_BUILD_KEY_SCHEMA = "epyc.autokernel.gpu_source_build_key.v2"
 _BUILD_REF_SCHEMA = "epyc.autokernel.gpu_source_build_ref.v1"
 _BUILD_INTENT_SCHEMA = "epyc.autokernel.gpu_source_build_intent.v1"
 _BUILD_TERMINAL_SCHEMA = "epyc.autokernel.gpu_source_build_terminal.v2"
@@ -66,7 +66,7 @@ _BUILD_ENV_NAMES = (
     "CXX", "CFLAGS", "CXXFLAGS", "CPPFLAGS", "LDFLAGS", "MAKEFLAGS",
 )
 _SEALED_BUILD_PATH = "/opt/rocm/bin:/usr/local/bin:/usr/bin:/bin"
-_SUPERVISED_BUILD_AUTHORITY_SCHEMA = "epyc.autokernel.supervised_build_authority.v1"
+_SUPERVISED_BUILD_AUTHORITY_SCHEMA = "epyc.autokernel.supervised_build_authority.v2"
 _HEX = frozenset("0123456789abcdef")
 
 
@@ -341,17 +341,25 @@ def _parse_supervisor_ledger(raw: bytes) -> list[dict[str, Any]]:
 
 
 def _validate_supervised_build_authority(
-        value: Any, *, deployment_config_sha256: str,
+        value: Any, *, deployment_config_canonical_sha256: str,
+        deployment_config_semantic_sha256: str,
         require_current: bool = True) -> dict[str, Any]:
     """Bind a build owner to the supervisor's immutable launch transaction."""
     top_keys = {"schema", "launch_spec", "death_ledger", "spec_sha256",
-                "deployment_config_sha256", "supervisor", "controller",
+                "deployment_config_canonical_sha256",
+                "deployment_config_semantic_sha256", "supervisor", "controller",
                 "ledger_child_started_record_sha256"}
     if (not isinstance(value, Mapping) or set(value) != top_keys
             or value.get("schema") != _SUPERVISED_BUILD_AUTHORITY_SCHEMA):
         raise StaticRegistryError("supervised build authority schema/keys mismatch")
-    if value.get("deployment_config_sha256") != deployment_config_sha256:
-        raise StaticRegistryError("supervised build authority changed deployment config")
+    if (value.get("deployment_config_canonical_sha256")
+            != deployment_config_canonical_sha256):
+        raise StaticRegistryError(
+            "supervised build authority changed canonical deployment config bytes")
+    if (value.get("deployment_config_semantic_sha256")
+            != deployment_config_semantic_sha256):
+        raise StaticRegistryError(
+            "supervised build authority changed semantic deployment config identity")
     _require_hash(value.get("spec_sha256"), "supervisor spec content hash")
     target_record = _require_hash(
         value.get("ledger_child_started_record_sha256"),
@@ -386,8 +394,65 @@ def _validate_supervised_build_authority(
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise StaticRegistryError("supervisor launch specification is not JSON") from exc
     if (not isinstance(spec, Mapping)
+            or launch_raw != _canonical(dict(spec))
             or schemas.content_hash(dict(spec)) != value["spec_sha256"]):
         raise StaticRegistryError("supervisor launch specification content hash changed")
+    spec_keys = {
+        "schema", "kind", "runtime_root", "runtime_root_identity",
+        "deployment_config", "validate_only", "canary", "python",
+        "restart_policy", "termination_policy", "execution_closure",
+        "execution_modules", "graph_execution_modules", "cgroup",
+    }
+    config_keys = {
+        "source_path", "source_identity", "runtime_leaf", "canonical_sha256",
+        "semantic_sha256", "canonical_size", "identity",
+    }
+    config = spec.get("deployment_config")
+    if (set(spec) != spec_keys
+            or spec.get("schema") != "epyc.autokernel.discovery_supervisor_spec.v4"
+            or spec.get("kind") != "deployment"
+            or not isinstance(config, Mapping) or set(config) != config_keys
+            or config.get("runtime_leaf") != "deployment-config.json"):
+        raise StaticRegistryError("supervisor launch specification schema changed")
+    if (config.get("canonical_sha256")
+            != value["deployment_config_canonical_sha256"]
+            or config.get("semantic_sha256")
+            != value["deployment_config_semantic_sha256"]):
+        raise StaticRegistryError("supervisor launch specification config binding changed")
+    runtime_root = Path(str(spec.get("runtime_root", "")))
+    config_path = runtime_root / str(config["runtime_leaf"])
+    if (not runtime_root.is_absolute() or runtime_root != launch_path.parent
+            or config_path.parent != launch_path.parent):
+        raise StaticRegistryError("supervisor deployment config path is not bound")
+    config_raw, config_identity = _read_bound_file(
+        config_path, "supervisor canonical deployment config", receipt=True)
+    expected_config_identity = config.get("identity")
+    if (not isinstance(expected_config_identity, Mapping)
+            or {"dev": config_identity["device"],
+                "ino": config_identity["inode"],
+                "uid": config_identity["uid"],
+                "mode": config_identity["mode"],
+                "nlink": config_identity["nlink"],
+                "size": config_identity["size"],
+                "mtime_ns": config_identity["mtime_ns"],
+                "ctime_ns": config_identity["ctime_ns"]}
+            != dict(expected_config_identity)
+            or len(config_raw) != config.get("canonical_size")
+            or hashlib.sha256(config_raw).hexdigest()
+            != config.get("canonical_sha256")):
+        raise StaticRegistryError("supervisor canonical deployment config object changed")
+    try:
+        config_value = json.loads(config_raw.decode("utf-8", "strict"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise StaticRegistryError("supervisor canonical deployment config is not JSON") from exc
+    if (not isinstance(config_value, dict)
+            or config_raw != _canonical(config_value)
+            or config_value.get("config_sha256") != config.get("semantic_sha256")
+            or schemas.content_hash({
+                key: item for key, item in config_value.items()
+                if key != "config_sha256"}) != config.get("semantic_sha256")):
+        raise StaticRegistryError(
+            "supervisor canonical and semantic deployment identities disagree")
     supervisor = value.get("supervisor")
     controller_identity = value.get("controller")
     supervisor_keys = {"pid", "start_ticks", "boot_id", "host",
@@ -587,11 +652,14 @@ def _controller_epoch_cleanup_proof(
 
 def _stable_supervised_authority(value: Mapping[str, Any]) -> dict[str, Any]:
     return {
-        "schema": "epyc.autokernel.supervised_launch_authority.v1",
+        "schema": "epyc.autokernel.supervised_launch_authority.v2",
         "launch_spec": dict(value["launch_spec"]),
         "death_ledger": dict(value["death_ledger"]),
         "spec_sha256": value["spec_sha256"],
-        "deployment_config_sha256": value["deployment_config_sha256"],
+        "deployment_config_canonical_sha256":
+            value["deployment_config_canonical_sha256"],
+        "deployment_config_semantic_sha256":
+            value["deployment_config_semantic_sha256"],
     }
 
 
@@ -632,7 +700,10 @@ def _owner_matches_supervised_authority(
     try:
         validated = _validate_supervised_build_authority(
             embedded,
-            deployment_config_sha256=str(contract.get("deployment_config_sha256")),
+            deployment_config_canonical_sha256=str(
+                contract.get("deployment_config_canonical_sha256")),
+            deployment_config_semantic_sha256=str(
+                contract.get("deployment_config_semantic_sha256")),
             require_current=False)
     except StaticRegistryError:
         return False
@@ -1802,15 +1873,21 @@ class StaticGpuSourceBuilder:
     def _contract(self, candidate: controller.PlannedCandidate,
                   permit: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, str]]:
         instrument_branch = permit.get("instrument_branch")
-        deployment_sha = permit.get("deployment_config_sha256")
+        deployment_semantic_sha = permit.get("deployment_config_semantic_sha256")
+        deployment_canonical_sha = permit.get("deployment_config_canonical_sha256")
         if not isinstance(instrument_branch, str) or not instrument_branch:
             raise StaticRegistryError("static source builder requires a sealed instrument branch")
-        if (not isinstance(deployment_sha, str) or len(deployment_sha) != 64
-                or any(char not in "0123456789abcdef" for char in deployment_sha)):
+        if (not isinstance(deployment_semantic_sha, str)
+                or len(deployment_semantic_sha) != 64
+                or any(char not in _HEX for char in deployment_semantic_sha)
+                or not isinstance(deployment_canonical_sha, str)
+                or len(deployment_canonical_sha) != 64
+                or any(char not in _HEX for char in deployment_canonical_sha)):
             raise StaticRegistryError("static source builder requires sealed deployment authority")
         supervised_authority = _validate_supervised_build_authority(
             permit.get("supervised_build_authority"),
-            deployment_config_sha256=deployment_sha)
+            deployment_config_canonical_sha256=deployment_canonical_sha,
+            deployment_config_semantic_sha256=deployment_semantic_sha)
         production_root = self.production_path.resolve(strict=True)
         instrument_root = self.instrument_path.resolve(strict=True)
         if production_root == instrument_root:
@@ -1851,7 +1928,8 @@ class StaticGpuSourceBuilder:
         contract: dict[str, Any] = {
             "schema": _BUILD_KEY_SCHEMA,
             "builder_schema": _BUILDER_SCHEMA,
-            "deployment_config_sha256": deployment_sha,
+            "deployment_config_canonical_sha256": deployment_canonical_sha,
+            "deployment_config_semantic_sha256": deployment_semantic_sha,
             "supervised_build_authority": _stable_supervised_authority(
                 supervised_authority),
             "supervised_build_authority_sha256": schemas.content_hash(
@@ -1877,8 +1955,11 @@ class StaticGpuSourceBuilder:
     @staticmethod
     def _request_key(contract: Mapping[str, Any]) -> str:
         return schemas.content_hash({
-            "schema": "epyc.autokernel.gpu_source_build_request.v1",
-            "deployment_config_sha256": contract["deployment_config_sha256"],
+            "schema": "epyc.autokernel.gpu_source_build_request.v2",
+            "deployment_config_canonical_sha256":
+                contract["deployment_config_canonical_sha256"],
+            "deployment_config_semantic_sha256":
+                contract["deployment_config_semantic_sha256"],
             "supervised_build_authority_sha256":
                 contract["supervised_build_authority_sha256"],
             "production_base_authority": contract["production_base_authority"],
@@ -2811,7 +2892,10 @@ class StaticGpuSourceBuilder:
         contract, environment = self._contract(candidate, _permit)
         supervised_authority = _validate_supervised_build_authority(
             _permit.get("supervised_build_authority"),
-            deployment_config_sha256=str(contract["deployment_config_sha256"]))
+            deployment_config_canonical_sha256=str(
+                contract["deployment_config_canonical_sha256"]),
+            deployment_config_semantic_sha256=str(
+                contract["deployment_config_semantic_sha256"]))
         build_key = str(contract["build_key"])
         request_key = self._request_key(contract)
         cache_base = self.operations_root / "build-cache"

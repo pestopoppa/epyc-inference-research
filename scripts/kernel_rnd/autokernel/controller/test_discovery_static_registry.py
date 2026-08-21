@@ -569,7 +569,35 @@ class StaticBuildCacheTests(unittest.TestCase):
             return _FakeBuildResult(plan, log)
 
         launch_root = root / "supervisor"; launch_root.mkdir(mode=0o700)
-        spec = {"schema": "test.supervisor.spec.v1", "deployment": "fixture"}
+        semantic_sha256 = E.schemas.content_hash({})
+        config_path = launch_root / "deployment-config.json"
+        config_raw = json.dumps(
+            {"config_sha256": semantic_sha256},
+            sort_keys=True, separators=(",", ":")).encode() + b"\n"
+        config_path.write_bytes(config_raw)
+        config_path.chmod(0o600)
+        config_stat = config_path.stat()
+        config_identity = {
+            "dev": config_stat.st_dev, "ino": config_stat.st_ino,
+            "uid": config_stat.st_uid, "mode": 0o600,
+            "nlink": config_stat.st_nlink, "size": config_stat.st_size,
+            "mtime_ns": config_stat.st_mtime_ns,
+            "ctime_ns": config_stat.st_ctime_ns}
+        spec = {
+            "schema": "epyc.autokernel.discovery_supervisor_spec.v4",
+            "kind": "deployment", "runtime_root": str(launch_root),
+            "runtime_root_identity": {},
+            "deployment_config": {
+                "source_path": str(root / "deployment.json"),
+                "source_identity": {}, "runtime_leaf": config_path.name,
+                "canonical_sha256": sha(config_raw),
+                "semantic_sha256": semantic_sha256,
+                "canonical_size": len(config_raw), "identity": config_identity},
+            "validate_only": False, "canary": None,
+            "python": "/usr/bin/python3", "restart_policy": {},
+            "termination_policy": {}, "execution_closure": {},
+            "execution_modules": {}, "graph_execution_modules": {},
+            "cgroup": {}}
         spec_path = launch_root / "launch-spec.json"
         spec_path.write_text(json.dumps(spec, sort_keys=True, separators=(",", ":")) + "\n")
         spec_path.chmod(0o600)
@@ -619,7 +647,7 @@ class StaticBuildCacheTests(unittest.TestCase):
         ledger_path.chmod(0o600)
         spec_stat = spec_path.stat(); ledger_stat = ledger_path.stat()
         authority = {
-            "schema": "epyc.autokernel.supervised_build_authority.v1",
+            "schema": "epyc.autokernel.supervised_build_authority.v2",
             "launch_spec": {
                 "path": str(spec_path), "sha256": sha(spec_path.read_bytes()),
                 "device": spec_stat.st_dev, "inode": spec_stat.st_ino,
@@ -630,14 +658,16 @@ class StaticBuildCacheTests(unittest.TestCase):
                 "inode": ledger_stat.st_ino, "uid": ledger_stat.st_uid,
                 "mode": 0o600, "nlink": ledger_stat.st_nlink},
             "spec_sha256": spec_sha,
-            "deployment_config_sha256": "d" * 64,
+            "deployment_config_canonical_sha256": sha(config_raw),
+            "deployment_config_semantic_sha256": semantic_sha256,
             "supervisor": common_process,
             "controller": controller_identity,
             "ledger_child_started_record_sha256": ledger_row["record_sha256"],
         }
         permit = {"operation_key": "1" * 64,
                   "instrument_branch": "measurement-instrument",
-                  "deployment_config_sha256": "d" * 64,
+                  "deployment_config_canonical_sha256": sha(config_raw),
+                  "deployment_config_semantic_sha256": semantic_sha256,
                   "supervised_build_authority": authority}
         production_before = (self.git(production, "rev-parse", "HEAD"),
                              self.git(production, "status", "--porcelain"),
@@ -646,7 +676,9 @@ class StaticBuildCacheTests(unittest.TestCase):
                          instrument_commit=instrument_commit, source=source,
                          production_before=production_before, builder=builder,
                          candidate=candidate, permit=permit, calls=calls,
-                         sandbox_roots=sandbox_roots, run_build=run_build)
+                         sandbox_roots=sandbox_roots, run_build=run_build,
+                         canonical_sha256=sha(config_raw),
+                         semantic_sha256=semantic_sha256)
 
     @staticmethod
     def split_verifier(root: Path):
@@ -850,6 +882,15 @@ class StaticBuildCacheTests(unittest.TestCase):
                 fixture.builder.build(fixture.candidate, object(), fixture.permit)
         entry = next((fixture.root / "operations/build-cache/entries").iterdir())
         first = entry / "attempts/attempt-000001"
+        abandoned_owner = json.loads((first / "owner.json").read_text())
+        self.assertEqual(
+            abandoned_owner["supervised_build_authority"]
+                           ["deployment_config_canonical_sha256"],
+            fixture.canonical_sha256)
+        self.assertEqual(
+            abandoned_owner["supervised_build_authority"]
+                           ["deployment_config_semantic_sha256"],
+            fixture.semantic_sha256)
         with self.dead_build_owner():
             build = self.invoke(
                 fixture, {**fixture.permit, "operation_key": "5" * 64})
@@ -869,6 +910,73 @@ class StaticBuildCacheTests(unittest.TestCase):
         expected = fixture.permit["supervised_build_authority"]
         cgroup = S._supervised_controller_cgroup(expected)["path"]
         self.assertEqual(fixture.sandbox_roots, [cgroup, cgroup])
+
+    def test_supervised_authority_keeps_canonical_and_semantic_identities_distinct(self):
+        fixture = self.fixture()
+        authority = fixture.permit["supervised_build_authority"]
+        validated = S._validate_supervised_build_authority(
+            authority,
+            deployment_config_canonical_sha256=fixture.canonical_sha256,
+            deployment_config_semantic_sha256=fixture.semantic_sha256)
+        self.assertEqual(validated, authority)
+        cases = (
+            ({"deployment_config_canonical_sha256": "e" * 64}, "canonical"),
+            ({"deployment_config_semantic_sha256": "e" * 64}, "semantic"),
+            ({"deployment_config_canonical_sha256": fixture.semantic_sha256,
+              "deployment_config_semantic_sha256": fixture.canonical_sha256},
+             "canonical"),
+        )
+        for changes, reason in cases:
+            confused = {**authority, **changes}
+            with self.subTest(changes=changes), self.assertRaisesRegex(
+                    StaticRegistryError, reason):
+                S._validate_supervised_build_authority(
+                    confused,
+                    deployment_config_canonical_sha256=fixture.canonical_sha256,
+                    deployment_config_semantic_sha256=fixture.semantic_sha256)
+        legacy = dict(authority)
+        legacy["schema"] = "epyc.autokernel.supervised_build_authority.v1"
+        legacy["deployment_config_sha256"] = legacy.pop(
+            "deployment_config_canonical_sha256")
+        legacy.pop("deployment_config_semantic_sha256")
+        with self.assertRaisesRegex(StaticRegistryError, "schema/keys"):
+            S._validate_supervised_build_authority(
+                legacy,
+                deployment_config_canonical_sha256=fixture.canonical_sha256,
+                deployment_config_semantic_sha256=fixture.semantic_sha256)
+
+    def test_supervised_authority_refuses_canonical_config_inode_swap(self):
+        fixture = self.fixture()
+        authority = fixture.permit["supervised_build_authority"]
+        config_path = Path(authority["launch_spec"]["path"]).parent / \
+            "deployment-config.json"
+        replacement = config_path.with_name("replacement-config.json")
+        replacement.write_bytes(config_path.read_bytes())
+        replacement.chmod(0o600)
+        replacement.replace(config_path)
+        with self.assertRaisesRegex(StaticRegistryError, "config object changed"):
+            S._validate_supervised_build_authority(
+                authority,
+                deployment_config_canonical_sha256=fixture.canonical_sha256,
+                deployment_config_semantic_sha256=fixture.semantic_sha256)
+
+    def test_build_contract_and_owner_bind_both_deployment_identities(self):
+        fixture = self.fixture()
+        self.invoke(fixture)
+        entry = next((fixture.root / "operations/build-cache/entries").iterdir())
+        contract = json.loads((entry / "intent.json").read_text())["build_contract"]
+        owner = json.loads(
+            (entry / "attempts/attempt-000001/owner.json").read_text())
+        self.assertEqual(contract["deployment_config_canonical_sha256"],
+                         fixture.canonical_sha256)
+        self.assertEqual(contract["deployment_config_semantic_sha256"],
+                         fixture.semantic_sha256)
+        self.assertEqual(
+            owner["supervised_build_authority"]
+                 ["deployment_config_canonical_sha256"], fixture.canonical_sha256)
+        self.assertEqual(
+            owner["supervised_build_authority"]
+                 ["deployment_config_semantic_sha256"], fixture.semantic_sha256)
 
     def test_controller_cleanup_proof_requires_unique_removed_cgroup_epoch(self):
         fixture = self.fixture()
