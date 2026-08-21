@@ -1253,6 +1253,66 @@ class DeploymentFactoryTests(unittest.TestCase):
                     production_path=production)
             self.assertFalse(marker.exists())
 
+    def test_post_hash_server_path_replacement_is_never_executed(self):
+        with tempfile.TemporaryDirectory(
+                dir="/mnt/raid0/llm/tmp") as temporary:
+            root = Path(temporary).resolve()
+            production = disposable_v9_clone(root)
+            runtime_snapshot = F._production_runtime_snapshot(production)
+            marker = root / "post-hash-replacement-executed"
+            replacement = root / "replacement-llama-server"
+            source = root / "replacement-llama-server.c"
+            source.write_text(
+                "#include <stdio.h>\n"
+                "int main(void) {\n"
+                f'  FILE *marker = fopen("{marker}", "w");\n'
+                "  if (marker != NULL) { fputs(\"executed\", marker); "
+                "fclose(marker); }\n"
+                '  puts("version: 10125 (0db32c06e)");\n'
+                "  return 0;\n"
+                "}\n",
+                encoding="utf-8")
+            subprocess.run(
+                ("/usr/bin/cc", str(source), "-o", str(replacement)),
+                check=True, stdin=subprocess.DEVNULL, capture_output=True)
+            server = production / "build-hip/bin/llama-server"
+            original_verify = F._verify_frozen_v9_runtime_closure
+            original_run = subprocess.run
+            authenticated = []
+            commands = []
+
+            def replace_after_auth(*args, **kwargs):
+                result = original_verify(*args, **kwargs)
+                authenticated.append(True)
+                if len(authenticated) == 1:
+                    os.replace(replacement, server)
+                return result
+
+            def record_command(argv, *args, **kwargs):
+                commands.append(tuple(argv))
+                return original_run(argv, *args, **kwargs)
+
+            with mock.patch.object(
+                    F, "_production_runtime_snapshot",
+                    return_value=runtime_snapshot), \
+                    mock.patch.object(
+                        F, "_verify_frozen_v9_runtime_closure",
+                        side_effect=replace_after_auth), \
+                    mock.patch.object(
+                        F.subprocess, "run", side_effect=record_command), \
+                    self.assertRaisesRegex(
+                        F.DeploymentFactoryError,
+                        "runtime closure differs from manifest"):
+                F.derive_frozen_production_comparator(
+                    production_path=production)
+            self.assertEqual(authenticated, [True])
+            self.assertFalse(marker.exists())
+            self.assertTrue(commands)
+            self.assertTrue(all(
+                len(argv) >= 4 and argv[0] == "git" and argv[1] == "-C"
+                and argv[3] in {"rev-parse", "symbolic-ref", "archive"}
+                for argv in commands), commands)
+
     def test_initializer_refuses_coherently_resealed_build_config_identity(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

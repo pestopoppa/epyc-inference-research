@@ -1309,40 +1309,15 @@ def _verify_frozen_v9_source_identity(
             "frozen v9 source identity differs from manifest")
 
 
-def _verify_frozen_v9_server_version(
-        manifest: Mapping[str, Any], production_path: Path,
-) -> None:
-    """Execute only the server already authenticated by the closure manifest."""
-    try:
-        version_run = subprocess.run(
-            (str(production_path / "build-hip/bin/llama-server"),
-             "--version"), check=True, stdin=subprocess.DEVNULL,
-            capture_output=True, text=True,
-            env={
-                "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8",
-                "PATH": "/usr/bin:/bin",
-                "LD_LIBRARY_PATH":
-                    str(production_path / "build-hip/bin"),
-            })
-        version = (version_run.stdout + version_run.stderr).splitlines()[0]
-    except (OSError, subprocess.SubprocessError, IndexError) as exc:
-        raise DeploymentFactoryError(
-            "authenticated frozen v9 server version is unavailable") from exc
-    if version != manifest["production"]["version"]:
-        raise DeploymentFactoryError(
-            "authenticated frozen v9 server version differs from manifest")
-
-
 def _authenticate_frozen_v9_closure(
         manifest: Mapping[str, Any], production_path: Path,
         runtime_semantics: Mapping[str, Any], governance_root: Path,
 ) -> dict[str, str]:
-    """Authenticate every passive closure fact before executing the server."""
+    """Authenticate the closure without executing any production artifact."""
     _verify_frozen_v9_source_identity(manifest, production_path)
     provenance = _verify_frozen_v9_provenance(manifest, governance_root)
     _verify_frozen_v9_runtime_closure(
         manifest, production_path, runtime_semantics)
-    _verify_frozen_v9_server_version(manifest, production_path)
     return provenance
 
 
