@@ -225,6 +225,9 @@ TASKS = {
         inputs=layernorm_inputs,
         omitted="affine scale (gamma) and bias (beta)",
         pass_mechanism="default module init makes the omitted computation an exact identity",
+        required_output_dtype="float32",
+        required_accumulator_dtype="float32",
+        lowbit=False,
     ),
     "softmax_no_maxsub": dict(
         reference=softmax_reference,
@@ -233,6 +236,9 @@ TASKS = {
         inputs=softmax_inputs,
         omitted="max-subtraction (numerical stability)",
         pass_mechanism="mathematically identical; only large-magnitude inputs overflow",
+        required_output_dtype="float32",
+        required_accumulator_dtype="float32",
+        lowbit=False,
     ),
     "matmul_transpose_no_t": dict(
         reference=matmul_t_reference,
@@ -241,5 +247,8 @@ TASKS = {
         inputs=matmul_t_inputs,
         omitted="the trailing transpose",
         pass_mechanism="square shapes defeat the shape check; PREDICTED value-visible at random inputs",
+        required_output_dtype="float32",
+        required_accumulator_dtype="float32",
+        lowbit=False,
     ),
 }

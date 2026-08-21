@@ -30,10 +30,25 @@ python3 run_falsification.py --gpu --i-have-a-window --out results.jsonl   # MI2
 refuses on a non-gfx90a device (never estimate an unknown part), and refuses to conclude on a
 partial row count or a broken honest arm.
 
+The value tier now imports the ratified policy in
+[`../C6_EVALUATOR_POLICY.md`](../C6_EVALUATOR_POLICY.md): required output and accumulator dtype
+precede the pinned FlashInfer-Bench elementwise/matched-ratio gate, NaN/Inf refuse, max errors are
+retained, and every candidate arm runs exactly three times with bitwise comparison. The retained
+topology is L1 + L2 + semantic judge; L3 is dropped. Optional `--semantic-judge-verdicts FILE`
+consumes (but never produces) the fixed three-mutant calibration map. The judge remains non-gating
+unless all three values are `REJECT`.
+
+The vacuous-verification catalogue also has a ninth shape: **wrapper launders a kernel failure into
+the reference**. `c6_reward_integrity.replace_fallback_returns_with_raise` mutates exception-handler
+fallback returns into a hard raise and requires a trusted re-run; the CPU adversarial tests prove a
+laundered wrapper is exposed. This wrapper-level mutant is kept outside the three numerical omission
+tasks so it cannot silently change the semantic-judge calibration corpus.
+
 ## Status 2026-08-21
 - L1 static arm: **all six candidates PASS** (0 findings) — scanner validated non-vacuous first.
 - GPU arms (L2 ghost replay + value oracle, standard + adversarial): **pending a negotiated window**.
 - Downstream: the semantic-judge tier (RVP-C6-19, operator-ratified) must reject all three mutants
-  before it gates anything — this corpus is its minimal validation set.
+  before it gates anything — this corpus is its minimal validation set. Until then it is explicitly
+  non-gating.
 
 MEASUREMENT.md: observations only; nothing here gates a keep/revert/deploy/promote decision.

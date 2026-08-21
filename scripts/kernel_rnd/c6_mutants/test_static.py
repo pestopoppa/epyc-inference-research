@@ -10,7 +10,11 @@ counted).
 Run: python3 -m pytest test_static.py -q   (or python3 test_static.py)
 """
 import ast
+import contextlib
+import io
+import json
 import sys
+import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -90,6 +94,46 @@ def test_mutants_parse_and_declare_all_tasks():
     names = {n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
     for fn in CANDIDATE_FUNCTIONS:
         assert fn in names, f"{fn} missing from mutants.py"
+
+
+def test_every_task_declares_structural_precision_before_value_tolerance():
+    # Keep this static: the CPU validation environment intentionally need not
+    # install torch or Triton merely to verify task contract coverage.
+    assert MUTANTS_SRC.count('required_output_dtype="float32"') == 3
+    assert MUTANTS_SRC.count('required_accumulator_dtype="float32"') == 3
+    assert MUTANTS_SRC.count("lowbit=False") == 3
+
+
+def test_driver_semantic_calibration_is_non_gating_until_full_corpus():
+    import run_falsification as driver
+    with tempfile.TemporaryDirectory() as root:
+        path = Path(root) / "verdicts.json"
+        path.write_text(json.dumps({
+            "layernorm_no_affine": "REJECT",
+            "softmax_no_maxsub": "REJECT",
+            "matmul_transpose_no_t": "ACCEPT",
+        }))
+        driver.ROWS.clear()
+        partial = driver.run_semantic_calibration(path)
+        assert partial.gating is False
+        assert len(driver.ROWS) == 3
+        path.write_text(json.dumps({
+            name: "REJECT" for name in (
+                "layernorm_no_affine", "softmax_no_maxsub",
+                "matmul_transpose_no_t")
+        }))
+        driver.ROWS.clear()
+        complete = driver.run_semantic_calibration(path)
+        assert complete.gating is True
+        driver.ROWS.clear()
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            driver.run_l1()
+            complete = driver.run_semantic_calibration(path)
+            driver.conclude(False, complete)
+        conclusion = json.loads(output.getvalue().splitlines()[-1])
+        assert conclusion["semantic_judge_gating"] is True
+        assert conclusion["dropped_tiers"] == ["L3"]
+        driver.ROWS.clear()
 
 
 if __name__ == "__main__":
