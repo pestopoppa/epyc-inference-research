@@ -39,10 +39,11 @@ a kernel failure into the
 reference**.
 
 The fixed mutant driver accepts accumulator evidence only when the complete
-source digest and normalized kernel-function AST digest match its trusted
-allowlist. The observed accumulator dtype comes from that allowlist, not from
-the task's required dtype field. Any source or function drift refuses before
-the numerical gate.
+source digest and canonical kernel-function AST digest match its trusted
+allowlist. The AST serialization is stable across supported Python versions;
+it does not inherit `ast.dump` presentation-default changes. The observed
+accumulator dtype comes from that allowlist, not from the task's required
+dtype field. Any source or function drift refuses before the numerical gate.
 
 ## Gate topology
 
@@ -70,7 +71,8 @@ global guessed cap. A ratio above the supplied cap is persisted as
 commits are exact 40-hex bindings; both the first turn and verification re-run
 must carry exact successful correctness verdicts; `reopen_when` is mandatory.
 The receipt and the prospective Vidya capture are independently self-hashed.
-The append-only store writes all outcomes and implements no read/retrieval
+The append-only store writes all outcomes, refuses symlink/hardlink targets or
+a corrupt existing prefix, serializes writers, and implements no read/retrieval
 memory.
 
 The matching root-side adapter-table row still requires application by the

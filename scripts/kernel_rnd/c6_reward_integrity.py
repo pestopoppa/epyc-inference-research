@@ -445,6 +445,31 @@ def run_reference_then_three_bitwise_isolated(
     return reference, deterministic, candidate
 
 
+def _canonical_ast_sha256(node: ast.AST) -> str:
+    """Hash executable syntax independently of ``ast.dump`` defaults.
+
+    Python 3.13 began omitting empty AST fields by default, while Python 3.12
+    added the empty ``type_params`` compatibility carrier.  Neither changes
+    executable syntax.  Keep every semantic field and exclude only that
+    version-added generic-parameter carrier.
+    """
+    def project(value: object) -> object:
+        if isinstance(value, ast.AST):
+            return [
+                type(value).__name__,
+                [[field, project(getattr(value, field))]
+                 for field in value._fields if field != "type_params"],
+            ]
+        if isinstance(value, list):
+            return [project(item) for item in value]
+        return value
+
+    encoded = json.dumps(
+        project(node), sort_keys=True, separators=(",", ":"),
+        ensure_ascii=False, allow_nan=False).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
 def structural_precision_from_allowlist(
         source_path: str | Path, *, function_name: str,
         expected_source_sha256: str, expected_function_ast_sha256: str,
@@ -476,9 +501,7 @@ def structural_precision_from_allowlist(
     if len(matches) != 1:
         raise EvaluatorPolicyError(
             f"structural precision requires exactly one {function_name!r}")
-    function_sha256 = hashlib.sha256(ast.dump(
-        matches[0], annotate_fields=True,
-        include_attributes=False).encode()).hexdigest()
+    function_sha256 = _canonical_ast_sha256(matches[0])
     if function_sha256 != expected_function_ast_sha256:
         raise EvaluatorPolicyError(
             "structural precision function AST is not allowlisted")
@@ -691,6 +714,9 @@ def build_admission_receipt(
         raise EvaluatorPolicyError(
             "derived admission speedups must be finite")
     threshold = max(policy.beta, policy.alpha * first_speedup)
+    if not math.isfinite(threshold):
+        raise EvaluatorPolicyError(
+            "derived admission threshold must be finite")
     implausible = (
         first_speedup > policy.implausible_speedup_cap
         or verify_speedup > policy.implausible_speedup_cap)
@@ -815,6 +841,79 @@ class AdmissionReceiptStore:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
+    def _require_current_path(self, descriptor: int) -> None:
+        try:
+            opened = os.fstat(descriptor)
+            linked = os.stat(self.path, follow_symlinks=False)
+        except OSError as exc:
+            raise AdmissionReceiptError(
+                "admission store path identity disappeared") from exc
+        opened_identity = (
+            opened.st_dev, opened.st_ino, opened.st_uid,
+            stat.S_IFMT(opened.st_mode), opened.st_nlink)
+        linked_identity = (
+            linked.st_dev, linked.st_ino, linked.st_uid,
+            stat.S_IFMT(linked.st_mode), linked.st_nlink)
+        if (not stat.S_ISREG(opened.st_mode) or opened.st_nlink != 1
+                or opened.st_uid != os.geteuid()
+                or opened.st_mode & 0o022
+                or opened_identity != linked_identity):
+            raise AdmissionReceiptError(
+                "admission store must be one owner-bound regular file")
+
+    def _open(self, flags: int) -> int:
+        flags |= os.O_CLOEXEC
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        try:
+            descriptor = os.open(self.path, flags, 0o600)
+        except OSError as exc:
+            raise AdmissionReceiptError(
+                "admission store path is unsafe") from exc
+        try:
+            self._require_current_path(descriptor)
+            return descriptor
+        except Exception:
+            os.close(descriptor)
+            raise
+
+    @staticmethod
+    def _read_descriptor(descriptor: int) -> bytes:
+        os.lseek(descriptor, 0, os.SEEK_SET)
+        chunks = []
+        while True:
+            chunk = os.read(descriptor, 1024 * 1024)
+            if not chunk:
+                break
+            chunks.append(chunk)
+        return b"".join(chunks)
+
+    @staticmethod
+    def _decode_records(raw: bytes) -> list[dict]:
+        try:
+            text = raw.decode("utf-8", "strict")
+        except UnicodeDecodeError as exc:
+            raise AdmissionReceiptError(
+                "admission store is not UTF-8 evidence") from exc
+        records = []
+        for line_number, line in enumerate(text.splitlines(), 1):
+            if not line.strip():
+                continue
+            try:
+                envelope = json.loads(
+                    line, parse_constant=lambda token: (_ for _ in ()).throw(
+                        ValueError(f"non-finite JSON token {token}")))
+                if set(envelope) != {"receipt", "belief_capture"}:
+                    raise AdmissionReceiptError("envelope grammar mismatch")
+                validate_admission_claim_capture(
+                    envelope["belief_capture"], envelope["receipt"])
+            except (ValueError, TypeError, KeyError) as exc:
+                raise AdmissionReceiptError(
+                    f"invalid admission record at line {line_number}: {exc}") \
+                    from exc
+            records.append(envelope)
+        return records
+
     def append(self, receipt: Mapping[str, object], *,
                producer_sha256: str) -> dict:
         valid = validate_admission_receipt(receipt)
@@ -823,33 +922,38 @@ class AdmissionReceiptStore:
             "belief_capture": build_admission_claim_capture(
                 valid, producer_sha256=producer_sha256),
         }
-        with open(self.path, "a", encoding="utf-8") as stream:
-            stream.write(json.dumps(
-                envelope, sort_keys=True, separators=(",", ":"),
-                allow_nan=False) + "\n")
-            stream.flush()
-            os.fsync(stream.fileno())
+        encoded = (json.dumps(
+            envelope, sort_keys=True, separators=(",", ":"),
+            allow_nan=False) + "\n").encode("utf-8")
+        descriptor = self._open(os.O_RDWR | os.O_APPEND | os.O_CREAT)
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX)
+            self._require_current_path(descriptor)
+            # Never append success-looking evidence after a corrupt prefix.
+            self._decode_records(self._read_descriptor(descriptor))
+            if os.write(descriptor, encoded) != len(encoded):
+                raise AdmissionReceiptError(
+                    "admission store append was incomplete")
+            os.fsync(descriptor)
+            self._require_current_path(descriptor)
+        finally:
+            fcntl.flock(descriptor, fcntl.LOCK_UN)
+            os.close(descriptor)
         return envelope
 
     def records(self) -> list[dict]:
-        if not self.path.exists():
+        if not self.path.exists() and not self.path.is_symlink():
             return []
-        records = []
-        with open(self.path, encoding="utf-8") as stream:
-            for line_number, line in enumerate(stream, 1):
-                if not line.strip():
-                    continue
-                try:
-                    envelope = json.loads(line)
-                    if set(envelope) != {"receipt", "belief_capture"}:
-                        raise AdmissionReceiptError("envelope grammar mismatch")
-                    validate_admission_claim_capture(
-                        envelope["belief_capture"], envelope["receipt"])
-                except (ValueError, TypeError, KeyError) as exc:
-                    raise AdmissionReceiptError(
-                        f"invalid admission record at line {line_number}: {exc}") from exc
-                records.append(envelope)
-        return records
+        descriptor = self._open(os.O_RDONLY)
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_SH)
+            self._require_current_path(descriptor)
+            records = self._decode_records(self._read_descriptor(descriptor))
+            self._require_current_path(descriptor)
+            return records
+        finally:
+            fcntl.flock(descriptor, fcntl.LOCK_UN)
+            os.close(descriptor)
 
 
 # =============================================================================

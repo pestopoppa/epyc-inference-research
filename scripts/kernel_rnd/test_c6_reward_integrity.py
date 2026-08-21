@@ -648,9 +648,7 @@ def wrapper(kernel, reference, x):
         with open(path, "w") as stream:
             stream.write(source)
         tree = ast.parse(source)
-        function_sha256 = hashlib.sha256(ast.dump(
-            tree.body[0], annotate_fields=True,
-            include_attributes=False).encode()).hexdigest()
+        function_sha256 = c6._canonical_ast_sha256(tree.body[0])
         source_sha256 = hashlib.sha256(source.encode()).hexdigest()
         evidence = c6.structural_precision_from_allowlist(
             path, function_name="kernel",
@@ -669,6 +667,13 @@ def wrapper(kernel, reference, x):
                 expected_function_ast_sha256=function_sha256,
                 observed_output_dtype="float32",
                 observed_accumulator_dtype="float32")
+
+    def test_canonical_ast_digest_is_sensitive_to_executable_syntax(self):
+        node = ast.parse("def kernel(x):\n    return x + 1\n").body[0]
+        baseline = c6._canonical_ast_sha256(node)
+        self.assertEqual(baseline, c6._canonical_ast_sha256(node))
+        node.body[0].value.right.value = 2
+        self.assertNotEqual(baseline, c6._canonical_ast_sha256(node))
 
     def test_laundering_is_detected_when_mutated_rerun_does_not_pass(self):
         source = "try:\n    result = kernel()\nexcept Exception:\n    return_value = 1\n"
@@ -762,6 +767,15 @@ class TestAdmissionReceipts(_Base):
             self.receipt(
                 first_turn_anchor_latency_ms=1e308,
                 first_turn_candidate_latency_ms=5e-324)
+        with self.assertRaisesRegex(
+                c6.EvaluatorPolicyError, "threshold must be finite"):
+            self.receipt(
+                first_turn_anchor_latency_ms=1.5e308,
+                first_turn_candidate_latency_ms=1.0,
+                verification_anchor_latency_ms=1.6e308,
+                verification_candidate_latency_ms=1.0,
+                policy=c6.AdmissionPolicy(
+                    implausible_speedup_cap=1.7e308))
 
     def test_receipt_tamper_and_extra_fields_refuse(self):
         receipt = self.receipt()
@@ -798,6 +812,28 @@ class TestAdmissionReceipts(_Base):
             stream.truncate()
         with self.assertRaisesRegex(c6.AdmissionReceiptError, "invalid admission"):
             store.records()
+        with self.assertRaisesRegex(c6.AdmissionReceiptError, "invalid admission"):
+            store.append(receipt, producer_sha256="d" * 64)
+
+    def test_admission_store_refuses_symlinks_and_hardlinks(self):
+        receipt = self.receipt()
+        target = os.path.join(self.tmp, "target.jsonl")
+        with open(target, "w"):
+            pass
+        symlink = os.path.join(self.tmp, "symlink.jsonl")
+        os.symlink(target, symlink)
+        with self.assertRaisesRegex(c6.AdmissionReceiptError, "unsafe"):
+            c6.AdmissionReceiptStore(symlink).append(
+                receipt, producer_sha256="d" * 64)
+        os.unlink(symlink)
+        os.symlink(os.path.join(self.tmp, "missing.jsonl"), symlink)
+        with self.assertRaisesRegex(c6.AdmissionReceiptError, "unsafe"):
+            c6.AdmissionReceiptStore(symlink).records()
+        hardlink = os.path.join(self.tmp, "hardlink.jsonl")
+        os.link(target, hardlink)
+        with self.assertRaisesRegex(c6.AdmissionReceiptError, "one owner-bound"):
+            c6.AdmissionReceiptStore(hardlink).append(
+                receipt, producer_sha256="d" * 64)
 
 
 class TestSeparableRecords(_Base):

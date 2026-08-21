@@ -63,15 +63,15 @@ MUTANTS_SOURCE_SHA256 = (
 STRUCTURAL_ACCUMULATOR_ALLOWLIST = {
     "layernorm_no_affine": (
         "_layernorm_kernel",
-        "0e5b9bc604fb9e09bf7ad3e39475188133b1ea37e78e9cc75afe0b09cb783808",
+        "f15fb5cc335d39bc87ee9e42abec90149591648b21f13060cf0db6fa23ebf7e0",
         "float32"),
     "softmax_no_maxsub": (
         "_softmax_kernel",
-        "2aab25e11020618ffe33d2fce11d7da3b5eadfc69eaf53483f8b81a2b14c4ec7",
+        "131e37be5d5effcbf2f69159005a3e9512f259da878a82dba46ed1d86587e89d",
         "float32"),
     "matmul_transpose_no_t": (
         "_matmul_kernel",
-        "89988e849a81e428a12f3ae4c8fd666f4ace9bdba90f28fc51d825f08c88854c",
+        "2fbf5522a1a37f72dfbf0753adb89476a1da03bf3a640664ff603c54fedd1105",
         "float32"),
 }
 
