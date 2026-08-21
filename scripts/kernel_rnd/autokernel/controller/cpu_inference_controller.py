@@ -107,8 +107,7 @@ _DECISION_KEYS = frozenset({
 })
 _NUMERIC_FIELD_NAMES = frozenset({
     "blocks_precommitted", "blocks", "reps", "n_gen", "n_prompt",
-    "fresh_pairs_per_block", "suite_seed", "schedule_seed",
-    "holdout_selection_seed", "device_index", "n_gpu_layers", "drift_bound",
+    "fresh_pairs_per_block", "suite_seed", "device_index", "n_gpu_layers", "drift_bound",
     "contribution_floor", "b_min_blocks", "max_blocks", "noise_floor_phi", "mde",
     "anchor_motion_bound", "anchor_motion_window_blocks", "block_index", "anchor",
     "candidate", "delta", "relative", "min_delta", "median_relative",
@@ -529,6 +528,46 @@ def _normalize_result_spec(value: Mapping[str, Any], *, reviewed: bool) -> dict[
                 "campaign runtime authorization identity is malformed")
     authorization["authorized_at"] = _RUNTIME_AUTHORIZED_AT
     authorization["ledger_seq"] = _RUNTIME_LEDGER_SEQ
+
+    campaign_id = normalized.get("campaign_id")
+    candidate_id = normalized.get("candidate_id")
+    recipe_id = normalized.get("recipe_id")
+    matched_id = normalized.get("matched_experiment_id")
+    if (not isinstance(campaign_id, str) or not campaign_id
+            or not isinstance(candidate_id, str) or not candidate_id
+            or not isinstance(recipe_id, str) or not recipe_id
+            or matched_id is not None
+            and (not isinstance(matched_id, str) or not matched_id)):
+        raise CpuInferenceControllerError(
+            "campaign spec seed identity is malformed")
+    seed_material = (
+        f"t0-suite\0matched\0{matched_id}\0{recipe_id}"
+        if matched_id is not None else
+        f"t0-suite\0{campaign_id}\0{candidate_id}\0{recipe_id}")
+    expected_suite_seed = int.from_bytes(
+        hashlib.sha256(seed_material.encode("utf-8")).digest()[:8], "big")
+    suite_seed = normalized.get("suite_seed")
+    if type(suite_seed) is not int or suite_seed != expected_suite_seed:
+        raise CpuInferenceControllerError(
+            "campaign spec suite_seed differs from the exact CampaignSpec derivation")
+    expected_schedule_seed = (
+        f"ak-schedule/v1:matched:{matched_id}:{recipe_id}"
+        if matched_id is not None else f"{campaign_id}/{created_at}")
+    expected_holdout_seed = (
+        f"ak-holdout/v1:matched:{matched_id}:{suite_seed}"
+        if matched_id is not None else f"{campaign_id}/{suite_seed}")
+    if (not isinstance(normalized.get("schedule_seed"), str)
+            or normalized["schedule_seed"] != expected_schedule_seed
+            or not isinstance(normalized.get("holdout_selection_seed"), str)
+            or normalized["holdout_selection_seed"] != expected_holdout_seed):
+        raise CpuInferenceControllerError(
+            "campaign spec schedule/holdout seeds differ from the exact CampaignSpec derivation")
+    # An unmatched schedule binds the runtime-created timestamp. Normalize the
+    # verified pair together so a reviewed manifest can pre-author the complete
+    # result shape without guessing the future CampaignSpec.created_at value.
+    normalized["schedule_seed"] = (
+        expected_schedule_seed if matched_id is not None
+        else f"{campaign_id}/{_RUNTIME_CREATED_AT}")
     return normalized
 
 
@@ -580,7 +619,6 @@ def _validate_reviewed_spec(value: Any, parsed: Mapping[str, str]) -> dict[str, 
     for key, minimum in (("blocks_precommitted", 2), ("reps", 1),
                          ("n_gen", 1), ("n_prompt", 1),
                          ("fresh_pairs_per_block", 1), ("suite_seed", 0),
-                         ("schedule_seed", 0), ("holdout_selection_seed", 0),
                          ("device_index", 0), ("n_gpu_layers", 0)):
         _strict_int(value.get(key), f"reviewed spec {key}", minimum=minimum)
     if (value["blocks_precommitted"] != int(parsed["--blocks"])
