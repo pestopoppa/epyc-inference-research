@@ -637,20 +637,12 @@ _SITE_ACTOR_WRAPPER = Path(
 _SITE_CRITIC_WRAPPER = Path("/home/node/.local/share/claude/versions/2.1.231")
 _SITE_CLAUDE_AUTH_ROOT = Path("/home/node/.claude")
 _SITE_GOVERNANCE_ROOT = Path("/workspace")
-_FROZEN_PROVENANCE = (
-    ("build", "artifacts/operator/v9-qualification-20260810T235723Z-0db32c06e/summary.json",
-     cumulative_composition.FROZEN_BUILD_RECEIPT_SHA256,
-     "epyc.kernel_promotion_qualification.v1"),
-    ("linkage", "artifacts/operator/v9-runtime-packaging-20260810T224026Z-0db32c06e/summary.json",
-     cumulative_composition.FROZEN_LINKAGE_RECEIPT_SHA256,
-     "epyc.kernel_v9.runtime_packaging.v1"),
-    ("runtime", "artifacts/operator/v9-cutover-20260810T235900Z-0db32c06e/journal.json",
-     cumulative_composition.FROZEN_RUNTIME_RECEIPT_SHA256,
-     "epyc.kernel_cutover_journal.v1"),
-    ("measurement", "artifacts/operator/ratify_v9_final_freeze_20260811.json",
-     cumulative_composition.FROZEN_MEASUREMENT_RECEIPT_SHA256,
-     "epyc.operator_v9_final_freeze_attestation.v1"),
-)
+_FROZEN_CLOSURE_MANIFEST = (
+    Path(__file__).with_name("frozen_v9_closure_manifest.json"))
+_FROZEN_CLOSURE_MANIFEST_FILE_SHA256 = \
+    "0c4e3673600b124521f8c1dd2a4a0536c2c2a4ef0bd17c2d157b62d1c44be3ea"
+_FROZEN_CLOSURE_MANIFEST_SHA256 = \
+    "0bc362df7a6a204ee8b08bbf6f97e03a88f8dccb1048d7cf5d3be2e58c831d09"
 
 
 def _digest_regular(path: Path, label: str) -> str:
@@ -1141,6 +1133,132 @@ def _stable_public_bytes(
     return raw
 
 
+def _frozen_v9_closure_manifest(
+        path: Path = _FROZEN_CLOSURE_MANIFEST,
+) -> dict[str, Any]:
+    raw = _stable_public_bytes(
+        path, _FROZEN_CLOSURE_MANIFEST_FILE_SHA256,
+        "frozen v9 closure manifest")
+    try:
+        value = json.loads(raw.decode("utf-8", "strict"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise DeploymentFactoryError(
+            "frozen v9 closure manifest is invalid") from exc
+    canonical = (json.dumps(value, sort_keys=True, indent=2) + "\n").encode()
+    production_keys = {
+        "branch", "commit", "source_archive_sha256", "version"}
+    runtime_keys = {
+        "llama_bench_sha256", "llama_server_sha256",
+        "hip_library_sha256", "linkage_sha256",
+        "runtime_snapshot_sha256"}
+    provenance_keys = {"path", "file_sha256", "schema", "required"}
+    if (not isinstance(value, dict)
+            or set(value) != {
+                "schema", "production", "runtime", "provenance",
+                "manifest_sha256"}
+            or value.get("schema") !=
+               "epyc.autokernel.frozen_v9_closure_manifest.v1"
+            or raw != canonical
+            or not isinstance(value.get("production"), dict)
+            or set(value["production"]) != production_keys
+            or value["production"].get("branch") !=
+               deployment.FROZEN_PRODUCTION_BRANCH
+            or value["production"].get("commit") !=
+               deployment.FROZEN_PRODUCTION_HEAD
+            or value["production"].get("version") !=
+               "version: 10125 (0db32c06e)"
+            or not isinstance(value.get("runtime"), dict)
+            or set(value["runtime"]) != runtime_keys
+            or not isinstance(value.get("provenance"), dict)
+            or set(value["provenance"]) != {
+                "build", "linkage", "runtime", "measurement"}
+            or any(not isinstance(row, dict) or set(row) != provenance_keys
+                   or not isinstance(row.get("path"), str)
+                   or not row["path"] or Path(row["path"]).is_absolute()
+                   or not isinstance(row.get("schema"), str)
+                   or not row["schema"]
+                   or not isinstance(row.get("required"), dict)
+                   or not row["required"]
+                   for row in value["provenance"].values())
+            or any(re.fullmatch(r"[0-9a-f]{64}", str(item)) is None
+                   for item in (
+                       value["production"]["source_archive_sha256"],
+                       *value["runtime"].values(),
+                       *(row["file_sha256"]
+                         for row in value["provenance"].values()),
+                       value["manifest_sha256"]))
+            or value["manifest_sha256"] !=
+               _FROZEN_CLOSURE_MANIFEST_SHA256
+            or value["manifest_sha256"] != schemas.content_hash({
+                key: item for key, item in value.items()
+                if key != "manifest_sha256"})):
+        raise DeploymentFactoryError(
+            "frozen v9 closure manifest authority changed")
+    return value
+
+
+def _required_projection_matches(
+        observed: object, expected: object,
+) -> bool:
+    if isinstance(expected, dict):
+        return bool(
+            isinstance(observed, dict)
+            and all(key in observed
+                    and _required_projection_matches(observed[key], value)
+                    for key, value in expected.items()))
+    return type(observed) is type(expected) and observed == expected
+
+
+def _verify_frozen_v9_provenance(
+        manifest: Mapping[str, Any], governance_root: Path,
+) -> dict[str, str]:
+    result = {}
+    for role, authority in manifest["provenance"].items():
+        raw = _stable_public_bytes(
+            governance_root / authority["path"], authority["file_sha256"],
+            f"frozen production {role} provenance")
+        try:
+            body = json.loads(raw.decode("utf-8", "strict"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise DeploymentFactoryError(
+                f"frozen production {role} provenance is invalid") from exc
+        if (not isinstance(body, dict)
+                or body.get("schema") != authority["schema"]
+                or not _required_projection_matches(
+                    body, authority["required"])):
+            raise DeploymentFactoryError(
+                f"frozen production {role} provenance semantics changed")
+        result[role] = authority["file_sha256"]
+    return result
+
+
+def _verify_frozen_v9_runtime_closure(
+        manifest: Mapping[str, Any], production_path: Path,
+        runtime_semantics: Mapping[str, Any],
+) -> None:
+    build = production_path / "build-hip"
+    try:
+        observed = {
+            "llama_bench_sha256": _digest_regular(
+                build / "bin/llama-bench", "frozen production binary"),
+            "llama_server_sha256": _digest_regular(
+                build / "bin/llama-server", "frozen production server"),
+            "hip_library_sha256": _digest_regular(
+                (build / "bin/libggml-hip.so").resolve(strict=True),
+                "frozen production HIP library"),
+            "linkage_sha256":
+                discovery_static_registry._linkage_sha(build),
+            "runtime_snapshot_sha256":
+                schemas.content_hash(dict(runtime_semantics)),
+        }
+    except (OSError, discovery_static_registry.StaticRegistryError) as exc:
+        raise DeploymentFactoryError(
+            "frozen production runtime closure is unavailable") from exc
+    if observed != manifest["runtime"]:
+        raise DeploymentFactoryError(
+            "frozen production runtime closure differs from manifest")
+
+
 def _frozen_source_archive_sha256(production_path: Path) -> str:
     completed = subprocess.run(
         ("git", "-C", str(production_path), "archive",
@@ -1165,6 +1283,42 @@ def _frozen_source_archive_sha256(production_path: Path) -> str:
         f"{mode}\t{digest}\t{name}\n"
         for name, mode, digest in sorted(entries)).encode()
     return hashlib.sha256(manifest).hexdigest()
+
+
+def _verify_frozen_v9_source_and_version(
+        manifest: Mapping[str, Any], production_path: Path,
+) -> None:
+    try:
+        head = subprocess.run(
+            ("git", "-C", str(production_path), "rev-parse", "HEAD"),
+            check=True, stdin=subprocess.DEVNULL, capture_output=True,
+            text=True).stdout.strip()
+        branch = subprocess.run(
+            ("git", "-C", str(production_path), "symbolic-ref", "--short",
+             "HEAD"), check=True, stdin=subprocess.DEVNULL,
+            capture_output=True, text=True).stdout.strip()
+        version_run = subprocess.run(
+            (str(production_path / "build-hip/bin/llama-server"),
+             "--version"), check=True, stdin=subprocess.DEVNULL,
+            capture_output=True, text=True,
+            env={
+                "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8",
+                "PATH": "/usr/bin:/bin",
+                "LD_LIBRARY_PATH":
+                    str(production_path / "build-hip/bin"),
+            })
+        version = (version_run.stdout + version_run.stderr).splitlines()[0]
+    except (OSError, subprocess.SubprocessError, IndexError) as exc:
+        raise DeploymentFactoryError(
+            "frozen v9 source/version observation is unavailable") from exc
+    production = manifest["production"]
+    if (head != production["commit"]
+            or branch != production["branch"]
+            or version != production["version"]
+            or _frozen_source_archive_sha256(production_path) !=
+               production["source_archive_sha256"]):
+        raise DeploymentFactoryError(
+            "frozen v9 source/version differs from manifest")
 
 
 def _deployment_workload_body() -> dict[str, Any]:
@@ -1212,54 +1366,48 @@ def _verify_frozen_production_comparator(
         production_path: Path, runtime_semantics: Mapping[str, Any],
         *, model_path: Path, workload_sha256: str,
         runtime_config_sha256: str,
+        governance_root: Path = _SITE_GOVERNANCE_ROOT,
 ) -> None:
     """Join the static comparator to the exact live frozen-v9 closure.
 
     ``source_sha256`` is the integrity-tree digest of ``git archive`` for the
     exact frozen commit.  It intentionally does not hash the serving worktree,
     whose ignored operator tooling is outside the Git/source-build authority.
-    The comparator's build/linkage/runtime receipt digests remain immutable
-    provenance inside its deployment-bound self-hash; promotion authority comes
-    from the independently revalidated source, executable, linkage and runtime
-    facts below rather than merely trusting those historical receipt labels.
+    The comparator's build/linkage/runtime receipt digests are reopened against
+    the reviewed closure manifest and their required ratification semantics.
+    Promotion authority also reobserves the exact source, executable, linkage
+    and runtime closure instead of trusting current-disk values by themselves.
     """
-    if schemas.content_hash(dict(runtime_semantics)) != \
-            comparator.runtime_snapshot_sha256:
+    manifest = _frozen_v9_closure_manifest()
+    _verify_frozen_v9_source_and_version(manifest, production_path)
+    provenance = _verify_frozen_v9_provenance(manifest, governance_root)
+    _verify_frozen_v9_runtime_closure(
+        manifest, production_path, runtime_semantics)
+    if comparator.runtime_snapshot_sha256 != \
+            manifest["runtime"]["runtime_snapshot_sha256"]:
         raise DeploymentFactoryError(
             "frozen production comparator runtime snapshot changed")
-    build = production_path / "build-hip"
     identity = comparator.build_identity
-    try:
-        binary_sha = _digest_regular(
-            build / "bin" / "llama-bench", "frozen production binary")
-        hip_sha = _digest_regular(
-            (build / "bin" / "libggml-hip.so").resolve(strict=True),
-            "frozen production HIP library")
-        linkage_sha = discovery_static_registry._linkage_sha(build)
-    except (OSError, discovery_static_registry.StaticRegistryError) as exc:
-        raise DeploymentFactoryError(
-            "frozen production comparator runtime linkage is unavailable") from exc
     if (identity.source_commit != deployment.FROZEN_PRODUCTION_HEAD
             or identity.source_sha256 !=
-               cumulative_composition.FROZEN_PRODUCTION_SOURCE_SHA256
-            or identity.binary_sha256 != binary_sha
-            or identity.hip_library_sha256 != hip_sha
-            or identity.linkage_sha256 != linkage_sha
+               manifest["production"]["source_archive_sha256"]
+            or identity.binary_sha256 !=
+               manifest["runtime"]["llama_bench_sha256"]
+            or identity.hip_library_sha256 !=
+               manifest["runtime"]["hip_library_sha256"]
+            or identity.linkage_sha256 !=
+               manifest["runtime"]["linkage_sha256"]
             or identity.config_sha256 != comparator.build_receipt_sha256
-            or identity.config_sha256 !=
-               cumulative_composition.FROZEN_BUILD_RECEIPT_SHA256):
+            or identity.config_sha256 != provenance["build"]):
         raise DeploymentFactoryError(
             "frozen production comparator build/linkage identity changed")
     protocol = cumulative_composition.frozen_production_protocol_binding(
         model_sha256=comparator.model_sha256,
         build_identity=identity)
     model_sha = _digest_regular(model_path, "frozen comparator model")
-    expected_receipts = (
-        cumulative_composition.FROZEN_BUILD_RECEIPT_SHA256,
-        cumulative_composition.FROZEN_LINKAGE_RECEIPT_SHA256,
-        cumulative_composition.FROZEN_RUNTIME_RECEIPT_SHA256,
-        cumulative_composition.FROZEN_MEASUREMENT_RECEIPT_SHA256,
-    )
+    expected_receipts = tuple(
+        provenance[role]
+        for role in ("build", "linkage", "runtime", "measurement"))
     if ((comparator.build_receipt_sha256,
          comparator.linkage_receipt_sha256,
          comparator.runtime_receipt_sha256,
@@ -1284,40 +1432,21 @@ def derive_frozen_production_comparator(
         governance_root: Path = _SITE_GOVERNANCE_ROOT,
 ) -> cumulative_composition.FrozenProductionComparator:
     """Derive the canonical comparator from real frozen-v9 authority only."""
-    if (_frozen_source_archive_sha256(production_path) !=
-            cumulative_composition.FROZEN_PRODUCTION_SOURCE_SHA256):
-        raise DeploymentFactoryError("frozen v9 source archive digest changed")
-    provenance = {}
-    for role, relative, expected_sha, expected_schema in _FROZEN_PROVENANCE:
-        raw = _stable_public_bytes(
-            governance_root / relative, expected_sha,
-            f"frozen production {role} provenance")
-        try:
-            body = json.loads(raw.decode("utf-8", "strict"))
-        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-            raise DeploymentFactoryError(
-                f"frozen production {role} provenance is invalid") from exc
-        if (not isinstance(body, Mapping) or body.get("schema") != expected_schema
-                or body.get("status") not in {
-                    None, "preproduction_qualification_pass", "sealed",
-                    "production_promoted_frozen"}):
-            raise DeploymentFactoryError(
-                f"frozen production {role} provenance semantics changed")
-        provenance[role] = expected_sha
+    manifest = _frozen_v9_closure_manifest()
+    _verify_frozen_v9_source_and_version(manifest, production_path)
+    provenance = _verify_frozen_v9_provenance(manifest, governance_root)
     snapshot_files, runtime_semantics = _production_runtime_snapshot(production_path)
     del snapshot_files
-    runtime_snapshot_sha = schemas.content_hash(runtime_semantics)
-    build = production_path / "build-hip"
+    _verify_frozen_v9_runtime_closure(
+        manifest, production_path, runtime_semantics)
+    runtime_snapshot_sha = manifest["runtime"]["runtime_snapshot_sha256"]
     identity = gpu_source_proofs.BuildIdentity(
         source_commit=deployment.FROZEN_PRODUCTION_HEAD,
-        source_sha256=cumulative_composition.FROZEN_PRODUCTION_SOURCE_SHA256,
-        binary_sha256=_digest_regular(
-            build / "bin/llama-bench", "frozen production binary"),
-        hip_library_sha256=_digest_regular(
-            (build / "bin/libggml-hip.so").resolve(strict=True),
-            "frozen production HIP library"),
+        source_sha256=manifest["production"]["source_archive_sha256"],
+        binary_sha256=manifest["runtime"]["llama_bench_sha256"],
+        hip_library_sha256=manifest["runtime"]["hip_library_sha256"],
         config_sha256=provenance["build"],
-        linkage_sha256=discovery_static_registry._linkage_sha(build))
+        linkage_sha256=manifest["runtime"]["linkage_sha256"])
     model_sha = _digest_regular(model_path, "frozen comparator model")
     workload_sha = _pretty_json_sha256(_deployment_workload_body())
     runtime_sha = _pretty_json_sha256(_deployment_runtime_body())
@@ -1342,7 +1471,7 @@ def derive_frozen_production_comparator(
     _verify_frozen_production_comparator(
         comparator, production_path, runtime_semantics,
         model_path=model_path.resolve(), workload_sha256=workload_sha,
-        runtime_config_sha256=runtime_sha)
+        runtime_config_sha256=runtime_sha, governance_root=governance_root)
     return comparator
 
 

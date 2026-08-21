@@ -8,6 +8,7 @@ import json
 import os
 import shutil
 import stat
+import subprocess
 import unittest
 from unittest import mock
 from pathlib import Path
@@ -67,6 +68,20 @@ def frozen_production_comparator(
         json.dumps(comparator.to_dict(), sort_keys=True, indent=2) + "\n",
         encoding="utf-8")
     return path.resolve()
+
+
+def disposable_v9_clone(root: Path) -> Path:
+    production = root / "production"
+    subprocess.run([
+        "git", "clone", "--shared", "--no-checkout",
+        str(F.deployment.FROZEN_PRODUCTION_PATH), str(production)],
+        check=True, capture_output=True)
+    for flavor in ("build", "build-hip"):
+        subprocess.run([
+            "cp", "-a", "--reflink=auto",
+            str(F.deployment.FROZEN_PRODUCTION_PATH / flavor),
+            str(production / flavor)], check=True, capture_output=True)
+    return production
 
 
 def template(path="ggml/src/ggml-cuda/fattn.cu", symbol="fattn_kernel"):
@@ -689,21 +704,7 @@ class DeploymentFactoryTests(unittest.TestCase):
                      "load_admission": {"effective_context_sha256": "0" * 64}})
 
     def static_config(self, root: Path):
-        production = root / "production"
-        (production / "ggml/src/ggml-cuda").mkdir(parents=True)
-        for relative in ("CMakeLists.txt", "ggml/src/ggml-cuda/unary.cu",
-                         "ggml/src/ggml-cuda/mmvq.cu"):
-            path = production / relative
-            path.write_text(f"sealed {relative}\n", encoding="utf-8")
-        for flavor in ("build", "build-hip"):
-            binary_dir = production / flavor / "bin"
-            binary_dir.mkdir(parents=True)
-            for name in ("llama-server", "llama-bench"):
-                shutil.copyfile("/bin/true", binary_dir / name)
-            if flavor == "build-hip":
-                shutil.copyfile("/bin/true", binary_dir / "libggml-hip.so.0")
-                (binary_dir / "libggml-hip.so").symlink_to(
-                    "libggml-hip.so.0")
+        production = F.deployment.FROZEN_PRODUCTION_PATH
         package = root / "codex-package"
         wrapper = package / "bin/codex.js"
         wrapper.parent.mkdir(parents=True)
@@ -801,7 +802,7 @@ class DeploymentFactoryTests(unittest.TestCase):
         config = SimpleNamespace(
             config_sha256="c" * 64, production_path=production.resolve(),
             production_branch=F.deployment.FROZEN_PRODUCTION_BRANCH,
-            production_head="0" * 40,
+            production_head=F.deployment.FROZEN_PRODUCTION_HEAD,
             instrument_path=F._INSTRUMENT_PATH,
             instrument_commit=F._INSTRUMENT_COMMIT,
             instrument_branch=F._INSTRUMENT_BRANCH,
@@ -1095,19 +1096,133 @@ class DeploymentFactoryTests(unittest.TestCase):
                 F._load_frozen_production_comparator(canonical)
 
     def test_historical_provenance_tamper_refuses_exact_digest(self):
-        role, relative, expected_sha, _schema = F._FROZEN_PROVENANCE[-1]
+        manifest = F._frozen_v9_closure_manifest()
+        role = "measurement"
+        authority = manifest["provenance"][role]
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()
-            carrier = root / relative
+            carrier = root / authority["path"]
             carrier.parent.mkdir(parents=True)
             carrier.write_bytes(
-                (F._SITE_GOVERNANCE_ROOT / relative).read_bytes() + b"\n")
+                (F._SITE_GOVERNANCE_ROOT /
+                 authority["path"]).read_bytes() + b"\n")
             carrier.chmod(0o400)
             with self.assertRaisesRegex(
                     F.DeploymentFactoryError, "changed while read"):
                 F._stable_public_bytes(
-                    carrier, expected_sha,
+                    carrier, authority["file_sha256"],
                     f"frozen production {role} provenance")
+
+    def test_closure_manifest_refuses_alias_and_coherent_tamper(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            exact = root / "exact.json"
+            shutil.copyfile(F._FROZEN_CLOSURE_MANIFEST, exact)
+            exact.chmod(0o400)
+            self.assertEqual(
+                F._frozen_v9_closure_manifest(exact)["manifest_sha256"],
+                F._FROZEN_CLOSURE_MANIFEST_SHA256)
+            alias = root / "alias.json"
+            alias.symlink_to(exact)
+            with self.assertRaisesRegex(
+                    F.DeploymentFactoryError, "stable carrier"):
+                F._frozen_v9_closure_manifest(alias)
+            exact.chmod(0o600)
+            body = json.loads(exact.read_text(encoding="utf-8"))
+            body["runtime"]["llama_bench_sha256"] = "0" * 64
+            body["manifest_sha256"] = F.schemas.content_hash({
+                key: value for key, value in body.items()
+                if key != "manifest_sha256"})
+            exact.write_text(
+                json.dumps(body, sort_keys=True, indent=2) + "\n",
+                encoding="utf-8")
+            exact.chmod(0o400)
+            with self.assertRaisesRegex(
+                    F.DeploymentFactoryError, "changed while read"):
+                F._frozen_v9_closure_manifest(exact)
+
+    def test_closure_manifest_requires_ratified_receipt_semantics(self):
+        manifest = F._frozen_v9_closure_manifest()
+        originals = {
+            role: (F._SITE_GOVERNANCE_ROOT / row["path"]).read_bytes()
+            for role, row in manifest["provenance"].items()}
+        ratification = json.loads(originals["measurement"])
+        ratification["production_binary_sha256"]["hip"] = "0" * 64
+        changed = json.dumps(ratification, sort_keys=True).encode()
+
+        def carrier(path, _expected, _label):
+            for role, authority in manifest["provenance"].items():
+                if Path(path) == F._SITE_GOVERNANCE_ROOT / authority["path"]:
+                    return changed if role == "measurement" else originals[role]
+            raise AssertionError(path)
+
+        with mock.patch.object(
+                F, "_stable_public_bytes", side_effect=carrier), \
+                self.assertRaisesRegex(
+                    F.DeploymentFactoryError, "semantics changed"):
+            F._verify_frozen_v9_provenance(
+                manifest, F._SITE_GOVERNANCE_ROOT)
+
+    def test_disposable_v9_runtime_mutations_refuse_frozen_closure(self):
+        mutations = {
+            "binary": lambda production: (
+                production / "build-hip/bin/llama-bench"),
+            "server": lambda production: (
+                production / "build-hip/bin/llama-server"),
+            "hip": lambda production: (
+                production / "build-hip/bin/libggml-hip.so.0.16.0"),
+            "runtime": lambda production: (
+                production / "build/bin/libggml-base.so.0.16.0"),
+        }
+        with tempfile.TemporaryDirectory(
+                dir="/mnt/raid0/llm/tmp") as temporary:
+            production = disposable_v9_clone(
+                Path(temporary).resolve())
+            self.assertEqual(
+                F.derive_frozen_production_comparator(
+                    production_path=production).receipt_sha256,
+                "79143fbfe62305dc1c9fce29248a8b3d4302eb27d3f55a60020eeb683c9de6bb")
+        for name, target in mutations.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory(
+                    dir="/mnt/raid0/llm/tmp") as temporary:
+                production = disposable_v9_clone(
+                    Path(temporary).resolve())
+                path = target(production)
+                path.chmod(0o700)
+                with path.open("ab") as stream:
+                    stream.write(b"coherent-current-disk-substitution")
+                with self.assertRaisesRegex(
+                        F.DeploymentFactoryError,
+                        "runtime closure differs from manifest"):
+                    F.derive_frozen_production_comparator(
+                        production_path=production)
+        with tempfile.TemporaryDirectory(
+                dir="/mnt/raid0/llm/tmp") as temporary:
+            production = disposable_v9_clone(
+                Path(temporary).resolve())
+            alias = production / "build-hip/bin/libggml-hip.so"
+            alias.unlink()
+            alias.symlink_to("libggml-hip.so.0.16.0")
+            with self.assertRaisesRegex(
+                    F.DeploymentFactoryError,
+                    "runtime closure differs from manifest"):
+                F.derive_frozen_production_comparator(
+                    production_path=production)
+
+    def test_disposable_v9_clone_refuses_foreign_source_head(self):
+        with tempfile.TemporaryDirectory(
+                dir="/mnt/raid0/llm/tmp") as temporary:
+            production = disposable_v9_clone(
+                Path(temporary).resolve())
+            subprocess.run([
+                "git", "-C", str(production), "checkout", "--detach",
+                f"{F.deployment.FROZEN_PRODUCTION_HEAD}^"],
+                check=True, capture_output=True)
+            with self.assertRaisesRegex(
+                    F.DeploymentFactoryError,
+                    "source/version (observation is unavailable|differs from manifest)"):
+                F.derive_frozen_production_comparator(
+                    production_path=production)
 
     def test_initializer_refuses_coherently_resealed_build_config_identity(self):
         with tempfile.TemporaryDirectory() as temporary:

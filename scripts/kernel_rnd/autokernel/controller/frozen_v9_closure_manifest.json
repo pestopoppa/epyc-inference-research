@@ -1,0 +1,80 @@
+{
+  "manifest_sha256": "0bc362df7a6a204ee8b08bbf6f97e03a88f8dccb1048d7cf5d3be2e58c831d09",
+  "production": {
+    "branch": "production-consolidated-v9",
+    "commit": "0db32c06e3e550065b78311a6031ef3dd2c4f27c",
+    "source_archive_sha256": "48663678dad691ba046cc3d3e9a70d42046d92602db94704b3707e3fadb82ca8",
+    "version": "version: 10125 (0db32c06e)"
+  },
+  "provenance": {
+    "build": {
+      "file_sha256": "04344a3624247646d0ebd795c12abfa4db48be895ebc8ccc465867917e7da679",
+      "path": "artifacts/operator/v9-qualification-20260810T235723Z-0db32c06e/summary.json",
+      "required": {
+        "candidate": {
+          "branch": "experimental-v9-dspark-promotion",
+          "commit": "0db32c06e3e550065b78311a6031ef3dd2c4f27c",
+          "remote_commit": "0db32c06e3e550065b78311a6031ef3dd2c4f27c",
+          "remote_ref": "fork/experimental-v9-dspark-promotion",
+          "version": "10125"
+        },
+        "cutover_disposition": "authorized_and_eligible",
+        "production_mutated": false,
+        "status": "preproduction_qualification_pass"
+      },
+      "schema": "epyc.kernel_promotion_qualification.v1"
+    },
+    "linkage": {
+      "file_sha256": "8c4f507a2072fdb170ad4ac7bfa9ca4867bd20023587615b5f960eab9e21580b",
+      "path": "artifacts/operator/v9-runtime-packaging-20260810T224026Z-0db32c06e/summary.json",
+      "required": {
+        "candidate_branch": "experimental-v9-dspark-promotion",
+        "candidate_head": "0db32c06e3e550065b78311a6031ef3dd2c4f27c",
+        "candidate_version": "version: 10125 (0db32c06e)",
+        "deployed_server_sha256": {
+          "cpu": "8ebb1355593121a231735d7b58ad076f4539d2c5e3847fa09d2922fa8a980499",
+          "hip": "21cfb750dc0ba4b3add0674fcb9dd061d77b3604ebf8e1d063ba0e2c51902feb"
+        },
+        "production_mutated": false,
+        "status": "sealed"
+      },
+      "schema": "epyc.kernel_v9.runtime_packaging.v1"
+    },
+    "measurement": {
+      "file_sha256": "21c396477c1cdcc71dbaffd7452dd43e7bbf5941b1f199c8a5d217da830945ed",
+      "path": "artifacts/operator/ratify_v9_final_freeze_20260811.json",
+      "required": {
+        "decision": "FREEZE-V9",
+        "production_binary_sha256": {
+          "cpu": "8ebb1355593121a231735d7b58ad076f4539d2c5e3847fa09d2922fa8a980499",
+          "hip": "21cfb750dc0ba4b3add0674fcb9dd061d77b3604ebf8e1d063ba0e2c51902feb"
+        },
+        "production_branch": "production-consolidated-v9",
+        "production_frozen": true,
+        "production_head": "0db32c06e3e550065b78311a6031ef3dd2c4f27c",
+        "production_version": "10125 (0db32c06e)",
+        "status": "production_promoted_frozen"
+      },
+      "schema": "epyc.operator_v9_final_freeze_attestation.v1"
+    },
+    "runtime": {
+      "file_sha256": "e5374f054d0c1be12fe6d511c32c5e24fcac9fb79bc954c82f42bc28e8822d48",
+      "path": "artifacts/operator/v9-cutover-20260810T235900Z-0db32c06e/journal.json",
+      "required": {
+        "completed": 1,
+        "phase": "complete",
+        "production_branch": "production-consolidated-v9",
+        "production_head": "0db32c06e3e550065b78311a6031ef3dd2c4f27c"
+      },
+      "schema": "epyc.kernel_cutover_journal.v1"
+    }
+  },
+  "runtime": {
+    "hip_library_sha256": "18192805ae84178ea1fd0ebee6ea0a5092b99d064bc357800325fc65015cd5e1",
+    "linkage_sha256": "a9566ad41066638e6eba5549aed96d2da3aa5b2861e4ac893ea01ed6b9ecae79",
+    "llama_bench_sha256": "f6f4ed341804306142d4eb8c288f2802df403959ce090e929f53f38e953cca7e",
+    "llama_server_sha256": "21cfb750dc0ba4b3add0674fcb9dd061d77b3604ebf8e1d063ba0e2c51902feb",
+    "runtime_snapshot_sha256": "02fd69e15fbbec6fca078f176346c5e863f40908c8bb47e1cd745d2d71659fd6"
+  },
+  "schema": "epyc.autokernel.frozen_v9_closure_manifest.v1"
+}
