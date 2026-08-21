@@ -19,6 +19,7 @@ import re
 import stat
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from statistics import median
 from typing import Any, Mapping, Sequence
 
 from . import source_candidate
@@ -30,7 +31,7 @@ __all__ = (
     "CompositionLedger", "CompositionPlan", "CumulativeBuildPair",
     "CumulativePerformance", "CumulativePerformanceRef", "DnrAuthority",
     "FrozenProductionAuthority", "FrozenProductionComparator",
-    "FullCorrectness", "IncrementalComparison",
+    "FullCorrectness", "IncrementalComparison", "MeasurementReceiptRef",
     "IsolatedReplication", "ReplicatedPositiveLever",
 )
 
@@ -869,15 +870,251 @@ class FullCorrectness:
             "receipt_sha256", "passed", "result_sha256")})
 
 
+_MEASUREMENT_ROLES = frozenset({
+    "exact_route", "incremental_graphs_off", "incremental_graphs_on",
+    "production_graphs_on",
+})
+
+
+def _strict_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    value: dict[str, Any] = {}
+    for key, row in pairs:
+        if key in value:
+            raise ValueError(f"duplicate JSON key {key}")
+        value[key] = row
+    return value
+
+
+def _stable_receipt_bytes(path: Path, *, expected_sha256: str) -> bytes:
+    """Read one immutable evidence file without following a final symlink."""
+    expected_sha256 = _require_sha(expected_sha256, "measurement file sha256")
+    if not path.is_absolute() or ".." in path.parts:
+        raise CompositionError("measurement receipt path is unsafe")
+    flags = os.O_RDONLY | os.O_CLOEXEC
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as exc:
+        raise CompositionError("measurement receipt is unavailable") from exc
+    try:
+        before = os.fstat(descriptor)
+        if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1
+                or before.st_uid != os.geteuid()
+                or before.st_mode & 0o022
+                or before.st_size > 16 * 1024 * 1024):
+            raise CompositionError("measurement receipt identity is unsafe")
+        chunks: list[bytes] = []
+        while True:
+            chunk = os.read(descriptor, 1024 * 1024)
+            if not chunk:
+                break
+            chunks.append(chunk)
+        after = os.fstat(descriptor)
+    finally:
+        os.close(descriptor)
+    try:
+        pathname = os.lstat(path)
+    except OSError as exc:
+        raise CompositionError("measurement receipt path disappeared") from exc
+    identity = lambda row: (
+        row.st_dev, row.st_ino, row.st_uid, stat.S_IFMT(row.st_mode),
+        row.st_nlink, row.st_size, row.st_mtime_ns, row.st_ctime_ns)
+    if (identity(before) != identity(after)
+            or identity(after) != identity(pathname)):
+        raise CompositionError("measurement receipt changed during stable read")
+    raw = b"".join(chunks)
+    if hashlib.sha256(raw).hexdigest() != expected_sha256:
+        raise CompositionError("measurement receipt bytes changed")
+    return raw
+
+
+def _load_measurement_receipt(reference: "MeasurementReceiptRef") \
+        -> dict[str, Any]:
+    raw = _stable_receipt_bytes(
+        Path(reference.path), expected_sha256=reference.sha256)
+    try:
+        value = json.loads(
+            raw.decode("utf-8", "strict"), object_pairs_hook=_strict_pairs,
+            parse_constant=lambda token: (_ for _ in ()).throw(
+                ValueError(f"non-finite JSON token {token}")))
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+        raise CompositionError("measurement receipt is not strict JSON") from exc
+    if not isinstance(value, dict):
+        raise CompositionError("measurement receipt is not an object")
+    native_key = ("receipt_sha256" if reference.role == "exact_route"
+                  else "result_sha256")
+    if (not _require_sha(value.get(native_key), native_key)
+            or value[native_key] != _sha({
+                key: row for key, row in value.items()
+                if key != native_key})):
+        raise CompositionError("measurement receipt native identity changed")
+    return value
+
+
+@dataclass(frozen=True)
+class MeasurementReceiptRef:
+    """Byte and canonical-location binding for one cumulative measurement."""
+
+    role: str
+    path: str
+    sha256: str
+
+    def __post_init__(self) -> None:
+        if self.role not in _MEASUREMENT_ROLES:
+            raise CompositionError("measurement receipt role is invalid")
+        path = Path(self.path)
+        if (not isinstance(self.path, str) or not path.is_absolute()
+                or ".." in path.parts):
+            raise CompositionError("measurement receipt path is unsafe")
+        _require_sha(self.sha256, "measurement receipt sha256")
+
+    def to_dict(self) -> dict[str, str]:
+        return {
+            "schema": "epyc.autokernel.cumulative_measurement_ref.v1",
+            "role": self.role, "path": self.path, "sha256": self.sha256,
+        }
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "MeasurementReceiptRef":
+        if (not isinstance(value, Mapping)
+                or set(value) != {"schema", "role", "path", "sha256"}
+                or value.get("schema") !=
+                   "epyc.autokernel.cumulative_measurement_ref.v1"):
+            raise CompositionError("measurement receipt ref has an inexact schema")
+        return cls(
+            role=value["role"], path=value["path"], sha256=value["sha256"])
+
+    def canonical_location(self) -> tuple[Path, str | None]:
+        path = Path(self.path)
+        if self.role == "exact_route":
+            if path.name != "attribution-pair.json" \
+                    or path.parent.name != "proof":
+                raise CompositionError(
+                    "exact-route receipt is outside its canonical location")
+            root = path.parent.parent
+            repetition = None
+        else:
+            stage_names = {
+                "incremental_graphs_off": "measurement-graphs-off",
+                "incremental_graphs_on": "target-runtime-graphs-on",
+                "production_graphs_on":
+                    "cumulative-vs-production-graphs-on",
+            }
+            stage = path.parent
+            repetition_dir = stage.parent
+            runner = repetition_dir.parent
+            root = runner.parent
+            if (path.name != "result.json"
+                    or stage.name != stage_names[self.role]
+                    or runner.name != "runner"
+                    or re.fullmatch(r"s[1-9][0-9]*", repetition_dir.name)
+                       is None):
+                raise CompositionError(
+                    "measurement receipt is outside its canonical location")
+            repetition = repetition_dir.name
+        if (not root.is_absolute() or root.name == ""
+                or path != path.resolve(strict=False)):
+            raise CompositionError("measurement receipt path is not canonical")
+        return root, repetition
+
+    def load(self) -> dict[str, Any]:
+        self.canonical_location()
+        return _load_measurement_receipt(self)
+
+
+def _exact_route_effect(value: Mapping[str, Any]) -> float:
+    if (value.get("schema") !=
+            "epyc.autokernel.gpu_kernel_attribution_pair.v2"
+            or value.get("authority") !=
+               "nonpromotable_candidate_only_discovery"
+            or value.get("non_promotable") is not True
+            or value.get("promotion_claim") is not False):
+        raise CompositionError("exact-route carrier authority changed")
+    comparison = value.get("exact_duration_comparison")
+    required = {
+        "candidate_routes", "anchor_routes", "candidate_total_duration_ns",
+        "anchor_total_duration_ns", "relative_improvement_fraction",
+        "direction", "all_candidate_routes_present",
+        "all_anchor_routes_present", "statistic",
+    }
+    if not isinstance(comparison, Mapping) or set(comparison) != required:
+        raise CompositionError("exact-route comparison is malformed")
+
+    def total(rows: object, label: str) -> int:
+        if not isinstance(rows, Mapping) or not rows:
+            raise CompositionError(f"{label} exact routes are missing")
+        values: list[int] = []
+        for signature, row in rows.items():
+            if (not isinstance(signature, str) or not signature
+                    or not isinstance(row, Mapping)
+                    or isinstance(row.get("total_duration_ns"), bool)
+                    or not isinstance(row.get("total_duration_ns"), int)
+                    or row["total_duration_ns"] <= 0
+                    or isinstance(row.get("calls"), bool)
+                    or not isinstance(row.get("calls"), int)
+                    or row["calls"] <= 0):
+                raise CompositionError(f"{label} exact route is malformed")
+            values.append(row["total_duration_ns"])
+        return sum(values)
+
+    candidate_total = total(comparison["candidate_routes"], "candidate")
+    anchor_total = total(comparison["anchor_routes"], "anchor")
+    effect = (anchor_total - candidate_total) / anchor_total
+    direction = ("improved" if candidate_total < anchor_total else
+                 "regressed" if candidate_total > anchor_total else "neutral")
+    if (comparison.get("candidate_total_duration_ns") != candidate_total
+            or comparison.get("anchor_total_duration_ns") != anchor_total
+            or comparison.get("relative_improvement_fraction") != effect
+            or comparison.get("direction") != direction
+            or comparison.get("all_candidate_routes_present") is not True
+            or comparison.get("all_anchor_routes_present") is not True
+            or comparison.get("statistic") !=
+               "sum_exact_route_total_duration_ns"):
+        raise CompositionError("exact-route effect is not derived from routes")
+    return effect
+
+
+def _runner_effect(value: Mapping[str, Any], *, graph_mode: str,
+                   factor_name: str) -> float:
+    if (value.get("schema") !=
+            "epyc.autokernel.gpu_candidate_only_screen.v2"
+            or value.get("authority") !=
+               "nonpromotable_candidate_only_discovery"
+            or value.get("non_promotable") is not True
+            or value.get("promotion_claim") is not False
+            or value.get("hip_residency_proved") is not True
+            or value.get("runtime_graphs") != graph_mode
+            or not isinstance(value.get("sole_factor"), Mapping)
+            or value["sole_factor"].get("name") != factor_name):
+        raise CompositionError("runner measurement carrier authority changed")
+    center = _finite(value.get("baseline_center"), "measurement baseline")
+    samples = value.get("candidate_samples")
+    if (center <= 0 or not isinstance(samples, list) or not samples):
+        raise CompositionError("measurement samples are malformed")
+    observed = tuple(_finite(row, "measurement sample") for row in samples)
+    if any(row <= 0 for row in observed):
+        raise CompositionError("measurement samples must be positive")
+    effects = tuple((row - center) / center for row in observed)
+    measured = median(effects)
+    if (value.get("relative_effects") != list(effects)
+            or value.get("median_relative") != measured):
+        raise CompositionError("measurement effect is not derived from samples")
+    return measured
+
+
 @dataclass(frozen=True)
 class IncrementalComparison:
     operation_key: str
     build_pair_sha256: str
     correctness_result_sha256: str
     exact_route_receipt_sha256: str
+    exact_route_receipt_ref: MeasurementReceiptRef
     expected_route_set_sha256: str
     graphs_off_receipt_sha256: str
+    graphs_off_receipt_ref: MeasurementReceiptRef
     graphs_on_receipt_sha256: str
+    graphs_on_receipt_ref: MeasurementReceiptRef
     target_runtime_frame_sha256: str
     exact_route_effect_fraction: float
     graphs_off_effect_fraction: float
@@ -890,6 +1127,9 @@ class IncrementalComparison:
             cls, pair: CumulativeBuildPair, correctness: FullCorrectness, *,
             exact_route_receipt_sha256: str, graphs_on_receipt_sha256: str,
             graphs_off_receipt_sha256: str,
+            exact_route_receipt_path: Path | str,
+            graphs_off_receipt_path: Path | str,
+            graphs_on_receipt_path: Path | str,
             expected_route_set_sha256: str,
             target_runtime_frame_sha256: str,
             exact_route_effect_fraction: float,
@@ -902,6 +1142,17 @@ class IncrementalComparison:
         route = _finite(exact_route_effect_fraction, "exact-route effect")
         graphs_off = _finite(graphs_off_effect_fraction, "graphs-off effect")
         graphs = _finite(graphs_on_effect_fraction, "graphs-on effect")
+        exact_ref = MeasurementReceiptRef(
+            role="exact_route", path=str(exact_route_receipt_path),
+            sha256=exact_route_receipt_sha256)
+        off_ref = MeasurementReceiptRef(
+            role="incremental_graphs_off",
+            path=str(graphs_off_receipt_path),
+            sha256=graphs_off_receipt_sha256)
+        on_ref = MeasurementReceiptRef(
+            role="incremental_graphs_on",
+            path=str(graphs_on_receipt_path),
+            sha256=graphs_on_receipt_sha256)
         if route > 0 and graphs_off > 0 and graphs > 0:
             classification = "candidate"
         elif route <= 0 and graphs_off <= 0 and graphs <= 0:
@@ -909,18 +1160,21 @@ class IncrementalComparison:
         else:
             classification = "inconclusive"
         body = {
-            "schema": "epyc.autokernel.incremental_composition_comparison.v2",
+            "schema": "epyc.autokernel.incremental_composition_comparison.v3",
             "operation_key": pair.operation_key,
             "build_pair_sha256": pair.pair_sha256,
             "correctness_result_sha256": correctness.result_sha256,
             "exact_route_receipt_sha256": _require_sha(
                 exact_route_receipt_sha256, "exact_route_receipt_sha256"),
+            "exact_route_receipt_ref": exact_ref.to_dict(),
             "expected_route_set_sha256": _require_sha(
                 expected_route_set_sha256, "expected_route_set_sha256"),
             "graphs_off_receipt_sha256": _require_sha(
                 graphs_off_receipt_sha256, "graphs_off_receipt_sha256"),
+            "graphs_off_receipt_ref": off_ref.to_dict(),
             "graphs_on_receipt_sha256": _require_sha(
                 graphs_on_receipt_sha256, "graphs_on_receipt_sha256"),
+            "graphs_on_receipt_ref": on_ref.to_dict(),
             "target_runtime_frame_sha256": _require_sha(
                 target_runtime_frame_sha256, "target_runtime_frame_sha256"),
             "exact_route_effect_fraction": route,
@@ -936,9 +1190,12 @@ class IncrementalComparison:
             build_pair_sha256=pair.pair_sha256,
             correctness_result_sha256=correctness.result_sha256,
             exact_route_receipt_sha256=exact_route_receipt_sha256,
+            exact_route_receipt_ref=exact_ref,
             expected_route_set_sha256=expected_route_set_sha256,
             graphs_off_receipt_sha256=graphs_off_receipt_sha256,
+            graphs_off_receipt_ref=off_ref,
             graphs_on_receipt_sha256=graphs_on_receipt_sha256,
+            graphs_on_receipt_ref=on_ref,
             target_runtime_frame_sha256=target_runtime_frame_sha256,
             exact_route_effect_fraction=route,
             graphs_off_effect_fraction=graphs_off,
@@ -948,14 +1205,17 @@ class IncrementalComparison:
 
     def _body(self) -> dict[str, Any]:
         return {
-            "schema": "epyc.autokernel.incremental_composition_comparison.v2",
+            "schema": "epyc.autokernel.incremental_composition_comparison.v3",
             "operation_key": self.operation_key,
             "build_pair_sha256": self.build_pair_sha256,
             "correctness_result_sha256": self.correctness_result_sha256,
             "exact_route_receipt_sha256": self.exact_route_receipt_sha256,
+            "exact_route_receipt_ref": self.exact_route_receipt_ref.to_dict(),
             "expected_route_set_sha256": self.expected_route_set_sha256,
             "graphs_off_receipt_sha256": self.graphs_off_receipt_sha256,
+            "graphs_off_receipt_ref": self.graphs_off_receipt_ref.to_dict(),
             "graphs_on_receipt_sha256": self.graphs_on_receipt_sha256,
+            "graphs_on_receipt_ref": self.graphs_on_receipt_ref.to_dict(),
             "target_runtime_frame_sha256": self.target_runtime_frame_sha256,
             "exact_route_effect_fraction": self.exact_route_effect_fraction,
             "graphs_off_effect_fraction": self.graphs_off_effect_fraction,
@@ -966,6 +1226,12 @@ class IncrementalComparison:
         }
 
     def __post_init__(self) -> None:
+        if (not isinstance(self.exact_route_receipt_ref, MeasurementReceiptRef)
+                or not isinstance(
+                    self.graphs_off_receipt_ref, MeasurementReceiptRef)
+                or not isinstance(
+                    self.graphs_on_receipt_ref, MeasurementReceiptRef)):
+            raise CompositionError("incremental measurement refs are untyped")
         for label in (
             "operation_key", "build_pair_sha256", "correctness_result_sha256",
             "exact_route_receipt_sha256", "graphs_on_receipt_sha256",
@@ -982,8 +1248,53 @@ class IncrementalComparison:
                     else "screened_out"
                     if route <= 0 and graphs_off <= 0 and graphs <= 0
                     else "inconclusive")
-        if self.classification != expected or self.result_sha256 != _sha(self._body()):
+        exact_root, exact_repetition = \
+            self.exact_route_receipt_ref.canonical_location()
+        off_root, off_repetition = \
+            self.graphs_off_receipt_ref.canonical_location()
+        on_root, on_repetition = \
+            self.graphs_on_receipt_ref.canonical_location()
+        if (self.exact_route_receipt_ref.role != "exact_route"
+                or self.graphs_off_receipt_ref.role !=
+                   "incremental_graphs_off"
+                or self.graphs_on_receipt_ref.role !=
+                   "incremental_graphs_on"
+                or exact_root.name != self.operation_key
+                or len({exact_root, off_root, on_root}) != 1
+                or exact_repetition is not None
+                or off_repetition != on_repetition
+                or self.exact_route_receipt_sha256 !=
+                   self.exact_route_receipt_ref.sha256
+                or self.graphs_off_receipt_sha256 !=
+                   self.graphs_off_receipt_ref.sha256
+                or self.graphs_on_receipt_sha256 !=
+                   self.graphs_on_receipt_ref.sha256):
+            raise CompositionError(
+                "incremental measurement locations or hashes changed")
+        derived = (
+            _exact_route_effect(self.exact_route_receipt_ref.load()),
+            _runner_effect(
+                self.graphs_off_receipt_ref.load(), graph_mode="off",
+                factor_name="source_patch"),
+            _runner_effect(
+                self.graphs_on_receipt_ref.load(), graph_mode="on",
+                factor_name="source_patch"),
+        )
+        if ((route, graphs_off, graphs) != derived
+                or self.classification != expected
+                or self.result_sha256 != _sha(self._body())):
             raise CompositionError("incremental comparison identity changed")
+
+    @property
+    def operation_root(self) -> Path:
+        return self.exact_route_receipt_ref.canonical_location()[0]
+
+    @property
+    def repetition(self) -> str:
+        repetition = self.graphs_on_receipt_ref.canonical_location()[1]
+        if repetition is None:
+            raise CompositionError("incremental repetition is unavailable")
+        return repetition
 
     @property
     def admissible(self) -> bool:
@@ -997,8 +1308,11 @@ class IncrementalComparison:
         required = {
             "schema", "operation_key", "build_pair_sha256",
             "correctness_result_sha256", "exact_route_receipt_sha256",
+            "exact_route_receipt_ref",
             "graphs_off_receipt_sha256",
+            "graphs_off_receipt_ref",
             "expected_route_set_sha256", "graphs_on_receipt_sha256",
+            "graphs_on_receipt_ref",
             "target_runtime_frame_sha256", "exact_route_effect_fraction",
             "graphs_off_effect_fraction",
             "graphs_on_effect_fraction", "classification",
@@ -1008,19 +1322,26 @@ class IncrementalComparison:
         if not isinstance(value, Mapping) or set(value) != required:
             raise CompositionError("incremental comparison has an inexact schema")
         if (value.get("schema") !=
-                "epyc.autokernel.incremental_composition_comparison.v2"
+                "epyc.autokernel.incremental_composition_comparison.v3"
                 or value.get("exact_route_executed") is not True
                 or value.get("graphs_off_executed") is not True
                 or value.get("graphs_on_executed") is not True):
             raise CompositionError("incremental comparison authority changed")
-        return cls(**{key: value[key] for key in (
+        kwargs = {key: value[key] for key in (
             "operation_key", "build_pair_sha256", "correctness_result_sha256",
             "exact_route_receipt_sha256", "expected_route_set_sha256",
             "graphs_off_receipt_sha256",
             "graphs_on_receipt_sha256", "target_runtime_frame_sha256",
             "exact_route_effect_fraction", "graphs_on_effect_fraction",
             "graphs_off_effect_fraction",
-            "classification", "result_sha256")})
+            "classification", "result_sha256")}
+        kwargs["exact_route_receipt_ref"] = MeasurementReceiptRef.from_dict(
+            value["exact_route_receipt_ref"])
+        kwargs["graphs_off_receipt_ref"] = MeasurementReceiptRef.from_dict(
+            value["graphs_off_receipt_ref"])
+        kwargs["graphs_on_receipt_ref"] = MeasurementReceiptRef.from_dict(
+            value["graphs_on_receipt_ref"])
+        return cls(**kwargs)
 
 
 @dataclass(frozen=True)
@@ -1401,9 +1722,14 @@ class CumulativePerformance:
     incremental_graphs_off_effect_fraction: float
     incremental_graphs_on_effect_fraction: float
     cumulative_graphs_on_effect_fraction: float
+    incremental_exact_route_receipt_sha256: str
+    incremental_exact_route_receipt_ref: MeasurementReceiptRef
     incremental_graphs_off_receipt_sha256: str
+    incremental_graphs_off_receipt_ref: MeasurementReceiptRef
     incremental_graphs_on_receipt_sha256: str
+    incremental_graphs_on_receipt_ref: MeasurementReceiptRef
     production_graphs_on_receipt_sha256: str
+    production_graphs_on_receipt_ref: MeasurementReceiptRef
     incremental_graphs_off_frame_sha256: str
     incremental_graphs_on_frame_sha256: str
     production_graphs_on_frame_sha256: str
@@ -1424,6 +1750,7 @@ class CumulativePerformance:
             metric: str, metric_direction: str,
             cumulative_graphs_on_effect_fraction: float,
             production_graphs_on_receipt_sha256: str,
+            production_graphs_on_receipt_path: Path | str,
             incremental_graphs_off_frame_sha256: str,
             incremental_graphs_on_frame_sha256: str,
             production_graphs_on_frame_sha256: str,
@@ -1444,6 +1771,10 @@ class CumulativePerformance:
             raise CompositionError(
                 "cumulative performance metric direction is unsupported")
         metric = _require_text(metric, "metric")
+        production_ref = MeasurementReceiptRef(
+            role="production_graphs_on",
+            path=str(production_graphs_on_receipt_path),
+            sha256=production_graphs_on_receipt_sha256)
         hashes = {
             "model_sha256": model_sha256,
             "workload_sha256": workload_sha256,
@@ -1551,12 +1882,21 @@ class CumulativePerformance:
             "incremental_graphs_on_effect_fraction":
                 incremental.graphs_on_effect_fraction,
             "cumulative_graphs_on_effect_fraction": on,
+            "incremental_exact_route_receipt_sha256":
+                incremental.exact_route_receipt_sha256,
+            "incremental_exact_route_receipt_ref":
+                incremental.exact_route_receipt_ref,
             "incremental_graphs_off_receipt_sha256":
                 incremental.graphs_off_receipt_sha256,
+            "incremental_graphs_off_receipt_ref":
+                incremental.graphs_off_receipt_ref,
             "incremental_graphs_on_receipt_sha256":
                 incremental.graphs_on_receipt_sha256,
+            "incremental_graphs_on_receipt_ref":
+                incremental.graphs_on_receipt_ref,
             "production_graphs_on_receipt_sha256":
                 production_graphs_on_receipt_sha256,
+            "production_graphs_on_receipt_ref": production_ref,
             "incremental_graphs_off_frame_sha256":
                 incremental_graphs_off_frame_sha256,
             "incremental_graphs_on_frame_sha256":
@@ -1578,8 +1918,16 @@ class CumulativePerformance:
         frozen = body.get("frozen_production")
         if isinstance(frozen, FrozenProductionAuthority):
             body["frozen_production"] = frozen.to_dict()
+        for key in (
+                "incremental_exact_route_receipt_ref",
+                "incremental_graphs_off_receipt_ref",
+                "incremental_graphs_on_receipt_ref",
+                "production_graphs_on_receipt_ref"):
+            reference = body.get(key)
+            if isinstance(reference, MeasurementReceiptRef):
+                body[key] = reference.to_dict()
         return {
-            "schema": "epyc.autokernel.cumulative_performance.v1",
+            "schema": "epyc.autokernel.cumulative_performance.v2",
             "authority": "frozen_production_promotion_gate",
             "promotion_authority": True,
             **body,
@@ -1589,6 +1937,15 @@ class CumulativePerformance:
         if not isinstance(self.frozen_production, FrozenProductionAuthority):
             raise CompositionError(
                 "cumulative performance production authority is untyped")
+        references = (
+            self.incremental_exact_route_receipt_ref,
+            self.incremental_graphs_off_receipt_ref,
+            self.incremental_graphs_on_receipt_ref,
+            self.production_graphs_on_receipt_ref,
+        )
+        if any(not isinstance(row, MeasurementReceiptRef)
+               for row in references):
+            raise CompositionError("cumulative measurement ref is untyped")
         for label in (
             "operation_key", "plan_sha256", "accepted_authority_sha256",
             "accepted_patch_set_sha256", "build_pair_sha256",
@@ -1596,6 +1953,7 @@ class CumulativePerformance:
             "incremental_comparison_result_sha256", "model_sha256",
             "workload_sha256", "runtime_config_sha256",
             "protocol_frame_sha256",
+            "incremental_exact_route_receipt_sha256",
             "incremental_graphs_off_receipt_sha256",
             "incremental_graphs_on_receipt_sha256",
             "production_graphs_on_receipt_sha256",
@@ -1643,6 +2001,46 @@ class CumulativePerformance:
         ))
         on = _finite(self.cumulative_graphs_on_effect_fraction,
                      "cumulative graphs-on effect")
+        incremental_roots = tuple(
+            reference.canonical_location() for reference in references[:3])
+        derived_incremental = (
+            _exact_route_effect(
+                self.incremental_exact_route_receipt_ref.load()),
+            _runner_effect(
+                self.incremental_graphs_off_receipt_ref.load(),
+                graph_mode="off", factor_name="source_patch"),
+            _runner_effect(
+                self.incremental_graphs_on_receipt_ref.load(),
+                graph_mode="on", factor_name="source_patch"),
+        )
+        production_root, production_repetition = \
+            self.production_graphs_on_receipt_ref.canonical_location()
+        derived_on = _runner_effect(
+            self.production_graphs_on_receipt_ref.load(), graph_mode="on",
+            factor_name="cumulative_production")
+        if (tuple(reference.role for reference in references) != (
+                    "exact_route", "incremental_graphs_off",
+                    "incremental_graphs_on", "production_graphs_on")
+                or len({row[0] for row in incremental_roots}) != 1
+                or incremental_roots[0][0].name != self.operation_key
+                or incremental_roots[0][1] is not None
+                or incremental_roots[1][1] != incremental_roots[2][1]
+                or self.incremental_exact_route_receipt_sha256 !=
+                   self.incremental_exact_route_receipt_ref.sha256
+                or self.incremental_graphs_off_receipt_sha256 !=
+                   self.incremental_graphs_off_receipt_ref.sha256
+                or self.incremental_graphs_on_receipt_sha256 !=
+                   self.incremental_graphs_on_receipt_ref.sha256
+                or incremental_effects != derived_incremental
+                or self.production_graphs_on_receipt_ref.role !=
+                "production_graphs_on"
+                or production_root != incremental_roots[0][0]
+                or production_repetition != incremental_roots[1][1]
+                or self.production_graphs_on_receipt_sha256 !=
+                   self.production_graphs_on_receipt_ref.sha256
+                or on != derived_on):
+            raise CompositionError(
+                "cumulative measurement carriers changed")
         incremental_class = (
             "candidate" if all(value > 0 for value in incremental_effects)
             else "screened_out" if all(value <= 0 for value in incremental_effects)
@@ -1694,10 +2092,22 @@ class CumulativePerformance:
                    incremental.graphs_off_effect_fraction
                 or self.incremental_graphs_on_effect_fraction !=
                    incremental.graphs_on_effect_fraction
+                or self.incremental_exact_route_receipt_sha256 !=
+                   incremental.exact_route_receipt_sha256
+                or self.incremental_exact_route_receipt_ref !=
+                   incremental.exact_route_receipt_ref
                 or self.incremental_graphs_off_receipt_sha256 !=
                    incremental.graphs_off_receipt_sha256
+                or self.incremental_graphs_off_receipt_ref !=
+                   incremental.graphs_off_receipt_ref
                 or self.incremental_graphs_on_receipt_sha256 !=
-                   incremental.graphs_on_receipt_sha256):
+                   incremental.graphs_on_receipt_sha256
+                or self.incremental_graphs_on_receipt_ref !=
+                   incremental.graphs_on_receipt_ref
+                or self.production_graphs_on_receipt_ref.canonical_location()[0]
+                   != incremental.operation_root
+                or self.production_graphs_on_receipt_ref.canonical_location()[1]
+                   != incremental.repetition):
             raise CompositionError(
                 "cumulative performance binds other composition evidence")
         disposition = ("admitted" if incremental.admissible
@@ -1757,9 +2167,14 @@ class CumulativePerformance:
             "incremental_graphs_off_effect_fraction",
             "incremental_graphs_on_effect_fraction",
             "cumulative_graphs_on_effect_fraction",
+            "incremental_exact_route_receipt_sha256",
+            "incremental_exact_route_receipt_ref",
             "incremental_graphs_off_receipt_sha256",
+            "incremental_graphs_off_receipt_ref",
             "incremental_graphs_on_receipt_sha256",
+            "incremental_graphs_on_receipt_ref",
             "production_graphs_on_receipt_sha256",
+            "production_graphs_on_receipt_ref",
             "incremental_graphs_off_frame_sha256",
             "incremental_graphs_on_frame_sha256",
             "production_graphs_on_frame_sha256",
@@ -1773,7 +2188,7 @@ class CumulativePerformance:
             raise CompositionError(
                 "cumulative performance has an inexact schema")
         if (value.get("schema") !=
-                "epyc.autokernel.cumulative_performance.v1"
+                "epyc.autokernel.cumulative_performance.v2"
                 or value.get("authority") !=
                    "frozen_production_promotion_gate"
                 or value.get("promotion_authority") is not True):
@@ -1782,6 +2197,12 @@ class CumulativePerformance:
         kwargs = {key: value[key] for key in fields}
         kwargs["frozen_production"] = FrozenProductionAuthority.from_dict(
             value["frozen_production"])
+        for key in (
+                "incremental_exact_route_receipt_ref",
+                "incremental_graphs_off_receipt_ref",
+                "incremental_graphs_on_receipt_ref",
+                "production_graphs_on_receipt_ref"):
+            kwargs[key] = MeasurementReceiptRef.from_dict(value[key])
         return cls(**kwargs)
 
 
@@ -1988,6 +2409,7 @@ def performance_from_measurements(
         incremental_graphs_on: Mapping[str, Any],
         production_graphs_on: Mapping[str, Any],
         production_graphs_on_receipt_sha256: str,
+        production_graphs_on_receipt_path: Path | str,
 ) -> CumulativePerformance:
     """Create authority from incremental off/on and production graphs-on."""
     pair.bind_plan(plan)
@@ -2061,6 +2483,8 @@ def performance_from_measurements(
             production_row["effect_fraction"],
         production_graphs_on_receipt_sha256=
             production_graphs_on_receipt_sha256,
+        production_graphs_on_receipt_path=
+            production_graphs_on_receipt_path,
         incremental_graphs_off_frame_sha256=
             incremental_rows[0]["frame_sha256"],
         incremental_graphs_on_frame_sha256=
@@ -2126,12 +2550,23 @@ def load_cumulative_performance(
             TypeError) as exc:
         raise CompositionError(
             "cumulative performance receipt is not strict evidence") from exc
+    operation_root = \
+        performance.production_graphs_on_receipt_ref.canonical_location()[0]
+    if path != operation_root / "cumulative-performance.json":
+        raise CompositionError(
+            "cumulative performance receipt is outside its canonical operation")
     return performance, file_sha
 
 
 def seal_cumulative_performance(
         path: Path, performance: CumulativePerformance,
 ) -> CumulativePerformanceRef:
+    operation_root = \
+        performance.production_graphs_on_receipt_ref.canonical_location()[0]
+    if (not path.is_absolute()
+            or path != operation_root / "cumulative-performance.json"):
+        raise CompositionError(
+            "cumulative performance receipt path is not canonical")
     if path.exists() or path.is_symlink():
         reopened, file_sha = load_cumulative_performance(path)
         if reopened != performance:

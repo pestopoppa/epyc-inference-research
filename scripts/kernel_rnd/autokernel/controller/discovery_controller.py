@@ -2391,9 +2391,12 @@ class GpuSourceScreener:
             composition_comparison = cumulative_composition.IncrementalComparison.create(
                 pair, composition_correctness,
                 exact_route_receipt_sha256=bundle.attribution["file_sha256"],
+                exact_route_receipt_path=bundle.attribution["path"],
                 expected_route_set_sha256=schemas.content_hash(expected_routes),
                 graphs_off_receipt_sha256=graphs_off_file_sha256,
+                graphs_off_receipt_path=graphs_off_path,
                 graphs_on_receipt_sha256=graphs_on_file_sha256,
+                graphs_on_receipt_path=result_path,
                 target_runtime_frame_sha256=schemas.content_hash({
                     "baseline_sha256": raw["baseline_sha256"],
                     "runtime_graphs": raw["runtime_graphs"],
@@ -2416,7 +2419,9 @@ class GpuSourceScreener:
                     incremental_graphs_on=raw,
                     production_graphs_on=production_graphs_on,
                     production_graphs_on_receipt_sha256=hashlib.sha256(
-                        production_graphs_on_path.read_bytes()).hexdigest())
+                        production_graphs_on_path.read_bytes()).hexdigest(),
+                    production_graphs_on_receipt_path=
+                        production_graphs_on_path)
             performance_path = getattr(
                 args, "_cumulative_performance_path", None)
             if not isinstance(performance_path, str):

@@ -1398,11 +1398,14 @@ def _recover_completed_composition_screen(
     incremental = cumulative_composition.IncrementalComparison.create(
         pair, correctness,
         exact_route_receipt_sha256=str(bundle.attribution["file_sha256"]),
+        exact_route_receipt_path=str(bundle.attribution["path"]),
         expected_route_set_sha256=schemas.content_hash(expected_routes),
         graphs_off_receipt_sha256=hashlib.sha256(
             off_path.read_bytes()).hexdigest(),
+        graphs_off_receipt_path=off_path,
         graphs_on_receipt_sha256=hashlib.sha256(
             on_path.read_bytes()).hexdigest(),
+        graphs_on_receipt_path=on_path,
         target_runtime_frame_sha256=schemas.content_hash({
             "baseline_sha256": graphs_on["baseline_sha256"],
             "runtime_graphs": graphs_on["runtime_graphs"],
@@ -1419,7 +1422,8 @@ def _recover_completed_composition_screen(
         incremental_graphs_on=graphs_on,
         production_graphs_on=production_graphs_on,
         production_graphs_on_receipt_sha256=hashlib.sha256(
-            production_on_path.read_bytes()).hexdigest())
+            production_on_path.read_bytes()).hexdigest(),
+        production_graphs_on_receipt_path=production_on_path)
     performance_ref = cumulative_composition.seal_cumulative_performance(
         performance_path, performance)
     recovered = controller.SealedScreen(
