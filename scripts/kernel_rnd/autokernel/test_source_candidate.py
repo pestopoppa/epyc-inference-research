@@ -201,6 +201,32 @@ class SourceCase(unittest.TestCase):
         rows = S._hunk_rows(patch, source_backed_declarations=True)
         self.assertEqual(tuple(row[2] for row in rows), ("allowed",))
 
+    def test_comments_and_call_fragments_cannot_replace_enclosing_scope(self):
+        patch = (
+            "diff --git a/x.cpp b/x.cpp\n--- a/x.cpp\n+++ b/x.cpp\n"
+            "@@ -1,8 +1,8 @@ forbidden\n"
+            " static int forbidden(int x) {\n"
+            "     // values to process (0-3)\n"
+            "     call allowed(value,\n-old\n+new\n"
+            " }\n")
+        rows = S._hunk_rows(patch, source_backed_declarations=True)
+        self.assertEqual(tuple(row[2] for row in rows), ("forbidden",))
+
+    def test_real_vecdot_comment_does_not_override_q1_scope(self):
+        patch = (
+            "diff --git a/vecdotq.cuh b/vecdotq.cuh\n"
+            "--- a/vecdotq.cuh\n+++ b/vecdotq.cuh\n"
+            "@@ -675,10 +675,10 @@ vec_dot_q1_0_q8_1\n"
+            " static __device__ __forceinline__ float vec_dot_q1_0_q8_1(\n"
+            "     const void * vx, const block_q8_1 * y, const int & iqs) {\n"
+            "     // iqs selects which half of the 256 quants to process (0-3)\n"
+            "-    const int lane = iqs;\n"
+            "+    const int lane = iqs & 3;\n"
+            " }\n")
+        rows = S._hunk_rows(patch, source_backed_declarations=True)
+        self.assertEqual(tuple(row[2] for row in rows),
+                         ("vec_dot_q1_0_q8_1",))
+
     def test_added_function_after_allowed_function_is_file_scope(self):
         patch = (
             "diff --git a/x.cpp b/x.cpp\n--- a/x.cpp\n+++ b/x.cpp\n"

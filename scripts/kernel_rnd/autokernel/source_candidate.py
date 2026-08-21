@@ -102,6 +102,8 @@ def _symbol_from_context(context: str) -> str:
 
 def _symbol_from_source_declaration(normalized: str) -> str:
     """Recognize declarations only in Git's source-backed function context."""
+    if normalized.startswith(("//", "/*", "*", "#")):
+        return FILE_SCOPE
     matches = list(_FUNC.finditer(normalized))
     match = matches[-1] if matches else _TRUNCATED_FUNC.search(normalized)
     if match is None:
@@ -127,7 +129,8 @@ def _symbols_from_source_hunk(body: Sequence[str]) -> tuple[str, ...]:
         source = line[1:]
         normalized = source.strip()
         declaration = _symbol_from_source_declaration(normalized)
-        if sign in (" ", "-") and declaration != FILE_SCOPE:
+        if (current_symbol is None and sign in (" ", "-")
+                and declaration != FILE_SCOPE):
             current_symbol = declaration
         # Candidate-added declarations never create or replace authority.  If
         # the immediately preceding immutable preimage row was a deleted
