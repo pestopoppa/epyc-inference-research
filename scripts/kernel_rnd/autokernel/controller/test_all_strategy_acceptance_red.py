@@ -241,7 +241,8 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
                             receipt_path=str(
                                 (root / "v24-correctness-divergence.json").resolve()),
                             receipt_sha256=terminal["file_sha256"],
-                            result_sha256=terminal["body"]["receipt_sha256"])
+                            result_sha256=terminal["body"]["receipt_sha256"],
+                            operation_key=_args[1]["operation_key"])
                     return C.SealedScreen(
                         "receipt", "9" * 64, -0.01, "candidate",
                         "a" * 64, "b" * 64, "c" * 64)
@@ -289,6 +290,157 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
         self.assertEqual(
             result["portfolio_terminals"][records[0]["hypothesis_id"]][
                 "disposition"], records[0]["decision_policy"]["terminal_rule"])
+
+    def test_infrastructure_ambiguity_preserves_state_and_requires_fresh_operation(self):
+        """Per-arm integrity failure retries without spending any budget."""
+        fixture = TD.Tests(methodName="runTest")
+        record = next(
+            row for row in self.portfolio.eligible_hypotheses()
+            if row["hypothesis_id"] == "akh-v2-q8-quantizer-new-mechanism")
+
+        class Planner:
+            def __init__(self): self.calls = 0
+            def attest(self): return {**C.SOL, "runtime": TD.RUNTIME}
+            def plan(self, *, context, workspace):
+                self.calls += 1
+                return AllStrategyAcceptanceRedGate._bound_candidate(
+                    fixture,
+                    context["authoring_assignment"]["portfolio_binding"],
+                    context, 1)
+
+        class Lease(TD.Lease):
+            def __init__(self): self.operations = []
+            def admit(self, item, *, operation_key):
+                self.operations.append(operation_key)
+                return super().admit(item, operation_key=operation_key)
+
+        class Screen:
+            def __init__(self, root): self.root, self.calls = root, 0
+            def reconcile(self, _inflight): return C.Recovery("safe_to_start")
+            def screen(self, _candidate, _authorization, permit):
+                self.calls += 1
+                if self.calls == 1:
+                    receipt = self.root / "arm-integrity-ambiguity.json"
+                    receipt.write_text("{}", encoding="utf-8")
+                    raise C.ScreenInfrastructureAmbiguity(
+                        "within-arm timed outputs are not bitwise invariant",
+                        receipt_path=str(receipt.resolve()),
+                        receipt_sha256=hashlib.sha256(
+                            receipt.read_bytes()).hexdigest(),
+                        operation_key=permit["operation_key"])
+                return C.SealedScreen(
+                    "receipt", "8" * 64, -0.01, "candidate",
+                    "a" * 64, "b" * 64, "c" * 64)
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config = self._real_portfolio_config(root, [record], iterations=1)
+            planner, lease, screen = Planner(), Lease(), Screen(root)
+            first = C.run_controller(
+                config, planner=planner, critic=TD.FakeCritic(["accept"]),
+                screener=screen, lease=lease)
+            self.assertEqual(first["next"], 1)
+            self.assertEqual(first["scientific_attempts"], 0)
+            self.assertEqual(first["iterations"], [])
+            self.assertEqual(first["pending"]["infrastructure_retry_epoch"], 1)
+            self.assertEqual(len(first["infrastructure_ambiguities"]), 1)
+            self.assertEqual(first.get("attempted_candidate_identities", {}), {})
+            second = C.run_controller(
+                config, planner=planner, critic=TD.FakeCritic([]),
+                screener=screen, lease=lease)
+            self.assertNotEqual(lease.operations[0], lease.operations[1])
+            self.assertEqual(planner.calls, 1)
+            self.assertEqual(screen.calls, 2)
+            self.assertEqual(second["scientific_attempts"], 1)
+            self.assertEqual(second["next"], 2)
+            self.assertEqual(len(second["iterations"]), 1)
+
+    def test_typed_timing_terminals_cannot_cross_operation_namespaces(self):
+        """Controller rederives the producer operation before disposition."""
+        state = {
+            "iterations": [], "scientific_attempts": 0, "next": 1,
+            "inflight": {"operation_key": "9" * 64}}
+        row = {"candidate_semantic_sha256": "7" * 64,
+               "source_manifest_sha256": "6" * 64}
+        divergence = C.TimedOutputCorrectnessRefusal(
+            "diverged", receipt_path="/sealed/divergence.json",
+            receipt_sha256="a" * 64, result_sha256="b" * 64,
+            operation_key="8" * 64)
+        with self.assertRaisesRegex(
+                C.DiscoveryControllerError, "operation identity"):
+            C._record_governed_stage_refusal(state, row, divergence)
+        self.assertIn("inflight", state)
+        self.assertEqual(state["iterations"], [])
+        ambiguity = C.ScreenInfrastructureAmbiguity(
+            "unstable", receipt_path="/sealed/ambiguity.json",
+            receipt_sha256="c" * 64, operation_key="8" * 64)
+        with self.assertRaisesRegex(
+                C.DiscoveryControllerError, "inflight operation"):
+            C._record_screen_infrastructure_ambiguity(state, row, ambiguity)
+        self.assertIn("inflight", state)
+        self.assertEqual(state["iterations"], [])
+
+    def test_identical_patch_new_envelope_is_rejected_before_critic_and_lease(self):
+        """Per-turn IDs cannot disguise a repeated source implementation."""
+        fixture = TD.Tests(methodName="runTest")
+        record = next(
+            row for row in self.portfolio.eligible_hypotheses()
+            if row["hypothesis_id"] == "akh-v2-q8-quantizer-new-mechanism")
+        record = {**record, "decision_policy": dict(record["decision_policy"])}
+        record["decision_policy"]["max_distinct_candidates"] = 2
+
+        class Planner:
+            def __init__(self): self.calls = 0
+            def attest(self): return {**C.SOL, "runtime": TD.RUNTIME}
+            def plan(self, *, context, workspace):
+                self.calls += 1
+                # Turn two changes every envelope ID but repeats sequence 1's
+                # exact patch.  Turn three is a corrected distinct patch.
+                sequence = 1 if self.calls < 3 else 2
+                return AllStrategyAcceptanceRedGate._bound_candidate(
+                    fixture,
+                    context["authoring_assignment"]["portfolio_binding"],
+                    context, sequence)
+
+        class Critic(TD.FakeCritic):
+            def __init__(self): super().__init__(["accept", "accept"]); self.calls = 0
+            def review(self, *args, **kwargs):
+                self.calls += 1
+                return super().review(*args, **kwargs)
+
+        class Lease(TD.Lease):
+            def __init__(self): self.operations = []
+            def admit(self, item, *, operation_key):
+                self.operations.append(operation_key)
+                return super().admit(item, operation_key=operation_key)
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config = self._real_portfolio_config(root, [record], iterations=2)
+            planner, critic, lease = Planner(), Critic(), Lease()
+            screen = TD.FakeScreen([-0.01, -0.02])
+            state = C.run_controller(
+                config, planner=planner, critic=critic,
+                screener=screen, lease=lease)
+            self.assertEqual(planner.calls, 3)
+            self.assertEqual(critic.calls, 2)
+            self.assertEqual(screen.calls, 2)
+            self.assertEqual(len(lease.operations), 2)
+            repeated = [row for row in state["iterations"]
+                        if row["status"] ==
+                        "candidate_semantic_repeat_refused"]
+            self.assertEqual(len(repeated), 1)
+            scientific = [row for row in state["iterations"]
+                          if row.get("scientific_budget_spent") is True]
+            self.assertEqual(len(scientific), 2)
+            self.assertEqual(
+                repeated[0]["candidate_semantic_sha256"],
+                scientific[0]["candidate_semantic_sha256"])
+            self.assertNotEqual(
+                scientific[0]["candidate_semantic_sha256"],
+                scientific[1]["candidate_semantic_sha256"])
+            self.assertEqual(len(state["attempted_candidate_identities"]), 2)
+            self.assertEqual(state["scientific_attempts"], 2)
 
     def test_each_strategy_positive_s1_runs_one_s2_then_nominates(self):
         """Replication reuses the candidate and never asks either actor twice."""
@@ -1372,6 +1524,7 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
                     "receipt_sha256": "a" * 64}
                 if name == "TimedOutputCorrectnessRefusal":
                     kwargs["result_sha256"] = "b" * 64
+                    kwargs["operation_key"] = "c" * 64
                 refusal = refusal_type("sealed stage outcome", **kwargs)
                 self.assertEqual(refusal.stage, stage)
                 self.assertEqual(refusal.disposition, disposition)
@@ -1682,6 +1835,7 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
                           "receipt_sha256": receipt_sha256}
                 if name == "TimedOutputCorrectnessRefusal":
                     kwargs["result_sha256"] = receipt["body"]["receipt_sha256"]
+                    kwargs["operation_key"] = "c" * 64
                 refusal = refusal_type("sealed stage outcome", **kwargs)
 
                 class RefusingScreen:
@@ -1693,6 +1847,13 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
 
                     def screen(self, *_args):
                         self.calls += 1
+                        if isinstance(refusal, C.TimedOutputCorrectnessRefusal):
+                            raise C.TimedOutputCorrectnessRefusal(
+                                str(refusal),
+                                receipt_path=refusal.receipt_path,
+                                receipt_sha256=refusal.receipt_sha256,
+                                result_sha256=refusal.result_sha256,
+                                operation_key=_args[2]["operation_key"])
                         raise refusal
 
                 # Exercise the live path with the same complete, sealed
@@ -1783,6 +1944,7 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
                           "receipt_sha256": loaded["file_sha256"]}
                 if refusal_name == "TimedOutputCorrectnessRefusal":
                     kwargs["result_sha256"] = loaded["body"]["receipt_sha256"]
+                    kwargs["operation_key"] = "c" * 64
                 refusal = refusal_type("durable producer outcome", **kwargs)
 
                 class Screen:
@@ -1798,6 +1960,13 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
                         if self.calls == 1:
                             self.executor_calls += 1
                             raise CrashAfterProducerTerminal()
+                        if isinstance(refusal, C.TimedOutputCorrectnessRefusal):
+                            raise C.TimedOutputCorrectnessRefusal(
+                                str(refusal),
+                                receipt_path=refusal.receipt_path,
+                                receipt_sha256=refusal.receipt_sha256,
+                                result_sha256=refusal.result_sha256,
+                                operation_key=_args[2]["operation_key"])
                         raise refusal
 
                 record = next(

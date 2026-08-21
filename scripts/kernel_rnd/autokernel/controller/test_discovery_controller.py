@@ -1339,13 +1339,14 @@ class Tests(unittest.TestCase):
    native=D.gpu_discovery.CandidateCorrectnessDivergence(
        "candidate timed outputs differ bitwise from the sealed anchor",
        receipt_path=str(refusal_file.resolve()),receipt_sha256=refusal_sha,
-       result_sha256="e"*64)
+       result_sha256="e"*64, operation_key="9"*64)
    with patch.object(D.gpu_discovery,"run",side_effect=native) as run, \
        self.assertRaises(D.TimedOutputCorrectnessRefusal) as raised:
     screen.screen(item,object(),{})
    self.assertEqual(run.call_count,1)
    self.assertEqual(raised.exception.receipt_sha256,refusal_sha)
    self.assertEqual(raised.exception.result_sha256,"e"*64)
+   self.assertEqual(raised.exception.operation_key,"9"*64)
    self.assertTrue(raised.exception.scientific_budget_spent)
  def test_lease_wait_is_durable_without_spending_iteration(self):
   class Wait:

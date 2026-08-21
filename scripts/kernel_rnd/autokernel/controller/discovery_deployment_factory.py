@@ -1944,6 +1944,7 @@ def _runner_binding(config: deployment.DiscoveryDeployment) -> RunnerArgsBinding
             "candidate": dict(build_.candidate_identity.__dict__),
         }
         for current in (graphs_off, graphs_on):
+            setattr(current, "_operation_key", operation_key)
             for arm, identity in sealed_identities.items():
                 setattr(current, f"_sealed_{arm}_source_build_identity", identity)
         setattr(graphs_off, "_target_runtime_args", graphs_on)
@@ -1978,6 +1979,9 @@ def _bind_runner_runtime_authority(
         "candidate": dict(build_.candidate_identity.__dict__),
     }
     for current in (result, target):
+        if getattr(current, "_operation_key", None) != build_.operation_key:
+            raise DeploymentFactoryError(
+                "runner arguments changed private operation identity")
         for key, value in expected_admission.items():
             existing = getattr(current, key, None)
             if existing is not None and existing != value:

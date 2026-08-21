@@ -429,6 +429,8 @@ class DeploymentFactoryTests(unittest.TestCase):
                 args = F._bind_runner_runtime_authority(
                     config, build, {"load_admission": decision}, args)
                 target = args._target_runtime_args
+                self.assertEqual(args._operation_key, build.operation_key)
+                self.assertEqual(target._operation_key, build.operation_key)
                 self.assertEqual((args.runtime_graphs, target.runtime_graphs),
                                  ("off", "on"))
                 self.assertEqual(args.load_admission_decision_path,
@@ -453,6 +455,8 @@ class DeploymentFactoryTests(unittest.TestCase):
                     on = F.controller.gpu_discovery.preflight(target)
                 self.assertEqual((off["runtime_graphs"], on["runtime_graphs"]),
                                  ("off", "on"))
+                self.assertEqual(off["operation_key"], build.operation_key)
+                self.assertEqual(on["operation_key"], build.operation_key)
                 self.assertNotEqual(
                     off["anchor_identity"]["source_commit"],
                     off["candidate_identity"]["source_commit"])

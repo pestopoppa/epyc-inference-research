@@ -43,6 +43,8 @@ SCHEMA_PROCESS_RECEIPT = "epyc.autokernel.gpu_discovery_process_receipt.v1"
 SCHEMA_OUTPUT_REFUSAL = "epyc.autokernel.gpu_discovery_output_refusal.v1"
 SCHEMA_CORRECTNESS_DIVERGENCE = (
     "epyc.autokernel.gpu_candidate_correctness_divergence.v1")
+SCHEMA_TIMED_OUTPUT_INFRASTRUCTURE = (
+    "epyc.autokernel.timed_output_infrastructure_ambiguity.v1")
 SOURCE_COMMIT = "0db32c06e3e550065b78311a6031ef3dd2c4f27c"
 READY_CONTINUE_INSTRUMENT_COMMIT = "5bbcc5498e4732162356953b7be96a53073a6706"
 READY_CONTINUE_CONTRACT_SHA256 = "1411f5e81c1b0b3db6952523922c672d88a78aaff5945865c9ccc2b4fc5fd99f"
@@ -85,7 +87,8 @@ class CandidateCorrectnessDivergence(RuntimeError):
     scientific_budget_spent = True
 
     def __init__(self, message: str, *, receipt_path: str,
-                 receipt_sha256: str, result_sha256: str) -> None:
+                 receipt_sha256: str, result_sha256: str,
+                 operation_key: str) -> None:
         super().__init__(message)
         if (not receipt_path or not isinstance(receipt_sha256, str)
                 or re.fullmatch(r"[0-9a-f]{64}", receipt_sha256) is None):
@@ -98,6 +101,32 @@ class CandidateCorrectnessDivergence(RuntimeError):
             raise RuntimeError(
                 "candidate correctness divergence lacks its native result hash")
         self.result_sha256 = result_sha256
+        if (not isinstance(operation_key, str)
+                or re.fullmatch(r"[0-9a-f]{64}", operation_key) is None):
+            raise RuntimeError(
+                "candidate correctness divergence lacks its operation identity")
+        self.operation_key = operation_key
+
+
+class TimedOutputInfrastructureAmbiguity(RuntimeError):
+    """Per-arm integrity failure requiring a fresh operation epoch."""
+
+    stage = "measurement_integrity"
+    disposition = "infrastructure_ambiguity"
+    scientific_budget_spent = False
+
+    def __init__(self, message: str, *, receipt_path: str,
+                 receipt_sha256: str, operation_key: str) -> None:
+        super().__init__(message)
+        if (not receipt_path or not isinstance(receipt_sha256, str)
+                or re.fullmatch(r"[0-9a-f]{64}", receipt_sha256) is None
+                or not isinstance(operation_key, str)
+                or re.fullmatch(r"[0-9a-f]{64}", operation_key) is None):
+            raise RuntimeError(
+                "timed-output infrastructure ambiguity lacks sealed authority")
+        self.receipt_path = receipt_path
+        self.receipt_sha256 = receipt_sha256
+        self.operation_key = operation_key
 
 
 class _CrossArmOutputDivergence(RuntimeError):
@@ -536,16 +565,67 @@ def _seal_output_refusal(
         receipt_sha256=refusal_binding["sha256"])
 
 
+def _seal_timed_output_infrastructure_ambiguity(
+        root: Path, *, capture: Mapping[str, Any], code: str,
+        message: str) -> TimedOutputInfrastructureAmbiguity:
+    receipt = capture.get("receipt")
+    identity = receipt.get("identity") if isinstance(receipt, Mapping) else None
+    context = (identity.get("process_context")
+               if isinstance(identity, Mapping) else None)
+    operation_key = (context.get("operation_key")
+                     if isinstance(context, Mapping) else None)
+    if (not isinstance(operation_key, str)
+            or re.fullmatch(r"[0-9a-f]{64}", operation_key) is None):
+        raise RuntimeError(
+            "timed-output infrastructure ambiguity lacks operation identity")
+    path = root.with_name(f"{root.name}-infrastructure-ambiguity.json")
+    body = {
+        "schema": SCHEMA_TIMED_OUTPUT_INFRASTRUCTURE,
+        "status": "infrastructure_ambiguity",
+        "stage": "measurement_integrity",
+        "scientific_budget_spent": False,
+        "candidate_disposition": False,
+        "requires_fresh_operation": True,
+        "operation_key": operation_key,
+        "process_receipt_path": capture["receipt_path"],
+        "process_receipt_file_sha256": capture["receipt_file_sha256"],
+        "reason_code": code,
+        "reason_sha256": hashlib.sha256(message.encode()).hexdigest(),
+        "diagnostic": _output_refusal_diagnostic(capture),
+    }
+    value = {**body, "receipt_sha256": schemas.content_hash(body)}
+    if path.exists() or path.is_symlink():
+        payload, binding = _capture_file(path, "timed-output infrastructure ambiguity")
+        if json.loads(payload) != value:
+            raise RuntimeError(
+                "timed-output infrastructure ambiguity changed on reopen")
+    else:
+        atomic_json(path, value)
+        os.chmod(path, 0o600)
+        payload, binding = _capture_file(path, "timed-output infrastructure ambiguity")
+        if json.loads(payload) != value:
+            raise RuntimeError(
+                "timed-output infrastructure ambiguity changed after sealing")
+    return TimedOutputInfrastructureAmbiguity(
+        message, receipt_path=str(path.resolve()),
+        receipt_sha256=binding["sha256"], operation_key=operation_key)
+
+
 def _seal_candidate_correctness_divergence(
         output_root: Path, *, anchor: Mapping[str, Any],
         candidate: Mapping[str, Any], runtime_graphs: str,
-        campaign_id: str, anchor_identity: Mapping[str, Any],
+        campaign_id: str, operation_key: str,
+        anchor_identity: Mapping[str, Any],
         candidate_identity: Mapping[str, Any]
         ) -> CandidateCorrectnessDivergence:
     """Seal a scientific rejection without copying raw output hashes forward."""
     if runtime_graphs != "off":
         raise RuntimeError(
             "candidate timed-output divergence is only defined for graphs-off")
+    if (not isinstance(operation_key, str)
+            or re.fullmatch(r"[0-9a-f]{64}", operation_key) is None):
+        raise RuntimeError(
+            "candidate correctness divergence lacks operation identity")
     semantics = []
     processes = []
     preflight_sha256 = None
@@ -563,6 +643,11 @@ def _seal_candidate_correctness_divergence(
                 or re.fullmatch(r"[0-9a-f]{64}", receipt_sha256) is None):
             raise RuntimeError(
                 f"{label} correctness divergence process binding is malformed")
+        expected_receipt = (output_root / f"process-{label}" /
+                            "receipt.json").resolve()
+        if Path(receipt_path) != expected_receipt:
+            raise RuntimeError(
+                f"{label} correctness divergence escaped its operation namespace")
         receipt_bytes, receipt_binding = _capture_file(
             Path(receipt_path), f"{label} correctness divergence process receipt")
         if receipt_binding["sha256"] != receipt_sha256:
@@ -581,6 +666,7 @@ def _seal_candidate_correctness_divergence(
                              if isinstance(context, Mapping) else None)
         if (not isinstance(context, Mapping)
                 or context.get("campaign_id") != campaign_id
+                or context.get("operation_key") != operation_key
                 or context.get("arm") != label
                 or context.get("runtime_graphs") != runtime_graphs
                 or not isinstance(current_preflight, str)
@@ -619,6 +705,7 @@ def _seal_candidate_correctness_divergence(
         "candidate_rejected": True,
         "promotion_claim": False,
         "campaign_id": campaign_id,
+        "operation_key": operation_key,
         "preflight_sha256": preflight_sha256,
         "anchor_build_identity_sha256": schemas.content_hash(anchor_identity),
         "candidate_build_identity_sha256": schemas.content_hash(candidate_identity),
@@ -652,7 +739,8 @@ def _seal_candidate_correctness_divergence(
     return CandidateCorrectnessDivergence(
         message, receipt_path=str(path.resolve()),
         receipt_sha256=binding["sha256"],
-        result_sha256=value["receipt_sha256"])
+        result_sha256=value["receipt_sha256"],
+        operation_key=operation_key)
 
 
 def _output_refusal_diagnostic(capture: Mapping[str, Any]) -> dict[str, Any]:
@@ -2011,6 +2099,10 @@ def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
         except _NativeOutputError as exc:
             if process_receipt_root is None:
                 raise RuntimeError(str(exc)) from exc
+            if exc.code == "timed_output_semantics":
+                raise _seal_timed_output_infrastructure_ambiguity(
+                    process_receipt_root, capture=capture,
+                    code=exc.code, message=str(exc)) from exc
             raise _seal_output_refusal(
                 process_receipt_root, capture=capture,
                 code=exc.code, message=str(exc)) from exc
@@ -2365,7 +2457,12 @@ def preflight(args: argparse.Namespace) -> dict:
         raise RuntimeError("configured inference-window lock is unsafe")
     anchor_identity = build_identity(anchor_build)
     candidate_identity = build_identity(candidate_build)
+    operation_key = getattr(args, "_operation_key", None)
     if args.factor == "source_patch":
+        if (not isinstance(operation_key, str)
+                or re.fullmatch(r"[0-9a-f]{64}", operation_key) is None):
+            raise RuntimeError(
+                "source patch runner lacks its private operation identity")
         anchor_identity = _sealed_source_build_identity(
             args, arm="anchor", build=anchor_build,
             observed=anchor_identity)
@@ -2442,6 +2539,8 @@ def preflight(args: argparse.Namespace) -> dict:
     return {
         "schema": "epyc.autokernel.gpu_discovery_preflight.v1",
         "campaign_id": args.campaign_id,
+        **({"operation_key": operation_key}
+           if args.factor == "source_patch" else {}),
         "authority": "nonpromotable_candidate_only_discovery",
         "model": str(model),
         "model_sha256": sha256_file(model),
@@ -2560,6 +2659,8 @@ def _prepare_runner_output(root: Path, sealed: Mapping[str, Any]) -> bool:
         "supervisor-anchor", "supervisor-candidate",
         "process-anchor", "process-candidate",
         "process-anchor-refusal.json", "process-candidate-refusal.json",
+        "process-anchor-infrastructure-ambiguity.json",
+        "process-candidate-infrastructure-ambiguity.json",
         "correctness-divergence.json",
     }
     entries = tuple(root.iterdir())
@@ -2757,6 +2858,8 @@ def run(args: argparse.Namespace) -> dict:
                 process_receipt_root=out / f"process-{arm}",
                 process_context={
                     "campaign_id": args.campaign_id,
+                    **({"operation_key": sealed["operation_key"]}
+                       if "operation_key" in sealed else {}),
                     "preflight_sha256": schemas.content_hash(sealed),
                     "arm": arm,
                     "workload": getattr(args, "workload", sealed["frame"]),
@@ -2788,6 +2891,7 @@ def run(args: argparse.Namespace) -> dict:
                     out, anchor=anchor_runs[0], candidate=candidate_runs[0],
                     runtime_graphs=str(sealed.get("runtime_graphs", "off")),
                     campaign_id=args.campaign_id,
+                    operation_key=str(sealed.get("operation_key", "")),
                     anchor_identity=anchor_identity,
                     candidate_identity=candidate_identity)
         if sealed.get("runtime_graphs") == "on":

@@ -217,6 +217,7 @@ class TestGpuDiscoveryBuildIdentity(unittest.TestCase):
                     anchor, gpu.READY_CONTINUE_INSTRUMENT_COMMIT)
                 args._sealed_candidate_source_build_identity = _source_identity(
                     candidate, "b" * 40)
+                args._operation_key = "9" * 64
                 sealed = gpu.preflight(args)
             self.assertEqual(sealed["runtime_arms"]["measurement_binary_sha256"],
                              gpu.sha256_file(anchor / "bin" / "llama-bench"))
@@ -249,6 +250,7 @@ class TestGpuDiscoveryBuildIdentity(unittest.TestCase):
                 candidate_loader_dir=str(candidate / "bin"),
                 device_id=gpu.DEVICE_ID, inference_window_lock=None),
                 mode="cold_overlap")
+            args._operation_key = "9" * 64
             with self.assertRaisesRegex(RuntimeError, "sealed builder identity"):
                 gpu.preflight(args)
             args._sealed_anchor_source_build_identity = _source_identity(
@@ -1082,6 +1084,51 @@ class TestGpuDiscoveryBatchedSubprocess(unittest.TestCase):
                 serialization_env={"AMD_SERIALIZE_KERNEL": "3", "AMD_SERIALIZE_COPY": "3",
                                    "GGML_CUDA_DISABLE_GRAPHS": "1"})
 
+    def test_within_arm_instability_is_operation_bound_infrastructure_ambiguity(self) -> None:
+        """A bad hardening pair cannot consume science as output refusal."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            build = _build(root / "build", rocwmma="ON", mfma="OFF")
+            model = root / "model.gguf"; model.write_bytes(b"model")
+            wrong = self._row([100.0] * 3).replace(
+                '"autokernel_hardened": true',
+                '"autokernel_hardened": false')
+            process = self._Process(wrong)
+            operation_key = "9" * 64
+            receipt_root = root / "process-anchor"
+            kwargs = dict(
+                build=build, model=model, seed=8613, baseline_vram=0,
+                flash_attention=True,
+                expected_source_commit=gpu.SOURCE_COMMIT,
+                repetitions=3, timed_output_oracle=True,
+                runtime_graphs="off",
+                process_factory=lambda *_args, **_kwargs: process,
+                kfd_pid_provider=lambda: (123,), vram_reader=lambda: 64,
+                pgid_provider=lambda _pid: process.pid, sleep=lambda _: None,
+                process_receipt_root=receipt_root,
+                process_context={"operation_key": operation_key,
+                                 "arm": "anchor"})
+            with self.assertRaises(
+                    gpu.TimedOutputInfrastructureAmbiguity) as first:
+                gpu._invoke_locked(**kwargs)
+            self.assertEqual(first.exception.operation_key, operation_key)
+            ambiguity = json.loads(
+                Path(first.exception.receipt_path).read_text(encoding="utf-8"))
+            self.assertEqual(
+                ambiguity["schema"],
+                gpu.SCHEMA_TIMED_OUTPUT_INFRASTRUCTURE)
+            self.assertFalse(ambiguity["scientific_budget_spent"])
+            self.assertFalse(ambiguity["candidate_disposition"])
+            self.assertTrue(ambiguity["requires_fresh_operation"])
+            self.assertFalse((root / "process-anchor-refusal.json").exists())
+            kwargs["process_factory"] = lambda *_args, **_kwargs: self.fail(
+                "ambiguous completed process was replayed")
+            with self.assertRaises(
+                    gpu.TimedOutputInfrastructureAmbiguity) as reopened:
+                gpu._invoke_locked(**kwargs)
+            self.assertEqual(first.exception.receipt_sha256,
+                             reopened.exception.receipt_sha256)
+
     def test_cross_arm_oracle_refuses_changed_outputs(self) -> None:
         row = json.loads(self._row([100.0] * 3))
         kwargs = {
@@ -1128,6 +1175,10 @@ class TestGpuDiscoveryBatchedSubprocess(unittest.TestCase):
             exact_env = {
                 "AMD_SERIALIZE_KERNEL": "3", "AMD_SERIALIZE_COPY": "3",
                 "GGML_CUDA_DISABLE_GRAPHS": "1"}
+            operation_key = "9" * 64
+            output_root = (root / operation_key / "runner" / "s1" /
+                           "measurement-graphs-off")
+            output_root.mkdir(parents=True)
 
             def semantics(outputs):
                 body = {
@@ -1151,10 +1202,12 @@ class TestGpuDiscoveryBatchedSubprocess(unittest.TestCase):
             runs = {}
             for arm, outputs in (("anchor", anchor_outputs),
                                  ("candidate", candidate_outputs)):
-                receipt = root / f"process-{arm}.json"
+                receipt = output_root / f"process-{arm}" / "receipt.json"
+                receipt.parent.mkdir()
                 receipt.write_text(json.dumps({
                     "identity": {"process_context": {
                         "campaign_id": "ak-v24-replay",
+                        "operation_key": operation_key,
                         "preflight_sha256": "f" * 64,
                         "arm": arm, "runtime_graphs": "off"}}}),
                     encoding="utf-8")
@@ -1172,14 +1225,16 @@ class TestGpuDiscoveryBatchedSubprocess(unittest.TestCase):
                     runs["anchor"], runs["candidate"])
             with self.assertRaises(gpu.CandidateCorrectnessDivergence) as first:
                 raise gpu._seal_candidate_correctness_divergence(
-                    root, anchor=runs["anchor"], candidate=runs["candidate"],
+                    output_root, anchor=runs["anchor"], candidate=runs["candidate"],
                     runtime_graphs="off", campaign_id="ak-v24-replay",
+                    operation_key=operation_key,
                     anchor_identity={"source_commit": "a" * 40},
                     candidate_identity={"source_commit": "b" * 40})
             with self.assertRaises(gpu.CandidateCorrectnessDivergence) as reopened:
                 raise gpu._seal_candidate_correctness_divergence(
-                    root, anchor=runs["anchor"], candidate=runs["candidate"],
+                    output_root, anchor=runs["anchor"], candidate=runs["candidate"],
                     runtime_graphs="off", campaign_id="ak-v24-replay",
+                    operation_key=operation_key,
                     anchor_identity={"source_commit": "a" * 40},
                     candidate_identity={"source_commit": "b" * 40})
             self.assertEqual(first.exception.receipt_sha256,
@@ -1190,11 +1245,30 @@ class TestGpuDiscoveryBatchedSubprocess(unittest.TestCase):
             self.assertEqual(receipt["classification"], "screened_out")
             self.assertTrue(receipt["scientific_budget_spent"])
             self.assertEqual(receipt["differing_repetitions"], 9)
+            self.assertEqual(receipt["operation_key"], operation_key)
             self.assertFalse(receipt["target_runtime_executed"])
             self.assertEqual(receipt_path.stat().st_mode & 0o777, 0o600)
             rendered = receipt_path.read_text(encoding="utf-8")
             self.assertFalse(any(value in rendered for value in
                                  anchor_outputs + candidate_outputs))
+            escaped = dict(runs["candidate"])
+            escaped["supervisor"] = dict(escaped["supervisor"])
+            outside = root / "outside-receipt.json"
+            outside.write_bytes(Path(
+                escaped["supervisor"]["process_receipt_path"]).read_bytes())
+            outside.chmod(0o600)
+            escaped["supervisor"]["process_receipt_path"] = str(
+                outside.resolve())
+            escaped["supervisor"]["process_receipt_file_sha256"] = (
+                gpu.sha256_file(outside))
+            with self.assertRaisesRegex(RuntimeError,
+                                        "escaped its operation namespace"):
+                gpu._seal_candidate_correctness_divergence(
+                    output_root, anchor=runs["anchor"], candidate=escaped,
+                    runtime_graphs="off", campaign_id="ak-v24-replay",
+                    operation_key=operation_key,
+                    anchor_identity={"source_commit": "a" * 40},
+                    candidate_identity={"source_commit": "b" * 40})
 
     def test_serialized_readiness_does_not_unlock_on_maps_without_instrument_barrier(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -1523,6 +1597,7 @@ class TestGpuDiscoveryRunCleanup(unittest.TestCase):
                 "frame": "tg128-ngl99", "metric": "decode_tokens_per_s",
                 "arm_order_schedule": ["candidate", "anchor"],
                 "arm_order_seed_sha256": "d" * 64,
+                "operation_key": "9" * 64,
             }
             claim = mock.Mock()
             claim.borrowed_outer_reservation = True

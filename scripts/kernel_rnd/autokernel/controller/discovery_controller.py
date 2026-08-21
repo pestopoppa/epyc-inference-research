@@ -114,13 +114,19 @@ class TimedOutputCorrectnessRefusal(CorrectnessRefusal):
     scientific_budget_spent = True
 
     def __init__(self, message: str, *, receipt_path: str,
-                 receipt_sha256: str, result_sha256: str) -> None:
+                 receipt_sha256: str, result_sha256: str,
+                 operation_key: str) -> None:
         super().__init__(message, receipt_path=receipt_path,
                          receipt_sha256=receipt_sha256)
         if not isinstance(result_sha256, str) or not HASH.fullmatch(result_sha256):
             raise DiscoveryControllerError(
                 "timed-output correctness refusal lacks its native result hash")
         self.result_sha256 = result_sha256
+        if (not isinstance(operation_key, str)
+                or not HASH.fullmatch(operation_key)):
+            raise DiscoveryControllerError(
+                "timed-output correctness refusal lacks its operation identity")
+        self.operation_key = operation_key
 
 
 class DispatchAttributionRefusal(GovernedStageRefusal):
@@ -153,6 +159,24 @@ class ResumableScreenInterruption(DiscoveryControllerError):
     controller pauses without consuming an iteration so a corrected/reloaded
     runner can resume at the first incomplete stage.
     """
+
+
+class ScreenInfrastructureAmbiguity(DiscoveryControllerError):
+    """A sealed per-arm integrity failure requiring a fresh operation epoch."""
+
+    def __init__(self, message: str, *, receipt_path: str,
+                 receipt_sha256: str, operation_key: str) -> None:
+        super().__init__(message)
+        if (not isinstance(receipt_path, str) or not receipt_path
+                or not isinstance(receipt_sha256, str)
+                or not HASH.fullmatch(receipt_sha256)
+                or not isinstance(operation_key, str)
+                or not HASH.fullmatch(operation_key)):
+            raise DiscoveryControllerError(
+                "screen infrastructure ambiguity lacks sealed authority")
+        self.receipt_path = receipt_path
+        self.receipt_sha256 = receipt_sha256
+        self.operation_key = operation_key
 
 
 class ResourceWait(DiscoveryControllerError):
@@ -1597,11 +1621,17 @@ class GpuSourceScreener:
             else:
                 try:
                     raw = gpu_discovery.run(current)
+                except gpu_discovery.TimedOutputInfrastructureAmbiguity as exc:
+                    raise ScreenInfrastructureAmbiguity(
+                        str(exc), receipt_path=exc.receipt_path,
+                        receipt_sha256=exc.receipt_sha256,
+                        operation_key=exc.operation_key) from exc
                 except gpu_discovery.CandidateCorrectnessDivergence as exc:
                     raise TimedOutputCorrectnessRefusal(
                         str(exc), receipt_path=exc.receipt_path,
                         receipt_sha256=exc.receipt_sha256,
-                        result_sha256=exc.result_sha256) from exc
+                        result_sha256=exc.result_sha256,
+                        operation_key=exc.operation_key) from exc
                 except gpu_discovery.MeasurementOutputRefusal as exc:
                     raise MeasurementOutputRefusal(
                         str(exc), receipt_path=exc.receipt_path,
@@ -1888,9 +1918,12 @@ def _select_portfolio_binding(state: Mapping[str, Any],
                 or binding["hypothesis_id"] in state.get(
                     "portfolio_validations", {})):
             continue
-        attempts = {row.get("source_manifest_sha256") for row in state["iterations"]
+        attempts = {(row.get("candidate_semantic_sha256")
+                     or row.get("source_manifest_sha256"))
+                    for row in state["iterations"]
                     if row.get("portfolio_hypothesis_id") == binding["hypothesis_id"]
-                    and isinstance(row.get("source_manifest_sha256"), str)
+                    and isinstance((row.get("candidate_semantic_sha256")
+                                    or row.get("source_manifest_sha256")), str)
                     and isinstance(row.get("result_sha256"), str)
                     and HASH.fullmatch(row["result_sha256"])
                     and isinstance(row.get("evidence"), Mapping)}
@@ -2002,6 +2035,10 @@ def _revalidate_portfolio_checkpoint(config: ControllerConfig,
     if expected["outcome"] != schemas.PASS:
         raise DiscoveryControllerError(
             "portfolio pending candidate exactly matches a sealed DNR")
+    semantic = row.get("candidate_semantic_sha256")
+    if semantic is not None and semantic != _candidate_semantic_identity(item):
+        raise DiscoveryControllerError(
+            "portfolio pending candidate semantic identity changed")
 
 
 def _bind_campaign_ledger_outcome(row: dict[str, Any],
@@ -2302,6 +2339,230 @@ def _row_spends_scientific_budget(row: Mapping[str, Any]) -> bool:
             and isinstance(row.get("evidence"), Mapping))
 
 
+def _candidate_semantic_identity(item: PlannedCandidate) -> str:
+    """Hash source semantics while excluding per-turn envelope identities."""
+    manifest = item.source_manifest
+    return _sha({
+        "schema": "epyc.autokernel.candidate_source_semantics.v1",
+        "source_tree": manifest.source_tree,
+        "production_base_commit": manifest.production_base_commit,
+        "instrument_commit": manifest.instrument_commit,
+        "change_class": manifest.change_class,
+        "declared_files": sorted(manifest.declared_files),
+        "declared_symbols": {
+            key: sorted(value)
+            for key, value in sorted(manifest.declared_symbols.items())},
+        "mechanism_id": manifest.mechanism_id,
+        "patch_sha256": manifest.patch_sha256,
+    })
+
+
+def _record_attempted_candidate_identity(
+        state: dict[str, Any], row: Mapping[str, Any]) -> None:
+    identity = row.get("candidate_semantic_sha256")
+    operation_key = row.get("operation_key")
+    result_sha256 = row.get("result_sha256")
+    hypothesis_id = row.get("portfolio_hypothesis_id")
+    if (not all(isinstance(value, str) and HASH.fullmatch(value)
+                for value in (identity, operation_key, result_sha256))
+            or not isinstance(hypothesis_id, str)
+            or not _row_spends_scientific_budget(row)):
+        raise DiscoveryControllerError(
+            "scientific candidate lacks its semantic attempt identity")
+    attempt = {
+        "operation_key": operation_key,
+        "result_sha256": result_sha256,
+        "disposition": row.get("status"),
+        "repetition": row.get("repetition", 1),
+    }
+    state["candidate_semantic_registry_schema"] = (
+        "epyc.autokernel.candidate_semantic_registry.v1")
+    registry = state.setdefault("attempted_candidate_identities", {})
+    prior = registry.get(identity)
+    if prior is None:
+        prior = {"hypothesis_id": hypothesis_id, "attempts": []}
+        registry[identity] = prior
+    if (not isinstance(prior, dict)
+            or prior.get("hypothesis_id") != hypothesis_id
+            or not isinstance(prior.get("attempts"), list)):
+        raise DiscoveryControllerError(
+            "candidate source semantics already have a different scientific outcome")
+    if attempt in prior["attempts"]:
+        return
+    if any(current.get("operation_key") == operation_key
+           for current in prior["attempts"] if isinstance(current, Mapping)):
+        raise DiscoveryControllerError(
+            "candidate source semantics repeat an operation with changed evidence")
+    prior["attempts"].append(attempt)
+
+
+def _validate_attempted_candidate_identities(state: Mapping[str, Any]) -> None:
+    marker = state.get("candidate_semantic_registry_schema")
+    registry = state.get("attempted_candidate_identities", {})
+    if marker is None and not registry:
+        # Historical checkpoints predate semantic retry suppression.  New
+        # scientific writes publish the marker and registry atomically.
+        return
+    if marker != "epyc.autokernel.candidate_semantic_registry.v1":
+        raise DiscoveryControllerError(
+            "durable candidate semantic registry version is malformed")
+    if not isinstance(registry, Mapping):
+        raise DiscoveryControllerError(
+            "durable candidate semantic attempt registry is malformed")
+    derived: dict[str, dict[str, Any]] = {}
+    for row in state.get("iterations", []):
+        if (not isinstance(row, Mapping)
+                or not _row_spends_scientific_budget(row)
+                or not isinstance(row.get("portfolio_hypothesis_id"), str)):
+            continue
+        identity = row.get("candidate_semantic_sha256")
+        operation_key = row.get("operation_key")
+        result_sha256 = row.get("result_sha256")
+        hypothesis_id = row.get("portfolio_hypothesis_id")
+        if (not all(isinstance(value, str) and HASH.fullmatch(value)
+                    for value in (identity, operation_key, result_sha256))
+                or not isinstance(hypothesis_id, str)):
+            raise DiscoveryControllerError(
+                "durable scientific row lacks candidate semantic identity")
+        attempt = {
+            "operation_key": operation_key,
+            "result_sha256": result_sha256,
+            "disposition": row.get("status"),
+            "repetition": row.get("repetition", 1),
+        }
+        entry = derived.setdefault(identity, {
+            "hypothesis_id": hypothesis_id, "attempts": []})
+        if entry["hypothesis_id"] != hypothesis_id:
+            raise DiscoveryControllerError(
+                "durable state aliases candidate semantics across hypotheses")
+        if (attempt in entry["attempts"]
+                or any(current.get("operation_key") == operation_key
+                       for current in entry["attempts"])):
+            raise DiscoveryControllerError(
+                "durable state repeats a candidate semantic operation")
+        entry["attempts"].append(attempt)
+    if dict(registry) != derived:
+        raise DiscoveryControllerError(
+            "durable candidate semantic registry differs from scientific rows")
+
+
+def _require_unattempted_checkpoint(
+        state: Mapping[str, Any], row: Mapping[str, Any], *,
+        confirmation: bool) -> None:
+    if confirmation:
+        return
+    semantic = row.get("candidate_semantic_sha256")
+    registry = state.get("attempted_candidate_identities", {})
+    if isinstance(semantic, str) and semantic in registry:
+        raise DiscoveryControllerError(
+            "durable candidate checkpoint repeats prior source semantics")
+
+
+def _validate_infrastructure_ambiguities(state: Mapping[str, Any]) -> None:
+    events = state.get("infrastructure_ambiguities", [])
+    if not isinstance(events, list):
+        raise DiscoveryControllerError(
+            "durable infrastructure ambiguity ledger is malformed")
+    seen: set[str] = set()
+    latest: dict[str, int] = {}
+    for event in events:
+        if (not isinstance(event, Mapping)
+                or set(event) != {
+                    "schema", "operation_key", "source_manifest_sha256",
+                    "candidate_semantic_sha256", "stage_receipt_path",
+                    "stage_receipt_sha256", "reason_sha256", "retry_epoch"}
+                or event.get("schema") !=
+                   "epyc.autokernel.screen_infrastructure_ambiguity.v1"):
+            raise DiscoveryControllerError(
+                "durable infrastructure ambiguity event is malformed")
+        hashes = (event.get("operation_key"),
+                  event.get("source_manifest_sha256"),
+                  event.get("candidate_semantic_sha256"),
+                  event.get("stage_receipt_sha256"),
+                  event.get("reason_sha256"))
+        epoch = event.get("retry_epoch")
+        if (not all(isinstance(value, str) and HASH.fullmatch(value)
+                    for value in hashes)
+                or not isinstance(event.get("stage_receipt_path"), str)
+                or not event["stage_receipt_path"]
+                or isinstance(epoch, bool) or not isinstance(epoch, int)
+                or epoch < 0 or event["operation_key"] in seen):
+            raise DiscoveryControllerError(
+                "durable infrastructure ambiguity authority is malformed")
+        identity = str(event["candidate_semantic_sha256"])
+        expected_epoch = latest.get(identity, -1) + 1
+        if epoch != expected_epoch:
+            raise DiscoveryControllerError(
+                "durable infrastructure retry epochs are not contiguous")
+        latest[identity] = epoch
+        seen.add(str(event["operation_key"]))
+    for label in ("pending", "inflight"):
+        holder = state.get(label)
+        if not isinstance(holder, Mapping):
+            continue
+        row = holder.get("row")
+        identity = (row.get("candidate_semantic_sha256")
+                    if isinstance(row, Mapping) else None)
+        epoch = holder.get("infrastructure_retry_epoch", 0)
+        if (isinstance(epoch, bool) or not isinstance(epoch, int) or epoch < 0
+                or epoch > 0 and (not isinstance(identity, str)
+                                  or not HASH.fullmatch(identity))):
+            raise DiscoveryControllerError(
+                f"durable {label} infrastructure retry authority is malformed")
+        expected = latest.get(str(identity), -1) + 1
+        if ((epoch or identity in latest)
+                and holder.get("confirmation") is not True
+                and epoch != expected):
+            raise DiscoveryControllerError(
+                f"durable {label} infrastructure retry epoch changed")
+        if label == "inflight" and epoch:
+            operation_key = holder.get("operation_key")
+            if operation_key in seen:
+                raise DiscoveryControllerError(
+                    "inflight operation reuses a refused infrastructure epoch")
+
+
+def _record_screen_infrastructure_ambiguity(
+        state: dict[str, Any], row: dict[str, Any],
+        exc: ScreenInfrastructureAmbiguity) -> None:
+    inflight = state.get("inflight")
+    if (not isinstance(inflight, Mapping)
+            or inflight.get("operation_key") != exc.operation_key):
+        raise DiscoveryControllerError(
+            "screen infrastructure ambiguity does not bind the inflight operation")
+    epoch = inflight.get("infrastructure_retry_epoch", 0)
+    semantic = row.get("candidate_semantic_sha256")
+    manifest = row.get("source_manifest_sha256")
+    if (isinstance(epoch, bool) or not isinstance(epoch, int) or epoch < 0
+            or not isinstance(semantic, str) or not HASH.fullmatch(semantic)
+            or not isinstance(manifest, str) or not HASH.fullmatch(manifest)):
+        raise DiscoveryControllerError(
+            "screen infrastructure ambiguity lacks candidate retry authority")
+    event = {
+        "schema": "epyc.autokernel.screen_infrastructure_ambiguity.v1",
+        "operation_key": exc.operation_key,
+        "source_manifest_sha256": manifest,
+        "candidate_semantic_sha256": semantic,
+        "stage_receipt_path": exc.receipt_path,
+        "stage_receipt_sha256": exc.receipt_sha256,
+        "reason_sha256": hashlib.sha256(str(exc).encode()).hexdigest(),
+        "retry_epoch": epoch,
+    }
+    events = state.setdefault("infrastructure_ambiguities", [])
+    events.append(event)
+    state.pop("inflight", None)
+    state["pending"] = {
+        "row": row,
+        "candidate": inflight["candidate"],
+        "authorization": inflight["authorization"],
+        "confirmation": bool(inflight.get("confirmation")),
+        "parent_authorization": inflight.get("parent_authorization"),
+        "infrastructure_retry_epoch": epoch + 1,
+        "prior_operation_key": exc.operation_key,
+    }
+    _validate_infrastructure_ambiguities(state)
+
+
 def _derived_scientific_attempts(state: Mapping[str, Any]) -> int:
     iterations = state.get("iterations", [])
     if not isinstance(iterations, list):
@@ -2383,9 +2644,12 @@ def _apply_portfolio_outcome(state: dict[str, Any], row: dict[str, Any]) -> None
             terminals[hypothesis_id] = {"disposition": "retire_conflict",
                                         "policy": dict(policy)}
             return
-    attempts = {item.get("source_manifest_sha256") for item in state["iterations"]
+    attempts = {(item.get("candidate_semantic_sha256")
+                 or item.get("source_manifest_sha256"))
+                for item in state["iterations"]
                 if item.get("portfolio_hypothesis_id") == hypothesis_id
-                and isinstance(item.get("source_manifest_sha256"), str)
+                and isinstance((item.get("candidate_semantic_sha256")
+                                or item.get("source_manifest_sha256")), str)
                 and _row_spends_scientific_budget(item)}
     if len(attempts) >= policy["max_distinct_candidates"]:
         disposition = policy["terminal_rule"]
@@ -2412,6 +2676,14 @@ def _record_governed_stage_refusal(
         exc: GovernedStageRefusal) -> None:
     """Consume one already-sealed stage terminal without replaying its work."""
     inflight = state.get("inflight")
+    if isinstance(exc, TimedOutputCorrectnessRefusal):
+        operation_key = (inflight.get("operation_key")
+                         if isinstance(inflight, Mapping) else None)
+        if (not isinstance(operation_key, str)
+                or not HASH.fullmatch(operation_key)
+                or operation_key != exc.operation_key):
+            raise DiscoveryControllerError(
+                "candidate correctness divergence changed its operation identity")
     state.pop("inflight", None)
     state.pop("pending", None)
     row.update(
@@ -2430,14 +2702,12 @@ def _record_governed_stage_refusal(
             correctness_status="failed",
             result_sha256=exc.result_sha256,
             evidence={"correctness_divergence": exc.receipt_sha256})
-        operation_key = (inflight.get("operation_key")
-                         if isinstance(inflight, Mapping) else None)
-        if not isinstance(operation_key, str) or not HASH.fullmatch(operation_key):
-            raise DiscoveryControllerError(
-                "candidate correctness divergence lacks its operation identity")
+        operation_key = exc.operation_key
         row["operation_key"] = operation_key
     state["iterations"].append(row)
     if exc.scientific_budget_spent:
+        if isinstance(row.get("portfolio_hypothesis_id"), str):
+            _record_attempted_candidate_identity(state, row)
         state["scientific_attempts"] = _derived_scientific_attempts(state)
     if exc.disposition == "authoring_refused":
         _note_portfolio_authoring_failure(state, row)
@@ -2748,6 +3018,8 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
             "sealed hypothesis portfolio changed; durable discovery cannot resume")
     if existing_portfolio is None and config.hypothesis_portfolio_sha256 is not None:
         state["hypothesis_portfolio_sha256"] = config.hypothesis_portfolio_sha256
+    _validate_attempted_candidate_identities(state)
+    _validate_infrastructure_ambiguities(state)
     # A completed state is an acknowledged terminal checkpoint.  Re-entering it
     # must be a read, not another executor opportunity or a timestamp rewrite.
     if state["complete"]: return state
@@ -2758,6 +3030,9 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
         inflight=state["inflight"]; item=_restore_pending({"candidate":inflight["candidate"]}); authorization=hypotheses.ClaimAuthorization.from_dict(inflight["authorization"]); permit=inflight["lease"]
         inflight_row = dict(inflight["row"])
         _revalidate_portfolio_checkpoint(config, item, inflight_row)
+        _require_unattempted_checkpoint(
+            state, inflight_row,
+            confirmation=bool(inflight.get("confirmation")))
         _bind_campaign_ledger_outcome(inflight_row, authorization)
         if (config.hypothesis_portfolio is not None
                 and inflight_row != dict(inflight["row"])):
@@ -2784,7 +3059,9 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                         "row":row,"candidate":inflight["candidate"],
                         "authorization":inflight["authorization"],
                         "confirmation":bool(inflight.get("confirmation")),
-                        "parent_authorization":inflight.get("parent_authorization")}
+                        "parent_authorization":inflight.get("parent_authorization"),
+                        "infrastructure_retry_epoch":inflight.get(
+                            "infrastructure_retry_epoch", 0)}
                     store.save(state,"waiting_resource")
                     return state
                 fresh_permit={**dict(fresh_permit),
@@ -2811,8 +3088,15 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                         "row":row,"candidate":inflight["candidate"],
                         "authorization":inflight["authorization"],
                         "confirmation":bool(inflight.get("confirmation")),
-                        "parent_authorization":inflight.get("parent_authorization")}
+                        "parent_authorization":inflight.get("parent_authorization"),
+                        "infrastructure_retry_epoch":inflight.get(
+                            "infrastructure_retry_epoch", 0)}
                     store.save(state,"waiting_resource")
+                    return state
+                except ScreenInfrastructureAmbiguity as exc:
+                    row = dict(inflight["row"])
+                    _record_screen_infrastructure_ambiguity(state, row, exc)
+                    store.save(state, "screen_infrastructure_ambiguity")
                     return state
                 except PrecomputeScreenRefusal as exc:
                     row = dict(inflight["row"])
@@ -2827,12 +3111,16 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
         if not precompute_refused:
             if not isinstance(result,SealedScreen): raise DiscoveryControllerError("inflight recovery produced no sealed result")
             row=dict(inflight["row"]); policy=row.get("portfolio_decision_policy")
+            row["operation_key"] = inflight["operation_key"]
             result=_classified_result(state,item,result,policy); row.update(
                 _screen_iteration_fields(
                     result, repetition=int(inflight["lease"].get(
                         "repetition", 2 if inflight.get("confirmation") else 1))))
             _record_attempt_once(tracker,item,str(item.proposal.get("proposal_id",row["proposal_sha256"])),result)
-            state.pop("inflight",None); state.pop("pending",None); state["iterations"].append(row); state["scientific_attempts"]=_derived_scientific_attempts(state); _apply_portfolio_outcome(state,row); state["next"]+=1; _schedule_replication(state,item=item,authorization=authorization,row=row,result=result,max_iterations=config.max_iterations); _append_nomination(config.output_root,item,result,_decision_floor(policy,"nomination_floor_pct",config.nomination_threshold)); _write_projection(config.evidence_root or config.output_root); store.save(state,"recovered_screen")
+            state.pop("inflight",None); state.pop("pending",None); state["iterations"].append(row)
+            if isinstance(row.get("portfolio_hypothesis_id"), str):
+                _record_attempted_candidate_identity(state, row)
+            state["scientific_attempts"]=_derived_scientific_attempts(state); _apply_portfolio_outcome(state,row); state["next"]+=1; _schedule_replication(state,item=item,authorization=authorization,row=row,result=result,max_iterations=config.max_iterations); _append_nomination(config.output_root,item,result,_decision_floor(policy,"nomination_floor_pct",config.nomination_threshold)); _write_projection(config.evidence_root or config.output_root); store.save(state,"recovered_screen")
     while (not state["complete"]
            and (state["scientific_attempts"] < config.max_iterations
                 if config.hypothesis_portfolio is not None
@@ -2877,6 +3165,9 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
             if pending is not None and pending_phase == "critic_pending":
                 item=_restore_pending(pending); row=dict(pending["row"])
                 _revalidate_portfolio_checkpoint(config, item, row)
+                _require_unattempted_checkpoint(
+                    state, row,
+                    confirmation=bool(pending.get("confirmation")))
                 try:
                     review=critic.review(item,context=context,workspace=workspace)
                 except Exception:
@@ -2903,6 +3194,9 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
             if pending is not None:
                 item=_restore_pending(pending); row=dict(pending["row"]); review=Critique(**row["critic"])
                 _revalidate_portfolio_checkpoint(config, item, row)
+                _require_unattempted_checkpoint(
+                    state, row,
+                    confirmation=bool(pending.get("confirmation")))
                 if "authorization" in pending:
                     authorization=hypotheses.ClaimAuthorization.from_dict(pending["authorization"])
                     durable_row = dict(row)
@@ -3000,7 +3294,8 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                      "mechanism_id":item.source_manifest.mechanism_id,
                      "target_surface":item.experiment_intent.target_surface if item.experiment_intent else None,
                      "target_symbol":item.experiment_intent.target_symbol if item.experiment_intent else None,
-                     "context_sha256":_sha(context)}
+                     "context_sha256":_sha(context),
+                     "candidate_semantic_sha256":_candidate_semantic_identity(item)}
                 _drain_visibility_degradation(state, planner, row)
                 if portfolio_binding is not None:
                     row.update(portfolio_hypothesis_id=portfolio_binding["hypothesis_id"],
@@ -3039,6 +3334,20 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                             }
                         state["next"] += 1
                         store.save(state, "portfolio_dnr_refused")
+                        continue
+                    semantic = row["candidate_semantic_sha256"]
+                    prior_semantics = state.get(
+                        "attempted_candidate_identities", {})
+                    if semantic in prior_semantics:
+                        row.update(
+                            status="candidate_semantic_repeat_refused",
+                            reason=("candidate patch/base/mechanism/scope exactly "
+                                    "repeats a prior scientific candidate"))
+                        state.pop("planning", None)
+                        state["iterations"].append(row)
+                        _note_portfolio_authoring_failure(state, row)
+                        state["next"] += 1
+                        store.save(state, "candidate_semantic_repeat_refused")
                         continue
                 state.pop("planning", None)
                 state["pending"]={
@@ -3086,13 +3395,26 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                 store.save(state, "dry_run_authorized")
                 continue
             repetition=2 if pending and pending.get("confirmation") else 1
-            operation_key=_sha({"turn":turn,"manifest":item.source_manifest_sha256,"authorization":authorization.to_dict(),"repetition":repetition})
+            retry_epoch = (pending.get("infrastructure_retry_epoch", 0)
+                           if isinstance(pending, Mapping) else 0)
+            if (isinstance(retry_epoch, bool)
+                    or not isinstance(retry_epoch, int) or retry_epoch < 0):
+                raise DiscoveryControllerError(
+                    "pending infrastructure retry epoch is malformed")
+            operation_identity = {"turn":turn,
+                                  "manifest":item.source_manifest_sha256,
+                                  "authorization":authorization.to_dict(),
+                                  "repetition":repetition}
+            if retry_epoch:
+                operation_identity["infrastructure_retry_epoch"] = retry_epoch
+            operation_key=_sha(operation_identity)
+            row["operation_key"] = operation_key
             permit=lease.admit(item, operation_key=operation_key)
             if not bool(permit.get("admitted")):
                 # Waiting is durable but is not an experiment and cannot spend an
                 # iteration budget.  Planning/critique may continue elsewhere;
                 # this exact candidate is retried only after a new lease admits it.
-                row.update(status="waiting_resource",lease=dict(permit)); state["pending"]={"row":row,"candidate":_pending_item(item),"authorization":authorization.to_dict(),"confirmation":bool(pending and pending.get("confirmation")),"parent_authorization":pending.get("parent_authorization") if pending else None}; store.save(state,"waiting_resource"); break
+                row.update(status="waiting_resource",lease=dict(permit)); state["pending"]={"row":row,"candidate":_pending_item(item),"authorization":authorization.to_dict(),"confirmation":bool(pending and pending.get("confirmation")),"parent_authorization":pending.get("parent_authorization") if pending else None,"infrastructure_retry_epoch":retry_epoch}; store.save(state,"waiting_resource"); break
             # The governed GPU adapter owns an operation-key-bound receipt
             # namespace.  It refuses an unkeyed lease, making recovery and
             # result reconciliation refer to the same durable operation.
@@ -3100,7 +3422,7 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                 raise DiscoveryControllerError("resource lease did not bind the exact operation key")
             permit={**dict(permit), "repetition":repetition}
             state.pop("pending",None)
-            state["inflight"]={"operation_key":operation_key,"row":row,"candidate":_pending_item(item),"authorization":authorization.to_dict(),"lease":dict(permit),"confirmation":bool(pending and pending.get("confirmation")),"parent_authorization":pending.get("parent_authorization") if pending else None}
+            state["inflight"]={"operation_key":operation_key,"row":row,"candidate":_pending_item(item),"authorization":authorization.to_dict(),"lease":dict(permit),"confirmation":bool(pending and pending.get("confirmation")),"parent_authorization":pending.get("parent_authorization") if pending else None,"infrastructure_retry_epoch":retry_epoch}
             store.save(state,"pre_screen_intent")
             try: result=screener.screen(item,authorization,permit)
             except ResumableScreenInterruption as exc:
@@ -3115,8 +3437,12 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                 _require_safe_resource_wait_recovery(screener,state["inflight"])
                 state.pop("inflight",None)
                 row.update(status="waiting_resource",lease=wait_receipt)
-                state["pending"]={"row":row,"candidate":_pending_item(item),"authorization":authorization.to_dict(),"confirmation":bool(pending and pending.get("confirmation")),"parent_authorization":pending.get("parent_authorization") if pending else None}
+                state["pending"]={"row":row,"candidate":_pending_item(item),"authorization":authorization.to_dict(),"confirmation":bool(pending and pending.get("confirmation")),"parent_authorization":pending.get("parent_authorization") if pending else None,"infrastructure_retry_epoch":retry_epoch}
                 store.save(state,"waiting_resource")
+                break
+            except ScreenInfrastructureAmbiguity as exc:
+                _record_screen_infrastructure_ambiguity(state, row, exc)
+                store.save(state, "screen_infrastructure_ambiguity")
                 break
             except PrecomputeScreenRefusal as exc:
                 _record_precompute_refusal(state, row, exc)
@@ -3140,7 +3466,10 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
             # Record the measured disposition before exposing it to the next
             # planner context.  This is the only source of repeat suppression.
             _record_attempt_once(tracker,item,str(item.proposal.get("proposal_id",row["proposal_sha256"])),result)
-            state.pop("inflight",None); state.pop("pending",None); state["iterations"].append(row); state["scientific_attempts"]=_derived_scientific_attempts(state); _apply_portfolio_outcome(state,row); state["next"]+=1; _schedule_replication(state,item=item,authorization=authorization,row=row,result=result,max_iterations=config.max_iterations); _append_nomination(config.output_root,item,result,_decision_floor(policy,"nomination_floor_pct",config.nomination_threshold)); _write_projection(config.evidence_root or config.output_root); store.save(state,"screened")
+            state.pop("inflight",None); state.pop("pending",None); state["iterations"].append(row)
+            if isinstance(row.get("portfolio_hypothesis_id"), str):
+                _record_attempted_candidate_identity(state, row)
+            state["scientific_attempts"]=_derived_scientific_attempts(state); _apply_portfolio_outcome(state,row); state["next"]+=1; _schedule_replication(state,item=item,authorization=authorization,row=row,result=result,max_iterations=config.max_iterations); _append_nomination(config.output_root,item,result,_decision_floor(policy,"nomination_floor_pct",config.nomination_threshold)); _write_projection(config.evidence_root or config.output_root); store.save(state,"screened")
     if config.hypothesis_portfolio is not None:
         if (not state.get("complete")
                 and state["scientific_attempts"] >= config.max_iterations):
