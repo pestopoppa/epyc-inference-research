@@ -593,6 +593,9 @@ def _validated_runner_plan(
     cumulative = dual | {
         "production_graphs_on_output_dir",
         "cumulative_performance_path",
+        "composition_exact_route_receipt_sha256",
+        "composition_expected_route_set_sha256",
+        "composition_target_runtime_frame_sha256",
     }
     keys = set(body)
     if (keys not in (base | single, base | dual, base | cumulative)
@@ -1253,6 +1256,7 @@ def _source_frame(operation_root: Path, result: controller.SealedScreen) -> tupl
 def _composition_runner_fields(
         candidate: controller.PlannedCandidate,
         build: controller.GpuSourceBuild, operation_root: Path,
+        target_runtime_args: Any | None = None,
 ) -> dict[str, Any]:
     plan = _candidate_composition_plan(candidate)
     pair = build.composition_build_pair
@@ -1291,6 +1295,23 @@ def _composition_runner_fields(
             cases_sha256=schemas.content_hash(correctness_body),
             receipt_sha256=str(bundle.correctness["file_sha256"]),
             passed=True)
+        attribution = bundle.attribution.get("body")
+        exact_comparison = (attribution.get("exact_duration_comparison")
+                            if isinstance(attribution, Mapping) else None)
+        candidate_routes = (exact_comparison.get("candidate_routes")
+                            if isinstance(exact_comparison, Mapping) else None)
+        if not isinstance(candidate_routes, Mapping):
+            raise cumulative_composition.CompositionError(
+                "proof bundle lacks the planned exact route set")
+        if target_runtime_args is None:
+            raise cumulative_composition.CompositionError(
+                "cumulative runner lacks target runtime preflight authority")
+        target_preflight = controller.gpu_discovery.preflight(
+            target_runtime_args)
+        target_frame = \
+            cumulative_composition.planned_target_runtime_frame_sha256(
+                target_preflight,
+                candidate_identity=pair.candidate.build_identity)
     except (KeyError, TypeError, cumulative_composition.CompositionError,
             evidence.EvidenceProducerError, gpu_source_proofs.ProofError) as exc:
         raise GpuSourceAdapterError(
@@ -1300,6 +1321,11 @@ def _composition_runner_fields(
         "composition_build_pair": pair.to_dict(),
         "composition_correctness": correctness.to_dict(),
         "composition_production_authority": production.to_dict(),
+        "composition_exact_route_receipt_sha256":
+            str(bundle.attribution["file_sha256"]),
+        "composition_expected_route_set_sha256":
+            schemas.content_hash(candidate_routes),
+        "composition_target_runtime_frame_sha256": target_frame,
     }
 
 
@@ -1406,12 +1432,8 @@ def _recover_completed_composition_screen(
         graphs_on_receipt_sha256=hashlib.sha256(
             on_path.read_bytes()).hexdigest(),
         graphs_on_receipt_path=on_path,
-        target_runtime_frame_sha256=schemas.content_hash({
-            "baseline_sha256": graphs_on["baseline_sha256"],
-            "runtime_graphs": graphs_on["runtime_graphs"],
-            "factor": graphs_on.get("factor"),
-            "technical_workload": graphs_on.get("technical_workload"),
-        }),
+        target_runtime_frame_sha256=
+            cumulative_composition._target_runtime_frame_sha256(graphs_on),
         exact_route_effect_fraction=exact_effect,
         graphs_off_effect_fraction=off_effect,
         graphs_on_effect_fraction=on_effect)
@@ -1838,7 +1860,8 @@ class GovernedGpuSourceAdapter:
                 "promotion_claim": False,
                 "operation_key": operation_key,
                 **_composition_runner_fields(
-                    candidate_, build_, operation_root),
+                    candidate_, build_, operation_root,
+                    target_runtime_args=target_args),
                 **({"measurement_graphs_off_output_dir": str(outputs[0]),
                     "target_runtime_graphs_on_output_dir": str(outputs[1]),
                     **({

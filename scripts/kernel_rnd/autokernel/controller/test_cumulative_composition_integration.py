@@ -185,6 +185,23 @@ def _production(*, frame_sha256: str = _sha("matched-on"),
         metric="tokens_per_second", direction="higher_is_better")
 
 
+def _planned_production(
+        *, workload_sha256: str = _sha("workload"),
+        runtime_config_sha256: str = _sha("runtime"),
+) -> composition.FrozenProductionAuthority:
+    identity = _production().build_identity
+    protocol = composition.frozen_production_protocol_binding(
+        model_sha256=_sha("model"), build_identity=identity)
+    return _production(
+        frame_sha256=protocol["frame_sha256"],
+        protocol_sha256=protocol["measurement_protocol_sha256"],
+        workload_sha256=workload_sha256,
+        runtime_config_sha256=runtime_config_sha256,
+        observed_workload_sha256=protocol["observed_workload_sha256"],
+        observed_runtime_config_sha256=
+            protocol["observed_runtime_config_sha256"])
+
+
 def _composition_performance(
         root: Path, plan: composition.CompositionPlan,
         pair: composition.CumulativeBuildPair,
@@ -193,7 +210,6 @@ def _composition_performance(
         cumulative_on: float = .02,
 ) -> tuple[composition.CumulativePerformance,
            composition.CumulativePerformanceRef]:
-    off_frame, on_frame = _sha("matched-off"), _sha("matched-on")
     production_path = (
         comparison.operation_root / "runner" / comparison.repetition /
         "cumulative-vs-production-graphs-on/result.json")
@@ -202,21 +218,33 @@ def _composition_performance(
         factor="cumulative_production", effect=cumulative_on)
     production_sha = _write_receipt(
         production_path, production_body, "result_sha256")
+    off = composition._runner_projection(
+        comparison.graphs_off_receipt_ref.load(), graph_mode="off",
+        factor_name="source_patch")
+    on = composition._runner_projection(
+        comparison.graphs_on_receipt_ref.load(), graph_mode="on",
+        factor_name="source_patch")
+    production = composition._runner_projection(
+        production_body, graph_mode="on",
+        factor_name="cumulative_production")
+    frozen = _planned_production()
     performance = composition.CumulativePerformance.create(
         plan, pair, correctness, comparison,
-        frozen_production=_production(
-            frame_sha256=on_frame, protocol_sha256=_sha("protocol")),
+        frozen_production=frozen,
         model_sha256=_sha("model"), workload_sha256=_sha("workload"),
         runtime_config_sha256=_sha("runtime"),
-        protocol_frame_sha256=_sha("protocol"),
+        protocol_frame_sha256=on["protocol_frame_sha256"],
         metric="decode_tokens_per_s", metric_direction="higher_better",
         cumulative_graphs_on_effect_fraction=
             production_body["median_relative"],
         production_graphs_on_receipt_sha256=production_sha,
         production_graphs_on_receipt_path=production_path,
-        incremental_graphs_off_frame_sha256=off_frame,
-        incremental_graphs_on_frame_sha256=on_frame,
-        production_graphs_on_frame_sha256=on_frame)
+        incremental_graphs_off_frame_sha256=
+            off["candidate_frame_sha256"],
+        incremental_graphs_on_frame_sha256=
+            on["candidate_frame_sha256"],
+        production_graphs_on_frame_sha256=
+            production["anchor_frame_sha256"])
     reference = composition.seal_cumulative_performance(
         comparison.operation_root / "cumulative-performance.json",
         performance)
@@ -232,7 +260,57 @@ def _write_receipt(path: Path, body: dict, native_key: str) -> str:
     return hashlib.sha256(raw).hexdigest()
 
 
-def _exact_carrier(effect: float) -> dict:
+def _write_runner_plan(
+        root: Path, pair: composition.CumulativeBuildPair,
+        correctness: composition.FullCorrectness, *, exact_sha256: str,
+        route_sha256: str, target_sha256: str) -> None:
+    exact_path = root / "proof/attribution-pair.json"
+    exact_body = json.loads(exact_path.read_text(encoding="utf-8"))
+    bundle = gpu_source_proofs.GpuSourceProofBundle.from_validated_paths(
+        manifest_sha256=_sha(pair.operation_key + "-manifest"),
+        candidate=pair.candidate.build_identity,
+        anchor=pair.anchor.build_identity,
+        workload_sha256=_sha(pair.operation_key + "-proof-workload"),
+        correctness={
+            "path": str(root / "proof/correctness/receipt.json"),
+            "file_sha256": correctness.receipt_sha256,
+            "native_sha256": correctness.result_sha256,
+            "body": correctness.to_dict(),
+        },
+        attribution={
+            "path": str(exact_path), "file_sha256": exact_sha256,
+            "native_sha256": exact_body["receipt_sha256"],
+            "body": exact_body,
+        })
+    _write_receipt(root / "proof/proof-bundle.json", {
+        "schema": "epyc.autokernel.gpu_source_evidence_bundle.v1",
+        "authority": "nonpromotable_candidate_only_discovery",
+        "promotion_claim": False, "bundle": bundle.to_dict(),
+    }, "receipt_sha256")
+    body = {
+        "schema": "epyc.autokernel.gpu_source_runner_plan.v2",
+        "authority": "nonpromotable_candidate_only_discovery",
+        "promotion_claim": False, "operation_key": pair.operation_key,
+        "composition_plan_sha256": pair.plan_sha256,
+        "composition_build_pair": pair.to_dict(),
+        "composition_correctness": correctness.to_dict(),
+        "composition_production_authority": _planned_production().to_dict(),
+        "composition_exact_route_receipt_sha256": exact_sha256,
+        "composition_expected_route_set_sha256": route_sha256,
+        "composition_target_runtime_frame_sha256": target_sha256,
+        "measurement_graphs_off_output_dir": str(
+            root / "runner/s1/measurement-graphs-off"),
+        "target_runtime_graphs_on_output_dir": str(
+            root / "runner/s1/target-runtime-graphs-on"),
+    }
+    _write_receipt(root / "runner-plan.json", body, "receipt_sha256")
+
+
+def _exact_carrier(
+        effect: float, pair: composition.CumulativeBuildPair,
+        *, workload_sha256: str = _sha("workload"),
+        runtime_config_sha256: str = _sha("runtime"),
+) -> dict:
     anchor_total = 1_000_000
     candidate_total = round(anchor_total * (1.0 - effect))
     derived = (anchor_total - candidate_total) / anchor_total
@@ -240,6 +318,11 @@ def _exact_carrier(effect: float) -> dict:
         "schema": "epyc.autokernel.gpu_kernel_attribution_pair.v2",
         "authority": "nonpromotable_candidate_only_discovery",
         "non_promotable": True, "promotion_claim": False,
+        "candidate_build_identity": vars(pair.candidate.build_identity),
+        "anchor_build_identity": vars(pair.anchor.build_identity),
+        "model_sha256": _sha("model"),
+        "workload_sha256": workload_sha256,
+        "runtime_config_sha256": runtime_config_sha256,
         "exact_duration_comparison": {
             "candidate_routes": {"candidate": {
                 "total_duration_ns": candidate_total, "calls": 9}},
@@ -265,7 +348,7 @@ def _composition_comparison(
     exact_path = operation / "proof/attribution-pair.json"
     off_path = operation / "runner/s1/measurement-graphs-off/result.json"
     on_path = operation / "runner/s1/target-runtime-graphs-on/result.json"
-    exact = _exact_carrier(effect)
+    exact = _exact_carrier(effect, pair)
     off = _measurement(
         pair=pair, anchor=pair.anchor.build_identity, graph_mode="off",
         factor="source_patch", effect=effect)
@@ -275,16 +358,22 @@ def _composition_comparison(
     exact_sha = _write_receipt(exact_path, exact, "receipt_sha256")
     off_sha = _write_receipt(off_path, off, "result_sha256")
     on_sha = _write_receipt(on_path, on, "result_sha256")
+    route_sha = schemas.content_hash(
+        exact["exact_duration_comparison"]["candidate_routes"])
+    target_sha = composition._target_runtime_frame_sha256(on)
+    _write_runner_plan(
+        operation, pair, correctness, exact_sha256=exact_sha,
+        route_sha256=route_sha, target_sha256=target_sha)
     return composition.IncrementalComparison.create(
         pair, correctness,
         exact_route_receipt_sha256=exact_sha,
         exact_route_receipt_path=exact_path,
-        expected_route_set_sha256=_sha("route-set"),
+        expected_route_set_sha256=route_sha,
         graphs_off_receipt_sha256=off_sha,
         graphs_off_receipt_path=off_path,
         graphs_on_receipt_sha256=on_sha,
         graphs_on_receipt_path=on_path,
-        target_runtime_frame_sha256=_sha("frame"),
+        target_runtime_frame_sha256=target_sha,
         exact_route_effect_fraction=
             exact["exact_duration_comparison"][
                 "relative_improvement_fraction"],
@@ -296,8 +385,13 @@ def _measurement(
         *, pair: composition.CumulativeBuildPair,
         anchor: gpu_source_proofs.BuildIdentity, graph_mode: str,
         factor: str, effect: float) -> dict:
+    metric_contract = {
+        "schema": "epyc.autokernel.matched-test-metric.v1",
+        "graph_mode": graph_mode,
+    }
     baseline_center = 1_000_000.0
-    candidate_samples = [baseline_center * (1.0 + effect)]
+    anchor_samples = [baseline_center] * 9
+    candidate_samples = [baseline_center * (1.0 + effect)] * 9
     relative_effects = [
         (value - baseline_center) / baseline_center
         for value in candidate_samples]
@@ -322,10 +416,7 @@ def _measurement(
             "backend": "llama_gpu", "recipe": "tg128-ngl99",
             "metric": "decode_tokens_per_s",
             "metric_direction": "higher_better",
-            "metric_contract": {
-                "schema": "epyc.autokernel.matched-test-metric.v1",
-                "graph_mode": graph_mode,
-            },
+            "metric_contract": metric_contract,
             "n_prompt": 0, "n_gen": 128,
             "model": "/models/test.gguf", "model_sha256": _sha("model"),
             "source_commit": pair.candidate.build_identity.source_commit,
@@ -335,11 +426,36 @@ def _measurement(
         "sole_factor": {"name": factor},
         "anchor_identity": vars(anchor),
         "candidate_identity": vars(pair.candidate.build_identity),
-        "candidate_runs": [{"raw_row": raw_row}],
-        "candidate_invocations": 9, "candidate_processes": 1,
+        "anchor_samples": anchor_samples,
+        "anchor_runs": [_producer_run(
+            anchor_samples, raw_row, metric_contract, "anchor", anchor)],
+        "candidate_runs": [_producer_run(
+            candidate_samples, raw_row, metric_contract, "candidate",
+            pair.candidate.build_identity)],
+        "anchor_invocations": 9, "candidate_invocations": 9,
+        "anchor_processes": 1, "candidate_processes": 1,
     }
     body["result_sha256"] = schemas.content_hash(body)
     return body
+
+
+def _producer_run(samples: list[float], raw_row: dict,
+                  metric_contract: dict, label: str,
+                  identity: gpu_source_proofs.BuildIdentity) -> dict:
+    diagnostic = {"schema": "epyc.test.native_metric.v1", "arm": label}
+    diagnostic["receipt_sha256"] = schemas.content_hash(diagnostic)
+    return {
+        "metric": sum(samples) / len(samples), "samples": samples,
+        "metric_contract": metric_contract, "sample_count": len(samples),
+        "raw_row": raw_row,
+        "reward_binary_sha256": identity.binary_sha256,
+        "hip_library_sha256": identity.hip_library_sha256,
+        "native_metric_diagnostic": diagnostic,
+        "supervisor": {
+            "stdout_sha256": _sha(label + "-stdout"),
+            "stderr_sha256": _sha(label + "-stderr"),
+        },
+    }
 
 
 class CumulativeControllerIntegrationTests(unittest.TestCase):
@@ -397,7 +513,10 @@ class CumulativeControllerIntegrationTests(unittest.TestCase):
             "native_sha256": _sha("recovery-correctness-native"),
             "body": correctness_body,
         }
-        attribution_body = _exact_carrier(.03)
+        attribution_body = _exact_carrier(
+            .03, pair,
+            workload_sha256=_sha("deployment-workload-file"),
+            runtime_config_sha256=_sha("deployment-runtime-file"))
         correctness = composition.FullCorrectness.create(
             pair, suite_id="current-gpu-source-full-correctness-v1",
             cases_sha256=schemas.content_hash(correctness_body),
@@ -421,6 +540,12 @@ class CumulativeControllerIntegrationTests(unittest.TestCase):
             anchor=pair.anchor.build_identity,
             workload_sha256=_sha("recovery-workload"),
             correctness=correctness_ref, attribution=attribution_ref)
+        gpu_source_evidence._seal(
+            operation / "proof/proof-bundle.json", {
+                "schema": gpu_source_evidence.SEALED_BUNDLE_SCHEMA,
+                "authority": gpu_source_adapter.AUTHORITY,
+                "promotion_claim": False, "bundle": bundle.to_dict(),
+            })
         authorization = {"claim": "sealed-composition"}
         lease = {"operation_key": adapter_operation,
                  "mode": "hardware-free", "repetition": 1}
@@ -477,6 +602,12 @@ class CumulativeControllerIntegrationTests(unittest.TestCase):
             "composition_build_pair": pair.to_dict(),
             "composition_correctness": correctness.to_dict(),
             "composition_production_authority": production.to_dict(),
+            "composition_exact_route_receipt_sha256": attribution_sha,
+            "composition_expected_route_set_sha256": schemas.content_hash(
+                attribution_body["exact_duration_comparison"][
+                    "candidate_routes"]),
+            "composition_target_runtime_frame_sha256":
+                composition._target_runtime_frame_sha256(bodies[1]),
             "measurement_graphs_off_output_dir": str(outputs[0]),
             "target_runtime_graphs_on_output_dir": str(outputs[1]),
             "production_graphs_on_output_dir": str(outputs[2]),

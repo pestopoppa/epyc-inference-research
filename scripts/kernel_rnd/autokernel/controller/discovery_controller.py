@@ -2390,12 +2390,8 @@ class GpuSourceScreener:
                 graphs_off_receipt_path=graphs_off_path,
                 graphs_on_receipt_sha256=graphs_on_file_sha256,
                 graphs_on_receipt_path=result_path,
-                target_runtime_frame_sha256=schemas.content_hash({
-                    "baseline_sha256": raw["baseline_sha256"],
-                    "runtime_graphs": raw["runtime_graphs"],
-                    "factor": raw.get("factor"),
-                    "technical_workload": raw.get("technical_workload"),
-                }),
+                target_runtime_frame_sha256=
+                    cumulative_composition._target_runtime_frame_sha256(raw),
                 exact_route_effect_fraction=exact_effect,
                 graphs_off_effect_fraction=graphs_off_effect,
                 graphs_on_effect_fraction=target_effect)

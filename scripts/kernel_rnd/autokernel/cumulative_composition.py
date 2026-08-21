@@ -885,9 +885,12 @@ def _strict_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return value
 
 
-def _stable_receipt_bytes(path: Path, *, expected_sha256: str) -> bytes:
+def _stable_receipt_bytes(
+        path: Path, *, expected_sha256: str | None = None) -> bytes:
     """Read one immutable evidence file without following a final symlink."""
-    expected_sha256 = _require_sha(expected_sha256, "measurement file sha256")
+    if expected_sha256 is not None:
+        expected_sha256 = _require_sha(
+            expected_sha256, "measurement file sha256")
     if not path.is_absolute() or ".." in path.parts:
         raise CompositionError("measurement receipt path is unsafe")
     flags = os.O_RDONLY | os.O_CLOEXEC
@@ -924,9 +927,121 @@ def _stable_receipt_bytes(path: Path, *, expected_sha256: str) -> bytes:
             or identity(after) != identity(pathname)):
         raise CompositionError("measurement receipt changed during stable read")
     raw = b"".join(chunks)
-    if hashlib.sha256(raw).hexdigest() != expected_sha256:
+    if (expected_sha256 is not None
+            and hashlib.sha256(raw).hexdigest() != expected_sha256):
         raise CompositionError("measurement receipt bytes changed")
     return raw
+
+
+def _load_runner_measurement_authority(operation_root: Path) -> dict[str, Any]:
+    """Load the independently sealed pre-run measurement authority."""
+    path = operation_root / "runner-plan.json"
+    if path != path.resolve(strict=False):
+        raise CompositionError("runner plan path is not canonical")
+    raw = _stable_receipt_bytes(path)
+    try:
+        value = json.loads(
+            raw.decode("utf-8", "strict"), object_pairs_hook=_strict_pairs,
+            parse_constant=lambda token: (_ for _ in ()).throw(
+                ValueError(f"non-finite JSON token {token}")))
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+        raise CompositionError("runner plan is not strict JSON") from exc
+    if (not isinstance(value, dict)
+            or value.get("schema") !=
+               "epyc.autokernel.gpu_source_runner_plan.v2"
+            or value.get("authority") !=
+               "nonpromotable_candidate_only_discovery"
+            or value.get("promotion_claim") is not False):
+        raise CompositionError("runner plan authority changed")
+    receipt = _require_sha(value.get("receipt_sha256"),
+                           "runner plan receipt_sha256")
+    if receipt != _sha({key: row for key, row in value.items()
+                        if key != "receipt_sha256"}):
+        raise CompositionError("runner plan native identity changed")
+    pair = CumulativeBuildPair.from_dict(value.get("composition_build_pair"))
+    correctness = FullCorrectness.from_dict(
+        value.get("composition_correctness"))
+    correctness.bind_pair(pair)
+    production = FrozenProductionAuthority.from_dict(
+        value.get("composition_production_authority"))
+    return {
+        "operation_key": _require_sha(
+            value.get("operation_key"), "runner plan operation_key"),
+        "build_pair_sha256": pair.pair_sha256,
+        "correctness_result_sha256": correctness.result_sha256,
+        "exact_route_receipt_sha256": _require_sha(
+            value.get("composition_exact_route_receipt_sha256"),
+            "runner plan exact-route receipt"),
+        "expected_route_set_sha256": _require_sha(
+            value.get("composition_expected_route_set_sha256"),
+            "runner plan expected route set"),
+        "target_runtime_frame_sha256": _require_sha(
+            value.get("composition_target_runtime_frame_sha256"),
+            "runner plan target runtime frame"),
+        "frozen_production": production,
+    }
+
+
+def _load_exact_proof_bundle_authority(
+        operation_root: Path, exact_ref: "MeasurementReceiptRef",
+) -> dict[str, Any]:
+    """Bind attribution bytes to the separately sealed proof bundle."""
+    path = operation_root / "proof/proof-bundle.json"
+    if path != path.resolve(strict=False):
+        raise CompositionError("proof bundle path is not canonical")
+    raw = _stable_receipt_bytes(path)
+    try:
+        wrapper = json.loads(
+            raw.decode("utf-8", "strict"), object_pairs_hook=_strict_pairs,
+            parse_constant=lambda token: (_ for _ in ()).throw(
+                ValueError(f"non-finite JSON token {token}")))
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+        raise CompositionError("proof bundle is not strict JSON") from exc
+    if (not isinstance(wrapper, dict)
+            or wrapper.get("schema") !=
+               "epyc.autokernel.gpu_source_evidence_bundle.v1"
+            or wrapper.get("authority") !=
+               "nonpromotable_candidate_only_discovery"
+            or wrapper.get("promotion_claim") is not False
+            or not isinstance(wrapper.get("bundle"), Mapping)):
+        raise CompositionError("proof bundle authority changed")
+    receipt = _require_sha(wrapper.get("receipt_sha256"),
+                           "proof bundle receipt_sha256")
+    if receipt != _sha({key: row for key, row in wrapper.items()
+                        if key != "receipt_sha256"}):
+        raise CompositionError("proof bundle native identity changed")
+    bundle_raw = wrapper["bundle"]
+    try:
+        bundle = gpu_source_proofs.GpuSourceProofBundle(
+            manifest_sha256=bundle_raw["manifest_sha256"],
+            candidate=_carrier_build_identity(
+                bundle_raw.get("candidate"), "proof bundle candidate"),
+            anchor=_carrier_build_identity(
+                bundle_raw.get("anchor"), "proof bundle anchor"),
+            workload_sha256=bundle_raw["workload_sha256"],
+            correctness=dict(bundle_raw["correctness"]),
+            attribution=dict(bundle_raw["attribution"]),
+            bundle_sha256=bundle_raw["bundle_sha256"],
+        )
+    except (KeyError, TypeError, ValueError,
+            gpu_source_proofs.ProofError) as exc:
+        raise CompositionError("proof bundle identity is malformed") from exc
+    if bundle.to_dict() != bundle_raw:
+        raise CompositionError("proof bundle projection changed")
+    attribution = bundle.attribution
+    exact = exact_ref.load()
+    if (attribution.get("path") != exact_ref.path
+            or attribution.get("file_sha256") != exact_ref.sha256
+            or attribution.get("native_sha256") != exact.get("receipt_sha256")
+            or attribution.get("body") != exact):
+        raise CompositionError("proof bundle attribution binding changed")
+    return {
+        "candidate_identity": bundle.candidate,
+        "anchor_identity": bundle.anchor,
+        "exact_route_receipt_sha256": exact_ref.sha256,
+        "expected_route_set_sha256": _exact_route_projection(
+            exact)["expected_route_set_sha256"],
+    }
 
 
 def _load_measurement_receipt(reference: "MeasurementReceiptRef") \
@@ -1023,7 +1138,25 @@ class MeasurementReceiptRef:
         return _load_measurement_receipt(self)
 
 
-def _exact_route_effect(value: Mapping[str, Any]) -> float:
+_RUNTIME_ROW_FIELDS = (
+    "n_threads", "n_batch", "n_ubatch", "use_mmap", "no_op_offload",
+    "split_mode", "no_kv_offload", "poll", "n_prompt", "n_gen",
+    "flash_attn",
+)
+
+
+def _carrier_build_identity(value: object, label: str) \
+        -> gpu_source_proofs.BuildIdentity:
+    if not isinstance(value, Mapping):
+        raise CompositionError(f"{label} build identity is missing")
+    try:
+        return gpu_source_proofs.BuildIdentity(**dict(value))
+    except (TypeError, ValueError, gpu_source_proofs.ProofError) as exc:
+        raise CompositionError(f"{label} build identity is malformed") from exc
+
+
+def _exact_route_projection(value: Mapping[str, Any]) -> dict[str, Any]:
+    """Re-derive every cumulative field duplicated from attribution bytes."""
     if (value.get("schema") !=
             "epyc.autokernel.gpu_kernel_attribution_pair.v2"
             or value.get("authority") !=
@@ -1072,11 +1205,102 @@ def _exact_route_effect(value: Mapping[str, Any]) -> float:
             or comparison.get("statistic") !=
                "sum_exact_route_total_duration_ns"):
         raise CompositionError("exact-route effect is not derived from routes")
-    return effect
+    return {
+        "effect_fraction": effect,
+        "expected_route_set_sha256": _sha(comparison["candidate_routes"]),
+        "candidate_identity": _carrier_build_identity(
+            value.get("candidate_build_identity"), "exact-route candidate"),
+        "anchor_identity": _carrier_build_identity(
+            value.get("anchor_build_identity"), "exact-route anchor"),
+        "model_sha256": _require_sha(
+            value.get("model_sha256"), "exact-route model_sha256"),
+        "workload_sha256": _require_sha(
+            value.get("workload_sha256"), "exact-route workload_sha256"),
+        "runtime_config_sha256": _require_sha(
+            value.get("runtime_config_sha256"),
+            "exact-route runtime_config_sha256"),
+    }
 
 
-def _runner_effect(value: Mapping[str, Any], *, graph_mode: str,
-                   factor_name: str) -> float:
+def _target_runtime_frame_sha256(value: Mapping[str, Any]) -> str:
+    """Derive the target frame solely from fields fixed before execution."""
+    frame = value.get("frame")
+    runs = value.get("candidate_runs")
+    identity = _carrier_build_identity(
+        value.get("candidate_identity"), "target runtime candidate")
+    if (not isinstance(frame, Mapping)
+            or not isinstance(runs, list) or len(runs) != 1
+            or not isinstance(runs[0], Mapping)
+            or not isinstance(runs[0].get("raw_row"), Mapping)):
+        raise CompositionError("target runtime frame is malformed")
+    raw_row = runs[0]["raw_row"]
+    if any(key not in raw_row for key in _RUNTIME_ROW_FIELDS):
+        raise CompositionError("target runtime configuration is incomplete")
+    return _sha({
+        "schema": "epyc.autokernel.target_runtime_frame.v1",
+        "runtime_graphs": value.get("runtime_graphs"),
+        "factor_name": value.get("sole_factor", {}).get("name")
+            if isinstance(value.get("sole_factor"), Mapping) else None,
+        "frame": {
+            key: frame.get(key) for key in (
+                "backend", "recipe", "metric", "metric_direction",
+                "n_prompt", "n_gen", "model_sha256", "cpu_list",
+                "device", "architecture")
+        },
+        "runtime": {key: raw_row[key] for key in _RUNTIME_ROW_FIELDS},
+        "candidate_identity": asdict(identity),
+    })
+
+
+def planned_target_runtime_frame_sha256(
+        value: Mapping[str, Any], *,
+        candidate_identity: gpu_source_proofs.BuildIdentity,
+) -> str:
+    """Derive the same target frame from a sealed preflight plan."""
+    if not isinstance(candidate_identity, gpu_source_proofs.BuildIdentity):
+        raise CompositionError("planned target candidate identity is untyped")
+    required = {
+        "frame", "metric", "prompt_tokens", "generation_tokens",
+        "model_sha256", "runtime_graphs", "sole_factor",
+    }
+    if not required.issubset(value):
+        raise CompositionError("planned target runtime frame is incomplete")
+    runtime = {
+        "n_threads": value.get("candidate_threads"),
+        "n_batch": value.get("candidate_batch"),
+        "n_ubatch": value.get("candidate_ubatch"),
+        "use_mmap": value.get("candidate_mmap"),
+        "no_op_offload": int(bool(value.get("candidate_no_op_offload"))),
+        "split_mode": value.get("candidate_split_mode"),
+        "no_kv_offload": value.get("candidate_no_kv_offload"),
+        "poll": value.get("candidate_poll"),
+        "n_prompt": value.get("prompt_tokens"),
+        "n_gen": value.get("generation_tokens"),
+        "flash_attn": int(bool(value.get("candidate_flash_attention"))),
+    }
+    return _sha({
+        "schema": "epyc.autokernel.target_runtime_frame.v1",
+        "runtime_graphs": value.get("runtime_graphs"),
+        "factor_name": value.get("sole_factor", {}).get("name")
+            if isinstance(value.get("sole_factor"), Mapping) else None,
+        "frame": {
+            "backend": "llama_gpu", "recipe": value.get("frame"),
+            "metric": value.get("metric"),
+            "metric_direction": "higher_better",
+            "n_prompt": value.get("prompt_tokens"),
+            "n_gen": value.get("generation_tokens"),
+            "model_sha256": value.get("model_sha256"),
+            "cpu_list": "184-191", "device": "AMD Instinct MI210",
+            "architecture": "gfx90a",
+        },
+        "runtime": runtime,
+        "candidate_identity": asdict(candidate_identity),
+    })
+
+
+def _runner_projection(value: Mapping[str, Any], *, graph_mode: str,
+                       factor_name: str) -> dict[str, Any]:
+    """Re-derive effects, frames, protocol, and identities from one run."""
     if (value.get("schema") !=
             "epyc.autokernel.gpu_candidate_only_screen.v2"
             or value.get("authority") !=
@@ -1088,19 +1312,170 @@ def _runner_effect(value: Mapping[str, Any], *, graph_mode: str,
             or not isinstance(value.get("sole_factor"), Mapping)
             or value["sole_factor"].get("name") != factor_name):
         raise CompositionError("runner measurement carrier authority changed")
-    center = _finite(value.get("baseline_center"), "measurement baseline")
-    samples = value.get("candidate_samples")
-    if (center <= 0 or not isinstance(samples, list) or not samples):
-        raise CompositionError("measurement samples are malformed")
-    observed = tuple(_finite(row, "measurement sample") for row in samples)
-    if any(row <= 0 for row in observed):
-        raise CompositionError("measurement samples must be positive")
+    frame = value.get("frame")
+    required_frame = {
+        "backend", "recipe", "metric", "metric_direction",
+        "metric_contract", "n_prompt", "n_gen", "model",
+        "model_sha256", "source_commit", "cpu_list", "device",
+        "architecture",
+    }
+    metric_contract = frame.get("metric_contract") \
+        if isinstance(frame, Mapping) else None
+    if (not isinstance(frame, Mapping) or set(frame) != required_frame
+            or not isinstance(metric_contract, Mapping)
+            or metric_contract.get("graph_mode") not in {
+                graph_mode, "disabled_for_integrity"}
+            or frame.get("metric_direction") != "higher_better"):
+        raise CompositionError("runner metric/frame authority changed")
+
+    def arm_runs(rows: object, label: str) -> dict[str, Any]:
+        if (not isinstance(rows, list) or len(rows) != 1
+                or not isinstance(rows[0], Mapping)):
+            raise CompositionError(f"runner {label} runs are malformed")
+        run = rows[0]
+        required = {
+            "metric", "samples", "metric_contract", "sample_count",
+            "raw_row", "reward_binary_sha256", "hip_library_sha256",
+            "native_metric_diagnostic", "supervisor",
+        }
+        if not required.issubset(run):
+            raise CompositionError(f"runner {label} run is incomplete")
+        samples = run.get("samples")
+        if (not isinstance(samples, list) or len(samples) != 9
+                or run.get("sample_count") != len(samples)
+                or run.get("metric_contract") != metric_contract):
+            raise CompositionError(f"runner {label} samples are malformed")
+        observed = tuple(
+            _finite(row, f"runner {label} sample") for row in samples)
+        if any(row <= 0 for row in observed) \
+                or _finite(run.get("metric"), f"runner {label} metric") <= 0:
+            raise CompositionError(f"runner {label} samples must be positive")
+        binary_sha256 = _require_sha(
+            run.get("reward_binary_sha256"), f"runner {label} binary")
+        hip_sha256 = _require_sha(
+            run.get("hip_library_sha256"), f"runner {label} HIP library")
+        diagnostic = run.get("native_metric_diagnostic")
+        if not isinstance(diagnostic, Mapping):
+            raise CompositionError(f"runner {label} native metric is missing")
+        native_sha = _require_sha(
+            diagnostic.get("receipt_sha256"),
+            f"runner {label} native metric receipt")
+        if native_sha != _sha({key: row for key, row in diagnostic.items()
+                               if key != "receipt_sha256"}):
+            raise CompositionError(
+                f"runner {label} native metric identity changed")
+        supervisor = run.get("supervisor")
+        if not isinstance(supervisor, Mapping):
+            raise CompositionError(f"runner {label} supervisor is missing")
+        _require_sha(supervisor.get("stdout_sha256"),
+                     f"runner {label} stdout")
+        _require_sha(supervisor.get("stderr_sha256"),
+                     f"runner {label} stderr")
+        raw_row = run.get("raw_row")
+        if (not isinstance(raw_row, Mapping)
+                or any(key not in raw_row for key in _RUNTIME_ROW_FIELDS)):
+            raise CompositionError(
+                f"runner {label} runtime configuration is incomplete")
+        return {
+            "samples": observed, "raw_row": raw_row,
+            "binary_sha256": binary_sha256,
+            "hip_library_sha256": hip_sha256,
+        }
+
+    anchor_run = arm_runs(value.get("anchor_runs"), "anchor")
+    candidate_run = arm_runs(
+        value.get("candidate_runs"), "candidate")
+    anchor_samples = anchor_run["samples"]
+    candidate_samples = candidate_run["samples"]
+    if value.get("anchor_samples") != list(anchor_samples) \
+            or value.get("candidate_samples") != list(candidate_samples):
+        raise CompositionError("runner flattened samples changed")
+    center = (float(value["anchor_runs"][0]["metric"])
+              if metric_contract.get("schema") ==
+                 "epyc.autokernel.serialized_pair_max_metric.v1"
+              else sum(anchor_samples) / len(anchor_samples))
+    if value.get("baseline_center") != center:
+        raise CompositionError("runner baseline center is not derived from anchor runs")
+    observed = candidate_samples
     effects = tuple((row - center) / center for row in observed)
     measured = median(effects)
     if (value.get("relative_effects") != list(effects)
             or value.get("median_relative") != measured):
         raise CompositionError("measurement effect is not derived from samples")
-    return measured
+    candidate_identity = _carrier_build_identity(
+        value.get("candidate_identity"), "runner candidate")
+    anchor_identity = _carrier_build_identity(
+        value.get("anchor_identity"), "runner anchor")
+    if (candidate_run["binary_sha256"] != candidate_identity.binary_sha256
+            or candidate_run["hip_library_sha256"] !=
+               candidate_identity.hip_library_sha256
+            or anchor_run["binary_sha256"] != anchor_identity.binary_sha256
+            or anchor_run["hip_library_sha256"] !=
+               anchor_identity.hip_library_sha256):
+        raise CompositionError("runner native artifacts differ from build identities")
+    candidate_raw = candidate_run["raw_row"]
+    anchor_raw = anchor_run["raw_row"]
+    runtime = {key: candidate_raw[key] for key in _RUNTIME_ROW_FIELDS}
+    anchor_runtime = {key: anchor_raw[key] for key in _RUNTIME_ROW_FIELDS}
+    if (frame.get("source_commit") != candidate_identity.source_commit
+            or anchor_runtime != runtime):
+        raise CompositionError("runner metric/frame authority changed")
+    if (value.get("candidate_invocations") != 9
+            or value.get("anchor_invocations") != 9
+            or value.get("candidate_processes") != 1
+            or value.get("anchor_processes") != 1):
+        raise CompositionError("runner execution cardinality changed")
+    model_sha256 = _require_sha(frame.get("model_sha256"), "model_sha256")
+    metric = _require_text(frame.get("metric"), "metric")
+    workload = {
+        "backend": frame["backend"], "recipe": frame["recipe"],
+        "n_prompt": frame["n_prompt"], "n_gen": frame["n_gen"],
+    }
+    runtime_config_sha256 = _sha(runtime)
+    protocol = {
+        **workload, "model_sha256": model_sha256,
+        "metric": metric, "metric_direction": frame["metric_direction"],
+        "cpu_list": frame["cpu_list"], "device": frame["device"],
+        "architecture": frame["architecture"],
+        "runtime_config_sha256": runtime_config_sha256,
+        "graphs_mode": graph_mode,
+        "candidate_invocations": value["candidate_invocations"],
+        "candidate_processes": value["candidate_processes"],
+    }
+    frame_base = {
+        "schema": "epyc.autokernel.measurement_arm_frame.v1",
+        "protocol": protocol, "factor_name": factor_name,
+    }
+    return {
+        "effect_fraction": measured,
+        "candidate_identity": candidate_identity,
+        "anchor_identity": anchor_identity,
+        "candidate_frame_sha256": _sha({
+            **frame_base, "arm": "candidate",
+            "source_commit": candidate_identity.source_commit,
+            "build_identity": asdict(candidate_identity),
+        }),
+        "anchor_frame_sha256": _sha({
+            **frame_base, "arm": "anchor",
+            "source_commit": anchor_identity.source_commit,
+            "build_identity": asdict(anchor_identity),
+        }),
+        "target_runtime_frame_sha256":
+            _target_runtime_frame_sha256(value),
+        "protocol_frame_sha256": _sha(protocol),
+        "model_sha256": model_sha256,
+        "workload_sha256": _sha(workload),
+        "runtime_config_sha256": runtime_config_sha256,
+        "metric": metric,
+        "metric_direction": frame["metric_direction"],
+    }
+
+
+def _runner_effect(value: Mapping[str, Any], *, graph_mode: str,
+                   factor_name: str) -> float:
+    return _runner_projection(
+        value, graph_mode=graph_mode,
+        factor_name=factor_name)["effect_fraction"]
 
 
 @dataclass(frozen=True)
@@ -1185,7 +1560,7 @@ class IncrementalComparison:
             "graphs_off_executed": True,
             "graphs_on_executed": True,
         }
-        return cls(
+        created = cls(
             operation_key=pair.operation_key,
             build_pair_sha256=pair.pair_sha256,
             correctness_result_sha256=correctness.result_sha256,
@@ -1202,6 +1577,8 @@ class IncrementalComparison:
             graphs_on_effect_fraction=graphs,
             classification=classification, result_sha256=_sha(body),
         )
+        created.bind(pair, correctness)
+        return created
 
     def _body(self) -> dict[str, Any]:
         return {
@@ -1271,19 +1648,92 @@ class IncrementalComparison:
                    self.graphs_on_receipt_ref.sha256):
             raise CompositionError(
                 "incremental measurement locations or hashes changed")
-        derived = (
-            _exact_route_effect(self.exact_route_receipt_ref.load()),
-            _runner_effect(
-                self.graphs_off_receipt_ref.load(), graph_mode="off",
-                factor_name="source_patch"),
-            _runner_effect(
-                self.graphs_on_receipt_ref.load(), graph_mode="on",
-                factor_name="source_patch"),
+        exact = _exact_route_projection(
+            self.exact_route_receipt_ref.load())
+        off = _runner_projection(
+            self.graphs_off_receipt_ref.load(), graph_mode="off",
+            factor_name="source_patch")
+        on = _runner_projection(
+            self.graphs_on_receipt_ref.load(), graph_mode="on",
+            factor_name="source_patch")
+        authority = _load_runner_measurement_authority(exact_root)
+        proof_authority = _load_exact_proof_bundle_authority(
+            exact_root, self.exact_route_receipt_ref)
+        common = (
+            "candidate_identity", "anchor_identity", "model_sha256",
+            "workload_sha256", "runtime_config_sha256", "metric",
+            "metric_direction",
         )
-        if ((route, graphs_off, graphs) != derived
+        expected_authority = {
+            "operation_key": self.operation_key,
+            "build_pair_sha256": self.build_pair_sha256,
+            "correctness_result_sha256": self.correctness_result_sha256,
+            "exact_route_receipt_sha256":
+                self.exact_route_receipt_sha256,
+            "expected_route_set_sha256": self.expected_route_set_sha256,
+            "target_runtime_frame_sha256":
+                self.target_runtime_frame_sha256,
+        }
+        if any(authority.get(key) != value
+               for key, value in expected_authority.items()):
+            raise CompositionError(
+                "incremental pre-run measurement authority changed")
+        if (proof_authority["candidate_identity"] !=
+                exact["candidate_identity"]
+                or proof_authority["anchor_identity"] !=
+                   exact["anchor_identity"]
+                or proof_authority["exact_route_receipt_sha256"] !=
+                   self.exact_route_receipt_sha256
+                or proof_authority["expected_route_set_sha256"] !=
+                   self.expected_route_set_sha256):
+            raise CompositionError(
+                "incremental proof-bundle authority changed")
+        if ((route, graphs_off, graphs) != (
+                    exact["effect_fraction"], off["effect_fraction"],
+                    on["effect_fraction"])
+                or self.expected_route_set_sha256 !=
+                   exact["expected_route_set_sha256"]
+                or self.target_runtime_frame_sha256 !=
+                   on["target_runtime_frame_sha256"]
+                or exact["candidate_identity"] != off["candidate_identity"]
+                or exact["anchor_identity"] != off["anchor_identity"]
+                or exact["model_sha256"] != off["model_sha256"]
+                or any(off[field] != on[field] for field in common)
                 or self.classification != expected
                 or self.result_sha256 != _sha(self._body())):
             raise CompositionError("incremental comparison identity changed")
+
+    def bind(
+            self, pair: CumulativeBuildPair,
+            correctness: FullCorrectness,
+    ) -> None:
+        correctness.bind_pair(pair)
+        exact = _exact_route_projection(
+            self.exact_route_receipt_ref.load())
+        off = _runner_projection(
+            self.graphs_off_receipt_ref.load(), graph_mode="off",
+            factor_name="source_patch")
+        on = _runner_projection(
+            self.graphs_on_receipt_ref.load(), graph_mode="on",
+            factor_name="source_patch")
+        authority = _load_runner_measurement_authority(self.operation_root)
+        if (self.operation_key != pair.operation_key
+                or self.build_pair_sha256 != pair.pair_sha256
+                or self.correctness_result_sha256 !=
+                   correctness.result_sha256
+                or exact["candidate_identity"] != pair.candidate.build_identity
+                or exact["anchor_identity"] != pair.anchor.build_identity
+                or off["candidate_identity"] != pair.candidate.build_identity
+                or off["anchor_identity"] != pair.anchor.build_identity
+                or on["candidate_identity"] != pair.candidate.build_identity
+                or on["anchor_identity"] != pair.anchor.build_identity):
+            raise CompositionError(
+                "incremental comparison binds other build evidence")
+        if authority["build_pair_sha256"] != pair.pair_sha256 \
+                or authority["correctness_result_sha256"] != \
+                   correctness.result_sha256:
+            raise CompositionError(
+                "incremental measurement authority binds other evidence")
 
     @property
     def operation_root(self) -> Path:
@@ -1757,13 +2207,8 @@ class CumulativePerformance:
     ) -> "CumulativePerformance":
         pair.bind_plan(plan)
         correctness.bind_pair(pair)
+        incremental.bind(pair, correctness)
         frozen_production.bind_plan(plan)
-        if (incremental.operation_key != plan.operation_key
-                or incremental.build_pair_sha256 != pair.pair_sha256
-                or incremental.correctness_result_sha256 !=
-                   correctness.result_sha256):
-            raise CompositionError(
-                "cumulative performance incremental evidence changed")
         if not correctness.passed:
             raise CompositionError(
                 "failed correctness cannot reach cumulative performance")
@@ -2003,21 +2448,29 @@ class CumulativePerformance:
                      "cumulative graphs-on effect")
         incremental_roots = tuple(
             reference.canonical_location() for reference in references[:3])
-        derived_incremental = (
-            _exact_route_effect(
-                self.incremental_exact_route_receipt_ref.load()),
-            _runner_effect(
-                self.incremental_graphs_off_receipt_ref.load(),
-                graph_mode="off", factor_name="source_patch"),
-            _runner_effect(
-                self.incremental_graphs_on_receipt_ref.load(),
-                graph_mode="on", factor_name="source_patch"),
-        )
+        runner_authority = _load_runner_measurement_authority(
+            incremental_roots[0][0])
+        exact = _exact_route_projection(
+            self.incremental_exact_route_receipt_ref.load())
+        off = _runner_projection(
+            self.incremental_graphs_off_receipt_ref.load(),
+            graph_mode="off", factor_name="source_patch")
+        incremental_on = _runner_projection(
+            self.incremental_graphs_on_receipt_ref.load(),
+            graph_mode="on", factor_name="source_patch")
         production_root, production_repetition = \
             self.production_graphs_on_receipt_ref.canonical_location()
-        derived_on = _runner_effect(
+        production = _runner_projection(
             self.production_graphs_on_receipt_ref.load(), graph_mode="on",
             factor_name="cumulative_production")
+        derived_incremental = (
+            exact["effect_fraction"], off["effect_fraction"],
+            incremental_on["effect_fraction"])
+        incremental_common = (
+            "candidate_identity", "anchor_identity", "model_sha256",
+            "workload_sha256", "runtime_config_sha256", "metric",
+            "metric_direction",
+        )
         if (tuple(reference.role for reference in references) != (
                     "exact_route", "incremental_graphs_off",
                     "incremental_graphs_on", "production_graphs_on")
@@ -2027,6 +2480,8 @@ class CumulativePerformance:
                 or incremental_roots[1][1] != incremental_roots[2][1]
                 or self.incremental_exact_route_receipt_sha256 !=
                    self.incremental_exact_route_receipt_ref.sha256
+                or runner_authority["frozen_production"] !=
+                   self.frozen_production
                 or self.incremental_graphs_off_receipt_sha256 !=
                    self.incremental_graphs_off_receipt_ref.sha256
                 or self.incremental_graphs_on_receipt_sha256 !=
@@ -2038,7 +2493,40 @@ class CumulativePerformance:
                 or production_repetition != incremental_roots[1][1]
                 or self.production_graphs_on_receipt_sha256 !=
                    self.production_graphs_on_receipt_ref.sha256
-                or on != derived_on):
+                or on != production["effect_fraction"]
+                or any(off[field] != incremental_on[field]
+                       for field in incremental_common)
+                or exact["candidate_identity"] != off["candidate_identity"]
+                or exact["anchor_identity"] != off["anchor_identity"]
+                or production["candidate_identity"] !=
+                   off["candidate_identity"]
+                or production["anchor_identity"] !=
+                   self.frozen_production.build_identity
+                or exact["model_sha256"] != self.model_sha256
+                or exact["workload_sha256"] != self.workload_sha256
+                or exact["runtime_config_sha256"] !=
+                   self.runtime_config_sha256
+                or any(row["model_sha256"] != self.model_sha256
+                       for row in (off, incremental_on, production))
+                or any(row["workload_sha256"] !=
+                       self.frozen_production.observed_workload_sha256
+                       for row in (off, incremental_on, production))
+                or any(row["runtime_config_sha256"] !=
+                       self.frozen_production.observed_runtime_config_sha256
+                       for row in (off, incremental_on, production))
+                or any(row["metric"] != self.metric
+                       or row["metric_direction"] != self.metric_direction
+                       for row in (off, incremental_on, production))
+                or self.protocol_frame_sha256 !=
+                   incremental_on["protocol_frame_sha256"]
+                or self.protocol_frame_sha256 !=
+                   production["protocol_frame_sha256"]
+                or self.incremental_graphs_off_frame_sha256 !=
+                   off["candidate_frame_sha256"]
+                or self.incremental_graphs_on_frame_sha256 !=
+                   incremental_on["candidate_frame_sha256"]
+                or self.production_graphs_on_frame_sha256 !=
+                   production["anchor_frame_sha256"]):
             raise CompositionError(
                 "cumulative measurement carriers changed")
         incremental_class = (
@@ -2075,6 +2563,18 @@ class CumulativePerformance:
         self.frozen_production.bind_plan(plan)
         pair.bind_plan(plan)
         correctness.bind_pair(pair)
+        incremental.bind(pair, correctness)
+        exact = _exact_route_projection(
+            self.incremental_exact_route_receipt_ref.load())
+        off = _runner_projection(
+            self.incremental_graphs_off_receipt_ref.load(),
+            graph_mode="off", factor_name="source_patch")
+        incremental_on = _runner_projection(
+            self.incremental_graphs_on_receipt_ref.load(),
+            graph_mode="on", factor_name="source_patch")
+        production = _runner_projection(
+            self.production_graphs_on_receipt_ref.load(), graph_mode="on",
+            factor_name="cumulative_production")
         if (self.operation_key != plan.operation_key
                 or self.plan_sha256 != plan.plan_sha256
                 or self.accepted_authority_sha256 !=
@@ -2107,7 +2607,16 @@ class CumulativePerformance:
                 or self.production_graphs_on_receipt_ref.canonical_location()[0]
                    != incremental.operation_root
                 or self.production_graphs_on_receipt_ref.canonical_location()[1]
-                   != incremental.repetition):
+                   != incremental.repetition
+                or exact["candidate_identity"] != pair.candidate.build_identity
+                or exact["anchor_identity"] != pair.anchor.build_identity
+                or any(row["candidate_identity"] !=
+                       pair.candidate.build_identity
+                       for row in (off, incremental_on, production))
+                or any(row["anchor_identity"] != pair.anchor.build_identity
+                       for row in (off, incremental_on))
+                or production["anchor_identity"] !=
+                   self.frozen_production.build_identity):
             raise CompositionError(
                 "cumulative performance binds other composition evidence")
         disposition = ("admitted" if incremental.admissible
@@ -2236,13 +2745,6 @@ class CumulativePerformanceRef:
         return cls(path=value["path"], sha256=value["sha256"])
 
 
-_RUNTIME_ROW_FIELDS = (
-    "n_threads", "n_batch", "n_ubatch", "use_mmap", "no_op_offload",
-    "split_mode", "no_kv_offload", "poll", "n_prompt", "n_gen",
-    "flash_attn",
-)
-
-
 def frozen_production_protocol_binding(
         *, model_sha256: str,
         build_identity: gpu_source_proofs.BuildIdentity,
@@ -2292,112 +2794,17 @@ def _measurement_descriptor(
         factor_name: str,
 ) -> dict[str, Any]:
     """Project one runner result into its commensurability authority."""
-    if (not isinstance(value, Mapping)
-            or value.get("schema") !=
-               "epyc.autokernel.gpu_candidate_only_screen.v2"
-            or value.get("runtime_graphs") != graph_mode
-            or value.get("promotion_claim") is not False
-            or value.get("non_promotable") is not True
-            or value.get("hip_residency_proved") is not True):
-        raise CompositionError(
-            "cumulative performance runner result is not sealed")
-    frame = value.get("frame")
-    sole_factor = value.get("sole_factor")
-    candidate_identity = value.get("candidate_identity")
-    runs = value.get("candidate_runs")
-    if (not isinstance(frame, Mapping)
-            or not isinstance(sole_factor, Mapping)
-            or sole_factor.get("name") != factor_name
-            or not isinstance(candidate_identity, Mapping)
-            or not isinstance(runs, list) or len(runs) != 1
-            or not isinstance(runs[0], Mapping)
-            or not isinstance(runs[0].get("raw_row"), Mapping)):
-        raise CompositionError(
-            "cumulative performance runner frame is malformed")
-    expected_candidate = asdict(candidate.build_identity)
-    if any(candidate_identity.get(key) != expected
-           for key, expected in expected_candidate.items()):
+    projection = _runner_projection(
+        value, graph_mode=graph_mode, factor_name=factor_name)
+    if projection["candidate_identity"] != candidate.build_identity:
         raise CompositionError(
             "cumulative performance candidate build identity changed")
-    observed_anchor = value.get("anchor_identity")
-    expected_anchor = asdict(anchor_identity)
-    if (not isinstance(observed_anchor, Mapping)
-            or any(observed_anchor.get(key) != expected
-                   for key, expected in expected_anchor.items())):
+    if projection["anchor_identity"] != anchor_identity:
         raise CompositionError(
             "cumulative performance comparator build identity changed")
-    raw_row = runs[0]["raw_row"]
-    if any(key not in raw_row for key in _RUNTIME_ROW_FIELDS):
-        raise CompositionError(
-            "cumulative performance runtime configuration is incomplete")
-    runtime = {key: raw_row[key] for key in _RUNTIME_ROW_FIELDS}
-    runtime_config_sha256 = _sha(runtime)
-    required_frame = {
-        "backend", "recipe", "metric", "metric_direction",
-        "metric_contract", "n_prompt", "n_gen", "model",
-        "model_sha256", "source_commit", "cpu_list", "device",
-        "architecture",
-    }
-    if set(frame) != required_frame:
-        raise CompositionError(
-            "cumulative performance measurement frame is inexact")
-    metric_contract = frame.get("metric_contract")
-    if (not isinstance(metric_contract, Mapping)
-            or frame.get("source_commit") !=
-               candidate.build_identity.source_commit
-            or frame.get("metric_direction") != "higher_better"
-            or metric_contract.get("graph_mode") not in {
-                graph_mode, "disabled_for_integrity"}):
-        raise CompositionError(
-            "cumulative performance metric/frame authority changed")
-    for label in ("model_sha256",):
-        _require_sha(frame[label], label)
-    metric = _require_text(frame["metric"], "metric")
-    workload = {
-        "backend": frame["backend"], "recipe": frame["recipe"],
-        "n_prompt": frame["n_prompt"], "n_gen": frame["n_gen"],
-    }
-    stable_protocol = {
-        **workload,
-        "model_sha256": frame["model_sha256"],
-        "metric": metric,
-        "metric_direction": frame["metric_direction"],
-        "cpu_list": frame["cpu_list"], "device": frame["device"],
-        "architecture": frame["architecture"],
-        "runtime_config_sha256": runtime_config_sha256,
-        "graphs_mode": graph_mode,
-        "candidate_invocations": value.get("candidate_invocations"),
-        "candidate_processes": value.get("candidate_processes"),
-    }
-    if (stable_protocol["candidate_invocations"] != 9
-            or stable_protocol["candidate_processes"] != 1):
-        raise CompositionError(
-            "cumulative performance execution cardinality changed")
-    candidate_frame_sha = _sha({
-        "schema": "epyc.autokernel.measurement_arm_frame.v1",
-        "arm": "candidate", "protocol": stable_protocol,
-        "source_commit": candidate.build_identity.source_commit,
-        "build_identity": asdict(candidate.build_identity),
-        "factor_name": factor_name,
-    })
-    anchor_frame_sha = _sha({
-        "schema": "epyc.autokernel.measurement_arm_frame.v1",
-        "arm": "anchor", "protocol": stable_protocol,
-        "source_commit": anchor_identity.source_commit,
-        "build_identity": asdict(anchor_identity),
-        "factor_name": factor_name,
-    })
     return {
-        "frame_sha256": candidate_frame_sha,
-        "anchor_frame_sha256": anchor_frame_sha,
-        "protocol_frame_sha256": _sha(stable_protocol),
-        "model_sha256": frame["model_sha256"],
-        "workload_sha256": _sha(workload),
-        "runtime_config_sha256": runtime_config_sha256,
-        "metric": metric,
-        "metric_direction": frame["metric_direction"],
-        "effect_fraction": _finite(
-            value.get("median_relative"), "cumulative measured effect"),
+        **projection,
+        "frame_sha256": projection["candidate_frame_sha256"],
     }
 
 
@@ -2543,6 +2950,7 @@ def load_cumulative_performance(
     try:
         value = json.loads(
             raw.decode("utf-8", "strict"),
+            object_pairs_hook=_strict_pairs,
             parse_constant=lambda token: (_ for _ in ()).throw(
                 ValueError(f"non-finite JSON token {token}")))
         performance = CumulativePerformance.from_dict(value)
@@ -2760,11 +3168,7 @@ class CompositionLedger:
             correctness.bind_pair(pair)
             if not correctness.passed:
                 raise CompositionError("failed correctness cannot be measured")
-            if (comparison.operation_key != plan.operation_key
-                    or comparison.build_pair_sha256 != pair.pair_sha256
-                    or comparison.correctness_result_sha256 !=
-                       correctness.result_sha256):
-                raise CompositionError("incremental comparison binds other evidence")
+            comparison.bind(pair, correctness)
             if pending["comparison"] is not None:
                 if pending["comparison"] == comparison.to_dict():
                     return state
@@ -3135,12 +3539,8 @@ class CompositionLedger:
             correctness.bind_pair(pair)
             if not correctness.passed:
                 raise CompositionError("failed correctness remained pending")
-        if comparison is not None and (
-                comparison.operation_key != plan.operation_key
-                or comparison.build_pair_sha256 != pair.pair_sha256
-                or comparison.correctness_result_sha256 !=
-                   correctness.result_sha256):
-            raise CompositionError("pending comparison evidence changed")
+        if comparison is not None:
+            comparison.bind(pair, correctness)
         if performance is not None:
             performance.bind(plan, pair, correctness, comparison)
             reopened, file_sha = load_cumulative_performance(
@@ -3295,11 +3695,7 @@ class CompositionLedger:
         if comparison is not None:
             if correctness is None or pair is None:
                 raise CompositionError("terminal comparison lacks prerequisite evidence")
-            if (comparison.operation_key != plan.operation_key
-                    or comparison.build_pair_sha256 != pair.pair_sha256
-                    or comparison.correctness_result_sha256 !=
-                       correctness.result_sha256):
-                raise CompositionError("terminal comparison binding changed")
+            comparison.bind(pair, correctness)
         if performance is not None:
             if (comparison is None or correctness is None or pair is None
                     or performance_ref is None):
