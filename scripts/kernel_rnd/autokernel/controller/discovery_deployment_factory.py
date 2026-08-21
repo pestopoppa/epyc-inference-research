@@ -782,10 +782,10 @@ def _candidate_manifest_identity(
     })
 
 
-def _v25_carry_forward(
-        config: deployment.DiscoveryDeployment) -> Mapping[str, Any]:
+def _derive_v25_carry_forward(
+        evidence_rows: Mapping[str, Mapping[str, Any]],
+        erratum_path: Path) -> Mapping[str, Any]:
     """Derive successor replay authority plus the sealed v26 Q5 erratum."""
-    evidence_rows = config.hypothesis_evidence_manifest.value["evidence"]
     try:
         state_row = evidence_rows["ev-v25-terminal-state"]
         journal_row = evidence_rows["ev-v25-terminal-journal"]
@@ -913,8 +913,7 @@ def _v25_carry_forward(
     if len(patch_sha256) != 7 or len(cross_campaign_sha256) != 7:
         raise DeploymentFactoryError(
             "v25 source manifests do not derive seven distinct candidates")
-    erratum = controller._q5_lds0_attribution_erratum(
-        config.q5_lds0_attribution_erratum.path)
+    erratum = controller._q5_lds0_attribution_erratum(erratum_path)
     # Import the invalid v26 attempt into the replay set, then let the
     # controller exempt only the exact triple bound by the erratum.  This
     # preserves every prior replay prohibition without treating the bad
@@ -935,6 +934,23 @@ def _v25_carry_forward(
     }
     body["carry_forward_sha256"] = schemas.content_hash(body)
     return MappingProxyType(body)
+
+
+def _v25_carry_forward(
+        config: deployment.DiscoveryDeployment) -> Mapping[str, Any]:
+    """Re-derive and join the immutable carry-forward carrier exactly."""
+    derived = _derive_v25_carry_forward(
+        config.hypothesis_evidence_manifest.value["evidence"],
+        config.q5_lds0_attribution_erratum.path)
+    carrier = config.carry_forward.value
+    if (dict(carrier) != dict(derived)
+            or config.carry_forward.self_sha256 !=
+               derived["carry_forward_sha256"]
+            or config.carry_forward.semantic_sha256 !=
+               derived["carry_forward_sha256"]):
+        raise DeploymentFactoryError(
+            "immutable carry-forward carrier differs from derived authority")
+    return MappingProxyType(dict(carrier))
 
 
 def _validate_critic_auth_source() -> Mapping[str, Any]:
@@ -1147,6 +1163,16 @@ def initialize_static_deployment_bundle(root: Path) -> Path:
     evidence_manifest["manifest_sha256"] = schemas.content_hash(evidence_manifest)
     evidence_manifest_path, evidence_manifest_file_sha = _json_artifact(
         config_dir / "hypothesis-evidence-manifest.json", evidence_manifest)
+    carry_forward = _derive_v25_carry_forward(
+        evidence_manifest["evidence"], erratum_path)
+    carry_forward_path = config_dir / "discovery-carry-forward-v2.json"
+    carry_forward_bytes = (
+        json.dumps(dict(carry_forward), sort_keys=True,
+                   separators=(",", ":")) + "\n").encode()
+    _atomic_bytes(carry_forward_path, carry_forward_bytes)
+    carry_forward_path.chmod(0o400)
+    carry_forward_file_sha = hashlib.sha256(carry_forward_bytes).hexdigest()
+    carry_forward_self_sha = carry_forward["carry_forward_sha256"]
     model = _bound(_SITE_MODEL, "model")
     source_plan = _bound(
         Path(vendored_evidence["ev-source-plan-v1"]["path"]),
@@ -1320,7 +1346,12 @@ def initialize_static_deployment_bundle(root: Path) -> Path:
                                       "sha256": continuation_file_sha},
                                   "q5_lds0_attribution_erratum": {
                                       "path": str(erratum_path.resolve()),
-                                      "sha256": erratum_file_sha}},
+                                      "sha256": erratum_file_sha},
+                                  "carry_forward": {
+                                      "path": str(carry_forward_path.resolve()),
+                                      "sha256": carry_forward_file_sha,
+                                      "self_sha256": carry_forward_self_sha,
+                                      "semantic_sha256": carry_forward_self_sha}},
              "planner_context": {"path": str(context_path), "sha256": context_sha},
              "source_plan": {"source_builder_id": _STATIC_IDS["source_builder"],
                              "evidence_plan_id": _STATIC_IDS["evidence_plan"],
@@ -2714,6 +2745,12 @@ def _seal_graph_receipt(config: deployment.DiscoveryDeployment,
                     config.hypothesis_evidence_manifest.value["manifest_sha256"],
                 "contract_sha256": config.hypothesis_portfolio_contract.sha256},
             "carry_forward_sha256": carry_forward["carry_forward_sha256"],
+            "carry_forward": {
+                "schema": deployment.CARRY_FORWARD_SCHEMA,
+                "file_sha256": config.carry_forward.input.sha256,
+                "self_sha256": config.carry_forward.self_sha256,
+                "semantic_sha256": config.carry_forward.semantic_sha256,
+            },
             "preauthored_continuation": {
                 "schema": preauthored_continuation.SCHEMA,
                 "carrier_sha256": config.preauthored_continuation.value.sha256,

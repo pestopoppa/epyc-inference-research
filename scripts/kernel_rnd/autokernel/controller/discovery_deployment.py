@@ -17,6 +17,7 @@ import math
 import os
 from pathlib import Path
 import re
+import stat
 import subprocess
 from typing import Any, Mapping
 
@@ -184,6 +185,133 @@ class PreauthoredContinuationInput:
         if refreshed != self.value:
             raise DeploymentConfigError(
                 "preauthored continuation semantic identity changed")
+
+
+CARRY_FORWARD_SCHEMA = "epyc.autokernel.discovery_carry_forward.v2"
+
+
+@dataclass(frozen=True)
+class CarryForwardInput:
+    """Canonical predecessor authority read and revalidated through one fd."""
+
+    input: ImmutableInput
+    value: Mapping[str, Any]
+    self_sha256: str
+    semantic_sha256: str
+
+    def revalidate(self) -> None:
+        refreshed = _carry_forward({
+            "path": str(self.input.path),
+            "sha256": self.input.sha256,
+            "self_sha256": self.self_sha256,
+            "semantic_sha256": self.semantic_sha256,
+        })
+        if refreshed != self:
+            raise DeploymentConfigError(
+                "carry_forward immutable authority changed")
+
+
+def _carry_forward(value: object) -> CarryForwardInput:
+    raw = _exact(value, {"path", "sha256", "self_sha256", "semantic_sha256"},
+                 "carry_forward")
+    path = _absolute(raw["path"], "carry_forward.path")
+    file_sha256 = _digest_identifier(raw["sha256"], "carry_forward.sha256")
+    self_sha256 = _digest_identifier(
+        raw["self_sha256"], "carry_forward.self_sha256")
+    semantic_sha256 = _digest_identifier(
+        raw["semantic_sha256"], "carry_forward.semantic_sha256")
+    descriptor = -1
+    try:
+        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        before = os.fstat(descriptor)
+        if (not stat.S_ISREG(before.st_mode) or before.st_uid != os.geteuid()
+                or before.st_nlink != 1 or before.st_mode & 0o022):
+            raise DeploymentConfigError(
+                "carry_forward has unsafe file authority")
+        handle = os.fdopen(descriptor, "rb")
+        descriptor = -1
+        with handle:
+            payload = handle.read()
+            after = os.fstat(handle.fileno())
+        if ((before.st_dev, before.st_ino, before.st_size,
+             before.st_mtime_ns, before.st_ctime_ns, before.st_nlink)
+                != (after.st_dev, after.st_ino, after.st_size,
+                    after.st_mtime_ns, after.st_ctime_ns, after.st_nlink)):
+            raise DeploymentConfigError("carry_forward changed while read")
+    except OSError as exc:
+        raise DeploymentConfigError("carry_forward is unreadable") from exc
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+    if hashlib.sha256(payload).hexdigest() != file_sha256:
+        raise DeploymentConfigError("carry_forward file identity changed")
+
+    def strict_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for key, item in pairs:
+            if key in result:
+                raise ValueError("duplicate key")
+            result[key] = item
+        return result
+
+    try:
+        body = json.loads(
+            payload.decode("utf-8", "strict"),
+            object_pairs_hook=strict_object,
+            parse_constant=lambda token: (_ for _ in ()).throw(
+                ValueError(f"non-finite JSON token {token}")))
+    except (UnicodeDecodeError, ValueError, json.JSONDecodeError) as exc:
+        raise DeploymentConfigError(
+            "carry_forward is not strict JSON") from exc
+    keys = {
+        "schema", "predecessor_state_file_sha256",
+        "predecessor_journal_file_sha256",
+        "predecessor_state_semantic_sha256", "portfolio_outcomes",
+        "candidate_semantic_sha256", "candidate_patch_sha256",
+        "cross_campaign_candidate_sha256",
+        "attribution_expectation_erratum", "carry_forward_sha256",
+    }
+    expected_outcomes = {
+        "akh-v2-q5-type-specific-dequant": "nominated",
+        "akh-v2-q8-quantizer-new-mechanism": "retire",
+        "akh-v2-fa-gqa7-pair-tail": "bounded_authoring_skip",
+        "akh-v2-rms-direct-load-reduction": "bounded_authoring_skip",
+    }
+    calculated = schemas.content_hash({
+        key: item for key, item in body.items()
+        if key != "carry_forward_sha256"}) if isinstance(body, Mapping) else None
+    canonical = ((json.dumps(dict(body), sort_keys=True, separators=(",", ":"))
+                  + "\n").encode() if isinstance(body, Mapping) else b"")
+    if (not isinstance(body, Mapping) or set(body) != keys
+            or body.get("schema") != CARRY_FORWARD_SCHEMA
+            or body.get("portfolio_outcomes") != expected_outcomes
+            or any(not isinstance(body.get(key), str)
+                   or not SHA.fullmatch(body[key])
+                   for key in (
+                       "predecessor_state_file_sha256",
+                       "predecessor_journal_file_sha256",
+                       "predecessor_state_semantic_sha256"))
+            or any(not isinstance(body.get(key), list)
+                   or body[key] != sorted(set(body[key]))
+                   or any(not isinstance(item, str) or not SHA.fullmatch(item)
+                          for item in body[key])
+                   for key in (
+                       "candidate_semantic_sha256", "candidate_patch_sha256",
+                       "cross_campaign_candidate_sha256"))
+            or tuple(len(body[key]) for key in (
+                "candidate_semantic_sha256", "candidate_patch_sha256",
+                "cross_campaign_candidate_sha256")) != (13, 8, 8)
+            or not isinstance(body.get("attribution_expectation_erratum"),
+                              Mapping)
+            or body.get("carry_forward_sha256") != self_sha256
+            or calculated != self_sha256
+            or semantic_sha256 != self_sha256
+            or payload != canonical):
+        raise DeploymentConfigError(
+            "carry_forward semantic authority changed")
+    return CarryForwardInput(
+        ImmutableInput(path, file_sha256), dict(body),
+        self_sha256, semantic_sha256)
 
 
 def _portfolio(raw: ImmutableInput) -> HypothesisPortfolioInput:
@@ -415,6 +543,7 @@ class DiscoveryDeployment:
     hypothesis_evidence_manifest: HypothesisEvidenceManifest
     preauthored_continuation: PreauthoredContinuationInput
     q5_lds0_attribution_erratum: ImmutableInput
+    carry_forward: CarryForwardInput
     hypothesis_portfolio_contract: ImmutableInput
     planner_context: PlannerContext
     source_builder_id: str
@@ -441,6 +570,7 @@ class DiscoveryDeployment:
         self.preauthored_continuation.revalidate()
         self.q5_lds0_attribution_erratum.revalidate(
             "q5_lds0_attribution_erratum")
+        self.carry_forward.revalidate()
         self.hypothesis_portfolio_contract.revalidate("hypothesis_portfolio_contract")
         self.planner_context.revalidate()
 
@@ -615,7 +745,7 @@ def load_deployment_config(path: Path, *, sealed_bytes: bytes | None = None
         "model", "workload", "runtime_config", "admission_policy",
         "hypothesis_portfolio", "hypothesis_evidence_manifest",
         "hypothesis_portfolio_contract", "preauthored_continuation",
-        "q5_lds0_attribution_erratum"},
+        "q5_lds0_attribution_erratum", "carry_forward"},
         "immutable_inputs")
     source = _exact(top["source_plan"], {"source_builder_id", "evidence_plan_id",
                                            "runner_args_id", "experiment_template_registry_id", "experiment_template_registry_sha256",
@@ -640,6 +770,7 @@ def load_deployment_config(path: Path, *, sealed_bytes: bytes | None = None
     q5_erratum = _input(
         inputs["q5_lds0_attribution_erratum"],
         "q5_lds0_attribution_erratum")
+    carry_forward = _carry_forward(inputs["carry_forward"])
     try:
         continuation = PreauthoredContinuationInput(
             continuation_input,
@@ -663,6 +794,7 @@ def load_deployment_config(path: Path, *, sealed_bytes: bytes | None = None
                           ("hypothesis_portfolio_contract", portfolio_contract),
                           ("preauthored_continuation", continuation.input),
                           ("q5_lds0_attribution_erratum", q5_erratum),
+                          ("carry_forward", carry_forward.input),
                           ("planner_context", planner_context.input)):
         if any(_overlaps(input_.path, protected)
                for protected in (*roots.values(), production_path, instrument_path)):
@@ -686,6 +818,7 @@ def load_deployment_config(path: Path, *, sealed_bytes: bytes | None = None
         hypothesis_evidence_manifest=evidence_manifest,
         preauthored_continuation=continuation,
         q5_lds0_attribution_erratum=q5_erratum,
+        carry_forward=carry_forward,
         hypothesis_portfolio_contract=portfolio_contract,
         planner_context=planner_context,
         source_builder_id=_identifier(source["source_builder_id"], "source_plan.source_builder_id"),
@@ -727,5 +860,5 @@ def resolve_registry(config: DiscoveryDeployment, registry: Mapping[str, Mapping
 __all__ = ["SCHEMA", "PLANNER_CONTEXT_SCHEMA", "EVIDENCE_MANIFEST_SCHEMA",
            "DeploymentConfigError", "ImmutableInput", "PlannerContext",
            "HypothesisPortfolioInput", "HypothesisEvidenceManifest",
-           "PreauthoredContinuationInput", "DiscoveryDeployment",
+           "PreauthoredContinuationInput", "CarryForwardInput", "DiscoveryDeployment",
            "ResolvedDeployment", "load_deployment_config", "resolve_registry"]

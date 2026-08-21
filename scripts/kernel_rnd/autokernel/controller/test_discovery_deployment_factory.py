@@ -672,6 +672,13 @@ class DeploymentFactoryTests(unittest.TestCase):
         }
         historical_evidence = F._preauthored_historical_evidence(
             continuation, carry_forward_evidence)
+        carry_forward = mocked_v25_carry_forward()
+        carry_forward_path = root / "discovery-carry-forward-v2.json"
+        carry_forward_path.write_text(
+            json.dumps(carry_forward, sort_keys=True,
+                       separators=(",", ":")) + "\n", encoding="utf-8")
+        carry_forward_path.chmod(0o600)
+        carry_forward_input = immutable(carry_forward_path)
         config = SimpleNamespace(
             config_sha256="c" * 64, production_path=production.resolve(),
             production_branch=F.deployment.FROZEN_PRODUCTION_BRANCH,
@@ -714,6 +721,10 @@ class DeploymentFactoryTests(unittest.TestCase):
                 input=immutable(preauthored_continuation.DEFAULT_CARRIER)),
             q5_lds0_attribution_erratum=immutable(
                 erratum_path),
+            carry_forward=SimpleNamespace(
+                value=carry_forward, input=carry_forward_input,
+                self_sha256=carry_forward["carry_forward_sha256"],
+                semantic_sha256=carry_forward["carry_forward_sha256"]),
             hypothesis_evidence_manifest=SimpleNamespace(value=evidence_manifest),
             hypothesis_portfolio_contract=SimpleNamespace(
                 sha256=F._PORTFOLIO_CONTRACT_SHA256),
@@ -784,6 +795,13 @@ class DeploymentFactoryTests(unittest.TestCase):
                 loaded.q5_lds0_attribution_erratum.path,
                 (root / "config" /
                  "q5-lds0-attribution-erratum-v1.json").resolve())
+            self.assertEqual(
+                loaded.carry_forward.input.path,
+                (root / "config" /
+                 "discovery-carry-forward-v2.json").resolve())
+            self.assertEqual(
+                loaded.carry_forward.self_sha256,
+                loaded.carry_forward.semantic_sha256)
             ineligible = {
                 row["hypothesis_id"]: row for row in context["ineligible_hypotheses"]
             }
@@ -833,6 +851,30 @@ class DeploymentFactoryTests(unittest.TestCase):
             with self.assertRaisesRegex(
                     C.DiscoveryControllerError,
                     "erratum file identity changed"):
+                F._v25_carry_forward(config)
+
+    def test_carry_forward_vendored_carrier_refuses_coherent_substitution(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            config, _site, _docker, _ca = self.static_config(Path(temporary))
+            changed = dict(config.carry_forward.value)
+            changed["predecessor_state_semantic_sha256"] = "0" * 64
+            changed["carry_forward_sha256"] = F.schemas.content_hash({
+                key: value for key, value in changed.items()
+                if key != "carry_forward_sha256"})
+            carrier = config.carry_forward.input.path
+            carrier.write_text(
+                json.dumps(changed, sort_keys=True, separators=(",", ":"))
+                + "\n", encoding="utf-8")
+            changed_file = SimpleNamespace(
+                path=carrier,
+                sha256=hashlib.sha256(carrier.read_bytes()).hexdigest())
+            config.carry_forward = SimpleNamespace(
+                value=changed, input=changed_file,
+                self_sha256=changed["carry_forward_sha256"],
+                semantic_sha256=changed["carry_forward_sha256"])
+            with self.assertRaisesRegex(
+                    F.DeploymentFactoryError,
+                    "carrier differs from derived authority"):
                 F._v25_carry_forward(config)
 
     def test_v25_manifest_evidence_must_join_its_exact_controller_turn(self):
@@ -990,6 +1032,12 @@ class DeploymentFactoryTests(unittest.TestCase):
             self.assertIn("codex_container_actor", receipt["execution_modules"])
             self.assertEqual(receipt["schema"],
                              "epyc.autokernel.static_discovery_graph.v9")
+            self.assertEqual(receipt["carry_forward"], {
+                "schema": F.deployment.CARRY_FORWARD_SCHEMA,
+                "file_sha256": config.carry_forward.input.sha256,
+                "self_sha256": config.carry_forward.self_sha256,
+                "semantic_sha256": config.carry_forward.semantic_sha256,
+            })
             self.assertEqual(receipt["attribution_expectation_erratum"], {
                 "schema":
                     "epyc.autokernel.attribution_expectation_erratum_source.v1",

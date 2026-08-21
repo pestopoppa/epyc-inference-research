@@ -90,6 +90,37 @@ class DeploymentConfigTests(unittest.TestCase):
         erratum_path.chmod(0o600)
         inputs["q5_lds0_attribution_erratum"] = {
             "path": str(erratum_path), "sha256": digest(erratum_path)}
+        erratum = json.loads(erratum_path.read_text(encoding="utf-8"))
+        carry = {
+            "schema": D.CARRY_FORWARD_SCHEMA,
+            "predecessor_state_file_sha256": "1" * 64,
+            "predecessor_journal_file_sha256": "2" * 64,
+            "predecessor_state_semantic_sha256": "3" * 64,
+            "portfolio_outcomes": {
+                "akh-v2-q5-type-specific-dequant": "nominated",
+                "akh-v2-q8-quantizer-new-mechanism": "retire",
+                "akh-v2-fa-gqa7-pair-tail": "bounded_authoring_skip",
+                "akh-v2-rms-direct-load-reduction": "bounded_authoring_skip",
+            },
+            "candidate_semantic_sha256": [f"{value:064x}"
+                                           for value in range(1, 14)],
+            "candidate_patch_sha256": [f"{value:064x}"
+                                        for value in range(21, 29)],
+            "cross_campaign_candidate_sha256": [f"{value:064x}"
+                                                  for value in range(41, 49)],
+            "attribution_expectation_erratum": erratum,
+        }
+        carry["carry_forward_sha256"] = D.schemas.content_hash(carry)
+        carry_path = config_dir / "discovery-carry-forward-v2.json"
+        carry_path.write_text(
+            json.dumps(carry, sort_keys=True, separators=(",", ":")) + "\n",
+            encoding="utf-8")
+        carry_path.chmod(0o600)
+        inputs["carry_forward"] = {
+            "path": str(carry_path), "sha256": digest(carry_path),
+            "self_sha256": carry["carry_forward_sha256"],
+            "semantic_sha256": carry["carry_forward_sha256"],
+        }
         evidence = {}
         evidence_root = root / "portfolio-evidence"
         evidence_root.mkdir()
@@ -210,6 +241,31 @@ class DeploymentConfigTests(unittest.TestCase):
             self.assertEqual(
                 loaded.q5_lds0_attribution_erratum.sha256,
                 "22f23f769bd7e10e24d2c642846fa0b739c5ff03b457c56e374d941f01b60a98")
+            self.assertEqual(
+                loaded.carry_forward.self_sha256,
+                loaded.carry_forward.semantic_sha256)
+
+    def test_carry_forward_missing_tamper_and_metadata_substitution_refuse(self):
+        for mutation in ("missing", "tamper", "self", "semantic", "extra"):
+            with self.subTest(mutation=mutation), \
+                    tempfile.TemporaryDirectory() as temp:
+                path, raw = self.config(Path(temp))
+                row = raw["immutable_inputs"]["carry_forward"]
+                carrier = Path(row["path"])
+                if mutation == "missing":
+                    del raw["immutable_inputs"]["carry_forward"]
+                elif mutation == "tamper":
+                    carrier.write_bytes(carrier.read_bytes() + b" ")
+                elif mutation == "self":
+                    row["self_sha256"] = "0" * 64
+                elif mutation == "semantic":
+                    row["semantic_sha256"] = "0" * 64
+                else:
+                    row["extra"] = True
+                seal(raw)
+                path.write_text(json.dumps(raw), encoding="utf-8")
+                with self.assertRaises(D.DeploymentConfigError):
+                    self.load(path)
 
     def test_planner_context_requires_exact_template_symbol_authority(self):
         for replacement in (None, {}, {"test": {"ggml.cu": []}},

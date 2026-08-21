@@ -103,8 +103,20 @@ class Lease:
 
     def admit(self, candidate, *, operation_key):
         admitted = next(self.decisions)
-        return {"admitted": admitted, "mode": "allowed_discovery_noise",
-                "operation_key": operation_key}
+        common = {
+            "admitted": admitted,
+            "phase": "prebuild_probe",
+            "mode": "cold_serialized",
+            "device_id": "mi210_0",
+            "operation_key": operation_key,
+            "inference_window_lock": "/tmp/test-inference-window.lock",
+            "model_sha256": H,
+            "load_admission": {"decision_sha256": H},
+            "promotion_claim": False,
+        }
+        if admitted:
+            return common
+        return {**common, "reason": "device_busy", "detail": "test busy"}
 
     def resume(self, candidate, permit):
         return self.admit(candidate, operation_key=permit["operation_key"])
