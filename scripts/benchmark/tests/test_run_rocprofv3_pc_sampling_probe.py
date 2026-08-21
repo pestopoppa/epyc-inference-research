@@ -9,6 +9,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[3]
 RUNNER = ROOT / "scripts/benchmark/run_rocprofv3_pc_sampling_probe.py"
@@ -47,6 +48,7 @@ class PcSamplingProbeContractTests(unittest.TestCase):
             self.assertIn("--pc-sampling-beta-enabled",
                           plan["commands"]["profile"])
             self.assertIn("host_trap", plan["commands"]["profile"])
+            self.assertIn("KFD", plan["residency_claim"])
             self.assertEqual(list(Path(directory).iterdir()), [])
 
     def test_live_execution_requires_explicit_window_ack(self):
@@ -174,6 +176,76 @@ class PcSamplingProbeContractTests(unittest.TestCase):
         self.assertNotEqual(
             original["receipt_sha256"], changed["receipt_sha256"])
 
+    def test_emitted_rows_require_child_bound_kfd_and_nonzero_vram(self):
+        valid = SimpleNamespace(
+            observed_monotonic_ns=150, device_id="mi210_0",
+            kfd_pids=(77, 78), vram_bytes=4096, launcher_pid=77)
+        witness = MODULE.process_bound_residency_witness(
+            child_pid=77, started_monotonic_ns=100,
+            ended_monotonic_ns=200, samples=[valid])
+        self.assertIs(witness["overlapped"], True)
+        self.assertEqual(witness["overlap_sample_count"], 1)
+        self.assertEqual(witness["max_vram_bytes"], 4096)
+        analysis = MODULE.classify_host_trap_csv(csv_text())
+        self.assertEqual(
+            MODULE.gate_emitted_analysis(analysis, witness), analysis)
+
+    def test_aggregate_vram_without_process_overlap_is_inconclusive(self):
+        foreign = SimpleNamespace(
+            observed_monotonic_ns=150, device_id="mi210_0",
+            kfd_pids=(999,), vram_bytes=1 << 30, launcher_pid=None)
+        witness = MODULE.process_bound_residency_witness(
+            child_pid=77, started_monotonic_ns=100,
+            ended_monotonic_ns=200, samples=[foreign])
+        result = MODULE.gate_emitted_analysis(
+            MODULE.classify_host_trap_csv(csv_text()), witness)
+        self.assertIs(witness["overlapped"], False)
+        self.assertEqual(
+            result["classification"],
+            "inconclusive_missing_process_bound_residency")
+        self.assertEqual(
+            result["observed_classification"],
+            "host_trap_hotspot_only_no_stall_reason_fields")
+
+    def test_zero_vram_and_out_of_window_samples_are_inconclusive(self):
+        samples = [
+            SimpleNamespace(
+                observed_monotonic_ns=150, device_id="mi210_0",
+                kfd_pids=(77,), vram_bytes=0, launcher_pid=77),
+            SimpleNamespace(
+                observed_monotonic_ns=201, device_id="mi210_0",
+                kfd_pids=(77,), vram_bytes=4096, launcher_pid=77),
+        ]
+        witness = MODULE.process_bound_residency_witness(
+            child_pid=77, started_monotonic_ns=100,
+            ended_monotonic_ns=200, samples=samples)
+        self.assertIs(witness["overlapped"], False)
+
+    def test_cli_refusal_does_not_require_kernel_residency(self):
+        analysis = {
+            "classification": "pc_sampling_cli_unavailable_on_rocm_6_2",
+            "record_count": 0,
+        }
+        self.assertEqual(MODULE.gate_emitted_analysis(analysis, {}), analysis)
+
+    def test_hard_deadline_starts_before_preflight_and_reserves_finalization(self):
+        now = [0.0]
+        deadline = MODULE.ProbeDeadline(clock=lambda: now[0])
+        now[0] = 1741.0
+        with self.assertRaisesRegex(
+                MODULE.ProbeContractError, "finalization reserve"):
+            deadline.require_reserve(
+                MODULE.FINALIZATION_RESERVE_SECONDS,
+                "receipt finalization")
+        now[0] = 1800.0
+        with self.assertRaisesRegex(MODULE.ProbeContractError, "ceiling"):
+            deadline.check("device teardown")
+        args = MODULE.parser().parse_args([
+            "--output-dir", "/tmp/not-created", "--execute",
+            "--source-commit", "a" * 40])
+        with self.assertRaisesRegex(MODULE.ProbeContractError, "ceiling"):
+            MODULE.execute(args, deadline=deadline)
+
     def test_static_governance_and_exact_arch_refusal(self):
         runner = RUNNER.read_text(encoding="utf-8")
         source = PROBE.read_text(encoding="utf-8")
@@ -182,7 +254,8 @@ class PcSamplingProbeContractTests(unittest.TestCase):
         self.assertIn("assert_source_identity", runner)
         self.assertIn("MAX_TOTAL_SECONDS = 1800.0", runner)
         self.assertIn('authority": "diagnostic_only"', runner)
-        self.assertIn("makes no HIP-residency claim", runner)
+        self.assertIn("nonzero-VRAM overlap witness", runner)
+        self.assertIn("deadline.require_reserve", runner)
         self.assertIn("validate_receipt_self_hash(payload)", runner)
         self.assertNotIn("torch", runner.casefold())
         self.assertIn("expected exact gfx90a", source)

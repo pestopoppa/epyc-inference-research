@@ -114,9 +114,9 @@ substitute a neighboring CDNA generation when CDNA2 documentation is silent.
 It cannot execute without both `--execute` and
 `--i-have-exclusive-gpu-window`; live mode then acquires the governed MI210
 claim, records in-window device telemetry, binds a clean exact source commit,
-and enforces a 30-minute total ceiling. It does not bind both KFD and VRAM and
-therefore makes no HIP-residency claim. The companion HIP program refuses any
-part other than exact `gfx90a`.
+and enforces one 30-minute wall deadline from before source preflight through
+claim teardown, artifact inventory, hashing, and receipt sealing. The companion
+HIP program refuses any part other than exact `gfx90a`.
 
 The only decision-grade outcomes are:
 
@@ -126,6 +126,13 @@ The only decision-grade outcomes are:
 - emitted but empty stall fields:
   `host_trap_stall_reason_fields_unpopulated`;
 - populated stall data: `unexpected_stall_reason_input_review_required`.
+
+Every emitted-record outcome above additionally requires at least one sample
+during the profiler child's lifetime that binds the child or a descendant KFD
+PID and nonzero MI210 VRAM. Aggregate VRAM without that process relationship,
+zero VRAM, or a sample outside the child window makes the classification
+`inconclusive_missing_process_bound_residency`. Exact CLI-option refusal occurs
+before a kernel can run and therefore does not require a residency witness.
 
 The CSV parser accepts only one of two exact ordered schemas and refuses blank,
 under-wide, over-wide, duplicate-header, unknown-header, or malformed input.

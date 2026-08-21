@@ -21,7 +21,7 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Mapping, Sequence
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
@@ -33,6 +33,8 @@ PROFILER = PROFILER_PREFIX / "bin/rocprofv3"
 HIPCC = Path("/opt/rocm/bin/hipcc")
 PROBE_SOURCE = REPO_ROOT / "scripts/benchmark/rocprofv3_pc_sampling_probe.cpp"
 MAX_TOTAL_SECONDS = 1800.0
+FINALIZATION_RESERVE_SECONDS = 60.0
+PROFILE_SAMPLE_INTERVAL_SECONDS = 0.020
 SCHEMA = "epyc.rvp.rocprofv3_pc_sampling_probe.v1"
 HOST_TRAP_FIELDS = (
     "Sample_Timestamp", "Exec_Mask", "Dispatch_Id", "Instruction",
@@ -57,14 +59,47 @@ class ProbeContractError(RuntimeError):
     pass
 
 
+class ProbeDeadline:
+    """One wall-clock budget covering preflight, execution, and finalization."""
+
+    def __init__(self, *, clock: Any = time.monotonic) -> None:
+        self._clock = clock
+        self.started = float(clock())
+
+    def elapsed(self) -> float:
+        return float(self._clock()) - self.started
+
+    def check(self, stage: str) -> None:
+        elapsed = self.elapsed()
+        if not math.isfinite(elapsed) or elapsed < 0 or elapsed >= MAX_TOTAL_SECONDS:
+            raise ProbeContractError(
+                f"30-minute total probe ceiling exhausted during {stage}")
+
+    def timeout(self, requested: float, *, reserve: float = 0.0) -> float:
+        self.check("deadline calculation")
+        left = MAX_TOTAL_SECONDS - self.elapsed() - reserve
+        if left <= 0:
+            raise ProbeContractError(
+                "30-minute total probe ceiling lacks finalization reserve")
+        return min(requested, left)
+
+    def require_reserve(self, seconds: float, stage: str) -> None:
+        self.check(stage)
+        if MAX_TOTAL_SECONDS - self.elapsed() <= seconds:
+            raise ProbeContractError(
+                f"30-minute total probe ceiling lacks {stage} reserve")
+
+
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def sha256_file(path: Path) -> str:
+def sha256_file(path: Path, *, deadline: ProbeDeadline | None = None) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
         for block in iter(lambda: stream.read(1024 * 1024), b""):
+            if deadline is not None:
+                deadline.check(f"hashing {path.name}")
             digest.update(block)
     return digest.hexdigest()
 
@@ -105,14 +140,17 @@ def validate_receipt_self_hash(value: dict[str, Any]) -> None:
         raise ProbeContractError("receipt_sha256 does not match canonical receipt")
 
 
-def git_output(*args: str) -> str:
+def git_output(*args: str, deadline: ProbeDeadline | None = None) -> str:
+    timeout = (deadline.timeout(30.0, reserve=FINALIZATION_RESERVE_SECONDS)
+               if deadline is not None else None)
     result = subprocess.run(
         ("git", *args), cwd=REPO_ROOT, check=True, text=True,
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout)
     return result.stdout.strip()
 
 
-def assert_source_identity(expected_commit: str) -> str:
+def assert_source_identity(
+        expected_commit: str, *, deadline: ProbeDeadline | None = None) -> str:
     if not isinstance(expected_commit, str) or len(expected_commit) != 40:
         raise ProbeContractError("--source-commit must be an exact 40-hex commit")
     try:
@@ -120,11 +158,13 @@ def assert_source_identity(expected_commit: str) -> str:
     except ValueError as exc:
         raise ProbeContractError(
             "--source-commit must be an exact 40-hex commit") from exc
-    observed = git_output("rev-parse", "HEAD")
+    observed = git_output("rev-parse", "HEAD", deadline=deadline)
     if observed != expected_commit:
         raise ProbeContractError(
             f"source commit mismatch: expected {expected_commit}, observed {observed}")
-    dirty = git_output("status", "--porcelain=v1", "--untracked-files=all")
+    dirty = git_output(
+        "status", "--porcelain=v1", "--untracked-files=all",
+        deadline=deadline)
     if dirty:
         raise ProbeContractError("research source tree must be clean")
     return observed
@@ -180,7 +220,8 @@ def prepared_plan(output_dir: Path) -> dict[str, Any]:
         },
         "claim_rule": "exclusive mi210_0 device claim required",
         "residency_claim": (
-            "none; this probe does not bind both KFD and VRAM residency"),
+            "emitted-record conclusions require an in-window child-bound KFD "
+            "and nonzero-VRAM overlap witness; CLI refusal does not"),
         "interpretation_rule": (
             "classify only emitted records or an exact CLI refusal; documentation "
             "alone is not evidence of absence"),
@@ -251,17 +292,114 @@ def classify_host_trap_csv(text: str) -> dict[str, Any]:
     }
 
 
+def _sample_dict(sample: Any) -> dict[str, Any] | None:
+    try:
+        observed = sample.observed_monotonic_ns
+        device_id = sample.device_id
+        kfd_pids = tuple(sample.kfd_pids)
+        vram_bytes = sample.vram_bytes
+        launcher_pid = sample.launcher_pid
+    except (AttributeError, TypeError):
+        return None
+    if (isinstance(observed, bool) or not isinstance(observed, int)
+            or not isinstance(device_id, str) or not device_id
+            or not kfd_pids
+            or any(isinstance(pid, bool) or not isinstance(pid, int) or pid < 1
+                   for pid in kfd_pids)
+            or isinstance(vram_bytes, bool) or not isinstance(vram_bytes, int)
+            or vram_bytes < 0
+            or launcher_pid is not None and (
+                isinstance(launcher_pid, bool)
+                or not isinstance(launcher_pid, int) or launcher_pid < 1)):
+        return None
+    return {
+        "observed_monotonic_ns": observed, "device_id": device_id,
+        "kfd_pids": list(kfd_pids), "vram_bytes": vram_bytes,
+        "launcher_pid": launcher_pid,
+    }
+
+
+def process_bound_residency_witness(
+        *, child_pid: int, started_monotonic_ns: int,
+        ended_monotonic_ns: int, samples: Sequence[Any]) -> dict[str, Any]:
+    valid: list[dict[str, Any]] = []
+    for sample in (() if ended_monotonic_ns <= started_monotonic_ns else samples):
+        row = _sample_dict(sample)
+        if (row is not None
+                and started_monotonic_ns <= row["observed_monotonic_ns"] <=
+                    ended_monotonic_ns
+                and row["device_id"] == "mi210_0"
+                and row["vram_bytes"] > 0
+                and (child_pid in row["kfd_pids"]
+                     or row["launcher_pid"] == child_pid)):
+            valid.append(row)
+    return {
+        "overlapped": bool(valid), "child_pid": child_pid,
+        "execution_started_monotonic_ns": started_monotonic_ns,
+        "execution_ended_monotonic_ns": ended_monotonic_ns,
+        "overlap_sample_count": len(valid),
+        "kfd_pids": sorted({pid for row in valid for pid in row["kfd_pids"]}),
+        "max_vram_bytes": max(
+            (row["vram_bytes"] for row in valid), default=0),
+        "samples": valid,
+    }
+
+
+def gate_emitted_analysis(
+        analysis: dict[str, Any], witness: Mapping[str, Any]) -> dict[str, Any]:
+    emitted = {
+        "host_trap_hotspot_only_no_stall_reason_fields",
+        "host_trap_stall_reason_fields_unpopulated",
+        "unexpected_stall_reason_input_review_required",
+    }
+    if analysis.get("classification") not in emitted:
+        return analysis
+    if (witness.get("overlapped") is True
+            and isinstance(witness.get("overlap_sample_count"), int)
+            and witness["overlap_sample_count"] > 0
+            and isinstance(witness.get("max_vram_bytes"), int)
+            and witness["max_vram_bytes"] > 0):
+        return analysis
+    return {
+        **analysis,
+        "observed_classification": analysis["classification"],
+        "classification": "inconclusive_missing_process_bound_residency",
+    }
+
+
 def run_command(command: Sequence[str], *, env: dict[str, str] | None,
-                stdout: Path, stderr: Path, timeout_s: float) -> tuple[int, float]:
+                stdout: Path, stderr: Path, timeout_s: float,
+                deadline: ProbeDeadline,
+                residency_sampler: Any | None = None,
+                monotonic_ns: Any = time.monotonic_ns,
+                sample_interval_s: float = PROFILE_SAMPLE_INTERVAL_SECONDS,
+) -> tuple[int, float, dict[str, Any] | None]:
     if not math.isfinite(timeout_s) or timeout_s <= 0:
         raise ProbeContractError("command timeout must be positive and finite")
+    if not math.isfinite(sample_interval_s) or sample_interval_s <= 0:
+        raise ProbeContractError("sample interval must be positive and finite")
     started = time.monotonic()
+    started_ns = int(monotonic_ns())
+    samples: list[Any] = []
     with stdout.open("wb") as out, stderr.open("wb") as err:
         process = subprocess.Popen(
             tuple(command), env=env, stdin=subprocess.DEVNULL,
             stdout=out, stderr=err, start_new_session=True)
         try:
-            returncode = process.wait(timeout=timeout_s)
+            command_timeout = deadline.timeout(
+                timeout_s, reserve=FINALIZATION_RESERVE_SECONDS)
+            command_started = time.monotonic()
+            while process.poll() is None:
+                if residency_sampler is not None:
+                    samples.append(residency_sampler(int(process.pid)))
+                left = command_timeout - (time.monotonic() - command_started)
+                if left <= 0:
+                    raise subprocess.TimeoutExpired(tuple(command), command_timeout)
+                try:
+                    process.wait(timeout=min(sample_interval_s, left))
+                except subprocess.TimeoutExpired:
+                    continue
+            returncode = int(process.wait())
         except BaseException:
             if process.poll() is None:
                 os.killpg(process.pid, 15)
@@ -271,32 +409,41 @@ def run_command(command: Sequence[str], *, env: dict[str, str] | None,
                     os.killpg(process.pid, 9)
                     process.wait(timeout=10)
             raise
-    return returncode, time.monotonic() - started
+    ended_ns = int(monotonic_ns())
+    deadline.check("command completion")
+    witness = (process_bound_residency_witness(
+        child_pid=int(process.pid), started_monotonic_ns=started_ns,
+        ended_monotonic_ns=ended_ns, samples=samples)
+        if residency_sampler is not None else None)
+    return returncode, time.monotonic() - started, witness
 
 
-def remaining(started: float, requested: float) -> float:
-    left = MAX_TOTAL_SECONDS - (time.monotonic() - started)
-    if left <= 0:
-        raise ProbeContractError("30-minute total probe ceiling exhausted")
-    return min(requested, left)
-
-
-def inventory(root: Path) -> list[dict[str, Any]]:
+def inventory(
+        root: Path, *, deadline: ProbeDeadline | None = None,
+) -> list[dict[str, Any]]:
+    if deadline is not None:
+        deadline.check("artifact inventory")
     return [{
         "path": str(path.relative_to(root)), "bytes": path.stat().st_size,
-        "sha256": sha256_file(path),
+        "sha256": sha256_file(path, deadline=deadline),
     } for path in sorted(root.rglob("*"))
       if path.is_file() and path.name != "receipt.json"]
 
 
-def execute(args: argparse.Namespace) -> dict[str, Any]:
+def execute(
+        args: argparse.Namespace, *, deadline: ProbeDeadline | None = None,
+) -> dict[str, Any]:
+    deadline = ProbeDeadline() if deadline is None else deadline
+    deadline.check("argument preflight")
     if not args.i_have_exclusive_gpu_window:
         raise ProbeContractError(
             "--execute requires --i-have-exclusive-gpu-window")
     if args.profile_timeout_s > 900 or args.build_timeout_s > 300:
         raise ProbeContractError(
             "profile/build timeouts may not exceed 900/300 seconds")
-    source_commit = assert_source_identity(args.source_commit)
+    source_commit = assert_source_identity(
+        args.source_commit, deadline=deadline)
+    deadline.check("source preflight")
     if not PROFILER.is_file() or not HIPCC.is_file():
         raise ProbeContractError("pinned rocprofv3 or hipcc is unavailable")
 
@@ -305,6 +452,7 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
     from scripts.kernel_rnd.autokernel import storage
     from scripts.kernel_rnd.autokernel.execution import device_sampler
     from scripts.kernel_rnd.autokernel.resource import device_claim
+    from scripts.kernel_rnd.autokernel.controller import gpu_residency_sampler
 
     output_dir = Path(storage.assert_not_scratch(
         args.output_dir, what="RVP-C4-10 PC-sampling evidence directory"))
@@ -313,14 +461,16 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
     raw_dir.mkdir()
     binary = output_dir / "pc_sampling_probe"
     started_at = utc_now()
-    started = time.monotonic()
     claim = device_claim.acquire_device_claim(
         "mi210_0", purpose="RVP-C4-10 bounded rocprofv3 PC-sampling probe",
         campaign_id=args.campaign_id,
         journal=device_claim.ClaimJournal(args.claim_journal),
         holder_label="run_rocprofv3_pc_sampling_probe.py",
-        timeout_s=min(args.claim_timeout_s, 60.0),
+        timeout_s=deadline.timeout(
+            min(args.claim_timeout_s, 60.0),
+            reserve=FINALIZATION_RESERVE_SECONDS),
         max_hold_s=MAX_TOTAL_SECONDS)
+    deadline.check("device claim acquisition")
     opened = claim.receipt().to_dict()
     sampler = None
     sampling = None
@@ -328,28 +478,30 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
     teardown_errors: list[BaseException] = []
     failure: BaseException | None = None
     payload: dict[str, Any] = {}
+    profile_residency: dict[str, Any] | None = None
     try:
         sampler = device_sampler.RocmSmiSampler(
             device_index=0, interval_s=0.250).start()
         build = build_command(binary)
-        build_rc, build_s = run_command(
+        build_rc, build_s, _ = run_command(
             build, env=None, stdout=output_dir / "build.stdout.txt",
             stderr=output_dir / "build.stderr.txt",
-            timeout_s=remaining(started, args.build_timeout_s))
+            timeout_s=args.build_timeout_s, deadline=deadline)
         if build_rc != 0 or not binary.is_file():
             raise ProbeContractError(f"probe build failed with rc={build_rc}")
         listing = list_command()
-        list_rc, list_s = run_command(
+        list_rc, list_s, _ = run_command(
             listing, env=profiler_environment(binary),
             stdout=output_dir / "list.stdout.txt",
             stderr=output_dir / "list.stderr.txt",
-            timeout_s=remaining(started, 120.0))
+            timeout_s=120.0, deadline=deadline)
         profile = profile_command(binary, raw_dir)
-        profile_rc, profile_s = run_command(
+        profile_rc, profile_s, profile_residency = run_command(
             profile, env=profiler_environment(binary),
             stdout=output_dir / "profile.stdout.txt",
             stderr=output_dir / "profile.stderr.txt",
-            timeout_s=remaining(started, args.profile_timeout_s))
+            timeout_s=args.profile_timeout_s, deadline=deadline,
+            residency_sampler=gpu_residency_sampler.Mi210ResidencySampler())
         if profile_rc != 0:
             classification = classify_cli_failure(
                 (output_dir / "profile.stderr.txt").read_text(
@@ -369,23 +521,29 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
             else:
                 analysis = classify_host_trap_csv(candidates[0].read_text(
                     encoding="utf-8", errors="strict"))
+                analysis = gate_emitted_analysis(
+                    analysis, profile_residency or {})
                 analysis["csv"] = str(candidates[0].relative_to(output_dir))
-                analysis["csv_sha256"] = sha256_file(candidates[0])
+                analysis["csv_sha256"] = sha256_file(
+                    candidates[0], deadline=deadline)
         payload = {
             "schema": SCHEMA, "status": "observed",
             "authority": "diagnostic_only", "target": "gfx90a",
             "method": "host_trap", "campaign_id": args.campaign_id,
             "started_at": started_at, "ended_at": utc_now(),
-            "duration_s": time.monotonic() - started,
+            "duration_s": deadline.elapsed(),
             "source": {
                 "commit": source_commit,
                 "probe_path": str(PROBE_SOURCE.relative_to(REPO_ROOT)),
-                "probe_sha256": sha256_file(PROBE_SOURCE),
+                "probe_sha256": sha256_file(
+                    PROBE_SOURCE, deadline=deadline),
             },
             "toolchain": {
                 "rocprofv3": str(PROFILER),
-                "rocprofv3_sha256": sha256_file(PROFILER),
-                "hipcc": str(HIPCC), "hipcc_sha256": sha256_file(HIPCC),
+                "rocprofv3_sha256": sha256_file(
+                    PROFILER, deadline=deadline),
+                "hipcc": str(HIPCC), "hipcc_sha256": sha256_file(
+                    HIPCC, deadline=deadline),
             },
             "commands": {"build": build, "list": listing, "profile": profile},
             "returncodes": {"build": build_rc, "list": list_rc,
@@ -393,11 +551,12 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
             "timing_s": {"build": build_s, "list": list_s,
                          "profile": profile_s},
             "analysis": analysis,
+            "profile_residency_witness": profile_residency,
             "claim_boundary": (
                 "This result describes only the captured in-window run. It does "
                 "not infer absent fields from documentation or from a missed window. "
-                "Device sampling is telemetry only: this probe does not bind both "
-                "KFD and VRAM residency and makes no HIP-residency claim."),
+                "Any emitted-record conclusion requires a child-bound KFD plus "
+                "nonzero-VRAM overlap witness; exact CLI refusal does not."),
             "device_claim": {"opened": opened},
         }
     except BaseException as exc:
@@ -406,6 +565,10 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
         sampling, released_receipt, teardown_errors = stop_sampler_and_release(
             sampler=sampler, claim=claim)
         released = released_receipt.to_dict() if released_receipt else None
+        try:
+            deadline.check("device teardown")
+        except BaseException as exc:
+            teardown_errors = (*teardown_errors, exc)
     if teardown_errors and failure is None:
         failure = teardown_errors[0]
     if not payload:
@@ -414,7 +577,7 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
             "authority": "diagnostic_only", "target": "gfx90a",
             "method": "host_trap", "campaign_id": args.campaign_id,
             "started_at": started_at, "ended_at": utc_now(),
-            "duration_s": time.monotonic() - started,
+            "duration_s": deadline.elapsed(),
             "source": {"commit": source_commit},
             "failure": repr(failure), "device_claim": {"opened": opened},
         }
@@ -425,10 +588,15 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
     if failure is not None:
         payload["status"] = "failed"
         payload["failure"] = repr(failure)
-    payload["artifacts"] = inventory(output_dir)
+    deadline.require_reserve(
+        FINALIZATION_RESERVE_SECONDS, "receipt finalization")
+    payload["artifacts"] = inventory(output_dir, deadline=deadline)
+    deadline.check("artifact hashing")
     payload = seal_receipt(payload)
     validate_receipt_self_hash(payload)
+    deadline.check("receipt sealing")
     write_json_atomic(output_dir / "receipt.json", payload)
+    deadline.check("receipt fsync")
     if failure is not None:
         raise failure
     return payload
