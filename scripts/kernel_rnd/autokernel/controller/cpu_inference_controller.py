@@ -23,12 +23,14 @@ host ownership.
 from __future__ import annotations
 
 import argparse
+from contextlib import redirect_stderr
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import fcntl
 import hashlib
 import io
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -41,10 +43,13 @@ from .. import campaign, journal, storage
 
 SCHEMA = "epyc.autokernel.cpu_inference_controller_manifest.v1"
 CANDIDATE_SCHEMA = "epyc.autokernel.cpu_inference_candidate.v1"
-STATE_SCHEMA = "epyc.autokernel.cpu_inference_controller_state.v1"
-RECEIPT_SCHEMA = "epyc.autokernel.cpu_inference_controller_receipt.v1"
+STATE_SCHEMA = "epyc.autokernel.cpu_inference_controller_state.v2"
+RECEIPT_SCHEMA = "epyc.autokernel.cpu_inference_controller_receipt.v2"
 HASH = re.compile(r"^[0-9a-f]{64}$")
 ID = re.compile(r"^[a-z][a-z0-9._-]{0,127}$")
+CONTROLLER_ID = re.compile(r"^ak-[a-z0-9](?:[a-z0-9._-]{0,123}[a-z0-9])?$")
+CANDIDATE_ID = re.compile(r"^akc-[a-z0-9](?:[a-z0-9._-]{0,122}[a-z0-9])?$")
+HYPOTHESIS_ID = re.compile(r"^akh-[a-z0-9](?:[a-z0-9._-]{0,122}[a-z0-9])?$")
 
 _MODE_FLAGS = frozenset({
     "--execute", "--dry-run", "--i-hold-the-host", "--json",
@@ -173,6 +178,76 @@ def _read_regular(path: Path, label: str) -> tuple[bytes, os.stat_result]:
         os.close(fd)
 
 
+def _lexically_safe_absolute(path: Path, label: str) -> None:
+    raw = str(path)
+    if (not raw.startswith("/") or "\0" in raw or "//" in raw
+            or any(part in {"", ".", ".."} for part in path.parts[1:])
+            or os.path.normpath(raw) != raw):
+        raise CpuInferenceControllerError(
+            f"{label} must be a canonical absolute path without traversal")
+
+
+def _assert_no_symlink_ancestry(path: Path, label: str) -> None:
+    _lexically_safe_absolute(path, label)
+    current = Path("/")
+    for part in path.parts[1:]:
+        current /= part
+        try:
+            info = current.lstat()
+        except FileNotFoundError:
+            break
+        except OSError as exc:
+            raise CpuInferenceControllerError(
+                f"{label} ancestry cannot be attested") from exc
+        if stat.S_ISLNK(info.st_mode):
+            raise CpuInferenceControllerError(
+                f"{label} has symlink ancestry at {current}")
+
+
+def _contains_or_is_contained(left: Path, right: Path) -> bool:
+    left_s, right_s = str(left), str(right)
+    try:
+        common = os.path.commonpath((left_s, right_s))
+    except ValueError:
+        return False
+    return common in {left_s, right_s}
+
+
+def _validate_controller_path(path: Path, label: str, *, root: Path | None = None) -> None:
+    """Refuse controller-owned material in repositories or production trees."""
+    _assert_no_symlink_ancestry(path, label)
+    if ".git" in path.parts:
+        raise CpuInferenceControllerError(f"{label} may not be inside .git")
+    if root is not None:
+        _assert_no_symlink_ancestry(root, "controller output root")
+        try:
+            path.relative_to(root)
+        except ValueError as exc:
+            raise CpuInferenceControllerError(
+                f"{label} escapes the controller output root") from exc
+    # An output below a repository is mutable through that repository; an
+    # output above it could contain and overwrite the repository.  Check every
+    # existing ancestor for the former and the owned root itself for the latter.
+    for ancestor in (path, *path.parents):
+        git = ancestor / ".git"
+        if (git.exists() or git.is_symlink()) and _contains_or_is_contained(path, git):
+            raise CpuInferenceControllerError(
+                f"{label} is inside or contains Git metadata at {git}")
+    if root is None and path.is_dir():
+        for current, dirs, files in os.walk(path, topdown=True, followlinks=False):
+            dirs.sort()
+            files.sort()
+            if ".git" in dirs or ".git" in files:
+                raise CpuInferenceControllerError(
+                    f"{label} contains Git metadata below {current}")
+    for production in campaign.worktree.frozen_tree_paths():
+        frozen = Path(production)
+        _lexically_safe_absolute(frozen, "frozen production tree")
+        if _contains_or_is_contained(path, frozen):
+            raise CpuInferenceControllerError(
+                f"{label} is inside or contains frozen production tree {frozen}")
+
+
 def _hash_path(path: Path, kind: str) -> str:
     """Hash a stable file or complete directory closure without following links."""
     if kind == "file":
@@ -292,6 +367,63 @@ def _parse_args(args: tuple[str, ...]) -> dict[str, str]:
     if len(physical) != 1:
         raise CpuInferenceControllerError(
             "CPU campaign requires exactly one physical-envelope authority")
+    # The controller's allowlist is the authority over *which* knobs may be
+    # forwarded.  The campaign parser remains the authority over their types,
+    # choices, and argparse grammar.  Exercise it during validate-only so a
+    # malformed int cannot survive until the host-owning execution boundary.
+    try:
+        with redirect_stderr(io.StringIO()):
+            normalized = campaign.build_parser().parse_args(list(args))
+    except SystemExit as exc:
+        raise CpuInferenceControllerError(
+            "campaign arguments do not parse under the current campaign grammar") from exc
+    destinations = {
+        "--campaign-id": "campaign_id", "--candidate-id": "candidate_id",
+        "--candidate": "candidate_ref", "--backend": "backend",
+        "--blocks": "blocks", "--recipe": "recipe_id", "--model": "model",
+        "--reps": "reps", "--nominal-khz": "nominal_khz",
+        "--journal-root": "journal_root", "--hypothesis": "hypothesis",
+        "--proposal-manifest": "proposal_manifest",
+        "--least-commitment-capture-plan": "least_commitment_capture_plan",
+        "--matched-experiment-id": "matched_experiment_id",
+        "--source-patch-manifest": "source_patch_manifest",
+        "--source-prerequisite-package": "source_prerequisite_package",
+        "--fresh-source-prerequisite-plan": "fresh_source_prerequisite_plan",
+        "--calibration-bundle": "calibration_bundle",
+        "--physical-envelope": "physical_envelope",
+        "--ranked-units": "ranked_units",
+        "--hypothesis-store": "hypothesis_store",
+    }
+    if set(destinations) != _SINGLE_VALUE_FLAGS:
+        raise CpuInferenceControllerError(
+            "controller campaign normalization table is incomplete")
+    for flag, destination in destinations.items():
+        if flag not in parsed:
+            continue
+        actual = getattr(normalized, destination)
+        expected: Any = parsed[flag]
+        if flag in {"--blocks", "--reps", "--nominal-khz"}:
+            expected = int(expected)
+        if actual != expected:
+            raise CpuInferenceControllerError(
+                f"campaign argument {flag} did not normalize exactly")
+    for flag in _PATH_FLAGS | {"--journal-root"}:
+        if flag in parsed:
+            _lexically_safe_absolute(Path(parsed[flag]), f"campaign argument {flag}")
+    if "--blocks" in parsed and int(parsed["--blocks"]) < 2:
+        raise CpuInferenceControllerError("campaign --blocks must be at least 2")
+    if "--reps" in parsed and int(parsed["--reps"]) < 1:
+        raise CpuInferenceControllerError("campaign --reps must be positive")
+    if int(parsed["--nominal-khz"]) < 1:
+        raise CpuInferenceControllerError("campaign --nominal-khz must be positive")
+    if not CONTROLLER_ID.fullmatch(parsed["--campaign-id"]):
+        raise CpuInferenceControllerError("campaign id is outside the strict CPU namespace")
+    if not CANDIDATE_ID.fullmatch(parsed["--candidate-id"]):
+        raise CpuInferenceControllerError("candidate id is outside the strict CPU namespace")
+    if not HYPOTHESIS_ID.fullmatch(parsed["--hypothesis"]):
+        raise CpuInferenceControllerError("hypothesis id is outside the strict CPU namespace")
+    if not parsed["--candidate"].strip():
+        raise CpuInferenceControllerError("candidate ref must be non-empty")
     return parsed
 
 
@@ -311,9 +443,9 @@ class CpuCandidate:
             raise CpuInferenceControllerError("CPU candidate schema is not exact")
         if (value.get("schema") != CANDIDATE_SCHEMA
                 or not isinstance(value.get("candidate_id"), str)
-                or not value["candidate_id"].startswith("akc-")
+                or not CANDIDATE_ID.fullmatch(value["candidate_id"])
                 or not isinstance(value.get("hypothesis_id"), str)
-                or not value["hypothesis_id"].startswith("akh-")
+                or not HYPOTHESIS_ID.fullmatch(value["hypothesis_id"])
                 or not isinstance(value.get("campaign_args"), list)
                 or not isinstance(value.get("artifacts"), list)
                 or not isinstance(value.get("candidate_sha256"), str)
@@ -365,8 +497,19 @@ class CpuCandidate:
         if Path(parsed["--journal-root"]) != expected_journal:
             raise CpuInferenceControllerError(
                 "candidate journal root differs from controller-owned root")
+        _validate_controller_path(expected_journal, "campaign journal root",
+                                  root=output_root)
         for artifact in self.artifacts:
             artifact.revalidate()
+
+    def operation_key(self, controller_id: str) -> str:
+        return _sha({
+            "schema": "epyc.autokernel.cpu_inference_operation.v1",
+            "controller_id": controller_id,
+            "candidate_id": self.candidate_id,
+            "candidate_sha256": self.candidate_sha256,
+            "campaign_args": list(self.campaign_args),
+        })
 
 
 @dataclass(frozen=True)
@@ -387,8 +530,7 @@ class ControllerManifest:
             raise CpuInferenceControllerError("controller manifest schema is not exact")
         if (value.get("schema") != SCHEMA
                 or not isinstance(value.get("controller_id"), str)
-                or not value["controller_id"].startswith("ak-")
-                or not ID.fullmatch(value["controller_id"])
+                or not CONTROLLER_ID.fullmatch(value["controller_id"])
                 or not isinstance(value.get("output_root"), str)
                 or not Path(value["output_root"]).is_absolute()
                 or isinstance(value.get("max_scientific_attempts"), bool)
@@ -407,6 +549,7 @@ class ControllerManifest:
         if len({item.candidate_id for item in candidates}) != len(candidates):
             raise CpuInferenceControllerError("controller repeats candidate identity")
         output_root = Path(value["output_root"])
+        _validate_controller_path(output_root, "controller output root")
         for candidate in candidates:
             candidate.revalidate(output_root)
             if candidate.parsed_args["--campaign-id"] != value["controller_id"]:
@@ -417,6 +560,7 @@ class ControllerManifest:
                    value["manifest_sha256"])
 
     def revalidate(self) -> None:
+        _validate_controller_path(self.output_root, "controller output root")
         for candidate in self.candidates:
             candidate.revalidate(self.output_root)
 
@@ -454,15 +598,26 @@ class StateStore:
         self.book = journal.Journal(
             str(self.root / "controller-journal"),
             campaign_id=config.controller_id)
+        for path, label in (
+                (self.root, "controller output root"),
+                (self.path, "controller state path"),
+                (self.lock_path, "controller lock path"),
+                (Path(self.book.root), "controller journal path"),
+                (self.root / "receipts", "controller receipt directory")):
+            _validate_controller_path(path, label,
+                                      root=None if path == self.root else self.root)
 
     def lock(self):
         self.root.mkdir(parents=True, exist_ok=True, mode=0o700)
-        fd = os.open(self.lock_path, os.O_RDWR | os.O_CREAT | os.O_CLOEXEC, 0o600)
+        _validate_controller_path(self.lock_path, "controller lock path", root=self.root)
+        fd = os.open(self.lock_path, os.O_RDWR | os.O_CREAT | os.O_CLOEXEC
+                     | os.O_NOFOLLOW, 0o600)
         handle = os.fdopen(fd, "r+")
         fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
         return handle
 
     def load(self) -> dict[str, Any]:
+        _validate_controller_path(self.path, "controller state path", root=self.root)
         if not self.path.exists():
             return {
                 "schema": STATE_SCHEMA, "controller_id": self.config.controller_id,
@@ -489,6 +644,8 @@ class StateStore:
                 or isinstance(value.get("scientific_attempts"), bool)
                 or not isinstance(value.get("scientific_attempts"), int)
                 or value["scientific_attempts"] < 0
+                or value["scientific_attempts"] >
+                   self.config.max_scientific_attempts
                 or not isinstance(value.get("iterations"), list)
                 or len(value["iterations"]) != value["next_index"]
                 or not isinstance(value.get("complete"), bool)):
@@ -507,7 +664,7 @@ class StateStore:
             "candidate_id", "hypothesis_id", "candidate_sha256", "status",
             "classification", "scientific_budget_spent", "keep",
             "receipt_path", "receipt_file_sha256", "result_sha256",
-            "reason_code", "completed_at",
+            "operation_key", "effect_fraction", "reason_code", "completed_at",
         }
         scientific_classes = {
             "candidate": True, "screened_out": False,
@@ -519,6 +676,8 @@ class StateStore:
                     or row.get("candidate_id") != candidate.candidate_id
                     or row.get("hypothesis_id") != candidate.hypothesis_id
                     or row.get("candidate_sha256") != candidate.candidate_sha256
+                    or row.get("operation_key") != candidate.operation_key(
+                        self.config.controller_id)
                     or not isinstance(row.get("status"), str)
                     or not isinstance(row.get("completed_at"), str)
                     or not row["completed_at"]):
@@ -528,7 +687,11 @@ class StateStore:
             science = row.get("scientific_budget_spent")
             if classification in scientific_classes:
                 expected_keep = scientific_classes[classification]
+                expected_status = (campaign.STATE_DECIDED
+                                   if classification in {"candidate", "screened_out"}
+                                   else campaign.STATE_T0_FAILED)
                 if (science is not True or row.get("keep") is not expected_keep
+                        or row.get("status") != expected_status
                         or not isinstance(row.get("receipt_path"), str)
                         or Path(row["receipt_path"]) != self.root / "receipts" / (
                             f"{candidate.candidate_id}.json")
@@ -536,11 +699,18 @@ class StateStore:
                         or not HASH.fullmatch(row["receipt_file_sha256"])
                         or not isinstance(row.get("result_sha256"), str)
                         or not HASH.fullmatch(row["result_sha256"])
+                        or (classification in {"candidate", "screened_out"}
+                            and (not isinstance(row.get("effect_fraction"), (int, float))
+                                 or isinstance(row.get("effect_fraction"), bool)
+                                 or not math.isfinite(row["effect_fraction"])))
+                        or (classification == "correctness_falsified"
+                            and row.get("effect_fraction") is not None)
                         or row.get("reason_code") is not None):
                     raise CpuInferenceControllerError(
                         "scientific CPU iteration is not exactly evidence-bound")
             elif classification == "infrastructure_ambiguous":
-                if science is not False or row.get("keep") is not None:
+                if (science is not False or row.get("keep") is not None
+                        or row.get("effect_fraction") is not None):
                     raise CpuInferenceControllerError(
                         "infrastructure ambiguity cannot consume science or keep")
                 receipt_values = (row.get("receipt_path"),
@@ -562,25 +732,60 @@ class StateStore:
                         or not ID.fullmatch(row["reason_code"])):
                     raise CpuInferenceControllerError(
                         "infrastructure reason code is malformed")
+                if receipt_values[0] is None:
+                    exact_reasons = {
+                        "interrupted_without_terminal":
+                            "inflight_operation_has_no_sealed_terminal",
+                    }
+                    status = row.get("status")
+                    if status == "campaign_entrypoint_refused":
+                        reason = row.get("reason_code")
+                        if (not isinstance(reason, str)
+                                or not re.fullmatch(r"campaign_exit_[0-9]+_without_result",
+                                                    reason)):
+                            raise CpuInferenceControllerError(
+                                "entrypoint ambiguity lacks its exact exit reason")
+                    elif exact_reasons.get(status) != row.get("reason_code"):
+                        raise CpuInferenceControllerError(
+                            "receipt-free infrastructure ambiguity is not a typed terminal")
+                elif row.get("reason_code") is not None:
+                    raise CpuInferenceControllerError(
+                        "evidence-bound infrastructure ambiguity carries an extra reason")
             else:
                 raise CpuInferenceControllerError(
                     "controller iteration classification is unknown")
             if row.get("receipt_path") is not None:
                 receipt_path = Path(row["receipt_path"])
+                _validate_controller_path(
+                    receipt_path, "referenced CPU result receipt", root=self.root)
                 receipt_bytes = _read_regular(
                     receipt_path, "referenced CPU result receipt")[0]
                 if hashlib.sha256(receipt_bytes).hexdigest() != row[
                         "receipt_file_sha256"]:
                     raise CpuInferenceControllerError(
                         "referenced CPU result receipt file hash changed")
-                receipt_result = _load_receipt(receipt_path, candidate)
+                receipt_result = _load_receipt(
+                    receipt_path, candidate,
+                    candidate.operation_key(self.config.controller_id))
                 if _sha(receipt_result) != row["result_sha256"]:
                     raise CpuInferenceControllerError(
                         "referenced CPU campaign result identity changed")
+                # A self-hash proves only byte identity.  Re-run the complete
+                # typed disposition on every restart so release, production
+                # immutability, T0 and statistical semantics cannot be replaced
+                # together with a freshly recomputed receipt/state hash.
+                disposition = _result_disposition(
+                    candidate, receipt_result, self.root,
+                    candidate.operation_key(self.config.controller_id))
+                for key in ("status", "classification",
+                            "scientific_budget_spent", "keep", "effect_fraction"):
+                    if row.get(key) != disposition[key]:
+                        raise CpuInferenceControllerError(
+                            "controller iteration differs from rederived result disposition")
         inflight = value.get("inflight")
         if inflight is not None:
             keys = {"candidate_index", "candidate_id", "candidate_sha256",
-                    "started_at"}
+                    "operation_key", "started_at"}
             index = inflight.get("candidate_index") if isinstance(inflight, Mapping) else None
             if (not isinstance(inflight, Mapping) or set(inflight) != keys
                     or isinstance(index, bool) or not isinstance(index, int)
@@ -590,6 +795,9 @@ class StateStore:
                        self.config.candidates[index].candidate_id
                     or inflight.get("candidate_sha256") !=
                        self.config.candidates[index].candidate_sha256
+                    or inflight.get("operation_key") !=
+                       self.config.candidates[index].operation_key(
+                           self.config.controller_id)
                     or not isinstance(inflight.get("started_at"), str)
                     or not inflight["started_at"]):
                 raise CpuInferenceControllerError(
@@ -615,6 +823,7 @@ class StateStore:
         state["state_sha256"] = _sha({key: state[key] for key in self._KEYS
                                       if key != "state_sha256"})
         self.root.mkdir(parents=True, exist_ok=True, mode=0o700)
+        _validate_controller_path(self.path, "controller state path", root=self.root)
         temporary = self.path.with_name(f".{self.path.name}.{os.getpid()}.tmp")
         with temporary.open("xb") as handle:
             os.fchmod(handle.fileno(), 0o600)
@@ -637,8 +846,87 @@ class StateStore:
         })
 
 
+def _t0_gates(value: Any) -> tuple[tuple[str, str, tuple[str, ...]], ...]:
+    if (not isinstance(value, Mapping)
+            or set(value) != {"all_pass", "report_ref", "gates"}
+            or not isinstance(value.get("all_pass"), bool)
+            or not isinstance(value.get("report_ref"), str)
+            or not value["report_ref"].strip()
+            or not isinstance(value.get("gates"), list)
+            or not value["gates"]):
+        raise CpuInferenceControllerError("T0 result is not an exact nonempty gate set")
+    rows: list[tuple[str, str, tuple[str, ...]]] = []
+    for row in value["gates"]:
+        if (not isinstance(row, list) or len(row) != 3
+                or not isinstance(row[0], str) or not row[0].strip()
+                or row[1] not in {campaign.schemas.PASS, campaign.schemas.FAIL,
+                                  campaign.schemas.COULD_NOT_CHECK}
+                or not isinstance(row[2], list)
+                or any(not isinstance(reason, str) for reason in row[2])):
+            raise CpuInferenceControllerError("T0 gate row is malformed")
+        rows.append((row[0], row[1], tuple(row[2])))
+        if row[1] != campaign.schemas.PASS and not row[2]:
+            raise CpuInferenceControllerError(
+                "T0 FAIL/COULD_NOT_CHECK gate must carry a reason")
+    if len({row[0] for row in rows}) != len(rows):
+        raise CpuInferenceControllerError("T0 gate identities are repeated")
+    expected_all = all(row[1] == campaign.schemas.PASS for row in rows)
+    if value["all_pass"] is not expected_all:
+        raise CpuInferenceControllerError("T0 all_pass disagrees with typed gates")
+    return tuple(rows)
+
+
+def _exact_decision(spec: Mapping[str, Any], t0: Mapping[str, Any],
+                    pairs_value: Any, decision: Any) -> float:
+    blocks = spec.get("blocks_precommitted")
+    if (isinstance(blocks, bool) or not isinstance(blocks, int) or blocks < 2
+            or not isinstance(pairs_value, list) or len(pairs_value) != blocks
+            or not isinstance(decision, Mapping) or set(decision) != _DECISION_KEYS):
+        raise CpuInferenceControllerError(
+            "CPU pair count and decision do not match the precommitted blocks")
+    pairs: list[campaign.Pair] = []
+    for index, row in enumerate(pairs_value):
+        if (not isinstance(row, Mapping)
+                or set(row) != {"block_index", "anchor", "candidate", "order",
+                                    "delta", "relative"}
+                or row.get("block_index") != index):
+            raise CpuInferenceControllerError("CPU pair geometry is not exact")
+        for field in ("anchor", "candidate", "delta", "relative"):
+            value = row.get(field)
+            if (isinstance(value, bool) or not isinstance(value, (int, float))
+                    or not math.isfinite(value)):
+                raise CpuInferenceControllerError("CPU pair contains a non-finite value")
+        try:
+            pair = campaign.Pair(index, row["anchor"], row["candidate"], row["order"])
+        except (TypeError, ValueError) as exc:
+            raise CpuInferenceControllerError("CPU pair is invalid") from exc
+        expected_pair = pair.to_dict()
+        if any(not math.isclose(float(row[key]), float(expected_pair[key]),
+                                rel_tol=1e-12, abs_tol=1e-12)
+               for key in ("delta", "relative")):
+            raise CpuInferenceControllerError("CPU pair derived values disagree")
+        pairs.append(pair)
+    _t0_gates(t0)
+    try:
+        expected = campaign.decide(
+            pairs,
+            t0=campaign.T0Outcome(all_pass=True),
+            blocks_precommitted=blocks,
+            drift_bound=decision.get("drift_bound"),
+            contribution_floor=decision.get("contribution_floor"),
+            calibration_evidence_ref=decision.get("calibration_evidence_ref"),
+        ).to_dict()
+    except (TypeError, ValueError, campaign.AcceptRuleMisuse) as exc:
+        raise CpuInferenceControllerError("CPU decision cannot be rederived") from exc
+    if dict(decision) != expected:
+        raise CpuInferenceControllerError(
+            "CPU decision/effect differs from the exact paired observations")
+    return float(expected["median_relative"])
+
+
 def _result_disposition(candidate: CpuCandidate, result: Mapping[str, Any],
-                        output_root: Path) -> dict[str, Any]:
+                        output_root: Path, operation_key: str) -> dict[str, Any]:
+    _canonical(result)
     parsed = candidate.parsed_args
     spec = result.get("spec")
     if (set(result) != _CAMPAIGN_RESULT_KEYS
@@ -648,6 +936,7 @@ def _result_disposition(candidate: CpuCandidate, result: Mapping[str, Any],
             or result.get("candidate_id") != candidate.candidate_id
             or spec.get("campaign_id") != parsed["--campaign-id"]
             or spec.get("candidate_id") != candidate.candidate_id
+            or spec.get("candidate_ref") != parsed["--candidate"]
             or spec.get("backend") != campaign.BACKEND_CPU
             or spec.get("journal_root") != str(output_root / "campaign-journal")
             or result.get("executed") is not True
@@ -659,34 +948,65 @@ def _result_disposition(candidate: CpuCandidate, result: Mapping[str, Any],
             or not isinstance(result.get("pairs"), list)):
         raise CpuInferenceControllerError(
             "campaign result differs from the selected full CPU operation")
+    if not HASH.fullmatch(operation_key) or operation_key != candidate.operation_key(
+            parsed["--campaign-id"]):
+        raise CpuInferenceControllerError("campaign result operation binding changed")
+    blocks = spec.get("blocks_precommitted")
+    if (isinstance(blocks, bool) or not isinstance(blocks, int) or blocks < 2
+            or "--blocks" in parsed and blocks != int(parsed["--blocks"])
+            or "--reps" in parsed and spec.get("reps") != int(parsed["--reps"])
+            or spec.get("model") != parsed["--model"]):
+        raise CpuInferenceControllerError(
+            "campaign result spec differs from normalized candidate arguments")
     state = result.get("state")
     decision = result.get("decision")
     if state == campaign.STATE_DECIDED:
         t0 = result.get("t0")
         if (not isinstance(decision, Mapping) or set(decision) != _DECISION_KEYS
                 or not isinstance(decision.get("keep"), bool)
-                or not isinstance(t0, Mapping) or set(t0) != {
-                    "all_pass", "report_ref", "gates"}
-                or t0.get("all_pass") is not True
                 or not result["pairs"]
                 or result.get("journal_error") is not None
-                or result.get("ok") is not True):
+                or result.get("ok") is not True
+                or result.get("error") is not None):
             raise CpuInferenceControllerError("decided CPU result lacks an exact decision")
+        gates = _t0_gates(t0)
+        if any(row[1] != campaign.schemas.PASS for row in gates):
+            raise CpuInferenceControllerError("decided CPU result lacks all-PASS T0")
+        effect = _exact_decision(spec, t0, result["pairs"], decision)
         classification = "candidate" if decision["keep"] else "screened_out"
         science = True
         keep: bool | None = decision["keep"]
     elif state == campaign.STATE_T0_FAILED:
         t0 = result.get("t0")
-        if (decision is not None or not isinstance(t0, Mapping)
-                or set(t0) != {"all_pass", "report_ref", "gates"}
-                or t0.get("all_pass") is not False
+        if (decision is not None
                 or result["pairs"]
                 or result.get("journal_error") is not None
                 or result.get("ok") is not True):
             raise CpuInferenceControllerError("T0 failure unexpectedly carries speed decision")
-        classification = "correctness_falsified"
-        science = True
-        keep = False
+        gates = _t0_gates(t0)
+        outcomes = {row[1] for row in gates}
+        if campaign.schemas.COULD_NOT_CHECK in outcomes:
+            classification = "infrastructure_ambiguous"
+            science = False
+            keep = None
+        elif campaign.schemas.FAIL in outcomes:
+            if result.get("error") is not None:
+                raise CpuInferenceControllerError(
+                    "correctness-falsified T0 carries an unrelated error")
+            classification = "correctness_falsified"
+            science = True
+            keep = False
+        elif outcomes == {campaign.schemas.PASS} and isinstance(
+                result.get("error"), str) and result["error"].strip():
+            # T0 itself passed, but the governed evaluator admission to timing
+            # refused.  This is a typed infrastructure terminal, never a
+            # correctness falsification and never science.
+            classification = "infrastructure_ambiguous"
+            science = False
+            keep = None
+        else:
+            raise CpuInferenceControllerError("T0 failure has no typed failure")
+        effect = None
     elif state in {campaign.STATE_PREFLIGHT_REFUSED, campaign.STATE_ERROR}:
         if (decision is not None or result["pairs"]
                 or state == campaign.STATE_ERROR and result.get("ok") is not False):
@@ -695,42 +1015,57 @@ def _result_disposition(candidate: CpuCandidate, result: Mapping[str, Any],
         classification = "infrastructure_ambiguous"
         science = False
         keep = None
+        effect = None
     else:
         raise CpuInferenceControllerError(
             f"executing CPU campaign returned inadmissible state {state!r}")
     releases = result.get("releases")
-    if not isinstance(releases, list) or any(
-            not isinstance(row, Mapping) or row.get("released") is not True
-            for row in releases):
+    if (not isinstance(releases, list) or any(
+            not isinstance(row, Mapping)
+            or set(row) != {"name", "released", "detail"}
+            or not isinstance(row.get("name"), str) or not row["name"].strip()
+            or row.get("released") is not True
+            or not isinstance(row.get("detail"), str)
+            for row in releases)
+            or len({row["name"] for row in releases}) != len(releases)):
         raise CpuInferenceControllerError(
             "campaign result does not prove release of every acquired resource")
-    if science:
+    if state in {campaign.STATE_DECIDED, campaign.STATE_T0_FAILED}:
         names = {row.get("name") for row in releases}
         if not {"cpu_region_claim", "campaign_worktree"} <= names:
             raise CpuInferenceControllerError(
-                "scientific CPU disposition lacks claim/worktree release evidence")
-        unchanged = result.get("production_unchanged")
-        if not isinstance(unchanged, Mapping) or unchanged.get("outcome") != "PASS":
-            raise CpuInferenceControllerError(
-                "scientific CPU disposition lacks production immutability PASS")
+                "CPU post-claim terminal lacks claim/worktree release evidence")
+    unchanged = result.get("production_unchanged")
+    if (not isinstance(unchanged, Mapping)
+            or set(unchanged) != {"outcome", "reasons"}
+            or unchanged.get("outcome") != campaign.schemas.PASS
+            or not isinstance(unchanged.get("reasons"), list)
+            or any(not isinstance(reason, str) for reason in unchanged["reasons"])):
+        raise CpuInferenceControllerError(
+            "CPU disposition lacks production immutability PASS")
     return {
         "status": state, "classification": classification,
         "scientific_budget_spent": science, "keep": keep,
+        "effect_fraction": effect,
     }
 
 
 def _write_receipt(root: Path, candidate: CpuCandidate,
+                   operation_key: str,
                    result: Mapping[str, Any]) -> tuple[Path, str, str]:
     directory = root / "receipts"
+    _validate_controller_path(directory, "CPU receipt directory", root=root)
     directory.mkdir(parents=True, exist_ok=True, mode=0o700)
     result_sha = _sha(result)
     body = {
         "schema": RECEIPT_SCHEMA, "candidate_id": candidate.candidate_id,
         "candidate_sha256": candidate.candidate_sha256,
+        "operation_key": operation_key,
         "campaign_result_sha256": result_sha, "campaign_result": dict(result),
     }
     receipt = {**body, "receipt_sha256": _sha(body)}
     path = directory / f"{candidate.candidate_id}.json"
+    _validate_controller_path(path, "CPU result receipt", root=root)
     encoded = json.dumps(receipt, sort_keys=True, indent=2,
                          allow_nan=False).encode("utf-8") + b"\n"
     if path.exists():
@@ -748,18 +1083,20 @@ def _write_receipt(root: Path, candidate: CpuCandidate,
     return path, file_sha, result_sha
 
 
-def _load_receipt(path: Path, candidate: CpuCandidate) -> Mapping[str, Any]:
+def _load_receipt(path: Path, candidate: CpuCandidate,
+                  operation_key: str) -> Mapping[str, Any]:
     raw = _read_regular(path, "CPU result receipt")[0]
     value = _strict_json(raw, "CPU result receipt")
     if not isinstance(value, Mapping):
         raise CpuInferenceControllerError("CPU result receipt is not an object")
-    required = {"schema", "candidate_id", "candidate_sha256",
+    required = {"schema", "candidate_id", "candidate_sha256", "operation_key",
                 "campaign_result_sha256", "campaign_result", "receipt_sha256"}
     body = {key: value[key] for key in required - {"receipt_sha256"}} \
         if set(value) == required else None
     if (body is None or value.get("schema") != RECEIPT_SCHEMA
             or value.get("candidate_id") != candidate.candidate_id
             or value.get("candidate_sha256") != candidate.candidate_sha256
+            or value.get("operation_key") != operation_key
             or not isinstance(value.get("campaign_result"), Mapping)
             or value.get("campaign_result_sha256") != _sha(value["campaign_result"])
             or value.get("receipt_sha256") != _sha(body)):
@@ -768,7 +1105,8 @@ def _load_receipt(path: Path, candidate: CpuCandidate) -> Mapping[str, Any]:
 
 
 def _journal_terminal(config: ControllerManifest,
-                      candidate: CpuCandidate) -> Mapping[str, Any] | None:
+                      candidate: CpuCandidate,
+                      operation_key: str) -> Mapping[str, Any] | None:
     book = journal.Journal(
         str(config.output_root / "campaign-journal"),
         campaign_id=config.controller_id)
@@ -782,6 +1120,9 @@ def _journal_terminal(config: ControllerManifest,
                and entry.payload["result"].get("candidate_id") == candidate.candidate_id]
     if not entries:
         return None
+    for entry in entries:
+        _result_disposition(candidate, entry.payload["result"],
+                            config.output_root, operation_key)
     hashes = {_sha(entry.payload["result"]) for entry in entries}
     if len(hashes) != 1:
         raise CpuInferenceControllerError(
@@ -790,16 +1131,19 @@ def _journal_terminal(config: ControllerManifest,
 
 
 def _iteration(candidate: CpuCandidate, disposition: Mapping[str, Any], *,
+               operation_key: str,
                receipt_path: Path | None, receipt_file_sha256: str | None,
                result_sha256: str | None, reason_code: str | None = None) -> dict[str, Any]:
     return {
         "candidate_id": candidate.candidate_id,
         "hypothesis_id": candidate.hypothesis_id,
         "candidate_sha256": candidate.candidate_sha256,
+        "operation_key": operation_key,
         "status": disposition["status"],
         "classification": disposition["classification"],
         "scientific_budget_spent": disposition["scientific_budget_spent"],
         "keep": disposition["keep"],
+        "effect_fraction": disposition.get("effect_fraction"),
         "receipt_path": None if receipt_path is None else str(receipt_path),
         "receipt_file_sha256": receipt_file_sha256,
         "result_sha256": result_sha256,
@@ -852,20 +1196,26 @@ def run_controller(config: ControllerManifest, *,
                     or not 0 <= index < len(config.candidates)):
                 raise CpuInferenceControllerError("inflight candidate checkpoint is malformed")
             candidate = config.candidates[index]
+            operation_key = candidate.operation_key(config.controller_id)
             if (inflight.get("candidate_sha256") != candidate.candidate_sha256
-                    or inflight.get("candidate_id") != candidate.candidate_id):
+                    or inflight.get("candidate_id") != candidate.candidate_id
+                    or inflight.get("operation_key") != operation_key):
                 raise CpuInferenceControllerError("inflight candidate identity changed")
             receipt_path = config.output_root / "receipts" / f"{candidate.candidate_id}.json"
+            _validate_controller_path(
+                receipt_path, "CPU result receipt", root=config.output_root)
             if receipt_path.exists():
-                result = _load_receipt(receipt_path, candidate)
+                result = _load_receipt(receipt_path, candidate, operation_key)
             else:
-                result = _journal_terminal(config, candidate)
+                result = _journal_terminal(config, candidate, operation_key)
             if result is not None:
-                disposition = _result_disposition(candidate, result, config.output_root)
+                disposition = _result_disposition(
+                    candidate, result, config.output_root, operation_key)
                 path, file_sha, result_sha = _write_receipt(
-                    config.output_root, candidate, result)
+                    config.output_root, candidate, operation_key, result)
                 _append_iteration(state, _iteration(
-                    candidate, disposition, receipt_path=path,
+                    candidate, disposition, operation_key=operation_key,
+                    receipt_path=path,
                     receipt_file_sha256=file_sha, result_sha256=result_sha))
                 _finish_terminal(state, config)
                 store.save(state, "reconciled_terminal")
@@ -874,9 +1224,11 @@ def run_controller(config: ControllerManifest, *,
                     "status": "interrupted_without_terminal",
                     "classification": "infrastructure_ambiguous",
                     "scientific_budget_spent": False, "keep": None,
+                    "effect_fraction": None,
                 }
                 _append_iteration(state, _iteration(
-                    candidate, disposition, receipt_path=None,
+                    candidate, disposition, operation_key=operation_key,
+                    receipt_path=None,
                     receipt_file_sha256=None, result_sha256=None,
                     reason_code="inflight_operation_has_no_sealed_terminal"))
                 _finish_terminal(state, config)
@@ -888,9 +1240,11 @@ def run_controller(config: ControllerManifest, *,
             index = state["next_index"]
             candidate = config.candidates[index]
             candidate.revalidate(config.output_root)
+            operation_key = candidate.operation_key(config.controller_id)
             state["inflight"] = {
                 "candidate_index": index, "candidate_id": candidate.candidate_id,
                 "candidate_sha256": candidate.candidate_sha256,
+                "operation_key": operation_key,
                 "started_at": _now(),
             }
             store.save(state, "candidate_started")
@@ -902,15 +1256,18 @@ def run_controller(config: ControllerManifest, *,
                     "status": "campaign_entrypoint_refused",
                     "classification": "infrastructure_ambiguous",
                     "scientific_budget_spent": False, "keep": None,
+                    "effect_fraction": None,
                 }
                 _append_iteration(state, _iteration(
-                    candidate, disposition, receipt_path=None,
+                    candidate, disposition, operation_key=operation_key,
+                    receipt_path=None,
                     receipt_file_sha256=None, result_sha256=None,
                     reason_code=f"campaign_exit_{code}_without_result"))
                 _finish_terminal(state, config)
                 store.save(state, "entrypoint_refused")
                 continue
-            disposition = _result_disposition(candidate, result, config.output_root)
+            disposition = _result_disposition(
+                candidate, result, config.output_root, operation_key)
             if code not in {0, 1}:
                 raise CpuInferenceControllerError(
                     "campaign returned a result under an inadmissible exit status")
@@ -918,9 +1275,10 @@ def run_controller(config: ControllerManifest, *,
                 raise CpuInferenceControllerError(
                     "campaign exit status disagrees with result.ok")
             path, file_sha, result_sha = _write_receipt(
-                config.output_root, candidate, result)
+                config.output_root, candidate, operation_key, result)
             _append_iteration(state, _iteration(
-                candidate, disposition, receipt_path=path,
+                candidate, disposition, operation_key=operation_key,
+                receipt_path=path,
                 receipt_file_sha256=file_sha, result_sha256=result_sha))
             _finish_terminal(state, config)
             store.save(state, "candidate_terminal")

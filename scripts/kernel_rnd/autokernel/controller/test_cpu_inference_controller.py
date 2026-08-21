@@ -50,7 +50,7 @@ class CpuInferenceControllerTests(unittest.TestCase):
             path.write_bytes(f"{prefix}:{name}\n".encode())
             files[name] = path
         calibration = self.root / f"{prefix}-calibration"
-        calibration.mkdir()
+        calibration.mkdir(exist_ok=True)
         (calibration / "campaign_declaration.json").write_text(
             json.dumps({"candidate": prefix}))
         return files, calibration
@@ -99,41 +99,94 @@ class CpuInferenceControllerTests(unittest.TestCase):
         path.write_text(json.dumps(value, sort_keys=True, indent=2) + "\n")
         return path, value
 
+    def _write_manifest(self, path, value):
+        for candidate in value["candidates"]:
+            body = {key: item for key, item in candidate.items()
+                    if key != "candidate_sha256"}
+            candidate["candidate_sha256"] = C._sha(body)
+        body = {key: item for key, item in value.items()
+                if key != "manifest_sha256"}
+        value["manifest_sha256"] = C._sha(body)
+        path.write_text(json.dumps(value, sort_keys=True) + "\n")
+
+    def _replace_output(self, path, value, output):
+        old = value["output_root"]
+        value["output_root"] = str(output)
+        for candidate in value["candidates"]:
+            args = candidate["campaign_args"]
+            index = args.index("--journal-root") + 1
+            self.assertEqual(args[index], str(Path(old) / "campaign-journal"))
+            args[index] = str(output / "campaign-journal")
+        self._write_manifest(path, value)
+
+    def _rewrite_completed_receipt(self, config, mutate):
+        state_path = config.output_root / "state.json"
+        state = json.loads(state_path.read_text())
+        receipt_path = Path(state["iterations"][0]["receipt_path"])
+        receipt = json.loads(receipt_path.read_text())
+        mutate(receipt["campaign_result"])
+        receipt["campaign_result_sha256"] = C._sha(receipt["campaign_result"])
+        receipt["receipt_sha256"] = C._sha({
+            key: item for key, item in receipt.items()
+            if key != "receipt_sha256"})
+        encoded = json.dumps(receipt, sort_keys=True, indent=2).encode() + b"\n"
+        receipt_path.write_bytes(encoded)
+        state["iterations"][0]["receipt_file_sha256"] = C.hashlib.sha256(
+            encoded).hexdigest()
+        state["iterations"][0]["result_sha256"] = receipt[
+            "campaign_result_sha256"]
+        state["state_sha256"] = C._sha({
+            key: item for key, item in state.items() if key != "state_sha256"})
+        state_path.write_text(json.dumps(state, sort_keys=True) + "\n")
+
     def _result(self, candidate, state, *, keep=None, ok=True):
+        parsed = C._parse_args(tuple(candidate["campaign_args"]))
         scientific = state in {C.campaign.STATE_DECIDED,
                                C.campaign.STATE_T0_FAILED}
         releases = ([{"name": "cpu_region_claim", "released": True,
                       "detail": "released"},
                      {"name": "campaign_worktree", "released": True,
                       "detail": "released"}] if scientific else [])
+        t0 = None
+        decision = None
+        pairs = []
+        if state == C.campaign.STATE_DECIDED:
+            t0 = {"all_pass": True, "report_ref": "t0.json",
+                  "gates": [["output", C.campaign.schemas.PASS, []]]}
+            candidate_value = 11.0 if keep else 9.0
+            pair_objects = (
+                C.campaign.Pair(0, 10.0, candidate_value, "anchor_first"),
+                C.campaign.Pair(1, 10.0, candidate_value, "candidate_first"),
+            )
+            pairs = [row.to_dict() for row in pair_objects]
+            derived = C.campaign.decide(
+                pair_objects, t0=C.campaign.T0Outcome(all_pass=True),
+                blocks_precommitted=2, drift_bound=0.1,
+                contribution_floor=0.03,
+                calibration_evidence_ref="fixture")
+            self.assertIs(derived.keep, keep)
+            decision = derived.to_dict()
+        elif state == C.campaign.STATE_T0_FAILED:
+            t0 = {"all_pass": False, "report_ref": "t0.json",
+                  "gates": [["output", C.campaign.schemas.FAIL,
+                             ["output mismatch"]]]}
         return {
             "schema": "epyc.autokernel.campaign_result.v1",
             "campaign_id": self.controller_id,
             "candidate_id": candidate["candidate_id"],
             "spec": {"campaign_id": self.controller_id,
                      "candidate_id": candidate["candidate_id"],
+                     "candidate_ref": parsed["--candidate"],
                      "backend": "llama_cpu",
+                     "blocks_precommitted": 2,
+                     "reps": 5,
+                     "model": parsed["--model"],
                      "journal_root": str(self.output / "campaign-journal")},
             "state": state,
             "steps": [],
-            "t0": ({"all_pass": state == C.campaign.STATE_DECIDED,
-                    "report_ref": "t0.json", "gates": []}
-                   if scientific else None),
-            "decision": ({"keep": keep, "reason": "fixture",
-                          "blocks": 2, "min_delta": 1.0,
-                          "median_relative": 0.1,
-                          "contribution_floor": 0.03,
-                          "calibration_evidence_ref": "fixture",
-                          "drift_bound": 0.1, "anchor_drift": 0.0,
-                          "deltas": [1.0, 1.0],
-                          "relatives": [0.1, 0.1],
-                          "anchors": [10.0, 10.0],
-                          "orders": ["anchor_first", "candidate_first"]}
-                         if state == C.campaign.STATE_DECIDED else None),
-            "pairs": ([{"block_index": 0, "anchor": 10.0,
-                        "candidate": 11.0, "order": "anchor_first",
-                        "delta": 1.0, "relative": 0.1}]
-                      if state == C.campaign.STATE_DECIDED else []),
+            "t0": t0,
+            "decision": decision,
+            "pairs": pairs,
             "preflight": {"outcome": "PASS", "reasons": []},
             "releases": releases,
             "production_unchanged": {"outcome": "PASS", "reasons": []},
@@ -220,6 +273,8 @@ class CpuInferenceControllerTests(unittest.TestCase):
         state["inflight"] = {"candidate_index": 0,
                              "candidate_id": candidate.candidate_id,
                              "candidate_sha256": candidate.candidate_sha256,
+                             "operation_key": candidate.operation_key(
+                                 self.controller_id),
                              "started_at": C._now()}
         store.save(state, "candidate_started")
         result = self._result(raw["candidates"][0], C.campaign.STATE_DECIDED,
@@ -244,6 +299,8 @@ class CpuInferenceControllerTests(unittest.TestCase):
         state["inflight"] = {"candidate_index": 0,
                              "candidate_id": candidate.candidate_id,
                              "candidate_sha256": candidate.candidate_sha256,
+                             "operation_key": candidate.operation_key(
+                                 self.controller_id),
                              "started_at": C._now()}
         store.save(state, "candidate_started")
         recovered = C.run_controller(config, runner=NeverRunner())
@@ -343,6 +400,174 @@ class CpuInferenceControllerTests(unittest.TestCase):
         self.assertEqual(value["status"], "validated")
         self.assertFalse(value["inference_executed"])
         self.assertFalse((self.output / "state.json").exists())
+
+    def test_validate_only_parses_numeric_argv_and_strict_ids(self):
+        for mutation, message in (
+                (("--nominal-khz", "not-an-int"), "do not parse"),
+                (("--blocks", "1"), "at least 2"),
+                (("--reps", "0"), "positive"),
+                (("--candidate-id", "akc-BAD"), "identity is malformed"),
+                (("--hypothesis", "akh-bad/escape"), "identity is malformed")):
+            with self.subTest(mutation=mutation):
+                path, raw = self._manifest(count=1)
+                args = raw["candidates"][0]["campaign_args"]
+                flag, value = mutation
+                if flag not in args:
+                    args.extend((flag, value))
+                else:
+                    args[args.index(flag) + 1] = value
+                if flag == "--candidate-id":
+                    raw["candidates"][0]["candidate_id"] = value
+                if flag == "--hypothesis":
+                    raw["candidates"][0]["hypothesis_id"] = value
+                self._write_manifest(path, raw)
+                with self.assertRaisesRegex(C.CpuInferenceControllerError, message):
+                    C.ControllerManifest.load(path)
+
+    def test_controller_owned_paths_refuse_traversal_symlinks_git_and_production(self):
+        def refuses(output, message, frozen_paths=()):
+            path, raw = self._manifest(count=1)
+            self._replace_output(path, raw, output)
+            with mock.patch.object(C.campaign.worktree, "frozen_tree_paths",
+                                   return_value=frozen_paths), self.assertRaisesRegex(
+                                       C.CpuInferenceControllerError, message):
+                C.ControllerManifest.load(path)
+
+        refuses(Path(str(self.root / "owned") + "/../escape"),
+                "canonical absolute")
+        real = self.root / "real"
+        real.mkdir()
+        alias = self.root / "alias"
+        alias.symlink_to(real, target_is_directory=True)
+        refuses(alias / "owned", "symlink ancestry")
+
+        repository = self.root / "repository"
+        repository.mkdir()
+        (repository / ".git").mkdir()
+        refuses(repository, "Git metadata")
+
+        frozen = self.root / "frozen"
+        frozen.mkdir()
+        refuses(frozen / "evidence", "frozen production", (frozen,))
+        container = self.root / "frozen-container"
+        nested_frozen = container / "production"
+        nested_frozen.mkdir(parents=True)
+        refuses(container, "frozen production", (nested_frozen,))
+
+    def test_result_candidate_operation_t0_and_decision_mutations_refuse(self):
+        mutations = (
+            ("candidate_ref", lambda result: result["spec"].__setitem__(
+                "candidate_ref", "foreign"), "selected full CPU operation"),
+            ("empty_t0", lambda result: result["t0"].__setitem__("gates", []),
+             "nonempty gate"),
+            ("t0_false_pass", lambda result: result["t0"].__setitem__(
+                "all_pass", False), "all_pass disagrees"),
+            ("pair_delta", lambda result: result["pairs"][0].__setitem__(
+                "delta", 99.0), "derived values disagree"),
+            ("pair_index", lambda result: result["pairs"][1].__setitem__(
+                "block_index", 0), "geometry"),
+            ("decision_effect", lambda result: result["decision"].__setitem__(
+                "median_relative", 0.5), "decision/effect differs"),
+            ("decision_error", lambda result: result.__setitem__(
+                "error", "keep_or_revert: failed"), "exact decision"),
+        )
+        for name, mutate, message in mutations:
+            with self.subTest(name=name):
+                self.output = self.root / f"durable-{name}"
+                path, raw = self._manifest(count=1)
+                config = C.ControllerManifest.load(path)
+                result = self._result(raw["candidates"][0],
+                                      C.campaign.STATE_DECIDED, keep=True)
+                mutate(result)
+                with self.assertRaisesRegex(C.CpuInferenceControllerError, message):
+                    C.run_controller(config, runner=FakeRunner([(0, result)]))
+
+    def test_t0_could_not_check_is_infrastructure_and_fail_is_science(self):
+        path, raw = self._manifest(count=2)
+        config = C.ControllerManifest.load(path)
+        uncertain = self._result(raw["candidates"][0], C.campaign.STATE_T0_FAILED)
+        uncertain["t0"]["gates"][0][1] = C.campaign.schemas.COULD_NOT_CHECK
+        failed = self._result(raw["candidates"][1], C.campaign.STATE_T0_FAILED)
+        state = C.run_controller(config, runner=FakeRunner([(0, uncertain), (0, failed)]))
+        self.assertEqual(state["scientific_attempts"], 1)
+        self.assertEqual(
+            [row["classification"] for row in state["iterations"]],
+            ["infrastructure_ambiguous", "correctness_falsified"])
+
+    def test_completed_restart_rederives_release_and_production_immutability(self):
+        for name, mutate, message in (
+                ("release", lambda result: result["releases"][0].__setitem__(
+                    "released", False), "release of every acquired"),
+                ("immutability", lambda result: result["production_unchanged"].__setitem__(
+                    "outcome", C.campaign.schemas.COULD_NOT_CHECK),
+                 "production immutability PASS")):
+            with self.subTest(name=name):
+                self.output = self.root / f"durable-restart-{name}"
+                path, raw = self._manifest(count=1)
+                config = C.ControllerManifest.load(path)
+                C.run_controller(config, runner=FakeRunner([(
+                    0, self._result(raw["candidates"][0],
+                                    C.campaign.STATE_DECIDED, keep=True))]))
+                self._rewrite_completed_receipt(config, mutate)
+                with self.assertRaisesRegex(C.CpuInferenceControllerError, message):
+                    C.run_controller(config, runner=NeverRunner())
+
+    def test_recomputed_state_cannot_exceed_budget_or_swap_operation(self):
+        path, raw = self._manifest(count=1, budget=1)
+        config = C.ControllerManifest.load(path)
+        C.run_controller(config, runner=FakeRunner([(
+            0, self._result(raw["candidates"][0],
+                            C.campaign.STATE_DECIDED, keep=True))]))
+        state_path = self.output / "state.json"
+        state = json.loads(state_path.read_text())
+        state["scientific_attempts"] = 2
+        state["state_sha256"] = C._sha({
+            key: item for key, item in state.items() if key != "state_sha256"})
+        state_path.write_text(json.dumps(state))
+        with self.assertRaisesRegex(C.CpuInferenceControllerError, "counters"):
+            C.run_controller(config, runner=NeverRunner())
+
+        self.output = self.root / "durable-operation-swap"
+        path, raw = self._manifest(count=1, budget=1)
+        config = C.ControllerManifest.load(path)
+        C.run_controller(config, runner=FakeRunner([(
+            0, self._result(raw["candidates"][0],
+                            C.campaign.STATE_DECIDED, keep=True))]))
+        state_path = self.output / "state.json"
+        state = json.loads(state_path.read_text())
+        state["iterations"][0]["operation_key"] = "0" * 64
+        state["state_sha256"] = C._sha({
+            key: item for key, item in state.items() if key != "state_sha256"})
+        state_path.write_text(json.dumps(state))
+        with self.assertRaisesRegex(C.CpuInferenceControllerError,
+                                    "iteration identity"):
+            C.run_controller(config, runner=NeverRunner())
+
+    def test_journal_recovery_requires_current_candidate_operation_result(self):
+        path, raw = self._manifest(count=1)
+        config = C.ControllerManifest.load(path)
+        candidate = config.candidates[0]
+        store = C.StateStore(config)
+        state = store.load()
+        state["inflight"] = {
+            "candidate_index": 0, "candidate_id": candidate.candidate_id,
+            "candidate_sha256": candidate.candidate_sha256,
+            "operation_key": candidate.operation_key(self.controller_id),
+            "started_at": C._now(),
+        }
+        store.save(state, "candidate_started")
+        result = self._result(raw["candidates"][0],
+                              C.campaign.STATE_DECIDED, keep=True)
+        result["spec"]["candidate_ref"] = "foreign-operation"
+        book = C.journal.Journal(str(self.output / "campaign-journal"),
+                                 campaign_id=self.controller_id)
+        book.initialize()
+        book.append(C.journal.KIND_STOP_STATE, {
+            "state": "decided", "campaign_id": self.controller_id,
+            "result": result})
+        with self.assertRaisesRegex(C.CpuInferenceControllerError,
+                                    "selected full CPU operation"):
+            C.run_controller(config, runner=NeverRunner())
 
 
 if __name__ == "__main__":
