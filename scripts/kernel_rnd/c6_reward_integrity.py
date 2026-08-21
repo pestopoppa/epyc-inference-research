@@ -4,10 +4,12 @@ MI210 auto-kernel authoring loop (Phase 2 of the kernel-R&D loop).
 
 STANDALONE, importable, GPU-free. This module is the loop's owned
 differentiator — **C6 (reward integrity)** — plus its provenance layer. It is
-NOT wired into kernel_eval.sh / kernel_sweep.sh; the future Phase-2 loop imports
-it. The logic is ported from the proven design in the MIT-licensed reference
-repo github.com/MrSteeeve/OpenHyra (sandbox.py / provenance.py / stopping.py /
-eb.py), adapted to the SOL-ExecBench kernel task/scoring contract.
+not wired into the legacy kernel_eval.sh / kernel_sweep.sh paths. The
+typed AutoKernel discovery controller imports its sealed skill-admission writer
+after the complete governed screen. The logic is ported from the proven design
+in the MIT-licensed reference repo github.com/MrSteeeve/OpenHyra (sandbox.py /
+provenance.py / stopping.py / eb.py), adapted to the SOL-ExecBench kernel
+task/scoring contract.
 
 Discipline it enforces (why each exists):
   * Anti-TOCTOU snapshot — a candidate cannot mutate its artifact after the
@@ -810,7 +812,10 @@ def build_admission_claim_capture(
         "metric_direction": "higher_is_better",
         "value": valid["verification_speedup"],
         "unit": "ratio",
-        "category": "MEASUREMENT",
+        # ClaimTuple categories describe the measured arm's role, not the
+        # source class.  This is a candidate-vs-anchor admission measurement;
+        # ``MEASUREMENT`` is not in the canonical ClaimTuple vocabulary.
+        "category": "CANDIDATE",
         "protocol_id": ADMISSION_RECEIPT_SCHEMA,
         "reps": 1,
         "producer_sha256": producer_sha256,
@@ -930,7 +935,17 @@ class AdmissionReceiptStore:
             fcntl.flock(descriptor, fcntl.LOCK_EX)
             self._require_current_path(descriptor)
             # Never append success-looking evidence after a corrupt prefix.
-            self._decode_records(self._read_descriptor(descriptor))
+            records = self._decode_records(self._read_descriptor(descriptor))
+            exact = [row for row in records if row == envelope]
+            if exact:
+                if len(exact) != 1:
+                    raise AdmissionReceiptError(
+                        "admission store contains a duplicated exact attempt")
+                return envelope
+            if any(row["receipt"]["task_id"] == valid["task_id"]
+                   for row in records):
+                raise AdmissionReceiptError(
+                    "admission task already has different sealed evidence")
             if os.write(descriptor, encoded) != len(encoded):
                 raise AdmissionReceiptError(
                     "admission store append was incomplete")
