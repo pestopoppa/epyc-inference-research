@@ -31,6 +31,7 @@ OPERATION_SCHEMA = "epyc.autokernel.gpu_source_operation.v2"
 RESULT_SCHEMA = "epyc.autokernel.gpu_source_operation_result.v2"
 RESOURCE_WAIT_SCHEMA = "epyc.autokernel.gpu_source_resource_wait.v1"
 RESERVATION_RELEASE_SCHEMA = "epyc.autokernel.gpu_source_reservation_release.v1"
+RUNNER_PLAN_SCHEMA = "epyc.autokernel.gpu_source_runner_plan.v2"
 AUTHORITY = evidence.AUTHORITY
 SHA = re.compile(r"^[0-9a-f]{64}$")
 
@@ -87,7 +88,8 @@ def _candidate_manifest(value: object) -> str:
     return digest
 
 
-def _candidate_composition_plan_sha256(value: object) -> str | None:
+def _candidate_composition_plan(
+        value: object) -> cumulative_composition.CompositionPlan | None:
     plan = getattr(value, "composition_plan", None)
     if isinstance(value, Mapping):
         nested = value.get("candidate")
@@ -96,12 +98,17 @@ def _candidate_composition_plan_sha256(value: object) -> str | None:
     if plan is None:
         return None
     try:
-        typed = (plan if isinstance(plan, cumulative_composition.CompositionPlan)
-                 else cumulative_composition.CompositionPlan.from_dict(plan))
+        return (plan if isinstance(
+            plan, cumulative_composition.CompositionPlan)
+            else cumulative_composition.CompositionPlan.from_dict(plan))
     except (TypeError, cumulative_composition.CompositionError) as exc:
         raise GpuSourceAdapterError(
             "candidate cumulative plan is invalid") from exc
-    return typed.plan_sha256
+
+
+def _candidate_composition_plan_sha256(value: object) -> str | None:
+    plan = _candidate_composition_plan(value)
+    return None if plan is None else plan.plan_sha256
 
 
 def _read_json(path: Path, label: str) -> dict[str, Any]:
@@ -152,6 +159,29 @@ def _typed_screen(value: object) -> controller.SealedScreen:
         raise GpuSourceAdapterError("sealed screen payload is invalid") from exc
     _load_screen_receipt(result)
     return result
+
+
+def _bind_composition_screen(
+        result: controller.SealedScreen,
+        plan: cumulative_composition.CompositionPlan,
+) -> None:
+    pair = result.composition_build_pair
+    correctness = result.composition_correctness
+    comparison = result.composition_comparison
+    if pair is None or correctness is None or comparison is None:
+        raise GpuSourceAdapterError("cumulative result wrapper is partial")
+    try:
+        pair.bind_plan(plan)
+        correctness.bind_pair(pair)
+    except cumulative_composition.CompositionError as exc:
+        raise GpuSourceAdapterError(
+            "cumulative result wrapper changed typed evidence") from exc
+    if (comparison.operation_key != plan.operation_key
+            or comparison.build_pair_sha256 != pair.pair_sha256
+            or comparison.correctness_result_sha256 !=
+               correctness.result_sha256):
+        raise GpuSourceAdapterError(
+            "cumulative result wrapper changed typed evidence")
 
 
 def _intent_body(*, operation_key: str, candidate: object,
@@ -265,6 +295,66 @@ def _validated_stage_receipt(path: Path, schema: str,
             or body.get("manifest_sha256") != identity["manifest_sha256"]):
         raise GpuSourceAdapterError("partial proof receipt identity mismatch")
     return loaded
+
+
+def _validated_runner_plan(
+        path: Path, identity: Mapping[str, Any], *,
+        composition_plan: cumulative_composition.CompositionPlan | None = None,
+) -> tuple[Mapping[str, Any],
+           cumulative_composition.CumulativeBuildPair | None,
+           cumulative_composition.FullCorrectness | None]:
+    """Reopen the pre-run carrier that makes completed output recoverable.
+
+    The pair and full-correctness authority are sealed before either runner
+    process starts.  A controller crash after the second result therefore has
+    enough immutable evidence to reconstruct the exact typed composition
+    screen without rebuilding or spending another scientific attempt.
+    """
+    body = gpu_source_proofs.load_receipt(
+        path, schema=RUNNER_PLAN_SCHEMA)["body"]
+    base = {
+        "schema", "authority", "promotion_claim", "operation_key",
+        "composition_plan_sha256", "composition_build_pair",
+        "composition_correctness", "receipt_sha256",
+    }
+    single = {"output_dir"}
+    dual = {
+        "measurement_graphs_off_output_dir",
+        "target_runtime_graphs_on_output_dir",
+    }
+    keys = set(body)
+    if (keys not in (base | single, base | dual)
+            or body.get("authority") != AUTHORITY
+            or body.get("promotion_claim") is not False
+            or body.get("operation_key") != identity["operation_key"]
+            or body.get("composition_plan_sha256") !=
+               identity.get("composition_plan_sha256")):
+        raise GpuSourceAdapterError("GPU runner plan identity mismatch")
+    expected_plan_sha = identity.get("composition_plan_sha256")
+    pair_raw = body.get("composition_build_pair")
+    correctness_raw = body.get("composition_correctness")
+    if expected_plan_sha is None:
+        if pair_raw is not None or correctness_raw is not None:
+            raise GpuSourceAdapterError(
+                "ordinary runner acquired cumulative recovery authority")
+        return body, None, None
+    try:
+        pair = cumulative_composition.CumulativeBuildPair.from_dict(pair_raw)
+        correctness = cumulative_composition.FullCorrectness.from_dict(
+            correctness_raw)
+        correctness.bind_pair(pair)
+        if pair.plan_sha256 != expected_plan_sha or not correctness.passed:
+            raise cumulative_composition.CompositionError(
+                "runner recovery evidence differs from the composition plan")
+        if composition_plan is not None:
+            if composition_plan.plan_sha256 != expected_plan_sha:
+                raise cumulative_composition.CompositionError(
+                    "inflight composition plan identity changed")
+            pair.bind_plan(composition_plan)
+    except (TypeError, cumulative_composition.CompositionError) as exc:
+        raise GpuSourceAdapterError(
+            "GPU runner cumulative recovery evidence is invalid") from exc
+    return body, pair, correctness
 
 
 def _is_resumable_stage_root(
@@ -477,13 +567,8 @@ def _is_resumable_stage_root(
                 or runner_root.exists() or runner_root.is_symlink()):
             if not bundle.is_file() or bundle.is_symlink():
                 return False
-            plan = gpu_source_proofs.load_receipt(
-                runner_plan,
-                schema="epyc.autokernel.gpu_source_runner_plan.v1")["body"]
-            if (plan.get("authority") != AUTHORITY
-                    or plan.get("promotion_claim") is not False
-                    or plan.get("operation_key") != identity["operation_key"]):
-                return False
+            plan, _composition_pair, _composition_correctness = \
+                _validated_runner_plan(runner_plan, identity)
             off_raw = plan.get("measurement_graphs_off_output_dir")
             on_raw = plan.get("target_runtime_graphs_on_output_dir")
             if not isinstance(off_raw, str) or not isinstance(on_raw, str):
@@ -824,6 +909,11 @@ def _series_payload(series: Sequence[controller.SealedScreen], *,
 
 def _screen_dict(screen: controller.SealedScreen) -> dict[str, Any]:
     raw = asdict(screen)
+    for key in (
+            "composition_build_pair", "composition_correctness",
+            "composition_comparison"):
+        typed = getattr(screen, key)
+        raw[key] = None if typed is None else typed.to_dict()
     return _json_value(raw)
 
 
@@ -867,6 +957,178 @@ def _source_frame(operation_root: Path, result: controller.SealedScreen) -> tupl
         },
     })
     return series_key, bundle
+
+
+def _composition_runner_fields(
+        candidate: controller.PlannedCandidate,
+        build: controller.GpuSourceBuild, operation_root: Path,
+) -> dict[str, Any]:
+    plan = _candidate_composition_plan(candidate)
+    pair = build.composition_build_pair
+    if plan is None:
+        if pair is not None:
+            raise GpuSourceAdapterError(
+                "ordinary build acquired cumulative recovery authority")
+        return {
+            "composition_plan_sha256": None,
+            "composition_build_pair": None,
+            "composition_correctness": None,
+        }
+    if pair is None:
+        raise GpuSourceAdapterError(
+            "cumulative runner plan lacks its typed build pair")
+    try:
+        pair.bind_plan(plan)
+        bundle = evidence.load_gpu_source_evidence_bundle(
+            operation_root / "proof/proof-bundle.json")
+        if (bundle.anchor != pair.anchor.build_identity
+                or bundle.candidate != pair.candidate.build_identity):
+            raise cumulative_composition.CompositionError(
+                "proof bundle build identities differ from cumulative pair")
+        correctness_body = bundle.correctness.get("body")
+        if not isinstance(correctness_body, Mapping):
+            raise cumulative_composition.CompositionError(
+                "proof bundle lacks full-correctness body")
+        correctness = cumulative_composition.FullCorrectness.create(
+            pair, suite_id="current-gpu-source-full-correctness-v1",
+            cases_sha256=schemas.content_hash(correctness_body),
+            receipt_sha256=str(bundle.correctness["file_sha256"]),
+            passed=True)
+    except (KeyError, TypeError, cumulative_composition.CompositionError,
+            evidence.EvidenceProducerError, gpu_source_proofs.ProofError) as exc:
+        raise GpuSourceAdapterError(
+            "cumulative runner recovery evidence could not be sealed") from exc
+    return {
+        "composition_plan_sha256": plan.plan_sha256,
+        "composition_build_pair": pair.to_dict(),
+        "composition_correctness": correctness.to_dict(),
+    }
+
+
+def _recover_completed_composition_screen(
+        operation_root: Path, identity: Mapping[str, Any],
+        runner_plan: Mapping[str, Any],
+        plan: cumulative_composition.CompositionPlan,
+        pair: cumulative_composition.CumulativeBuildPair,
+        correctness: cumulative_composition.FullCorrectness,
+) -> controller.SealedScreen:
+    """Reconstruct the exact post-run typed screen from durable carriers."""
+    off_raw = runner_plan.get("measurement_graphs_off_output_dir")
+    on_raw = runner_plan.get("target_runtime_graphs_on_output_dir")
+    if not isinstance(off_raw, str) or not isinstance(on_raw, str):
+        raise GpuSourceAdapterError(
+            "cumulative runner plan lacks both graph-mode outputs")
+    runner_root = (operation_root / "runner").resolve()
+    off_dir, on_dir = Path(off_raw).resolve(), Path(on_raw).resolve()
+    if (off_dir == on_dir or not off_dir.is_relative_to(runner_root)
+            or not on_dir.is_relative_to(runner_root)):
+        raise GpuSourceAdapterError(
+            "cumulative runner output escaped its operation")
+    loaded_rows: list[tuple[Path, Mapping[str, Any]]] = []
+    for output, graph_mode in ((off_dir, "off"), (on_dir, "on")):
+        result_path = output / "result.json"
+        if result_path.is_symlink() or not result_path.is_file():
+            raise GpuSourceAdapterError(
+                "cumulative completed runner output is partial")
+        body = gpu_source_proofs.require_result_file(
+            result_path,
+            gpu_source_proofs.load_receipt(
+                result_path,
+                schema="epyc.autokernel.gpu_candidate_only_screen.v2"
+            )["body"],
+        )["body"]
+        if (body.get("runtime_graphs") != graph_mode
+                or body.get("promotion_claim") is not False
+                or body.get("non_promotable") is not True
+                or body.get("hip_residency_proved") is not True):
+            raise GpuSourceAdapterError(
+                "cumulative completed runner graph mode is invalid")
+        loaded_rows.append((result_path, body))
+    off_path, graphs_off = loaded_rows[0]
+    on_path, graphs_on = loaded_rows[1]
+    projection = autokernel_progression._gpu_screen(on_path, graphs_on)
+    if projection is None:
+        raise GpuSourceAdapterError(
+            "cumulative completed runner failed canonical progression")
+    bundle = evidence.load_gpu_source_evidence_bundle(
+        operation_root / "proof/proof-bundle.json")
+    if (bundle.anchor != pair.anchor.build_identity
+            or bundle.candidate != pair.candidate.build_identity):
+        raise GpuSourceAdapterError(
+            "cumulative proof/build identities changed on recovery")
+    correctness_body = bundle.correctness.get("body")
+    if not isinstance(correctness_body, Mapping):
+        raise GpuSourceAdapterError(
+            "cumulative proof lacks its correctness body")
+    reconstructed_correctness = cumulative_composition.FullCorrectness.create(
+        pair, suite_id="current-gpu-source-full-correctness-v1",
+        cases_sha256=schemas.content_hash(correctness_body),
+        receipt_sha256=str(bundle.correctness["file_sha256"]), passed=True)
+    if reconstructed_correctness != correctness:
+        raise GpuSourceAdapterError(
+            "cumulative correctness recovery carrier changed")
+    attribution = bundle.attribution.get("body")
+    comparison_raw = (attribution.get("exact_duration_comparison")
+                      if isinstance(attribution, Mapping) else None)
+    if not isinstance(comparison_raw, Mapping):
+        raise GpuSourceAdapterError(
+            "cumulative proof lacks exact-route comparison")
+    try:
+        exact_effect = float(comparison_raw["relative_improvement_fraction"])
+        off_effect = float(graphs_off["median_relative"])
+        on_effect = float(graphs_on["median_relative"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise GpuSourceAdapterError(
+            "cumulative completed runner effects are malformed") from exc
+    expected_routes = comparison_raw.get("candidate_routes")
+    if not isinstance(expected_routes, (list, tuple, Mapping)):
+        expected_routes = comparison_raw
+    incremental = cumulative_composition.IncrementalComparison.create(
+        pair, correctness,
+        exact_route_receipt_sha256=str(bundle.attribution["file_sha256"]),
+        expected_route_set_sha256=schemas.content_hash(expected_routes),
+        graphs_off_receipt_sha256=hashlib.sha256(
+            off_path.read_bytes()).hexdigest(),
+        graphs_on_receipt_sha256=hashlib.sha256(
+            on_path.read_bytes()).hexdigest(),
+        target_runtime_frame_sha256=schemas.content_hash({
+            "baseline_sha256": graphs_on["baseline_sha256"],
+            "runtime_graphs": graphs_on["runtime_graphs"],
+            "factor": graphs_on.get("factor"),
+            "technical_workload": graphs_on.get("technical_workload"),
+        }),
+        exact_route_effect_fraction=exact_effect,
+        graphs_off_effect_fraction=off_effect,
+        graphs_on_effect_fraction=on_effect)
+    recovered = controller.SealedScreen(
+        receipt_path=str(on_path),
+        result_sha256=str(graphs_on["result_sha256"]),
+        effect_fraction=on_effect,
+        classification=str(projection["stage"]),
+        baseline_sha256=str(graphs_on["baseline_sha256"]),
+        source_proof_sha256=str(bundle.correctness["file_sha256"]),
+        dispatch_proof_sha256=str(bundle.attribution["file_sha256"]),
+        exact_attribution_effect_fraction=exact_effect,
+        target_runtime_effect_fraction=on_effect,
+        stages=("materialized", "built", "correctness", "attribution",
+                "measurement_graphs_off_screen",
+                "target_runtime_graphs_on_screen"),
+        build_identity_sha256=schemas.content_hash(
+            vars(pair.candidate.build_identity)),
+        correctness_receipt_sha256=str(bundle.correctness["file_sha256"]),
+        attribution_receipt_sha256=str(bundle.attribution["file_sha256"]),
+        graphs_off_receipt_sha256=incremental.graphs_off_receipt_sha256,
+        graphs_on_receipt_sha256=incremental.graphs_on_receipt_sha256,
+        composition_build_pair=pair,
+        composition_correctness=correctness,
+        composition_comparison=incremental)
+    series_key, _ = _source_frame(operation_root, recovered)
+    recovered = _with_series_key(recovered, series_key)
+    _load_screen_receipt(recovered)
+    if plan.plan_sha256 != identity.get("composition_plan_sha256"):
+        raise GpuSourceAdapterError(
+            "recovered cumulative screen names another plan")
+    return recovered
 
 
 def _reservation_release_epochs(
@@ -1198,10 +1460,12 @@ class GovernedGpuSourceAdapter:
                     setattr(current, "_expected_outer_claim_id", expected_claim)
             runner_args["args"] = args
             plan_body = {
-                "schema": "epyc.autokernel.gpu_source_runner_plan.v1",
+                "schema": RUNNER_PLAN_SCHEMA,
                 "authority": AUTHORITY,
                 "promotion_claim": False,
                 "operation_key": operation_key,
+                **_composition_runner_fields(
+                    candidate_, build_, operation_root),
                 **({"measurement_graphs_off_output_dir": str(outputs[0]),
                     "target_runtime_graphs_on_output_dir": str(outputs[1])}
                    if target_args is not None else {"output_dir": str(outputs[0])}),
@@ -1210,7 +1474,7 @@ class GovernedGpuSourceAdapter:
             if plan_path.exists() or plan_path.is_symlink():
                 loaded = gpu_source_proofs.load_receipt(
                     plan_path,
-                    schema="epyc.autokernel.gpu_source_runner_plan.v1")["body"]
+                    schema=RUNNER_PLAN_SCHEMA)["body"]
                 if ({key: value for key, value in loaded.items()
                      if key != "receipt_sha256"} != plan_body):
                     raise GpuSourceAdapterError("runner plan identity changed")
@@ -1264,6 +1528,9 @@ class GovernedGpuSourceAdapter:
         try:
             result = delegate.screen(candidate, authorization, lease)
             _load_screen_receipt(result)
+            composition_plan = _candidate_composition_plan(candidate)
+            if composition_plan is not None:
+                _bind_composition_screen(result, composition_plan)
             series_key, _bundle = _source_frame(operation_root, result)
             result = _with_series_key(result, series_key)
             rows, effects = _series_payload(
@@ -1311,6 +1578,8 @@ class GovernedGpuSourceAdapter:
         try:
             self.runner_attest()
             identity = _inflight_identity(inflight)
+            composition_plan = _candidate_composition_plan(
+                inflight.get("candidate"))
             root = self._root(identity["operation_key"])
             if not root.exists() and not root.is_symlink():
                 return _recovery("safe_to_start")
@@ -1320,63 +1589,115 @@ class GovernedGpuSourceAdapter:
             _validate_intent(intent, identity)
             result_path = root / "screen-result.json"
             if not result_path.exists() and not result_path.is_symlink():
+                runner_plan_path = root / "runner-plan.json"
+                if (composition_plan is not None
+                        and runner_plan_path.is_file()
+                        and not runner_plan_path.is_symlink()):
+                    runner_plan, pair, correctness = _validated_runner_plan(
+                        runner_plan_path, identity,
+                        composition_plan=composition_plan)
+                    if pair is None or correctness is None:
+                        raise GpuSourceAdapterError(
+                            "cumulative runner plan lost typed recovery evidence")
+                    off_raw = runner_plan.get(
+                        "measurement_graphs_off_output_dir")
+                    on_raw = runner_plan.get(
+                        "target_runtime_graphs_on_output_dir")
+                    completed = all(
+                        isinstance(value, str)
+                        and (Path(value).resolve() / "result.json").is_file()
+                        and not (Path(value).resolve() / "result.json").is_symlink()
+                        for value in (off_raw, on_raw))
+                    if completed:
+                        result = _recover_completed_composition_screen(
+                            root, identity, runner_plan, composition_plan,
+                            pair, correctness)
+                        rows, effects = _series_payload(
+                            (result,), current=result)
+                        evidence._seal(result_path, {
+                            "schema": RESULT_SCHEMA,
+                            "authority": AUTHORITY,
+                            "promotion_claim": False,
+                            "operation_key": identity["operation_key"],
+                            "manifest_sha256": identity["manifest_sha256"],
+                            "composition_plan_sha256":
+                                identity["composition_plan_sha256"],
+                            "screen": _screen_dict(result),
+                            "receipt_series": rows,
+                            "effects": effects,
+                        })
+                elif (composition_plan is None
+                      and runner_plan_path.is_file()
+                      and not runner_plan_path.is_symlink()):
+                    runner_plan, pair, correctness = _validated_runner_plan(
+                        runner_plan_path, identity)
+                    if pair is not None or correctness is not None:
+                        raise GpuSourceAdapterError(
+                            "ordinary runner plan gained cumulative evidence")
+                    output_raw = runner_plan.get("output_dir")
+                    if isinstance(output_raw, str):
+                        output = Path(output_raw).resolve()
+                        if not output.is_relative_to(
+                                (root / "runner").resolve()):
+                            raise GpuSourceAdapterError(
+                                "GPU runner plan escaped operation")
+                        durable_path = output / "result.json"
+                        if durable_path.is_file() and not durable_path.is_symlink():
+                            loaded = gpu_source_proofs.require_result_file(
+                                durable_path,
+                                gpu_source_proofs.load_receipt(
+                                    durable_path,
+                                    schema=("epyc.autokernel."
+                                            "gpu_candidate_only_screen.v2"))[
+                                                "body"])["body"]
+                            projection = autokernel_progression._gpu_screen(
+                                durable_path, loaded)
+                            if (projection is None
+                                    or loaded.get("hip_residency_proved") is not True):
+                                raise GpuSourceAdapterError(
+                                    "durable GPU result failed canonical validation")
+                            placeholder = controller.SealedScreen(
+                                receipt_path=str(durable_path),
+                                result_sha256=str(loaded["result_sha256"]),
+                                effect_fraction=float(
+                                    loaded["median_relative"]),
+                                classification=str(projection["stage"]),
+                                baseline_sha256=str(
+                                    loaded["baseline_sha256"]),
+                                source_proof_sha256="0" * 64,
+                                dispatch_proof_sha256="0" * 64)
+                            series_key, bundle = _source_frame(
+                                root, placeholder)
+                            result = _with_series_key(
+                                replace(
+                                    placeholder,
+                                    source_proof_sha256=str(
+                                        bundle.correctness["file_sha256"]),
+                                    dispatch_proof_sha256=str(
+                                        bundle.attribution["file_sha256"])),
+                                series_key)
+                            rows, effects = _series_payload(
+                                (result,), current=result)
+                            evidence._seal(result_path, {
+                                "schema": RESULT_SCHEMA,
+                                "authority": AUTHORITY,
+                                "promotion_claim": False,
+                                "operation_key": identity["operation_key"],
+                                "manifest_sha256": identity["manifest_sha256"],
+                                "composition_plan_sha256": None,
+                                "screen": _screen_dict(result),
+                                "receipt_series": rows,
+                                "effects": effects,
+                            })
                 if _is_resumable_wait_root(root, identity):
                     return _recovery("safe_to_start")
-                if _is_resumable_stage_root(
+                if (not result_path.exists()
+                        and _is_resumable_stage_root(
                         root, identity,
-                        _mapping(inflight.get("lease"), "inflight lease")):
+                        _mapping(inflight.get("lease"), "inflight lease"))):
                     return _recovery("safe_to_start")
-                plan = _read_json(root / "runner-plan.json", "GPU runner plan")
-                if (plan.get("operation_key") != identity["operation_key"]
-                        or plan.get("authority") != AUTHORITY
-                        or plan.get("promotion_claim") is not False):
-                    raise GpuSourceAdapterError("GPU runner plan identity mismatch")
-                output = Path(str(plan.get("output_dir", ""))).resolve()
-                try:
-                    output.relative_to((root / "runner").resolve())
-                except ValueError as exc:
-                    raise GpuSourceAdapterError("GPU runner plan escaped operation") from exc
-                durable_path = output / "result.json"
-                if not durable_path.is_file() or durable_path.is_symlink():
+                if not result_path.exists():
                     return _recovery("ambiguous")
-                loaded = gpu_source_proofs.require_result_file(
-                    durable_path,
-                    gpu_source_proofs.load_receipt(
-                        durable_path,
-                        schema="epyc.autokernel.gpu_candidate_only_screen.v2")["body"])["body"]
-                projection = autokernel_progression._gpu_screen(durable_path, loaded)
-                if projection is None or loaded.get("hip_residency_proved") is not True:
-                    raise GpuSourceAdapterError("durable GPU result failed canonical validation")
-                _series_key, bundle = _source_frame(root, controller.SealedScreen(
-                    receipt_path=str(durable_path),
-                    result_sha256=str(loaded["result_sha256"]),
-                    effect_fraction=float(loaded["median_relative"]),
-                    classification=str(projection["stage"]),
-                    baseline_sha256=str(loaded["baseline_sha256"]),
-                    source_proof_sha256="0" * 64,
-                    dispatch_proof_sha256="0" * 64))
-                result = controller.SealedScreen(
-                    receipt_path=str(durable_path),
-                    result_sha256=str(loaded["result_sha256"]),
-                    effect_fraction=float(loaded["median_relative"]),
-                    classification=str(projection["stage"]),
-                    baseline_sha256=str(loaded["baseline_sha256"]),
-                    source_proof_sha256=str(bundle.correctness["file_sha256"]),
-                    dispatch_proof_sha256=str(bundle.attribution["file_sha256"]))
-                result = _with_series_key(result, _series_key)
-                rows, effects = _series_payload((result,), current=result)
-                evidence._seal(result_path, {
-                    "schema": RESULT_SCHEMA,
-                    "authority": AUTHORITY,
-                    "promotion_claim": False,
-                    "operation_key": identity["operation_key"],
-                    "manifest_sha256": identity["manifest_sha256"],
-                    "composition_plan_sha256":
-                        identity["composition_plan_sha256"],
-                    "screen": _screen_dict(result),
-                    "receipt_series": rows,
-                    "effects": effects,
-                })
             raw = _read_json(result_path, "operation result")
             if self.reservation_manager is not None:
                 if not _reservation_release_epochs(
@@ -1412,12 +1733,15 @@ class GovernedGpuSourceAdapter:
             result = _typed_screen(raw.get("screen"))
             if screens[-1] != result:
                 raise GpuSourceAdapterError("receipt series does not end at sealed result")
+            if composition_plan is not None:
+                _bind_composition_screen(result, composition_plan)
             # Re-open the producer bundle and all nested receipts on recovery.
             evidence.load_gpu_source_evidence_bundle(root / "proof/proof-bundle.json")
             return _recovery("sealed_result", result)
         except (GpuSourceAdapterError, evidence.EvidenceProducerError,
-                gpu_source_proofs.ProofError, OSError, TypeError, ValueError,
-                KeyError):
+                gpu_source_proofs.ProofError,
+                cumulative_composition.CompositionError,
+                OSError, TypeError, ValueError, KeyError):
             return _recovery("ambiguous")
 
     def receipt_series(self, operation_key: str) -> tuple[controller.SealedScreen, ...]:
