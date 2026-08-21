@@ -612,18 +612,36 @@ def _seal_timed_output_infrastructure_ambiguity(
 
 
 def _directory_namespace_identity(path: Path, label: str) -> dict[str, Any]:
+    flags = os.O_RDONLY | os.O_CLOEXEC
+    if hasattr(os, "O_DIRECTORY"):
+        flags |= os.O_DIRECTORY
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
     try:
-        info = path.lstat()
+        fd = os.open(path, flags)
     except OSError as exc:
         raise RuntimeError(f"{label} is unavailable") from exc
-    if (path.is_symlink() or not stat.S_ISDIR(info.st_mode)
-            or info.st_uid != os.getuid()
-            or stat.S_IMODE(info.st_mode) & 0o022):
-        raise RuntimeError(f"{label} is not a trusted operation directory")
-    return {
-        "path": str(path), "device": info.st_dev, "inode": info.st_ino,
-        "uid": info.st_uid, "mode": stat.S_IMODE(info.st_mode),
-    }
+    try:
+        info = os.fstat(fd)
+        pathname = path.lstat()
+        parent = path.parent.stat()
+        if (path.is_symlink() or not stat.S_ISDIR(info.st_mode)
+                or (info.st_dev, info.st_ino) !=
+                   (pathname.st_dev, pathname.st_ino)
+                or info.st_uid != os.getuid()
+                or stat.S_IMODE(info.st_mode) & 0o022
+                or info.st_nlink < 2):
+            raise RuntimeError(
+                f"{label} is not a trusted operation directory")
+        return {
+            "path": str(path), "type": "directory",
+            "device": info.st_dev, "inode": info.st_ino,
+            "uid": info.st_uid, "mode": stat.S_IMODE(info.st_mode),
+            "nlink": info.st_nlink,
+            "parent_device": parent.st_dev, "parent_inode": parent.st_ino,
+        }
+    finally:
+        os.close(fd)
 
 
 def _operation_namespace(
@@ -654,6 +672,9 @@ def _operation_namespace(
             directories,
             ("operations root", "operation root", "runner root",
              "runner repetition root"), strict=True)]
+    output_identity = (
+        _directory_namespace_identity(output_root, "runner stage root")
+        if output_root.exists() or output_root.is_symlink() else None)
     return {
         "schema": "epyc.autokernel.gpu_runner_operation_namespace.v1",
         "operation_key": operation_key,
@@ -662,6 +683,7 @@ def _operation_namespace(
         "stage": stage,
         "output_root": str(output_root),
         "directories": identities,
+        "output_identity": output_identity,
     }
 
 
@@ -671,7 +693,7 @@ def _revalidate_operation_namespace(
     if (not isinstance(namespace, Mapping)
             or set(namespace) != {
                 "schema", "operation_key", "repetition", "runtime_graphs",
-                "stage", "output_root", "directories"}
+                "stage", "output_root", "directories", "output_identity"}
             or namespace.get("schema") !=
                "epyc.autokernel.gpu_runner_operation_namespace.v1"
             or namespace.get("operation_key") != operation_key
@@ -686,7 +708,25 @@ def _revalidate_operation_namespace(
         operations_root=operations_root, output_root=output_root,
         operation_key=operation_key,
         repetition=namespace.get("repetition"), runtime_graphs=runtime_graphs)
-    if current != dict(namespace):
+    sealed_output = namespace.get("output_identity")
+    current_output = current.get("output_identity")
+    if (not isinstance(sealed_output, Mapping)
+            or not isinstance(current_output, Mapping)):
+        raise RuntimeError("sealed runner stage leaf identity is absent")
+    stable_output_keys = {
+        "path", "type", "device", "inode", "uid", "mode",
+        "parent_device", "parent_inode"}
+    if ({key: sealed_output.get(key) for key in stable_output_keys}
+            != {key: current_output.get(key) for key in stable_output_keys}
+            or not isinstance(sealed_output.get("nlink"), int)
+            or not isinstance(current_output.get("nlink"), int)
+            or current_output["nlink"] < sealed_output["nlink"]):
+        raise RuntimeError("sealed runner stage leaf identity changed")
+    current_without_leaf = dict(current)
+    sealed_without_leaf = dict(namespace)
+    current_without_leaf.pop("output_identity")
+    sealed_without_leaf.pop("output_identity")
+    if current_without_leaf != sealed_without_leaf:
         raise RuntimeError("sealed runner operation namespace identity changed")
 
 
@@ -709,6 +749,7 @@ def _seal_candidate_correctness_divergence(
     _revalidate_operation_namespace(
         operation_namespace, output_root=output_root,
         operation_key=operation_key, runtime_graphs=runtime_graphs)
+    operation_namespace_sha256 = schemas.content_hash(operation_namespace)
     semantics = []
     processes = []
     preflight_sha256 = None
@@ -750,6 +791,8 @@ def _seal_candidate_correctness_divergence(
         if (not isinstance(context, Mapping)
                 or context.get("campaign_id") != campaign_id
                 or context.get("operation_key") != operation_key
+                or context.get("operation_namespace_sha256") !=
+                   operation_namespace_sha256
                 or context.get("arm") != label
                 or context.get("runtime_graphs") != runtime_graphs
                 or not isinstance(current_preflight, str)
@@ -789,6 +832,7 @@ def _seal_candidate_correctness_divergence(
         "promotion_claim": False,
         "campaign_id": campaign_id,
         "operation_key": operation_key,
+        "operation_namespace_sha256": operation_namespace_sha256,
         "preflight_sha256": preflight_sha256,
         "anchor_build_identity_sha256": schemas.content_hash(anchor_identity),
         "candidate_build_identity_sha256": schemas.content_hash(candidate_identity),
@@ -2739,6 +2783,25 @@ def _prepare_runner_output(root: Path, sealed: Mapping[str, Any]) -> bool:
     """Create a fresh stage root or validate the exact resumable closure."""
     if not root.exists() and not root.is_symlink():
         root.mkdir(parents=True, mode=0o700)
+        namespace = sealed.get("operation_namespace")
+        if isinstance(namespace, Mapping):
+            if not isinstance(sealed, dict):
+                raise RuntimeError(
+                    "runner preflight cannot bind its stage leaf identity")
+            namespace = dict(namespace)
+            if namespace.get("output_root") != str(root):
+                raise RuntimeError(
+                    "runner stage leaf differs from its preflight namespace")
+            directories = namespace.get("directories")
+            if not isinstance(directories, list) or not directories:
+                raise RuntimeError(
+                    "runner preflight lacks its operations-root identity")
+            sealed["operation_namespace"] = _operation_namespace(
+                operations_root=Path(str(directories[0].get("path", ""))),
+                output_root=root,
+                operation_key=str(namespace.get("operation_key", "")),
+                repetition=namespace.get("repetition"),
+                runtime_graphs=str(namespace.get("runtime_graphs", "")))
         atomic_json(root / "preflight.json", dict(sealed))
         os.chmod(root / "preflight.json", 0o600)
         return False
@@ -2837,12 +2900,12 @@ def run(args: argparse.Namespace) -> dict:
     sealed = preflight(args)
     started_at = utc_now()
     out = Path(storage.assert_not_scratch(args.output_dir, what="GPU discovery output"))
+    resumed = _prepare_runner_output(out, sealed)
     if sealed.get("sole_factor", {}).get("name") == "source_patch":
         _revalidate_operation_namespace(
             sealed["operation_namespace"], output_root=out,
             operation_key=sealed["operation_key"],
             runtime_graphs=sealed["runtime_graphs"])
-    resumed = _prepare_runner_output(out, sealed)
     model = Path(sealed["model"])
     anchor_build = Path(sealed["anchor_build"])
     candidate_build = Path(sealed["candidate_build"])
@@ -2915,6 +2978,11 @@ def run(args: argparse.Namespace) -> dict:
             raise RuntimeError("arm order must contain anchor and candidate exactly once")
 
         def run_arm(arm: str) -> list[dict]:
+            if sealed.get("sole_factor", {}).get("name") == "source_patch":
+                _revalidate_operation_namespace(
+                    sealed["operation_namespace"], output_root=out,
+                    operation_key=sealed["operation_key"],
+                    runtime_graphs=sealed["runtime_graphs"])
             anchor = arm == "anchor"
             prefix = "anchor" if anchor else "candidate"
             identity = anchor_identity if anchor else candidate_identity
@@ -2960,6 +3028,9 @@ def run(args: argparse.Namespace) -> dict:
                     "campaign_id": args.campaign_id,
                     **({"operation_key": sealed["operation_key"]}
                        if "operation_key" in sealed else {}),
+                    **({"operation_namespace_sha256": schemas.content_hash(
+                            sealed["operation_namespace"])}
+                       if "operation_namespace" in sealed else {}),
                     "preflight_sha256": schemas.content_hash(sealed),
                     "arm": arm,
                     "workload": getattr(args, "workload", sealed["frame"]),

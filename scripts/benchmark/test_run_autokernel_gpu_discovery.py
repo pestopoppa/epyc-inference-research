@@ -1,5 +1,6 @@
 from pathlib import Path
 import argparse
+import os
 import hashlib
 import json
 import tempfile
@@ -1228,6 +1229,8 @@ class TestGpuDiscoveryBatchedSubprocess(unittest.TestCase):
                     "identity": {"process_context": {
                         "campaign_id": "ak-v24-replay",
                         "operation_key": operation_key,
+                        "operation_namespace_sha256": schemas.content_hash(
+                            operation_namespace),
                         "preflight_sha256": "f" * 64,
                         "arm": arm, "runtime_graphs": "off"}}}),
                     encoding="utf-8")
@@ -1268,6 +1271,9 @@ class TestGpuDiscoveryBatchedSubprocess(unittest.TestCase):
             self.assertTrue(receipt["scientific_budget_spent"])
             self.assertEqual(receipt["differing_repetitions"], 9)
             self.assertEqual(receipt["operation_key"], operation_key)
+            self.assertEqual(
+                receipt["operation_namespace_sha256"],
+                schemas.content_hash(operation_namespace))
             self.assertFalse(receipt["target_runtime_executed"])
             self.assertEqual(receipt_path.stat().st_mode & 0o777, 0o600)
             rendered = receipt_path.read_text(encoding="utf-8")
@@ -1335,14 +1341,70 @@ class TestGpuDiscoveryBatchedSubprocess(unittest.TestCase):
                     operation_key=operation_key, repetition=1,
                     runtime_graphs="off")
             alias.unlink()
+            prior_output = output_root.with_name(".measurement-graphs-off.prior")
+            output_root.rename(prior_output)
+            output_root.mkdir(mode=0o700)
+            with self.assertRaisesRegex(RuntimeError, "stage leaf identity changed"):
+                gpu._seal_candidate_correctness_divergence(
+                    output_root, anchor=runs["anchor"],
+                    candidate=runs["candidate"], runtime_graphs="off",
+                    campaign_id="ak-v24-replay",
+                    operation_key=operation_key,
+                    operation_namespace=operation_namespace,
+                    anchor_identity={"source_commit": "a" * 40},
+                    candidate_identity={"source_commit": "b" * 40})
+            output_root.rmdir()
+            output_root.symlink_to(prior_output, target_is_directory=True)
+            with self.assertRaisesRegex(RuntimeError, "malformed or aliased"):
+                gpu._revalidate_operation_namespace(
+                    operation_namespace, output_root=output_root,
+                    operation_key=operation_key, runtime_graphs="off")
+            output_root.unlink()
+            hardlink_source = root / "stage-hardlink-source"
+            hardlink_source.write_bytes(b"not a directory")
+            os.link(hardlink_source, output_root)
+            with self.assertRaisesRegex(RuntimeError, "stage root is unavailable"):
+                gpu._revalidate_operation_namespace(
+                    operation_namespace, output_root=output_root,
+                    operation_key=operation_key, runtime_graphs="off")
+            output_root.unlink()
+            prior_output.rename(output_root)
             operation_dir = root / operation_key
             prior_operation_dir = root / f"{operation_key}.prior"
             operation_dir.rename(prior_operation_dir)
-            (operation_dir / "runner/s1").mkdir(parents=True)
+            (operation_dir / "runner/s1/measurement-graphs-off").mkdir(
+                parents=True)
             with self.assertRaisesRegex(RuntimeError, "identity changed"):
                 gpu._revalidate_operation_namespace(
                     operation_namespace, output_root=output_root,
                     operation_key=operation_key, runtime_graphs="off")
+
+    def test_replaced_stage_leaf_cannot_reopen_resumable_preflight(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            operations_root = Path(directory)
+            operation_key = "9" * 64
+            output_root = (operations_root / operation_key / "runner/s1" /
+                           "measurement-graphs-off")
+            output_root.parent.mkdir(parents=True)
+            namespace = gpu._operation_namespace(
+                operations_root=operations_root, output_root=output_root,
+                operation_key=operation_key, repetition=1,
+                runtime_graphs="off")
+            sealed = {"operation_namespace": namespace}
+            self.assertFalse(gpu._prepare_runner_output(output_root, sealed))
+            original_preflight = (output_root / "preflight.json").read_bytes()
+            prior = output_root.with_name(".measurement-graphs-off.prior")
+            output_root.rename(prior)
+            output_root.mkdir(mode=0o700)
+            (output_root / "preflight.json").write_bytes(original_preflight)
+            (output_root / "preflight.json").chmod(0o600)
+            resumed = {"operation_namespace": gpu._operation_namespace(
+                operations_root=operations_root, output_root=output_root,
+                operation_key=operation_key, repetition=1,
+                runtime_graphs="off")}
+            with self.assertRaisesRegex(RuntimeError,
+                                        "preflight identity changed"):
+                gpu._prepare_runner_output(output_root, resumed)
 
     def test_serialized_readiness_does_not_unlock_on_maps_without_instrument_barrier(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
