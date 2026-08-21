@@ -41,13 +41,22 @@ PKGS=(
   "r/rocm-bandwidth-test6.2.0/rocm-bandwidth-test6.2.0_1.4.0.60200-66~22.04_amd64.deb"
   "o/omniperf6.2.0/omniperf6.2.0_2.0.1.60200-66~22.04_amd64.deb"
   "h/hsa-amd-aqlprofile6.2.0/hsa-amd-aqlprofile6.2.0_1.0.0.60200.60200-66~22.04_amd64.deb"
+  # rocprofv3 -- added 2026-08-21 (epyc-root research-intake Stage-4, operator-approved).
+  # rocprofiler-sdk DOES exist for ROCm 6.2 at 0.4.0-66; its earlier absence here was a
+  # scope choice, NOT a version gap -- verified against the 6.2 pool, then downloaded,
+  # extracted and run --help before this line was added. Ships /opt/rocm-6.2.0/bin/rocprofv3
+  # and supports exactly the flags the counter-free kernel-trace path needs
+  # (--kernel-trace --stats --output-format csv -d -o) plus counter collection (-L, -i).
+  # ADDITIVE: rocprofv2 and rocprof v1 are untouched by this package.
+  # Consumer: RVP-C4-5 in epyc-root handoffs/active/rocm-verify-profile-backend.md.
+  "r/rocprofiler-sdk6.2.0/rocprofiler-sdk6.2.0_0.4.0-66~22.04_amd64.deb"
 )
 
 verify() {
   local ok=0 fail=0
   # shellcheck disable=SC1090
   source "${ROOT}/env.sh" 2>/dev/null || { echo "  env.sh missing"; return 1; }
-  for t in rocprofv2 rocprof rocm-bandwidth-test; do
+  for t in rocprofv2 rocprof rocprofv3 rocm-bandwidth-test; do
     if command -v "$t" >/dev/null 2>&1 && [[ "$(command -v "$t")" == "${PREFIX}"* ]]; then
       echo "  OK      $t"; ok=$((ok+1))
     else
