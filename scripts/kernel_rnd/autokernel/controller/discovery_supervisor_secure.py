@@ -275,6 +275,18 @@ class OwnedCgroup:
     def pids(self) -> tuple[int, ...]:
         return tuple(int(row) for row in self._read("cgroup.procs").split() if row)
 
+    def identity(self) -> dict[str, int | str]:
+        if self.dir_fd is None:
+            raise SecureRuntimeError("controller cgroup is not open")
+        return {"path": str(self.path), **directory_identity(os.fstat(self.dir_fd))}
+
+    def populated(self) -> bool:
+        fields = dict(
+            line.split(maxsplit=1) for line in self._read("cgroup.events").splitlines())
+        if fields.get("populated") not in {"0", "1"}:
+            raise SecureRuntimeError("controller cgroup populated state is malformed")
+        return fields["populated"] == "1"
+
     def add(self, pid: int) -> None:
         self._write("cgroup.procs", f"{pid}\n".encode("ascii"))
         if pid not in self.pids():
@@ -308,15 +320,24 @@ class OwnedCgroup:
     def wait_empty(self, timeout: float) -> bool:
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
-            if not self.pids():
+            if not self.populated():
                 return True
             time.sleep(0.02)
-        return not self.pids()
+        return not self.populated()
 
     def close_and_remove(self) -> None:
         if self.dir_fd is not None:
-            if self.pids():
+            if self.populated():
                 raise SecureRuntimeError("refusing to remove populated controller cgroup")
             os.close(self.dir_fd)
             self.dir_fd = None
+        descendants = sorted(
+            (path for path in self.path.rglob("*")
+             if path.is_dir() and not path.is_symlink()),
+            key=lambda path: len(path.parts), reverse=True)
+        for descendant in descendants:
+            info = descendant.stat(follow_symlinks=False)
+            if info.st_uid != os.getuid():
+                raise SecureRuntimeError("controller descendant cgroup owner changed")
+            descendant.rmdir()
         os.rmdir(self.path)

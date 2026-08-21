@@ -1176,10 +1176,19 @@ class DeploymentFactoryTests(unittest.TestCase):
                 source_manifest=manifest,
                 proposal={"proposal_id": "akp-static-build-root",
                           "change_class": "dispatch"})
-            contract, _environment = builder._contract(candidate, {
-                "instrument_branch": config.instrument_branch,
-                "deployment_config_sha256": config.config_sha256,
-            })
+            validated_authority = {
+                "schema": "epyc.autokernel.supervised_build_authority.v1",
+                "launch_spec": {}, "death_ledger": {},
+                "spec_sha256": "1" * 64,
+                "deployment_config_sha256": config.config_sha256}
+            with mock.patch.object(
+                    F.discovery_static_registry,
+                    "_validate_supervised_build_authority",
+                    return_value=validated_authority):
+                contract, _environment = builder._contract(candidate, {
+                    "instrument_branch": config.instrument_branch,
+                    "deployment_config_sha256": config.config_sha256,
+                })
             self.assertEqual(Path(contract["operations_root"]), config.operations_root)
             self.assertEqual(Path(contract["build_root"]), config.build_root)
             self.assertEqual(config.build_root, bundle_root / "builds")

@@ -784,6 +784,8 @@ def _validate_ledger_fsm(records: Sequence[Mapping[str, Any]]) -> None:
                 "message",
                 "cleanup_actions",
                 "cleanup_error",
+                "active_child_started_record_sha256",
+                "cgroup",
             }:
                 raise SupervisorError("invalid supervisor_fault transition")
             child, state = None, "terminal"
@@ -1289,10 +1291,6 @@ def supervise(runtime_root: Path) -> int:
         if binding is None:
             raise SupervisorError("supervisor has no owning tmux session")
         _validate_tmux_binding(binding, supervisor_identity, spec.session_name)
-        cgroup = secure.OwnedCgroup(
-            spec.body["cgroup"]["name"], base=Path(spec.body["cgroup"]["base"])
-        )
-        cgroup.create()
         ledger = DeathLedger(root)
         ledger.append(
             "supervisor_started",
@@ -1326,8 +1324,16 @@ def supervise(runtime_root: Path) -> int:
         restarts = 0
         final_code = 0
         active = None
+        active_child_record = None
+        cgroup_identity = None
         try:
             while True:
+                cgroup = secure.OwnedCgroup(
+                    f"{spec.body['cgroup']['name']}-{supervisor_identity['pid']}-{restarts}",
+                    base=Path(spec.body["cgroup"]["base"]),
+                )
+                cgroup.create()
+                cgroup_identity = cgroup.identity()
                 process, child_identity, gate_write, authority_fd = _launch_child(
                     spec, root, cgroup
                 )
@@ -1339,9 +1345,10 @@ def supervise(runtime_root: Path) -> int:
                         "child": child_identity,
                         "stdout": str(root.path / "controller.stdout.log"),
                         "stderr": str(root.path / "controller.stderr.log"),
-                        "cgroup": str(cgroup.path),
+                        "cgroup": cgroup_identity,
                     },
                 )
+                active_child_record = child_record["record_sha256"]
                 _write_identity(
                     root,
                     spec,
@@ -1375,6 +1382,11 @@ def supervise(runtime_root: Path) -> int:
                 return_code = process.wait(
                     timeout=spec.body["termination_policy"]["kill_grace_seconds"]
                 )
+                cgroup.close_and_remove()
+                if cgroup.path.exists():
+                    raise SupervisorError("controller cgroup survived exact removal")
+                actions.append("cgroup.remove")
+                cgroup = None
                 ledger.append(
                     "child_exited",
                     {
@@ -1385,6 +1397,8 @@ def supervise(runtime_root: Path) -> int:
                     },
                 )
                 active = None
+                active_child_record = None
+                cgroup_identity = None
                 if requested_signal:
                     final_code = 128 + requested_signal
                     break
@@ -1427,6 +1441,9 @@ def supervise(runtime_root: Path) -> int:
                         kill_grace=spec.body["termination_policy"]["kill_grace_seconds"],
                         term_already_sent=False,
                     )
+                    cgroup.close_and_remove()
+                    actions.append("cgroup.remove")
+                    cgroup = None
                 if active is not None and active.poll() is None:
                     active.wait(timeout=spec.body["termination_policy"]["kill_grace_seconds"])
             except Exception as cleanup_exc:
@@ -1438,6 +1455,8 @@ def supervise(runtime_root: Path) -> int:
                     "message": str(exc),
                     "cleanup_actions": actions,
                     "cleanup_error": cleanup_error,
+                    "active_child_started_record_sha256": active_child_record,
+                    "cgroup": cgroup_identity,
                 },
             )
             final_code = 70
@@ -1467,7 +1486,7 @@ def supervise(runtime_root: Path) -> int:
     finally:
         if cgroup is not None:
             try:
-                if cgroup.pids():
+                if cgroup.populated():
                     cgroup.kill()
                     cgroup.wait_empty(2.0)
                 cgroup.close_and_remove()
@@ -1506,6 +1525,7 @@ def stop_supervisor(runtime_root: Path, *, timeout: float = 15.0) -> dict[str, A
 
 def _canary_child(hold_seconds: float, exit_code: int, spawn_descendant: bool) -> int:
     descendant = None
+    descendant_cgroup = None
     if spawn_descendant:
         descendant = subprocess.Popen(
             (
@@ -1519,6 +1539,17 @@ def _canary_child(hold_seconds: float, exit_code: int, spawn_descendant: bool) -
             stderr=subprocess.DEVNULL,
             close_fds=True,
         )
+        unified = [line.split("::", 1)[1] for line in
+                   Path("/proc/self/cgroup").read_text(encoding="ascii").splitlines()
+                   if "::" in line]
+        if len(unified) != 1:
+            raise SupervisorError("canary cannot identify its controller cgroup")
+        descendant_cgroup = Path(
+            "/sys/fs/cgroup", unified[0].lstrip("/"),
+            f"canary-nested-{descendant.pid}")
+        descendant_cgroup.mkdir(mode=0o700)
+        Path(descendant_cgroup, "cgroup.procs").write_text(
+            str(descendant.pid), encoding="ascii")
     print(
         json.dumps(
             {
@@ -1526,6 +1557,8 @@ def _canary_child(hold_seconds: float, exit_code: int, spawn_descendant: bool) -
                 "pid": os.getpid(),
                 "start_ticks": _read_start_ticks(os.getpid())[1],
                 "descendant_pid": descendant.pid if descendant else None,
+                "descendant_cgroup": (str(descendant_cgroup)
+                                      if descendant_cgroup is not None else None),
                 "hardware_accessed": False,
             },
             sort_keys=True,

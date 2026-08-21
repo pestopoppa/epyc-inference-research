@@ -5,6 +5,7 @@ import json
 import hashlib
 import os
 import shutil
+import stat
 import subprocess
 from dataclasses import replace
 from pathlib import Path
@@ -545,9 +546,11 @@ class StaticBuildCacheTests(unittest.TestCase):
             build_root=build_root, cmake_defines=(("GGML_HIP", "ON"),),
             correctness_capability_runner=capability_runner)
         calls = []
+        sandbox_roots = []
 
         def run_build(plan, *, log_path, **_kwargs):
             calls.append(str(plan.build_dir.path))
+            sandbox_roots.append(_kwargs.get("sandbox_cgroup_root"))
             build = Path(plan.build_dir.path); bindir = build / "bin"
             bindir.mkdir(parents=True)
             for name in ("llama-bench", "libllama-bench-impl.so", "libllama-common.so",
@@ -591,11 +594,19 @@ class StaticBuildCacheTests(unittest.TestCase):
                    if "::" in line]
         controller_cgroup = str(
             Path("/sys/fs/cgroup") / unified[0].lstrip("/"))
+        controller_cgroup_facts = Path(controller_cgroup).stat()
+        controller_cgroup_identity = {
+            "path": controller_cgroup,
+            "dev": controller_cgroup_facts.st_dev,
+            "ino": controller_cgroup_facts.st_ino,
+            "uid": controller_cgroup_facts.st_uid,
+            "nlink": controller_cgroup_facts.st_nlink,
+            "mode": stat.S_IMODE(controller_cgroup_facts.st_mode)}
         ledger_payload = {
             "restart_count": 0, "child": controller_identity,
             "stdout": str(launch_root / "controller.stdout.log"),
             "stderr": str(launch_root / "controller.stderr.log"),
-            "cgroup": controller_cgroup}
+            "cgroup": controller_cgroup_identity}
         ledger_row = {
             "schema": "epyc.autokernel.discovery_supervisor_ledger.v2",
             "sequence": 1, "previous_sha256": None,
@@ -635,7 +646,7 @@ class StaticBuildCacheTests(unittest.TestCase):
                          instrument_commit=instrument_commit, source=source,
                          production_before=production_before, builder=builder,
                          candidate=candidate, permit=permit, calls=calls,
-                         run_build=run_build)
+                         sandbox_roots=sandbox_roots, run_build=run_build)
 
     @staticmethod
     def split_verifier(root: Path):
@@ -851,6 +862,82 @@ class StaticBuildCacheTests(unittest.TestCase):
         self.assertTrue(all("attempt-000002" in path for path in fixture.calls))
         self.assertTrue(str(build.anchor_build).startswith(
             str(fixture.root / "build")))
+
+    def test_build_sandboxes_remain_nested_under_supervisor_controller_cgroup(self):
+        fixture = self.fixture()
+        self.invoke(fixture)
+        expected = fixture.permit["supervised_build_authority"]
+        cgroup = S._supervised_controller_cgroup(expected)["path"]
+        self.assertEqual(fixture.sandbox_roots, [cgroup, cgroup])
+
+    def test_controller_cleanup_proof_requires_unique_removed_cgroup_epoch(self):
+        fixture = self.fixture()
+        authority = fixture.permit["supervised_build_authority"]
+        ledger = Path(authority["death_ledger"]["path"])
+        current = json.loads(ledger.read_text())
+        old_cgroup = fixture.root / "removed-controller-cgroup"
+        current_cgroup = dict(current["payload"]["cgroup"])
+        rows = []
+
+        def append(event, payload):
+            row = {
+                "schema": "epyc.autokernel.discovery_supervisor_ledger.v2",
+                "sequence": len(rows) + 1,
+                "previous_sha256": (rows[-1]["record_sha256"] if rows else None),
+                "written_at": "2026-08-21T00:00:00Z",
+                "event": event, "payload": payload}
+            row["record_sha256"] = E.schemas.content_hash(row)
+            rows.append(row)
+
+        old_payload = dict(current["payload"])
+        old_payload["cgroup"] = {
+            "path": str(old_cgroup), "dev": 1, "ino": 2,
+            "uid": os.geteuid(), "nlink": 1, "mode": 0o700}
+        append("child_started", old_payload)
+        append("child_exited", {
+            "restart_count": 0, "return_code": 70,
+            "cleanup_actions": ["cgroup.kill", "cgroup.remove"],
+            "stop_signal": None})
+        append("restart_scheduled", {
+            "restart_count": 1, "delay_seconds": 0, "last_return_code": 70})
+        current_payload = dict(current["payload"])
+        current_payload["restart_count"] = 1
+        current_payload["cgroup"] = current_cgroup
+        append("child_started", current_payload)
+        ledger.write_text("".join(json.dumps(
+            row, sort_keys=True, separators=(",", ":")) + "\n" for row in rows))
+        ledger.chmod(0o600)
+        facts = ledger.stat()
+        ledger_identity = {
+            "path": str(ledger), "device": facts.st_dev, "inode": facts.st_ino,
+            "uid": facts.st_uid, "mode": 0o600, "nlink": facts.st_nlink}
+        old_authority = {**authority, "death_ledger": ledger_identity,
+                         "ledger_child_started_record_sha256": rows[0]["record_sha256"]}
+        current_authority = {**authority, "death_ledger": ledger_identity,
+                             "ledger_child_started_record_sha256": rows[-1]["record_sha256"]}
+        proof = S._controller_epoch_cleanup_proof(
+            old_authority, current_authority)
+        self.assertEqual(
+            proof["state"],
+            "controller_cgroup_killed_drained_removed_before_successor")
+        rows[1]["payload"]["cleanup_actions"] = ["cgroup.kill"]
+        rows[1]["record_sha256"] = E.schemas.content_hash({
+            key: value for key, value in rows[1].items()
+            if key != "record_sha256"})
+        rows[2]["previous_sha256"] = rows[1]["record_sha256"]
+        rows[2]["record_sha256"] = E.schemas.content_hash({
+            key: value for key, value in rows[2].items()
+            if key != "record_sha256"})
+        rows[3]["previous_sha256"] = rows[2]["record_sha256"]
+        rows[3]["record_sha256"] = E.schemas.content_hash({
+            key: value for key, value in rows[3].items()
+            if key != "record_sha256"})
+        ledger.write_text("".join(json.dumps(
+            row, sort_keys=True, separators=(",", ":")) + "\n" for row in rows))
+        refused_current = {**current_authority,
+                           "ledger_child_started_record_sha256": rows[3]["record_sha256"]}
+        with self.assertRaisesRegex(StaticRegistryError, "cgroup cleanup"):
+            S._controller_epoch_cleanup_proof(old_authority, refused_current)
 
     def test_terminal_binds_superseded_quarantine_receipt_bytes(self):
         fixture = self.fixture()
@@ -1155,18 +1242,32 @@ class StaticBuildCacheTests(unittest.TestCase):
         child = subprocess.Popen(
             ("/usr/bin/sleep", "30"), env=env, start_new_session=True)
         try:
-            with self.dead_build_owner(), self.assertRaisesRegex(
-                    StaticRegistryError, "epoch still has live"):
+            with self.dead_build_owner(), mock.patch.object(
+                    S, "_controller_epoch_cleanup_proof",
+                    side_effect=StaticRegistryError(
+                        "supervisor has no durable cgroup cleanup")), \
+                    self.assertRaisesRegex(
+                        StaticRegistryError, "no durable cgroup cleanup"):
                 self.invoke(fixture, {**fixture.permit,
                                       "operation_key": "5" * 64})
             self.assertEqual(fixture.calls, [])
         finally:
             child.terminate(); child.wait(timeout=5)
-        with self.dead_build_owner():
+        cleanup = {
+            "schema": "epyc.autokernel.supervisor_controller_cleanup.v1",
+            "child_started_record_sha256": "1" * 64,
+            "controller_terminal_record_sha256": "2" * 64,
+            "cgroup": {"path": "/gone"},
+            "state": "controller_cgroup_killed_drained_removed_before_successor"}
+        with self.dead_build_owner(), mock.patch.object(
+                S, "_controller_epoch_cleanup_proof", return_value=cleanup), \
+                mock.patch.object(
+                    S, "_epoch_processes",
+                    side_effect=AssertionError("global /proc scan is forbidden")):
             self.invoke(fixture, {**fixture.permit, "operation_key": "5" * 64})
         self.assertTrue((first / "recovery.json").is_file())
 
-    def test_permission_error_epoch_scan_is_unknown_without_sandbox_closure(self):
+    def test_unrelated_unreadable_processes_do_not_gate_supervisor_closed_epoch(self):
         fixture = self.fixture()
         with mock.patch.object(StaticGpuSourceBuilder, "_build_uncached",
                                side_effect=KeyboardInterrupt("crash")):
@@ -1182,11 +1283,19 @@ class StaticBuildCacheTests(unittest.TestCase):
             "stdout_path": str(logs / "anchor.configure.stream"),
             "sandbox_receipt_path": None, "sandbox_policy_sha256": None,
             "sandbox_token": None, "cgroup_root": None})
+        cleanup = {
+            "schema": "epyc.autokernel.supervisor_controller_cleanup.v1",
+            "child_started_record_sha256": "1" * 64,
+            "controller_terminal_record_sha256": "2" * 64,
+            "cgroup": {"path": "/gone"},
+            "state": "controller_cgroup_killed_drained_removed_before_successor"}
         with self.dead_build_owner(), mock.patch.object(
-                S, "_epoch_processes", return_value=([], [12345])), \
-                self.assertRaisesRegex(StaticRegistryError, "UNKNOWN"):
+                S, "_controller_epoch_cleanup_proof", return_value=cleanup), \
+                mock.patch.object(
+                    S, "_epoch_processes",
+                    side_effect=PermissionError("unrelated same-uid proc")):
             self.invoke(fixture, {**fixture.permit, "operation_key": "5" * 64})
-        self.assertFalse((first / "recovery.json").exists())
+        self.assertTrue((first / "recovery.json").exists())
 
     def test_terminal_rejects_orphan_process_receipt_and_final_quarantine(self):
         for case in ("orphan", "quarantined"):

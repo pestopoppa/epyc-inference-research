@@ -2534,7 +2534,8 @@ def run_build(plan: BuildPlan, *, log_path: Any,
               configure_timeout_s: float = 900.0,
               build_timeout_s: float = 14400.0,
               env: Optional[Mapping[str, str]] = None,
-              require_fresh_build_dir: bool = True) -> BuildResult:
+              require_fresh_build_dir: bool = True,
+              sandbox_cgroup_root: Optional[str] = None) -> BuildResult:
     """Configure, build, capture the log, and return the facts.
 
     The build directory is created here and its pre-build digest is taken with
@@ -2573,8 +2574,15 @@ def run_build(plan: BuildPlan, *, log_path: Any,
     build_env = dict(os.environ if env is None else env)
     build_env["TMPDIR"] = candidate_tmp
     build_env["PYTHONDONTWRITEBYTECODE"] = "1"
+    if sandbox_cgroup_root is not None:
+        cgroup_root = Path(sandbox_cgroup_root)
+        if (not cgroup_root.is_absolute() or cgroup_root.is_symlink()
+                or not cgroup_root.is_dir()):
+            raise WorktreeError("sandbox cgroup root is not an exact directory")
     sandbox_policy = process_sandbox.SandboxPolicy(
-        writable_root=plan.build_dir.path)
+        writable_root=plan.build_dir.path,
+        **({"cgroup_root": sandbox_cgroup_root}
+           if sandbox_cgroup_root is not None else {}))
     configure_sandbox_receipt = log + ".configure-sandbox.json"
     build_sandbox_receipt = log + ".build-sandbox.json"
 

@@ -434,6 +434,16 @@ class DetachedCanaryTests(unittest.TestCase):
         events = [row["event"] for row in self._ledger()]
         self.assertEqual(events.count("child_started"), 3)
         self.assertEqual(events.count("restart_scheduled"), 2)
+        children = [row for row in self._ledger()
+                    if row["event"] == "child_started"]
+        cgroups = [row["payload"]["cgroup"] for row in children]
+        self.assertEqual(len({row["path"] for row in cgroups}), 3)
+        self.assertTrue(all(set(row) == {
+            "path", "dev", "ino", "uid", "nlink", "mode"} for row in cgroups))
+        self.assertTrue(all(not Path(row["path"]).exists() for row in cgroups))
+        exited = [row for row in self._ledger() if row["event"] == "child_exited"]
+        self.assertTrue(all("cgroup.remove" in row["payload"]["cleanup_actions"]
+                            for row in exited))
 
     def test_forced_stop_cleans_leader_and_descendant_without_killpg(self):
         _pid, launcher = self._launcher(
@@ -464,12 +474,12 @@ class DetachedCanaryTests(unittest.TestCase):
         self.assertEqual(stopped["stop_result"], "stopped")
         self.assertIsNone(S._read_start_ticks(identity["child"]["pid"]))
         self.assertIsNone(S._read_start_ticks(canary["descendant_pid"]))
-        self.assertFalse(
-            Path(
-                json.loads((self.root / "launch-spec.json").read_text())["cgroup"]["base"],
-                json.loads((self.root / "launch-spec.json").read_text())["cgroup"]["name"],
-            ).exists()
-        )
+        child_rows = [row for row in self._ledger()
+                      if row["event"] == "child_started"]
+        self.assertTrue(child_rows)
+        self.assertTrue(all(
+            not Path(row["payload"]["cgroup"]["path"]).exists()
+            for row in child_rows))
 
 
 if __name__ == "__main__":

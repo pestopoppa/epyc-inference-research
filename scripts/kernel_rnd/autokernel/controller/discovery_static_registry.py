@@ -302,6 +302,44 @@ def _require_hash(value: Any, label: str) -> str:
     return value
 
 
+def _parse_supervisor_ledger(raw: bytes) -> list[dict[str, Any]]:
+    try:
+        lines = raw.decode("utf-8", "strict").splitlines()
+    except UnicodeDecodeError as exc:
+        raise StaticRegistryError("supervisor death ledger is not UTF-8") from exc
+    row_keys = {
+        "schema", "sequence", "previous_sha256", "written_at", "event",
+        "payload", "record_sha256",
+    }
+    previous: str | None = None
+    rows: list[dict[str, Any]] = []
+    for sequence, line in enumerate(lines, 1):
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise StaticRegistryError("supervisor death ledger is malformed") from exc
+        if (not isinstance(row, dict) or set(row) != row_keys
+                or row.get("schema")
+                != "epyc.autokernel.discovery_supervisor_ledger.v2"
+                or row.get("sequence") != sequence
+                or not isinstance(row.get("written_at"), str)
+                or not isinstance(row.get("event"), str)
+                or not isinstance(row.get("payload"), dict)):
+            raise StaticRegistryError("supervisor death ledger row schema changed")
+        canonical_row = json.dumps(
+            row, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        claimed = row.get("record_sha256")
+        payload = {key: item for key, item in row.items()
+                   if key != "record_sha256"}
+        if (line.encode("utf-8") != canonical_row
+                or claimed != schemas.content_hash(payload)
+                or row.get("previous_sha256") != previous):
+            raise StaticRegistryError("supervisor death ledger hash chain changed")
+        previous = str(claimed)
+        rows.append(row)
+    return rows
+
+
 def _validate_supervised_build_authority(
         value: Any, *, deployment_config_sha256: str,
         require_current: bool = True) -> dict[str, Any]:
@@ -403,49 +441,24 @@ def _validate_supervised_build_authority(
             or supervisor_verdict.state not in {device_claim.LIVE, device_claim.DEAD}):
         raise StaticRegistryError(
             "build supervisor is not live and exact: " + supervisor_verdict.reason)
-    previous: str | None = None
     found = False
-    authority_cgroup: str | None = None
-    try:
-        ledger_lines = ledger_raw.decode("utf-8", "strict").splitlines()
-    except UnicodeDecodeError as exc:
-        raise StaticRegistryError("supervisor death ledger is not UTF-8") from exc
-    ledger_row_keys = {
-        "schema", "sequence", "previous_sha256", "written_at", "event",
-        "payload", "record_sha256",
-    }
-    for sequence, line in enumerate(ledger_lines, 1):
-        try:
-            row = json.loads(line)
-        except json.JSONDecodeError as exc:
-            raise StaticRegistryError("supervisor death ledger is malformed") from exc
-        if (not isinstance(row, Mapping) or set(row) != ledger_row_keys
-                or row.get("schema")
-                != "epyc.autokernel.discovery_supervisor_ledger.v2"
-                or row.get("sequence") != sequence
-                or not isinstance(row.get("written_at"), str)
-                or not isinstance(row.get("event"), str)
-                or not isinstance(row.get("payload"), Mapping)):
-            raise StaticRegistryError("supervisor death ledger row schema changed")
-        canonical_row = json.dumps(
-            row, sort_keys=True, separators=(",", ":")).encode("utf-8")
-        if line.encode("utf-8") != canonical_row:
-            raise StaticRegistryError("supervisor death ledger row is not canonical")
-        claimed = row.get("record_sha256")
-        payload = {key: item for key, item in row.items() if key != "record_sha256"}
-        if (claimed != schemas.content_hash(payload)
-                or row.get("previous_sha256") != previous):
-            raise StaticRegistryError("supervisor death ledger hash chain changed")
-        previous = str(claimed)
+    authority_cgroup: Mapping[str, Any] | None = None
+    for row in _parse_supervisor_ledger(ledger_raw):
+        claimed = row["record_sha256"]
         if claimed == target_record:
             child = row.get("payload", {}).get("child") if isinstance(
                 row.get("payload"), Mapping) else None
             if row.get("event") != "child_started" or child != controller_identity:
                 raise StaticRegistryError("supervisor child-start authority changed")
             cgroup = row.get("payload", {}).get("cgroup")
-            if not isinstance(cgroup, str) or not Path(cgroup).is_absolute():
+            if (not isinstance(cgroup, Mapping)
+                    or set(cgroup) != {"path", "dev", "ino", "uid", "nlink", "mode"}
+                    or not isinstance(cgroup.get("path"), str)
+                    or not Path(str(cgroup["path"])).is_absolute()
+                    or any(not isinstance(cgroup.get(key), int)
+                           for key in ("dev", "ino", "uid", "nlink", "mode"))):
                 raise StaticRegistryError("supervisor child-start cgroup is malformed")
-            authority_cgroup = cgroup
+            authority_cgroup = dict(cgroup)
             found = True
     if not found:
         raise StaticRegistryError("supervisor child-start record is absent")
@@ -458,9 +471,118 @@ def _validate_supervised_build_authority(
                    if "::" in line]
         expected = str(Path("/sys/fs/cgroup") / str(unified[0]).lstrip("/")) \
             if len(unified) == 1 else None
-        if authority_cgroup != expected:
+        if authority_cgroup is None or authority_cgroup.get("path") != expected:
             raise StaticRegistryError("supervised controller is outside its exact cgroup")
+        try:
+            cgroup_facts = Path(expected).stat(follow_symlinks=False) \
+                if expected is not None else None
+        except OSError as exc:
+            raise StaticRegistryError("supervised controller cgroup is unavailable") from exc
+        if cgroup_facts is None or {
+                "dev": cgroup_facts.st_dev, "ino": cgroup_facts.st_ino,
+                "uid": cgroup_facts.st_uid, "nlink": cgroup_facts.st_nlink,
+                "mode": stat.S_IMODE(cgroup_facts.st_mode)} != {
+                    key: authority_cgroup[key]
+                    for key in ("dev", "ino", "uid", "nlink", "mode")}:
+            raise StaticRegistryError("supervised controller cgroup identity changed")
     return json.loads(json.dumps(value, sort_keys=True))
+
+
+def _controller_epoch_cleanup_proof(
+        owner_authority: Any, current_authority: Any) -> dict[str, Any]:
+    """Prove the supervisor drained the crashed controller's whole cgroup.
+
+    Every compiler is born beneath the controller, which the supervisor places
+    in its owned cgroup before releasing the controller bootstrap.  Therefore
+    the fsynced child_exited row, emitted only after `_cleanup_cgroup` observed
+    that cgroup empty, closes even a compiler born before its own start receipt.
+    """
+    try:
+        shared_authority = (
+            isinstance(owner_authority, Mapping)
+            and isinstance(current_authority, Mapping)
+            and _stable_supervised_authority(owner_authority)
+            == _stable_supervised_authority(current_authority))
+    except (KeyError, TypeError):
+        shared_authority = False
+    if not shared_authority:
+        raise StaticRegistryError(
+            "recovery controller does not share the abandoned launch authority")
+    old_target = _require_hash(
+        owner_authority.get("ledger_child_started_record_sha256"),
+        "abandoned controller child-start record")
+    current_target = _require_hash(
+        current_authority.get("ledger_child_started_record_sha256"),
+        "recovery controller child-start record")
+    if old_target == current_target:
+        raise StaticRegistryError(
+            "missing process start cannot be recovered by the same controller epoch")
+    ledger_path = Path(str(current_authority["death_ledger"]["path"]))
+    raw, identity = _read_bound_file(
+        ledger_path, "supervisor recovery death ledger", receipt=True)
+    expected_identity = {
+        key: current_authority["death_ledger"][key]
+        for key in ("device", "inode", "uid", "mode", "nlink")}
+    if {key: identity[key] for key in expected_identity} != expected_identity:
+        raise StaticRegistryError("supervisor recovery ledger identity changed")
+    rows = _parse_supervisor_ledger(raw)
+    indices = {row["record_sha256"]: index for index, row in enumerate(rows)}
+    if old_target not in indices or current_target not in indices \
+            or indices[old_target] >= indices[current_target]:
+        raise StaticRegistryError(
+            "recovery controller does not follow the abandoned controller")
+    old_index, current_index = indices[old_target], indices[current_target]
+    old = rows[old_index]
+    current = rows[current_index]
+    if (old.get("event") != "child_started"
+            or current.get("event") != "child_started"):
+        raise StaticRegistryError("abandoned controller record is not child_started")
+    closed: dict[str, Any] | None = None
+    for row in rows[old_index + 1:current_index]:
+        if row["event"] == "child_started":
+            raise StaticRegistryError(
+                "another controller started before abandoned cgroup closure")
+        if row["event"] == "child_exited":
+            payload = row["payload"]
+            old_payload = old["payload"]
+            if (payload.get("restart_count") != old_payload.get("restart_count")
+                    or not isinstance(payload.get("return_code"), int)
+                    or not isinstance(payload.get("cleanup_actions"), list)
+                    or "cgroup.remove" not in payload["cleanup_actions"]):
+                raise StaticRegistryError(
+                    "abandoned controller exit does not prove cgroup cleanup")
+            closed = row
+            break
+        if row["event"] == "supervisor_fault":
+            payload = row["payload"]
+            if (payload.get("active_child_started_record_sha256") != old_target
+                    or payload.get("cgroup") != old["payload"].get("cgroup")
+                    or payload.get("cleanup_error") is not None
+                    or not isinstance(payload.get("cleanup_actions"), list)
+                    or "cgroup.remove" not in payload["cleanup_actions"]):
+                raise StaticRegistryError(
+                    "supervisor fault does not prove abandoned cgroup cleanup")
+            closed = row
+            break
+    if closed is None:
+        raise StaticRegistryError(
+            "supervisor has no durable cgroup cleanup for abandoned controller")
+    old_cgroup = old["payload"].get("cgroup")
+    current_cgroup = current["payload"].get("cgroup")
+    if (not isinstance(old_cgroup, Mapping)
+            or not isinstance(current_cgroup, Mapping)
+            or old_cgroup.get("path") == current_cgroup.get("path")):
+        raise StaticRegistryError("controller cgroup epoch was reused")
+    old_path = Path(str(old_cgroup.get("path", "")))
+    if old_path.exists() or old_path.is_symlink():
+        raise StaticRegistryError("abandoned controller cgroup still exists")
+    return {
+        "schema": "epyc.autokernel.supervisor_controller_cleanup.v1",
+        "child_started_record_sha256": old_target,
+        "controller_terminal_record_sha256": closed["record_sha256"],
+        "cgroup": dict(old_cgroup),
+        "state": "controller_cgroup_killed_drained_removed_before_successor",
+    }
 
 
 def _stable_supervised_authority(value: Mapping[str, Any]) -> dict[str, Any]:
@@ -471,6 +593,20 @@ def _stable_supervised_authority(value: Mapping[str, Any]) -> dict[str, Any]:
         "spec_sha256": value["spec_sha256"],
         "deployment_config_sha256": value["deployment_config_sha256"],
     }
+
+
+def _supervised_controller_cgroup(value: Mapping[str, Any]) -> dict[str, Any]:
+    ledger_raw, _identity = _read_bound_file(
+        Path(str(value["death_ledger"]["path"])),
+        "supervisor controller cgroup ledger", receipt=True)
+    target = value.get("ledger_child_started_record_sha256")
+    for row in _parse_supervisor_ledger(ledger_raw):
+        if row["record_sha256"] == target:
+            cgroup = row["payload"].get("cgroup")
+            if not isinstance(cgroup, Mapping):
+                break
+            return dict(cgroup)
+    raise StaticRegistryError("supervised controller cgroup record is absent")
 
 
 def _owner_matches_supervised_authority(
@@ -665,7 +801,9 @@ def _sandbox_activation_is_empty(
 
 def _owned_process_receipts_are_dead(
         attempt_root: Path, holder: Mapping[str, Any], *,
-        require_terminals: bool = False) -> list[dict[str, Any]]:
+        require_terminals: bool = False,
+        owner_authority: Mapping[str, Any] | None = None,
+        current_authority: Mapping[str, Any] | None = None) -> list[dict[str, Any]]:
     logs = attempt_root / "logs"
     if not logs.exists() and not logs.is_symlink():
         return []
@@ -695,19 +833,14 @@ def _owned_process_receipts_are_dead(
         start_path = intent_path.with_name(
             intent_path.name.replace("-intent.json", "-start.json"))
         if not start_path.exists() and not start_path.is_symlink():
-            matches, unreadable = _epoch_processes(str(intent.get("epoch_token")))
-            if matches:
-                raise StaticRegistryError(
-                    f"durable pre-spawn epoch still has live processes {matches}")
-            if unreadable:
-                raise StaticRegistryError(
-                    "durable pre-spawn epoch scan is UNKNOWN for same-uid processes "
-                    f"{unreadable}")
-            proofs.append({"intent": str(intent_path.resolve()), "start": None,
-                           "state": "pre_spawn_epoch_absent", "sandbox": None})
             if require_terminals:
                 raise StaticRegistryError(
                     "terminal build cannot close a process intent without a start")
+            cleanup = _controller_epoch_cleanup_proof(
+                owner_authority, current_authority)
+            proofs.append({"intent": str(intent_path.resolve()), "start": None,
+                           "state": "pre_spawn_closed_by_supervisor",
+                           "sandbox": None, "controller_cleanup": cleanup})
             continue
         start = _sealed_read(start_path,
                              schema="epyc.autokernel.owned_process_start.v1",
@@ -773,13 +906,9 @@ def _owned_process_receipts_are_dead(
                            "state": "terminal_verified_dead", "sandbox": sandbox})
         elif verdict.state == device_claim.DEAD:
             sandbox = _sandbox_activation_is_empty(intent, holder, start=start)
-            matches, unreadable = _epoch_processes(str(intent.get("epoch_token")))
-            if matches:
+            if not sandbox["receipt_present"]:
                 raise StaticRegistryError(
-                    f"durable process epoch still has live processes {matches}")
-            if unreadable and not sandbox["receipt_present"]:
-                raise StaticRegistryError(
-                    "owned process epoch scan is UNKNOWN and no exact sandbox activation closes it")
+                    "owned process start lacks exact sandbox activation authority")
             proofs.append({"start": str(start_path.resolve()),
                            "intent": str(intent_path.resolve()),
                            "terminal": None, "state": "observed_dead",
@@ -796,9 +925,13 @@ def _owned_process_receipts_are_dead(
 
 def _process_receipt_closure(
         attempt_root: Path, holder: Mapping[str, Any], *,
-        require_terminals: bool) -> dict[str, Any]:
+        require_terminals: bool,
+        owner_authority: Mapping[str, Any] | None = None,
+        current_authority: Mapping[str, Any] | None = None) -> dict[str, Any]:
     proofs = _owned_process_receipts_are_dead(
-        attempt_root, holder, require_terminals=require_terminals)
+        attempt_root, holder, require_terminals=require_terminals,
+        owner_authority=owner_authority,
+        current_authority=current_authority)
     logs = attempt_root / "logs"
     rows: list[dict[str, Any]] = []
     if logs.exists() or logs.is_symlink():
@@ -2069,7 +2202,8 @@ class StaticGpuSourceBuilder:
     def _recover_incomplete_attempt(
             self, *, cache_root: Path, keyed_build_root: Path,
             candidate: controller.PlannedCandidate, contract: Mapping[str, Any],
-            lock_paths: tuple[Path, Path]) -> None:
+            lock_paths: tuple[Path, Path],
+            current_supervised_authority: Mapping[str, Any]) -> None:
         attempts_root = cache_root / "attempts"
         if not attempts_root.exists() and not attempts_root.is_symlink():
             self._recover_transaction_before_attempt(
@@ -2114,7 +2248,8 @@ class StaticGpuSourceBuilder:
                 attempt_root=attempt_root, owner_path=owner_path,
                 holder=owner.get("holder"), recovery=recovery,
                 contract=contract, expected_number=number,
-                expected_build_root=expected_build_root)
+                expected_build_root=expected_build_root,
+                current_supervised_authority=current_supervised_authority)
             return
         holder = owner.get("holder")
         verdict = device_claim.assess_holder_liveness(holder)
@@ -2124,7 +2259,11 @@ class StaticGpuSourceBuilder:
                 f"{verdict.reason}")
         process_closure = _process_receipt_closure(
             attempt_root, holder if isinstance(holder, Mapping) else {},
-            require_terminals=False)
+            require_terminals=False,
+            owner_authority=(owner.get("supervised_build_authority")
+                             if isinstance(owner.get("supervised_build_authority"), Mapping)
+                             else None),
+            current_authority=current_supervised_authority)
 
         campaign_root = attempt_root / "worktrees"
         teardown_rows: list[dict[str, Any]] = []
@@ -2186,7 +2325,8 @@ class StaticGpuSourceBuilder:
     def _validate_quarantined_attempt(
             self, *, attempt_root: Path, owner_path: Path, holder: Any,
             recovery: Mapping[str, Any], contract: Mapping[str, Any],
-            expected_number: int, expected_build_root: Path) -> None:
+            expected_number: int, expected_build_root: Path,
+            current_supervised_authority: Mapping[str, Any]) -> None:
         expected_keys = {
             "schema", "build_key", "attempt", "owner_sha256", "state",
             "owner_liveness", "owned_processes", "process_closure_sha256",
@@ -2216,7 +2356,12 @@ class StaticGpuSourceBuilder:
         if not isinstance(holder, Mapping):
             raise StaticRegistryError("quarantined build owner is malformed")
         process_closure = _process_receipt_closure(
-            attempt_root, holder, require_terminals=False)
+            attempt_root, holder, require_terminals=False,
+            owner_authority=(
+                _sealed_read(owner_path, schema=_BUILD_ATTEMPT_SCHEMA,
+                             label="quarantined build attempt owner")
+                .get("supervised_build_authority")),
+            current_authority=current_supervised_authority)
         if (recovery.get("owned_processes") != process_closure["proofs"]
                 or recovery.get("process_closure_sha256")
                 != process_closure["closure_sha256"]):
@@ -2242,7 +2387,9 @@ class StaticGpuSourceBuilder:
     def _reopen(self, *, cache_root: Path, build_root: Path, operation_key: str,
                 expected_intent: Mapping[str, Any], contract: Mapping[str, Any],
                 candidate: controller.PlannedCandidate,
-                lock_paths: tuple[Path, Path]) -> controller.GpuSourceBuild | None:
+                lock_paths: tuple[Path, Path],
+                current_supervised_authority: Mapping[str, Any]
+                ) -> controller.GpuSourceBuild | None:
         intent_path = cache_root / "intent.json"
         intent = _sealed_read(intent_path, schema=_BUILD_INTENT_SCHEMA,
                               label="build cache intent")
@@ -2268,7 +2415,8 @@ class StaticGpuSourceBuilder:
         if not terminal_path.exists() and not terminal_path.is_symlink():
             self._recover_incomplete_attempt(
                 cache_root=cache_root, keyed_build_root=build_root,
-                candidate=candidate, contract=contract, lock_paths=lock_paths)
+                candidate=candidate, contract=contract, lock_paths=lock_paths,
+                current_supervised_authority=current_supervised_authority)
             return None
         attempts_path = cache_root / "attempts"
         if attempts_path.exists() or attempts_path.is_symlink():
@@ -2327,7 +2475,8 @@ class StaticGpuSourceBuilder:
                 holder=owner.get("holder"), recovery=recovery,
                 contract=contract,
                 expected_number=int(prior.name.removeprefix("attempt-")),
-                expected_build_root=build_root / prior.name)
+                expected_build_root=build_root / prior.name,
+                current_supervised_authority=current_supervised_authority)
         final_attempt = attempts[-1]
         final_owner_path = final_attempt / "owner.json"
         final_owner = _sealed_read(
@@ -2429,10 +2578,6 @@ class StaticGpuSourceBuilder:
             raise StaticRegistryError("completed build projection is malformed") from exc
         if build.build_key != contract["build_key"]:
             raise StaticRegistryError("cached build identity is not keyed by its build contract")
-        expected_epoch = _attempt_artifact_epoch(
-            final_attempt, final_owner_path, final_holder, build=build)
-        if terminal.get("artifact_epoch") != expected_epoch:
-            raise StaticRegistryError("completed build artifact epoch changed")
         _within(build.anchor_build, build_root, "anchor build", directory=True)
         _within(build.candidate_build, build_root, "candidate build", directory=True)
         materialization_path = _within(
@@ -2651,6 +2796,10 @@ class StaticGpuSourceBuilder:
                     or expected_cmake not in plan["configure_command"]
                     or expected_cmake not in plan["build_command"]):
                 raise StaticRegistryError("cached build plan differs from sealed build contract")
+        expected_epoch = _attempt_artifact_epoch(
+            final_attempt, final_owner_path, final_holder, build=build)
+        if terminal.get("artifact_epoch") != expected_epoch:
+            raise StaticRegistryError("completed build artifact epoch changed")
         return build
 
     def build(self, candidate: controller.PlannedCandidate, _authorization: Any,
@@ -2738,7 +2887,8 @@ class StaticGpuSourceBuilder:
                         cache_root=cache_root, build_root=keyed_build_root,
                         operation_key=operation_key,
                         expected_intent=expected_intent, contract=contract,
-                        candidate=candidate, lock_paths=lock_paths)
+                        candidate=candidate, lock_paths=lock_paths,
+                        current_supervised_authority=supervised_authority)
                     if reopened is not None:
                         return reopened
                     intent_file_sha = _digest(cache_root / "intent.json")
@@ -2820,7 +2970,8 @@ class StaticGpuSourceBuilder:
                                     build_root=keyed_build_root,
                                     operation_key=operation_key,
                                     expected_intent=expected_intent, contract=contract,
-                                    candidate=candidate, lock_paths=lock_paths)
+                                    candidate=candidate, lock_paths=lock_paths,
+                                    current_supervised_authority=supervised_authority)
 
     def _build_uncached(self, candidate: controller.PlannedCandidate, _authorization: Any,
                         _permit: Mapping[str, Any]) -> controller.GpuSourceBuild:
@@ -2828,6 +2979,7 @@ class StaticGpuSourceBuilder:
         if not isinstance(operation_key, str) or len(operation_key) != 64:
             raise StaticRegistryError("uncached builder requires its canonical build key")
         contract = _permit.get("build_contract")
+        supervised_authority = _permit.get("supervised_build_authority")
         environment = _permit.get("build_environment")
         cache_root_raw = _permit.get("cache_root")
         build_attempt_root_raw = _permit.get("build_attempt_root")
@@ -2836,8 +2988,15 @@ class StaticGpuSourceBuilder:
                 or not isinstance(environment, Mapping) or not isinstance(cache_root_raw, str)
                 or not isinstance(build_attempt_root_raw, str)
                 or not isinstance(attempt_name, str)
-                or not attempt_name.startswith("attempt-")):
+                or not attempt_name.startswith("attempt-")
+                or not isinstance(supervised_authority, Mapping)):
             raise StaticRegistryError("uncached builder lacks its sealed build transaction")
+        controller_cgroup = _supervised_controller_cgroup(supervised_authority)
+        controller_cgroup_root = Path(str(controller_cgroup.get("path", "")))
+        if (not controller_cgroup_root.is_absolute()
+                or controller_cgroup_root.is_symlink()
+                or not controller_cgroup_root.is_dir()):
+            raise StaticRegistryError("supervised build cgroup root is unavailable")
         cache_root = Path(cache_root_raw).resolve(strict=True)
         # Production remains verification-only.  Every mutable worktree is
         # created from the independently sealed experimental instrument repo.
@@ -2909,7 +3068,9 @@ class StaticGpuSourceBuilder:
                 log.parent.mkdir(parents=True, exist_ok=True)
                 result = worktree.run_build(plan, log_path=log,
                                             env={str(key): str(value)
-                                                 for key, value in environment.items()})
+                                                 for key, value in environment.items()},
+                                            sandbox_cgroup_root=str(
+                                                controller_cgroup_root))
                 if not result.succeeded or result.log_disagrees_with_exit_code:
                     raise _CompileFailure(
                         f"clean build did not succeed for {ident}")
