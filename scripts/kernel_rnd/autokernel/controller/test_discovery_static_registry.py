@@ -16,6 +16,8 @@ import unittest
 from unittest import mock
 
 from . import discovery_static_registry as S
+from . import discovery_supervisor as D
+from . import discovery_supervisor_secure as DS
 from .discovery_static_registry import (SharedRewardRuntime, StaticRegistryError,
                                         runtime_maps_sampler, evidence_identity_files_for_build,
                                         StaticGpuSourceBuilder, _instrument_authority,
@@ -570,29 +572,21 @@ class StaticBuildCacheTests(unittest.TestCase):
 
         launch_root = root / "supervisor"; launch_root.mkdir(mode=0o700)
         semantic_sha256 = E.schemas.content_hash({})
-        config_path = launch_root / "deployment-config.json"
-        config_raw = json.dumps(
-            {"config_sha256": semantic_sha256},
-            sort_keys=True, separators=(",", ":")).encode() + b"\n"
-        config_path.write_bytes(config_raw)
-        config_path.chmod(0o600)
-        config_stat = config_path.stat()
-        config_identity = {
-            "dev": config_stat.st_dev, "ino": config_stat.st_ino,
-            "uid": config_stat.st_uid, "mode": 0o600,
-            "nlink": config_stat.st_nlink, "size": config_stat.st_size,
-            "mtime_ns": config_stat.st_mtime_ns,
-            "ctime_ns": config_stat.st_ctime_ns}
+        source_config = root / "deployment.json"
+        source_config.write_text(json.dumps(
+            {"config_sha256": semantic_sha256}) + "\n")
+        runtime = DS.RuntimeRoot.create_or_open(launch_root)
+        try:
+            producer_config = D._canonical_config(runtime, source_config)
+        finally:
+            runtime.close()
+        config_path = launch_root / producer_config["runtime_leaf"]
+        config_raw = config_path.read_bytes()
         spec = {
             "schema": "epyc.autokernel.discovery_supervisor_spec.v4",
             "kind": "deployment", "runtime_root": str(launch_root),
             "runtime_root_identity": {},
-            "deployment_config": {
-                "source_path": str(root / "deployment.json"),
-                "source_identity": {}, "runtime_leaf": config_path.name,
-                "canonical_sha256": sha(config_raw),
-                "semantic_sha256": semantic_sha256,
-                "canonical_size": len(config_raw), "identity": config_identity},
+            "deployment_config": producer_config,
             "validate_only": False, "canary": None,
             "python": "/usr/bin/python3", "restart_policy": {},
             "termination_policy": {}, "execution_closure": {},
@@ -914,6 +908,10 @@ class StaticBuildCacheTests(unittest.TestCase):
     def test_supervised_authority_keeps_canonical_and_semantic_identities_distinct(self):
         fixture = self.fixture()
         authority = fixture.permit["supervised_build_authority"]
+        launch_spec = json.loads(Path(authority["launch_spec"]["path"]).read_text())
+        self.assertEqual(
+            set(launch_spec["deployment_config"]["identity"]),
+            {"dev", "ino", "uid", "nlink", "mode", "size"})
         validated = S._validate_supervised_build_authority(
             authority,
             deployment_config_canonical_sha256=fixture.canonical_sha256,

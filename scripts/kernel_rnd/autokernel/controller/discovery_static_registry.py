@@ -427,16 +427,17 @@ def _validate_supervised_build_authority(
     config_raw, config_identity = _read_bound_file(
         config_path, "supervisor canonical deployment config", receipt=True)
     expected_config_identity = config.get("identity")
+    declared_config_identity = {
+        "dev": config_identity["device"],
+        "ino": config_identity["inode"],
+        "uid": config_identity["uid"],
+        "mode": config_identity["mode"],
+        "nlink": config_identity["nlink"],
+        "size": config_identity["size"],
+    }
     if (not isinstance(expected_config_identity, Mapping)
-            or {"dev": config_identity["device"],
-                "ino": config_identity["inode"],
-                "uid": config_identity["uid"],
-                "mode": config_identity["mode"],
-                "nlink": config_identity["nlink"],
-                "size": config_identity["size"],
-                "mtime_ns": config_identity["mtime_ns"],
-                "ctime_ns": config_identity["ctime_ns"]}
-            != dict(expected_config_identity)
+            or set(expected_config_identity) != set(declared_config_identity)
+            or declared_config_identity != dict(expected_config_identity)
             or len(config_raw) != config.get("canonical_size")
             or hashlib.sha256(config_raw).hexdigest()
             != config.get("canonical_sha256")):
