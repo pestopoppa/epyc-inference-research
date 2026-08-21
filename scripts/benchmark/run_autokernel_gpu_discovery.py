@@ -713,20 +713,44 @@ def _revalidate_operation_namespace(
     if (not isinstance(sealed_output, Mapping)
             or not isinstance(current_output, Mapping)):
         raise RuntimeError("sealed runner stage leaf identity is absent")
-    stable_output_keys = {
+    stable_directory_keys = {
         "path", "type", "device", "inode", "uid", "mode",
         "parent_device", "parent_inode"}
-    if ({key: sealed_output.get(key) for key in stable_output_keys}
-            != {key: current_output.get(key) for key in stable_output_keys}
-            or not isinstance(sealed_output.get("nlink"), int)
-            or not isinstance(current_output.get("nlink"), int)
-            or current_output["nlink"] < sealed_output["nlink"]):
-        raise RuntimeError("sealed runner stage leaf identity changed")
-    current_without_leaf = dict(current)
-    sealed_without_leaf = dict(namespace)
-    current_without_leaf.pop("output_identity")
-    sealed_without_leaf.pop("output_identity")
-    if current_without_leaf != sealed_without_leaf:
+    identity_keys = stable_directory_keys | {"nlink"}
+
+    def validate_directory(
+            sealed: Mapping[str, Any], observed: Mapping[str, Any],
+            label: str) -> None:
+        # A directory's link count legitimately grows when a governed child
+        # directory is created.  Its original count is a lower bound, while
+        # the inode and every other authority field remain immutable.
+        if (set(sealed) != identity_keys or set(observed) != identity_keys
+                or {key: sealed.get(key) for key in stable_directory_keys}
+                   != {key: observed.get(key)
+                       for key in stable_directory_keys}
+                or isinstance(sealed.get("nlink"), bool)
+                or not isinstance(sealed.get("nlink"), int)
+                or sealed["nlink"] < 2
+                or isinstance(observed.get("nlink"), bool)
+                or not isinstance(observed.get("nlink"), int)
+                or observed["nlink"] < sealed["nlink"]):
+            raise RuntimeError(f"sealed runner {label} identity changed")
+
+    validate_directory(sealed_output, current_output, "stage leaf")
+    for index, (sealed_directory, current_directory) in enumerate(zip(
+            namespace["directories"], current["directories"], strict=True)):
+        if (not isinstance(sealed_directory, Mapping)
+                or not isinstance(current_directory, Mapping)):
+            raise RuntimeError(
+                "sealed runner operation namespace identity changed")
+        validate_directory(
+            sealed_directory, current_directory,
+            f"operation directory {index}")
+    stable_namespace_keys = {
+        "schema", "operation_key", "repetition", "runtime_graphs", "stage",
+        "output_root"}
+    if ({key: namespace.get(key) for key in stable_namespace_keys}
+            != {key: current.get(key) for key in stable_namespace_keys}):
         raise RuntimeError("sealed runner operation namespace identity changed")
 
 
@@ -2836,8 +2860,33 @@ def _prepare_runner_output(root: Path, sealed: Mapping[str, Any]) -> bool:
         existing = json.loads(preflight_bytes)
     except (OSError, json.JSONDecodeError) as exc:
         raise RuntimeError("GPU discovery resumable preflight is unavailable") from exc
-    if existing != dict(sealed):
+    if not isinstance(existing, dict):
         raise RuntimeError("GPU discovery resumable preflight identity changed")
+    supplied = dict(sealed)
+    stored_namespace = existing.pop("operation_namespace", None)
+    supplied_namespace = supplied.pop("operation_namespace", None)
+    if existing != supplied:
+        raise RuntimeError("GPU discovery resumable preflight identity changed")
+    try:
+        if (not isinstance(stored_namespace, Mapping)
+                or not isinstance(supplied_namespace, Mapping)):
+            raise RuntimeError("runner operation namespace is absent")
+        _revalidate_operation_namespace(
+            stored_namespace, output_root=root,
+            operation_key=str(stored_namespace.get("operation_key", "")),
+            runtime_graphs=str(stored_namespace.get("runtime_graphs", "")))
+        _revalidate_operation_namespace(
+            supplied_namespace, output_root=root,
+            operation_key=str(supplied_namespace.get("operation_key", "")),
+            runtime_graphs=str(supplied_namespace.get("runtime_graphs", "")))
+    except RuntimeError as exc:
+        raise RuntimeError(
+            "GPU discovery resumable preflight identity changed") from exc
+    if not isinstance(sealed, dict):
+        raise RuntimeError("GPU discovery resumable preflight cannot be restored")
+    # All later process and terminal receipts keep the original namespace
+    # hash.  The freshly sampled namespace is only a revalidation witness.
+    sealed["operation_namespace"] = dict(stored_namespace)
     return True
 
 

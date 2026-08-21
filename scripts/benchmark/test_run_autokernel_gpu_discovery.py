@@ -1406,6 +1406,57 @@ class TestGpuDiscoveryBatchedSubprocess(unittest.TestCase):
                                         "preflight identity changed"):
                 gpu._prepare_runner_output(output_root, resumed)
 
+    def test_completed_arm_child_directories_resume_with_original_namespace(self) -> None:
+        """A completed first arm may raise nlink without changing authority."""
+        with tempfile.TemporaryDirectory() as directory:
+            operations_root = Path(directory)
+            operation_key = "9" * 64
+            output_root = (operations_root / operation_key / "runner/s1" /
+                           "measurement-graphs-off")
+            output_root.parent.mkdir(parents=True)
+            sealed = {
+                "operation_namespace": gpu._operation_namespace(
+                    operations_root=operations_root, output_root=output_root,
+                    operation_key=operation_key, repetition=1,
+                    runtime_graphs="off"),
+                "runtime_graphs": "off",
+                "arm_order_schedule": ["anchor", "candidate"],
+            }
+            self.assertFalse(gpu._prepare_runner_output(output_root, sealed))
+            original_namespace = dict(sealed["operation_namespace"])
+            original_namespace_sha256 = schemas.content_hash(original_namespace)
+            identity = {"runtime_graphs": "off", "runtime_arm": "anchor"}
+            gpu._seal_process_capture(
+                output_root / "process-anchor", identity=identity,
+                returncode=0, stdout=b"complete\n", stderr=b"",
+                residency=[{"sample": "in-window"}],
+                runtime_maps_identity=None, readiness_witness=None,
+                elapsed_s=1.0,
+                teardown={"death_proved": True}, resource_context=None)
+            (output_root / "supervisor-anchor").mkdir(mode=0o700)
+            self.assertGreater(
+                output_root.stat().st_nlink,
+                original_namespace["output_identity"]["nlink"])
+            process_receipt = output_root / "process-anchor/receipt.json"
+            original_receipt = process_receipt.read_bytes()
+
+            resumed = {
+                "operation_namespace": gpu._operation_namespace(
+                    operations_root=operations_root, output_root=output_root,
+                    operation_key=operation_key, repetition=1,
+                    runtime_graphs="off"),
+                "runtime_graphs": "off",
+                "arm_order_schedule": ["anchor", "candidate"],
+            }
+            self.assertTrue(gpu._prepare_runner_output(output_root, resumed))
+            self.assertEqual(resumed["operation_namespace"], original_namespace)
+            self.assertEqual(
+                schemas.content_hash(resumed["operation_namespace"]),
+                original_namespace_sha256)
+            self.assertEqual(process_receipt.read_bytes(), original_receipt)
+            self.assertTrue(gpu.validate_resumable_output(
+                output_root, graph_mode="off"))
+
     def test_serialized_readiness_does_not_unlock_on_maps_without_instrument_barrier(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             build = _build(Path(directory), rocwmma="ON", mfma="OFF")
