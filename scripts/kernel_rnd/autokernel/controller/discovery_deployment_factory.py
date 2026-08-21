@@ -22,7 +22,7 @@ from types import MappingProxyType
 from typing import Any, Callable, Mapping
 
 from .. import schemas, source_candidate
-from .. import hypothesis_portfolio
+from .. import hypothesis_portfolio, preauthored_continuation
 from ..execution import inference_window, device_sampler, t0_provider, worktree
 from ..execution import cpu_region_claim
 from ..execution import instrument_integrity
@@ -121,6 +121,74 @@ class ExperimentTemplate:
         if (not isinstance(markers, list) or not markers
                 or not all(isinstance(value, str) and value for value in markers)):
             raise DeploymentFactoryError("template kernel literal markers are malformed")
+        q5_variants = self.semantics.get("preauthored_q5_candidate_dispatch")
+        if q5_variants is not None:
+            if (self.template_id != "cuda-mmvq-q5-onewave-continuation-v1"
+                    or not isinstance(q5_variants, Mapping)
+                    or set(q5_variants) != {row.signature for row in
+                                            self.dispatch.anchor_exact[:3]}
+                    or len(expected_rows) != 3
+                    or len(self.dispatch.anchor_exact) != 4):
+                raise DeploymentFactoryError(
+                    "preauthored Q5 dispatch variants are outside dedicated authority")
+            anchors = {row.signature: row for row in self.dispatch.anchor_exact}
+            expected_by_route = {row.route_id: row for row in expected_rows}
+            selected_ids = {row.signature for row in self.dispatch.anchor_exact[:3]}
+            if set(expected_by_route) != selected_ids:
+                raise DeploymentFactoryError(
+                    "preauthored Q5 routes differ from exact selected anchor authority")
+            candidate: list[evidence.ExactDispatch] = []
+            selected: list[evidence.ExactDispatch] = []
+            for route_id in sorted(selected_ids):
+                anchor = anchors[route_id]
+                observed = expected_by_route[route_id]
+                if ((observed.calls, observed.grid, observed.workgroup,
+                     observed.lds_bytes) !=
+                    (anchor.calls, anchor.grid, anchor.workgroup,
+                     anchor.lds_bytes)
+                        or re.fullmatch(anchor.kernel_pattern,
+                                        observed.kernel_name) is None):
+                    raise DeploymentFactoryError(
+                        "preauthored Q5 anchor route identity changed")
+                derived_name = observed.kernel_name.replace(
+                    "(ggml_type)6, 1, true, true",
+                    "(ggml_type)6, 1, true, false")
+                if derived_name == observed.kernel_name:
+                    raise DeploymentFactoryError(
+                        "preauthored Q5 candidate literal cannot be derived")
+                variant = q5_variants[route_id]
+                expected_variant = {
+                    "kernel_name": derived_name, "calls": anchor.calls,
+                    "grid": anchor.grid, "workgroup": 64,
+                    "lds_bytes": anchor.lds_bytes // 2,
+                }
+                if dict(variant) != expected_variant:
+                    raise DeploymentFactoryError(
+                        "preauthored Q5 candidate geometry changed")
+                candidate.append(evidence.ExactDispatch(
+                    signature=f"{route_id}.candidate-onewave",
+                    kernel_pattern="^" + re.escape(derived_name) + "$",
+                    calls=anchor.calls, grid=anchor.grid, workgroup=64,
+                    lds_bytes=anchor.lds_bytes // 2,
+                    blocks_per_call=anchor.grid // 64))
+                selected.append(anchor)
+            tail = self.dispatch.anchor_exact[3]
+            candidate_tail_pattern = tail.kernel_pattern.replace(
+                "false, true", "false, false")
+            return evidence.DispatchContract(
+                candidate_exact=tuple(candidate), anchor_exact=tuple(selected),
+                candidate_structural_exact=(evidence.ExactDispatch(
+                    signature=f"{tail.signature}.candidate-structural-excluded",
+                    kernel_pattern=candidate_tail_pattern,
+                    calls=tail.calls, grid=tail.grid, workgroup=64,
+                    lds_bytes=tail.lds_bytes // 2,
+                    blocks_per_call=tail.grid // 64),),
+                anchor_structural_exact=(replace(
+                    tail, signature=f"{tail.signature}.anchor-structural-excluded"),),
+                candidate_forbidden=(evidence.ForbiddenDispatch(
+                    signature=f"{tail.signature}.candidate-stale-tail-forbidden",
+                    kernel_pattern=tail.kernel_pattern),),
+                invariants=())
         variants = self.semantics.get("candidate_dispatch_variants")
         if variants is not None:
             # The only topology-changing template is the reviewed odd-GQA7
@@ -368,6 +436,7 @@ def _execution_module_sources() -> dict[str, tuple[str, Path]]:
         "codex_container_actor": Path(codex_container_actor.__file__),
         "claude_fable5_critic_actor": Path(claude_fable5_critic_actor.__file__),
         "hypothesis_portfolio": Path(hypothesis_portfolio.__file__),
+        "preauthored_continuation": Path(preauthored_continuation.__file__),
     }
     if set(paths) != set(discovery_supervisor.GRAPH_EXECUTION_MODULES):
         raise DeploymentFactoryError("execution module role closure changed")
@@ -538,8 +607,8 @@ _PROFILE_V3_TRACE_CSV = Path(
 _PROFILE_V3_TRACE_CSV_SHA256 = "fb818d7b135becc5bfd773c1075cbdea91809d1f5c22ed8d8817560678b03c69"
 _PROFILE_V3_AGENT_CSV = _PROFILE_V3_TRACE_CSV.with_name("v13_sdk_agent_info.csv")
 _PROFILE_V3_AGENT_CSV_SHA256 = "50189a58f15ffb0008e840a8a6d18db1a88f73e3492b686b167d773de6b9323e"
-_PORTFOLIO_SEMANTIC_SHA256 = "814fa65c62bcbbb3f4d9cff7349f2322760580513b0f267f53c879ae905c0f2c"
-_PORTFOLIO_FILE_SHA256 = "64790d94bb8dd5a3ea75e8db9cc45403a90066b4efe28e1665d5940e2537d42b"
+_PORTFOLIO_SEMANTIC_SHA256 = "7ba7dd1c3c246fb22a247d6e24facb5fbe0eaebec8b2eb21635fde20043e8303"
+_PORTFOLIO_FILE_SHA256 = "0fab59286577fbb3d5fa2bf527ce0a0890c2f6fed25f81f6e3693518c1bf8e3f"
 _PORTFOLIO_CONTRACT_SHA256 = "96f207733e5fc27a722763cf1b3c542f327eb70d41e04b9948aaec086b3facd4"
 _V25_STATE_FILE_SHA256 = "7ce6e5561572390e0a1a31ff8a059be3b68c8cfc809a9233c2e22a8ca730ef3c"
 _V25_JOURNAL_FILE_SHA256 = "a715dbbf8a8e089ea9e356339ceaf8f007bf6191ee0ea699d445c1560ddc5b69"
@@ -892,6 +961,107 @@ def _json_artifact(path: Path, value: Mapping[str, Any]) -> tuple[Path, str]:
     return path.resolve(), hashlib.sha256(raw).hexdigest()
 
 
+def _preauthored_historical_evidence(
+        continuation: preauthored_continuation.PreauthoredContinuation,
+        evidence_rows: Mapping[str, Mapping[str, str]]) -> dict[str, Any]:
+    """Join the exact old receipt/output/binary bytes as provenance only."""
+    required_ids = {"ev-q5-onewave-correctness-binary"}
+    for row in continuation.historical_receipts:
+        required_ids.update({
+            row["receipt_evidence_id"], row["stdout_evidence_id"],
+            row["stderr_evidence_id"], row["binary_evidence_id"],
+        })
+    if not required_ids.issubset(evidence_rows):
+        raise DeploymentFactoryError(
+            "preauthored historical evidence coverage is incomplete")
+    joined = []
+    receipt_keys = {
+        "binary", "binary_sha256", "campaign_id", "command",
+        "cpu_overlap_policy", "device_claim_open", "device_claim_released",
+        "ended_at", "exact_case", "exact_case_ok", "exit_code",
+        "non_promotable", "promotion_claim", "residency_witness", "result",
+        "schema", "source_commit", "started_at", "stderr_sha256",
+        "stdout_sha256",
+    }
+
+    def strict_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        value: dict[str, Any] = {}
+        for key, item in pairs:
+            if key in value:
+                raise ValueError(f"duplicate JSON key {key!r}")
+            value[key] = item
+        return value
+
+    for expected in continuation.historical_receipts:
+        carriers = {
+            kind: evidence_rows[expected[f"{kind}_evidence_id"]]
+            for kind in ("receipt", "stdout", "stderr", "binary")
+        }
+        if (carriers["receipt"].get("sha256") != expected["file_sha256"]
+                or carriers["stdout"].get("sha256") != expected["stdout_sha256"]
+                or carriers["stderr"].get("sha256") != expected["stderr_sha256"]
+                or carriers["binary"].get("sha256") != expected["binary_sha256"]):
+            raise DeploymentFactoryError(
+                "historical correctness carrier hashes do not join")
+        carrier_bytes: dict[str, bytes] = {}
+        for kind, carrier in carriers.items():
+            if not isinstance(carrier.get("path"), str):
+                raise DeploymentFactoryError(
+                    "historical correctness evidence path is malformed")
+            carrier_bytes[kind] = _read_private_bound_bytes(
+                Path(carrier["path"]), carrier["sha256"],
+                f"historical Q5 {kind}")
+        try:
+            receipt = json.loads(
+                carrier_bytes["receipt"].decode("utf-8", "strict"),
+                object_pairs_hook=strict_object,
+                parse_constant=lambda value: (_ for _ in ()).throw(
+                    ValueError(value)))
+        except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+            raise DeploymentFactoryError(
+                "historical correctness receipt is unreadable") from exc
+        command_tail = (["test", "-o", "MUL_MAT", "-b", "ROCm0", "-p",
+                         "q5_0", "-j", "1"]
+                        if expected["scope"] == "targeted_q5_0" else
+                        ["test", "-o", "MUL_MAT", "-b", "ROCm0", "-j", "1"])
+        command = receipt.get("command")
+        exact_case = ("type_a=q5_0" if expected["scope"] == "targeted_q5_0"
+                      else "MUL_MAT(")
+        if (not isinstance(receipt, Mapping) or set(receipt) != receipt_keys
+                or not isinstance(command, list) or not command
+                or Path(str(command[0])).name != "test-backend-ops"
+                or command[1:] != command_tail
+                or receipt.get("schema") != expected["schema"]
+                or receipt.get("result") != expected["result"]
+                or receipt.get("source_commit") != expected["source_commit"]
+                or receipt.get("binary_sha256") != expected["binary_sha256"]
+                or receipt.get("stdout_sha256") != expected["stdout_sha256"]
+                or receipt.get("stderr_sha256") != expected["stderr_sha256"]
+                or receipt.get("exit_code") != 0
+                or receipt.get("exact_case") != exact_case
+                or receipt.get("exact_case_ok") is not True
+                or receipt.get("non_promotable") is not True
+                or receipt.get("promotion_claim") is not False):
+            raise DeploymentFactoryError(
+                "historical correctness receipt semantics changed")
+        joined.append({
+            "scope": expected["scope"],
+            "receipt_sha256": carriers["receipt"]["sha256"],
+            "stdout_sha256": carriers["stdout"]["sha256"],
+            "stderr_sha256": carriers["stderr"]["sha256"],
+            "binary_sha256": carriers["binary"]["sha256"],
+        })
+    body = {
+        "schema": "epyc.autokernel.preauthored_historical_evidence.v1",
+        "authority": "provenance_only_no_current_correctness_waiver",
+        "carrier_sha256": continuation.sha256,
+        "receipts": sorted(joined, key=lambda row: row["scope"]),
+        "modern_governed_correctness_required": True,
+    }
+    body["receipt_sha256"] = schemas.content_hash(body)
+    return body
+
+
 def initialize_static_deployment_bundle(root: Path) -> Path:
     """Emit the one reviewed site bundle; no caller supplies code or argv authority."""
     if not root.is_absolute() or root.is_symlink() or ".." in root.parts:
@@ -921,6 +1091,19 @@ def initialize_static_deployment_bundle(root: Path) -> Path:
     contract_sha = _digest_regular(contract_path, "hypothesis portfolio contract")
     if contract_sha != _PORTFOLIO_CONTRACT_SHA256:
         raise DeploymentFactoryError("hypothesis portfolio contract identity changed")
+    try:
+        continuation = preauthored_continuation.load()
+        preauthored_continuation.verify_git_authority(
+            continuation, _INSTRUMENT_PATH, _INSTRUMENT_COMMIT)
+    except preauthored_continuation.PreauthoredContinuationError as exc:
+        raise DeploymentFactoryError(
+            "checked-in preauthored continuation is not deployable") from exc
+    continuation_path = config_dir / "preauthored-q5-continuation-v1.json"
+    _atomic_bytes(
+        continuation_path, preauthored_continuation.DEFAULT_CARRIER.read_bytes())
+    continuation_path.chmod(0o400)
+    continuation_file_sha = _digest_regular(
+        continuation_path, "preauthored continuation")
     vendored_evidence: dict[str, dict[str, str]] = {}
     for row in portfolio.body["evidence"]:
         evidence_id = row["evidence_id"]
@@ -933,6 +1116,8 @@ def initialize_static_deployment_bundle(root: Path) -> Path:
         target.chmod(0o400)
         vendored_evidence[evidence_id] = {
             "path": str(target.resolve()), "sha256": row["sha256"]}
+    historical_q5_evidence = _preauthored_historical_evidence(
+        continuation, vendored_evidence)
     evidence_manifest = {
         "schema": deployment.EVIDENCE_MANIFEST_SCHEMA,
         "portfolio_sha256": portfolio.sha256,
@@ -1041,7 +1226,7 @@ def initialize_static_deployment_bundle(root: Path) -> Path:
                "runtime_config_sha256": runtime_sha,
                "profile_receipts": [{"path": str(source_plan.path), "sha256": source_plan.sha256}],
                "hotspots": hotspots,
-               "source_constraints": {"template_registry": "gpu-source-templates-v3",
+               "source_constraints": {"template_registry": "gpu-source-templates-v4",
                                       "max_reviewed_files_per_candidate": 2,
                                       "excluded_source_plan_fields": ["planner_posture", "current_execution",
                                                                        "max_overlap_bytes", "overlap_policy"]},
@@ -1069,6 +1254,11 @@ def initialize_static_deployment_bundle(root: Path) -> Path:
                "template_surfaces_sha256": schemas.content_hash(template_surfaces),
                "template_surfaces": template_surfaces,
                "portfolio_dispatch_authority": portfolio_dispatch_authority}
+    context["preauthored_continuation_sha256"] = continuation.sha256
+    context["preauthored_source_backed_diff_sha256"] = (
+        continuation.source_backed_diff_sha256)
+    context["preauthored_historical_evidence_sha256"] = (
+        historical_q5_evidence["receipt_sha256"])
     context["context_sha256"] = schemas.content_hash(context)
     context_path, context_sha = _json_artifact(config_dir / "planner-context.json", context)
     for directory in (root / "state", root / "evidence", root / "operations", root / "builds"):
@@ -1085,7 +1275,7 @@ def initialize_static_deployment_bundle(root: Path) -> Path:
                             "evidence_root": str(root / "evidence"),
                             "operations_root": str(root / "operations"),
                             "build_root": str(root / "builds"),
-                            "max_iterations": 100, "nomination_threshold": .03},
+                            "max_iterations": 10, "nomination_threshold": .03},
              "actors": {"wrapper_path": str(wrapper.path), "wrapper_sha256": wrapper.sha256,
                         "critic_path": str(critic.path), "critic_sha256": critic.sha256,
                         "environment_profile_id": _STATIC_IDS["environment_profile"]},
@@ -1103,7 +1293,10 @@ def initialize_static_deployment_bundle(root: Path) -> Path:
                                       "sha256": evidence_manifest_file_sha},
                                   "hypothesis_portfolio_contract": {
                                       "path": str(contract_path.resolve()),
-                                      "sha256": contract_sha}},
+                                      "sha256": contract_sha},
+                                  "preauthored_continuation": {
+                                      "path": str(continuation_path.resolve()),
+                                      "sha256": continuation_file_sha}},
              "planner_context": {"path": str(context_path), "sha256": context_sha},
              "source_plan": {"source_builder_id": _STATIC_IDS["source_builder"],
                              "evidence_plan_id": _STATIC_IDS["evidence_plan"],
@@ -1400,6 +1593,18 @@ def _template_registry() -> ExperimentTemplateRegistry:
          "anchor": mmvq_anchor,
          "replays": tuple({"trace": f"{q} exact dispatch", "symbol": "mul_mat_vec_q_switch_type"}
                           for q in ("Q4_K", "Q5_0", "Q6_K"))},
+        {"id": "cuda-mmvq-q5-onewave-continuation-v1",
+         "path": "ggml/src/ggml-cuda/mmvq.cu",
+         "primary": "calc_nwarps",
+         "symbols": ("mmvq_parameter_table_id", "get_device_table_id",
+                     "calc_nwarps", "calc_rows_per_block"),
+         "markers": ("mul_mat_vec_q<",), "op": "MUL_MAT", "cases": 1139,
+         "anchor": mmvq_anchor[:4], "replays": (),
+         "q5_preauthored": True,
+         "planner_target_exclusions": ({
+             "kernel_pattern": mmvq_anchor[3][0], "calls": 129,
+             "grid": 57344, "workgroup": 128, "lds_bytes": 512,
+             "reason": "Q5 false/true tail is structural and excluded from reward"},)},
         {"id": "cuda-vecdotq-v1", "path": "ggml/src/ggml-cuda/vecdotq.cuh",
          "primary": "vec_dot_q5_0_q8_1",
          "symbols": ("get_int_b1", "get_int_b2", "get_int_b4", "get_int_from_table_16", "unpack_ksigns",
@@ -1516,6 +1721,12 @@ def _template_registry() -> ExperimentTemplateRegistry:
                        "manual_replay_traces": [dict(row, file=path) for row in family["replays"]],
                        "planner_target_exclusions": list(
                            family.get("planner_target_exclusions", ())),
+                       **({"preauthored_q5_candidate_dispatch": {
+                           f"cuda-mmvq-q5-onewave-continuation-v1.anchor.{index}": {
+                               "kernel_name": "", "calls": row[1], "grid": row[2],
+                               "workgroup": 64, "lds_bytes": row[4] // 2}
+                           for index, row in enumerate(mmvq_anchor[:3])}}
+                          if family.get("q5_preauthored") is True else {}),
                        "target_runtime_screen": target_runtime_screen,
                        "stage_fsm": stage_fsm,
                        "decision_evidence": decision_evidence,
@@ -1542,9 +1753,41 @@ def _template_registry() -> ExperimentTemplateRegistry:
                                            "workgroup": [64, 1024], "lds_bytes": [0, 131072],
                                            "kernel_name_fragments": list(family["markers"])}})
     provisional = object.__new__(ExperimentTemplateRegistry)
-    object.__setattr__(provisional, "version", "gpu-source-templates-v3")
+    # Fill exact full demangled Q5 candidate names from the reviewed anchor CSV;
+    # the empty placeholders above cannot become actor authority.
+    q5_template = templates.get("cuda-mmvq-q5-onewave-continuation-v1")
+    if q5_template is not None:
+        q5_rows = {}
+        for anchor in q5_template.dispatch.anchor_exact[:3]:
+            matches = [
+                (str(row["kernel"]), int(row["grid"]), int(row["workgroup"]),
+                 int(row["lds"]))
+                for row in evidence._load_dispatches(
+                    _PROFILE_V3_TRACE_CSV,
+                    profiler_trace_schema_id=evidence.ROCPROF_V3_TRACE_ID,
+                    expected_rows=59925)
+                if (re.fullmatch(anchor.kernel_pattern, str(row["kernel"]))
+                    and int(row["grid"]) == anchor.grid
+                    and int(row["workgroup"]) == anchor.workgroup
+                    and int(row["lds"]) == anchor.lds_bytes)]
+            names = {row[0] for row in matches}
+            if len(names) != 1:
+                raise DeploymentFactoryError(
+                    "reviewed Q5 anchor lacks one exact native kernel name")
+            name = names.pop().replace(
+                "(ggml_type)6, 1, true, true",
+                "(ggml_type)6, 1, true, false")
+            q5_rows[anchor.signature] = {
+                "kernel_name": name, "calls": anchor.calls,
+                "grid": anchor.grid, "workgroup": 64,
+                "lds_bytes": anchor.lds_bytes // 2}
+        semantics = dict(q5_template.semantics)
+        semantics["preauthored_q5_candidate_dispatch"] = q5_rows
+        templates[q5_template.template_id] = replace(
+            q5_template, semantics=semantics)
+    object.__setattr__(provisional, "version", "gpu-source-templates-v4")
     object.__setattr__(provisional, "templates", MappingProxyType(templates))
-    body = {"version": "gpu-source-templates-v3", "templates": {
+    body = {"version": "gpu-source-templates-v4", "templates": {
         key: {"template_id": value.template_id, "target_surface": value.target_surface,
               "target_symbol": value.target_symbol, "correctness_id": value.correctness_id,
               "dispatch_id": value.dispatch_id, "allowed_files": sorted(value.allowed_files),
@@ -1558,7 +1801,7 @@ def _template_registry() -> ExperimentTemplateRegistry:
         for key, value in sorted(templates.items())}}
     digest = hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":"),
                                        ensure_ascii=False, allow_nan=False).encode()).hexdigest()
-    return ExperimentTemplateRegistry("gpu-source-templates-v3", digest, templates)
+    return ExperimentTemplateRegistry("gpu-source-templates-v4", digest, templates)
 
 
 def _reviewed_source_package(
@@ -1595,6 +1838,7 @@ _TEMPLATE_CHANGE_CLASSES = {
     "cuda-fattn-combine-v1": ("arithmetic",),
     "cuda-fattn-gqa7-common-v1": ("dispatcher",),
     "cuda-mmvq-v2": ("arithmetic", "dispatcher"),
+    "cuda-mmvq-q5-onewave-continuation-v1": ("dispatcher",),
     "cuda-vecdotq-v1": ("arithmetic",),
     "cuda-vecdotq-q4k-v1": ("arithmetic",),
     "cuda-vecdotq-q6k-v1": ("arithmetic",),
@@ -2426,7 +2670,10 @@ def _seal_graph_receipt(config: deployment.DiscoveryDeployment,
         templates, config.hypothesis_portfolio.value)
     profiler_runtime = [evidence._bound_reference(item)
                         for item in _rocprof_v3_policy(config)]
-    body = {"schema": "epyc.autokernel.static_discovery_graph.v6",
+    historical_q5_evidence = _preauthored_historical_evidence(
+        config.preauthored_continuation.value,
+        config.hypothesis_evidence_manifest.value["evidence"])
+    body = {"schema": "epyc.autokernel.static_discovery_graph.v7",
             "authority": "nonpromotable_candidate_only_discovery", "promotion_claim": False,
             "inference_executed": False, "config_sha256": config.config_sha256,
             "registry_ids": dict(_STATIC_IDS), "template_registry_sha256": templates.registry_sha256,
@@ -2443,6 +2690,20 @@ def _seal_graph_receipt(config: deployment.DiscoveryDeployment,
                     config.hypothesis_evidence_manifest.value["manifest_sha256"],
                 "contract_sha256": config.hypothesis_portfolio_contract.sha256},
             "carry_forward_sha256": carry_forward["carry_forward_sha256"],
+            "preauthored_continuation": {
+                "schema": preauthored_continuation.SCHEMA,
+                "carrier_sha256": config.preauthored_continuation.value.sha256,
+                "file_sha256": config.preauthored_continuation.input.sha256,
+                "hypothesis_id": config.preauthored_continuation.value.hypothesis_id,
+                "template_id": config.preauthored_continuation.value.template_id,
+                "patch_sha256": config.preauthored_continuation.value.patch_sha256,
+                "source_backed_diff_sha256":
+                    config.preauthored_continuation.value.source_backed_diff_sha256,
+                "historical_evidence_sha256":
+                    historical_q5_evidence["receipt_sha256"],
+                "historical_correctness_authority": "provenance_only",
+                "modern_governed_correctness_required": True,
+            },
             "reviewed_source_package": source_package.manifest(),
             "profile_trace_authority": {
                 "receipt": str(_PROFILE_TRACE_RECEIPT),
@@ -2559,10 +2820,11 @@ def _seal_graph_receipt(config: deployment.DiscoveryDeployment,
             raise DeploymentFactoryError("durable deployment graph is malformed") from exc
         if durable.get("schema") in {
                 "epyc.autokernel.static_discovery_graph.v4",
-                "epyc.autokernel.static_discovery_graph.v5"}:
+                "epyc.autokernel.static_discovery_graph.v5",
+                "epyc.autokernel.static_discovery_graph.v6"}:
             raise DeploymentFactoryError(
                 "legacy deployment graph cannot authorize successor execution; "
-                "initialize a fresh v6 deployment")
+                "initialize a fresh v7 deployment")
         if path.read_bytes() != encoded:
             raise DeploymentFactoryError("durable deployment graph differs from current sealed graph")
     else:
@@ -2576,6 +2838,21 @@ def _seal_graph_receipt(config: deployment.DiscoveryDeployment,
 def build_static_deployment_graph(config: deployment.DiscoveryDeployment) -> StaticDeploymentGraph:
     """Construct the sole live graph.  No registry/executor object is accepted."""
     config.revalidate()
+    try:
+        preauthored_continuation.verify_git_authority(
+            config.preauthored_continuation.value, config.instrument_path,
+            config.instrument_commit)
+    except preauthored_continuation.PreauthoredContinuationError as exc:
+        raise DeploymentFactoryError(
+            "preauthored continuation Git authority changed") from exc
+    historical_q5_evidence = _preauthored_historical_evidence(
+        config.preauthored_continuation.value,
+        config.hypothesis_evidence_manifest.value["evidence"])
+    if (config.planner_context.value[
+            "preauthored_historical_evidence_sha256"]
+            != historical_q5_evidence["receipt_sha256"]):
+        raise DeploymentFactoryError(
+            "planner context historical continuation evidence changed")
     if (config.hypothesis_portfolio.value.sha256 != _PORTFOLIO_SEMANTIC_SHA256
             or config.hypothesis_portfolio.input.sha256 != _PORTFOLIO_FILE_SHA256
             or config.hypothesis_portfolio_contract.sha256
@@ -3215,6 +3492,9 @@ def controller_config(config: deployment.DiscoveryDeployment, *, dry_run: bool =
     """The deployment receipt is the sole source of controller configuration."""
     config.revalidate()
     carry_forward = _v25_carry_forward(config)
+    preauthored_continuation.verify_git_authority(
+        config.preauthored_continuation.value, config.instrument_path,
+        config.instrument_commit)
     return controller.ControllerConfig(
         output_root=config.state_root, evidence_root=config.evidence_root,
         max_iterations=config.max_iterations,
@@ -3236,6 +3516,10 @@ def controller_config(config: deployment.DiscoveryDeployment, *, dry_run: bool =
         hypothesis_portfolio_sha256=config.hypothesis_portfolio.value.sha256,
         carry_forward=carry_forward,
         carry_forward_sha256=carry_forward["carry_forward_sha256"],
+        preauthored_continuations={
+            config.preauthored_continuation.value.hypothesis_id:
+                config.preauthored_continuation.value,
+        },
         # The sealed deployment digest, not a caller argument, namespaces all
         # controller/worktree/receipt identities across concurrent deployments.
         campaign_id=f"ak-discovery-{config.config_sha256[:16]}")

@@ -7,7 +7,7 @@ backend test: ``--autokernel-property-self-test`` returns before
 """
 from __future__ import annotations
 
-from dataclasses import fields, replace
+from dataclasses import dataclass, fields, replace
 import hashlib
 import json
 import os
@@ -42,6 +42,17 @@ SELF_TEST_MARKER = (
 REAL_SUBPROCESS_RUN = subprocess.run
 
 
+@dataclass(frozen=True)
+class _InstrumentReviewConfig:
+    """Only the current review helper's inputs, never a migrated v8 config."""
+
+    production_head: str
+    instrument_path: Path
+    instrument_branch: str
+    instrument_commit: str
+    state_root: Path
+
+
 def _self_hash_holds(body: dict[str, object]) -> bool:
     expected = body.get("receipt_sha256")
     payload = {key: value for key, value in body.items()
@@ -50,7 +61,25 @@ def _self_hash_holds(body: dict[str, object]) -> bool:
 
 
 def _load_v8() -> tuple[object, C.PlannedCandidate, C.GpuSourceBuild, dict[str, object]]:
-    config = F.deployment.load_deployment_config(V8_BUNDLE / "config/deployment.json")
+    # The v8 deployment is immutable evidence under the retired exact v4
+    # grammar.  Loading it through the live v5 parser would weaken the parser's
+    # explicit legacy refusal.  This test only needs the five inputs consumed by
+    # ``_instrument_review_receipt``; construct that narrow test carrier from
+    # the immutable v8 production identity and replace its instrument fields in
+    # the validate-only test below.
+    legacy = json.loads(
+        (V8_BUNDLE / "config/deployment.json").read_text(encoding="utf-8"))
+    if (legacy.get("schema") != "epyc.autokernel.discovery_deployment.v4"
+            or legacy.get("production", {}).get("head") !=
+               "0db32c06e3e550065b78311a6031ef3dd2c4f27c"):
+        raise AssertionError("v8 deployment identity changed")
+    config = _InstrumentReviewConfig(
+        production_head=legacy["production"]["head"],
+        instrument_path=Path(legacy["instrument"]["repo_path"]),
+        instrument_branch=legacy["instrument"]["branch"],
+        instrument_commit=legacy["instrument"]["commit"],
+        state_root=Path(legacy["controller"]["state_root"]),
+    )
     state = json.loads((V8_BUNDLE / "state/state.json").read_text(encoding="utf-8"))
     candidate = C._restore_pending(state["inflight"])
     terminals = tuple((V8_BUNDLE / "operations/build-cache/entries").glob(

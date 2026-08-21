@@ -35,11 +35,11 @@ CORRECTNESS_SCHEMA = "epyc.autokernel.targeted_correctness_receipt.v3"
 CORRECTNESS_REFUSAL_SCHEMA = "epyc.autokernel.targeted_correctness_refusal.v1"
 CORRECTNESS_PARSER_ID = "ak.t0.backend_ops_console/v1"
 EXECUTION_POLICY_SCHEMA = "epyc.autokernel.gpu_source_execution_policy.v2"
-ATTRIBUTION_SCHEMA = "epyc.autokernel.gpu_kernel_attribution.v2"
+ATTRIBUTION_SCHEMA = "epyc.autokernel.gpu_kernel_attribution.v3"
 ATTRIBUTION_REFUSAL_SCHEMA = "epyc.autokernel.gpu_kernel_attribution_refusal.v1"
-PROFILER_ATTEMPT_SCHEMA = "epyc.autokernel.rocprofiler_transport_attempt.v1"
+PROFILER_ATTEMPT_SCHEMA = "epyc.autokernel.rocprofiler_transport_attempt.v2"
 PROFILER_RUNTIME_SCHEMA = "epyc.autokernel.rocprofiler_runtime_closure.v1"
-PAIR_SCHEMA = "epyc.autokernel.gpu_kernel_attribution_pair.v1"
+PAIR_SCHEMA = "epyc.autokernel.gpu_kernel_attribution_pair.v2"
 PAIR_REFUSAL_SCHEMA = "epyc.autokernel.gpu_kernel_attribution_pair_refusal.v1"
 SEALED_BUNDLE_SCHEMA = "epyc.autokernel.gpu_source_evidence_bundle.v1"
 SHA = re.compile(r"^[0-9a-f]{64}$")
@@ -474,6 +474,8 @@ class InvariantDispatch:
 class DispatchContract:
     candidate_exact: tuple[ExactDispatch, ...]
     anchor_exact: tuple[ExactDispatch, ...]
+    candidate_structural_exact: tuple[ExactDispatch, ...] = ()
+    anchor_structural_exact: tuple[ExactDispatch, ...] = ()
     candidate_forbidden: tuple[ForbiddenDispatch, ...] = ()
     anchor_forbidden: tuple[ForbiddenDispatch, ...] = ()
     invariants: tuple[InvariantDispatch, ...] = ()
@@ -482,7 +484,9 @@ class DispatchContract:
         if not self.candidate_exact or not self.anchor_exact:
             raise EvidenceProducerError("both arms require exact dispatch expectations")
         signatures = [item.signature for group in (
-            self.candidate_exact, self.anchor_exact, self.candidate_forbidden,
+            self.candidate_exact, self.anchor_exact,
+            self.candidate_structural_exact, self.anchor_structural_exact,
+            self.candidate_forbidden,
             self.anchor_forbidden, self.invariants) for item in group]
         if len(signatures) != len(set(signatures)):
             raise EvidenceProducerError("dispatch expectation signatures must be globally unique")
@@ -2237,40 +2241,45 @@ def _geometry_signature(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
 
 def _reduce_arm(
     rows: Sequence[Mapping[str, Any]], *, exact: Sequence[ExactDispatch],
+    structural_exact: Sequence[ExactDispatch] = (),
     forbidden: Sequence[ForbiddenDispatch], invariants: Sequence[InvariantDispatch],
 ) -> dict[str, Any]:
-    exact_result: dict[str, Any] = {}
-    for expectation in exact:
-        # One real kernel symbol can launch at several governed geometries in
-        # the same workload (quantize_q8_1 is the canonical case).  Select the
-        # geometry as well as the escaped name so each expected cell remains
-        # exact and independently countable.
-        hits = [row for row in _matching(rows, expectation.kernel_pattern)
-                if (int(row["grid"]), int(row["workgroup"]), int(row["lds"]),
-                    int(row["blocks_per_call"])) ==
-                   (expectation.grid, expectation.workgroup,
-                    expectation.lds_bytes, expectation.blocks_per_call)]
-        geometry = _geometry_signature(hits)
-        expected_geometry = [{
-            "grid": expectation.grid, "workgroup": expectation.workgroup,
-            "lds_bytes": expectation.lds_bytes,
-            "blocks_per_call": expectation.blocks_per_call,
-            "calls": expectation.calls,
-        }]
-        if (geometry["calls"] != expectation.calls
-                or geometry["geometries"] != expected_geometry):
-            raise EvidenceProducerError(
-                f"exact dispatch {expectation.signature} count/geometry mismatch")
-        exact_result[expectation.signature] = geometry
-    for pattern in {item.kernel_pattern for item in exact}:
-        allowed = {(item.grid, item.workgroup, item.lds_bytes, item.blocks_per_call)
-                   for item in exact if item.kernel_pattern == pattern}
-        unexpected = [row for row in _matching(rows, pattern)
-                      if (int(row["grid"]), int(row["workgroup"]), int(row["lds"]),
-                          int(row["blocks_per_call"])) not in allowed]
-        if unexpected:
-            raise EvidenceProducerError(
-                "exact dispatch matched an unreviewed geometry")
+    def reduce_exact(expectations: Sequence[ExactDispatch], label: str
+                     ) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for expectation in expectations:
+            hits = [row for row in _matching(rows, expectation.kernel_pattern)
+                    if (int(row["grid"]), int(row["workgroup"]), int(row["lds"]),
+                        int(row["blocks_per_call"])) ==
+                       (expectation.grid, expectation.workgroup,
+                        expectation.lds_bytes, expectation.blocks_per_call)]
+            geometry = _geometry_signature(hits)
+            expected_geometry = [{
+                "grid": expectation.grid, "workgroup": expectation.workgroup,
+                "lds_bytes": expectation.lds_bytes,
+                "blocks_per_call": expectation.blocks_per_call,
+                "calls": expectation.calls,
+            }]
+            if (geometry["calls"] != expectation.calls
+                    or geometry["geometries"] != expected_geometry):
+                raise EvidenceProducerError(
+                    f"{label} dispatch {expectation.signature} count/geometry mismatch")
+            result[expectation.signature] = geometry
+        for pattern in {item.kernel_pattern for item in expectations}:
+            allowed = {(item.grid, item.workgroup, item.lds_bytes,
+                        item.blocks_per_call)
+                       for item in expectations if item.kernel_pattern == pattern}
+            unexpected = [row for row in _matching(rows, pattern)
+                          if (int(row["grid"]), int(row["workgroup"]),
+                              int(row["lds"]), int(row["blocks_per_call"]))
+                          not in allowed]
+            if unexpected:
+                raise EvidenceProducerError(
+                    f"{label} dispatch matched an unreviewed geometry")
+        return result
+
+    exact_result = reduce_exact(exact, "exact")
+    structural_result = reduce_exact(structural_exact, "structural")
     forbidden_result: dict[str, int] = {}
     for expectation in forbidden:
         count = len(_matching(rows, expectation.kernel_pattern))
@@ -2287,8 +2296,15 @@ def _reduce_arm(
         invariant_result[expectation.signature] = {
             key: value for key, value in _geometry_signature(hits).items()
             if key in {"calls", "geometries"}}
-    return {"exact": exact_result, "forbidden": forbidden_result,
+    return {"exact": exact_result, "structural_exact": structural_result,
+            "forbidden": forbidden_result,
             "invariants": invariant_result}
+
+
+def _arm_structural_exact(plan: GpuSourceEvidencePlan, arm: str
+                          ) -> tuple[ExactDispatch, ...]:
+    return (plan.dispatch.candidate_structural_exact if arm == "candidate"
+            else plan.dispatch.anchor_structural_exact)
 
 
 def _rocprofv3_invocation(
@@ -2537,6 +2553,7 @@ def _seal_profiler_attempt(
         "timestamp_reduction_sha256": schemas.content_hash(dispatches),
         "structural_fingerprint_sha256": _profiler_structural_fingerprint(dispatches),
         "exact_dispatch_signatures": reduction["exact"],
+        "structural_dispatch_signatures": reduction["structural_exact"],
         "forbidden_dispatch_signatures": reduction["forbidden"],
         "invariant_signatures": reduction["invariants"],
         "benchmark_completion": dict(completion),
@@ -2628,7 +2645,8 @@ def _load_profiler_attempt(
     forbidden = (plan.dispatch.candidate_forbidden if arm == "candidate"
                  else plan.dispatch.anchor_forbidden)
     reduction = _reduce_arm(
-        dispatches, exact=exact, forbidden=forbidden,
+        dispatches, exact=exact,
+        structural_exact=_arm_structural_exact(plan, arm), forbidden=forbidden,
         invariants=plan.dispatch.invariants)
     completion = _parse_profile_completion(
         Path(str(body["stdout_path"])), expected_csv=output,
@@ -2639,6 +2657,8 @@ def _load_profiler_attempt(
             or body.get("structural_fingerprint_sha256")
             != _profiler_structural_fingerprint(dispatches)
             or body.get("exact_dispatch_signatures") != reduction["exact"]
+            or body.get("structural_dispatch_signatures")
+               != reduction["structural_exact"]
             or body.get("forbidden_dispatch_signatures") != reduction["forbidden"]
             or body.get("invariant_signatures") != reduction["invariants"]
             or body.get("benchmark_completion") != completion
@@ -2688,7 +2708,8 @@ def _execute_profiler_attempt(
         plan=plan, arm=arm, argv=invocation.argv)
     try:
         reduction = _reduce_arm(
-            dispatches, exact=exact, forbidden=forbidden,
+            dispatches, exact=exact,
+            structural_exact=_arm_structural_exact(plan, arm), forbidden=forbidden,
             invariants=plan.dispatch.invariants)
     except EvidenceProducerError as exc:
         identity = plan.candidate if arm == "candidate" else plan.anchor
@@ -2816,6 +2837,8 @@ def _produce_attribution_arm_v3(
         "started_at": body_attempt["started_at"],
         "ended_at": body_attempt["ended_at"], "dispatches": dispatches,
         "exact_dispatch_signatures": body_attempt["exact_dispatch_signatures"],
+        "structural_dispatch_signatures":
+            body_attempt["structural_dispatch_signatures"],
         "forbidden_dispatch_signatures": body_attempt["forbidden_dispatch_signatures"],
         "invariant_signatures": body_attempt["invariant_signatures"],
         "structural_fingerprint_sha256": body_attempt["structural_fingerprint_sha256"],
@@ -2877,7 +2900,8 @@ def _produce_attribution_arm(
     dispatches = _load_dispatches(invocation.timestamp_csv_path)
     try:
         reduction = _reduce_arm(
-            dispatches, exact=exact, forbidden=forbidden,
+            dispatches, exact=exact,
+            structural_exact=_arm_structural_exact(plan, arm), forbidden=forbidden,
             invariants=plan.dispatch.invariants)
     except EvidenceProducerError as exc:
         refusal = _seal(directory / "refusal.json", {
@@ -2943,6 +2967,7 @@ def _produce_attribution_arm(
         "ended_at": capture.ended_at,
         "dispatches": dispatches,
         "exact_dispatch_signatures": reduction["exact"],
+        "structural_dispatch_signatures": reduction["structural_exact"],
         "forbidden_dispatch_signatures": reduction["forbidden"],
         "invariant_signatures": reduction["invariants"],
         **_claim_boundary_fields(opened, released, residency),
@@ -3030,7 +3055,9 @@ def load_gpu_source_attribution_refusal(
     forbidden = (plan.dispatch.candidate_forbidden if arm == "candidate"
                  else plan.dispatch.anchor_forbidden)
     try:
-        _reduce_arm(dispatches, exact=exact, forbidden=forbidden,
+        _reduce_arm(dispatches, exact=exact,
+                    structural_exact=_arm_structural_exact(plan, arm),
+                    forbidden=forbidden,
                     invariants=plan.dispatch.invariants)
     except EvidenceProducerError as exc:
         if _durable_refusal_reason(exc) != body["reason"]:
@@ -3050,6 +3077,10 @@ def _expectations(plan: GpuSourceEvidencePlan) -> dict[str, Any]:
     return {
         "candidate_exact": [asdict(item) for item in plan.dispatch.candidate_exact],
         "anchor_exact": [asdict(item) for item in plan.dispatch.anchor_exact],
+        "candidate_structural_exact": [
+            asdict(item) for item in plan.dispatch.candidate_structural_exact],
+        "anchor_structural_exact": [
+            asdict(item) for item in plan.dispatch.anchor_structural_exact],
         "candidate_forbidden": [asdict(item) for item in plan.dispatch.candidate_forbidden],
         "anchor_forbidden": [asdict(item) for item in plan.dispatch.anchor_forbidden],
         "invariants": [asdict(item) for item in plan.dispatch.invariants],
@@ -3289,9 +3320,13 @@ def _validate_attribution_body(body: Mapping[str, Any], *, plan: GpuSourceEviden
     exact = plan.dispatch.candidate_exact if arm == "candidate" else plan.dispatch.anchor_exact
     forbidden = (plan.dispatch.candidate_forbidden if arm == "candidate"
                  else plan.dispatch.anchor_forbidden)
-    reduction = _reduce_arm(rows, exact=exact, forbidden=forbidden,
+    reduction = _reduce_arm(rows, exact=exact,
+                            structural_exact=_arm_structural_exact(plan, arm),
+                            forbidden=forbidden,
                             invariants=plan.dispatch.invariants)
     if (body.get("exact_dispatch_signatures") != reduction["exact"]
+            or body.get("structural_dispatch_signatures")
+               != reduction["structural_exact"]
             or body.get("forbidden_dispatch_signatures") != reduction["forbidden"]
             or body.get("invariant_signatures") != reduction["invariants"]):
         raise EvidenceProducerError(f"{arm} dispatch derivation mismatch")
@@ -3610,6 +3645,10 @@ def _contract_from_dict(value: Mapping[str, Any]) -> DispatchContract:
         return DispatchContract(
             candidate_exact=tuple(ExactDispatch(**row) for row in value["candidate_exact"]),
             anchor_exact=tuple(ExactDispatch(**row) for row in value["anchor_exact"]),
+            candidate_structural_exact=tuple(
+                ExactDispatch(**row) for row in value["candidate_structural_exact"]),
+            anchor_structural_exact=tuple(
+                ExactDispatch(**row) for row in value["anchor_structural_exact"]),
             candidate_forbidden=tuple(ForbiddenDispatch(**row) for row in value["candidate_forbidden"]),
             anchor_forbidden=tuple(ForbiddenDispatch(**row) for row in value["anchor_forbidden"]),
             invariants=tuple(InvariantDispatch(**row) for row in value["invariants"]),

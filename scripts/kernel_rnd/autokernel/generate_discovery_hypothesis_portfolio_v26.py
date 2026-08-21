@@ -171,11 +171,12 @@ def generate() -> dict[str, object]:
     body["corpus_id"] = "gpu-decode-v26-20260821"
     body["generated_at"] = "2026-08-21T10:00:00Z"
     bundle = body["current_bundle"]
-    bundle["bundle_id"] = "gpu-source-templates-v3-qwen05b-tg128"
-    bundle["template_catalog_version"] = "gpu-source-templates-v3"
+    bundle["bundle_id"] = "gpu-source-templates-v4-qwen05b-tg128"
+    bundle["template_catalog_version"] = "gpu-source-templates-v4"
     bundle["template_ids"] = sorted(set(bundle["template_ids"]) | {
         "cuda-fattn-combine-v1", "cuda-fattn-gqa7-common-v1",
         "cuda-vecdotq-q4k-v1", "cuda-vecdotq-q6k-v1",
+        "cuda-mmvq-q5-onewave-continuation-v1",
     })
     bundle["eligibility_semantics"] = (
         "Eligible means one exact current-frame route and one route-scoped reviewed "
@@ -218,10 +219,54 @@ def generate() -> dict[str, object]:
             "Derives predecessor patch and cross-campaign semantic replay identity",
         ],
     } for turn, operation_key, source_manifest_sha256 in V25_SOURCE_MANIFESTS)
+    body["evidence"].extend([
+        {
+            "evidence_id": "ev-q5-onewave-correctness-targeted-stdout",
+            "path": ("/mnt/raid0/llm/autokernel/screens/"
+                     "ak-gpu-q5-onewave-correctness-targeted-20260813-s1/stdout.txt"),
+            "sha256": "d01705d052979a27c8e06dd03dbfd69d0acd8346e39c45926480218be7c80cf4",
+            "authority": "candidate_only", "temporal_status": "current_v9",
+            "claims": ["Historical targeted Q5_0 correctness stdout bytes only"],
+        },
+        {
+            "evidence_id": "ev-q5-onewave-correctness-targeted-stderr",
+            "path": ("/mnt/raid0/llm/autokernel/screens/"
+                     "ak-gpu-q5-onewave-correctness-targeted-20260813-s1/stderr.txt"),
+            "sha256": "319da273d511817608a0372f67752eb3ed5769526e52cf4e482f042f07306a40",
+            "authority": "candidate_only", "temporal_status": "current_v9",
+            "claims": ["Historical targeted Q5_0 correctness stderr bytes only"],
+        },
+        {
+            "evidence_id": "ev-q5-onewave-correctness-full-stdout",
+            "path": ("/mnt/raid0/llm/autokernel/screens/"
+                     "ak-gpu-q5-onewave-correctness-full-20260813-s1/stdout.txt"),
+            "sha256": "f342b8503ad53e88a9f6d8280a21e50069dc203562aa51b07a5f6183f9fb466c",
+            "authority": "candidate_only", "temporal_status": "current_v9",
+            "claims": ["Historical full backend correctness stdout bytes only"],
+        },
+        {
+            "evidence_id": "ev-q5-onewave-correctness-full-stderr",
+            "path": ("/mnt/raid0/llm/autokernel/screens/"
+                     "ak-gpu-q5-onewave-correctness-full-20260813-s1/stderr.txt"),
+            "sha256": "1341b362077509ab6fd87e17b9e40a95bd0dda20d0a2577afa8608c1abab29e9",
+            "authority": "candidate_only", "temporal_status": "current_v9",
+            "claims": ["Historical full backend correctness stderr bytes only"],
+        },
+        {
+            "evidence_id": "ev-q5-onewave-correctness-binary",
+            "path": ("/mnt/raid0/llm/autokernel/worktrees/"
+                     "ak-gpu-q5-onewave-20260813/build-ak-gpu-q5-onewave/"
+                     "bin/test-backend-ops"),
+            "sha256": "e6540dc80ae41f28cd2791e13e65d12aa9ebba83f63aeba8b48adcc540aec378",
+            "authority": "candidate_only", "temporal_status": "current_v9",
+            "claims": ["Historical Q5 one-wave correctness binary bytes only"],
+        },
+    ])
 
-    old = body["hypotheses"]
+    old = [row for row in body["hypotheses"]
+           if row["hypothesis_id"] != "akh-v2-q5-onewave-preauthored"]
     for row in old:
-        row["priority"]["rank"] += 6
+        row["priority"]["rank"] += 7
     outcomes = {
         "akh-v2-q5-type-specific-dequant":
             "v25 nominated this family after two scientific screens; discovery replay is forbidden.",
@@ -267,9 +312,81 @@ def generate() -> dict[str, object]:
         _signature("cuda-fattn-gqa7-common-v1", 1,
                    "flash_attn_combine_results<64>", 3096, 896, 64, 512),
     ]
+    q5_template = "cuda-mmvq-q5-onewave-continuation-v1"
+    q5 = [
+        _signature(q5_template, 0, "mul_mat_vec_q<(ggml_type)6,1,true,true>",
+                   6063, 57344, 128, 1024),
+        _signature(q5_template, 1, "mul_mat_vec_q<(ggml_type)6,1,true,true>",
+                   4644, 8192, 128, 1024),
+        _signature(q5_template, 2, "mul_mat_vec_q<(ggml_type)6,1,true,true>",
+                   3096, 311296, 128, 1024),
+    ]
+    q5_continuation = _record(
+        rank=1, hypothesis_id="akh-v2-q5-onewave-preauthored",
+        title="Q5_0 one-wave governed preauthored continuation",
+        statement=("The exact eb26918 Q5_0 CDNA2 one-wave patch can be rebuilt "
+                   "against the byte-identical current MMVQ preimage and evaluated "
+                   "without another planner, critic, or source-authoring call."),
+        quant="Q5_0", shape="type6-mmvq",
+        files=["ggml/src/ggml-cuda/mmvq.cu"],
+        symbols=["calc_nwarps", "calc_rows_per_block", "get_device_table_id",
+                 "mmvq_parameter_table_id"],
+        template=q5_template, mechanism="q5_0_one_wave_per_output_block",
+        change_class="dispatcher", signatures=q5, share=27.42969404468003,
+        expected_gain=(0.5, 3.0), cost="low", risk="medium",
+        falsifiers=[
+            "Current governed correctness fails after the modern instrument build",
+            "Exact selected type-6 route duration is non-positive",
+            "Graphs-on whole-model throughput direction is non-positive",
+        ],
+        notes=[
+            "Dedicated Q5 MMVQ continuation authority; generic cuda-mmvq-v2 remains forbidden",
+            "Historical v1 correctness is provenance only and never waives current correctness",
+            "The false/true tail is structural/excluded, not attribution reward authority",
+        ],
+        evidence_refs=[
+            EVIDENCE, "ev-q5-onewave-correctness-targeted",
+            "ev-q5-onewave-correctness-full",
+            "ev-q5-onewave-correctness-targeted-stdout",
+            "ev-q5-onewave-correctness-targeted-stderr",
+            "ev-q5-onewave-correctness-full-stdout",
+            "ev-q5-onewave-correctness-full-stderr",
+            "ev-q5-onewave-correctness-binary",
+        ],
+        next_action=("Materialize the exact sealed patch, build against the current "
+                     "instrument, rerun governed correctness, then start attribution."))
+    q5_continuation["dispatch_anchors"][0]["selection"] = (
+        "The three exact true/true anchor routes are attribution authority; the "
+        "129-call false/true tail remains structural and excluded.")
+    q5_continuation["dispatch_anchors"][0]["excluded_signatures"] = [
+        _signature(q5_template, 3, "mul_mat_vec_q<(ggml_type)6,1,false,true>",
+                   129, 57344, 128, 512)]
+    q5_continuation["lifecycle"] = {
+        "maturity": "candidate_authored",
+        "next_action": ("Rebuild exact sealed patch and rerun current governed correctness; "
+                        "historical receipts remain provenance only."),
+        "candidate_identity": {
+            "candidate_id": "ak-candidate-q5-onewave-eb26918fa",
+            "source_commit": "eb26918fa82f8aef3ab72f1e3263bd8fecde62e7",
+            "candidate_patch_sha256":
+                "f4cc49cd11cdfd93a2d5d2e00e653f503b6a16ce675bfb12c034fbbfae3e7a77",
+            "authority": "sealed_patch",
+        },
+        "diagnostic_identity": None,
+    }
+    q5_continuation["decision_policy"]["max_distinct_candidates"] = 1
+    q5_continuation["epistemic"] = {
+        "grade": "correctness_only", "confidence": "high",
+        "limitations": [
+            "Historical v1 correctness validates only the old binary/runtime closure.",
+            "Current governed correctness is mandatory after the modern build.",
+            "No historical receipt supplies attribution or throughput authority.",
+        ],
+    }
     fresh = [
+        q5_continuation,
         _record(
-            rank=1, hypothesis_id="akh-v26-q4k-branchless-sixbit-scale",
+            rank=2, hypothesis_id="akh-v26-q4k-branchless-sixbit-scale",
             title="Q4_K lane-uniform six-bit scale/min selection",
             statement=("Packed selection can remove the lane-uniform j<2 scale/min "
                        "branch while preserving dp4a and exact launch geometry."),
@@ -288,7 +405,7 @@ def generate() -> dict[str, object]:
                            "ev-fable5-mi210-lever-matrix", "ev-research-loop-snapshot"],
             next_action="Author one clean packed-select variant inside the two reviewed Q4_K symbols."),
         _record(
-            rank=2, hypothesis_id="akh-v26-rms-scale-broadcast",
+            rank=3, hypothesis_id="akh-v26-rms-scale-broadcast",
             title="RMSNorm single-scale shared broadcast",
             statement=("Lane zero can compute the identical post-reduction mean and rsqrt once "
                        "and broadcast the scale through existing shared storage."),
@@ -306,7 +423,7 @@ def generate() -> dict[str, object]:
                            "ev-v25-terminal-journal"],
             next_action="Author the single-scale shared-broadcast mechanism after source-scope validation."),
         _record(
-            rank=3, hypothesis_id="akh-v26-rope-neox-index-strength-reduction",
+            rank=4, hypothesis_id="akh-v26-rope-neox-index-strength-reduction",
             title="RoPE NEOX exact index strength reduction",
             statement=("Exact quotient, remainder, and pair indices can be reused across both "
                        "current NEOX routes without changing powf or trigonometric semantics."),
@@ -324,7 +441,7 @@ def generate() -> dict[str, object]:
             evidence_refs=[EVIDENCE, "ev-source-plan-v1", "ev-research-loop-snapshot"],
             next_action="Author exact integer index reuse across the two sealed NEOX routes."),
         _record(
-            rank=4, hypothesis_id="akh-v26-fa-combine-wave-normalization",
+            rank=5, hypothesis_id="akh-v26-fa-combine-wave-normalization",
             title="Flash-attention combine wave-cooperative normalization",
             statement=("For the exact 64-block combine route, one wave lane per metadata block "
                        "can reduce max and denominator and reuse scales via existing shared memory."),
@@ -342,7 +459,7 @@ def generate() -> dict[str, object]:
             evidence_refs=[EVIDENCE, "ev-source-plan-v1"],
             next_action="Author one exact 64-lane metadata normalization specialization."),
         _record(
-            rank=5, hypothesis_id="akh-v26-q6k-packed-decode",
+            rank=6, hypothesis_id="akh-v26-q6k-packed-decode",
             title="Q6_K packed decode address-arithmetic reduction",
             statement=("Precomputed lane offsets and shifts can reduce packed ql/qh/sign/scale "
                        "address arithmetic while preserving dp4a and two-wave geometry."),
@@ -362,7 +479,7 @@ def generate() -> dict[str, object]:
                            "ev-quant-ladder-np-raw-20260816"],
             next_action="Author one Q6-only packed-offset reuse variant under the narrow template."),
         _record(
-            rank=6, hypothesis_id="akh-v26-fa-gqa7-common-map",
+            rank=7, hypothesis_id="akh-v26-fa-gqa7-common-map",
             title="Flash-attention GQA7 operation-level common mapping",
             statement=("One operation-level 7=3x2+1 mapping can emit exact paired-head and tail "
                        "tile routes without per-KV host slicing or axis remapping."),

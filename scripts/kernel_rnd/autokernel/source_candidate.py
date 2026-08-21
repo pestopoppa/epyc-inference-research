@@ -15,7 +15,7 @@ import math
 import os
 import re
 import stat
-from dataclasses import dataclass
+from dataclasses import InitVar, dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, Mapping, Optional, Sequence
 
@@ -27,7 +27,8 @@ __all__ = [
     "SCHEMA_SOURCE_PATCH", "SourceCandidateError", "SourcePatchManifest",
     "AppliedSourceCandidate", "source_patch_manifest_bytes", "load_source_patch_manifest",
     "apply_source_candidate", "parameter_patch_bundle_sha256",
-    "hunk_identities",
+    "hunk_identities", "source_backed_symbol_map",
+    "source_backed_source_patch_manifest",
 ]
 
 SCHEMA_SOURCE_PATCH = "epyc.autokernel.source-patch.v1"
@@ -48,6 +49,10 @@ _TRUNCATED_FUNC = re.compile(
     r"(?P<name>[A-Za-z_~][A-Za-z0-9_:~<>]*)\s*\(\s*$")
 _SOURCE_DECLARATION_FRAGMENT = re.compile(
     r"(?P<name>[A-Za-z_~][A-Za-z0-9_:~<>]*)\s*\([^(){};]*,\s*$")
+_SOURCE_NAMED_ENUM = re.compile(
+    r"^enum(?:\s+(?:class|struct))?\s+"
+    r"(?P<name>[A-Za-z_][A-Za-z0-9_]*)"
+    r"(?:\s*:\s*[^{};]+)?\s*\{$")
 _CONTROL_WORDS = frozenset({"if", "for", "while", "switch", "catch"})
 _NON_DECLARATION_PREFIXES = (
     "if ", "for ", "while ", "switch ", "catch ", "return ",
@@ -104,6 +109,9 @@ def _symbol_from_source_declaration(normalized: str) -> str:
     """Recognize declarations only in Git's source-backed function context."""
     if normalized.startswith(("//", "/*", "*", "#")):
         return FILE_SCOPE
+    enum = _SOURCE_NAMED_ENUM.fullmatch(normalized)
+    if enum is not None:
+        return enum.group("name")
     matches = list(_FUNC.finditer(normalized))
     match = matches[-1] if matches else _TRUNCATED_FUNC.search(normalized)
     if match is None:
@@ -251,6 +259,23 @@ def hunk_identities(diff_text: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
             tuple(sorted(set(row[2] for row in rows))))
 
 
+def source_backed_symbol_map(diff_text: str) -> Mapping[str, tuple[str, ...]]:
+    """Return exact scopes from an immutable source-derived context diff.
+
+    Unlike :func:`hunk_identities`, this recognizes declarations only from
+    unchanged or deleted source rows.  It is therefore suitable for a
+    controller-owned preauthored continuation after the context diff has been
+    derived from the checked-out preimage, never for actor-authored hunk prose.
+    """
+    _text, paths, _hunks, _symbols, symbols_by_file, _deleted = \
+        _validate_patch_text(
+            diff_text.encode("utf-8"), source_backed_declarations=True)
+    if any(FILE_SCOPE in symbols for symbols in symbols_by_file.values()):
+        raise SourceCandidateError(
+            "source-backed diff contains an unresolved file-scope edit")
+    return {path: tuple(symbols_by_file[path]) for path in paths}
+
+
 def _validate_patch_text(
         patch_bytes: bytes,
         *, source_backed_declarations: bool = False,
@@ -326,6 +351,9 @@ def _changed_line_identity(
     return tuple(rows)
 
 
+_SOURCE_BACKED_MANIFEST_AUTHORITY = object()
+
+
 @dataclass(frozen=True)
 class SourcePatchManifest:
     campaign_id: str
@@ -340,8 +368,9 @@ class SourcePatchManifest:
     mechanism_id: str
     patch_sha256: str
     patch_bytes: bytes
+    _source_backed_diff: InitVar[object] = None
 
-    def __post_init__(self) -> None:
+    def __post_init__(self, _source_backed_diff: object) -> None:
         if not self.campaign_id.startswith("ak-") or not self.proposal_id.startswith("akp-") \
                 or not self.candidate_id.startswith("akc-"):
             raise SourceCandidateError("manifest campaign/proposal/candidate id prefixes are invalid")
@@ -373,8 +402,28 @@ class SourcePatchManifest:
             normalized[path] = tuple(sorted(set(symbols)))
         object.__setattr__(self, "declared_symbols", normalized)
         schemas.require.str(self.mechanism_id, "mechanism_id", error=SourceCandidateError)
-        text, paths, _hunks, _actual_symbols, actual_by_file, _deleted = \
+        text, paths, _hunks, _actual_symbols, generic_by_file, _deleted = \
             _validate_patch_text(self.patch_bytes)
+        if _source_backed_diff is None:
+            actual_by_file = generic_by_file
+        else:
+            if (not isinstance(_source_backed_diff, tuple)
+                    or len(_source_backed_diff) != 2
+                    or _source_backed_diff[0] is not
+                       _SOURCE_BACKED_MANIFEST_AUTHORITY
+                    or not isinstance(_source_backed_diff[1], str)):
+                raise SourceCandidateError(
+                    "source-backed manifest authority is invalid")
+            source_diff = _source_backed_diff[1]
+            (_source_text, source_paths, _source_hunks, _source_symbols,
+             actual_by_file, _source_deleted) = _validate_patch_text(
+                 source_diff.encode("utf-8"),
+                 source_backed_declarations=True)
+            if (source_paths != paths
+                    or _changed_line_identity(source_diff)
+                       != _changed_line_identity(text)):
+                raise SourceCandidateError(
+                    "source-backed scope differs from canonical patch edits")
         scan = reward_hack_scan.scan_unified_diff(text)
         prebuild_findings = {
             "phase_detection": scan.phase_detection_findings,
@@ -394,6 +443,11 @@ class SourcePatchManifest:
             if outside:
                 raise SourceCandidateError(
                     f"patch hunks in {path!r} derive undeclared enclosing symbol(s) {outside}")
+            if _source_backed_diff is not None \
+                    and set(actual_by_file[path]) != set(normalized[path]):
+                raise SourceCandidateError(
+                    f"source-backed scopes in {path!r} do not exactly equal "
+                    "declared symbols")
         if not text.endswith("\n"):
             raise SourceCandidateError("patch bytes must end in a newline")
 
@@ -429,6 +483,35 @@ class SourcePatchManifest:
         if any(path in {p for paths in instrument_integrity.TRANSLATION_UNITS.values()
                         for p in paths} for path in self.declared_files):
             raise SourceCandidateError("a candidate may not patch a reward-instrument translation unit")
+
+
+def source_backed_source_patch_manifest(
+    *, campaign_id: str, proposal_id: str, candidate_id: str,
+    source_tree: str, production_base_commit: str, instrument_commit: str,
+    change_class: str, declared_files: tuple[str, ...],
+    declared_symbols: Mapping[str, tuple[str, ...]], mechanism_id: str,
+    patch_sha256: str, patch_bytes: bytes, source_backed_diff: str,
+) -> SourcePatchManifest:
+    """Construct a manifest from an exact immutable-source context diff.
+
+    The source-backed view must describe precisely the same changed bytes and
+    coordinates as ``patch_bytes``.  It may supply enclosing named-enum or
+    function declarations that ordinary actor-authored hunk headers cannot.
+    The returned object remains the normal canonical ``SourcePatchManifest``;
+    its serialized carrier contains no alternate scope or file-scope waiver.
+    """
+    if not isinstance(source_backed_diff, str) or not source_backed_diff:
+        raise SourceCandidateError("source-backed diff is missing")
+    return SourcePatchManifest(
+        campaign_id=campaign_id, proposal_id=proposal_id,
+        candidate_id=candidate_id, source_tree=source_tree,
+        production_base_commit=production_base_commit,
+        instrument_commit=instrument_commit, change_class=change_class,
+        declared_files=declared_files, declared_symbols=declared_symbols,
+        mechanism_id=mechanism_id, patch_sha256=patch_sha256,
+        patch_bytes=patch_bytes,
+        _source_backed_diff=(
+            _SOURCE_BACKED_MANIFEST_AUTHORITY, source_backed_diff))
 
 
 def source_patch_manifest_bytes(manifest: SourcePatchManifest) -> bytes:

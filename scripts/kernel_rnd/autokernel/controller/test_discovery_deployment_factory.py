@@ -14,7 +14,7 @@ from pathlib import Path
 from types import SimpleNamespace
 import tempfile
 
-from .. import hypothesis_portfolio, source_candidate
+from .. import hypothesis_portfolio, preauthored_continuation, source_candidate
 from . import discovery_deployment_factory as F
 from . import discovery_controller as C
 
@@ -262,8 +262,8 @@ class DeploymentFactoryTests(unittest.TestCase):
             expected_rows=59_925)
         self.assertEqual(len(rows), 59_925)
         registry = F._template_registry()
-        self.assertEqual(registry.version, "gpu-source-templates-v3")
-        self.assertEqual(len(registry.templates), 14)
+        self.assertEqual(registry.version, "gpu-source-templates-v4")
+        self.assertEqual(len(registry.templates), 15)
         for template_id, reviewed in registry.templates.items():
             with self.subTest(template=template_id):
                 reduced = F.evidence._reduce_arm(
@@ -302,6 +302,8 @@ class DeploymentFactoryTests(unittest.TestCase):
         surfaces = F._normalized_template_surfaces(registry, portfolio)
         authority = F._portfolio_dispatch_authority(registry, portfolio)
         expected_authority = {
+            "akh-v2-q5-onewave-preauthored": [
+                (6063, 57344), (4644, 8192), (3096, 311296)],
             "akh-v26-q4k-branchless-sixbit-scale": [(1548, 114688)],
             "akh-v26-rms-scale-broadcast": [(6321, 256)],
             "akh-v26-rope-neox-index-strength-reduction": [
@@ -382,6 +384,7 @@ class DeploymentFactoryTests(unittest.TestCase):
             observed[template_id] = F._expected_rocprofv3_rows(
                 reviewed.bind_dispatch(intent))
         self.assertEqual(observed, {
+            "cuda-mmvq-q5-onewave-continuation-v1": (59_925, 59_925),
             "cuda-vecdotq-q4k-v1": (59_925, 59_925),
             "cuda-norm-v2": (59_925, 59_925),
             "cuda-rope-v2": (59_925, 59_925),
@@ -631,17 +634,23 @@ class DeploymentFactoryTests(unittest.TestCase):
                                   "workspace_path": f"reviewed-source/{path}"}
                                  for path in sorted(F._TARGET_SOURCE_SHA256)]}
         portfolio_input = immutable(hypothesis_portfolio.DEFAULT_PORTFOLIO)
+        continuation = preauthored_continuation.load(
+            preauthored_continuation.DEFAULT_CARRIER)
         carry_forward_root = root / "v25-carry-forward"
         carry_forward_root.mkdir(mode=0o700)
         portfolio_evidence = {
             row["evidence_id"]: row for row in portfolio.body["evidence"]}
         carry_forward_evidence = {}
-        carry_forward_ids = (
+        carry_forward_ids = {
             "ev-v25-terminal-state", "ev-v25-terminal-journal",
             *(f"ev-v25-source-manifest-turn{turn:02d}"
               for turn in (2, 4, 6, 8, 12, 13, 14)),
-        )
-        for evidence_id in carry_forward_ids:
+        }
+        for receipt in continuation.historical_receipts:
+            carry_forward_ids.update({
+                receipt[f"{kind}_evidence_id"]
+                for kind in ("receipt", "stdout", "stderr", "binary")})
+        for evidence_id in sorted(carry_forward_ids):
             source = portfolio_evidence[evidence_id]
             target = carry_forward_root / f"{evidence_id}.json"
             shutil.copyfile(source["path"], target)
@@ -652,6 +661,8 @@ class DeploymentFactoryTests(unittest.TestCase):
             "manifest_sha256": "f" * 64,
             "evidence": carry_forward_evidence,
         }
+        historical_evidence = F._preauthored_historical_evidence(
+            continuation, carry_forward_evidence)
         config = SimpleNamespace(
             config_sha256="c" * 64, production_path=production.resolve(),
             production_branch=F.deployment.FROZEN_PRODUCTION_BRANCH,
@@ -682,8 +693,16 @@ class DeploymentFactoryTests(unittest.TestCase):
                 "template_surfaces": surfaces,
                 "template_surfaces_sha256": F.schemas.content_hash(surfaces),
                 "portfolio_dispatch_authority": F._portfolio_dispatch_authority(
-                    templates, portfolio)}),
+                    templates, portfolio),
+                "preauthored_continuation_sha256": continuation.sha256,
+                "preauthored_source_backed_diff_sha256":
+                    continuation.source_backed_diff_sha256,
+                "preauthored_historical_evidence_sha256":
+                    historical_evidence["receipt_sha256"]}),
             hypothesis_portfolio=SimpleNamespace(value=portfolio, input=portfolio_input),
+            preauthored_continuation=SimpleNamespace(
+                value=continuation,
+                input=immutable(preauthored_continuation.DEFAULT_CARRIER)),
             hypothesis_evidence_manifest=SimpleNamespace(value=evidence_manifest),
             hypothesis_portfolio_contract=SimpleNamespace(
                 sha256=F._PORTFOLIO_CONTRACT_SHA256),
@@ -717,11 +736,12 @@ class DeploymentFactoryTests(unittest.TestCase):
             json.dumps(controller_config.planner_context)
             portfolio = loaded.hypothesis_portfolio.value
             self.assertEqual(portfolio.sha256,
-                             "814fa65c62bcbbb3f4d9cff7349f2322760580513b0f267f53c879ae905c0f2c")
+                             "7ba7dd1c3c246fb22a247d6e24facb5fbe0eaebec8b2eb21635fde20043e8303")
             context = loaded.planner_context.value
             self.assertEqual(
                 {row["hypothesis_id"] for row in context["eligible_hypotheses"]},
-                {"akh-v26-q4k-branchless-sixbit-scale",
+                {"akh-v2-q5-onewave-preauthored",
+                 "akh-v26-q4k-branchless-sixbit-scale",
                  "akh-v26-rms-scale-broadcast",
                  "akh-v26-rope-neox-index-strength-reduction",
                  "akh-v26-fa-combine-wave-normalization",
@@ -729,8 +749,8 @@ class DeploymentFactoryTests(unittest.TestCase):
                  "akh-v26-fa-gqa7-common-map"},
             )
             self.assertEqual(len(portfolio.hypotheses), 27)
-            self.assertEqual(len(context["eligible_hypotheses"]), 6)
-            self.assertEqual(len(context["ineligible_hypotheses"]), 21)
+            self.assertEqual(len(context["eligible_hypotheses"]), 7)
+            self.assertEqual(len(context["ineligible_hypotheses"]), 20)
             self.assertEqual(
                 context["template_symbol_authority"],
                 template_symbol_authority(F._template_registry()))
@@ -758,7 +778,7 @@ class DeploymentFactoryTests(unittest.TestCase):
                 "akh-v2-batching-closes-all-lowbit-gaps",
                 {row["dnr_id"] for row in context["do_not_repeat"]})
             rows = loaded.hypothesis_evidence_manifest.value["evidence"]
-            self.assertEqual(len(rows), 38)
+            self.assertEqual(len(rows), 43)
             self.assertEqual(set(rows), {row["evidence_id"]
                                          for row in portfolio.body["evidence"]})
             self.assertTrue(all(str(root / "portfolio-evidence") in row["path"]
@@ -872,14 +892,18 @@ class DeploymentFactoryTests(unittest.TestCase):
                     ["--deployment", str(deployment_path), "--validate-only"]), 0)
                 graph_path = config.state_root / "deployment-graph.json"
                 sealed_graph = graph_path.read_bytes()
-                graph_path.write_text(json.dumps({
-                    "schema": "epyc.autokernel.static_discovery_graph.v5",
-                    "graph_sha256": "0" * 64,
-                }), encoding="utf-8")
-                with self.assertRaisesRegex(
-                        F.DeploymentFactoryError,
-                        "legacy deployment graph cannot authorize successor"):
-                    F.build_static_deployment_graph(config)
+                for legacy_schema in (
+                        "epyc.autokernel.static_discovery_graph.v5",
+                        "epyc.autokernel.static_discovery_graph.v6"):
+                    with self.subTest(legacy_schema=legacy_schema):
+                        graph_path.write_text(json.dumps({
+                            "schema": legacy_schema,
+                            "graph_sha256": "0" * 64,
+                        }), encoding="utf-8")
+                        with self.assertRaisesRegex(
+                                F.DeploymentFactoryError,
+                                "legacy deployment graph cannot authorize successor"):
+                            F.build_static_deployment_graph(config)
                 graph_path.write_bytes(sealed_graph)
             payload = json.loads(output.getvalue())
             self.assertEqual(payload["status"], "validated")
@@ -921,7 +945,7 @@ class DeploymentFactoryTests(unittest.TestCase):
             self.assertIn("t0_provider", receipt["execution_modules"])
             self.assertIn("codex_container_actor", receipt["execution_modules"])
             self.assertEqual(receipt["schema"],
-                             "epyc.autokernel.static_discovery_graph.v6")
+                             "epyc.autokernel.static_discovery_graph.v7")
             self.assertTrue(all(
                 set(row) == {"logical_path", "sha256"}
                 and row["logical_path"].startswith("scripts/")
@@ -1024,24 +1048,37 @@ class DeploymentFactoryTests(unittest.TestCase):
             source_manifest=Manifest(("ggml/src/ggml-cuda/fattn.cu",))), template())
 
     def test_controller_config_has_no_cli_override_authority(self):
-        context = {"context_sha256": "a" * 64}
+        continuation = preauthored_continuation.load(
+            preauthored_continuation.DEFAULT_CARRIER)
+        context = {
+            "context_sha256": "a" * 64,
+            "preauthored_continuation_sha256": continuation.sha256,
+            "preauthored_source_backed_diff_sha256":
+                continuation.source_backed_diff_sha256,
+        }
         config = mock.Mock(state_root=Path("/state"), evidence_root=Path("/evidence"),
                            max_iterations=2, nomination_threshold=.03,
                            planner_context=mock.Mock(value=context), production_branch="production-consolidated-v9",
                            production_head="b" * 40,
                            instrument_branch="measurement-instrument",
-                           instrument_commit="c" * 40,
+                           instrument_path=Path("/instrument"),
+                           instrument_commit=continuation.compatibility_bridge[
+                               "current_instrument_commit"],
                            config_sha256="c" * 64,
                            experiment_template_registry_sha256="d" * 64)
         portfolio = hypothesis_portfolio.load(hypothesis_portfolio.DEFAULT_PORTFOLIO)
         config.hypothesis_portfolio = SimpleNamespace(value=portfolio)
+        config.preauthored_continuation = SimpleNamespace(value=continuation)
         config.admission_policy = SimpleNamespace(
             value={"policy_sha256": "e" * 64, "examples": [], "profiles": []},
             corpus=SimpleNamespace(policy_sha256="e" * 64, version="test-v2"))
         config.revalidate = mock.Mock()
         carry_forward = mocked_v25_carry_forward()
         with mock.patch.object(
-                F, "_v25_carry_forward", return_value=carry_forward) as derive:
+                F, "_v25_carry_forward", return_value=carry_forward) as derive, \
+                mock.patch.object(
+                    F.preauthored_continuation, "verify_git_authority",
+                    return_value=continuation.source_backed_diff) as verify:
             result = F.controller_config(config, dry_run=True)
         self.assertEqual((result.output_root, result.evidence_root,
                           result.max_iterations, result.nomination_threshold,
@@ -1056,6 +1093,8 @@ class DeploymentFactoryTests(unittest.TestCase):
         self.assertEqual(result.carry_forward_sha256,
                          carry_forward["carry_forward_sha256"])
         derive.assert_called_once_with(config)
+        verify.assert_called_once_with(
+            continuation, config.instrument_path, config.instrument_commit)
         config.revalidate.assert_called_once()
 
     def test_window_lease_uses_sealed_arbiter_and_never_probes_cpu_lock(self):

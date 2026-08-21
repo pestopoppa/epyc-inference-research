@@ -27,7 +27,8 @@ import stat
 import tempfile
 from typing import Any, Callable, Mapping, Protocol, Sequence
 
-from .. import campaign, hypothesis_portfolio, journal, schemas, source_candidate
+from .. import (campaign, hypothesis_portfolio, journal,
+                preauthored_continuation, schemas, source_candidate)
 from ..evaluator import integrity
 from . import (claude_fable5_critic_actor, codex_container_actor,
                discovery_telemetry, do_not_repeat, hypotheses)
@@ -35,7 +36,7 @@ from . import gpu_source_proofs
 from scripts.benchmark import autokernel_progression
 from scripts.benchmark import run_autokernel_gpu_discovery as gpu_discovery
 
-SCHEMA = "epyc.autokernel.discovery_controller.v6"
+SCHEMA = "epyc.autokernel.discovery_controller.v7"
 ROSTER_SCHEMA = "epyc.autokernel.discovery_roster.v3"
 AUTHORITY = "nonpromotable_candidate_only_discovery"
 HASH = __import__("re").compile(r"^[0-9a-f]{64}$")
@@ -132,6 +133,7 @@ class TimedOutputCorrectnessRefusal(CorrectnessRefusal):
 class DispatchAttributionRefusal(GovernedStageRefusal):
     stage = "dispatch_attribution"
     disposition = "attribution_route_falsified"
+    scientific_budget_spent = True
 
 
 class MeasurementOutputRefusal(GovernedStageRefusal):
@@ -1742,6 +1744,8 @@ class ControllerConfig:
     hypothesis_portfolio_sha256: str | None = None
     carry_forward: Mapping[str, Any] | None = None
     carry_forward_sha256: str | None = None
+    preauthored_continuations: Mapping[
+        str, preauthored_continuation.PreauthoredContinuation] | None = None
     def __post_init__(self) -> None:
         if (not self.output_root.is_absolute() or not 1 <= self.max_iterations <= 1000
                 or isinstance(self.nomination_threshold, bool)
@@ -1820,6 +1824,40 @@ class ControllerConfig:
                               if key != "carry_forward_sha256"}) !=
                         self.carry_forward_sha256)):
             raise DiscoveryControllerError("invalid predecessor carry-forward authority")
+        continuations = self.preauthored_continuations
+        requires_q5_continuation = bool(
+            self.hypothesis_portfolio is not None
+            and any(
+                isinstance(record, Mapping)
+                and record.get("hypothesis_id") ==
+                    "akh-v2-q5-onewave-preauthored"
+                and isinstance(record.get("current_bundle_eligibility"), Mapping)
+                and record["current_bundle_eligibility"].get("eligible") is True
+                and tuple(record["current_bundle_eligibility"].get(
+                    "template_ids", ())) ==
+                    ("cuda-mmvq-q5-onewave-continuation-v1",)
+                for record in self.hypothesis_portfolio.hypotheses))
+        if ((requires_q5_continuation != (continuations is not None))
+                or continuations is not None
+                and (not isinstance(continuations, Mapping)
+                     or set(continuations) != {"akh-v2-q5-onewave-preauthored"}
+                     or any(not isinstance(value,
+                                           preauthored_continuation.PreauthoredContinuation)
+                            or value.hypothesis_id != key
+                            for key, value in continuations.items()))):
+            raise DiscoveryControllerError(
+                "invalid preauthored continuation authority")
+        if (requires_q5_continuation
+                and (not isinstance(self.planner_context, Mapping)
+                     or self.planner_context.get(
+                         "preauthored_continuation_sha256") !=
+                        continuations["akh-v2-q5-onewave-preauthored"].sha256
+                     or self.planner_context.get(
+                         "preauthored_source_backed_diff_sha256") !=
+                        continuations[
+                            "akh-v2-q5-onewave-preauthored"].source_backed_diff_sha256)):
+            raise DiscoveryControllerError(
+                "planner context differs from preauthored continuation authority")
         sealed = (self.planner_context_sha256, self.production_base_commit,
                   self.instrument_commit, self.experiment_template_registry_sha256,
                   self.admission_corpus_sha256, self.admission_corpus_version,
@@ -1835,6 +1873,9 @@ class DurableState:
     def load(self) -> dict[str, Any]:
         if not self.path.exists(): return {"schema": SCHEMA, "authority": AUTHORITY, "roster": sealed_roster(), "iterations": [], "next": 1, "scientific_attempts": 0, "complete": False}
         value=_read_object(self.path, self.root); _require_roster(value.get("roster", {}))
+        if value.get("schema") == "epyc.autokernel.discovery_controller.v6":
+            raise DiscoveryControllerError(
+                "legacy v6 controller state lacks preauthored continuation authority; initialize a fresh v7 campaign")
         if value.get("schema") != SCHEMA or value.get("authority") != AUTHORITY: raise DiscoveryControllerError("wrong controller journal")
         declared=value.get("state_sha256")
         if not isinstance(declared,str) or declared != _sha({k:v for k,v in value.items() if k!="state_sha256"}): raise DiscoveryControllerError("durable controller state hash mismatch")
@@ -1861,7 +1902,8 @@ def _memory_block(tracker: hypotheses.HypothesisTracker, turn: int) -> Mapping[s
 
 
 def _ensure_question(tracker: hypotheses.HypothesisTracker, item: PlannedCandidate,
-                     portfolio_binding: Mapping[str, Any] | None = None) -> None:
+                     portfolio_binding: Mapping[str, Any] | None = None,
+                     preauthored_authority: Mapping[str, Any] | None = None) -> None:
     """Open the exact question whose campaign-ledger DNR gate will authorize it.
 
     Legacy/generic callers retain their original regime verbatim: an old question
@@ -1875,9 +1917,13 @@ def _ensure_question(tracker: hypotheses.HypothesisTracker, item: PlannedCandida
     """
     regime = dict(item.regime)
     if portfolio_binding is not None:
-        mechanism = item.source_manifest.mechanism_id
+        mechanism = portfolio_binding.get("mechanism_id")
+        expected_source_mechanism = (
+            "q5_0_one_wave_per_output_block"
+            if preauthored_authority is not None else mechanism)
         if (not isinstance(mechanism, str) or not HASH.fullmatch(mechanism)
-                or mechanism != portfolio_binding.get("mechanism_id")):
+                or item.source_manifest.mechanism_id !=
+                   expected_source_mechanism):
             raise DiscoveryControllerError(
                 "portfolio candidate lacks its controller-owned structural mechanism")
         declared = regime.get("mechanism")
@@ -1885,9 +1931,60 @@ def _ensure_question(tracker: hypotheses.HypothesisTracker, item: PlannedCandida
             raise DiscoveryControllerError(
                 "portfolio candidate regime disagrees with its controller-owned mechanism")
         regime["mechanism"] = mechanism
-    question=hypotheses.Hypothesis(hypothesis_id=item.hypothesis_id, statement=item.statement, falsifier=item.falsifier, origin=hypotheses.ORIGIN_PLANNER, author="gpt-5.6-sol", regime=regime, source={"manifest_sha256":item.source_manifest_sha256})
-    try: tracker.open_hypothesis(question)
-    except hypotheses.HypothesisAlreadyTracked: pass
+    origin = hypotheses.ORIGIN_PLANNER
+    author = "gpt-5.6-sol"
+    source = {"manifest_sha256": item.source_manifest_sha256}
+    if preauthored_authority is not None:
+        required = {
+            "schema", "hypothesis_id", "carrier_sha256",
+            "authoring_turn",
+            "source_backed_diff_sha256", "source_manifest_sha256",
+            "candidate_semantic_sha256", "cross_campaign_candidate_sha256",
+            "origin", "author", "historical_commit",
+            "modern_governed_correctness_required", "receipt_sha256",
+        }
+        if (set(preauthored_authority) != required
+                or preauthored_authority.get("schema") !=
+                   "epyc.autokernel.preauthored_checkpoint.v1"
+                or preauthored_authority.get("hypothesis_id") !=
+                   item.hypothesis_id
+                or preauthored_authority.get("source_manifest_sha256") !=
+                   item.source_manifest_sha256
+                or item.proposal.get("proposal_id") !=
+                   f"akp-discovery-{preauthored_authority.get('authoring_turn')}"
+                or preauthored_authority.get("candidate_semantic_sha256") !=
+                   _candidate_semantic_identity(item)
+                or preauthored_authority.get(
+                    "cross_campaign_candidate_sha256") !=
+                   _cross_campaign_candidate_identity(item)
+                or preauthored_authority.get("origin") !=
+                   hypotheses.ORIGIN_IMPORT
+                or preauthored_authority.get("author") !=
+                   "reviewed-eb26918-continuation"
+                or preauthored_authority.get(
+                    "modern_governed_correctness_required") is not True
+                or preauthored_authority.get("receipt_sha256") != _sha({
+                    key: value for key, value in preauthored_authority.items()
+                    if key != "receipt_sha256"})):
+            raise DiscoveryControllerError(
+                "preauthored hypothesis provenance authority changed")
+        origin = hypotheses.ORIGIN_IMPORT
+        author = "reviewed-eb26918-continuation"
+        source.update({
+            "preauthored_continuation_sha256":
+                preauthored_authority["carrier_sha256"],
+            "historical_commit": preauthored_authority["historical_commit"],
+            "source_backed_diff_sha256":
+                preauthored_authority["source_backed_diff_sha256"],
+        })
+    question=hypotheses.Hypothesis(hypothesis_id=item.hypothesis_id, statement=item.statement, falsifier=item.falsifier, origin=origin, author=author, regime=regime, source=source)
+    try:
+        tracker.open_hypothesis(question)
+    except hypotheses.HypothesisAlreadyTracked:
+        if (preauthored_authority is not None
+                and tracker.get(item.hypothesis_id).hypothesis != question):
+            raise DiscoveryControllerError(
+                "preauthored hypothesis already exists with different provenance")
 
 def _record_attempt_once(tracker: hypotheses.HypothesisTracker, item: PlannedCandidate, proposal_id: str, result: SealedScreen) -> None:
     ref=f"sha256:{result.result_sha256}"
@@ -2091,7 +2188,10 @@ def _validate_portfolio_candidate(
             or item.statement != binding["statement"]
             or item.falsifier != binding["falsifier"]
             or dict(item.regime) != dict(binding["regime"])
-            or manifest.mechanism_id != binding["mechanism_id"]
+            or manifest.mechanism_id != (
+                "q5_0_one_wave_per_output_block"
+                if item.hypothesis_id == "akh-v2-q5-onewave-preauthored"
+                else binding["mechanism_id"])
             or manifest.change_class != binding["change_class"]
             or item.proposal.get("change_class") != binding["change_class"]
             or tuple(manifest.declared_files) != tuple(binding["target_files"])
@@ -2143,9 +2243,13 @@ def _portfolio_exact_dnr_check(config: ControllerConfig, item: PlannedCandidate,
             or portfolio.sha256 != semantic_sha256):
         raise DiscoveryControllerError(
             "portfolio exact-DNR check lacks sealed semantic authority")
-    mechanism_id = item.source_manifest.mechanism_id
+    mechanism_id = binding.get("mechanism_id")
+    expected_source_mechanism = (
+        "q5_0_one_wave_per_output_block"
+        if item.hypothesis_id == "akh-v2-q5-onewave-preauthored"
+        else mechanism_id)
     if (not isinstance(mechanism_id, str) or not HASH.fullmatch(mechanism_id)
-            or mechanism_id != binding.get("mechanism_id")):
+            or item.source_manifest.mechanism_id != expected_source_mechanism):
         raise DiscoveryControllerError(
             "portfolio exact-DNR check lacks the controller-owned candidate mechanism")
     regime = dict(item.regime)
@@ -2283,9 +2387,142 @@ def _pending_item(item: PlannedCandidate) -> dict[str, Any]:
             "manifest_raw_base64":base64.b64encode(raw_manifest).decode("ascii"),"manifest_file_sha256":hashlib.sha256(raw_manifest).hexdigest(),"patch_bundle_sha256":manifest.patch_bundle_sha256}
 
 
-def _restore_pending(value: Mapping[str, Any]) -> PlannedCandidate:
+def _preauthored_candidate(
+        config: ControllerConfig, binding: Mapping[str, Any],
+        turn: int) -> PlannedCandidate:
+    """Reconstruct the one reviewed Q5 candidate without an actor."""
+    hypothesis_id = binding.get("hypothesis_id")
+    continuations = config.preauthored_continuations
+    if (hypothesis_id != "akh-v2-q5-onewave-preauthored"
+            or continuations is None or hypothesis_id not in continuations):
+        raise DiscoveryControllerError(
+            "portfolio binding is not an authorized preauthored continuation")
+    continuation = continuations[hypothesis_id]
+    if (continuation.sha256 != config.planner_context.get(
+            "preauthored_continuation_sha256")
+            or continuation.source_backed_diff_sha256 != hashlib.sha256(
+                continuation.source_backed_diff.encode("utf-8")).hexdigest()
+            or continuation.mechanism_id !=
+               "q5_0_one_wave_per_output_block"
+            or binding.get("mechanism_id") !=
+               "7d88a2725aab2276202324ecef22f2414a1d893f9081061314622c82a7c28919"
+            or continuation.change_class != binding.get("change_class")
+            or [continuation.source_file] != binding.get("target_files")
+            or list(continuation.declared_symbols) !=
+               sorted(binding.get("target_symbols", []))
+            or binding.get("target_symbols_by_file") != {
+                continuation.source_file: list(continuation.declared_symbols)}
+            or continuation.template_id != binding.get("template_id")
+            or [dict(row) for row in continuation.expected_dispatch] !=
+               binding.get("expected_dispatch")):
+        raise DiscoveryControllerError(
+            "preauthored continuation differs from its portfolio/config binding")
+    proposal_id = f"akp-discovery-{turn}"
+    candidate_id = f"akc-discovery-{turn}"
+    try:
+        manifest = source_candidate.source_backed_source_patch_manifest(
+            campaign_id=config.campaign_id, proposal_id=proposal_id,
+            candidate_id=candidate_id, source_tree=continuation.source_tree,
+            production_base_commit=config.production_base_commit,
+            instrument_commit=config.instrument_commit,
+            change_class=continuation.change_class,
+            declared_files=(continuation.source_file,),
+            declared_symbols={
+                continuation.source_file: continuation.declared_symbols},
+            mechanism_id=continuation.mechanism_id,
+            patch_sha256=continuation.patch_sha256,
+            patch_bytes=continuation.patch_bytes,
+            source_backed_diff=continuation.source_backed_diff)
+    except (TypeError, source_candidate.SourceCandidateError) as exc:
+        raise DiscoveryControllerError(
+            "preauthored source manifest cannot be reconstructed") from exc
+    changed_lines = sum(
+        1 for line in manifest.patch_text.splitlines()
+        if line.startswith(("+", "-"))
+        and not line.startswith(("+++", "---")))
+    proposal = {
+        "proposal_id": proposal_id,
+        "change_class": continuation.change_class,
+        "change": {
+            "files_and_symbols": [
+                f"{continuation.source_file}:{symbol}"
+                for symbol in continuation.declared_symbols],
+            "estimated_diff_size": changed_lines,
+        },
+        "preauthored_continuation_sha256": continuation.sha256,
+    }
+    intent = GpuSourceExperimentIntent(
+        template_id=continuation.template_id,
+        target_surface="gpu_decode", target_symbol="calc_nwarps",
+        correctness_id=continuation.correctness_id,
+        dispatch_id=continuation.dispatch_id,
+        expected_dispatch=tuple(
+            BoundedDispatchExpectation(**dict(row))
+            for row in continuation.expected_dispatch))
+    return PlannedCandidate(
+        hypothesis_id=hypothesis_id, statement=binding["statement"],
+        falsifier=binding["falsifier"], regime=dict(binding["regime"]),
+        proposal=proposal, source_manifest=manifest,
+        source_manifest_sha256=manifest.patch_bundle_sha256,
+        experiment_intent=intent)
+
+
+def _preauthored_checkpoint_authority(
+        config: ControllerConfig, item: PlannedCandidate) -> dict[str, Any]:
+    continuation = config.preauthored_continuations[item.hypothesis_id]
+    match = re.fullmatch(r"akp-discovery-([1-9][0-9]*)",
+                         str(item.proposal.get("proposal_id")))
+    if (match is None or item.source_manifest.candidate_id !=
+            f"akc-discovery-{match.group(1)}"):
+        raise DiscoveryControllerError(
+            "preauthored candidate authoring turn identity changed")
+    body = {
+        "schema": "epyc.autokernel.preauthored_checkpoint.v1",
+        "hypothesis_id": item.hypothesis_id,
+        "authoring_turn": int(match.group(1)),
+        "carrier_sha256": continuation.sha256,
+        "source_backed_diff_sha256": continuation.source_backed_diff_sha256,
+        "source_manifest_sha256": item.source_manifest_sha256,
+        "candidate_semantic_sha256": _candidate_semantic_identity(item),
+        "cross_campaign_candidate_sha256":
+            _cross_campaign_candidate_identity(item),
+        "origin": hypotheses.ORIGIN_IMPORT,
+        "author": "reviewed-eb26918-continuation",
+        "historical_commit": continuation.historical_commit,
+        "modern_governed_correctness_required": True,
+    }
+    body["receipt_sha256"] = _sha(body)
+    return body
+
+
+def _restore_pending(
+        value: Mapping[str, Any],
+        config: ControllerConfig | None = None) -> PlannedCandidate:
     raw=value.get("candidate")
     if not isinstance(raw,Mapping) or not isinstance(raw.get("manifest"),Mapping): raise DiscoveryControllerError("pending candidate is missing sealed manifest")
+    preauthored = value.get("preauthored_continuation")
+    if preauthored is not None:
+        if (config is None or not isinstance(preauthored, Mapping)
+                or not isinstance(value.get("row"), Mapping)
+                or not isinstance(value["row"].get("portfolio_binding"), Mapping)):
+            raise DiscoveryControllerError(
+                "preauthored pending candidate lacks sealed controller authority")
+        authoring_turn = preauthored.get("authoring_turn")
+        if (isinstance(authoring_turn, bool)
+                or not isinstance(authoring_turn, int)
+                or authoring_turn <= 0):
+            raise DiscoveryControllerError(
+                "preauthored pending authoring turn is malformed")
+        if value["row"].get("authoring_turn") != authoring_turn:
+            raise DiscoveryControllerError(
+                "preauthored row changed its original authoring turn")
+        item = _preauthored_candidate(
+            config, value["row"]["portfolio_binding"], authoring_turn)
+        expected = _preauthored_checkpoint_authority(config, item)
+        if dict(preauthored) != expected or _pending_item(item) != dict(raw):
+            raise DiscoveryControllerError(
+                "preauthored pending candidate identity changed")
+        return item
     m=raw["manifest"]
     try:
         manifest=source_candidate.SourcePatchManifest(campaign_id=m["campaign_id"],proposal_id=m["proposal_id"],candidate_id=m["candidate_id"],source_tree=m["source_tree"],production_base_commit=m["production_base_commit"],instrument_commit=m["instrument_commit"],change_class=m["change_class"],declared_files=tuple(m["declared_files"]),declared_symbols={k:tuple(v) for k,v in m["declared_symbols"].items()},mechanism_id=m["mechanism_id"],patch_sha256=m["patch_sha256"],patch_bytes=base64.b64decode(m["patch_base64"],validate=True))
@@ -2707,6 +2944,19 @@ def _validate_infrastructure_ambiguities(state: Mapping[str, Any]) -> None:
                     "inflight operation reuses a refused infrastructure epoch")
 
 
+def _preauthored_pending_fields(
+        row: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
+    authority = row.get("preauthored_continuation")
+    if authority is None:
+        return {}
+    if (not isinstance(authority, Mapping)
+            or authority.get("schema") !=
+               "epyc.autokernel.preauthored_checkpoint.v1"):
+        raise DiscoveryControllerError(
+            "candidate continuation checkpoint is malformed")
+    return {"preauthored_continuation": dict(authority)}
+
+
 def _record_screen_infrastructure_ambiguity(
         state: dict[str, Any], row: dict[str, Any],
         exc: ScreenInfrastructureAmbiguity) -> None:
@@ -2744,6 +2994,7 @@ def _record_screen_infrastructure_ambiguity(
         "parent_authorization": inflight.get("parent_authorization"),
         "infrastructure_retry_epoch": epoch + 1,
         "prior_operation_key": exc.operation_key,
+        **_preauthored_pending_fields(row),
     }
     _validate_infrastructure_ambiguities(state)
 
@@ -2800,6 +3051,7 @@ def _schedule_replication(state: dict[str, Any], *, item: PlannedCandidate,
         # as permission for a second device claim.
         "confirmation": True,
         "parent_authorization": authorization.to_dict(),
+        **_preauthored_pending_fields(replica),
     }
 
 
@@ -2876,6 +3128,11 @@ def _record_governed_stage_refusal(
         stage_receipt_path=exc.receipt_path,
         stage_receipt_sha256=exc.receipt_sha256,
         scientific_budget_spent=exc.scientific_budget_spent)
+    if isinstance(exc, DispatchAttributionRefusal):
+        row.update(
+            classification="screened_out",
+            result_sha256=exc.receipt_sha256,
+            evidence={"dispatch_attribution": exc.receipt_sha256})
     candidate_divergence = isinstance(exc, TimedOutputCorrectnessRefusal)
     if candidate_divergence:
         # This is a typed source-screen result, not an infrastructure refusal.
@@ -3219,6 +3476,44 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
             raise DiscoveryControllerError(
                 "legacy durable state lacks predecessor carry-forward")
         state["carry_forward_sha256"] = config.carry_forward_sha256
+    configured_continuation_sha256 = (
+        None if config.preauthored_continuations is None else
+        config.preauthored_continuations[
+            "akh-v2-q5-onewave-preauthored"].sha256)
+    configured_source_backed_diff_sha256 = (
+        None if config.preauthored_continuations is None else
+        config.preauthored_continuations[
+            "akh-v2-q5-onewave-preauthored"].source_backed_diff_sha256)
+    existing_continuation = state.get("preauthored_continuation_sha256")
+    if (existing_continuation is not None
+            and existing_continuation != configured_continuation_sha256):
+        raise DiscoveryControllerError(
+            "preauthored continuation changed; durable discovery cannot resume")
+    if (existing_continuation is None
+            and configured_continuation_sha256 is not None):
+        if (state.get("iterations") or state.get("pending") is not None
+                or state.get("inflight") is not None
+                or state.get("planning") is not None):
+            raise DiscoveryControllerError(
+                "legacy durable state lacks preauthored continuation authority")
+        state["preauthored_continuation_sha256"] = (
+            configured_continuation_sha256)
+    existing_source_backed_diff = state.get(
+        "preauthored_source_backed_diff_sha256")
+    if (existing_source_backed_diff is not None
+            and existing_source_backed_diff !=
+                configured_source_backed_diff_sha256):
+        raise DiscoveryControllerError(
+            "preauthored source-backed diff changed; discovery cannot resume")
+    if (existing_source_backed_diff is None
+            and configured_source_backed_diff_sha256 is not None):
+        if (state.get("iterations") or state.get("pending") is not None
+                or state.get("inflight") is not None
+                or state.get("planning") is not None):
+            raise DiscoveryControllerError(
+                "legacy durable state lacks preauthored source-backed authority")
+        state["preauthored_source_backed_diff_sha256"] = (
+            configured_source_backed_diff_sha256)
     _validate_portfolio_authoring_failures(state)
     _validate_attempted_candidate_identities(state)
     _validate_infrastructure_ambiguities(state)
@@ -3229,7 +3524,7 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
     tracker=_tracker(store)
     if state.get("inflight") is not None:
         precompute_refused = False
-        inflight=state["inflight"]; item=_restore_pending({"candidate":inflight["candidate"]}); authorization=hypotheses.ClaimAuthorization.from_dict(inflight["authorization"]); permit=inflight["lease"]
+        inflight=state["inflight"]; item=_restore_pending({"candidate":inflight["candidate"], "row":inflight.get("row"), "preauthored_continuation":inflight.get("preauthored_continuation")}, config); authorization=hypotheses.ClaimAuthorization.from_dict(inflight["authorization"]); permit=inflight["lease"]
         inflight_row = dict(inflight["row"])
         _revalidate_portfolio_checkpoint(config, item, inflight_row)
         _require_unattempted_checkpoint(
@@ -3263,7 +3558,8 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                         "confirmation":bool(inflight.get("confirmation")),
                         "parent_authorization":inflight.get("parent_authorization"),
                         "infrastructure_retry_epoch":inflight.get(
-                            "infrastructure_retry_epoch", 0)}
+                            "infrastructure_retry_epoch", 0),
+                        **_preauthored_pending_fields(row)}
                     store.save(state,"waiting_resource")
                     return state
                 fresh_permit={**dict(fresh_permit),
@@ -3292,7 +3588,8 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                         "confirmation":bool(inflight.get("confirmation")),
                         "parent_authorization":inflight.get("parent_authorization"),
                         "infrastructure_retry_epoch":inflight.get(
-                            "infrastructure_retry_epoch", 0)}
+                            "infrastructure_retry_epoch", 0),
+                        **_preauthored_pending_fields(row)}
                     store.save(state,"waiting_resource")
                     return state
                 except ScreenInfrastructureAmbiguity as exc:
@@ -3353,6 +3650,80 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                         "pending actor context identity changed")
             else:
                 context=_context(state,tracker,turn,config,portfolio_binding)
+            if (pending is None and isinstance(portfolio_binding, Mapping)
+                    and portfolio_binding.get("hypothesis_id") ==
+                        "akh-v2-q5-onewave-preauthored"):
+                item = _preauthored_candidate(config, portfolio_binding, turn)
+                row = {
+                    "turn": turn, "hypothesis_id": item.hypothesis_id,
+                    "authoring_turn": turn,
+                    "statement": item.statement, "falsifier": item.falsifier,
+                    "regime": dict(item.regime),
+                    "proposal_sha256": _sha(item.proposal),
+                    "source_manifest_sha256": item.source_manifest_sha256,
+                    "experiment_intent": asdict(item.experiment_intent),
+                    "mechanism_id": item.source_manifest.mechanism_id,
+                    "target_surface": item.experiment_intent.target_surface,
+                    "target_symbol": item.experiment_intent.target_symbol,
+                    "context_sha256": _sha(context),
+                    "candidate_semantic_sha256":
+                        _candidate_semantic_identity(item),
+                    "portfolio_hypothesis_id":
+                        portfolio_binding["hypothesis_id"],
+                    "portfolio_binding": dict(portfolio_binding),
+                    "portfolio_record_sha256":
+                        portfolio_binding["record_sha256"],
+                    "portfolio_decision_policy": dict(
+                        portfolio_binding["decision_policy"]),
+                }
+                _validate_portfolio_candidate(
+                    item, portfolio_binding, config.hypothesis_portfolio,
+                    config.carry_forward)
+                receipt = _portfolio_exact_dnr_check(
+                    config, item, portfolio_binding)
+                row["portfolio_exact_dnr_check"] = receipt
+                if receipt["outcome"] == schemas.FAIL:
+                    row.update(
+                        status="portfolio_dnr_refused",
+                        reason="candidate exactly repeats sealed portfolio DNR "
+                               + ", ".join(receipt["matched_dnr_ids"]))
+                    state["iterations"].append(row)
+                    state.setdefault("portfolio_terminals", {})[
+                        portfolio_binding["hypothesis_id"]] = {
+                            "disposition": "portfolio_dnr_refused",
+                            "policy": dict(portfolio_binding[
+                                "decision_policy"]),
+                            "receipt_sha256": receipt["receipt_sha256"],
+                        }
+                    state["next"] += 1
+                    store.save(state, "portfolio_dnr_refused")
+                    continue
+                semantic = row["candidate_semantic_sha256"]
+                if semantic in state.get("attempted_candidate_identities", {}):
+                    row.update(
+                        status="candidate_semantic_repeat_refused",
+                        reason="preauthored source semantics already have a scientific outcome")
+                    state["iterations"].append(row)
+                    _note_portfolio_authoring_failure(state, row)
+                    state["next"] += 1
+                    store.save(state, "candidate_semantic_repeat_refused")
+                    continue
+                authority = _preauthored_checkpoint_authority(config, item)
+                row.update(
+                    preauthored_continuation=dict(authority),
+                    hypothesis_origin=hypotheses.ORIGIN_IMPORT,
+                    hypothesis_author="reviewed-eb26918-continuation",
+                    historical_correctness_authority="provenance_only",
+                    modern_governed_correctness_required=True)
+                state["pending"] = {
+                    "phase": "preauthored_ready", "row": row,
+                    "candidate": _pending_item(item),
+                    "preauthored_continuation": dict(authority),
+                    "context": dict(context), "context_sha256": _sha(context),
+                    "confirmation": False, "parent_authorization": None,
+                }
+                store.save(state, "preauthored_checkpointed")
+                continue
             if pending is None:
                 state["planning"] = _planning_intent(
                     config, turn=turn, context=context,
@@ -3365,7 +3736,7 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
             workspace=Path(temp)
             pending_phase = pending.get("phase") if isinstance(pending, Mapping) else None
             if pending is not None and pending_phase == "critic_pending":
-                item=_restore_pending(pending); row=dict(pending["row"])
+                item=_restore_pending(pending, config); row=dict(pending["row"])
                 _revalidate_portfolio_checkpoint(config, item, row)
                 _require_unattempted_checkpoint(
                     state, row,
@@ -3394,7 +3765,10 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                 store.save(state,"critic_checkpointed")
                 continue
             if pending is not None:
-                item=_restore_pending(pending); row=dict(pending["row"]); review=Critique(**row["critic"])
+                item=_restore_pending(pending, config); row=dict(pending["row"])
+                review = (Critique("accept", "controller-owned reviewed preauthored continuation")
+                          if pending_phase == "preauthored_ready" else
+                          Critique(**row["critic"]))
                 _revalidate_portfolio_checkpoint(config, item, row)
                 _require_unattempted_checkpoint(
                     state, row,
@@ -3406,7 +3780,7 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                     if config.hypothesis_portfolio is not None and row != durable_row:
                         raise DiscoveryControllerError(
                             "portfolio pending candidate lacks campaign-ledger DNR outcome")
-                elif pending_phase == "critic_complete":
+                elif pending_phase in {"critic_complete", "preauthored_ready"}:
                     authorization=None
                 elif pending.get("confirmation") is True:
                     # A positive S1 is not a receipted negative.  Re-consult
@@ -3415,7 +3789,10 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                     _ensure_question(
                         tracker, item,
                         row.get("portfolio_binding")
-                        if isinstance(row.get("portfolio_binding"), Mapping) else None)
+                        if isinstance(row.get("portfolio_binding"), Mapping) else None,
+                        pending.get("preauthored_continuation")
+                        if isinstance(pending.get("preauthored_continuation"), Mapping)
+                        else None)
                     authorization=tracker.authorize_claim(item.hypothesis_id,purpose="candidate_only_confirmation",authorized_by="discovery_controller",ledger=do_not_repeat.compile_for_tracker(tracker))
                     _bind_campaign_ledger_outcome(row, authorization)
                 else:
@@ -3562,11 +3939,14 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                 continue
             if review.decision != "accept":
                 row["status"]="critic_"+review.decision; state["iterations"].append(row); _apply_portfolio_outcome(state,row); _note_portfolio_authoring_failure(state,row); state["next"]+=1; store.save(state,"critic_refused"); continue
-            if pending_phase == "critic_complete":
+            if pending_phase in {"critic_complete", "preauthored_ready"}:
                 _ensure_question(
                     tracker, item,
                     row.get("portfolio_binding")
-                    if isinstance(row.get("portfolio_binding"), Mapping) else None)
+                    if isinstance(row.get("portfolio_binding"), Mapping) else None,
+                    pending.get("preauthored_continuation")
+                    if isinstance(pending.get("preauthored_continuation"), Mapping)
+                    else None)
                 ledger=do_not_repeat.compile_for_tracker(tracker)
                 try:
                     authorization=tracker.authorize_claim(item.hypothesis_id,purpose="candidate_only_discovery",authorized_by="discovery_controller",ledger=ledger)
@@ -3617,7 +3997,7 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                 # Waiting is durable but is not an experiment and cannot spend an
                 # iteration budget.  Planning/critique may continue elsewhere;
                 # this exact candidate is retried only after a new lease admits it.
-                row.update(status="waiting_resource",lease=dict(permit)); state["pending"]={"row":row,"candidate":_pending_item(item),"authorization":authorization.to_dict(),"confirmation":bool(pending and pending.get("confirmation")),"parent_authorization":pending.get("parent_authorization") if pending else None,"infrastructure_retry_epoch":retry_epoch}; store.save(state,"waiting_resource"); break
+                row.update(status="waiting_resource",lease=dict(permit)); state["pending"]={"row":row,"candidate":_pending_item(item),"authorization":authorization.to_dict(),"confirmation":bool(pending and pending.get("confirmation")),"parent_authorization":pending.get("parent_authorization") if pending else None,"infrastructure_retry_epoch":retry_epoch, **_preauthored_pending_fields(row)}; store.save(state,"waiting_resource"); break
             # The governed GPU adapter owns an operation-key-bound receipt
             # namespace.  It refuses an unkeyed lease, making recovery and
             # result reconciliation refer to the same durable operation.
@@ -3625,7 +4005,7 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                 raise DiscoveryControllerError("resource lease did not bind the exact operation key")
             permit={**dict(permit), "repetition":repetition}
             state.pop("pending",None)
-            state["inflight"]={"operation_key":operation_key,"row":row,"candidate":_pending_item(item),"authorization":authorization.to_dict(),"lease":dict(permit),"confirmation":bool(pending and pending.get("confirmation")),"parent_authorization":pending.get("parent_authorization") if pending else None,"infrastructure_retry_epoch":retry_epoch}
+            state["inflight"]={"operation_key":operation_key,"row":row,"candidate":_pending_item(item),"authorization":authorization.to_dict(),"lease":dict(permit),"confirmation":bool(pending and pending.get("confirmation")),"parent_authorization":pending.get("parent_authorization") if pending else None,"infrastructure_retry_epoch":retry_epoch, **({"preauthored_continuation":dict(pending["preauthored_continuation"])} if pending and isinstance(pending.get("preauthored_continuation"), Mapping) else {})}
             store.save(state,"pre_screen_intent")
             try: result=screener.screen(item,authorization,permit)
             except ResumableScreenInterruption as exc:
@@ -3640,7 +4020,7 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                 _require_safe_resource_wait_recovery(screener,state["inflight"])
                 state.pop("inflight",None)
                 row.update(status="waiting_resource",lease=wait_receipt)
-                state["pending"]={"row":row,"candidate":_pending_item(item),"authorization":authorization.to_dict(),"confirmation":bool(pending and pending.get("confirmation")),"parent_authorization":pending.get("parent_authorization") if pending else None,"infrastructure_retry_epoch":retry_epoch}
+                state["pending"]={"row":row,"candidate":_pending_item(item),"authorization":authorization.to_dict(),"confirmation":bool(pending and pending.get("confirmation")),"parent_authorization":pending.get("parent_authorization") if pending else None,"infrastructure_retry_epoch":retry_epoch, **_preauthored_pending_fields(row)}
                 store.save(state,"waiting_resource")
                 break
             except ScreenInfrastructureAmbiguity as exc:

@@ -17,7 +17,7 @@ import unittest
 from unittest import mock
 
 from scripts.benchmark import test_run_autokernel_gpu_discovery as TR
-from .. import hypothesis_portfolio
+from .. import hypothesis_portfolio, preauthored_continuation
 from . import discovery_controller as C
 from . import discovery_deployment_factory as F
 from . import gpu_source_evidence as E
@@ -28,6 +28,8 @@ from .test_gpu_source_evidence import ClaimFactory, FakeExecutors, plan
 
 
 ELIGIBLE = (
+    ("akh-v2-q5-onewave-preauthored", "cuda-mmvq-q5-onewave-continuation-v1",
+     "MUL_MAT", 1139),
     ("akh-v26-q4k-branchless-sixbit-scale", "cuda-vecdotq-q4k-v1", "MUL_MAT", 1139),
     ("akh-v26-rms-scale-broadcast", "cuda-norm-v2", "RMS_NORM", 21),
     ("akh-v26-rope-neox-index-strength-reduction", "cuda-rope-v2", "ROPE", 428),
@@ -143,12 +145,24 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
         authority = {
             row["hypothesis_id"]: self._dispatch_for_record(row)
             for row in records}
+        continuation = preauthored_continuation.load(
+            preauthored_continuation.DEFAULT_CARRIER)
+        requires_q5 = any(
+            row["hypothesis_id"] == continuation.hypothesis_id
+            for row in records)
+        context = {
+            "portfolio_dispatch_authority": authority,
+            "template_symbol_authority": self._symbol_authority(records),
+        }
+        if requires_q5:
+            context.update(
+                preauthored_continuation_sha256=continuation.sha256,
+                preauthored_source_backed_diff_sha256=
+                    continuation.source_backed_diff_sha256)
         carry, carry_sha = TD.Tests(methodName="runTest").carry_forward()
         return C.ControllerConfig(
             root, iterations, dry_run=False,
-            planner_context={
-                "portfolio_dispatch_authority": authority,
-                "template_symbol_authority": self._symbol_authority(records)},
+            planner_context=context,
             planner_context_sha256="e" * 64,
             production_base_commit="0" * 40,
             instrument_commit="1" * 40,
@@ -158,7 +172,10 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
             deployment_identity_sha256="d" * 64,
             hypothesis_portfolio=portfolio,
             hypothesis_portfolio_sha256=portfolio.sha256,
-            carry_forward=carry, carry_forward_sha256=carry_sha)
+            carry_forward=carry, carry_forward_sha256=carry_sha,
+            preauthored_continuations=(
+                {continuation.hypothesis_id: continuation}
+                if requires_q5 else None))
 
     @staticmethod
     def _bound_candidate(fixture, binding, context, sequence):
@@ -231,7 +248,12 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
                 critic=TD.FakeCritic(["accept"] * len(expected)),
                 screener=NegativeScreen(),
                 lease=TD.Lease())
-        self.assertEqual(planner.selected, expected)
+        continuation = preauthored_continuation.load(
+            preauthored_continuation.DEFAULT_CARRIER)
+        self.assertEqual(
+            planner.selected,
+            [hypothesis_id for hypothesis_id in expected
+             if hypothesis_id != continuation.hypothesis_id])
         self.assertEqual(result["terminal_reason"], "portfolio_exhausted")
         self.assertEqual(set(result["portfolio_terminals"]),
                          {row["hypothesis_id"] for row in records})
@@ -536,8 +558,11 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
                         Path(directory), [record], iterations=3),
                     planner=planner, critic=critic,
                     screener=screen, lease=TD.Lease())
-                self.assertEqual((planner.calls, critic.calls, screen.calls),
-                                 (1, 1, 2))
+                actor_calls = (0, 0) if hypothesis_id == (
+                    "akh-v2-q5-onewave-preauthored") else (1, 1)
+                self.assertEqual(
+                    (planner.calls, critic.calls, screen.calls),
+                    (*actor_calls, 2))
                 self.assertEqual(
                     [row["status"] for row in result["iterations"]],
                     ["candidate", "top_k_replicated_candidate"])
@@ -1319,24 +1344,33 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            continuation = preauthored_continuation.load(
+                preauthored_continuation.DEFAULT_CARRIER)
             config = C.ControllerConfig(
                 root, len(ELIGIBLE) + 1, dry_run=True,
                 planner_context={
                     "portfolio_dispatch_authority": self.dispatch,
                     "template_symbol_authority": self._symbol_authority(
-                        self.portfolio.eligible_hypotheses())},
+                        self.portfolio.eligible_hypotheses()),
+                    "preauthored_continuation_sha256": continuation.sha256,
+                    "preauthored_source_backed_diff_sha256":
+                        continuation.source_backed_diff_sha256},
                 planner_context_sha256="e" * 64,
                 production_base_commit="0" * 40,
                 instrument_commit="1" * 40,
                 hypothesis_portfolio=self.portfolio,
-                hypothesis_portfolio_sha256=self.portfolio.sha256)
+                hypothesis_portfolio_sha256=self.portfolio.sha256,
+                preauthored_continuations={
+                    continuation.hypothesis_id: continuation})
             planner = BoundPlanner()
             result = C.run_controller(
                 config, planner=planner,
                 critic=TD.FakeCritic(["accept"] * (len(ELIGIBLE) + 1)),
                 screener=NeverCompute(), lease=NeverCompute())
         expected = [row[0] for row in ELIGIBLE]
-        self.assertEqual(planner.selected, expected)
+        actor_expected = [hypothesis_id for hypothesis_id in expected
+                          if hypothesis_id != continuation.hypothesis_id]
+        self.assertEqual(planner.selected, actor_expected)
         self.assertEqual([row["status"] for row in result["iterations"]],
                          ["dry_run_authorized"] * len(ELIGIBLE))
         self.assertEqual(result["terminal_reason"], "portfolio_exhausted")
@@ -1566,7 +1600,7 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
             ("TimedOutputCorrectnessRefusal", "correctness",
              "correctness_falsified", True),
             ("DispatchAttributionRefusal", "dispatch_attribution",
-             "attribution_route_falsified", False),
+             "attribution_route_falsified", True),
             ("MeasurementOutputRefusal", "measurement_output",
              "measurement_output_refused", False),
         )
@@ -1871,7 +1905,7 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
             ("TimedOutputCorrectnessRefusal", "correctness_falsified",
              False, False, True),
             ("DispatchAttributionRefusal", "attribution_route_falsified",
-             False, False, False),
+             False, False, True),
             ("MeasurementOutputRefusal", "measurement_output_refused",
              False, False, False),
         )
@@ -1951,6 +1985,12 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
                 self.assertEqual(row["stage_receipt_path"], receipt_path)
                 self.assertEqual(row["stage_receipt_sha256"], receipt_sha256)
                 self.assertIs(row["scientific_budget_spent"], scientific_spent)
+                if name == "DispatchAttributionRefusal":
+                    self.assertEqual(row["classification"], "screened_out")
+                    self.assertEqual(row["result_sha256"], receipt_sha256)
+                    self.assertEqual(
+                        row["evidence"],
+                        {"dispatch_attribution": receipt_sha256})
                 self.assertEqual(result["scientific_attempts"],
                                  1 if scientific_spent else 0)
                 self.assertEqual(
@@ -2121,8 +2161,8 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
                 screener=Screen(), lease=TD.Lease())
         self.assertEqual(
             planner.selected,
-            [first["hypothesis_id"]] * route_budget +
-            [second["hypothesis_id"]])
+            [first["hypothesis_id"], second["hypothesis_id"]] +
+            [first["hypothesis_id"]] * (route_budget - 1))
         self.assertIn(first["hypothesis_id"], result["portfolio_skips"])
         self.assertNotIn(first["hypothesis_id"], result["portfolio_terminals"])
         self.assertEqual(

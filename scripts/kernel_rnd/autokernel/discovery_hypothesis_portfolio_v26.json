@@ -4,9 +4,9 @@
   "generated_at": "2026-08-21T10:00:00Z",
   "promotion_authority": false,
   "current_bundle": {
-    "bundle_id": "gpu-source-templates-v3-qwen05b-tg128",
+    "bundle_id": "gpu-source-templates-v4-qwen05b-tg128",
     "frame_id": "frame-current-qwen05b-q4km-tg128",
-    "template_catalog_version": "gpu-source-templates-v3",
+    "template_catalog_version": "gpu-source-templates-v4",
     "template_ids": [
       "cuda-fattn-combine-v1",
       "cuda-fattn-common-v1",
@@ -14,6 +14,7 @@
       "cuda-fattn-tile-entry-v1",
       "cuda-fattn-tile-v1",
       "cuda-fattn-v2",
+      "cuda-mmvq-q5-onewave-continuation-v1",
       "cuda-mmvq-v2",
       "cuda-norm-v2",
       "cuda-quantize-q8-v1",
@@ -467,6 +468,56 @@
       "claims": [
         "Exact v25 turn 14 source candidate manifest",
         "Derives predecessor patch and cross-campaign semantic replay identity"
+      ]
+    },
+    {
+      "evidence_id": "ev-q5-onewave-correctness-targeted-stdout",
+      "path": "/mnt/raid0/llm/autokernel/screens/ak-gpu-q5-onewave-correctness-targeted-20260813-s1/stdout.txt",
+      "sha256": "d01705d052979a27c8e06dd03dbfd69d0acd8346e39c45926480218be7c80cf4",
+      "authority": "candidate_only",
+      "temporal_status": "current_v9",
+      "claims": [
+        "Historical targeted Q5_0 correctness stdout bytes only"
+      ]
+    },
+    {
+      "evidence_id": "ev-q5-onewave-correctness-targeted-stderr",
+      "path": "/mnt/raid0/llm/autokernel/screens/ak-gpu-q5-onewave-correctness-targeted-20260813-s1/stderr.txt",
+      "sha256": "319da273d511817608a0372f67752eb3ed5769526e52cf4e482f042f07306a40",
+      "authority": "candidate_only",
+      "temporal_status": "current_v9",
+      "claims": [
+        "Historical targeted Q5_0 correctness stderr bytes only"
+      ]
+    },
+    {
+      "evidence_id": "ev-q5-onewave-correctness-full-stdout",
+      "path": "/mnt/raid0/llm/autokernel/screens/ak-gpu-q5-onewave-correctness-full-20260813-s1/stdout.txt",
+      "sha256": "f342b8503ad53e88a9f6d8280a21e50069dc203562aa51b07a5f6183f9fb466c",
+      "authority": "candidate_only",
+      "temporal_status": "current_v9",
+      "claims": [
+        "Historical full backend correctness stdout bytes only"
+      ]
+    },
+    {
+      "evidence_id": "ev-q5-onewave-correctness-full-stderr",
+      "path": "/mnt/raid0/llm/autokernel/screens/ak-gpu-q5-onewave-correctness-full-20260813-s1/stderr.txt",
+      "sha256": "1341b362077509ab6fd87e17b9e40a95bd0dda20d0a2577afa8608c1abab29e9",
+      "authority": "candidate_only",
+      "temporal_status": "current_v9",
+      "claims": [
+        "Historical full backend correctness stderr bytes only"
+      ]
+    },
+    {
+      "evidence_id": "ev-q5-onewave-correctness-binary",
+      "path": "/mnt/raid0/llm/autokernel/worktrees/ak-gpu-q5-onewave-20260813/build-ak-gpu-q5-onewave/bin/test-backend-ops",
+      "sha256": "e6540dc80ae41f28cd2791e13e65d12aa9ebba83f63aeba8b48adcc540aec378",
+      "authority": "candidate_only",
+      "temporal_status": "current_v9",
+      "claims": [
+        "Historical Q5 one-wave correctness binary bytes only"
       ]
     }
   ],
@@ -1001,6 +1052,222 @@
   ],
   "hypotheses": [
     {
+      "hypothesis_id": "akh-v2-q5-onewave-preauthored",
+      "title": "Q5_0 one-wave governed preauthored continuation",
+      "status": "queued",
+      "statement": "The exact eb26918 Q5_0 CDNA2 one-wave patch can be rebuilt against the byte-identical current MMVQ preimage and evaluated without another planner, critic, or source-authoring call.",
+      "primary_falsifier": "Current governed correctness fails after the modern instrument build",
+      "regime": {
+        "backend": "hip",
+        "phase": "decode",
+        "batch": 1,
+        "architecture": "gfx90a",
+        "model_or_frame": "frame-current-qwen05b-q4km-tg128",
+        "quant": "Q5_0",
+        "shape": "type6-mmvq",
+        "measurement_graphs": false,
+        "target_runtime_graphs": true
+      },
+      "target": {
+        "frame_ids": [
+          "frame-current-qwen05b-q4km-tg128"
+        ],
+        "source_files": [
+          "ggml/src/ggml-cuda/mmvq.cu"
+        ],
+        "source_symbols": [
+          "calc_nwarps",
+          "calc_rows_per_block",
+          "get_device_table_id",
+          "mmvq_parameter_table_id"
+        ],
+        "template_intent": "cuda-mmvq-q5-onewave-continuation-v1"
+      },
+      "dispatch_anchors": [
+        {
+          "frame_id": "frame-current-qwen05b-q4km-tg128",
+          "signatures": [
+            {
+              "kernel_literal": "mul_mat_vec_q<(ggml_type)6,1,true,true>",
+              "calls": 6063,
+              "grid": 57344,
+              "workgroup": 128,
+              "lds_bytes": 1024,
+              "route_id": "cuda-mmvq-q5-onewave-continuation-v1.anchor.0"
+            },
+            {
+              "kernel_literal": "mul_mat_vec_q<(ggml_type)6,1,true,true>",
+              "calls": 4644,
+              "grid": 8192,
+              "workgroup": 128,
+              "lds_bytes": 1024,
+              "route_id": "cuda-mmvq-q5-onewave-continuation-v1.anchor.1"
+            },
+            {
+              "kernel_literal": "mul_mat_vec_q<(ggml_type)6,1,true,true>",
+              "calls": 3096,
+              "grid": 311296,
+              "workgroup": 128,
+              "lds_bytes": 1024,
+              "route_id": "cuda-mmvq-q5-onewave-continuation-v1.anchor.2"
+            }
+          ],
+          "total_calls": 13803,
+          "aggregation": "exact_signatures",
+          "selection": "The three exact true/true anchor routes are attribution authority; the 129-call false/true tail remains structural and excluded.",
+          "evidence_ref": "ev-current-qwen05-profile",
+          "excluded_signatures": [
+            {
+              "kernel_literal": "mul_mat_vec_q<(ggml_type)6,1,false,true>",
+              "calls": 129,
+              "grid": 57344,
+              "workgroup": 128,
+              "lds_bytes": 512,
+              "route_id": "cuda-mmvq-q5-onewave-continuation-v1.anchor.3"
+            }
+          ]
+        }
+      ],
+      "mechanism": {
+        "facets": {
+          "mechanism": "q5_0_one_wave_per_output_block",
+          "ops": [
+            "type6-mmvq"
+          ],
+          "files": [
+            "ggml/src/ggml-cuda/mmvq.cu"
+          ],
+          "symbols": [
+            "calc_nwarps",
+            "calc_rows_per_block",
+            "get_device_table_id",
+            "mmvq_parameter_table_id"
+          ],
+          "change_class": "dispatcher"
+        },
+        "fingerprint_sha256": "7d88a2725aab2276202324ecef22f2414a1d893f9081061314622c82a7c28919"
+      },
+      "falsifiers": [
+        "Current governed correctness fails after the modern instrument build",
+        "Exact selected type-6 route duration is non-positive",
+        "Graphs-on whole-model throughput direction is non-positive"
+      ],
+      "evidence_refs": [
+        "ev-current-qwen05-profile",
+        "ev-q5-onewave-correctness-targeted",
+        "ev-q5-onewave-correctness-full",
+        "ev-q5-onewave-correctness-targeted-stdout",
+        "ev-q5-onewave-correctness-targeted-stderr",
+        "ev-q5-onewave-correctness-full-stdout",
+        "ev-q5-onewave-correctness-full-stderr",
+        "ev-q5-onewave-correctness-binary"
+      ],
+      "interactions": [],
+      "portability": {
+        "level": "exact_frame",
+        "source_frames": [
+          "frame-current-qwen05b-q4km-tg128"
+        ],
+        "target_frames": [
+          "frame-current-qwen05b-q4km-tg128"
+        ],
+        "constraints": [
+          "Exact current-frame dispatch only",
+          "Preserve reviewed launch geometry and numeric contract"
+        ],
+        "required_validation": [
+          "Full operation correctness",
+          "Exact route attribution",
+          "Graphs-on paired whole-model screen"
+        ]
+      },
+      "priority": {
+        "rank": 1,
+        "tier": "P0",
+        "device_time_share_pct_range": [
+          27.42969404468003,
+          27.42969404468003
+        ],
+        "rationale": "Ranked by exact current-frame device share, mechanism signal, implementation cost, and correctness blast radius."
+      },
+      "expected_value": {
+        "metric": "decode_tokens_per_s",
+        "direction": "higher_better",
+        "expected_relative_gain_pct_range": [
+          0.5,
+          3.0
+        ],
+        "device_time_ceiling_pct": 27.42969404468003,
+        "device_time_ceiling_frame_id": "frame-current-qwen05b-q4km-tg128",
+        "current_bundle_plausible_gain_ceiling_pct": 27.42969404468003,
+        "basis": "Exact graphs-off route share is a ceiling and routing fact only; graphs-on paired throughput decides continuation."
+      },
+      "implementation": {
+        "cost": "low",
+        "risk": "medium",
+        "notes": [
+          "Dedicated Q5 MMVQ continuation authority; generic cuda-mmvq-v2 remains forbidden",
+          "Historical v1 correctness is provenance only and never waives current correctness",
+          "The false/true tail is structural/excluded, not attribution reward authority"
+        ]
+      },
+      "stop_rule": [
+        "Current governed correctness fails after the modern instrument build",
+        "Exact selected type-6 route duration is non-positive",
+        "Graphs-on whole-model throughput direction is non-positive"
+      ],
+      "current_bundle_eligibility": {
+        "eligible": true,
+        "template_ids": [
+          "cuda-mmvq-q5-onewave-continuation-v1"
+        ],
+        "blocking_conditions": [],
+        "reason": "Exact current route, source scope, falsifier, and route-scoped reviewed template are sealed."
+      },
+      "lifecycle": {
+        "maturity": "candidate_authored",
+        "next_action": "Rebuild exact sealed patch and rerun current governed correctness; historical receipts remain provenance only.",
+        "candidate_identity": {
+          "candidate_id": "ak-candidate-q5-onewave-eb26918fa",
+          "source_commit": "eb26918fa82f8aef3ab72f1e3263bd8fecde62e7",
+          "candidate_patch_sha256": "f4cc49cd11cdfd93a2d5d2e00e653f503b6a16ce675bfb12c034fbbfae3e7a77",
+          "authority": "sealed_patch"
+        },
+        "diagnostic_identity": null
+      },
+      "decision_policy": {
+        "metric": "decode_tokens_per_s",
+        "frame_id": "frame-current-qwen05b-q4km-tg128",
+        "continuation_floor_pct": 0.2,
+        "nomination_floor_pct": 0.5,
+        "required_replications": 2,
+        "sign_policy": "all_positive",
+        "conflict_policy": "retain_inconclusive",
+        "max_distinct_candidates": 1,
+        "terminal_rule": "retire",
+        "effect_unit": "relative_percent",
+        "min_replication_effect_pct": 0.1,
+        "max_replication_spread_pct": 1
+      },
+      "epistemic": {
+        "grade": "correctness_only",
+        "confidence": "high",
+        "limitations": [
+          "Historical v1 correctness validates only the old binary/runtime closure.",
+          "Current governed correctness is mandatory after the modern build.",
+          "No historical receipt supplies attribution or throughput authority."
+        ]
+      },
+      "record_version": 1,
+      "provenance": {
+        "introduced_at": "2026-08-21T10:00:00Z",
+        "introduced_by": "autokernel-v26-successor",
+        "origin": "v25-cost-and-capacity-audit",
+        "note": "Fresh route-scoped v26 question; v25 terminals remain noneligible history.",
+        "supersedes": null
+      }
+    },
+    {
       "hypothesis_id": "akh-v26-q4k-branchless-sixbit-scale",
       "title": "Q4_K lane-uniform six-bit scale/min selection",
       "status": "queued",
@@ -1098,7 +1365,7 @@
         ]
       },
       "priority": {
-        "rank": 1,
+        "rank": 2,
         "tier": "P0",
         "device_time_share_pct_range": [
           3.8994134849336506,
@@ -1273,7 +1540,7 @@
         ]
       },
       "priority": {
-        "rank": 2,
+        "rank": 3,
         "tier": "P0",
         "device_time_share_pct_range": [
           10.734949639102124,
@@ -1458,8 +1725,8 @@
         ]
       },
       "priority": {
-        "rank": 3,
-        "tier": "P0",
+        "rank": 4,
+        "tier": "P1",
         "device_time_share_pct_range": [
           8.61269905295275,
           8.61269905295275
@@ -1633,7 +1900,7 @@
         ]
       },
       "priority": {
-        "rank": 4,
+        "rank": 5,
         "tier": "P1",
         "device_time_share_pct_range": [
           3.719734811288374,
@@ -1810,7 +2077,7 @@
         ]
       },
       "priority": {
-        "rank": 5,
+        "rank": 6,
         "tier": "P1",
         "device_time_share_pct_range": [
           3.9210764977513834,
@@ -1999,7 +2266,7 @@
         ]
       },
       "priority": {
-        "rank": 6,
+        "rank": 7,
         "tier": "P1",
         "device_time_share_pct_range": [
           8.536375294887034,
@@ -2181,7 +2448,7 @@
         ]
       },
       "priority": {
-        "rank": 7,
+        "rank": 8,
         "tier": "P0",
         "device_time_share_pct_range": [
           3.8994,
@@ -2407,7 +2674,7 @@
         ]
       },
       "priority": {
-        "rank": 8,
+        "rank": 9,
         "tier": "P0",
         "device_time_share_pct_range": [
           27.42969404468003,
@@ -2483,223 +2750,6 @@
         "introduced_by": "autokernel-strategy-integrator",
         "origin": "current-frame-profiler-audit",
         "note": "Added as the highest-value current-bundle scientific question, distinct from one-wave continuation.",
-        "supersedes": null
-      }
-    },
-    {
-      "hypothesis_id": "akh-v2-q5-onewave-preauthored",
-      "title": "Q5_0 one-wave correctness-validated continuation",
-      "status": "queued",
-      "statement": "The sealed eb26918 Q5_0 one-wave candidate has passed targeted and full correctness and must continue directly to attribution and whole-model screening without re-authoring.",
-      "primary_falsifier": "Exact attribution fails to show a positive type-6 kernel delta",
-      "regime": {
-        "backend": "hip",
-        "phase": "decode",
-        "batch": 1,
-        "architecture": "gfx90a",
-        "model_or_frame": "frame-current-qwen05b-q4km-tg128",
-        "quant": "Q5_0",
-        "shape": "type6-mmvq",
-        "measurement_graphs": false,
-        "target_runtime_graphs": true
-      },
-      "target": {
-        "frame_ids": [
-          "frame-current-qwen05b-q4km-tg128"
-        ],
-        "source_files": [
-          "ggml/src/ggml-cuda/mmvq.cu"
-        ],
-        "source_symbols": [
-          "mmvq_parameter_table_id",
-          "get_device_table_id",
-          "calc_nwarps",
-          "calc_rows_per_block"
-        ],
-        "template_intent": "preauthored-candidate-direct-continuation-v1"
-      },
-      "dispatch_anchors": [
-        {
-          "frame_id": "frame-current-qwen05b-q4km-tg128",
-          "signatures": [
-            {
-              "kernel_literal": "mul_mat_vec_q<(ggml_type)6,1,true,true>;grid=57344",
-              "calls": 6063,
-              "grid": 57344,
-              "workgroup": 128,
-              "lds_bytes": 1024,
-              "route_id": "cuda-mmvq-v2.anchor.0"
-            },
-            {
-              "kernel_literal": "mul_mat_vec_q<(ggml_type)6,1,true,true>;grid=8192",
-              "calls": 4644,
-              "grid": 8192,
-              "workgroup": 128,
-              "lds_bytes": 1024,
-              "route_id": "cuda-mmvq-v2.anchor.1"
-            },
-            {
-              "kernel_literal": "mul_mat_vec_q<(ggml_type)6,1,true,true>;grid=311296",
-              "calls": 3096,
-              "grid": 311296,
-              "workgroup": 128,
-              "lds_bytes": 1024,
-              "route_id": "cuda-mmvq-v2.anchor.2"
-            }
-          ],
-          "total_calls": 13803,
-          "aggregation": "exact_signatures",
-          "selection": "The three exact true/true main-path rows are selected; the 129-call false/true tail is explicitly excluded and cannot be silently added.",
-          "evidence_ref": "ev-current-qwen05-profile",
-          "excluded_signatures": [
-            {
-              "kernel_literal": "mul_mat_vec_q<(ggml_type)6,1,false,true>",
-              "calls": 129,
-              "grid": 57344,
-              "workgroup": 128,
-              "lds_bytes": 512,
-              "route_id": "cuda-mmvq-v2.anchor.3"
-            }
-          ]
-        }
-      ],
-      "mechanism": {
-        "facets": {
-          "mechanism": "q5_0_one_wave_per_output_block",
-          "ops": [
-            "mul_mat_vec_q"
-          ],
-          "files": [
-            "ggml/src/ggml-cuda/mmvq.cu"
-          ],
-          "symbols": [
-            "mmvq_parameter_table_id",
-            "get_device_table_id",
-            "calc_nwarps",
-            "calc_rows_per_block"
-          ],
-          "change_class": "launch_geometry"
-        },
-        "fingerprint_sha256": "09544955549ee65a6fe6462cbf92315ceb9d6f54fe8c9a0f1d3ce9e7d0a4238e"
-      },
-      "falsifiers": [
-        "Exact attribution fails to show a positive type-6 kernel delta",
-        "Graphs-on whole-model decode direction is non-positive",
-        "A replay does not reproduce the sealed patch bytes against its exact parent"
-      ],
-      "evidence_refs": [
-        "ev-current-qwen05-profile",
-        "ev-q5-onewave-correctness-targeted",
-        "ev-q5-onewave-correctness-full"
-      ],
-      "interactions": [
-        {
-          "with": "akh-v2-q5-type-specific-dequant",
-          "kind": "shared_bottleneck",
-          "rationale": "Both target type-6 MMVQ, but this is a sealed wave-count continuation and must not consume a planner attempt."
-        }
-      ],
-      "portability": {
-        "level": "exact_frame",
-        "source_frames": [
-          "frame-current-qwen05b-q4km-tg128"
-        ],
-        "target_frames": [
-          "frame-current-qwen05b-q4km-tg128"
-        ],
-        "constraints": [
-          "Exact Q5_0 type-6 dispatch only",
-          "No generic wave-count mutation"
-        ],
-        "required_validation": [
-          "Representative correctness",
-          "Exact-kernel attribution",
-          "Graphs-on whole-model paired screen"
-        ]
-      },
-      "priority": {
-        "rank": 9,
-        "tier": "P0",
-        "device_time_share_pct_range": [
-          27.42969404468003,
-          27.42969404468003
-        ],
-        "rationale": "Correctness-validated work is closer to measurement, but planner eligibility would discard its maturity."
-      },
-      "expected_value": {
-        "metric": "decode_tokens_per_s",
-        "direction": "higher_better",
-        "expected_relative_gain_pct_range": [
-          0.5,
-          3
-        ],
-        "device_time_ceiling_pct": 27.42969404468003,
-        "basis": "The selected three true/true rows total 13,803 calls and 27.429694 percent graphs-off device time. The 129-call false/true tail is an explicit excluded signature; routing and ceiling do not establish graphs-on reward.",
-        "device_time_ceiling_frame_id": "frame-current-qwen05b-q4km-tg128",
-        "current_bundle_plausible_gain_ceiling_pct": 27.42969404468003
-      },
-      "implementation": {
-        "cost": "medium",
-        "risk": "medium",
-        "notes": [
-          "Avoid the four-wave DNR",
-          "Keep changes inside sealed vecdotq authority"
-        ]
-      },
-      "stop_rule": [
-        "Reject generic wave-count changes",
-        "Stop on correctness mismatch",
-        "Retire after the declared candidate budget without exact-kernel and graphs-on whole-model gain"
-      ],
-      "current_bundle_eligibility": {
-        "eligible": false,
-        "template_ids": [],
-        "blocking_conditions": [
-          "Targeted and full correctness are already complete; re-authoring or replanning is refused because it would repeat correctness work and discard sealed candidate identity",
-          "Controller lacks a sealed preauthored-candidate continuation path",
-          "Current cuda-mmvq-v2 authority does not cover the exact enum/table/geometry symbols touched by the sealed patch"
-        ],
-        "reason": "Continue the exact correctness-validated candidate only through a dedicated sealed continuation carrier; current planner/template authority refuses replanning, re-authoring, repeated correctness, or implied source coverage."
-      },
-      "lifecycle": {
-        "maturity": "correctness_validated",
-        "next_action": "Dispatch exact type-6 attribution, then graphs-on whole-model screen using the sealed candidate; never re-author",
-        "candidate_identity": {
-          "candidate_id": "ak-candidate-q5-onewave-eb26918fa",
-          "source_commit": "eb26918fa82f8aef3ab72f1e3263bd8fecde62e7",
-          "candidate_patch_sha256": "f4cc49cd11cdfd93a2d5d2e00e653f503b6a16ce675bfb12c034fbbfae3e7a77",
-          "authority": "sealed_patch"
-        },
-        "diagnostic_identity": null
-      },
-      "decision_policy": {
-        "metric": "decode_tokens_per_s",
-        "frame_id": "frame-current-qwen05b-q4km-tg128",
-        "continuation_floor_pct": 0.25,
-        "nomination_floor_pct": 0.5,
-        "required_replications": 2,
-        "sign_policy": "all_positive",
-        "conflict_policy": "retain_inconclusive",
-        "max_distinct_candidates": 1,
-        "terminal_rule": "retire",
-        "effect_unit": "relative_percent",
-        "min_replication_effect_pct": 0.125,
-        "max_replication_spread_pct": 1
-      },
-      "epistemic": {
-        "grade": "correctness_only",
-        "confidence": "high",
-        "limitations": [
-          "Targeted and full correctness receipts do not contain attribution or throughput evidence.",
-          "Full commit and binary patch identity are repo-resolved provenance, not fields claimed by the correctness receipts."
-        ]
-      },
-      "record_version": 1,
-      "provenance": {
-        "introduced_at": "2026-08-14T12:00:00Z",
-        "introduced_by": "autokernel-strategy-integrator",
-        "origin": "sealed-q5-correctness-receipts",
-        "note": "Preserves the preauthored candidate as direct continuation work rather than a planner question.",
         "supersedes": null
       }
     },
@@ -2840,7 +2890,7 @@
         ]
       },
       "priority": {
-        "rank": 10,
+        "rank": 11,
         "tier": "P0",
         "device_time_share_pct_range": [
           8.0084,
@@ -3039,7 +3089,7 @@
         ]
       },
       "priority": {
-        "rank": 11,
+        "rank": 12,
         "tier": "P0",
         "device_time_share_pct_range": [
           42.376,
@@ -3243,7 +3293,7 @@
         ]
       },
       "priority": {
-        "rank": 25,
+        "rank": 26,
         "tier": "P1",
         "device_time_share_pct_range": [
           42.376,
@@ -3424,7 +3474,7 @@
         ]
       },
       "priority": {
-        "rank": 26,
+        "rank": 27,
         "tier": "P3",
         "device_time_share_pct_range": [
           0,
@@ -3603,7 +3653,7 @@
         ]
       },
       "priority": {
-        "rank": 27,
+        "rank": 28,
         "tier": "P3",
         "device_time_share_pct_range": [
           0,
@@ -3794,7 +3844,7 @@
         ]
       },
       "priority": {
-        "rank": 12,
+        "rank": 13,
         "tier": "P1",
         "device_time_share_pct_range": [
           3.1458,
@@ -3989,7 +4039,7 @@
         ]
       },
       "priority": {
-        "rank": 13,
+        "rank": 14,
         "tier": "P1",
         "device_time_share_pct_range": [
           10.7349496,
@@ -4175,7 +4225,7 @@
         ]
       },
       "priority": {
-        "rank": 14,
+        "rank": 15,
         "tier": "P1",
         "device_time_share_pct_range": [
           5.9512,
@@ -4391,7 +4441,7 @@
         ]
       },
       "priority": {
-        "rank": 15,
+        "rank": 16,
         "tier": "P1",
         "device_time_share_pct_range": [
           4.3655,
@@ -4582,7 +4632,7 @@
         ]
       },
       "priority": {
-        "rank": 16,
+        "rank": 17,
         "tier": "P2",
         "device_time_share_pct_range": [
           0.66,
@@ -4765,7 +4815,7 @@
         ]
       },
       "priority": {
-        "rank": 17,
+        "rank": 18,
         "tier": "P2",
         "device_time_share_pct_range": [
           3.8994,
@@ -4955,7 +5005,7 @@
         ]
       },
       "priority": {
-        "rank": 18,
+        "rank": 19,
         "tier": "P3",
         "device_time_share_pct_range": [
           3.5214881479,
@@ -5124,7 +5174,7 @@
         ]
       },
       "priority": {
-        "rank": 19,
+        "rank": 20,
         "tier": "P3",
         "device_time_share_pct_range": [
           0,
@@ -5309,7 +5359,7 @@
         ]
       },
       "priority": {
-        "rank": 20,
+        "rank": 21,
         "tier": "P3",
         "device_time_share_pct_range": [
           2.3187,
@@ -5494,7 +5544,7 @@
         ]
       },
       "priority": {
-        "rank": 21,
+        "rank": 22,
         "tier": "P3",
         "device_time_share_pct_range": [
           1.6451,
@@ -5683,7 +5733,7 @@
         ]
       },
       "priority": {
-        "rank": 22,
+        "rank": 23,
         "tier": "P1",
         "device_time_share_pct_range": [
           3.8994,
@@ -5866,7 +5916,7 @@
         ]
       },
       "priority": {
-        "rank": 23,
+        "rank": 24,
         "tier": "P2",
         "device_time_share_pct_range": [
           0,
@@ -6041,7 +6091,7 @@
         ]
       },
       "priority": {
-        "rank": 24,
+        "rank": 25,
         "tier": "P3",
         "device_time_share_pct_range": [
           0,

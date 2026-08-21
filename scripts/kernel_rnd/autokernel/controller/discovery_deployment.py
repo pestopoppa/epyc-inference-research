@@ -20,11 +20,11 @@ import re
 import subprocess
 from typing import Any, Mapping
 
-from .. import hypothesis_portfolio, schemas
+from .. import hypothesis_portfolio, preauthored_continuation, schemas
 from . import gpu_load_admission
 
 
-SCHEMA = "epyc.autokernel.discovery_deployment.v4"
+SCHEMA = "epyc.autokernel.discovery_deployment.v5"
 FROZEN_PRODUCTION_PATH = Path("/mnt/raid0/llm/llama.cpp")
 FROZEN_PRODUCTION_HEAD = "0db32c06e3e550065b78311a6031ef3dd2c4f27c"
 FROZEN_PRODUCTION_BRANCH = "production-consolidated-v9"
@@ -112,7 +112,7 @@ class ImmutableInput:
         _digest_file(self.path, self.sha256, label)
 
 
-PLANNER_CONTEXT_SCHEMA = "epyc.autokernel.discovery_planner_context.v3"
+PLANNER_CONTEXT_SCHEMA = "epyc.autokernel.discovery_planner_context.v4"
 EVIDENCE_MANIFEST_SCHEMA = "epyc.autokernel.hypothesis_evidence_manifest.v1"
 ADMISSION_POLICY_SCHEMA = gpu_load_admission.POLICY_SCHEMA
 _PLANNER_CONTEXT_LIMIT = 512 * 1024
@@ -167,6 +167,23 @@ class HypothesisEvidenceManifest:
         refreshed = _evidence_manifest(self.input, portfolio=portfolio)
         if refreshed.value != self.value:
             raise DeploymentConfigError("hypothesis evidence manifest changed")
+
+
+@dataclass(frozen=True)
+class PreauthoredContinuationInput:
+    input: ImmutableInput
+    value: preauthored_continuation.PreauthoredContinuation
+
+    def revalidate(self) -> None:
+        self.input.revalidate("preauthored_continuation")
+        try:
+            refreshed = preauthored_continuation.load(self.input.path)
+        except preauthored_continuation.PreauthoredContinuationError as exc:
+            raise DeploymentConfigError(
+                "preauthored continuation changed") from exc
+        if refreshed != self.value:
+            raise DeploymentConfigError(
+                "preauthored continuation semantic identity changed")
 
 
 def _portfolio(raw: ImmutableInput) -> HypothesisPortfolioInput:
@@ -232,7 +249,8 @@ def _admission_policy(raw: ImmutableInput, *, model: ImmutableInput,
 def _planner_context(value: object, *, model: ImmutableInput,
                      workload: ImmutableInput, runtime_config: ImmutableInput,
                      portfolio: HypothesisPortfolioInput,
-                     evidence_manifest: HypothesisEvidenceManifest) -> PlannerContext:
+                     evidence_manifest: HypothesisEvidenceManifest,
+                     continuation: PreauthoredContinuationInput) -> PlannerContext:
     raw = _input(value, "planner_context")
     if raw.path.stat().st_size > _PLANNER_CONTEXT_LIMIT:
         raise DeploymentConfigError("planner_context exceeds its bounded actor input limit")
@@ -249,7 +267,10 @@ def _planner_context(value: object, *, model: ImmutableInput,
                 "reviewed_source_package_sha256", "template_registry_sha256",
                 "template_symbol_authority",
                 "template_surfaces_sha256", "template_surfaces",
-                "portfolio_dispatch_authority"}
+                "portfolio_dispatch_authority",
+                "preauthored_continuation_sha256",
+                "preauthored_source_backed_diff_sha256",
+                "preauthored_historical_evidence_sha256"}
     if not isinstance(body, Mapping) or set(body) != required:
         raise DeploymentConfigError("planner_context has an unknown or incomplete schema")
     if body["schema"] != PLANNER_CONTEXT_SCHEMA:
@@ -266,6 +287,18 @@ def _planner_context(value: object, *, model: ImmutableInput,
         raise DeploymentConfigError("planner_context is not bound to the sealed portfolio")
     if body.get("hypothesis_evidence_manifest_sha256") != evidence_manifest.value["manifest_sha256"]:
         raise DeploymentConfigError("planner_context is not bound to vendored portfolio evidence")
+    if (body.get("preauthored_continuation_sha256")
+            != continuation.value.sha256):
+        raise DeploymentConfigError(
+            "planner_context preauthored continuation identity mismatch")
+    if (body.get("preauthored_source_backed_diff_sha256")
+            != continuation.value.source_backed_diff_sha256):
+        raise DeploymentConfigError(
+            "planner_context preauthored source-backed identity mismatch")
+    if not SHA.fullmatch(str(body.get(
+            "preauthored_historical_evidence_sha256"))):
+        raise DeploymentConfigError(
+            "planner_context historical continuation evidence is unsealed")
     if (not all(SHA.fullmatch(str(body.get(key))) for key in (
             "reviewed_source_package_sha256", "template_registry_sha256",
             "template_surfaces_sha256"))
@@ -380,6 +413,7 @@ class DiscoveryDeployment:
     admission_policy: AdmissionPolicy
     hypothesis_portfolio: HypothesisPortfolioInput
     hypothesis_evidence_manifest: HypothesisEvidenceManifest
+    preauthored_continuation: PreauthoredContinuationInput
     hypothesis_portfolio_contract: ImmutableInput
     planner_context: PlannerContext
     source_builder_id: str
@@ -403,6 +437,7 @@ class DiscoveryDeployment:
         self.admission_policy.revalidate()
         self.hypothesis_portfolio.revalidate()
         self.hypothesis_evidence_manifest.revalidate(self.hypothesis_portfolio.value)
+        self.preauthored_continuation.revalidate()
         self.hypothesis_portfolio_contract.revalidate("hypothesis_portfolio_contract")
         self.planner_context.revalidate()
 
@@ -576,7 +611,8 @@ def load_deployment_config(path: Path, *, sealed_bytes: bytes | None = None
     inputs = _exact(top["immutable_inputs"], {
         "model", "workload", "runtime_config", "admission_policy",
         "hypothesis_portfolio", "hypothesis_evidence_manifest",
-        "hypothesis_portfolio_contract"}, "immutable_inputs")
+        "hypothesis_portfolio_contract", "preauthored_continuation"},
+        "immutable_inputs")
     source = _exact(top["source_plan"], {"source_builder_id", "evidence_plan_id",
                                            "runner_args_id", "experiment_template_registry_id", "experiment_template_registry_sha256",
                                            "production_snapshot_id"}, "source_plan")
@@ -595,10 +631,19 @@ def load_deployment_config(path: Path, *, sealed_bytes: bytes | None = None
         portfolio=portfolio_input.value)
     portfolio_contract = _input(inputs["hypothesis_portfolio_contract"],
                                 "hypothesis_portfolio_contract")
-    planner_context = _planner_context(top["planner_context"], model=model,
-                                       workload=workload, runtime_config=runtime_config,
-                                       portfolio=portfolio_input,
-                                       evidence_manifest=evidence_manifest)
+    continuation_input = _input(
+        inputs["preauthored_continuation"], "preauthored_continuation")
+    try:
+        continuation = PreauthoredContinuationInput(
+            continuation_input,
+            preauthored_continuation.load(continuation_input.path))
+    except preauthored_continuation.PreauthoredContinuationError as exc:
+        raise DeploymentConfigError(
+            "preauthored continuation schema/content mismatch") from exc
+    planner_context = _planner_context(
+        top["planner_context"], model=model, workload=workload,
+        runtime_config=runtime_config, portfolio=portfolio_input,
+        evidence_manifest=evidence_manifest, continuation=continuation)
     if planner_context.value["template_registry_sha256"] != template_registry_sha256:
         raise DeploymentConfigError(
             "planner_context template registry differs from source plan")
@@ -609,6 +654,7 @@ def load_deployment_config(path: Path, *, sealed_bytes: bytes | None = None
                           ("hypothesis_portfolio", portfolio_input.input),
                           ("hypothesis_evidence_manifest", evidence_manifest.input),
                           ("hypothesis_portfolio_contract", portfolio_contract),
+                          ("preauthored_continuation", continuation.input),
                           ("planner_context", planner_context.input)):
         if any(_overlaps(input_.path, protected)
                for protected in (*roots.values(), production_path, instrument_path)):
@@ -630,6 +676,7 @@ def load_deployment_config(path: Path, *, sealed_bytes: bytes | None = None
         runtime_config=runtime_config, policy=admission_policy_input,
         hypothesis_portfolio=portfolio_input,
         hypothesis_evidence_manifest=evidence_manifest,
+        preauthored_continuation=continuation,
         hypothesis_portfolio_contract=portfolio_contract,
         planner_context=planner_context,
         source_builder_id=_identifier(source["source_builder_id"], "source_plan.source_builder_id"),
@@ -670,5 +717,6 @@ def resolve_registry(config: DiscoveryDeployment, registry: Mapping[str, Mapping
 
 __all__ = ["SCHEMA", "PLANNER_CONTEXT_SCHEMA", "EVIDENCE_MANIFEST_SCHEMA",
            "DeploymentConfigError", "ImmutableInput", "PlannerContext",
-           "HypothesisPortfolioInput", "HypothesisEvidenceManifest", "DiscoveryDeployment",
+           "HypothesisPortfolioInput", "HypothesisEvidenceManifest",
+           "PreauthoredContinuationInput", "DiscoveryDeployment",
            "ResolvedDeployment", "load_deployment_config", "resolve_registry"]

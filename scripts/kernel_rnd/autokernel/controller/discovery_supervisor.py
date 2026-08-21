@@ -92,6 +92,8 @@ GRAPH_EXECUTION_MODULES = {
     "claude_fable5_critic_actor":
         "scripts/kernel_rnd/autokernel/controller/claude_fable5_critic_actor.py",
     "hypothesis_portfolio": "scripts/kernel_rnd/autokernel/hypothesis_portfolio.py",
+    "preauthored_continuation":
+        "scripts/kernel_rnd/autokernel/preauthored_continuation.py",
 }
 
 

@@ -230,7 +230,8 @@ class HypothesisPortfolioTest(unittest.TestCase):
         portfolio = P.load(P.DEFAULT_PORTFOLIO)
         self.assertEqual(
             {row["hypothesis_id"] for row in portfolio.eligible_projection()},
-            {"akh-v26-q4k-branchless-sixbit-scale",
+            {"akh-v2-q5-onewave-preauthored",
+             "akh-v26-q4k-branchless-sixbit-scale",
              "akh-v26-rms-scale-broadcast",
              "akh-v26-rope-neox-index-strength-reduction",
              "akh-v26-fa-combine-wave-normalization",
@@ -250,12 +251,17 @@ class HypothesisPortfolioTest(unittest.TestCase):
     def test_q5_pre_authored_candidate_cannot_be_replanned(self):
         portfolio = P.load(P.DEFAULT_PORTFOLIO)
         row = portfolio.hypothesis("akh-v2-q5-onewave-preauthored")
-        self.assertEqual(row["lifecycle"]["maturity"], "correctness_validated")
+        self.assertEqual(row["lifecycle"]["maturity"], "candidate_authored")
         self.assertEqual(row["lifecycle"]["candidate_identity"]["candidate_patch_sha256"],
                          "f4cc49cd11cdfd93a2d5d2e00e653f503b6a16ce675bfb12c034fbbfae3e7a77")
-        self.assertFalse(row["current_bundle_eligibility"]["eligible"])
-        with self.assertRaisesRegex(P.PortfolioError, "not current-bundle eligible"):
-            portfolio.eligible_record(row["hypothesis_id"])
+        self.assertTrue(row["current_bundle_eligibility"]["eligible"])
+        eligible = portfolio.eligible_record(row["hypothesis_id"])
+        self.assertEqual(
+            eligible["template_ids"],
+            ("cuda-mmvq-q5-onewave-continuation-v1",))
+        self.assertIn("without another planner", eligible["statement"])
+        self.assertIn("current governed correctness",
+                      row["lifecycle"]["next_action"])
 
     def test_current_eligible_dispatches_preserve_exact_multi_row_geometry(self):
         portfolio = P.load(P.DEFAULT_PORTFOLIO)
@@ -295,6 +301,21 @@ class HypothesisPortfolioTest(unittest.TestCase):
                 **dict(zip(("calls", "grid", "workgroup", "lds_bytes"), row)),
             ) for offset, row in enumerate(rows)]
         surfaces = {
+            "cuda-mmvq-q5-onewave-continuation-v1": {
+                "source_files": ["ggml/src/ggml-cuda/mmvq.cu"],
+                "source_symbols": ["calc_nwarps", "calc_rows_per_block",
+                                   "get_device_table_id",
+                                   "mmvq_parameter_table_id"],
+                "change_classes": ["dispatcher"],
+                "dispatch_signatures": geometry(
+                    "cuda-mmvq-q5-onewave-continuation-v1", 0,
+                    (6063, 57344, 128, 1024),
+                    (4644, 8192, 128, 1024),
+                    (3096, 311296, 128, 1024)),
+                "excluded_signatures": geometry(
+                    "cuda-mmvq-q5-onewave-continuation-v1", 3,
+                    (129, 57344, 128, 512)),
+            },
             "cuda-vecdotq-q4k-v1": {
                 "source_files": ["ggml/src/ggml-cuda/vecdotq.cuh"],
                 "source_symbols": ["vec_dot_q4_K_q8_1", "vec_dot_q4_K_q8_1_impl_vmmq"],
@@ -346,22 +367,22 @@ class HypothesisPortfolioTest(unittest.TestCase):
                 "excluded_signatures": [],
             },
         }
-        P.validate_template_authorability(portfolio, "gpu-source-templates-v3", surfaces)
+        P.validate_template_authorability(portfolio, "gpu-source-templates-v4", surfaces)
         surfaces["cuda-norm-v2"]["source_symbols"] = ["not_rms"]
         with self.assertRaisesRegex(P.PortfolioError, "target symbols"):
             P.validate_template_authorability(
-                portfolio, "gpu-source-templates-v3", surfaces)
+                portfolio, "gpu-source-templates-v4", surfaces)
         surfaces["cuda-norm-v2"]["source_symbols"] = ["rms_norm_f32"]
         surfaces["cuda-norm-v2"]["dispatch_signatures"] = geometry(
             "cuda-norm-v2", 0, (6321, 999, 256, 512))
         with self.assertRaisesRegex(P.PortfolioError, "dispatch geometry"):
             P.validate_template_authorability(
-                portfolio, "gpu-source-templates-v3", surfaces)
+                portfolio, "gpu-source-templates-v4", surfaces)
         surfaces["cuda-norm-v2"]["dispatch_signatures"] = geometry(
             "cuda-norm-v2", 1, (6321, 256, 256, 512))
         with self.assertRaisesRegex(P.PortfolioError, "dispatch geometry"):
             P.validate_template_authorability(
-                portfolio, "gpu-source-templates-v3", surfaces)
+                portfolio, "gpu-source-templates-v4", surfaces)
 
     def test_q4_branchless_economics_are_frame_scoped(self):
         row = P.load(P.DEFAULT_PORTFOLIO).hypothesis("akh-v2-q4k-branchless-scale-min")
@@ -574,13 +595,13 @@ class HypothesisPortfolioTest(unittest.TestCase):
         result = json.loads(stdout.getvalue())
         self.assertEqual(result["hypotheses"], 27)
         self.assertEqual(result["do_not_repeat"], 22)
-        self.assertEqual(result["eligible"], 6)
+        self.assertEqual(result["eligible"], 7)
         stdout = StringIO()
         with redirect_stdout(stdout):
             self.assertEqual(P.main(["summarize", str(P.DEFAULT_PORTFOLIO)]), 0)
         summary = json.loads(stdout.getvalue())
         self.assertEqual(summary["sha256"], result["sha256"])
-        self.assertEqual(len(summary["eligible_records"]), 6)
+        self.assertEqual(len(summary["eligible_records"]), 7)
         self.assertEqual(len(summary["do_not_repeat"]), 22)
 
     def test_duplicate_json_key_is_refused(self):

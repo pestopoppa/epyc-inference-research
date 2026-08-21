@@ -8,7 +8,7 @@ import unittest
 from unittest import mock
 from types import SimpleNamespace
 
-from .. import hypothesis_portfolio
+from .. import hypothesis_portfolio, preauthored_continuation
 from . import discovery_deployment as D
 
 
@@ -75,6 +75,14 @@ class DeploymentConfigTests(unittest.TestCase):
             "HYPOTHESIS_PORTFOLIO_V2.md").read_bytes())
         inputs["hypothesis_portfolio_contract"] = {
             "path": str(contract_path), "sha256": digest(contract_path)}
+        continuation_path = config_dir / "preauthored-q5-continuation-v1.json"
+        continuation_path.write_bytes(
+            preauthored_continuation.DEFAULT_CARRIER.read_bytes())
+        continuation_path.chmod(0o600)
+        continuation = preauthored_continuation.load(continuation_path)
+        inputs["preauthored_continuation"] = {
+            "path": str(continuation_path),
+            "sha256": digest(continuation_path)}
         evidence = {}
         evidence_root = root / "portfolio-evidence"
         evidence_root.mkdir()
@@ -129,6 +137,10 @@ class DeploymentConfigTests(unittest.TestCase):
                     "kernel_name": "kernel()", "calls": 1,
                                         "grid": 64, "workgroup": 64, "lds_bytes": 0}]
                 for row in portfolio.eligible_hypotheses()},
+            "preauthored_continuation_sha256": continuation.sha256,
+            "preauthored_source_backed_diff_sha256":
+                continuation.source_backed_diff_sha256,
+            "preauthored_historical_evidence_sha256": "f" * 64,
         }
         planner_context["context_sha256"] = D.schemas.content_hash(
             {key: item for key, item in planner_context.items() if key != "context_sha256"})
@@ -183,7 +195,7 @@ class DeploymentConfigTests(unittest.TestCase):
             self.assertEqual(loaded.nomination_threshold, 0.03)
             self.assertEqual(loaded.build_root, (Path(temp) / "builds").resolve())
             self.assertEqual(loaded.planner_context.value["schema"],
-                             "epyc.autokernel.discovery_planner_context.v3")
+                             D.PLANNER_CONTEXT_SCHEMA)
             self.assertEqual(
                 loaded.planner_context.value["template_symbol_authority"],
                 {"test": {"ggml.cu": ["kernel"]}},
