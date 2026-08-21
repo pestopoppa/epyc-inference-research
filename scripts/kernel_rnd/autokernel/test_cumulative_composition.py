@@ -14,7 +14,7 @@ from . import source_candidate
 from .controller import gpu_source_proofs
 
 
-BASE = "1" * 40
+BASE = C.FROZEN_PRODUCTION_COMMIT
 INSTRUMENT = "2" * 40
 CAMPAIGN = "ak-composition-test"
 
@@ -141,6 +141,106 @@ def _comparison(pair: C.CumulativeBuildPair, correctness: C.FullCorrectness,
     )
 
 
+def _production(*, frame_sha256: str = _h("matched-on-frame"),
+                protocol_sha256: str = _h("protocol-frame"),
+                measurement_receipt_sha256: str = _h(("production", "on")),
+                model_sha256: str = _h("model"),
+                workload_sha256: str = _h("workload"),
+                runtime_config_sha256: str = _h("runtime-config")) \
+        -> C.FrozenProductionAuthority:
+    identity = replace(_identity("production"), source_commit=BASE)
+    return C.FrozenProductionAuthority.create(
+        production_commit=BASE, build_identity=identity,
+        runtime_snapshot_sha256=_h("production-runtime-snapshot"),
+        comparator_receipt_sha256=_h("production-comparator-receipt"),
+        graphs_mode="graphs_on", frame_sha256=frame_sha256,
+        measurement_protocol_sha256=protocol_sha256,
+        measurement_receipt_sha256=measurement_receipt_sha256,
+        model_sha256=model_sha256, workload_sha256=workload_sha256,
+        runtime_config_sha256=runtime_config_sha256,
+        metric="tokens_per_second", direction="higher_is_better")
+
+
+def _performance(
+        directory: str | Path, plan: C.CompositionPlan,
+        pair: C.CumulativeBuildPair, correctness: C.FullCorrectness,
+        comparison: C.IncrementalComparison, *,
+        cumulative_on: float = .02,
+) -> tuple[C.CumulativePerformance, C.CumulativePerformanceRef]:
+    off_frame, on_frame = _h("matched-off-frame"), _h("matched-on-frame")
+    performance = C.CumulativePerformance.create(
+        plan, pair, correctness, comparison,
+        frozen_production=_production(
+            frame_sha256=on_frame,
+            protocol_sha256=_h("protocol-frame")),
+        model_sha256=_h("model"), workload_sha256=_h("workload"),
+        runtime_config_sha256=_h("runtime-config"),
+        protocol_frame_sha256=_h("protocol-frame"),
+        metric="decode_tokens_per_s", metric_direction="higher_better",
+        cumulative_graphs_on_effect_fraction=cumulative_on,
+        production_graphs_on_receipt_sha256=_h(("production", "on")),
+        incremental_graphs_off_frame_sha256=off_frame,
+        incremental_graphs_on_frame_sha256=on_frame,
+        production_graphs_on_frame_sha256=on_frame)
+    reference = C.seal_cumulative_performance(
+        Path(directory) / f"performance-{plan.operation_key}.json",
+        performance)
+    return performance, reference
+
+
+def _record_performance(
+        ledger: C.CompositionLedger, directory: str | Path,
+        plan: C.CompositionPlan, pair: C.CumulativeBuildPair,
+        correctness: C.FullCorrectness,
+        comparison: C.IncrementalComparison, **kwargs,
+) -> C.CumulativePerformance:
+    performance, reference = _performance(
+        directory, plan, pair, correctness, comparison, **kwargs)
+    ledger.record_cumulative_performance(performance, reference)
+    return performance
+
+
+def _measurement(
+        *, pair: C.CumulativeBuildPair,
+        anchor: gpu_source_proofs.BuildIdentity, graph_mode: str,
+        factor: str, effect: float,
+) -> dict:
+    metric_contract = {
+        "schema": "epyc.autokernel.matched-test-metric.v1",
+        "graph_mode": graph_mode,
+    }
+    raw_row = {
+        "n_threads": 8, "n_batch": 512, "n_ubatch": 512,
+        "use_mmap": True, "no_op_offload": 0,
+        "split_mode": "layer", "no_kv_offload": False, "poll": 50,
+        "n_prompt": 0, "n_gen": 128, "flash_attn": 1,
+    }
+    body = {
+        "schema": "epyc.autokernel.gpu_candidate_only_screen.v2",
+        "promotion_claim": False, "non_promotable": True,
+        "hip_residency_proved": True, "runtime_graphs": graph_mode,
+        "median_relative": effect,
+        "frame": {
+            "backend": "llama_gpu", "recipe": "tg128-ngl99",
+            "metric": "decode_tokens_per_s",
+            "metric_direction": "higher_better",
+            "metric_contract": metric_contract,
+            "n_prompt": 0, "n_gen": 128, "model": "/models/test.gguf",
+            "model_sha256": _h("model"),
+            "source_commit": pair.candidate.build_identity.source_commit,
+            "cpu_list": "0-7", "device": "AMD Instinct MI210",
+            "architecture": "gfx90a",
+        },
+        "sole_factor": {"name": factor},
+        "anchor_identity": vars(anchor),
+        "candidate_identity": vars(pair.candidate.build_identity),
+        "candidate_runs": [{"raw_row": raw_row}],
+        "candidate_invocations": 9, "candidate_processes": 1,
+    }
+    body["result_sha256"] = C._sha(body)
+    return body
+
+
 class CumulativeCompositionTests(unittest.TestCase):
     def test_ordered_authority_round_trip_and_order_is_identity(self):
         first, second = _lever(1), _lever(2)
@@ -232,6 +332,9 @@ class CumulativeCompositionTests(unittest.TestCase):
             ledger.record_build_pair(first_pair)
             ledger.record_correctness(first_correctness)
             ledger.record_comparison(first_comparison)
+            _record_performance(
+                ledger, directory, first_plan, first_pair,
+                first_correctness, first_comparison)
             ledger.finalize(first_plan.operation_key)
             omitted = C.DnrAuthority.pass_for(
                 anchor=initial, candidate=initial.append(second),
@@ -277,6 +380,8 @@ class CumulativeCompositionTests(unittest.TestCase):
                 ledger.finalize(plan.operation_key)
             ledger.record_correctness(passed)
             ledger.record_comparison(comparison)
+            _record_performance(
+                ledger, directory, plan, pair, passed, comparison)
             final = ledger.finalize(plan.operation_key)
             self.assertEqual(final["terminals"][0]["disposition"], "admitted")
 
@@ -301,12 +406,22 @@ class CumulativeCompositionTests(unittest.TestCase):
                 C.CompositionLedger(path).load()["pending"]["stage"],
                 "correctness_passed")
             ledger.record_comparison(comparison)
+            self.assertEqual(
+                C.CompositionLedger(path).load()["pending"]["stage"],
+                "incremental_measured")
+            performance = _record_performance(
+                ledger, directory, plan, pair, correct, comparison)
             final = C.CompositionLedger(path).finalize(plan.operation_key)
             self.assertIsNone(final["pending"])
             self.assertEqual(final["scientific_attempts"], 1)
             self.assertEqual(
                 C.CompositionAuthority.from_dict(final["authority"]),
                 plan.candidate)
+            self.assertTrue(final["terminals"][0]["promotion_eligible"])
+            self.assertEqual(
+                C.CumulativePerformance.from_dict(
+                    final["terminals"][0]["cumulative_performance"]),
+                performance)
             self.assertEqual(
                 C.CompositionLedger(path).create(plan.anchor), final)
             self.assertEqual(
@@ -379,12 +494,244 @@ class CumulativeCompositionTests(unittest.TestCase):
                 comparison = _comparison(pair, correct, route, graphs)
                 self.assertEqual(comparison.classification, expected)
                 ledger.record_comparison(comparison)
+                performance = _record_performance(
+                    ledger, directory, plan, pair, correct, comparison)
                 final = ledger.finalize(plan.operation_key)
                 self.assertEqual(final["terminals"][0]["disposition"],
                                  "incremental_rollback")
                 self.assertEqual(
                     C.CompositionAuthority.from_dict(final["authority"]),
                     plan.anchor)
+                self.assertFalse(performance.promotion_eligible)
+
+    def test_positive_incremental_nonpositive_cumulative_is_admitted_but_nonpromotable(self):
+        plan = _plan(_authority(_lever(1)), _lever(2))
+        pair = _build_pair(plan)
+        correct = _correctness(pair)
+        comparison = _comparison(pair, correct)
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = C.CompositionLedger(Path(directory) / "state.json")
+            ledger.create(plan.anchor)
+            ledger.begin(plan)
+            ledger.record_build_pair(pair)
+            ledger.record_correctness(correct)
+            ledger.record_comparison(comparison)
+            performance = _record_performance(
+                ledger, directory, plan, pair, correct, comparison,
+                cumulative_on=-.02)
+            final = ledger.finalize(plan.operation_key)
+            terminal = final["terminals"][0]
+            self.assertEqual(terminal["disposition"], "admitted")
+            self.assertFalse(terminal["promotion_eligible"])
+            self.assertEqual(terminal["promotion_reason"],
+                             "cumulative_screened_out")
+            self.assertFalse(performance.promotion_eligible)
+            self.assertEqual(
+                C.CompositionAuthority.from_dict(final["authority"]),
+                plan.candidate)
+
+    def test_positive_cumulative_with_negative_latest_rolls_back(self):
+        plan = _plan(_authority(_lever(1)), _lever(2))
+        pair = _build_pair(plan)
+        correct = _correctness(pair)
+        comparison = _comparison(pair, correct, route=-.01, graphs=-.02)
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = C.CompositionLedger(Path(directory) / "state.json")
+            ledger.create(plan.anchor)
+            ledger.begin(plan)
+            ledger.record_build_pair(pair)
+            ledger.record_correctness(correct)
+            ledger.record_comparison(comparison)
+            performance = _record_performance(
+                ledger, directory, plan, pair, correct, comparison,
+                cumulative_on=.03)
+            final = ledger.finalize(plan.operation_key)
+            terminal = final["terminals"][0]
+            self.assertEqual(terminal["disposition"],
+                             "incremental_rollback")
+            self.assertFalse(performance.promotion_eligible)
+            self.assertEqual(performance.promotion_reason,
+                             "incremental_screened_out")
+            self.assertEqual(
+                C.CompositionAuthority.from_dict(final["authority"]),
+                plan.anchor)
+
+    def test_three_result_protocol_match_creates_promotion_authority(self):
+        plan = _plan(_authority(_lever(1)), _lever(2))
+        pair = _build_pair(plan)
+        correct = _correctness(pair)
+        comparison = _comparison(pair, correct)
+        production_identity = replace(
+            _identity("production"), source_commit=BASE)
+        incremental_off = _measurement(
+            pair=pair, anchor=pair.anchor.build_identity, graph_mode="off",
+            factor="source_patch", effect=.02)
+        incremental_on = _measurement(
+            pair=pair, anchor=pair.anchor.build_identity, graph_mode="on",
+            factor="source_patch", effect=.01)
+        production_on = _measurement(
+            pair=pair, anchor=production_identity, graph_mode="on",
+            factor="cumulative_production", effect=.03)
+        production_descriptor = C._measurement_descriptor(
+            production_on, graph_mode="on", candidate=pair.candidate,
+            anchor_identity=production_identity,
+            factor_name="cumulative_production")
+        production = _production(
+            frame_sha256=production_descriptor["anchor_frame_sha256"],
+            protocol_sha256=
+                production_descriptor["protocol_frame_sha256"],
+            measurement_receipt_sha256=_h("production-on-file"),
+            model_sha256=production_descriptor["model_sha256"],
+            workload_sha256=production_descriptor["workload_sha256"],
+            runtime_config_sha256=
+                production_descriptor["runtime_config_sha256"])
+        performance = C.performance_from_measurements(
+            plan, pair, correct, comparison,
+            frozen_production=production,
+            incremental_graphs_off=incremental_off,
+            incremental_graphs_on=incremental_on,
+            production_graphs_on=production_on,
+            production_graphs_on_receipt_sha256=_h("production-on-file"))
+        self.assertTrue(performance.promotion_eligible)
+        self.assertEqual(
+            C.CumulativePerformance.from_dict(performance.to_dict()),
+            performance)
+
+        mixed = copy.deepcopy(production_on)
+        mixed["runtime_graphs"] = "off"
+        with self.assertRaisesRegex(C.CompositionError, "not sealed"):
+            C.performance_from_measurements(
+                plan, pair, correct, comparison,
+                frozen_production=production,
+                incremental_graphs_off=incremental_off,
+                incremental_graphs_on=incremental_on,
+                production_graphs_on=mixed,
+                production_graphs_on_receipt_sha256=_h("production-on-file"))
+
+        mismatched = copy.deepcopy(production_on)
+        mismatched["frame"]["model_sha256"] = _h("different-model")
+        with self.assertRaisesRegex(C.CompositionError, "protocol"):
+            C.performance_from_measurements(
+                plan, pair, correct, comparison,
+                frozen_production=production,
+                incremental_graphs_off=incremental_off,
+                incremental_graphs_on=incremental_on,
+                production_graphs_on=mismatched,
+                production_graphs_on_receipt_sha256=_h("production-on-file"))
+
+        protocol_changed = copy.deepcopy(production_on)
+        protocol_changed["frame"]["cpu_list"] = "176-183"
+        with self.assertRaisesRegex(C.CompositionError, "protocol"):
+            C.performance_from_measurements(
+                plan, pair, correct, comparison,
+                frozen_production=production,
+                incremental_graphs_off=incremental_off,
+                incremental_graphs_on=incremental_on,
+                production_graphs_on=protocol_changed,
+                production_graphs_on_receipt_sha256=
+                    _h("production-on-file"))
+
+        candidate_changed = copy.deepcopy(production_on)
+        replacement_identity = _identity("replacement-candidate")
+        candidate_changed["candidate_identity"] = \
+            replacement_identity.__dict__
+        candidate_changed["frame"]["source_commit"] = \
+            replacement_identity.source_commit
+        replacement_binding = C.BuildBinding.create(
+            pair.candidate.patch_set_sha256, replacement_identity,
+            source_materialization_receipt_sha256=
+                pair.candidate.source_materialization_receipt_sha256)
+        replacement_descriptor = C._measurement_descriptor(
+            candidate_changed, graph_mode="on",
+            candidate=replacement_binding,
+            anchor_identity=production_identity,
+            factor_name="cumulative_production")
+        self.assertEqual(
+            replacement_descriptor["protocol_frame_sha256"],
+            production_descriptor["protocol_frame_sha256"])
+        self.assertNotEqual(
+            replacement_descriptor["frame_sha256"],
+            production_descriptor["frame_sha256"])
+        with self.assertRaisesRegex(
+                C.CompositionError, "candidate build identity changed"):
+            C.performance_from_measurements(
+                plan, pair, correct, comparison,
+                frozen_production=production,
+                incremental_graphs_off=incremental_off,
+                incremental_graphs_on=incremental_on,
+                production_graphs_on=candidate_changed,
+                production_graphs_on_receipt_sha256=
+                    _h("production-on-file"))
+
+        with self.assertRaisesRegex(
+                C.CompositionError, "three distinct runs"):
+            C.performance_from_measurements(
+                plan, pair, correct, comparison,
+                frozen_production=production,
+                incremental_graphs_off=incremental_off,
+                incremental_graphs_on=incremental_on,
+                production_graphs_on=production_on,
+                production_graphs_on_receipt_sha256=
+                    comparison.graphs_on_receipt_sha256)
+
+    def test_static_frozen_comparator_exact_schema_and_tamper_refusal(self):
+        identity = replace(_identity("production-static"), source_commit=BASE)
+        comparator = C.FrozenProductionComparator.create(
+            build_identity=identity, build_receipt_sha256=_h("build"),
+            linkage_receipt_sha256=_h("linkage"),
+            runtime_receipt_sha256=_h("runtime"),
+            runtime_snapshot_sha256=_h("snapshot"),
+            measurement_receipt_sha256=_h("measurement"),
+            model_sha256=_h("model"), workload_sha256=_h("workload"),
+            runtime_config_sha256=_h("runtime-config"),
+            frame_sha256=_h("production-frame"),
+            measurement_protocol_sha256=_h("protocol"))
+        reopened = C.FrozenProductionComparator.from_dict(
+            comparator.to_dict())
+        self.assertEqual(reopened, comparator)
+        self.assertEqual(reopened.authority().build_identity, identity)
+        for mutation in (
+                lambda value: value.update(graphs_mode="graphs_off"),
+                lambda value: value.update(commit="f" * 40),
+                lambda value: value.update(runtime_snapshot_sha256="0" * 64),
+                lambda value: value.update(extra="unexpected")):
+            damaged = copy.deepcopy(comparator.to_dict())
+            mutation(damaged)
+            with self.assertRaises(C.CompositionError):
+                C.FrozenProductionComparator.from_dict(damaged)
+
+    def test_performance_receipt_same_fd_reopen_and_tamper_refusal(self):
+        plan = _plan(_authority(), _lever(1))
+        pair = _build_pair(plan)
+        correct = _correctness(pair)
+        comparison = _comparison(pair, correct)
+        with tempfile.TemporaryDirectory() as directory:
+            performance, reference = _performance(
+                directory, plan, pair, correct, comparison)
+            reopened, digest = C.load_cumulative_performance(
+                Path(reference.path), expected_file_sha256=reference.sha256)
+            self.assertEqual((reopened, digest),
+                             (performance, reference.sha256))
+            path = Path(reference.path)
+            raw = json.loads(path.read_text())
+            raw["promotion_eligible"] = False
+            raw["result_sha256"] = C._sha({
+                key: value for key, value in raw.items()
+                if key != "result_sha256"})
+            path.write_text(json.dumps(raw))
+            os.chmod(path, 0o600)
+            with self.assertRaises(C.CompositionError):
+                C.load_cumulative_performance(
+                    path, expected_file_sha256=reference.sha256)
+
+        with tempfile.TemporaryDirectory() as directory:
+            performance, reference = _performance(
+                directory, plan, pair, correct, comparison)
+            path = Path(reference.path)
+            alias = path.with_name("performance-hardlink.json")
+            os.link(path, alias)
+            with self.assertRaisesRegex(C.CompositionError, "identity is unsafe"):
+                C.load_cumulative_performance(path)
 
     def test_infrastructure_rollback_is_non_scientific_and_fresh_retry_is_allowed(self):
         lever = _lever(1)
@@ -421,7 +768,10 @@ class CumulativeCompositionTests(unittest.TestCase):
                 ledger.begin(plan)
                 ledger.record_build_pair(pair)
                 ledger.record_correctness(correct)
-                ledger.record_comparison(_comparison(pair, correct))
+                comparison = _comparison(pair, correct)
+                ledger.record_comparison(comparison)
+                _record_performance(
+                    ledger, directory, plan, pair, correct, comparison)
                 state = ledger.finalize(plan.operation_key)
                 authority = plan.candidate
                 self.assertEqual(state["scientific_attempts"], index)
@@ -473,7 +823,10 @@ class CumulativeCompositionTests(unittest.TestCase):
             ledger.begin(plan)
             ledger.record_build_pair(pair)
             ledger.record_correctness(correct)
-            ledger.record_comparison(_comparison(pair, correct))
+            comparison = _comparison(pair, correct)
+            ledger.record_comparison(comparison)
+            _record_performance(
+                ledger, directory, plan, pair, correct, comparison)
             ledger.finalize(plan.operation_key)
             original = json.loads(path.read_text())
 

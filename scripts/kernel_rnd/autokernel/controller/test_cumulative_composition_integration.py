@@ -19,7 +19,7 @@ from . import gpu_source_evidence
 from . import gpu_source_proofs
 
 
-BASE = "1" * 40
+BASE = composition.FROZEN_PRODUCTION_COMMIT
 INSTRUMENT = "2" * 40
 RUNTIME = {
     "kind": "docker_workspace_bind_only", "docker_path": "/docker",
@@ -160,6 +160,94 @@ def _identity(label: str) -> gpu_source_proofs.BuildIdentity:
         linkage_sha256=_sha(f"linkage-{label}"))
 
 
+def _production(*, frame_sha256: str = _sha("matched-on"),
+                protocol_sha256: str = _sha("protocol"),
+                measurement_receipt_sha256: str = _sha("production-on"),
+                model_sha256: str = _sha("model"),
+                workload_sha256: str = _sha("workload"),
+                runtime_config_sha256: str = _sha("runtime")) \
+        -> composition.FrozenProductionAuthority:
+    identity = replace(_identity("production"), source_commit=BASE)
+    return composition.FrozenProductionAuthority.create(
+        production_commit=BASE, build_identity=identity,
+        runtime_snapshot_sha256=_sha("production-runtime-snapshot"),
+        comparator_receipt_sha256=_sha("production-comparator-receipt"),
+        graphs_mode="graphs_on", frame_sha256=frame_sha256,
+        measurement_protocol_sha256=protocol_sha256,
+        measurement_receipt_sha256=measurement_receipt_sha256,
+        model_sha256=model_sha256, workload_sha256=workload_sha256,
+        runtime_config_sha256=runtime_config_sha256,
+        metric="tokens_per_second", direction="higher_is_better")
+
+
+def _composition_performance(
+        root: Path, plan: composition.CompositionPlan,
+        pair: composition.CumulativeBuildPair,
+        correctness: composition.FullCorrectness,
+        comparison: composition.IncrementalComparison, *,
+        cumulative_on: float = .02,
+) -> tuple[composition.CumulativePerformance,
+           composition.CumulativePerformanceRef]:
+    off_frame, on_frame = _sha("matched-off"), _sha("matched-on")
+    performance = composition.CumulativePerformance.create(
+        plan, pair, correctness, comparison,
+        frozen_production=_production(
+            frame_sha256=on_frame, protocol_sha256=_sha("protocol")),
+        model_sha256=_sha("model"), workload_sha256=_sha("workload"),
+        runtime_config_sha256=_sha("runtime"),
+        protocol_frame_sha256=_sha("protocol"),
+        metric="decode_tokens_per_s", metric_direction="higher_better",
+        cumulative_graphs_on_effect_fraction=cumulative_on,
+        production_graphs_on_receipt_sha256=_sha("production-on"),
+        incremental_graphs_off_frame_sha256=off_frame,
+        incremental_graphs_on_frame_sha256=on_frame,
+        production_graphs_on_frame_sha256=on_frame)
+    reference = composition.seal_cumulative_performance(
+        root / f"performance-{plan.operation_key}.json", performance)
+    return performance, reference
+
+
+def _measurement(
+        *, pair: composition.CumulativeBuildPair,
+        anchor: gpu_source_proofs.BuildIdentity, graph_mode: str,
+        factor: str, effect: float) -> dict:
+    raw_row = {
+        "n_threads": 8, "n_batch": 512, "n_ubatch": 512,
+        "use_mmap": True, "no_op_offload": 0,
+        "split_mode": "layer", "no_kv_offload": False, "poll": 50,
+        "n_prompt": 0, "n_gen": 128, "flash_attn": 1,
+    }
+    body = {
+        "schema": "epyc.autokernel.gpu_candidate_only_screen.v2",
+        "non_promotable": True, "promotion_claim": False,
+        "hip_residency_proved": True, "runtime_graphs": graph_mode,
+        "median_relative": effect,
+        "baseline_sha256": _sha("recovery-baseline"),
+        "factor": factor, "technical_workload": {"tokens": 32},
+        "frame": {
+            "backend": "llama_gpu", "recipe": "tg128-ngl99",
+            "metric": "decode_tokens_per_s",
+            "metric_direction": "higher_better",
+            "metric_contract": {
+                "schema": "epyc.autokernel.matched-test-metric.v1",
+                "graph_mode": graph_mode,
+            },
+            "n_prompt": 0, "n_gen": 128,
+            "model": "/models/test.gguf", "model_sha256": _sha("model"),
+            "source_commit": pair.candidate.build_identity.source_commit,
+            "cpu_list": "0-7", "device": "AMD Instinct MI210",
+            "architecture": "gfx90a",
+        },
+        "sole_factor": {"name": factor},
+        "anchor_identity": vars(anchor),
+        "candidate_identity": vars(pair.candidate.build_identity),
+        "candidate_runs": [{"raw_row": raw_row}],
+        "candidate_invocations": 9, "candidate_processes": 1,
+    }
+    body["result_sha256"] = schemas.content_hash(body)
+    return body
+
+
 class CumulativeControllerIntegrationTests(unittest.TestCase):
     def _scheduled(self, root: Path):
         item = _candidate()
@@ -245,24 +333,42 @@ class CumulativeControllerIntegrationTests(unittest.TestCase):
             operation / "intent.json", gpu_source_adapter._intent_body(
                 operation_key=adapter_operation, candidate=item,
                 authorization=authorization, lease=lease))
+        production_identity = replace(
+            _identity("production"), source_commit=BASE)
+        stages = (
+            ("off", "off", "source_patch", .02,
+             pair.anchor.build_identity),
+            ("on", "on", "source_patch", .01,
+             pair.anchor.build_identity),
+            ("production-on", "on", "cumulative_production", .03,
+             production_identity),
+        )
         outputs = []
-        for graph_mode, effect in (("off", .02), ("on", .01)):
-            output = operation / "runner" / graph_mode
+        bodies = []
+        for name, graph_mode, factor, effect, anchor in stages:
+            output = operation / "runner" / name
             output.mkdir(parents=True)
-            body = {
-                "schema": "epyc.autokernel.gpu_candidate_only_screen.v2",
-                "non_promotable": True, "promotion_claim": False,
-                "hip_residency_proved": True,
-                "runtime_graphs": graph_mode,
-                "median_relative": effect,
-                "baseline_sha256": _sha("recovery-baseline"),
-                "factor": "source_patch",
-                "technical_workload": {"tokens": 32},
-            }
-            body["result_sha256"] = schemas.content_hash(body)
+            body = _measurement(
+                pair=pair, anchor=anchor, graph_mode=graph_mode,
+                factor=factor, effect=effect)
             (output / "result.json").write_text(
                 json.dumps(body, sort_keys=True) + "\n", encoding="utf-8")
             outputs.append(output)
+            bodies.append(body)
+        production_descriptor = composition._measurement_descriptor(
+            bodies[2], graph_mode="on", candidate=pair.candidate,
+            anchor_identity=production_identity,
+            factor_name="cumulative_production")
+        production = _production(
+            frame_sha256=production_descriptor["anchor_frame_sha256"],
+            protocol_sha256=
+                production_descriptor["protocol_frame_sha256"],
+            measurement_receipt_sha256=hashlib.sha256(
+                (outputs[2] / "result.json").read_bytes()).hexdigest(),
+            model_sha256=production_descriptor["model_sha256"],
+            workload_sha256=production_descriptor["workload_sha256"],
+            runtime_config_sha256=
+                production_descriptor["runtime_config_sha256"])
         runner_body = {
             "schema": gpu_source_adapter.RUNNER_PLAN_SCHEMA,
             "authority": gpu_source_adapter.AUTHORITY,
@@ -271,8 +377,12 @@ class CumulativeControllerIntegrationTests(unittest.TestCase):
             "composition_plan_sha256": plan.plan_sha256,
             "composition_build_pair": pair.to_dict(),
             "composition_correctness": correctness.to_dict(),
+            "composition_production_authority": production.to_dict(),
             "measurement_graphs_off_output_dir": str(outputs[0]),
             "target_runtime_graphs_on_output_dir": str(outputs[1]),
+            "production_graphs_on_output_dir": str(outputs[2]),
+            "cumulative_performance_path": str(
+                operation / "cumulative-performance.json"),
         }
         gpu_source_evidence._seal(
             operation / "runner-plan.json", runner_body)
@@ -380,7 +490,7 @@ class CumulativeControllerIntegrationTests(unittest.TestCase):
             row = dict(state["pending"]["row"])
             row["operation_key"] = _sha("controller-correctness-operation")
             state["inflight"] = {"operation_key": row["operation_key"]}
-            controller._bind_cumulative_terminal_row(row, terminal)
+            controller._bind_cumulative_terminal_row(state, row, terminal)
             controller._record_governed_stage_refusal(state, row, exc)
             self.assertEqual(state["scientific_attempts"], 3)
             self.assertEqual(state["iterations"][-1]["status"],
@@ -425,16 +535,22 @@ class CumulativeControllerIntegrationTests(unittest.TestCase):
                 exact_route_effect_fraction=.01,
                 graphs_off_effect_fraction=.01,
                 graphs_on_effect_fraction=.01)
+            performance, performance_ref = _composition_performance(
+                Path(directory).resolve(), first_plan, pair,
+                correctness, comparison)
             measured = replace(
                 _screen(3, "candidate"),
                 composition_build_pair=pair,
                 composition_correctness=correctness,
-                composition_comparison=comparison)
+                composition_comparison=comparison,
+                cumulative_performance=performance,
+                cumulative_performance_ref=performance_ref)
             terminal = controller._finalize_cumulative_screen(
                 config, item, measured)
             self.assertEqual(terminal["disposition"], "admitted")
             admitted_row = dict(state["pending"]["row"])
-            controller._bind_cumulative_terminal_row(admitted_row, terminal)
+            controller._bind_cumulative_terminal_row(
+                state, admitted_row, terminal)
             state["iterations"].append(admitted_row)
             state.pop("pending")
             state["scientific_attempts"] = 3
@@ -489,7 +605,7 @@ class CumulativeControllerIntegrationTests(unittest.TestCase):
                 config, item, exc)
             row = dict(state["pending"]["row"])
             row["operation_key"] = _sha("controller-source-operation")
-            controller._bind_cumulative_terminal_row(row, terminal)
+            controller._bind_cumulative_terminal_row(state, row, terminal)
             controller._record_governed_stage_refusal(state, row, exc)
             self.assertEqual(controller._derived_scientific_attempts(state), 2)
             self.assertFalse(terminal["scientific_budget_spent"])
@@ -533,7 +649,7 @@ class CumulativeControllerIntegrationTests(unittest.TestCase):
             row = dict(state["pending"]["row"])
             row["operation_key"] = _sha("controller-attribution-operation")
             state["inflight"] = {"operation_key": row["operation_key"]}
-            controller._bind_cumulative_terminal_row(row, terminal)
+            controller._bind_cumulative_terminal_row(state, row, terminal)
             controller._record_governed_stage_refusal(state, row, exc)
             self.assertEqual(state["scientific_attempts"], 3)
             self.assertEqual(state["iterations"][-1]["status"],
@@ -618,7 +734,7 @@ class CumulativeControllerIntegrationTests(unittest.TestCase):
             # plan is still pending/inflight after a crash.
             controller._validate_cumulative_composition_state(config, state)
             row = dict(state["pending"]["row"])
-            controller._bind_cumulative_terminal_row(row, terminal)
+            controller._bind_cumulative_terminal_row(state, row, terminal)
             state["iterations"].append(row)
             state.pop("pending")
             controller._validate_cumulative_composition_state(config, state)
@@ -878,6 +994,9 @@ class CumulativeControllerIntegrationTests(unittest.TestCase):
                     exact_route_effect_fraction=-.01,
                     graphs_off_effect_fraction=-.01,
                     graphs_on_effect_fraction=-.01)
+                performance, performance_ref = _composition_performance(
+                    Path(directory).resolve(), plan, pair, correctness,
+                    comparison, cumulative_on=.03)
                 return controller.SealedScreen(
                     receipt_path="/sealed/composition/result.json",
                     result_sha256=comparison.result_sha256,
@@ -897,7 +1016,9 @@ class CumulativeControllerIntegrationTests(unittest.TestCase):
                     graphs_on_receipt_sha256=_sha("graphs-on"),
                     composition_build_pair=pair,
                     composition_correctness=correctness,
-                    composition_comparison=comparison)
+                    composition_comparison=comparison,
+                    cumulative_performance=performance,
+                    cumulative_performance_ref=performance_ref)
 
         self_outer = self
         planner, critic, screener = Planner(), Critic(), Screener()

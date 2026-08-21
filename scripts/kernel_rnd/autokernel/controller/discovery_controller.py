@@ -1033,6 +1033,8 @@ class SealedScreen:
     composition_build_pair: cumulative_composition.CumulativeBuildPair | None = None
     composition_correctness: cumulative_composition.FullCorrectness | None = None
     composition_comparison: cumulative_composition.IncrementalComparison | None = None
+    cumulative_performance: cumulative_composition.CumulativePerformance | None = None
+    cumulative_performance_ref: cumulative_composition.CumulativePerformanceRef | None = None
 
     def __post_init__(self) -> None:
         if self.classification not in {"candidate", "screened_out", "inconclusive", "failed", "top_k_replicated_candidate", "replicated_but_subadditive"}: raise DiscoveryControllerError("unknown screen class")
@@ -1064,14 +1066,19 @@ class SealedScreen:
                     "screen replication evidence is incomplete")
         composition = (
             self.composition_build_pair, self.composition_correctness,
-            self.composition_comparison)
+            self.composition_comparison, self.cumulative_performance,
+            self.cumulative_performance_ref)
         if any(value is not None for value in composition):
             if (not isinstance(self.composition_build_pair,
                                cumulative_composition.CumulativeBuildPair)
                     or not isinstance(self.composition_correctness,
                                       cumulative_composition.FullCorrectness)
                     or not isinstance(self.composition_comparison,
-                                      cumulative_composition.IncrementalComparison)):
+                                      cumulative_composition.IncrementalComparison)
+                    or not isinstance(self.cumulative_performance,
+                                      cumulative_composition.CumulativePerformance)
+                    or not isinstance(self.cumulative_performance_ref,
+                                      cumulative_composition.CumulativePerformanceRef)):
                 raise DiscoveryControllerError(
                     "screen cumulative evidence is incomplete")
             self.composition_correctness.bind_pair(
@@ -1084,6 +1091,10 @@ class SealedScreen:
                        self.composition_correctness.result_sha256):
                 raise DiscoveryControllerError(
                     "screen cumulative evidence bindings changed")
+            plan_sha256 = self.composition_build_pair.plan_sha256
+            if self.cumulative_performance.plan_sha256 != plan_sha256:
+                raise DiscoveryControllerError(
+                    "screen cumulative performance names another plan")
         if not self.candidate_only or self.promotion_claim:
             raise DiscoveryControllerError(
                 "discovery screen must remain nonpromotable")
@@ -1135,6 +1146,10 @@ def _sealed_screen_from_dict(value: Mapping[str, Any]) -> SealedScreen:
          cumulative_composition.FullCorrectness.from_dict),
         ("composition_comparison",
          cumulative_composition.IncrementalComparison.from_dict),
+        ("cumulative_performance",
+         cumulative_composition.CumulativePerformance.from_dict),
+        ("cumulative_performance_ref",
+         cumulative_composition.CumulativePerformanceRef.from_dict),
     )
     try:
         for key, constructor in constructors:
@@ -2056,6 +2071,8 @@ class GpuSourceBuild:
     teardown_receipt: Path | None = None
     teardown_sha256: str | None = None
     composition_build_pair: cumulative_composition.CumulativeBuildPair | None = None
+    composition_production_authority: (
+        cumulative_composition.FrozenProductionAuthority | None) = None
     def __post_init__(self) -> None:
         for path in (self.anchor_build, self.candidate_build):
             if not path.is_absolute() or not path.is_dir():
@@ -2099,6 +2116,16 @@ class GpuSourceBuild:
                     cumulative_composition.CumulativeBuildPair)):
             raise DiscoveryControllerError(
                 "GPU source build cumulative pair must be typed")
+        if (self.composition_build_pair is None
+                and self.composition_production_authority is not None):
+            raise DiscoveryControllerError(
+                "ordinary GPU source build acquired production authority")
+        if (self.composition_production_authority is not None
+                and not isinstance(
+                    self.composition_production_authority,
+                    cumulative_composition.FrozenProductionAuthority)):
+            raise DiscoveryControllerError(
+                "GPU source build production authority must be typed")
 
 
 @dataclass(frozen=True)
@@ -2181,6 +2208,25 @@ class GpuSourceScreener:
                != build.candidate_build
                for current in (args, target_args)):
             raise DiscoveryControllerError("GPU source runner arguments are not bound to the typed build")
+        production_on_args = getattr(args, "_production_graphs_on_args", None)
+        production = build.composition_production_authority
+        if getattr(candidate, "composition_plan", None) is not None:
+            if production is None or production_on_args is None:
+                raise DiscoveryControllerError(
+                    "cumulative runner lacks frozen-production comparison")
+            production.bind_plan(candidate.composition_plan)
+            for current, mode in ((production_on_args, "on"),):
+                if (getattr(current, "factor", None) !=
+                        "cumulative_production"
+                        or getattr(current, "runtime_graphs", None) != mode
+                        or getattr(current,
+                                   "_frozen_production_authority", None) !=
+                           production.to_dict()):
+                    raise DiscoveryControllerError(
+                        "production runner arguments changed comparator authority")
+        elif production_on_args is not None:
+            raise DiscoveryControllerError(
+                "ordinary runner acquired production-comparison stages")
         attribution_body = bundle.attribution.get("body")
         comparison = (attribution_body.get("exact_duration_comparison")
                       if isinstance(attribution_body, Mapping) else None)
@@ -2299,6 +2345,11 @@ class GpuSourceScreener:
 
         graphs_off_path, graphs_off = run_stage(args, graph_mode="off")
         result_path, raw = run_stage(target_args, graph_mode="on")
+        production_graphs_on_path = None
+        production_graphs_on = None
+        if production is not None:
+            production_graphs_on_path, production_graphs_on = run_stage(
+                production_on_args, graph_mode="on")
         projection = autokernel_progression._gpu_screen(result_path, raw)
         if projection is None: raise DiscoveryControllerError("GPU result failed canonical progression validation")
         target_effect = float(raw["median_relative"])
@@ -2311,6 +2362,8 @@ class GpuSourceScreener:
             result_path.read_bytes()).hexdigest()
         composition_correctness = None
         composition_comparison = None
+        cumulative_performance = None
+        cumulative_performance_ref = None
         if getattr(candidate, "composition_plan", None) is not None:
             pair = build.composition_build_pair
             if pair is None:
@@ -2343,7 +2396,29 @@ class GpuSourceScreener:
                 exact_route_effect_fraction=exact_effect,
                 graphs_off_effect_fraction=graphs_off_effect,
                 graphs_on_effect_fraction=target_effect)
-        return SealedScreen(receipt_path=str(result_path), result_sha256=str(raw["result_sha256"]), effect_fraction=target_effect, classification=str(projection["stage"]), baseline_sha256=str(raw["baseline_sha256"]), source_proof_sha256=bundle.correctness["file_sha256"], dispatch_proof_sha256=bundle.attribution["file_sha256"], exact_attribution_effect_fraction=exact_effect, target_runtime_effect_fraction=target_effect, stages=("materialized", "built", "correctness", "attribution", "measurement_graphs_off_screen", "target_runtime_graphs_on_screen"), build_identity_sha256=build_identity_sha256, correctness_receipt_sha256=bundle.correctness["file_sha256"], attribution_receipt_sha256=bundle.attribution["file_sha256"], graphs_off_receipt_sha256=graphs_off_file_sha256, graphs_on_receipt_sha256=graphs_on_file_sha256, composition_build_pair=build.composition_build_pair, composition_correctness=composition_correctness, composition_comparison=composition_comparison)
+            if (production is None or production_graphs_on_path is None
+                    or production_graphs_on is None):
+                raise DiscoveryControllerError(
+                    "cumulative production comparison is incomplete")
+            cumulative_performance = \
+                cumulative_composition.performance_from_measurements(
+                    candidate.composition_plan, pair,
+                    composition_correctness, composition_comparison,
+                    frozen_production=production,
+                    incremental_graphs_off=graphs_off,
+                    incremental_graphs_on=raw,
+                    production_graphs_on=production_graphs_on,
+                    production_graphs_on_receipt_sha256=hashlib.sha256(
+                        production_graphs_on_path.read_bytes()).hexdigest())
+            performance_path = getattr(
+                args, "_cumulative_performance_path", None)
+            if not isinstance(performance_path, str):
+                raise DiscoveryControllerError(
+                    "cumulative runner lacks performance receipt path")
+            cumulative_performance_ref = \
+                cumulative_composition.seal_cumulative_performance(
+                    Path(performance_path), cumulative_performance)
+        return SealedScreen(receipt_path=str(result_path), result_sha256=str(raw["result_sha256"]), effect_fraction=target_effect, classification=str(projection["stage"]), baseline_sha256=str(raw["baseline_sha256"]), source_proof_sha256=bundle.correctness["file_sha256"], dispatch_proof_sha256=bundle.attribution["file_sha256"], exact_attribution_effect_fraction=exact_effect, target_runtime_effect_fraction=target_effect, stages=("materialized", "built", "correctness", "attribution", "measurement_graphs_off_screen", "target_runtime_graphs_on_screen"), build_identity_sha256=build_identity_sha256, correctness_receipt_sha256=bundle.correctness["file_sha256"], attribution_receipt_sha256=bundle.attribution["file_sha256"], graphs_off_receipt_sha256=graphs_off_file_sha256, graphs_on_receipt_sha256=graphs_on_file_sha256, composition_build_pair=build.composition_build_pair, composition_correctness=composition_correctness, composition_comparison=composition_comparison, cumulative_performance=cumulative_performance, cumulative_performance_ref=cumulative_performance_ref)
 
 
 @dataclass(frozen=True)
@@ -3925,7 +4000,13 @@ def _validate_cumulative_composition_state(
                 or row.get("composition_disposition") !=
                    terminal["disposition"]
                 or row.get("composition_scientific_budget_spent") !=
-                   terminal["scientific_budget_spent"]):
+                   terminal["scientific_budget_spent"]
+                or row.get("composition_promotion_eligible") !=
+                   terminal["promotion_eligible"]
+                or row.get("composition_promotion_reason") !=
+                   terminal["promotion_reason"]
+                or row.get("cumulative_performance_result_sha256") !=
+                   terminal["cumulative_performance_result_sha256"]):
             raise DiscoveryControllerError(
                 "controller composition result differs from its ledger")
         joined.add(str(operation))
@@ -3945,6 +4026,42 @@ def _validate_cumulative_composition_state(
         if holder is None or pending_plan != holder:
             raise DiscoveryControllerError(
                 "composition ledger pending plan lacks controller ownership")
+    state_terminal = state.get("cumulative_composition_terminal")
+    state_performance = state.get("cumulative_performance")
+    if not ledger_state["terminals"]:
+        if state_terminal is not None or state_performance is not None:
+            raise DiscoveryControllerError(
+                "controller cumulative authority lacks a terminal")
+    elif not ahead:
+        latest = ledger_state["terminals"][-1]
+        if state_terminal != latest:
+            raise DiscoveryControllerError(
+                "controller cumulative terminal envelope changed")
+        typed_ref = latest.get("cumulative_performance_ref")
+        expected_ref = (
+            {"path": typed_ref["path"], "sha256": typed_ref["sha256"]}
+            if latest.get("disposition") == "admitted"
+            and isinstance(typed_ref, Mapping) else None)
+        if state_performance != expected_ref:
+            raise DiscoveryControllerError(
+                "controller cumulative performance reference changed")
+        if expected_ref is not None:
+            try:
+                reopened, file_sha = \
+                    cumulative_composition.load_cumulative_performance(
+                        Path(expected_ref["path"]),
+                        expected_file_sha256=expected_ref["sha256"])
+                expected_performance = \
+                    cumulative_composition.CumulativePerformance.from_dict(
+                        latest["cumulative_performance"])
+            except cumulative_composition.CompositionError as exc:
+                raise DiscoveryControllerError(
+                    "controller cumulative performance cannot be reopened") \
+                    from exc
+            if (reopened != expected_performance
+                    or file_sha != expected_ref["sha256"]):
+                raise DiscoveryControllerError(
+                    "controller cumulative performance receipt changed")
 
 
 def _schedule_cumulative_composition(
@@ -4048,10 +4165,20 @@ def _finalize_cumulative_screen(
     pair = result.composition_build_pair
     correctness = result.composition_correctness
     comparison = result.composition_comparison
-    if pair is None or correctness is None or comparison is None:
+    performance = result.cumulative_performance
+    performance_ref = result.cumulative_performance_ref
+    if (pair is None or correctness is None or comparison is None
+            or performance is None or performance_ref is None):
         raise DiscoveryControllerError(
-            "cumulative screen lacks build/correctness/comparison evidence")
+            "cumulative screen lacks promotion-authority evidence")
     pair.bind_plan(item.composition_plan)
+    performance.bind(item.composition_plan, pair, correctness, comparison)
+    reopened, file_sha = cumulative_composition.load_cumulative_performance(
+        Path(performance_ref.path),
+        expected_file_sha256=performance_ref.sha256)
+    if reopened != performance or file_sha != performance_ref.sha256:
+        raise DiscoveryControllerError(
+            "cumulative performance reference changed before terminalization")
     ledger = _composition_ledger(config)
     existing = [row for row in ledger.load()["terminals"]
                 if row["operation_key"] == item.composition_plan.operation_key]
@@ -4059,7 +4186,11 @@ def _finalize_cumulative_screen(
         if (len(existing) != 1
                 or existing[0]["build_pair"] != pair.to_dict()
                 or existing[0]["correctness"] != correctness.to_dict()
-                or existing[0]["comparison"] != comparison.to_dict()):
+                or existing[0]["comparison"] != comparison.to_dict()
+                or existing[0]["cumulative_performance"] !=
+                   performance.to_dict()
+                or existing[0]["cumulative_performance_ref"] !=
+                   performance_ref.to_dict()):
             raise DiscoveryControllerError(
                 "cumulative screen differs from its durable terminal")
         return existing[0]
@@ -4067,6 +4198,7 @@ def _finalize_cumulative_screen(
     ledger.record_build_pair(pair)
     ledger.record_correctness(correctness)
     ledger.record_comparison(comparison)
+    ledger.record_cumulative_performance(performance, performance_ref)
     state = ledger.finalize(item.composition_plan.operation_key)
     matches = [row for row in state["terminals"]
                if row["operation_key"] == item.composition_plan.operation_key]
@@ -4185,14 +4317,34 @@ def _record_cumulative_infrastructure_ambiguity(
 
 
 def _bind_cumulative_terminal_row(
-        row: dict[str, Any], terminal: Mapping[str, Any] | None) -> None:
+        state: dict[str, Any], row: dict[str, Any] | Mapping[str, Any] | None,
+        terminal: Mapping[str, Any] | None = None) -> None:
+    # Preserve the private two-argument seam used by historical fixture code;
+    # live controller paths always pass state explicitly.
+    if terminal is None and isinstance(row, Mapping):
+        terminal = row
+        row = state
+        state = {}
     if terminal is None:
         return
+    if not isinstance(row, dict):
+        raise DiscoveryControllerError(
+            "cumulative terminal row is not mutable")
     row.update(
         composition_disposition=terminal["disposition"],
         composition_terminal_sha256=terminal["terminal_sha256"],
         composition_scientific_budget_spent=
-            terminal["scientific_budget_spent"])
+            terminal["scientific_budget_spent"],
+        composition_promotion_eligible=terminal["promotion_eligible"],
+        composition_promotion_reason=terminal["promotion_reason"],
+        cumulative_performance_result_sha256=
+            terminal["cumulative_performance_result_sha256"])
+    state["cumulative_composition_terminal"] = dict(terminal)
+    typed_ref = terminal.get("cumulative_performance_ref")
+    state["cumulative_performance"] = (
+        {"path": typed_ref["path"], "sha256": typed_ref["sha256"]}
+        if terminal.get("disposition") == "admitted"
+        and isinstance(typed_ref, Mapping) else None)
 
 
 def _schedule_replication(state: dict[str, Any], *, item: PlannedCandidate,
@@ -4796,7 +4948,7 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                 except GovernedStageRefusal as exc:
                     row = dict(inflight["row"])
                     _bind_cumulative_terminal_row(
-                        row, _terminalize_cumulative_refusal(
+                        state, row, _terminalize_cumulative_refusal(
                             config, item, exc))
                     _record_governed_stage_refusal(state, row, exc)
                     store.save(state, exc.disposition)
@@ -4812,13 +4964,8 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                     result, repetition=int(inflight["lease"].get(
                         "repetition", 2 if inflight.get("confirmation") else 1))))
             if composition_terminal is not None:
-                row.update(
-                    composition_disposition=
-                        composition_terminal["disposition"],
-                    composition_terminal_sha256=
-                        composition_terminal["terminal_sha256"],
-                    composition_scientific_budget_spent=
-                        composition_terminal["scientific_budget_spent"])
+                _bind_cumulative_terminal_row(
+                    state, row, composition_terminal)
             _record_attempt_once(tracker,item,str(item.proposal.get("proposal_id",row["proposal_sha256"])),result)
             state.pop("inflight",None); state.pop("pending",None); state["iterations"].append(row)
             if isinstance(row.get("portfolio_hypothesis_id"), str):
@@ -5280,7 +5427,7 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                 store.save(state,"screen_refused"); continue
             except GovernedStageRefusal as exc:
                 _bind_cumulative_terminal_row(
-                    row, _terminalize_cumulative_refusal(
+                    state, row, _terminalize_cumulative_refusal(
                         config, item, exc))
                 _record_governed_stage_refusal(state, row, exc)
                 store.save(state, exc.disposition)
@@ -5300,13 +5447,8 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
             result=_classified_result(state,item,result,policy); row.update(
                 _screen_iteration_fields(result, repetition=repetition))
             if composition_terminal is not None:
-                row.update(
-                    composition_disposition=
-                        composition_terminal["disposition"],
-                    composition_terminal_sha256=
-                        composition_terminal["terminal_sha256"],
-                    composition_scientific_budget_spent=
-                        composition_terminal["scientific_budget_spent"])
+                _bind_cumulative_terminal_row(
+                    state, row, composition_terminal)
             # Record the measured disposition before exposing it to the next
             # planner context.  This is the only source of repeat suppression.
             _record_attempt_once(tracker,item,str(item.proposal.get("proposal_id",row["proposal_sha256"])),result)

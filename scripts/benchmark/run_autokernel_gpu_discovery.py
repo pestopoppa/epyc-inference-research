@@ -646,18 +646,26 @@ def _directory_namespace_identity(path: Path, label: str) -> dict[str, Any]:
 
 def _operation_namespace(
         *, operations_root: Path, output_root: Path, operation_key: str,
-        repetition: int, runtime_graphs: str) -> dict[str, Any]:
+        repetition: int, runtime_graphs: str,
+        factor_name: str = "source_patch") -> dict[str, Any]:
     if (not isinstance(operation_key, str)
             or re.fullmatch(r"[0-9a-f]{64}", operation_key) is None
             or isinstance(repetition, bool) or repetition not in {1, 2}
             or runtime_graphs not in {"off", "on"}
+            or factor_name not in {"source_patch", "cumulative_production"}
             or not operations_root.is_absolute()
             or not output_root.is_absolute()
             or operations_root.resolve() != operations_root
             or output_root.resolve(strict=False) != output_root):
         raise RuntimeError("runner operation namespace is malformed or aliased")
-    stage = ("measurement-graphs-off" if runtime_graphs == "off"
-             else "target-runtime-graphs-on")
+    if factor_name == "cumulative_production":
+        if runtime_graphs != "on":
+            raise RuntimeError(
+                "frozen-production comparison is graphs-on only")
+        stage = "cumulative-vs-production-graphs-on"
+    else:
+        stage = ("measurement-graphs-off" if runtime_graphs == "off"
+                 else "target-runtime-graphs-on")
     operation_dir = operations_root / operation_key
     runner_dir = operation_dir / "runner"
     repetition_dir = runner_dir / f"s{repetition}"
@@ -680,6 +688,7 @@ def _operation_namespace(
         "operation_key": operation_key,
         "repetition": repetition,
         "runtime_graphs": runtime_graphs,
+        "factor_name": factor_name,
         "stage": stage,
         "output_root": str(output_root),
         "directories": identities,
@@ -693,7 +702,8 @@ def _revalidate_operation_namespace(
     if (not isinstance(namespace, Mapping)
             or set(namespace) != {
                 "schema", "operation_key", "repetition", "runtime_graphs",
-                "stage", "output_root", "directories", "output_identity"}
+                "factor_name", "stage", "output_root", "directories",
+                "output_identity"}
             or namespace.get("schema") !=
                "epyc.autokernel.gpu_runner_operation_namespace.v1"
             or namespace.get("operation_key") != operation_key
@@ -707,7 +717,8 @@ def _revalidate_operation_namespace(
     current = _operation_namespace(
         operations_root=operations_root, output_root=output_root,
         operation_key=operation_key,
-        repetition=namespace.get("repetition"), runtime_graphs=runtime_graphs)
+        repetition=namespace.get("repetition"), runtime_graphs=runtime_graphs,
+        factor_name=namespace.get("factor_name"))
     sealed_output = namespace.get("output_identity")
     current_output = current.get("output_identity")
     if (not isinstance(sealed_output, Mapping)
@@ -748,7 +759,7 @@ def _revalidate_operation_namespace(
             f"operation directory {index}")
     stable_namespace_keys = {
         "schema", "operation_key", "repetition", "runtime_graphs", "stage",
-        "output_root"}
+        "factor_name", "output_root"}
     if ({key: namespace.get(key) for key in stable_namespace_keys}
             != {key: current.get(key) for key in stable_namespace_keys}):
         raise RuntimeError("sealed runner operation namespace identity changed")
@@ -2512,6 +2523,22 @@ def factor_spec(*, factor: str, anchor_build: Path, candidate_build: Path,
             "anchor_flash_attention": True,
             "candidate_flash_attention": True,
         }
+    if factor == "cumulative_production":
+        if anchor_identity["source_commit"] != \
+                "0db32c06e3e550065b78311a6031ef3dd2c4f27c":
+            raise RuntimeError(
+                "cumulative production anchor is not exact frozen v9")
+        if anchor_identity["source_commit"] == \
+                candidate_identity["source_commit"]:
+            raise RuntimeError(
+                "cumulative production candidate did not change source")
+        return {
+            "name": "cumulative_production",
+            "anchor": anchor_identity["source_commit"][:12],
+            "candidate": candidate_identity["source_commit"][:12],
+            "anchor_flash_attention": True,
+            "candidate_flash_attention": True,
+        }
     if factor in {"helper_threads", "helper_threads_12", "helper_threads_16",
                   "helper_threads_24", "batch", "batch_up", "ubatch", "ubatch_up",
                   "mmap", "op_offload", "split_row", "kv_offload", "poll_zero"}:
@@ -2610,7 +2637,7 @@ def preflight(args: argparse.Namespace) -> dict:
     candidate_identity = build_identity(candidate_build)
     operation_key = getattr(args, "_operation_key", None)
     operation_namespace = None
-    if args.factor == "source_patch":
+    if args.factor in {"source_patch", "cumulative_production"}:
         if (not isinstance(operation_key, str)
                 or re.fullmatch(r"[0-9a-f]{64}", operation_key) is None):
             raise RuntimeError(
@@ -2623,7 +2650,8 @@ def preflight(args: argparse.Namespace) -> dict:
         operation_namespace = _operation_namespace(
             operations_root=Path(operations_root_value),
             output_root=Path(args.output_dir), operation_key=operation_key,
-            repetition=repetition, runtime_graphs=args.runtime_graphs)
+            repetition=repetition, runtime_graphs=args.runtime_graphs,
+            factor_name=args.factor)
         anchor_identity = _sealed_source_build_identity(
             args, arm="anchor", build=anchor_build,
             observed=anchor_identity)
@@ -2701,9 +2729,9 @@ def preflight(args: argparse.Namespace) -> dict:
         "schema": "epyc.autokernel.gpu_discovery_preflight.v1",
         "campaign_id": args.campaign_id,
         **({"operation_key": operation_key}
-           if args.factor == "source_patch" else {}),
+           if args.factor in {"source_patch", "cumulative_production"} else {}),
         **({"operation_namespace": operation_namespace}
-           if args.factor == "source_patch" else {}),
+           if args.factor in {"source_patch", "cumulative_production"} else {}),
         "authority": "nonpromotable_candidate_only_discovery",
         "model": str(model),
         "model_sha256": sha256_file(model),
@@ -2825,7 +2853,8 @@ def _prepare_runner_output(root: Path, sealed: Mapping[str, Any]) -> bool:
                 output_root=root,
                 operation_key=str(namespace.get("operation_key", "")),
                 repetition=namespace.get("repetition"),
-                runtime_graphs=str(namespace.get("runtime_graphs", "")))
+                runtime_graphs=str(namespace.get("runtime_graphs", "")),
+                factor_name=str(namespace.get("factor_name", "")))
         atomic_json(root / "preflight.json", dict(sealed))
         os.chmod(root / "preflight.json", 0o600)
         return False
@@ -2950,7 +2979,8 @@ def run(args: argparse.Namespace) -> dict:
     started_at = utc_now()
     out = Path(storage.assert_not_scratch(args.output_dir, what="GPU discovery output"))
     resumed = _prepare_runner_output(out, sealed)
-    if sealed.get("sole_factor", {}).get("name") == "source_patch":
+    if sealed.get("sole_factor", {}).get("name") in {
+            "source_patch", "cumulative_production"}:
         _revalidate_operation_namespace(
             sealed["operation_namespace"], output_root=out,
             operation_key=sealed["operation_key"],
@@ -3027,7 +3057,8 @@ def run(args: argparse.Namespace) -> dict:
             raise RuntimeError("arm order must contain anchor and candidate exactly once")
 
         def run_arm(arm: str) -> list[dict]:
-            if sealed.get("sole_factor", {}).get("name") == "source_patch":
+            if sealed.get("sole_factor", {}).get("name") in {
+                    "source_patch", "cumulative_production"}:
                 _revalidate_operation_namespace(
                     sealed["operation_namespace"], output_root=out,
                     operation_key=sealed["operation_key"],
@@ -3260,7 +3291,7 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--output-dir", required=True)
     result.add_argument("--campaign-id", required=True)
     result.add_argument("--factor", choices=("mmq_mfma", "flash_attention", "rocwmma_fattn",
-                                             "source_patch",
+                                             "source_patch", "cumulative_production",
                                              "hip_graphs", "helper_threads", "helper_threads_12",
                                              "helper_threads_16", "helper_threads_24", "batch",
                                              "batch_up", "ubatch", "ubatch_up", "mmap",

@@ -28,13 +28,17 @@ from .controller import gpu_source_proofs
 __all__ = (
     "BuildBinding", "CompositionAuthority", "CompositionError",
     "CompositionLedger", "CompositionPlan", "CumulativeBuildPair",
-    "DnrAuthority", "FullCorrectness", "IncrementalComparison",
+    "CumulativePerformance", "CumulativePerformanceRef", "DnrAuthority",
+    "FrozenProductionAuthority", "FrozenProductionComparator",
+    "FullCorrectness", "IncrementalComparison",
     "IsolatedReplication", "ReplicatedPositiveLever",
 )
 
 
 SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 COMMIT = re.compile(r"[0-9a-f]{40}\Z")
+FROZEN_PRODUCTION_BRANCH = "production-consolidated-v9"
+FROZEN_PRODUCTION_COMMIT = "0db32c06e3e550065b78311a6031ef3dd2c4f27c"
 HUNK = re.compile(
     r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(?: .*)?$"
 )
@@ -1009,6 +1013,1038 @@ class IncrementalComparison:
             "classification", "result_sha256")})
 
 
+@dataclass(frozen=True)
+class FrozenProductionComparator:
+    branch: str
+    commit: str
+    build_identity: gpu_source_proofs.BuildIdentity
+    build_receipt_sha256: str
+    linkage_receipt_sha256: str
+    runtime_receipt_sha256: str
+    runtime_snapshot_sha256: str
+    measurement_receipt_sha256: str
+    model_sha256: str
+    workload_sha256: str
+    runtime_config_sha256: str
+    frame_sha256: str
+    graphs_mode: str
+    metric: str
+    direction: str
+    measurement_protocol_sha256: str
+    receipt_sha256: str
+
+    @classmethod
+    def create(
+            cls, *, build_identity: gpu_source_proofs.BuildIdentity,
+            build_receipt_sha256: str, linkage_receipt_sha256: str,
+            runtime_receipt_sha256: str, runtime_snapshot_sha256: str,
+            measurement_receipt_sha256: str, model_sha256: str,
+            workload_sha256: str, runtime_config_sha256: str,
+            frame_sha256: str, measurement_protocol_sha256: str,
+    ) -> "FrozenProductionComparator":
+        values = {
+            "branch": FROZEN_PRODUCTION_BRANCH,
+            "commit": FROZEN_PRODUCTION_COMMIT,
+            "build_identity": build_identity,
+            "build_receipt_sha256": build_receipt_sha256,
+            "linkage_receipt_sha256": linkage_receipt_sha256,
+            "runtime_receipt_sha256": runtime_receipt_sha256,
+            "runtime_snapshot_sha256": runtime_snapshot_sha256,
+            "measurement_receipt_sha256": measurement_receipt_sha256,
+            "model_sha256": model_sha256,
+            "workload_sha256": workload_sha256,
+            "runtime_config_sha256": runtime_config_sha256,
+            "frame_sha256": frame_sha256,
+            "graphs_mode": "graphs_on",
+            "metric": "tokens_per_second",
+            "direction": "higher_is_better",
+            "measurement_protocol_sha256": measurement_protocol_sha256,
+        }
+        body = {
+            "schema": "epyc.autokernel.frozen_production_comparator.v1",
+            **{key: (asdict(value)
+                     if isinstance(value, gpu_source_proofs.BuildIdentity)
+                     else value)
+               for key, value in values.items()},
+        }
+        return cls(**values, receipt_sha256=_sha(body))
+
+    def __post_init__(self) -> None:
+        if (self.branch != FROZEN_PRODUCTION_BRANCH
+                or self.commit != FROZEN_PRODUCTION_COMMIT
+                or not isinstance(self.build_identity,
+                                  gpu_source_proofs.BuildIdentity)
+                or self.build_identity.source_commit != self.commit
+                or self.graphs_mode != "graphs_on"
+                or self.metric != "tokens_per_second"
+                or self.direction != "higher_is_better"):
+            raise CompositionError(
+                "frozen production comparator protocol is not exact v9")
+        for label in (
+                "build_receipt_sha256", "linkage_receipt_sha256",
+                "runtime_receipt_sha256", "runtime_snapshot_sha256",
+                "measurement_receipt_sha256", "model_sha256",
+                "workload_sha256", "runtime_config_sha256", "frame_sha256",
+                "measurement_protocol_sha256", "receipt_sha256"):
+            _require_sha(getattr(self, label), label)
+        if self.receipt_sha256 != _sha(self._body()):
+            raise CompositionError(
+                "frozen production comparator self-hash changed")
+
+    def _body(self) -> dict[str, Any]:
+        return {
+            "schema": "epyc.autokernel.frozen_production_comparator.v1",
+            **{key: (asdict(value)
+                     if isinstance(value, gpu_source_proofs.BuildIdentity)
+                     else value)
+               for key, value in asdict(self).items()
+               if key != "receipt_sha256"},
+        }
+
+    def to_dict(self) -> dict[str, Any]:
+        return {**self._body(), "receipt_sha256": self.receipt_sha256}
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) \
+            -> "FrozenProductionComparator":
+        fields = {
+            "branch", "commit", "build_identity", "build_receipt_sha256",
+            "linkage_receipt_sha256", "runtime_receipt_sha256",
+            "runtime_snapshot_sha256", "measurement_receipt_sha256",
+            "model_sha256", "workload_sha256", "runtime_config_sha256",
+            "frame_sha256", "graphs_mode", "metric", "direction",
+            "measurement_protocol_sha256", "receipt_sha256",
+        }
+        if (not isinstance(value, Mapping)
+                or set(value) != fields | {"schema"}
+                or value.get("schema") !=
+                   "epyc.autokernel.frozen_production_comparator.v1"):
+            raise CompositionError(
+                "frozen production comparator has an inexact schema")
+        try:
+            identity = gpu_source_proofs.BuildIdentity(
+                **dict(value["build_identity"]))
+        except (TypeError, ValueError, gpu_source_proofs.ProofError) as exc:
+            raise CompositionError(
+                "frozen production comparator build identity is invalid") \
+                from exc
+        return cls(**{
+            **{key: value[key] for key in fields - {"build_identity"}},
+            "build_identity": identity,
+        })
+
+    def authority(self) -> "FrozenProductionAuthority":
+        return FrozenProductionAuthority.create(
+            production_commit=self.commit, build_identity=self.build_identity,
+            runtime_snapshot_sha256=self.runtime_snapshot_sha256,
+            comparator_receipt_sha256=self.receipt_sha256,
+            graphs_mode=self.graphs_mode, frame_sha256=self.frame_sha256,
+            measurement_protocol_sha256=self.measurement_protocol_sha256,
+            measurement_receipt_sha256=self.measurement_receipt_sha256,
+            model_sha256=self.model_sha256,
+            workload_sha256=self.workload_sha256,
+            runtime_config_sha256=self.runtime_config_sha256,
+            metric=self.metric, direction=self.direction)
+
+
+@dataclass(frozen=True)
+class FrozenProductionAuthority:
+    """Exact executable projection of the immutable deployment comparator."""
+
+    production_commit: str
+    build_identity: gpu_source_proofs.BuildIdentity
+    build_identity_sha256: str
+    runtime_snapshot_sha256: str
+    comparator_receipt_sha256: str
+    graphs_mode: str
+    frame_sha256: str
+    measurement_protocol_sha256: str
+    measurement_receipt_sha256: str
+    model_sha256: str
+    workload_sha256: str
+    runtime_config_sha256: str
+    metric: str
+    direction: str
+    authority_sha256: str
+
+    @classmethod
+    def create(
+            cls, *, production_commit: str,
+            build_identity: gpu_source_proofs.BuildIdentity,
+            runtime_snapshot_sha256: str,
+            comparator_receipt_sha256: str,
+            graphs_mode: str,
+            frame_sha256: str,
+            measurement_protocol_sha256: str,
+            measurement_receipt_sha256: str,
+            model_sha256: str, workload_sha256: str,
+            runtime_config_sha256: str, metric: str, direction: str,
+    ) -> "FrozenProductionAuthority":
+        if not isinstance(build_identity, gpu_source_proofs.BuildIdentity):
+            raise CompositionError("frozen production build identity must be typed")
+        body = cls._body_for(
+            production_commit, build_identity, runtime_snapshot_sha256,
+            comparator_receipt_sha256, graphs_mode, frame_sha256,
+            measurement_protocol_sha256, measurement_receipt_sha256,
+            model_sha256, workload_sha256, runtime_config_sha256,
+            metric, direction)
+        return cls(
+            production_commit=production_commit,
+            build_identity=build_identity,
+            build_identity_sha256=_sha(asdict(build_identity)),
+            runtime_snapshot_sha256=runtime_snapshot_sha256,
+            comparator_receipt_sha256=comparator_receipt_sha256,
+            graphs_mode=graphs_mode, frame_sha256=frame_sha256,
+            measurement_protocol_sha256=measurement_protocol_sha256,
+            measurement_receipt_sha256=measurement_receipt_sha256,
+            model_sha256=model_sha256, workload_sha256=workload_sha256,
+            runtime_config_sha256=runtime_config_sha256,
+            metric=metric, direction=direction,
+            authority_sha256=_sha(body))
+
+    @staticmethod
+    def _body_for(
+            production_commit: str,
+            build_identity: gpu_source_proofs.BuildIdentity,
+            runtime_snapshot_sha256: str,
+            comparator_receipt_sha256: str,
+            graphs_mode: str, frame_sha256: str,
+            measurement_protocol_sha256: str,
+            measurement_receipt_sha256: str,
+            model_sha256: str, workload_sha256: str,
+            runtime_config_sha256: str, metric: str, direction: str,
+    ) -> dict[str, Any]:
+        return {
+            "schema": "epyc.autokernel.frozen_production_authority.v1",
+            "production_commit": _require_commit(
+                production_commit, "production_commit"),
+            "build_identity": asdict(build_identity),
+            "build_identity_sha256": _sha(asdict(build_identity)),
+            "runtime_snapshot_sha256": _require_sha(
+                runtime_snapshot_sha256, "runtime_snapshot_sha256"),
+            "comparator_receipt_sha256": _require_sha(
+                comparator_receipt_sha256, "comparator_receipt_sha256"),
+            "graphs_mode": graphs_mode,
+            "frame_sha256": _require_sha(frame_sha256, "frame_sha256"),
+            "measurement_protocol_sha256": _require_sha(
+                measurement_protocol_sha256,
+                "measurement_protocol_sha256"),
+            "measurement_receipt_sha256": _require_sha(
+                measurement_receipt_sha256,
+                "measurement_receipt_sha256"),
+            "model_sha256": _require_sha(model_sha256, "model_sha256"),
+            "workload_sha256": _require_sha(
+                workload_sha256, "workload_sha256"),
+            "runtime_config_sha256": _require_sha(
+                runtime_config_sha256, "runtime_config_sha256"),
+            "metric": metric, "direction": direction,
+        }
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.build_identity, gpu_source_proofs.BuildIdentity):
+            raise CompositionError("frozen production build identity must be typed")
+        body = self._body_for(
+            self.production_commit, self.build_identity,
+            self.runtime_snapshot_sha256,
+            self.comparator_receipt_sha256, self.graphs_mode,
+            self.frame_sha256, self.measurement_protocol_sha256,
+            self.measurement_receipt_sha256, self.model_sha256,
+            self.workload_sha256, self.runtime_config_sha256,
+            self.metric, self.direction)
+        if (self.production_commit != FROZEN_PRODUCTION_COMMIT
+                or self.build_identity.source_commit != self.production_commit
+                or self.graphs_mode != "graphs_on"
+                or self.metric != "tokens_per_second"
+                or self.direction != "higher_is_better"
+                or self.build_identity_sha256 !=
+                   _sha(asdict(self.build_identity))
+                or self.authority_sha256 != _sha(body)):
+            raise CompositionError("frozen production authority identity changed")
+
+    def bind_plan(self, plan: CompositionPlan) -> None:
+        if self.production_commit != plan.candidate.production_base_commit:
+            raise CompositionError(
+                "frozen production authority names another source era")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {**self._body_for(
+            self.production_commit, self.build_identity,
+            self.runtime_snapshot_sha256,
+            self.comparator_receipt_sha256, self.graphs_mode,
+            self.frame_sha256, self.measurement_protocol_sha256,
+            self.measurement_receipt_sha256, self.model_sha256,
+            self.workload_sha256, self.runtime_config_sha256,
+            self.metric, self.direction),
+            "authority_sha256": self.authority_sha256}
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "FrozenProductionAuthority":
+        required = {
+            "schema", "production_commit", "build_identity",
+            "build_identity_sha256", "runtime_snapshot_sha256",
+            "comparator_receipt_sha256", "graphs_mode", "frame_sha256",
+            "measurement_protocol_sha256",
+            "measurement_receipt_sha256", "model_sha256",
+            "workload_sha256", "runtime_config_sha256", "metric",
+            "direction",
+            "authority_sha256",
+        }
+        if not isinstance(value, Mapping) or set(value) != required:
+            raise CompositionError(
+                "frozen production authority has an inexact schema")
+        if value.get("schema") != \
+                "epyc.autokernel.frozen_production_authority.v1":
+            raise CompositionError("frozen production authority schema changed")
+        try:
+            identity = gpu_source_proofs.BuildIdentity(
+                **dict(value["build_identity"]))
+        except (TypeError, ValueError, gpu_source_proofs.ProofError) as exc:
+            raise CompositionError(
+                "frozen production build identity is invalid") from exc
+        return cls(
+            production_commit=value["production_commit"],
+            build_identity=identity,
+            build_identity_sha256=value["build_identity_sha256"],
+            runtime_snapshot_sha256=value["runtime_snapshot_sha256"],
+            comparator_receipt_sha256=value["comparator_receipt_sha256"],
+            graphs_mode=value["graphs_mode"],
+            frame_sha256=value["frame_sha256"],
+            measurement_protocol_sha256=
+                value["measurement_protocol_sha256"],
+            measurement_receipt_sha256=value["measurement_receipt_sha256"],
+            model_sha256=value["model_sha256"],
+            workload_sha256=value["workload_sha256"],
+            runtime_config_sha256=value["runtime_config_sha256"],
+            metric=value["metric"], direction=value["direction"],
+            authority_sha256=value["authority_sha256"])
+
+
+_TERMINAL_RECEIPT_EDGE = frozenset({
+    "cumulative_performance", "cumulative_performance_ref",
+    "cumulative_performance_result_sha256", "terminal_sha256",
+})
+
+
+def _terminal_decision_sha256(value: Mapping[str, Any]) -> str:
+    """Hash terminal science/decision while excluding its cyclic receipt edge."""
+    return _sha({key: row for key, row in value.items()
+                 if key not in _TERMINAL_RECEIPT_EDGE})
+
+
+@dataclass(frozen=True)
+class CumulativePerformance:
+    """Promotion authority for an accepted stack versus frozen production.
+
+    The incremental comparison answers whether the newest lever belongs in the
+    stack.  This distinct receipt answers whether that resulting stack is
+    promotable versus exact frozen production.  Effects are never multiplied,
+    added, or otherwise inferred from prior incremental results.
+    """
+
+    operation_key: str
+    plan_sha256: str
+    accepted_authority_sha256: str
+    accepted_patch_set_sha256: str
+    build_pair_sha256: str
+    correctness_result_sha256: str
+    incremental_comparison_result_sha256: str
+    frozen_production: FrozenProductionAuthority
+    model_sha256: str
+    workload_sha256: str
+    runtime_config_sha256: str
+    protocol_frame_sha256: str
+    metric: str
+    metric_direction: str
+    incremental_exact_route_effect_fraction: float
+    incremental_graphs_off_effect_fraction: float
+    incremental_graphs_on_effect_fraction: float
+    cumulative_graphs_on_effect_fraction: float
+    incremental_graphs_off_receipt_sha256: str
+    incremental_graphs_on_receipt_sha256: str
+    production_graphs_on_receipt_sha256: str
+    incremental_graphs_off_frame_sha256: str
+    incremental_graphs_on_frame_sha256: str
+    production_graphs_on_frame_sha256: str
+    production_graphs_mode: str
+    cumulative_classification: str
+    promotion_eligible: bool
+    promotion_reason: str
+    composition_terminal_sha256: str
+    result_sha256: str
+
+    @classmethod
+    def create(
+            cls, plan: CompositionPlan, pair: CumulativeBuildPair,
+            correctness: FullCorrectness, incremental: IncrementalComparison,
+            *, frozen_production: FrozenProductionAuthority,
+            model_sha256: str, workload_sha256: str,
+            runtime_config_sha256: str, protocol_frame_sha256: str,
+            metric: str, metric_direction: str,
+            cumulative_graphs_on_effect_fraction: float,
+            production_graphs_on_receipt_sha256: str,
+            incremental_graphs_off_frame_sha256: str,
+            incremental_graphs_on_frame_sha256: str,
+            production_graphs_on_frame_sha256: str,
+    ) -> "CumulativePerformance":
+        pair.bind_plan(plan)
+        correctness.bind_pair(pair)
+        frozen_production.bind_plan(plan)
+        if (incremental.operation_key != plan.operation_key
+                or incremental.build_pair_sha256 != pair.pair_sha256
+                or incremental.correctness_result_sha256 !=
+                   correctness.result_sha256):
+            raise CompositionError(
+                "cumulative performance incremental evidence changed")
+        if not correctness.passed:
+            raise CompositionError(
+                "failed correctness cannot reach cumulative performance")
+        if metric_direction != "higher_better":
+            raise CompositionError(
+                "cumulative performance metric direction is unsupported")
+        metric = _require_text(metric, "metric")
+        hashes = {
+            "model_sha256": model_sha256,
+            "workload_sha256": workload_sha256,
+            "runtime_config_sha256": runtime_config_sha256,
+            "protocol_frame_sha256": protocol_frame_sha256,
+            "production_graphs_on_receipt_sha256":
+                production_graphs_on_receipt_sha256,
+            "incremental_graphs_off_frame_sha256":
+                incremental_graphs_off_frame_sha256,
+            "incremental_graphs_on_frame_sha256":
+                incremental_graphs_on_frame_sha256,
+            "production_graphs_on_frame_sha256":
+                production_graphs_on_frame_sha256,
+        }
+        for label, value in hashes.items():
+            _require_sha(value, label)
+        if (frozen_production.graphs_mode != "graphs_on"
+                or frozen_production.measurement_protocol_sha256 !=
+                   protocol_frame_sha256
+                or frozen_production.frame_sha256 !=
+                   production_graphs_on_frame_sha256
+                or frozen_production.model_sha256 != model_sha256
+                or frozen_production.workload_sha256 != workload_sha256
+                or frozen_production.runtime_config_sha256 !=
+                   runtime_config_sha256
+                or frozen_production.metric != "tokens_per_second"
+                or metric not in {
+                    "decode_tokens_per_s", "prefill_tokens_per_s"}
+                or frozen_production.direction != "higher_is_better"
+                or metric_direction != "higher_better"):
+            raise CompositionError(
+                "cumulative production comparator authority changed")
+        if len({incremental.graphs_off_receipt_sha256,
+                incremental.graphs_on_receipt_sha256,
+                production_graphs_on_receipt_sha256}) != 3:
+            raise CompositionError(
+                "cumulative measurement receipts are not three distinct runs")
+        on = _finite(cumulative_graphs_on_effect_fraction,
+                     "cumulative graphs-on effect")
+        if on > 0:
+            classification = "candidate"
+        else:
+            classification = "screened_out"
+        if not incremental.admissible:
+            eligible = False
+            reason = f"incremental_{incremental.classification}"
+        elif classification != "candidate":
+            eligible = False
+            reason = f"cumulative_{classification}"
+        else:
+            eligible = True
+            reason = "incremental_and_cumulative_positive"
+        disposition = ("admitted" if incremental.admissible
+                       else "incremental_rollback")
+        reason_code = (
+            "incremental_admitted_promotion_eligible"
+            if incremental.admissible and eligible else
+            "incremental_admitted_" + reason
+            if incremental.admissible else
+            f"incremental_{incremental.classification}")
+        terminal_core = {
+            "schema": "epyc.autokernel.cumulative_composition_terminal.v3",
+            "operation_key": plan.operation_key,
+            "plan_sha256": plan.plan_sha256, "plan": plan.to_dict(),
+            "lever_sha256": plan.candidate.accepted[-1].lever_sha256,
+            "cross_campaign_candidate_sha256":
+                plan.candidate.accepted[-1].cross_campaign_candidate_sha256,
+            "isolated_result_sha256s": [
+                row.result_sha256
+                for row in plan.candidate.accepted[-1].replications],
+            "disposition": disposition, "scientific_budget_spent": True,
+            "build_pair": pair.to_dict(),
+            "correctness": correctness.to_dict(),
+            "comparison": incremental.to_dict(),
+            "correctness_result_sha256": correctness.result_sha256,
+            "comparison_result_sha256": incremental.result_sha256,
+            "promotion_eligible": eligible, "promotion_reason": reason,
+            "admitted_authority_sha256": (
+                plan.candidate.authority_sha256
+                if disposition == "admitted" else None),
+            "reason_code": reason_code,
+            "infrastructure_receipt_sha256": None,
+            "attribution_receipt_sha256": None,
+        }
+        values = {
+            "operation_key": plan.operation_key,
+            "plan_sha256": plan.plan_sha256,
+            "accepted_authority_sha256": plan.candidate.authority_sha256,
+            "accepted_patch_set_sha256":
+                plan.candidate.ordered_patch_set_sha256,
+            "build_pair_sha256": pair.pair_sha256,
+            "correctness_result_sha256": correctness.result_sha256,
+            "incremental_comparison_result_sha256":
+                incremental.result_sha256,
+            "frozen_production": frozen_production,
+            "model_sha256": model_sha256,
+            "workload_sha256": workload_sha256,
+            "runtime_config_sha256": runtime_config_sha256,
+            "protocol_frame_sha256": protocol_frame_sha256,
+            "metric": metric, "metric_direction": metric_direction,
+            "incremental_exact_route_effect_fraction":
+                incremental.exact_route_effect_fraction,
+            "incremental_graphs_off_effect_fraction":
+                incremental.graphs_off_effect_fraction,
+            "incremental_graphs_on_effect_fraction":
+                incremental.graphs_on_effect_fraction,
+            "cumulative_graphs_on_effect_fraction": on,
+            "incremental_graphs_off_receipt_sha256":
+                incremental.graphs_off_receipt_sha256,
+            "incremental_graphs_on_receipt_sha256":
+                incremental.graphs_on_receipt_sha256,
+            "production_graphs_on_receipt_sha256":
+                production_graphs_on_receipt_sha256,
+            "incremental_graphs_off_frame_sha256":
+                incremental_graphs_off_frame_sha256,
+            "incremental_graphs_on_frame_sha256":
+                incremental_graphs_on_frame_sha256,
+            "production_graphs_on_frame_sha256":
+                production_graphs_on_frame_sha256,
+            "production_graphs_mode": "on",
+            "cumulative_classification": classification,
+            "promotion_eligible": eligible,
+            "promotion_reason": reason,
+            "composition_terminal_sha256": _sha(terminal_core),
+        }
+        body = cls._body_for(**values)
+        return cls(**values, result_sha256=_sha(body))
+
+    @staticmethod
+    def _body_for(**values: Any) -> dict[str, Any]:
+        body = dict(values)
+        frozen = body.get("frozen_production")
+        if isinstance(frozen, FrozenProductionAuthority):
+            body["frozen_production"] = frozen.to_dict()
+        return {
+            "schema": "epyc.autokernel.cumulative_performance.v1",
+            "authority": "frozen_production_promotion_gate",
+            "promotion_authority": True,
+            **body,
+        }
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.frozen_production, FrozenProductionAuthority):
+            raise CompositionError(
+                "cumulative performance production authority is untyped")
+        for label in (
+            "operation_key", "plan_sha256", "accepted_authority_sha256",
+            "accepted_patch_set_sha256", "build_pair_sha256",
+            "correctness_result_sha256",
+            "incremental_comparison_result_sha256", "model_sha256",
+            "workload_sha256", "runtime_config_sha256",
+            "protocol_frame_sha256",
+            "incremental_graphs_off_receipt_sha256",
+            "incremental_graphs_on_receipt_sha256",
+            "production_graphs_on_receipt_sha256",
+            "incremental_graphs_off_frame_sha256",
+            "incremental_graphs_on_frame_sha256",
+            "production_graphs_on_frame_sha256",
+            "composition_terminal_sha256", "result_sha256",
+        ):
+            _require_sha(getattr(self, label), label)
+        _require_text(self.metric, "metric")
+        _require_text(self.promotion_reason, "promotion_reason")
+        if (self.metric_direction != "higher_better"
+                or not isinstance(self.promotion_eligible, bool)):
+            raise CompositionError(
+                "cumulative performance promotion decision is malformed")
+        if (self.production_graphs_mode != "on"
+                or self.frozen_production.graphs_mode != "graphs_on"
+                or self.frozen_production.measurement_protocol_sha256 !=
+                   self.protocol_frame_sha256
+                or self.frozen_production.frame_sha256 !=
+                   self.production_graphs_on_frame_sha256
+                or self.frozen_production.model_sha256 != self.model_sha256
+                or self.frozen_production.workload_sha256 !=
+                   self.workload_sha256
+                or self.frozen_production.runtime_config_sha256 !=
+                   self.runtime_config_sha256
+                or self.frozen_production.metric != "tokens_per_second"
+                or self.metric not in {
+                    "decode_tokens_per_s", "prefill_tokens_per_s"}
+                or self.frozen_production.direction != "higher_is_better"):
+            raise CompositionError(
+                "cumulative performance protocol frame changed")
+        if len({self.incremental_graphs_off_receipt_sha256,
+                self.incremental_graphs_on_receipt_sha256,
+                self.production_graphs_on_receipt_sha256}) != 3:
+            raise CompositionError(
+                "cumulative measurement receipts are not three distinct runs")
+        incremental_effects = tuple(_finite(value, label) for value, label in (
+            (self.incremental_exact_route_effect_fraction,
+             "incremental exact-route effect"),
+            (self.incremental_graphs_off_effect_fraction,
+             "incremental graphs-off effect"),
+            (self.incremental_graphs_on_effect_fraction,
+             "incremental graphs-on effect"),
+        ))
+        on = _finite(self.cumulative_graphs_on_effect_fraction,
+                     "cumulative graphs-on effect")
+        incremental_class = (
+            "candidate" if all(value > 0 for value in incremental_effects)
+            else "screened_out" if all(value <= 0 for value in incremental_effects)
+            else "inconclusive")
+        cumulative_class = (
+            "candidate" if on > 0 else "screened_out")
+        expected_eligible = (
+            incremental_class == "candidate"
+            and cumulative_class == "candidate")
+        expected_reason = (
+            "incremental_and_cumulative_positive"
+            if expected_eligible else
+            f"incremental_{incremental_class}"
+            if incremental_class != "candidate" else
+            f"cumulative_{cumulative_class}")
+        values = {
+            key: getattr(self, key) for key in self.__dataclass_fields__
+            if key != "result_sha256"
+        }
+        if (self.cumulative_classification != cumulative_class
+                or self.promotion_eligible != expected_eligible
+                or self.promotion_reason != expected_reason
+                or self.result_sha256 != _sha(self._body_for(**values))):
+            raise CompositionError(
+                "cumulative performance identity or decision changed")
+
+    def bind(
+            self, plan: CompositionPlan, pair: CumulativeBuildPair,
+            correctness: FullCorrectness,
+            incremental: IncrementalComparison,
+    ) -> None:
+        self.frozen_production.bind_plan(plan)
+        pair.bind_plan(plan)
+        correctness.bind_pair(pair)
+        if (self.operation_key != plan.operation_key
+                or self.plan_sha256 != plan.plan_sha256
+                or self.accepted_authority_sha256 !=
+                   plan.candidate.authority_sha256
+                or self.accepted_patch_set_sha256 !=
+                   plan.candidate.ordered_patch_set_sha256
+                or self.build_pair_sha256 != pair.pair_sha256
+                or self.correctness_result_sha256 !=
+                   correctness.result_sha256
+                or self.incremental_comparison_result_sha256 !=
+                   incremental.result_sha256
+                or self.incremental_exact_route_effect_fraction !=
+                   incremental.exact_route_effect_fraction
+                or self.incremental_graphs_off_effect_fraction !=
+                   incremental.graphs_off_effect_fraction
+                or self.incremental_graphs_on_effect_fraction !=
+                   incremental.graphs_on_effect_fraction
+                or self.incremental_graphs_off_receipt_sha256 !=
+                   incremental.graphs_off_receipt_sha256
+                or self.incremental_graphs_on_receipt_sha256 !=
+                   incremental.graphs_on_receipt_sha256):
+            raise CompositionError(
+                "cumulative performance binds other composition evidence")
+        disposition = ("admitted" if incremental.admissible
+                       else "incremental_rollback")
+        terminal = {
+            "schema": "epyc.autokernel.cumulative_composition_terminal.v3",
+            "operation_key": plan.operation_key,
+            "plan_sha256": plan.plan_sha256, "plan": plan.to_dict(),
+            "lever_sha256": plan.candidate.accepted[-1].lever_sha256,
+            "cross_campaign_candidate_sha256":
+                plan.candidate.accepted[-1].cross_campaign_candidate_sha256,
+            "isolated_result_sha256s": [
+                row.result_sha256
+                for row in plan.candidate.accepted[-1].replications],
+            "disposition": disposition, "scientific_budget_spent": True,
+            "build_pair": pair.to_dict(),
+            "correctness": correctness.to_dict(),
+            "comparison": incremental.to_dict(),
+            "correctness_result_sha256": correctness.result_sha256,
+            "comparison_result_sha256": incremental.result_sha256,
+            "promotion_eligible": self.promotion_eligible,
+            "promotion_reason": self.promotion_reason,
+            "admitted_authority_sha256": (
+                plan.candidate.authority_sha256
+                if disposition == "admitted" else None),
+            "reason_code": (
+                "incremental_admitted_promotion_eligible"
+                if incremental.admissible and self.promotion_eligible else
+                "incremental_admitted_" + self.promotion_reason
+                if incremental.admissible else
+                f"incremental_{incremental.classification}"),
+            "infrastructure_receipt_sha256": None,
+            "attribution_receipt_sha256": None,
+        }
+        if self.composition_terminal_sha256 != _sha(terminal):
+            raise CompositionError(
+                "cumulative performance terminal decision changed")
+
+    def to_dict(self) -> dict[str, Any]:
+        values = {
+            key: getattr(self, key) for key in self.__dataclass_fields__
+            if key != "result_sha256"
+        }
+        return {**self._body_for(**values),
+                "result_sha256": self.result_sha256}
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "CumulativePerformance":
+        fields = {
+            "operation_key", "plan_sha256", "accepted_authority_sha256",
+            "accepted_patch_set_sha256", "build_pair_sha256",
+            "correctness_result_sha256",
+            "incremental_comparison_result_sha256", "frozen_production",
+            "model_sha256", "workload_sha256", "runtime_config_sha256",
+            "protocol_frame_sha256", "metric", "metric_direction",
+            "incremental_exact_route_effect_fraction",
+            "incremental_graphs_off_effect_fraction",
+            "incremental_graphs_on_effect_fraction",
+            "cumulative_graphs_on_effect_fraction",
+            "incremental_graphs_off_receipt_sha256",
+            "incremental_graphs_on_receipt_sha256",
+            "production_graphs_on_receipt_sha256",
+            "incremental_graphs_off_frame_sha256",
+            "incremental_graphs_on_frame_sha256",
+            "production_graphs_on_frame_sha256",
+            "production_graphs_mode",
+            "cumulative_classification", "promotion_eligible",
+            "promotion_reason", "composition_terminal_sha256",
+            "result_sha256",
+        }
+        required = fields | {"schema", "authority", "promotion_authority"}
+        if not isinstance(value, Mapping) or set(value) != required:
+            raise CompositionError(
+                "cumulative performance has an inexact schema")
+        if (value.get("schema") !=
+                "epyc.autokernel.cumulative_performance.v1"
+                or value.get("authority") !=
+                   "frozen_production_promotion_gate"
+                or value.get("promotion_authority") is not True):
+            raise CompositionError(
+                "cumulative performance authority changed")
+        kwargs = {key: value[key] for key in fields}
+        kwargs["frozen_production"] = FrozenProductionAuthority.from_dict(
+            value["frozen_production"])
+        return cls(**kwargs)
+
+
+@dataclass(frozen=True)
+class CumulativePerformanceRef:
+    path: str
+    sha256: str
+
+    def __post_init__(self) -> None:
+        candidate = Path(self.path)
+        if (not isinstance(self.path, str) or not candidate.is_absolute()
+                or ".." in candidate.parts):
+            raise CompositionError(
+                "cumulative performance reference path is unsafe")
+        _require_sha(self.sha256, "cumulative performance file sha256")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "schema": "epyc.autokernel.cumulative_performance_ref.v1",
+            "path": self.path, "sha256": self.sha256,
+        }
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "CumulativePerformanceRef":
+        if (not isinstance(value, Mapping)
+                or set(value) != {"schema", "path", "sha256"}
+                or value.get("schema") !=
+                   "epyc.autokernel.cumulative_performance_ref.v1"):
+            raise CompositionError(
+                "cumulative performance reference has an inexact schema")
+        return cls(path=value["path"], sha256=value["sha256"])
+
+
+_RUNTIME_ROW_FIELDS = (
+    "n_threads", "n_batch", "n_ubatch", "use_mmap", "no_op_offload",
+    "split_mode", "no_kv_offload", "poll", "n_prompt", "n_gen",
+    "flash_attn",
+)
+
+
+def _measurement_descriptor(
+        value: Mapping[str, Any], *, graph_mode: str,
+        candidate: BuildBinding, anchor_identity: gpu_source_proofs.BuildIdentity,
+        factor_name: str,
+) -> dict[str, Any]:
+    """Project one runner result into its commensurability authority."""
+    if (not isinstance(value, Mapping)
+            or value.get("schema") !=
+               "epyc.autokernel.gpu_candidate_only_screen.v2"
+            or value.get("runtime_graphs") != graph_mode
+            or value.get("promotion_claim") is not False
+            or value.get("non_promotable") is not True
+            or value.get("hip_residency_proved") is not True):
+        raise CompositionError(
+            "cumulative performance runner result is not sealed")
+    frame = value.get("frame")
+    sole_factor = value.get("sole_factor")
+    candidate_identity = value.get("candidate_identity")
+    runs = value.get("candidate_runs")
+    if (not isinstance(frame, Mapping)
+            or not isinstance(sole_factor, Mapping)
+            or sole_factor.get("name") != factor_name
+            or not isinstance(candidate_identity, Mapping)
+            or not isinstance(runs, list) or len(runs) != 1
+            or not isinstance(runs[0], Mapping)
+            or not isinstance(runs[0].get("raw_row"), Mapping)):
+        raise CompositionError(
+            "cumulative performance runner frame is malformed")
+    expected_candidate = asdict(candidate.build_identity)
+    if any(candidate_identity.get(key) != expected
+           for key, expected in expected_candidate.items()):
+        raise CompositionError(
+            "cumulative performance candidate build identity changed")
+    observed_anchor = value.get("anchor_identity")
+    expected_anchor = asdict(anchor_identity)
+    if (not isinstance(observed_anchor, Mapping)
+            or any(observed_anchor.get(key) != expected
+                   for key, expected in expected_anchor.items())):
+        raise CompositionError(
+            "cumulative performance comparator build identity changed")
+    raw_row = runs[0]["raw_row"]
+    if any(key not in raw_row for key in _RUNTIME_ROW_FIELDS):
+        raise CompositionError(
+            "cumulative performance runtime configuration is incomplete")
+    runtime = {key: raw_row[key] for key in _RUNTIME_ROW_FIELDS}
+    runtime_config_sha256 = _sha(runtime)
+    required_frame = {
+        "backend", "recipe", "metric", "metric_direction",
+        "metric_contract", "n_prompt", "n_gen", "model",
+        "model_sha256", "source_commit", "cpu_list", "device",
+        "architecture",
+    }
+    if set(frame) != required_frame:
+        raise CompositionError(
+            "cumulative performance measurement frame is inexact")
+    metric_contract = frame.get("metric_contract")
+    if (not isinstance(metric_contract, Mapping)
+            or frame.get("source_commit") !=
+               candidate.build_identity.source_commit
+            or frame.get("metric_direction") != "higher_better"
+            or metric_contract.get("graph_mode") not in {
+                graph_mode, "disabled_for_integrity"}):
+        raise CompositionError(
+            "cumulative performance metric/frame authority changed")
+    for label in ("model_sha256",):
+        _require_sha(frame[label], label)
+    metric = _require_text(frame["metric"], "metric")
+    workload = {
+        "backend": frame["backend"], "recipe": frame["recipe"],
+        "n_prompt": frame["n_prompt"], "n_gen": frame["n_gen"],
+    }
+    stable_protocol = {
+        **workload,
+        "model": frame["model"], "model_sha256": frame["model_sha256"],
+        "metric": metric,
+        "metric_direction": frame["metric_direction"],
+        "cpu_list": frame["cpu_list"], "device": frame["device"],
+        "architecture": frame["architecture"],
+        "runtime_config_sha256": runtime_config_sha256,
+        "graphs_mode": graph_mode,
+        "candidate_invocations": value.get("candidate_invocations"),
+        "candidate_processes": value.get("candidate_processes"),
+    }
+    if (stable_protocol["candidate_invocations"] != 9
+            or stable_protocol["candidate_processes"] != 1):
+        raise CompositionError(
+            "cumulative performance execution cardinality changed")
+    candidate_frame_sha = _sha({
+        "schema": "epyc.autokernel.measurement_arm_frame.v1",
+        "arm": "candidate", "protocol": stable_protocol,
+        "source_commit": candidate.build_identity.source_commit,
+        "build_identity": asdict(candidate.build_identity),
+        "factor_name": factor_name,
+    })
+    anchor_frame_sha = _sha({
+        "schema": "epyc.autokernel.measurement_arm_frame.v1",
+        "arm": "anchor", "protocol": stable_protocol,
+        "source_commit": anchor_identity.source_commit,
+        "build_identity": asdict(anchor_identity),
+        "factor_name": factor_name,
+    })
+    return {
+        "frame_sha256": candidate_frame_sha,
+        "anchor_frame_sha256": anchor_frame_sha,
+        "protocol_frame_sha256": _sha(stable_protocol),
+        "model_sha256": frame["model_sha256"],
+        "workload_sha256": _sha(workload),
+        "runtime_config_sha256": runtime_config_sha256,
+        "metric": metric,
+        "metric_direction": frame["metric_direction"],
+        "effect_fraction": _finite(
+            value.get("median_relative"), "cumulative measured effect"),
+    }
+
+
+def performance_from_measurements(
+        plan: CompositionPlan, pair: CumulativeBuildPair,
+        correctness: FullCorrectness, incremental: IncrementalComparison,
+        *, frozen_production: FrozenProductionAuthority,
+        incremental_graphs_off: Mapping[str, Any],
+        incremental_graphs_on: Mapping[str, Any],
+        production_graphs_on: Mapping[str, Any],
+        production_graphs_on_receipt_sha256: str,
+) -> CumulativePerformance:
+    """Create authority from incremental off/on and production graphs-on."""
+    pair.bind_plan(plan)
+    frozen_production.bind_plan(plan)
+    incremental_rows = (
+        _measurement_descriptor(
+            incremental_graphs_off, graph_mode="off",
+            candidate=pair.candidate,
+            anchor_identity=pair.anchor.build_identity,
+            factor_name="source_patch"),
+        _measurement_descriptor(
+            incremental_graphs_on, graph_mode="on",
+            candidate=pair.candidate,
+            anchor_identity=pair.anchor.build_identity,
+            factor_name="source_patch"),
+    )
+    production_row = _measurement_descriptor(
+        production_graphs_on, graph_mode="on",
+        candidate=pair.candidate,
+        anchor_identity=frozen_production.build_identity,
+        factor_name="cumulative_production")
+    common_fields = (
+        "model_sha256", "workload_sha256",
+        "runtime_config_sha256", "metric", "metric_direction",
+    )
+    if any(len({row[field] for row in (
+            *incremental_rows, production_row)}) != 1
+           for field in common_fields):
+        raise CompositionError(
+            "cumulative production comparison is not protocol matched")
+    if (incremental_rows[1]["protocol_frame_sha256"] !=
+            production_row["protocol_frame_sha256"]):
+        raise CompositionError(
+            "cumulative graphs-on measurement protocol changed")
+    if (incremental.graphs_off_receipt_sha256 !=
+            _require_sha(incremental.graphs_off_receipt_sha256,
+                         "incremental graphs-off receipt")
+            or incremental.graphs_on_receipt_sha256 !=
+               _require_sha(incremental.graphs_on_receipt_sha256,
+                            "incremental graphs-on receipt")):
+        raise CompositionError("incremental comparison receipt changed")
+    shared = incremental_rows[0]
+    return CumulativePerformance.create(
+        plan, pair, correctness, incremental,
+        frozen_production=frozen_production,
+        model_sha256=shared["model_sha256"],
+        workload_sha256=shared["workload_sha256"],
+        runtime_config_sha256=shared["runtime_config_sha256"],
+        protocol_frame_sha256=
+            incremental_rows[1]["protocol_frame_sha256"],
+        metric=shared["metric"],
+        metric_direction=shared["metric_direction"],
+        cumulative_graphs_on_effect_fraction=
+            production_row["effect_fraction"],
+        production_graphs_on_receipt_sha256=
+            production_graphs_on_receipt_sha256,
+        incremental_graphs_off_frame_sha256=
+            incremental_rows[0]["frame_sha256"],
+        incremental_graphs_on_frame_sha256=
+            incremental_rows[1]["frame_sha256"],
+        production_graphs_on_frame_sha256=
+            production_row["anchor_frame_sha256"],
+    )
+
+
+def load_cumulative_performance(
+        path: Path, *, expected_file_sha256: str | None = None,
+) -> tuple[CumulativePerformance, str]:
+    """Stable same-fd reopen of a canonical cumulative-performance receipt."""
+    flags = os.O_RDONLY | os.O_CLOEXEC
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as exc:
+        raise CompositionError(
+            "cumulative performance receipt is unavailable") from exc
+    try:
+        before = os.fstat(descriptor)
+        if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1
+                or before.st_uid != os.geteuid()
+                or before.st_mode & 0o022
+                or before.st_size > 4 * 1024 * 1024):
+            raise CompositionError(
+                "cumulative performance receipt identity is unsafe")
+        chunks: list[bytes] = []
+        while True:
+            chunk = os.read(descriptor, 1024 * 1024)
+            if not chunk:
+                break
+            chunks.append(chunk)
+        after = os.fstat(descriptor)
+    finally:
+        os.close(descriptor)
+    try:
+        pathname = os.lstat(path)
+    except OSError as exc:
+        raise CompositionError(
+            "cumulative performance receipt path disappeared") from exc
+    identity = lambda row: (
+        row.st_dev, row.st_ino, row.st_uid, stat.S_IFMT(row.st_mode),
+        row.st_nlink, row.st_size, row.st_mtime_ns, row.st_ctime_ns)
+    if identity(before) != identity(after) or identity(after) != identity(pathname):
+        raise CompositionError(
+            "cumulative performance receipt changed during stable read")
+    raw = b"".join(chunks)
+    file_sha = hashlib.sha256(raw).hexdigest()
+    if (expected_file_sha256 is not None
+            and file_sha != _require_sha(
+                expected_file_sha256, "cumulative performance expected hash")):
+        raise CompositionError("cumulative performance receipt bytes changed")
+    try:
+        value = json.loads(
+            raw.decode("utf-8", "strict"),
+            parse_constant=lambda token: (_ for _ in ()).throw(
+                ValueError(f"non-finite JSON token {token}")))
+        performance = CumulativePerformance.from_dict(value)
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError,
+            TypeError) as exc:
+        raise CompositionError(
+            "cumulative performance receipt is not strict evidence") from exc
+    return performance, file_sha
+
+
+def seal_cumulative_performance(
+        path: Path, performance: CumulativePerformance,
+) -> CumulativePerformanceRef:
+    if path.exists() or path.is_symlink():
+        reopened, file_sha = load_cumulative_performance(path)
+        if reopened != performance:
+            raise CompositionError(
+                "cumulative performance changed on restart")
+    else:
+        _atomic_replace(path, performance.to_dict())
+        reopened, file_sha = load_cumulative_performance(path)
+        if reopened != performance:
+            raise CompositionError(
+                "cumulative performance changed while sealing")
+    return CumulativePerformanceRef(
+        path=str(path.resolve()), sha256=file_sha)
+
+
 def _atomic_replace(path: Path, value: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     parent_stat = os.lstat(path.parent)
@@ -1041,7 +2077,7 @@ def _atomic_replace(path: Path, value: Mapping[str, Any]) -> None:
 class CompositionLedger:
     """Atomic, restart-safe state for one cumulative composition campaign."""
 
-    SCHEMA = "epyc.autokernel.cumulative_composition_state.v2"
+    SCHEMA = "epyc.autokernel.cumulative_composition_state.v3"
 
     def __init__(self, path: Path | str):
         self.path = Path(path)
@@ -1102,6 +2138,8 @@ class CompositionLedger:
             state["pending"] = {
                 "stage": "planned", "plan": plan.to_dict(),
                 "build_pair": None, "correctness": None, "comparison": None,
+                "cumulative_performance": None,
+                "cumulative_performance_ref": None,
             }
             return self._write_unlocked(state)
 
@@ -1157,6 +2195,8 @@ class CompositionLedger:
             return self._terminalize(
                 state, plan=plan, disposition="correctness_rollback",
                 scientific=True, correctness=correctness, comparison=None,
+                cumulative_performance=None,
+                cumulative_performance_ref=None,
                 admitted=None, reason_code="current_full_correctness_failed",
             )
 
@@ -1195,6 +2235,54 @@ class CompositionLedger:
             if pending["stage"] != "correctness_passed":
                 raise CompositionError("incremental comparison arrived out of order")
             pending["comparison"] = comparison.to_dict()
+            pending["stage"] = "incremental_measured"
+            return self._write_unlocked(state)
+
+    def record_cumulative_performance(
+            self, performance: CumulativePerformance,
+            reference: CumulativePerformanceRef,
+    ) -> dict[str, Any]:
+        with self._lock():
+            state = self._load_unlocked()
+            if state["pending"] is None:
+                matches = [row for row in state["terminals"]
+                           if (row["operation_key"] ==
+                               performance.operation_key
+                               and row["cumulative_performance"] ==
+                               performance.to_dict()
+                               and row["cumulative_performance_ref"] ==
+                               reference.to_dict())]
+                if len(matches) == 1:
+                    return state
+                raise CompositionError("no cumulative composition is pending")
+            state, pending, plan = self._pending(state)
+            if (pending["build_pair"] is None
+                    or pending["correctness"] is None
+                    or pending["comparison"] is None):
+                raise CompositionError(
+                    "cumulative performance cannot skip incremental evidence")
+            pair = CumulativeBuildPair.from_dict(pending["build_pair"])
+            correctness = FullCorrectness.from_dict(pending["correctness"])
+            comparison = IncrementalComparison.from_dict(
+                pending["comparison"])
+            performance.bind(plan, pair, correctness, comparison)
+            reopened, file_sha = load_cumulative_performance(
+                Path(reference.path), expected_file_sha256=reference.sha256)
+            if reopened != performance or file_sha != reference.sha256:
+                raise CompositionError(
+                    "cumulative performance reference changed")
+            if pending["cumulative_performance"] is not None:
+                if (pending["cumulative_performance"] == performance.to_dict()
+                        and pending["cumulative_performance_ref"] ==
+                            reference.to_dict()):
+                    return state
+                raise CompositionError(
+                    "cumulative performance changed on restart")
+            if pending["stage"] != "incremental_measured":
+                raise CompositionError(
+                    "cumulative performance arrived out of order")
+            pending["cumulative_performance"] = performance.to_dict()
+            pending["cumulative_performance_ref"] = reference.to_dict()
             pending["stage"] = "measured"
             return self._write_unlocked(state)
 
@@ -1213,16 +2301,30 @@ class CompositionLedger:
                 raise CompositionError("composition is not ready to finalize")
             correctness = FullCorrectness.from_dict(pending["correctness"])
             comparison = IncrementalComparison.from_dict(pending["comparison"])
+            performance = CumulativePerformance.from_dict(
+                pending["cumulative_performance"])
+            reference = CumulativePerformanceRef.from_dict(
+                pending["cumulative_performance_ref"])
+            pair = CumulativeBuildPair.from_dict(pending["build_pair"])
+            performance.bind(plan, pair, correctness, comparison)
             if comparison.admissible:
                 return self._terminalize(
                     state, plan=plan, disposition="admitted", scientific=True,
                     correctness=correctness, comparison=comparison,
-                    admitted=plan.candidate, reason_code="incremental_both_positive",
+                    cumulative_performance=performance,
+                    cumulative_performance_ref=reference,
+                    admitted=plan.candidate,
+                    reason_code=(
+                        "incremental_admitted_promotion_eligible"
+                        if performance.promotion_eligible else
+                        "incremental_admitted_" +
+                        performance.promotion_reason),
                 )
             return self._terminalize(
                 state, plan=plan, disposition="incremental_rollback",
                 scientific=True, correctness=correctness, comparison=comparison,
-                admitted=None,
+                cumulative_performance=performance,
+                cumulative_performance_ref=reference, admitted=None,
                 reason_code=f"incremental_{comparison.classification}",
             )
 
@@ -1252,6 +2354,8 @@ class CompositionLedger:
             return self._terminalize(
                 state, plan=plan, disposition="attribution_rollback",
                 scientific=True, correctness=correctness, comparison=None,
+                cumulative_performance=None,
+                cumulative_performance_ref=None,
                 admitted=None, reason_code="exact_route_authority_failed",
                 attribution_receipt_sha256=receipt_sha256)
 
@@ -1280,6 +2384,8 @@ class CompositionLedger:
             return self._terminalize(
                 state, plan=plan, disposition="infrastructure_rollback",
                 scientific=False, correctness=None, comparison=None,
+                cumulative_performance=None,
+                cumulative_performance_ref=None,
                 admitted=None, reason_code=reason_code,
                 infrastructure_receipt_sha256=receipt_sha256,
             )
@@ -1447,6 +2553,7 @@ class CompositionLedger:
     ) -> None:
         if not isinstance(pending, Mapping) or set(pending) != {
             "stage", "plan", "build_pair", "correctness", "comparison",
+            "cumulative_performance", "cumulative_performance_ref",
         }:
             raise CompositionError("composition pending state has an inexact schema")
         plan = CompositionPlan.from_dict(pending["plan"])
@@ -1454,7 +2561,10 @@ class CompositionLedger:
             raise CompositionError("composition pending authority is stale")
         _validate_dnr_history(plan, prior_cross_campaign_candidates)
         stage = pending["stage"]
-        allowed = {"planned", "built", "correctness_passed", "measured"}
+        allowed = {
+            "planned", "built", "correctness_passed",
+            "incremental_measured", "measured",
+        }
         if stage not in allowed:
             raise CompositionError("composition pending stage is invalid")
         pair = (None if pending["build_pair"] is None else
@@ -1463,12 +2573,23 @@ class CompositionLedger:
                        FullCorrectness.from_dict(pending["correctness"]))
         comparison = (None if pending["comparison"] is None else
                       IncrementalComparison.from_dict(pending["comparison"]))
+        performance = (
+            None if pending["cumulative_performance"] is None else
+            CumulativePerformance.from_dict(pending["cumulative_performance"]))
+        performance_ref = (
+            None if pending["cumulative_performance_ref"] is None else
+            CumulativePerformanceRef.from_dict(
+                pending["cumulative_performance_ref"]))
         expected_presence = {
-            "planned": (False, False, False), "built": (True, False, False),
-            "correctness_passed": (True, True, False),
-            "measured": (True, True, True),
+            "planned": (False, False, False, False, False),
+            "built": (True, False, False, False, False),
+            "correctness_passed": (True, True, False, False, False),
+            "incremental_measured": (True, True, True, False, False),
+            "measured": (True, True, True, True, True),
         }
-        if tuple(row is not None for row in (pair, correctness, comparison)) != \
+        if tuple(row is not None for row in (
+                pair, correctness, comparison, performance,
+                performance_ref)) != \
                 expected_presence[stage]:
             raise CompositionError("composition pending stage/evidence disagree")
         if pair is not None:
@@ -1483,12 +2604,22 @@ class CompositionLedger:
                 or comparison.correctness_result_sha256 !=
                    correctness.result_sha256):
             raise CompositionError("pending comparison evidence changed")
+        if performance is not None:
+            performance.bind(plan, pair, correctness, comparison)
+            reopened, file_sha = load_cumulative_performance(
+                Path(performance_ref.path),
+                expected_file_sha256=performance_ref.sha256)
+            if reopened != performance or file_sha != performance_ref.sha256:
+                raise CompositionError(
+                    "pending cumulative performance reference changed")
 
     def _terminalize(
             self, state: dict[str, Any], *, plan: CompositionPlan,
             disposition: str, scientific: bool,
             correctness: FullCorrectness | None,
             comparison: IncrementalComparison | None,
+            cumulative_performance: CumulativePerformance | None,
+            cumulative_performance_ref: CumulativePerformanceRef | None,
             admitted: CompositionAuthority | None, reason_code: str,
             infrastructure_receipt_sha256: str | None = None,
             attribution_receipt_sha256: str | None = None,
@@ -1498,7 +2629,7 @@ class CompositionLedger:
             raise CompositionError("composition scientific budget is exhausted")
         lever = plan.candidate.accepted[-1]
         body = {
-            "schema": "epyc.autokernel.cumulative_composition_terminal.v2",
+            "schema": "epyc.autokernel.cumulative_composition_terminal.v3",
             "operation_key": plan.operation_key, "plan_sha256": plan.plan_sha256,
             "plan": plan.to_dict(),
             "lever_sha256": lever.lever_sha256,
@@ -1512,10 +2643,26 @@ class CompositionLedger:
             "build_pair": state["pending"].get("build_pair"),
             "correctness": None if correctness is None else correctness.to_dict(),
             "comparison": None if comparison is None else comparison.to_dict(),
+            "cumulative_performance": (
+                None if cumulative_performance is None else
+                cumulative_performance.to_dict()),
+            "cumulative_performance_ref": (
+                None if cumulative_performance_ref is None else
+                cumulative_performance_ref.to_dict()),
             "correctness_result_sha256":
                 None if correctness is None else correctness.result_sha256,
             "comparison_result_sha256":
                 None if comparison is None else comparison.result_sha256,
+            "cumulative_performance_result_sha256": (
+                None if cumulative_performance is None else
+                cumulative_performance.result_sha256),
+            "promotion_eligible": (
+                False if cumulative_performance is None else
+                cumulative_performance.promotion_eligible),
+            "promotion_reason": (
+                "missing_cumulative_production_comparison"
+                if cumulative_performance is None else
+                cumulative_performance.promotion_reason),
             "admitted_authority_sha256":
                 None if admitted is None else admitted.authority_sha256,
             "reason_code": _require_text(reason_code, "reason_code"),
@@ -1528,7 +2675,13 @@ class CompositionLedger:
         if attribution_receipt_sha256 is not None:
             _require_sha(attribution_receipt_sha256,
                          "attribution_receipt_sha256")
-        terminal = {**body, "terminal_sha256": _sha(body)}
+        terminal_sha256 = _terminal_decision_sha256(body)
+        if (cumulative_performance is not None
+                and cumulative_performance.composition_terminal_sha256 !=
+                    terminal_sha256):
+            raise CompositionError(
+                "cumulative performance names another terminal decision")
+        terminal = {**body, "terminal_sha256": terminal_sha256}
         if admitted is not None:
             state["authority"] = admitted.to_dict()
         state["terminals"].append(terminal)
@@ -1542,14 +2695,17 @@ class CompositionLedger:
             "cross_campaign_candidate_sha256", "isolated_result_sha256s",
             "disposition", "scientific_budget_spent",
             "build_pair", "correctness", "comparison",
+            "cumulative_performance", "cumulative_performance_ref",
             "correctness_result_sha256", "comparison_result_sha256",
+            "cumulative_performance_result_sha256", "promotion_eligible",
+            "promotion_reason",
             "admitted_authority_sha256", "reason_code",
             "infrastructure_receipt_sha256", "terminal_sha256",
             "attribution_receipt_sha256",
         }
         if not isinstance(value, Mapping) or set(value) != required:
             raise CompositionError("composition terminal has an inexact schema")
-        if value.get("schema") != "epyc.autokernel.cumulative_composition_terminal.v2":
+        if value.get("schema") != "epyc.autokernel.cumulative_composition_terminal.v3":
             raise CompositionError("composition terminal schema changed")
         for key in ("operation_key", "plan_sha256", "lever_sha256",
                     "cross_campaign_candidate_sha256"):
@@ -1573,6 +2729,7 @@ class CompositionLedger:
         if not isinstance(value["scientific_budget_spent"], bool):
             raise CompositionError("terminal science disposition is malformed")
         for key in ("correctness_result_sha256", "comparison_result_sha256",
+                    "cumulative_performance_result_sha256",
                     "admitted_authority_sha256", "infrastructure_receipt_sha256",
                     "attribution_receipt_sha256"):
             if value[key] is not None:
@@ -1585,6 +2742,13 @@ class CompositionLedger:
                        FullCorrectness.from_dict(value["correctness"]))
         comparison = (None if value["comparison"] is None else
                       IncrementalComparison.from_dict(value["comparison"]))
+        performance = (
+            None if value["cumulative_performance"] is None else
+            CumulativePerformance.from_dict(value["cumulative_performance"]))
+        performance_ref = (
+            None if value["cumulative_performance_ref"] is None else
+            CumulativePerformanceRef.from_dict(
+                value["cumulative_performance_ref"]))
         if pair is not None:
             pair.bind_plan(plan)
         if correctness is not None:
@@ -1599,33 +2763,86 @@ class CompositionLedger:
                     or comparison.correctness_result_sha256 !=
                        correctness.result_sha256):
                 raise CompositionError("terminal comparison binding changed")
+        if performance is not None:
+            if (comparison is None or correctness is None or pair is None
+                    or performance_ref is None):
+                raise CompositionError(
+                    "terminal cumulative performance lacks prerequisites")
+            performance.bind(plan, pair, correctness, comparison)
+            reopened, file_sha = load_cumulative_performance(
+                Path(performance_ref.path),
+                expected_file_sha256=performance_ref.sha256)
+            if reopened != performance or file_sha != performance_ref.sha256:
+                raise CompositionError(
+                    "terminal cumulative performance reference changed")
+        elif performance_ref is not None:
+            raise CompositionError(
+                "terminal cumulative performance reference is orphaned")
         if ((None if correctness is None else correctness.result_sha256) !=
                 value["correctness_result_sha256"]
                 or (None if comparison is None else comparison.result_sha256) !=
-                   value["comparison_result_sha256"]):
+                   value["comparison_result_sha256"]
+                or (None if performance is None else
+                    performance.result_sha256) !=
+                   value["cumulative_performance_result_sha256"]):
             raise CompositionError("terminal evidence hashes changed")
+        expected_promotion = (
+            False if performance is None else performance.promotion_eligible)
+        expected_promotion_reason = (
+            "missing_cumulative_production_comparison"
+            if performance is None else performance.promotion_reason)
+        if (value["promotion_eligible"] is not expected_promotion
+                or value["promotion_reason"] != expected_promotion_reason):
+            raise CompositionError(
+                "terminal promotion decision differs from cumulative evidence")
         disposition = value["disposition"]
         shape = (
             value["scientific_budget_spent"],
             value["correctness_result_sha256"] is not None,
             value["comparison_result_sha256"] is not None,
+            value["cumulative_performance_result_sha256"] is not None,
             value["admitted_authority_sha256"] is not None,
             value["infrastructure_receipt_sha256"] is not None,
             value["attribution_receipt_sha256"] is not None,
         )
         expected_shapes = {
-            "admitted": (True, True, True, True, False, False),
-            "incremental_rollback": (True, True, True, False, False, False),
-            "correctness_rollback": (True, True, False, False, False, False),
-            "attribution_rollback": (True, True, False, False, False, True),
-            "infrastructure_rollback": (False, False, False, False, True, False),
+            "admitted": (True, True, True, True, True, False, False),
+            "incremental_rollback": (
+                True, True, True, True, False, False, False),
+            "correctness_rollback": (
+                True, True, False, False, False, False, False),
+            "attribution_rollback": (
+                True, True, False, False, False, False, True),
+            "infrastructure_rollback": (
+                False, False, False, False, False, True, False),
         }
         if expected_shapes.get(disposition) != shape:
             raise CompositionError("composition terminal disposition/evidence disagree")
+        expected_reason_codes = {
+            "admitted": (
+                "incremental_admitted_promotion_eligible"
+                if performance is not None and performance.promotion_eligible
+                else "incremental_admitted_" +
+                     (performance.promotion_reason
+                      if performance is not None else "missing")),
+            "incremental_rollback": (
+                "incremental_" + comparison.classification
+                if comparison is not None else "incremental_missing"),
+            "correctness_rollback": "current_full_correctness_failed",
+            "attribution_rollback": "exact_route_authority_failed",
+        }
+        if (disposition in expected_reason_codes
+                and value["reason_code"] != expected_reason_codes[disposition]):
+            raise CompositionError(
+                "composition terminal reason differs from its decision")
         if (disposition == "admitted"
                 and value["admitted_authority_sha256"] !=
                     plan.candidate.authority_sha256):
             raise CompositionError("admitted authority does not bind terminal plan")
-        body = {key: row for key, row in value.items() if key != "terminal_sha256"}
-        if value["terminal_sha256"] != _sha(body):
+        if value["terminal_sha256"] != _terminal_decision_sha256(value):
             raise CompositionError("composition terminal identity changed")
+        if (performance is not None
+                and performance.composition_terminal_sha256 !=
+                    value["terminal_sha256"]):
+            raise CompositionError(
+                "composition performance names another terminal decision")

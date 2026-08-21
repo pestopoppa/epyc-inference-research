@@ -178,14 +178,23 @@ def _bind_composition_screen(
     pair = result.composition_build_pair
     correctness = result.composition_correctness
     comparison = result.composition_comparison
-    if pair is None or correctness is None or comparison is None:
+    performance = result.cumulative_performance
+    reference = result.cumulative_performance_ref
+    if (pair is None or correctness is None or comparison is None
+            or performance is None or reference is None):
         raise GpuSourceAdapterError("cumulative result wrapper is partial")
     try:
         pair.bind_plan(plan)
         correctness.bind_pair(pair)
+        performance.bind(plan, pair, correctness, comparison)
+        reopened, file_sha = cumulative_composition.load_cumulative_performance(
+            Path(reference.path), expected_file_sha256=reference.sha256)
     except cumulative_composition.CompositionError as exc:
         raise GpuSourceAdapterError(
             "cumulative result wrapper changed typed evidence") from exc
+    if reopened != performance or file_sha != reference.sha256:
+        raise GpuSourceAdapterError(
+            "cumulative performance reference changed typed evidence")
     if (comparison.operation_key != plan.operation_key
             or comparison.build_pair_sha256 != pair.pair_sha256
             or comparison.correctness_result_sha256 !=
@@ -559,7 +568,8 @@ def _validated_runner_plan(
         composition_plan: cumulative_composition.CompositionPlan | None = None,
 ) -> tuple[Mapping[str, Any],
            cumulative_composition.CumulativeBuildPair | None,
-           cumulative_composition.FullCorrectness | None]:
+           cumulative_composition.FullCorrectness | None,
+           cumulative_composition.FrozenProductionAuthority | None]:
     """Reopen the pre-run carrier that makes completed output recoverable.
 
     The pair and full-correctness authority are sealed before either runner
@@ -572,15 +582,20 @@ def _validated_runner_plan(
     base = {
         "schema", "authority", "promotion_claim", "operation_key",
         "composition_plan_sha256", "composition_build_pair",
-        "composition_correctness", "receipt_sha256",
+        "composition_correctness", "composition_production_authority",
+        "receipt_sha256",
     }
     single = {"output_dir"}
     dual = {
         "measurement_graphs_off_output_dir",
         "target_runtime_graphs_on_output_dir",
     }
+    cumulative = dual | {
+        "production_graphs_on_output_dir",
+        "cumulative_performance_path",
+    }
     keys = set(body)
-    if (keys not in (base | single, base | dual)
+    if (keys not in (base | single, base | dual, base | cumulative)
             or body.get("authority") != AUTHORITY
             or body.get("promotion_claim") is not False
             or body.get("operation_key") != identity["operation_key"]
@@ -590,15 +605,19 @@ def _validated_runner_plan(
     expected_plan_sha = identity.get("composition_plan_sha256")
     pair_raw = body.get("composition_build_pair")
     correctness_raw = body.get("composition_correctness")
+    production_raw = body.get("composition_production_authority")
     if expected_plan_sha is None:
-        if pair_raw is not None or correctness_raw is not None:
+        if (pair_raw is not None or correctness_raw is not None
+                or production_raw is not None):
             raise GpuSourceAdapterError(
                 "ordinary runner acquired cumulative recovery authority")
-        return body, None, None
+        return body, None, None, None
     try:
         pair = cumulative_composition.CumulativeBuildPair.from_dict(pair_raw)
         correctness = cumulative_composition.FullCorrectness.from_dict(
             correctness_raw)
+        production = cumulative_composition.FrozenProductionAuthority.from_dict(
+            production_raw)
         correctness.bind_pair(pair)
         if pair.plan_sha256 != expected_plan_sha or not correctness.passed:
             raise cumulative_composition.CompositionError(
@@ -608,10 +627,14 @@ def _validated_runner_plan(
                 raise cumulative_composition.CompositionError(
                     "inflight composition plan identity changed")
             pair.bind_plan(composition_plan)
+            production.bind_plan(composition_plan)
     except (TypeError, cumulative_composition.CompositionError) as exc:
         raise GpuSourceAdapterError(
             "GPU runner cumulative recovery evidence is invalid") from exc
-    return body, pair, correctness
+    if keys != base | cumulative:
+        raise GpuSourceAdapterError(
+            "cumulative runner plan lacks frozen-production outputs")
+    return body, pair, correctness, production
 
 
 def _is_resumable_stage_root(
@@ -827,15 +850,22 @@ def _is_resumable_stage_root(
                 or runner_root.exists() or runner_root.is_symlink()):
             if not bundle.is_file() or bundle.is_symlink():
                 return False
-            plan, _composition_pair, _composition_correctness = \
+            plan, _composition_pair, _composition_correctness, \
+                _composition_production = \
                 _validated_runner_plan(runner_plan, identity)
-            off_raw = plan.get("measurement_graphs_off_output_dir")
-            on_raw = plan.get("target_runtime_graphs_on_output_dir")
-            if not isinstance(off_raw, str) or not isinstance(on_raw, str):
+            output_keys = [
+                "measurement_graphs_off_output_dir",
+                "target_runtime_graphs_on_output_dir",
+            ]
+            if _composition_pair is not None:
+                output_keys.append("production_graphs_on_output_dir")
+            raw_outputs = [plan.get(key) for key in output_keys]
+            if not all(isinstance(value, str) for value in raw_outputs):
                 return False
             runner_resolved = runner_root.resolve()
-            outputs = (Path(off_raw).resolve(), Path(on_raw).resolve())
-            if outputs[0] == outputs[1] or any(
+            outputs = tuple(Path(str(value)).resolve()
+                            for value in raw_outputs)
+            if len(set(outputs)) != len(outputs) or any(
                     not output.is_relative_to(runner_resolved)
                     for output in outputs):
                 return False
@@ -1171,7 +1201,8 @@ def _screen_dict(screen: controller.SealedScreen) -> dict[str, Any]:
     raw = asdict(screen)
     for key in (
             "composition_build_pair", "composition_correctness",
-            "composition_comparison"):
+            "composition_comparison", "cumulative_performance",
+            "cumulative_performance_ref"):
         typed = getattr(screen, key)
         raw[key] = None if typed is None else typed.to_dict()
     return _json_value(raw)
@@ -1233,12 +1264,18 @@ def _composition_runner_fields(
             "composition_plan_sha256": None,
             "composition_build_pair": None,
             "composition_correctness": None,
+            "composition_production_authority": None,
         }
     if pair is None:
         raise GpuSourceAdapterError(
             "cumulative runner plan lacks its typed build pair")
+    production = build.composition_production_authority
+    if production is None:
+        raise GpuSourceAdapterError(
+            "cumulative runner plan lacks frozen-production authority")
     try:
         pair.bind_plan(plan)
+        production.bind_plan(plan)
         bundle = evidence.load_gpu_source_evidence_bundle(
             operation_root / "proof/proof-bundle.json")
         if (bundle.anchor != pair.anchor.build_identity
@@ -1262,6 +1299,7 @@ def _composition_runner_fields(
         "composition_plan_sha256": plan.plan_sha256,
         "composition_build_pair": pair.to_dict(),
         "composition_correctness": correctness.to_dict(),
+        "composition_production_authority": production.to_dict(),
     }
 
 
@@ -1271,21 +1309,34 @@ def _recover_completed_composition_screen(
         plan: cumulative_composition.CompositionPlan,
         pair: cumulative_composition.CumulativeBuildPair,
         correctness: cumulative_composition.FullCorrectness,
+        production: cumulative_composition.FrozenProductionAuthority,
 ) -> controller.SealedScreen:
     """Reconstruct the exact post-run typed screen from durable carriers."""
     off_raw = runner_plan.get("measurement_graphs_off_output_dir")
     on_raw = runner_plan.get("target_runtime_graphs_on_output_dir")
-    if not isinstance(off_raw, str) or not isinstance(on_raw, str):
+    production_on_raw = runner_plan.get("production_graphs_on_output_dir")
+    performance_raw = runner_plan.get("cumulative_performance_path")
+    if not all(isinstance(value, str) for value in (
+            off_raw, on_raw, production_on_raw,
+            performance_raw)):
         raise GpuSourceAdapterError(
-            "cumulative runner plan lacks both graph-mode outputs")
+            "cumulative runner plan lacks all measured outputs")
     runner_root = (operation_root / "runner").resolve()
-    off_dir, on_dir = Path(off_raw).resolve(), Path(on_raw).resolve()
-    if (off_dir == on_dir or not off_dir.is_relative_to(runner_root)
-            or not on_dir.is_relative_to(runner_root)):
+    directories = tuple(Path(str(value)).resolve() for value in (
+        off_raw, on_raw, production_on_raw))
+    off_dir, on_dir, production_on_dir = directories
+    performance_path = Path(str(performance_raw)).resolve()
+    if (len(set(directories)) != 3
+            or any(not path.is_relative_to(runner_root)
+                   for path in directories)
+            or performance_path !=
+               (operation_root / "cumulative-performance.json").resolve()):
         raise GpuSourceAdapterError(
             "cumulative runner output escaped its operation")
     loaded_rows: list[tuple[Path, Mapping[str, Any]]] = []
-    for output, graph_mode in ((off_dir, "off"), (on_dir, "on")):
+    for output, graph_mode in (
+            (off_dir, "off"), (on_dir, "on"),
+            (production_on_dir, "on")):
         result_path = output / "result.json"
         if result_path.is_symlink() or not result_path.is_file():
             raise GpuSourceAdapterError(
@@ -1306,6 +1357,7 @@ def _recover_completed_composition_screen(
         loaded_rows.append((result_path, body))
     off_path, graphs_off = loaded_rows[0]
     on_path, graphs_on = loaded_rows[1]
+    production_on_path, production_graphs_on = loaded_rows[2]
     projection = autokernel_progression._gpu_screen(on_path, graphs_on)
     if projection is None:
         raise GpuSourceAdapterError(
@@ -1360,6 +1412,16 @@ def _recover_completed_composition_screen(
         exact_route_effect_fraction=exact_effect,
         graphs_off_effect_fraction=off_effect,
         graphs_on_effect_fraction=on_effect)
+    performance = cumulative_composition.performance_from_measurements(
+        plan, pair, correctness, incremental,
+        frozen_production=production,
+        incremental_graphs_off=graphs_off,
+        incremental_graphs_on=graphs_on,
+        production_graphs_on=production_graphs_on,
+        production_graphs_on_receipt_sha256=hashlib.sha256(
+            production_on_path.read_bytes()).hexdigest())
+    performance_ref = cumulative_composition.seal_cumulative_performance(
+        performance_path, performance)
     recovered = controller.SealedScreen(
         receipt_path=str(on_path),
         result_sha256=str(graphs_on["result_sha256"]),
@@ -1381,7 +1443,9 @@ def _recover_completed_composition_screen(
         graphs_on_receipt_sha256=incremental.graphs_on_receipt_sha256,
         composition_build_pair=pair,
         composition_correctness=correctness,
-        composition_comparison=incremental)
+        composition_comparison=incremental,
+        cumulative_performance=performance,
+        cumulative_performance_ref=performance_ref)
     series_key, _ = _source_frame(operation_root, recovered)
     recovered = _with_series_key(recovered, series_key)
     _load_screen_receipt(recovered)
@@ -1705,10 +1769,31 @@ class GovernedGpuSourceAdapter:
         def contained_args(candidate_: Any, build_: Any, lease_: Mapping[str, Any]) -> Any:
             args = self.args_factory(candidate_, build_, lease_)
             target_args = getattr(args, "_target_runtime_args", None)
-            outputs = (Path(getattr(args, "output_dir", "")).resolve(),
-                       *((Path(getattr(target_args, "output_dir", "")).resolve(),)
-                         if target_args is not None else ()))
+            production_on_args = getattr(
+                args, "_production_graphs_on_args", None)
+            current_args = tuple(row for row in (
+                args, target_args, production_on_args)
+                if row is not None)
+            outputs = tuple(
+                Path(getattr(row, "output_dir", "")).resolve()
+                for row in current_args)
+            is_composition = _candidate_composition_plan(candidate_) is not None
+            if is_composition and (target_args is None
+                    or production_on_args is None):
+                raise GpuSourceAdapterError(
+                    "cumulative runner lacks its three measured arms")
+            if not is_composition and production_on_args is not None:
+                raise GpuSourceAdapterError(
+                    "ordinary runner acquired production-comparison arms")
+            if is_composition:
+                setattr(
+                    args, "_cumulative_performance_path",
+                    str((operation_root /
+                         "cumulative-performance.json").resolve()))
             runner_root = (operation_root / "runner").resolve()
+            if len(set(outputs)) != len(outputs):
+                raise GpuSourceAdapterError(
+                    "GPU runner output directories are not distinct")
             for output in outputs:
                 try:
                     output.relative_to(runner_root)
@@ -1724,9 +1809,7 @@ class GovernedGpuSourceAdapter:
                         "runner arguments were requested before the outer reservation")
                 releases = _reservation_release_epochs(
                     operation_root, operation_key)
-                for current in (args, target_args):
-                    if current is None:
-                        continue
+                for current in current_args:
                     setattr(current, "_device_claim_acquirer",
                             self.reservation_manager.borrower(operation_key))
                     result_path = Path(current.output_dir).resolve() / "result.json"
@@ -1753,7 +1836,13 @@ class GovernedGpuSourceAdapter:
                 **_composition_runner_fields(
                     candidate_, build_, operation_root),
                 **({"measurement_graphs_off_output_dir": str(outputs[0]),
-                    "target_runtime_graphs_on_output_dir": str(outputs[1])}
+                    "target_runtime_graphs_on_output_dir": str(outputs[1]),
+                    **({
+                        "production_graphs_on_output_dir": str(outputs[2]),
+                        "cumulative_performance_path": str(
+                            (operation_root /
+                             "cumulative-performance.json").resolve()),
+                    } if is_composition else {})}
                    if target_args is not None else {"output_dir": str(outputs[0])}),
             }
             plan_path = operation_root / "runner-plan.json"
@@ -1879,25 +1968,29 @@ class GovernedGpuSourceAdapter:
                 if (composition_plan is not None
                         and runner_plan_path.is_file()
                         and not runner_plan_path.is_symlink()):
-                    runner_plan, pair, correctness = _validated_runner_plan(
+                    runner_plan, pair, correctness, production = \
+                        _validated_runner_plan(
                         runner_plan_path, identity,
                         composition_plan=composition_plan)
-                    if pair is None or correctness is None:
+                    if (pair is None or correctness is None
+                            or production is None):
                         raise GpuSourceAdapterError(
                             "cumulative runner plan lost typed recovery evidence")
                     off_raw = runner_plan.get(
                         "measurement_graphs_off_output_dir")
                     on_raw = runner_plan.get(
                         "target_runtime_graphs_on_output_dir")
+                    production_on_raw = runner_plan.get(
+                        "production_graphs_on_output_dir")
                     completed = all(
                         isinstance(value, str)
                         and (Path(value).resolve() / "result.json").is_file()
                         and not (Path(value).resolve() / "result.json").is_symlink()
-                        for value in (off_raw, on_raw))
+                        for value in (off_raw, on_raw, production_on_raw))
                     if completed:
                         result = _recover_completed_composition_screen(
                             root, identity, runner_plan, composition_plan,
-                            pair, correctness)
+                            pair, correctness, production)
                         rows, effects = _series_payload(
                             (result,), current=result)
                         evidence._seal(result_path, {
@@ -1915,9 +2008,11 @@ class GovernedGpuSourceAdapter:
                 elif (composition_plan is None
                       and runner_plan_path.is_file()
                       and not runner_plan_path.is_symlink()):
-                    runner_plan, pair, correctness = _validated_runner_plan(
+                    runner_plan, pair, correctness, production = \
+                        _validated_runner_plan(
                         runner_plan_path, identity)
-                    if pair is not None or correctness is not None:
+                    if (pair is not None or correctness is not None
+                            or production is not None):
                         raise GpuSourceAdapterError(
                             "ordinary runner plan gained cumulative evidence")
                     output_raw = runner_plan.get("output_dir")

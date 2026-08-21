@@ -37,7 +37,8 @@ class DeploymentConfigTests(unittest.TestCase):
         critic.write_text("#!/bin/sh\n", encoding="utf-8")
         critic.chmod(0o700)
         inputs = {}
-        for label in ("model", "workload", "runtime_config", "admission_policy"):
+        for label in ("model", "workload", "runtime_config", "admission_policy",
+                      "frozen_production_comparator"):
             path = root / f"{label}.json"
             path.write_text(label, encoding="utf-8")
             inputs[label] = {"path": str(path), "sha256": digest(path)}

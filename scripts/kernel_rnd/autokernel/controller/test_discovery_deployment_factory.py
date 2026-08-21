@@ -19,6 +19,43 @@ from . import discovery_deployment_factory as F
 from . import discovery_controller as C
 
 
+def frozen_production_comparator(root: Path) -> Path:
+    workload = {
+        "schema": "epyc.autokernel.discovery_workload.v1",
+        "workload": "decode_tg128", "prompt_tokens": 0,
+        "generation_tokens": 128, "calls_per_arm": 9,
+        "device_id": "mi210_0", "promotion_claim": False,
+    }
+    runtime = {
+        "schema": "epyc.autokernel.discovery_runtime.v1",
+        "architecture": "gfx90a", "gpu_layers": 99,
+        "flash_attention": True, "hip_graphs": True,
+        "cpu_list": "184-191", "threads": 8,
+        "promotion_claim": False,
+    }
+    digest = lambda value: hashlib.sha256(
+        (json.dumps(value, sort_keys=True, indent=2) + "\n").encode()
+    ).hexdigest()
+    identity = F.gpu_source_proofs.BuildIdentity(
+        F.deployment.FROZEN_PRODUCTION_HEAD,
+        "1" * 64, "2" * 64, "3" * 64, "4" * 64, "5" * 64)
+    comparator = F.cumulative_composition.FrozenProductionComparator.create(
+        build_identity=identity, build_receipt_sha256="6" * 64,
+        linkage_receipt_sha256="7" * 64,
+        runtime_receipt_sha256="8" * 64,
+        runtime_snapshot_sha256="9" * 64,
+        measurement_receipt_sha256="a" * 64,
+        model_sha256=F._digest_regular(F._SITE_MODEL, "fixture model"),
+        workload_sha256=digest(workload), runtime_config_sha256=digest(runtime),
+        frame_sha256="b" * 64, measurement_protocol_sha256="c" * 64)
+    path = root / "frozen-production-comparator.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(comparator.to_dict(), sort_keys=True, indent=2) + "\n",
+        encoding="utf-8")
+    return path.resolve()
+
+
 def template(path="ggml/src/ggml-cuda/fattn.cu", symbol="fattn_kernel"):
     return F.ExperimentTemplate("fattn-v1", "gpu_decode", symbol, "backend-fattn",
                                 "fattn-dispatch", mock.Mock(), frozenset({path}),
@@ -432,6 +469,8 @@ class DeploymentFactoryTests(unittest.TestCase):
                 return build_root
             anchor_build = make_build("anchor-build", b"anchor-hip")
             candidate_build = make_build("candidate-build", b"candidate-hip")
+            production_build = make_build(
+                "production/build-hip", b"production-hip")
             policy_path = root / "admission-policy.json"
             policy_path.write_text("{}\n", encoding="utf-8")
             corpus = SimpleNamespace(
@@ -449,6 +488,7 @@ class DeploymentFactoryTests(unittest.TestCase):
                 planner_context=SimpleNamespace(
                     value={"context_sha256": "c" * 64}),
                 model=SimpleNamespace(path=model),
+                production_path=root / "production",
                 inference_window_lock=root / "model-call.lock",
                 device_id="mi210_0")
             def identity(build_root, commit):
@@ -475,6 +515,21 @@ class DeploymentFactoryTests(unittest.TestCase):
                 anchor_identity=identity(
                     anchor_build, F.controller.gpu_discovery.READY_CONTINUE_INSTRUMENT_COMMIT),
                 candidate_identity=identity(candidate_build, "6" * 40))
+            production_identity = identity(
+                production_build, F.deployment.FROZEN_PRODUCTION_HEAD)
+            production_authority = \
+                F.cumulative_composition.FrozenProductionAuthority.create(
+                    production_commit=F.deployment.FROZEN_PRODUCTION_HEAD,
+                    build_identity=production_identity,
+                    runtime_snapshot_sha256="7" * 64,
+                    comparator_receipt_sha256="8" * 64,
+                    graphs_mode="graphs_on", frame_sha256="9" * 64,
+                    measurement_protocol_sha256="a" * 64,
+                    measurement_receipt_sha256="b" * 64,
+                    model_sha256="c" * 64, workload_sha256="d" * 64,
+                    runtime_config_sha256="e" * 64,
+                    metric="tokens_per_second",
+                    direction="higher_is_better")
             effective = F.schemas.content_hash({
                 "planner_context_sha256": "c" * 64,
                 "admission_policy_sha256": corpus.policy_sha256,
@@ -497,15 +552,22 @@ class DeploymentFactoryTests(unittest.TestCase):
             ), start=1):
                 candidate = SimpleNamespace(
                     hypothesis_id=hypothesis_id,
-                    source_manifest_sha256=f"{index}" * 64)
+                    source_manifest_sha256=f"{index}" * 64,
+                    composition_plan=(object() if index == 4 else None))
+                current_build = (
+                    SimpleNamespace(
+                        **vars(build),
+                        composition_production_authority=
+                        production_authority)
+                    if candidate.composition_plan is not None else build)
                 with mock.patch.object(
                         F.gpu_load_admission, "validate_decision_receipt"):
-                    args = binding.build(candidate, build, {
+                    args = binding.build(candidate, current_build, {
                         "operation_key": build.operation_key,
                         "repetition": 1,
                         "load_admission": decision})
                 args = F._bind_runner_runtime_authority(
-                    config, build,
+                    config, current_build,
                     {"load_admission": decision, "repetition": 1}, args)
                 target = args._target_runtime_args
                 self.assertEqual(args._operation_key, build.operation_key)
@@ -542,6 +604,38 @@ class DeploymentFactoryTests(unittest.TestCase):
                 self.assertNotEqual(
                     off["anchor_identity"]["source_commit"],
                     off["candidate_identity"]["source_commit"])
+                production = getattr(args, "_production_graphs_on_args", None)
+                if candidate.composition_plan is None:
+                    self.assertIsNone(production)
+                else:
+                    self.assertEqual(production.factor,
+                                     "cumulative_production")
+                    self.assertEqual(production.runtime_graphs, "on")
+                    self.assertIsNone(production.measurement_binary)
+                    self.assertEqual(
+                        production._frozen_production_authority,
+                        production_authority.to_dict())
+                    self.assertEqual(
+                        production._sealed_anchor_source_build_identity,
+                        production_identity.__dict__)
+                    with mock.patch.object(
+                            F.controller.gpu_discovery.gpu_load_admission,
+                            "validate_decision_receipt"):
+                        production_preflight = \
+                            F.controller.gpu_discovery.preflight(production)
+                    self.assertEqual(
+                        production_preflight["sole_factor"]["name"],
+                        "cumulative_production")
+                    self.assertIsNone(
+                        production_preflight["runtime_arms"])
+                    production.factor = "source_patch"
+                    with self.assertRaisesRegex(
+                            F.DeploymentFactoryError,
+                            "comparator authority"):
+                        F._bind_runner_runtime_authority(
+                            config, current_build,
+                            {"load_admission": decision,
+                             "repetition": 1}, args)
 
     def test_argparse_nonzero_is_an_ordinary_resumable_operation_failure(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -679,6 +773,8 @@ class DeploymentFactoryTests(unittest.TestCase):
                        separators=(",", ":")) + "\n", encoding="utf-8")
         carry_forward_path.chmod(0o600)
         carry_forward_input = immutable(carry_forward_path)
+        comparator_input = immutable(
+            frozen_production_comparator(root / "production-authority"))
         config = SimpleNamespace(
             config_sha256="c" * 64, production_path=production.resolve(),
             production_branch=F.deployment.FROZEN_PRODUCTION_BRANCH,
@@ -695,6 +791,7 @@ class DeploymentFactoryTests(unittest.TestCase):
             device_id="mi210_0", claim_timeout_s=0.0,
             inference_window_lock=(locks / "window.lock").resolve(),
             model=immutable(model), workload=immutable(workload), runtime_config=immutable(runtime),
+            frozen_production_comparator=comparator_input,
             policy=immutable(policy),
             admission_policy=SimpleNamespace(value={"policy_sha256": "a" * 64},
                 corpus=SimpleNamespace(profiles=(SimpleNamespace(
@@ -752,7 +849,9 @@ class DeploymentFactoryTests(unittest.TestCase):
     def test_public_initializer_vendors_and_revalidates_all_portfolio_evidence(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "portfolio-v26-bundle"
-            path = F.initialize_static_deployment_bundle(root)
+            path = F.initialize_static_deployment_bundle(
+                root, frozen_production_comparator=
+                frozen_production_comparator(Path(temporary) / "authority"))
             loaded = F.deployment.load_deployment_config(path)
             controller_config = F.controller_config(loaded, dry_run=True)
             json.dumps(controller_config.planner_context)
@@ -1509,7 +1608,10 @@ class DeploymentFactoryTests(unittest.TestCase):
         """The public bundle must reach the real static contract without a build."""
         with tempfile.TemporaryDirectory() as directory:
             bundle_root = Path(directory).resolve()
-            deployment_path = F.initialize_static_deployment_bundle(bundle_root)
+            deployment_path = F.initialize_static_deployment_bundle(
+                bundle_root, frozen_production_comparator=
+                frozen_production_comparator(
+                    Path(directory) / "authority"))
             config = F.deployment.load_deployment_config(deployment_path)
             registry = F._static_registry(config, F._template_registry())
             binding = registry["source_builder"][F._STATIC_IDS["source_builder"]]

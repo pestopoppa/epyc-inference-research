@@ -17,6 +17,7 @@ from unittest import mock
 from . import discovery_deployment_factory as F
 from . import discovery_supervisor as S
 from . import discovery_supervisor_secure as R
+from .test_discovery_deployment_factory import frozen_production_comparator
 
 
 CANARY = {"hold_seconds": 1.0, "exit_code": 0, "spawn_descendant": False}
@@ -473,7 +474,10 @@ class DetachedCanaryTests(unittest.TestCase):
 
     def test_direct_validate_graph_reopens_byte_identically_from_root_closure(self):
         bundle = Path(self.temporary.name) / "deployment"
-        deployment = F.initialize_static_deployment_bundle(bundle)
+        deployment = F.initialize_static_deployment_bundle(
+            bundle, frozen_production_comparator=
+            frozen_production_comparator(
+                Path(self.temporary.name) / "authority"))
         command = (
             str(Path(sys.executable).resolve()), "-B", "-m",
             F.__name__, "--deployment", str(deployment), "--validate-only")
