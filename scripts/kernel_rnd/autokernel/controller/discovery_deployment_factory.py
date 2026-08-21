@@ -1090,11 +1090,28 @@ def _preauthored_historical_evidence(
     return body
 
 
-def initialize_static_deployment_bundle(root: Path) -> Path:
+def _load_frozen_production_comparator(
+        path: Path) -> cumulative_composition.FrozenProductionComparator:
+    if path.is_symlink() or not path.is_file():
+        raise DeploymentFactoryError(
+            "frozen production comparator must be a regular receipt")
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        return cumulative_composition.FrozenProductionComparator.from_dict(raw)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError,
+            cumulative_composition.CompositionError) as exc:
+        raise DeploymentFactoryError(
+            "frozen production comparator receipt is invalid") from exc
+
+
+def initialize_static_deployment_bundle(
+        root: Path, *, frozen_production_comparator: Path) -> Path:
     """Emit the one reviewed site bundle; no caller supplies code or argv authority."""
     if not root.is_absolute() or root.is_symlink() or ".." in root.parts:
         raise DeploymentFactoryError("bundle root must be an absolute non-symlink path")
     root.mkdir(parents=True, exist_ok=True)
+    comparator = _load_frozen_production_comparator(
+        frozen_production_comparator)
     config_dir = root / "config"
     for directory in (config_dir, root / "locks", root / "portfolio-evidence"):
         directory.mkdir(parents=True, exist_ok=True)
@@ -1191,6 +1208,17 @@ def initialize_static_deployment_bundle(root: Path) -> Path:
         "schema": "epyc.autokernel.discovery_runtime.v1", "architecture": "gfx90a",
         "gpu_layers": 99, "flash_attention": True, "hip_graphs": True,
         "cpu_list": "184-191", "threads": 8, "promotion_claim": False})
+    if (comparator.model_sha256 != model.sha256
+            or comparator.workload_sha256 != workload_sha
+            or comparator.runtime_config_sha256 != runtime_sha):
+        raise DeploymentFactoryError(
+            "frozen production comparator names another immutable frame")
+    comparator_path = config_dir / "frozen-production-comparator.json"
+    _atomic_bytes(
+        comparator_path, frozen_production_comparator.read_bytes())
+    comparator_path.chmod(0o400)
+    comparator_file_sha = _digest_regular(
+        comparator_path, "frozen production comparator")
     _fallback_path, fallback_sha = _json_artifact(
         config_dir / "admission-fallback.json", {
             "schema": "epyc.autokernel.gpu_load_admission_fallback.v1",
@@ -1334,6 +1362,9 @@ def initialize_static_deployment_bundle(root: Path) -> Path:
              "immutable_inputs": {"model": {"path": str(model.path), "sha256": model.sha256},
                                   "workload": {"path": str(workload_path), "sha256": workload_sha},
                                   "runtime_config": {"path": str(runtime_path), "sha256": runtime_sha},
+                                  "frozen_production_comparator": {
+                                      "path": str(comparator_path),
+                                      "sha256": comparator_file_sha},
                                   "admission_policy": {"path": str(policy_path), "sha256": policy_sha},
                                   "hypothesis_portfolio": {"path": str(portfolio_path.resolve()),
                                                            "sha256": portfolio_file_sha},
@@ -2578,6 +2609,42 @@ def _runner_binding(config: deployment.DiscoveryDeployment) -> RunnerArgsBinding
                 *common_argv, "--output-dir",
                 str(stage_root / "target-runtime-graphs-on"),
                 "--runtime-graphs", "on"])
+            production_graphs_on = None
+            if getattr(candidate, "composition_plan", None) is not None:
+                authority = getattr(
+                    build_, "composition_production_authority", None)
+                if authority is None:
+                    raise DeploymentFactoryError(
+                        "cumulative build lacks frozen-production authority")
+                production_graphs_on = \
+                    controller.gpu_discovery.parser().parse_args([
+                        "--anchor-build",
+                        str(config.production_path / "build-hip"),
+                        "--candidate-build", str(build_.candidate_build),
+                        "--model", str(config.model.path),
+                        "--campaign-id",
+                        f"ak-discovery-{config.config_sha256[:16]}",
+                        "--factor", "cumulative_production",
+                        "--calls", "9", "--workload", "decode_tg128",
+                        "--arm-order-schedule", arm_order,
+                        "--arm-order-seed-sha256", schedule_seed,
+                        "--inference-window-lock",
+                        str(config.inference_window_lock),
+                        "--load-admission-decision", str(decision_path),
+                        "--load-admission-policy",
+                        str(config.admission_policy.input.path),
+                        "--load-admission-policy-sha256",
+                        config.admission_policy.input.sha256,
+                        "--effective-context-sha256", effective,
+                        "--device-id", config.device_id,
+                        "--cpu-claim-journal",
+                        str(config.operations_root / "claims" / "cpu.jsonl"),
+                        "--device-claim-journal",
+                        str(config.operations_root / "claims" / "device.jsonl"),
+                        "--output-dir",
+                        str(stage_root /
+                            "cumulative-vs-production-graphs-on"),
+                        "--runtime-graphs", "on"])
         except SystemExit as exc:
             # argparse is allowed to reject an invalid sealed contract, but it
             # must not terminate the unified controller process.  This typed
@@ -2595,6 +2662,24 @@ def _runner_binding(config: deployment.DiscoveryDeployment) -> RunnerArgsBinding
             for arm, identity in sealed_identities.items():
                 setattr(current, f"_sealed_{arm}_source_build_identity", identity)
         setattr(graphs_off, "_target_runtime_args", graphs_on)
+        if production_graphs_on is not None:
+            authority = getattr(
+                build_, "composition_production_authority", None)
+            assert authority is not None
+            setattr(production_graphs_on, "_operation_key", operation_key)
+            setattr(production_graphs_on, "_operations_root",
+                    str(config.operations_root))
+            setattr(production_graphs_on, "_operation_repetition", repetition)
+            setattr(production_graphs_on,
+                    "_sealed_anchor_source_build_identity",
+                    dict(authority.build_identity.__dict__))
+            setattr(production_graphs_on,
+                    "_sealed_candidate_source_build_identity",
+                    dict(build_.candidate_identity.__dict__))
+            setattr(production_graphs_on,
+                    "_frozen_production_authority", authority.to_dict())
+            setattr(graphs_off, "_production_graphs_on_args",
+                    production_graphs_on)
         return graphs_off
     return RunnerArgsBinding(build=build)
 
@@ -2664,6 +2749,56 @@ def _bind_runner_runtime_authority(
                 or getattr(current, "load_admission_decision", None) != decision):
             raise DeploymentFactoryError(
                 "runner arguments do not bind source builds/model/window/discovery authority")
+    production = getattr(result, "_production_graphs_on_args", None)
+    authority = getattr(build_, "composition_production_authority", None)
+    if authority is None:
+        if production is not None:
+            raise DeploymentFactoryError(
+                "ordinary runner acquired frozen-production authority")
+        return result
+    if production is None:
+        raise DeploymentFactoryError(
+            "cumulative runner lacks frozen-production graphs-on arguments")
+    if (getattr(production, "_operation_key", None) != build_.operation_key
+            or getattr(production, "_operations_root", None) !=
+               str(config.operations_root)
+            or getattr(production, "_operation_repetition", None) !=
+               permit.get("repetition")
+            or getattr(production, "factor", None) !=
+               "cumulative_production"
+            or getattr(production, "runtime_graphs", None) != "on"
+            or str(getattr(production, "model", "")) !=
+               str(config.model.path)
+            or str(getattr(production, "anchor_build", "")) !=
+               str(config.production_path / "build-hip")
+            or str(getattr(production, "candidate_build", "")) !=
+               str(build_.candidate_build)
+            or str(getattr(production, "inference_window_lock", "")) !=
+               str(config.inference_window_lock)
+            or getattr(production, "promotion_claim", False) is not False
+            or getattr(production, "_frozen_production_authority", None) !=
+               authority.to_dict()):
+        raise DeploymentFactoryError(
+            "production runner arguments changed comparator authority")
+    for arm, identity in {
+            "anchor": dict(authority.build_identity.__dict__),
+            "candidate": dict(build_.candidate_identity.__dict__),
+    }.items():
+        if getattr(
+                production,
+                f"_sealed_{arm}_source_build_identity", None) != identity:
+            raise DeploymentFactoryError(
+                "production runner changed sealed build identity")
+    for key, value in expected_admission.items():
+        existing = getattr(production, key, None)
+        if existing is not None and existing != value:
+            raise DeploymentFactoryError(
+                f"production runner attempted to override {key}")
+        try:
+            setattr(production, key, value)
+        except (AttributeError, TypeError) as exc:
+            raise DeploymentFactoryError(
+                "production runner cannot carry sealed load admission") from exc
     return result
 
 
@@ -2696,6 +2831,19 @@ def _static_registry(config: deployment.DiscoveryDeployment,
         build_root=config.build_root,
         cmake_defines=(("GGML_HIP", "ON"), ("AMDGPU_TARGETS", "gfx90a"),
                        ("GGML_NATIVE", "OFF")))
+    comparator = _load_frozen_production_comparator(
+        config.frozen_production_comparator.path)
+
+    def build_source(candidate: controller.PlannedCandidate,
+                     authorization: Any,
+                     lease: Mapping[str, Any]) -> controller.GpuSourceBuild:
+        built = source_builder.build(candidate, authorization, lease)
+        if candidate.composition_plan is None:
+            return built
+        authority = comparator.authority()
+        authority.bind_plan(candidate.composition_plan)
+        return replace(
+            built, composition_production_authority=authority)
     snapshot_files, snapshot_semantics = _production_runtime_snapshot(config.production_path)
     snapshot = ProductionSnapshotBinding(
         config.production_path, snapshot_files, snapshot_semantics,
@@ -2703,7 +2851,7 @@ def _static_registry(config: deployment.DiscoveryDeployment,
     return MappingProxyType({
         "environment_profile": MappingProxyType({_STATIC_IDS["environment_profile"]: environment}),
         "source_builder": MappingProxyType({_STATIC_IDS["source_builder"]:
-                                               SourceBuilderBinding(source_builder.build)}),
+                                               SourceBuilderBinding(build_source)}),
         "evidence_plan": MappingProxyType({_STATIC_IDS["evidence_plan"]: _evidence_binding(config)}),
         "runner_args": MappingProxyType({_STATIC_IDS["runner_args"]: _runner_binding(config)}),
         "experiment_template_registry": MappingProxyType({_STATIC_IDS["experiment_template_registry"]: templates}),
@@ -2730,6 +2878,8 @@ def _seal_graph_receipt(config: deployment.DiscoveryDeployment,
     historical_q5_evidence = _preauthored_historical_evidence(
         config.preauthored_continuation.value,
         config.hypothesis_evidence_manifest.value["evidence"])
+    comparator = _load_frozen_production_comparator(
+        config.frozen_production_comparator.path)
     body = {"schema": "epyc.autokernel.static_discovery_graph.v9",
             "authority": "nonpromotable_candidate_only_discovery", "promotion_claim": False,
             "inference_executed": False, "config_sha256": config.config_sha256,
@@ -2752,6 +2902,13 @@ def _seal_graph_receipt(config: deployment.DiscoveryDeployment,
                 "file_sha256": config.carry_forward.input.sha256,
                 "self_sha256": config.carry_forward.self_sha256,
                 "semantic_sha256": config.carry_forward.semantic_sha256,
+            },
+            "frozen_production_comparator": {
+                "schema": (
+                    "epyc.autokernel."
+                    "frozen_production_comparator_source.v1"),
+                "file_sha256": config.frozen_production_comparator.sha256,
+                "receipt_sha256": comparator.receipt_sha256,
             },
             "preauthored_continuation": {
                 "schema": preauthored_continuation.SCHEMA,
@@ -3616,6 +3773,8 @@ def deployment_main(argv: list[str] | None = None) -> int:
     authority.add_argument("--deployment")
     authority.add_argument("--initialize-bundle",
                            help="emit the fixed-site sealed deployment bundle")
+    parser.add_argument("--frozen-production-comparator",
+                        help="sealed exact-v9 graphs-on comparator receipt")
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument("--validate-only", action="store_true")
     modes.add_argument("--dry-run", action="store_true",
@@ -3634,10 +3793,19 @@ def deployment_main(argv: list[str] | None = None) -> int:
     if args.initialize_bundle:
         if args.validate_only or args.dry_run:
             parser.error("bundle initialization does not accept execution flags")
-        result = initialize_static_deployment_bundle(Path(args.initialize_bundle))
+        if not args.frozen_production_comparator:
+            parser.error(
+                "bundle initialization requires --frozen-production-comparator")
+        result = initialize_static_deployment_bundle(
+            Path(args.initialize_bundle),
+            frozen_production_comparator=Path(
+                args.frozen_production_comparator))
         print(json.dumps({"status": "initialized", "inference_executed": False,
                           "deployment": str(result)}, sort_keys=True))
         return 0
+    if args.frozen_production_comparator:
+        parser.error(
+            "--frozen-production-comparator is only valid with bundle initialization")
     sealed_bytes = None
     if args.supervised_config_fd is not None:
         sealed_bytes, authority = discovery_supervisor.verified_supervised_launch(

@@ -537,6 +537,7 @@ class DiscoveryDeployment:
     model: ImmutableInput
     workload: ImmutableInput
     runtime_config: ImmutableInput
+    frozen_production_comparator: ImmutableInput
     policy: ImmutableInput
     admission_policy: AdmissionPolicy
     hypothesis_portfolio: HypothesisPortfolioInput
@@ -562,7 +563,10 @@ class DiscoveryDeployment:
         self.actor_wrapper.revalidate("actors.wrapper")
         self.critic_wrapper.revalidate("actors.critic")
         for label, value in (("model", self.model), ("workload", self.workload),
-                             ("runtime_config", self.runtime_config), ("policy", self.policy)):
+                             ("runtime_config", self.runtime_config),
+                             ("frozen_production_comparator",
+                              self.frozen_production_comparator),
+                             ("policy", self.policy)):
             value.revalidate(label)
         self.admission_policy.revalidate()
         self.hypothesis_portfolio.revalidate()
@@ -745,7 +749,8 @@ def load_deployment_config(path: Path, *, sealed_bytes: bytes | None = None
         "model", "workload", "runtime_config", "admission_policy",
         "hypothesis_portfolio", "hypothesis_evidence_manifest",
         "hypothesis_portfolio_contract", "preauthored_continuation",
-        "q5_lds0_attribution_erratum", "carry_forward"},
+        "q5_lds0_attribution_erratum", "carry_forward",
+        "frozen_production_comparator"},
         "immutable_inputs")
     source = _exact(top["source_plan"], {"source_builder_id", "evidence_plan_id",
                                            "runner_args_id", "experiment_template_registry_id", "experiment_template_registry_sha256",
@@ -756,6 +761,9 @@ def load_deployment_config(path: Path, *, sealed_bytes: bytes | None = None
     model = _input(inputs["model"], "model")
     workload = _input(inputs["workload"], "workload")
     runtime_config = _input(inputs["runtime_config"], "runtime_config")
+    frozen_production_comparator = _input(
+        inputs["frozen_production_comparator"],
+        "frozen_production_comparator")
     admission_policy_input = _input(inputs["admission_policy"], "admission_policy")
     admission_policy = _admission_policy(admission_policy_input, model=model, workload=workload)
     portfolio_input = _portfolio(_input(inputs["hypothesis_portfolio"],
@@ -788,6 +796,8 @@ def load_deployment_config(path: Path, *, sealed_bytes: bytes | None = None
     for label, input_ in (("actors.wrapper", actor_wrapper), ("actors.critic", critic_wrapper),
                           ("model", model),
                           ("workload", workload), ("runtime_config", runtime_config),
+                          ("frozen_production_comparator",
+                           frozen_production_comparator),
                           ("admission_policy", admission_policy_input),
                           ("hypothesis_portfolio", portfolio_input.input),
                           ("hypothesis_evidence_manifest", evidence_manifest.input),
@@ -814,6 +824,7 @@ def load_deployment_config(path: Path, *, sealed_bytes: bytes | None = None
         claim_timeout_s=float(claim_timeout_s), inference_window_lock=window,
         model=model, workload=workload, admission_policy=admission_policy,
         runtime_config=runtime_config, policy=admission_policy_input,
+        frozen_production_comparator=frozen_production_comparator,
         hypothesis_portfolio=portfolio_input,
         hypothesis_evidence_manifest=evidence_manifest,
         preauthored_continuation=continuation,
