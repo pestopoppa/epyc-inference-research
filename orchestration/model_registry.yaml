@@ -2750,11 +2750,26 @@ roles:
       size_gb: 1.67
       architecture: lfm2
     artifact_status:
-      download: deleted
+      download: present
       observed_date: 2026-08-12
-      deleted: 2026-08-12
-      deleted_reason: >-
-        operator-directed retirement. REJECTED as a worker_general candidate: it is a REASONING
+      local_path: /mnt/raid0/llm/models/LFM2.5-2.6B-Q4_K_M.gguf
+      revision: b421ad1d549afeda6a0fb2ad3a697cb5a7879adc
+      # re-verified 2026-08-21 by the operator session completing this orphaned restoration.
+      # The restoring session's own re-fetch had TRUNCATED at 1,496,379,392 of 1,674,454,848
+      # bytes (89%) — which is why it left pending-reverify and why verification here began
+      # with a re-download from the pinned revision. Local sha256 now MATCHES the HF LFS oid.
+      sha256: 79fdf00351b46cf26f020aead28d01889886be87c55fa0eb907e6f9b00bfee14
+      size_bytes: 1674454848
+      restored: 2026-08-12
+      restored_reason: >-
+        UN-DEPRECATED the same day on a RESIDENCY argument (operator). The rejection below compared
+        like-for-like hardware, which is operationally wrong: the incumbent is CPU-served and at 26.3%
+        of the MI210 cannot casually become GPU-resident, while this model is 3.2%. Deployed-config
+        time-to-answer is a wash (2.23 s on GPU vs the incumbent's 1.70-2.97 s on CPU), not the 4.3x
+        deficit recorded. Re-fetched from this entry's own pinned revision — the ledger's reproduction
+        path worked, which is the argument for writing one. See WG-LFMI-5.
+      prior_rejection: >-
+        operator-directed retirement 2026-08-12. REJECTED as a worker_general candidate: it is a REASONING
         variant with no `enable_thinking` kwarg in its chat template, so its reasoning cannot be
         disabled the way the incumbent's is. Measured 2.08x faster per token but ~4.3x SLOWER to a
         finished answer, emitting 15.2x more tokens on the same prompts; GPU widens rather than
@@ -2782,10 +2797,18 @@ roles:
       size_gb: 2.87
       architecture: lfm2
     artifact_status:
-      download: deleted
+      download: present
       observed_date: 2026-08-12
-      deleted: 2026-08-12
-      deleted_reason: >-
+      local_path: /mnt/raid0/llm/models/LFM2.5-2.6B-Q8_0.gguf
+      revision: b421ad1d549afeda6a0fb2ad3a697cb5a7879adc
+      # re-verified 2026-08-21 by the operator session completing this orphaned restoration:
+      # local sha256 computed and MATCHES the HF LFS oid at the pinned revision.
+      sha256: 36587fdf27bdfc69caf2637273679a0870ec155162161bde6fd16e8c70bdb757
+      size_bytes: 2874779456
+      restored: 2026-08-12
+      restored_reason: >-
+        Un-deprecated alongside lfm25_26b_q4km on the residency argument; see WG-LFMI-5.
+      prior_rejection: >-
         Same retirement as lfm25_26b_q4km — reasoning variant, superseded by
         LFM2.5-1.2B-Instruct. Additionally never competitive on CPU (tg512 44.95 vs the Q4_K_M
         rung's 72.04) though within noise of it on GPU (228.34 vs 225.11), which is itself the
@@ -9901,6 +9924,23 @@ roles:
       gpu_only_candidate: true
       hybrid_candidate: false
 
+    chat_template:
+      provenance: unsloth_patched_not_stock
+      evidence_strength: direct_artifact_digest
+      served_template_bytes: 9993
+      served_template_sha256_12: 12827f24b742
+      upstream_template_bytes: 8952
+      upstream_template_sha256_12: c3cf9e34abf4
+      upstream_ref: Qwen/Qwen3.8-27B
+      trailing_marker: '{#- Unsloth fixes - developer role, merged system messages, tool calling #}'
+      evidence: 'Extracted 2026-08-21 from the GGUF header of /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf
+        without loading the model; 1,041 bytes larger than stock. Divergences that matter: reasoning_effort
+        ''high'' is silently coerced to ''xhigh'' (template :60-61) where stock raises; the xhigh default
+        injects a 209-char instruction (:59, :66); and the assistant branch (:113-120) reads only
+        message.reasoning_content, never inline <think>, so inline-think history yields a duplicated blank
+        <think></think>. All three sit inside the enable_thinking gate (:58) and are unreachable while
+        chat_template_kwargs.enable_thinking is false. Reachability audit:
+        epyc-root handoffs/active/qwen38-27b-replace-qwen36.md -> Research Intake 2026-08-21 (Q38-T1/T3).'
   qwen36_35b_a3b_mtp_q8_local:
     tier: C
     description: >
