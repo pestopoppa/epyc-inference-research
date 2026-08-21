@@ -1545,10 +1545,25 @@ class Tests(unittest.TestCase):
    self.assertTrue(raised.exception.scientific_budget_spent)
  def test_lease_wait_is_durable_without_spending_iteration(self):
   class Wait:
-   def admit(self,item,*,operation_key): return {"admitted":False,"reason":"CPU window busy","operation_key":operation_key}
+   def __init__(self): self.calls=0
+   def admit(self,item,*,operation_key):
+    self.calls+=1
+    return {"admitted":False,"phase":"prebuild_probe",
+            "reason":"device_busy","detail":"CPU window busy",
+            "operation_key":operation_key,"promotion_claim":False,
+            "mode":"cold_serialized","device_id":"mi210_0",
+            "inference_window_lock":"/tmp/test-inference-window.lock",
+            "model_sha256":H,"load_admission":{"decision_sha256":H}}
   with tempfile.TemporaryDirectory() as t, patch.object(D.source_candidate,"SourcePatchManifest",Manifest), patch.object(D,"_write_projection"):
-   r=D.run_controller(self.cfg(Path(t),1),planner=FakePlanner(),critic=FakeCritic(["accept"]),screener=FakeScreen([.1]),lease=Wait())
+   root=Path(t); planner=FakePlanner(); critic=FakeCritic(["accept"])
+   screen=FakeScreen([.1]); lease=Wait()
+   r=D.run_controller(self.cfg(root,1),planner=planner,critic=critic,
+                      screener=screen,lease=lease)
    self.assertEqual(r["next"],1); self.assertEqual(r["pending"]["row"]["status"],"waiting_resource"); self.assertFalse(r["complete"])
+   reopened=D.run_controller(self.cfg(root,1),planner=planner,critic=critic,
+                             screener=screen,lease=lease)
+   self.assertEqual((reopened["scientific_attempts"],reopened["next"]),(0,1))
+   self.assertEqual((lease.calls,len(planner.calls),screen.calls),(2,1,0))
  def test_postbuild_resource_wait_retries_exact_candidate_without_replanning(self):
   class Race(FakeScreen):
    def __init__(self,root):
@@ -1612,6 +1627,86 @@ class Tests(unittest.TestCase):
    self.assertEqual((len(lease.admits),len(lease.resumes)),(1,2))
    self.assertEqual(screen.operations,[lease.admits[0],lease.admits[0]])
    self.assertEqual(lease.resumes,[checkpoint["resume_permit"]]*2)
+ def test_postbuild_resource_wait_partial_or_resealed_checkpoint_fails_closed(self):
+  class Race(FakeScreen):
+   def __init__(self,root):
+    super().__init__([]); self.root=root; self.wait_receipt=None
+   def screen(self,*args):
+    self.calls+=1
+    if self.calls != 1:
+     raise AssertionError("partial wait checkpoint re-entered the screener")
+    operation_key=args[2]["operation_key"]
+    directory=self.root/operation_key/"resource-waits"
+    directory.mkdir(parents=True,mode=0o700)
+    contention={"admitted":False,"phase":"pre_executor_reservation",
+                "reason":"device_busy","device_id":"mi210_0",
+                "operation_key":operation_key,"promotion_claim":False}
+    body={"schema":"epyc.autokernel.gpu_source_resource_wait.v1",
+          "authority":D.AUTHORITY,"promotion_claim":False,
+          "operation_key":operation_key,"gpu_executor_started":False,
+          "proof_root_created":False,"runner_plan_created":False,
+          "runner_output_created":False,"contention":contention}
+    body["receipt_sha256"]=D._sha(body)
+    path=directory/"wait-0001.json"
+    path.write_text(json.dumps(body,sort_keys=True))
+    self.wait_receipt={**contention,"stage_receipt_path":str(path),
+                       "stage_receipt_sha256":
+                           hashlib.sha256(path.read_bytes()).hexdigest()}
+    raise D.ResourceWait("device race",receipt=self.wait_receipt)
+   def reconcile(self,inflight):
+    return D.Recovery("resource_wait",wait_receipt=self.wait_receipt)
+  class TrackingLease(Lease):
+   def __init__(self): self.admits=[]; self.resumes=[]
+   def admit(self,item,*,operation_key):
+    self.admits.append(operation_key)
+    return super().admit(item,operation_key=operation_key)
+   def resume(self,item,permit):
+    self.resumes.append(dict(permit))
+    raise AssertionError("malformed wait reached lease.resume")
+  mutations={
+      "deleted_checkpoint": lambda value:
+          value["pending"].pop("resource_wait"),
+      "null_checkpoint": lambda value:
+          value["pending"].__setitem__("resource_wait",None),
+      "missing_field": lambda value:
+          value["pending"]["resource_wait"].pop("wait_receipt_sha256"),
+      "extra_field": lambda value:
+          value["pending"]["resource_wait"].__setitem__("extra",True),
+      "coherently_resealed_wait": self._reseal_resource_wait_mutation,
+      "deleted_stage_receipt": None,
+  }
+  for label,mutate in mutations.items():
+   with self.subTest(label=label), tempfile.TemporaryDirectory() as t, \
+       patch.object(D.source_candidate,"SourcePatchManifest",Manifest), \
+       patch.object(D,"_write_projection"):
+    root=Path(t); planner=FakePlanner(); critic=FakeCritic(["accept"])
+    screen=Race(root/"operations"); lease=TrackingLease()
+    waiting=D.run_controller(
+        self.cfg(root,1),planner=planner,critic=critic,
+        screener=screen,lease=lease)
+    tampered=json.loads(json.dumps(waiting))
+    if mutate is None:
+     Path(tampered["pending"]["resource_wait"]
+          ["wait_receipt"]["stage_receipt_path"]).unlink()
+    else:
+     mutate(tampered)
+    D.DurableState(root/"out").save(tampered,"test_partial_wait")
+    with self.assertRaises(D.DiscoveryControllerError):
+     D.run_controller(self.cfg(root,1),planner=planner,critic=critic,
+                      screener=screen,lease=lease)
+    self.assertEqual((len(planner.calls),screen.calls,
+                      len(lease.admits),len(lease.resumes)),(1,1,1,0))
+ @staticmethod
+ def _reseal_resource_wait_mutation(value):
+  checkpoint=value["pending"]["resource_wait"]
+  wait=checkpoint["wait_receipt"]
+  wait["reason"]="device_free"
+  checkpoint["wait_receipt_sha256"]=D._sha(wait)
+  checkpoint["resume_permit"]={**checkpoint["inflight"]["lease"],**wait}
+  value["pending"]["row"]["lease"]=dict(wait)
+  checkpoint["checkpoint_sha256"]=D._sha({
+      key:item for key,item in checkpoint.items()
+      if key != "checkpoint_sha256"})
  def test_forged_resource_wait_cannot_erase_ambiguous_inflight(self):
   class Forged(FakeScreen):
    def screen(self,*args):

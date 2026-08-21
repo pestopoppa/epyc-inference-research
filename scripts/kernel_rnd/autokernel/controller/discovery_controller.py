@@ -408,6 +408,72 @@ def _validated_resource_wait_checkpoint(
     return checkpoint
 
 
+def _validated_prebuild_resource_wait(
+        pending: Mapping[str, Any], operation_key: str) -> Mapping[str, Any]:
+    """Accept only the exact claim-free lease refusal written before a build.
+
+    A post-build wait is distinguishable by its ``pre_executor_reservation``
+    phase and must carry ``resource_wait``.  Treating a partial post-build
+    checkpoint as this older pending form would bypass ``lease.resume`` and
+    re-enter the screen through ordinary admission.
+    """
+    row = pending.get("row")
+    if (not isinstance(row, Mapping)
+            or row.get("status") != "waiting_resource"):
+        raise DiscoveryControllerError(
+            "pending resource wait lacks its typed waiting row")
+    permit = row.get("lease")
+    common = {
+        "admitted", "phase", "reason", "operation_key", "promotion_claim",
+        "mode", "device_id", "inference_window_lock", "model_sha256",
+        "load_admission",
+    }
+    if not isinstance(permit, Mapping):
+        raise DiscoveryControllerError(
+            "pending prebuild resource wait lacks a typed lease")
+    reason = permit.get("reason")
+    allowed = (common | {"foreign_kfd_pids"}
+               if isinstance(reason, str) and reason.startswith("foreign_kfd_")
+               else common | {"detail"})
+    if (set(permit) != allowed
+            or permit.get("admitted") is not False
+            or permit.get("phase") != "prebuild_probe"
+            or permit.get("operation_key") != operation_key
+            or permit.get("promotion_claim") is not False
+            or permit.get("mode") not in {"cold_overlap", "cold_serialized"}
+            or not isinstance(permit.get("device_id"), str)
+            or not permit["device_id"]
+            or not isinstance(permit.get("inference_window_lock"), str)
+            or not permit["inference_window_lock"]
+            or not isinstance(permit.get("model_sha256"), str)
+            or not HASH.fullmatch(permit["model_sha256"])
+            or not isinstance(permit.get("load_admission"), Mapping)
+            or not permit["load_admission"]
+            or reason not in {
+                "device_busy", "foreign_kfd_busy",
+                "foreign_kfd_inventory_invalid",
+                "foreign_kfd_inventory_unreadable",
+            }
+            or any(key in permit for key in (
+                "stage_receipt_path", "stage_receipt_sha256"))):
+        raise DiscoveryControllerError(
+            "pending prebuild resource wait is malformed")
+    if isinstance(reason, str) and reason.startswith("foreign_kfd_"):
+        pids = permit.get("foreign_kfd_pids")
+        if (not isinstance(pids, list)
+                or pids != sorted(set(pids))
+                or any(isinstance(pid, bool) or not isinstance(pid, int)
+                       or pid <= 0 for pid in pids)
+                or reason == "foreign_kfd_busy" and not pids
+                or reason != "foreign_kfd_busy" and pids):
+            raise DiscoveryControllerError(
+                "pending prebuild KFD inventory is malformed")
+    elif not isinstance(permit.get("detail"), str):
+        raise DiscoveryControllerError(
+            "pending prebuild device contention detail is malformed")
+    return permit
+
+
 def _atomic(path: Path, value: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
@@ -4111,9 +4177,9 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                 operation_identity["infrastructure_retry_epoch"] = retry_epoch
             operation_key=_sha(operation_identity)
             row["operation_key"] = operation_key
-            wait_checkpoint = (pending.get("resource_wait")
-                               if isinstance(pending, Mapping) else None)
-            if wait_checkpoint is not None:
+            has_wait_checkpoint = (isinstance(pending, Mapping)
+                                   and "resource_wait" in pending)
+            if has_wait_checkpoint:
                 checkpoint = _validated_resource_wait_checkpoint(
                     pending, operation_key)
                 _require_safe_resource_wait_recovery(
@@ -4125,12 +4191,17 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                         "pending resource wait lacks resource re-admission")
                 permit = resume(item, checkpoint["resume_permit"])
             else:
+                pending_row = (pending.get("row")
+                               if isinstance(pending, Mapping) else None)
+                if (isinstance(pending_row, Mapping)
+                        and pending_row.get("status") == "waiting_resource"):
+                    _validated_prebuild_resource_wait(pending, operation_key)
                 permit=lease.admit(item, operation_key=operation_key)
             if not bool(permit.get("admitted")):
                 # Waiting is durable but is not an experiment and cannot spend an
                 # iteration budget.  Planning/critique may continue elsewhere;
                 # this exact candidate is retried only after a new lease admits it.
-                if wait_checkpoint is None:
+                if not has_wait_checkpoint:
                     row.update(status="waiting_resource",lease=dict(permit)); state["pending"]={"row":row,"candidate":_pending_item(item),"authorization":authorization.to_dict(),"confirmation":bool(pending and pending.get("confirmation")),"parent_authorization":pending.get("parent_authorization") if pending else None,"infrastructure_retry_epoch":retry_epoch, **_preauthored_pending_fields(row)}
                 # A post-build wait remains bound to its original admitted
                 # lease and durable stage receipt.  A failed re-admission is
