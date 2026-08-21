@@ -136,6 +136,7 @@ class IsolatedReplication:
     build_identity_sha256: str
     correctness_receipt_sha256: str
     attribution_receipt_sha256: str
+    graphs_off_receipt_sha256: str
     graphs_on_receipt_sha256: str
     effect_fraction: float
 
@@ -143,6 +144,7 @@ class IsolatedReplication:
         for label in (
             "result_sha256", "series_key", "build_identity_sha256",
             "correctness_receipt_sha256", "attribution_receipt_sha256",
+            "graphs_off_receipt_sha256",
             "graphs_on_receipt_sha256",
         ):
             _require_sha(getattr(self, label), label)
@@ -157,6 +159,7 @@ class IsolatedReplication:
         if not isinstance(value, Mapping) or set(value) != {
             "result_sha256", "series_key", "build_identity_sha256",
             "correctness_receipt_sha256", "attribution_receipt_sha256",
+            "graphs_off_receipt_sha256",
             "graphs_on_receipt_sha256", "effect_fraction",
         }:
             raise CompositionError("isolated replication has an inexact schema")
@@ -203,7 +206,7 @@ class ReplicatedPositiveLever:
 
     def _body(self) -> dict[str, Any]:
         return {
-            "schema": "epyc.autokernel.replicated_positive_lever.v1",
+            "schema": "epyc.autokernel.replicated_positive_lever.v2",
             "hypothesis_id": self.hypothesis_id,
             "cross_campaign_candidate_sha256":
                 self.cross_campaign_candidate_sha256,
@@ -227,7 +230,7 @@ class ReplicatedPositiveLever:
         }
         if not isinstance(value, Mapping) or set(value) != required:
             raise CompositionError("replicated lever has an inexact schema")
-        if (value.get("schema") != "epyc.autokernel.replicated_positive_lever.v1"
+        if (value.get("schema") != "epyc.autokernel.replicated_positive_lever.v2"
                 or value.get("isolated_disposition") !=
                    "top_k_replicated_candidate"):
             raise CompositionError("replicated lever type/disposition changed")
@@ -842,9 +845,11 @@ class IncrementalComparison:
     correctness_result_sha256: str
     exact_route_receipt_sha256: str
     expected_route_set_sha256: str
+    graphs_off_receipt_sha256: str
     graphs_on_receipt_sha256: str
     target_runtime_frame_sha256: str
     exact_route_effect_fraction: float
+    graphs_off_effect_fraction: float
     graphs_on_effect_fraction: float
     classification: str
     result_sha256: str
@@ -853,24 +858,27 @@ class IncrementalComparison:
     def create(
             cls, pair: CumulativeBuildPair, correctness: FullCorrectness, *,
             exact_route_receipt_sha256: str, graphs_on_receipt_sha256: str,
+            graphs_off_receipt_sha256: str,
             expected_route_set_sha256: str,
             target_runtime_frame_sha256: str,
             exact_route_effect_fraction: float,
+            graphs_off_effect_fraction: float,
             graphs_on_effect_fraction: float,
     ) -> "IncrementalComparison":
         correctness.bind_pair(pair)
         if not correctness.passed:
             raise CompositionError("failed correctness cannot reach composition measurement")
         route = _finite(exact_route_effect_fraction, "exact-route effect")
+        graphs_off = _finite(graphs_off_effect_fraction, "graphs-off effect")
         graphs = _finite(graphs_on_effect_fraction, "graphs-on effect")
-        if route > 0 and graphs > 0:
+        if route > 0 and graphs_off > 0 and graphs > 0:
             classification = "candidate"
-        elif route <= 0 and graphs <= 0:
+        elif route <= 0 and graphs_off <= 0 and graphs <= 0:
             classification = "screened_out"
         else:
             classification = "inconclusive"
         body = {
-            "schema": "epyc.autokernel.incremental_composition_comparison.v1",
+            "schema": "epyc.autokernel.incremental_composition_comparison.v2",
             "operation_key": pair.operation_key,
             "build_pair_sha256": pair.pair_sha256,
             "correctness_result_sha256": correctness.result_sha256,
@@ -878,14 +886,18 @@ class IncrementalComparison:
                 exact_route_receipt_sha256, "exact_route_receipt_sha256"),
             "expected_route_set_sha256": _require_sha(
                 expected_route_set_sha256, "expected_route_set_sha256"),
+            "graphs_off_receipt_sha256": _require_sha(
+                graphs_off_receipt_sha256, "graphs_off_receipt_sha256"),
             "graphs_on_receipt_sha256": _require_sha(
                 graphs_on_receipt_sha256, "graphs_on_receipt_sha256"),
             "target_runtime_frame_sha256": _require_sha(
                 target_runtime_frame_sha256, "target_runtime_frame_sha256"),
             "exact_route_effect_fraction": route,
+            "graphs_off_effect_fraction": graphs_off,
             "graphs_on_effect_fraction": graphs,
             "classification": classification,
             "exact_route_executed": True,
+            "graphs_off_executed": True,
             "graphs_on_executed": True,
         }
         return cls(
@@ -894,42 +906,51 @@ class IncrementalComparison:
             correctness_result_sha256=correctness.result_sha256,
             exact_route_receipt_sha256=exact_route_receipt_sha256,
             expected_route_set_sha256=expected_route_set_sha256,
+            graphs_off_receipt_sha256=graphs_off_receipt_sha256,
             graphs_on_receipt_sha256=graphs_on_receipt_sha256,
             target_runtime_frame_sha256=target_runtime_frame_sha256,
             exact_route_effect_fraction=route,
+            graphs_off_effect_fraction=graphs_off,
             graphs_on_effect_fraction=graphs,
             classification=classification, result_sha256=_sha(body),
         )
 
     def _body(self) -> dict[str, Any]:
         return {
-            "schema": "epyc.autokernel.incremental_composition_comparison.v1",
+            "schema": "epyc.autokernel.incremental_composition_comparison.v2",
             "operation_key": self.operation_key,
             "build_pair_sha256": self.build_pair_sha256,
             "correctness_result_sha256": self.correctness_result_sha256,
             "exact_route_receipt_sha256": self.exact_route_receipt_sha256,
             "expected_route_set_sha256": self.expected_route_set_sha256,
+            "graphs_off_receipt_sha256": self.graphs_off_receipt_sha256,
             "graphs_on_receipt_sha256": self.graphs_on_receipt_sha256,
             "target_runtime_frame_sha256": self.target_runtime_frame_sha256,
             "exact_route_effect_fraction": self.exact_route_effect_fraction,
+            "graphs_off_effect_fraction": self.graphs_off_effect_fraction,
             "graphs_on_effect_fraction": self.graphs_on_effect_fraction,
             "classification": self.classification,
-            "exact_route_executed": True, "graphs_on_executed": True,
+            "exact_route_executed": True, "graphs_off_executed": True,
+            "graphs_on_executed": True,
         }
 
     def __post_init__(self) -> None:
         for label in (
             "operation_key", "build_pair_sha256", "correctness_result_sha256",
             "exact_route_receipt_sha256", "graphs_on_receipt_sha256",
+            "graphs_off_receipt_sha256",
             "expected_route_set_sha256", "target_runtime_frame_sha256",
             "result_sha256",
         ):
             _require_sha(getattr(self, label), label)
         route = _finite(self.exact_route_effect_fraction, "exact-route effect")
+        graphs_off = _finite(
+            self.graphs_off_effect_fraction, "graphs-off effect")
         graphs = _finite(self.graphs_on_effect_fraction, "graphs-on effect")
-        expected = ("candidate" if route > 0 and graphs > 0 else
-                    "screened_out" if route <= 0 and graphs <= 0 else
-                    "inconclusive")
+        expected = ("candidate" if route > 0 and graphs_off > 0 and graphs > 0
+                    else "screened_out"
+                    if route <= 0 and graphs_off <= 0 and graphs <= 0
+                    else "inconclusive")
         if self.classification != expected or self.result_sha256 != _sha(self._body()):
             raise CompositionError("incremental comparison identity changed")
 
@@ -945,23 +966,29 @@ class IncrementalComparison:
         required = {
             "schema", "operation_key", "build_pair_sha256",
             "correctness_result_sha256", "exact_route_receipt_sha256",
+            "graphs_off_receipt_sha256",
             "expected_route_set_sha256", "graphs_on_receipt_sha256",
             "target_runtime_frame_sha256", "exact_route_effect_fraction",
+            "graphs_off_effect_fraction",
             "graphs_on_effect_fraction", "classification",
-            "exact_route_executed", "graphs_on_executed", "result_sha256",
+            "exact_route_executed", "graphs_off_executed",
+            "graphs_on_executed", "result_sha256",
         }
         if not isinstance(value, Mapping) or set(value) != required:
             raise CompositionError("incremental comparison has an inexact schema")
         if (value.get("schema") !=
-                "epyc.autokernel.incremental_composition_comparison.v1"
+                "epyc.autokernel.incremental_composition_comparison.v2"
                 or value.get("exact_route_executed") is not True
+                or value.get("graphs_off_executed") is not True
                 or value.get("graphs_on_executed") is not True):
             raise CompositionError("incremental comparison authority changed")
         return cls(**{key: value[key] for key in (
             "operation_key", "build_pair_sha256", "correctness_result_sha256",
             "exact_route_receipt_sha256", "expected_route_set_sha256",
+            "graphs_off_receipt_sha256",
             "graphs_on_receipt_sha256", "target_runtime_frame_sha256",
             "exact_route_effect_fraction", "graphs_on_effect_fraction",
+            "graphs_off_effect_fraction",
             "classification", "result_sha256")})
 
 
@@ -997,7 +1024,7 @@ def _atomic_replace(path: Path, value: Mapping[str, Any]) -> None:
 class CompositionLedger:
     """Atomic, restart-safe state for one cumulative composition campaign."""
 
-    SCHEMA = "epyc.autokernel.cumulative_composition_state.v1"
+    SCHEMA = "epyc.autokernel.cumulative_composition_state.v2"
 
     def __init__(self, path: Path | str):
         self.path = Path(path)
@@ -1059,7 +1086,15 @@ class CompositionLedger:
 
     def record_build_pair(self, pair: CumulativeBuildPair) -> dict[str, Any]:
         with self._lock():
-            state, pending, plan = self._pending(self._load_unlocked())
+            state = self._load_unlocked()
+            if state["pending"] is None:
+                matches = [row for row in state["terminals"]
+                           if (row["operation_key"] == pair.operation_key
+                               and row["build_pair"] == pair.to_dict())]
+                if len(matches) == 1:
+                    return state
+                raise CompositionError("no cumulative composition is pending")
+            state, pending, plan = self._pending(state)
             pair.bind_plan(plan)
             if pending["build_pair"] is not None:
                 if pending["build_pair"] == pair.to_dict():
@@ -1108,7 +1143,17 @@ class CompositionLedger:
             self, comparison: IncrementalComparison,
     ) -> dict[str, Any]:
         with self._lock():
-            state, pending, plan = self._pending(self._load_unlocked())
+            state = self._load_unlocked()
+            if state["pending"] is None:
+                matches = [row for row in state["terminals"]
+                           if (row["operation_key"] ==
+                               comparison.operation_key
+                               and row["comparison"] ==
+                               comparison.to_dict())]
+                if len(matches) == 1:
+                    return state
+                raise CompositionError("no cumulative composition is pending")
+            state, pending, plan = self._pending(state)
             if pending["build_pair"] is None or pending["correctness"] is None:
                 raise CompositionError("incremental comparison cannot skip correctness")
             pair = CumulativeBuildPair.from_dict(pending["build_pair"])
@@ -1159,6 +1204,35 @@ class CompositionLedger:
                 admitted=None,
                 reason_code=f"incremental_{comparison.classification}",
             )
+
+    def rollback_attribution(
+            self, operation_key: str, *, receipt_sha256: str,
+    ) -> dict[str, Any]:
+        """Scientifically reject a stack whose exact route authority failed."""
+        _require_sha(operation_key, "operation_key")
+        _require_sha(receipt_sha256, "receipt_sha256")
+        with self._lock():
+            state = self._load_unlocked()
+            if state["pending"] is None:
+                matches = [row for row in state["terminals"]
+                           if (row["operation_key"] == operation_key
+                               and row["disposition"] == "attribution_rollback"
+                               and row["attribution_receipt_sha256"] ==
+                                   receipt_sha256)]
+                if len(matches) == 1:
+                    return state
+                raise CompositionError("no cumulative composition is pending")
+            state, pending, plan = self._pending(state)
+            if (plan.operation_key != operation_key
+                    or pending["stage"] != "correctness_passed"):
+                raise CompositionError(
+                    "attribution rollback arrived out of order")
+            correctness = FullCorrectness.from_dict(pending["correctness"])
+            return self._terminalize(
+                state, plan=plan, disposition="attribution_rollback",
+                scientific=True, correctness=correctness, comparison=None,
+                admitted=None, reason_code="exact_route_authority_failed",
+                attribution_receipt_sha256=receipt_sha256)
 
     def rollback_infrastructure(
             self, operation_key: str, *, reason_code: str,
@@ -1388,13 +1462,14 @@ class CompositionLedger:
             comparison: IncrementalComparison | None,
             admitted: CompositionAuthority | None, reason_code: str,
             infrastructure_receipt_sha256: str | None = None,
+            attribution_receipt_sha256: str | None = None,
     ) -> dict[str, Any]:
         if scientific and state["scientific_attempts"] >= \
                 state["max_scientific_attempts"]:
             raise CompositionError("composition scientific budget is exhausted")
         lever = plan.candidate.accepted[-1]
         body = {
-            "schema": "epyc.autokernel.cumulative_composition_terminal.v1",
+            "schema": "epyc.autokernel.cumulative_composition_terminal.v2",
             "operation_key": plan.operation_key, "plan_sha256": plan.plan_sha256,
             "plan": plan.to_dict(),
             "lever_sha256": lever.lever_sha256,
@@ -1416,10 +1491,14 @@ class CompositionLedger:
                 None if admitted is None else admitted.authority_sha256,
             "reason_code": _require_text(reason_code, "reason_code"),
             "infrastructure_receipt_sha256": infrastructure_receipt_sha256,
+            "attribution_receipt_sha256": attribution_receipt_sha256,
         }
         if infrastructure_receipt_sha256 is not None:
             _require_sha(infrastructure_receipt_sha256,
                          "infrastructure_receipt_sha256")
+        if attribution_receipt_sha256 is not None:
+            _require_sha(attribution_receipt_sha256,
+                         "attribution_receipt_sha256")
         terminal = {**body, "terminal_sha256": _sha(body)}
         if admitted is not None:
             state["authority"] = admitted.to_dict()
@@ -1437,10 +1516,11 @@ class CompositionLedger:
             "correctness_result_sha256", "comparison_result_sha256",
             "admitted_authority_sha256", "reason_code",
             "infrastructure_receipt_sha256", "terminal_sha256",
+            "attribution_receipt_sha256",
         }
         if not isinstance(value, Mapping) or set(value) != required:
             raise CompositionError("composition terminal has an inexact schema")
-        if value.get("schema") != "epyc.autokernel.cumulative_composition_terminal.v1":
+        if value.get("schema") != "epyc.autokernel.cumulative_composition_terminal.v2":
             raise CompositionError("composition terminal schema changed")
         for key in ("operation_key", "plan_sha256", "lever_sha256",
                     "cross_campaign_candidate_sha256"):
@@ -1464,7 +1544,8 @@ class CompositionLedger:
         if not isinstance(value["scientific_budget_spent"], bool):
             raise CompositionError("terminal science disposition is malformed")
         for key in ("correctness_result_sha256", "comparison_result_sha256",
-                    "admitted_authority_sha256", "infrastructure_receipt_sha256"):
+                    "admitted_authority_sha256", "infrastructure_receipt_sha256",
+                    "attribution_receipt_sha256"):
             if value[key] is not None:
                 _require_sha(value[key], key)
         _require_text(value["disposition"], "disposition")
@@ -1501,12 +1582,14 @@ class CompositionLedger:
             value["comparison_result_sha256"] is not None,
             value["admitted_authority_sha256"] is not None,
             value["infrastructure_receipt_sha256"] is not None,
+            value["attribution_receipt_sha256"] is not None,
         )
         expected_shapes = {
-            "admitted": (True, True, True, True, False),
-            "incremental_rollback": (True, True, True, False, False),
-            "correctness_rollback": (True, True, False, False, False),
-            "infrastructure_rollback": (False, False, False, False, True),
+            "admitted": (True, True, True, True, False, False),
+            "incremental_rollback": (True, True, True, False, False, False),
+            "correctness_rollback": (True, True, False, False, False, False),
+            "attribution_rollback": (True, True, False, False, False, True),
+            "infrastructure_rollback": (False, False, False, False, True, False),
         }
         if expected_shapes.get(disposition) != shape:
             raise CompositionError("composition terminal disposition/evidence disagree")

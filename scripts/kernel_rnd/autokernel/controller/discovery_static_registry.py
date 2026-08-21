@@ -19,6 +19,7 @@ import subprocess
 import time
 from typing import Any, Mapping
 
+from .. import cumulative_composition
 from .. import source_candidate
 from .. import schemas
 from ..evaluator import integrity
@@ -45,8 +46,8 @@ class _CompileFailure(StaticRegistryError):
 _REWARD_FILES = ("llama-bench", "libllama-bench-impl.so", "libllama-common.so",
                  "libllama.so", "libggml.so", "libggml-cpu.so", "libggml-base.so")
 _HIP = "libggml-hip.so"
-_BUILDER_SCHEMA = "epyc.autokernel.static_gpu_source_builder.v6"
-_BUILD_KEY_SCHEMA = "epyc.autokernel.gpu_source_build_key.v2"
+_BUILDER_SCHEMA = "epyc.autokernel.static_gpu_source_builder.v7"
+_BUILD_KEY_SCHEMA = "epyc.autokernel.gpu_source_build_key.v3"
 _BUILD_REF_SCHEMA = "epyc.autokernel.gpu_source_build_ref.v1"
 _BUILD_INTENT_SCHEMA = "epyc.autokernel.gpu_source_build_intent.v1"
 _BUILD_TERMINAL_SCHEMA = "epyc.autokernel.gpu_source_build_terminal.v2"
@@ -68,6 +69,31 @@ _BUILD_ENV_NAMES = (
 _SEALED_BUILD_PATH = "/opt/rocm/bin:/usr/local/bin:/usr/bin:/bin"
 _SUPERVISED_BUILD_AUTHORITY_SCHEMA = "epyc.autokernel.supervised_build_authority.v2"
 _HEX = frozenset("0123456789abcdef")
+
+
+def _composition_components(
+        authority: cumulative_composition.CompositionAuthority,
+) -> tuple[tuple[source_candidate.SourcePatchManifest,
+                 Mapping[str, Any]], ...]:
+    rows = []
+    for lever in authority.accepted:
+        manifest = lever.manifest
+        changed_lines = sum(
+            1 for line in manifest.patch_text.splitlines()
+            if line.startswith(("+", "-"))
+            and not line.startswith(("+++", "---")))
+        rows.append((manifest, {
+            "proposal_id": manifest.proposal_id,
+            "change_class": manifest.change_class,
+            "change": {
+                "files_and_symbols": [
+                    f"{path}:{symbol}"
+                    for path in manifest.declared_files
+                    for symbol in manifest.declared_symbols[path]],
+                "estimated_diff_size": changed_lines,
+            },
+        }))
+    return tuple(rows)
 
 
 def _stat_identity(value: os.stat_result) -> tuple[int, ...]:
@@ -1914,12 +1940,30 @@ class StaticGpuSourceBuilder:
             production_commit=candidate.source_manifest.production_base_commit,
             instrument_branch=instrument_branch,
             instrument_commit=candidate.source_manifest.instrument_commit)
+        composition_plan = getattr(candidate, "composition_plan", None)
+        selected_paths = candidate.source_manifest.declared_files
+        if composition_plan is not None:
+            try:
+                if (composition_plan.candidate.accepted[-1].manifest !=
+                        candidate.source_manifest
+                        or composition_plan.anchor.production_base_commit !=
+                           candidate.source_manifest.production_base_commit
+                        or composition_plan.anchor.instrument_commit !=
+                           candidate.source_manifest.instrument_commit):
+                    raise StaticRegistryError(
+                        "cumulative plan differs from candidate source era")
+                selected_paths = tuple(sorted({
+                    path for lever in composition_plan.candidate.accepted
+                    for path in lever.manifest.declared_files}))
+            except (AttributeError, cumulative_composition.CompositionError) as exc:
+                raise StaticRegistryError(
+                    "static builder cumulative plan is invalid") from exc
         selected = _verify_selected_gpu_blobs(
             production_path=self.production_path,
             production_commit=candidate.source_manifest.production_base_commit,
             instrument_path=self.instrument_path,
             instrument_commit=candidate.source_manifest.instrument_commit,
-            paths=candidate.source_manifest.declared_files)
+            paths=selected_paths)
         effective_defines = dict(self._sealed_cmake_defines())
         effective_defines.setdefault("GGML_CCACHE", "OFF")
         try:
@@ -1940,6 +1984,18 @@ class StaticGpuSourceBuilder:
             "patch_bundle_sha256": candidate.source_manifest.patch_bundle_sha256,
             "patch_sha256": candidate.source_manifest.patch_sha256,
             "proposal_sha256": proposal_sha256,
+            "composition_plan": (
+                None if composition_plan is None else
+                composition_plan.to_dict()),
+            "composition_plan_sha256": (
+                None if composition_plan is None else
+                composition_plan.plan_sha256),
+            "anchor_patch_set_sha256": (
+                None if composition_plan is None else
+                composition_plan.anchor.ordered_patch_set_sha256),
+            "candidate_patch_set_sha256": (
+                None if composition_plan is None else
+                composition_plan.candidate.ordered_patch_set_sha256),
             "selected_gpu_base_blobs": selected,
             "cmake_defines": [list(item) for item in sorted(effective_defines.items())],
             "build_type": "Release",
@@ -1956,7 +2012,7 @@ class StaticGpuSourceBuilder:
     @staticmethod
     def _request_key(contract: Mapping[str, Any]) -> str:
         return schemas.content_hash({
-            "schema": "epyc.autokernel.gpu_source_build_request.v2",
+            "schema": "epyc.autokernel.gpu_source_build_request.v3",
             "deployment_config_canonical_sha256":
                 contract["deployment_config_canonical_sha256"],
             "deployment_config_semantic_sha256":
@@ -1967,6 +2023,10 @@ class StaticGpuSourceBuilder:
             "instrument_authority": contract["instrument_authority"],
             "patch_bundle_sha256": contract["patch_bundle_sha256"],
             "proposal_sha256": contract["proposal_sha256"],
+            "composition_plan_sha256": contract["composition_plan_sha256"],
+            "anchor_patch_set_sha256": contract["anchor_patch_set_sha256"],
+            "candidate_patch_set_sha256": contract[
+                "candidate_patch_set_sha256"],
             "builder_schema": contract["builder_schema"],
         })
 
@@ -2006,6 +2066,9 @@ class StaticGpuSourceBuilder:
         }
         if any(value in (None, "None") for value in fields.values()):
             raise StaticRegistryError("completed build projection is incomplete")
+        fields["composition_build_pair"] = (
+            None if build.composition_build_pair is None else
+            build.composition_build_pair.to_dict())
         return fields
 
     def _validate_ref(self, path: Path, *, request_key: str, build_key: str) -> None:
@@ -2655,8 +2718,14 @@ class StaticGpuSourceBuilder:
                     raw["candidate_correctness_capability_sha256"]),
                 teardown_receipt=Path(str(raw["teardown_receipt"])),
                 teardown_sha256=str(raw["teardown_sha256"]),
+                composition_build_pair=(
+                    None if raw.get("composition_build_pair") is None else
+                    cumulative_composition.CumulativeBuildPair.from_dict(
+                        raw["composition_build_pair"])),
             )
-        except (KeyError, TypeError, ValueError, controller.DiscoveryControllerError) as exc:
+        except (KeyError, TypeError, ValueError,
+                controller.DiscoveryControllerError,
+                cumulative_composition.CompositionError) as exc:
             raise StaticRegistryError("completed build projection is malformed") from exc
         if build.build_key != contract["build_key"]:
             raise StaticRegistryError("cached build identity is not keyed by its build contract")
@@ -2676,6 +2745,27 @@ class StaticGpuSourceBuilder:
             raise StaticRegistryError("materialization receipt differs from sealed build contract")
         if _digest(materialization_path) != build.materialization_sha256:
             raise StaticRegistryError("materialization receipt bytes changed")
+        composition_raw = contract.get("composition_plan")
+        if composition_raw is None:
+            if (materialization.get("composition_plan") is not None
+                    or build.composition_build_pair is not None):
+                raise StaticRegistryError(
+                    "ordinary build acquired cumulative composition authority")
+        else:
+            try:
+                composition_plan = \
+                    cumulative_composition.CompositionPlan.from_dict(
+                        composition_raw)
+            except cumulative_composition.CompositionError as exc:
+                raise StaticRegistryError(
+                    "cached cumulative plan is invalid") from exc
+            if (materialization.get("composition_plan") != composition_raw
+                    or materialization.get("composition_plan_sha256") !=
+                       composition_plan.plan_sha256
+                    or build.composition_build_pair is None):
+                raise StaticRegistryError(
+                    "materialization lost cumulative composition authority")
+            build.composition_build_pair.bind_plan(composition_plan)
         if (_production_authority(
                 production_path=self.production_path, production_branch=self.production_branch,
                 production_commit=str(contract["production_base_authority"]["commit"]))
@@ -2805,7 +2895,9 @@ class StaticGpuSourceBuilder:
                 or teardown.get("errors") != []):
             raise StaticRegistryError("cached build teardown is incomplete")
         receipts = teardown.get("receipts")
-        if not isinstance(receipts, list) or len(receipts) != 3:
+        expected_worktree_count = 2 if composition_raw is not None else 3
+        if (not isinstance(receipts, list)
+                or len(receipts) != expected_worktree_count):
             raise StaticRegistryError("cached build teardown does not cover all worktrees")
         actor = materialization.get("actor_worktree")
         builds = materialization.get("builds")
@@ -2817,8 +2909,9 @@ class StaticGpuSourceBuilder:
             if not isinstance(plan, Mapping):
                 raise StaticRegistryError("cached build receipt lacks a source snapshot")
             expected_worktree_paths.add(str(Path(str(plan.get("source_root", ""))).resolve()))
-        if len(expected_worktree_paths) != 3:
-            raise StaticRegistryError("materialization worktree provenance is not one actor plus two snapshots")
+        if len(expected_worktree_paths) != expected_worktree_count:
+            raise StaticRegistryError(
+                "materialization worktree provenance differs from its build mode")
         actual_worktree_paths = {
             str(Path(str(receipt.get("worktree_path", ""))).resolve())
             for receipt in receipts if isinstance(receipt, Mapping)}
@@ -3102,7 +3195,8 @@ class StaticGpuSourceBuilder:
             production_commit=candidate.source_manifest.production_base_commit,
             instrument_path=self.instrument_path,
             instrument_commit=candidate.source_manifest.instrument_commit,
-            paths=candidate.source_manifest.declared_files)
+            paths=tuple(sorted(
+                contract["selected_gpu_base_blobs"].keys())))
         campaign_root = cache_root / "worktrees"
         build_root = Path(build_attempt_root_raw).resolve(strict=True)
         if campaign_root.exists() or campaign_root.is_symlink():
@@ -3112,30 +3206,77 @@ class StaticGpuSourceBuilder:
         campaign_root.mkdir()
         actor: worktree.Worktree | None = None
         actor_proof: Any | None = None
+        composition_anchor_proof: Any | None = None
         snapshots: list[worktree.Worktree] = []
         operation_dir = cache_root / "receipts"
         operation_dir.mkdir(parents=True, exist_ok=True)
         completed: dict[str, Any] | None = None
         try:
-            actor, actor_proof = worktree.create_campaign_worktree(
-                anchor, candidate.source_manifest.campaign_id,
-                leaf=attempt_name, root=campaign_root)
-            try:
-                applied = source_candidate.apply_source_candidate(
-                    candidate.source_manifest,
-                    proposal=candidate.proposal, actor=actor)
-            except source_candidate.SourceCandidateError as exc:
-                raise _SourceApplyFailure(str(exc)) from exc
-            anchor_snapshot, _ = worktree.create_snapshot_worktree(
-                self.instrument_path, anchor.commit,
-                worktree.snapshot_worktree_path(candidate.source_manifest.campaign_id,
-                                                "akc-anchor", root=campaign_root))
-            snapshots.append(anchor_snapshot)
-            candidate_snapshot, _ = worktree.create_snapshot_worktree(
-                self.instrument_path, applied.candidate_commit,
-                worktree.snapshot_worktree_path(candidate.source_manifest.campaign_id,
-                                                candidate.source_manifest.candidate_id, root=campaign_root))
-            snapshots.append(candidate_snapshot)
+            composition_plan = getattr(candidate, "composition_plan", None)
+            if composition_plan is None:
+                actor, actor_proof = worktree.create_campaign_worktree(
+                    anchor, f"{candidate.source_manifest.campaign_id}-candidate",
+                    leaf=attempt_name, root=campaign_root)
+                try:
+                    applied = source_candidate.apply_source_candidate(
+                        candidate.source_manifest,
+                        proposal=candidate.proposal, actor=actor)
+                except source_candidate.SourceCandidateError as exc:
+                    raise _SourceApplyFailure(str(exc)) from exc
+                anchor_snapshot, _ = worktree.create_snapshot_worktree(
+                    self.instrument_path, anchor.commit,
+                    worktree.snapshot_worktree_path(
+                        candidate.source_manifest.campaign_id,
+                        "akc-anchor", root=campaign_root))
+                snapshots.append(anchor_snapshot)
+                candidate_snapshot, _ = worktree.create_snapshot_worktree(
+                    self.instrument_path, applied.candidate_commit,
+                    worktree.snapshot_worktree_path(
+                        candidate.source_manifest.campaign_id,
+                        candidate.source_manifest.candidate_id,
+                        root=campaign_root))
+                snapshots.append(candidate_snapshot)
+                anchor_commit = anchor.commit
+            else:
+                actor, actor_proof = worktree.create_campaign_worktree(
+                    anchor, candidate.source_manifest.campaign_id,
+                    leaf=f"{attempt_name}-candidate", root=campaign_root)
+                try:
+                    applied = source_candidate.apply_source_composition(
+                        _composition_components(composition_plan.candidate),
+                        actor=actor,
+                        composition_id=composition_plan.candidate.
+                        ordered_patch_set_sha256)
+                except source_candidate.SourceCandidateError as exc:
+                    raise _SourceApplyFailure(str(exc)) from exc
+                candidate_snapshot = actor
+                if composition_plan.anchor.accepted:
+                    anchor_snapshot, composition_anchor_proof = \
+                        worktree.create_campaign_worktree(
+                            anchor,
+                            f"{candidate.source_manifest.campaign_id}-anchor",
+                            leaf=f"{attempt_name}-anchor",
+                            root=campaign_root)
+                    snapshots.append(anchor_snapshot)
+                    try:
+                        applied_anchor = \
+                            source_candidate.apply_source_composition(
+                                _composition_components(
+                                    composition_plan.anchor),
+                                actor=anchor_snapshot,
+                                composition_id=composition_plan.anchor.
+                                ordered_patch_set_sha256)
+                    except source_candidate.SourceCandidateError as exc:
+                        raise _SourceApplyFailure(str(exc)) from exc
+                    anchor_commit = applied_anchor.candidate_commit
+                else:
+                    anchor_snapshot, _ = worktree.create_snapshot_worktree(
+                        self.instrument_path, anchor.commit,
+                        worktree.snapshot_worktree_path(
+                            candidate.source_manifest.campaign_id,
+                            "akc-anchor", root=campaign_root))
+                    snapshots.append(anchor_snapshot)
+                    anchor_commit = anchor.commit
             parallel = worktree.BuildParallelism(jobs=1)
             plans = []
             for ident, snapshot in (("akc-anchor", anchor_snapshot),
@@ -3180,13 +3321,13 @@ class StaticGpuSourceBuilder:
                     correctness_binary, _digest(correctness_binary),
                     capability_path, capability_sha)
             anchor_root = Path(anchor_snapshot.path.path); candidate_root = Path(candidate_snapshot.path.path)
-            anchor_identity = _identity(root=anchor_root, commit=anchor.commit,
+            anchor_identity = _identity(root=anchor_root, commit=anchor_commit,
                                         build=Path(by_id["akc-anchor"][1].path))
             candidate_identity = _identity(root=candidate_root, commit=applied.candidate_commit,
                                            build=Path(by_id[candidate.source_manifest.candidate_id][1].path))
             anchor_source_receipt, anchor_source_sha = _source_tree_receipt(
                 path=operation_dir / "anchor-source-tree.json", root=anchor_root,
-                commit=anchor.commit)
+                commit=anchor_commit)
             candidate_source_receipt, candidate_source_sha = _source_tree_receipt(
                 path=operation_dir / "candidate-source-tree.json", root=candidate_root,
                 commit=applied.candidate_commit)
@@ -3239,6 +3380,18 @@ class StaticGpuSourceBuilder:
                 "build_contract": dict(contract),
                 "actor_worktree": actor.to_record(),
                 "actor_proof": actor_proof.to_dict(),
+                "composition_plan": (
+                    None if composition_plan is None else
+                    composition_plan.to_dict()),
+                "composition_plan_sha256": (
+                    None if composition_plan is None else
+                    composition_plan.plan_sha256),
+                "composition_anchor_worktree": (
+                    None if composition_anchor_proof is None else
+                    anchor_snapshot.to_record()),
+                "composition_anchor_proof": (
+                    None if composition_anchor_proof is None else
+                    composition_anchor_proof.to_dict()),
                 "manifest_sha256": candidate.source_manifest.patch_bundle_sha256,
                 "production_base_authority": {
                     **dict(contract["production_base_authority"]),
@@ -3254,7 +3407,7 @@ class StaticGpuSourceBuilder:
                     "mutation_receipt": dict(applied.mutation_receipt),
                     "diff_sha256": hashlib.sha256(applied.diff_text.encode()).hexdigest(),
                 },
-                "anchor_commit": anchor.commit,
+                "anchor_commit": anchor_commit,
                 "candidate_source_commit": applied.candidate_commit,
                 "candidate_source_sha256": candidate_identity.source_sha256,
                 "patch_applied": True,
@@ -3291,6 +3444,23 @@ class StaticGpuSourceBuilder:
             materialization_path = operation_dir / "materialization.json"
             materialization_path, _materialization_file_sha = _sealed_write(
                 materialization_path, materialization)
+            composition_build_pair = None
+            if composition_plan is not None:
+                composition_build_pair = \
+                    cumulative_composition.CumulativeBuildPair.create(
+                        composition_plan,
+                        anchor=cumulative_composition.BuildBinding.create(
+                            composition_plan.anchor.ordered_patch_set_sha256,
+                            anchor_identity,
+                            source_materialization_receipt_sha256=
+                                anchor_source_sha),
+                        candidate=
+                        cumulative_composition.BuildBinding.create(
+                            composition_plan.candidate.
+                            ordered_patch_set_sha256,
+                            candidate_identity,
+                            source_materialization_receipt_sha256=
+                                candidate_source_sha))
             completed = {
                 "anchor_build": Path(by_id["akc-anchor"][1].path),
                 "candidate_build": Path(by_id[candidate.source_manifest.candidate_id][1].path),
@@ -3315,6 +3485,7 @@ class StaticGpuSourceBuilder:
                 "anchor_correctness_capability_sha256": correctness_capabilities["anchor"][3],
                 "candidate_correctness_capability_receipt": correctness_capabilities["candidate"][2],
                 "candidate_correctness_capability_sha256": correctness_capabilities["candidate"][3],
+                "composition_build_pair": composition_build_pair,
             }
         finally:
             receipts = []

@@ -23,6 +23,7 @@ from .discovery_static_registry import (SharedRewardRuntime, StaticRegistryError
                                         StaticGpuSourceBuilder, _instrument_authority,
                                         _verify_selected_gpu_blobs, _sealed_write,
                                         _build_environment_and_toolchain)
+from .. import cumulative_composition as CC
 from .. import source_candidate
 from . import discovery_controller as C
 from . import gpu_source_evidence as E
@@ -499,7 +500,9 @@ class StaticBuildCacheTests(unittest.TestCase):
         self.git(production, "config", "user.name", "Test")
         source = production / "ggml/src/ggml-cuda/fattn.cu"
         source.parent.mkdir(parents=True)
-        source.write_text("int kernel() {\n    return 1;\n}\n")
+        source.write_text(
+            "int kernel() {\n    return 1;\n}\n\n"
+            "int kernel_two() {\n    return 1;\n}\n")
         self.git(production, "add", ".")
         self.git(production, "commit", "-qm", "production")
         production_commit = self.git(production, "rev-parse", "HEAD")
@@ -779,6 +782,94 @@ class StaticBuildCacheTests(unittest.TestCase):
             (self.git(fixture.production, "rev-parse", "HEAD"),
              self.git(fixture.production, "status", "--porcelain"),
              fixture.source.read_bytes()), fixture.production_before)
+
+    def test_cumulative_build_materializes_anchor_stack_and_stack_plus_one(self):
+        fixture = self.fixture()
+        path = "ggml/src/ggml-cuda/fattn.cu"
+        second_patch = (
+            b"diff --git a/ggml/src/ggml-cuda/fattn.cu b/ggml/src/ggml-cuda/fattn.cu\n"
+            b"--- a/ggml/src/ggml-cuda/fattn.cu\n"
+            b"+++ b/ggml/src/ggml-cuda/fattn.cu\n"
+            b"@@ -5,3 +5,3 @@ int kernel_two() {\n"
+            b" int kernel_two() {\n"
+            b"-    return 1;\n"
+            b"+    return 3;\n"
+            b" }\n")
+        second_manifest = source_candidate.SourcePatchManifest(
+            campaign_id="ak-cache-test", proposal_id="akp-cache-test-two",
+            candidate_id="akc-cache-test-two", source_tree="llama.cpp",
+            production_base_commit=fixture.candidate.source_manifest.
+            production_base_commit,
+            instrument_commit=fixture.instrument_commit,
+            change_class="arithmetic", declared_files=(path,),
+            declared_symbols={path: ("kernel_two",)},
+            mechanism_id="cache-test-two", patch_sha256=sha(second_patch),
+            patch_bytes=second_patch)
+
+        def lever(index, manifest):
+            replications = tuple(CC.IsolatedReplication(
+                result_sha256=sha(f"result-{index}-{rep}".encode()),
+                series_key=sha(f"series-{index}".encode()),
+                build_identity_sha256=sha(f"build-{index}".encode()),
+                correctness_receipt_sha256=sha(
+                    f"correctness-{index}-{rep}".encode()),
+                attribution_receipt_sha256=sha(
+                    f"attribution-{index}-{rep}".encode()),
+                graphs_off_receipt_sha256=sha(
+                    f"graphs-off-{index}-{rep}".encode()),
+                graphs_on_receipt_sha256=sha(
+                    f"graphs-on-{index}-{rep}".encode()),
+                effect_fraction=.01)
+                for rep in (1, 2))
+            return CC.ReplicatedPositiveLever(
+                hypothesis_id=f"akh-cache-composition-{index}",
+                cross_campaign_candidate_sha256=sha(
+                    f"cross-{index}".encode()),
+                manifest=manifest, replications=replications)
+
+        first = lever(1, fixture.candidate.source_manifest)
+        second = lever(2, second_manifest)
+        anchor = CC.CompositionAuthority(
+            "ak-cache-test", fixture.candidate.source_manifest.
+            production_base_commit, fixture.instrument_commit, (first,))
+        candidate_authority = anchor.append(second)
+        dnr = CC.DnrAuthority.pass_for(
+            anchor=anchor, candidate=candidate_authority,
+            registry_sha256=sha(b"composition-registry"),
+            checked_cross_campaign_candidate_sha256s=(
+                first.cross_campaign_candidate_sha256,))
+        plan = CC.CompositionPlan.create(
+            anchor=anchor, lever=second, dnr=dnr,
+            attempt_id=sha(b"composition-attempt"))
+        proposal = {
+            "proposal_id": second_manifest.proposal_id,
+            "change_class": "arithmetic",
+            "change": {"files_and_symbols": [f"{path}:kernel_two"],
+                       "estimated_diff_size": 4}}
+        fixture.candidate = C.PlannedCandidate(
+            second.hypothesis_id, "compose the second positive lever",
+            "incremental stack comparison is nonpositive", {}, proposal,
+            second_manifest, second_manifest.patch_bundle_sha256,
+            composition_plan=plan)
+        first_build = self.invoke(fixture)
+        self.assertIsNotNone(first_build.composition_build_pair)
+        first_build.composition_build_pair.bind_plan(plan)
+        anchor_source = self.git(
+            fixture.instrument, "show",
+            f"{first_build.anchor_identity.source_commit}:{path}")
+        candidate_source = self.git(
+            fixture.instrument, "show",
+            f"{first_build.candidate_identity.source_commit}:{path}")
+        self.assertIn("return 2", anchor_source)
+        self.assertNotIn("return 3", anchor_source)
+        self.assertIn("return 2", candidate_source)
+        self.assertIn("return 3", candidate_source)
+        reopened = self.invoke(
+            fixture, {**fixture.permit, "operation_key": "2" * 64})
+        self.assertEqual(
+            reopened.composition_build_pair,
+            first_build.composition_build_pair)
+        self.assertEqual(len(fixture.calls), 2)
 
     def test_artifact_receipt_and_ref_tamper_refuse_without_rebuild(self):
         cases = ("artifact", "receipt", "ref", "missing-ref")

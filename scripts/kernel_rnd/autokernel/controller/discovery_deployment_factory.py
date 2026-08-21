@@ -22,7 +22,8 @@ from types import MappingProxyType
 from typing import Any, Callable, Mapping
 
 from .. import schemas, source_candidate
-from .. import hypothesis_portfolio, preauthored_continuation
+from .. import (cumulative_composition, hypothesis_portfolio,
+                preauthored_continuation)
 from ..execution import inference_window, device_sampler, t0_provider, worktree
 from ..execution import cpu_region_claim
 from ..execution import instrument_integrity
@@ -437,6 +438,7 @@ def _execution_module_sources() -> dict[str, tuple[str, Path]]:
         "claude_fable5_critic_actor": Path(claude_fable5_critic_actor.__file__),
         "hypothesis_portfolio": Path(hypothesis_portfolio.__file__),
         "preauthored_continuation": Path(preauthored_continuation.__file__),
+        "cumulative_composition": Path(cumulative_composition.__file__),
     }
     if set(paths) != set(discovery_supervisor.GRAPH_EXECUTION_MODULES):
         raise DeploymentFactoryError("execution module role closure changed")
