@@ -41,6 +41,8 @@ SCHEMA_RESULT = "epyc.autokernel.gpu_candidate_only_screen.v2"
 SCHEMA_LIVE_GOVERNANCE = "epyc.autokernel.gpu_discovery_live_governance.v1"
 SCHEMA_PROCESS_RECEIPT = "epyc.autokernel.gpu_discovery_process_receipt.v1"
 SCHEMA_OUTPUT_REFUSAL = "epyc.autokernel.gpu_discovery_output_refusal.v1"
+SCHEMA_CORRECTNESS_DIVERGENCE = (
+    "epyc.autokernel.gpu_candidate_correctness_divergence.v1")
 SOURCE_COMMIT = "0db32c06e3e550065b78311a6031ef3dd2c4f27c"
 READY_CONTINUE_INSTRUMENT_COMMIT = "5bbcc5498e4732162356953b7be96a53073a6706"
 READY_CONTINUE_CONTRACT_SHA256 = "1411f5e81c1b0b3db6952523922c672d88a78aaff5945865c9ccc2b4fc5fd99f"
@@ -73,6 +75,33 @@ class MeasurementOutputRefusal(RuntimeError):
             raise RuntimeError("measurement output refusal lacks a sealed receipt")
         self.receipt_path = receipt_path
         self.receipt_sha256 = receipt_sha256
+
+
+class CandidateCorrectnessDivergence(RuntimeError):
+    """A fully validated same-input candidate whose outputs differ from anchor."""
+
+    stage = "correctness"
+    disposition = "correctness_falsified"
+    scientific_budget_spent = True
+
+    def __init__(self, message: str, *, receipt_path: str,
+                 receipt_sha256: str, result_sha256: str) -> None:
+        super().__init__(message)
+        if (not receipt_path or not isinstance(receipt_sha256, str)
+                or re.fullmatch(r"[0-9a-f]{64}", receipt_sha256) is None):
+            raise RuntimeError(
+                "candidate correctness divergence lacks a sealed receipt")
+        self.receipt_path = receipt_path
+        self.receipt_sha256 = receipt_sha256
+        if (not isinstance(result_sha256, str)
+                or re.fullmatch(r"[0-9a-f]{64}", result_sha256) is None):
+            raise RuntimeError(
+                "candidate correctness divergence lacks its native result hash")
+        self.result_sha256 = result_sha256
+
+
+class _CrossArmOutputDivergence(RuntimeError):
+    """Internal marker raised only after both arm receipts validate completely."""
 
 
 def utc_now() -> str:
@@ -507,6 +536,125 @@ def _seal_output_refusal(
         receipt_sha256=refusal_binding["sha256"])
 
 
+def _seal_candidate_correctness_divergence(
+        output_root: Path, *, anchor: Mapping[str, Any],
+        candidate: Mapping[str, Any], runtime_graphs: str,
+        campaign_id: str, anchor_identity: Mapping[str, Any],
+        candidate_identity: Mapping[str, Any]
+        ) -> CandidateCorrectnessDivergence:
+    """Seal a scientific rejection without copying raw output hashes forward."""
+    if runtime_graphs != "off":
+        raise RuntimeError(
+            "candidate timed-output divergence is only defined for graphs-off")
+    semantics = []
+    processes = []
+    preflight_sha256 = None
+    for label, run in (("anchor", anchor), ("candidate", candidate)):
+        current = run.get("timed_output_semantics")
+        supervisor = run.get("supervisor")
+        if (not isinstance(current, Mapping)
+                or not isinstance(supervisor, Mapping)):
+            raise RuntimeError(
+                f"{label} correctness divergence lacks its validated process binding")
+        receipt_path = supervisor.get("process_receipt_path")
+        receipt_sha256 = supervisor.get("process_receipt_file_sha256")
+        if (not isinstance(receipt_path, str) or not receipt_path
+                or not isinstance(receipt_sha256, str)
+                or re.fullmatch(r"[0-9a-f]{64}", receipt_sha256) is None):
+            raise RuntimeError(
+                f"{label} correctness divergence process binding is malformed")
+        receipt_bytes, receipt_binding = _capture_file(
+            Path(receipt_path), f"{label} correctness divergence process receipt")
+        if receipt_binding["sha256"] != receipt_sha256:
+            raise RuntimeError(
+                f"{label} correctness divergence process receipt changed")
+        # Require syntactically intact JSON without projecting its private raw
+        # carriers into this dashboard-facing terminal.
+        receipt = json.loads(receipt_bytes)
+        if not isinstance(receipt, Mapping):
+            raise RuntimeError(
+                f"{label} correctness divergence process receipt is malformed")
+        identity = receipt.get("identity")
+        context = (identity.get("process_context")
+                   if isinstance(identity, Mapping) else None)
+        current_preflight = (context.get("preflight_sha256")
+                             if isinstance(context, Mapping) else None)
+        if (not isinstance(context, Mapping)
+                or context.get("campaign_id") != campaign_id
+                or context.get("arm") != label
+                or context.get("runtime_graphs") != runtime_graphs
+                or not isinstance(current_preflight, str)
+                or re.fullmatch(r"[0-9a-f]{64}", current_preflight) is None
+                or preflight_sha256 is not None
+                and current_preflight != preflight_sha256):
+            raise RuntimeError(
+                f"{label} correctness divergence process context changed")
+        preflight_sha256 = current_preflight
+        semantics.append(current)
+        processes.append({
+            "arm": label,
+            "process_receipt_path": receipt_path,
+            "process_receipt_file_sha256": receipt_sha256,
+        })
+    anchor_semantics, candidate_semantics = semantics
+    inputs = anchor_semantics["input_hashes"]
+    anchor_outputs = anchor_semantics["output_hashes"]
+    candidate_outputs = candidate_semantics["output_hashes"]
+    mismatch_count = sum(
+        left != right for left, right in zip(anchor_outputs, candidate_outputs))
+    if (not isinstance(inputs, list) or not isinstance(anchor_outputs, list)
+            or not isinstance(candidate_outputs, list)
+            or not inputs or len(anchor_outputs) != len(inputs)
+            or len(candidate_outputs) != len(inputs) or mismatch_count <= 0):
+        raise RuntimeError(
+            "candidate correctness divergence lacks a nonempty matched bank")
+    message = (
+        "candidate timed outputs differ bitwise from the sealed anchor")
+    body = {
+        "schema": SCHEMA_CORRECTNESS_DIVERGENCE,
+        "status": "correctness_falsified",
+        "classification": "screened_out",
+        "stage": "correctness",
+        "scientific_budget_spent": True,
+        "candidate_rejected": True,
+        "promotion_claim": False,
+        "campaign_id": campaign_id,
+        "preflight_sha256": preflight_sha256,
+        "anchor_build_identity_sha256": schemas.content_hash(anchor_identity),
+        "candidate_build_identity_sha256": schemas.content_hash(candidate_identity),
+        "runtime_graphs": runtime_graphs,
+        "target_runtime_executed": False,
+        "reason_code": "cross_arm_timed_output_divergence",
+        "reason_sha256": hashlib.sha256(message.encode()).hexdigest(),
+        "repetitions": len(inputs),
+        "differing_repetitions": mismatch_count,
+        # Hash the vectors as one opaque bank.  The exact member hashes remain
+        # solely in the mode-0600 native process captures named below.
+        "matched_input_bank_sha256": schemas.content_hash(inputs),
+        "anchor_output_bank_sha256": schemas.content_hash(anchor_outputs),
+        "candidate_output_bank_sha256": schemas.content_hash(candidate_outputs),
+        "process_receipts": processes,
+    }
+    value = {**body, "receipt_sha256": schemas.content_hash(body)}
+    path = output_root / "correctness-divergence.json"
+    if path.exists() or path.is_symlink():
+        payload, binding = _capture_file(path, "correctness divergence")
+        if json.loads(payload) != value:
+            raise RuntimeError(
+                "candidate correctness divergence changed on reopen")
+    else:
+        atomic_json(path, value)
+        os.chmod(path, 0o600)
+        payload, binding = _capture_file(path, "correctness divergence")
+        if json.loads(payload) != value:
+            raise RuntimeError(
+                "candidate correctness divergence changed after sealing")
+    return CandidateCorrectnessDivergence(
+        message, receipt_path=str(path.resolve()),
+        receipt_sha256=binding["sha256"],
+        result_sha256=value["receipt_sha256"])
+
+
 def _output_refusal_diagnostic(capture: Mapping[str, Any]) -> dict[str, Any]:
     """Project bounded, secret-free native timing facts from refused output.
 
@@ -789,7 +937,8 @@ def _validate_cross_arm_timed_outputs(anchor: Mapping[str, Any],
     if anchor_semantics.get("input_hashes") != candidate_semantics.get("input_hashes"):
         raise RuntimeError("matched arms did not execute the same hidden input bank")
     if anchor_semantics.get("output_hashes") != candidate_semantics.get("output_hashes"):
-        raise RuntimeError("candidate timed outputs differ bitwise from the sealed anchor")
+        raise _CrossArmOutputDivergence(
+            "candidate timed outputs differ bitwise from the sealed anchor")
     if (anchor_semantics.get("reward_admissible") is not True
             or candidate_semantics.get("reward_admissible") is not True):
         raise RuntimeError(
@@ -2411,6 +2560,7 @@ def _prepare_runner_output(root: Path, sealed: Mapping[str, Any]) -> bool:
         "supervisor-anchor", "supervisor-candidate",
         "process-anchor", "process-candidate",
         "process-anchor-refusal.json", "process-candidate-refusal.json",
+        "correctness-divergence.json",
     }
     entries = tuple(root.iterdir())
     if any(entry.name not in allowed or entry.is_symlink()
@@ -2630,8 +2780,16 @@ def run(args: argparse.Namespace) -> dict:
         timed_output_oracle = None
         graphs_on_output_oracle = None
         if timed_output_oracle_enabled:
-            timed_output_oracle = _validate_cross_arm_timed_outputs(
-                anchor_runs[0], candidate_runs[0])
+            try:
+                timed_output_oracle = _validate_cross_arm_timed_outputs(
+                    anchor_runs[0], candidate_runs[0])
+            except _CrossArmOutputDivergence:
+                raise _seal_candidate_correctness_divergence(
+                    out, anchor=anchor_runs[0], candidate=candidate_runs[0],
+                    runtime_graphs=str(sealed.get("runtime_graphs", "off")),
+                    campaign_id=args.campaign_id,
+                    anchor_identity=anchor_identity,
+                    candidate_identity=candidate_identity)
         if sealed.get("runtime_graphs") == "on":
             graphs_on_output_oracle = _validate_cross_arm_graphs_on_outputs(
                 anchor_runs[0], candidate_runs[0])

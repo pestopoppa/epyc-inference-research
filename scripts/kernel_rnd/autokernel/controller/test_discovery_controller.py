@@ -1301,6 +1301,52 @@ class Tests(unittest.TestCase):
     screen.screen(item,object(),{})
    self.assertEqual(events,["build","source","dispatch"])
    run.assert_not_called()
+ def test_gpu_source_maps_timed_divergence_and_never_runs_graphs_on(self):
+  with tempfile.TemporaryDirectory() as t, patch.object(D.source_candidate,"SourcePatchManifest",Manifest):
+   root=Path(t); anchor=root/"anchor"; candidate=root/"candidate"; anchor.mkdir(); candidate.mkdir()
+   source_file=root/"source.json"; dispatch_file=root/"dispatch.json"
+   source_file.write_text("source"); dispatch_file.write_text("dispatch")
+   refusal_file=root/"correctness-divergence.json"
+   refusal_file.write_text(json.dumps({"status":"correctness_falsified"}))
+   refusal_sha=hashlib.sha256(refusal_file.read_bytes()).hexdigest()
+   build=D.GpuSourceBuild(
+       anchor,candidate,
+       D.gpu_source_proofs.BuildIdentity("commit-a",H,H,H,H,H),
+       D.gpu_source_proofs.BuildIdentity("commit-b","b"*64,"b"*64,"b"*64,"b"*64,"b"*64))
+   item=D.PlannedCandidate("akh-a","statement","falsifier",{}, {"id":"p"},Manifest(),H)
+   off=root/"off"; on=root/"on"; off.mkdir(); on.mkdir()
+   target=argparse.Namespace(
+       factor="source_patch",anchor_build=str(anchor),candidate_build=str(candidate),
+       output_dir=str(on))
+   args=argparse.Namespace(
+       factor="source_patch",anchor_build=str(anchor),candidate_build=str(candidate),
+       output_dir=str(off),_target_runtime_args=target)
+   source_hash=hashlib.sha256(source_file.read_bytes()).hexdigest()
+   dispatch_hash=hashlib.sha256(dispatch_file.read_bytes()).hexdigest()
+   comparison={"relative_improvement_fraction":.01}
+   material={"manifest_sha256":H,"candidate":build.candidate_identity,
+             "anchor":build.anchor_identity,"workload_sha256":H,
+             "correctness":{"file_sha256":source_hash,"native_sha256":H},
+             "attribution":{"file_sha256":dispatch_hash,"native_sha256":H,
+                            "body":{"exact_duration_comparison":comparison}}}
+   hashed={**material,"candidate":build.candidate_identity.__dict__,
+           "anchor":build.anchor_identity.__dict__}
+   bundle=D.gpu_source_proofs.GpuSourceProofBundle(
+       **material,bundle_sha256=D.gpu_source_proofs._hash(hashed))
+   screen=D.GpuSourceScreener(
+       build_source=lambda *_:build,proof_bundle=lambda *_:bundle,
+       args_factory=lambda *_:args)
+   native=D.gpu_discovery.CandidateCorrectnessDivergence(
+       "candidate timed outputs differ bitwise from the sealed anchor",
+       receipt_path=str(refusal_file.resolve()),receipt_sha256=refusal_sha,
+       result_sha256="e"*64)
+   with patch.object(D.gpu_discovery,"run",side_effect=native) as run, \
+       self.assertRaises(D.TimedOutputCorrectnessRefusal) as raised:
+    screen.screen(item,object(),{})
+   self.assertEqual(run.call_count,1)
+   self.assertEqual(raised.exception.receipt_sha256,refusal_sha)
+   self.assertEqual(raised.exception.result_sha256,"e"*64)
+   self.assertTrue(raised.exception.scientific_budget_spent)
  def test_lease_wait_is_durable_without_spending_iteration(self):
   class Wait:
    def admit(self,item,*,operation_key): return {"admitted":False,"reason":"CPU window busy","operation_key":operation_key}

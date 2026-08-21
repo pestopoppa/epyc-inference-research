@@ -108,6 +108,21 @@ class CorrectnessRefusal(GovernedStageRefusal):
     disposition = "correctness_falsified"
 
 
+class TimedOutputCorrectnessRefusal(CorrectnessRefusal):
+    """A measured same-input candidate divergence; science was consumed."""
+
+    scientific_budget_spent = True
+
+    def __init__(self, message: str, *, receipt_path: str,
+                 receipt_sha256: str, result_sha256: str) -> None:
+        super().__init__(message, receipt_path=receipt_path,
+                         receipt_sha256=receipt_sha256)
+        if not isinstance(result_sha256, str) or not HASH.fullmatch(result_sha256):
+            raise DiscoveryControllerError(
+                "timed-output correctness refusal lacks its native result hash")
+        self.result_sha256 = result_sha256
+
+
 class DispatchAttributionRefusal(GovernedStageRefusal):
     stage = "dispatch_attribution"
     disposition = "attribution_route_falsified"
@@ -1582,6 +1597,11 @@ class GpuSourceScreener:
             else:
                 try:
                     raw = gpu_discovery.run(current)
+                except gpu_discovery.CandidateCorrectnessDivergence as exc:
+                    raise TimedOutputCorrectnessRefusal(
+                        str(exc), receipt_path=exc.receipt_path,
+                        receipt_sha256=exc.receipt_sha256,
+                        result_sha256=exc.result_sha256) from exc
                 except gpu_discovery.MeasurementOutputRefusal as exc:
                     raise MeasurementOutputRefusal(
                         str(exc), receipt_path=exc.receipt_path,
@@ -2391,6 +2411,7 @@ def _record_governed_stage_refusal(
         state: dict[str, Any], row: dict[str, Any],
         exc: GovernedStageRefusal) -> None:
     """Consume one already-sealed stage terminal without replaying its work."""
+    inflight = state.get("inflight")
     state.pop("inflight", None)
     state.pop("pending", None)
     row.update(
@@ -2398,6 +2419,23 @@ def _record_governed_stage_refusal(
         stage_receipt_path=exc.receipt_path,
         stage_receipt_sha256=exc.receipt_sha256,
         scientific_budget_spent=exc.scientific_budget_spent)
+    candidate_divergence = isinstance(exc, TimedOutputCorrectnessRefusal)
+    if candidate_divergence:
+        # This is a typed source-screen result, not an infrastructure refusal.
+        # The stage receipt is the immutable result identity; its private raw
+        # process captures retain member hashes while this row stays safe for
+        # telemetry/dashboard projection.
+        row.update(
+            classification="screened_out",
+            correctness_status="failed",
+            result_sha256=exc.result_sha256,
+            evidence={"correctness_divergence": exc.receipt_sha256})
+        operation_key = (inflight.get("operation_key")
+                         if isinstance(inflight, Mapping) else None)
+        if not isinstance(operation_key, str) or not HASH.fullmatch(operation_key):
+            raise DiscoveryControllerError(
+                "candidate correctness divergence lacks its operation identity")
+        row["operation_key"] = operation_key
     state["iterations"].append(row)
     if exc.scientific_budget_spent:
         state["scientific_attempts"] = _derived_scientific_attempts(state)
@@ -2405,7 +2443,9 @@ def _record_governed_stage_refusal(
         _note_portfolio_authoring_failure(state, row)
     hypothesis_id = row.get("portfolio_hypothesis_id")
     terminals = state.setdefault("portfolio_terminals", {})
-    if (isinstance(hypothesis_id, str)
+    if candidate_divergence:
+        _apply_portfolio_outcome(state, row)
+    elif (isinstance(hypothesis_id, str)
             and exc.disposition == "correctness_falsified"):
         terminals[hypothesis_id] = {
             "disposition": exc.disposition,

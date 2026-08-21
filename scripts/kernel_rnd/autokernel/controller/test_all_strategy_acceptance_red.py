@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import dataclasses
 import hashlib
+import json
 from pathlib import Path
 import tempfile
 from types import SimpleNamespace
@@ -182,6 +183,112 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
         self.assertTrue(all(
             row["disposition"] == "retire"
             for row in result["portfolio_terminals"].values()))
+
+    def test_v24_timed_output_divergence_spends_once_and_advances_strategy(self):
+        """A sealed 9/9 candidate divergence is final, visible, and idempotent."""
+        fixture = TD.Tests(methodName="runTest")
+        records_by_id = {
+            row["hypothesis_id"]: row
+            for row in self.portfolio.eligible_hypotheses()}
+        first = dict(records_by_id["akh-v2-q8-quantizer-new-mechanism"])
+        first["decision_policy"] = {
+            **first["decision_policy"], "max_distinct_candidates": 2}
+        records = [first,
+                   records_by_id["akh-v2-rms-direct-load-reduction"]]
+
+        class Planner:
+            def __init__(self):
+                self.selected = []
+                self.sequence = 0
+
+            def attest(self):
+                return {**C.SOL, "runtime": TD.RUNTIME}
+
+            def plan(self, *, context, workspace):
+                self.sequence += 1
+                binding = context["authoring_assignment"]["portfolio_binding"]
+                self.selected.append(binding["hypothesis_id"])
+                return AllStrategyAcceptanceRedGate._bound_candidate(
+                    fixture, binding, context, self.sequence)
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            terminal = E._seal(root / "v24-correctness-divergence.json", {
+                "schema": "epyc.autokernel.gpu_candidate_correctness_divergence.v1",
+                "status": "correctness_falsified",
+                "classification": "screened_out",
+                "stage": "correctness",
+                "scientific_budget_spent": True,
+                "reason_code": "cross_arm_timed_output_divergence",
+                "repetitions": 9,
+                "differing_repetitions": 9,
+            })
+
+            class Screen:
+                def __init__(self):
+                    self.calls = []
+                    self.manifests = []
+
+                def reconcile(self, _inflight):
+                    return C.Recovery("safe_to_start")
+
+                def screen(self, candidate, *_args):
+                    self.calls.append(candidate.hypothesis_id)
+                    self.manifests.append(candidate.source_manifest_sha256)
+                    if len(self.calls) == 1:
+                        raise C.TimedOutputCorrectnessRefusal(
+                            "candidate timed outputs differ bitwise from the sealed anchor",
+                            receipt_path=str(
+                                (root / "v24-correctness-divergence.json").resolve()),
+                            receipt_sha256=terminal["file_sha256"],
+                            result_sha256=terminal["body"]["receipt_sha256"])
+                    return C.SealedScreen(
+                        "receipt", "9" * 64, -0.01, "candidate",
+                        "a" * 64, "b" * 64, "c" * 64)
+
+            config = self._real_portfolio_config(
+                root / "state", records, iterations=3)
+            planner, screen = Planner(), Screen()
+            result = C.run_controller(
+                config, planner=planner,
+                critic=TD.FakeCritic(["accept", "accept", "accept"]),
+                screener=screen, lease=TD.Lease())
+            before = (list(planner.selected), list(screen.calls))
+            reopened = C.run_controller(
+                config, planner=planner,
+                critic=TD.FakeCritic([]), screener=screen, lease=TD.Lease())
+
+        self.assertEqual(planner.selected,
+                         [records[0]["hypothesis_id"],
+                          records[0]["hypothesis_id"],
+                          records[1]["hypothesis_id"]])
+        self.assertEqual(screen.calls,
+                         [records[0]["hypothesis_id"],
+                          records[0]["hypothesis_id"],
+                          records[1]["hypothesis_id"]])
+        self.assertEqual(len(set(screen.manifests[:2])), 2)
+        self.assertEqual((planner.selected, screen.calls), before)
+        self.assertEqual(
+            json.loads(json.dumps(result["iterations"], sort_keys=True)),
+            reopened["iterations"])
+        self.assertEqual(result["scientific_attempts"],
+                         reopened["scientific_attempts"])
+        self.assertEqual(result["next"], reopened["next"])
+        first = result["iterations"][0]
+        self.assertEqual(first["status"], "correctness_falsified")
+        self.assertEqual(first["stage"], "correctness")
+        self.assertTrue(first["scientific_budget_spent"])
+        self.assertEqual(first["result_sha256"],
+                         terminal["body"]["receipt_sha256"])
+        self.assertEqual(first["stage_receipt_sha256"],
+                         terminal["file_sha256"])
+        self.assertNotIn("inflight", result)
+        self.assertEqual(result["scientific_attempts"], 3)
+        self.assertEqual(result["next"], 4)
+        self.assertNotIn("portfolio_disposition", first)
+        self.assertEqual(
+            result["portfolio_terminals"][records[0]["hypothesis_id"]][
+                "disposition"], records[0]["decision_policy"]["terminal_rule"])
 
     def test_each_strategy_positive_s1_runs_one_s2_then_nominates(self):
         """Replication reuses the candidate and never asks either actor twice."""
@@ -1245,27 +1352,33 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
         base = getattr(C, "GovernedStageRefusal", None)
         self.assertIsInstance(base, type)
         expected = (
-            ("SourceApplyRefusal", "source_apply", "authoring_refused"),
-            ("CompileRefusal", "compile", "authoring_refused"),
-            ("CorrectnessRefusal", "correctness", "correctness_falsified"),
+            ("SourceApplyRefusal", "source_apply", "authoring_refused", False),
+            ("CompileRefusal", "compile", "authoring_refused", False),
+            ("CorrectnessRefusal", "correctness", "correctness_falsified", False),
+            ("TimedOutputCorrectnessRefusal", "correctness",
+             "correctness_falsified", True),
             ("DispatchAttributionRefusal", "dispatch_attribution",
-             "attribution_route_falsified"),
+             "attribution_route_falsified", False),
             ("MeasurementOutputRefusal", "measurement_output",
-             "measurement_output_refused"),
+             "measurement_output_refused", False),
         )
-        for name, stage, disposition in expected:
+        for name, stage, disposition, scientific_spent in expected:
             with self.subTest(refusal=name):
                 refusal_type = getattr(C, name, None)
                 self.assertIsInstance(refusal_type, type)
                 self.assertTrue(issubclass(refusal_type, base))
-                refusal = refusal_type(
-                    "sealed stage outcome", receipt_path="/sealed/receipt.json",
-                    receipt_sha256="a" * 64)
+                kwargs = {
+                    "receipt_path": "/sealed/receipt.json",
+                    "receipt_sha256": "a" * 64}
+                if name == "TimedOutputCorrectnessRefusal":
+                    kwargs["result_sha256"] = "b" * 64
+                refusal = refusal_type("sealed stage outcome", **kwargs)
                 self.assertEqual(refusal.stage, stage)
                 self.assertEqual(refusal.disposition, disposition)
                 self.assertEqual(refusal.receipt_path, "/sealed/receipt.json")
                 self.assertEqual(refusal.receipt_sha256, "a" * 64)
-                self.assertIs(refusal.scientific_budget_spent, False)
+                self.assertIs(refusal.scientific_budget_spent,
+                              scientific_spent)
 
     def test_static_builder_emits_reusable_typed_source_apply_terminal(self):
         """A known rejected patch is durable authoring evidence, not ambiguity."""
@@ -1543,13 +1656,18 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
                     context["authoring_assignment"]["portfolio_binding"])
 
         expected = (
-            ("SourceApplyRefusal", "authoring_refused", False, True),
-            ("CompileRefusal", "authoring_refused", False, True),
-            ("CorrectnessRefusal", "correctness_falsified", True, False),
-            ("DispatchAttributionRefusal", "attribution_route_falsified", False, False),
-            ("MeasurementOutputRefusal", "measurement_output_refused", False, False),
+            ("SourceApplyRefusal", "authoring_refused", False, True, False),
+            ("CompileRefusal", "authoring_refused", False, True, False),
+            ("CorrectnessRefusal", "correctness_falsified", True, False, False),
+            ("TimedOutputCorrectnessRefusal", "correctness_falsified",
+             False, False, True),
+            ("DispatchAttributionRefusal", "attribution_route_falsified",
+             False, False, False),
+            ("MeasurementOutputRefusal", "measurement_output_refused",
+             False, False, False),
         )
-        for name, disposition, hypothesis_terminal, authoring_failure in expected:
+        for (name, disposition, hypothesis_terminal, authoring_failure,
+             scientific_spent) in expected:
             with self.subTest(refusal=name), tempfile.TemporaryDirectory() as directory:
                 refusal_type = getattr(C, name, None)
                 self.assertIsInstance(refusal_type, type)
@@ -1560,9 +1678,11 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
                 receipt_path = str(
                     (Path(directory) / "stage-receipt.json").resolve())
                 receipt_sha256 = receipt["body"]["receipt_sha256"]
-                refusal = refusal_type(
-                    "sealed stage outcome", receipt_path=receipt_path,
-                    receipt_sha256=receipt_sha256)
+                kwargs = {"receipt_path": receipt_path,
+                          "receipt_sha256": receipt_sha256}
+                if name == "TimedOutputCorrectnessRefusal":
+                    kwargs["result_sha256"] = receipt["body"]["receipt_sha256"]
+                refusal = refusal_type("sealed stage outcome", **kwargs)
 
                 class RefusingScreen:
                     def __init__(self):
@@ -1613,7 +1733,9 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
                 self.assertEqual(row["status"], disposition)
                 self.assertEqual(row["stage_receipt_path"], receipt_path)
                 self.assertEqual(row["stage_receipt_sha256"], receipt_sha256)
-                self.assertIs(row["scientific_budget_spent"], False)
+                self.assertIs(row["scientific_budget_spent"], scientific_spent)
+                self.assertEqual(result["scientific_attempts"],
+                                 1 if scientific_spent else 0)
                 self.assertEqual(
                     record["hypothesis_id"] in result["portfolio_terminals"],
                     hypothesis_terminal)
@@ -1646,6 +1768,7 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
                 ("SourceApplyRefusal", "authoring_refused"),
                 ("CompileRefusal", "authoring_refused"),
                 ("CorrectnessRefusal", "correctness_falsified"),
+                ("TimedOutputCorrectnessRefusal", "correctness_falsified"),
                 ("DispatchAttributionRefusal", "attribution_route_falsified"),
                 ("MeasurementOutputRefusal", "measurement_output_refused")):
             with self.subTest(refusal=refusal_name), \
@@ -1656,10 +1779,11 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
                     "schema": "epyc.autokernel.stage_outcome_test.v1",
                     "stage": refusal_name})
                 refusal_type = getattr(C, refusal_name)
-                refusal = refusal_type(
-                    "durable producer outcome",
-                    receipt_path=str(receipt.resolve()),
-                    receipt_sha256=loaded["file_sha256"])
+                kwargs = {"receipt_path": str(receipt.resolve()),
+                          "receipt_sha256": loaded["file_sha256"]}
+                if refusal_name == "TimedOutputCorrectnessRefusal":
+                    kwargs["result_sha256"] = loaded["body"]["receipt_sha256"]
+                refusal = refusal_type("durable producer outcome", **kwargs)
 
                 class Screen:
                     def __init__(self):

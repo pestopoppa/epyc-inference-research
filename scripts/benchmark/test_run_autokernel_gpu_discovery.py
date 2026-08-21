@@ -1105,6 +1105,96 @@ class TestGpuDiscoveryBatchedSubprocess(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "semantic receipt is invalid"):
             gpu._validate_cross_arm_timed_outputs(
                 {"timed_output_semantics": tampered}, candidate)
+        wrong_inputs = dict(candidate["timed_output_semantics"])
+        wrong_inputs["input_hashes"] = [
+            "e000000000000001", *wrong_inputs["input_hashes"][1:]]
+        wrong_inputs["receipt_sha256"] = schemas.content_hash({
+            key: value for key, value in wrong_inputs.items()
+            if key != "receipt_sha256"})
+        with self.assertRaisesRegex(
+                RuntimeError, "same hidden input bank") as infrastructure:
+            gpu._validate_cross_arm_timed_outputs(
+                anchor, {"timed_output_semantics": wrong_inputs})
+        self.assertNotIsInstance(
+            infrastructure.exception, gpu._CrossArmOutputDivergence)
+
+    def test_v24_nine_of_nine_divergence_seals_reusable_scientific_terminal(self) -> None:
+        """Replay v24's same-input, internally stable, all-output mismatch."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            inputs = [f"{index + 1:016x}" for index in range(9)]
+            anchor_outputs = [f"a{index:015x}" for index in range(9)]
+            candidate_outputs = [f"b{index:015x}" for index in range(9)]
+            exact_env = {
+                "AMD_SERIALIZE_KERNEL": "3", "AMD_SERIALIZE_COPY": "3",
+                "GGML_CUDA_DISABLE_GRAPHS": "1"}
+
+            def semantics(outputs):
+                body = {
+                    "schema": "epyc.autokernel.timed_output_semantics.v1",
+                    "instrument_commit": gpu.READY_CONTINUE_INSTRUMENT_COMMIT,
+                    "seed": 8613, "repetitions": 9,
+                    "tokens_per_repetition": 128,
+                    "input_hashes": inputs, "output_hashes": outputs,
+                    "within_pair_bitwise_equal": True,
+                    "ranked_member_device_sync": "hip_full_device",
+                    "serialization_env": exact_env,
+                    "first_samples_ns": [1_000_000] * 9,
+                    "second_samples_ns": [1_000_000] * 9,
+                    "protected_samples_ns": [1_000_000] * 9,
+                    "protected_samples_ts": [128_000.0] * 9,
+                    "anti_shift_witness": "hip_serialized_pair_max",
+                    "reward_admissible": True,
+                }
+                return {**body, "receipt_sha256": schemas.content_hash(body)}
+
+            runs = {}
+            for arm, outputs in (("anchor", anchor_outputs),
+                                 ("candidate", candidate_outputs)):
+                receipt = root / f"process-{arm}.json"
+                receipt.write_text(json.dumps({
+                    "identity": {"process_context": {
+                        "campaign_id": "ak-v24-replay",
+                        "preflight_sha256": "f" * 64,
+                        "arm": arm, "runtime_graphs": "off"}}}),
+                    encoding="utf-8")
+                receipt.chmod(0o600)
+                runs[arm] = {
+                    "timed_output_semantics": semantics(outputs),
+                    "supervisor": {
+                        "process_receipt_path": str(receipt.resolve()),
+                        "process_receipt_file_sha256": gpu.sha256_file(receipt),
+                    },
+                }
+
+            with self.assertRaises(gpu._CrossArmOutputDivergence):
+                gpu._validate_cross_arm_timed_outputs(
+                    runs["anchor"], runs["candidate"])
+            with self.assertRaises(gpu.CandidateCorrectnessDivergence) as first:
+                raise gpu._seal_candidate_correctness_divergence(
+                    root, anchor=runs["anchor"], candidate=runs["candidate"],
+                    runtime_graphs="off", campaign_id="ak-v24-replay",
+                    anchor_identity={"source_commit": "a" * 40},
+                    candidate_identity={"source_commit": "b" * 40})
+            with self.assertRaises(gpu.CandidateCorrectnessDivergence) as reopened:
+                raise gpu._seal_candidate_correctness_divergence(
+                    root, anchor=runs["anchor"], candidate=runs["candidate"],
+                    runtime_graphs="off", campaign_id="ak-v24-replay",
+                    anchor_identity={"source_commit": "a" * 40},
+                    candidate_identity={"source_commit": "b" * 40})
+            self.assertEqual(first.exception.receipt_sha256,
+                             reopened.exception.receipt_sha256)
+            receipt_path = Path(first.exception.receipt_path)
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            self.assertEqual(receipt["status"], "correctness_falsified")
+            self.assertEqual(receipt["classification"], "screened_out")
+            self.assertTrue(receipt["scientific_budget_spent"])
+            self.assertEqual(receipt["differing_repetitions"], 9)
+            self.assertFalse(receipt["target_runtime_executed"])
+            self.assertEqual(receipt_path.stat().st_mode & 0o777, 0o600)
+            rendered = receipt_path.read_text(encoding="utf-8")
+            self.assertFalse(any(value in rendered for value in
+                                 anchor_outputs + candidate_outputs))
 
     def test_serialized_readiness_does_not_unlock_on_maps_without_instrument_barrier(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -1520,6 +1610,89 @@ class TestGpuDiscoveryRunCleanup(unittest.TestCase):
             governance = json.loads((root / "success/live-governance.json").read_text())
             self.assertEqual(governance["status"], "borrowed_phase_ended")
             self.assertNotIn("device_claim_released", governance)
+
+            # v24: both hardened arms complete on the same nine inputs, but
+            # every candidate output differs.  This must seal a scientific
+            # correctness terminal and still end the borrowed claim exactly
+            # once; no result may make the mismatched throughput admissible.
+            sealed["runtime_graphs"] = "off"
+            sealed["timed_output_oracle"] = {"enabled": True}
+            args.output_dir = str(root / "v24-divergence")
+            claim.reset_mock()
+            claim.borrowed_outer_reservation = True
+            claim.receipt.return_value.to_dict.return_value = gpu.device_claim.ClaimReceipt(
+                claim_id="akd-outer", device_id="mi210_0", lock_path="/claim",
+                state="held", holder_pid=1, holder_start_ticks=1,
+                holder_boot_id="boot", host="host", holder_label="test",
+                purpose="outer", campaign_id="cleanup-test", acquired_at="now").to_dict()
+            claim.release.return_value = {
+                "schema": "epyc.autokernel.borrowed_device_claim_phase.v1",
+                "mode": "borrowed_outer_reservation", "outer_claim_id": "akd-outer",
+                "device_id": "mi210_0", "campaign_id": "cleanup-test",
+                "phase_ended_at": "done", "physical_release": False}
+            sampler.reset_mock(); sampler.start.return_value = sampler
+            sampler.stop.side_effect = None
+            sampler.stop.return_value.to_dict.return_value = {"samples": []}
+            inputs = [f"{index + 1:016x}" for index in range(9)]
+
+            def divergent_invocation(**kwargs):
+                arm = ("anchor" if kwargs["expected_source_commit"] == "a" * 40
+                       else "candidate")
+                outputs = [
+                    f"{'a' if arm == 'anchor' else 'b'}{index:015x}"
+                    for index in range(9)]
+                body = {
+                    "schema": "epyc.autokernel.timed_output_semantics.v1",
+                    "instrument_commit": gpu.READY_CONTINUE_INSTRUMENT_COMMIT,
+                    "seed": kwargs["seed"], "repetitions": 9,
+                    "tokens_per_repetition": 128,
+                    "input_hashes": inputs, "output_hashes": outputs,
+                    "within_pair_bitwise_equal": True,
+                    "ranked_member_device_sync": "hip_full_device",
+                    "serialization_env": {
+                        "AMD_SERIALIZE_KERNEL": "3", "AMD_SERIALIZE_COPY": "3",
+                        "GGML_CUDA_DISABLE_GRAPHS": "1"},
+                    "first_samples_ns": [1_000_000] * 9,
+                    "second_samples_ns": [1_000_000] * 9,
+                    "protected_samples_ns": [1_000_000] * 9,
+                    "protected_samples_ts": [128_000.0] * 9,
+                    "anti_shift_witness": "hip_serialized_pair_max",
+                    "reward_admissible": True,
+                }
+                process_root = kwargs["process_receipt_root"]
+                process_root.mkdir(mode=0o700)
+                receipt_path = process_root / "receipt.json"
+                receipt_path.write_text(json.dumps({
+                    "identity": {"process_context": kwargs["process_context"]}}),
+                    encoding="utf-8")
+                receipt_path.chmod(0o600)
+                return {
+                    **invocation,
+                    "timed_output_semantics": {
+                        **body, "receipt_sha256": schemas.content_hash(body)},
+                    "supervisor": {
+                        "process_receipt_path": str(receipt_path.resolve()),
+                        "process_receipt_file_sha256": gpu.sha256_file(receipt_path),
+                    },
+                }
+
+            with mock.patch.object(gpu, "preflight", return_value=sealed), \
+                 mock.patch.object(gpu.storage, "assert_not_scratch",
+                                   return_value=root / "v24-divergence"), \
+                 mock.patch.object(gpu, "_readiness_policy_for_arm", return_value=None), \
+                 mock.patch.object(gpu, "_kfd_pids", return_value=()), \
+                 mock.patch.object(gpu, "VRAM_USED", vram), \
+                 mock.patch.object(gpu.device_claim, "acquire_device_claim",
+                                   side_effect=AssertionError("nested physical claim")), \
+                 mock.patch.object(gpu.device_sampler, "RocmSmiSampler",
+                                   return_value=sampler), \
+                 mock.patch.object(gpu, "invoke", side_effect=divergent_invocation), \
+                 self.assertRaises(gpu.CandidateCorrectnessDivergence):
+                gpu.run(args)
+            claim.release.assert_called_once_with()
+            sampler.stop.assert_called_once_with()
+            self.assertTrue((root / "v24-divergence/correctness-divergence.json").is_file())
+            self.assertFalse((root / "v24-divergence/result.json").exists())
 
             # The graphs-on run owns a separate cross-arm output oracle.  It
             # must pass the identical hidden seed to both arms regardless of
