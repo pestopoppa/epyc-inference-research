@@ -811,6 +811,19 @@ server_mode:
                                             # => 41.0 KiB/token at q8_0/q8_0, 10.25 GiB per instance
     chat_template_kwargs:
       enable_thinking: false  # Qwen3.6 thinking OFF for task suites (lean parity; +33pp empirically)
+    # Terseness-template PILOT per operator directive 2026-08-21/22: serve the epyc-built
+    # terse template (sha256 first-12: 1443ea9ab4bb) instead of the GGUF-embedded one.
+    # CT-1b evidence: epyc-root handoffs/active/qwen-chat-template-evaluation.md — never worse,
+    # significantly better where budget binds, 34-99.5% fewer answer tokens on Qwen3.6-35B-A3B.
+    # REVERT: removing the single chat_template_file line below fully reverts the pilot.
+    chat_template_file: /mnt/raid0/llm/models/chat-templates/epyc-qwen3x-v1-terse.jinja
+    chat_template:
+      provenance: epyc_built_terse_v1
+      served_template_bytes: 25808
+      served_template_sha256_12: 1443ea9ab4bb
+      base: froggeric v22.3 minus inline-tag scan plus Sharp terseness
+      evidence: 'CT-1b A/B artifacts: epyc-root artifacts/chat-templates/epyc-qwen3x-v1/ab-cpu-20260821/ct1b-terse/.
+        E-7: frontdoor''s calibration stamps are voided by the template axis and must re-measure.'
     model_role: qwen36_q8_0
     shared_with: [worker_summarize]  # 2026-07-31: coder_escalation REMOVED from this list —
                        # it moved to architect_general's :8083 GPU process (Directive 3), so it is no
@@ -1142,6 +1155,22 @@ server_mode:
                                      # impossible (KV alone would be 32.5 GiB); see the note there.
     chat_template_kwargs:
       enable_thinking: false
+    # Terseness-template PILOT EXTENSION per operator directive 2026-08-22 ("can we have the
+    # pilot on architect_general also please"). CAVEATS RECORDED: CT-1b measured the terseness
+    # effect on Qwen3.6-35B-A3B (frontdoor's model), NOT on Qwen3.8-27B — this role's deployment
+    # is unmeasured-on-model (base-template fidelity on 3.8 shapes IS proven, CT-5 battery);
+    # coder_escalation aliases this server, so the pilot covers coding traffic where the CT-1b
+    # cruxeval watch-item applies. sha256 first-12: 1443ea9ab4bb. REVERT: delete the line below.
+    chat_template_file: /mnt/raid0/llm/models/chat-templates/epyc-qwen3x-v1-terse.jinja
+    chat_template:
+      provenance: epyc_built_terse_v1
+      served_template_bytes: 25808
+      served_template_sha256_12: 1443ea9ab4bb
+      base: froggeric v22.3 minus inline-tag scan plus Sharp terseness
+      evidence: 'CT-1b A/B artifacts: epyc-root artifacts/chat-templates/epyc-qwen3x-v1/ab-cpu-20260821/ct1b-terse/
+        (measured on Qwen3.6-35B-A3B; UNMEASURED on this role''s Qwen3.8-27B). E-7: this role''s
+        calibration stamps are voided by the template axis and must re-measure. NOTE this REPLACES
+        the Unsloth-embedded template documented under the qwen38_27b_q8_local role row.'
     # 2026-08-20 Qwen3.6->Qwen3.8 swap: moved with model_path. See the note on coder_escalation —
     # model_role is load-bearing, not documentation.
     model_role: qwen38_27b_q8_local
