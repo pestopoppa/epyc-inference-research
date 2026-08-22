@@ -201,6 +201,12 @@ def _bind_composition_screen(
                correctness.result_sha256):
         raise GpuSourceAdapterError(
             "cumulative result wrapper changed typed evidence")
+    try:
+        cumulative_composition.commit_result_authority(
+            Path(reference.path).resolve().parent)
+    except cumulative_composition.CompositionError as exc:
+        raise GpuSourceAdapterError(
+            "cumulative result authority journal refused") from exc
 
 
 def _intent_body(*, operation_key: str, candidate: object,
@@ -1882,6 +1888,13 @@ class GovernedGpuSourceAdapter:
                     raise GpuSourceAdapterError("runner plan identity changed")
             else:
                 evidence._seal(plan_path, plan_body)
+            if is_composition:
+                try:
+                    cumulative_composition.commit_pre_run_authority(
+                        operation_root)
+                except cumulative_composition.CompositionError as exc:
+                    raise GpuSourceAdapterError(
+                        "runner pre-run authority journal refused") from exc
             return args
 
         protected_before = _protected_snapshot(

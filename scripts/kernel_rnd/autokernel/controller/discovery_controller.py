@@ -2419,6 +2419,12 @@ class GpuSourceScreener:
             cumulative_performance_ref = \
                 cumulative_composition.seal_cumulative_performance(
                     Path(performance_path), cumulative_performance)
+            try:
+                cumulative_composition.commit_result_authority(
+                    Path(performance_path).resolve().parent)
+            except cumulative_composition.CompositionError as exc:
+                raise DiscoveryControllerError(
+                    "cumulative result authority journal refused") from exc
         return SealedScreen(receipt_path=str(result_path), result_sha256=str(raw["result_sha256"]), effect_fraction=target_effect, classification=str(projection["stage"]), baseline_sha256=str(raw["baseline_sha256"]), source_proof_sha256=bundle.correctness["file_sha256"], dispatch_proof_sha256=bundle.attribution["file_sha256"], exact_attribution_effect_fraction=exact_effect, target_runtime_effect_fraction=target_effect, stages=("materialized", "built", "correctness", "attribution", "measurement_graphs_off_screen", "target_runtime_graphs_on_screen"), build_identity_sha256=build_identity_sha256, correctness_receipt_sha256=bundle.correctness["file_sha256"], attribution_receipt_sha256=bundle.attribution["file_sha256"], graphs_off_receipt_sha256=graphs_off_file_sha256, graphs_on_receipt_sha256=graphs_on_file_sha256, composition_build_pair=build.composition_build_pair, composition_correctness=composition_correctness, composition_comparison=composition_comparison, cumulative_performance=cumulative_performance, cumulative_performance_ref=cumulative_performance_ref)
 
 

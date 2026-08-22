@@ -249,6 +249,10 @@ def _comparison(pair: C.CumulativeBuildPair, correctness: C.FullCorrectness,
         route_sha256=route_sha, target_sha256=target_sha,
         workload_sha256=workload_sha256,
         runtime_config_sha256=runtime_config_sha256)
+    authority, payload = C._runner_measurement_authority_uncommitted(root)
+    C._append_authority_event(
+        root, kind="pre_run", operation_key=authority["operation_key"],
+        payload=payload)
     return C.IncrementalComparison.create(
         pair, correctness,
         exact_route_receipt_sha256=exact_sha,
@@ -443,6 +447,120 @@ def _producer_run(samples: list[float], raw_row: dict,
             "stderr_sha256": _h((label, "stderr")),
         },
     }
+
+
+class AuthorityJournalTests(unittest.TestCase):
+    """Append-only pre-run/result authority journal mechanics."""
+
+    def _root(self, directory):
+        root = Path(directory) / "operation"
+        root.mkdir(parents=True)
+        return root
+
+    def test_journal_appends_chain_idempotently(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = self._root(directory)
+            first = C._append_authority_event(
+                root, kind="pre_run", operation_key=_h("op"),
+                payload={"runner_plan_file_sha256": _h("plan")})
+            second = C._append_authority_event(
+                root, kind="result", operation_key=_h("op"),
+                payload={"cumulative_performance_file_sha256": _h("perf")})
+            rows = C._read_authority_journal(root)
+            self.assertEqual([row["kind"] for row in rows],
+                             ["pre_run", "result"])
+            self.assertEqual([row["sequence"] for row in rows], [1, 2])
+            self.assertEqual(rows[0]["previous_event_sha256"], "0" * 64)
+            self.assertEqual(rows[1]["previous_event_sha256"],
+                             rows[0]["event_sha256"])
+            self.assertEqual(C._append_authority_event(
+                root, kind="pre_run", operation_key=_h("op"),
+                payload={"runner_plan_file_sha256": _h("plan")}), first)
+            self.assertEqual(C._append_authority_event(
+                root, kind="result", operation_key=_h("op"),
+                payload={"cumulative_performance_file_sha256": _h("perf")}),
+                second)
+            self.assertEqual(len(C._read_authority_journal(root)), 2)
+
+    def test_journal_refuses_result_before_pre_run(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = self._root(directory)
+            with self.assertRaisesRegex(
+                    C.CompositionError, "lacks one pre-run commitment"):
+                C._append_authority_event(
+                    root, kind="result", operation_key=_h("op"),
+                    payload={"cumulative_performance_file_sha256": _h("p")})
+
+    def test_journal_refuses_changed_payload_on_reappend(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = self._root(directory)
+            C._append_authority_event(
+                root, kind="pre_run", operation_key=_h("op"),
+                payload={"runner_plan_file_sha256": _h("plan")})
+            with self.assertRaisesRegex(
+                    C.CompositionError, "changed after commitment"):
+                C._append_authority_event(
+                    root, kind="pre_run", operation_key=_h("op"),
+                    payload={"runner_plan_file_sha256": _h("other")})
+
+    def test_journal_tamper_breaks_hash_chain(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = self._root(directory)
+            C._append_authority_event(
+                root, kind="pre_run", operation_key=_h("op"),
+                payload={"runner_plan_file_sha256": _h("plan")})
+            C._append_authority_event(
+                root, kind="result", operation_key=_h("op"),
+                payload={"cumulative_performance_file_sha256": _h("perf")})
+            path = root / C._AUTHORITY_JOURNAL
+            raw = path.read_bytes()
+            path.write_bytes(raw.replace(b"pre_run", b"pre_rxn"))
+            with self.assertRaises(C.CompositionError):
+                C._read_authority_journal(root)
+
+    def test_journal_strict_json_rejects_duplicate_keys(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = self._root(directory)
+            path = root / C._AUTHORITY_JOURNAL
+            path.write_bytes(
+                b'{"schema":"epyc.autokernel.cumulative_authority_journal_event.v1",'
+                b'"sequence":1,"previous_event_sha256":"' + b"0" * 64 +
+                b'","kind":"pre_run","operation_key":"' + _h("op").encode() +
+                b'","payload":{"runner_plan_file_sha256":"' + _h("plan").encode() +
+                b'"},\n')
+            with self.assertRaises(C.CompositionError):
+                C._read_authority_journal(root)
+
+    def test_load_requires_pre_run_journal(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "operation"
+            plan = _plan(_authority(_lever(1)), _lever(2))
+            pair = _build_pair(plan)
+            correctness = _correctness(pair)
+            exact_path = root / "proof/attribution-pair.json"
+            exact = _exact_carrier(.01, pair)
+            exact_sha = _write_receipt(exact_path, exact, "receipt_sha256")
+            off_path = root / "runner/s1/measurement-graphs-off/result.json"
+            on_path = root / "runner/s1/target-runtime-graphs-on/result.json"
+            off = _measurement(
+                pair=pair, anchor=pair.anchor.build_identity,
+                graph_mode="off", factor="source_patch", effect=.01)
+            on = _measurement(
+                pair=pair, anchor=pair.anchor.build_identity,
+                graph_mode="on", factor="source_patch", effect=.01)
+            _write_receipt(off_path, off, "result_sha256")
+            _write_receipt(on_path, on, "result_sha256")
+            route_sha = C._sha(
+                exact["exact_duration_comparison"]["candidate_routes"])
+            target_sha = C._target_runtime_frame_sha256(on)
+            _write_runner_plan(
+                root, pair, correctness, exact_sha256=exact_sha,
+                route_sha256=route_sha, target_sha256=target_sha,
+                workload_sha256=_h("workload"),
+                runtime_config_sha256=_h("runtime-config"))
+            with self.assertRaisesRegex(
+                    C.CompositionError, "pre-run authority differs"):
+                C._load_runner_measurement_authority(root)
 
 
 class CumulativeCompositionTests(unittest.TestCase):

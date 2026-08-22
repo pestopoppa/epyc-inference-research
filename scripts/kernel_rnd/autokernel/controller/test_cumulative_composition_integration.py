@@ -364,6 +364,11 @@ def _composition_comparison(
     _write_runner_plan(
         operation, pair, correctness, exact_sha256=exact_sha,
         route_sha256=route_sha, target_sha256=target_sha)
+    authority, payload = composition._runner_measurement_authority_uncommitted(
+        operation)
+    composition._append_authority_event(
+        operation, kind="pre_run", operation_key=authority["operation_key"],
+        payload=payload)
     return composition.IncrementalComparison.create(
         pair, correctness,
         exact_route_receipt_sha256=exact_sha,
@@ -616,6 +621,11 @@ class CumulativeControllerIntegrationTests(unittest.TestCase):
         }
         gpu_source_evidence._seal(
             operation / "runner-plan.json", runner_body)
+        authority, payload = composition._runner_measurement_authority_uncommitted(
+            operation)
+        composition._append_authority_event(
+            operation, kind="pre_run",
+            operation_key=authority["operation_key"], payload=payload)
         adapter = object.__new__(
             gpu_source_adapter.GovernedGpuSourceAdapter)
         adapter.operations_root = operations
@@ -1029,6 +1039,11 @@ class CumulativeControllerIntegrationTests(unittest.TestCase):
             self.assertEqual(first.status, "sealed_result")
             self.assertEqual(second, first)
             self.assertTrue((operation / "screen-result.json").is_file())
+            journal = operation / composition._AUTHORITY_JOURNAL
+            self.assertTrue(journal.is_file())
+            rows = composition._read_authority_journal(operation)
+            self.assertEqual([row["kind"] for row in rows],
+                             ["pre_run", "result"])
             result = first.result
             self.assertEqual(result.composition_build_pair, pair)
             self.assertEqual(result.composition_correctness, correctness)
@@ -1043,6 +1058,38 @@ class CumulativeControllerIntegrationTests(unittest.TestCase):
                 config.output_root / "cumulative-composition.json").load()
             self.assertEqual(ledger["scientific_attempts"], 1)
             self.assertEqual(len(ledger["terminals"]), 1)
+
+    def test_result_tamper_refuses_against_committed_journal(self):
+        with tempfile.TemporaryDirectory() as directory:
+            values = self._completed_adapter_recovery(
+                Path(directory).resolve())
+            (config, _state, item, pair, correctness, bundle, adapter,
+             inflight, operation) = values
+            with mock.patch.object(
+                    gpu_source_adapter.evidence,
+                    "load_gpu_source_evidence_bundle",
+                    return_value=bundle), mock.patch.object(
+                    gpu_source_adapter, "_source_frame",
+                    return_value=(_sha("recovery-series"), bundle)), \
+                    mock.patch.object(
+                        gpu_source_adapter.autokernel_progression,
+                        "_gpu_screen", return_value={"stage": "candidate"}):
+                first = adapter.reconcile(inflight)
+            self.assertEqual(first.status, "sealed_result")
+            off_result = operation / "runner/s1" / \
+                "measurement-graphs-off" / "result.json"
+            off_result.write_bytes(off_result.read_bytes() + b" ")
+            with mock.patch.object(
+                    gpu_source_adapter.evidence,
+                    "load_gpu_source_evidence_bundle",
+                    return_value=bundle), mock.patch.object(
+                    gpu_source_adapter, "_source_frame",
+                    return_value=(_sha("recovery-series"), bundle)), \
+                    mock.patch.object(
+                        gpu_source_adapter.autokernel_progression,
+                        "_gpu_screen", return_value={"stage": "candidate"}):
+                self.assertEqual(
+                    adapter.reconcile(inflight).status, "ambiguous")
 
     def test_recovery_refuses_swapped_builds_and_partial_result_wrapper(self):
         with tempfile.TemporaryDirectory() as directory:

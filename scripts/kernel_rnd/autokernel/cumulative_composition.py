@@ -23,7 +23,7 @@ from statistics import median
 from typing import Any, Mapping, Sequence
 
 from . import source_candidate
-from .controller import gpu_source_proofs
+from .controller import gpu_source_evidence, gpu_source_proofs
 
 
 __all__ = (
@@ -885,6 +885,134 @@ def _strict_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return value
 
 
+_AUTHORITY_JOURNAL = "composition-authority.jsonl"
+_AUTHORITY_JOURNAL_SCHEMA = \
+    "epyc.autokernel.cumulative_authority_journal_event.v1"
+
+
+def _authority_journal_path(operation_root: Path) -> Path:
+    path = operation_root / _AUTHORITY_JOURNAL
+    if (not operation_root.is_absolute()
+            or operation_root != operation_root.resolve(strict=False)
+            or path != path.resolve(strict=False)):
+        raise CompositionError("composition authority journal path is not canonical")
+    return path
+
+
+def _read_authority_journal(operation_root: Path) -> tuple[dict[str, Any], ...]:
+    """Read the append-only operation authority chain with strict JSON.
+
+    Runner plans, measurement receipts, performance receipts, and controller
+    state are replaceable snapshots.  This journal is the separately appended
+    boundary that commits their byte identities before/after execution.
+    """
+    path = _authority_journal_path(operation_root)
+    if not path.exists() and not path.is_symlink():
+        return ()
+    raw = _stable_receipt_bytes(path)
+    if not raw or not raw.endswith(b"\n"):
+        raise CompositionError("composition authority journal has a torn tail")
+    rows: list[dict[str, Any]] = []
+    previous = "0" * 64
+    for index, line in enumerate(raw.splitlines(), 1):
+        try:
+            value = json.loads(
+                line.decode("utf-8", "strict"), object_pairs_hook=_strict_pairs,
+                parse_constant=lambda token: (_ for _ in ()).throw(
+                    ValueError(f"non-finite JSON token {token}")))
+        except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+            raise CompositionError(
+                "composition authority journal is not strict JSON") from exc
+        required = {
+            "schema", "sequence", "previous_event_sha256", "kind",
+            "operation_key", "payload", "event_sha256",
+        }
+        if (not isinstance(value, dict) or set(value) != required
+                or value.get("schema") != _AUTHORITY_JOURNAL_SCHEMA
+                or value.get("sequence") != index
+                or value.get("previous_event_sha256") != previous
+                or value.get("kind") not in {"pre_run", "result"}
+                or not isinstance(value.get("payload"), Mapping)):
+            raise CompositionError("composition authority journal chain is malformed")
+        _require_sha(value.get("operation_key"), "journal operation_key")
+        event_sha = _require_sha(value.get("event_sha256"), "journal event_sha256")
+        if event_sha != _sha({key: row for key, row in value.items()
+                              if key != "event_sha256"}):
+            raise CompositionError("composition authority journal hash chain changed")
+        previous = event_sha
+        rows.append(value)
+    return tuple(rows)
+
+
+def _append_authority_event(
+        operation_root: Path, *, kind: str, operation_key: str,
+        payload: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Append one idempotent authority event; never replace an old event."""
+    if kind not in {"pre_run", "result"}:
+        raise CompositionError("composition authority journal kind is invalid")
+    _require_sha(operation_key, "journal operation_key")
+    path = _authority_journal_path(operation_root)
+    lock = path.with_suffix(path.suffix + ".lock")
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    flags = os.O_RDWR | os.O_CREAT | os.O_CLOEXEC
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    descriptor = os.open(lock, flags, 0o600)
+    try:
+        facts = os.fstat(descriptor)
+        if (not stat.S_ISREG(facts.st_mode) or facts.st_nlink != 1
+                or facts.st_uid != os.geteuid() or facts.st_mode & 0o022):
+            raise CompositionError("composition authority journal lock is unsafe")
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        rows = _read_authority_journal(operation_root) \
+            if path.exists() else ()
+        matches = [row for row in rows if row["kind"] == kind]
+        if matches:
+            if len(matches) != 1 or matches[0]["operation_key"] != operation_key \
+                    or matches[0]["payload"] != dict(payload):
+                raise CompositionError(
+                    f"composition {kind} authority changed after commitment")
+            return matches[0]
+        if kind == "result" and (len(rows) != 1 or rows[0]["kind"] != "pre_run"):
+            raise CompositionError("composition result lacks one pre-run commitment")
+        if kind == "pre_run" and rows:
+            raise CompositionError("composition pre-run authority was not first")
+        event = {
+            "schema": _AUTHORITY_JOURNAL_SCHEMA,
+            "sequence": len(rows) + 1,
+            "previous_event_sha256": (
+                rows[-1]["event_sha256"] if rows else "0" * 64),
+            "kind": kind, "operation_key": operation_key,
+            "payload": dict(payload),
+        }
+        event["event_sha256"] = _sha(event)
+        encoded = _canonical(event) + b"\n"
+        write_flags = os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_CLOEXEC
+        if hasattr(os, "O_NOFOLLOW"):
+            write_flags |= os.O_NOFOLLOW
+        out = os.open(path, write_flags, 0o600)
+        try:
+            before = os.fstat(out)
+            if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1
+                    or before.st_uid != os.geteuid()
+                    or before.st_mode & 0o022):
+                raise CompositionError("composition authority journal is unsafe")
+            os.write(out, encoded)
+            os.fsync(out)
+        finally:
+            os.close(out)
+        reopened = _read_authority_journal(operation_root)
+        if reopened[-1] != event:
+            raise CompositionError("composition authority event changed while appending")
+        return event
+    finally:
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_UN)
+        finally:
+            os.close(descriptor)
+
+
 def _stable_receipt_bytes(
         path: Path, *, expected_sha256: str | None = None) -> bytes:
     """Read one immutable evidence file without following a final symlink."""
@@ -933,8 +1061,8 @@ def _stable_receipt_bytes(
     return raw
 
 
-def _load_runner_measurement_authority(operation_root: Path) -> dict[str, Any]:
-    """Load the independently sealed pre-run measurement authority."""
+def _strict_runner_plan(operation_root: Path) -> tuple[dict[str, Any], bytes]:
+    """Strict-parse one runner plan and bind its native identity."""
     path = operation_root / "runner-plan.json"
     if path != path.resolve(strict=False):
         raise CompositionError("runner plan path is not canonical")
@@ -958,13 +1086,21 @@ def _load_runner_measurement_authority(operation_root: Path) -> dict[str, Any]:
     if receipt != _sha({key: row for key, row in value.items()
                         if key != "receipt_sha256"}):
         raise CompositionError("runner plan native identity changed")
+    return value, raw
+
+
+def _runner_measurement_authority_uncommitted(
+        operation_root: Path,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Project the runner plan and the bytes the pre-run journal commits."""
+    value, raw = _strict_runner_plan(operation_root)
     pair = CumulativeBuildPair.from_dict(value.get("composition_build_pair"))
     correctness = FullCorrectness.from_dict(
         value.get("composition_correctness"))
     correctness.bind_pair(pair)
     production = FrozenProductionAuthority.from_dict(
         value.get("composition_production_authority"))
-    return {
+    authority = {
         "operation_key": _require_sha(
             value.get("operation_key"), "runner plan operation_key"),
         "build_pair_sha256": pair.pair_sha256,
@@ -980,6 +1116,184 @@ def _load_runner_measurement_authority(operation_root: Path) -> dict[str, Any]:
             "runner plan target runtime frame"),
         "frozen_production": production,
     }
+    proof_path = operation_root / "proof/proof-bundle.json"
+    proof_raw = _stable_receipt_bytes(proof_path)
+    payload = {
+        "runner_plan_file_sha256": hashlib.sha256(raw).hexdigest(),
+        "runner_plan_receipt_sha256": _require_sha(
+            value.get("receipt_sha256"), "runner plan receipt_sha256"),
+        "proof_bundle_file_sha256": hashlib.sha256(proof_raw).hexdigest(),
+        "build_pair_sha256": authority["build_pair_sha256"],
+        "correctness_result_sha256": authority["correctness_result_sha256"],
+        "exact_route_receipt_sha256":
+            authority["exact_route_receipt_sha256"],
+        "expected_route_set_sha256": authority["expected_route_set_sha256"],
+        "target_runtime_frame_sha256":
+            authority["target_runtime_frame_sha256"],
+        "frozen_production_authority_sha256": production.authority_sha256,
+    }
+    return authority, payload
+
+
+def _strict_screen_result(result_raw: bytes, *, label: str) -> str:
+    """Strict-parse one sealed runner result and return its native hash."""
+    try:
+        result = json.loads(
+            result_raw.decode("utf-8", "strict"),
+            object_pairs_hook=_strict_pairs,
+            parse_constant=lambda token: (_ for _ in ()).throw(
+                ValueError(f"non-finite JSON token {token}")))
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+        raise CompositionError(f"{label} is not strict JSON") from exc
+    if (not isinstance(result, dict)
+            or result.get("schema") !=
+               "epyc.autokernel.gpu_candidate_only_screen.v2"
+            or result.get("promotion_claim") is not False
+            or result.get("non_promotable") is not True):
+        raise CompositionError(f"{label} authority changed")
+    native = _require_sha(result.get("result_sha256"),
+                          f"{label} result_sha256")
+    if native != _sha({key: row for key, row in result.items()
+                       if key != "result_sha256"}):
+        raise CompositionError(f"{label} native identity changed")
+    return native
+
+
+def _runner_result_payload_uncommitted(
+        operation_root: Path,
+) -> dict[str, Any] | None:
+    """Project the sealed result bytes the result journal must commit.
+
+    Returns None when the runner plan is not a cumulative three-output plan;
+    such a plan can never carry a result commitment.
+    """
+    value, _ = _strict_runner_plan(operation_root)
+    off_raw = value.get("measurement_graphs_off_output_dir")
+    on_raw = value.get("target_runtime_graphs_on_output_dir")
+    production_raw = value.get("production_graphs_on_output_dir")
+    performance_raw = value.get("cumulative_performance_path")
+    if not all(isinstance(item, str) for item in (
+            off_raw, on_raw, production_raw, performance_raw)):
+        return None
+    runner_root = (operation_root / "runner").resolve()
+    directories = tuple(Path(str(item)).resolve() for item in (
+        off_raw, on_raw, production_raw))
+    performance_path = Path(str(performance_raw)).resolve()
+    if (len(set(directories)) != 3
+            or any(not path.is_relative_to(runner_root)
+                   for path in directories)
+            or performance_path !=
+               (operation_root / "cumulative-performance.json").resolve()):
+        raise CompositionError(
+            "cumulative result output escaped its operation")
+    results: dict[str, Any] = {}
+    for label, directory in (
+            ("graphs_off", directories[0]),
+            ("graphs_on", directories[1]),
+            ("production_graphs_on", directories[2])):
+        result_path = directory / "result.json"
+        if result_path.is_symlink() or not result_path.is_file():
+            return None
+        result_raw = _stable_receipt_bytes(result_path)
+        results[label] = {
+            "path": str(result_path),
+            "file_sha256": hashlib.sha256(result_raw).hexdigest(),
+            "result_sha256": _strict_screen_result(
+                result_raw, label=f"runner result {label}"),
+        }
+    if performance_path.is_symlink() or not performance_path.is_file():
+        return None
+    performance_raw = _stable_receipt_bytes(performance_path)
+    try:
+        performance = json.loads(
+            performance_raw.decode("utf-8", "strict"),
+            object_pairs_hook=_strict_pairs,
+            parse_constant=lambda token: (_ for _ in ()).throw(
+                ValueError(f"non-finite JSON token {token}")))
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+        raise CompositionError(
+            "cumulative performance receipt is not strict JSON") from exc
+    if (not isinstance(performance, dict)
+            or performance.get("schema") !=
+               "epyc.autokernel.cumulative_performance.v2"
+            or performance.get("promotion_authority") is not True):
+        raise CompositionError("cumulative performance authority changed")
+    performance_native = _require_sha(
+        performance.get("result_sha256"),
+        "cumulative performance result_sha256")
+    if performance_native != _sha(
+            {key: row for key, row in performance.items()
+             if key != "result_sha256"}):
+        raise CompositionError(
+            "cumulative performance native identity changed")
+    return {
+        "runner_plan_file_sha256": hashlib.sha256(
+            _stable_receipt_bytes(operation_root / "runner-plan.json")
+        ).hexdigest(),
+        "results": results,
+        "cumulative_performance": {
+            "path": str(performance_path),
+            "file_sha256": hashlib.sha256(performance_raw).hexdigest(),
+            "result_sha256": performance_native,
+        },
+    }
+
+
+def commit_pre_run_authority(operation_root: Path) -> dict[str, Any]:
+    """Recursively validate proof bytes, then append their pre-run commitment."""
+    try:
+        gpu_source_evidence.load_gpu_source_evidence_bundle(
+            operation_root / "proof/proof-bundle.json")
+    except (gpu_source_evidence.EvidenceProducerError,
+            gpu_source_proofs.ProofError) as exc:
+        raise CompositionError(
+            "composition proof bundle failed recursive pre-run reopening") from exc
+    authority, payload = _runner_measurement_authority_uncommitted(
+        operation_root)
+    return _append_authority_event(
+        operation_root, kind="pre_run",
+        operation_key=authority["operation_key"], payload=payload)
+
+
+def commit_result_authority(operation_root: Path) -> dict[str, Any]:
+    """Append the result commitment after the cumulative runner seals."""
+    authority, _ = _runner_measurement_authority_uncommitted(operation_root)
+    payload = _runner_result_payload_uncommitted(operation_root)
+    if payload is None:
+        raise CompositionError(
+            "runner plan lacks the cumulative result commitment paths")
+    return _append_authority_event(
+        operation_root, kind="result",
+        operation_key=authority["operation_key"], payload=payload)
+
+
+def _load_runner_measurement_authority(operation_root: Path) -> dict[str, Any]:
+    """Load authority only when the append-only journal still matches.
+
+    The pre-run event is mandatory.  The result event is enforced as soon as
+    it exists: in-run creation/binding happens before the result commitment
+    is appended, while every later reopen re-derives the result payload from
+    the sealed bytes and fails closed unless the journal still agrees.
+    """
+    authority, payload = _runner_measurement_authority_uncommitted(
+        operation_root)
+    rows = _read_authority_journal(operation_root)
+    matches = [row for row in rows if row["kind"] == "pre_run"]
+    if (len(matches) != 1
+            or matches[0]["operation_key"] != authority["operation_key"]
+            or matches[0]["payload"] != payload):
+        raise CompositionError("pre-run authority differs from its journal")
+    result_payload = _runner_result_payload_uncommitted(operation_root)
+    result_matches = [row for row in rows if row["kind"] == "result"]
+    if result_payload is None:
+        if result_matches:
+            raise CompositionError(
+                "result journal exists without derivable result authority")
+    elif result_matches and (len(result_matches) != 1
+            or result_matches[0]["operation_key"] != authority["operation_key"]
+            or result_matches[0]["payload"] != result_payload):
+        raise CompositionError("result authority differs from its journal")
+    return authority
 
 
 def _load_exact_proof_bundle_authority(
