@@ -98,7 +98,6 @@ _PROVIDER_POLICY_REFUSAL_SCHEMA = (
 _PROVIDER_POLICY_MARKERS = (
     "this content can't be shown",
     "this content can’t be shown",
-    "trusted access",
 )
 
 
@@ -1760,8 +1759,8 @@ class CodexPlanner:
                 raise
             stdout_text = getattr(result, "stdout", "")
             stderr_text = getattr(result, "stderr", "")
-            provider_policy = _classify_provider_policy_refusal(
-                stdout_text, stderr_text)
+            provider_policy = (_classify_provider_policy_refusal(
+                stdout_text, stderr_text) if result.returncode else None)
             result_facts = {
                 "returncode": result.returncode,
                 "stdout_sha256": hashlib.sha256(
