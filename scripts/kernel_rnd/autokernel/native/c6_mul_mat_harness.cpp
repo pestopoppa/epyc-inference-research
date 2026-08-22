@@ -11,13 +11,16 @@
 
 #include <algorithm>
 #include <cerrno>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <filesystem>
 #include <sstream>
+#include <thread>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -26,10 +29,15 @@
 namespace {
 
 struct options {
+    std::string mode = "combined";
     std::string operation;
     std::string backend;
     std::string type_a;
     std::string sidecar;
+    std::string input_dir;
+    std::string output;
+    std::string ready_file;
+    std::string continue_file;
     int64_t m = 0;
     int64_t n = 0;
     int64_t k = 0;
@@ -42,6 +50,9 @@ struct input_blob {
 };
 
 using input_set = std::vector<input_blob>;
+
+void write_binary(const std::filesystem::path & path,
+                  const std::vector<uint8_t> & bytes);
 
 [[noreturn]] void fail(const std::string & message) {
     throw std::runtime_error(message);
@@ -71,7 +82,8 @@ options parse_options(int argc, char ** argv) {
         if (i + 1 >= argc) fail("every option requires one value");
         const std::string key = argv[i++];
         const char * value = argv[i];
-        if (key == "--operation") result.operation = value;
+        if (key == "--mode") result.mode = value;
+        else if (key == "--operation") result.operation = value;
         else if (key == "--backend") result.backend = value;
         else if (key == "--type-a") result.type_a = value;
         else if (key == "--m") result.m = parse_i64(value, "m");
@@ -79,13 +91,30 @@ options parse_options(int argc, char ** argv) {
         else if (key == "--k") result.k = parse_i64(value, "k");
         else if (key == "--seed") result.seed = parse_u64(value, "seed");
         else if (key == "--sidecar") result.sidecar = value;
+        else if (key == "--input-dir") result.input_dir = value;
+        else if (key == "--output") result.output = value;
+        else if (key == "--ready-file") result.ready_file = value;
+        else if (key == "--continue-file") result.continue_file = value;
         else fail("unknown option: " + key);
     }
     if ((result.operation != "MUL_MAT" && result.operation != "RMS_NORM"
              && result.operation != "FLASH_ATTN_EXT")
-            || result.backend.empty() || result.type_a.empty() || result.sidecar.empty()
+            || result.backend.empty() || result.type_a.empty()
             || result.m < 1 || result.n < 1 || result.k < 1) {
         fail("canonical operation, backend, type-a, dimensions, seed, and sidecar are required");
+    }
+    if (result.mode != "combined" && result.mode != "oracle"
+            && result.mode != "candidate") {
+        fail("mode must be combined, oracle, or candidate");
+    }
+    if ((result.mode == "combined" || result.mode == "oracle")
+            && result.sidecar.empty()) {
+        fail("combined/oracle mode requires a private sidecar");
+    }
+    if (result.mode == "candidate"
+            && (result.input_dir.empty() || result.output.empty()
+                || result.ready_file.empty() || result.continue_file.empty())) {
+        fail("candidate mode requires input/output and ready/continue paths");
     }
     return result;
 }
@@ -169,6 +198,48 @@ input_set make_inputs(const options & opts, ggml_type type) {
                 static_cast<size_t>(opts.m * opts.k * kv_heads), state)}};
 }
 
+std::vector<std::string> input_names(const options & opts) {
+    if (opts.operation == "MUL_MAT") {
+        return {"weights", "activations_f32le"};
+    }
+    if (opts.operation == "RMS_NORM") {
+        return {"activations_f32le", "scale_f32le"};
+    }
+    return {"query_f32le", "key_f16le", "value_f16le"};
+}
+
+void write_binary(const std::filesystem::path & path,
+                  const std::vector<uint8_t> & bytes) {
+    std::ofstream stream(path, std::ios::binary | std::ios::trunc);
+    if (!stream) fail("could not open private phase output");
+    stream.write(reinterpret_cast<const char *>(bytes.data()),
+                 static_cast<std::streamsize>(bytes.size()));
+    stream.close();
+    if (!stream) fail("could not durably write private phase output");
+}
+
+std::vector<uint8_t> read_binary(const std::filesystem::path & path) {
+    std::ifstream stream(path, std::ios::binary);
+    if (!stream) fail("could not open transformed candidate input");
+    stream.seekg(0, std::ios::end);
+    const std::streamoff size = stream.tellg();
+    if (size <= 0) fail("transformed candidate input is empty");
+    stream.seekg(0, std::ios::beg);
+    std::vector<uint8_t> bytes(static_cast<size_t>(size));
+    stream.read(reinterpret_cast<char *>(bytes.data()), size);
+    if (!stream) fail("could not read transformed candidate input");
+    return bytes;
+}
+
+input_set load_inputs(const options & opts) {
+    input_set result;
+    const std::filesystem::path root(opts.input_dir);
+    for (const std::string & name : input_names(opts)) {
+        result.push_back({name, read_binary(root / (name + ".bin"))});
+    }
+    return result;
+}
+
 const std::vector<uint8_t> & input(const input_set & inputs, const char * name) {
     for (const auto & item : inputs) if (item.name == name) return item.bytes;
     fail(std::string("missing input witness: ") + name);
@@ -249,6 +320,16 @@ std::vector<float> run_once(const options & opts, ggml_type type,
         static_cast<size_t>(ggml_nbytes(out)), 0);
     ggml_backend_tensor_set(
         out, initialized_output.data(), 0, initialized_output.size());
+    if (!reference && opts.mode == "candidate") {
+        write_binary(opts.ready_file, std::vector<uint8_t>{'R'});
+        for (int attempt = 0; attempt < 3000; ++attempt) {
+            if (std::filesystem::exists(opts.continue_file)) break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        if (!std::filesystem::exists(opts.continue_file)) {
+            fail("candidate phase timed out before evaluator continuation");
+        }
+    }
     if (ggml_backend_graph_compute(backend.get(), graph) != GGML_STATUS_SUCCESS) {
         fail("governed graph compute failed");
     }
@@ -456,6 +537,33 @@ void write_sidecar(const options & opts, ggml_type type, const input_set & data,
     if (!stream) fail("could not durably write sidecar");
 }
 
+void write_oracle_sidecar(const options & opts, ggml_type type,
+                          const input_set & data,
+                          const std::vector<float> & reference,
+                          const std::vector<double> & reference_float64) {
+    std::ofstream stream(opts.sidecar, std::ios::binary | std::ios::trunc);
+    if (!stream) fail("could not open private oracle sidecar");
+    stream << "{\"schema\":\"epyc.autokernel.c6_native_oracle_phase.v1\""
+           << ",\"backend\":\"" << opts.backend << "\""
+           << ",\"operation\":\"" << opts.operation << "\""
+           << ",\"type_a\":\"" << ggml_type_name(type) << "\""
+           << ",\"m\":" << opts.m << ",\"n\":" << opts.n
+           << ",\"k\":" << opts.k << ",\"seed\":" << opts.seed
+           << ",\"output_elements\":" << reference.size()
+           << ",\"input_witness\":{";
+    for (size_t i = 0; i < data.size(); ++i) {
+        if (i) stream << ',';
+        stream << '\"' << data[i].name << "_hex\":\""
+               << hex_bytes(data[i].bytes) << '\"';
+    }
+    stream << "},\"reference_output_f32le_hex\":\""
+           << hex_floats(reference) << "\""
+           << ",\"reference_output_f64le_hex\":\""
+           << hex_doubles(reference_float64) << "\"}\n";
+    stream.close();
+    if (!stream) fail("could not durably write private oracle sidecar");
+}
+
 } // namespace
 
 int main(int argc, char ** argv) {
@@ -463,9 +571,22 @@ int main(int argc, char ** argv) {
         const options opts = parse_options(argc, argv);
         ggml_backend_load_all();
         const ggml_type type = parse_type(opts.type_a);
+        if (opts.mode == "candidate") {
+            const input_set data = load_inputs(opts);
+            const std::vector<float> output = run_once(opts, type, data, false);
+            write_binary(opts.output, raw_bytes(output));
+            ggml_quantize_free();
+            return 0;
+        }
         const input_set data = make_inputs(opts, type);
         const std::vector<float> reference = run_once(opts, type, data, true);
         const std::vector<double> reference_float64 = float64_oracle(opts, type, data);
+        if (opts.mode == "oracle") {
+            write_oracle_sidecar(
+                opts, type, data, reference, reference_float64);
+            ggml_quantize_free();
+            return 0;
+        }
         std::vector<std::vector<float>> candidates;
         for (int i = 0; i < 3; ++i) candidates.push_back(run_once(opts, type, data, false));
         write_sidecar(opts, type, data, reference, reference_float64, candidates);

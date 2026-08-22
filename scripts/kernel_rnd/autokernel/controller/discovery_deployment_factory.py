@@ -2822,7 +2822,7 @@ def _c6_native_capability(
         json.dumps(capability, sort_keys=True, separators=(",", ":")).encode(),
         "native C6 capability")
     capability_sha = _digest_regular(capability_path, "native C6 capability")
-    argv = (str(executable), "--operation", str(operation),
+    argv = (str(executable), "--mode", "oracle", "--operation", str(operation),
             "--backend", "ROCm0", "--type-a", capability["type_a"],
             "--m", str(dimensions[0]), "--n", str(dimensions[1]),
             "--k", str(dimensions[2]),

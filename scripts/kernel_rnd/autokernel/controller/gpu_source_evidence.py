@@ -20,6 +20,7 @@ import re
 import stat
 import struct
 import subprocess
+import threading
 import time
 from datetime import datetime, timezone
 from typing import Any, Callable, Mapping, Protocol, Sequence
@@ -37,6 +38,14 @@ BORROWED_PHASE_SCHEMA = "epyc.autokernel.borrowed_device_claim_phase.v1"
 CORRECTNESS_SCHEMA = "epyc.autokernel.targeted_correctness_receipt.v3"
 C6_CORRECTNESS_SCHEMA = "epyc.autokernel.c6_correctness_receipt.v1"
 C6_SIDECAR_SCHEMA = "epyc.autokernel.c6_native_operator_sidecar.v3"
+C6_ORACLE_SIDECAR_SCHEMA = "epyc.autokernel.c6_native_oracle_phase.v1"
+C6_INPUT_BINDING_SCHEMA = "epyc.autokernel.c6_input_binding.v1"
+C6_LEG_BINDING_SCHEMA = "epyc.autokernel.c6_leg_binding.v1"
+C6_MODE_COMBINED = "combined"
+C6_MODE_ORACLE = "oracle"
+C6_MODE_CANDIDATE = "candidate"
+C6_READY_TOKEN = b"R"
+C6_CONTINUE_TOKEN = b"C"
 C6_SIDECAR_OUTPUT = "{C6_SIDECAR_OUTPUT}"
 CORRECTNESS_REFUSAL_SCHEMA = "epyc.autokernel.targeted_correctness_refusal.v1"
 CORRECTNESS_PARSER_ID = "ak.t0.backend_ops_console/v1"
@@ -184,17 +193,27 @@ def _argv(value: Sequence[str], label: str) -> tuple[str, ...]:
     return result
 
 
+def _c6_mode_from_argv(argv: Sequence[str]) -> str:
+    if len(argv) >= 3 and argv[1] == "--mode":
+        if argv[2] in {C6_MODE_ORACLE, C6_MODE_COMBINED, C6_MODE_CANDIDATE}:
+            return argv[2]
+        raise EvidenceProducerError("native C6 argv mode is not oracle/combined/candidate")
+    return C6_MODE_COMBINED
+
+
 def _c6_case_identity_from_argv(argv: Sequence[str]) -> dict[str, Any]:
     """Reduce the sealed native argv to one exact seeded case identity."""
-    if len(argv) != 17 or not isinstance(argv[0], str):
+    if not argv or not isinstance(argv[0], str):
         raise EvidenceProducerError("native C6 argv is not the canonical case shape")
+    mode = _c6_mode_from_argv(argv)
+    tail = argv[3:] if argv[1] == "--mode" else argv[1:]
     expected_keys = (
         "--operation", "--backend", "--type-a", "--m", "--n", "--k",
         "--seed", "--sidecar")
-    keys = tuple(argv[index] for index in range(1, len(argv), 2))
-    if keys != expected_keys:
+    keys = tuple(tail[index] for index in range(0, len(tail), 2))
+    if len(tail) != 16 or keys != expected_keys:
         raise EvidenceProducerError("native C6 argv option order changed")
-    values = {argv[index]: argv[index + 1] for index in range(1, len(argv), 2)}
+    values = {tail[index]: tail[index + 1] for index in range(0, len(tail), 2)}
     if (values["--operation"] not in {"MUL_MAT", "RMS_NORM", "FLASH_ATTN_EXT"}
             or not values["--backend"] or not values["--type-a"]
             or values["--sidecar"] != C6_SIDECAR_OUTPUT):
@@ -207,9 +226,78 @@ def _c6_case_identity_from_argv(argv: Sequence[str]) -> dict[str, Any]:
     if any(value < 1 for value in dimensions.values()) or seed < 0:
         raise EvidenceProducerError("native C6 dimensions/seed are out of range")
     return {
+        "mode": mode,
         "operation": values["--operation"],
         "backend": values["--backend"], "type_a": values["--type-a"],
         **dimensions, "seed": seed,
+    }
+
+
+def _c6_case_path(value: object, label: str) -> Path:
+    if (not isinstance(value, str) or not value
+            or not Path(value).is_absolute()
+            or Path(value) != Path(value).resolve(strict=False)
+            or Path(value).is_symlink()):
+        raise EvidenceProducerError(f"{label} is not a canonical absolute path")
+    return Path(value)
+
+
+def _c6_candidate_argv_from_argv(
+        argv: Sequence[str], *, input_dir: Path, output: Path,
+        ready_file: Path, continue_file: Path) -> tuple[str, ...]:
+    """Derive one candidate-leg argv deterministically from the oracle argv.
+
+    The candidate never generates inputs: it loads the exact bytes the
+    evaluator handed over from the oracle witness.  Every path is injected
+    here so the sealed receipt can re-derive the exact argv at reopen time.
+    """
+    if _c6_mode_from_argv(argv) != C6_MODE_ORACLE:
+        raise EvidenceProducerError(
+            "candidate argv must derive from an oracle-mode capability")
+    if argv.count(C6_SIDECAR_OUTPUT) != 1:
+        raise EvidenceProducerError(
+            "candidate argv derivation lacks the exact sidecar token")
+    tail = argv[3:]
+    base = tuple(
+        item for pair in (
+            (tail[index], tail[index + 1])
+            for index in range(0, len(tail), 2))
+        if pair[0] != "--sidecar" for item in pair)
+    if len(base) != 14 or any(
+            key not in {"--operation", "--backend", "--type-a", "--m",
+                        "--n", "--k", "--seed"}
+            for key in base[::2]):
+        raise EvidenceProducerError(
+            "candidate argv derivation lost canonical case options")
+    for label, path in (("input directory", input_dir),
+                        ("output path", output),
+                        ("ready path", ready_file),
+                        ("continue path", continue_file)):
+        _c6_case_path(str(path), label)
+    return (str(argv[0]), "--mode", C6_MODE_CANDIDATE, *base,
+            "--input-dir", str(input_dir),
+            "--output", str(output),
+            "--ready-file", str(ready_file),
+            "--continue-file", str(continue_file))
+
+
+def _c6_candidate_paths_from_argv(
+        argv: Sequence[str]) -> dict[str, Path]:
+    """Recover the four candidate paths from one attested candidate argv."""
+    if _c6_mode_from_argv(argv) != C6_MODE_CANDIDATE:
+        raise EvidenceProducerError("argv is not a candidate-leg argv")
+    expected = ("--operation", "--backend", "--type-a", "--m", "--n", "--k",
+                "--seed", "--input-dir", "--output", "--ready-file",
+                "--continue-file")
+    tail = argv[3:]
+    if len(tail) != 22 or tuple(tail[index] for index in range(0, 22, 2)) != expected:
+        raise EvidenceProducerError("candidate-leg argv option order changed")
+    values = {tail[index]: tail[index + 1] for index in range(0, len(tail), 2)}
+    return {
+        "input_dir": _c6_case_path(values["--input-dir"], "candidate input directory"),
+        "output": _c6_case_path(values["--output"], "candidate output"),
+        "ready_file": _c6_case_path(values["--ready-file"], "candidate ready file"),
+        "continue_file": _c6_case_path(values["--continue-file"], "candidate continue file"),
     }
 
 
@@ -1687,11 +1775,151 @@ def _run_c6_then_targeted_claimed(
             c6_receipt)
 
 
+def _run_c6_oracle_then_targeted_claimed(
+    oracle_invocation: CommandInvocation,
+    candidate_invocations: tuple[CommandInvocation, ...],
+    targeted_invocation: CommandInvocation,
+    oracle_sidecar: Path, input_dir: Path, *,
+    plan: GpuSourceEvidencePlan, executor: CommandExecutor,
+    claim_acquirer: Callable[..., Any],
+    claim_verifier: Callable[[Mapping[str, Any]], object], claim_journal: Any,
+    claim_timeout_s: float, c6_ready_timeout_s: float = 120.0,
+) -> tuple[ExecutionCapture, dict[str, Any], dict[str, Any],
+           dict[str, Any], Mapping[str, Any]]:
+    """Run the oracle and three candidate legs as distinct confined processes.
+
+    The oracle process generates inputs and the f32/f64 references under one
+    held claim.  The evaluator then materializes the exact witness bytes as
+    hardlink-safe candidate inputs, and every candidate leg runs as its own
+    process whose compute gate the evaluator arms only after the leg proves it
+    reached the gate with those exact inputs.  Targeted correctness follows in
+    the same held claim; the sealed C6 receipt precedes it.
+    """
+    invocations = (oracle_invocation, *candidate_invocations,
+                   targeted_invocation)
+    if (len(candidate_invocations) != 3
+            or any(item.kind != "correctness" or item.arm != "candidate"
+                   for item in invocations)):
+        raise EvidenceProducerError(
+            "claimed split C6 requires an oracle, three candidate legs, "
+            "and one targeted command")
+    _verify_plan_files(plan)
+    output_paths = [path for invocation in invocations
+                    for path in (invocation.stdout_path, invocation.stderr_path)]
+    for invocation in candidate_invocations:
+        paths = _c6_candidate_paths_from_argv(invocation.argv)
+        output_paths.extend(
+            (paths["output"], paths["ready_file"], paths["continue_file"]))
+    if len(output_paths) != len(set(output_paths)) or any(
+            path.exists() or path.is_symlink() for path in output_paths):
+        raise EvidenceProducerError("sequence outputs must be fresh unique paths")
+    for path in output_paths:
+        path.parent.mkdir(parents=True, exist_ok=True)
+    claim = None
+    borrowed_outer = False
+    opened = released = None
+    targeted_capture: ExecutionCapture | None = None
+    c6_receipt: Mapping[str, Any] | None = None
+    targeted_residency: dict[str, Any] | None = None
+    verified_before = verified_after = False
+    failure: BaseException | None = None
+    try:
+        claim = claim_acquirer(
+            plan.device_id,
+            purpose="AutoKernel GPU source evidence correctness/candidate",
+            campaign_id=plan.campaign_id, journal=claim_journal,
+            holder_label="gpu_source_evidence.py", timeout_s=claim_timeout_s,
+            max_hold_s=3600.0)
+        borrowed_outer = bool(getattr(claim, "borrowed_outer_reservation", False))
+        opened = _receipt_dict(claim.receipt(), "opened claim")
+        verified_before = _check_result_passed(claim_verifier(opened))
+        if not verified_before:
+            raise EvidenceProducerError(
+                "device claim was not verifiably held before execution")
+        oracle_capture = executor(oracle_invocation)
+        if (not isinstance(oracle_capture, ExecutionCapture)
+                or oracle_capture.argv != oracle_invocation.argv):
+            raise EvidenceProducerError(
+                "executor did not attest the exact native C6 oracle argv")
+        if oracle_capture.exit_code != 0:
+            raise EvidenceProducerError(
+                "native C6 oracle command exited nonzero")
+        oracle_residency = _residency(oracle_capture, plan.device_id)
+        oracle_residency.update({
+            "claim_verified_before": verified_before,
+            "claim_verified_after": _check_result_passed(
+                claim_verifier(opened)),
+            "device_claim_mode": (
+                "borrowed_outer_reservation" if borrowed_outer
+                else "direct_device_claim"),
+            "outer_claim_id": opened["claim_id"] if borrowed_outer else None,
+        })
+        if oracle_residency["claim_verified_after"] is not True:
+            raise EvidenceProducerError(
+                "device claim was not held after native C6 oracle execution")
+        if not oracle_sidecar.exists() or oracle_sidecar.is_symlink():
+            raise EvidenceProducerError(
+                "native C6 oracle command did not emit its sidecar")
+        c6_receipt = _evaluate_c6_oracle_and_candidate_outputs(
+            oracle_sidecar, input_dir, oracle_invocation, oracle_capture,
+            oracle_residency, candidate_invocations,
+            plan=plan, executor=executor, opened=opened,
+            c6_ready_timeout_s=c6_ready_timeout_s)
+        _validate_c6_correctness_receipt(c6_receipt, plan)
+        _verify_plan_files(plan)
+        if not _check_result_passed(claim_verifier(opened)):
+            raise EvidenceProducerError(
+                "device claim was not held after the sealed C6 boundary")
+        targeted_capture = executor(targeted_invocation)
+        if (not isinstance(targeted_capture, ExecutionCapture)
+                or targeted_capture.argv != targeted_invocation.argv):
+            raise EvidenceProducerError(
+                "executor did not attest the exact targeted correctness argv")
+        verified_after = _check_result_passed(claim_verifier(opened))
+        if not verified_after:
+            raise EvidenceProducerError(
+                "device claim was not verifiably held after correctness sequence")
+    except BaseException as exc:
+        failure = exc
+    try:
+        if claim is not None:
+            released = _receipt_dict(claim.release(), "released claim")
+    except BaseException as exc:
+        failure = failure or exc
+    if failure is not None:
+        if isinstance(failure, EvidenceProducerError):
+            raise failure
+        raise EvidenceProducerError(
+            f"correctness sequence execution failed: {failure}") from failure
+    if (opened is None or released is None or targeted_capture is None
+            or c6_receipt is None):
+        raise EvidenceProducerError(
+            "claimed correctness sequence did not produce complete evidence")
+    _validate_claim_pair(opened, released, plan=plan)
+    targeted_residency = _residency(targeted_capture, plan.device_id)
+    targeted_residency.update({
+        "claim_verified_before": verified_before,
+        "claim_verified_after": verified_after,
+        "device_claim_mode": (
+            "borrowed_outer_reservation" if borrowed_outer
+            else "direct_device_claim"),
+        "outer_claim_id": opened["claim_id"] if borrowed_outer else None,
+    })
+    return (targeted_capture, opened, released, targeted_residency,
+            c6_receipt)
+
+
 def _materialize_c6_argv(argv: tuple[str, ...], sidecar: Path) -> tuple[str, ...]:
     if not sidecar.is_absolute() or argv.count(C6_SIDECAR_OUTPUT) != 1:
         raise EvidenceProducerError("C6 sidecar substitution is invalid")
     return tuple(str(sidecar) if item == C6_SIDECAR_OUTPUT else item
                  for item in argv)
+
+
+def _materialize_c6_oracle_argv(argv: tuple[str, ...], sidecar: Path) -> tuple[str, ...]:
+    if _c6_mode_from_argv(argv) != C6_MODE_ORACLE:
+        raise EvidenceProducerError("C6 oracle substitution requires oracle mode")
+    return _materialize_c6_argv(argv, sidecar)
 
 
 def _decode_f32le_hex(value: object, label: str) -> tuple[bytes, list[float]]:
@@ -1719,7 +1947,9 @@ def _validate_c6_sidecar_identity(
     expected = {
         "schema": C6_SIDECAR_SCHEMA,
         "sequence": ["reference", "candidate-1", "candidate-2", "candidate-3"],
-        **dict(case_identity), "type_b": "f32",
+        **{key: case_identity[key] for key in (
+            "backend", "operation", "type_a", "m", "n", "k", "seed")},
+        "type_b": "f32",
         "output_dtype": "f32",
         "candidate_clone_ids": ["candidate-1", "candidate-2", "candidate-3"],
     }
@@ -1798,6 +2028,440 @@ def _decode_c6_sidecar_payload(
         raise EvidenceProducerError(f"{label} output shape is inconsistent")
     return (ordered_inputs, reference_raw, reference,
             reference_f64_raw, reference_f64, candidate_raw, candidates)
+
+
+def _validate_c6_oracle_sidecar_identity(
+        value: object, case_identity: Mapping[str, Any], *, label: str) -> None:
+    expected = {
+        "schema": C6_ORACLE_SIDECAR_SCHEMA,
+        **{key: case_identity[key] for key in (
+            "backend", "operation", "type_a", "m", "n", "k", "seed")},
+    }
+    payload_keys = {
+        "input_witness", "output_elements", "reference_output_f32le_hex",
+        "reference_output_f64le_hex"}
+    if (not isinstance(value, Mapping)
+            or set(value) != set(expected) | payload_keys
+            or any(type(value.get(key)) is not type(item)
+                   or value.get(key) != item for key, item in expected.items())):
+        raise EvidenceProducerError(
+            f"{label} oracle identity contract changed")
+
+
+def _decode_c6_oracle_payload(
+        value: Mapping[str, Any], case_identity: Mapping[str, Any], *,
+        label: str,
+) -> tuple[dict[str, bytes], bytes, list[float], bytes, list[float]]:
+    """Decode the oracle phase into by-name inputs plus f32/f64 references."""
+    witness = value.get("input_witness")
+    operation = case_identity["operation"]
+    expected_witness = {
+        "MUL_MAT": {"weights_hex", "activations_f32le_hex"},
+        "RMS_NORM": {"activations_f32le_hex", "scale_f32le_hex"},
+        "FLASH_ATTN_EXT": {
+            "query_f32le_hex", "key_f16le_hex", "value_f16le_hex"},
+    }[operation]
+    if not isinstance(witness, Mapping) or set(witness) != expected_witness:
+        raise EvidenceProducerError(f"{label} input witness is incomplete")
+    by_name: dict[str, bytes] = {}
+    for key in sorted(expected_witness):
+        encoded = witness[key]
+        if (not isinstance(encoded, str) or not encoded
+                or len(encoded) % 2):
+            raise EvidenceProducerError(f"{label} input witness is not hex")
+        try:
+            by_name[key.removesuffix("_hex")] = bytes.fromhex(encoded)
+        except ValueError as exc:
+            raise EvidenceProducerError(
+                f"{label} input witness is not hex") from exc
+    m, n, k = (case_identity[name] for name in ("m", "n", "k"))
+    if operation == "MUL_MAT":
+        lengths_ok = (len(by_name["weights"]) > 0
+                      and len(by_name["activations_f32le"]) == k*n*4)
+        output_elements = m*n
+    elif operation == "RMS_NORM":
+        lengths_ok = (case_identity["type_a"] == "f32" and k == 1
+                      and len(by_name["activations_f32le"]) == m*n*4
+                      and len(by_name["scale_f32le"]) == m*4)
+        output_elements = m*n
+    else:
+        lengths_ok = (case_identity["type_a"] == "f16" and m == 64 and n == 1
+                      and len(by_name["query_f32le"]) == m*n*14*4
+                      and len(by_name["key_f16le"]) == m*k*2*2
+                      and len(by_name["value_f16le"]) == m*k*2*2)
+        output_elements = m*n*14
+    if not lengths_ok or value.get("output_elements") != output_elements:
+        raise EvidenceProducerError(f"{label} input/output shape is inconsistent")
+    reference_raw, reference = _decode_f32le_hex(
+        value.get("reference_output_f32le_hex"), f"{label} reference")
+    reference_f64_raw, reference_f64 = _decode_f64le_hex(
+        value.get("reference_output_f64le_hex"),
+        f"{label} float64 reference")
+    if any(len(row) != output_elements
+           for row in (reference, reference_f64)):
+        raise EvidenceProducerError(f"{label} output shape is inconsistent")
+    return by_name, reference_raw, reference, reference_f64_raw, reference_f64
+
+
+_C6_INPUT_ORDER = {
+    "MUL_MAT": ("weights", "activations_f32le"),
+    "RMS_NORM": ("activations_f32le", "scale_f32le"),
+    "FLASH_ATTN_EXT": ("query_f32le", "key_f16le", "value_f16le"),
+}
+
+
+def _seal_c6_token_file(path: Path, token: bytes, *, label: str) -> str:
+    """Write one handshake token file with hardlink-safe secrecy."""
+    if path.exists() or path.is_symlink():
+        raise EvidenceProducerError(f"{label} path is not fresh")
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    descriptor = os.open(path, flags, 0o600)
+    try:
+        facts = os.fstat(descriptor)
+        if (not stat.S_ISREG(facts.st_mode) or facts.st_nlink != 1
+                or facts.st_uid != os.geteuid() or facts.st_mode & 0o077):
+            raise EvidenceProducerError(f"{label} file is not hardlink-safe")
+        os.write(descriptor, token)
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+    return _hash_file(path, label)
+
+
+def _write_c6_input_binding(
+        input_dir: Path, by_name: Mapping[str, bytes],
+        case_identity: Mapping[str, Any], *, label: str) -> tuple[Path, dict[str, Any]]:
+    """Materialize the oracle witness as hardlink-safe candidate inputs.
+
+    Each input is a fresh 0600 regular file created O_EXCL without following
+    any final symlink, fsynced, then re-verified by inode identity.  The
+    binding manifest seals every per-file digest plus the canonical ordered
+    input identity so the candidate's loads are re-derivable at reopen.
+    """
+    operation = case_identity["operation"]
+    order = _C6_INPUT_ORDER.get(operation)
+    if order is None or any(name not in by_name for name in order):
+        raise EvidenceProducerError(
+            f"{label} input witness lacks the canonical input set")
+    if (input_dir.is_symlink() or not input_dir.is_absolute()
+            or input_dir != input_dir.resolve(strict=False)):
+        raise EvidenceProducerError(f"{label} input directory is not canonical")
+    input_dir.mkdir(mode=0o700, exist_ok=False)
+    files: list[dict[str, Any]] = []
+    for name in order:
+        path = input_dir / f"{name}.bin"
+        digest = _seal_c6_token_file(path, by_name[name], label=f"{label} input {name}")
+        files.append({
+            "name": name, "path": str(path), "sha256": digest,
+            "length": len(by_name[name])})
+    manifest = {
+        "schema": C6_INPUT_BINDING_SCHEMA,
+        "operation": operation,
+        "input_dir": str(input_dir),
+        "input_identity_sha256": hashlib.sha256(
+            b"".join(by_name[name] for name in order)).hexdigest(),
+        "files": files,
+    }
+    manifest_path = input_dir.parent / "c6-input-binding.json"
+    manifest_digest = _seal_c6_token_file(
+        manifest_path,
+        json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode()
+        + b"\n", label=f"{label} input binding")
+    return manifest_path, {"sha256": manifest_digest, "manifest": manifest}
+
+
+def _reopen_c6_input_binding(
+        manifest_path: Path, by_name: Mapping[str, bytes],
+        case_identity: Mapping[str, Any], *, label: str) -> None:
+    """Re-verify the materialized inputs and binding against the oracle witness."""
+    if (manifest_path.is_symlink() or not manifest_path.is_absolute()
+            or manifest_path != manifest_path.resolve(strict=False)):
+        raise EvidenceProducerError(f"{label} input binding path is not canonical")
+    try:
+        value = json.loads(manifest_path.read_bytes())
+    except (OSError, json.JSONDecodeError) as exc:
+        raise EvidenceProducerError(
+            f"{label} input binding is unreadable") from exc
+    operation = case_identity["operation"]
+    order = _C6_INPUT_ORDER.get(operation)
+    input_dir = Path(str(value.get("input_dir", "")))
+    if (not isinstance(value, Mapping)
+            or value.get("schema") != C6_INPUT_BINDING_SCHEMA
+            or value.get("operation") != operation
+            or input_dir != input_dir.resolve(strict=False)
+            or input_dir.is_symlink()
+            or value.get("input_identity_sha256") != hashlib.sha256(
+                b"".join(by_name[name] for name in order)).hexdigest()
+            or not isinstance(value.get("files"), list)
+            or [item.get("name") for item in value["files"]] != list(order)):
+        raise EvidenceProducerError(
+            f"{label} input binding manifest changed")
+    for item, name in zip(value["files"], order):
+        if (not isinstance(item, Mapping)
+                or item.get("path") != str(input_dir / f"{name}.bin")
+                or not isinstance(item.get("sha256"), str)
+                or item.get("length") != len(by_name[name])):
+            raise EvidenceProducerError(
+                f"{label} input binding file record changed")
+        path = Path(str(item["path"]))
+        if (path.is_symlink() or not path.is_file() or path.stat().st_nlink != 1
+                or _hash_file(path, f"{label} input {name}") != item["sha256"]
+                or hashlib.sha256(by_name[name]).hexdigest() != item["sha256"]):
+            raise EvidenceProducerError(
+                f"{label} input binding file changed")
+
+
+def _paced_candidate(
+        executor: CommandExecutor, invocation: CommandInvocation,
+        ready_path: Path, continue_path: Path, *, ready_timeout_s: float = 120.0,
+) -> tuple[ExecutionCapture, dict[str, Any]]:
+    """Execute one candidate leg under an evaluator-armed continue gate.
+
+    The native candidate writes a ready token only after it has loaded the
+    exact handed-over inputs and reached the compute gate; it then waits for
+    the continue token.  This wrapper arms the continue token strictly after
+    observing the ready token, so every leg journals one coherent event
+    stream: launched <= ready <= continue <= completed.  A candidate that
+    never reaches the gate fails closed with its own exit/stderr evidence.
+    """
+    if ready_timeout_s <= 0 or not math.isfinite(ready_timeout_s):
+        raise EvidenceProducerError("candidate pacing timeout must be finite")
+    if ready_path.exists() or ready_path.is_symlink() \
+            or continue_path.exists() or continue_path.is_symlink():
+        raise EvidenceProducerError("candidate handshake paths are not fresh")
+    launched_ns = time.monotonic_ns()
+    result: dict[str, Any] = {}
+    failures: list[BaseException] = []
+
+    def run() -> None:
+        try:
+            result["capture"] = executor(invocation)
+        except BaseException as exc:  # noqa: BLE001 - surfaced below
+            failures.append(exc)
+
+    thread = threading.Thread(target=run, name="c6-paced-candidate", daemon=True)
+    thread.start()
+    ready_observed_ns: int | None = None
+    continue_written_ns: int | None = None
+    deadline = launched_ns + int(ready_timeout_s * 1e9)
+    while ready_observed_ns is None:
+        if time.monotonic_ns() > deadline:
+            break
+        if not ready_path.is_symlink() and ready_path.is_file():
+            try:
+                content = ready_path.read_bytes()
+            except OSError:
+                content = b""
+            if content == C6_READY_TOKEN:
+                ready_observed_ns = time.monotonic_ns()
+                break
+        time.sleep(0.01)
+    if ready_observed_ns is not None:
+        continue_written_ns = time.monotonic_ns()
+        _seal_c6_token_file(
+            continue_path, C6_CONTINUE_TOKEN, label="candidate continue")
+    thread.join(timeout=max(60.0, ready_timeout_s))
+    if thread.is_alive():
+        raise EvidenceProducerError(
+            "candidate pacing thread did not terminate after timeout")
+    if failures:
+        raise EvidenceProducerError(
+            "candidate leg executor failed") from failures[0]
+    capture = result.get("capture")
+    if not isinstance(capture, ExecutionCapture):
+        raise EvidenceProducerError("candidate leg produced no capture")
+    completed_ns = time.monotonic_ns()
+    if ready_observed_ns is None:
+        raise EvidenceProducerError(
+            "candidate ready token was not observed within the pacing window")
+    if (continue_written_ns is None or not (launched_ns
+            <= ready_observed_ns <= continue_written_ns <= completed_ns)):
+        raise EvidenceProducerError(
+            "candidate handshake event stream is not monotonic")
+    return capture, {
+        "launched_monotonic_ns": launched_ns,
+        "ready_observed_monotonic_ns": ready_observed_ns,
+        "continue_written_monotonic_ns": continue_written_ns,
+        "completed_monotonic_ns": completed_ns,
+    }
+
+
+def _evaluate_c6_oracle_and_candidate_outputs(
+        oracle_sidecar: Path, input_dir: Path,
+        oracle_invocation: CommandInvocation, oracle_capture: ExecutionCapture,
+        oracle_residency: Mapping[str, Any],
+        candidate_invocations: tuple[CommandInvocation, ...], *,
+        plan: GpuSourceEvidencePlan, executor: CommandExecutor,
+        opened: Mapping[str, Any], c6_ready_timeout_s: float) -> Mapping[str, Any]:
+    """Seal one split-mode C6 receipt from oracle and paced candidate legs."""
+    c6 = plan.c6_correctness
+    if c6 is None:
+        raise EvidenceProducerError("production correctness lacks C6 capability")
+    if _c6_mode_from_argv(c6.argv) != C6_MODE_ORACLE:
+        raise EvidenceProducerError("split C6 evaluation requires oracle mode")
+    try:
+        raw = oracle_sidecar.read_bytes()
+        value = json.loads(raw)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise EvidenceProducerError("native C6 oracle sidecar is unreadable") from exc
+    case_identity = _c6_case_identity_from_argv(c6.argv)
+    _validate_c6_oracle_sidecar_identity(
+        value, case_identity, label="native C6 oracle")
+    if plan.correctness_op != case_identity["operation"]:
+        raise EvidenceProducerError(
+            "native C6 operation differs from targeted correctness")
+    by_name, reference_raw, reference, reference_f64_raw, reference_f64 = (
+        _decode_c6_oracle_payload(value, case_identity, label="native C6"))
+    operation = case_identity["operation"]
+    output_elements = (
+        case_identity["m"] * case_identity["n"] * 14
+        if operation == "FLASH_ATTN_EXT"
+        else case_identity["m"] * case_identity["n"])
+    manifest_path, input_binding = _write_c6_input_binding(
+        input_dir, by_name, case_identity, label="native C6")
+    leg_bindings: list[dict[str, Any]] = []
+    raw_outputs: list[bytes] = []
+    for index, invocation in enumerate(candidate_invocations, 1):
+        paths = _c6_candidate_paths_from_argv(invocation.argv)
+        if paths["input_dir"] != input_dir:
+            raise EvidenceProducerError(
+                "candidate leg input directory differs from the handover")
+        capture, pacing = _paced_candidate(
+            executor, invocation, paths["ready_file"],
+            paths["continue_file"], ready_timeout_s=c6_ready_timeout_s)
+        if capture.argv != invocation.argv:
+            raise EvidenceProducerError(
+                "executor did not attest the exact candidate leg argv")
+        if capture.exit_code != 0:
+            raise EvidenceProducerError(
+                f"native C6 candidate leg {index} exited nonzero")
+        leg_residency = _residency(capture, plan.device_id)
+        if paths["output"].is_symlink() or not paths["output"].is_file() \
+                or paths["output"].stat().st_nlink != 1:
+            raise EvidenceProducerError(
+                f"candidate leg {index} output is not a sealed regular file")
+        output_bytes = paths["output"].read_bytes()
+        if len(output_bytes) != output_elements * 4:
+            raise EvidenceProducerError(
+                f"candidate leg {index} output length is inconsistent")
+        leg_bindings.append({
+            "schema": C6_LEG_BINDING_SCHEMA,
+            "leg_index": index,
+            "child_pid": capture.child_pid,
+            "exit_code": capture.exit_code,
+            "argv": list(invocation.argv),
+            "argv_sha256": hashlib.sha256(
+                json.dumps(list(invocation.argv), sort_keys=True).encode()
+            ).hexdigest(),
+            "stdout_path": str(invocation.stdout_path),
+            "stdout_sha256": _hash_file(invocation.stdout_path, f"C6 leg {index} stdout"),
+            "stderr_path": str(invocation.stderr_path),
+            "stderr_sha256": _hash_file(
+                invocation.stderr_path, f"C6 leg {index} stderr",
+                allow_empty=True),
+            "output_path": str(paths["output"]),
+            "output_sha256": hashlib.sha256(output_bytes).hexdigest(),
+            "output_length": len(output_bytes),
+            "ready_path": str(paths["ready_file"]),
+            "ready_sha256": _hash_file(
+                paths["ready_file"], f"C6 leg {index} ready"),
+            "continue_path": str(paths["continue_file"]),
+            "continue_sha256": _hash_file(
+                paths["continue_file"], f"C6 leg {index} continue"),
+            "event_stream": pacing,
+            "residency": {
+                "overlap_sample_count": leg_residency["overlap_sample_count"],
+                "kfd_pids": leg_residency["kfd_pids"],
+                "max_vram_bytes": leg_residency["max_vram_bytes"],
+            },
+        })
+        raw_outputs.append(output_bytes)
+    policy = c6_reward_integrity.PrecisionContract(**dict(c6.precision_contract))
+    structural = c6_reward_integrity.StructuralPrecisionEvidence(
+        **dict(c6.structural_precision_evidence))
+    numerical = [c6_reward_integrity.evaluate_numerics(
+        reference, candidate, structural=structural, policy=policy)
+        for candidate in [list(struct.unpack(
+            f"<{output_elements}f", item)) for item in raw_outputs]]
+    precision_policy = hawkeye_measurement.PrecisionEquivalencePolicy(
+        **dict(c6.precision_equivalence_policy))
+    precision_equivalence = [hawkeye_measurement.evaluate_precision_equivalence(
+        reference_f64, candidate, policy=precision_policy,
+        observed_output_dtype=structural.output_dtype,
+        observed_accumulator_dtype=structural.accumulator_dtype)
+        for candidate in [list(struct.unpack(
+            f"<{output_elements}f", item)) for item in raw_outputs]]
+    determinism = c6_reward_integrity.determinism_from_recorded_outputs(
+        raw_outputs)
+    semantic = c6_reward_integrity.calibrate_semantic_judge(
+        c6.semantic_judge_verdicts)
+    if (oracle_capture.exit_code != 0
+            or not all(row.correct for row in numerical)
+            or not all(row.correct for row in precision_equivalence)
+            or not determinism.correct or semantic.gating):
+        raise EvidenceProducerError(
+            "native C6 split correctness/determinism/semantic policy refused")
+    _verify_plan_files(plan)
+    dispatch_sha = schemas.content_hash(_expectations(plan))
+    ordered_inputs = [by_name[name] for name in _C6_INPUT_ORDER[operation]]
+    body = {
+        "schema": C6_CORRECTNESS_SCHEMA, "authority": AUTHORITY,
+        "status": "complete", "result": "PASS", "non_promotable": True,
+        "promotion_claim": False, "campaign_id": plan.campaign_id,
+        "device_id": plan.device_id, "manifest_sha256": plan.manifest_sha256,
+        "candidate_build_identity": asdict(plan.candidate),
+        "post_run_compiled_source_sha256": plan.candidate.source_sha256,
+        "command_argv": list(oracle_invocation.argv),
+        "command_cwd": str(plan.execution_cwd),
+        "command_environment_sha256": schemas.content_hash(
+            [list(item) for item in oracle_invocation.environment]),
+        "exit_code": oracle_capture.exit_code,
+        "c6_process_mode": "oracle_candidate_split",
+        "oracle_output": {
+            "stdout_path": str(oracle_invocation.stdout_path),
+            "stdout_sha256": _hash_file(
+                oracle_invocation.stdout_path, "C6 oracle stdout"),
+            "stderr_path": str(oracle_invocation.stderr_path),
+            "stderr_sha256": _hash_file(
+                oracle_invocation.stderr_path, "C6 oracle stderr",
+                allow_empty=True),
+        },
+        "sidecar": {"path": str(oracle_sidecar),
+                    "sha256": hashlib.sha256(raw).hexdigest()},
+        "seeded_case_identity": case_identity,
+        "input_binding": {
+            "path": str(manifest_path), "sha256": input_binding["sha256"],
+            "input_identity_sha256":
+                input_binding["manifest"]["input_identity_sha256"],
+        },
+        "per_leg_bindings": leg_bindings,
+        "input_identity_sha256": hashlib.sha256(
+            b"".join(ordered_inputs)).hexdigest(),
+        "reference_output_sha256": hashlib.sha256(reference_raw).hexdigest(),
+        "reference_float64_output_sha256": hashlib.sha256(
+            reference_f64_raw).hexdigest(),
+        "candidate_output_sha256": [hashlib.sha256(row).hexdigest()
+                                     for row in raw_outputs],
+        "precision_contract": asdict(policy),
+        "precision_equivalence_policy": asdict(precision_policy),
+        "precision_equivalence": [hawkeye_measurement.serialize_carrier(row)
+                                    for row in precision_equivalence],
+        "structural_precision_evidence": asdict(structural),
+        "numeric_verdicts": [asdict(row) for row in numerical],
+        "determinism": json.loads(json.dumps(asdict(determinism))),
+        "semantic_judge_calibration": json.loads(json.dumps(asdict(semantic))),
+        "semantic_judge_gating": False,
+        "native_execution": True, "wrapper_used": False,
+        "dispatch_expectations_sha256": dispatch_sha,
+        "c6_inputs": [_bound_reference(item) for item in c6.inputs],
+        "started_at": oracle_capture.started_at,
+        "ended_at": oracle_capture.ended_at,
+        **_open_claim_boundary_fields(opened, oracle_residency),
+        "residency_witness": dict(oracle_residency),
+    }
+    return _seal(oracle_sidecar.parent / "c6-receipt.json", body)
 
 
 def _evaluate_c6_sidecar(
@@ -2019,7 +2683,7 @@ def _parse_correctness(
 def _produce_correctness(
     root: Path, plan: GpuSourceEvidencePlan, executor: CommandExecutor, *,
     claim_acquirer: Callable[..., Any], claim_verifier: Callable[[Mapping[str, Any]], object],
-    claim_journal: Any, claim_timeout_s: float,
+    claim_journal: Any, claim_timeout_s: float, c6_ready_timeout_s: float = 120.0,
 ) -> Mapping[str, Any]:
     if plan.correctness_invocations:
         return _produce_correctness_invocations(
@@ -2030,14 +2694,6 @@ def _produce_correctness(
     c6 = plan.c6_correctness
     if c6 is None:
         raise EvidenceProducerError("production correctness lacks C6 capability")
-    c6_sidecar = (directory / "c6-sidecar.json").resolve()
-    c6_invocation = CommandInvocation(
-        kind="correctness", arm="candidate",
-        argv=_materialize_c6_argv(c6.argv, c6_sidecar),
-        stdout_path=(directory / "c6-stdout.txt").resolve(),
-        stderr_path=(directory / "c6-stderr.txt").resolve(),
-        working_directory=plan.execution_cwd,
-        environment=plan.correctness_environment)
     invocation = CommandInvocation(
         kind="correctness", arm="candidate", argv=plan.correctness_argv,
         stdout_path=(directory / "stdout.txt").resolve(),
@@ -2045,27 +2701,88 @@ def _produce_correctness(
         working_directory=plan.execution_cwd,
         environment=plan.correctness_environment)
     c6_receipt_path = directory / "c6-receipt.json"
-    if c6_receipt_path.exists() or c6_receipt_path.is_symlink():
-        try:
-            c6_receipt = proofs.load_receipt(
-                c6_receipt_path, schema=C6_CORRECTNESS_SCHEMA)
-        except proofs.ProofError as exc:
-            raise EvidenceProducerError(
-                "sealed C6 restart boundary is not recoverable") from exc
-        _validate_c6_correctness_receipt(c6_receipt, plan)
-        capture, opened, released, residency = _run_claimed(
-            invocation, plan=plan, executor=executor,
-            claim_acquirer=claim_acquirer, claim_verifier=claim_verifier,
-            claim_journal=claim_journal, claim_timeout_s=claim_timeout_s)
-        c6_claim_join = "sealed_c6_restart"
+    if _c6_mode_from_argv(c6.argv) == C6_MODE_ORACLE:
+        oracle_sidecar = (directory / "c6-oracle-sidecar.json").resolve()
+        oracle_invocation = CommandInvocation(
+            kind="correctness", arm="candidate",
+            argv=_materialize_c6_oracle_argv(c6.argv, oracle_sidecar),
+            stdout_path=(directory / "c6-oracle-stdout.txt").resolve(),
+            stderr_path=(directory / "c6-oracle-stderr.txt").resolve(),
+            working_directory=plan.execution_cwd,
+            environment=plan.correctness_environment)
+        input_dir = (directory / "c6-inputs").resolve()
+        candidate_invocations = tuple(
+            CommandInvocation(
+                kind="correctness", arm="candidate",
+                argv=_c6_candidate_argv_from_argv(
+                    c6.argv, input_dir=input_dir,
+                    output=(directory / f"c6-candidate-{index}-output.bin")
+                           .resolve(),
+                    ready_file=(directory / f"c6-candidate-{index}-ready")
+                               .resolve(),
+                    continue_file=(
+                        directory / f"c6-candidate-{index}-continue").resolve()),
+                stdout_path=(directory / f"c6-candidate-{index}-stdout.txt")
+                            .resolve(),
+                stderr_path=(directory / f"c6-candidate-{index}-stderr.txt")
+                            .resolve(),
+                working_directory=plan.execution_cwd,
+                environment=plan.correctness_environment)
+            for index in (1, 2, 3))
+        if c6_receipt_path.exists() or c6_receipt_path.is_symlink():
+            try:
+                c6_receipt = proofs.load_receipt(
+                    c6_receipt_path, schema=C6_CORRECTNESS_SCHEMA)
+            except proofs.ProofError as exc:
+                raise EvidenceProducerError(
+                    "sealed C6 restart boundary is not recoverable") from exc
+            _validate_c6_correctness_receipt(c6_receipt, plan)
+            capture, opened, released, residency = _run_claimed(
+                invocation, plan=plan, executor=executor,
+                claim_acquirer=claim_acquirer, claim_verifier=claim_verifier,
+                claim_journal=claim_journal, claim_timeout_s=claim_timeout_s)
+            c6_claim_join = "sealed_c6_restart"
+        else:
+            capture, opened, released, residency, c6_receipt = \
+                _run_c6_oracle_then_targeted_claimed(
+                    oracle_invocation, candidate_invocations, invocation,
+                    oracle_sidecar, input_dir, plan=plan, executor=executor,
+                    claim_acquirer=claim_acquirer,
+                    claim_verifier=claim_verifier,
+                    claim_journal=claim_journal,
+                    claim_timeout_s=claim_timeout_s,
+                    c6_ready_timeout_s=c6_ready_timeout_s)
+            c6_claim_join = "same_held_claim"
     else:
-        capture, opened, released, residency, c6_receipt = \
-            _run_c6_then_targeted_claimed(
-                c6_invocation, invocation, c6_sidecar, plan=plan,
-                executor=executor, claim_acquirer=claim_acquirer,
-                claim_verifier=claim_verifier, claim_journal=claim_journal,
-                claim_timeout_s=claim_timeout_s)
-        c6_claim_join = "same_held_claim"
+        c6_sidecar = (directory / "c6-sidecar.json").resolve()
+        c6_invocation = CommandInvocation(
+            kind="correctness", arm="candidate",
+            argv=_materialize_c6_argv(c6.argv, c6_sidecar),
+            stdout_path=(directory / "c6-stdout.txt").resolve(),
+            stderr_path=(directory / "c6-stderr.txt").resolve(),
+            working_directory=plan.execution_cwd,
+            environment=plan.correctness_environment)
+        if c6_receipt_path.exists() or c6_receipt_path.is_symlink():
+            try:
+                c6_receipt = proofs.load_receipt(
+                    c6_receipt_path, schema=C6_CORRECTNESS_SCHEMA)
+            except proofs.ProofError as exc:
+                raise EvidenceProducerError(
+                    "sealed C6 restart boundary is not recoverable") from exc
+            _validate_c6_correctness_receipt(c6_receipt, plan)
+            capture, opened, released, residency = _run_claimed(
+                invocation, plan=plan, executor=executor,
+                claim_acquirer=claim_acquirer, claim_verifier=claim_verifier,
+                claim_journal=claim_journal, claim_timeout_s=claim_timeout_s)
+            c6_claim_join = "sealed_c6_restart"
+        else:
+            capture, opened, released, residency, c6_receipt = \
+                _run_c6_then_targeted_claimed(
+                    c6_invocation, invocation, c6_sidecar, plan=plan,
+                    executor=executor, claim_acquirer=claim_acquirer,
+                    claim_verifier=claim_verifier, claim_journal=claim_journal,
+                    claim_timeout_s=claim_timeout_s)
+            c6_claim_join = "same_held_claim"
     outputs = _output_hashes(invocation)
     try:
         parsed = _parse_correctness(
@@ -2318,13 +3035,42 @@ def _produce_correctness_invocations(
                 "sealed aggregate C6 restart boundary is not recoverable") from exc
         _validate_c6_correctness_receipt(c6_receipt, plan)
         c6_claim_join = "sealed_c6_restart"
-    c6_invocation = CommandInvocation(
-        kind="correctness", arm="candidate",
-        argv=_materialize_c6_argv(c6.argv, c6_sidecar),
-        stdout_path=(directory / "c6-stdout.txt").resolve(),
-        stderr_path=(directory / "c6-stderr.txt").resolve(),
-        working_directory=plan.execution_cwd,
-        environment=plan.correctness_environment)
+    if _c6_mode_from_argv(c6.argv) == C6_MODE_ORACLE:
+        oracle_sidecar = (directory / "c6-oracle-sidecar.json").resolve()
+        input_dir = (directory / "c6-inputs").resolve()
+        oracle_invocation = CommandInvocation(
+            kind="correctness", arm="candidate",
+            argv=_materialize_c6_oracle_argv(c6.argv, oracle_sidecar),
+            stdout_path=(directory / "c6-oracle-stdout.txt").resolve(),
+            stderr_path=(directory / "c6-oracle-stderr.txt").resolve(),
+            working_directory=plan.execution_cwd,
+            environment=plan.correctness_environment)
+        candidate_invocations = tuple(
+            CommandInvocation(
+                kind="correctness", arm="candidate",
+                argv=_c6_candidate_argv_from_argv(
+                    c6.argv, input_dir=input_dir,
+                    output=(directory / f"c6-candidate-{index}-output.bin")
+                           .resolve(),
+                    ready_file=(directory / f"c6-candidate-{index}-ready")
+                               .resolve(),
+                    continue_file=(
+                        directory / f"c6-candidate-{index}-continue").resolve()),
+                stdout_path=(directory / f"c6-candidate-{index}-stdout.txt")
+                            .resolve(),
+                stderr_path=(directory / f"c6-candidate-{index}-stderr.txt")
+                            .resolve(),
+                working_directory=plan.execution_cwd,
+                environment=plan.correctness_environment)
+            for index in (1, 2, 3))
+    else:
+        c6_invocation = CommandInvocation(
+            kind="correctness", arm="candidate",
+            argv=_materialize_c6_argv(c6.argv, c6_sidecar),
+            stdout_path=(directory / "c6-stdout.txt").resolve(),
+            stderr_path=(directory / "c6-stderr.txt").resolve(),
+            working_directory=plan.execution_cwd,
+            environment=plan.correctness_environment)
     references: list[dict[str, Any]] = []
     for invocation_index, contract in enumerate(plan.correctness_invocations):
         invocation_id = str(contract["invocation_id"])
@@ -2360,12 +3106,23 @@ def _produce_correctness_invocations(
             working_directory=plan.execution_cwd,
             environment=_correctness_invocation_environment(plan, contract))
         if invocation_index == 0 and c6_receipt is None:
-            capture, opened, released, residency, c6_receipt = (
-                _run_c6_then_targeted_claimed(
-                    c6_invocation, invocation, c6_sidecar, plan=plan,
-                    executor=executor, claim_acquirer=claim_acquirer,
-                    claim_verifier=claim_verifier, claim_journal=claim_journal,
-                    claim_timeout_s=claim_timeout_s))
+            if _c6_mode_from_argv(c6.argv) == C6_MODE_ORACLE:
+                capture, opened, released, residency, c6_receipt = (
+                    _run_c6_oracle_then_targeted_claimed(
+                        oracle_invocation, candidate_invocations, invocation,
+                        oracle_sidecar, input_dir, plan=plan, executor=executor,
+                        claim_acquirer=claim_acquirer,
+                        claim_verifier=claim_verifier,
+                        claim_journal=claim_journal,
+                        claim_timeout_s=claim_timeout_s))
+            else:
+                capture, opened, released, residency, c6_receipt = (
+                    _run_c6_then_targeted_claimed(
+                        c6_invocation, invocation, c6_sidecar, plan=plan,
+                        executor=executor, claim_acquirer=claim_acquirer,
+                        claim_verifier=claim_verifier,
+                        claim_journal=claim_journal,
+                        claim_timeout_s=claim_timeout_s))
             c6_claim_join = "same_held_claim"
         else:
             if c6_receipt is None:
@@ -4088,6 +4845,173 @@ def _validate_correctness_body(body: Mapping[str, Any], plan: GpuSourceEvidenceP
         label="correctness")
 
 
+def _validate_c6_split_receipt_body(
+        body: Mapping[str, Any], c6: C6CorrectnessPlan,
+        plan: GpuSourceEvidencePlan) -> None:
+    """Re-open one split-mode C6 receipt without executing any artifact."""
+    sidecar = body.get("sidecar")
+    if not isinstance(sidecar, Mapping):
+        raise EvidenceProducerError("sealed C6 oracle sidecar reference is malformed")
+    sidecar_path = Path(str(sidecar.get("path", "")))
+    if _hash_file(sidecar_path, "C6 oracle sidecar", allow_empty=False) \
+            != sidecar.get("sha256"):
+        raise EvidenceProducerError("sealed C6 oracle sidecar changed")
+    try:
+        value = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise EvidenceProducerError("sealed C6 oracle sidecar is unreadable") from exc
+    case_identity = _c6_case_identity_from_argv(c6.argv)
+    _validate_c6_oracle_sidecar_identity(
+        value, case_identity, label="sealed C6 oracle")
+    if plan.correctness_op != case_identity["operation"]:
+        raise EvidenceProducerError(
+            "sealed C6 operation differs from targeted correctness")
+    by_name, ref_raw, reference, ref_f64_raw, reference_f64 = (
+        _decode_c6_oracle_payload(value, case_identity, label="sealed C6"))
+    operation = case_identity["operation"]
+    output_elements = (
+        case_identity["m"] * case_identity["n"] * 14
+        if operation == "FLASH_ATTN_EXT"
+        else case_identity["m"] * case_identity["n"])
+    oracle_output = body.get("oracle_output")
+    if not isinstance(oracle_output, Mapping):
+        raise EvidenceProducerError("sealed C6 oracle output reference is malformed")
+    for kind, allow_empty in (("stdout", False), ("stderr", True)):
+        path = Path(str(oracle_output.get(f"{kind}_path", "")))
+        if _hash_file(path, f"C6 oracle {kind}", allow_empty=allow_empty) \
+                != oracle_output.get(f"{kind}_sha256"):
+            raise EvidenceProducerError(f"sealed C6 oracle {kind} changed")
+    input_binding = body.get("input_binding")
+    if (not isinstance(input_binding, Mapping)
+            or not isinstance(input_binding.get("path"), str)
+            or not isinstance(input_binding.get("sha256"), str)
+            or not isinstance(input_binding.get("input_identity_sha256"), str)):
+        raise EvidenceProducerError(
+            "sealed C6 input binding reference is malformed")
+    manifest_path = Path(input_binding["path"])
+    if _hash_file(manifest_path, "C6 input binding", allow_empty=False) \
+            != input_binding["sha256"]:
+        raise EvidenceProducerError("sealed C6 input binding changed")
+    _reopen_c6_input_binding(
+        manifest_path, by_name, case_identity, label="sealed C6")
+    ordered_inputs = [by_name[name] for name in _C6_INPUT_ORDER[operation]]
+    if input_binding["input_identity_sha256"] != hashlib.sha256(
+            b"".join(ordered_inputs)).hexdigest():
+        raise EvidenceProducerError(
+            "sealed C6 input binding identity changed")
+    per_leg = body.get("per_leg_bindings")
+    if not isinstance(per_leg, list) or len(per_leg) != 3:
+        raise EvidenceProducerError(
+            "sealed C6 requires exactly three candidate leg bindings")
+    raw_outputs: list[bytes] = []
+    for index, binding in enumerate(per_leg, 1):
+        if (not isinstance(binding, Mapping)
+                or binding.get("schema") != C6_LEG_BINDING_SCHEMA
+                or binding.get("leg_index") != index
+                or not isinstance(binding.get("argv"), list)):
+            raise EvidenceProducerError(
+                f"sealed C6 leg {index} binding is malformed")
+        paths = _c6_candidate_paths_from_argv(tuple(binding["argv"]))
+        rebuilt = _c6_candidate_argv_from_argv(
+            c6.argv, input_dir=paths["input_dir"], output=paths["output"],
+            ready_file=paths["ready_file"],
+            continue_file=paths["continue_file"])
+        if tuple(binding["argv"]) != rebuilt:
+            raise EvidenceProducerError(
+                f"sealed C6 leg {index} argv differs from deterministic derivation")
+        if binding.get("argv_sha256") != hashlib.sha256(
+                json.dumps(list(binding["argv"]), sort_keys=True).encode()
+        ).hexdigest():
+            raise EvidenceProducerError(
+                f"sealed C6 leg {index} argv digest changed")
+        for kind, allow_empty in (("stdout", False), ("stderr", True)):
+            path = Path(str(binding.get(f"{kind}_path", "")))
+            if _hash_file(path, f"C6 leg {index} {kind}",
+                          allow_empty=allow_empty) \
+                    != binding.get(f"{kind}_sha256"):
+                raise EvidenceProducerError(
+                    f"sealed C6 leg {index} {kind} changed")
+        output_path = Path(str(binding.get("output_path", "")))
+        if output_path.is_symlink() or not output_path.is_file() \
+                or output_path.stat().st_nlink != 1:
+            raise EvidenceProducerError(
+                f"sealed C6 leg {index} output is not a sealed regular file")
+        output_bytes = output_path.read_bytes()
+        if (binding.get("output_sha256") != hashlib.sha256(
+                output_bytes).hexdigest()
+                or binding.get("output_length") != len(output_bytes)
+                or len(output_bytes) != output_elements * 4):
+            raise EvidenceProducerError(
+                f"sealed C6 leg {index} output changed")
+        for kind in ("ready", "continue"):
+            path = Path(str(binding.get(f"{kind}_path", "")))
+            if (path.is_symlink() or not path.is_file()
+                    or path.stat().st_nlink != 1
+                    or _hash_file(path, f"C6 leg {index} {kind}")
+                    != binding.get(f"{kind}_sha256")):
+                raise EvidenceProducerError(
+                    f"sealed C6 leg {index} {kind} token changed")
+        event = binding.get("event_stream")
+        if (not isinstance(event, Mapping)
+                or not all(isinstance(event.get(key), int)
+                           for key in ("launched_monotonic_ns",
+                                       "ready_observed_monotonic_ns",
+                                       "continue_written_monotonic_ns",
+                                       "completed_monotonic_ns"))
+                or not (event["launched_monotonic_ns"]
+                        <= event["ready_observed_monotonic_ns"]
+                        <= event["continue_written_monotonic_ns"]
+                        <= event["completed_monotonic_ns"])):
+            raise EvidenceProducerError(
+                f"sealed C6 leg {index} event stream is not monotonic")
+        residency = binding.get("residency")
+        if (not isinstance(residency, Mapping)
+                or not isinstance(residency.get("overlap_sample_count"), int)
+                or residency["overlap_sample_count"] < 1
+                or not isinstance(residency.get("kfd_pids"), list)
+                or not residency["kfd_pids"]
+                or any(isinstance(pid, bool) or not isinstance(pid, int)
+                       or pid < 1 for pid in residency["kfd_pids"])
+                or not isinstance(residency.get("max_vram_bytes"), int)
+                or residency["max_vram_bytes"] < 0):
+            raise EvidenceProducerError(
+                f"sealed C6 leg {index} residency summary is malformed")
+        raw_outputs.append(output_bytes)
+    policy = c6_reward_integrity.PrecisionContract(**dict(c6.precision_contract))
+    structural = c6_reward_integrity.StructuralPrecisionEvidence(
+        **dict(c6.structural_precision_evidence))
+    candidate_outputs = [list(struct.unpack(
+        f"<{output_elements}f", item)) for item in raw_outputs]
+    numerical = [c6_reward_integrity.evaluate_numerics(
+        reference, candidate, structural=structural, policy=policy)
+        for candidate in candidate_outputs]
+    precision_policy = hawkeye_measurement.PrecisionEquivalencePolicy(
+        **dict(c6.precision_equivalence_policy))
+    precision_equivalence = [hawkeye_measurement.evaluate_precision_equivalence(
+        reference_f64, candidate, policy=precision_policy,
+        observed_output_dtype=structural.output_dtype,
+        observed_accumulator_dtype=structural.accumulator_dtype)
+        for candidate in candidate_outputs]
+    deterministic = c6_reward_integrity.determinism_from_recorded_outputs(
+        raw_outputs)
+    if (body.get("input_identity_sha256") != hashlib.sha256(
+                b"".join(ordered_inputs)).hexdigest()
+            or body.get("reference_output_sha256") != hashlib.sha256(ref_raw).hexdigest()
+            or body.get("reference_float64_output_sha256") !=
+               hashlib.sha256(ref_f64_raw).hexdigest()
+            or body.get("candidate_output_sha256") != [
+                hashlib.sha256(item).hexdigest() for item in raw_outputs]
+            or body.get("numeric_verdicts") != [asdict(item) for item in numerical]
+            or body.get("precision_equivalence") != [
+                hawkeye_measurement.serialize_carrier(item)
+                for item in precision_equivalence]
+            or body.get("determinism") != json.loads(json.dumps(asdict(deterministic)))
+            or not all(item.correct for item in numerical)
+            or not all(item.correct for item in precision_equivalence)
+            or not deterministic.correct):
+        raise EvidenceProducerError("sealed C6 reductions changed or no longer pass")
+
+
 def _validate_c6_correctness_receipt(
         loaded: Mapping[str, Any], plan: GpuSourceEvidencePlan) -> None:
     c6 = plan.c6_correctness
@@ -4119,6 +5043,9 @@ def _validate_c6_correctness_receipt(
         "dispatch_expectations_sha256": schemas.content_hash(_expectations(plan)),
         "c6_inputs": [_bound_reference(item) for item in c6.inputs],
     }
+    split_mode = _c6_mode_from_argv(c6.argv) == C6_MODE_ORACLE
+    if split_mode:
+        expected["c6_process_mode"] = "oracle_candidate_split"
     if any(body.get(key) != value for key, value in expected.items()):
         raise EvidenceProducerError("sealed C6 correctness identity/policy changed")
     argv = body.get("command_argv")
@@ -4126,6 +5053,12 @@ def _validate_c6_correctness_receipt(
             or any(actual != planned for actual, planned in zip(argv, c6.argv)
                    if planned != C6_SIDECAR_OUTPUT)):
         raise EvidenceProducerError("sealed C6 command differs from capability")
+    if split_mode:
+        _validate_c6_split_receipt_body(body, c6, plan)
+        _validate_open_claim_boundary(body, plan=plan)
+        _validate_residency_witness(
+            body.get("residency_witness"), device_id=plan.device_id, label="C6")
+        return
     for kind in ("stdout", "stderr"):
         path = Path(str(body.get(f"{kind}_path", "")))
         if _hash_file(path, f"C6 {kind}", allow_empty=kind == "stderr") \
@@ -4460,7 +5393,7 @@ def produce_gpu_source_evidence(
     correctness_executor: CommandExecutor, rocprof_executor: CommandExecutor,
     claim_journal: Any, claim_acquirer: Callable[..., Any] = device_claim.acquire_device_claim,
     claim_verifier: Callable[[Mapping[str, Any]], object] = _default_claim_verifier,
-    claim_timeout_s: float = 300.0,
+    claim_timeout_s: float = 300.0, c6_ready_timeout_s: float = 120.0,
 ) -> proofs.GpuSourceProofBundle:
     """Execute or exactly-once resume the ordered GPU proof stages.
 
@@ -4503,13 +5436,24 @@ def produce_gpu_source_evidence(
         sealed_c6_boundary = False
         if (correctness_dir.exists() and correctness_dir.is_dir()
                 and not correctness_dir.is_symlink()
-                and not plan.correctness_invocations):
+                and not plan.correctness_invocations
+                and plan.c6_correctness is not None):
+            mode = _c6_mode_from_argv(plan.c6_correctness.argv)
+            if mode == C6_MODE_ORACLE:
+                expected = {"c6-receipt.json", "c6-oracle-sidecar.json",
+                            "c6-oracle-stdout.txt", "c6-oracle-stderr.txt",
+                            "c6-input-binding.json", "c6-inputs"}
+                for index in (1, 2, 3):
+                    for suffix in ("stdout.txt", "stderr.txt", "output.bin",
+                                   "ready", "continue"):
+                        expected.add(f"c6-candidate-{index}-{suffix}")
+            else:
+                expected = {
+                    "c6-receipt.json", "c6-sidecar.json",
+                    "c6-stdout.txt", "c6-stderr.txt"}
             sealed_c6_boundary = {
                 path.name for path in correctness_dir.iterdir()
-            } == {
-                "c6-receipt.json", "c6-sidecar.json",
-                "c6-stdout.txt", "c6-stderr.txt",
-            }
+            } == expected
         if (((correctness_dir.exists() or correctness_dir.is_symlink())
              and not plan.correctness_invocations and not sealed_c6_boundary)
                 or any(path.exists() or path.is_symlink() for path in later_paths)):
@@ -4518,7 +5462,8 @@ def produce_gpu_source_evidence(
         correctness = _produce_correctness(
             root, plan, correctness_executor, claim_acquirer=claim_acquirer,
             claim_verifier=claim_verifier, claim_journal=claim_journal,
-            claim_timeout_s=float(claim_timeout_s))
+            claim_timeout_s=float(claim_timeout_s),
+            c6_ready_timeout_s=float(c6_ready_timeout_s))
 
     arm_receipts: dict[str, Mapping[str, Any]] = {}
     for index, arm in enumerate(plan.attribution_arm_order):
