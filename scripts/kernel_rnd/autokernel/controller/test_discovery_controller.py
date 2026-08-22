@@ -725,6 +725,37 @@ class Tests(unittest.TestCase):
                  workspace=workspace,checkpoint_path=root/"operation"/"actor-result.json")
    self.assertNotIsInstance(caught.exception,D.PlannerOutputRefusal)
 
+ def test_trusted_access_actor_failure_is_sealed_typed_and_reopenable(self):
+  package=self.source_package()
+  assignment=D.AuthoringAssignment("ak-test","akp-test","akc-test","0"*40,"1"*40)
+  response="This content can't be shown: Trusted Access"
+  with tempfile.TemporaryDirectory() as t:
+   root=Path(t); workspace=root/"operation/workspace"; workspace.mkdir(parents=True)
+   wrapper=root/"codex"; wrapper.write_bytes(b"codex"); wrapper.chmod(0o700)
+   planner=D.CodexPlanner(wrapper=wrapper,environment={"PATH":"/usr/bin"},
+                          reviewed_sources=package)
+   context={"authoring_assignment":assignment.to_dict(),
+            "planner_context":{"reviewed_source_package_sha256":
+                               package.package_sha256}}
+   checkpoint=root/"operation/actor-result.json"
+   actor_result=SimpleNamespace(returncode=1,stdout="",stderr=response)
+   with patch.object(D.codex_container_actor,"runtime_identity",return_value=RUNTIME), \
+        patch.object(D.codex_container_actor,"run_actor",return_value=actor_result), \
+        self.assertRaises(D.PlannerProviderPolicyRefusal) as caught:
+    planner.plan(context=context,workspace=workspace,checkpoint_path=checkpoint)
+   expected=hashlib.sha256(("\0"+response).encode()).hexdigest()
+   self.assertEqual(caught.exception.response_sha256,expected)
+   serialized=checkpoint.read_text()
+   self.assertNotIn(response,serialized)
+   self.assertIn(expected,serialized)
+   with patch.object(D.codex_container_actor,"runtime_identity",return_value=RUNTIME), \
+        patch.object(D.codex_container_actor,"run_actor",
+                     side_effect=AssertionError("sealed policy actor replayed")), \
+        self.assertRaises(D.PlannerProviderPolicyRefusal) as resumed:
+    planner.resume_plan(context=context,workspace=workspace,
+                        checkpoint_path=checkpoint)
+   self.assertEqual(resumed.exception.response_sha256,expected)
+
  def test_v19_fa_candidate_subroutes_are_typed_secret_free_and_reopen_without_actor(self):
   package=self.source_package()
   assignment=D.AuthoringAssignment("ak-test","akp-test","akc-test","0"*40,"1"*40)

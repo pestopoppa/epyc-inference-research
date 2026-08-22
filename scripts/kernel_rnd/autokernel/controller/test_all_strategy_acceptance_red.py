@@ -1518,6 +1518,132 @@ class AllStrategyAcceptanceRedGate(unittest.TestCase):
         self.assertEqual(result["terminal_reason"], "portfolio_exhausted")
         self.assertNotIn("akh-provider-retry", result["portfolio_terminals"])
 
+    def test_trusted_access_policy_refusal_advances_without_science(self):
+        fixture = TD.Tests(methodName="runTest")
+        response = "This content can’t be shown under Trusted Access"
+        classification = C._classify_provider_policy_refusal("", response)
+        self.assertEqual(classification["policy_id"],
+                         "trusted_access_content_hidden_v1")
+        self.assertIsNone(C._classify_provider_policy_refusal(
+            "", "ordinary provider transport timeout"))
+
+        class Planner:
+            def __init__(self):
+                self.selected = []
+
+            def attest(self):
+                return {**C.SOL, "runtime": TD.RUNTIME}
+
+            def plan(self, *, context, workspace):
+                binding = context["authoring_assignment"]["portfolio_binding"]
+                self.selected.append(binding["hypothesis_id"])
+                if len(self.selected) == 1:
+                    raise C.PlannerProviderPolicyRefusal(
+                        response_sha256=classification["response_sha256"])
+                return fixture.portfolio_candidate(binding)
+
+        class NeverCompute:
+            def __getattr__(self, _name):
+                def fail(*_args, **_kwargs):
+                    raise AssertionError("dry-run provider policy test reached compute")
+                return fail
+
+        with tempfile.TemporaryDirectory() as directory:
+            records = [
+                fixture.portfolio_record(
+                    hypothesis_id="akh-policy-first", rank=1, budget=1),
+                fixture.portfolio_record(
+                    hypothesis_id="akh-policy-second", rank=2, budget=1),
+            ]
+            planner = Planner()
+            result = C.run_controller(
+                dataclasses.replace(
+                    fixture.portfolio_config(Path(directory), records),
+                    max_iterations=2),
+                planner=planner, critic=TD.FakeCritic(["accept"]),
+                screener=NeverCompute(), lease=NeverCompute())
+        self.assertEqual(planner.selected,
+                         ["akh-policy-first", "akh-policy-second"])
+        first = result["iterations"][0]
+        self.assertEqual(first["status"],
+                         "planner_provider_policy_refused")
+        self.assertEqual(first["refusal_type"],
+                         "planner_provider_policy_refusal")
+        self.assertFalse(first["scientific_budget_spent"])
+        self.assertFalse(first["retryable"])
+        self.assertEqual(first["retry_disposition"],
+                         "advance_portfolio_without_science_debit")
+        self.assertNotIn(response, json.dumps(result))
+        self.assertEqual(result["portfolio_skips"]["akh-policy-first"][
+            "disposition"], "bounded_provider_policy_skip")
+        self.assertEqual(result["scientific_attempts"], 0)
+        self.assertEqual(result["terminal_reason"], "portfolio_exhausted")
+
+    def test_provider_policy_refusal_restart_is_idempotent_and_exhausts(self):
+        fixture = TD.Tests(methodName="runTest")
+        digest = hashlib.sha256(b"Trusted Access").hexdigest()
+
+        class StopAfterPolicyCheckpoint(BaseException):
+            pass
+
+        class Planner:
+            def __init__(self):
+                self.selected = []
+
+            def attest(self):
+                return {**C.SOL, "runtime": TD.RUNTIME}
+
+            def plan(self, *, context, workspace):
+                hypothesis_id = context["authoring_assignment"][
+                    "portfolio_binding"]["hypothesis_id"]
+                self.selected.append(hypothesis_id)
+                raise C.PlannerProviderPolicyRefusal(response_sha256=digest)
+
+        class Never:
+            def attest(self):
+                return {**C.FABLE5_CRITIC, "runtime": TD.CLAUDE_RUNTIME}
+
+            def __getattr__(self, _name):
+                def fail(*_args, **_kwargs):
+                    raise AssertionError("provider policy refusal reached compute")
+                return fail
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            records = [
+                fixture.portfolio_record(
+                    hypothesis_id="akh-policy-a", rank=1, budget=1),
+                fixture.portfolio_record(
+                    hypothesis_id="akh-policy-b", rank=2, budget=1),
+            ]
+            config = dataclasses.replace(
+                fixture.portfolio_config(root, records), max_iterations=2)
+            planner = Planner()
+            original_save = C.DurableState.save
+            stopped = [False]
+
+            def save_then_stop(store, state, phase):
+                original_save(store, state, phase)
+                if phase == "planner_provider_policy_refused" and not stopped[0]:
+                    stopped[0] = True
+                    raise StopAfterPolicyCheckpoint(phase)
+
+            with mock.patch.object(C.DurableState, "save", new=save_then_stop), \
+                    self.assertRaises(StopAfterPolicyCheckpoint):
+                C.run_controller(
+                    config, planner=planner, critic=Never(),
+                    screener=Never(), lease=Never())
+            result = C.run_controller(
+                config, planner=planner, critic=Never(),
+                screener=Never(), lease=Never())
+        self.assertEqual(planner.selected, ["akh-policy-a", "akh-policy-b"])
+        self.assertEqual([row["status"] for row in result["iterations"]],
+                         ["planner_provider_policy_refused"] * 2)
+        self.assertEqual(result["scientific_attempts"], 0)
+        self.assertEqual(result["terminal_reason"], "portfolio_exhausted")
+        self.assertEqual(set(result["portfolio_skips"]),
+                         {"akh-policy-a", "akh-policy-b"})
+
     def test_repeated_planner_provider_transients_do_not_spend_turn_or_skip(self):
         """Provider/API availability is not an authored or scientific attempt."""
         fixture = TD.Tests(methodName="runTest")

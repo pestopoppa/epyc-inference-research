@@ -79,6 +79,58 @@ class PlannerProviderTransient(PlannerOutputRefusal):
     """A retryable provider/API interruption before candidate validation."""
 
 
+class PlannerProviderPolicyRefusal(PlannerOutputRefusal):
+    """A non-retryable provider policy decision, never a scientific attempt."""
+
+    policy_id = "trusted_access_content_hidden_v1"
+
+    def __init__(self, *, response_sha256: str) -> None:
+        if not HASH.fullmatch(response_sha256):
+            raise DiscoveryControllerError(
+                "provider policy refusal lacks a sealed response digest")
+        super().__init__(
+            "provider policy refused this authoring request; response text withheld")
+        self.response_sha256 = response_sha256
+
+
+_PROVIDER_POLICY_REFUSAL_SCHEMA = (
+    "epyc.autokernel.provider_policy_refusal_classification.v1")
+_PROVIDER_POLICY_MARKERS = (
+    "this content can't be shown",
+    "this content can’t be shown",
+    "trusted access",
+)
+
+
+def _classify_provider_policy_refusal(
+        stdout: str, stderr: str) -> dict[str, str] | None:
+    if not isinstance(stdout, str) or not isinstance(stderr, str):
+        raise DiscoveryControllerError("provider response streams must be text")
+    combined = stdout + "\0" + stderr
+    normalized = " ".join(combined.casefold().split())
+    if not any(marker in normalized for marker in _PROVIDER_POLICY_MARKERS):
+        return None
+    return {
+        "schema": _PROVIDER_POLICY_REFUSAL_SCHEMA,
+        "policy_id": PlannerProviderPolicyRefusal.policy_id,
+        "response_sha256": hashlib.sha256(combined.encode()).hexdigest(),
+    }
+
+
+def _reopen_provider_policy_refusal(value: object) -> dict[str, str] | None:
+    if value is None:
+        return None
+    if (not isinstance(value, Mapping)
+            or set(value) != {"schema", "policy_id", "response_sha256"}
+            or value.get("schema") != _PROVIDER_POLICY_REFUSAL_SCHEMA
+            or value.get("policy_id") != PlannerProviderPolicyRefusal.policy_id
+            or not isinstance(value.get("response_sha256"), str)
+            or not HASH.fullmatch(value["response_sha256"])):
+        raise DiscoveryControllerError(
+            "planner checkpoint provider-policy classification changed")
+    return dict(value)
+
+
 class GovernedStageRefusal(DiscoveryControllerError):
     stage = ""
     disposition = ""
@@ -1706,12 +1758,18 @@ class CodexPlanner:
                         operation_key=telemetry_operation_key,
                         failure_sink=self.telemetry_failures)
                 raise
+            stdout_text = getattr(result, "stdout", "")
+            stderr_text = getattr(result, "stderr", "")
+            provider_policy = _classify_provider_policy_refusal(
+                stdout_text, stderr_text)
             result_facts = {
                 "returncode": result.returncode,
                 "stdout_sha256": hashlib.sha256(
-                    getattr(result, "stdout", "").encode()).hexdigest(),
+                    stdout_text.encode()).hexdigest(),
                 "stderr_sha256": hashlib.sha256(
-                    getattr(result, "stderr", "").encode()).hexdigest(),
+                    stderr_text.encode()).hexdigest(),
+                **({"provider_policy_refusal": provider_policy}
+                   if provider_policy is not None else {}),
             }
             actor_failure_message = (
                 f"Sol actor failed: {getattr(result, 'stderr', '')[-400:]}"
@@ -1730,6 +1788,12 @@ class CodexPlanner:
                     result=result_facts,
                     operation_key=telemetry_operation_key,
                     failure_sink=self.telemetry_failures)
+            provider_policy = _reopen_provider_policy_refusal(
+                result_facts.get("provider_policy_refusal"))
+            if provider_policy is not None:
+                raise PlannerProviderPolicyRefusal(
+                    response_sha256=str(provider_policy.get(
+                        "response_sha256", "")))
             raise PlannerProviderTransient(
                 actor_failure_message
                 or f"sealed Sol actor invocation failed with return code "
@@ -5174,12 +5238,18 @@ def _record_planner_refusal(state: dict[str, Any], *, turn: int,
     """Persist one non-candidate authoring refusal without spending science budget."""
     row: dict[str, Any] = {
         "turn": turn,
-        "status": ("planner_transient" if isinstance(exc, PlannerProviderTransient)
-                   else "planner_refused"),
+        "status": (
+            "planner_provider_policy_refused"
+            if isinstance(exc, PlannerProviderPolicyRefusal)
+            else "planner_transient" if isinstance(exc, PlannerProviderTransient)
+            else "planner_refused"),
         "reason": str(exc),
-        "refusal_type": ("planner_provider_transient"
-                         if isinstance(exc, PlannerProviderTransient)
-                         else "planner_output_refusal"),
+        "refusal_type": (
+            "planner_provider_policy_refusal"
+            if isinstance(exc, PlannerProviderPolicyRefusal)
+            else "planner_provider_transient"
+            if isinstance(exc, PlannerProviderTransient)
+            else "planner_output_refusal"),
         "scientific_budget_spent": False,
         "context_sha256": _sha(context),
     }
@@ -5207,6 +5277,12 @@ def _record_planner_refusal(state: dict[str, Any], *, turn: int,
             portfolio_decision_policy=dict(
                 portfolio_binding["decision_policy"]),
         )
+    if isinstance(exc, PlannerProviderPolicyRefusal):
+        row.update(
+            provider_policy_id=exc.policy_id,
+            provider_response_sha256=exc.response_sha256,
+            retryable=False,
+            retry_disposition="advance_portfolio_without_science_debit")
     state["iterations"].append(row)
     if isinstance(exc, PlannerProviderTransient):
         # Provider/API availability is neither authored output nor a scientific
@@ -5214,6 +5290,16 @@ def _record_planner_refusal(state: dict[str, Any], *, turn: int,
         # a fresh sealed actor operation on the next pass.
         state["planner_provider_attempt"] = int(
             state.get("planner_provider_attempt", 0)) + 1
+    elif isinstance(exc, PlannerProviderPolicyRefusal):
+        hypothesis_id = row.get("portfolio_hypothesis_id")
+        if isinstance(hypothesis_id, str):
+            state.setdefault("portfolio_skips", {})[hypothesis_id] = {
+                "disposition": "bounded_provider_policy_skip",
+                "scientific_terminal": False,
+                "policy_id": exc.policy_id,
+                "response_sha256": exc.response_sha256,
+            }
+        state["next"] += 1
     else:
         _note_portfolio_authoring_failure(state, row)
         state["next"] += 1
@@ -5807,7 +5893,9 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                         state, planner, state["iterations"][-1])
                     store.save(
                         state,
-                        "planner_transient"
+                        "planner_provider_policy_refused"
+                        if isinstance(exc, PlannerProviderPolicyRefusal)
+                        else "planner_transient"
                         if isinstance(exc, PlannerProviderTransient)
                         else "planner_refused")
                     continue
