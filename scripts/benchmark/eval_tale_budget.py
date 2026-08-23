@@ -18,6 +18,8 @@ Usage:
     python eval_tale_budget.py --suites math --model-port 8080 --dry-run
 """
 
+# Scoring: delegates to orchestrator B7 debug_scorer (2026-08-23) — no pre-B7 semantics
+
 from __future__ import annotations
 
 import argparse

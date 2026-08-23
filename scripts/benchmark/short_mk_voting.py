@@ -3,6 +3,8 @@ from __future__ import annotations
 
 """Run short-m@k majority-vote evaluations against a llama-server."""
 
+# Scoring: delegates to orchestrator B7 debug_scorer (2026-08-23) — no pre-B7 semantics
+
 import argparse
 import concurrent.futures
 import json

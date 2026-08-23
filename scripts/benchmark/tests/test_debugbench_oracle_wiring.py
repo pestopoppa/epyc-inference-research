@@ -8,10 +8,12 @@ research side of the wiring:
 
   * the adapter emits `programmatic` / `code_patch`, not a solution prefix;
   * echoing the buggy code FAILS and the reference solution PASSES;
-  * THIS repo's diverged debug_scorer.py agrees with the orchestrator's — it
-    answers an unknown verifier with a case-insensitive substring match on
-    `expected`, so a `code_patch` row reaching an unported copy would be silently
-    scored by a weaker oracle.
+  * THIS repo's debug_scorer.py is a delegation shim to the orchestrator's B7
+    copy (2026-08-23, scorer-fork-drift-audit-2026-07-22 residual row), so it
+    agrees with the orchestrator's on everything, including raising on an
+    unknown verifier instead of falling back to a case-insensitive substring
+    match on `expected` — a `code_patch` row can never be silently scored by a
+    weaker oracle.
 
 Origin: epyc-root `artifacts/audit/debugbench-oracle-vacuity-20260812.md`.
 """
@@ -20,6 +22,8 @@ from __future__ import annotations
 import importlib.util
 import sys
 from pathlib import Path
+
+import pytest
 
 BENCHMARK_DIR = Path(__file__).resolve().parents[1]
 for _p in (str(BENCHMARK_DIR), str(BENCHMARK_DIR.parent), str(BENCHMARK_DIR.parents[1])):
@@ -107,22 +111,27 @@ def test_both_repo_copies_of_the_scorer_agree_on_the_same_row() -> None:
         assert orch_verdict is expected_verdict
 
 
-def test_an_unported_scorer_would_have_scored_this_row_by_a_different_oracle() -> None:
-    """Why the verifier was ported rather than left to the canonical copy.
+def test_the_delegated_scorer_refuses_an_unknown_verifier() -> None:
+    """The research path is B7 now: fail-closed, not a weaker oracle.
 
-    This repo's `_score_programmatic` answers an unknown verifier with a
-    case-insensitive substring match on `expected` instead of raising. Deleting
-    `code_patch` from its table does not make the row unscoreable — it makes it
-    quietly scored by something else, which is the failure this fixture pins.
+    Pre-2026-08-23, this repo's `_score_programmatic` answered an unknown
+    verifier with a case-insensitive substring match on `expected` instead of
+    raising (pinned by this test in its original form), so deleting `code_patch`
+    from its table made the row quietly scored by something else. Since the
+    delegation shim (scorer-fork-drift-audit-2026-07-22 residual row) the
+    research path inherits B7's SCORE-25 rejection: an unknown verifier raises,
+    so an unscoreable row fails closed instead of being quietly mis-scored.
     """
     row = _row()
     verifiers_without_code_patch = dict(row["scoring_config"], verifier="not_a_verifier")
-    assert research_scorer.score_answer(
-        "some prose that happens to mention nothing relevant",
-        row["expected"], "programmatic", verifiers_without_code_patch) is False
-    assert research_scorer.score_answer(
-        row["expected"], row["expected"], "programmatic",
-        verifiers_without_code_patch) is True
+    with pytest.raises(ValueError):
+        research_scorer.score_answer(
+            "some prose that happens to mention nothing relevant",
+            row["expected"], "programmatic", verifiers_without_code_patch)
+    with pytest.raises(ValueError):
+        research_scorer.score_answer(
+            row["expected"], row["expected"], "programmatic",
+            verifiers_without_code_patch)
 
 
 def test_the_builder_drops_a_row_it_cannot_validate() -> None:

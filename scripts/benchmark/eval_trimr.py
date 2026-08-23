@@ -21,6 +21,8 @@ Environment:
     Optionally requires a verifier model on --verifier-port for TrimR-lite.
 """
 
+# Scoring: delegates to orchestrator B7 debug_scorer (2026-08-23) — no pre-B7 semantics
+
 from __future__ import annotations
 
 import argparse
