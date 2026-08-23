@@ -822,7 +822,7 @@ server_mode:
       served_template_bytes: 25808
       served_template_sha256_12: 1443ea9ab4bb
       base: froggeric v22.3 minus inline-tag scan plus Sharp terseness
-      evidence: 'CT-1b A/B artifacts: epyc-root artifacts/chat-templates/epyc-qwen3x-v1/ab-cpu-20260821/ct1b-terse/.
+      evidence: 'CT-1b A/B artifacts: /workspace/artifacts/chat-templates/epyc-qwen3x-v1/ab-cpu-20260821/ct1b-terse/.
         E-7: frontdoor''s calibration stamps are voided by the template axis and must re-measure.'
     model_role: qwen36_q8_0
     shared_with: [worker_summarize]  # 2026-07-31: coder_escalation REMOVED from this list —
@@ -1167,7 +1167,7 @@ server_mode:
       served_template_bytes: 25808
       served_template_sha256_12: 1443ea9ab4bb
       base: froggeric v22.3 minus inline-tag scan plus Sharp terseness
-      evidence: 'CT-1b A/B artifacts: epyc-root artifacts/chat-templates/epyc-qwen3x-v1/ab-cpu-20260821/ct1b-terse/
+      evidence: 'CT-1b A/B artifacts: /workspace/artifacts/chat-templates/epyc-qwen3x-v1/ab-cpu-20260821/ct1b-terse/
         (measured on Qwen3.6-35B-A3B; UNMEASURED on this role''s Qwen3.8-27B). E-7: this role''s
         calibration stamps are voided by the template axis and must re-measure. NOTE this REPLACES
         the Unsloth-embedded template documented under the qwen38_27b_q8_local role row.'
@@ -1742,7 +1742,7 @@ roles:
 
   frontdoor:
     tier: A
-    description: Root LM — Qwen3.6-35B-A3B Q8 (quality 93%, May-4 Claude-as-Judge 170/183)
+    description: "Root LM — Qwen3.6-35B-A3B Q8 (E-7 2026-08-22 at terse template 1443ea9ab4bb: math 82.5%, mmlu_pro 37.5%, gpqa_diamond 55.0%, cruxeval 32.5%; May-4 judge 93% VOIDED by the template swap)"
     # Phase 3 compliance gate (2026-05-07): NON-MONOTONIC. mild fails (compliance 83% baseline),
     # medium fails (compliance 92%, procedure 90%); aggressive PASSES (108% C, 100% P,
     # recall 1.00). Orchestrator routes to aggressive directly per user direction.
@@ -1789,8 +1789,20 @@ roles:
       baseline_tps: null      # category=BASELINE: spec-dec-off NOT measured for this model. Do not fabricate.
       optimized_tps: 40.22    # category=OPTIMUM: full instance, interleave=all, draft-mtp n_max 4
       optimized_tps_attest: "[P-BENCH-PLACEMENT-1, n=3, 2026-07-30, attest data/numa_placement/20260730-P-BENCH-PLACEMENT-1/prodopt_results.txt]"
-      quality_pct: 93  # May-4 Claude-as-Judge 170/183
-      benchmark_date: 2026-05-04
+      # VOIDED 2026-08-22 (CT-2): the May-4 Claude-as-Judge 170/183 (93%) was measured
+      # through the GGUF-embedded template; the terse-template pilot (1443ea9ab4bb)
+      # invalidates it. Preserved above as the historical record; E-7 live-path
+      # re-stamps below carry the current authority.
+      quality_pct: null
+      benchmark_date: null  # superseded by the E-7 stamps below (2026-08-22)
+      math_suite: "33/40 (82.5%)"
+      mmlu_pro_suite: "15/40 (37.5%)"
+      gpqa_diamond_suite: "22/40 (55.0%)"
+      cruxeval_suite: "13/40 (32.5%)"
+      # E-7 stamp: (Qwen3.6-35B-A3B-MTP Q8_0, v9 0db32c06e/10125, template 1443ea9ab4bb,
+      # live production path :8070, prod sampling, maxtok 900). Belief rows grade
+      # Witnessed/Attested, e7-recal-20260822-frontdoor (results_arm0.jsonl sha256
+      # 6dbf36c4). math mmlu_pro gpqa_diamond cruxeval = CT-1b arm-2 REPRODUCED live.
     memory:
       residency: hot
       pinned: true
@@ -1942,7 +1954,7 @@ roles:
       Handle edge cases explicitly.
   coder_escalation:
     tier: B
-    description: "Coding escalation — Qwen3.6-27B dense Q8 MTP on MI210 (ROCm0). 2026-07-31: MOVED off frontdoor. Alias on architect_general's :8083 process; NO LONGER the same model as frontdoor and no longer shares its GGUF mmap. Absorbs the eliminated architect_coding role. Former Qwen2.5-Coder-32B-Q4 preserved as qwen25_coder_32b_q4km."
+    description: "Coding escalation — Qwen3.8-27B dense Q8 MTP on MI210 (ROCm0). E-7 2026-08-22 at terse template 1443ea9ab4bb: math 85.0%, mmlu_pro 27.5%, gpqa_diamond 47.5%, cruxeval 22.5% (alias on architect_general's :8083; same stamps). 2026-07-31: MOVED off frontdoor. Alias on architect_general's :8083 process; NO LONGER the same model as frontdoor and no longer shares its GGUF mmap. Absorbs the eliminated architect_coding role. Former Qwen2.5-Coder-32B-Q4 preserved as qwen25_coder_32b_q4km."
     model:
       name: Qwen3.8-27B-Q8_0
       path: /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf
@@ -1982,14 +1994,23 @@ roles:
       optimized_tps_attest: "[published stack measurement record §01, 2026-07-31]"
       contended_tps: 19.81      # -35.8% with the other MI210 tenants active
       # 2026-08-01: same model, same process, same evidence as architect_general.
-      swe_verified_pct: 57.5    # 23/40, SWE-bench Verified oracle-file n=40, frozen 4-arm authority arm A3
-      swe_verified_raw: "23/40"
-      swe_verified_instrument: "SWE-bench Verified, oracle-file, v4 tail replay, n=40, 2026-07-27"
+      # 2026-08-22 E-7 RE-STAMP (CT-E7b): swe_verified VOIDED — the 57.5 was arm A3
+      # measured on Qwen3.6-27B-MTP-Q8_0; the Qwen3.8-27B swap + terse-template pilot
+      # (1443ea9ab4bb) both invalidate it. This role is an ALIAS on architect_general's
+      # :8083 process — same model, same template — so it carries architect_general's
+      # E-7 stamps (belief rows Witnessed/Attested, e7-recal-20260822-architect_general):
+      swe_verified_pct: null                       # VOIDED 2026-08-22 — see E-7 re-stamp below
+      swe_verified_raw: null
+      swe_verified_instrument: "VOIDED 2026-08-22: was 'SWE-bench Verified, oracle-file, v4 tail replay, n=40, 2026-07-27' measured on Qwen3.6-27B-MTP (arm A3). Alias now serves Qwen3.8-27B + terse template on :8083."
       quality_pct: null         # was 93 ("shares frontdoor bench") — that is the 35B's May-4 170/183
+      math_suite: "34/40 (85.0%)"                  # E-7, live :8083, template 1443ea9ab4bb
+      mmlu_pro_suite: "11/40 (27.5%)"
+      gpqa_diamond_suite: "19/40 (47.5%)"
+      cruxeval_suite: "9/40 (22.5%)"
+      gpqa_diamond_cot_suite: "45/60 (75.0%)"      # 4096 rerun supersedes the 900-cap void
       coder_suite: null         # was 29/30 (97%) — 35B measurement. NOT backfilled from SWE-bench:
                                 # the 10-question coder.yaml suite is a different instrument.
       agentic_suite: null       # was 26/30 (87%) — 35B measurement
-      math_suite: null          # was 29/30 (97%) — 35B measurement
       speedup: 1.55x            # 47.79 / 30.87. Was `shares_frontdoor_gguf` — a machine-readable
                                 # assertion of the association Directive 2 dissolves.
     memory:
@@ -2151,7 +2172,7 @@ roles:
     # until 2026-05-09. A model swap MUST edit both blocks — and as of 2026-07-31 also
     # roles.coder_escalation (the alias): THREE places.
     tier: A
-    description: "System architecture, invariants, acceptance tests - emits IR only. 2026-07-31: Qwen3.6-27B dense Q8 MTP on MI210 (ROCm0); PRIMARY for the :8083 process, with coder_escalation aliased onto it."
+    description: "System architecture, invariants, acceptance tests - emits IR only. 2026-08-22: E-7 stamps at terse template 1443ea9ab4bb — math 85.0%, mmlu_pro 27.5%, gpqa_diamond 47.5%, cruxeval 22.5%, gpqa_diamond_cot 75.0% (45/60 @4096). 2026-07-31: Qwen3.6-27B dense Q8 MTP on MI210 (ROCm0); PRIMARY for the :8083 process, with coder_escalation aliased onto it."
     agent_file_compression_operating_point: none  # 2026-07-31 model swap: the `aggressive` gate
       # (Phase 3, 2026-05-07: 117% baseline compliance, 110% procedure, recall 0.93) was measured
       # on the 122B and does NOT transfer. RE-PROBE via tests/compliance/agent_file/runner.py.
@@ -2247,18 +2268,34 @@ roles:
       #   -fa on -np 1 -c 49152 -ctk f16 -ctv f16 --spec-type draft-mtp --spec-draft-n-max 4
       #   GGML_IQK=1, taskset -c 184-191 (GPU host threads)
       # A3 is the TOP arm on this instrument, beating the 122B by 20.0 pp.
-      swe_verified_pct: 57.5                       # 23/40 resolved, 5 empty-patch, 0 harness errors
-      swe_verified_raw: "23/40"
-      swe_verified_instrument: "SWE-bench Verified, oracle-file, v4 tail replay, n=40, 2026-07-27"
-      swe_verified_comparators: "A1 Qwen3.5-122B-A10B IQ2 37.5% (15/40) · A4 Qwen3.6-35B-A3B 32.5% (13/40). NOTE A1 is the IQ2 quant, NOT the UD-Q4_K_M that architect_critic serves — this is not a head-to-head against the deployed 122B."
-      swe_verified_shape_caveat: "Measured at -c 49152 / f16 KV / -np 1; production launches -c 16384 / q8_0 KV / slots 2. Quality transfer across context depth is assumed here, not measured."
-      swe_verified_transfer_basis: "operator-certified v7-to-v8 kernel delta 0.0pp exact quality parity; quality_transfer_to_v8_eligible=true"
+      # 2026-08-22 E-7 RE-STAMP (this is the Qwen3.8-27B row; CT-E7b):
+      # swe_verified_pct VOIDED — the 57.5 was measured on Qwen3.6-27B-MTP-Q8_0 (arm A3),
+      # and BOTH the model swap (Qwen3.8-27B, 2026-08-20) and the terse-template pilot
+      # (1443ea9ab4bb, 2026-08-22) invalidate it. The E-7 recalibration measured the
+      # live path at template 1443ea9ab4bb instead:
+      swe_verified_pct: null                       # VOIDED 2026-08-22 — see E-7 re-stamp below
+      swe_verified_raw: null
+      swe_verified_instrument: "VOIDED 2026-08-22: was 'SWE-bench Verified, oracle-file, v4 tail replay, n=40, 2026-07-27' measured on Qwen3.6-27B-MTP (arm A3). The role now serves Qwen3.8-27B + terse template; SWE not re-measured."
+      swe_verified_comparators: "VOIDED with the row above. Historical: A1 37.5% (15/40) · A4 32.5% (13/40)."
+      swe_verified_shape_caveat: "VOIDED with the row above."
+      swe_verified_transfer_basis: "VOIDED with the row above."
+      # E-7 stamps (live production path :8083, v9 0db32c06e/10125, template
+      # 1443ea9ab4bb, prod sampling, maxtok 900; belief rows Witnessed/Attested,
+      # e7-recal-20260822-architect_general): FIRST-EVER stamps for Qwen3.8-27B.
+      math_suite: "34/40 (85.0%)"
+      mmlu_pro_suite: "11/40 (27.5%)"
+      gpqa_diamond_suite: "19/40 (47.5%)"
+      cruxeval_suite: "9/40 (22.5%)"
+      # gpqa_diamond_cot VOIDED at maxtok 900 (48/60 truncated); 4096 rerun
+      # (e7-cot4096) supersedes: 45/60 = 75.0%, mean 2182 tok, 14 truncated —
+      # ABOVE the embedded template's CT-5 70.0% baseline on the same pinned ids.
+      gpqa_diamond_cot_suite: "45/60 (75.0%)"
       quality_score: null                          # STILL NULL, correctly: the canonical 79-question
-                                                   # Claude-as-Judge suite has NOT been run on the 27B.
-                                                   # SWE-bench Verified is a different instrument on a
-                                                   # different scale — do NOT compare 57.5 here against
-                                                   # frontdoor's 92.9 (183-question judge).
-      benchmark_date: 2026-07-31
+                                                    # Claude-as-Judge suite has NOT been run on the 27B.
+                                                    # SWE-bench Verified is a different instrument on a
+                                                    # different scale — do NOT compare 57.5 here against
+                                                    # frontdoor's 92.9 (183-question judge).
+      benchmark_date: 2026-08-22
     memory:
       residency: hot                              # 2026-07-31: GPU-resident on ROCm0. Also fixes a
                                                   # PRE-EXISTING contradiction — server_mode said
