@@ -530,6 +530,7 @@ def _is_resumable_wait_root(root: Path, identity: Mapping[str, Any]) -> bool:
     allowed = {
         "intent.json", "source-manifest.json", "evidence-policy.json",
         "postbuild-checkpoint.json", "resource-waits",
+        "composition-authority.jsonl", "composition-authority.jsonl.lock",
     }
     if any(path.name not in allowed for path in root.iterdir()):
         return False
@@ -661,6 +662,7 @@ def _is_resumable_stage_root(
         "postbuild-checkpoint.json", "resource-waits", "proof",
         "runner-plan.json", "runner",
         "reservation-release.json", "reservation-releases",
+        "composition-authority.jsonl", "composition-authority.jsonl.lock",
     }
     if any(path.name not in allowed_root for path in root.iterdir()):
         return False

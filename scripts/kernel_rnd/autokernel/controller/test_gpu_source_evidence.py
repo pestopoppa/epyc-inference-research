@@ -887,6 +887,81 @@ class GpuSourceEvidenceTests(unittest.TestCase):
                     E.proofs.load_receipt(receipt, schema=E.C6_CORRECTNESS_SCHEMA),
                     current)
 
+    def test_split_c6_malformed_input_manifest_refuses_typed(self):
+        """Audit D1: non-mapping manifest structures raise EvidenceProducerError,
+        never AttributeError, even under a coherent reseal."""
+        for label, payload in (
+                ("array", b"[]\n"),
+                ("scalar", b"42\n"),
+                ("bad-files", b'{"schema":"epyc.autokernel.c6_input_binding.v1",'
+                             b'"operation":"MUL_MAT","input_dir":"/tmp/x",'
+                             b'"input_identity_sha256":"' + b"0" * 64 +
+                             b'","files":[{"name":"weights"}]}\n')):
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as directory:
+                current = plan(Path(directory) / "inputs")
+                self.produce(directory, plan_=current)
+                receipt = Path(directory) / "evidence" / "correctness" / \
+                    "c6-receipt.json"
+                loaded = json.loads(receipt.read_text())
+                manifest_path = Path(loaded["input_binding"]["path"])
+                manifest_path.write_bytes(payload)
+                loaded["input_binding"]["sha256"] = hashlib.sha256(
+                    payload).hexdigest()
+                loaded["receipt_sha256"] = E.schemas.content_hash({
+                    key: value for key, value in loaded.items()
+                    if key != "receipt_sha256"})
+                receipt.write_text(
+                    json.dumps(loaded, sort_keys=True) + "\n")
+                with self.assertRaises(E.EvidenceProducerError):
+                    E._validate_c6_correctness_receipt(
+                        E.proofs.load_receipt(
+                            receipt, schema=E.C6_CORRECTNESS_SCHEMA), current)
+
+    def test_split_c6_leg_argv_paths_bind_to_verified_files(self):
+        """Audit D2: the sealed leg argv is re-derived from the VERIFIED binding
+        fields (input_dir/output/ready/continue), so a path substitution in the
+        argv is refused even though the argv is internally consistent."""
+        with tempfile.TemporaryDirectory() as directory:
+            current = plan(Path(directory) / "inputs")
+            self.produce(directory, plan_=current)
+            receipt = Path(directory) / "evidence" / "correctness" / \
+                "c6-receipt.json"
+            loaded = json.loads(receipt.read_text())
+            leg = loaded["per_leg_bindings"][0]
+            argv = leg["argv"]
+            argv[argv.index("--input-dir") + 1] = str(
+                Path(leg["input_dir"]).parent / "other-inputs")
+            loaded["receipt_sha256"] = E.schemas.content_hash({
+                key: value for key, value in loaded.items()
+                if key != "receipt_sha256"})
+            receipt.write_text(json.dumps(loaded, sort_keys=True) + "\n")
+            with self.assertRaisesRegex(
+                    E.EvidenceProducerError, "deterministic derivation"):
+                E._validate_c6_correctness_receipt(
+                    E.proofs.load_receipt(
+                        receipt, schema=E.C6_CORRECTNESS_SCHEMA), current)
+
+    def test_split_c6_leg_residency_must_include_child_pid(self):
+        """Audit D3: a coherently resealed leg residency whose kfd_pids omit the
+        leg's child_pid is refused."""
+        with tempfile.TemporaryDirectory() as directory:
+            current = plan(Path(directory) / "inputs")
+            self.produce(directory, plan_=current)
+            receipt = Path(directory) / "evidence" / "correctness" / \
+                "c6-receipt.json"
+            loaded = json.loads(receipt.read_text())
+            leg = loaded["per_leg_bindings"][0]
+            leg["residency"]["kfd_pids"] = [9999]
+            loaded["receipt_sha256"] = E.schemas.content_hash({
+                key: value for key, value in loaded.items()
+                if key != "receipt_sha256"})
+            receipt.write_text(json.dumps(loaded, sort_keys=True) + "\n")
+            with self.assertRaisesRegex(
+                    E.EvidenceProducerError, "residency summary"):
+                E._validate_c6_correctness_receipt(
+                    E.proofs.load_receipt(
+                        receipt, schema=E.C6_CORRECTNESS_SCHEMA), current)
+
     def test_shared_reward_rocprof_uses_one_binary_with_separate_hashed_hip_arms(self):
         with tempfile.TemporaryDirectory() as directory:
             current = plan(Path(directory) / "inputs", shared_reward=True)

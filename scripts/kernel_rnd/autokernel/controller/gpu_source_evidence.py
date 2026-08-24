@@ -2186,15 +2186,18 @@ def _reopen_c6_input_binding(
             f"{label} input binding is unreadable") from exc
     operation = case_identity["operation"]
     order = _C6_INPUT_ORDER.get(operation)
-    input_dir = Path(str(value.get("input_dir", "")))
     if (not isinstance(value, Mapping)
-            or value.get("schema") != C6_INPUT_BINDING_SCHEMA
+            or not isinstance(value.get("input_dir"), str)
+            or not isinstance(value.get("files"), list)
+            or any(not isinstance(item, Mapping) for item in value["files"])):
+        raise EvidenceProducerError(f"{label} input binding manifest changed")
+    input_dir = Path(value["input_dir"])
+    if (value.get("schema") != C6_INPUT_BINDING_SCHEMA
             or value.get("operation") != operation
             or input_dir != input_dir.resolve(strict=False)
             or input_dir.is_symlink()
             or value.get("input_identity_sha256") != hashlib.sha256(
                 b"".join(by_name[name] for name in order)).hexdigest()
-            or not isinstance(value.get("files"), list)
             or [item.get("name") for item in value["files"]] != list(order)):
         raise EvidenceProducerError(
             f"{label} input binding manifest changed")
@@ -2355,6 +2358,7 @@ def _evaluate_c6_oracle_and_candidate_outputs(
             "argv_sha256": hashlib.sha256(
                 json.dumps(list(invocation.argv), sort_keys=True).encode()
             ).hexdigest(),
+            "input_dir": str(paths["input_dir"]),
             "stdout_path": str(invocation.stdout_path),
             "stdout_sha256": _hash_file(invocation.stdout_path, f"C6 leg {index} stdout"),
             "stderr_path": str(invocation.stderr_path),
@@ -4912,10 +4916,18 @@ def _validate_c6_split_receipt_body(
             raise EvidenceProducerError(
                 f"sealed C6 leg {index} binding is malformed")
         paths = _c6_candidate_paths_from_argv(tuple(binding["argv"]))
+        for field, key in (("input directory", "input_dir"),
+                           ("output path", "output_path"),
+                           ("ready path", "ready_path"),
+                           ("continue path", "continue_path")):
+            if not isinstance(binding.get(key), str):
+                raise EvidenceProducerError(
+                    f"sealed C6 leg {index} {field} reference is malformed")
         rebuilt = _c6_candidate_argv_from_argv(
-            c6.argv, input_dir=paths["input_dir"], output=paths["output"],
-            ready_file=paths["ready_file"],
-            continue_file=paths["continue_file"])
+            c6.argv, input_dir=Path(binding["input_dir"]),
+            output=Path(binding["output_path"]),
+            ready_file=Path(binding["ready_path"]),
+            continue_file=Path(binding["continue_path"]))
         if tuple(binding["argv"]) != rebuilt:
             raise EvidenceProducerError(
                 f"sealed C6 leg {index} argv differs from deterministic derivation")
@@ -4965,6 +4977,7 @@ def _validate_c6_split_receipt_body(
             raise EvidenceProducerError(
                 f"sealed C6 leg {index} event stream is not monotonic")
         residency = binding.get("residency")
+        child_pid = binding.get("child_pid")
         if (not isinstance(residency, Mapping)
                 or not isinstance(residency.get("overlap_sample_count"), int)
                 or residency["overlap_sample_count"] < 1
@@ -4973,7 +4986,10 @@ def _validate_c6_split_receipt_body(
                 or any(isinstance(pid, bool) or not isinstance(pid, int)
                        or pid < 1 for pid in residency["kfd_pids"])
                 or not isinstance(residency.get("max_vram_bytes"), int)
-                or residency["max_vram_bytes"] < 0):
+                or residency["max_vram_bytes"] < 0
+                or not isinstance(child_pid, int) or isinstance(child_pid, bool)
+                or child_pid < 1
+                or child_pid not in residency["kfd_pids"]):
             raise EvidenceProducerError(
                 f"sealed C6 leg {index} residency summary is malformed")
         raw_outputs.append(output_bytes)

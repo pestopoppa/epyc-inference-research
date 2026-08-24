@@ -184,6 +184,19 @@ class GpuSourceAdapterTests(unittest.TestCase):
             result.write_text(result.read_text().replace("0.12", "0.13", 1))
             self.assertEqual(adapter.reconcile(inflight).status, "ambiguous")
 
+    def test_journal_files_do_not_break_resumable_stage_root(self):
+        """PERF audit D1: composition-authority journal + lock must not park a
+        resumable operation in ambiguous."""
+        with tempfile.TemporaryDirectory() as directory:
+            adapter, candidate, authorization, lease, inflight, current, _ = self.setup(directory)
+            root = adapter._root(lease["operation_key"]); root.mkdir(parents=True)
+            E._seal(root / "intent.json", A._intent_body(
+                operation_key=lease["operation_key"], candidate=candidate,
+                authorization=authorization, lease=lease))
+            (root / "composition-authority.jsonl").write_text("")
+            (root / "composition-authority.jsonl.lock").write_text("")
+            self.assertEqual(adapter.reconcile(inflight).status, "safe_to_start")
+
     def test_wrong_operation_candidate_or_lease_is_ambiguous(self):
         with tempfile.TemporaryDirectory() as directory:
             adapter, candidate, authorization, lease, inflight, current, _ = self.setup(directory)
