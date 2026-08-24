@@ -8,6 +8,7 @@ import json
 import os
 import shutil
 import stat
+import subprocess
 import unittest
 from unittest import mock
 from pathlib import Path
@@ -20,26 +21,12 @@ from . import discovery_controller as C
 
 
 def frozen_production_comparator(
-        root: Path, *, production_path: Path | None = None) -> Path:
+        root: Path, *, production_path: Path | None = None,
+        model_path: Path | None = None) -> Path:
     production_path = (
         F.deployment.FROZEN_PRODUCTION_PATH
         if production_path is None else production_path)
-    workload = {
-        "schema": "epyc.autokernel.discovery_workload.v1",
-        "workload": "decode_tg128", "prompt_tokens": 0,
-        "generation_tokens": 128, "calls_per_arm": 9,
-        "device_id": "mi210_0", "promotion_claim": False,
-    }
-    runtime = {
-        "schema": "epyc.autokernel.discovery_runtime.v1",
-        "architecture": "gfx90a", "gpu_layers": 99,
-        "flash_attention": True, "hip_graphs": True,
-        "cpu_list": "184-191", "threads": 8,
-        "promotion_claim": False,
-    }
-    digest = lambda value: hashlib.sha256(
-        (json.dumps(value, sort_keys=True, indent=2) + "\n").encode()
-    ).hexdigest()
+    model_path = F._SITE_MODEL if model_path is None else model_path
     production_build = production_path / "build-hip"
     _files, runtime_semantics = F._production_runtime_snapshot(production_path)
     identity = F.gpu_source_proofs.BuildIdentity(
@@ -50,23 +37,51 @@ def frozen_production_comparator(
         F._digest_regular(
             (production_build / "bin/libggml-hip.so").resolve(strict=True),
             "fixture production HIP library"),
-        hashlib.sha256(b"externally sealed v9 configuration").hexdigest(),
+        F.cumulative_composition.FROZEN_BUILD_RECEIPT_SHA256,
         F.discovery_static_registry._linkage_sha(production_build))
+    model_sha = F._digest_regular(model_path, "fixture model")
+    protocol = F.cumulative_composition.frozen_production_protocol_binding(
+        model_sha256=model_sha,
+        build_identity=identity)
     comparator = F.cumulative_composition.FrozenProductionComparator.create(
-        build_identity=identity, build_receipt_sha256="6" * 64,
-        linkage_receipt_sha256="7" * 64,
-        runtime_receipt_sha256="8" * 64,
+        build_identity=identity,
+        build_receipt_sha256=
+            F.cumulative_composition.FROZEN_BUILD_RECEIPT_SHA256,
+        linkage_receipt_sha256=
+            F.cumulative_composition.FROZEN_LINKAGE_RECEIPT_SHA256,
+        runtime_receipt_sha256=
+            F.cumulative_composition.FROZEN_RUNTIME_RECEIPT_SHA256,
         runtime_snapshot_sha256=F.schemas.content_hash(runtime_semantics),
-        measurement_receipt_sha256="a" * 64,
-        model_sha256=F._digest_regular(F._SITE_MODEL, "fixture model"),
-        workload_sha256=digest(workload), runtime_config_sha256=digest(runtime),
-        frame_sha256="b" * 64, measurement_protocol_sha256="c" * 64)
+        measurement_receipt_sha256=
+            F.cumulative_composition.FROZEN_MEASUREMENT_RECEIPT_SHA256,
+        model_sha256=model_sha,
+        workload_sha256=F._pretty_json_sha256(F._deployment_workload_body()),
+        runtime_config_sha256=F._pretty_json_sha256(F._deployment_runtime_body()),
+        observed_workload_sha256=protocol["observed_workload_sha256"],
+        observed_runtime_config_sha256=
+            protocol["observed_runtime_config_sha256"],
+        frame_sha256=protocol["frame_sha256"],
+        measurement_protocol_sha256=protocol["measurement_protocol_sha256"])
     path = root / "frozen-production-comparator.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         json.dumps(comparator.to_dict(), sort_keys=True, indent=2) + "\n",
         encoding="utf-8")
     return path.resolve()
+
+
+def disposable_v9_clone(root: Path) -> Path:
+    production = root / "production"
+    subprocess.run([
+        "git", "clone", "--shared", "--no-checkout",
+        str(F.deployment.FROZEN_PRODUCTION_PATH), str(production)],
+        check=True, capture_output=True)
+    for flavor in ("build", "build-hip"):
+        subprocess.run([
+            "cp", "-a", "--reflink=auto",
+            str(F.deployment.FROZEN_PRODUCTION_PATH / flavor),
+            str(production / flavor)], check=True, capture_output=True)
+    return production
 
 
 def template(path="ggml/src/ggml-cuda/fattn.cu", symbol="fattn_kernel"):
@@ -654,6 +669,8 @@ class DeploymentFactoryTests(unittest.TestCase):
                     measurement_receipt_sha256="b" * 64,
                     model_sha256="c" * 64, workload_sha256="d" * 64,
                     runtime_config_sha256="e" * 64,
+                    observed_workload_sha256="f" * 64,
+                    observed_runtime_config_sha256="0" * 64,
                     metric="tokens_per_second",
                     direction="higher_is_better")
             effective = F.schemas.content_hash({
@@ -800,21 +817,7 @@ class DeploymentFactoryTests(unittest.TestCase):
                      "load_admission": {"effective_context_sha256": "0" * 64}})
 
     def static_config(self, root: Path):
-        production = root / "production"
-        (production / "ggml/src/ggml-cuda").mkdir(parents=True)
-        for relative in ("CMakeLists.txt", "ggml/src/ggml-cuda/unary.cu",
-                         "ggml/src/ggml-cuda/mmvq.cu"):
-            path = production / relative
-            path.write_text(f"sealed {relative}\n", encoding="utf-8")
-        for flavor in ("build", "build-hip"):
-            binary_dir = production / flavor / "bin"
-            binary_dir.mkdir(parents=True)
-            for name in ("llama-server", "llama-bench"):
-                shutil.copyfile("/bin/true", binary_dir / name)
-            if flavor == "build-hip":
-                shutil.copyfile("/bin/true", binary_dir / "libggml-hip.so.0")
-                (binary_dir / "libggml-hip.so").symlink_to(
-                    "libggml-hip.so.0")
+        production = F.deployment.FROZEN_PRODUCTION_PATH
         package = root / "codex-package"
         wrapper = package / "bin/codex.js"
         wrapper.parent.mkdir(parents=True)
@@ -838,9 +841,13 @@ class DeploymentFactoryTests(unittest.TestCase):
         model = root / "model.gguf"
         model.write_bytes(b"small model")
         workload = root / "workload.json"
-        workload.write_text('{"workload":"decode_tg128"}', encoding="utf-8")
+        workload.write_text(
+            json.dumps(F._deployment_workload_body(), sort_keys=True, indent=2)
+            + "\n", encoding="utf-8")
         runtime = root / "runtime.json"
-        runtime.write_text("{}", encoding="utf-8")
+        runtime.write_text(
+            json.dumps(F._deployment_runtime_body(), sort_keys=True, indent=2)
+            + "\n", encoding="utf-8")
         policy = root / "policy.json"
         policy.write_text("{}", encoding="utf-8")
         planner = root / "planner.json"
@@ -903,11 +910,12 @@ class DeploymentFactoryTests(unittest.TestCase):
         carry_forward_input = immutable(carry_forward_path)
         comparator_input = immutable(
             frozen_production_comparator(
-                root / "production-authority", production_path=production))
+                root / "production-authority", production_path=production,
+                model_path=model))
         config = SimpleNamespace(
             config_sha256="c" * 64, production_path=production.resolve(),
             production_branch=F.deployment.FROZEN_PRODUCTION_BRANCH,
-            production_head="0" * 40,
+            production_head=F.deployment.FROZEN_PRODUCTION_HEAD,
             instrument_path=F._INSTRUMENT_PATH,
             instrument_commit=F._INSTRUMENT_COMMIT,
             instrument_branch=F._INSTRUMENT_BRANCH,
@@ -1079,6 +1087,502 @@ class DeploymentFactoryTests(unittest.TestCase):
                 F.initialize_static_deployment_bundle(
                     root / "bundle",
                     frozen_production_comparator=comparator)
+
+    def test_canonical_frozen_v9_comparator_sealer_and_validate_only(self):
+        from . import seal_frozen_production_comparator as sealer
+
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary).resolve() / "frozen-v9-comparator.json"
+            stream = io.StringIO()
+            with contextlib.redirect_stdout(stream):
+                self.assertEqual(sealer.main(["--output", str(output)]), 0)
+            result = json.loads(stream.getvalue())
+            self.assertEqual(result["status"], "sealed")
+            self.assertFalse(result["inference_executed"])
+            self.assertEqual(stat.S_IMODE(output.stat().st_mode), 0o400)
+            self.assertEqual(output.stat().st_nlink, 1)
+            comparator = F._load_frozen_production_comparator(output)
+            self.assertEqual(
+                comparator.build_identity.source_sha256,
+                F.cumulative_composition.FROZEN_PRODUCTION_SOURCE_SHA256)
+            self.assertEqual(
+                comparator.build_identity.config_sha256,
+                comparator.build_receipt_sha256)
+            self.assertEqual(
+                (comparator.build_receipt_sha256,
+                 comparator.linkage_receipt_sha256,
+                 comparator.runtime_receipt_sha256,
+                 comparator.measurement_receipt_sha256),
+                (F.cumulative_composition.FROZEN_BUILD_RECEIPT_SHA256,
+                 F.cumulative_composition.FROZEN_LINKAGE_RECEIPT_SHA256,
+                 F.cumulative_composition.FROZEN_RUNTIME_RECEIPT_SHA256,
+                 F.cumulative_composition.FROZEN_MEASUREMENT_RECEIPT_SHA256))
+            self.assertNotEqual(comparator.workload_sha256,
+                                comparator.observed_workload_sha256)
+            self.assertNotEqual(comparator.runtime_config_sha256,
+                                comparator.observed_runtime_config_sha256)
+            stream = io.StringIO()
+            with contextlib.redirect_stdout(stream):
+                self.assertEqual(sealer.main([
+                    "--output", str(output), "--validate-only"]), 0)
+            self.assertFalse(json.loads(stream.getvalue())["inference_executed"])
+
+    def test_comparator_sealer_refuses_tamper_placeholder_and_aliases(self):
+        from . import seal_frozen_production_comparator as sealer
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            output = root / "frozen-v9-comparator.json"
+            with contextlib.redirect_stdout(io.StringIO()):
+                sealer.main(["--output", str(output)])
+            output.chmod(0o600)
+            body = json.loads(output.read_text(encoding="utf-8"))
+            body["measurement_protocol_sha256"] = "0" * 64
+            body["receipt_sha256"] = F.schemas.content_hash({
+                key: value for key, value in body.items()
+                if key != "receipt_sha256"})
+            output.write_text(
+                json.dumps(body, sort_keys=True, indent=2) + "\n",
+                encoding="utf-8")
+            output.chmod(0o400)
+            with self.assertRaisesRegex(
+                    F.DeploymentFactoryError, "differs from current"):
+                sealer.main(["--output", str(output), "--validate-only"])
+
+            canonical = root / "canonical.json"
+            with contextlib.redirect_stdout(io.StringIO()):
+                sealer.main(["--output", str(canonical)])
+            alias = root / "alias.json"
+            alias.symlink_to(canonical)
+            with self.assertRaisesRegex(
+                    F.DeploymentFactoryError, "alias|stable carrier"):
+                sealer.main(["--output", str(alias)])
+            hardlink = root / "hardlink.json"
+            os.link(canonical, hardlink)
+            with self.assertRaisesRegex(
+                    F.DeploymentFactoryError, "stable carrier"):
+                sealer.main(["--output", str(hardlink)])
+            alias_parent = root / "alias-parent"
+            actual_parent = root / "actual-parent"
+            actual_parent.mkdir()
+            alias_parent.symlink_to(actual_parent, target_is_directory=True)
+            with self.assertRaisesRegex(
+                    F.DeploymentFactoryError, "alias"):
+                sealer.main(["--output", str(alias_parent / "new.json")])
+            with self.assertRaisesRegex(
+                    F.DeploymentFactoryError, "git metadata"):
+                F._validate_comparator_output_path(
+                    root / ".git" / "comparator.json")
+            with self.assertRaisesRegex(
+                    F.DeploymentFactoryError, "frozen production"):
+                F._validate_comparator_output_path(
+                    F.deployment.FROZEN_PRODUCTION_PATH /
+                    "build-hip/comparator.json")
+
+    def test_comparator_loader_refuses_noncanonical_carrier(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            canonical = frozen_production_comparator(root / "authority")
+            compact = root / "compact.json"
+            compact.write_text(
+                json.dumps(json.loads(canonical.read_text(encoding="utf-8")),
+                           sort_keys=True, separators=(",", ":")) + "\n",
+                encoding="utf-8")
+            with self.assertRaisesRegex(
+                    F.DeploymentFactoryError, "canonical JSON"):
+                F._load_frozen_production_comparator(compact)
+            real_stat = os.stat
+
+            def swapped_stat(path, *args, **kwargs):
+                observed = real_stat(path, *args, **kwargs)
+                if Path(path) != canonical:
+                    return observed
+                values = {
+                    key: getattr(observed, key) for key in (
+                        "st_dev", "st_ino", "st_uid", "st_nlink", "st_mode",
+                        "st_size", "st_mtime_ns", "st_ctime_ns")}
+                values["st_ino"] += 1
+                return SimpleNamespace(**values)
+            with mock.patch.object(F.os, "stat", side_effect=swapped_stat), \
+                    self.assertRaisesRegex(
+                        F.DeploymentFactoryError, "changed while read"):
+                F._load_frozen_production_comparator(canonical)
+
+    def test_historical_provenance_tamper_refuses_exact_digest(self):
+        manifest = F._frozen_v9_closure_manifest()
+        role = "measurement"
+        authority = manifest["provenance"][role]
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            carrier = root / authority["path"]
+            carrier.parent.mkdir(parents=True)
+            carrier.write_bytes(
+                (F._SITE_GOVERNANCE_ROOT /
+                 authority["path"]).read_bytes() + b"\n")
+            carrier.chmod(0o400)
+            with self.assertRaisesRegex(
+                    F.DeploymentFactoryError, "changed while read"):
+                F._stable_public_bytes(
+                    carrier, authority["file_sha256"],
+                    f"frozen production {role} provenance")
+
+    def test_closure_manifest_refuses_alias_and_coherent_tamper(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            exact = root / "exact.json"
+            shutil.copyfile(F._FROZEN_CLOSURE_MANIFEST, exact)
+            exact.chmod(0o400)
+            self.assertEqual(
+                F._frozen_v9_closure_manifest(exact)["manifest_sha256"],
+                F._FROZEN_CLOSURE_MANIFEST_SHA256)
+            alias = root / "alias.json"
+            alias.symlink_to(exact)
+            with self.assertRaisesRegex(
+                    F.DeploymentFactoryError, "stable carrier"):
+                F._frozen_v9_closure_manifest(alias)
+            exact.chmod(0o600)
+            body = json.loads(exact.read_text(encoding="utf-8"))
+            body["runtime"]["llama_bench_sha256"] = "0" * 64
+            body["manifest_sha256"] = F.schemas.content_hash({
+                key: value for key, value in body.items()
+                if key != "manifest_sha256"})
+            exact.write_text(
+                json.dumps(body, sort_keys=True, indent=2) + "\n",
+                encoding="utf-8")
+            exact.chmod(0o400)
+            with self.assertRaisesRegex(
+                    F.DeploymentFactoryError, "changed while read"):
+                F._frozen_v9_closure_manifest(exact)
+
+    def test_closure_manifest_requires_ratified_receipt_semantics(self):
+        manifest = F._frozen_v9_closure_manifest()
+        originals = {
+            role: (F._SITE_GOVERNANCE_ROOT / row["path"]).read_bytes()
+            for role, row in manifest["provenance"].items()}
+        ratification = json.loads(originals["measurement"])
+        ratification["production_binary_sha256"]["hip"] = "0" * 64
+        changed = json.dumps(ratification, sort_keys=True).encode()
+
+        def carrier(path, _expected, _label):
+            for role, authority in manifest["provenance"].items():
+                if Path(path) == F._SITE_GOVERNANCE_ROOT / authority["path"]:
+                    return changed if role == "measurement" else originals[role]
+            raise AssertionError(path)
+
+        with mock.patch.object(
+                F, "_stable_public_bytes", side_effect=carrier), \
+                self.assertRaisesRegex(
+                    F.DeploymentFactoryError, "semantics changed"):
+            F._verify_frozen_v9_provenance(
+                manifest, F._SITE_GOVERNANCE_ROOT)
+
+    def test_runtime_inventory_fixture_matches_before_approved_readelf(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            source = Path("/usr/bin/true").resolve(strict=True)
+            relative_paths = (
+                "build/bin/llama-bench",
+                "build/bin/llama-server",
+                "build-hip/bin/llama-bench",
+                "build-hip/bin/llama-server",
+            )
+            rows = []
+            for relative in relative_paths:
+                target = root / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(source, target)
+                rows.append({
+                    "relative_path": relative,
+                    "sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
+                    "symlink_target": None,
+                })
+            hip_real = root / "build-hip/bin/libggml-hip.so.0.16.0"
+            shutil.copyfile(source, hip_real)
+            hip_alias = root / "build-hip/bin/libggml-hip.so.0"
+            hip_alias.symlink_to(hip_real.name)
+            rows.append({
+                "relative_path": "build-hip/bin/libggml-hip.so.0",
+                "sha256": hashlib.sha256(hip_real.read_bytes()).hexdigest(),
+                "symlink_target": hip_real.name,
+            })
+            rows.sort(key=lambda row: row["relative_path"])
+            inventory = {
+                "schema": "epyc.autokernel.runtime_inventory.v1",
+                "readelf": {
+                    "path": str(source),
+                    "sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+                    "version": "fixture readelf 1",
+                },
+                "objects": rows,
+            }
+            commands = []
+
+            def inspect(argv, **_kwargs):
+                commands.append(tuple(argv))
+                return SimpleNamespace(
+                    returncode=0,
+                    stdout=("fixture readelf 1\n" if argv[1] == "--version"
+                            else ""), stderr="")
+
+            files, semantics = F._production_runtime_snapshot(
+                root, closure_manifest={"runtime_inventory": inventory},
+                runner=inspect)
+            self.assertEqual(len(files), 5)
+            self.assertEqual(commands[0], (str(source), "--version"))
+            self.assertEqual(
+                set(semantics["closures"]), {"build", "build-hip"})
+            self.assertEqual(
+                set(semantics["closures"]["build-hip"]["topology"]),
+                {"libggml-hip.so.0", "llama-bench", "llama-server"})
+
+    def test_runtime_inventory_fixture_refuses_before_readelf(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            path = root / "build/bin/llama-bench"
+            path.parent.mkdir(parents=True)
+            path.write_bytes(b"fixture-runtime-object")
+            inventory = {
+                "schema": "epyc.autokernel.runtime_inventory.v1",
+                "readelf": {
+                    "path": str(Path("/usr/bin/true").resolve(strict=True)),
+                    "sha256": hashlib.sha256(
+                        Path("/usr/bin/true").resolve(strict=True).read_bytes()
+                    ).hexdigest(),
+                    "version": "fixture readelf 1",
+                },
+                "objects": [{
+                    "relative_path": "build/bin/llama-bench",
+                    "sha256": "0" * 64,
+                    "symlink_target": None,
+                }],
+            }
+            runner = mock.Mock()
+            with self.assertRaisesRegex(
+                    F.DeploymentFactoryError,
+                    "runtime inventory differs from manifest"):
+                F._production_runtime_snapshot(
+                    root,
+                    closure_manifest={"runtime_inventory": inventory},
+                    runner=runner)
+            runner.assert_not_called()
+
+            inventory["objects"][0]["sha256"] = hashlib.sha256(
+                path.read_bytes()).hexdigest()
+            inventory["objects"][0]["symlink_target"] = "unexpected-target"
+            with self.assertRaisesRegex(
+                    F.DeploymentFactoryError,
+                    "runtime inventory differs from manifest"):
+                F._production_runtime_snapshot(
+                    root,
+                    closure_manifest={"runtime_inventory": inventory},
+                    runner=runner)
+            runner.assert_not_called()
+
+    def test_approved_readelf_requires_exact_bytes_and_version(self):
+        inventory = json.loads(json.dumps(
+            F._frozen_v9_closure_manifest()["runtime_inventory"]))
+        inventory["readelf"]["sha256"] = "0" * 64
+        runner = mock.Mock()
+        with self.assertRaisesRegex(
+                F.DeploymentFactoryError, "approved readelf is unavailable"):
+            F._approved_readelf(inventory, runner=runner)
+        runner.assert_not_called()
+
+        inventory = F._frozen_v9_closure_manifest()["runtime_inventory"]
+        runner.return_value = SimpleNamespace(
+            returncode=0, stdout="foreign readelf\n", stderr="")
+        with self.assertRaisesRegex(
+                F.DeploymentFactoryError, "readelf version differs"):
+            F._approved_readelf(inventory, runner=runner)
+
+    def test_disposable_v9_runtime_mutations_refuse_frozen_closure(self):
+        mutations = {
+            "binary": lambda production: (
+                production / "build-hip/bin/llama-bench"),
+            "server": lambda production: (
+                production / "build-hip/bin/llama-server"),
+            "hip": lambda production: (
+                production / "build-hip/bin/libggml-hip.so.0.16.0"),
+            "runtime": lambda production: (
+                production / "build/bin/libggml-base.so.0.16.0"),
+        }
+        with tempfile.TemporaryDirectory(
+                dir="/mnt/raid0/llm/tmp") as temporary:
+            production = disposable_v9_clone(
+                Path(temporary).resolve())
+            self.assertEqual(
+                F.derive_frozen_production_comparator(
+                    production_path=production).receipt_sha256,
+                "79143fbfe62305dc1c9fce29248a8b3d4302eb27d3f55a60020eeb683c9de6bb")
+        for name, target in mutations.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory(
+                    dir="/mnt/raid0/llm/tmp") as temporary:
+                production = disposable_v9_clone(
+                    Path(temporary).resolve())
+                path = target(production)
+                path.chmod(0o700)
+                with path.open("ab") as stream:
+                    stream.write(b"coherent-current-disk-substitution")
+                with self.assertRaisesRegex(
+                        F.DeploymentFactoryError,
+                        "runtime (?:inventory|closure) differs from manifest"):
+                    F.derive_frozen_production_comparator(
+                        production_path=production)
+        with tempfile.TemporaryDirectory(
+                dir="/mnt/raid0/llm/tmp") as temporary:
+            production = disposable_v9_clone(
+                Path(temporary).resolve())
+            alias = production / "build-hip/bin/libggml-hip.so"
+            alias.unlink()
+            alias.symlink_to("libggml-hip.so.0.16.0")
+            with self.assertRaisesRegex(
+                    F.DeploymentFactoryError,
+                    "runtime (?:inventory|closure) differs from manifest"):
+                F.derive_frozen_production_comparator(
+                    production_path=production)
+
+    def test_disposable_v9_clone_refuses_foreign_source_head(self):
+        with tempfile.TemporaryDirectory(
+                dir="/mnt/raid0/llm/tmp") as temporary:
+            production = disposable_v9_clone(
+                Path(temporary).resolve())
+            subprocess.run([
+                "git", "-C", str(production), "checkout", "--detach",
+                f"{F.deployment.FROZEN_PRODUCTION_HEAD}^"],
+                check=True, capture_output=True)
+            with self.assertRaisesRegex(
+                    F.DeploymentFactoryError,
+                    "source identity (observation is unavailable|differs from manifest)"):
+                F.derive_frozen_production_comparator(
+                    production_path=production)
+
+    def test_substituted_server_is_not_executed_before_closure_authentication(
+            self):
+        with tempfile.TemporaryDirectory(
+                dir="/mnt/raid0/llm/tmp") as temporary:
+            root = Path(temporary).resolve()
+            production = disposable_v9_clone(root)
+            marker = root / "substituted-server-executed"
+            server = production / "build-hip/bin/llama-server"
+            source = root / "substituted-server.c"
+            source.write_text(
+                "#include <stdio.h>\n"
+                "int main(void) {\n"
+                f'  FILE *marker = fopen("{marker}", "w");\n'
+                "  if (marker != NULL) { fputs(\"executed\", marker); "
+                "fclose(marker); }\n"
+                '  puts("version: 10125 (0db32c06e)");\n'
+                "  return 0;\n"
+                "}\n",
+                encoding="utf-8")
+            subprocess.run(
+                ("/usr/bin/cc", str(source), "-o", str(server)),
+                check=True, stdin=subprocess.DEVNULL, capture_output=True)
+            with self.assertRaisesRegex(
+                    F.DeploymentFactoryError,
+                    "runtime (?:inventory|closure) differs from manifest"):
+                F.derive_frozen_production_comparator(
+                    production_path=production)
+            self.assertFalse(marker.exists())
+
+    def test_post_hash_server_path_replacement_is_never_executed(self):
+        with tempfile.TemporaryDirectory(
+                dir="/mnt/raid0/llm/tmp") as temporary:
+            root = Path(temporary).resolve()
+            production = disposable_v9_clone(root)
+            runtime_snapshot = F._production_runtime_snapshot(production)
+            marker = root / "post-hash-replacement-executed"
+            replacement = root / "replacement-llama-server"
+            source = root / "replacement-llama-server.c"
+            source.write_text(
+                "#include <stdio.h>\n"
+                "int main(void) {\n"
+                f'  FILE *marker = fopen("{marker}", "w");\n'
+                "  if (marker != NULL) { fputs(\"executed\", marker); "
+                "fclose(marker); }\n"
+                '  puts("version: 10125 (0db32c06e)");\n'
+                "  return 0;\n"
+                "}\n",
+                encoding="utf-8")
+            subprocess.run(
+                ("/usr/bin/cc", str(source), "-o", str(replacement)),
+                check=True, stdin=subprocess.DEVNULL, capture_output=True)
+            server = production / "build-hip/bin/llama-server"
+            original_verify = F._verify_frozen_v9_runtime_closure
+            original_run = subprocess.run
+            authenticated = []
+            commands = []
+
+            def replace_after_auth(*args, **kwargs):
+                result = original_verify(*args, **kwargs)
+                authenticated.append(True)
+                if len(authenticated) == 1:
+                    os.replace(replacement, server)
+                return result
+
+            def record_command(argv, *args, **kwargs):
+                commands.append(tuple(argv))
+                return original_run(argv, *args, **kwargs)
+
+            with mock.patch.object(
+                    F, "_production_runtime_snapshot",
+                    return_value=runtime_snapshot), \
+                    mock.patch.object(
+                        F, "_verify_frozen_v9_runtime_closure",
+                        side_effect=replace_after_auth), \
+                    mock.patch.object(
+                        F.subprocess, "run", side_effect=record_command), \
+                    self.assertRaisesRegex(
+                        F.DeploymentFactoryError,
+                        "runtime (?:inventory|closure) differs from manifest"):
+                F.derive_frozen_production_comparator(
+                    production_path=production)
+            self.assertEqual(authenticated, [True])
+            self.assertFalse(marker.exists())
+            self.assertTrue(commands)
+            self.assertTrue(all(
+                len(argv) >= 4 and argv[0] == "git" and argv[1] == "-C"
+                and argv[3] in {"rev-parse", "symbolic-ref", "archive"}
+                for argv in commands), commands)
+
+    def test_initializer_refuses_coherently_resealed_build_config_identity(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            comparator = frozen_production_comparator(root / "authority")
+            body = json.loads(comparator.read_text(encoding="utf-8"))
+            body["build_identity"]["config_sha256"] = "0" * 64
+            body["receipt_sha256"] = F.schemas.content_hash({
+                key: value for key, value in body.items()
+                if key != "receipt_sha256"})
+            comparator.write_text(
+                json.dumps(body, sort_keys=True, indent=2) + "\n",
+                encoding="utf-8")
+            with self.assertRaisesRegex(
+                    F.DeploymentFactoryError,
+                    "build/linkage identity changed"):
+                F.initialize_static_deployment_bundle(
+                    root / "bundle", frozen_production_comparator=comparator)
+
+    def test_initializer_refuses_foreign_deployment_runtime_hash(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            comparator = frozen_production_comparator(root / "authority")
+            body = json.loads(comparator.read_text(encoding="utf-8"))
+            self.assertNotEqual(
+                body["runtime_config_sha256"],
+                body["observed_runtime_config_sha256"])
+            body["runtime_config_sha256"] = "0" * 64
+            body["receipt_sha256"] = F.schemas.content_hash({
+                key: value for key, value in body.items()
+                if key != "receipt_sha256"})
+            comparator.write_text(
+                json.dumps(body, sort_keys=True, indent=2) + "\n",
+                encoding="utf-8")
+            with self.assertRaisesRegex(
+                    F.DeploymentFactoryError,
+                    "another immutable frame"):
+                F.initialize_static_deployment_bundle(
+                    root / "bundle", frozen_production_comparator=comparator)
 
     def test_static_registry_refuses_coherently_resealed_linkage_identity(self):
         with tempfile.TemporaryDirectory() as temporary:

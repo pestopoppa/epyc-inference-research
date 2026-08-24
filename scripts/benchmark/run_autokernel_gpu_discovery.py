@@ -3262,6 +3262,8 @@ def run(args: argparse.Namespace) -> dict:
             "arm_order_schedule": list(arm_order),
             "arm_order_seed_sha256": sealed.get("arm_order_seed_sha256", "0" * 64),
             "baseline_center": center, "candidate_samples": values,
+            "anchor_samples": bank["anchor_samples"],
+            "anchor_runs": bank["anchor_runs"],
             "relative_effects": effects, "median_relative": median(effects),
             "host_noise_policy": "ordinary_host_activity_recorded_not_blocking",
             "cpu_overlap_policy": sealed["cpu_overlap_policy"],
@@ -3270,6 +3272,7 @@ def run(args: argparse.Namespace) -> dict:
             "promotion_claim": False,
             "runtime_graphs": sealed.get("runtime_graphs", "off"),
             "frame": bank["frame"], "sole_factor": bank["sole_factor"],
+            "anchor_identity": bank["anchor_identity"],
             "candidate_identity": bank["candidate_identity"],
             "candidate_runs": candidate_runs, "device_sampling": numeric,
             **({"timed_output_oracle": timed_output_oracle}

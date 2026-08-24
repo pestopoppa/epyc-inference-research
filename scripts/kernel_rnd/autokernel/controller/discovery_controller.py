@@ -2459,15 +2459,14 @@ class GpuSourceScreener:
             composition_comparison = cumulative_composition.IncrementalComparison.create(
                 pair, composition_correctness,
                 exact_route_receipt_sha256=bundle.attribution["file_sha256"],
+                exact_route_receipt_path=bundle.attribution["path"],
                 expected_route_set_sha256=schemas.content_hash(expected_routes),
                 graphs_off_receipt_sha256=graphs_off_file_sha256,
+                graphs_off_receipt_path=graphs_off_path,
                 graphs_on_receipt_sha256=graphs_on_file_sha256,
-                target_runtime_frame_sha256=schemas.content_hash({
-                    "baseline_sha256": raw["baseline_sha256"],
-                    "runtime_graphs": raw["runtime_graphs"],
-                    "factor": raw.get("factor"),
-                    "technical_workload": raw.get("technical_workload"),
-                }),
+                graphs_on_receipt_path=result_path,
+                target_runtime_frame_sha256=
+                    cumulative_composition._target_runtime_frame_sha256(raw),
                 exact_route_effect_fraction=exact_effect,
                 graphs_off_effect_fraction=graphs_off_effect,
                 graphs_on_effect_fraction=target_effect)
@@ -2484,7 +2483,9 @@ class GpuSourceScreener:
                     incremental_graphs_on=raw,
                     production_graphs_on=production_graphs_on,
                     production_graphs_on_receipt_sha256=hashlib.sha256(
-                        production_graphs_on_path.read_bytes()).hexdigest())
+                        production_graphs_on_path.read_bytes()).hexdigest(),
+                    production_graphs_on_receipt_path=
+                        production_graphs_on_path)
             performance_path = getattr(
                 args, "_cumulative_performance_path", None)
             if not isinstance(performance_path, str):
@@ -2493,6 +2494,12 @@ class GpuSourceScreener:
             cumulative_performance_ref = \
                 cumulative_composition.seal_cumulative_performance(
                     Path(performance_path), cumulative_performance)
+            try:
+                cumulative_composition.commit_result_authority(
+                    Path(performance_path).resolve().parent)
+            except cumulative_composition.CompositionError as exc:
+                raise DiscoveryControllerError(
+                    "cumulative result authority journal refused") from exc
         c6_ref = (bundle.correctness.get("body", {}).get("c6_correctness")
                   if isinstance(bundle.correctness, Mapping) else None)
         if c6_ref is not None and not isinstance(c6_ref, Mapping):

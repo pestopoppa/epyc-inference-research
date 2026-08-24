@@ -1,0 +1,195 @@
+{
+  "manifest_sha256": "e01ea9392bb8300b4d222581da7bb48b03636883d7c8c8a36a2c3acbe1f17da4",
+  "production": {
+    "branch": "production-consolidated-v9",
+    "commit": "0db32c06e3e550065b78311a6031ef3dd2c4f27c",
+    "source_archive_sha256": "48663678dad691ba046cc3d3e9a70d42046d92602db94704b3707e3fadb82ca8",
+    "version": "version: 10125 (0db32c06e)"
+  },
+  "provenance": {
+    "build": {
+      "file_sha256": "04344a3624247646d0ebd795c12abfa4db48be895ebc8ccc465867917e7da679",
+      "path": "artifacts/operator/v9-qualification-20260810T235723Z-0db32c06e/summary.json",
+      "required": {
+        "candidate": {
+          "branch": "experimental-v9-dspark-promotion",
+          "commit": "0db32c06e3e550065b78311a6031ef3dd2c4f27c",
+          "remote_commit": "0db32c06e3e550065b78311a6031ef3dd2c4f27c",
+          "remote_ref": "fork/experimental-v9-dspark-promotion",
+          "version": "10125"
+        },
+        "cutover_disposition": "authorized_and_eligible",
+        "production_mutated": false,
+        "status": "preproduction_qualification_pass"
+      },
+      "schema": "epyc.kernel_promotion_qualification.v1"
+    },
+    "linkage": {
+      "file_sha256": "8c4f507a2072fdb170ad4ac7bfa9ca4867bd20023587615b5f960eab9e21580b",
+      "path": "artifacts/operator/v9-runtime-packaging-20260810T224026Z-0db32c06e/summary.json",
+      "required": {
+        "candidate_branch": "experimental-v9-dspark-promotion",
+        "candidate_head": "0db32c06e3e550065b78311a6031ef3dd2c4f27c",
+        "candidate_version": "version: 10125 (0db32c06e)",
+        "deployed_server_sha256": {
+          "cpu": "8ebb1355593121a231735d7b58ad076f4539d2c5e3847fa09d2922fa8a980499",
+          "hip": "21cfb750dc0ba4b3add0674fcb9dd061d77b3604ebf8e1d063ba0e2c51902feb"
+        },
+        "production_mutated": false,
+        "status": "sealed"
+      },
+      "schema": "epyc.kernel_v9.runtime_packaging.v1"
+    },
+    "measurement": {
+      "file_sha256": "21c396477c1cdcc71dbaffd7452dd43e7bbf5941b1f199c8a5d217da830945ed",
+      "path": "artifacts/operator/ratify_v9_final_freeze_20260811.json",
+      "required": {
+        "decision": "FREEZE-V9",
+        "production_binary_sha256": {
+          "cpu": "8ebb1355593121a231735d7b58ad076f4539d2c5e3847fa09d2922fa8a980499",
+          "hip": "21cfb750dc0ba4b3add0674fcb9dd061d77b3604ebf8e1d063ba0e2c51902feb"
+        },
+        "production_branch": "production-consolidated-v9",
+        "production_frozen": true,
+        "production_head": "0db32c06e3e550065b78311a6031ef3dd2c4f27c",
+        "production_version": "10125 (0db32c06e)",
+        "status": "production_promoted_frozen"
+      },
+      "schema": "epyc.operator_v9_final_freeze_attestation.v1"
+    },
+    "runtime": {
+      "file_sha256": "e5374f054d0c1be12fe6d511c32c5e24fcac9fb79bc954c82f42bc28e8822d48",
+      "path": "artifacts/operator/v9-cutover-20260810T235900Z-0db32c06e/journal.json",
+      "required": {
+        "completed": 1,
+        "phase": "complete",
+        "production_branch": "production-consolidated-v9",
+        "production_head": "0db32c06e3e550065b78311a6031ef3dd2c4f27c"
+      },
+      "schema": "epyc.kernel_cutover_journal.v1"
+    }
+  },
+  "runtime": {
+    "hip_library_sha256": "18192805ae84178ea1fd0ebee6ea0a5092b99d064bc357800325fc65015cd5e1",
+    "linkage_sha256": "a9566ad41066638e6eba5549aed96d2da3aa5b2861e4ac893ea01ed6b9ecae79",
+    "llama_bench_sha256": "f6f4ed341804306142d4eb8c288f2802df403959ce090e929f53f38e953cca7e",
+    "llama_server_sha256": "21cfb750dc0ba4b3add0674fcb9dd061d77b3604ebf8e1d063ba0e2c51902feb",
+    "runtime_snapshot_sha256": "02fd69e15fbbec6fca078f176346c5e863f40908c8bb47e1cd745d2d71659fd6"
+  },
+  "runtime_inventory": {
+    "objects": [
+      {
+        "relative_path": "build-hip/bin/libggml-base.so.0",
+        "sha256": "eedeb7380ef4f82f2feedf514341c92d52e5673846ea1c11d7ebb7c8643390de",
+        "symlink_target": "libggml-base.so.0.16.0"
+      },
+      {
+        "relative_path": "build-hip/bin/libggml-cpu.so.0",
+        "sha256": "ddead9e009cc1de96cc18154fa9bb891d69d4689e84e57920034a585afaccb55",
+        "symlink_target": "libggml-cpu.so.0.16.0"
+      },
+      {
+        "relative_path": "build-hip/bin/libggml-hip.so.0",
+        "sha256": "18192805ae84178ea1fd0ebee6ea0a5092b99d064bc357800325fc65015cd5e1",
+        "symlink_target": "libggml-hip.so.0.16.0"
+      },
+      {
+        "relative_path": "build-hip/bin/libggml.so.0",
+        "sha256": "fd87ca295fb3c3ed760def97b6787a994611efc18ad7279049c64a50f6ea72f0",
+        "symlink_target": "libggml.so.0.16.0"
+      },
+      {
+        "relative_path": "build-hip/bin/libllama-bench-impl.so",
+        "sha256": "43800ede9eec2ec3d7559482a1577e97370279087e9cb6441a23f8039d923a1b",
+        "symlink_target": null
+      },
+      {
+        "relative_path": "build-hip/bin/libllama-common.so.0",
+        "sha256": "eae6f202532cf7f031b3ea7dc1d9784e93badeb56011b3f31795324382cd5755",
+        "symlink_target": "libllama-common.so.0.0.10125"
+      },
+      {
+        "relative_path": "build-hip/bin/libllama-server-impl.so",
+        "sha256": "20cbf39b087e6a3beacc51e2c9fc9ecf55bfc5b524c3b1de3c0c46db8bd858df",
+        "symlink_target": null
+      },
+      {
+        "relative_path": "build-hip/bin/libllama.so.0",
+        "sha256": "f31db68deb459fb7d7835f2a835849bbb5de0cea1ae2c3daee2ab2b995ca9bd5",
+        "symlink_target": "libllama.so.0.0.10125"
+      },
+      {
+        "relative_path": "build-hip/bin/libmtmd.so.0",
+        "sha256": "092080aa893fb752a3452dc8ed10be46599c4c97d8b216198b346361bf252583",
+        "symlink_target": "libmtmd.so.0.0.10125"
+      },
+      {
+        "relative_path": "build-hip/bin/llama-bench",
+        "sha256": "f6f4ed341804306142d4eb8c288f2802df403959ce090e929f53f38e953cca7e",
+        "symlink_target": null
+      },
+      {
+        "relative_path": "build-hip/bin/llama-server",
+        "sha256": "21cfb750dc0ba4b3add0674fcb9dd061d77b3604ebf8e1d063ba0e2c51902feb",
+        "symlink_target": null
+      },
+      {
+        "relative_path": "build/bin/libggml-base.so.0",
+        "sha256": "07a8c706017d791af5959b772e4afa4c5e819d51cce9176e4e9d19c1e5d35943",
+        "symlink_target": "libggml-base.so.0.16.0"
+      },
+      {
+        "relative_path": "build/bin/libggml-cpu.so.0",
+        "sha256": "125fb55976f7b9da332bba402801d9cb994067cb314595158f098c2c8f88ac3e",
+        "symlink_target": "libggml-cpu.so.0.16.0"
+      },
+      {
+        "relative_path": "build/bin/libggml.so.0",
+        "sha256": "f44d0c794478ee5042a8abdaebabd198929a4bdbf7759fe4fb801b0c00dd8119",
+        "symlink_target": "libggml.so.0.16.0"
+      },
+      {
+        "relative_path": "build/bin/libllama-bench-impl.so",
+        "sha256": "304accafb55610fb45b84e44828103a51392a530af1a6a19fbfa4abcc9685e8b",
+        "symlink_target": null
+      },
+      {
+        "relative_path": "build/bin/libllama-common.so.0",
+        "sha256": "22aa420869b5a858bde82b2e9deb3405baf582f3e24283616aeb630a19ff0df4",
+        "symlink_target": "libllama-common.so.0.0.10125"
+      },
+      {
+        "relative_path": "build/bin/libllama-server-impl.so",
+        "sha256": "264fc9f208f91d6ddd3427837d63c507b14d170a566c2a53992b142b09dcabd6",
+        "symlink_target": null
+      },
+      {
+        "relative_path": "build/bin/libllama.so.0",
+        "sha256": "3020ebf11484629a98ea1393246e53c11a3d27593810f994061a82bc572e3550",
+        "symlink_target": "libllama.so.0.0.10125"
+      },
+      {
+        "relative_path": "build/bin/libmtmd.so.0",
+        "sha256": "2c2e9ec08606c0d13278e5013244cd79879db95b418a54f027db6ff5522fb4ea",
+        "symlink_target": "libmtmd.so.0.0.10125"
+      },
+      {
+        "relative_path": "build/bin/llama-bench",
+        "sha256": "56ebb2ae56b38cd931c6c506ae7379f7bfefc552a4ff33eb2029e9b90c22f9d6",
+        "symlink_target": null
+      },
+      {
+        "relative_path": "build/bin/llama-server",
+        "sha256": "8ebb1355593121a231735d7b58ad076f4539d2c5e3847fa09d2922fa8a980499",
+        "symlink_target": null
+      }
+    ],
+    "readelf": {
+      "path": "/usr/bin/x86_64-linux-gnu-readelf",
+      "sha256": "d1459ee29cd3ae90f4b703e7a76748d48c89f1050ecfa626c3825af2cc1efcfb",
+      "version": "GNU readelf (GNU Binutils for Ubuntu) 2.45"
+    },
+    "schema": "epyc.autokernel.runtime_inventory.v1"
+  },
+  "schema": "epyc.autokernel.frozen_v9_closure_manifest.v2"
+}

@@ -311,6 +311,8 @@ class TestGpuDiscoveryBuildIdentity(unittest.TestCase):
                 measurement_receipt_sha256="5" * 64,
                 model_sha256="6" * 64, workload_sha256="7" * 64,
                 runtime_config_sha256="8" * 64,
+                observed_workload_sha256="9" * 64,
+                observed_runtime_config_sha256="a" * 64,
                 metric="tokens_per_second", direction="higher_is_better")
         raw = dict(identity.__dict__)
         args = argparse.Namespace(
