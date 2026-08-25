@@ -642,7 +642,7 @@ _SITE_ACTOR_WRAPPER = Path(
     "/usr/local/share/npm-global/lib/node_modules/@openai/codex/bin/codex.js")
 _SITE_CRITIC_WRAPPER = Path("/home/node/.local/share/claude/versions/2.1.241")
 _SITE_BACKUP_CRITIC_WRAPPER = Path(
-    "/usr/local/share/npm-global/lib/node_modules/opencode-ai/bin/opencode.exe")
+    "/mnt/raid0/llm/autokernel/bin/opencode.exe")
 _SITE_CLAUDE_AUTH_ROOT = Path("/home/node/.claude")
 _SITE_GOVERNANCE_ROOT = Path("/workspace")
 _FROZEN_CLOSURE_MANIFEST = (
