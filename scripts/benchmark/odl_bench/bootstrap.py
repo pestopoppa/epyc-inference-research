@@ -10,11 +10,11 @@ Resolution order for the orchestrator root (first existing wins):
   2. ``/workspace/repos/epyc-orchestrator`` (single-source symlink)
   3. ``/mnt/raid0/llm/epyc-orchestrator`` (canonical tree)
 
-Likewise for the opendataloader-bench harness root (used by the adapter to run
-scoring in the bench's OWN venv):
+Likewise for the omnidocbench harness root (the OmniDocBench clone whose own
+venv runs the upstream scoring; used by the adapter to run scoring there):
   1. ``$OPENDATALOADER_BENCH_ROOT``
-  2. ``/workspace/repos/opendataloader-bench``
-  3. ``/mnt/raid0/llm/opendataloader-bench``
+  2. ``/workspace/repos/omnidocbench``
+  3. ``/mnt/raid0/llm/omnidocbench``
 """
 
 from __future__ import annotations
@@ -31,8 +31,8 @@ _ORCH_CANDIDATES = (
 
 _BENCH_CANDIDATES = (
     os.environ.get("OPENDATALOADER_BENCH_ROOT"),
-    "/workspace/repos/opendataloader-bench",
-    "/mnt/raid0/llm/opendataloader-bench",
+    "/workspace/repos/omnidocbench",
+    "/mnt/raid0/llm/omnidocbench",
 )
 
 
@@ -52,7 +52,7 @@ def orchestrator_root() -> Path | None:
 
 
 def bench_root() -> Path | None:
-    """Absolute path to the opendataloader-bench checkout, or None if not found."""
+    """Absolute path to the omnidocbench (OmniDocBench clone) checkout, or None if not found."""
     return _first_existing(_BENCH_CANDIDATES)
 
 

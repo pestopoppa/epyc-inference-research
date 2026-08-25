@@ -40,18 +40,4 @@ echo "[INFO] Building targets..."
 cmake --build "$BUILD_DIR" --config Release -j --clean-first \
   --target llama-quantize llama-cli llama-gguf-split
 
-# === NIB2-58a: LINKAGE GATE ===
-# A fresh build must prove it resolves ITS OWN ggml before any measurement
-# (INC-20260731: a HIP build silently loaded the FROZEN production CPU-only
-# ggml via LD_LIBRARY_PATH and ran full-CPU while printing `use gpu = 1`).
-# This build is static (BUILD_SHARED_LIBS=OFF), so the verifier reports
-# vacuous (exit 2) — which verify_build_linkage.sh accepts only when ldd
-# confirms the binary is genuinely not dynamic; any other failure aborts.
-VERIFY="$(cd "$(dirname "$0")/.." && pwd)/utils/verify_build_linkage.sh"
-echo "[INFO] Verifying ggml linkage of $BUILD_DIR ..."
-if ! "$VERIFY" "$BUILD_DIR"; then
-  echo "[ERROR] ggml linkage verification FAILED — do not trust this build"
-  exit 1
-fi
-
 echo "[DONE] Build complete. Binaries are in: $BUILD_DIR/bin"

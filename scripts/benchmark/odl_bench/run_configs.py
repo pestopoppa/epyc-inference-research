@@ -28,7 +28,7 @@ from pathlib import Path
 
 # Interpreter that MUST run scoring (has Levenshtein/apted; py3.11).
 # Resolved lazily via bootstrap.bench_python(); this string documents the default.
-BENCH_PYTHON_DEFAULT = "/mnt/raid0/llm/opendataloader-bench/.venv/bin/python"
+BENCH_PYTHON_DEFAULT = "/mnt/raid0/llm/omnidocbench/.venv/bin/python"
 BENCH_VALIDATION_SCRIPT = "pdf_validation.py"  # bench entrypoint, run with cwd=bench_root
 
 # Interpreter recommended to GENERATE predictions with all deterministic engines

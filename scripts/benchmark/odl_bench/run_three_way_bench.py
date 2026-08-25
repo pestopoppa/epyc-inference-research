@@ -6,6 +6,18 @@ opendataloader-bench 200-PDF corpus (ground-truth markdown), scored with the
 upstream harness's own evaluator (NID = reading order, TEDS = table fidelity,
 MHS = heading fidelity, plus per-doc latency = speed).
 
+Fail-closed contract (PIP-05 hardening, 2026-08-25):
+  * a non-zero extractor return code, a missing candidate output, or an empty
+    prediction FAILS the document — the prediction file is never left behind
+    as if it were a valid prediction;
+  * any failed document makes the parse phase exit non-zero (after writing the
+    per-engine summaries so the failures are forensically visible);
+  * the ODL/LiteParse engine versions are pinned (ENGINE_PINS); the parse
+    phase refuses to run when the installed distribution is missing or does
+    not match the pin;
+  * raw per-document latencies are persisted (summary["per_doc_latency_ms"]) so
+    the reported median/p90 can be reproduced independently.
+
 Layout (mirrors the upstream harness's prediction/engine/markdown contract):
 
     <run_dir>/prediction/<engine>/markdown/<stem>.md
@@ -17,7 +29,7 @@ deps:
     Phase 1 (PARSE) — research venv, python3.13:
         liteparse 2.12.0 (cp313 wheel) + opendataloader-pdf 2.5.0 (py3-none-any)
         + pdftotext (system poppler binary).
-    Phase 2 (SCORE) — opendataloader-bench .venv, python3.11:
+    Phase 2 (SCORE) — the OmniDocBench clone's .venv (omnidocbench), python3.11:
         apted, rapidfuzz, lxml, bs4 (the upstream evaluator's deps).
 
 Phase 1 emits predictions; Phase 2 imports the upstream evaluator read-only and
@@ -44,9 +56,7 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
-import shutil
 import subprocess
 import sys
 import time
@@ -55,6 +65,28 @@ from pathlib import Path
 ENGINES = ("pdftotext", "opendataloader", "liteparse")
 
 LITEPARSE_OUTPUT_FORMAT = "markdown"  # LiteParse-output-aware mode (SDK option)
+
+# PIP-05: engine runs must be attributable to a pinned version. The parse
+# phase fails closed when the installed distribution cannot be resolved or
+# does not match the pin (opendataloader-pdf 2.5.0 and liteparse 2.12.0 are
+# the versions pinned for the 2026-08-13 ODL-013 run).
+ENGINE_PINS = {
+    "opendataloader": "opendataloader-pdf==2.5.0",
+    "liteparse": "liteparse==2.12.0",
+}
+
+
+def _installed_dist_version(dist_name: str) -> str | None:
+    """Installed distribution version via importlib.metadata, or None.
+
+    None means the version cannot be attributed — treated as fail-closed.
+    """
+    try:
+        from importlib import metadata
+
+        return metadata.version(dist_name)
+    except Exception:  # noqa: BLE001 - any resolution failure means unpinned
+        return None
 
 
 def _resolve(module: str):
@@ -66,7 +98,7 @@ def _resolve(module: str):
             f"Module {module!r} not importable in this interpreter "
             f"({sys.executable}). Phase 1 (parse) must run under the research "
             f"venv (liteparse + opendataloader_pdf); Phase 2 (score) must run "
-            f"under the opendataloader-bench .venv (apted/rapidfuzz/lxml/bs4). "
+            f"under the omnidocbench .venv (apted/rapidfuzz/lxml/bs4). "
             f"Detail: {exc}"
         )
 
@@ -75,7 +107,11 @@ def _resolve(module: str):
 # Phase 1 — parse
 # ---------------------------------------------------------------------------
 def _parse_pdftotext(pdf: Path, out_dir: Path, stem: str) -> float:
-    """pdftotext -layout -> <stem>.md (plain text; reading-order faithful)."""
+    """pdftotext -layout -> <stem>.md (plain text; reading-order faithful).
+
+    Fail closed: a non-zero exit code raises instead of returning a partial
+    or empty prediction.
+    """
     start = time.perf_counter()
     r = subprocess.run(
         ["pdftotext", "-layout", str(pdf), "-"],
@@ -84,13 +120,20 @@ def _parse_pdftotext(pdf: Path, out_dir: Path, stem: str) -> float:
         timeout=60,
     )
     latency = (time.perf_counter() - start) * 1000.0
+    if r.returncode != 0:
+        detail = (r.stderr or r.stdout or "").strip()[:500] or "no detail"
+        raise RuntimeError(f"pdftotext exited {r.returncode}: {detail}")
     text = r.stdout
     (out_dir / f"{stem}.md").write_text(text, encoding="utf-8")
     return latency
 
 
 def _parse_opendataloader(pdf: Path, out_dir: Path, stem: str) -> float:
-    """opendataloader_pdf.convert (local, rule-based) -> <stem>.md."""
+    """opendataloader_pdf.convert (local, rule-based) -> <stem>.md.
+
+    Fail closed: a missing candidate output raises instead of silently
+    writing an empty prediction.
+    """
     import opendataloader_pdf
 
     start = time.perf_counter()
@@ -105,25 +148,39 @@ def _parse_opendataloader(pdf: Path, out_dir: Path, stem: str) -> float:
     latency = (time.perf_counter() - start) * 1000.0
     md_file = out_dir / f"{stem}.md"
     if not md_file.exists():
-        # SDK may write a sibling beside source or with different casing; fall
-        # back to scanning the output dir for the stem.
+        # SDK may write a sibling beside source or with different casing; scan
+        # the output dir for the stem before failing closed.
         candidates = [p for p in out_dir.glob(f"{stem}*") if p.suffix in (".md", ".MD")]
         if not candidates:
-            (out_dir / f"{stem}.md").write_text("", encoding="utf-8")
-        return latency
+            raise RuntimeError(
+                f"opendataloader produced no markdown candidate for {stem}"
+            )
+        md_file = candidates[0]
     return latency
 
 
 def _parse_liteparse(pdf: Path, out_dir: Path, stem: str) -> float:
-    """liteparse 2.12 with output_format=markdown (LiteParse-output-aware)."""
+    """liteparse 2.12 with output_format=markdown (LiteParse-output-aware).
+
+    Fail closed: an empty prediction raises instead of being scored as
+    success.
+    """
     from liteparse import LiteParse
 
     start = time.perf_counter()
     lp = LiteParse(output_format=LITEPARSE_OUTPUT_FORMAT)
     result = lp.parse(str(pdf))
     latency = (time.perf_counter() - start) * 1000.0
+    if not result.text.strip():
+        raise RuntimeError(f"liteparse returned an empty prediction for {stem}")
     (out_dir / f"{stem}.md").write_text(result.text, encoding="utf-8")
     return latency
+
+
+def _remove_prediction(out_dir: Path, stem: str) -> None:
+    """Never leave a failed doc's (possibly partial) prediction on disk."""
+    for stale in out_dir.glob(f"{stem}*"):
+        stale.unlink()
 
 
 _PARSERS = {
@@ -141,6 +198,7 @@ def phase_parse(corpus: Path, run_dir: Path, engines: tuple[str, ...]) -> None:
 
     import cpuinfo  # summary metadata parity with upstream
 
+    any_failed = False
     for engine in engines:
         out_dir = run_dir / "prediction" / engine / "markdown"
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -148,26 +206,40 @@ def phase_parse(corpus: Path, run_dir: Path, engines: tuple[str, ...]) -> None:
         for stale in out_dir.glob("*.md"):
             stale.unlink()
 
+        engine_version = _pinned_engine_version(engine)
         parser = _PARSERS[engine]
-        latencies: list[float] = []
-        failed = 0
+        per_doc_latency: dict[str, float] = {}
+        failed_docs: list[str] = []
         started = time.time()
         for pdf in pdfs:
             stem = pdf.stem
             try:
                 lat = parser(pdf, out_dir, stem)
             except Exception as exc:  # noqa: BLE001 — record per-doc failure
-                failed += 1
-                (out_dir / f"{stem}.md").write_text("", encoding="utf-8")
-                latencies.append(0.0)
+                failed_docs.append(stem)
+                _remove_prediction(out_dir, stem)
                 print(f"  [{engine}] {stem}: ERROR {type(exc).__name__}: {exc}")
                 continue
-            latencies.append(lat)
+            pred_file = out_dir / f"{stem}.md"
+            if not pred_file.exists() or not pred_file.read_text(
+                encoding="utf-8"
+            ).strip():
+                # Fail closed: an empty prediction must never look like success.
+                failed_docs.append(stem)
+                _remove_prediction(out_dir, stem)
+                print(f"  [{engine}] {stem}: ERROR empty prediction")
+                continue
+            per_doc_latency[stem] = lat
         total = time.time() - started
 
+        failed = len(failed_docs)
+        if failed:
+            any_failed = True
+        latencies = list(per_doc_latency.values())
         summary = {
             "engine_name": engine,
-            "engine_version": _engine_version(engine),
+            "engine_version": engine_version,
+            "engine_pin": ENGINE_PINS.get(engine) or "system binary (unpinned)",
             "processor": cpuinfo.get_cpu_info()["brand_raw"],
             "document_count": len(pdfs),
             "total_elapsed": total,
@@ -176,6 +248,11 @@ def phase_parse(corpus: Path, run_dir: Path, engines: tuple[str, ...]) -> None:
             "p50_latency_ms": _percentile(latencies, 50),
             "p90_latency_ms": _percentile(latencies, 90),
             "failed_docs": failed,
+            "failed_stems": failed_docs,
+            "latency_count": len(latencies),
+            "per_doc_latency_ms": {
+                stem: round(ms, 6) for stem, ms in sorted(per_doc_latency.items())
+            },
             "date": time.strftime("%Y-%m-%d"),
         }
         (run_dir / "prediction" / engine / "summary.json").write_text(
@@ -183,18 +260,48 @@ def phase_parse(corpus: Path, run_dir: Path, engines: tuple[str, ...]) -> None:
         )
         print(f"[parse] {engine}: {len(pdfs)} docs, {total:.1f}s total, "
               f"{summary['median_latency_ms']:.1f} ms median, {failed} failed")
+    if any_failed:
+        # Fail closed: a run with failed documents must not be consumable as a
+        # clean run. Summaries were written above so failures are inspectable.
+        print(
+            "[parse] FAILED CLOSED: one or more engines had failed documents; "
+            "predictions for failed docs were NOT written (see per-engine "
+            "summary.json 'failed_stems')",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+
+
+def _pinned_engine_version(engine: str) -> str:
+    """Resolve the engine version against ENGINE_PINS; fail closed otherwise.
+
+    Unpinned engines (pdftotext system binary) keep the plain version probe.
+    """
+    pin = ENGINE_PINS.get(engine)
+    if pin is None:
+        return _engine_version(engine)
+    dist, _, want = pin.partition("==")
+    installed = _installed_dist_version(dist)
+    if installed is None:
+        print(
+            f"[{engine}] installed distribution {dist!r} version unresolvable; "
+            f"cannot attribute the run to pinned {pin} — fail closed",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+    if installed != want:
+        print(
+            f"[{engine}] installed {dist}=={installed} != pinned {pin} — "
+            "fail closed (run would not be attributable to the pinned profile)",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+    return installed
 
 
 def _engine_version(engine: str) -> str:
+    """Version probe for unpinned (system-binary) engines, e.g. pdftotext."""
     try:
-        if engine == "liteparse":
-            import liteparse
-
-            return getattr(liteparse, "__version__", "?")
-        if engine == "opendataloader":
-            import opendataloader_pdf
-
-            return getattr(opendataloader_pdf, "__version__", "?")
         if engine == "pdftotext":
             r = subprocess.run(["pdftotext", "-v"], capture_output=True, text=True)
             m = re.search(r"version (\S+)", r.stderr or r.stdout)
@@ -223,7 +330,12 @@ def _percentile(values: list[float], p: float) -> float:
 # ---------------------------------------------------------------------------
 def phase_score(corpus: Path, run_dir: Path, engines: tuple[str, ...],
                 report_path: Path | None = None) -> dict[str, dict]:
-    """Score each engine dir via the upstream evaluator; returns engine->metrics."""
+    """Score each engine dir via the upstream evaluator; returns engine->metrics.
+
+    Fail closed: a missing prediction dir, a missing or empty prediction for
+    any ground-truth document, or a missing evaluation.json aborts with a
+    non-zero exit code instead of silently skipping the engine.
+    """
 
     # Read-only import of the upstream evaluator (never modified).
     src = corpus / "src"
@@ -235,18 +347,36 @@ def phase_score(corpus: Path, run_dir: Path, engines: tuple[str, ...],
     gt_dir = corpus / "ground-truth" / "markdown"
     if not gt_dir.is_dir():
         sys.exit(f"Ground-truth markdown dir not found at {gt_dir}")
+    gt_stems = sorted(p.stem for p in gt_dir.glob("*.md"))
 
     results: dict[str, dict] = {}
     for engine in engines:
         pred_dir = run_dir / "prediction" / engine
-        if not (pred_dir / "markdown").is_dir():
-            print(f"[score] {engine}: no markdown dir, skipped")
-            continue
+        pred_md = pred_dir / "markdown"
+        if not pred_md.is_dir():
+            print(f"[score] {engine}: prediction markdown dir missing — fail closed",
+                  file=sys.stderr)
+            sys.exit(3)
+        missing = [s for s in gt_stems if not (pred_md / f"{s}.md").is_file()]
+        empty = [
+            s for s in gt_stems
+            if (pred_md / f"{s}.md").is_file()
+            and not (pred_md / f"{s}.md").read_text(encoding="utf-8").strip()
+        ]
+        if missing or empty:
+            print(
+                f"[score] {engine}: FAILED CLOSED — missing predictions: "
+                f"{missing[:10]} (n={len(missing)}); empty predictions: "
+                f"{empty[:10]} (n={len(empty)})",
+                file=sys.stderr,
+            )
+            sys.exit(3)
         _evaluate_engine_version(gt_dir, pred_dir, "evaluation.json")
         eval_path = pred_dir / "evaluation.json"
         if not eval_path.exists():
-            print(f"[score] {engine}: no evaluation.json produced")
-            continue
+            print(f"[score] {engine}: evaluation.json not produced — fail closed",
+                  file=sys.stderr)
+            sys.exit(3)
         with eval_path.open(encoding="utf-8") as fh:
             ev = json.load(fh)
         metrics = ev.get("metrics", {}).get("score", {})
@@ -292,7 +422,9 @@ def _render_report(results: dict[str, dict], run_dir: Path) -> str:
             f"| {engine} | {_fmt(r['nid'])} | {_fmt(r['teds'])} | "
             f"{_fmt(r['mhs'])} | {_fmt(r['overall'])} |"
         )
-    lines += ["", "## Speed (per doc)", "", "| engine | median ms | elapsed_per_doc (s) |", "|---|---|---|"]
+    lines += ["", "## Speed (per doc)", "",
+              "| engine | median ms | p90 ms | elapsed_per_doc (s) |",
+              "|---|---|---|---|"]
     for engine in ENGINES:
         summary_path = run_dir / "prediction" / engine / "summary.json"
         if summary_path.exists():
@@ -300,10 +432,11 @@ def _render_report(results: dict[str, dict], run_dir: Path) -> str:
                 s = json.load(fh)
             lines.append(
                 f"| {engine} | {s.get('median_latency_ms', 0.0):.1f} | "
+                f"{s.get('p90_latency_ms', 0.0):.1f} | "
                 f"{s.get('elapsed_per_doc', 0.0):.3f} |"
             )
         else:
-            lines.append(f"| {engine} | — | — |")
+            lines.append(f"| {engine} | — | — | — |")
     lines += ["", "## JVM-free deploy footprint", "",
               "- **pdftotext**: poppler binary; no JVM, no runtime deps.",
               "- **liteparse**: self-contained manylinux wheel (PDFium+tesseract compiled in); **no JVM**.",

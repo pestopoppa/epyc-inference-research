@@ -168,7 +168,7 @@ $RES/.venv/bin/python -m scripts.benchmark.odl_bench.adapter availability
 # ORCHESTRATOR venv so ODL-local is live; scoring auto-subprocesses to the bench venv
 /mnt/raid0/llm/epyc-orchestrator/.venv/bin/python \
   -m scripts.benchmark.odl_bench.adapter run \
-  --gt   /mnt/raid0/llm/opendataloader-bench/demo_data/omnidocbench_demo/OmniDocBench_demo.json \
+  --gt   /mnt/raid0/llm/omnidocbench/demo_data/omnidocbench_demo/OmniDocBench_demo.json \
   --pdf-manifest <pdf_manifest.json> --run-dir /tmp/odlrun --score
 
 # emit the Wave-3 model-gated manifest stubs (JSON)
@@ -177,8 +177,8 @@ $RES/.venv/bin/python -m scripts.benchmark.odl_bench.adapter stubs
 # run the PaddleOCR-VL document-parser arm over GT page images, then optionally score
 $RES/.venv/bin/python -m scripts.benchmark.odl_bench.adapter run-model \
   --engine paddleocr_vl_1_6 \
-  --gt /mnt/raid0/llm/opendataloader-bench/demo_data/omnidocbench_demo/OmniDocBench_demo.json \
-  --image-root /mnt/raid0/llm/opendataloader-bench/demo_data/omnidocbench_demo/images \
+  --gt /mnt/raid0/llm/omnidocbench/demo_data/omnidocbench_demo/OmniDocBench_demo.json \
+  --image-root /mnt/raid0/llm/omnidocbench/demo_data/omnidocbench_demo/images \
   --run-dir /mnt/raid0/llm/tmp/odl-paddleocr-vl \
   --prompt-profile html_tables \
   --allow-inference --score

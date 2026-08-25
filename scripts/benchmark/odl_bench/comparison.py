@@ -204,7 +204,7 @@ def infer_metric_result_path(
     if result_dir is None:
         bench_root = bootstrap.bench_root()
         if bench_root is None:
-            raise RuntimeError("cannot infer result dir: opendataloader-bench root not found")
+            raise RuntimeError("cannot infer result dir: omnidocbench root not found")
         result_root = bench_root / "result"
     else:
         result_root = Path(result_dir)

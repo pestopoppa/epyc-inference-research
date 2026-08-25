@@ -26,7 +26,7 @@ _PRED_DIR = "$RUN_DIR/predictions/<engine>"
 _EXPECTED = [
     f"{_PRED_DIR}/<gt_stem>.md  (one markdown prediction per GT page)",
     "$RUN_DIR/config/<engine>.yaml  (OmniDocBench config; reuses DETERMINISTIC_METRIC_CONFIG)",
-    "opendataloader-bench/result/<save_name>_metric_result.json  (structural/table/reading_order scores)",
+    "omnidocbench/result/<save_name>_metric_result.json  (structural/table/reading_order scores)",
     "$RUN_DIR/<engine>_run_manifest.json  (speed rows: per-page extraction latency_ms)",
 ]
 

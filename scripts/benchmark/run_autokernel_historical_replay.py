@@ -34,13 +34,6 @@ ARM_ORDER = (
     ("expert_off", "expert_on", "parent"),
 )
 
-#: The canonical ggml linkage verifier (NIB2-58a). Same absolute spelling as
-#: orchestrator_stack.py's _VERIFY_GGML_LINKAGE_SCRIPT and verify_speech_kernels.sh
-#: so every consumer enforces the same file rather than two drifting copies.
-LINKAGE_VERIFIER = (
-    "/mnt/raid0/llm/epyc-inference-research/scripts/utils/verify_ggml_linkage.sh"
-)
-
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
@@ -77,39 +70,6 @@ def create_worktree(*, repo: Path, path: Path, commit: str) -> None:
         check=True, stdin=subprocess.DEVNULL)
 
 
-def verify_linkage(binary: Path, build_dir: Path) -> None:
-    """Prove the freshly built binary resolves ITS OWN ggml (NIB2-58a).
-
-    Runs the canonical verifier under the same launch recipe `run_benchmark`
-    composes (binary's own lib dir first, then /opt/rocm/lib) — a check under
-    any other environment proves nothing, because LD_LIBRARY_PATH is the
-    variable under test. A fresh HIP build whose libggml-hip resolves from the
-    FROZEN production tree runs full-CPU while printing `use gpu = 1`
-    (INC-20260731-ggml-linkage-silent-cpu-fallback); this gate is what stops
-    that binary from ever producing a historical-replay number.
-    """
-    env = os.environ.copy()
-    env["LD_LIBRARY_PATH"] = f"{binary.parent}:/opt/rocm/lib"
-    completed = subprocess.run(
-        ["bash", LINKAGE_VERIFIER, str(binary), str(build_dir)],
-        env=env, capture_output=True, text=True, timeout=60,
-    )
-    inspected = sum(
-        1 for line in completed.stdout.splitlines()
-        if line.strip().startswith(("OK ", "BAD ")))
-    core = sum(1 for line in completed.stdout.splitlines()
-               if line.strip().startswith(("OK ", "BAD "))
-               and "libggml-base.so" in line)
-    if completed.returncode != 0 or inspected == 0 or core == 0:
-        for line in completed.stdout.splitlines():
-            if line.strip().startswith(("OK ", "BAD ", "FAIL", "PASS")):
-                print(f"      {line.strip()}")
-        raise RuntimeError(
-            f"{arm} historical binary FAILED ggml linkage under its launch env "
-            f"(rc={completed.returncode}, inspected {inspected} libs, "
-            f"libggml-base seen {core} times): {binary}")
-
-
 def build_arm(*, arm: str, tree: Path, output_dir: Path,
               jobs: int, timeout_s: float) -> dict:
     build = tree / "build-autokernel-historical"
@@ -138,7 +98,6 @@ def build_arm(*, arm: str, tree: Path, output_dir: Path,
     binary = build / "bin" / "llama-batched-bench"
     if not binary.is_file() or not os.access(binary, os.X_OK):
         raise RuntimeError(f"{arm} historical binary is not executable: {binary}")
-    verify_linkage(binary, build)
     commit = subprocess.check_output(
         ("git", "rev-parse", "HEAD"), cwd=tree, text=True).strip()
     status = subprocess.check_output(

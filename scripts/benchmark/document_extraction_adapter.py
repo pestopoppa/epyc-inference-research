@@ -4,8 +4,15 @@
 Provides NID, TEDS, and MHS scoring metrics for evaluating PDF extraction
 quality against ground-truth markdown annotations.
 
-Dataset: opendataloader-bench (MIT license, ~200 real-world PDFs)
-Clone to: /mnt/raid0/llm/opendataloader-bench/
+Dataset: OpenDataLoader-bench 200-PDF corpus (Apache-2.0, ~200 real-world PDFs).
+Dataset paths (PIP-05 collision resolution, 2026-08-25 — always cite full paths):
+  * canonical OpenDataLoader-bench clone (repo + corpus):
+    /mnt/raid0/llm/opendataloader-bench-upstream
+  * /mnt/raid0/llm/omnidocbench is the OmniDocBench clone (renamed from
+    opendataloader-bench); it also carries a 2026-07-21 copy of the 200-PDF
+    corpus in {pdfs,ground-truth}/ which this adapter reads by default. The
+    clone command below is informational only — do NOT clone into
+    /mnt/raid0/llm/omnidocbench (that path is OmniDocBench's).
 
 Metrics:
   NID (Normalized Information Distance): Reading order quality
@@ -32,9 +39,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-# Default location for cloned OpenDataLoader-bench repo
-# Clone: git clone https://github.com/opendataloader-project/opendataloader-bench /mnt/raid0/llm/opendataloader-bench
-ODL_BENCH_DIR = Path("/mnt/raid0/llm/opendataloader-bench")
+# Default corpus root this adapter reads (a copy of the OpenDataLoader-bench
+# 200-PDF corpus fetched 2026-07-21 into the OmniDocBench clone's directory).
+# Reference: https://github.com/opendataloader-project/opendataloader-bench
+ODL_BENCH_DIR = Path("/mnt/raid0/llm/omnidocbench")
 
 
 @dataclass
@@ -48,16 +56,16 @@ class DocumentProblem:
 
 
 class DocumentExtractionAdapter:
-    """Adapter for opendataloader-bench dataset.
+    """Adapter for the OpenDataLoader-bench corpus.
 
-    Expected repo structure:
-        opendataloader-bench/
-        ├── pdfs/           # Source PDF files
+    Expected layout (the 2026-07-21 corpus copy inside the omnidocbench clone):
+        <bench_dir>/
+        ├── pdfs/           # Source PDF files (200)
         ├── ground-truth/   # Markdown ground truth (same basename as PDF)
         └── metadata.json   # Optional: per-document metadata
 
     Args:
-        bench_dir: Path to cloned opendataloader-bench repo.
+        bench_dir: Path to a directory holding the {pdfs,ground-truth} corpus.
     """
 
     def __init__(self, bench_dir: Path = ODL_BENCH_DIR):

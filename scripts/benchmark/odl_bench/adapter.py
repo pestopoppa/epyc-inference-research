@@ -179,7 +179,7 @@ class OdlBenchAdapter:
         research venv (py3.14, no Levenshtein/apted).
         """
         if self.bench_root is None or not self.bench_root.exists():
-            raise RuntimeError("opendataloader-bench root not found; cannot score")
+            raise RuntimeError("omnidocbench root not found; cannot score")
         cmd = self.score_command(config_path, bench_python)
         subprocess.run(cmd, cwd=str(self.bench_root), check=True, timeout=timeout_sec)
         save_name = self.save_name_for(prediction_dir)

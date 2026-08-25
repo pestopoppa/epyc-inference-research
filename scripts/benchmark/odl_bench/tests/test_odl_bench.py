@@ -110,7 +110,7 @@ def _make_min_pdf(lines) -> bytes:
     return buf.getvalue()
 
 
-@unittest.skipIf(BENCH_ROOT is None, "opendataloader-bench checkout not found")
+@unittest.skipIf(BENCH_ROOT is None, "omnidocbench checkout not found")
 class TestNamingContract(unittest.TestCase):
     def test_prediction_filename_strips_ext_and_adds_md(self):
         self.assertEqual(
@@ -137,7 +137,7 @@ class TestNamingContract(unittest.TestCase):
         self.assertIn("images", paths[images[0]].parts)
 
 
-@unittest.skipIf(BENCH_ROOT is None, "opendataloader-bench checkout not found")
+@unittest.skipIf(BENCH_ROOT is None, "omnidocbench checkout not found")
 class TestFakeBackendPredictions(unittest.TestCase):
     def setUp(self):
         register_backend(FakeBackend(name="fake", latency_ms=2.5))
@@ -173,7 +173,7 @@ class TestFakeBackendPredictions(unittest.TestCase):
             self.assertIn("had no mapped PDF", manifest.detail)
 
 
-@unittest.skipIf(BENCH_ROOT is None, "opendataloader-bench checkout not found")
+@unittest.skipIf(BENCH_ROOT is None, "omnidocbench checkout not found")
 class TestRealPdftotextBackend(unittest.TestCase):
     def test_pdftotext_deterministic_extraction(self):
         backend = resolve_backend("pdftotext")
@@ -195,7 +195,7 @@ class TestRealPdftotextBackend(unittest.TestCase):
             self.assertGreater(art.latency_ms, 0.0)
 
 
-@unittest.skipIf(BENCH_ROOT is None, "opendataloader-bench checkout not found")
+@unittest.skipIf(BENCH_ROOT is None, "omnidocbench checkout not found")
 class TestConfigEmission(unittest.TestCase):
     def test_emit_config_loadable_and_targets_our_dirs(self):
         adapter = OdlBenchAdapter(bench_root=BENCH_ROOT)
@@ -310,7 +310,7 @@ class TestPaddleTablePostProcessing(unittest.TestCase):
         self.assertEqual(normalize_pipe_table_blocks(key_values), key_values)
 
 
-@unittest.skipIf(BENCH_ROOT is None, "opendataloader-bench checkout not found")
+@unittest.skipIf(BENCH_ROOT is None, "omnidocbench checkout not found")
 class TestModelGatedProducerGuards(unittest.TestCase):
     def test_model_gated_generation_requires_explicit_inference_flag(self):
         adapter = OdlBenchAdapter(bench_root=BENCH_ROOT)
@@ -694,7 +694,7 @@ class TestAvailabilityAndCommand(unittest.TestCase):
         )
 
 
-@unittest.skipIf(BENCH_ROOT is None, "opendataloader-bench checkout not found")
+@unittest.skipIf(BENCH_ROOT is None, "omnidocbench checkout not found")
 class TestDeterministicRowSet(unittest.TestCase):
     def setUp(self):
         register_backend(FakeBackend(name="fake", latency_ms=3.0))

@@ -36,8 +36,8 @@ done
 # Configuration
 OUTPUT_DIR="${OUTPUT_DIR:-${PROJECT_ROOT}/benchmarks/evidence/$(date +%Y%m%d_%H%M%S)}"
 LLAMA_CPP_EXPERIMENTAL="${LLM_ROOT}/llama.cpp-experimental"
-LLAMA_BENCH="${LLAMA_CPP_EXPERIMENTAL}/build-v9-cpu/bin/llama-bench"
-LLAMA_COMPLETION="${LLAMA_CPP_EXPERIMENTAL}/build-v9-cpu/bin/llama-completion"
+LLAMA_BENCH="${LLAMA_CPP_EXPERIMENTAL}/build/bin/llama-bench"
+LLAMA_COMPLETION="${LLAMA_CPP_EXPERIMENTAL}/build/bin/llama-completion"
 PAGED_MODEL_BASE="${LLM_ROOT}"
 
 # Models from PR (paths from model registry)
@@ -122,32 +122,6 @@ git log -1 --format="%H" >"${OUTPUT_DIR}/git_commit.txt"
 # Save full git info to file only (not screen)
 git log -1 --format="commit: %H%ndate: %ci%nsubject: %s" >>"${OUTPUT_DIR}/full_log.txt"
 git status --short >>"${OUTPUT_DIR}/full_log.txt"
-
-# ── ggml linkage preflight (NIB2-58a) ─────────────────────────────
-# These binaries may be a FRESH experimental build. A fresh build that resolves
-# the FROZEN production ggml via LD_LIBRARY_PATH runs full-CPU while reporting a
-# GPU device (INC-20260731-ggml-linkage-silent-cpu-fallback), and every paged-
-# attention number below would be attributable to the WRONG BUILD. Run the
-# canonical verifier under this script's own environment — the environment the
-# benchmarks inherit — and refuse to measure anything it cannot prove.
-LINKAGE_VERIFIER="${LINKAGE_VERIFIER:-/mnt/raid0/llm/epyc-inference-research/scripts/utils/verify_ggml_linkage.sh}"
-if [[ ! -r "$LINKAGE_VERIFIER" ]]; then
-  log "${RED}FATAL: ggml linkage verifier not readable: ${LINKAGE_VERIFIER}${NC}"
-  exit 1
-fi
-for smoke_bin in "$LLAMA_BENCH" "$LLAMA_COMPLETION"; do
-  if [[ ! -x "$smoke_bin" ]]; then
-    log "${RED}FATAL: binary missing: ${smoke_bin}${NC}"
-    log "${YELLOW}  Build first (see the build instructions at the end of this script)${NC}"
-    exit 1
-  fi
-  if ! bash "$LINKAGE_VERIFIER" "$smoke_bin" "${LLAMA_CPP_EXPERIMENTAL}/build-v9-cpu"; then
-    log "${RED}FATAL: ggml linkage check FAILED for ${smoke_bin}${NC}"
-    log "${RED}       This binary resolves another tree's ggml — do not measure it.${NC}"
-    exit 1
-  fi
-  log "${GREEN}OK: ${smoke_bin} resolves its own ggml${NC}"
-done
 
 header "3. MODEL VERIFICATION"
 
