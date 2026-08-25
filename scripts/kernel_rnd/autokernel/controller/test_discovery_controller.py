@@ -10,6 +10,7 @@ from . import discovery_controller as D
 H="a"*64
 RUNTIME={"kind":"docker_workspace_bind_only","docker_path":"/docker","docker_sha256":H,"image_id":"image","codex_native_sha256":H,"code_mode_host_sha256":H,"ca_certificate_sha256":H,"writable_host_binds":["/workspace"],"host_network_mode":"docker_bridge"}
 CLAUDE_RUNTIME={"kind":"claude_cli_structured_critic","provider":"claude","model":"claude-fable-5","effort":"high","wrapper_path":"/sealed/claude","wrapper_sha256":H,"argv_policy_sha256":H,"auth_staging_policy":"ephemeral_0600_copy_atomic_oauth_rotation_sync_no_secret_receipt"}
+OPENCODE_BACKUP_RUNTIME={"kind":"opencode_cli_structured_critic","provider":"opencode","model":"deepseek/deepseek-v4-flash","wrapper_path":"/sealed/opencode","wrapper_sha256":H,"argv_policy_sha256":H,"auth_staging_policy":"ephemeral_0600_copy_atomic_opencode_no_secret_receipt"}
 class Manifest:
  campaign_id="ak-test"; proposal_id="akp-test"; candidate_id="akc-test"; source_tree="llama.cpp"; production_base_commit="0"*40; instrument_commit="0"*40; change_class="fusion"; declared_files=("ggml/src/ggml.c",); declared_symbols={"ggml/src/ggml.c":("<file-scope>",)}; mechanism_id="test"; patch_sha256="0"*64; patch_bytes=b"diff --git a/ggml/src/ggml.c b/ggml/src/ggml.c\n--- a/ggml/src/ggml.c\n+++ b/ggml/src/ggml.c\n@@ -1 +1 @@\n-x\n+y\n"
  patch_text=patch_bytes.decode("utf-8")
@@ -1465,6 +1466,81 @@ class Tests(unittest.TestCase):
    with self.assertRaisesRegex(D.DiscoveryControllerError,"bounded critic visibility"), \
         patch.object(D.claude_fable5_critic_actor,"run_critic",side_effect=AssertionError("no actor")):
     critic.review(candidate,context={},workspace=root)
+ def test_primary_critic_failure_fails_over_to_opencode_backup(self):
+  with tempfile.TemporaryDirectory() as t:
+   root=Path(t); claude=root/"claude"; claude.write_bytes(b"claude"); claude.chmod(0o700)
+   backup=root/"opencode"; backup.write_bytes(b"opencode"); backup.chmod(0o700)
+   critic=D.ClaudeCritic(wrapper=claude,environment={"PATH":"/usr/bin"},
+       backup_wrapper=backup,backup_environment={"PATH":"/usr/bin"},
+       backup_wrapper_sha256=hashlib.sha256(backup.read_bytes()).hexdigest(),
+       backup_runtime_identity=dict(OPENCODE_BACKUP_RUNTIME))
+   with patch.object(D.source_candidate,"SourcePatchManifest",Manifest):
+    candidate=D.PlannedCandidate("akh-backup","statement","falsifier",{"backend":"gpu"},{"proposal_id":"akp-test"},Manifest(),H)
+   context={"turn":1,"planner_context_sha256":H}
+   backup_calls={}
+   def backup_run_critic(**kwargs):
+    backup_calls.update(kwargs)
+    return SimpleNamespace(decision="revise",reason="primary unavailable",
+        stdout_sha256=H,stderr_sha256=H)
+   with patch.object(D.claude_fable5_critic_actor,"run_critic",
+                     side_effect=D.claude_fable5_critic_actor.ClaudeFable5CriticError("primary down")), \
+        patch.object(D.opencode_deepseek_critic_actor,"run_critic",
+                     side_effect=backup_run_critic):
+    self.assertEqual(critic.review(candidate,context=context,workspace=root).decision,
+                     "revise")
+   self.assertEqual(set(backup_calls["bindings"]),
+                    {"proposal_sha256","source_manifest_sha256",
+                     "candidate_patch_sha256","context_sha256",
+                     "template_catalog_sha256"})
+   self.assertTrue(all(len(v) == 64 and all(c in "0123456789abcdef" for c in v)
+                       for v in backup_calls["bindings"].values()))
+   self.assertEqual(backup_calls["prompt"].split("\n")[0].startswith("{"), True)
+
+ def test_primary_critic_success_never_touches_backup(self):
+  with tempfile.TemporaryDirectory() as t:
+   root=Path(t); claude=root/"claude"; claude.write_bytes(b"claude"); claude.chmod(0o700)
+   backup=root/"opencode"; backup.write_bytes(b"opencode"); backup.chmod(0o700)
+   critic=D.ClaudeCritic(wrapper=claude,environment={"PATH":"/usr/bin"},
+       backup_wrapper=backup,backup_environment={"PATH":"/usr/bin"})
+   with patch.object(D.source_candidate,"SourcePatchManifest",Manifest):
+    candidate=D.PlannedCandidate("akh-backup","statement","falsifier",{}, {"proposal_id":"akp-test"},Manifest(),H)
+   def primary_run_critic(**kwargs):
+    return SimpleNamespace(decision="accept",reason="clean",
+        stdout_sha256=H,stderr_sha256=H)
+   with patch.object(D.claude_fable5_critic_actor,"run_critic",
+                     side_effect=primary_run_critic), \
+        patch.object(D.opencode_deepseek_critic_actor,"run_critic",
+                     side_effect=AssertionError("backup must not run")):
+    self.assertEqual(critic.review(candidate,context={},workspace=root).decision,
+                     "accept")
+
+ def test_backup_failure_reraised_primary(self):
+  with tempfile.TemporaryDirectory() as t:
+   root=Path(t); claude=root/"claude"; claude.write_bytes(b"claude"); claude.chmod(0o700)
+   backup=root/"opencode"; backup.write_bytes(b"opencode"); backup.chmod(0o700)
+   critic=D.ClaudeCritic(wrapper=claude,environment={"PATH":"/usr/bin"},
+       backup_wrapper=backup,backup_environment={"PATH":"/usr/bin"})
+   with patch.object(D.source_candidate,"SourcePatchManifest",Manifest):
+    candidate=D.PlannedCandidate("akh-backup","statement","falsifier",{}, {"proposal_id":"akp-test"},Manifest(),H)
+   primary_error=D.claude_fable5_critic_actor.ClaudeFable5CriticError("primary down")
+   with patch.object(D.claude_fable5_critic_actor,"run_critic",
+                     side_effect=primary_error), \
+        patch.object(D.opencode_deepseek_critic_actor,"run_critic",
+                     side_effect=D.opencode_deepseek_critic_actor.OpenCodeCriticError("backup down")):
+    with self.assertRaisesRegex(D.claude_fable5_critic_actor.ClaudeFable5CriticError,"primary down"):
+     critic.review(candidate,context={},workspace=root)
+
+ def test_no_backup_bound_reraises_primary(self):
+  with tempfile.TemporaryDirectory() as t:
+   root=Path(t); claude=root/"claude"; claude.write_bytes(b"claude"); claude.chmod(0o700)
+   critic=D.ClaudeCritic(wrapper=claude,environment={"PATH":"/usr/bin"})
+   with patch.object(D.source_candidate,"SourcePatchManifest",Manifest):
+    candidate=D.PlannedCandidate("akh-backup","statement","falsifier",{}, {"proposal_id":"akp-test"},Manifest(),H)
+   with patch.object(D.claude_fable5_critic_actor,"run_critic",
+                     side_effect=D.claude_fable5_critic_actor.ClaudeFable5CriticError("primary down")):
+    with self.assertRaisesRegex(D.claude_fable5_critic_actor.ClaudeFable5CriticError,"primary down"):
+     critic.review(candidate,context={},workspace=root)
+
  def test_single_positive_screen_never_nominates(self):
   with tempfile.TemporaryDirectory() as t, patch.object(D.source_candidate,"SourcePatchManifest",Manifest), patch.object(D,"_write_projection"):
    root=Path(t); r=D.run_controller(self.cfg(root,1),planner=FakePlanner(),critic=FakeCritic(["accept"]),screener=FakeScreen([.04]),lease=Lease())

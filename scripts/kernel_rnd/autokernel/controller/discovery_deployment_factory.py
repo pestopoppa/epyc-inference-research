@@ -34,6 +34,7 @@ from ..resource import device_claim
 from . import discovery_controller as controller
 from . import discovery_deployment as deployment
 from . import gpu_source_adapter
+from . import opencode_deepseek_critic_actor
 from . import gpu_source_evidence as evidence
 from . import gpu_load_admission
 from . import gpu_residency_sampler
@@ -441,6 +442,8 @@ def _execution_module_sources() -> dict[str, tuple[str, Path]]:
         "gpu_residency_sampler": Path(gpu_residency_sampler.__file__),
         "codex_container_actor": Path(codex_container_actor.__file__),
         "claude_fable5_critic_actor": Path(claude_fable5_critic_actor.__file__),
+        "opencode_deepseek_critic_actor": Path(
+            opencode_deepseek_critic_actor.__file__),
         "hypothesis_portfolio": Path(hypothesis_portfolio.__file__),
         "preauthored_continuation": Path(preauthored_continuation.__file__),
         "cumulative_composition": Path(cumulative_composition.__file__),
@@ -638,6 +641,8 @@ _SITE_WINDOW_LOCK = Path("/mnt/raid0/llm/tmp/model-call.lock")
 _SITE_ACTOR_WRAPPER = Path(
     "/usr/local/share/npm-global/lib/node_modules/@openai/codex/bin/codex.js")
 _SITE_CRITIC_WRAPPER = Path("/home/node/.local/share/claude/versions/2.1.231")
+_SITE_BACKUP_CRITIC_WRAPPER = Path(
+    "/usr/local/share/npm-global/lib/node_modules/opencode-ai/bin/opencode.exe")
 _SITE_CLAUDE_AUTH_ROOT = Path("/home/node/.claude")
 _SITE_GOVERNANCE_ROOT = Path("/workspace")
 _FROZEN_CLOSURE_MANIFEST = (
@@ -1671,6 +1676,8 @@ def initialize_static_deployment_bundle(
     wrapper = _bound(wrapper_path, "actor_wrapper")
     critic_path = _SITE_CRITIC_WRAPPER.resolve(strict=True)
     critic = _bound(critic_path, "critic_wrapper")
+    backup_critic_path = _SITE_BACKUP_CRITIC_WRAPPER.resolve(strict=True)
+    backup_critic = _bound(backup_critic_path, "backup_critic_wrapper")
     workload_path, workload_sha = _json_artifact(
         config_dir / "workload.json", _deployment_workload_body())
     runtime_path, runtime_sha = _json_artifact(
@@ -1828,6 +1835,8 @@ def initialize_static_deployment_bundle(
                             "max_iterations": 10, "nomination_threshold": .03},
              "actors": {"wrapper_path": str(wrapper.path), "wrapper_sha256": wrapper.sha256,
                         "critic_path": str(critic.path), "critic_sha256": critic.sha256,
+                        "backup_critic_path": str(backup_critic.path),
+                        "backup_critic_sha256": backup_critic.sha256,
                         "environment_profile_id": _STATIC_IDS["environment_profile"]},
              "gpu": {"device_id": "mi210_0", "claim_timeout_s": 0,
                      "inference_window_lock": str(_SITE_WINDOW_LOCK),
@@ -3871,6 +3880,11 @@ def _seal_graph_receipt(config: deployment.DiscoveryDeployment,
                         production_runtime_sha256: str,
                         critic_auth: Mapping[str, Any],
                         carry_forward: Mapping[str, Any]) -> tuple[Path, str]:
+    backup_critic_wrapper = getattr(config, "backup_critic_wrapper", None)
+    backup_critic_runtime = (
+        None if backup_critic_wrapper is None else
+        opencode_deepseek_critic_actor.runtime_identity(
+            backup_critic_wrapper.path))
     surfaces = _normalized_template_surfaces(
         templates, config.hypothesis_portfolio.value)
     profiler_runtime = [evidence._bound_reference(item)
@@ -3966,10 +3980,18 @@ def _seal_graph_receipt(config: deployment.DiscoveryDeployment,
                 "planner": {"path": str(config.actor_wrapper.path),
                             "sha256": config.actor_wrapper.sha256},
                 "critic": {"path": str(config.critic_wrapper.path),
-                           "sha256": config.critic_wrapper.sha256}},
+                           "sha256": config.critic_wrapper.sha256},
+                **({} if getattr(config, "backup_critic_wrapper", None) is None else {
+                    "critic_backup": {
+                        "path": str(config.backup_critic_wrapper.path),
+                        "sha256": config.backup_critic_wrapper.sha256}})},
             "actor_runtimes": {"planner": dict(planner_runtime),
-                               "critic": dict(critic_runtime)},
-            "actor_cells": [dict(controller.SOL), dict(controller.FABLE5_CRITIC)],
+                               "critic": dict(critic_runtime),
+                               **({} if backup_critic_runtime is None else {
+                                   "critic_backup": dict(backup_critic_runtime)})},
+            "actor_cells": [dict(controller.SOL), dict(controller.FABLE5_CRITIC),
+                            *([] if backup_critic_runtime is None else
+                              [dict(controller.OPENCODE_BACKUP_CRITIC)])],
             "actor_argv_authority": {
                 "planner": {"module_id": "codex_container_actor",
                             "module_sha256": execution_modules[
@@ -3980,7 +4002,15 @@ def _seal_graph_receipt(config: deployment.DiscoveryDeployment,
                            "module_sha256": execution_modules[
                                "claude_fable5_critic_actor"]["sha256"],
                            "constructor": "claude_fable5_critic_actor.build_argv",
-                           "tools": [], "permission_mode": "plan"}},
+                           "tools": [], "permission_mode": "plan"},
+                **({} if backup_critic_runtime is None else {
+                    "critic_backup": {
+                        "module_id": "opencode_deepseek_critic_actor",
+                        "module_sha256": execution_modules[
+                            "opencode_deepseek_critic_actor"]["sha256"],
+                        "constructor": "opencode_deepseek_critic_actor.build_argv",
+                        "model": opencode_deepseek_critic_actor.MODEL,
+                        "tools": [], "pure": True}})},
             "critic_auth_source": dict(critic_auth),
             "execution_modules": dict(execution_modules),
             "environment_profiles": {"planner": dict(_SAFE_ACTOR_ENVIRONMENT),
@@ -4147,12 +4177,21 @@ def build_static_deployment_graph(config: deployment.DiscoveryDeployment) -> Sta
     planner_runtime = codex_container_actor.runtime_identity(config.actor_wrapper.path)
     critic_runtime = claude_fable5_critic_actor.runtime_identity(
         config.critic_wrapper.path)
+    backup_critic_wrapper = getattr(config, "backup_critic_wrapper", None)
+    backup_critic_runtime = (
+        None if backup_critic_wrapper is None else
+        opencode_deepseek_critic_actor.runtime_identity(
+            backup_critic_wrapper.path))
     critic_auth = _validate_critic_auth_source()
     planner_launcher_sha256 = _digest_regular(
         Path(codex_container_actor.__file__).resolve(), "Codex actor launcher")
     critic_launcher_sha256 = _digest_regular(
         Path(claude_fable5_critic_actor.__file__).resolve(),
         "Claude critic launcher")
+    backup_critic_launcher_sha256 = (
+        None if backup_critic_wrapper is None else _digest_regular(
+            Path(opencode_deepseek_critic_actor.__file__).resolve(),
+            "opencode backup critic launcher"))
     sampler = gpu_residency_sampler.Mi210ResidencySampler()
     executor = evidence.SubprocessCommandExecutor(
         residency_sampler=sampler,
@@ -4179,7 +4218,14 @@ def build_static_deployment_graph(config: deployment.DiscoveryDeployment) -> Sta
         wrapper_sha256=config.critic_wrapper.sha256,
         runtime_identity=critic_runtime,
         actor_launcher_sha256=critic_launcher_sha256,
-        telemetry=telemetry)
+        telemetry=telemetry,
+        backup_wrapper=(None if backup_critic_wrapper is None
+                        else backup_critic_wrapper.path),
+        backup_environment=_SAFE_CRITIC_ENVIRONMENT,
+        backup_wrapper_sha256=(None if backup_critic_wrapper is None
+                               else backup_critic_wrapper.sha256),
+        backup_runtime_identity=backup_critic_runtime,
+        backup_launcher_sha256=backup_critic_launcher_sha256)
     receipt, digest = _seal_graph_receipt(
         config, planner_runtime, critic_runtime, templates,
         target_equality, instrument_review,

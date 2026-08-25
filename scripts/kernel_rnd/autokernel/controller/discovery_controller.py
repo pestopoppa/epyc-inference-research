@@ -33,7 +33,8 @@ from .. import (campaign, cumulative_composition, hypothesis_portfolio, journal,
 from ..evaluator import integrity, hawkeye_measurement
 from ..execution import physical_bounds
 from . import (claude_fable5_critic_actor, codex_container_actor,
-               discovery_telemetry, do_not_repeat, hypotheses)
+               discovery_telemetry, do_not_repeat, hypotheses,
+               opencode_deepseek_critic_actor)
 from . import gpu_source_evidence, gpu_source_proofs
 from scripts.benchmark import autokernel_progression
 from scripts.benchmark import run_autokernel_gpu_discovery as gpu_discovery
@@ -45,6 +46,8 @@ HASH = __import__("re").compile(r"^[0-9a-f]{64}$")
 PORTFOLIO_DNR_CHECK_SCHEMA = "epyc.autokernel.portfolio_exact_dnr_check.v1"
 SOL = {"provider": "codex", "model": "gpt-5.6-sol", "effort": "high", "role": "planner"}
 FABLE5_CRITIC = {"provider": "claude", "model": "claude-fable-5", "effort": "high", "role": "critic"}
+OPENCODE_BACKUP_CRITIC = {"provider": "opencode", "model": "deepseek/deepseek-v4-flash",
+                          "effort": "high", "role": "critic_backup"}
 
 
 class DiscoveryControllerError(RuntimeError): pass
@@ -1834,7 +1837,14 @@ class CodexPlanner:
 
 
 class ClaudeCritic:
-    """Concrete Fable 5 critic. It can bind a veto but never alters the candidate."""
+    """Concrete Fable 5 critic. It can bind a veto but never alters the candidate.
+
+    When a ``backup_wrapper`` is bound, any failure of the primary Fable 5
+    invocation (timeout, refusal, identity drift, unverifiable output) fails
+    over to the DeepSeek V4 Flash critic through the opencode CLI.  The
+    fallback consumes no GPU; it is a provider-availability backup, and the
+    returned Critique is indistinguishable in contract from the primary's.
+    """
     def __init__(self, *, wrapper: Path, environment: Mapping[str, str],
                  template_catalog: Mapping[str, Any] | None = None,
                  reviewed_sources: ReviewedSourcePackage | None = None,
@@ -1842,8 +1852,21 @@ class ClaudeCritic:
                  runtime_identity: Mapping[str, Any] | None = None,
                  actor_launcher_sha256: str | None = None,
                  telemetry: discovery_telemetry.DiscoveryTelemetry | None = None,
-                 auth_root: Path = Path("/home/node/.claude")) -> None:
+                 auth_root: Path = Path("/home/node/.claude"),
+                 backup_wrapper: Path | None = None,
+                 backup_environment: Mapping[str, str] | None = None,
+                 backup_wrapper_sha256: str | None = None,
+                 backup_runtime_identity: Mapping[str, Any] | None = None,
+                 backup_launcher_sha256: str | None = None) -> None:
         self.wrapper, self.environment = wrapper, dict(environment)
+        self.backup_wrapper = backup_wrapper
+        self.backup_environment = (
+            None if backup_environment is None else dict(backup_environment))
+        self.backup_wrapper_sha256 = backup_wrapper_sha256
+        self.backup_runtime_identity = (
+            None if backup_runtime_identity is None
+            else dict(backup_runtime_identity))
+        self.backup_launcher_sha256 = backup_launcher_sha256
         self.template_catalog = json.loads(json.dumps(template_catalog or {}, sort_keys=True))
         self.reviewed_sources = reviewed_sources
         self.wrapper_sha256 = wrapper_sha256
@@ -1864,7 +1887,85 @@ class ClaudeCritic:
                 != self.actor_launcher_sha256):
             raise DiscoveryControllerError("sealed Claude critic launcher/argv policy changed")
         return current
-    def attest(self) -> Mapping[str, Any]: return {**FABLE5_CRITIC, "runtime": self._runtime()}
+    def _backup_runtime(self) -> Mapping[str, Any] | None:
+        if self.backup_wrapper is None:
+            return None
+        if self.backup_wrapper.is_symlink() or not self.backup_wrapper.is_file():
+            raise DiscoveryControllerError(
+                "sealed opencode backup critic wrapper is unavailable")
+        current = opencode_deepseek_critic_actor.runtime_identity(
+            self.backup_wrapper)
+        if (self.backup_runtime_identity is not None
+                and current != self.backup_runtime_identity):
+            raise DiscoveryControllerError(
+                "sealed opencode backup critic runtime identity changed")
+        if (self.backup_launcher_sha256 is not None
+                and hashlib.sha256(
+                    Path(opencode_deepseek_critic_actor.__file__).resolve()
+                    .read_bytes()).hexdigest()
+                != self.backup_launcher_sha256):
+            raise DiscoveryControllerError(
+                "sealed opencode backup critic launcher/argv policy changed")
+        return current
+
+    def _run_backup_critic(
+            self, prompt: str, bindings: Mapping[str, str],
+            workspace: Path, campaign_id: str, hypothesis_id: str,
+            telemetry_operation_key: str) -> opencode_deepseek_critic_actor.CriticResult:
+        if self.backup_wrapper is None:
+            raise DiscoveryControllerError(
+                "Fable5 critic failed and no opencode backup critic is bound")
+        _emit_observational_telemetry(
+            self.telemetry,
+            "autokernel", "critic_fallback_started", campaign_id=campaign_id,
+            hypothesis_id=hypothesis_id,
+            provider=OPENCODE_BACKUP_CRITIC["provider"],
+            model=OPENCODE_BACKUP_CRITIC["model"],
+            effort=OPENCODE_BACKUP_CRITIC["effort"],
+            operation_key=telemetry_operation_key,
+            failure_sink=self.telemetry_failures)
+        try:
+            result = opencode_deepseek_critic_actor.run_critic(
+                wrapper=self.backup_wrapper, workspace=workspace,
+                prompt=prompt, bindings=bindings,
+                environment=self.backup_environment,
+                expected_wrapper_sha256=self.backup_wrapper_sha256,
+                expected_runtime_identity=self.backup_runtime_identity,
+                expected_launcher_sha256=self.backup_launcher_sha256)
+        except Exception:
+            _emit_observational_telemetry(
+                self.telemetry,
+                "autokernel", "critic_fallback_failed", campaign_id=campaign_id,
+                hypothesis_id=hypothesis_id,
+                provider=OPENCODE_BACKUP_CRITIC["provider"],
+                model=OPENCODE_BACKUP_CRITIC["model"],
+                effort=OPENCODE_BACKUP_CRITIC["effort"],
+                operation_key=telemetry_operation_key,
+                failure_sink=self.telemetry_failures)
+            raise
+        if self.telemetry is not None:
+            _emit_observational_telemetry(
+                self.telemetry,
+                "autokernel", "critic_fallback_completed", campaign_id=campaign_id,
+                hypothesis_id=hypothesis_id,
+                provider=OPENCODE_BACKUP_CRITIC["provider"],
+                model=OPENCODE_BACKUP_CRITIC["model"],
+                effort=OPENCODE_BACKUP_CRITIC["effort"],
+                operation_key=telemetry_operation_key,
+                failure_sink=self.telemetry_failures, result={
+                    "stdout_sha256": result.stdout_sha256,
+                    "stderr_sha256": result.stderr_sha256,
+                    "decision": result.decision,
+                })
+        return result
+
+    def attest(self) -> Mapping[str, Any]:
+        runtime = self._runtime()
+        if self.backup_wrapper is None:
+            return {**FABLE5_CRITIC, "runtime": runtime}
+        return {**FABLE5_CRITIC, "runtime": runtime,
+                "backup": {**OPENCODE_BACKUP_CRITIC,
+                           "runtime": self._backup_runtime()}}
     def review(self, candidate: PlannedCandidate, *, context: Mapping[str, Any], workspace: Path) -> Critique:
         manifest = candidate.source_manifest
         if len(manifest.patch_text.encode("utf-8")) > 65536:
@@ -1921,7 +2022,7 @@ class ClaudeCritic:
                 expected_wrapper_sha256=self.wrapper_sha256,
                 expected_runtime_identity=self.runtime_identity,
                 expected_launcher_sha256=self.actor_launcher_sha256)
-        except Exception:
+        except Exception as primary_failure:
             _emit_observational_telemetry(
                     self.telemetry,
                     "autokernel", "critic_failed", campaign_id=campaign_id,
@@ -1930,7 +2031,30 @@ class ClaudeCritic:
                     effort=FABLE5_CRITIC["effort"],
                     operation_key=telemetry_operation_key,
                     failure_sink=self.telemetry_failures)
-            raise
+            try:
+                backup = self._run_backup_critic(
+                    prompt=prompt, bindings=bindings, workspace=workspace,
+                    campaign_id=campaign_id,
+                    hypothesis_id=candidate.hypothesis_id,
+                    telemetry_operation_key=telemetry_operation_key)
+            except Exception:
+                raise primary_failure
+            if self.telemetry is not None:
+                _emit_observational_telemetry(
+                    self.telemetry,
+                    "autokernel", "critic_completed", campaign_id=campaign_id,
+                    hypothesis_id=candidate.hypothesis_id,
+                    provider=OPENCODE_BACKUP_CRITIC["provider"],
+                    model=OPENCODE_BACKUP_CRITIC["model"],
+                    effort=OPENCODE_BACKUP_CRITIC["effort"],
+                    operation_key=telemetry_operation_key,
+                    failure_sink=self.telemetry_failures, result={
+                        "stdout_sha256": backup.stdout_sha256,
+                        "stderr_sha256": backup.stderr_sha256,
+                        "decision": backup.decision,
+                        "fallback_from": FABLE5_CRITIC["provider"],
+                    })
+            return Critique(backup.decision, backup.reason)
         if self.telemetry is not None:
             _emit_observational_telemetry(
                     self.telemetry,

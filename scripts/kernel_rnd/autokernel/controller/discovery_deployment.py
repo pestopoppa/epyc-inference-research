@@ -39,9 +39,15 @@ class DeploymentConfigError(RuntimeError):
     """The declarative deployment boundary refused an unsealed configuration."""
 
 
-def _exact(value: object, keys: set[str], label: str) -> Mapping[str, Any]:
-    if not isinstance(value, Mapping) or set(value) != keys:
-        raise DeploymentConfigError(f"{label} must contain exactly {sorted(keys)}")
+def _exact(value: object, keys: set[str], label: str,
+           optional: set[str] | None = None) -> Mapping[str, Any]:
+    optional = optional or set()
+    present = set(value) if isinstance(value, Mapping) else set()
+    if (not isinstance(value, Mapping)
+            or not keys <= present <= keys | optional):
+        raise DeploymentConfigError(
+            f"{label} must contain exactly {sorted(keys)}"
+            + (f" (optional: {sorted(optional)})" if optional else ""))
     return value
 
 
@@ -554,6 +560,7 @@ class DiscoveryDeployment:
     experiment_template_registry_sha256: str
     inference_window_lease_id: str
     production_snapshot_id: str
+    backup_critic_wrapper: ImmutableInput | None = None
 
     def revalidate(self) -> None:
         """Close the parse-to-start TOCTOU gap for every sealed file reference."""
@@ -562,6 +569,8 @@ class DiscoveryDeployment:
                            self.instrument_branch, self.instrument_commit)
         self.actor_wrapper.revalidate("actors.wrapper")
         self.critic_wrapper.revalidate("actors.critic")
+        if self.backup_critic_wrapper is not None:
+            self.backup_critic_wrapper.revalidate("actors.backup_critic")
         for label, value in (("model", self.model), ("workload", self.workload),
                              ("runtime_config", self.runtime_config),
                              ("frozen_production_comparator",
@@ -723,13 +732,27 @@ def load_deployment_config(path: Path, *, sealed_bytes: bytes | None = None
         raise DeploymentConfigError("controller.nomination_threshold is invalid")
     actors = _exact(top["actors"], {"wrapper_path", "wrapper_sha256",
                                       "critic_path", "critic_sha256",
-                                      "environment_profile_id"}, "actors")
+                                      "environment_profile_id"}, "actors",
+                    optional={"backup_critic_path", "backup_critic_sha256"})
     actor_wrapper = _input({"path": actors["wrapper_path"], "sha256": actors["wrapper_sha256"]}, "actors.wrapper")
     if not os.access(actor_wrapper.path, os.X_OK):
         raise DeploymentConfigError("actors.wrapper_path must be executable")
     critic_wrapper = _input({"path": actors["critic_path"], "sha256": actors["critic_sha256"]}, "actors.critic")
     if not os.access(critic_wrapper.path, os.X_OK):
         raise DeploymentConfigError("actors.critic_path must be executable")
+    backup_critic_wrapper = None
+    if "backup_critic_path" in actors or "backup_critic_sha256" in actors:
+        if ("backup_critic_path" not in actors
+                or "backup_critic_sha256" not in actors):
+            raise DeploymentConfigError(
+                "actors.backup_critic_path and backup_critic_sha256 must appear together")
+        backup_critic_wrapper = _input(
+            {"path": actors["backup_critic_path"],
+             "sha256": actors["backup_critic_sha256"]},
+            "actors.backup_critic")
+        if not os.access(backup_critic_wrapper.path, os.X_OK):
+            raise DeploymentConfigError(
+                "actors.backup_critic_path must be executable")
     environment_profile_id = _identifier(actors["environment_profile_id"], "actors.environment_profile_id")
     gpu = _exact(top["gpu"], {"device_id", "claim_timeout_s", "inference_window_lock",
                                 "inference_window_lease_id"}, "gpu")
@@ -820,6 +843,7 @@ def load_deployment_config(path: Path, *, sealed_bytes: bytes | None = None
         max_iterations=max_iterations,
         nomination_threshold=float(threshold), actor_wrapper=actor_wrapper,
         critic_wrapper=critic_wrapper,
+        backup_critic_wrapper=backup_critic_wrapper,
         environment_profile_id=environment_profile_id, device_id=device_id,
         claim_timeout_s=float(claim_timeout_s), inference_window_lock=window,
         model=model, workload=workload, admission_policy=admission_policy,
