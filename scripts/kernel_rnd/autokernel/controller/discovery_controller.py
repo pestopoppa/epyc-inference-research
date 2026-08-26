@@ -2954,10 +2954,40 @@ def _ensure_question(tracker: hypotheses.HypothesisTracker, item: PlannedCandida
     try:
         tracker.open_hypothesis(question)
     except hypotheses.HypothesisAlreadyTracked:
-        if (preauthored_authority is not None
-                and tracker.get(item.hypothesis_id).hypothesis != question):
-            raise DiscoveryControllerError(
-                "preauthored hypothesis already exists with different provenance")
+        if preauthored_authority is not None:
+            stored = tracker.get(item.hypothesis_id).hypothesis
+            if not _same_preauthored_provenance(stored, question):
+                raise DiscoveryControllerError(
+                    "preauthored hypothesis already exists with different provenance")
+
+
+def _same_preauthored_provenance(
+        stored: hypotheses.Hypothesis,
+        rebuilt: hypotheses.Hypothesis) -> bool:
+    """Idempotency for re-authored preauthored candidates.
+
+    The preauthored question can legitimately be re-authored against the same
+    sealed continuation carrier (each authoring turn re-derives the candidate
+    manifest from the planner's build, so ``source.manifest_sha256`` is a
+    per-turn delta).  What must stay fixed is the carrier provenance: the
+    hypothesis id, statement/falsifier, origin/author, the continuation
+    carrier digest, the historical commit, and the source-backed diff digest.
+    If those all match, the re-registration is the same question re-authored,
+    not a provenance substitution, and is idempotent.
+    """
+    if (stored.hypothesis_id != rebuilt.hypothesis_id
+            or stored.statement != rebuilt.statement
+            or stored.falsifier != rebuilt.falsifier
+            or stored.origin != rebuilt.origin
+            or stored.author != rebuilt.author):
+        return False
+    stored_source = stored.source or {}
+    rebuilt_source = rebuilt.source or {}
+    for key in ("preauthored_continuation_sha256",
+                "historical_commit", "source_backed_diff_sha256"):
+        if stored_source.get(key) != rebuilt_source.get(key):
+            return False
+    return True
 
 def _record_attempt_once(tracker: hypotheses.HypothesisTracker, item: PlannedCandidate, proposal_id: str, result: SealedScreen) -> None:
     ref=f"sha256:{result.result_sha256}"

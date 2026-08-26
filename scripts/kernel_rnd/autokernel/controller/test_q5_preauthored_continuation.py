@@ -18,9 +18,11 @@ from .. import hypothesis_portfolio
 from .. import preauthored_continuation as P
 from .. import source_candidate as S
 from ..execution import worktree as W
+from ..journal import Journal as J
 from . import discovery_controller as D
 from . import discovery_deployment_factory as F
 from . import gpu_source_evidence as E
+from . import hypotheses as H
 from .test_gpu_source_evidence import ClaimFactory, FakeExecutors, plan
 
 
@@ -409,6 +411,66 @@ class Q5PreauthoredContinuationTests(unittest.TestCase):
             self.assertEqual(completed["iterations"][0]["status"],
                              "dry_run_authorized")
             self.assertEqual(completed["scientific_attempts"], 0)
+
+    def test_reauthored_preauthored_question_is_idempotent_but_carrier_swap_refuses(self):
+        """Crash regression: re-authoring the same sealed Q5 continuation with a
+        re-derived candidate manifest must reopen idempotently (the provenance-
+        critical carrier fields are unchanged); substituting a different carrier
+        digest must still refuse."""
+        with tempfile.TemporaryDirectory() as directory:
+            config = self._preauthored_config(Path(directory) / "state")
+            binding = self._q5_binding(config)
+            item_a = D._preauthored_candidate(config, binding, 1)
+            authority_a = D._preauthored_checkpoint_authority(config, item_a)
+            book = J(root=directory + "/journal")
+            book.initialize()
+            tracker = H.HypothesisTracker(
+                journal_=book, root=directory + "/hyp",
+                campaign_id="ak-q5-reauth-regression")
+            D._ensure_question(tracker, item_a, None, authority_a)
+            # Re-authored candidate: same carrier provenance, different manifest.
+            manifest_a = item_a.source_manifest
+            diff_b = manifest_a.patch_bytes.replace(
+                b"return", b"returl", 1)
+            continuation = config.preauthored_continuations[
+                item_a.hypothesis_id]
+            manifest_b = S.source_backed_source_patch_manifest(
+                campaign_id=manifest_a.campaign_id,
+                proposal_id=manifest_a.proposal_id,
+                candidate_id=manifest_a.candidate_id,
+                source_tree=manifest_a.source_tree,
+                production_base_commit=manifest_a.production_base_commit,
+                instrument_commit=manifest_a.instrument_commit,
+                change_class=manifest_a.change_class,
+                declared_files=manifest_a.declared_files,
+                declared_symbols=manifest_a.declared_symbols,
+                mechanism_id=manifest_a.mechanism_id,
+                patch_sha256=hashlib.sha256(diff_b).hexdigest(),
+                patch_bytes=diff_b,
+                source_backed_diff=continuation.source_backed_diff)
+            item_b = replace(
+                item_a, source_manifest=manifest_b,
+                source_manifest_sha256=manifest_b.patch_bundle_sha256)
+            authority_b = dict(authority_a)
+            authority_b["source_manifest_sha256"] = \
+                manifest_b.patch_bundle_sha256
+            authority_b["candidate_semantic_sha256"] = \
+                D._candidate_semantic_identity(item_b)
+            authority_b["cross_campaign_candidate_sha256"] = \
+                D._cross_campaign_candidate_identity(item_b)
+            authority_b["receipt_sha256"] = D._sha({
+                key: value for key, value in authority_b.items()
+                if key != "receipt_sha256"})
+            D._ensure_question(tracker, item_b, None, authority_b)
+            # A different carrier digest is a provenance substitution: refuse.
+            authority_c = dict(authority_b)
+            authority_c["carrier_sha256"] = "1" * 64
+            authority_c["receipt_sha256"] = D._sha({
+                key: value for key, value in authority_c.items()
+                if key != "receipt_sha256"})
+            with self.assertRaisesRegex(
+                    D.DiscoveryControllerError, "different provenance"):
+                D._ensure_question(tracker, item_b, None, authority_c)
 
     def test_q5_replication_reuses_original_authoring_turn_and_exact_manifest(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -1139,7 +1201,7 @@ class Q5PreauthoredContinuationTests(unittest.TestCase):
                 claim_acquirer=first_claims, claim_verifier=lambda _row: True,
                 claim_journal=object(), claim_timeout_s=0)
             self.assertEqual([row[0] for row in first_executor.calls],
-                             ["correctness", "correctness"])
+                             ["correctness"] * 5)
             self.assertEqual(len(first_claims.claims), 1)
 
             resumed_executor, resumed_claims = FakeExecutors(), ClaimFactory()
