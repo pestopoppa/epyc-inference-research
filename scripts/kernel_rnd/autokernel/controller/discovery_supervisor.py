@@ -365,6 +365,8 @@ def _copy_execution_closure(root: secure.RuntimeRoot) -> dict[str, Any]:
         Path("__init__.py"),
         Path("kernel_rnd/__init__.py"),
         Path("kernel_rnd/c6_reward_integrity.py"),
+        Path("kernel_rnd/c6_mutants/run_falsification.py"),
+        Path("kernel_rnd/c6_mutants/results_20260821.jsonl"),
         Path("benchmark/__init__.py"),
         Path("benchmark/autokernel_gpu_discovery_beliefs.py"),
         Path("benchmark/autokernel_progression.py"),
