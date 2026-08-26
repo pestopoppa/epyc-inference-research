@@ -1381,13 +1381,16 @@ def summarize_results_by_scenario(results: list[dict[str, Any]]) -> dict[str, An
     return summaries
 
 
+DSPARK_PARITY_NAMES: dict[str, tuple[str, int]] = {
+    "v9_dsv4_q8_dspark_request_nmax0": ("q8", 0),
+    "v9_dsv4_q8_dspark_request_nmax3": ("q8", 3),
+    "v9_dsv4_iq3_xxs_dspark_request_nmax0": ("iq3_xxs", 0),
+    "v9_dsv4_iq3_xxs_dspark_request_nmax3": ("iq3_xxs", 3),
+}
+
+
 def evaluate_dspark_parity(results: list[dict[str, Any]]) -> dict[str, Any] | None:
-    names: dict[str, tuple[str, int]] = {
-        "v9_dsv4_q8_dspark_request_nmax0": ("q8", 0),
-        "v9_dsv4_q8_dspark_request_nmax3": ("q8", 3),
-        "v9_dsv4_iq3_xxs_dspark_request_nmax0": ("iq3_xxs", 0),
-        "v9_dsv4_iq3_xxs_dspark_request_nmax3": ("iq3_xxs", 3),
-    }
+    names = DSPARK_PARITY_NAMES
     selected = [row for row in results if row.get("scenario") in names]
     if not selected:
         return None
@@ -1425,13 +1428,138 @@ def evaluate_dspark_parity(results: list[dict[str, Any]]) -> dict[str, Any] | No
     }
 
 
+# ── SC12: belief-kernel tuple emission for the DSpark paired write path ──
+#
+# The first quant-specific paired receipts (iq3-dspark-quick-20260811T063729Z
+# and every dspark-sidecar-match run so far) predate this hook and deliberately
+# remain unprojected — zero rows, no read-side retrofit.  Successor runs attach
+# one row per quant-specific paired receipt BEFORE the summary is written, so
+# the native artifact, rather than a later reader, records what was measured.
+# The row envelope mirrors the house shape (autokernel_gpu_discovery_beliefs /
+# autokernel_rocm_diagnostic_beliefs / dflash2_beliefs): self-hashed rows that
+# carry protocol id, scored reps/basis, date, category, metric direction and
+# the durable attestation locator+digest; grading remains the belief kernel's
+# single ladder and is never re-implemented here.
+
+K35_SUMMARY_SCHEMA = "epyc.k35_stack_context_matrix.summary.v1"
+
+
+def _content_sha256(value: Any) -> str:
+    """Canonical content hash, byte-identical to AutoKernel schemas.content_hash."""
+    return hashlib.sha256(
+        json.dumps(
+            value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
+        ).encode("utf-8")
+    ).hexdigest()
+
+
+def _measurement_sha256(row: dict[str, Any]) -> str:
+    unsigned = dict(row)
+    unsigned.pop("measurement_sha256", None)
+    return _content_sha256(unsigned)
+
+
+def _dspark_pair_belief_rows(
+    results: list[dict[str, Any]],
+    parity: dict[str, Any] | None,
+    *,
+    created_at: str,
+    attestation_locator: str,
+    attestation_sha256: str,
+) -> list[dict[str, Any]]:
+    """One belief_measurements row per quant-specific DSpark paired receipt.
+
+    A paired receipt is one (variant, nominal_context, rep) parity comparison:
+    the draft-dspark-disabled BASELINE arm plus the depth-3 CANDIDATE arm.  The
+    row records the CANDIDATE arm's measured decode throughput; the matched
+    BASELINE arm and the token-parity checks ride as pairing context in
+    ``extra`` — the parity outcome itself is a boolean admission, never a
+    fabricated ordinal metric.  Pairs whose candidate arm produced no finite
+    decode throughput yield no row: the summary's ``dspark_parity`` record
+    still documents the receipt.
+    """
+    comparisons = (parity or {}).get("comparisons")
+    if not comparisons:
+        return []
+    by_scenario = {str(row.get("scenario")): row for row in results}
+    scenario_for_arm = {
+        (variant, cap): scenario for scenario, (variant, cap) in DSPARK_PARITY_NAMES.items()
+    }
+    rows: list[dict[str, Any]] = []
+    for comparison in comparisons:
+        variant = str(comparison.get("variant") or "")
+        context = int(comparison.get("nominal_context") or 0)
+        rep = int(comparison.get("rep") or 1)
+        candidate = by_scenario.get(scenario_for_arm.get((variant, 3), "")) or {}
+        baseline = by_scenario.get(scenario_for_arm.get((variant, 0), "")) or {}
+        decode_tps = candidate.get("decode_tps")
+        if (
+            isinstance(decode_tps, bool)
+            or not isinstance(decode_tps, (int, float))
+            or not 0 < float(decode_tps) < float("inf")
+        ):
+            continue
+        draft_n = int(candidate.get("draft_n") or 0)
+        draft_accepted = int(candidate.get("draft_n_accepted") or 0)
+        draft_acceptance = (
+            float(draft_accepted) / float(draft_n) if draft_n > 0 else None
+        )
+        status = str(comparison.get("status") or "fail")
+        ok_arms = sum(1 for arm in (candidate, baseline) if arm.get("status") == "ok")
+        row: dict[str, Any] = {
+            "measurement_id": f"k35_dspark_{variant}_ctx{context}_rep{rep}_decode_tokens_per_s",
+            "metric": "decode_tokens_per_s",
+            "value": float(decode_tps),
+            "unit": "tokens_per_second",
+            "date": created_at[:10],
+            "category": "CANDIDATE",
+            "claim": (
+                f"K35 DSpark-sidecar paired receipt {variant} ctx{context} rep{rep}: "
+                f"draft-dspark candidate arm decode throughput {float(decode_tps):.9g} "
+                f"tokens/s; token-stream parity {status}"
+            ),
+            "metric_direction": "higher_better",
+            "protocol_id": K35_SUMMARY_SCHEMA,
+            "reps": 1,
+            "reps_basis": "scored:single candidate-arm request of the matched pair",
+            "attestation_locator": attestation_locator,
+            "attestation_sha256": attestation_sha256,
+            "source_kind": "k35-paired-receipt-measurement",
+            "extra": {
+                "variant": variant,
+                "nominal_context": context,
+                "rep": rep,
+                "pair_status": status,
+                "checks": dict(comparison.get("checks") or {}),
+                "scenario_candidate": scenario_for_arm.get((variant, 3)),
+                "scenario_baseline": scenario_for_arm.get((variant, 0)),
+                "candidate_effective_speculative_n_max": candidate.get(
+                    "effective_speculative_n_max"
+                ),
+                "baseline_effective_speculative_n_max": baseline.get(
+                    "effective_speculative_n_max"
+                ),
+                "candidate_decode_tokens_per_s": decode_tps,
+                "baseline_decode_tokens_per_s": baseline.get("decode_tps"),
+                "candidate_draft_n": draft_n,
+                "candidate_draft_n_accepted": draft_accepted,
+                "candidate_draft_acceptance_rate": draft_acceptance,
+                "scored_ok_arm_rows": ok_arms,
+                "pre_hook": False,
+            },
+        }
+        row["measurement_sha256"] = _measurement_sha256(row)
+        rows.append(row)
+    return rows
+
+
 def execute_plan(plan: dict[str, Any], args: argparse.Namespace, output_dir: Path) -> dict[str, Any]:
     guard = collect_guard_state(args.binary)
     write_json(output_dir / "guard_state.json", guard)
     blockers = guard.get("process_blockers") or []
     if blockers and not args.allow_dirty_host:
         summary = {
-            "schema": "epyc.k35_stack_context_matrix.summary.v1",
+            "schema": K35_SUMMARY_SCHEMA,
             "created_at": utc_now(),
             "status": "blocked",
             "reason": "process blockers present",
@@ -1458,7 +1586,7 @@ def execute_plan(plan: dict[str, Any], args: argparse.Namespace, output_dir: Pat
         if not cleanup_proved_complete(result.get("cleanup"))
     ]
     summary = {
-        "schema": "epyc.k35_stack_context_matrix.summary.v1",
+        "schema": K35_SUMMARY_SCHEMA,
         "created_at": utc_now(),
         "status": "failed"
         if cleanup_failures or (dspark_parity and dspark_parity["status"] != "pass")
@@ -1471,7 +1599,18 @@ def execute_plan(plan: dict[str, Any], args: argparse.Namespace, output_dir: Pat
         "pgpu1_protocol_fields": plan.get("pgpu1_protocol_fields"),
         "operator_waivers": plan.get("operator_waivers"),
     }
-    write_json(output_dir / "summary.json", summary)
+    summary_path = output_dir / "summary.json"
+    summary["belief_measurements"] = _dspark_pair_belief_rows(
+        results,
+        dspark_parity,
+        created_at=summary["created_at"],
+        attestation_locator=str(summary_path),
+        attestation_sha256=_content_sha256(summary),
+    )
+    summary["summary_sha256"] = _content_sha256(
+        {key: value for key, value in summary.items() if key != "summary_sha256"}
+    )
+    write_json(summary_path, summary)
     return summary
 
 

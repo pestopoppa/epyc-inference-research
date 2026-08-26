@@ -591,5 +591,200 @@ class K35StackContextMatrixRunnerTests(unittest.TestCase):
         self.assertEqual(summary["cleanup_failures"][0]["inference_status"], "ok")
 
 
+    def test_dspark_pair_belief_rows_emits_one_row_per_paired_receipt(self):
+        base = {
+            "nominal_context": 2048,
+            "rep": 1,
+            "status": "ok",
+            "decode_tps": 30.0,
+            "prompt_tps": 300.0,
+            "elapsed_s": 1.0,
+        }
+        results = [
+            {
+                **base,
+                "scenario": "v9_dsv4_iq3_xxs_dspark_request_nmax0",
+                "effective_speculative_n_max": 0,
+                "draft_n": 0,
+                "token_ids": [1, 2, 3],
+            },
+            {
+                **base,
+                "scenario": "v9_dsv4_iq3_xxs_dspark_request_nmax3",
+                "effective_speculative_n_max": 3,
+                "draft_n": 4,
+                "draft_n_accepted": 3,
+                "token_ids": [1, 2, 3],
+            },
+        ]
+        parity = k35.evaluate_dspark_parity(results)
+        self.assertEqual(parity["status"], "pass")
+        rows = k35._dspark_pair_belief_rows(
+            results,
+            parity,
+            created_at="2026-08-26T12:00:00+00:00",
+            attestation_locator="summary.json",
+            attestation_sha256="0" * 64,
+        )
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual(
+            row["measurement_id"], "k35_dspark_iq3_xxs_ctx2048_rep1_decode_tokens_per_s"
+        )
+        self.assertEqual(row["metric"], "decode_tokens_per_s")
+        self.assertEqual(row["value"], 30.0)
+        self.assertEqual(row["unit"], "tokens_per_second")
+        self.assertEqual(row["date"], "2026-08-26")
+        self.assertEqual(row["category"], "CANDIDATE")
+        self.assertEqual(row["metric_direction"], "higher_better")
+        self.assertEqual(row["protocol_id"], "epyc.k35_stack_context_matrix.summary.v1")
+        self.assertEqual(row["reps"], 1)
+        self.assertIn("scored", row["reps_basis"])
+        self.assertEqual(row["attestation_locator"], "summary.json")
+        self.assertEqual(row["attestation_sha256"], "0" * 64)
+        self.assertEqual(
+            row["extra"]["scenario_baseline"], "v9_dsv4_iq3_xxs_dspark_request_nmax0"
+        )
+        self.assertEqual(
+            row["extra"]["scenario_candidate"], "v9_dsv4_iq3_xxs_dspark_request_nmax3"
+        )
+        self.assertEqual(row["extra"]["pair_status"], "pass")
+        self.assertEqual(row["extra"]["candidate_draft_acceptance_rate"], 0.75)
+        self.assertEqual(row["extra"]["baseline_decode_tokens_per_s"], 30.0)
+        self.assertIn("parity", row["claim"])
+        self.assertEqual(
+            row["measurement_sha256"],
+            k35._content_sha256(
+                {key: value for key, value in row.items() if key != "measurement_sha256"}
+            ),
+        )
+
+    def test_dspark_pair_belief_rows_empty_without_paired_receipt(self):
+        rows = k35._dspark_pair_belief_rows(
+            [{"scenario": "frontdoor_cpu_no_spec", "status": "ok"}],
+            None,
+            created_at="2026-08-26T00:00:00+00:00",
+            attestation_locator="summary.json",
+            attestation_sha256="0" * 64,
+        )
+        self.assertEqual(rows, [])
+        rows = k35._dspark_pair_belief_rows(
+            [
+                {"scenario": "v9_dsv4_q8_dspark_request_nmax0", "status": "ok"},
+                {"scenario": "v9_dsv4_q8_dspark_request_nmax3", "status": "ok"},
+            ],
+            {"status": "fail", "comparisons": []},
+            created_at="2026-08-26T00:00:00+00:00",
+            attestation_locator="summary.json",
+            attestation_sha256="0" * 64,
+        )
+        self.assertEqual(rows, [])
+
+    def test_dspark_pair_belief_rows_skips_pair_without_candidate_decode(self):
+        results = [
+            {
+                "scenario": "v9_dsv4_q8_dspark_request_nmax0",
+                "nominal_context": 2048,
+                "rep": 1,
+                "status": "ok",
+                "effective_speculative_n_max": 0,
+                "draft_n": 0,
+                "token_ids": [1],
+            },
+            {
+                "scenario": "v9_dsv4_q8_dspark_request_nmax3",
+                "nominal_context": 2048,
+                "rep": 1,
+                "status": "error",
+                "decode_tps": None,
+            },
+        ]
+        parity = k35.evaluate_dspark_parity(results)
+        self.assertEqual(parity["status"], "fail")
+        rows = k35._dspark_pair_belief_rows(
+            results,
+            parity,
+            created_at="2026-08-26T00:00:00+00:00",
+            attestation_locator="summary.json",
+            attestation_sha256="0" * 64,
+        )
+        self.assertEqual(rows, [])
+
+    def test_execute_plan_embeds_belief_rows_with_write_time_attestation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            args = k35.parse_args(["--execute", "--output-dir", tmp, "--allow-dirty-host"])
+            plan = {
+                "cells": [
+                    {
+                        "scenario": "v9_dsv4_iq3_xxs_dspark_request_nmax0",
+                        "nominal_context": 2048,
+                        "rep": 1,
+                    },
+                    {
+                        "scenario": "v9_dsv4_iq3_xxs_dspark_request_nmax3",
+                        "nominal_context": 2048,
+                        "rep": 1,
+                    },
+                ],
+                "pgpu1_protocol_fields": {"policy": "test"},
+            }
+            base = {
+                "nominal_context": 2048,
+                "rep": 1,
+                "status": "ok",
+                "decode_tps": 40.0,
+                "prompt_tps": 400.0,
+                "elapsed_s": 1.0,
+                "token_ids": [1, 2, 3],
+                "cleanup": {
+                    "pid": 1,
+                    "returncode": 0,
+                    "dead": True,
+                    "completed": True,
+                    "ps_after": {"ok": True, "stdout": ""},
+                },
+            }
+
+            def fake_run_cell(cell, args, output_dir):
+                result = dict(base)
+                result["scenario"] = cell["scenario"]
+                if cell["scenario"].endswith("nmax0"):
+                    result["effective_speculative_n_max"] = 0
+                    result["draft_n"] = 0
+                else:
+                    result["effective_speculative_n_max"] = 3
+                    result["draft_n"] = 4
+                    result["draft_n_accepted"] = 4
+                return result
+
+            with mock.patch.object(
+                k35, "collect_guard_state", return_value={"process_blockers": []}
+            ), mock.patch.object(k35, "run_cell", side_effect=fake_run_cell), mock.patch.object(
+                k35, "collect_process_blockers", return_value=[]
+            ):
+                summary = k35.execute_plan(plan, args, Path(tmp))
+            stored = json.loads((Path(tmp) / "summary.json").read_text())
+
+        self.assertEqual(summary["status"], "ok")
+        rows = summary["belief_measurements"]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["category"], "CANDIDATE")
+        unsigned = {
+            key: value
+            for key, value in summary.items()
+            if key not in ("belief_measurements", "summary_sha256")
+        }
+        self.assertEqual(rows[0]["attestation_sha256"], k35._content_sha256(unsigned))
+        self.assertEqual(
+            summary["summary_sha256"],
+            k35._content_sha256(
+                {key: value for key, value in summary.items() if key != "summary_sha256"}
+            ),
+        )
+        self.assertEqual(stored["summary_sha256"], summary["summary_sha256"])
+        self.assertEqual(stored["belief_measurements"], rows)
+        self.assertEqual(stored["schema"], "epyc.k35_stack_context_matrix.summary.v1")
+
+
 if __name__ == "__main__":
     unittest.main()

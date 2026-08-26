@@ -40,6 +40,15 @@ rocm-smi --showmemuse --showuse > "$d/rocm_during.txt" 2>/dev/null
 QARG=(--questions-in "$PINNED")
 [ -f "$PINNED" ] || QARG=(--questions-out "$PINNED")
 
+# SC32 belief emission: forwarded only when the driver declares this arm's
+# role (BASELINE anchor / CANDIDATE control). Absent = zero belief rows, the
+# pre-hook behavior; the 2026-08-12 panel is never retrofitted.
+BELIEF_ARGS=()
+if [ -n "${GPU_BENCH_BELIEF_CATEGORY:-}" ]; then
+  BELIEF_ARGS+=(--belief-category "$GPU_BENCH_BELIEF_CATEGORY")
+  [ -n "${GPU_BENCH_BELIEF_CONFIG:-}" ] && BELIEF_ARGS+=(--belief-config "$GPU_BENCH_BELIEF_CONFIG")
+fi
+
 cd "$RES"
 HF_HOME=/mnt/raid0/llm/cache/huggingface RUNNER_REQUEST_TIMEOUT_S=1800 \
 uv run python scripts/benchmark/v7_quality_gate_runner.py \
@@ -53,6 +62,7 @@ uv run python scripts/benchmark/v7_quality_gate_runner.py \
   --models "$MODEL" \
   --per-question-out "$d/per_question.jsonl" \
   "${QARG[@]}" \
+  "${BELIEF_ARGS[@]}" \
   --output "$d/result.json" \
   > "$d/runner.stdout" 2> "$d/runner.stderr"
 rc=$?
