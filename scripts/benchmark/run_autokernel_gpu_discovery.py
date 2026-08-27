@@ -2546,6 +2546,28 @@ def factor_spec(*, factor: str, anchor_build: Path, candidate_build: Path,
                 "candidate_ubatch": (256 if factor == "ubatch" else
                                      1024 if factor == "ubatch_up" else 512),
                 "anchor_mmap": True, "candidate_mmap": False if factor == "mmap" else True}
+        if factor in {"batch", "batch_up", "ubatch", "ubatch_up"}:
+            # llama.cpp clamps the micro-batch to the batch (src/llama-context.cpp:265):
+            #   cparams.n_ubatch = std::min(cparams.n_batch,
+            #                               params.n_ubatch == 0 ? params.n_batch : params.n_ubatch)
+            # so a candidate ubatch ABOVE the candidate batch is silently clamped back to
+            # the anchor value and the screen degenerates into an A/A comparison on one
+            # identical binary -- which still reports a median effect, because run-to-run
+            # noise is not zero. Measured: ak-gpu-ubatch-up-screen-20260813-s3 passed
+            # `-b 512 -ub 1024`, so BOTH arms ran at an effective ubatch of 512, and the
+            # screen reported +46.9% from a bimodal sample whose median happened to land
+            # on the fast mode (its `batch_up` sibling, equally null, reported +0.59%).
+            # Refuse loudly here rather than emit a number that reads as a win.
+            anchor_eff = min(result["anchor_batch"], result["anchor_ubatch"])
+            cand_eff = min(result["candidate_batch"], result["candidate_ubatch"])
+            if (result["anchor_batch"], anchor_eff) == (result["candidate_batch"], cand_eff):
+                raise RuntimeError(
+                    f"{factor} screen is a null arm: anchor (b={result['anchor_batch']}, "
+                    f"ub={result['anchor_ubatch']} -> effective {anchor_eff}) and candidate "
+                    f"(b={result['candidate_batch']}, ub={result['candidate_ubatch']} -> "
+                    f"effective {cand_eff}) are the same effective configuration after "
+                    "llama.cpp's ubatch<=batch clamp; raise candidate_batch with "
+                    "candidate_ubatch or drop the factor")
         if factor == "op_offload":
             result["anchor_no_op_offload"] = False
             result["candidate_no_op_offload"] = True
