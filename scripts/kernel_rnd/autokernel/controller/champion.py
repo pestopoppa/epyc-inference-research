@@ -33,7 +33,7 @@ __all__ = [
     "read_validated_snapshot", "project_source_tree", "compatibility",
     "compatible_groups", "composition_request", "append_idempotent",
     "CompositionReceipt",
-    "promote_composition", "record_no_champion", "record_rejected_composition",
+    "promote_composition", "seed_champion", "record_no_champion", "record_rejected_composition",
     "record_anchor_moved", "reanchor_champion", "champion_branch",
 ]
 
@@ -1308,6 +1308,36 @@ def _empty_champion(anchor: AnchorIdentity, *, status: str, blocking: Sequence[s
     if violations:
         raise CompositionRefused("constructed empty champion record is invalid: " + "; ".join(violations))
     return record
+
+
+def seed_champion(book: journal.Journal, anchor: AnchorIdentity, *,
+                  reason: str) -> journal.JournalEntry:
+    """Champion₀: the aggregate EXISTS and currently equals the production anchor.
+
+    This is a different state from :func:`record_no_champion`, and the difference is
+    the whole point of the operator's standing requirement that *there is always an
+    aggregate candidate ready for promotion gate testing*:
+
+    * ``no_champion``          -- we have nothing, and something is BLOCKING us
+      (``NO_GREEN_COMPOSITION``).
+    * ``seeded_from_anchor``   -- we have an aggregate; it just has no members yet,
+      so it is byte-identical to production. Nothing is blocking it.
+
+    Hence ``blocking_conditions`` is empty here. That is not a weakened gate: a seed
+    carries no ``last_t0/t1/t2`` events, so the schema's always-green rule (which
+    fires on a tier event whose status is not ``pass``) has nothing to test. The
+    champion becomes claim-bearing only once a composition earns its own T0/T1/T2
+    against this same anchor, which :func:`promote_composition` still enforces.
+
+    Purity: this module may not build, benchmark or launch anything, so the anchor --
+    including its measured per-backend binary and linkage digests -- must be derived
+    by the caller (see ``champion_seed.production_anchor``) and handed in already
+    sealed.
+    """
+    return append_idempotent(
+        book, journal.KIND_CHAMPION_UPDATED,
+        _empty_champion(anchor, status="seeded_from_anchor", blocking=[],
+                        detail={"reason": _text(reason, "reason")}))
 
 
 def record_no_champion(book: journal.Journal, anchor: AnchorIdentity, *, reason: str) -> journal.JournalEntry:
