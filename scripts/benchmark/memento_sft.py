@@ -1092,7 +1092,14 @@ def emit_training_belief(*, model, config: MementoTrainingConfig, stage: int,
     attestation_sha256 = _content_hash(metrics)
 
     row = {
-        "measurement_id": f"memento_sft_stage{stage}_seconds_per_sample",
+        # Run-level locator (2026-08-27): the first two S2 smokes (0.6B + 1.7B) collided on
+        # the stage-only id, merging two measurements into one fold belief. The id must be
+        # unique per run: model + stage + UTC timestamp.
+        "measurement_id": (
+            f"memento_sft_stage{stage}_seconds_per_sample_"
+            f"{config.model_name_or_path.replace('/', '-')}_"
+            f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
+        ),
         "metric": "sft_seconds_per_sample",
         "value": s_per_sample,
         "unit": "s/sample",
