@@ -1043,8 +1043,12 @@ def emit_training_belief(*, model, config: MementoTrainingConfig, stage: int,
     finite = all(bool(torch.isfinite(p).all().item()) for p in trainable)
     lora_b_total = 0
     lora_b_nonzero = 0
+    # Match on SUBSTRING, not suffix: peft names these
+    # `...q_proj.lora_B.default.weight` (the `.weight` tail was missing from the
+    # original check, so the first real S2 run refused a perfectly good adapter
+    # with `0/0` — a false negative, found 2026-08-27 by reproducing the setup).
     for name, p in model.named_parameters():
-        if p.requires_grad and name.endswith("lora_B.default"):
+        if p.requires_grad and "lora_B.default" in name:
             lora_b_total += 1
             if torch.count_nonzero(p) > 0:
                 lora_b_nonzero += 1
@@ -1088,7 +1092,14 @@ def emit_training_belief(*, model, config: MementoTrainingConfig, stage: int,
     attestation_sha256 = _content_hash(metrics)
 
     row = {
-        "measurement_id": f"memento_sft_stage{stage}_seconds_per_sample",
+        # Run-level locator (2026-08-27): the first two S2 smokes (0.6B + 1.7B) collided on
+        # the stage-only id, merging two measurements into one fold belief. The id must be
+        # unique per run: model + stage + UTC timestamp.
+        "measurement_id": (
+            f"memento_sft_stage{stage}_seconds_per_sample_"
+            f"{config.model_name_or_path.replace('/', '-')}_"
+            f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
+        ),
         "metric": "sft_seconds_per_sample",
         "value": s_per_sample,
         "unit": "s/sample",
