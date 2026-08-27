@@ -39,6 +39,39 @@ def object_identity(info: os.stat_result) -> dict[str, int]:
     }
 
 
+# Keys that identify a runtime root ACROSS ITS OWN LIFETIME.
+#
+# `nlink` is deliberately excluded. A directory's link count is 2 + its
+# subdirectory count, so it necessarily drifts as the controller does its job:
+# the runtime root is a WORKING directory and every subdirectory the campaign
+# creates inside it changes the number. Pinning it makes "this directory has
+# been used" indistinguishable from "this directory was swapped underneath us".
+#
+# Measured 2026-08-27: v28's spec pinned nlink=2 (the root was empty when the
+# launch spec was sealed); the controller then created three subdirectories, and
+# the FIRST supervised restart raised `runtime root object identity changed`
+# (exit 70) with dev/ino/uid/mode all identical. The campaign had just proved a
+# clean resume — scientific_attempts survived — and was then killed by its own
+# integrity check. The bug was latent while `max_restarts == 0` forced a
+# permanent exit at first child death, because nothing ever re-verified.
+#
+# dev+ino identify the object uniquely, and uid+mode carry the ownership and
+# permission guarantees `create_or_open` establishes. POSIX forbids hard links
+# to directories, so nlink buys no anti-substitution property here that dev+ino
+# does not already give. It stays in `directory_identity` for SEALED trees (the
+# root-owned, a-w execution closures), where a changing subdirectory count IS a
+# real violation.
+RUNTIME_ROOT_IDENTITY_KEYS = ("dev", "ino", "uid", "mode")
+
+
+def runtime_root_invariants(identity: Mapping[str, Any]) -> dict[str, int]:
+    """The subset of a directory identity that must hold across a resume."""
+    missing = [k for k in RUNTIME_ROOT_IDENTITY_KEYS if k not in identity]
+    if missing:
+        raise SecureRuntimeError(f"runtime root identity is missing {missing}")
+    return {k: int(identity[k]) for k in RUNTIME_ROOT_IDENTITY_KEYS}
+
+
 def directory_identity(info: os.stat_result) -> dict[str, int]:
     return {
         "dev": info.st_dev,
@@ -129,11 +162,17 @@ class RuntimeRoot:
             self.fd = -1
 
     def verify(self, expected: Mapping[str, Any] | None = None) -> None:
+        # Compared on RUNTIME_ROOT_IDENTITY_KEYS, not the whole dict: see the
+        # note on runtime_root_invariants above. The fd and the path are still
+        # BOTH checked, so a swap-under-us is still caught by dev/ino.
+        pinned = runtime_root_invariants(self.identity)
         current = directory_identity(os.fstat(self.fd))
         current_path = directory_identity(os.stat(self.path, follow_symlinks=False))
-        if current != self.identity or current_path != self.identity:
+        if (runtime_root_invariants(current) != pinned
+                or runtime_root_invariants(current_path) != pinned):
             raise SecureRuntimeError("runtime root object identity changed")
-        if expected is not None and dict(expected) != current:
+        if (expected is not None
+                and runtime_root_invariants(expected) != runtime_root_invariants(current)):
             raise SecureRuntimeError("runtime root differs from launch specification")
 
     def open_leaf(self, name: str, flags: int, mode: int = 0o600) -> int:
