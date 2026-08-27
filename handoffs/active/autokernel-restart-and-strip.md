@@ -8,6 +8,19 @@ This is a rider on [`autokernel-research-loop.md`](autokernel-research-loop.md);
 re-open that handoff's backlog. It records what was fixed, what is verified-dead, and the
 deterministic crash sources that still need a GPU validation window.
 
+## LAUNCHED — v28 live under audit-session GPU ownership (2026-08-27T14:23Z)
+
+Operator granted GPU compute to this session and directed latching autokernel. **v28 is running
+the fixed code**, latched (`--max-restarts 1000`, supervisor auto-restarts + resumes from durable
+state). Deployment `gpu-discovery-quant-ladder-occupancy-v28`, config `659e356d`, tmux session
+`ak-fb097bfd6ee7a8e58c108430` (socket `epyc-autokernel-supervisors`), supervisor pid 1698290,
+execution closure `89de3a8a…` (verified to contain the sampler `owner_root_pid` fix and the
+lifted restart clamp). First iteration reached `planner_started` on `akh-v2-q5-type-specific-dequant`
+within seconds — clean, no crash. A fifth fix was required to launch at all: `_SITE_CRITIC_WRAPPER`
+pinned a Claude version (2.1.231) that auto-updates had orphaned, failing every bundle init
+(`82be1ad4`). Monitor: `/mnt/raid0/llm/autokernel/monitor-v28-audit.sh` → `…/v28/monitor-audit.log`.
+Stop with `discovery_supervisor stop --runtime-root …/v28/state` (graceful drain).
+
 ## Done (committed, unit-tested — 554/557 controller tests pass; 3 failures are a pre-existing
 `claude/versions` env artifact identical on main)
 
