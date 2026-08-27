@@ -1044,11 +1044,51 @@ class CodexPlanner:
                 "patch_sha256": hashlib.sha256(example_patch.encode()).hexdigest(),
                 "patch_encoding": "base64",
                 "patch_base64": base64.b64encode(example_patch.encode()).decode("ascii")}}
+        # DISCOVERY MODE. With a binding the task is implicit: implement the
+        # assigned hypothesis. Without one the planner must CHOOSE the
+        # hypothesis too, and saying nothing would leave it inferring the task
+        # from a placeholder example — so state it explicitly.
+        #
+        # Everything this asks for is already in the prompt: `context` carries
+        # prior_results (with effect sizes, mechanism ids and target symbols),
+        # do_not_repeat, and prior_authoring_refusals; the template catalogue
+        # bounds the authorable surface; reviewed_source_package is the code.
+        discovery_mode = None if binding is not None else {
+            "task": ("No hypothesis is assigned. PROPOSE one and implement it in "
+                     "the same turn."),
+            "propose_from": [
+                "context.prior_results — what has already been measured here, "
+                "with its exact effect sizes, mechanism ids and target symbols",
+                "context.do_not_repeat — mechanisms already refuted or receipted; "
+                "proposing one of these again will be refused",
+                "context.prior_authoring_refusals — how previous patches were "
+                "rejected, so the same shape is not re-authored",
+                "experiment_template_catalog — the ONLY files and symbols you may "
+                "touch; a patch outside a reviewed template is refused",
+                "reviewed_source_package — the actual source under those templates",
+            ],
+            "requirements": [
+                "State a bounded hypothesis and the primary falsifier that would "
+                "refute it; a proposal that nothing could falsify is not a "
+                "hypothesis.",
+                "Exactly ONE conceptual mutation per proposal.",
+                "The mechanism must be structurally distinct from every entry in "
+                "do_not_repeat.",
+                "Prefer a mechanism whose effect the declared dispatch route can "
+                "actually attribute; an unattributable change screens out before "
+                "it is ever benchmarked.",
+            ],
+            "note": ("Correctness is judged before speed and a wrong kernel is a "
+                     "failure, never a ranked result. A negative or inconclusive "
+                     "measurement is a legitimate outcome and is preferred to a "
+                     "mechanism chosen because it is easy to make look fast."),
+        }
         prompt = json.dumps({"role": SOL, "context": context,
                              "experiment_template_catalog": self._planner_catalog(),
                              "reviewed_source_package": source_package,
                              "authoring_contract": contract,
                              "controller_owned_portfolio_binding": binding,
+                             "discovery_mode": discovery_mode,
                              "structural_example_only": example,
                              "output": "Write plan.json and source-patch.json in workspace."}, sort_keys=True)
         checkpoint_operation_key = (
@@ -1733,6 +1773,22 @@ class ControllerConfig:
     # emitted 284 planner_failed events in 23 minutes on a codex 401 (08-26).
     planner_backoff_base_s: float = 30.0
     planner_backoff_max_s: float = 1800.0
+    # HYBRID DISCOVERY (2026-08-27). Default False, so every existing campaign
+    # keeps its exact semantics: a sealed portfolio is the exhaustive list and
+    # running out of eligible records completes the campaign.
+    #
+    # When True, the operator portfolio becomes a PRIORITY SEED rather than the
+    # whole hypothesis space: eligible records are still selected first, in rank
+    # order, and only once they are spent does the planner begin proposing its
+    # own mechanisms from prior results, the do-not-repeat ledger and the sealed
+    # template catalogue. A campaign with no portfolio at all is autonomous from
+    # turn 1.
+    #
+    # This does NOT widen what the planner may touch. The authorable surface is
+    # the sealed template catalogue, which is unchanged; the portfolio only ever
+    # bounded WHICH IDEAS were allowed, never WHICH FILES. Correctness,
+    # attribution, replication and DNR gates are identical on both paths.
+    autonomous_discovery: bool = False
     def __post_init__(self) -> None:
         for name in ("planner_backoff_base_s", "planner_backoff_max_s"):
             value = getattr(self, name)
@@ -2048,6 +2104,12 @@ def _revalidate_portfolio_checkpoint(config: ControllerConfig,
         # Legacy generic campaigns never had this receipt.  Their campaign-ledger
         # COULD_NOT_CHECK semantics are preserved rather than rewritten on resume.
         return
+    if row.get("discovery_mode") == "autonomous":
+        # A planner-proposed candidate has no portfolio record to revalidate
+        # against, by construction. This checks the MARKER rather than merely
+        # "the binding is missing", so a portfolio-bound candidate whose binding
+        # disappeared still fails closed below.
+        return
     binding = row.get("portfolio_binding")
     if not isinstance(binding, Mapping):
         raise DiscoveryControllerError(
@@ -2094,7 +2156,11 @@ def _context(state: Mapping[str, Any], tracker: hypotheses.HypothesisTracker, tu
             "falsifier", "experiment_intent", "mechanism_id", "target_surface",
             "target_symbol")})
     assignment = None
-    if config.production_base_commit is not None or portfolio_binding is not None:
+    # An AUTONOMOUS turn still needs proposal/candidate identities even though no
+    # hypothesis was assigned — the planner cannot emit a source patch without
+    # them, and `_plan` refuses a context with no authoring assignment.
+    if (config.production_base_commit is not None or portfolio_binding is not None
+            or config.autonomous_discovery):
         assignment = AuthoringAssignment(
             campaign_id=config.campaign_id, proposal_id=f"akp-discovery-{turn}",
             candidate_id=f"akc-discovery-{turn}",
@@ -2886,6 +2952,14 @@ def _record_planner_refusal(state: dict[str, Any], *, turn: int,
 # Consecutive provider transients at or beyond this streak flag operator
 # attention in durable state (still non-terminal: the loop keeps waiting).
 PLANNER_TRANSIENT_ATTENTION_STREAK = 12
+
+# An autonomous campaign may spend this many TURNS per unit of science budget
+# before it stops. Non-scientific outcomes (authoring refusals, critic
+# revisions, discarded in-flight ops) advance the turn counter without spending
+# science, so without this a planner that cannot produce an authorable patch
+# would loop until the restart cap. Generous on purpose: refusals are cheap and
+# expected, and stopping early would waste a working campaign.
+AUTONOMOUS_TURN_BUDGET_MULTIPLIER = 10
 _sleep: Callable[[float], None] = time.sleep
 
 
@@ -3220,7 +3294,16 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
     while (not state["complete"]
            and (state["scientific_attempts"] < config.max_iterations
                 if config.hypothesis_portfolio is not None
-                else state["next"] <= config.max_iterations)):
+                else state["next"] <= config.max_iterations)
+           # AUTONOMOUS TURN CEILING. The science budget alone cannot bound an
+           # autonomous campaign: refusals, critic revisions and discarded
+           # in-flight ops all advance the turn WITHOUT spending science, so a
+           # planner stuck emitting unauthorable patches would spin forever
+           # (found by test, not in production). Portfolio-only campaigns were
+           # bounded by exhaustion instead; hybrid removed that stop, so this
+           # replaces it.
+           and (not config.autonomous_discovery
+                or state["next"] <= config.max_iterations * AUTONOMOUS_TURN_BUDGET_MULTIPLIER)):
         turn=state["next"]
         pending=state.get("pending")
         planning=state.get("planning")
@@ -3236,10 +3319,18 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                                  _select_portfolio_binding(state, config))
             if (pending is None and config.hypothesis_portfolio is not None
                     and portfolio_binding is None):
-                state["complete"] = True
-                state["terminal_reason"] = "portfolio_exhausted"
-                store.save(state, "portfolio_exhausted")
-                break
+                if not config.autonomous_discovery:
+                    state["complete"] = True
+                    state["terminal_reason"] = "portfolio_exhausted"
+                    store.save(state, "portfolio_exhausted")
+                    break
+                # HYBRID: the seed portfolio is spent, not the search space.
+                # Fall through with portfolio_binding=None so the planner
+                # proposes its own mechanism. Recorded once, so the transition
+                # is legible in durable state rather than inferred from a gap.
+                if state.get("autonomous_since") is None:
+                    state["autonomous_since"] = turn
+                    store.save(state, "autonomous_discovery_engaged")
             if (pending is not None and isinstance(pending.get("context"), Mapping)):
                 context = dict(pending["context"])
                 if pending.get("context_sha256") != _sha(context):
@@ -3397,6 +3488,13 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                      "context_sha256":_sha(context),
                      "candidate_semantic_sha256":_candidate_semantic_identity(item)}
                 _drain_visibility_degradation(state, planner, row)
+                if portfolio_binding is None and config.autonomous_discovery:
+                    # Mark the turn EXPLICITLY as planner-proposed. Downstream
+                    # portfolio revalidation keys off this marker rather than
+                    # merely "binding is absent", so a portfolio-bound candidate
+                    # that LOST its binding still fails closed instead of being
+                    # mistaken for an autonomous one.
+                    row["discovery_mode"] = "autonomous"
                 if portfolio_binding is not None:
                     row.update(portfolio_hypothesis_id=portfolio_binding["hypothesis_id"],
                                portfolio_binding=dict(portfolio_binding),
@@ -3489,7 +3587,10 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                     }
                 state["next"] += 1
                 if (config.hypothesis_portfolio is not None
+                        and not config.autonomous_discovery
                         and _select_portfolio_binding(state, config) is None):
+                    # Under hybrid discovery an exhausted seed is a handover,
+                    # not a terminal state; the loop above engages the planner.
                     state["complete"] = True
                     state["terminal_reason"] = "portfolio_exhausted"
                 store.save(state, "dry_run_authorized")

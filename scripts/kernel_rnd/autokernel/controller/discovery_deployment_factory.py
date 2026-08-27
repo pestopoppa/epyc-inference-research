@@ -603,7 +603,8 @@ def _json_artifact(path: Path, value: Mapping[str, Any]) -> tuple[Path, str]:
     return path.resolve(), hashlib.sha256(raw).hexdigest()
 
 
-def initialize_static_deployment_bundle(root: Path) -> Path:
+def initialize_static_deployment_bundle(root: Path, *,
+                                        autonomous_discovery: bool = False) -> Path:
     """Emit the one reviewed site bundle; no caller supplies code or argv authority."""
     if not root.is_absolute() or root.is_symlink() or ".." in root.parts:
         raise DeploymentFactoryError("bundle root must be an absolute non-symlink path")
@@ -791,7 +792,10 @@ def initialize_static_deployment_bundle(root: Path) -> Path:
                             "evidence_root": str(root / "evidence"),
                             "operations_root": str(root / "operations"),
                             "build_root": str(root / "builds"),
-                            "max_iterations": 100, "nomination_threshold": .03},
+                            "max_iterations": 100, "nomination_threshold": .03,
+                            # Hybrid discovery: the sealed portfolio becomes a priority
+                            # SEED once enabled, and the planner proposes thereafter.
+                            "autonomous_discovery": bool(autonomous_discovery)},
              "actors": {"wrapper_path": str(wrapper.path), "wrapper_sha256": wrapper.sha256,
                         "critic_path": str(critic.path), "critic_sha256": critic.sha256,
                         "environment_profile_id": _STATIC_IDS["environment_profile"]},
@@ -2867,6 +2871,8 @@ def controller_config(config: deployment.DiscoveryDeployment, *, dry_run: bool =
     return controller.ControllerConfig(
         output_root=config.state_root, evidence_root=config.evidence_root,
         max_iterations=config.max_iterations,
+        # Hybrid discovery: sealed deployment decides, not a caller argument.
+        autonomous_discovery=config.autonomous_discovery,
         nomination_threshold=config.nomination_threshold, dry_run=dry_run,
         planner_context={**config.planner_context.value,
                          "admission_policy": _plain(config.admission_policy.value)},
@@ -2897,6 +2903,10 @@ def deployment_main(argv: list[str] | None = None) -> int:
     authority.add_argument("--deployment")
     authority.add_argument("--initialize-bundle",
                            help="emit the fixed-site sealed deployment bundle")
+    parser.add_argument("--autonomous", action="store_true",
+                        help="hybrid discovery: treat the sealed portfolio as a priority "
+                             "seed and let the planner propose its own mechanisms once it "
+                             "is spent (bundle initialization only)")
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument("--validate-only", action="store_true")
     modes.add_argument("--dry-run", action="store_true",
@@ -2915,7 +2925,8 @@ def deployment_main(argv: list[str] | None = None) -> int:
     if args.initialize_bundle:
         if args.validate_only or args.dry_run:
             parser.error("bundle initialization does not accept execution flags")
-        result = initialize_static_deployment_bundle(Path(args.initialize_bundle))
+        result = initialize_static_deployment_bundle(
+            Path(args.initialize_bundle), autonomous_discovery=bool(args.autonomous))
         print(json.dumps({"status": "initialized", "inference_executed": False,
                           "deployment": str(result)}, sort_keys=True))
         return 0

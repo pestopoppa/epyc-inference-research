@@ -44,6 +44,25 @@ def _exact(value: object, keys: set[str], label: str) -> Mapping[str, Any]:
     return value
 
 
+def _exact_with_optional(value: object, required: set[str], optional: set[str],
+                         label: str) -> Mapping[str, Any]:
+    """Like `_exact`, but tolerates a named set of optional keys.
+
+    Kept separate from `_exact` deliberately: the strictness of `_exact` is the
+    point everywhere else, and an unknown key in a SEALED deployment block must
+    stay an error. This admits only the keys named at the call site, so a typo
+    is still refused rather than silently ignored.
+    """
+    if not isinstance(value, Mapping):
+        raise DeploymentConfigError(f"{label} must be a mapping")
+    keys = set(value)
+    if not required <= keys or not keys <= (required | optional):
+        raise DeploymentConfigError(
+            f"{label} must contain exactly {sorted(required)} "
+            f"and at most the optional {sorted(optional)}")
+    return value
+
+
 def _jsonable(value: Any) -> Any:
     if isinstance(value, Mapping):
         return {key: _jsonable(item) for key, item in value.items()}
@@ -375,6 +394,12 @@ class DiscoveryDeployment:
     experiment_template_registry_sha256: str
     inference_window_lease_id: str
     production_snapshot_id: str
+    # Optional, defaults False so every existing sealed deployment parses
+    # unchanged. True makes the hypothesis portfolio a priority SEED rather than
+    # the exhaustive search space: once its eligible records are spent, the
+    # planner proposes its own mechanisms. See
+    # ControllerConfig.autonomous_discovery for what it does and does not widen.
+    autonomous_discovery: bool = False
 
     def revalidate(self) -> None:
         """Close the parse-to-start TOCTOU gap for every sealed file reference."""
@@ -517,9 +542,14 @@ def load_deployment_config(path: Path, *, sealed_bytes: bytes | None = None
     _verify_production(production_path, production["branch"], production["head"])
     _verify_instrument(instrument_path, production["head"], instrument["branch"],
                        instrument["commit"])
-    controller = _exact(top["controller"], {"state_root", "evidence_root",
-                                               "operations_root", "build_root", "max_iterations",
-                                               "nomination_threshold"}, "controller")
+    controller = _exact_with_optional(
+        top["controller"],
+        {"state_root", "evidence_root", "operations_root", "build_root",
+         "max_iterations", "nomination_threshold"},
+        {"autonomous_discovery"}, "controller")
+    autonomous_discovery = controller.get("autonomous_discovery", False)
+    if not isinstance(autonomous_discovery, bool):
+        raise DeploymentConfigError("controller.autonomous_discovery must be a bool")
     roots = {key: _validate_root(_absolute(controller[key], f"controller.{key}"), f"controller.{key}") for key in
              ("state_root", "evidence_root", "operations_root", "build_root")}
     if any(_overlaps(left, right) for index, left in enumerate(roots.values())
@@ -608,6 +638,7 @@ def load_deployment_config(path: Path, *, sealed_bytes: bytes | None = None
         state_root=roots["state_root"], evidence_root=roots["evidence_root"],
         operations_root=roots["operations_root"], build_root=roots["build_root"],
         max_iterations=max_iterations,
+        autonomous_discovery=autonomous_discovery,
         nomination_threshold=float(threshold), actor_wrapper=actor_wrapper,
         critic_wrapper=critic_wrapper,
         environment_profile_id=environment_profile_id, device_id=device_id,
