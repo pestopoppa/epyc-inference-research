@@ -3119,7 +3119,11 @@ class StaticGpuSourceBuilder:
         try:
             actor, actor_proof = worktree.create_campaign_worktree(
                 anchor, candidate.source_manifest.campaign_id,
-                leaf=attempt_name, root=campaign_root)
+                leaf=attempt_name, root=campaign_root,
+                # An attempt killed mid-build can leave its ak/ branch behind;
+                # a reused attempt name must clean up that dead orphan rather
+                # than abort the deployment (v27 crash #6).
+                prune_orphan_branch=True)
             try:
                 applied = source_candidate.apply_source_candidate(
                     candidate.source_manifest,

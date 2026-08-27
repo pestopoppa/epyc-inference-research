@@ -868,6 +868,16 @@ def main() -> int:
                         "server's -np slots. 1 = sequential.")
     p.add_argument("--arm", default="",
                    help="Arm label recorded in per-question records")
+    p.add_argument("--belief-category", choices=["BASELINE", "CANDIDATE"],
+                   default=None,
+                   help="When set, emit producer-authored belief_measurements rows "
+                        "into the result receipt at finalize (SC32): BASELINE for the "
+                        "anchor arm, CANDIDATE for controls. Absent = no emission; "
+                        "pre-hook runs (2026-08-12 panel, gpqa-cj1) stay zero-row.")
+    p.add_argument("--belief-config", default="",
+                   help="Optional JSON string merged into each belief row's "
+                        "extra.arm_config — server-side facts the runner cannot "
+                        "observe (template, quant detail)")
     args = p.parse_args()
 
     # Every non-dry run has a canonical capture.  Keep the optional spelling
@@ -968,8 +978,48 @@ def main() -> int:
     }
 
     args.output.write_text(json.dumps(output, indent=2))
+
+    # Result-finalize belief emission (SC32). The plain manifest above is the
+    # content attested at collect time; belief rows are attached to it only
+    # when the caller explicitly declares the arm's role. A refusal keeps the
+    # manifest on disk (zero belief rows) and exits non-zero so the driver
+    # notices the claim was not made.
+    belief_exit = 0
+    if args.belief_category is not None:
+        try:
+            if str(Path(__file__).resolve().parent) not in sys.path:
+                sys.path.insert(0, str(Path(__file__).resolve().parent))
+            import v7_quality_gate_beliefs as beliefs
+            arm_config = {}
+            if args.belief_config:
+                arm_config = json.loads(args.belief_config)
+            rows = beliefs.attach_accuracy_beliefs(
+                output,
+                output_path=args.output,
+                category=args.belief_category,
+                runner_source_sha256=runner_source_sha256(),
+                host=args.host,
+                port=args.port,
+                concurrency=args.concurrency,
+                arm_config=arm_config,
+            )
+            output["belief_measurements"] = rows
+            output["belief_attestation"] = {
+                "schema": beliefs.PROTOCOL_ID,
+                "attestation_sha256": rows[0]["extra"]["attestation_sha256"],
+                "attestation_path": str(args.output),
+            }
+            args.output.write_text(json.dumps(output, indent=2))
+            print(f"[runner] belief_measurements: {len(rows)} row(s) attached "
+                  f"(category={args.belief_category})", file=sys.stderr)
+        except Exception as exc:  # BeliefRefused or malformed --belief-config
+            print(f"[runner] BELIEF REFUSED: {exc}", file=sys.stderr)
+            print("[runner] result.json kept with zero belief rows; the claim "
+                  "was not emitted", file=sys.stderr)
+            belief_exit = 3
+
     print(f"\n[runner] Results written to {args.output}", file=sys.stderr)
-    return 0
+    return belief_exit
 
 
 if __name__ == "__main__":

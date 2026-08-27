@@ -24,6 +24,17 @@ def main() -> int:
     parser.add_argument("--spec", required=True)
     parser.add_argument("--max-tokens", type=int, default=64)
     parser.add_argument("--artifact-root", type=Path, required=True)
+    parser.add_argument("--belief-category", choices=["BASELINE", "CANDIDATE"],
+                        default=None,
+                        help="SC32 belief category for THIS arm: BASELINE for the "
+                             "anchor arm, CANDIDATE for controls. When set, the "
+                             "runner emits producer-authored belief_measurements "
+                             "rows at result-finalize; absent = zero rows "
+                             "(pre-hook behavior).")
+    parser.add_argument("--belief-config", default="",
+                        help="Optional JSON with server-side facts the runner cannot "
+                             "observe (template, quant detail); merged into the "
+                             "belief row's extra.arm_config")
     args = parser.parse_args()
 
     args.artifact_root.mkdir(parents=True, exist_ok=True)
@@ -50,6 +61,8 @@ def main() -> int:
         "GPU_BENCH_BIN": "/mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server",
         "HF_HOME": "/mnt/raid0/llm/cache/huggingface",
         "HF_DATASETS_OFFLINE": "1",
+        "GPU_BENCH_BELIEF_CATEGORY": args.belief_category or "",
+        "GPU_BENCH_BELIEF_CONFIG": args.belief_config,
     })
     cmd = [
         str(HERE / "architect_bench_gpu_arm.sh"), args.arm, args.model,

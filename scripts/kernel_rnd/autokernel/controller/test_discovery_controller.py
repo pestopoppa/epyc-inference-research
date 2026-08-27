@@ -71,6 +71,7 @@ class Tests(unittest.TestCase):
   portfolio=hypothesis_portfolio.Portfolio(
       {"hypotheses":records,"frames":[],"do_not_repeat":[]},"f"*64)
   return D.ControllerConfig(root,3,dry_run=True,
+      planner_backoff_base_s=0.0, planner_backoff_max_s=0.0,
       planner_context={"portfolio_dispatch_authority": {
           row["hypothesis_id"]: [{"route_id":"cuda-quantize-q8-v1.anchor.0",
                                   "kernel_name":"quantize_q8_1", "calls":18705,

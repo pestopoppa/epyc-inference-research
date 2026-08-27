@@ -31,12 +31,14 @@ Handoff: epyc-root/handoffs/active/memento-block-reasoning-compression.md
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
 import sys
 import time
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -874,8 +876,17 @@ def train_stage(
         ),
         "loss_history": loss_history,
     }
-    (output_dir / f"stage{stage}_metrics.json").write_text(json.dumps(metrics, indent=2))
-    print(f"  Metrics: {output_dir / f'stage{stage}_metrics.json'}")
+    run_record = output_dir / f"stage{stage}_metrics.json"
+    run_record.write_text(json.dumps(metrics, indent=2))
+    print(f"  Metrics: {run_record}")
+
+    # SC20 belief emission: the run record stands regardless; the claim row is
+    # emitted only when the adapter provably updated (see emit_training_belief
+    # for the scope contract). A refusal propagates — the caller decides.
+    emit_training_belief(
+        model=model, config=config, stage=stage, metrics=metrics,
+        run_record=run_record,
+    )
 
     return model
 
@@ -977,6 +988,161 @@ def lora_param_count(
     }
     per_layer = sum(rank * (shapes[t][0] + shapes[t][1]) for t in targets if t in shapes)
     return per_layer * cfg.num_hidden_layers
+
+
+# ---------------------------------------------------------------------------
+# Belief-kernel emission (SC20)
+# ---------------------------------------------------------------------------
+
+SFT_BELIEF_PROTOCOL_ID = "epyc.memento_sft.lora_training.v1"
+SFT_BELIEF_PRODUCER_ID = "scripts.benchmark.memento_sft/train_stage"
+SFT_BELIEF_PRODUCER_PATH = "scripts/benchmark/memento_sft.py"
+SFT_BELIEF_CATEGORY = "BASELINE"
+
+
+class BeliefRefused(ValueError):
+    """The training finalize cannot honestly produce a belief row."""
+
+
+def _content_hash(obj) -> str:
+    """SHA-256 over the canonical JSON encoding — byte-identical semantics to
+    ``autokernel.schemas.content_hash``. Implemented locally because this
+    script runs under arbitrary interpreters (ml-training venv, importlib
+    spec loads) where the repo root is not on sys.path."""
+    return hashlib.sha256(
+        json.dumps(
+            obj, sort_keys=True, separators=(",", ":"),
+            ensure_ascii=False, allow_nan=False,
+        ).encode("utf-8")
+    ).hexdigest()
+
+
+def emit_training_belief(*, model, config: MementoTrainingConfig, stage: int,
+                         metrics: dict, run_record: Path) -> dict:
+    """Write ``stage{stage}_belief_measurements.json`` beside the run record.
+
+    THE CLAIM IS NARROW ON PURPOSE: **"this configuration trains at X s/sample
+    with an adapter that provably updated"** — and NOTHING more. It never
+    claims "the model improved": SFT throughput and gradient movement say
+    nothing about post-training quality, which the MATH-500 gate decides
+    separately. That scope limit is also the register contract
+    (``epyc-root scripts/vidya/adapters/README.md``, LoRA/SFT row) and is
+    carried verbatim in the row's ``extra.scope``.
+
+    Fail-closed: if the adapter-integrity check fails (any trainable tensor
+    non-finite, or any ``lora_B`` still zero — i.e. the adapter did NOT
+    provably update), the run record stands but no belief row is emitted and
+    BeliefRefused propagates, because the claim's second half is false.
+    """
+    import torch
+
+    trainable = [p for p in model.parameters() if p.requires_grad]
+    if not trainable:
+        raise BeliefRefused("no trainable parameters; LoRA was not applied")
+
+    finite = all(bool(torch.isfinite(p).all().item()) for p in trainable)
+    lora_b_total = 0
+    lora_b_nonzero = 0
+    for name, p in model.named_parameters():
+        if p.requires_grad and name.endswith("lora_B.default"):
+            lora_b_total += 1
+            if torch.count_nonzero(p) > 0:
+                lora_b_nonzero += 1
+    integrity = {
+        "trainable_tensor_count": len(trainable),
+        "all_tensors_finite": finite,
+        "lora_B_total": lora_b_total,
+        "lora_B_nonzero": lora_b_nonzero,
+    }
+    if not finite:
+        raise BeliefRefused(
+            "non-finite trainable tensor; run record stands, claim row refused")
+    if lora_b_total == 0 or lora_b_nonzero != lora_b_total:
+        raise BeliefRefused(
+            f"lora_B off zero-init: {lora_b_nonzero}/{lora_b_total}; the "
+            "adapter did not provably update; run record stands, claim row refused")
+
+    loss_history = metrics.get("loss_history") or []
+    quarter = max(1, len(loss_history) // 4)
+    quarters = {
+        f"q{i}": (sum(loss_history[(i - 1) * quarter: i * quarter])
+                  / max(1, len(loss_history[(i - 1) * quarter: i * quarter])))
+        for i in range(1, 5)
+    }
+    if not loss_history:
+        quarters = {f"q{i}": None for i in range(1, 5)}
+
+    scored = max(0, int(metrics.get("samples_seen", 0))
+                 - int(metrics.get("samples_skipped_nonfinite", 0)))
+    if scored < 1:
+        raise BeliefRefused(
+            f"zero samples scored ({metrics.get('samples_seen', 0)} attempted, "
+            f"{metrics.get('samples_skipped_nonfinite', 0)} non-finite skips); "
+            "zero reps is not a measurement; run record stands, claim row refused")
+    attempted = int(metrics.get("samples_seen", 0))
+    s_per_sample = float(metrics.get("s_per_sample", 0.0))
+    trainable_params = sum(p.numel() for p in trainable)
+
+    # Attestation over the run record content written at collect time.
+    run_record = Path(run_record)
+    attestation_sha256 = _content_hash(metrics)
+
+    row = {
+        "measurement_id": f"memento_sft_stage{stage}_seconds_per_sample",
+        "metric": "sft_seconds_per_sample",
+        "value": s_per_sample,
+        "unit": "s/sample",
+        "metric_direction": "lower_better",
+        "category": SFT_BELIEF_CATEGORY,
+        "protocol_id": SFT_BELIEF_PROTOCOL_ID,
+        "reps": scored,
+        "reps_basis": (f"scored:{scored} training samples "
+                       f"({attempted} attempted minus "
+                       f"{metrics.get('samples_skipped_nonfinite', 0)} non-finite skips)"),
+        "claim": (f"Memento S2 stage {stage} configuration trains at "
+                  f"{s_per_sample} s/sample with an adapter that provably updated "
+                  f"(lora_B off zero-init, all tensors finite)"),
+        "extra": {
+            "date": datetime.now(timezone.utc).isoformat(),
+            "stage": stage,
+            "model": config.model_name_or_path,
+            "trainable_params": trainable_params,
+            "lora": {
+                "rank": config.lora_rank,
+                "alpha": config.lora_alpha,
+                "dropout": config.lora_dropout,
+                "target_modules": list(config.lora_target_modules),
+                "train_embeddings": config.train_embeddings,
+            },
+            "loss_quarters": quarters,
+            "loss_first": metrics.get("loss_first"),
+            "loss_last": metrics.get("loss_last"),
+            "adapter_integrity": integrity,
+            "training": {
+                "max_seq_len": metrics.get("max_seq_len"),
+                "optimizer_steps": metrics.get("optimizer_steps"),
+                "elapsed_s": metrics.get("elapsed_s"),
+                "records_dropped_prompt_only": metrics.get("records_dropped_prompt_only"),
+                "samples_skipped_nonfinite": metrics.get("samples_skipped_nonfinite"),
+            },
+            "producer_id": SFT_BELIEF_PRODUCER_ID,
+            "producer_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+            "attestation_path": str(run_record),
+            "attestation_sha256": attestation_sha256,
+            "attestation_locator": run_record.name,
+            "scope": ("CONFIGURATION TRAINING COST ONLY — this row claims that "
+                      "this configuration trains at the recorded s/sample with an "
+                      "adapter that provably updated; it NEVER claims the model "
+                      "improved. Post-training quality is decided by the MATH-500 "
+                      "gate separately."),
+        },
+    }
+    row["measurement_sha256"] = _content_hash(row)
+
+    out = run_record.with_name(f"stage{stage}_belief_measurements.json")
+    out.write_text(json.dumps(row, indent=2) + "\n")
+    print(f"  Belief row: {out}")
+    return row
 
 
 # ---------------------------------------------------------------------------
@@ -1308,7 +1474,8 @@ def main():
     print(f"    --base {config.model_name_or_path} \\")
     print(f"    --lora {final_dir} \\")
     print(f"    --outfile {final_dir}/memento-lora.gguf")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

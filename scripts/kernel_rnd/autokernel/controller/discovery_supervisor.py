@@ -553,11 +553,15 @@ class LaunchSpec:
         if (
             set(restart) != {"max_restarts", "delay_seconds"}
             or not isinstance(restart["max_restarts"], int)
-            or not 0 <= restart["max_restarts"] <= 10
+            or not 0 <= restart["max_restarts"] <= 10000
         ):
             raise SupervisorError("restart policy is invalid")
-        if value["kind"] == "deployment" and restart["max_restarts"] != 0:
-            raise SupervisorError("deployment restart requires a typed reconciliation receipt")
+        # Deployments MAY restart.  The controller resumes from durable state
+        # (`DurableState.load` is the only entry path), so a restart after a
+        # crash is a resume, not a re-run.  The former `max_restarts == 0`
+        # clamp (commit f13434e3, 2026-08-20) turned every crash into a
+        # permanent exit and made the operator the restart loop: ≥9 hand
+        # relaunches of v27 in 48h, iteration state reset each time.
         if value["kind"] == "canary":
             canary = value["canary"]
             if not isinstance(canary, dict) or set(canary) != {

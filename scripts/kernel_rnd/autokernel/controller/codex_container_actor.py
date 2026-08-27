@@ -42,6 +42,9 @@ CODEX_NATIVE_RELATIVE = Path(
 CODE_MODE_HOST_NAME = "codex-code-mode-host"
 SUPPORTED_MODELS = ("gpt-5.6-sol", "gpt-5.6-terra")
 SUPPORTED_EFFORT = "high"
+# One actor invocation may not run unbounded: v27's launcher had no timeout,
+# so a hung container held the controller turn indefinitely.
+DEFAULT_ACTOR_TIMEOUT_S = 1800.0
 
 
 class CodexContainerError(RuntimeError):
@@ -124,10 +127,18 @@ def run_actor(
     expected_wrapper_sha256: str | None = None,
     expected_runtime_identity: Mapping[str, Any] | None = None,
     expected_launcher_sha256: str | None = None,
+    timeout: float | None = DEFAULT_ACTOR_TIMEOUT_S,
 ) -> subprocess.CompletedProcess[str]:
-    """Stage read-only assets, run one container, then erase staged auth."""
+    """Stage read-only assets, run one container, then erase staged auth.
+
+    `timeout` bounds one actor invocation; on expiry the container is torn
+    down by exact name in the `finally` below and a CodexContainerError is
+    raised (the controller classifies it as a provider transient).
+    """
     if not isinstance(prompt, str) or not prompt.strip():
         raise CodexContainerError("actor prompt must be non-empty")
+    if timeout is not None and (isinstance(timeout, bool) or timeout <= 0):
+        raise CodexContainerError("actor timeout must be positive or None")
     if not Path(DOCKER_EXECUTABLE).is_file() or not os.access(DOCKER_EXECUTABLE, os.X_OK):
         raise CodexContainerError("Docker executable is unavailable")
     if not CA_CERTIFICATE_PATH.is_file() or CA_CERTIFICATE_PATH.is_symlink():
@@ -177,10 +188,14 @@ def run_actor(
         for sig in previous_handlers:
             signal.signal(sig, terminate)
         result: subprocess.CompletedProcess[str] | None = None
+        timed_out: subprocess.TimeoutExpired | None = None
         try:
-            result = subprocess.run(
-                argv, input=prompt, capture_output=True, text=True, check=False,
-                env=dict(environment))
+            try:
+                result = subprocess.run(
+                    argv, input=prompt, capture_output=True, text=True, check=False,
+                    env=dict(environment), timeout=timeout)
+            except subprocess.TimeoutExpired as exc:
+                timed_out = exc
         finally:
             for sig, handler in previous_handlers.items():
                 signal.signal(sig, handler)
@@ -195,6 +210,9 @@ def run_actor(
             if still_live.returncode == 0:
                 raise CodexContainerError(
                     "captured actor container survived exact-name teardown")
+        if timed_out is not None:
+            raise CodexContainerError(
+                f"actor container timed out after {float(timeout):.0f}s") from timed_out
         if result is None:
             raise CodexContainerError("actor container returned no process result")
         return result

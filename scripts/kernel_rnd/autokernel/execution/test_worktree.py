@@ -597,6 +597,43 @@ class TestAnchorAndCreate(_TmpMixin):
         self.addCleanup(W.teardown_worktree, wt, witness_trees=[self.repo])
         self.assertEqual(wt.head_commit(), anchor.commit)
 
+    def test_reused_attempt_name_prunes_a_dead_orphan_branch(self):
+        """v27 crash #6: an attempt killed between worktree-remove and
+        branch-delete leaves the ak/ branch behind; the next attempt reusing
+        the name must clean up the orphan instead of dying on 'already exists'.
+        """
+        anchor = W.resolve_anchor(self.repo, "production-consolidated-v8")
+        wt, _ = W.create_campaign_worktree(anchor, CAMPAIGN, leaf="attempt-000001",
+                                           root=self.tmp)
+        branch = wt.branch
+        # Simulate the kill: remove the worktree but leave the branch ref.
+        self.repo.remove_worktree(wt.path, force=True)
+        self.assertTrue(self.repo.branch_exists(branch))
+        self.assertNotIn(branch.name, self.repo.checked_out_branches())
+        # Without pruning, git refuses the reused branch name.
+        with self.assertRaises(W.GitCommandFailed):
+            W.create_campaign_worktree(anchor, CAMPAIGN, leaf="attempt-000001",
+                                       root=self.tmp)
+        # With pruning, the orphan is deleted and the worktree is recreated.
+        wt2, proof = W.create_campaign_worktree(
+            anchor, CAMPAIGN, leaf="attempt-000001", root=self.tmp,
+            prune_orphan_branch=True)
+        self.addCleanup(W.teardown_worktree, wt2, witness_trees=[self.repo])
+        self.assertTrue(proof.holds, proof.differences)
+        self.assertEqual(wt2.branch.name, f"ak/{CAMPAIGN}/attempt-000001")
+        self.assertEqual(wt2.head_commit(), self.head)
+
+    def test_prune_refuses_a_branch_a_live_worktree_holds(self):
+        anchor = W.resolve_anchor(self.repo, "production-consolidated-v8")
+        wt, _ = W.create_campaign_worktree(anchor, CAMPAIGN, leaf="attempt-000001",
+                                           root=self.tmp)
+        self.addCleanup(W.teardown_worktree, wt, witness_trees=[self.repo])
+        # The branch is live (checked out by wt); pruning must refuse, not
+        # yank it out from under the live worktree.
+        with self.assertRaises(W.WorktreeError):
+            W.create_campaign_worktree(anchor, CAMPAIGN, leaf="attempt-000001",
+                                       root=self.tmp, prune_orphan_branch=True)
+
     def test_a_snapshot_worktree_is_detached_and_holds_the_committed_tree_only(self):
         anchor = W.resolve_anchor(self.repo, "production-consolidated-v8")
         wt, _ = W.create_campaign_worktree(anchor, CAMPAIGN, root=self.tmp)

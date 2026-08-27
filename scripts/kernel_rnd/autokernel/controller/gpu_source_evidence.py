@@ -336,12 +336,17 @@ class SubprocessCommandExecutor:
     def __init__(self, *, residency_sampler: Callable[[int], GpuResidencySample],
                  runtime_maps_sampler: RuntimeMapsSampler | None = None,
                  sample_interval_s: float = .02,
+                 preflight_clear: Callable[[], Any] | None = None,
                  popen: Callable[..., Any] = subprocess.Popen) -> None:
         if sample_interval_s <= 0 or not math.isfinite(sample_interval_s):
             raise EvidenceProducerError("sample interval must be finite and positive")
         self.residency_sampler = residency_sampler
         self.runtime_maps_sampler = runtime_maps_sampler
         self.sample_interval_s = sample_interval_s
+        # Optional GPU-clear gate, run BEFORE the timed child is spawned so the
+        # measurement window never opens on a contended device.  Default None
+        # keeps the historical behaviour (and every existing test) unchanged.
+        self.preflight_clear = preflight_clear
         self.popen = popen
 
     def __call__(self, invocation: CommandInvocation) -> ExecutionCapture:
@@ -350,6 +355,11 @@ class SubprocessCommandExecutor:
         samples: list[GpuResidencySample] = []
         runtime_maps_identity: Mapping[str, Any] | None = None
         child: Any | None = None
+        if self.preflight_clear is not None:
+            # Wait for the GPU to be free of foreign work before opening the
+            # timed window.  A raise here (e.g. GpuContentionTimeout) aborts
+            # this leg BEFORE any child is spawned or artifact is written.
+            self.preflight_clear()
         with invocation.stdout_path.open("x", encoding="utf-8") as stdout, \
                 invocation.stderr_path.open("x", encoding="utf-8") as stderr:
             try:

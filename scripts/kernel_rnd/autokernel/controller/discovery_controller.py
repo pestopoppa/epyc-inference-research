@@ -25,6 +25,7 @@ import re
 import statistics
 import stat
 import tempfile
+import time
 from typing import Any, Callable, Mapping, Protocol, Sequence
 
 from .. import campaign, hypothesis_portfolio, journal, schemas, source_candidate
@@ -1083,7 +1084,7 @@ class CodexPlanner:
                     expected_wrapper_sha256=self.wrapper_sha256,
                     expected_runtime_identity=self.runtime_identity,
                     expected_launcher_sha256=self.actor_launcher_sha256)
-            except Exception:
+            except Exception as exc:
                 _emit_observational_telemetry(
                         self.telemetry,
                         "planner", "planner_failed",
@@ -1092,6 +1093,17 @@ class CodexPlanner:
                         model=SOL["model"], effort=SOL["effort"],
                         operation_key=telemetry_operation_key,
                         failure_sink=self.telemetry_failures)
+                # Transport-class failures (docker unavailable, container
+                # timeout, staging I/O) are provider availability, not a
+                # terminal controller fault: surface them as a typed transient
+                # so the loop backs off and retries instead of dying.  A
+                # signal-driven interruption is a real stop request and stays
+                # terminal.
+                if (isinstance(exc, (codex_container_actor.CodexContainerError, OSError))
+                        and "interrupted" not in str(exc)):
+                    raise PlannerProviderTransient(
+                        f"actor transport failure: {type(exc).__name__}: "
+                        f"{str(exc)[-400:]}") from exc
                 raise
             result_facts = {
                 "returncode": result.returncode,
@@ -1715,7 +1727,21 @@ class ControllerConfig:
     deployment_identity_sha256: str | None = None
     hypothesis_portfolio: hypothesis_portfolio.Portfolio | None = None
     hypothesis_portfolio_sha256: str | None = None
+    # Planner-provider outages (API auth refresh, docker hiccup, timeout) are
+    # WAITED OUT, never spun on and never terminal: exponential backoff from
+    # `planner_backoff_base_s`, capped at `planner_backoff_max_s`.  Origin: v27
+    # emitted 284 planner_failed events in 23 minutes on a codex 401 (08-26).
+    planner_backoff_base_s: float = 30.0
+    planner_backoff_max_s: float = 1800.0
     def __post_init__(self) -> None:
+        for name in ("planner_backoff_base_s", "planner_backoff_max_s"):
+            value = getattr(self, name)
+            if (isinstance(value, bool) or not isinstance(value, (int, float))
+                    or not math.isfinite(float(value)) or value < 0):
+                raise DiscoveryControllerError(f"invalid controller config: {name}")
+        if self.planner_backoff_max_s < self.planner_backoff_base_s:
+            raise DiscoveryControllerError(
+                "invalid controller config: planner_backoff_max_s < planner_backoff_base_s")
         if (not self.output_root.is_absolute() or not 1 <= self.max_iterations <= 1000
                 or isinstance(self.nomination_threshold, bool)
                 or not math.isfinite(float(self.nomination_threshold))
@@ -2857,6 +2883,49 @@ def _record_planner_refusal(state: dict[str, Any], *, turn: int,
         state["next"] += 1
 
 
+# Consecutive provider transients at or beyond this streak flag operator
+# attention in durable state (still non-terminal: the loop keeps waiting).
+PLANNER_TRANSIENT_ATTENTION_STREAK = 12
+_sleep: Callable[[float], None] = time.sleep
+
+
+def _planner_backoff_seconds(config: ControllerConfig, streak: int) -> float:
+    """Exponential backoff for the Nth consecutive provider transient."""
+    if streak < 1:
+        raise DiscoveryControllerError("planner transient streak must be >= 1")
+    exponent = min(streak - 1, 30)
+    return float(min(config.planner_backoff_max_s,
+                     config.planner_backoff_base_s * (2 ** exponent)))
+
+
+def _note_planner_transient(config: ControllerConfig, state: dict[str, Any],
+                            exc: PlannerProviderTransient) -> float:
+    """Record one more consecutive transient; return the wait before retry."""
+    streak = int(state.get("planner_transient_streak", 0)) + 1
+    state["planner_transient_streak"] = streak
+    delay = _planner_backoff_seconds(config, streak)
+    row = state["iterations"][-1]
+    row["backoff_seconds"] = delay
+    row["planner_transient_streak"] = streak
+    if streak >= PLANNER_TRANSIENT_ATTENTION_STREAK:
+        state["operator_attention"] = {
+            "kind": "planner_provider_unavailable",
+            "streak": streak,
+            "reason": str(exc)[-400:],
+            "since_turn": int(state["next"]),
+        }
+    return delay
+
+
+def _clear_planner_transient(state: dict[str, Any]) -> None:
+    """A successful planner call ends the outage: reset streak + attention."""
+    state.pop("planner_transient_streak", None)
+    attention = state.get("operator_attention")
+    if (isinstance(attention, Mapping)
+            and attention.get("kind") == "planner_provider_unavailable"):
+        state.pop("operator_attention", None)
+
+
 def _planning_intent(config: ControllerConfig, *, turn: int,
                      context: Mapping[str, Any],
                      portfolio_binding: Mapping[str, Any] | None,
@@ -3274,11 +3343,14 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                         portfolio_binding=portfolio_binding, exc=exc)
                     _drain_visibility_degradation(
                         state, planner, state["iterations"][-1])
-                    store.save(
-                        state,
-                        "planner_transient"
-                        if isinstance(exc, PlannerProviderTransient)
-                        else "planner_refused")
+                    if isinstance(exc, PlannerProviderTransient):
+                        delay = _note_planner_transient(config, state, exc)
+                        store.save(state, "planner_transient")
+                        # Checkpoint first, then wait: a SIGTERM during the
+                        # wait loses nothing and the streak survives restart.
+                        _sleep(delay)
+                    else:
+                        store.save(state, "planner_refused")
                     continue
                 except Exception as exc:
                     state["planning"]["failure"]={
@@ -3287,6 +3359,7 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                         state, planner, state["planning"])
                     store.save(state,"planner_terminal_failure")
                     raise
+                _clear_planner_transient(state)
                 row={"turn":turn,"hypothesis_id":item.hypothesis_id,"statement":item.statement,
                      "falsifier":item.falsifier,"regime":dict(item.regime),
                      "proposal_sha256":_sha(item.proposal),"source_manifest_sha256":item.source_manifest_sha256,

@@ -524,7 +524,14 @@ _PORTFOLIO_CONTRACT_SHA256 = "96f207733e5fc27a722763cf1b3c542f327eb70d41e04b9948
 _SITE_WINDOW_LOCK = Path("/mnt/raid0/llm/tmp/model-call.lock")
 _SITE_ACTOR_WRAPPER = Path(
     "/usr/local/share/npm-global/lib/node_modules/@openai/codex/bin/codex.js")
-_SITE_CRITIC_WRAPPER = Path("/home/node/.local/share/claude/versions/2.1.231")
+# The Claude critic wrapper must be an absolute NON-SYMLINK path (the critic
+# actor refuses a symlink), so resolve the stable launcher to its current
+# versioned target instead of a version literal.  The checked-in 2.1.231 pin
+# was orphaned when Claude auto-updated (2.1.238/240/241 installed, 2.1.231
+# gone), which made `initialize_static_deployment_bundle` — and therefore every
+# new deployment — fail with FileNotFoundError.  Resolving the launcher tracks
+# whatever version is installed at bundle-initialization time.
+_SITE_CRITIC_WRAPPER = Path("/home/node/.local/bin/claude").resolve()
 _SITE_CLAUDE_AUTH_ROOT = Path("/home/node/.claude")
 
 
@@ -2278,10 +2285,15 @@ def build_static_deployment_graph(config: deployment.DiscoveryDeployment) -> Sta
     critic_launcher_sha256 = _digest_regular(
         Path(claude_fable5_critic_actor.__file__).resolve(),
         "Claude critic launcher")
-    sampler = gpu_residency_sampler.Mi210ResidencySampler()
+    # owner_root_pid = this controller process: a sibling leg draining in our
+    # OWN tree is not "foreign" (fixes the self-flagged-KFD crash, 2026-08-27).
+    sampler = gpu_residency_sampler.Mi210ResidencySampler(owner_root_pid=os.getpid())
     executor = evidence.SubprocessCommandExecutor(
         residency_sampler=sampler,
-        runtime_maps_sampler=discovery_static_registry.runtime_maps_sampler())
+        runtime_maps_sampler=discovery_static_registry.runtime_maps_sampler(),
+        # Wait for the GPU to be free of foreign work before each timed leg,
+        # instead of aborting the deployment when contention appears.
+        preflight_clear=lambda: sampler.wait_until_clear())
     journal = device_claim.ClaimJournal(config.operations_root / "claims" / "device.jsonl")
     adapters = materialize(config, registry, correctness_executor=executor,
                            rocprof_executor=executor, claim_journal=journal,
