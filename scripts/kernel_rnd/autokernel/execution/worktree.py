@@ -1503,6 +1503,20 @@ class GitRepo:
             return False
         return True
 
+    def checked_out_branches(self) -> frozenset:
+        """Branch names a LIVE worktree currently has checked out.
+
+        A branch in this set is in use and must never be deleted; one that
+        `branch_exists` but is NOT here is an orphan ref (e.g. left by an
+        attempt killed between worktree-remove and branch-delete)."""
+        out = self._git("worktree", "list", "--porcelain")
+        names = set()
+        for line in out.splitlines():
+            if line.startswith("branch "):
+                ref = line.split(" ", 1)[1].strip()
+                names.add(ref[len("refs/heads/"):] if ref.startswith("refs/heads/") else ref)
+        return frozenset(names)
+
     # -- worktree administration (metadata-only on the addressed repo) -----
     def add_worktree(self, dest: SandboxPath, commit: str, *,
                      branch: Optional[SafeBranch] = None,
@@ -1815,7 +1829,8 @@ def create_campaign_worktree(anchor: Anchor, campaign_id: str, *,
                              leaf: str = "base",
                              source_tree: str = "llama.cpp",
                              root: Any = DEFAULT_WORKTREE_ROOT,
-                             require_current_tip: bool = True) -> tuple:
+                             require_current_tip: bool = True,
+                             prune_orphan_branch: bool = False) -> tuple:
     """Create `llama.cpp-ak-<campaign_id>` from the anchor. Returns `(Worktree, proof)`.
 
     `require_current_tip` re-resolves the branch tip HERE and raises
@@ -1843,6 +1858,17 @@ def create_campaign_worktree(anchor: Anchor, campaign_id: str, *,
                 "one (INC-20260706-iqk-missing-subsystem)")
     dest = campaign_worktree_path(campaign_id, source_tree=source_tree, root=root)
     branch = SafeBranch.for_campaign(campaign_id, leaf)
+    if prune_orphan_branch and git.branch_exists(branch):
+        # A prior attempt killed between worktree-remove and branch-delete
+        # leaves this ref behind with no live worktree; the next attempt that
+        # reuses the name then dies on `git worktree add -b ... already exists`
+        # (v27 crash #6). Delete the ORPHAN only — never a ref a live worktree
+        # still holds. SafeBranch is why this cannot reach a production branch.
+        if branch.name in git.checked_out_branches():
+            raise WorktreeError(
+                f"campaign branch {branch.name!r} is checked out by a live worktree; "
+                "refusing to prune it")
+        git.delete_branch(branch)
     worktree = git.add_worktree(dest, anchor.commit, branch=branch)
     after = fingerprint_tree(git)
     proof = prove_unchanged(before, after)

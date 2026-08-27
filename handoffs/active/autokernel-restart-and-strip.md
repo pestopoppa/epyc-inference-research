@@ -24,30 +24,27 @@ deterministic crash sources that still need a GPU validation window.
   restart loop. The controller already resumes from durable state (`DurableState.load` is the only
   entry path), so a supervised restart IS a resume.
 
-## Remaining deterministic crash sources — NEED A GPU VALIDATION WINDOW (do not patch blind)
+## Deterministic GPU-path crash sources — FIXED + unit-tested; need a GPU launch to confirm end-to-end
 
-These live in the sealed GPU measurement path; they cannot be end-to-end validated without a real
-launch. Each is a *deterministic* re-crash, so with the restart clamp lifted they would fast-loop
-until fixed. Fix these BEFORE the next launch. File:line at HEAD `5ea30f98`.
+Both landed on this lane after `79e9ef1c`. 776 controller/execution tests pass (the 3 failures are
+the pre-existing `claude/versions` env artifact, identical on main). Only the final residency-on-real-
+hardware behavior needs a launch window.
 
-1. **KFD sampler — self-flagging + no retry.** `controller/gpu_residency_sampler.py:33-56`
-   (`_belongs`/`__call__`). Caused 4 of 11 v27 crashes (#7-#10). Two defects:
-   (a) `_belongs(pid, child_pid)` only accepts descendants of the *sampled leg*, so the controller's
-   OWN sibling process (crash #10, pid 964901, ppid=controller) is called "foreign".
-   (b) ANY overlap → `ResidencySamplerError` → whole-controller crash, even a genuine external
-   process that would clear on its own (crashes #7-#9).
-   **Fix:** overlap (foreign OR sibling) is a RETRYABLE condition — the residency executor
-   (`gpu_source_evidence.py:336-416`, the `residency_sampler(child.pid)` loop) retries the leg with
-   bounded backoff until the GPU is clear, instead of raising. This is exactly the `kfd_contention_retry`
-   (max 4, 30s×2ⁿ) that closure `bfd57d4f` added and HEAD dropped — re-import it. Unit-testable with
-   fake `/proc` + KFD trees; no GPU needed to test the retry logic itself.
+1. **KFD sampler — self-flagging + no wait-out.** `controller/gpu_residency_sampler.py`. Caused 4 of
+   11 v27 crashes (#7-#10). (a) `_belongs` only accepted descendants of the *sampled leg*, so the
+   controller's OWN sibling (crash #10, pid 964901, ppid=controller) was "foreign"; now the sampler
+   takes `owner_root_pid` and any KFD pid in our own tree is ours. (b) ANY overlap crashed the
+   deployment; added `wait_until_clear(timeout_s, poll_s)` wired as `SubprocessCommandExecutor(
+   preflight_clear=…)` so a timed leg never opens on a contended GPU — foreign work is waited out,
+   then a clean `GpuContentionTimeout` leg-refusal (not a crash). A rare mid-run foreign appearance
+   still raises, now self-healing via restart+resume. Tests in `test_gpu_residency_sampler.py`.
 
-2. **Worktree name collision on crash-orphaned branch.** `execution/worktree.py:1447` (branch add)
-   via `create_campaign_worktree` ← `discovery_static_registry.py:3120`. Crash #6: a killed attempt
-   left branch `ak/…-candidate/attempt-000001`; the next attempt tried the same name → `git worktree add`
-   fatal. **Fix:** the attempt allocator (`discovery_static_registry.py:2135/2248`) must probe
-   `git branch --list` and bump `attempt-NNNNNN`, or prune the orphan through the guarded path, before
-   allocating.
+2. **Worktree name collision on crash-orphaned branch** (crash #6). `create_campaign_worktree(
+   prune_orphan_branch=True)` deletes the DEAD orphan ref — guarded by `GitRepo.checked_out_branches()`
+   (never a ref a live worktree holds) and `SafeBranch` (never a production branch) — before re-adding.
+   Wired at `discovery_static_registry.py`. Tests in `execution/test_worktree.py`.
+
+## Remaining (a disk-growth follow-up, NOT a crash source)
 
 3. **Disk has no expiry.** `deployments/*/builds/` (14 G) + `runtime/` (4.4 G) are pinned by
    `materialization.json` digests; `storage.expire_artifact` has zero callers. Add expiry for

@@ -2278,10 +2278,15 @@ def build_static_deployment_graph(config: deployment.DiscoveryDeployment) -> Sta
     critic_launcher_sha256 = _digest_regular(
         Path(claude_fable5_critic_actor.__file__).resolve(),
         "Claude critic launcher")
-    sampler = gpu_residency_sampler.Mi210ResidencySampler()
+    # owner_root_pid = this controller process: a sibling leg draining in our
+    # OWN tree is not "foreign" (fixes the self-flagged-KFD crash, 2026-08-27).
+    sampler = gpu_residency_sampler.Mi210ResidencySampler(owner_root_pid=os.getpid())
     executor = evidence.SubprocessCommandExecutor(
         residency_sampler=sampler,
-        runtime_maps_sampler=discovery_static_registry.runtime_maps_sampler())
+        runtime_maps_sampler=discovery_static_registry.runtime_maps_sampler(),
+        # Wait for the GPU to be free of foreign work before each timed leg,
+        # instead of aborting the deployment when contention appears.
+        preflight_clear=lambda: sampler.wait_until_clear())
     journal = device_claim.ClaimJournal(config.operations_root / "claims" / "device.jsonl")
     adapters = materialize(config, registry, correctness_executor=executor,
                            rocprof_executor=executor, claim_journal=journal,
