@@ -1,6 +1,6 @@
 """No-hardware replay tests for the typed discovery state machine."""
 from __future__ import annotations
-import argparse, base64, dataclasses, hashlib, json, os, tempfile, unittest
+import argparse, base64, dataclasses, hashlib, inspect, json, os, tempfile, unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -1383,6 +1383,61 @@ class Tests(unittest.TestCase):
    with self.assertRaisesRegex(D.DiscoveryControllerError,"durable stage"):
     D.run_controller(self.cfg(root,1),planner=FakePlanner(),critic=FakeCritic(["accept"]),screener=Forged([]),lease=Lease())
    state=json.loads((root/"out"/"state.json").read_text()); self.assertIn("inflight",state); self.assertNotIn("pending",state)
+ def test_exhausted_portfolio_completes_when_autonomy_is_off(self):
+  """Default behaviour is UNCHANGED: the sealed portfolio IS the whole space."""
+  with tempfile.TemporaryDirectory() as t, patch.object(D.source_candidate,"SourcePatchManifest",Manifest), patch.object(D,"_write_projection"):
+   root=Path(t)
+   cfg=dataclasses.replace(self.portfolio_config(root,[self.portfolio_record(eligible=False)]),
+                           max_iterations=3)
+   self.assertFalse(cfg.autonomous_discovery)
+   result=D.run_controller(cfg,planner=FakePlanner(),critic=FakeCritic(["accept"]),
+                           screener=FakeScreen([.01]),lease=Lease())
+  self.assertTrue(result["complete"])
+  self.assertEqual(result["terminal_reason"],"portfolio_exhausted")
+  self.assertEqual(result["iterations"],[])
+  self.assertIsNone(result.get("autonomous_since"))
+
+ def test_exhausted_portfolio_hands_over_to_autonomous_discovery(self):
+  """HYBRID: an operator portfolio is a priority SEED, not the search space.
+
+  With it spent the planner proposes its own mechanism instead of the campaign
+  completing. That ceiling — eligible hypotheses x max_distinct_candidates,
+  regardless of iteration budget — is what capped AutoKernel's science.
+  """
+  planner=FakePlanner()
+  with tempfile.TemporaryDirectory() as t, patch.object(D.source_candidate,"SourcePatchManifest",Manifest), patch.object(D,"_write_projection"):
+   root=Path(t)
+   cfg=dataclasses.replace(self.portfolio_config(root,[self.portfolio_record(eligible=False)]),
+                           max_iterations=1, autonomous_discovery=True)
+   # dry-run turns never spend science, so what stops this is the AUTONOMOUS
+   # TURN CEILING (max_iterations * AUTONOMOUS_TURN_BUDGET_MULTIPLIER); supply
+   # enough fixtures to actually reach it instead of exhausting them first.
+   result=D.run_controller(cfg,planner=planner,critic=FakeCritic(["accept"]*40),
+                           screener=FakeScreen([.01]*40),lease=Lease())
+  self.assertLessEqual(result["next"], 1*D.AUTONOMOUS_TURN_BUDGET_MULTIPLIER + 1,
+                       "an autonomous campaign must not spin past its turn ceiling")
+  self.assertNotEqual(result.get("terminal_reason"),"portfolio_exhausted",
+                      "an exhausted SEED must not end an autonomous campaign")
+  self.assertEqual(result.get("autonomous_since"),1,
+                   "the handover turn must be legible in durable state")
+  self.assertTrue(planner.calls,"the planner must be asked to propose")
+  self.assertIsNone(planner.calls[0]["authoring_assignment"]["portfolio_binding"],
+                    "an autonomous turn carries no controller-chosen hypothesis")
+  self.assertTrue(result["iterations"],"an autonomous turn must record a real attempt")
+
+ def test_autonomous_turn_instructs_the_planner_to_propose(self):
+  """The planner must be TOLD to choose a hypothesis, not left to infer it.
+
+  Without a binding the prompt previously carried only a placeholder structural
+  example, so "propose your own mechanism" was never actually asked for.
+  """
+  src=inspect.getsource(D.CodexPlanner._plan)
+  self.assertIn("discovery_mode",src)
+  self.assertIn("None if binding is not None else",src,
+                "discovery guidance must be conditional on there being no binding")
+  self.assertIn("PROPOSE one and implement it",src)
+  self.assertIn("do_not_repeat",src,"the proposal must be grounded in the DNR ledger")
+
  def test_unreconcilable_inflight_is_discarded_not_looped(self):
   """An inflight op we cannot reconcile is ONE lost attempt, not a fatal error.
 
