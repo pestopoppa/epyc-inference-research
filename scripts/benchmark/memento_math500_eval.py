@@ -74,7 +74,9 @@ def main() -> None:
            "-m", args.model, "-c", "4096", "--temp", "0",
            "--port", str(args.port), "--host", "127.0.0.1"]
     if args.lora:
-        cmd += ["-l", args.lora]
+        # --lora, NOT -l: in the frozen v9 build -l is --logit-bias (the same
+        # trap as llama-cli; the server exits on arg parse).
+        cmd += ["--lora", args.lora]
     srv = subprocess.Popen(cmd, stdout=subprocess.DEVNULL,
                            stderr=subprocess.DEVNULL)
     try:
