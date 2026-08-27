@@ -524,7 +524,14 @@ _PORTFOLIO_CONTRACT_SHA256 = "96f207733e5fc27a722763cf1b3c542f327eb70d41e04b9948
 _SITE_WINDOW_LOCK = Path("/mnt/raid0/llm/tmp/model-call.lock")
 _SITE_ACTOR_WRAPPER = Path(
     "/usr/local/share/npm-global/lib/node_modules/@openai/codex/bin/codex.js")
-_SITE_CRITIC_WRAPPER = Path("/home/node/.local/share/claude/versions/2.1.231")
+# The Claude critic wrapper must be an absolute NON-SYMLINK path (the critic
+# actor refuses a symlink), so resolve the stable launcher to its current
+# versioned target instead of a version literal.  The checked-in 2.1.231 pin
+# was orphaned when Claude auto-updated (2.1.238/240/241 installed, 2.1.231
+# gone), which made `initialize_static_deployment_bundle` — and therefore every
+# new deployment — fail with FileNotFoundError.  Resolving the launcher tracks
+# whatever version is installed at bundle-initialization time.
+_SITE_CRITIC_WRAPPER = Path("/home/node/.local/bin/claude").resolve()
 _SITE_CLAUDE_AUTH_ROOT = Path("/home/node/.claude")
 
 
