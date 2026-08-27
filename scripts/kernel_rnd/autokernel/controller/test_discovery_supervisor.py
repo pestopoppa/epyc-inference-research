@@ -238,20 +238,33 @@ print(','.join(results))
             finally:
                 root.close()
 
-    def test_deployment_restart_requires_typed_reconciliation(self):
+    def test_deployment_restart_policy_is_accepted(self):
+        """A deployment may restart: the controller resumes durable state.
+
+        The former `max_restarts == 0` clamp made every crash a permanent exit
+        and the operator the restart loop (v27: >=9 hand relaunches in 48h).
+        """
         with tempfile.TemporaryDirectory() as temporary:
             parent = Path(temporary)
             deployment = parent / "deployment.json"
             deployment.write_text(
                 json.dumps({"config_sha256": S._content_hash({})}) + "\n",
                 encoding="utf-8")
-            with self.assertRaisesRegex(S.SupervisorError, "typed reconciliation"):
+            spec = self._spec(
+                parent / "runtime",
+                deployment=deployment,
+                canary=None,
+                validate_only=False,
+                max_restarts=200,
+            )
+            self.assertEqual(spec.body["restart_policy"]["max_restarts"], 200)
+            with self.assertRaisesRegex(S.SupervisorError, "restart policy is invalid"):
                 self._spec(
-                    parent / "runtime",
+                    parent / "runtime-too-many",
                     deployment=deployment,
                     canary=None,
                     validate_only=False,
-                    max_restarts=1,
+                    max_restarts=10001,
                 )
 
     def test_ledger_refuses_torn_hash_and_out_of_order_transition(self):
