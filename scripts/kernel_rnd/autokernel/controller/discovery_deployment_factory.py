@@ -477,22 +477,56 @@ _INSTRUMENT_PATH = Path("/mnt/raid0/llm/llama.cpp-experimental")
 # earn its own T0/T1/T2 against the sealed production anchor before it means
 # anything, which is the drift catcher for a chain of small unreplicated wins.
 _INSTRUMENT_BRANCH = "ak/champion/llama-cpp-0db32c06e3e5"
-_INSTRUMENT_COMMIT = "fdc56acb3939d4a32149455bd89f4387cc1bcb9a"
-_INSTRUMENT_DIFF_SHA256 = "87122b4589d434c4275755640fbe2094d07ae4216315345bac16d68bed9703e0"
+_INSTRUMENT_COMMIT = "5c278648a4af2735587b4023613310ccf2341f46"
+_INSTRUMENT_DIFF_SHA256 = "9bcc28d3a0d8d2fa94bc5adc953ebc6ed274a67d49c9949c79d65fc368c78af6"
 _INSTRUMENT_TEST_SOURCE_SHA256 = "7571a536ba1305ad078948de2920aea33f9261ab9bb1b5714e55bd485ff335e9"
 _READY_CONTINUE_CONTRACT_SHA256 = "1411f5e81c1b0b3db6952523922c672d88a78aaff5945865c9ccc2b4fc5fd99f"
-_INSTRUMENT_BENCH_SOURCE_SHA256 = "b118e62cf452aa351a93f864bf4822d157dfc4af309f97b5f64cb6d1f31d2e07"
+# CHANGED by the champion: MoE-Spec adds an 8-line env-var fallback so
+# llama-bench (which has its own arg parser) can read --moe-spec-budget.
+# The flag DEFAULTS TO 0 and is inert unless a role selects it. The
+# correctness oracle test-backend-ops.cpp is UNCHANGED, which is the blob
+# that matters for verdicts.
+_INSTRUMENT_BENCH_SOURCE_SHA256 = "8d2bd4f6114e82553eef345183bf81f9c4969bf6a743579db2f45554cc70eefa"
 _INSTRUMENT_BENCH_README_SHA256 = "6429015fe5025d35b65e6271520ea668267910f82922e618b27b80c909cec33f"
 _INSTRUMENT_DIFF_PATHS = frozenset({
+    # The champion delta over frozen v9: the reviewed measurement apparatus
+    # (iqk sources, test-backend-ops, llama-bench) PLUS the admitted members
+    # MoE-Spec c7c37a0d9 and DFlash2 2046c64e9.
+    "common/arg.cpp",
+    "common/common.cpp",
+    "common/common.h",
+    "common/sampling.cpp",
+    "common/sampling.h",
+    "common/speculative.cpp",
+    "common/speculative.h",
+    "conversion/__init__.py",
+    "conversion/qwen.py",
+    "examples/speculative-simple/speculative-simple.cpp",
     "ggml/src/ggml-cpu/iqk/iqk_dispatch.cpp",
     "ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp",
     "ggml/src/ggml-cpu/iqk/iqk_quantize.h",
     "ggml/src/ggml-cpu/iqk/iqk_quantize_min.cpp",
+    "gguf-py/gguf/constants.py",
+    "gguf-py/gguf/gguf_writer.py",
+    "gguf-py/gguf/tensor_mapping.py",
+    "include/llama.h",
+    "src/llama-arch.cpp",
+    "src/llama-arch.h",
+    "src/llama-context.cpp",
+    "src/llama-cparams.h",
+    "src/llama-graph.cpp",
+    "src/llama-graph.h",
+    "src/llama-hparams.h",
+    "src/llama-model.cpp",
+    "src/llama-model.h",
+    "src/models/dflash.cpp",
+    "src/models/models.h",
     "tests/CMakeLists.txt",
     "tests/test-autokernel-ready-continue-contract.py",
     "tests/test-backend-ops.cpp",
     "tools/llama-bench/README.md",
     "tools/llama-bench/llama-bench.cpp",
+    "tools/server/server-context.cpp",
 })
 _TARGET_SOURCE_SHA256 = MappingProxyType({
     "ggml/src/ggml-cuda/fattn.cu": "f6a61657387c153e88bde036e25684b512c7cf078b1d17c7e3b2d31ee73f28d3",
