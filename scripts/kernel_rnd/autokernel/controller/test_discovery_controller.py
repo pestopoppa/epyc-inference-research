@@ -1383,6 +1383,35 @@ class Tests(unittest.TestCase):
    with self.assertRaisesRegex(D.DiscoveryControllerError,"durable stage"):
     D.run_controller(self.cfg(root,1),planner=FakePlanner(),critic=FakeCritic(["accept"]),screener=Forged([]),lease=Lease())
    state=json.loads((root/"out"/"state.json").read_text()); self.assertIn("inflight",state); self.assertNotIn("pending",state)
+ def test_unreconcilable_inflight_is_discarded_not_looped(self):
+  """An inflight op we cannot reconcile is ONE lost attempt, not a fatal error.
+
+  Measured on v29, 2026-08-27: raising here killed the controller on every
+  resume for the same operation, so once the deployment restart clamp was
+  lifted a single crash became an unbounded 30s restart loop (restart_count
+  1->3, byte-identical stderr, zero progress, heading for the 1000 cap).
+  """
+  class Forged(FakeScreen):
+   def screen(self,*args):
+    operation_key=args[2]["operation_key"]
+    raise D.ResourceWait("forged",receipt={"admitted":False,"phase":"pre_executor_reservation","operation_key":operation_key,"promotion_claim":False})
+  class Ambiguous(FakeScreen):
+   def reconcile(self,inflight): return D.Recovery("ambiguous")
+  with tempfile.TemporaryDirectory() as t, patch.object(D.source_candidate,"SourcePatchManifest",Manifest), patch.object(D,"_write_projection"):
+   root=Path(t)
+   # 1. leave a real inflight operation behind
+   with self.assertRaises(D.DiscoveryControllerError):
+    D.run_controller(self.cfg(root,1),planner=FakePlanner(),critic=FakeCritic(["accept"]),screener=Forged([]),lease=Lease())
+   self.assertIn("inflight",json.loads((root/"out"/"state.json").read_text()))
+   # 2. resume where that operation cannot be reconciled: must NOT raise
+   # the value is for the NEXT turn: proving the campaign advances in-process
+   # rather than dying, which is the whole point of the discard.
+   result=D.run_controller(self.cfg(root,1),planner=FakePlanner(),critic=FakeCritic(["accept"]),screener=Ambiguous([.01]),lease=Lease())
+  self.assertNotIn("inflight",result)
+  discarded=[r for r in result["iterations"] if r.get("status")=="inflight_discarded"]
+  self.assertEqual(len(discarded),1,"the lost attempt must be recorded, not silently dropped")
+  self.assertFalse(discarded[0]["scientific_budget_spent"],
+                   "an unreconcilable inflight is not a scientific attempt")
  def test_pending_roundtrip_uses_real_manifest_and_skips_planner_critic(self):
   with tempfile.TemporaryDirectory() as t:
    root=Path(t); patch_bytes=b"diff --git a/ggml/src/ggml.c b/ggml/src/ggml.c\n--- a/ggml/src/ggml.c\n+++ b/ggml/src/ggml.c\n@@ -1 +1 @@\n-x\n+y\n"; manifest=D.source_candidate.SourcePatchManifest(campaign_id="ak-test",proposal_id="akp-test",candidate_id="akc-test",source_tree="llama.cpp",production_base_commit="0"*40,instrument_commit="0"*40,change_class="fusion",declared_files=("ggml/src/ggml.c",),declared_symbols={"ggml/src/ggml.c":("<file-scope>",)},mechanism_id="test",patch_sha256=hashlib.sha256(patch_bytes).hexdigest(),patch_bytes=patch_bytes)

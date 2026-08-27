@@ -3112,7 +3112,34 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
             reconcile=getattr(screener,"reconcile",None)
             if not callable(reconcile): raise DiscoveryControllerError("inflight operation has no reconciliation adapter")
             recovery=reconcile(inflight)
-            if not isinstance(recovery,Recovery) or recovery.status == "ambiguous": raise DiscoveryControllerError("inflight operation cannot be safely reconciled")
+            if not isinstance(recovery, Recovery) or recovery.status == "ambiguous":
+                # An inflight operation we cannot reconcile is ONE LOST ATTEMPT,
+                # not a terminal fault. Raising here killed the controller on
+                # EVERY resume for the same op, so once the deployment restart
+                # clamp was lifted a single crash became an unbounded restart
+                # loop: measured on v29 (2026-08-27) restart_count climbed 1->3
+                # at 30s intervals with byte-identical stderr and zero progress,
+                # and would have run to the 1000-restart cap.
+                #
+                # The adapter marks ANY exception ambiguous — including a merely
+                # missing intent.json — so this is reachable from transient
+                # causes and must not be terminal. Discard the attempt, say so
+                # in the row, spend no science budget, and let the campaign
+                # advance to the next turn in-process.
+                row = dict(inflight["row"])
+                row.update(
+                    status="inflight_discarded",
+                    reason=("inflight operation could not be reconciled after a "
+                            "restart; the attempt was discarded rather than "
+                            "retried or replayed"),
+                    scientific_budget_spent=False)
+                state.pop("inflight", None)
+                state.pop("pending", None)
+                state["iterations"].append(row)
+                _note_portfolio_authoring_failure(state, row)
+                state["next"] += 1
+                precompute_refused = True
+                store.save(state, "inflight_discarded")
             if recovery.status == "sealed_result":
                 result=recovery.result
             else:
