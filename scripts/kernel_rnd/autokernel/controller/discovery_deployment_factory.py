@@ -463,8 +463,21 @@ _ROCPROF_V3_REGISTER_LIB = Path("/opt/rocm/lib/librocprofiler-register.so.0.4.0"
 _ROCPROF_V3_REGISTER_LIB_SHA256 = "4f095b333e6f4cb123f4ba2f59850304f51387a254acba89d457a6ff6a76dfc4"
 _CORRECTNESS_SUITE_SEED = 2026081301
 _INSTRUMENT_PATH = Path("/mnt/raid0/llm/llama.cpp-experimental")
-_INSTRUMENT_BRANCH = "codex/autokernel-gqa7-correctness-instrument-20260818"
-_INSTRUMENT_COMMIT = "5bbcc5498e4732162356953b7be96a53073a6706"
+# CH-3 (2026-08-27): the measurement instrument IS the champion.
+#
+# AutoKernel screens a candidate against this tree, so pointing it at the
+# champion branch is what makes gains COMPOUND: each experiment must beat the
+# accumulated state rather than re-deriving a delta against frozen production
+# forever. No controller change was needed -- the anchor arm has always been
+# built from the instrument, and _verify_instrument only requires the branch to
+# be a descendant of the frozen production head (which the champion is, by
+# construction, since Champion0 = production).
+#
+# Production remains the PROMOTION reference: a composed champion still has to
+# earn its own T0/T1/T2 against the sealed production anchor before it means
+# anything, which is the drift catcher for a chain of small unreplicated wins.
+_INSTRUMENT_BRANCH = "ak/champion/llama-cpp-0db32c06e3e5"
+_INSTRUMENT_COMMIT = "fdc56acb3939d4a32149455bd89f4387cc1bcb9a"
 _INSTRUMENT_DIFF_SHA256 = "87122b4589d434c4275755640fbe2094d07ae4216315345bac16d68bed9703e0"
 _INSTRUMENT_TEST_SOURCE_SHA256 = "7571a536ba1305ad078948de2920aea33f9261ab9bb1b5714e55bd485ff335e9"
 _READY_CONTINUE_CONTRACT_SHA256 = "1411f5e81c1b0b3db6952523922c672d88a78aaff5945865c9ccc2b4fc5fd99f"
