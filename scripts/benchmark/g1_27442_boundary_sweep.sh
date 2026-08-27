@@ -15,6 +15,13 @@
 #   --verbose-prompt (reports the exact prefilled token count) and --special
 #   (renders the first sampled token as its name, which llama-tokenize maps back
 #   to an id). All three live in <tree>/build/bin from the SAME frozen build.
+#   FLAG NOTES (verified against common/arg.cpp example tags in the frozen tree,
+#   2026-08-27): --no-cache-prompt and -np are tagged SERVER/PARALLEL only and
+#   the completion tool REJECTS them. Cold prefill is still guaranteed: no
+#   --prompt-cache is passed, so path_session is empty and neither
+#   llama_state_load_file nor llama_state_save_file ever runs (completion.cpp
+#   lines 247/260/385/983); -np is irrelevant because the tool is
+#   single-sequence by default.
 #
 # Prompt construction: llama-tokenize --show-count gives the EXACT token count
 # of any candidate prompt (vocab-only load, no weights), so prompts are built to
@@ -175,12 +182,12 @@ PYEOF
 
 build_prompt() { # target class -> prints ACTUAL token count of the built prompt
   python3 - "${TOKENIZER}" "${MODEL}" "$1" "$2" "${OUT_DIR}/prompt-$1-$2.txt" \
-    <<'PYEOF'
+    "${TOKENIZE_BUDGET}" <<'PYEOF'
 import random
 import subprocess
 import sys
 
-TOKENIZER, MODEL, TARGET, CLASS, OUT = sys.argv[1], sys.argv[2], int(sys.argv[3]), sys.argv[4], sys.argv[5]
+TOKENIZER, MODEL, TARGET, CLASS, OUT, BUDGET = sys.argv[1], sys.argv[2], int(sys.argv[3]), sys.argv[4], sys.argv[5], int(sys.argv[6])
 
 SEED = 27442  # fixed: deterministic, reproducible prompt construction
 
@@ -303,18 +310,22 @@ if CLASS not in units_for:
 build = units_for[CLASS]
 
 # --- iterate to the target token count (bounded, deterministic) --------------
-GRAN = 12 if CLASS == "pangram" else 25   # unit granularity in tokens
+# Step in UNITS using the MEASURED tokens-per-unit (actual/k), not a fixed
+# constant: the pangram unit is ~12 tokens, the meaningful paragraph ~60, and a
+# fixed granularity that mismatches the unit oscillates and burns the budget
+# (observed 2026-08-27: the meaningful builder stuck at 448 tokens).
 k = 1
 actual = count(build(k))
 best = (abs(actual - TARGET), k, actual)
-budget = TOKENIZE_BUDGET
+budget = BUDGET
 while budget > 0 and actual != TARGET:
     budget -= 1
+    tpu = max(1.0, actual / max(1, k))   # measured tokens per unit
     if actual > TARGET:
-        step = max(1, (actual - TARGET) // GRAN)
+        step = max(1, int((actual - TARGET) / tpu))
         k -= step
     else:
-        step = max(1, (TARGET - actual) // GRAN)
+        step = max(1, int((TARGET - actual) / tpu))
         k += step
     k = max(1, k)
     actual = count(build(k))
@@ -353,20 +364,39 @@ prompt_tokens = m[-1] if m else ""
 # stdout carries ONLY generated text + "[end of text]" marker + perf tail
 # (all LOG_INF noise goes to stderr). The perf block starts after the last "\n\n".
 region = out.rsplit("\n\n", 1)[0]
+# Console-notice hygiene (2026-08-27): with -n 1 the generated content is ONE
+# token, but the completion tool's console layer appends its own echoes ("> EOF
+# by user", etc.) to stdout after the generation. Those lines start with "> "
+# and are NOT generated content — the first observed trial's round-trip picked
+# them up and recorded null. Drop them BEFORE extraction; if the cleaned
+# region still renders more than one token (e.g. a newline token plus a stray
+# notice), fall back to the first line only — with -n 1 the first sampled token
+# is the entire generation.
+region = "\n".join(
+    ln for ln in region.splitlines() if not ln.lstrip().startswith("> ")
+).strip()
 eog_marker = "[end of text]" in region
 piece = region.split("[end of text]", 1)[0].strip()
 stop = "eog" if eog_marker else "completed"
 
 first_id = ""
 if piece:
-    p = subprocess.run(
-        [TOKENIZER, "-m", MODEL, "-p", piece, "--ids", "--special",
-         "--no-bos", "--no-escape"],
-        capture_output=True, timeout=300, text=True)
-    ids = re.findall(r"\d+", p.stdout)
-    if len(ids) == 1:
-        first_id = ids[0]
-    elif not p.stdout.strip() or p.stdout.strip() == "[]":
+    candidates = [piece] if piece else []
+    if piece and "\n" in piece:
+        candidates.append(piece.splitlines()[0])
+    for cand in candidates:
+        # llama-tokenize takes the prompt on STDIN (-p is COMPLETION/CLI-only in
+        # the frozen tree; --special is default-on for the TOKENIZE example).
+        p = subprocess.run(
+            [TOKENIZER, "-m", MODEL, "--stdin", "--ids", "--no-bos",
+             "--no-escape"],
+            input=cand, capture_output=True, timeout=300, text=True)
+        ids = re.findall(r"\d+", p.stdout)
+        if len(ids) == 1:
+            first_id = ids[0]
+            break
+        if not p.stdout.strip() or p.stdout.strip() == "[]":
+            break
         pass  # empty piece rendered no token id: honest null
     else:
         sys.stderr.write(f"g1_27442: first-token round-trip ambiguous "
@@ -424,7 +454,7 @@ for target in "${TARGETS[@]}"; do
 
     set +e
     "$BIN" -m "${MODEL}" -f "${OUT_DIR}/prompt-${target}-${cls}.txt" \
-      -n 1 --temp 0 -s "${SEED}" --no-cache-prompt -no-cnv -np 1 \
+      -n 1 --temp 0 -s "${SEED}" \
       -c "${CTX_SIZE}" --cache-type-k "${KV_K}" --cache-type-v "${KV_V}" \
       --special --no-display-prompt --verbose-prompt --no-escape \
       ${THREADS:+--threads "${THREADS}"} \
