@@ -26,7 +26,7 @@ import subprocess
 import time
 from typing import Any, Mapping, Sequence
 
-from .loop import Hypothesis, Review
+from .loop import ActorTransient, Hypothesis, Review
 
 CODEX = "/usr/local/share/npm-global/bin/codex"
 DEFAULT_TIMEOUT_S = 1800
@@ -34,8 +34,12 @@ DEFAULT_TIMEOUT_S = 1800
 BACKOFF_S = (30, 120, 480, 1800)
 
 
-class ProviderTransient(RuntimeError):
-    """The actor provider failed in a way that is worth retrying."""
+class ProviderTransient(ActorTransient):
+    """The actor provider failed in a way that is worth retrying.
+
+    Subclasses the loop's own transient type so `iterate` ends the ITERATION rather
+    than the run, without this module and the loop importing each other.
+    """
 
 
 def _run_agent(prompt: str, *, workspace: Path, timeout_s: int = DEFAULT_TIMEOUT_S,

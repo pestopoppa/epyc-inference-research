@@ -38,6 +38,16 @@ HYPOTHESIS_ROUNDS = 3
 PATCH_ROUNDS = 2
 
 
+class ActorTransient(RuntimeError):
+    """The actor provider failed in a way worth retrying.
+
+    Defined HERE, not in `actors`, so `iterate` can catch it without importing the
+    concrete actor module (which imports this one). A transient must end an
+    ITERATION, never the run: the superseded controller let provider faults escape as
+    terminal, so a codex 401 on 2026-08-26 took down 284 attempts in 23 minutes.
+    """
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
@@ -120,6 +130,21 @@ def iterate(*, planner: Planner, critic: Critic,
     working = dict(context)
     hypothesis_reasons: list[str] = []
 
+    try:
+        return _iterate(planner=planner, critic=critic, working=working,
+                        hypothesis_reasons=hypothesis_reasons, measure=measure,
+                        gate=gate, commit=commit,
+                        hypothesis_rounds=hypothesis_rounds,
+                        patch_rounds=patch_rounds)
+    except ActorTransient as exc:
+        # The provider failed, not the science. This ends the ITERATION and is
+        # recorded as such; the run continues, and a streak becomes visible in
+        # experiments.md rather than taking the campaign down with it.
+        return Outcome("planner_transient", None, [str(exc)])
+
+
+def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, commit,
+             hypothesis_rounds, patch_rounds) -> Outcome:
     for _ in range(hypothesis_rounds):
         working["prior_hypothesis_rejections"] = list(hypothesis_reasons)
         hypothesis = planner.propose(working)
@@ -191,5 +216,5 @@ def run(*, planner: Planner, critic: Critic, build_context: Callable[[], dict],
     return outcomes
 
 
-__all__ = ["Critic", "HYPOTHESIS_ROUNDS", "Hypothesis", "Outcome", "PATCH_ROUNDS",
+__all__ = ["ActorTransient", "Critic", "HYPOTHESIS_ROUNDS", "Hypothesis", "Outcome", "PATCH_ROUNDS",
            "Planner", "Review", "iterate", "run"]

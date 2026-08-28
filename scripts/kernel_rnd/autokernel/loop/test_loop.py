@@ -223,3 +223,55 @@ class BenchRefusals(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ProviderTransientsEndAnIterationNotTheRun(unittest.TestCase):
+    """A codex 401 took down 284 attempts in 23 minutes. Reproduced here, once.
+
+    The FIRST real end-to-end run of this loop hit exactly that class: the planner's
+    authoring step raised, the exception escaped `iterate`, and the whole run died on
+    iteration 1. That is the superseded controller's defect -- provider faults
+    escaping as terminal -- reproduced in the replacement. These tests pin the fix.
+    """
+
+    class _Exploding:
+        def __init__(self, where): self.where = where
+        def propose(self, context):
+            if self.where == "propose":
+                raise loop.ActorTransient("provider 401")
+            return _hypothesis()
+        def author(self, hypothesis, context):
+            if self.where == "author":
+                raise loop.ActorTransient("authoring returned no changed paths")
+            return ("a.cu",)
+
+    def test_a_transient_while_proposing_ends_the_iteration(self):
+        outcome, _ = _run(self._Exploding("propose"), _Critic([], []))
+        self.assertEqual(outcome.status, "planner_transient")
+        self.assertIn("provider 401", outcome.reasons[0])
+
+    def test_a_transient_while_authoring_ends_the_iteration(self):
+        outcome, committed = _run(self._Exploding("author"), _Critic([], []))
+        self.assertEqual(outcome.status, "planner_transient")
+        self.assertIn("no changed paths", outcome.reasons[0])
+        self.assertEqual(committed, {})
+
+    def test_the_transient_is_recorded_with_its_reason(self):
+        outcome, _ = _run(self._Exploding("author"), _Critic([], []))
+        row = outcome.to_attempt()
+        self.assertEqual(row["status"], "planner_transient")
+        self.assertIn("no changed paths", row["reason"])
+
+    def test_a_run_continues_past_a_transient(self):
+        """The property that matters: one bad provider call is not a dead campaign."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            outcomes = loop.run(
+                planner=self._Exploding("author"), critic=_Critic([], []),
+                build_context=dict,
+                measure=lambda h, p: _comparison(0.05),
+                gate=lambda h, p: (True, []),
+                commit=lambda h, p, c: "head",
+                store_root=Path(tmp), epoch="e" * 64,
+                campaign_id="ak-test", iterations=3)
+        self.assertEqual([o.status for o in outcomes], ["planner_transient"] * 3)
