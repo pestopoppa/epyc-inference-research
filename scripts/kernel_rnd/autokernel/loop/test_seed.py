@@ -9,7 +9,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from autokernel.loop import actors, archive, seed
+from autokernel.loop import actors, archive, loop, seed
 
 
 class Install(unittest.TestCase):
@@ -148,6 +148,36 @@ class NoSeededLeverContradictsASeededNegative(unittest.TestCase):
         self.assertIn("KV-quant", body)
         self.assertIn("do not propose", body.lower())
         self.assertIn("-16.7%", body)
+
+class TheProgramReachesTheActors(unittest.TestCase):
+    """111 lines of standing constraints sat beside the loop, unread.
+
+    `program.md` names, under "Settled -- do not re-open without new evidence", the
+    exact things run 6's planner proposed for nine straight iterations: GGML_IQK, MMQ,
+    HIP graphs, all already in v9. Nothing was wired to hand it to an actor. A
+    constraint nobody reads is not a constraint.
+    """
+
+    def test_the_program_file_is_rendered_into_the_bundle(self):
+        text = actors.render_context(
+            {"program": loop.PROGRAM.read_text(encoding="utf-8")})
+        self.assertIn("Standing constraints", text)
+        self.assertIn("Already in v9", text)
+        self.assertIn("MMQ_MFMA", text)
+
+    def test_the_measured_gfx90a_facts_are_in_it(self):
+        """A mechanism contradicting a receipt is dead on arrival; the actor must see
+        the receipt to know that."""
+        text = actors.render_context(
+            {"program": loop.PROGRAM.read_text(encoding="utf-8")})
+        for probe in ("32 banks", "8 phase cliques", "fp8_fp8", "bit-identical"):
+            self.assertIn(probe, text, probe)
+
+    def test_an_absent_program_does_not_break_the_bundle(self):
+        text = actors.render_context({"program": ""})
+        self.assertNotIn("Standing constraints", text)
+        self.assertIn("Where the device time actually goes", text)
+
 
 if __name__ == "__main__":
     unittest.main()

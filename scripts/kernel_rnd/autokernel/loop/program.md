@@ -83,8 +83,28 @@ they are ranked:
   lever must carry an explicit VGPR target — a reduction landing at 70 buys nothing.
 - **`iqk_gemm_1bit.cpp` and `iqk_flash_attn.cpp`** — vendored, audited clean
   2026-07-29, omitted from CMake, never staged.
-- **The hypothesis inbox** (`hypotheses/inbox/`): the operator drops files in
-  asynchronously and never blocks on the loop.
+- **The hypothesis inbox** (`<store>/inbox/*.md`, re-read every iteration): hypotheses
+  arrive asynchronously — from the operator, or harvested from the backlog by
+  `python3 -m autokernel.loop.seed`. Dropping a file in never blocks the loop.
+
+## Measured gfx90a facts — check a mechanism against these before proposing it
+
+These are receipts, not priors. A hypothesis that contradicts one is dead on arrival.
+
+- **gfx90a LDS is 32 banks with 8 phase cliques** — *not* the CDNA3 answer (64 banks,
+  2 phases of 32 lanes). Solved on our own silicon 2026-08-11 (372 bank / 6,048 phase
+  dispatches; receipt SHA-256 `ae1d833c…`). Any swizzle constant lifted from CDNA3
+  work — HipKittens' `>>7 <<3` among them — **does not transfer unexamined**.
+- **`__builtin_amdgcn_mfma_f32_16x16x32_fp8_fp8` does not exist on gfx90a.** Of the six
+  `__builtin_amdgcn_*` intrinsics HipKittens uses across 67 headers, exactly this one is
+  unavailable. Any fp8-MFMA mechanism is unimplementable here, not merely unmeasured.
+- **Our MFMA fragment layout is already the standard one.** `ggml/src/ggml-cuda/mma.cuh`
+  `tile<16,16>` (`:127,144` — `get_i = tid%16`, `get_j = 4*(tid/16)+l`, `ne=4`) is
+  **bit-identical** to HipKittens' `rt_base`. Fragment-level techniques from that
+  literature compose onto our existing tiles with **zero layout re-derivation** — this
+  is an enabling fact, and it means "we would have to re-derive the layout" is not a
+  reason to decline one.
+  (Source for all three: `handoffs/active/agentic-rocm-kernel-authoring.md`.)
 
 ## Settled — do not re-open without new evidence
 

@@ -130,6 +130,16 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12) -> str:
     """The bundle, as the actor sees it. Everything here was previously discarded."""
     lines: list[str] = []
 
+    # First, because it is the cheapest rejection: standing constraints and the
+    # settled list. `program.md` carried "Already in v9: GGML_IQK, MMQ, HIP graphs"
+    # for the whole of run 6 while the planner proposed exactly those and the critic
+    # rejected all nine iterations for it -- a document nobody was wired to read.
+    program = (context.get("program") or "").strip()
+    if program:
+        lines.append("## Standing constraints and settled questions (read this first)")
+        lines.append(program)
+        lines.append("")
+
     hotspots = context.get("kernel_hotspots") or []
     lines.append("## Where the device time actually goes (rocprofv3, current champion)")
     if hotspots:

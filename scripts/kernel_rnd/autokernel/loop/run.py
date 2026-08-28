@@ -94,6 +94,7 @@ def main(argv: list[str] | None = None) -> int:
 
     def build_context() -> dict:
         return {
+            "program": loop.PROGRAM.read_text(encoding="utf-8"),
             "kernel_hotspots": [row.to_dict() for row in hotspot_rows],
             "prior_experiments": archive.recall(args.store, epoch=epoch),
             "inbox": read_inbox(),

@@ -38,6 +38,12 @@ HYPOTHESIS_ROUNDS = 3
 PATCH_ROUNDS = 2
 
 
+#: The standing strategy, constraints and settled list. It is rendered into EVERY
+#: actor bundle: it sat unread beside the loop for the whole of run 6 while the
+#: planner proposed things its own "Already in v9" list names.
+PROGRAM = Path(__file__).resolve().parent / "program.md"
+
+
 class ActorTransient(RuntimeError):
     """The actor provider failed in a way worth retrying.
 
