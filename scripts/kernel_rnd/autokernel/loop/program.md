@@ -106,6 +106,38 @@ These are receipts, not priors. A hypothesis that contradicts one is dead on arr
   reason to decline one.
   (Source for all three: `handoffs/active/agentic-rocm-kernel-authoring.md`.)
 
+## Half of the prefill profile is not ours to patch
+
+Measured on the contracted surface (pp512, DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M,
+2026-08-28). Any hotspot whose signature begins **`Cijk_...`** is a **rocBLAS/Tensile
+GEMM**, shipped as a vendor library. It is not in the llama.cpp tree, this loop cannot
+edit it, and a hypothesis targeting one is unimplementable here:
+
+| share | patchable | kernel |
+|---|---|---|
+| 23.50% | **no** — Tensile | `Cijk_...MT64x64x64_MI32x32x8x1...` |
+| 21.67% | **no** — Tensile | `Cijk_...MT160x128x64_MI32x32x8x1...` |
+| 15.06% | yes | `dequantize_block_q4_K<__half>` |
+| 10.94% | yes | `flash_attn_ext_f16<128, 32, 4, 64, float, false>` |
+| 9.32% | yes | `convert_unary<float, __half>` |
+| 4.14% | **no** — Tensile | `Cijk_...MT64x128x64...` |
+
+**~51% vendor, ~47% ours.** So the addressable ceiling on this surface is roughly half
+the device time, and an effect must be scaled accordingly: a 10% win on
+`dequantize_block_q4_K` is 1.5% of the surface, which is above the 0.973% floor but not
+by much.
+
+**Read the shape, not just the rows.** Prefill here is a *dequantize-then-vendor-GEMM*
+path: `dequantize_block_q4_K` -> `convert_unary` -> Tensile GEMM is **75.7%** of device
+time. The weights are unpacked to f16 and multiplied by a library kernel. That is the
+structure a mechanism has to engage with, and the biggest patchable single target on
+this surface is the dequant itself.
+
+Note what this implies about the decode surface by contrast: `tg128` dispatches
+`mul_mat_vec_q` — quantized matmul, entirely our source, no Tensile at all. Decode has
+a far higher patchable fraction and a higher noise floor (1.85% at 5 pairs vs 0.973%).
+Neither surface is wrong; they are different bets, and the choice is the operator's.
+
 ## What the correctness gate does NOT catch
 
 `test-backend-ops` is the gate, and it is necessary rather than sufficient. A real
