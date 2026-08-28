@@ -50,6 +50,7 @@ def write(store_root: Path, *, state: str, epoch: str, campaign_id: str,
           champion_head: str | None = None,
           gpu: Mapping[str, Any] | None = None,
           hotspots: Sequence[Mapping[str, Any]] = (),
+          step: str | None = None,
           stale_after_s: int = DEFAULT_STALE_AFTER_S) -> Path:
     """Atomically publish the loop's current standing.
 
@@ -69,6 +70,11 @@ def write(store_root: Path, *, state: str, epoch: str, campaign_id: str,
         "generated_at": _now(),
         "stale_after_s": int(stale_after_s),
         "state": state,
+        # What the loop is doing RIGHT NOW. An iteration can run far longer
+        # than the freshness envelope -- a single planner call exceeded 18
+        # minutes once the bundle carried the program and the seeds -- so
+        # without a sub-iteration beat a healthy loop reads as stale.
+        "step": step,
         "campaign_id": campaign_id,
         "epoch_sha256": epoch,
         "anchor_commit": anchor_commit,

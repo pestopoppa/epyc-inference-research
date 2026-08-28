@@ -187,3 +187,70 @@ class TheUtilizationLegMustBeWired(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TheLoopBeatsWithinAnIteration(unittest.TestCase):
+    """An iteration can outlive the freshness envelope.
+
+    Once the bundle carried program.md plus the seeds, a single planner call ran past
+    18 minutes against a 30-minute envelope -- so a HEALTHY loop was on course to read
+    `stale`. Raising the envelope to cover it is the wrong fix: it makes a genuinely
+    dead loop look alive for longer. The loop reports what it is doing instead.
+    """
+
+    def test_the_step_is_carried_on_the_surface(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            status.write(Path(tmp), state="running", epoch="e" * 64,
+                         campaign_id="ak-loop", anchor_commit="a" * 40,
+                         surface="pp512", pairs=5, noise_floor_pct=1.0,
+                         step="critic pass 1: reviewing the hypothesis")
+            body = status.read(Path(tmp))
+        self.assertEqual(body["step"], "critic pass 1: reviewing the hypothesis")
+
+    def test_no_step_is_null_rather_than_a_stale_previous_one(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            status.write(Path(tmp), state="running", epoch="e" * 64,
+                         campaign_id="ak-loop", anchor_commit="a" * 40,
+                         surface="pp512", pairs=5, noise_floor_pct=1.0)
+            self.assertIsNone(status.read(Path(tmp))["step"])
+
+
+class EveryLongCallBeats(unittest.TestCase):
+    """A beat that only fires on the cheap steps proves nothing."""
+
+    def test_each_actor_and_device_call_is_preceded_by_a_beat(self):
+        from unittest import mock
+        from autokernel.loop import bench, gates, loop as loop_mod
+        beats = []
+        h = loop_mod.Hypothesis("akm-x", "s", "f", "a.cu", "sym")
+        planner = mock.Mock()
+        planner.propose.return_value = h
+        planner.author.return_value = ("a.cu",)
+        critic = mock.Mock()
+        critic.review_hypothesis.return_value = loop_mod.Review(True)
+        critic.review_patch.return_value = loop_mod.Review(True)
+        comparison = bench.Comparison(
+            surface="pp512", anchor_samples=[1.0], candidate_samples=[1.05],
+            effect=0.05, estimator="median_over_median", pairs=5,
+            noise_floor_pct=1.0, residency={})
+        loop_mod.iterate(
+            planner=planner, critic=critic, context={},
+            measure=lambda *a: comparison,
+            gate=lambda *a: (True, [gates.Verdict("compile", True)]),
+            commit=lambda *a: "abc1234",
+            on_step=beats.append)
+        for expected in ("proposing", "critic pass 1", "authoring",
+                         "critic pass 2", "building", "measuring"):
+            self.assertTrue(any(expected in b for b in beats),
+                            f"no beat before {expected}: {beats}")
+
+    def test_a_raising_hook_does_not_kill_the_iteration(self):
+        from unittest import mock
+        from autokernel.loop import loop as loop_mod
+        planner = mock.Mock()
+        planner.propose.side_effect = loop_mod.ActorTransient("provider down")
+        outcome = loop_mod.iterate(
+            planner=planner, critic=mock.Mock(), context={},
+            measure=mock.Mock(), gate=mock.Mock(), commit=mock.Mock(),
+            on_step=mock.Mock(side_effect=RuntimeError("disk full")))
+        self.assertEqual(outcome.status, "planner_transient")

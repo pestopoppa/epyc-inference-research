@@ -156,17 +156,24 @@ def main(argv: list[str] | None = None) -> int:
                 round(max(0.0, 1.0 - busy / held), 4) if held > 0 else None),
         }
 
-    def publish(state: str, outcomes=(), gpu=None, hotspot_rows=()) -> None:
+    def publish(state: str, outcomes=(), gpu=None, hotspot_rows=(),
+                step: str | None = None) -> None:
         """A loop that only reports when it succeeds looks identical to a stuck one."""
         status.write(
             args.store, state=state, epoch=epoch, campaign_id="ak-loop",
             anchor_commit=anchor_commit, surface=args.surface, pairs=args.pairs,
             noise_floor_pct=floor,
             outcomes=[o.to_attempt() for o in outcomes],
-            iterations_planned=args.iterations,
+            iterations_planned=args.iterations, step=step,
             champion_head=_git(args.worktree, "rev-parse", "HEAD"),
             gpu=gpu if gpu is not None else gpu_reading(outcomes),
             hotspots=[row.to_dict() for row in hotspot_rows])
+
+    latest: list = []
+
+    def _remember(rows) -> None:
+        latest[:] = list(rows)
+        publish("running", latest, hotspot_rows=hotspot_rows)
 
     claim_started = None
     publish("starting")
@@ -195,8 +202,10 @@ def main(argv: list[str] | None = None) -> int:
                 measure=measure, gate=gate, commit=commit,
                 store_root=args.store, epoch=epoch, campaign_id="ak-loop",
                 iterations=args.iterations, reset=reset_tree,
-                on_iteration=lambda rows: publish("running", rows,
-                                                  hotspot_rows=hotspot_rows))
+                on_iteration=_remember,
+                on_step=lambda label: publish("running", latest,
+                                              hotspot_rows=hotspot_rows,
+                                              step=label))
         except BaseException:
             # A crashed loop must SAY it crashed. Going quiet reads as "slow".
             publish("failed", hotspot_rows=hotspot_rows)

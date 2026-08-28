@@ -125,13 +125,27 @@ class Outcome:
         return row
 
 
+def _safe_step(hook):
+    """Reporting must never kill the loop, and a heartbeat least of all."""
+    if hook is None:
+        return lambda _label: None
+
+    def beat(label: str) -> None:
+        try:
+            hook(label)
+        except Exception:      # noqa: BLE001
+            pass
+    return beat
+
+
 def iterate(*, planner: Planner, critic: Critic,
             context: Mapping[str, Any],
             measure: Callable[[Hypothesis, Sequence[str]], bench.Comparison],
             gate: Callable[[Hypothesis, Sequence[str]], tuple[bool, list[gates.Verdict]]],
             commit: Callable[[Hypothesis, Sequence[str], bench.Comparison], str],
             hypothesis_rounds: int = HYPOTHESIS_ROUNDS,
-            patch_rounds: int = PATCH_ROUNDS) -> Outcome:
+            patch_rounds: int = PATCH_ROUNDS,
+            on_step: Callable[[str], None] | None = None) -> Outcome:
     """One full turn. Pure control flow: every side effect is an injected callable."""
     working = dict(context)
     hypothesis_reasons: list[str] = []
@@ -141,7 +155,7 @@ def iterate(*, planner: Planner, critic: Critic,
                         hypothesis_reasons=hypothesis_reasons, measure=measure,
                         gate=gate, commit=commit,
                         hypothesis_rounds=hypothesis_rounds,
-                        patch_rounds=patch_rounds)
+                        patch_rounds=patch_rounds, on_step=_safe_step(on_step))
     except ActorTransient as exc:
         # The provider failed, not the science. This ends the ITERATION and is
         # recorded as such; the run continues, and a streak becomes visible in
@@ -150,14 +164,16 @@ def iterate(*, planner: Planner, critic: Critic,
 
 
 def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, commit,
-             hypothesis_rounds, patch_rounds) -> Outcome:
+             hypothesis_rounds, patch_rounds, on_step=lambda _label: None) -> Outcome:
     last_proposed: Hypothesis | None = None
     for _ in range(hypothesis_rounds):
         working["prior_hypothesis_rejections"] = list(hypothesis_reasons)
+        on_step("proposing a hypothesis")
         hypothesis = planner.propose(working)
         last_proposed = hypothesis
 
         # ---- CRITIC PASS 1: the hypothesis, before any patch exists ----------
+        on_step("critic pass 1: reviewing the hypothesis")
         verdict = critic.review_hypothesis(hypothesis, working)
         if not verdict.accepted:
             # Verbatim, so the planner can answer the objection rather than guess.
@@ -167,9 +183,11 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
         patch_reasons: list[str] = []
         for _ in range(patch_rounds):
             working["prior_patch_rejections"] = list(patch_reasons)
+            on_step("authoring the patch")
             paths = planner.author(hypothesis, working)
 
             # ---- CRITIC PASS 2: the diff, BEFORE the build ------------------
+            on_step("critic pass 2: reviewing the diff")
             patch_verdict = critic.review_patch(hypothesis, paths, working)
             if not patch_verdict.accepted:
                 # The hypothesis is untouched: a bad patch is not evidence against
@@ -177,6 +195,7 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                 patch_reasons.append(patch_verdict.reason)
                 continue
 
+            on_step("building and gating")
             passed, verdicts = gate(hypothesis, paths)
             if not passed:
                 # Compile and correctness failures loop back the same way; the
@@ -184,6 +203,7 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                 patch_reasons.append(verdicts[-1].reason if verdicts else "gate refused")
                 continue
 
+            on_step("measuring A/B on the device")
             comparison = measure(hypothesis, paths)
             if comparison.decisive and comparison.effect > 0:
                 head = commit(hypothesis, paths, comparison)
@@ -217,7 +237,8 @@ def run(*, planner: Planner, critic: Critic, build_context: Callable[[], dict],
         commit: Callable[..., str], store_root: Path, epoch: str,
         campaign_id: str, iterations: int,
         on_iteration: Callable[[list["Outcome"]], None] | None = None,
-        reset: Callable[[], None] | None = None
+        reset: Callable[[], None] | None = None,
+        on_step: Callable[[str], None] | None = None
         ) -> list[Outcome]:
     """Drive `iterate` and persist every outcome, kept or not.
 
@@ -237,7 +258,8 @@ def run(*, planner: Planner, critic: Critic, build_context: Callable[[], dict],
         if reset is not None:
             reset()
         outcome = iterate(planner=planner, critic=critic, context=build_context(),
-                          measure=measure, gate=gate, commit=commit)
+                          measure=measure, gate=gate, commit=commit,
+                          on_step=on_step)
         archive.record(store_root, outcome.to_attempt(), epoch=epoch,
                        recorded_at=_now(), campaign_id=campaign_id)
         outcomes.append(outcome)
