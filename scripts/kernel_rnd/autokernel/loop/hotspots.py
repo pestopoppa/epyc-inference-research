@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import csv
 from dataclasses import dataclass
+import os
 import io
 from pathlib import Path
 import subprocess
@@ -42,6 +43,31 @@ def _resolve_rocprof() -> str | None:
         if Path(candidate).is_file():
             return candidate
     return None
+
+
+def _profiler_env(binary: Path, rocprof: str) -> dict[str, str]:
+    """The profiler's OWN libs must precede the system ones.
+
+    The vendored SDK ships `lib/librocprofiler-sdk.so` and
+    `lib/rocprofiler-sdk/librocprofiler-sdk-tool.so`, while /opt/rocm carries only
+    `librocprofiler-register.so` -- the registration shim. Inherit the plain loader
+    path and rocprofv3 finds the shim instead of its own tool library and produces no
+    trace. This is the same three-generations hazard the ggml linkage rule exists for,
+    one layer up.
+
+    The measured binary's own directory still comes FIRST, because the arm under test
+    must load ITS ggml, not the profiler's.
+    """
+    env = residency.loader_env(binary)
+    sdk_root = Path(rocprof).resolve().parent.parent
+    env["LD_LIBRARY_PATH"] = os.pathsep.join([
+        str(binary.parent),
+        str(sdk_root / "lib"),
+        str(sdk_root / "lib" / "rocprofiler-sdk"),
+        "/opt/rocm/lib",
+    ])
+    env["ROCPROFILER_METRICS_PATH"] = str(sdk_root / "lib" / "rocprofiler-sdk")
+    return env
 
 
 ROCPROF = _resolve_rocprof() or ROCPROF_CANDIDATES[0]
@@ -114,9 +140,12 @@ def profile(binary: Path, model: Path, *, pp: int = 0, tg: int = 32,
                 str(binary), "-m", str(model), "-p", str(pp), "-n", str(tg),
                 "-r", "1", "-ngl", "99", "-fa", "1", "-o", "json"]
         done = subprocess.run(argv, capture_output=True, text=True,
-                              timeout=timeout_s, env=residency.loader_env(binary))
+                              timeout=timeout_s,
+                              env=_profiler_env(binary, resolved))
         if done.returncode != 0:
-            raise ProfileFailed(f"rocprofv3 rc={done.returncode}: {done.stderr[-400:]}")
+            raise ProfileFailed(
+                f"rocprofv3 rc={done.returncode} via {resolved}: "
+                f"{(done.stderr or done.stdout)[-400:]}")
         traces = sorted(out.rglob("*kernel_trace.csv")) or sorted(out.rglob("*.csv"))
         if not traces:
             raise ProfileFailed("rocprofv3 produced no kernel trace csv")
