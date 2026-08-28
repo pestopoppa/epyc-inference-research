@@ -2022,3 +2022,51 @@ class TestGpuDiscoveryRunCleanup(unittest.TestCase):
             self.assertEqual(graph_result["graphs_on_output_oracle"]["seed"], 8613)
             self.assertTrue(
                 graph_result["graphs_on_output_oracle"]["cross_arm_bitwise_equal"])
+
+
+class ReviewedInstrumentLineageTests(unittest.TestCase):
+    """CH-3 made the CHAMPION the instrument; the gate must accept its lineage.
+
+    The timed-output gates compared the anchor arm's source commit for EQUALITY with
+    READY_CONTINUE_INSTRUMENT_COMMIT, so every champion-instrumented campaign died at
+    preflight with
+
+        RuntimeError: shared source-discovery reward requires the exact sealed
+        81bf32f11 timed-output instrument
+
+    That killed campaign v36 outright -- supervisor dead, 0 scientific attempts. What
+    the gate protects is that the oracle carries the REVIEWED measurement apparatus,
+    and a descendant does: the champion is built ON the instrument and the pinned
+    ready/continue contract blob is byte-identical between them. Ancestry keeps that
+    guarantee; equality merely also forbade the champion.
+    """
+
+    TREE = Path("/mnt/raid0/llm/llama.cpp")
+    INSTRUMENT = "5bbcc5498e4732162356953b7be96a53073a6706"
+    CHAMPION = "270b48ed64d617db9128054f3bd0620bbb9371f5"
+    PRODUCTION = "0db32c06e3e550065b78311a6031ef3dd2c4f27c"
+
+    def setUp(self) -> None:
+        if not (self.TREE / ".git").exists():
+            self.skipTest("llama.cpp work tree not present on this host")
+
+    def test_the_reviewed_instrument_itself_is_accepted(self):
+        self.assertTrue(gpu._descends_from_reviewed_instrument(
+            self.INSTRUMENT, tree=self.TREE))
+
+    def test_a_champion_built_on_the_instrument_is_accepted(self):
+        """The regression: this is what v36 ran and was refused for."""
+        self.assertTrue(gpu._descends_from_reviewed_instrument(
+            self.CHAMPION, tree=self.TREE))
+
+    def test_frozen_production_is_still_refused(self):
+        """The gate must keep its teeth: v9 predates the instrument and carries none
+        of its measurement apparatus, so it must never satisfy the oracle."""
+        self.assertFalse(gpu._descends_from_reviewed_instrument(
+            self.PRODUCTION, tree=self.TREE))
+
+    def test_unknown_and_missing_commits_are_refused(self):
+        for value in (None, "", "deadbeef" * 5, "not-a-commit"):
+            with self.subTest(value=value):
+                self.assertFalse(gpu._descends_from_reviewed_instrument(
+                    value, tree=self.TREE))
