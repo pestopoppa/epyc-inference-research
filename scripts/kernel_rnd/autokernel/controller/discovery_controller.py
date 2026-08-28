@@ -43,6 +43,30 @@ from scripts.benchmark import run_autokernel_gpu_discovery as gpu_discovery
 SCHEMA = "epyc.autokernel.discovery_controller.v5"
 ROSTER_SCHEMA = "epyc.autokernel.discovery_roster.v3"
 AUTHORITY = "nonpromotable_candidate_only_discovery"
+
+#: Row statuses that mean "the actor's AUTHORED OUTPUT was rejected, and here is why".
+#: These are fed back to the planner as `prior_authoring_refusals` so it can correct
+#: the next diff instead of re-deriving the same rejected one.
+#:
+#: This set previously contained only `planner_refused`, which is written almost
+#: never: across campaigns v28-v34 the real tally was `authoring_refused` 22 vs
+#: `planner_refused` 1. So 22 of 23 authoring failures produced NO feedback, and the
+#: planner re-proposed rejected work blind. Measured consequence, v33 turns 2 and 3:
+#: two different diffs, byte-identical refusal
+#: ("committed diff in 'ggml/src/ggml-cuda/vecdotq.cuh' derives undeclared symbols"),
+#: on the same hypothesis, which then hit the 3-strike bounded_authoring_skip and
+#: retired the hypothesis for the campaign without ever testing it.
+#:
+#: Kept deliberately to AUTHORING refusals. Screen/correctness outcomes are results,
+#: not authoring defects, and reach the planner through `prior_results`.
+AUTHORING_REFUSAL_STATUSES = frozenset({
+    "planner_refused",
+    "authoring_refused",
+    "authorization_refused",
+    "planner_contract_refused",
+    "candidate_semantic_repeat_refused",
+    "portfolio_dnr_refused",
+})
 HASH = __import__("re").compile(r"^[0-9a-f]{64}$")
 PORTFOLIO_DNR_CHECK_SCHEMA = "epyc.autokernel.portfolio_exact_dnr_check.v1"
 SOL = {"provider": "codex", "model": "gpt-5.6-sol", "effort": "high", "role": "planner"}
@@ -2190,7 +2214,8 @@ def _context(state: Mapping[str, Any], tracker: hypotheses.HypothesisTracker, tu
         {key: row.get(key) for key in (
             "turn", "status", "reason", "portfolio_hypothesis_id",
             "context_sha256")}
-        for row in state["iterations"] if row.get("status") == "planner_refused"
+        for row in state["iterations"]
+        if row.get("status") in AUTHORING_REFUSAL_STATUSES
     ][-8:]
     return {"authority": AUTHORITY, "turn":turn, "roster":sealed_roster(),
             "planner_context": config.planner_context,
