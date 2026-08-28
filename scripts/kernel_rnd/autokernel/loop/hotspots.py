@@ -23,7 +23,28 @@ import tempfile
 
 from . import residency
 
-ROCPROF = "/opt/rocm/bin/rocprofv3"
+#: NOT /opt/rocm/bin. This host's ROCm 6.2 ships no profiler binary at all -- only
+#: librocprofiler-register.so -- and the first real loop run reported
+#: `profile UNAVAILABLE` because of it. The working rocprofv3 is a VENDORED SDK at a
+#: non-standard root, which is what the superseded loop's sealed closure pointed at
+#: (`operations/config/rocprofv3-sdk-closure.json`). Candidates are tried in order and
+#: the first that exists wins, so a host that later gains a system profiler needs no
+#: change here.
+ROCPROF_CANDIDATES = (
+    "/mnt/raid0/llm/tools/rocprofiler-sdk-6.2.0-66/opt/rocm-6.2.0/bin/rocprofv3",
+    "/opt/rocm/bin/rocprofv3",
+    "/opt/rocm/bin/rocprofv2",
+)
+
+
+def _resolve_rocprof() -> str | None:
+    for candidate in ROCPROF_CANDIDATES:
+        if Path(candidate).is_file():
+            return candidate
+    return None
+
+
+ROCPROF = _resolve_rocprof() or ROCPROF_CANDIDATES[0]
 
 
 class ProfileFailed(RuntimeError):
@@ -83,11 +104,13 @@ def parse_kernel_trace(csv_text: str, *, limit: int = 12) -> list[Hotspot]:
 def profile(binary: Path, model: Path, *, pp: int = 0, tg: int = 32,
             limit: int = 12, timeout_s: int = 1800) -> list[Hotspot]:
     """Profile one short generation and return the ranked hotspots."""
-    if not Path(ROCPROF).is_file():
-        raise ProfileFailed(f"no rocprofv3 at {ROCPROF}")
+    resolved = _resolve_rocprof()
+    if resolved is None:
+        raise ProfileFailed(
+            "no rocprofv3 found; tried " + ", ".join(ROCPROF_CANDIDATES))
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp)
-        argv = [ROCPROF, "--kernel-trace", "-d", str(out), "-o", "trace", "--",
+        argv = [resolved, "--kernel-trace", "-d", str(out), "-o", "trace", "--",
                 str(binary), "-m", str(model), "-p", str(pp), "-n", str(tg),
                 "-r", "1", "-ngl", "99", "-fa", "1", "-o", "json"]
         done = subprocess.run(argv, capture_output=True, text=True,
@@ -100,4 +123,5 @@ def profile(binary: Path, model: Path, *, pp: int = 0, tg: int = 32,
         return parse_kernel_trace(traces[0].read_text(encoding="utf-8"), limit=limit)
 
 
-__all__ = ["Hotspot", "ProfileFailed", "ROCPROF", "parse_kernel_trace", "profile"]
+__all__ = ["Hotspot", "ProfileFailed", "ROCPROF", "ROCPROF_CANDIDATES",
+           "parse_kernel_trace", "profile"]
