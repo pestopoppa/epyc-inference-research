@@ -143,5 +143,47 @@ class Read(unittest.TestCase):
             self.assertIsNone(status.read(Path(tmp)))
 
 
+class TheUtilizationLegMustBeWired(unittest.TestCase):
+    """The dashboard found `gpu` empty on every publish: `publish()` accepted a
+    `gpu=` argument and no callsite passed one.
+
+    A contract leg that is declared and never populated is worse than an absent one,
+    because the page renders a field that will never fill. This is the number that
+    would have caught 1.403 hours of GPU held against 29.0 hours of compiling.
+    """
+
+    def test_a_populated_reading_survives_the_round_trip(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            status.write(Path(tmp), state="running", epoch="e" * 64,
+                         campaign_id="ak-loop", anchor_commit="a" * 40,
+                         surface="pp512", pairs=5, noise_floor_pct=1.0,
+                         gpu={"claim_held_s": 3600.0,
+                              "device_seconds_under_load": 60.0,
+                              "gpu_seconds_idle_while_claimed": 3540.0,
+                              "idle_fraction_while_claimed": 0.9833})
+            gpu = status.read(Path(tmp))["gpu"]
+        self.assertAlmostEqual(gpu["claim_held_s"], 3600.0)
+        self.assertAlmostEqual(gpu["idle_fraction_while_claimed"], 0.9833)
+
+    def test_the_runner_passes_a_reading_rather_than_an_empty_map(self):
+        """Pins the defect: run.py must not call publish() without gpu data."""
+        import re
+        source = (Path(__file__).resolve().parent / "run.py").read_text()
+        self.assertIn("def gpu_reading(", source)
+        # publish() must default to the computed reading, never to {}.
+        self.assertIn("gpu=gpu if gpu is not None else gpu_reading(outcomes)", source)
+        self.assertNotIn('gpu=gpu or {}', source)
+
+    def test_idle_is_derived_from_both_halves(self):
+        """Held without busy, or busy without held, is not a utilization figure."""
+        with tempfile.TemporaryDirectory() as tmp:
+            status.write(Path(tmp), state="running", epoch="e" * 64,
+                         campaign_id="ak-loop", anchor_commit="a" * 40,
+                         surface="pp512", pairs=5, noise_floor_pct=1.0, gpu={})
+            self.assertEqual(status.read(Path(tmp))["gpu"], {},
+                             "an unreported reading stays empty rather than "
+                             "fabricating 0s busy / 100% idle")
+
+
 if __name__ == "__main__":
     unittest.main()

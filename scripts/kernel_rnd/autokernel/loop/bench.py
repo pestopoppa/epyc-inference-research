@@ -22,6 +22,7 @@ import json
 from pathlib import Path
 import statistics as st
 import subprocess
+import time
 from typing import Sequence
 
 from . import residency
@@ -55,6 +56,10 @@ class Comparison:
     pairs: int
     noise_floor_pct: float | None
     residency: dict
+    #: Wall seconds this comparison spent with work on the device. The utilization
+    #: leg is meaningless without it, and utilization is the number that would have
+    #: caught 1.4 hours of GPU held against 29.0 hours of compiling.
+    device_seconds: float = 0.0
 
     @property
     def decisive(self) -> bool:
@@ -72,7 +77,7 @@ class Comparison:
             "surface": self.surface, "effect": self.effect,
             "effect_pct": self.effect * 100.0, "estimator": self.estimator,
             "pairs": self.pairs, "noise_floor_pct": self.noise_floor_pct,
-            "decisive": self.decisive,
+            "decisive": self.decisive, "device_seconds": self.device_seconds,
             "anchor_samples": self.anchor_samples,
             "candidate_samples": self.candidate_samples,
             "residency": self.residency,
@@ -111,6 +116,7 @@ def compare(anchor: Arm, candidate: Arm, model: Path, *, pp: int, tg: int,
     anchor_samples: list[float] = []
     candidate_samples: list[float] = []
     proofs: list[dict] = []
+    started = time.monotonic()
     for _ in range(pairs):
         for arm, sink in ((anchor, anchor_samples), (candidate, candidate_samples)):
             value, proof = run_once(arm.binary, model, pp=pp, tg=tg, reps=reps)
@@ -142,6 +148,7 @@ def compare(anchor: Arm, candidate: Arm, model: Path, *, pp: int, tg: int,
                    "resident": len(resident),
                    "peak_vram_bytes": max(p["peak_vram_bytes"] for p in proofs),
                    "peak_kfd_processes": max(p["peak_kfd_processes"] for p in proofs)},
+        device_seconds=time.monotonic() - started,
     )
 
 

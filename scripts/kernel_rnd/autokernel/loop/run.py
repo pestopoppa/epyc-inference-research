@@ -109,6 +109,27 @@ def main(argv: list[str] | None = None) -> int:
     inbox = [path.read_text(encoding="utf-8").strip()
              for path in sorted(inbox_dir.glob("*.md"))] if inbox_dir.is_dir() else []
 
+    def gpu_reading(outcomes=()) -> dict:
+        """Held versus busy. Both halves, or the number means nothing.
+
+        Held comes from the claim, busy from the comparisons that actually ran. The
+        superseded loop held the MI210 for 1.403 hours across its entire life while
+        compiling for 29.0, and nothing reported it -- because the surface reported
+        iterations and receipts and had no number for "am I using what I hold".
+        """
+        if claim_started is None:
+            return {}
+        held = time.time() - claim_started
+        busy = sum(float((o.comparison.to_dict() or {}).get("device_seconds") or 0.0)
+                   for o in outcomes if o.comparison is not None)
+        return {
+            "claim_held_s": round(held, 1),
+            "device_seconds_under_load": round(busy, 1),
+            "gpu_seconds_idle_while_claimed": round(max(0.0, held - busy), 1),
+            "idle_fraction_while_claimed": (
+                round(max(0.0, 1.0 - busy / held), 4) if held > 0 else None),
+        }
+
     def publish(state: str, outcomes=(), gpu=None, hotspot_rows=()) -> None:
         """A loop that only reports when it succeeds looks identical to a stuck one."""
         status.write(
@@ -118,12 +139,14 @@ def main(argv: list[str] | None = None) -> int:
             outcomes=[o.to_attempt() for o in outcomes],
             iterations_planned=args.iterations,
             champion_head=_git(args.worktree, "rev-parse", "HEAD"),
-            gpu=gpu or {},
+            gpu=gpu if gpu is not None else gpu_reading(outcomes),
             hotspots=[row.to_dict() for row in hotspot_rows])
 
+    claim_started = None
     publish("starting")
     started = time.time()
     with claim.hold() as receipt:
+        claim_started = time.time()
         print(f"claim     held on {receipt['device_id']}\n")
         try:
             hotspot_rows = hotspots.profile(
