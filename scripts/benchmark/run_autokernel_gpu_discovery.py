@@ -20,7 +20,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from statistics import median
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Mapping, Sequence
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
@@ -168,6 +168,69 @@ class TimedOutputInfrastructureAmbiguity(RuntimeError):
 
 class _CrossArmOutputDivergence(RuntimeError):
     """Internal marker raised only after both arm receipts validate completely."""
+
+
+def screen_effect(*, anchor_samples: Sequence[float], anchor_runs: Sequence[Mapping[str, Any]],
+                  candidate_samples: Sequence[float],
+                  candidate_runs: Sequence[Mapping[str, Any]],
+                  pair_max: bool) -> dict[str, Any]:
+    """ONE ESTIMATOR ON BOTH ARMS. The whole decision arithmetic of a screen.
+
+    The superseded rule centred on the MEAN of the anchor samples and then reported
+    the MEDIAN of the per-sample candidate effects against it -- mixed estimators.
+    The anchor arm reliably carries a cold-start low outlier, so median(anchor) sits
+    ~1.96% above mean(anchor), and that gap was reported as candidate improvement on
+    every single run.
+
+    Re-scored across all 25 historical two-arm screens the mismatch injected
+    +2.014pp of apparent effect, flipped the sign of 10 of them, and took the
+    nomination count from 3 to 7 -- i.e. the entire historical nomination stream is
+    indistinguishable from estimator bias plus noise. Reproduce with
+    ``scripts/benchmark/autokernel_rescore_estimator.py``.
+
+    `legacy_median_relative` reproduces the superseded value so the correction is
+    auditable on the record itself, not only in the re-score tool. It is never a
+    decision input.
+    """
+    if not anchor_samples:
+        raise ValueError("screen_effect requires at least one anchor sample")
+    if not candidate_samples:
+        raise ValueError("screen_effect requires at least one candidate sample")
+
+    anchor_median = median(anchor_samples)
+    anchor_mean = sum(anchor_samples) / len(anchor_samples)
+
+    if pair_max:
+        # This contract's statistic IS one run's serialized pair-max metric. Compare
+        # the candidate's own like statistic against the anchor's -- never a scalar
+        # against a distribution.
+        if not anchor_runs or not candidate_runs:
+            raise ValueError("pair-max contract requires one anchor run and one candidate run")
+        center = float(anchor_runs[0]["metric"])
+        candidate_statistic = float(candidate_runs[0]["metric"])
+        estimator = "pair_max_metric_over_pair_max_metric"
+        legacy_center = center
+    else:
+        center = anchor_median
+        candidate_statistic = median(candidate_samples)
+        estimator = "median_over_median"
+        legacy_center = anchor_mean
+
+    if center == 0:
+        raise ValueError("anchor centre is zero; a relative effect is undefined")
+
+    return {
+        "center": center,
+        "candidate_statistic": candidate_statistic,
+        "effect": (candidate_statistic / center) - 1.0,
+        "estimator": estimator,
+        "anchor_median": anchor_median,
+        "anchor_mean": anchor_mean,
+        # Diagnostics and the noise floor only; these no longer decide anything.
+        "relative_effects": [(value - center) / center for value in candidate_samples],
+        "legacy_median_relative": median(
+            [(value - legacy_center) / legacy_center for value in candidate_samples]),
+    }
 
 
 def utc_now() -> str:
@@ -3213,12 +3276,20 @@ def run(args: argparse.Namespace) -> dict:
         bank = gpu_beliefs.attach_baseline_beliefs(
             bank_body, producer_path=Path(__file__).resolve())
         atomic_json(out / "baseline-bank.json", bank)
-        center = (float(anchor_runs[0]["metric"])
-                  if bank["frame"]["metric_contract"]["schema"] ==
-                  "epyc.autokernel.serialized_pair_max_metric.v1"
-                  else sum(bank["anchor_samples"]) / len(bank["anchor_samples"]))
         values = [sample for run in candidate_runs for sample in run["samples"]]
-        effects = [(value - center) / center for value in values]
+        scored = screen_effect(
+            anchor_samples=bank["anchor_samples"], anchor_runs=anchor_runs,
+            candidate_samples=values, candidate_runs=candidate_runs,
+            pair_max=(bank["frame"]["metric_contract"]["schema"]
+                      == "epyc.autokernel.serialized_pair_max_metric.v1"))
+        center = scored["center"]
+        candidate_statistic = scored["candidate_statistic"]
+        effect = scored["effect"]
+        effects = scored["relative_effects"]
+        estimator = scored["estimator"]
+        anchor_median = scored["anchor_median"]
+        anchor_mean = scored["anchor_mean"]
+        legacy_median_relative = scored["legacy_median_relative"]
         numeric = sampler.stop().to_dict()
         sampler = None
         if claim_mode == "borrowed_outer_reservation":
@@ -3246,7 +3317,17 @@ def run(args: argparse.Namespace) -> dict:
             "arm_order_schedule": list(arm_order),
             "arm_order_seed_sha256": sealed.get("arm_order_seed_sha256", "0" * 64),
             "baseline_center": center, "candidate_samples": values,
-            "relative_effects": effects, "median_relative": median(effects),
+            "relative_effects": effects,
+            # Decision field. Like-for-like: the same statistic on both arms.
+            "median_relative": effect,
+            "estimator": estimator,
+            "candidate_statistic": candidate_statistic,
+            "baseline_center_median": anchor_median,
+            "baseline_center_mean": anchor_mean,
+            # Superseded mean-centred value, retained so the correction is visible on
+            # the record itself. NOT a decision input.
+            "median_relative_legacy_mean_centred": legacy_median_relative,
+            "estimator_bias_pp": (legacy_median_relative - effect) * 100.0,
             "host_noise_policy": "ordinary_host_activity_recorded_not_blocking",
             "cpu_overlap_policy": sealed["cpu_overlap_policy"],
             "model_size_bytes": model.stat().st_size,
@@ -3428,6 +3509,7 @@ def main() -> int:
     else:
         print(json.dumps({key: payload[key] for key in (
             "state", "baseline_center", "candidate_samples", "median_relative",
+            "estimator", "estimator_bias_pp",
             "hip_residency_proved", "result_sha256")}, sort_keys=True))
     return 0
 
