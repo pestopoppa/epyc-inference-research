@@ -1,0 +1,1813 @@
+{
+  "schema": "epyc.autokernel.storage_survey.v1",
+  "root": "/mnt/raid0/llm/autokernel/deployments",
+  "total_bytes": 35606354339,
+  "by_kind": {
+    "UNCLASSIFIED": {
+      "count": 330,
+      "bytes": 18395088172
+    },
+    "rejected_candidate_build_tree": {
+      "count": 28,
+      "bytes": 17211266167
+    }
+  },
+  "rows": [
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/.portfolio-route-test.V3uy69/config",
+      "expirable_kind": null,
+      "bytes": 382033
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/.portfolio-route-test.V3uy69/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/.portfolio-route-test.V3uy69/operations",
+      "expirable_kind": null,
+      "bytes": 26
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/.portfolio-route-test.V3uy69/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 1878057
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/.portfolio-route-test.V3uy69/state",
+      "expirable_kind": null,
+      "bytes": 32986
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/.portfolio-v2-test.Ys2mZL/config",
+      "expirable_kind": null,
+      "bytes": 377904
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/.portfolio-v2-test.Ys2mZL/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/.portfolio-v2-test.Ys2mZL/operations",
+      "expirable_kind": null,
+      "bytes": 26
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/.portfolio-v2-test.Ys2mZL/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 1878057
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/.portfolio-v2-test.Ys2mZL/state",
+      "expirable_kind": null,
+      "bytes": 31692
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/builder-root-validate-pkmYmR/config",
+      "expirable_kind": null,
+      "bytes": 8734
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/builder-root-validate-pkmYmR/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/builder-root-validate-pkmYmR/operations",
+      "expirable_kind": null,
+      "bytes": 26
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/builder-root-validate-pkmYmR/state",
+      "expirable_kind": null,
+      "bytes": 13627
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-batched-static-v1/config",
+      "expirable_kind": null,
+      "bytes": 8660
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-batched-static-v1/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-batched-static-v1/operations",
+      "expirable_kind": null,
+      "bytes": 26
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-batched-static-v1/state",
+      "expirable_kind": null,
+      "bytes": 7536
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-champion-v32/builds",
+      "expirable_kind": "rejected_candidate_build_tree",
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-champion-v32/config",
+      "expirable_kind": null,
+      "bytes": 540260
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-champion-v32/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-champion-v32/operations",
+      "expirable_kind": null,
+      "bytes": 75359
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-champion-v32/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 2469555
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-champion-v32/state",
+      "expirable_kind": null,
+      "bytes": 1245245
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-champion-v33/builds",
+      "expirable_kind": "rejected_candidate_build_tree",
+      "bytes": 33814889
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-champion-v33/config",
+      "expirable_kind": null,
+      "bytes": 540260
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-champion-v33/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-champion-v33/operations",
+      "expirable_kind": null,
+      "bytes": 488787436
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-champion-v33/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 2469555
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-champion-v33/state",
+      "expirable_kind": null,
+      "bytes": 2074724
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-champion-v34/builds",
+      "expirable_kind": "rejected_candidate_build_tree",
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-champion-v34/config",
+      "expirable_kind": null,
+      "bytes": 540260
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-champion-v34/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-champion-v34/operations",
+      "expirable_kind": null,
+      "bytes": 76025
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-champion-v34/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 2469555
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-champion-v34/state",
+      "expirable_kind": null,
+      "bytes": 1259283
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-champion-v35/builds",
+      "expirable_kind": "rejected_candidate_build_tree",
+      "bytes": 228483507
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-champion-v35/config",
+      "expirable_kind": null,
+      "bytes": 540260
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-champion-v35/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-champion-v35/operations",
+      "expirable_kind": null,
+      "bytes": 488885885
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-champion-v35/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 2469555
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-champion-v35/state",
+      "expirable_kind": null,
+      "bytes": 567107
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-champion-v36/builds",
+      "expirable_kind": "rejected_candidate_build_tree",
+      "bytes": 422002397
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-champion-v36/config",
+      "expirable_kind": null,
+      "bytes": 540260
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-champion-v36/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-champion-v36/operations",
+      "expirable_kind": null,
+      "bytes": 522969840
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-champion-v36/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 2469555
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-champion-v36/state",
+      "expirable_kind": null,
+      "bytes": 2086176
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-champion-v37/builds",
+      "expirable_kind": "rejected_candidate_build_tree",
+      "bytes": 78203153
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-champion-v37/config",
+      "expirable_kind": null,
+      "bytes": 540260
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-champion-v37/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-champion-v37/operations",
+      "expirable_kind": null,
+      "bytes": 488745474
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-champion-v37/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 2469555
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-champion-v37/state",
+      "expirable_kind": null,
+      "bytes": 569791
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-combined-final-v1/config",
+      "expirable_kind": null,
+      "bytes": 8660
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-combined-final-v1/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-combined-final-v1/operations",
+      "expirable_kind": null,
+      "bytes": 26
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-combined-final-v1/state",
+      "expirable_kind": null,
+      "bytes": 13238
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-fable5-critic-v1/config",
+      "expirable_kind": null,
+      "bytes": 8909
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-fable5-critic-v1/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-fable5-critic-v1/operations",
+      "expirable_kind": null,
+      "bytes": 26
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-fable5-critic-v1/state",
+      "expirable_kind": null,
+      "bytes": 15785
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-final-eac3ae7c-v1/config",
+      "expirable_kind": null,
+      "bytes": 8758
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-final-eac3ae7c-v1/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-final-eac3ae7c-v1/operations",
+      "expirable_kind": null,
+      "bytes": 26
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-final-eac3ae7c-v1/state",
+      "expirable_kind": null,
+      "bytes": 14016
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-gfx90a-safety-v1/config",
+      "expirable_kind": null,
+      "bytes": 452693
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-gfx90a-safety-v1/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-gfx90a-safety-v1/operations",
+      "expirable_kind": null,
+      "bytes": 26
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-gfx90a-safety-v1/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 1983530
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-gfx90a-safety-v1/state",
+      "expirable_kind": null,
+      "bytes": 36888
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-gfx90a-safety-v2/config",
+      "expirable_kind": null,
+      "bytes": 452693
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-gfx90a-safety-v2/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-gfx90a-safety-v2/operations",
+      "expirable_kind": null,
+      "bytes": 26
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-gfx90a-safety-v2/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 1983530
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-gfx90a-safety-v2/state",
+      "expirable_kind": null,
+      "bytes": 37650
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-auth-policy-v1/config",
+      "expirable_kind": null,
+      "bytes": 434509
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-auth-policy-v1/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-auth-policy-v1/operations",
+      "expirable_kind": null,
+      "bytes": 2519
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-auth-policy-v1/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 1945839
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-auth-policy-v1/state",
+      "expirable_kind": null,
+      "bytes": 72408
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-auth-restored-v1/config",
+      "expirable_kind": null,
+      "bytes": 434589
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-auth-restored-v1/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-auth-restored-v1/operations",
+      "expirable_kind": null,
+      "bytes": 26
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-auth-restored-v1/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 1945839
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-auth-restored-v1/state",
+      "expirable_kind": null,
+      "bytes": 37031
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-claim-outcome-v1/config",
+      "expirable_kind": null,
+      "bytes": 434589
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-claim-outcome-v1/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-claim-outcome-v1/operations",
+      "expirable_kind": null,
+      "bytes": 26
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-claim-outcome-v1/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 1945839
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-claim-outcome-v1/state",
+      "expirable_kind": null,
+      "bytes": 36977
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-contract-v2/config",
+      "expirable_kind": null,
+      "bytes": 434389
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-contract-v2/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-contract-v2/operations",
+      "expirable_kind": null,
+      "bytes": 26
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-contract-v2/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 1945839
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-contract-v2/state",
+      "expirable_kind": null,
+      "bytes": 36823
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-critic-diagnostic-v1/config",
+      "expirable_kind": null,
+      "bytes": 434749
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-critic-diagnostic-v1/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-critic-diagnostic-v1/operations",
+      "expirable_kind": null,
+      "bytes": 26
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-critic-diagnostic-v1/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 1945839
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-critic-diagnostic-v1/state",
+      "expirable_kind": null,
+      "bytes": 37005
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-hunk-contract-v1/config",
+      "expirable_kind": null,
+      "bytes": 434589
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-hunk-contract-v1/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-hunk-contract-v1/operations",
+      "expirable_kind": null,
+      "bytes": 26
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-hunk-contract-v1/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 1945839
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-hunk-contract-v1/state",
+      "expirable_kind": null,
+      "bytes": 36977
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-hunk-scope-fix-v1/config",
+      "expirable_kind": null,
+      "bytes": 434629
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-hunk-scope-fix-v1/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-hunk-scope-fix-v1/operations",
+      "expirable_kind": null,
+      "bytes": 26
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-hunk-scope-fix-v1/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 1945839
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-hunk-scope-fix-v1/state",
+      "expirable_kind": null,
+      "bytes": 36984
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-kfd-guard-v1/builds",
+      "expirable_kind": "rejected_candidate_build_tree",
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-kfd-guard-v1/config",
+      "expirable_kind": null,
+      "bytes": 434429
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-kfd-guard-v1/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-kfd-guard-v1/operations",
+      "expirable_kind": null,
+      "bytes": 14969
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-kfd-guard-v1/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 1945839
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-kfd-guard-v1/state",
+      "expirable_kind": null,
+      "bytes": 92059
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-live-telemetry-v1/config",
+      "expirable_kind": null,
+      "bytes": 434629
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-live-telemetry-v1/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-live-telemetry-v1/operations",
+      "expirable_kind": null,
+      "bytes": 4840
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-live-telemetry-v1/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 1945839
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-live-telemetry-v1/state",
+      "expirable_kind": null,
+      "bytes": 71000
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-schema-fix-v1/config",
+      "expirable_kind": null,
+      "bytes": 434469
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-schema-fix-v1/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-schema-fix-v1/operations",
+      "expirable_kind": null,
+      "bytes": 26
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-schema-fix-v1/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 1945839
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-schema-fix-v1/state",
+      "expirable_kind": null,
+      "bytes": 36956
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-scope-fix-v1/config",
+      "expirable_kind": null,
+      "bytes": 434429
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-scope-fix-v1/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-scope-fix-v1/operations",
+      "expirable_kind": null,
+      "bytes": 26
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-scope-fix-v1/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 1945839
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-scope-fix-v1/state",
+      "expirable_kind": null,
+      "bytes": 36949
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-size-guard-v1/config",
+      "expirable_kind": null,
+      "bytes": 434469
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-size-guard-v1/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-size-guard-v1/operations",
+      "expirable_kind": null,
+      "bytes": 26
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-size-guard-v1/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 1945839
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-size-guard-v1/state",
+      "expirable_kind": null,
+      "bytes": 36837
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-symbol-context-v1/config",
+      "expirable_kind": null,
+      "bytes": 434629
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-symbol-context-v1/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-symbol-context-v1/operations",
+      "expirable_kind": null,
+      "bytes": 1932
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-symbol-context-v1/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 1945839
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-symbol-context-v1/state",
+      "expirable_kind": null,
+      "bytes": 39067
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-trailing-scope-fix-v1/config",
+      "expirable_kind": null,
+      "bytes": 434789
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-trailing-scope-fix-v1/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-trailing-scope-fix-v1/operations",
+      "expirable_kind": null,
+      "bytes": 26
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-trailing-scope-fix-v1/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 1945839
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-inaugural-trailing-scope-fix-v1/state",
+      "expirable_kind": null,
+      "bytes": 37012
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-portfolio-v2-final-v1/config",
+      "expirable_kind": null,
+      "bytes": 382285
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-portfolio-v2-final-v1/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-portfolio-v2-final-v1/operations",
+      "expirable_kind": null,
+      "bytes": 26
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-portfolio-v2-final-v1/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 1878057
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-portfolio-v2-final-v1/state",
+      "expirable_kind": null,
+      "bytes": 36942
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-portfolio-v2-memory-final-v1/config",
+      "expirable_kind": null,
+      "bytes": 434669
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-portfolio-v2-memory-final-v1/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-portfolio-v2-memory-final-v1/operations",
+      "expirable_kind": null,
+      "bytes": 26
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-portfolio-v2-memory-final-v1/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 1945839
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-portfolio-v2-memory-final-v1/state",
+      "expirable_kind": null,
+      "bytes": 37039
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v1/config",
+      "expirable_kind": null,
+      "bytes": 517638
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v1/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v1/operations",
+      "expirable_kind": null,
+      "bytes": 26
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v1/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 2023269
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v1/state",
+      "expirable_kind": null,
+      "bytes": 37388
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v10/builds",
+      "expirable_kind": "rejected_candidate_build_tree",
+      "bytes": 421728484
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v10/config",
+      "expirable_kind": null,
+      "bytes": 541307
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v10/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v10/operations",
+      "expirable_kind": null,
+      "bytes": 150358120
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v10/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 2469555
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v10/state",
+      "expirable_kind": null,
+      "bytes": 444819
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v11/builds",
+      "expirable_kind": "rejected_candidate_build_tree",
+      "bytes": 421733772
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v11/config",
+      "expirable_kind": null,
+      "bytes": 541309
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v11/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v11/operations",
+      "expirable_kind": null,
+      "bytes": 150931982
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v11/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 2469555
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v11/state",
+      "expirable_kind": null,
+      "bytes": 443997
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v12/config",
+      "expirable_kind": null,
+      "bytes": 541309
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v12/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v12/operations",
+      "expirable_kind": null,
+      "bytes": 26
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v12/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 2469555
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v12/state",
+      "expirable_kind": null,
+      "bytes": 38865
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v13/builds",
+      "expirable_kind": "rejected_candidate_build_tree",
+      "bytes": 421741212
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v13/config",
+      "expirable_kind": null,
+      "bytes": 541309
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v13/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v13/operations",
+      "expirable_kind": null,
+      "bytes": 150940636
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v13/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 2469555
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v13/state",
+      "expirable_kind": null,
+      "bytes": 445295
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v14/builds",
+      "expirable_kind": "rejected_candidate_build_tree",
+      "bytes": 421733796
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v14/config",
+      "expirable_kind": null,
+      "bytes": 541225
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v14/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v14/operations",
+      "expirable_kind": null,
+      "bytes": 172121048
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v14/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 2469555
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v14/state",
+      "expirable_kind": null,
+      "bytes": 834364
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v15/builds",
+      "expirable_kind": "rejected_candidate_build_tree",
+      "bytes": 421733792
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v15/config",
+      "expirable_kind": null,
+      "bytes": 541225
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v15/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v15/operations",
+      "expirable_kind": null,
+      "bytes": 520014083
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v15/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 2469555
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v15/state",
+      "expirable_kind": null,
+      "bytes": 832077
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v16/config",
+      "expirable_kind": null,
+      "bytes": 541225
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v16/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v16/operations",
+      "expirable_kind": null,
+      "bytes": 39184
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v16/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 2469555
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v16/state",
+      "expirable_kind": null,
+      "bytes": 745512
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v17/builds",
+      "expirable_kind": "rejected_candidate_build_tree",
+      "bytes": 421733772
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v17/config",
+      "expirable_kind": null,
+      "bytes": 541225
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v17/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v17/operations",
+      "expirable_kind": null,
+      "bytes": 519998670
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v17/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 2469555
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v17/state",
+      "expirable_kind": null,
+      "bytes": 446578
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v18/builds",
+      "expirable_kind": "rejected_candidate_build_tree",
+      "bytes": 421734044
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v18/config",
+      "expirable_kind": null,
+      "bytes": 541225
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v18/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v18/operations",
+      "expirable_kind": null,
+      "bytes": 520877484
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v18/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 2469555
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v18/state",
+      "expirable_kind": null,
+      "bytes": 829646
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v19/builds",
+      "expirable_kind": "rejected_candidate_build_tree",
+      "bytes": 1686964544
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v19/config",
+      "expirable_kind": null,
+      "bytes": 541225
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v19/evidence",
+      "expirable_kind": null,
+      "bytes": 426
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v19/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v19/operations",
+      "expirable_kind": null,
+      "bytes": 3204336970
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v19/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 2469555
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v19/state",
+      "expirable_kind": null,
+      "bytes": 3483471
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v2/config",
+      "expirable_kind": null,
+      "bytes": 517638
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v2/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v2/operations",
+      "expirable_kind": null,
+      "bytes": 26
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v2/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 2023269
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v2/state",
+      "expirable_kind": null,
+      "bytes": 37388
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v20/builds",
+      "expirable_kind": "rejected_candidate_build_tree",
+      "bytes": 78239094
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v20/config",
+      "expirable_kind": null,
+      "bytes": 541225
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v20/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v20/operations",
+      "expirable_kind": null,
+      "bytes": 488574606
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v20/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 2469555
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v20/state",
+      "expirable_kind": null,
+      "bytes": 832906
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v21/config",
+      "expirable_kind": null,
+      "bytes": 541225
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v21/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v21/operations",
+      "expirable_kind": null,
+      "bytes": 38610
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v21/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 2469555
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v21/state",
+      "expirable_kind": null,
+      "bytes": 43066
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v22/config",
+      "expirable_kind": null,
+      "bytes": 541225
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v22/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v22/operations",
+      "expirable_kind": null,
+      "bytes": 48975
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v22/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 2469555
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v22/state",
+      "expirable_kind": null,
+      "bytes": 449611
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v23/builds",
+      "expirable_kind": "rejected_candidate_build_tree",
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v23/config",
+      "expirable_kind": null,
+      "bytes": 541225
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v23/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v23/operations",
+      "expirable_kind": null,
+      "bytes": 113062
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v23/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 2469555
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v23/state",
+      "expirable_kind": null,
+      "bytes": 832579
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v24/builds",
+      "expirable_kind": "rejected_candidate_build_tree",
+      "bytes": 423303546
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v24/config",
+      "expirable_kind": null,
+      "bytes": 541225
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v24/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v24/operations",
+      "expirable_kind": null,
+      "bytes": 522287719
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v24/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 2469555
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v24/state",
+      "expirable_kind": null,
+      "bytes": 1584239
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v25/builds",
+      "expirable_kind": "rejected_candidate_build_tree",
+      "bytes": 1693214240
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v25/config",
+      "expirable_kind": null,
+      "bytes": 541225
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v25/evidence",
+      "expirable_kind": null,
+      "bytes": 426
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v25/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v25/operations",
+      "expirable_kind": null,
+      "bytes": 2457863376
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v25/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 2469555
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v25/state",
+      "expirable_kind": null,
+      "bytes": 5004531
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v26/builds",
+      "expirable_kind": "rejected_candidate_build_tree",
+      "bytes": 846297628
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v26/config",
+      "expirable_kind": null,
+      "bytes": 667362
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v26/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v26/operations",
+      "expirable_kind": null,
+      "bytes": 322496024
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v26/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 4121979
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v26/state",
+      "expirable_kind": null,
+      "bytes": 467375
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v27/builds",
+      "expirable_kind": "rejected_candidate_build_tree",
+      "bytes": 5330698149
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v27/config",
+      "expirable_kind": null,
+      "bytes": 684498
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v27/evidence",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v27/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v27/operations",
+      "expirable_kind": null,
+      "bytes": 2145381867
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v27/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 4121979
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v27/state",
+      "expirable_kind": null,
+      "bytes": 216287
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v27/state-authcrash-ak-b7736cde",
+      "expirable_kind": null,
+      "bytes": 105288625
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v27/state-c6admissiongap-ak-db6b1d57",
+      "expirable_kind": null,
+      "bytes": 2494697
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v27/state-c6policyrefusal-ak-023f24d7",
+      "expirable_kind": null,
+      "bytes": 222898
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v27/state-c6selfrefusal-ak-964901",
+      "expirable_kind": null,
+      "bytes": 224438
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v27/state-contention-ak-085279c9",
+      "expirable_kind": null,
+      "bytes": 225345
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v27/state-crashed-ak53087cbd",
+      "expirable_kind": null,
+      "bytes": 2909267
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v27/state-foreignkfd2-ak-fresh",
+      "expirable_kind": null,
+      "bytes": 224452
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v27/state-foreignkfd3-648698",
+      "expirable_kind": null,
+      "bytes": 224438
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v27/state-ghostreplaygap-ak-088dcb66",
+      "expirable_kind": null,
+      "bytes": 2492282
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v27/state-resume-refused-ak-3e8f0da5",
+      "expirable_kind": null,
+      "bytes": 105287247
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v27/state-worktreegap-ak-c573fb33",
+      "expirable_kind": null,
+      "bytes": 223783
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v28/builds",
+      "expirable_kind": "rejected_candidate_build_tree",
+      "bytes": 846599700
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v28/config",
+      "expirable_kind": null,
+      "bytes": 541225
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v28/evidence",
+      "expirable_kind": null,
+      "bytes": 426
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v28/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v28/operations",
+      "expirable_kind": null,
+      "bytes": 1044651748
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v28/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 2469555
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v28/state",
+      "expirable_kind": null,
+      "bytes": 1727137
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v29/builds",
+      "expirable_kind": "rejected_candidate_build_tree",
+      "bytes": 1269902910
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v29/config",
+      "expirable_kind": null,
+      "bytes": 541225
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v29/evidence",
+      "expirable_kind": null,
+      "bytes": 426
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v29/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v29/operations",
+      "expirable_kind": null,
+      "bytes": 1936622389
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v29/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 2469555
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v29/state",
+      "expirable_kind": null,
+      "bytes": 2137601
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v3/builds",
+      "expirable_kind": "rejected_candidate_build_tree",
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v3/config",
+      "expirable_kind": null,
+      "bytes": 541237
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v3/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v3/operations",
+      "expirable_kind": null,
+      "bytes": 14835
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v3/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 2469555
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v3/state",
+      "expirable_kind": null,
+      "bytes": 69277
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v30/builds",
+      "expirable_kind": "rejected_candidate_build_tree",
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v30/config",
+      "expirable_kind": null,
+      "bytes": 541225
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v30/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v30/operations",
+      "expirable_kind": null,
+      "bytes": 75603
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v30/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 2469555
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v30/state",
+      "expirable_kind": null,
+      "bytes": 1250487
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v31/builds",
+      "expirable_kind": "rejected_candidate_build_tree",
+      "bytes": 478079594
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v31/config",
+      "expirable_kind": null,
+      "bytes": 541259
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v31/evidence",
+      "expirable_kind": null,
+      "bytes": 426
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v31/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v31/operations",
+      "expirable_kind": null,
+      "bytes": 1381749128
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v31/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 2469555
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v31/state",
+      "expirable_kind": null,
+      "bytes": 1731781
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v4/config",
+      "expirable_kind": null,
+      "bytes": 541237
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v4/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v4/operations",
+      "expirable_kind": null,
+      "bytes": 26
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v4/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 2469555
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v4/state",
+      "expirable_kind": null,
+      "bytes": 37863
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v5/builds",
+      "expirable_kind": "rejected_candidate_build_tree",
+      "bytes": 421665690
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v5/config",
+      "expirable_kind": null,
+      "bytes": 541237
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v5/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v5/operations",
+      "expirable_kind": null,
+      "bytes": 150172524
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v5/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 2469555
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v5/state",
+      "expirable_kind": null,
+      "bytes": 72441
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v6/config",
+      "expirable_kind": null,
+      "bytes": 541237
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v6/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v6/operations",
+      "expirable_kind": null,
+      "bytes": 26
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v6/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 2469555
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v6/state",
+      "expirable_kind": null,
+      "bytes": 37738
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v7/config",
+      "expirable_kind": null,
+      "bytes": 541237
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v7/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v7/operations",
+      "expirable_kind": null,
+      "bytes": 1562
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v7/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 2469555
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v7/state",
+      "expirable_kind": null,
+      "bytes": 37738
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v8/builds",
+      "expirable_kind": "rejected_candidate_build_tree",
+      "bytes": 421658254
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v8/config",
+      "expirable_kind": null,
+      "bytes": 541237
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v8/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v8/operations",
+      "expirable_kind": null,
+      "bytes": 150172517
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v8/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 2469555
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v8/state",
+      "expirable_kind": null,
+      "bytes": 442981
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v9/config",
+      "expirable_kind": null,
+      "bytes": 541237
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v9/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v9/operations",
+      "expirable_kind": null,
+      "bytes": 26
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v9/portfolio-evidence",
+      "expirable_kind": null,
+      "bytes": 2469555
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-quant-ladder-occupancy-v9/state",
+      "expirable_kind": null,
+      "bytes": 38721
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-reservation-final-v1/config",
+      "expirable_kind": null,
+      "bytes": 8782
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-reservation-final-v1/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-reservation-final-v1/operations",
+      "expirable_kind": null,
+      "bytes": 26
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-reservation-final-v1/state",
+      "expirable_kind": null,
+      "bytes": 14037
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-v1/config",
+      "expirable_kind": null,
+      "bytes": 8557
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-v1/locks",
+      "expirable_kind": null,
+      "bytes": 0
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-v1/operations",
+      "expirable_kind": null,
+      "bytes": 26
+    },
+    {
+      "path": "/mnt/raid0/llm/autokernel/deployments/gpu-discovery-v1/state",
+      "expirable_kind": null,
+      "bytes": 5136
+    }
+  ],
+  "reclaimable_bytes": 17211266167,
+  "expirable_kinds": [
+    "rejected_candidate_build_tree",
+    "retired_campaign_worktree",
+    "stale_profiler_trace"
+  ]
+}

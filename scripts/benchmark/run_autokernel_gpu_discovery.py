@@ -32,7 +32,7 @@ from scripts.kernel_rnd.autokernel.execution import (
 from scripts.kernel_rnd.autokernel.resource import device_claim
 from scripts.benchmark import autokernel_gpu_discovery_beliefs as gpu_beliefs
 from scripts.benchmark import autokernel_progression
-from scripts.kernel_rnd.autokernel.controller import split_runtime_verifier
+from scripts.kernel_rnd.autokernel.controller import gpu_utilization, split_runtime_verifier
 from scripts.kernel_rnd.autokernel.controller import gpu_load_admission
 
 
@@ -3386,6 +3386,14 @@ def run(args: argparse.Namespace) -> dict:
             "frame": bank["frame"], "sole_factor": bank["sole_factor"],
             "candidate_identity": bank["candidate_identity"],
             "candidate_runs": candidate_runs, "device_sampling": numeric,
+            # What fraction of the held claim was actually used. The loop held the
+            # MI210 for 1.403 hours across its whole life while compiling for 29.0,
+            # and nobody reported it, because the loop reported iterations and
+            # receipts and had no number for "am I using the thing I am holding".
+            "gpu_utilization": gpu_utilization.from_sampling(
+                numeric,
+                claim_acquired_at=(gpu.receipt().to_dict() or {}).get("acquired_at"),
+                window_ended_at=utc_now()),
             **({"timed_output_oracle": timed_output_oracle}
                if timed_output_oracle is not None else {}),
             **({"graphs_on_output_oracle": graphs_on_output_oracle}

@@ -57,6 +57,9 @@ _BUILD_TRANSACTION_RECOVERY_SCHEMA = "epyc.autokernel.gpu_source_build_transacti
 _TEARDOWN_SCHEMA = "epyc.autokernel.source_materialization_teardown.v2"
 _SOURCE_FAILURE_MESSAGE_MAX_BYTES = 2048
 _REQUIRED_TARGETS = ("llama-bench", "test-backend-ops")
+#: Build width and its confinement. See the comment at the BuildParallelism call.
+_BUILD_JOBS = 64
+_BUILD_CPU_LIST = "96-183"
 _CORRECTNESS_CAPABILITY_SCHEMA = "epyc.autokernel.backend_ops_property_capability.v1"
 _CORRECTNESS_CAPABILITY_SEED = 2026081301
 _BUILD_ENV_NAMES = (
@@ -1855,6 +1858,12 @@ class StaticGpuSourceBuilder:
     build_root: Path
     cmake_defines: tuple[tuple[str, str], ...]
     correctness_capability_runner: Any | None = None
+    #: Build width and its confinement. Production takes `_BUILD_JOBS` on
+    #: `_BUILD_CPU_LIST`; tests pass something small, because the suite runs dozens
+    #: of real cmake builds and 64-way contention destabilises the timing-sensitive
+    #: ones. Recorded in the build key, so changing it invalidates the cache.
+    build_jobs: int = _BUILD_JOBS
+    build_cpu_list: str | None = _BUILD_CPU_LIST
 
     def _sealed_cmake_defines(self) -> tuple[tuple[str, str], ...]:
         required = {
@@ -1943,7 +1952,9 @@ class StaticGpuSourceBuilder:
             "selected_gpu_base_blobs": selected,
             "cmake_defines": [list(item) for item in sorted(effective_defines.items())],
             "build_type": "Release",
-            "parallelism": {"jobs": 1, "cpu_list": None, "load_average_cap": None},
+            "parallelism": {"jobs": self.build_jobs,
+                            "cpu_list": self.build_cpu_list,
+                            "load_average_cap": None},
             "required_targets": list(_REQUIRED_TARGETS),
             "build_environment": dict(sorted(environment.items())),
             "toolchain": toolchain,
@@ -3140,7 +3151,25 @@ class StaticGpuSourceBuilder:
                 worktree.snapshot_worktree_path(candidate.source_manifest.campaign_id,
                                                 candidate.source_manifest.candidate_id, root=campaign_root))
             snapshots.append(candidate_snapshot)
-            parallel = worktree.BuildParallelism(jobs=1)
+            # WAS jobs=1, set with no comment, on a host reporting 192 CPUs.
+            # Measured cost: 77 of 77 build logs ran -j1; median build 1,012s; two
+            # arms per attempt = 33.7 min of pure compiling per candidate, against a
+            # LIFETIME total of 1.40 hours of GPU actually held. The MI210 was idle
+            # 95.4% of the loop's life while one thread compiled 379 translation
+            # units, 144 of them HIP.
+            #
+            # `BuildParallelism`'s own docstring says a default would be "either full
+            # width -- antisocial on a box that tonight carries load average ~67 --
+            # or a small number that quietly makes every build slow". jobs=1 was the
+            # second. The confinement it asks for is cpu_list, which this path never
+            # passed; campaign.py and execution/README.md both specify jobs=64.
+            #
+            # 96-183 deliberately avoids BOTH reserved regions on this shared host:
+            # 0-95 carries the canonical CPU baseline (taskset 0-95 -t 96) and
+            # 184-191 are the GPU host threads. Confining the build is what makes
+            # taking 64 of them defensible rather than antisocial.
+            parallel = worktree.BuildParallelism(jobs=self.build_jobs,
+                                                 cpu_list=self.build_cpu_list)
             plans = []
             for ident, snapshot in (("akc-anchor", anchor_snapshot),
                                     (candidate.source_manifest.candidate_id, candidate_snapshot)):

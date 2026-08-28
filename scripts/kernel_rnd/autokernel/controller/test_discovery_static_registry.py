@@ -546,7 +546,11 @@ class StaticBuildCacheTests(unittest.TestCase):
             production_path=production, production_branch="production-test",
             instrument_path=instrument, operations_root=operations,
             build_root=build_root, cmake_defines=(("GGML_HIP", "ON"),),
-            correctness_capability_runner=capability_runner)
+            correctness_capability_runner=capability_runner,
+            # The suite runs dozens of real cmake builds; production's 64-way width
+            # would have them contending with each other and destabilising the
+            # timing-sensitive cases. Narrow here, wide in production.
+            build_jobs=2, build_cpu_list=None)
         calls = []
         sandbox_roots = []
         probe_results = []
