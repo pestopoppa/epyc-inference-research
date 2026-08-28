@@ -10,7 +10,10 @@
     "A seeded negative is a reason to say what is different, never a reason not to look."
   ],
   "epoch_anchor_commit": "v7-candidate-20260711",
-  "epoch_build_recipe": {"name": "historical-pre-loop", "era": "v7-candidate"},
+  "epoch_build_recipe": {
+    "name": "historical-pre-loop",
+    "era": "v7-candidate"
+  },
   "records": [
     {
       "status": "measured_null",
@@ -41,6 +44,26 @@
       "target_symbol": "ggml_cuda_graph_get_key",
       "effect_fraction": -0.02,
       "reason": "IMPLEMENTED env-gated and measured NEUTRAL, not landed. Clean re-eval (quiet card, strictly sequential, fresh server per run, single request; 3/3 reps byte-identical): Q8 spec-dec 107.2 vs 109.5 t/s (-2%) with output BYTE-IDENTICAL to default, so the change is numerically transparent but gives no speedup. Q4 spec-dec +6% but Q4 stayed noisy (2 output variants), not conclusive. Note the collision itself is UNCONFIRMED: the [SHAPE_KEY] keylog never fired because backend GGML_LOG_INFO is filtered during decode. Patch preserved at /mnt/raid0/llm/llama.cpp-experimental/lever-a-shape-key.patch. Revisit only if a profile shows verify re-capture is a MEASURED bottleneck, and fix the keylog to fprintf(stderr) first. Source: handoffs/active/gemma-challenge-kernel-techniques-v7.md."
+    },
+    {
+      "status": "measured_null",
+      "mechanism_id": "akm-hist-kv-quant-long-ctx",
+      "statement": "At batch-1 long context the KV read adds materially to bytes/token, so q8_0 KV-quant (-ctk/-ctv q8_0, -fa 1) raises single-stream decode throughput.",
+      "falsifier": "q8-KV decode at 64k single-stream does not beat f16-KV outside the noise band.",
+      "target_surface": "runtime flag (-ctk/-ctv), not a kernel patch",
+      "target_symbol": "kv cache dequant path",
+      "effect_fraction": -0.167,
+      "reason": "FALSIFIED 2026-08-14 on frozen v9 (0db32c06e / 10125), observation-grade, 64k single-stream: 35B-A3B GDN hybrid 75.8 -> 63.1 t/s (-16.7%), dense 27B 21.7 -> 20.2 t/s (-6.9%). The dequant cast cost exceeds the KV bandwidth saving even on the dense 27B (all-full-global KV, where the KV read most rivals weight bytes). Matches the CPU precedent that the dequant cast COSTS throughput. Note mi210-q8-dequant-gemv-roofline.md still lists this as an ALIVE Tier-3 lever (L8); it is not. Source: handoffs/active/fable5-window2-findings-05c-mi210-lever-category-matrix.md gap-list row L14."
+    },
+    {
+      "status": "measured_null",
+      "mechanism_id": "akm-hist-mmq-row-grouping",
+      "statement": "Grouping MMQ tile rows (workgroup-mapping / swizzle, the G17 +9.823% proxy result) raises L2 hit rate and MMQ throughput on the real decode surface.",
+      "falsifier": "On the real batched decode tile grid, row-grouping does not raise L2 hit rate at flat read volume.",
+      "target_surface": "ggml/src/ggml-cuda/mmq.cu",
+      "target_symbol": "tile scheduling / workgroup mapping",
+      "effect_fraction": -0.07455,
+      "reason": "MEASURED NEGATIVE and mechanistically explained. The +9.823% proxy used a SYMMETRIC 64x64 tile grid where row-grouping has real headroom; the real MMQ surface is a batched pp=32 / tg=8 / pl=128 / n_kv=5120 decode whose tile grid is strongly M-heavy. With few N tiles the DEFAULT linear order already captures full activation reuse in a short window, so grouping M by 8-32 can only ENLARGE the concurrently-resident weight footprint -- predicting hit rate DOWN at flat read volume, which is exactly the measured -7.455 pts at +0.201% reads. Reinforcing: the CDNA MMQ path is PERSISTENT STREAM-K and already owns tile assignment (the r1 pilot was a literal no-op because the remap sat outside that path), and Q4_K decode weights stream with WGM0 hit rate already at 67.304%. Source: handoffs/active/autokernel-research-loop.md section 23.1 finding F3."
     }
   ]
 }

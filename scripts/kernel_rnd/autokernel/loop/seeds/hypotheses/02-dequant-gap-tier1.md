@@ -55,11 +55,18 @@ eval-parity/PPL check. Connects directly to the occupancy-knee hypotheses in see
 in absolute t/s despite fewer bytes/token -- which is also what seed 01's occupancy cliff
 predicts, so a null here is evidence FOR AK-H-QL-1, not merely a dead lever.
 
-**L8 — KV-quant for single-stream LONG context** (q8-KV, `-fa 1`). Distinct from the aggregate
-case, where it was dead: at batch-1 long context the KV read adds to bytes/token.
-*Decisive experiment:* 27B decode at 64k ctx, q8-KV vs f16-KV.
-**Falsifier (inferred here, not stated in the handoff):** q8-KV decode at 64k does not beat
-f16-KV outside the measured noise band.
+**L8 — KV-quant for single-stream LONG context** (q8-KV, `-fa 1`). **CLOSED — ALREADY
+FALSIFIED, do not propose.** The mi210 handoff ranks this as alive, distinguishing it from the
+aggregate case where it was dead. A different handoff has since run exactly its decisive
+experiment and killed it: `fable5-window2-findings-05c-mi210-lever-category-matrix.md` gap-list
+row L14 (recorded in this loop's memory as `akm-hist-kv-quant-long-ctx`), measured 2026-08-14 on frozen v9 (`0db32c06e` / `10125`) at 64k single-stream --
+`-ctk q8_0 -ctv q8_0` **hurts** decode on both arms: 35B-A3B GDN hybrid 75.8 -> 63.1 t/s
+(-16.7%), dense 27B 21.7 -> 20.2 t/s (-6.9%). The dequant cast cost exceeds the KV bandwidth
+saving even on the dense 27B, where the KV read most rivals weight bytes. Matches the CPU
+precedent that the dequant cast COSTS throughput. KV-quant is a max-context/VRAM
+characterization, not a speed lever.
+*Kept in this seed, struck through rather than deleted, because the two handoffs disagree and
+the planner will meet the live-looking version if it reads the source.*
 
 Deliberately omitted from this seed: the handoff's Tier-3 lever 6 (n-gram speculation) and its
 "do this FIRST" ranking. It is a serving-configuration change, not a kernel patch, so it is

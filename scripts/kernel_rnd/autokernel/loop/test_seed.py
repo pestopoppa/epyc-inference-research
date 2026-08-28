@@ -109,5 +109,45 @@ class TheSeedsAreFaithful(unittest.TestCase):
                           "a seeded negative must cite where it came from")
 
 
+
+class NoSeededLeverContradictsASeededNegative(unittest.TestCase):
+    """The supersession check, as a test.
+
+    Seed 02 was harvested from `mi210-q8-dequant-gemv-roofline.md`, which ranks KV-quant
+    at long context as an ALIVE Tier-3 lever. A DIFFERENT handoff had already run exactly
+    its decisive experiment and killed it (05c gap-list L14, -16.7% / -6.9% at 64k). The
+    seed shipped the dead lever as live for one commit.
+
+    'Grep the SAME question for later supersession FIRST' is the rule; this is the
+    mechanised version of it, so the next harvest cannot repeat it.
+    """
+
+    #: distinctive phrase -> the negative that closes it
+    CONFLICTS = {
+        "KV-quant": "akm-hist-kv-quant-long-ctx",
+        "async weight prefetch": "akm-hist-q8-prefetch",
+    }
+
+    def test_a_lever_a_negative_refutes_is_marked_closed(self):
+        negatives = {r["mechanism_id"] for r in json.loads(
+            (seed.SEEDS / "negatives.json").read_text(encoding="utf-8"))["records"]}
+        for phrase, mechanism in self.CONFLICTS.items():
+            self.assertIn(mechanism, negatives, f"{mechanism} must be a seeded negative")
+            for path in sorted((seed.SEEDS / "hypotheses").glob("*.md")):
+                body = path.read_text(encoding="utf-8")
+                if phrase.lower() not in body.lower():
+                    continue
+                self.assertIn(
+                    mechanism, body,
+                    f"{path.name} proposes '{phrase}' without pointing at the "
+                    f"measured negative {mechanism} that bears on it")
+
+    def test_the_falsified_kv_lever_is_explicitly_closed(self):
+        body = (seed.SEEDS / "hypotheses" / "02-dequant-gap-tier1.md").read_text(
+            encoding="utf-8")
+        self.assertIn("KV-quant", body)
+        self.assertIn("do not propose", body.lower())
+        self.assertIn("-16.7%", body)
+
 if __name__ == "__main__":
     unittest.main()
