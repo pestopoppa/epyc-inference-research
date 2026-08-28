@@ -106,6 +106,35 @@ These are receipts, not priors. A hypothesis that contradicts one is dead on arr
   reason to decline one.
   (Source for all three: `handoffs/active/agentic-rocm-kernel-authoring.md`.)
 
+## What the correctness gate does NOT catch
+
+`test-backend-ops` is the gate, and it is necessary rather than sufficient. A real
+corruption has already passed a green test suite here: `b8ad9d292` incidentally
+reclassified Q2_K/Q3_K activations `Q8_2_X4` → `Q8_K`, which engaged never-validated
+iqk kquant kernels and corrupted Hy3 output. It was **caught on live output at 20:47Z,
+not by tests** (fixed same day by `1977a5d78` plus static_asserts).
+
+So: a patch that changes an activation quant type, a type-traits row, or a dispatch
+table entry is in a known-dangerous class whose failure mode the gate cannot see. Say
+so in the hypothesis, and prefer a mechanism that leaves type selection alone.
+
+## Not this loop's surface — do not propose these
+
+The backlog is full of measured levers that are NOT kernel-source patches. They are
+real work; they are simply not what this loop can build, gate and A/B:
+
+- **Serving and sampling flags** — spec-dec draft depth, `--spec-type ngram-*`,
+  `-ctk/-ctv` KV quant, batch/ubatch geometry. Config, not source.
+- **Drafter work** — MTP/EAGLE3 heads, tree-draft, drafter fine-tuning for acceptance
+  rate. A separate track with its own handoffs.
+- **Lossy model surgery** — vocabulary pruning, layer/depth removal. Out of scope by
+  the ratified lossless-only rule, and both contributed to a 15/40-point degradation.
+- **KT / trellis quants** — CPU-only, so the MI210 cannot participate at all. Also
+  dominated on the arithmetic that motivated them: `block_iq2_kt` is 68 B per 256
+  weights = **2.125 bpw** against **IQ2_XXS at 2.0625 bpw**, so it is *larger* than
+  what GLM-5.2 already uses and saves zero bandwidth while adding per-weight work. A
+  quality-at-equal-bpw play mis-framed as a speed play.
+
 ## Settled — do not re-open without new evidence
 
 - **`MMQ_MFMA` OFF.** +23.09% on the 0.5B toy, **+0.50%** on Qwen3.8-27B. Real where
