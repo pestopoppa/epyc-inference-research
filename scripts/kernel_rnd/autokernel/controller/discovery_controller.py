@@ -18,6 +18,7 @@ import hashlib
 import importlib
 import inspect
 import json
+import sqlite3
 import math
 import os
 from pathlib import Path, PurePosixPath
@@ -32,7 +33,7 @@ from .. import campaign, hypothesis_portfolio, journal, schemas, source_candidat
 from ..evaluator import integrity
 from . import (claude_fable5_critic_actor, codex_container_actor,
                discovery_telemetry, do_not_repeat, hypotheses)
-from . import gpu_source_evidence, gpu_source_proofs
+from . import experiments, gpu_source_evidence, gpu_source_proofs
 # CH-2 champion seeding. `discovery_deployment` is imported under an alias because the
 # controller must not shadow the local name `deployment` used for iteration payloads.
 from . import champion, champion_seed
@@ -1821,6 +1822,12 @@ class ControllerConfig:
     deployment_identity_sha256: str | None = None
     hypothesis_portfolio: hypothesis_portfolio.Portfolio | None = None
     hypothesis_portfolio_sha256: str | None = None
+    #: Durable experiment memory, deliberately OUTSIDE deployments/<name>/state.
+    #: A new deployment is a new sealed configuration, not a new set of facts about
+    #: what has already been tried -- every crash used to mint a fresh deployment and
+    #: reset the counters, which is why one patch was proposed 38 times. None keeps
+    #: the store off (dry runs, unit fixtures).
+    experiment_memory_root: Path | None = None
     # Planner-provider outages (API auth refresh, docker hiccup, timeout) are
     # WAITED OUT, never spun on and never terminal: exponential backoff from
     # `planner_backoff_base_s`, capped at `planner_backoff_max_s`.  Origin: v27
@@ -1929,6 +1936,47 @@ class DurableState:
 
 def _tracker(store: DurableState) -> hypotheses.HypothesisTracker:
     return hypotheses.HypothesisTracker(journal_=store.book, root=str(store.root / "hypotheses"), campaign_id="ak-discovery")
+
+
+def _campaign_epoch(config: ControllerConfig) -> str:
+    """The configuration epoch this campaign's measurements belong to.
+
+    Anchor commit plus the sealed admission corpus: the two things that decide
+    whether two numbers are comparable at all. Deliberately NOT the deployment
+    identity -- that changes on every relaunch, which would make every record stale
+    and rebuild the amnesia this store exists to end.
+    """
+    return experiments.epoch_sha256(
+        anchor_commit=config.instrument_commit or config.production_base_commit,
+        build_recipe={"admission_corpus_sha256": config.admission_corpus_sha256,
+                      "admission_corpus_version": config.admission_corpus_version})
+
+
+def _recall_experiments(state: Mapping[str, Any],
+                        config: ControllerConfig) -> list[dict[str, Any]]:
+    """Sync this campaign's rows into durable memory, then read the history back.
+
+    Syncing at READ time is deliberate: `state["iterations"]` is appended from a
+    dozen sites and a per-site hook would eventually miss one. `record` is idempotent
+    on attempt identity, so replaying the whole list every turn costs nothing and
+    cannot drift from the state it mirrors.
+
+    Failures here are never fatal. Memory is an input to hypothesis formation, not a
+    trust boundary; a loop that cannot read its own history should run worse, not
+    refuse to run.
+    """
+    if config.experiment_memory_root is None:
+        return []
+    epoch = _campaign_epoch(config)
+    try:
+        with experiments.ExperimentStore(config.experiment_memory_root) as store:
+            store.record_all(
+                (row for row in state.get("iterations", []) if isinstance(row, Mapping)),
+                epoch=epoch, recorded_at=_now(), campaign_id=config.campaign_id)
+            store.write_markdown(epoch=epoch)
+            return store.recall(epoch=epoch)
+    except (sqlite3.Error, OSError, ValueError):
+        return []
 
 
 def _memory_block(tracker: hypotheses.HypothesisTracker, turn: int) -> Mapping[str, Any]:
@@ -2229,6 +2277,7 @@ def _context(state: Mapping[str, Any], tracker: hypotheses.HypothesisTracker, tu
     # while blind to the profile of the tree it was editing. Most-recent rather than
     # pooled, because every accepted patch moves the distribution and a stale ranking
     # aims the loop at the previous champion's hotspots.
+    experiment_memory = _recall_experiments(state, config)
     hotspots: list[Any] = []
     hotspots_from = None
     for row in reversed(state["iterations"]):
@@ -2268,6 +2317,7 @@ def _context(state: Mapping[str, Any], tracker: hypotheses.HypothesisTracker, tu
             "prior_authoring_refusals": prior_refusals,
             "kernel_hotspots": hotspots,
             "kernel_hotspots_from_result_sha256": hotspots_from,
+            "prior_experiments": experiment_memory,
             "prior_results": prior, "do_not_repeat":_memory_block(tracker,turn)}
 
 
