@@ -31,6 +31,15 @@ from . import residency
 #: (`operations/config/rocprofv3-sdk-closure.json`). Candidates are tried in order and
 #: the first that exists wins, so a host that later gains a system profiler needs no
 #: change here.
+#: rocprofv3 injects an interceptor into the measured binary, which then needs
+#: libhsa-amd-aqlprofile64.so.1 -- and that ships in a SECOND vendored tree, not with
+#: the SDK and not in /opt/rocm. Without it the measured binary dies rc=127 before it
+#: runs, and the loop reports "profile UNAVAILABLE" for a reason no part of the
+#: profiler's own error text explains.
+ROCPROF_SUPPORT_LIBS = (
+    "/mnt/raid0/llm/tools/rocm-profilers-6.2/opt/rocm-6.2.0/lib",
+)
+
 ROCPROF_CANDIDATES = (
     "/mnt/raid0/llm/tools/rocprofiler-sdk-6.2.0-66/opt/rocm-6.2.0/bin/rocprofv3",
     "/opt/rocm/bin/rocprofv3",
@@ -64,9 +73,14 @@ def _profiler_env(binary: Path, rocprof: str) -> dict[str, str]:
         str(binary.parent),
         str(sdk_root / "lib"),
         str(sdk_root / "lib" / "rocprofiler-sdk"),
+        *[path for path in ROCPROF_SUPPORT_LIBS if Path(path).is_dir()],
         "/opt/rocm/lib",
     ])
-    env["ROCPROFILER_METRICS_PATH"] = str(sdk_root / "lib" / "rocprofiler-sdk")
+    # The counter XMLs live under share/, not lib/. Pointing at lib/ makes
+    # rocprofiler_iterate_agent_supported_counters abort (SIGABRT) before the trace
+    # starts -- a crash whose backtrace names no missing file.
+    env["ROCPROFILER_METRICS_PATH"] = str(sdk_root / "share" / "rocprofiler-sdk")
+    env["ROCP_METRICS_PATH"] = str(sdk_root / "share" / "rocprofiler-sdk")
     return env
 
 
@@ -153,4 +167,5 @@ def profile(binary: Path, model: Path, *, pp: int = 0, tg: int = 32,
 
 
 __all__ = ["Hotspot", "ProfileFailed", "ROCPROF", "ROCPROF_CANDIDATES",
+           "ROCPROF_SUPPORT_LIBS",
            "parse_kernel_trace", "profile"]
