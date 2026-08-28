@@ -28,6 +28,7 @@ from ..execution import cpu_region_claim
 from ..execution import instrument_integrity
 from ..evaluator import integrity
 from ..resource import device_claim
+from . import build_recipe
 from . import discovery_controller as controller
 from . import discovery_deployment as deployment
 from . import gpu_source_adapter
@@ -566,9 +567,19 @@ _SAFE_CRITIC_ENVIRONMENT = MappingProxyType({
     "PATH": "/usr/local/bin:/usr/bin:/bin",
     "SSL_CERT_FILE": "/etc/ssl/certs/ca-certificates.crt",
 })
-_SITE_MODEL = Path(
-    "/mnt/raid0/llm/models/lmstudio-community/Qwen2.5-Coder-0.5B-GGUF/"
-    "Qwen2.5-Coder-0.5B-Q4_K_M.gguf")
+# The screening workload. It must dispatch the kernels PRODUCTION dispatches:
+# `workload_contract.verify_workload` censuses the tensor table on every
+# `DiscoveryDeployment.revalidate()` and refuses anything that does not.
+#
+# SUPERSEDED 2026-08-28 -- Qwen2.5-Coder-0.5B-Q4_K_M.gguf. Despite the filename it is
+# 132x Q5_0 and 12x Q4_K: n_embd=896 is not divisible by the 256-element K-quant
+# superblock, so llama.cpp fell back silently and every screen for a month measured
+# `mul_mat_vec_q<Q5_0>` -- a path production never dispatches. CH-6 measured the
+# consequence: MMQ_MFMA OFF-vs-ON is +23.09% there and +0.50% on Qwen3.8-27B.
+#
+# Replacement census, read from the GGUF rather than the name: n_embd=1536
+# (divisible), Q4_K x169, Q6_K x29 -- production's actual dispatch path, at ~1 GB.
+_SITE_MODEL = Path("/mnt/raid0/llm/models/DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf")
 _PROFILE_TRACE_RECEIPT = Path(
     "/mnt/raid0/llm/autokernel/screens/ak-gpu-qwen05b-tg128-rocprof-attribution-20260813/receipt.json")
 _PROFILE_TRACE_RECEIPT_SHA256 = "20742be4a69abf5bb70c228660ff0629bf416ed4452c4f69b9765ef74a933cd8"
@@ -2147,9 +2158,13 @@ def _static_registry(config: deployment.DiscoveryDeployment,
         # it is what you would want if these builds had to reproduce on another machine
         # -- but this is a single-host program and matching production is what makes a
         # find transferable. Forks: see the build-configuration note in the repo README.
-        cmake_defines=(("GGML_HIP", "ON"), ("AMDGPU_TARGETS", "gfx90a"),
-                       ("GGML_HIP_ROCWMMA_FATTN", "ON"),
-                       ("GGML_NATIVE", "ON")))
+        # The recipe is a versioned object, not a literal tuple. Every flag names
+        # its production counterpart and, where it diverges, its reason -- a
+        # divergence without one is refused at construction. GGML_HIP_ROCWMMA_FATTN
+        # was previously ABSENT here and fell to the CMake default OFF, which is
+        # unsafe on gfx90a under -fa on (non-finite values at longer sequence
+        # lengths). Nobody decided that; it was an unset variable.
+        cmake_defines=build_recipe.HOUSE_GPU_RECIPE.cmake_defines())
     snapshot_files, snapshot_semantics = _production_runtime_snapshot(config.production_path)
     snapshot = ProductionSnapshotBinding(
         config.production_path, snapshot_files, snapshot_semantics,

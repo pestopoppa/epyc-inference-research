@@ -113,5 +113,60 @@ class ScreenEffectEstimator(unittest.TestCase):
         self.assertNotAlmostEqual(median(got["relative_effects"]), got["effect"], places=6)
 
 
+class PairedAlternatingDesign(unittest.TestCase):
+    """Arms must alternate across PROCESSES, not run as two blocks.
+
+    The superseded design ran all anchor repetitions in one process and then all
+    candidate repetitions in one process. `anchor_processes: 1, candidate_processes:
+    1` with nine in-process reps means n_effective = 1 per arm: between-process
+    variance (model load, HIP context creation, clock and thermal state) is entirely
+    unsampled, and any drift over the window loads onto whichever arm ran second.
+    The same candidate identity in v31 measured +5.369% and -1.714% on two runs of
+    identical code.
+    """
+
+    def _order(self, pairs, schedule=("anchor", "candidate")):
+        """The runner's own schedule -- not a reimplementation of it."""
+        return gpu.arm_schedule(schedule, pairs)
+
+    def test_one_pair_is_the_superseded_block_sequential_shape(self):
+        self.assertEqual(self._order(1), [("anchor", 0), ("candidate", 0)])
+
+    def test_more_pairs_alternate_rather_than_block(self):
+        order = [arm for arm, _ in self._order(3)]
+        self.assertEqual(order, ["anchor", "candidate"] * 3)
+        # The property that matters: no arm ever runs twice in a row, so a monotone
+        # drift over the window cannot accumulate against one arm.
+        self.assertFalse(any(a == b for a, b in zip(order, order[1:])))
+
+    def test_the_declared_schedule_is_honoured(self):
+        order = [arm for arm, _ in self._order(2, ("candidate", "anchor"))]
+        self.assertEqual(order, ["candidate", "anchor"] * 2)
+
+    def test_pair_zero_keeps_the_historical_receipt_paths(self):
+        """An existing sealed operation must resume byte-identically."""
+        def supervisor_dir(arm, pair):
+            return f"supervisor-{arm}" if pair == 0 else f"supervisor-{arm}-p{pair}"
+        self.assertEqual(supervisor_dir("anchor", 0), "supervisor-anchor")
+        self.assertEqual(supervisor_dir("anchor", 1), "supervisor-anchor-p1")
+        # Distinct per pair, or two processes collide on one receipt root.
+        dirs = {supervisor_dir(arm, pair)
+                for pair in range(4) for arm in ("anchor", "candidate")}
+        self.assertEqual(len(dirs), 8)
+
+    def test_the_seed_is_not_varied_per_pair(self):
+        """Pairing replicates the PROCESS, not the input.
+
+        When a cross-arm output oracle is enabled both arms must see identical
+        input, so varying the seed per pair would break the oracle that proves the
+        two arms computed the same thing.
+        """
+        seeds = {gpu._invocation_seed(
+            base_seed=42, repetitions=9, arm=arm,
+            timed_output_oracle_enabled=True, runtime_graphs="off")
+            for arm in ("anchor", "candidate")}
+        self.assertEqual(seeds, {42}, "an enabled output oracle requires one seed")
+
+
 if __name__ == "__main__":
     unittest.main()

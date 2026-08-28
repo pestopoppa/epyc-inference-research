@@ -21,7 +21,7 @@ import subprocess
 from typing import Any, Mapping
 
 from .. import hypothesis_portfolio, schemas
-from . import gpu_load_admission
+from . import gpu_load_admission, workload_contract
 
 
 SCHEMA = "epyc.autokernel.discovery_deployment.v4"
@@ -411,6 +411,13 @@ class DiscoveryDeployment:
         for label, value in (("model", self.model), ("workload", self.workload),
                              ("runtime_config", self.runtime_config), ("policy", self.policy)):
             value.revalidate(label)
+        # The model's DIGEST being right says nothing about which kernels it
+        # dispatches. Qwen2.5-Coder-0.5B-Q4_K_M.gguf revalidated cleanly for a month
+        # while being 132x Q5_0 and only 12x Q4_K: n_embd=896 is not divisible by the
+        # 256-element K-quant superblock, so llama.cpp fell back silently and the loop
+        # optimised a kernel production never dispatches. Census the tensor table, not
+        # the filename.
+        workload_contract.verify_workload(self.model.path)
         self.admission_policy.revalidate()
         self.hypothesis_portfolio.revalidate()
         self.hypothesis_evidence_manifest.revalidate(self.hypothesis_portfolio.value)

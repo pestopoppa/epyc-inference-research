@@ -170,6 +170,25 @@ class _CrossArmOutputDivergence(RuntimeError):
     """Internal marker raised only after both arm receipts validate completely."""
 
 
+def arm_schedule(arm_order: Sequence[str], pairs: int) -> list[tuple[str, int]]:
+    """(arm, pair) in execution order.
+
+    Alternating across PROCESSES, not two blocks. The superseded design ran all
+    anchor repetitions in one process and then all candidate repetitions in one, so
+    `anchor_processes: 1, candidate_processes: 1` with nine in-process reps gave
+    n_effective = 1 per arm: between-process variance (model load, HIP context
+    creation, clock and thermal state) went entirely unsampled, and drift over the
+    window loaded onto whichever arm ran second. The same candidate identity in v31
+    measured +5.369% and -1.714% on two runs of identical code.
+
+    `pairs=1` reproduces the historical order exactly, so an existing sealed
+    operation resumes unchanged.
+    """
+    if not arm_order:
+        raise ValueError("arm schedule requires at least one arm")
+    return [(arm, pair) for pair in range(max(1, int(pairs))) for arm in arm_order]
+
+
 def screen_effect(*, anchor_samples: Sequence[float], anchor_runs: Sequence[Mapping[str, Any]],
                   candidate_samples: Sequence[float],
                   candidate_runs: Sequence[Mapping[str, Any]],
@@ -3151,7 +3170,7 @@ def run(args: argparse.Namespace) -> dict:
         if set(arm_order) != {"anchor", "candidate"} or len(arm_order) != 2:
             raise RuntimeError("arm order must contain anchor and candidate exactly once")
 
-        def run_arm(arm: str) -> list[dict]:
+        def run_arm(arm: str, pair: int = 0) -> list[dict]:
             if sealed.get("sole_factor", {}).get("name") == "source_patch":
                 _revalidate_operation_namespace(
                     sealed["operation_namespace"], output_root=out,
@@ -3196,8 +3215,12 @@ def run(args: argparse.Namespace) -> dict:
                 runtime_graphs=str(sealed.get("runtime_graphs", "off")),
                 load_readiness_policy=readiness,
                 ready_continue_handshake=handshake,
-                supervisor_root=out / f"supervisor-{arm}",
-                process_receipt_root=out / f"process-{arm}",
+                # Pair 0 keeps the historical paths byte-for-byte, so an existing
+                # sealed operation resumes unchanged; later pairs get their own.
+                supervisor_root=out / (f"supervisor-{arm}" if pair == 0
+                                       else f"supervisor-{arm}-p{pair}"),
+                process_receipt_root=out / (f"process-{arm}" if pair == 0
+                                            else f"process-{arm}-p{pair}"),
                 process_context={
                     "campaign_id": args.campaign_id,
                     **({"operation_key": sealed["operation_key"]}
@@ -3222,9 +3245,25 @@ def run(args: argparse.Namespace) -> dict:
                 after_process_checkpoint=getattr(
                     args, "_after_process_checkpoint", None))]
 
-        arm_runs = {arm: run_arm(arm) for arm in arm_order}
-        anchor_runs = arm_runs["anchor"]
-        candidate_runs = arm_runs["candidate"]
+        # PAIRED, ALTERNATING. The superseded design ran all anchor repetitions in
+        # ONE process and then all candidate repetitions in ONE process, so
+        # `anchor_processes: 1, candidate_processes: 1` with nine in-process reps
+        # gave n_effective = 1 per arm: between-process variance (model load, HIP
+        # context creation, clock and thermal state) was entirely unsampled, and any
+        # drift over the window loaded onto whichever arm ran second. The same
+        # candidate identity in v31 measured +5.369% and -1.714% on two runs of
+        # identical code.
+        #
+        # Alternating across PROCESSES makes drift hit both arms equally -- the
+        # design `scripts/benchmark/mmq_mfma_recheck.py` uses, and the reason its
+        # numbers held up. The seed is deliberately NOT varied per pair: when a
+        # cross-arm output oracle is enabled the arms must see identical input, and
+        # pairing replicates the PROCESS, not the input.
+        arm_pairs = max(1, int(getattr(args, "arm_pairs", 1) or 1))
+        anchor_runs, candidate_runs = [], []
+        for arm, pair in arm_schedule(arm_order, arm_pairs):
+            (anchor_runs if arm == "anchor" else candidate_runs).extend(
+                run_arm(arm, pair))
         timed_output_oracle = None
         graphs_on_output_oracle = None
         if timed_output_oracle_enabled:
@@ -3321,7 +3360,9 @@ def run(args: argparse.Namespace) -> dict:
             "nomination": "top_k_candidate_only_not_a_keep",
             "baseline_sha256": bank["baseline_sha256"],
             "anchor_invocations": args.calls, "candidate_invocations": args.calls,
-            "anchor_processes": 1, "candidate_processes": 1,
+            "anchor_processes": len(anchor_runs),
+            "candidate_processes": len(candidate_runs),
+            "arm_pairs": arm_pairs,
             "arm_order_schedule": list(arm_order),
             "arm_order_seed_sha256": sealed.get("arm_order_seed_sha256", "0" * 64),
             "baseline_center": center, "candidate_samples": values,
@@ -3422,6 +3463,13 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--seed", type=int, default=8613)
     result.add_argument("--calls", type=int, choices=(3, 5, 9), default=3,
                         help="fresh invocations per arm (discovery evidence only)")
+    result.add_argument("--arm-pairs", type=int, default=1,
+                        help="alternating anchor/candidate PROCESS pairs. 1 keeps "
+                             "the superseded block-sequential design (all anchor "
+                             "reps in one process, then all candidate reps in one), "
+                             "which leaves between-process variance unsampled and "
+                             "loads window drift onto whichever arm ran second. "
+                             ">1 alternates, so drift hits both arms equally.")
     result.add_argument("--arm-order-schedule",
                         choices=("anchor,candidate", "candidate,anchor"),
                         default="anchor,candidate")

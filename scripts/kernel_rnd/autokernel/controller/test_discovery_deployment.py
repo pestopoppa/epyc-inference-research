@@ -38,8 +38,16 @@ class DeploymentConfigTests(unittest.TestCase):
         critic.chmod(0o700)
         inputs = {}
         for label in ("model", "workload", "runtime_config", "admission_policy"):
-            path = root / f"{label}.json"
-            path.write_text(label, encoding="utf-8")
+            if label == "model":
+                # A real GGUF header, not a stub. `revalidate()` censuses the
+                # tensor table, because a correct DIGEST says nothing about which
+                # kernels a model dispatches -- Qwen2.5-Coder-0.5B-Q4_K_M.gguf
+                # revalidated cleanly for a month while being 132x Q5_0.
+                path = root / "model.gguf"
+                D.workload_contract.write_minimal_gguf(path)
+            else:
+                path = root / f"{label}.json"
+                path.write_text(label, encoding="utf-8")
             inputs[label] = {"path": str(path), "sha256": digest(path)}
         policy_body = {"schema": D.ADMISSION_POLICY_SCHEMA, "version": "test-v2",
                        "profiles": [{

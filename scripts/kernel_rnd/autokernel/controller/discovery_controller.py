@@ -33,7 +33,7 @@ from .. import campaign, hypothesis_portfolio, journal, schemas, source_candidat
 from ..evaluator import integrity
 from . import (claude_fable5_critic_actor, codex_container_actor,
                discovery_telemetry, do_not_repeat, hypotheses)
-from . import experiments, gpu_source_evidence, gpu_source_proofs
+from . import experiments, gate_parameters, gpu_source_evidence, gpu_source_proofs
 # CH-2 champion seeding. `discovery_deployment` is imported under an alias because the
 # controller must not shadow the local name `deployment` used for iteration payloads.
 from . import champion, champion_seed
@@ -2278,6 +2278,10 @@ def _context(state: Mapping[str, Any], tracker: hypotheses.HypothesisTracker, tu
     # pooled, because every accepted patch moves the distribution and a stale ranking
     # aims the loop at the previous champion's hotspots.
     experiment_memory = _recall_experiments(state, config)
+    gate_history = [row.get("gate_parameters") for row in state["iterations"]
+                    if isinstance(row.get("gate_parameters"), Mapping)]
+    gate_changes = (gate_parameters.diff(gate_history[-2], gate_history[-1])
+                    if len(gate_history) >= 2 else [])
     hotspots: list[Any] = []
     hotspots_from = None
     for row in reversed(state["iterations"]):
@@ -2318,6 +2322,8 @@ def _context(state: Mapping[str, Any], tracker: hypotheses.HypothesisTracker, tu
             "kernel_hotspots": hotspots,
             "kernel_hotspots_from_result_sha256": hotspots_from,
             "prior_experiments": experiment_memory,
+            "gate_parameter_changes": gate_changes,
+            "gate_parameter_widenings": gate_parameters.widenings(gate_changes),
             "prior_results": prior, "do_not_repeat":_memory_block(tracker,turn)}
 
 
@@ -2530,9 +2536,15 @@ def _classified_result(state: Mapping[str, Any], item: PlannedCandidate,
     return SealedScreen(receipt_path=result.receipt_path,result_sha256=result.result_sha256,effect_fraction=result.effect_fraction,classification=classification,baseline_sha256=result.baseline_sha256,source_proof_sha256=result.source_proof_sha256,dispatch_proof_sha256=result.dispatch_proof_sha256,exact_attribution_effect_fraction=result.exact_attribution_effect_fraction,target_runtime_effect_fraction=result.target_runtime_effect_fraction,candidate_only=result.candidate_only,promotion_claim=result.promotion_claim,stages=result.stages,series_key=series_key,component_series_keys=components,series_effect_fraction=float(statistics.median(effects)))
 
 
-def _screen_iteration_fields(result: SealedScreen, *, repetition: int) -> dict[str, Any]:
+def _screen_iteration_fields(result: SealedScreen, *, repetition: int,
+                             gate: Mapping[str, Any] | None = None) -> dict[str, Any]:
     target_executed = result.target_runtime_effect_fraction is not None
     return {
+        # The gate as it stood for THIS decision. Recorded beside the result it
+        # decided, so a later widening is visible in the record rather than
+        # reconstructable only by an audit -- every historical `keep` came after
+        # drift_bound was widened 6x, and nothing compared consecutive thresholds.
+        **({"gate_parameters": dict(gate)} if gate is not None else {}),
         "status": result.classification,
         "result_sha256": result.result_sha256,
         "evidence": {"baseline": result.baseline_sha256,
