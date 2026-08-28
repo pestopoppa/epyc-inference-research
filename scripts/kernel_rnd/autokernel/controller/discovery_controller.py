@@ -67,6 +67,19 @@ AUTHORING_REFUSAL_STATUSES = frozenset({
     "candidate_semantic_repeat_refused",
     "portfolio_dnr_refused",
 })
+#: Strikes before a hypothesis is skipped for the campaign. AK-VIS-2 splits what used
+#: to be one budget: a malformed/rejected diff is an authoring failure, while a critic
+#: REVISION is ordinary iteration and gets its own larger allowance. Both remain
+#: `scientific_terminal: false` -- a skip is campaign-scoped, never a retirement.
+AUTHORING_FAILURE_BUDGET = 3
+CRITIC_REVISION_BUDGET = 6
+
+#: The dashboard-visible telemetry event for an authoring refusal. Distinct from
+#: `planner_refused`, which specifically means the actor's OUTPUT was refused at
+#: contract time (returncode 0, exact typed result); an authoring refusal happens
+#: later, when the committed diff fails a source guard. Emitting them under one name
+#: would break the dashboard's exact-shape check for `planner_refused`.
+AUTHORING_REFUSAL_TELEMETRY_EVENT = "planner_authoring_refused"
 HASH = __import__("re").compile(r"^[0-9a-f]{64}$")
 PORTFOLIO_DNR_CHECK_SCHEMA = "epyc.autokernel.portfolio_exact_dnr_check.v1"
 SOL = {"provider": "codex", "model": "gpt-5.6-sol", "effort": "high", "role": "planner"}
@@ -2904,14 +2917,38 @@ def _record_governed_stage_refusal(
 
 def _note_portfolio_authoring_failure(state: dict[str, Any],
                                       row: Mapping[str, Any]) -> None:
-    """Bound repeated non-scientific actor failures without retiring science."""
+    """Bound repeated non-scientific actor failures without retiring science.
+
+    AK-VIS-2: a critic REVISION is not an authoring failure. It is the critic doing
+    its job -- the mechanism by which a proposal is supposed to improve -- so charging
+    it to the same 3-strike budget as a malformed diff retires hypotheses for being
+    reviewed. Measured on v33: one `critic_revise` plus two `authoring_refused` hit
+    `bounded_authoring_skip` and retired `akh-v2-q5-type-specific-dequant` for the
+    campaign without it ever being tested.
+
+    Revisions still need SOME bound, or a planner/critic pair can ping-pong on one
+    hypothesis for the whole campaign, so they get their own larger budget rather than
+    no budget. A critic REJECT is different again and keeps counting as an authoring
+    failure: the critic judged the proposal unsound, not merely improvable.
+    """
     hypothesis_id = row.get("portfolio_hypothesis_id")
     if not isinstance(hypothesis_id, str):
+        return
+    if row.get("status") == "critic_revise":
+        revisions = state.setdefault("portfolio_critic_revisions", {})
+        count = int(revisions.get(hypothesis_id, 0)) + 1
+        revisions[hypothesis_id] = count
+        if count >= CRITIC_REVISION_BUDGET:
+            state.setdefault("portfolio_skips", {})[hypothesis_id] = {
+                "disposition": "bounded_critic_revision_skip",
+                "scientific_terminal": False,
+                "revision_count": count,
+            }
         return
     failures = state.setdefault("portfolio_authoring_failures", {})
     count = int(failures.get(hypothesis_id, 0)) + 1
     failures[hypothesis_id] = count
-    if count >= 3:
+    if count >= AUTHORING_FAILURE_BUDGET:
         state.setdefault("portfolio_skips", {})[hypothesis_id] = {
             "disposition": "bounded_authoring_skip",
             "scientific_terminal": False,
