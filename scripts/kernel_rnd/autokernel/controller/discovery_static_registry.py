@@ -17,7 +17,8 @@ import shutil
 import stat
 import subprocess
 import time
-from typing import Any, Mapping
+from types import SimpleNamespace
+from typing import Any, Mapping, Sequence
 
 from .. import source_candidate
 from .. import schemas
@@ -57,6 +58,14 @@ _BUILD_TRANSACTION_RECOVERY_SCHEMA = "epyc.autokernel.gpu_source_build_transacti
 _TEARDOWN_SCHEMA = "epyc.autokernel.source_materialization_teardown.v2"
 _SOURCE_FAILURE_MESSAGE_MAX_BYTES = 2048
 _REQUIRED_TARGETS = ("llama-bench", "test-backend-ops")
+#: Fields of the build contract the ANCHOR does not depend on. Removing exactly
+#: these -- and nothing else -- is what makes one anchor build serve many candidates
+#: without weakening the identity of the build it actually is.
+_ANCHOR_IRRELEVANT_KEYS = frozenset({
+    "build_key", "patch_bundle_sha256", "patch_sha256", "proposal_sha256",
+    "selected_gpu_base_blobs",
+})
+
 #: Build width and its confinement. See the comment at the BuildParallelism call.
 _BUILD_JOBS = 64
 _BUILD_CPU_LIST = "96-183"
@@ -1848,6 +1857,108 @@ class SharedRewardRuntime:
                    receipt_path=receipt)
 
 
+
+# ---------------------------------------------------------------- anchor reuse
+
+_ANCHOR_RECEIPT = "anchor-build.json"
+
+
+class _ReplayedBuild:
+    """The REAL BuildResult of the build that produced these artifacts, replayed.
+
+    Not a synthetic stand-in: the dict is what `BuildResult.to_dict()` returned when
+    the anchor was actually compiled, persisted beside the build it describes. The
+    materialization record downstream is therefore identical to what a fresh build
+    would have written, which matters because receipts hash it.
+    """
+
+    __slots__ = ("_body", "facts", "succeeded", "log_disagrees_with_exit_code")
+
+    def __init__(self, body: Mapping[str, Any]) -> None:
+        self._body = dict(body)
+        self.succeeded = True
+        self.log_disagrees_with_exit_code = False
+        self.facts = SimpleNamespace(
+            built_targets=tuple(body.get("facts", {}).get("built_targets", ())))
+
+    def to_dict(self) -> dict[str, Any]:
+        return dict(self._body)
+
+
+def _anchor_identity(*, snapshot: Any, anchor_build_key: str,
+                     defines: Sequence[tuple[str, str]]) -> dict[str, Any]:
+    """What the cached anchor must still match to be reusable."""
+    return {
+        "anchor_build_key": anchor_build_key,
+        # `.sha256`, not the TreeDigest object: the receipt must canonicalise, and
+        # a broad `except` around publishing hid this for one test cycle. The
+        # narrower except below is why it surfaced.
+        "source_tree_sha256": integrity.hash_source_tree(
+            str(Path(snapshot.path.path)), exclude_dir_names=(".git",)).sha256,
+        "cmake_defines": [list(item) for item in sorted(defines)],
+        "required_targets": list(_REQUIRED_TARGETS),
+    }
+
+
+def _reuse_anchor_build(build_dir: Path, *, snapshot: Any, anchor_build_key: str,
+                        defines: Sequence[tuple[str, str]]) -> Any | None:
+    """Reuse a cached anchor build, or None to build fresh.
+
+    Reuse is VERIFIED, never assumed. Every one of these must hold, and any failure
+    falls through to a fresh build rather than raising: a stale cache is a
+    performance problem, and turning it into a campaign failure would be worse than
+    the recompile it saves.
+
+    This is not an incremental build -- §8.5.1's concern is that an incremental link
+    can pick up stale objects and hide the error a fresh snapshot would surface. Here
+    the SOURCE TREE DIGEST is identical, so the artifacts are the ones this exact
+    tree produces.
+    """
+    receipt_path = build_dir / _ANCHOR_RECEIPT
+    if not receipt_path.is_file() or receipt_path.is_symlink():
+        return None
+    try:
+        body = json.loads(receipt_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(body, Mapping):
+        return None
+    if body.get("identity") != _anchor_identity(
+            snapshot=snapshot, anchor_build_key=anchor_build_key, defines=defines):
+        return None
+    for target in _REQUIRED_TARGETS:
+        artifact = build_dir / "bin" / target
+        if not artifact.is_file() or artifact.is_symlink():
+            return None
+    result = body.get("result")
+    if not isinstance(result, Mapping):
+        return None
+    replayed = _ReplayedBuild(result)
+    if not set(_REQUIRED_TARGETS).issubset(set(replayed.facts.built_targets)):
+        return None
+    return replayed
+
+
+def _publish_anchor_build(build_dir: Path, *, snapshot: Any, anchor_build_key: str,
+                          defines: Sequence[tuple[str, str]], result: Any) -> None:
+    """Record what this anchor build was, so the next candidate can verify reuse."""
+    try:
+        _sealed_write(build_dir / _ANCHOR_RECEIPT, {
+            "schema": "epyc.autokernel.anchor_build_receipt.v1",
+            "identity": _anchor_identity(snapshot=snapshot,
+                                         anchor_build_key=anchor_build_key,
+                                         defines=defines),
+            "result": result.to_dict(),
+        })
+    except (OSError, StaticRegistryError):
+        # Publishing is an optimisation: a filesystem refusal costs a recompile next
+        # time, and failing the campaign over it would cost the campaign. TypeError
+        # and ValueError are deliberately NOT caught -- those mean the receipt is
+        # malformed, which is a bug that must surface rather than degrade into a
+        # permanent silent cache miss.
+        return
+
+
 @dataclass(frozen=True)
 class StaticGpuSourceBuilder:
     """Fresh production descendants, source mutation, clean snapshots, and builds."""
@@ -1962,6 +2073,18 @@ class StaticGpuSourceBuilder:
             "build_root": str(self.build_root.resolve(strict=False)),
         }
         contract["build_key"] = schemas.content_hash(contract)
+        # The ANCHOR does not depend on the candidate. It is built from the
+        # instrument commit with the sealed defines and toolchain, and nothing about
+        # the patch reaches it -- yet `build_key` hashes patch_bundle_sha256,
+        # patch_sha256 and proposal_sha256, so the anchor got a fresh key for every
+        # candidate. Measured: 44 of 51 anchor builds recompiled a byte-identical
+        # tree, ~1,012s each.
+        #
+        # This key is the same contract with the candidate-specific fields removed,
+        # so two candidates against one instrument share one anchor build.
+        contract["anchor_build_key"] = schemas.content_hash(
+            {key: value for key, value in contract.items()
+             if key not in _ANCHOR_IRRELEVANT_KEYS})
         return contract, environment
 
     @staticmethod
@@ -3173,8 +3296,18 @@ class StaticGpuSourceBuilder:
             plans = []
             for ident, snapshot in (("akc-anchor", anchor_snapshot),
                                     (candidate.source_manifest.candidate_id, candidate_snapshot)):
-                build_dir = worktree.default_build_dir(candidate.source_manifest.campaign_id, ident,
-                                                       root=build_root)
+                if ident == "akc-anchor":
+                    # Keyed by the anchor's own inputs rather than by campaign+ident,
+                    # so a second candidate against the same instrument reuses the
+                    # build instead of recompiling a byte-identical tree.
+                    build_dir = worktree.SandboxPath.in_sandbox(
+                        str(Path(build_root) / "anchor"
+                            / str(contract["anchor_build_key"])),
+                        sandbox_root=str(Path(build_root).resolve(strict=False)),
+                        label="anchor build dir")
+                else:
+                    build_dir = worktree.default_build_dir(
+                        candidate.source_manifest.campaign_id, ident, root=build_root)
                 plans.append((ident, snapshot, build_dir, worktree.BuildPlan(
                     source_root=snapshot.path, build_dir=build_dir, actor_worktree=actor.path,
                     parallelism=parallel, targets=_REQUIRED_TARGETS,
@@ -3184,6 +3317,14 @@ class StaticGpuSourceBuilder:
             for ident, snapshot, build_dir, plan in plans:
                 log = cache_root / "logs" / f"{ident}.log"
                 log.parent.mkdir(parents=True, exist_ok=True)
+                if ident == "akc-anchor":
+                    reused = _reuse_anchor_build(
+                        Path(build_dir.path), snapshot=snapshot,
+                        anchor_build_key=str(contract["anchor_build_key"]),
+                        defines=self._sealed_cmake_defines())
+                    if reused is not None:
+                        results.append((ident, snapshot, build_dir, reused))
+                        continue
                 result = worktree.run_build(plan, log_path=log,
                                             env={str(key): str(value)
                                                  for key, value in environment.items()},
@@ -3195,6 +3336,11 @@ class StaticGpuSourceBuilder:
                 if not set(_REQUIRED_TARGETS).issubset(set(result.facts.built_targets)):
                     raise _CompileFailure(
                         f"build did not prove required targets for {ident}")
+                if ident == "akc-anchor":
+                    _publish_anchor_build(
+                        Path(build_dir.path), snapshot=snapshot,
+                        anchor_build_key=str(contract["anchor_build_key"]),
+                        defines=self._sealed_cmake_defines(), result=result)
                 results.append((ident, snapshot, build_dir, result))
             by_id = {ident: (snapshot, build_dir, result) for ident, snapshot, build_dir, result in results}
             arm_builds = {
