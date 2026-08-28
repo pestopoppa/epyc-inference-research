@@ -146,6 +146,26 @@ Note what this implies about the decode surface by contrast: `tg128` dispatches
 a far higher patchable fraction and a higher noise floor (enforced 1.544% vs 0.973%; measured 1.502% vs 0.479%).
 Neither surface is wrong; they are different bets, and the choice is the operator's.
 
+## Known hazards when patching the dequant path (learned the expensive way)
+
+Run 9 aimed correctly at the two biggest patchable slices — `dequantize_block_q4_K` (15.06%)
+and `convert_unary` (9.32%) — and lost both to the same two failures. Answer these before
+authoring, not after the build:
+
+- **`dequantize.cuh` is a SHARED header.** It is also included by `cpy.cu`, which does not
+  declare `ggml_cuda_cast`. A new kernel in that header calling `ggml_cuda_cast<half>` compiles
+  fine where you are looking and then fails the whole build with undeclared-identifier errors
+  from a translation unit you never opened. Check every includer of a header before adding a
+  call to it, and prefer putting new code in the `.cu` that needs it.
+- **The dequant kernels sit on the MUL_MAT path.** Two separate run-9 attempts died on
+  `MUL_MAT failed on ROCm0`. The anchor passes 1139/1139, so the failure was the patch, not the
+  baseline. A change to dequantize/convert changes how every quantized matmul reads its
+  weights: a hypothesis here must say what keeps the numerics identical, not only what makes
+  it faster.
+- **Claiming a path you did not change is a transient, not a patch.** The worktree is the
+  ground truth and is reset to the champion before every iteration, so "authoring returned no
+  changed paths" means the edit never landed. Re-read the file before reporting paths.
+
 ## What the correctness gate does NOT catch
 
 `test-backend-ops` is the gate, and it is necessary rather than sufficient. A real
