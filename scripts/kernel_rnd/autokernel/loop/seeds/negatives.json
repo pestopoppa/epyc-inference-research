@@ -1,0 +1,46 @@
+{
+  "_comment": [
+    "Measured negatives from before this loop existed, seeded so the critic can refuse a",
+    "re-derivation with a receipt instead of the planner spending a call rediscovering them.",
+    "",
+    "These are recorded under a SYNTHETIC HISTORICAL EPOCH on purpose. recall() marks any",
+    "cross-epoch record stale and render_context prints 'STALE EPOCH ... the NUMBER is not",
+    "comparable' -- which is exactly right: these were measured on a different anchor and a",
+    "different build recipe, so the MECHANISM knowledge transfers and the magnitude does not.",
+    "A seeded negative is a reason to say what is different, never a reason not to look."
+  ],
+  "epoch_anchor_commit": "v7-candidate-20260711",
+  "epoch_build_recipe": {"name": "historical-pre-loop", "era": "v7-candidate"},
+  "records": [
+    {
+      "status": "measured_null",
+      "mechanism_id": "akm-hist-q8-prefetch",
+      "statement": "Async weight prefetch / LDS double-buffering in the dense Q8_0 GEMV hides HBM DMA latency and raises achieved bandwidth (GGML_CUDA_Q8_PREFETCH, compiled-in, runtime 0=off / 1=cached-DMA / 2=SLC-streaming).",
+      "falsifier": "Decode throughput fails to rise on dense Q8 models with prefetch enabled.",
+      "target_surface": "ggml/src/ggml-cuda/mmvq.cu",
+      "target_symbol": "mul_mat_vec_q",
+      "effect_fraction": -0.12,
+      "reason": "REJECTED 2026-07-11 on MI210, llama-bench base decode, r5, graphs ON, all 4 Q8 models. Net-negative and it hurts the DENSE models most despite targeting dense GEMV: Qwen3.6-27B dense -12%/-18%, gemma4-31B dense -6%/-7.5%. MoE marginal and sign-inconsistent (gemma4-A4B -3.5%/-0.3%, Qwen3.6-35B-A3B +4.2%/+3.1%), i.e. near noise. The prefetch/LDS-double-buffer overhead outweighs DMA-latency hiding on gfx90a at these shapes. Source: handoffs/active/gemma-challenge-kernel-techniques-v7.md."
+    },
+    {
+      "status": "measured_null",
+      "mechanism_id": "akm-hist-graph-opt",
+      "statement": "A fan-out / stream-reorder pass over the captured CUDA graph raises decode throughput (GGML_CUDA_GRAPH_OPT=1).",
+      "falsifier": "Decode throughput fails to rise with the reorder pass enabled.",
+      "target_surface": "ggml/src/ggml-cuda/ggml-cuda.cu",
+      "target_symbol": "ggml_backend_cuda_graph_compute",
+      "effect_fraction": -0.16,
+      "reason": "REJECTED on MI210, measured net-negative: gemma4-A4B Q8 base decode -16% (68.8 vs 82.5 t/s), Q8 spec-dec ~-11% (~96 vs 108); Q4 spec-dec noisy/neutral. Left OFF (the default). Source: handoffs/active/gemma-challenge-kernel-techniques-v7.md."
+    },
+    {
+      "status": "measured_null",
+      "mechanism_id": "akm-hist-graph-shape-key",
+      "statement": "The CUDA graph cache is keyed by nodes[0] POINTER only, so the draft forward and each verify forward collide on one slot and pay a per-switch warmup reset; mixing an FNV-1a shape signature (per-node op + ne[], excluding data pointers) into the key gives each batch shape its own warm slot.",
+      "falsifier": "With the shape key enabled, decode throughput does not rise on the Q8 focus quant.",
+      "target_surface": "ggml/src/ggml-cuda/ggml-cuda.cu",
+      "target_symbol": "ggml_cuda_graph_get_key",
+      "effect_fraction": -0.02,
+      "reason": "IMPLEMENTED env-gated and measured NEUTRAL, not landed. Clean re-eval (quiet card, strictly sequential, fresh server per run, single request; 3/3 reps byte-identical): Q8 spec-dec 107.2 vs 109.5 t/s (-2%) with output BYTE-IDENTICAL to default, so the change is numerically transparent but gives no speedup. Q4 spec-dec +6% but Q4 stayed noisy (2 output variants), not conclusive. Note the collision itself is UNCONFIRMED: the [SHAPE_KEY] keylog never fired because backend GGML_LOG_INFO is filtered during decode. Patch preserved at /mnt/raid0/llm/llama.cpp-experimental/lever-a-shape-key.patch. Revisit only if a profile shows verify re-capture is a MEASURED bottleneck, and fix the keylog to fprintf(stderr) first. Source: handoffs/active/gemma-challenge-kernel-techniques-v7.md."
+    }
+  ]
+}

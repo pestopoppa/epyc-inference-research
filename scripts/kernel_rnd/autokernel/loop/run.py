@@ -77,11 +77,26 @@ def main(argv: list[str] | None = None) -> int:
     planner = actors.CodexPlanner(workspace=args.worktree)
     critic = actors.CodexCritic(workspace=args.worktree)
 
+    def read_inbox() -> list[str]:
+        """Re-read every iteration, not once at startup.
+
+        The inbox is how a hypothesis reaches the planner from outside the loop -- from a
+        handoff, a backlog row, or the operator mid-run. Reading it once means anything
+        dropped in after launch is invisible until the next restart, which is how the
+        channel stayed empty while the backlog held measured levers for the exact kernels
+        the planner was re-deriving.
+        """
+        inbox_dir = args.store / "inbox"
+        if not inbox_dir.is_dir():
+            return []
+        return [path.read_text(encoding="utf-8").strip()
+                for path in sorted(inbox_dir.glob("*.md"))]
+
     def build_context() -> dict:
         return {
             "kernel_hotspots": [row.to_dict() for row in hotspot_rows],
             "prior_experiments": archive.recall(args.store, epoch=epoch),
-            "inbox": inbox,
+            "inbox": read_inbox(),
         }
 
     def gate(hypothesis, paths):
@@ -118,10 +133,6 @@ def main(argv: list[str] | None = None) -> int:
             message=(f"{hypothesis.mechanism_id}: {comparison.effect * 100:+.3f}% "
                      f"on {comparison.surface} over {comparison.pairs} pairs"),
             paths=tuple(paths))
-
-    inbox_dir = args.store / "inbox"
-    inbox = [path.read_text(encoding="utf-8").strip()
-             for path in sorted(inbox_dir.glob("*.md"))] if inbox_dir.is_dir() else []
 
     def gpu_reading(outcomes=()) -> dict:
         """Held versus busy. Both halves, or the number means nothing.

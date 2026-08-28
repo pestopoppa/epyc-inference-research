@@ -157,9 +157,32 @@ class BudgetsAreIndependent(unittest.TestCase):
         critic = _Critic([loop.Review(False, "unsupported by the profile")] * 5, [])
         outcome, _ = _run(planner, critic)
         self.assertEqual(outcome.status, "refused_at_formation")
-        self.assertIsNone(outcome.hypothesis,
-                          "no hypothesis is banked as retired; it re-enters the pool")
         self.assertEqual(len(outcome.reasons), loop.HYPOTHESIS_ROUNDS)
+        # This used to read `assertIsNone(outcome.hypothesis)` as a PROXY for "not
+        # retired". The proxy cost the operator the mechanism_id on the row the
+        # dashboard shows most often -- 5 of 5 iterations in run 6 read `None`. Naming
+        # what was refused is not retiring it, so assert the real contract instead.
+        row = outcome.to_attempt()
+        self.assertTrue(row.get("mechanism_id"), "the row must name what was refused")
+        for marker in ("retired", "banned", "do_not_repeat"):
+            self.assertNotIn(marker, row)
+
+    def test_a_mechanism_refused_before_can_still_be_proposed_and_kept(self):
+        """The property that `assertIsNone` proxy was standing in for.
+
+        Nothing in the loop excludes a mechanism because it appears in history: a
+        refusal is information the planner must answer, never a gate. This is what
+        stops the v33 failure where three turns retired a hypothesis that was never
+        tested.
+        """
+        refused, _ = _run(_Planner(),
+                          _Critic([loop.Review(False, "unsupported")] * 5, []))
+        self.assertEqual(refused.status, "refused_at_formation")
+        again, committed = _run(_Planner(), _Critic([], []), effect=0.05, floor=1.0)
+        self.assertEqual(again.status, "kept")
+        self.assertEqual(again.hypothesis.mechanism_id,
+                         refused.hypothesis.mechanism_id)
+        self.assertTrue(committed)
 
 
 class TheDecision(unittest.TestCase):
@@ -315,3 +338,21 @@ class TheTreeIsResetBeforeEachIteration(unittest.TestCase):
                 store_root=Path(tmp), epoch="e" * 64, campaign_id="ak-loop",
                 iterations=2)
         self.assertEqual(len(outcomes), 2)
+
+
+class ARefusalNamesWhatWasRefused(unittest.TestCase):
+    """A refused_at_formation row with an empty mechanism_id tells the operator that
+    something was refused without saying what -- and it is the row the dashboard shows
+    most often (run 6: 5 of 5 iterations)."""
+
+    def test_the_refusal_carries_the_last_hypothesis_proposed(self):
+        h = loop.Hypothesis("akm-q4k-branchless", "s", "f", "a.cu", "sym")
+        planner = mock.Mock(); planner.propose.return_value = h
+        critic = mock.Mock()
+        critic.review_hypothesis.return_value = loop.Review(False, "already in v9")
+        outcome = loop.iterate(planner=planner, critic=critic, context={},
+                               measure=mock.Mock(), gate=mock.Mock(), commit=mock.Mock())
+        self.assertEqual(outcome.status, "refused_at_formation")
+        self.assertIsNotNone(outcome.hypothesis)
+        self.assertEqual(outcome.to_attempt()["mechanism_id"], "akm-q4k-branchless")
+        self.assertIn("already in v9", outcome.to_attempt()["reason"])

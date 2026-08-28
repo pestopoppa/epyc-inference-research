@@ -145,9 +145,11 @@ def iterate(*, planner: Planner, critic: Critic,
 
 def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, commit,
              hypothesis_rounds, patch_rounds) -> Outcome:
+    last_proposed: Hypothesis | None = None
     for _ in range(hypothesis_rounds):
         working["prior_hypothesis_rejections"] = list(hypothesis_reasons)
         hypothesis = planner.propose(working)
+        last_proposed = hypothesis
 
         # ---- CRITIC PASS 1: the hypothesis, before any patch exists ----------
         verdict = critic.review_hypothesis(hypothesis, working)
@@ -197,7 +199,10 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
     # Hypothesis budget spent. H is NOT retired: it re-enters the pool carrying its
     # rejection history, because the profile moves and what was unsupported this week
     # may be the hotspot next week.
-    return Outcome("refused_at_formation", None, hypothesis_reasons)
+    # Carry the last hypothesis proposed, not None: a refusal row whose mechanism_id is
+    # empty tells the operator that something was refused without saying WHAT, and it is
+    # the row the dashboard shows most often. The refusal is of an idea; name the idea.
+    return Outcome("refused_at_formation", last_proposed, hypothesis_reasons)
 
 
 def run(*, planner: Planner, critic: Critic, build_context: Callable[[], dict],
