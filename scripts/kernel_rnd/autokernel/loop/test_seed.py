@@ -179,5 +179,34 @@ class TheProgramReachesTheActors(unittest.TestCase):
         self.assertIn("Where the device time actually goes", text)
 
 
+class TheProfileMustDescribeTheMeasuredSurface(unittest.TestCase):
+    """Profiling decode and then A/B-testing prefill aims every hypothesis at a route
+    the instrument cannot see.
+
+    `hotspots.profile` defaulted to `pp=0, tg=32` and `run.py` never overrode it, while
+    `--surface` defaults to `pp512`. So the hotspot table the planner reasoned from
+    described a workload the contracted measurement never ran. The loop's own critic
+    caught it on run 8: "the 17.73% quantize_q8_1 hotspot is from the decode profile
+    (-p 0 -n 32), while the contracted measurement is pp512".
+    """
+
+    def test_the_surface_is_required_not_defaulted(self):
+        """A default here is a silent way to profile the wrong thing."""
+        import inspect
+        from autokernel.loop import hotspots
+        signature = inspect.signature(hotspots.profile)
+        for name in ("pp", "tg"):
+            self.assertIs(signature.parameters[name].default,
+                          inspect.Parameter.empty,
+                          f"{name} must be required, not defaulted")
+
+    def test_the_runner_profiles_the_surface_it_measures(self):
+        source = (Path(__file__).resolve().parent / "run.py").read_text()
+        self.assertIn("hotspots.profile(", source)
+        profile_call = source.split("hotspots.profile(", 1)[1][:160]
+        self.assertIn("pp=pp", profile_call)
+        self.assertIn("tg=tg", profile_call)
+
+
 if __name__ == "__main__":
     unittest.main()

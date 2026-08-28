@@ -141,9 +141,20 @@ def parse_kernel_trace(csv_text: str, *, limit: int = 12) -> list[Hotspot]:
     return rows[:limit]
 
 
-def profile(binary: Path, model: Path, *, pp: int = 0, tg: int = 32,
+def profile(binary: Path, model: Path, *, pp: int, tg: int,
             limit: int = 12, timeout_s: int = 1800) -> list[Hotspot]:
-    """Profile one short generation and return the ranked hotspots."""
+    """Profile the MEASURED surface and return the ranked hotspots.
+
+    `pp`/`tg` are REQUIRED, deliberately. They used to default to `pp=0, tg=32` and
+    `run.py` never overrode them, so the loop profiled DECODE and then A/B-tested
+    PREFILL: every hypothesis was aimed at a hotspot the contracted measurement
+    cannot see, and no mechanism derived from that table could ever move the number.
+    The loop's own critic caught it on run 8 -- "the 17.73% quantize_q8_1 hotspot is
+    from the decode profile (-p 0 -n 32), while the contracted measurement is pp512".
+
+    A default here is not a convenience; it is a silent way to profile the wrong
+    thing. Callers must say which surface they are about to measure.
+    """
     resolved = _resolve_rocprof()
     if resolved is None:
         raise ProfileFailed(

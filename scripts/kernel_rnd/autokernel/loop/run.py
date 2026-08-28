@@ -175,8 +175,12 @@ def main(argv: list[str] | None = None) -> int:
         claim_started = time.time()
         print(f"claim     held on {receipt['device_id']}\n")
         try:
+            # The SAME surface the A/B will measure. Profiling decode and then
+            # measuring prefill aims every hypothesis at a route the instrument
+            # cannot see.
             hotspot_rows = hotspots.profile(
-                args.anchor_build / "bin" / "llama-bench", args.model)
+                args.anchor_build / "bin" / "llama-bench", args.model,
+                pp=pp, tg=tg)
             print(f"profile   {len(hotspot_rows)} hotspots; top: "
                   f"{hotspot_rows[0].signature[:60] if hotspot_rows else '(none)'}")
         except hotspots.ProfileFailed as exc:
