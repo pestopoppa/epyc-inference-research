@@ -1,0 +1,53 @@
+name: autokernel guards
+
+# The AutoKernel package took 271,216 insertions against 92 deletions in five weeks
+# and reached 6.2x the size of the CUDA/HIP backend it exists to optimise, with 68% of
+# its source never executing. Nothing bounded it and nothing ran on a push.
+#
+# This workflow is the bound. It runs the fast, hardware-free tests and the regrowth
+# guards; it does NOT run the GPU or build suites, which need an MI210 and a ROCm
+# toolchain no runner has.
+
+on:
+  push:
+    paths:
+      - 'scripts/kernel_rnd/autokernel/**'
+      - 'scripts/benchmark/run_autokernel_gpu_discovery.py'
+      - 'scripts/benchmark/autokernel_*.py'
+      - '.github/workflows/autokernel-guards.yml'
+  pull_request:
+    paths:
+      - 'scripts/kernel_rnd/autokernel/**'
+      - 'scripts/benchmark/run_autokernel_gpu_discovery.py'
+      - 'scripts/benchmark/autokernel_*.py'
+
+jobs:
+  guards:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Regrowth guards
+        run: python3 scripts/kernel_rnd/autokernel/check_regrowth_guards.py
+
+      - name: The decision arithmetic
+        # Deliberately a NAMED list, not the whole tree. These are the modules where
+        # a defect changes what the loop concludes: the estimator that decides
+        # faster-or-not, the workload contract that decides whether a measurement is
+        # about production at all, the gate-parameter diff that makes a moving
+        # threshold visible, the build recipe that refuses an unexplained divergence,
+        # the experiment memory, and the guards themselves.
+        run: |
+          python3 -m pytest -q \
+            scripts/benchmark/test_screen_effect_estimator.py \
+            scripts/kernel_rnd/autokernel/controller/test_workload_contract.py \
+            scripts/kernel_rnd/autokernel/controller/test_build_recipe.py \
+            scripts/kernel_rnd/autokernel/controller/test_gate_parameters.py \
+            scripts/kernel_rnd/autokernel/controller/test_experiments.py \
+            scripts/kernel_rnd/autokernel/controller/test_gpu_utilization.py \
+            scripts/kernel_rnd/autokernel/controller/test_kernel_hotspots.py \
+            scripts/kernel_rnd/autokernel/test_check_regrowth_guards.py
