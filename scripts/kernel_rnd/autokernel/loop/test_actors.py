@@ -176,6 +176,22 @@ class PlaceholderEchoes(unittest.TestCase):
                      "akm-q4k-branchless"):
             self.assertFalse(actors._is_placeholder(real), real)
 
+    def test_a_real_answer_containing_an_angle_bracket_survives(self):
+        """The guard's first version listed a bare `"<"` and retired three
+        consecutive hypotheses the planner had answered correctly.
+
+        A falsifier states a threshold and a statement names a C++ template, so both
+        legitimately carry `<`. Rejecting them is the guard forbidding its own
+        compliant idiom -- the failure class this rebuild exists to remove.
+        """
+        for real in (
+            "pp512 median delta < 0.97% over 5 alternating pairs",
+            "mul_mat_vec_q<(ggml_type)12, 1, true> loses its per-block branch",
+            "no change if occupancy stays < 8 waves/SIMD",
+            "vec_dot_q4_K_q8_1 dispatch count drops, and tg128 is unchanged",
+        ):
+            self.assertFalse(actors._is_placeholder(real), real)
+
     def test_authoring_refuses_an_echoed_template(self):
         planner = actors.CodexPlanner(workspace=Path("/tmp"))
         with mock.patch.object(actors, "_run_agent",

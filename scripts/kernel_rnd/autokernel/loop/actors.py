@@ -74,16 +74,33 @@ def _with_backoff(call, *, attempts: int = len(BACKOFF_S),
         f"actor failed {streak} consecutive times; last: {last}") from last
 
 
-#: Values that are our own prompt template echoed back, not an answer. The first
-#: real run parsed `paths: ['<relative path you changed>']` -- the extractor matched
-#: the SPEC in the prompt rather than the reply, and the loop recorded a transient
-#: while codex was in fact still working. A placeholder must never read as a result.
-_PLACEHOLDER = ("<", "your ", "e.g.", "example", "path you changed", "short-slug")
+#: Phrases that only ever appear in OUR prompt template, never in an answer.
+#: Deliberately specific: the first version of this guard listed a bare `"<"`, which
+#: rejected every legitimate falsifier that said `delta < 0.97%` and every statement
+#: that named `mul_mat_vec_q<Q4_K>`. It retired three consecutive hypotheses the
+#: planner had answered correctly -- a guard that forbids its own compliant idiom,
+#: which is the exact failure class this rebuild exists to remove.
+_TEMPLATE_PHRASES = ("path you changed", "short-slug", "your path here",
+                     "the function you will change")
 
 
 def _is_placeholder(value: Any) -> bool:
-    text = str(value).strip().lower()
-    return any(marker in text for marker in _PLACEHOLDER)
+    """True only for our own template echoed back, never for a real answer.
+
+    Three signals, all of which a genuine reply avoids and an echo cannot:
+
+      * the value is ENTIRELY an angle-bracket span (`<the function you will
+        change>`) -- an echoed slot is the whole field, whereas a C++ template or a
+        `<` comparison always sits inside surrounding prose;
+      * it carries a phrase that exists only in the prompt;
+      * it opens with `e.g.`, which introduces the prompt's illustration.
+    """
+    text = str(value).strip()
+    if text.startswith("<") and text.endswith(">"):
+        return True
+    lowered = text.lower()
+    return (lowered.startswith("e.g.")
+            or any(phrase in lowered for phrase in _TEMPLATE_PHRASES))
 
 
 def _extract_json(text: str) -> dict:
