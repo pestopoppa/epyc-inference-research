@@ -74,6 +74,18 @@ def _with_backoff(call, *, attempts: int = len(BACKOFF_S),
         f"actor failed {streak} consecutive times; last: {last}") from last
 
 
+#: Values that are our own prompt template echoed back, not an answer. The first
+#: real run parsed `paths: ['<relative path you changed>']` -- the extractor matched
+#: the SPEC in the prompt rather than the reply, and the loop recorded a transient
+#: while codex was in fact still working. A placeholder must never read as a result.
+_PLACEHOLDER = ("<", "your ", "e.g.", "example", "path you changed", "short-slug")
+
+
+def _is_placeholder(value: Any) -> bool:
+    text = str(value).strip().lower()
+    return any(marker in text for marker in _PLACEHOLDER)
+
+
 def _extract_json(text: str) -> dict:
     """Pull the last JSON object out of an agent's stdout."""
     depth = 0
@@ -181,6 +193,10 @@ class CodexPlanner:
                    "target_symbol"} - set(body)
         if missing:
             raise ProviderTransient(f"hypothesis is missing {sorted(missing)}")
+        echoed = sorted(key for key in body if _is_placeholder(body[key]))
+        if echoed:
+            raise ProviderTransient(
+                f"hypothesis echoed the prompt template for {echoed}")
         return Hypothesis(
             mechanism_id=str(body["mechanism_id"]), statement=str(body["statement"]),
             falsifier=str(body["falsifier"]),
@@ -197,8 +213,13 @@ class CodexPlanner:
             f"symbol:    {hypothesis.target_symbol}\n\n"
             f"{render_context(context)}\n\n"
             "Edit the file directly. Keep the change minimal and confined to the "
-            "named file. Reply with ONE json object and nothing else:\n"
-            '{"paths": ["<relative path you changed>"]}')
+            "named file.\n\n"
+            "DO NOT BUILD, COMPILE, BENCHMARK OR TEST. The loop owns the build and "
+            "the GPU; a build you start is unmeasured compute taken from another "
+            "session and it will not be used. Make the edit and stop.\n\n"
+            "Then reply with ONE json object naming the files you actually changed, "
+            "using their real paths:\n"
+            '{"paths": ["ggml/src/ggml-cuda/<file>"]}')
         raw, streak = _with_backoff(
             lambda: _run_agent(prompt, workspace=self.workspace,
                                timeout_s=self.timeout_s, binary=self.binary))
@@ -206,6 +227,18 @@ class CodexPlanner:
         paths = _extract_json(raw).get("paths")
         if not isinstance(paths, list) or not paths:
             raise ProviderTransient("authoring returned no changed paths")
+        if any(_is_placeholder(item) for item in paths):
+            raise ProviderTransient(
+                f"authoring echoed the prompt template instead of answering: {paths}")
+        # The ground truth is the worktree, not the reply. An actor that says it
+        # changed a file and did not is the failure mode a self-reported path cannot
+        # catch.
+        dirty = subprocess.run(
+            ["git", "-C", str(self.workspace), "status", "--porcelain", "--", *paths],
+            capture_output=True, text=True, timeout=300).stdout.strip()
+        if not dirty:
+            raise ProviderTransient(
+                f"authoring reported {paths} but the worktree is unchanged there")
         return tuple(str(item) for item in paths)
 
 

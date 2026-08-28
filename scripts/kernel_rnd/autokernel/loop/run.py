@@ -22,7 +22,7 @@ import sys
 import time
 
 from ..controller import build_recipe, workload_contract
-from . import actors, archive, bench, claim, gates, hotspots, loop
+from . import actors, archive, bench, claim, gates, hotspots, loop, status
 
 #: Measured 2026-08-28, n=20 alternating pairs. Prefill is the cheaper surface to
 #: detect on; decode has heavier tails.
@@ -109,6 +109,19 @@ def main(argv: list[str] | None = None) -> int:
     inbox = [path.read_text(encoding="utf-8").strip()
              for path in sorted(inbox_dir.glob("*.md"))] if inbox_dir.is_dir() else []
 
+    def publish(state: str, outcomes=(), gpu=None, hotspot_rows=()) -> None:
+        """A loop that only reports when it succeeds looks identical to a stuck one."""
+        status.write(
+            args.store, state=state, epoch=epoch, campaign_id="ak-loop",
+            anchor_commit=anchor_commit, surface=args.surface, pairs=args.pairs,
+            noise_floor_pct=floor,
+            outcomes=[o.to_attempt() for o in outcomes],
+            iterations_planned=args.iterations,
+            champion_head=_git(args.worktree, "rev-parse", "HEAD"),
+            gpu=gpu or {},
+            hotspots=[row.to_dict() for row in hotspot_rows])
+
+    publish("starting")
     started = time.time()
     with claim.hold() as receipt:
         print(f"claim     held on {receipt['device_id']}\n")
@@ -122,13 +135,22 @@ def main(argv: list[str] | None = None) -> int:
             print(f"profile   UNAVAILABLE ({exc}); the planner is told so rather "
                   f"than left to guess")
 
-        outcomes = loop.run(
-            planner=planner, critic=critic, build_context=build_context,
-            measure=measure, gate=gate, commit=commit,
-            store_root=args.store, epoch=epoch, campaign_id="ak-loop",
-            iterations=args.iterations)
+        publish("running", hotspot_rows=hotspot_rows)
+        try:
+            outcomes = loop.run(
+                planner=planner, critic=critic, build_context=build_context,
+                measure=measure, gate=gate, commit=commit,
+                store_root=args.store, epoch=epoch, campaign_id="ak-loop",
+                iterations=args.iterations,
+                on_iteration=lambda rows: publish("running", rows,
+                                                  hotspot_rows=hotspot_rows))
+        except BaseException:
+            # A crashed loop must SAY it crashed. Going quiet reads as "slow".
+            publish("failed", hotspot_rows=hotspot_rows)
+            raise
 
     elapsed = time.time() - started
+    publish("complete", outcomes, hotspot_rows=hotspot_rows)
     kept = sum(1 for outcome in outcomes if outcome.status == "kept")
     measured = sum(1 for outcome in outcomes
                    if outcome.status in {"kept", "measured_null"})

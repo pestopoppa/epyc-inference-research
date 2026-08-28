@@ -156,5 +156,85 @@ class CriticContract(unittest.TestCase):
                 Hypothesis("akm-x", "s", "f", "a.cu", "sym"), {}).accepted)
 
 
+class PlaceholderEchoes(unittest.TestCase):
+    """The first real run parsed the prompt's own template as the answer.
+
+    `_extract_json` takes the LAST complete JSON object in stdout, and codex echoes
+    the requested shape while reasoning. So `{"paths": ["<relative path you
+    changed>"]}` -- the spec, not the reply -- was parsed as a result, and the loop
+    recorded a transient while codex was still working.
+    """
+
+    def test_the_template_is_recognised_as_a_placeholder(self):
+        for echoed in ("<relative path you changed>", "akm-<short-slug>",
+                       "<the function you will change>", "e.g. mmvq.cu",
+                       "  YOUR PATH HERE  "):
+            self.assertTrue(actors._is_placeholder(echoed), echoed)
+
+    def test_a_real_path_is_not_a_placeholder(self):
+        for real in ("ggml/src/ggml-cuda/vecdotq.cuh", "mmvq.cu",
+                     "akm-q4k-branchless"):
+            self.assertFalse(actors._is_placeholder(real), real)
+
+    def test_authoring_refuses_an_echoed_template(self):
+        planner = actors.CodexPlanner(workspace=Path("/tmp"))
+        with mock.patch.object(actors, "_run_agent",
+                               return_value='{"paths": ["<relative path you changed>"]}'):
+            with self.assertRaises(actors.ProviderTransient) as caught:
+                planner.author(Hypothesis("akm-x", "s", "f", "a.cu", "sym"), {})
+        self.assertIn("echoed the prompt template", str(caught.exception))
+
+    def test_a_hypothesis_echoing_the_template_is_refused(self):
+        planner = actors.CodexPlanner(workspace=Path("/tmp"))
+        payload = ('{"mechanism_id": "akm-<short-slug>", "statement": "s", '
+                   '"falsifier": "f", "target_surface": "a.cu", '
+                   '"target_symbol": "<the function you will change>"}')
+        with mock.patch.object(actors, "_run_agent", return_value=payload):
+            with self.assertRaises(actors.ProviderTransient) as caught:
+                planner.propose({})
+        self.assertIn("echoed the prompt template", str(caught.exception))
+
+
+class TheWorktreeIsTheGroundTruth(unittest.TestCase):
+    """An actor that SAYS it changed a file and did not must not pass."""
+
+    def test_an_unchanged_worktree_refuses_the_claimed_path(self):
+        planner = actors.CodexPlanner(workspace=Path("/tmp"))
+        with mock.patch.object(actors, "_run_agent",
+                               return_value='{"paths": ["ggml/src/ggml-cuda/mmvq.cu"]}'), \
+             mock.patch.object(actors.subprocess, "run") as ran:
+            ran.return_value = mock.Mock(stdout="")          # git status: clean
+            with self.assertRaises(actors.ProviderTransient) as caught:
+                planner.author(Hypothesis("akm-x", "s", "f", "a.cu", "sym"), {})
+        self.assertIn("worktree is unchanged", str(caught.exception))
+
+    def test_a_genuinely_changed_worktree_passes(self):
+        planner = actors.CodexPlanner(workspace=Path("/tmp"))
+        with mock.patch.object(actors, "_run_agent",
+                               return_value='{"paths": ["ggml/src/ggml-cuda/mmvq.cu"]}'), \
+             mock.patch.object(actors.subprocess, "run") as ran:
+            ran.return_value = mock.Mock(stdout=" M ggml/src/ggml-cuda/mmvq.cu")
+            got = planner.author(Hypothesis("akm-x", "s", "f", "a.cu", "sym"), {})
+        self.assertEqual(got, ("ggml/src/ggml-cuda/mmvq.cu",))
+
+
+class TheActorMustNotSpendTheLoopsCompute(unittest.TestCase):
+    def test_the_authoring_prompt_forbids_building(self):
+        """codex started its own `cmake --build -j 16` on the first real run."""
+        planner = actors.CodexPlanner(workspace=Path("/tmp"))
+        captured = {}
+
+        def capture(prompt, **kwargs):
+            captured["prompt"] = prompt
+            return '{"paths": ["ggml/src/ggml-cuda/mmvq.cu"]}'
+
+        with mock.patch.object(actors, "_run_agent", side_effect=capture), \
+             mock.patch.object(actors.subprocess, "run") as ran:
+            ran.return_value = mock.Mock(stdout=" M ggml/src/ggml-cuda/mmvq.cu")
+            planner.author(Hypothesis("akm-x", "s", "f", "a.cu", "sym"), {})
+        self.assertIn("DO NOT BUILD", captured["prompt"])
+        self.assertIn("the loop owns the build", captured["prompt"].lower())
+
+
 if __name__ == "__main__":
     unittest.main()

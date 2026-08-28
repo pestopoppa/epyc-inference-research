@@ -204,15 +204,28 @@ def run(*, planner: Planner, critic: Critic, build_context: Callable[[], dict],
         measure: Callable[..., bench.Comparison],
         gate: Callable[..., tuple[bool, list[gates.Verdict]]],
         commit: Callable[..., str], store_root: Path, epoch: str,
-        campaign_id: str, iterations: int) -> list[Outcome]:
-    """Drive `iterate` and persist every outcome, kept or not."""
-    outcomes = []
+        campaign_id: str, iterations: int,
+        on_iteration: Callable[[list["Outcome"]], None] | None = None
+        ) -> list[Outcome]:
+    """Drive `iterate` and persist every outcome, kept or not.
+
+    `on_iteration` fires after EVERY iteration, including refused and transient ones.
+    Publishing status is not the loop's concern, but a loop that only reports when it
+    succeeds is indistinguishable from one that is stuck -- which is what "STOPPED,
+    authoring/build are event-silent by design" looked like on the old dashboard.
+    """
+    outcomes: list[Outcome] = []
     for _ in range(iterations):
         outcome = iterate(planner=planner, critic=critic, context=build_context(),
                           measure=measure, gate=gate, commit=commit)
         archive.record(store_root, outcome.to_attempt(), epoch=epoch,
                        recorded_at=_now(), campaign_id=campaign_id)
         outcomes.append(outcome)
+        if on_iteration is not None:
+            try:
+                on_iteration(outcomes)
+            except Exception:      # noqa: BLE001 - reporting must never kill the loop
+                pass
     return outcomes
 
 
