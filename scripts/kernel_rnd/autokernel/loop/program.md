@@ -39,9 +39,17 @@ invocations (`artifacts/autokernel-aa-noise-floor/`):
 | pairs | prefill p95 \|effect\| | decode p95 \|effect\| |
 |---|---|---|
 | 1 | 2.175% | 3.452% |
-| 5 | 0.753% | 1.848% |
-| 9 | 0.442% | 1.502% |
-| 20 | 0.182% | 1.175% |
+| 3 | 1.432% | 2.527% |
+| 5 | **0.479%** | **1.502%** |
+| 9 | 0.168% | 1.175% |
+| 20 | 0.029% | 0.067% |
+
+p95 of \|median effect\| over **every** C(20,k) subset — exhaustive, so it re-derives
+exactly (`bench.MEASURED_FLOOR_PCT`). An earlier hand-written version of this table
+quoted 0.753% / 1.848% at k=5, which no method reproduces from the raw pairs; it is
+corrected here. The floors the loop **enforces** are 0.973% (prefill) and 1.544%
+(decode) — deliberately *above* the measured row, because 20 pairs is a thin sample of
+a heavy tail.
 
 **4 of 20 pure-noise decode pairs already exceeded a 3% bar.** So: `n≥5`, and never
 claim an effect smaller than the floor for the pair count used. Decode has heavier
@@ -135,7 +143,7 @@ this surface is the dequant itself.
 
 Note what this implies about the decode surface by contrast: `tg128` dispatches
 `mul_mat_vec_q` — quantized matmul, entirely our source, no Tensile at all. Decode has
-a far higher patchable fraction and a higher noise floor (1.85% at 5 pairs vs 0.973%).
+a far higher patchable fraction and a higher noise floor (enforced 1.544% vs 0.973%; measured 1.502% vs 0.479%).
 Neither surface is wrong; they are different bets, and the choice is the operator's.
 
 ## What the correctness gate does NOT catch

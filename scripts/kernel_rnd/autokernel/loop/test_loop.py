@@ -356,3 +356,36 @@ class ARefusalNamesWhatWasRefused(unittest.TestCase):
         self.assertIsNotNone(outcome.hypothesis)
         self.assertEqual(outcome.to_attempt()["mechanism_id"], "akm-q4k-branchless")
         self.assertIn("already in v9", outcome.to_attempt()["reason"])
+
+
+class TheEnforcedFloorNeverSitsBelowTheMeasuredOne(unittest.TestCase):
+    """A bar below the instrument's own resolution is the defect this rebuild exists
+    to close -- the superseded loop used a 3% bar while 4 of 20 pure-noise decode
+    pairs already exceeded it.
+
+    Three different floor figures were in circulation at once: bench.py's docstring,
+    a hand-written table in program.md (0.753%/1.848% at k=5, reproducible by no
+    method from the raw pairs), and run.py's sigma/sqrt(n). This pins the only
+    relationship that actually matters between them.
+    """
+
+    def test_every_enforced_floor_is_at_or_above_its_measured_row(self):
+        from autokernel.loop import run as run_mod
+        for surface, enforced in run_mod.NOISE_FLOOR_PCT.items():
+            measured = bench.MEASURED_FLOOR_PCT[surface][bench.MIN_PAIRS]
+            self.assertGreaterEqual(
+                enforced, measured,
+                f"{surface}: enforced {enforced:.3f}% sits BELOW the measured "
+                f"{measured:.3f}% at {bench.MIN_PAIRS} pairs -- noise would pass")
+
+    def test_the_measured_table_is_monotonic_in_pair_count(self):
+        """Averaging more pairs must not raise the floor; a non-monotonic row means
+        the table was transcribed rather than derived."""
+        for surface, rows in bench.MEASURED_FLOOR_PCT.items():
+            counts = sorted(rows)
+            values = [rows[k] for k in counts]
+            self.assertEqual(values, sorted(values, reverse=True), surface)
+
+    def test_min_pairs_has_a_measured_row_at_all(self):
+        for surface in ("pp512", "tg128"):
+            self.assertIn(bench.MIN_PAIRS, bench.MEASURED_FLOOR_PCT[surface])

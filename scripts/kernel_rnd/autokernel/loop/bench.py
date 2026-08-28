@@ -13,7 +13,8 @@ Two rules carry everything here:
   * **Alternate across PROCESSES.** Running all of one arm then all of the other
     leaves between-process variance unsampled and loads window drift onto whichever
     arm ran second. The measured single-pair noise floor is p95 2.175% (prefill) and
-    3.452% (decode); five pairs bring those to 0.75% and 1.85%.
+    3.452% (decode). See MEASURED_FLOOR_PCT for what averaging actually buys, and
+    note the ENFORCED floors in `run.py` sit deliberately above it.
 """
 from __future__ import annotations
 
@@ -30,6 +31,20 @@ from . import residency
 #: Host threads for the GPU lane. NOT 88-95 -- these are the SMT siblings the
 #: production GPU recipe uses, and taking others contends with the CPU baseline.
 CPU_LIST = "184-191"
+#: p95 |median effect| over EVERY C(20,k) subset of the 20 measured A/A pairs
+#: (`artifacts/autokernel-aa-noise-floor/aa-noise-floor.json`). Exhaustive, so it is
+#: reproducible exactly rather than resampled -- an earlier hand-written table in
+#: `program.md` quoted 0.753%/1.848% at k=5, which no method reproduces from this data.
+#:
+#: The floors ENFORCED in `run.py` (0.973% / 1.544%, sigma/sqrt(n)) sit ABOVE these on
+#: both surfaces, deliberately: 20 pairs is a thin sample of a heavy tail, and a bar
+#: below the instrument's resolution is the defect this rebuild exists to close. Never
+#: lower an enforced floor beneath its row here.
+MEASURED_FLOOR_PCT = {
+    "pp512": {1: 2.175, 3: 1.432, 5: 0.479, 9: 0.168, 20: 0.029},
+    "tg128": {1: 3.452, 3: 2.527, 5: 1.502, 9: 1.175, 20: 0.067},
+}
+
 #: Measured floor, 2026-08-28, n=20 alternating pairs. Below five pairs a single
 #: observation on decode can exceed a 3% bar on noise alone (4 of 20 did).
 MIN_PAIRS = 5
