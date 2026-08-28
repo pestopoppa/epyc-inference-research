@@ -98,6 +98,20 @@ def main(argv: list[str] | None = None) -> int:
             bench.Arm("candidate", args.candidate_build / "bin" / "llama-bench"),
             args.model, pp=pp, tg=tg, pairs=args.pairs, noise_floor_pct=floor)
 
+    def reset_tree() -> None:
+        """Return the candidate tree to the champion before each iteration.
+
+        Run 5 left `mmq.cu` modified by an authoring attempt that never passed, so the
+        next iteration's worktree ground-truth check would have been satisfied by that
+        leftover rather than by anything the planner did. Resets to HEAD, not to a
+        fixed commit, so a kept patch stays on the champion branch.
+        """
+        subprocess.run(["git", "-C", str(args.worktree), "reset", "--hard", "HEAD"],
+                       capture_output=True, text=True, timeout=600, check=False)
+        subprocess.run(["git", "-C", str(args.worktree), "clean", "-fd",
+                        "ggml/", "src/"],
+                       capture_output=True, text=True, timeout=600, check=False)
+
     def commit(hypothesis, paths, comparison):
         return archive.keep(
             args.worktree, branch="HEAD",
@@ -164,7 +178,7 @@ def main(argv: list[str] | None = None) -> int:
                 planner=planner, critic=critic, build_context=build_context,
                 measure=measure, gate=gate, commit=commit,
                 store_root=args.store, epoch=epoch, campaign_id="ak-loop",
-                iterations=args.iterations,
+                iterations=args.iterations, reset=reset_tree,
                 on_iteration=lambda rows: publish("running", rows,
                                                   hotspot_rows=hotspot_rows))
         except BaseException:

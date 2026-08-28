@@ -8,6 +8,7 @@ faster can be reported as faster.
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 from autokernel.loop import bench, gates, loop
 
@@ -275,3 +276,42 @@ class ProviderTransientsEndAnIterationNotTheRun(unittest.TestCase):
                 store_root=Path(tmp), epoch="e" * 64,
                 campaign_id="ak-test", iterations=3)
         self.assertEqual([o.status for o in outcomes], ["planner_transient"] * 3)
+
+
+class TheTreeIsResetBeforeEachIteration(unittest.TestCase):
+    """A failed authoring attempt must not satisfy the NEXT iteration's ground truth.
+
+    Run 5 ended with `mmq.cu` still modified by an attempt that never passed. The
+    worktree check asks "did the actor actually change something", and a leftover
+    answers yes on the previous iteration's behalf -- a check that passes without the
+    thing it checks for having happened.
+    """
+
+    def _planner(self):
+        planner = mock.Mock()
+        planner.propose.side_effect = loop.ActorTransient("no hypothesis")
+        return planner
+
+    def test_reset_runs_before_every_iteration(self):
+        order = []
+        planner = self._planner()
+        planner.propose.side_effect = lambda ctx: order.append("propose") or (_ for _ in ()).throw(
+            loop.ActorTransient("no hypothesis"))
+        with tempfile.TemporaryDirectory() as tmp:
+            loop.run(planner=planner, critic=mock.Mock(),
+                         build_context=dict, measure=mock.Mock(), gate=mock.Mock(),
+                         commit=mock.Mock(), store_root=Path(tmp), epoch="e" * 64,
+                         campaign_id="ak-loop", iterations=3,
+                         reset=lambda: order.append("reset"))
+        self.assertEqual(order, ["reset", "propose"] * 3,
+                         "every iteration must start from the champion, not from "
+                         "the previous attempt's leftovers")
+
+    def test_the_loop_still_runs_without_a_reset_hook(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            outcomes = loop.run(
+                planner=self._planner(), critic=mock.Mock(), build_context=dict,
+                measure=mock.Mock(), gate=mock.Mock(), commit=mock.Mock(),
+                store_root=Path(tmp), epoch="e" * 64, campaign_id="ak-loop",
+                iterations=2)
+        self.assertEqual(len(outcomes), 2)

@@ -205,7 +205,8 @@ def run(*, planner: Planner, critic: Critic, build_context: Callable[[], dict],
         gate: Callable[..., tuple[bool, list[gates.Verdict]]],
         commit: Callable[..., str], store_root: Path, epoch: str,
         campaign_id: str, iterations: int,
-        on_iteration: Callable[[list["Outcome"]], None] | None = None
+        on_iteration: Callable[[list["Outcome"]], None] | None = None,
+        reset: Callable[[], None] | None = None
         ) -> list[Outcome]:
     """Drive `iterate` and persist every outcome, kept or not.
 
@@ -213,9 +214,17 @@ def run(*, planner: Planner, critic: Critic, build_context: Callable[[], dict],
     Publishing status is not the loop's concern, but a loop that only reports when it
     succeeds is indistinguishable from one that is stuck -- which is what "STOPPED,
     authoring/build are event-silent by design" looked like on the old dashboard.
+
+    `reset` runs BEFORE each iteration and returns the worktree to the champion.
+    Without it a failed authoring attempt leaves its edits behind, and the next
+    iteration's "the worktree actually changed" ground-truth check is satisfied by the
+    PREVIOUS iteration's leftovers -- a check that passes without the thing it checks
+    for having happened. Injected rather than done here so the loop stays free of git.
     """
     outcomes: list[Outcome] = []
     for _ in range(iterations):
+        if reset is not None:
+            reset()
         outcome = iterate(planner=planner, critic=critic, context=build_context(),
                           measure=measure, gate=gate, commit=commit)
         archive.record(store_root, outcome.to_attempt(), epoch=epoch,
