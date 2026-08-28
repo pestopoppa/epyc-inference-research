@@ -32,7 +32,7 @@ from .. import campaign, hypothesis_portfolio, journal, schemas, source_candidat
 from ..evaluator import integrity
 from . import (claude_fable5_critic_actor, codex_container_actor,
                discovery_telemetry, do_not_repeat, hypotheses)
-from . import gpu_source_proofs
+from . import gpu_source_evidence, gpu_source_proofs
 # CH-2 champion seeding. `discovery_deployment` is imported under an alias because the
 # controller must not shadow the local name `deployment` used for iteration payloads.
 from . import champion, champion_seed
@@ -570,6 +570,11 @@ class SealedScreen:
     # Pooled only by the controller after exact-series verification.  Adapter
     # receipts report their individual measured effect; they cannot nominate.
     series_effect_fraction: float | None = None
+    # Ranked per-kernel device-time table, reduced from the rocprofv3 routes this
+    # screen already produced.  Carried so the planner and both critic passes can see
+    # WHERE the time goes; the profiler ran on every attempt for a month and only its
+    # single scalar was ever read.
+    hotspots: tuple[Mapping[str, Any], ...] = ()
 
     def __post_init__(self) -> None:
         if self.classification not in {"candidate", "screened_out", "inconclusive", "failed", "top_k_replicated_candidate", "replicated_but_subadditive"}: raise DiscoveryControllerError("unknown screen class")
@@ -1098,6 +1103,13 @@ class CodexPlanner:
             "task": ("No hypothesis is assigned. PROPOSE one and implement it in "
                      "the same turn."),
             "propose_from": [
+                "context.kernel_hotspots — WHERE THE DEVICE TIME ACTUALLY GOES on "
+                "the tree you are editing, ranked by anchor share, from the most "
+                "recent screen that profiled it (rocprofv3 --kernel-trace): per "
+                "route, total_duration_ns and calls for both arms. Attack a route "
+                "near the top of this table; a mechanism aimed at a route with a "
+                "negligible anchor_share_of_device_time cannot move the target "
+                "runtime no matter how correct it is",
                 "context.prior_results — what has already been measured here, "
                 "with its exact effect sizes, mechanism ids and target symbols",
                 "context.do_not_repeat — mechanisms already refuted or receipted; "
@@ -1701,6 +1713,7 @@ class GpuSourceScreener:
                 dispatch_proof_sha256=bundle.attribution["file_sha256"],
                 exact_attribution_effect_fraction=exact_effect,
                 target_runtime_effect_fraction=None,
+                hotspots=tuple(gpu_source_evidence.kernel_hotspots(comparison)),
                 stages=("materialized", "built", "correctness", "attribution"))
         def run_stage(current: Any, *, graph_mode: str) -> tuple[Path, Mapping[str, Any]]:
             # Immediately-before-call byte attestation prevents a validated
@@ -1779,7 +1792,7 @@ class GpuSourceScreener:
         projection = autokernel_progression._gpu_screen(result_path, raw)
         if projection is None: raise DiscoveryControllerError("GPU result failed canonical progression validation")
         target_effect = float(raw["median_relative"])
-        return SealedScreen(receipt_path=str(result_path), result_sha256=str(raw["result_sha256"]), effect_fraction=target_effect, classification=str(projection["stage"]), baseline_sha256=str(raw["baseline_sha256"]), source_proof_sha256=bundle.correctness["file_sha256"], dispatch_proof_sha256=bundle.attribution["file_sha256"], exact_attribution_effect_fraction=exact_effect, target_runtime_effect_fraction=target_effect, stages=("materialized", "built", "correctness", "attribution", "measurement_graphs_off_screen", "target_runtime_graphs_on_screen"))
+        return SealedScreen(receipt_path=str(result_path), result_sha256=str(raw["result_sha256"]), effect_fraction=target_effect, classification=str(projection["stage"]), baseline_sha256=str(raw["baseline_sha256"]), source_proof_sha256=bundle.correctness["file_sha256"], dispatch_proof_sha256=bundle.attribution["file_sha256"], exact_attribution_effect_fraction=exact_effect, target_runtime_effect_fraction=target_effect, hotspots=tuple(gpu_source_evidence.kernel_hotspots(comparison)), stages=("materialized", "built", "correctness", "attribution", "measurement_graphs_off_screen", "target_runtime_graphs_on_screen"))
 
 
 @dataclass(frozen=True)
@@ -2210,6 +2223,20 @@ def _context(state: Mapping[str, Any], tracker: hypotheses.HypothesisTracker, tu
             "source_manifest_sha256", "series_key", "evidence", "statement",
             "falsifier", "experiment_intent", "mechanism_id", "target_surface",
             "target_symbol")})
+    # Where the device time actually goes, from the most recent screen that profiled
+    # it. rocprofv3 has run on every attempt since the GPU lane opened and this table
+    # was sealed and discarded every time -- the planner chose which kernel to attack
+    # while blind to the profile of the tree it was editing. Most-recent rather than
+    # pooled, because every accepted patch moves the distribution and a stale ranking
+    # aims the loop at the previous champion's hotspots.
+    hotspots: list[Any] = []
+    hotspots_from = None
+    for row in reversed(state["iterations"]):
+        candidate_rows = row.get("hotspots")
+        if isinstance(candidate_rows, (list, tuple)) and candidate_rows:
+            hotspots = [dict(item) for item in candidate_rows]
+            hotspots_from = row.get("result_sha256")
+            break
     assignment = None
     # An AUTONOMOUS turn still needs proposal/candidate identities even though no
     # hypothesis was assigned — the planner cannot emit a source patch without
@@ -2239,6 +2266,8 @@ def _context(state: Mapping[str, Any], tracker: hypotheses.HypothesisTracker, tu
             "hypothesis_portfolio_sha256": config.hypothesis_portfolio_sha256,
             "authoring_assignment": assignment,
             "prior_authoring_refusals": prior_refusals,
+            "kernel_hotspots": hotspots,
+            "kernel_hotspots_from_result_sha256": hotspots_from,
             "prior_results": prior, "do_not_repeat":_memory_block(tracker,turn)}
 
 
@@ -2467,6 +2496,10 @@ def _screen_iteration_fields(result: SealedScreen, *, repetition: int) -> dict[s
             result.exact_attribution_effect_fraction,
         "target_runtime_effect_fraction":
             result.target_runtime_effect_fraction,
+        # Persisted so a LATER turn's planner and critics can read the profile. The
+        # rocprofv3 table only exists inside the screen that produced it; without
+        # this it dies with the SealedScreen and the next turn is blind again.
+        "hotspots": [dict(item) for item in result.hotspots],
         "target_runtime_executed": target_executed,
         "target_runtime_reason": (
             None if target_executed else

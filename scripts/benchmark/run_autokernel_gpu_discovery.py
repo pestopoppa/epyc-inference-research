@@ -3268,6 +3268,14 @@ def run(args: argparse.Namespace) -> dict:
             "arm_order_seed_sha256": sealed.get("arm_order_seed_sha256", "0" * 64),
             "anchor_samples": [sample for run in anchor_runs for sample in run["samples"]],
             "anchor_runs": anchor_runs,
+            # The centre rule this bank's samples will be reduced under, declared on
+            # the bank as well as on the result so a reader never has to infer which
+            # estimator produced a record. See screen_effect().
+            "estimator": (
+                "pair_max_metric_over_pair_max_metric"
+                if (sealed.get("metric_contract") or {}).get("schema")
+                == "epyc.autokernel.serialized_pair_max_metric.v1"
+                else "median_over_median"),
             **({"timed_output_oracle": timed_output_oracle}
                if timed_output_oracle is not None else {}),
             **({"graphs_on_output_oracle": graphs_on_output_oracle}

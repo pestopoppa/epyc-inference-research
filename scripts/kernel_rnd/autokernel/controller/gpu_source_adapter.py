@@ -132,6 +132,13 @@ def _typed_screen(value: object) -> controller.SealedScreen:
         prepared = dict(value)
         if isinstance(prepared.get("stages"), list):
             prepared["stages"] = tuple(prepared["stages"])
+        if isinstance(prepared.get("component_series_keys"), list):
+            prepared["component_series_keys"] = tuple(prepared["component_series_keys"])
+        # Tuple-of-mappings on the dataclass, list-of-dicts once through JSON. Without
+        # this the round-trip compares unequal to the screen it was serialised from and
+        # a freshly sealed operation fails to reconcile with itself.
+        if isinstance(prepared.get("hotspots"), list):
+            prepared["hotspots"] = tuple(dict(item) for item in prepared["hotspots"])
         result = controller.SealedScreen(**prepared)
     except (TypeError, ValueError, controller.DiscoveryControllerError) as exc:
         raise GpuSourceAdapterError("sealed screen payload is invalid") from exc

@@ -3066,6 +3066,59 @@ def _expectations(plan: GpuSourceEvidencePlan) -> dict[str, Any]:
     }
 
 
+def kernel_hotspots(comparison: Mapping[str, Any], *, limit: int = 12) -> list[dict[str, Any]]:
+    """Rank the profiled routes by anchor device-time share.
+
+    `rocprofv3 --kernel-trace` runs on every attempt and this module already seals a
+    full per-signature table -- durations, call counts, both arms -- into
+    `exact_duration_comparison`. The controller then read exactly ONE field out of it
+    (`relative_improvement_fraction`) and discarded the rest, so the planner that has
+    to choose which kernel to attack next has never been shown where the time
+    actually goes. This reduction is that table, ranked. It costs no new measurement:
+    the data has been generated and discarded on every attempt for a month.
+
+    Anchor share is the ranking key, because the anchor is the thing being optimised
+    -- a candidate that removes a hotspot entirely should still be reported against
+    the hotspot it removed. A route present in one arm only carries a null duration
+    rather than a zero, so "never dispatched" is never read as "took no time".
+    """
+    anchor_routes = comparison.get("anchor_routes")
+    candidate_routes = comparison.get("candidate_routes")
+    if not isinstance(anchor_routes, Mapping) or not isinstance(candidate_routes, Mapping):
+        return []
+    anchor_total = comparison.get("anchor_total_duration_ns")
+    if isinstance(anchor_total, bool) or not isinstance(anchor_total, int) or anchor_total <= 0:
+        return []
+
+    def _int(row: Any, key: str) -> int | None:
+        if not isinstance(row, Mapping):
+            return None
+        value = row.get(key)
+        return None if isinstance(value, bool) or not isinstance(value, int) else value
+
+    rows: list[dict[str, Any]] = []
+    for signature in sorted(set(anchor_routes) | set(candidate_routes)):
+        anchor_ns = _int(anchor_routes.get(signature), "total_duration_ns")
+        candidate_ns = _int(candidate_routes.get(signature), "total_duration_ns")
+        rows.append({
+            "signature": signature,
+            "anchor_total_duration_ns": anchor_ns,
+            "candidate_total_duration_ns": candidate_ns,
+            "anchor_calls": _int(anchor_routes.get(signature), "calls"),
+            "candidate_calls": _int(candidate_routes.get(signature), "calls"),
+            "anchor_share_of_device_time": (
+                anchor_ns / anchor_total if anchor_ns is not None else None),
+            "relative_improvement_fraction": (
+                (anchor_ns - candidate_ns) / anchor_ns
+                if anchor_ns is not None and candidate_ns is not None and anchor_ns > 0
+                else None),
+        })
+
+    rows.sort(key=lambda row: (row["anchor_total_duration_ns"] is None,
+                               -(row["anchor_total_duration_ns"] or 0)))
+    return rows[:limit]
+
+
 def _exact_duration_comparison(candidate_body: Mapping[str, Any],
                                anchor_body: Mapping[str, Any]) -> dict[str, Any]:
     """Reduce only contract-authorized routes into the decision-bearing pair."""
