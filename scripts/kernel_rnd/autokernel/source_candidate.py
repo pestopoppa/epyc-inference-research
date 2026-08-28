@@ -473,10 +473,28 @@ def apply_source_candidate(manifest: SourcePatchManifest, *, proposal: Mapping[s
     if paths != manifest.declared_files:
         raise SourceCandidateError("committed diff paths differ from the authorized manifest")
     for path in manifest.declared_files:
-        outside = sorted(set(symbols_by_file[path]) - set(manifest.declared_symbols[path]))
+        declared = set(manifest.declared_symbols[path])
+        outside = sorted(set(symbols_by_file[path]) - declared)
         if outside:
+            # Three audiences read this and none can ask a follow-up question: the
+            # planner (it is fed back as a prior authoring refusal), the dashboard
+            # command band, and a human scanning the journal. The old text --
+            # "derives undeclared symbols ['<file-scope>']" -- named a symbol that
+            # exists nowhere in the source, omitted what WAS declared, and so gave
+            # nobody anything to act on. Say what changed, what was declared, and what
+            # to do about it.
+            hint = ""
+            if FILE_SCOPE in outside:
+                hint = (
+                    f" {FILE_SCOPE} is not a symbol name: it means the diff changed"
+                    " something OUTSIDE any function body -- an include, a macro, or a"
+                    " file-level declaration. Either declare it explicitly in"
+                    f" change.files_and_symbols as '{path}:{FILE_SCOPE}', or move the"
+                    " edit inside a function this proposal already declared.")
             raise SourceCandidateError(
-                f"committed diff in {path!r} derives undeclared symbols {outside}")
+                f"committed diff in {path!r} changed {outside}, which this proposal did"
+                f" not declare (it declared {sorted(declared) or 'nothing'} for this"
+                f" file).{hint}")
     estimated = int(proposal["change"]["estimated_diff_size"])
     if estimated < 1:
         raise SourceCandidateError("source proposal estimated_diff_size must be positive")
