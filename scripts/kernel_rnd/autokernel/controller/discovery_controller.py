@@ -33,6 +33,10 @@ from ..evaluator import integrity
 from . import (claude_fable5_critic_actor, codex_container_actor,
                discovery_telemetry, do_not_repeat, hypotheses)
 from . import gpu_source_proofs
+# CH-2 champion seeding. `discovery_deployment` is imported under an alias because the
+# controller must not shadow the local name `deployment` used for iteration payloads.
+from . import champion, champion_seed
+from . import discovery_deployment as deployment_module
 from scripts.benchmark import autokernel_progression
 from scripts.benchmark import run_autokernel_gpu_discovery as gpu_discovery
 
@@ -1789,6 +1793,20 @@ class ControllerConfig:
     # bounded WHICH IDEAS were allowed, never WHICH FILES. Correctness,
     # attribution, replication and DNR gates are identical on both paths.
     autonomous_discovery: bool = False
+    # CH-2: the frozen production tree, used ONCE at campaign start to seed Champion0.
+    # The operator's standing requirement is that an aggregate production candidate
+    # ALWAYS exists and is ready for promotion gate testing; composition was previously
+    # an end-of-campaign release action, so early in a campaign there was simply no
+    # champion. Seeding from the anchor makes "a champion exists" true from turn 0, and
+    # at worst the aggregate equals production.
+    #
+    # `production_binary_sha256` carries the ratified per-backend digests from
+    # scripts/session/verify_llama_cpp.sh. Supplying them is what stops the seed from
+    # anchoring on an unratified build, which would silently re-anchor every later
+    # comparison. Seeding is SKIPPED (not failed) when the path is absent, so callers
+    # that never had a production tree -- tests, dry runs -- are unaffected.
+    production_tree_path: Path | None = None
+    production_binary_sha256: Mapping[str, str] | None = None
     def __post_init__(self) -> None:
         for name in ("planner_backoff_base_s", "planner_backoff_max_s"):
             value = getattr(self, name)
@@ -3123,6 +3141,43 @@ def run_controller(config: ControllerConfig, *, planner: Planner, critic: Critic
     finally:
         fcntl.flock(lock.fileno(),fcntl.LOCK_UN); lock.close()
 
+def _seed_champion_if_absent(config: ControllerConfig, store: DurableState,
+                             state: dict[str, Any]) -> None:
+    """CH-2: make "an aggregate champion always exists" an invariant, not an event.
+
+    Idempotent by the `champion_seeded_at` state marker, so a resumed campaign never
+    re-seeds and never displaces a champion that composition has since advanced. Runs
+    once, at campaign start, before any iteration.
+
+    Deliberately SKIPS rather than fails when no production tree is configured: tests,
+    dry runs and the CLI path construct a ControllerConfig without one, and a campaign
+    that could otherwise run should not be blocked by a seed it never asked for. When a
+    tree IS configured the seed must succeed -- a tree that cannot be measured into a
+    sealed anchor means the champion would be anchored on something unverified, and
+    failing at turn 0 costs nothing while continuing would corrupt every later
+    comparison.
+    """
+    if (state.get("champion_seeded_at") is not None
+            or config.production_tree_path is None
+            # A dry run declares it "never calls an actor or hardware"; writing a
+            # champion into the journal would be exactly the durable side effect that
+            # promise excludes.
+            or config.dry_run):
+        return
+    anchor = champion_seed.production_anchor(
+        Path(config.production_tree_path),
+        branch=deployment_module.FROZEN_PRODUCTION_BRANCH,
+        commit=config.production_base_commit or "",
+        expected_binary_sha256=config.production_binary_sha256)
+    champion.seed_champion(
+        store.book, anchor,
+        reason="CH-2: Champion0 seeded from the frozen production anchor at campaign "
+               "start; the aggregate exists and currently equals production")
+    state["champion_seeded_at"] = _now()
+    state["champion_seed_anchor_commit"] = anchor.commit
+    store.save(state, "champion_seeded")
+
+
 def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic: Critic, screener: Screener, lease: Lease, store: DurableState) -> dict[str, Any]:
     state=store.load()
     existing_deployment = state.get("deployment_identity_sha256")
@@ -3140,6 +3195,8 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
         raise DiscoveryControllerError("sealed planner context changed; durable discovery cannot resume")
     if existing_context is None and config.planner_context_sha256 is not None:
         state["planner_context_sha256"] = config.planner_context_sha256
+    # CH-2: before any iteration runs, guarantee the aggregate champion exists.
+    _seed_champion_if_absent(config, store, state)
     existing_templates = state.get("experiment_template_registry_sha256")
     if existing_templates is not None and existing_templates != config.experiment_template_registry_sha256:
         raise DiscoveryControllerError("sealed experiment-template registry changed; durable discovery cannot resume")
@@ -3214,7 +3271,15 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
                 state["next"] += 1
                 precompute_refused = True
                 store.save(state, "inflight_discarded")
-            if recovery.status == "sealed_result":
+            # `elif`, not `if`: a discarded attempt has already been recorded and the
+            # inflight/pending keys popped, so the recovery path below must be SKIPPED.
+            # As a bare `if` this fell through and dereferenced `recovery.status` on a
+            # `recovery` that is None whenever the adapter returns a non-Recovery --
+            # turning the very restart-loop fix above into an AttributeError crash on
+            # the first unreconcilable inflight, and (restarts now being allowed) a
+            # crash loop again. Regression-tested by
+            # test_discovery_controller_blackbox.py::test_ambiguous_inflight_* .
+            elif recovery.status == "sealed_result":
                 result=recovery.result
             else:
                 resume=getattr(lease,"resume",None)

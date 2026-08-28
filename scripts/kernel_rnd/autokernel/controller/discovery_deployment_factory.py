@@ -478,6 +478,17 @@ _INSTRUMENT_PATH = Path("/mnt/raid0/llm/llama.cpp-experimental")
 # anything, which is the drift catcher for a chain of small unreplicated wins.
 _INSTRUMENT_BRANCH = "ak/champion/llama-cpp-0db32c06e3e5"
 _INSTRUMENT_COMMIT = "5c278648a4af2735587b4023613310ccf2341f46"
+
+#: CH-2 champion seeding: the ratified production `llama-server` digests, per backend,
+#: copied from the single source of truth `scripts/session/verify_llama_cpp.sh`
+#: (EXPECTED_CPU_SERVER_SHA256 / EXPECTED_HIP_SERVER_SHA256). `champion_seed` refuses to
+#: seed when a measured binary does not match, because anchoring Champion0 on an
+#: unratified build would silently re-anchor every later comparison. Keys are the
+#: `schemas.SOURCE_TREE_BY_BACKEND` backend names for llama.cpp.
+_RATIFIED_PRODUCTION_SERVER_SHA256 = MappingProxyType({
+    "llama_cpu": "8ebb1355593121a231735d7b58ad076f4539d2c5e3847fa09d2922fa8a980499",
+    "llama_gpu": "21cfb750dc0ba4b3add0674fcb9dd061d77b3604ebf8e1d063ba0e2c51902feb",
+})
 _INSTRUMENT_DIFF_SHA256 = "9bcc28d3a0d8d2fa94bc5adc953ebc6ed274a67d49c9949c79d65fc368c78af6"
 _INSTRUMENT_TEST_SOURCE_SHA256 = "7571a536ba1305ad078948de2920aea33f9261ab9bb1b5714e55bd485ff335e9"
 _READY_CONTINUE_CONTRACT_SHA256 = "1411f5e81c1b0b3db6952523922c672d88a78aaff5945865c9ccc2b4fc5fd99f"
@@ -2955,6 +2966,13 @@ def controller_config(config: deployment.DiscoveryDeployment, *, dry_run: bool =
             "deployment_identity_sha256": config.config_sha256}),
         production_base_commit=config.production_head,
         instrument_commit=config.instrument_commit,
+        # CH-2: the sealed deployment already owns the frozen production tree, so the
+        # champion seed takes its anchor from the same place the build does rather than
+        # inventing a second truth. The digests are the ratified pins from
+        # scripts/session/verify_llama_cpp.sh; supplying them is what prevents seeding a
+        # champion off an unratified build.
+        production_tree_path=config.production_path,
+        production_binary_sha256=_RATIFIED_PRODUCTION_SERVER_SHA256,
         experiment_template_registry_sha256=config.experiment_template_registry_sha256,
         admission_corpus_sha256=config.admission_policy.value["policy_sha256"],
         admission_corpus_version=config.admission_policy.corpus.version,

@@ -642,12 +642,27 @@ class BlackBoxLaunchGate(unittest.TestCase):
             self.assertEqual(
                 state["inflight"]["exception"],
                 {"type": "RuntimeError", "message": "cleanup durability failed"})
-            with self.assertRaisesRegex(
-                    D.DiscoveryControllerError, "cannot be safely reconciled"):
-                D.run_controller(
-                    self.config(root), planner=planner, critic=critic,
-                    screener=screen, lease=Lease((True,)))
-            self.assertEqual((planner.calls, critic.calls), (1, 1))
+            # CONTRACT CHANGED 2026-08-27: an inflight that cannot be reconciled is ONE
+            # LOST ATTEMPT, not a terminal fault. It used to raise here, which killed
+            # the controller on EVERY resume for the same operation -- so once the
+            # deployment restart clamp was lifted, one crash became an unbounded restart
+            # loop (v29: restart_count 1->3 at 30s intervals, byte-identical stderr,
+            # zero progress). The attempt is now discarded and the campaign advances.
+            #
+            # The invariant this test exists to protect is UNCHANGED and is asserted
+            # below: the ambiguous inflight is never recomputed and spends no budget.
+            D.run_controller(
+                self.config(root), planner=planner, critic=critic,
+                screener=screen, lease=Lease((True,)))
+            self.assertEqual((planner.calls, critic.calls), (1, 1),
+                             "a discarded inflight must not re-plan or re-critique")
+            state = json.loads((root / "out" / "state.json").read_text())
+            self.assertIsNone(state.get("inflight"),
+                              "the unreconcilable inflight must be cleared, not kept")
+            rows = state["iterations"]
+            self.assertEqual([r["status"] for r in rows], ["inflight_discarded"])
+            self.assertIs(rows[0]["scientific_budget_spent"], False,
+                          "a discarded attempt must not spend science budget")
 
     def test_recovery_busy_demotes_exact_inflight_to_pending_without_replanning(self):
         with tempfile.TemporaryDirectory() as temp, \
@@ -841,12 +856,23 @@ class BlackBoxLaunchGate(unittest.TestCase):
                     self.config(root), planner=planner, critic=critic,
                     screener=screen, lease=Lease((True,)),
                 )
-            with self.assertRaises(D.DiscoveryControllerError):
-                D.run_controller(
-                    self.config(root), planner=planner, critic=critic,
-                    screener=screen, lease=Lease((True,)),
-                )
-            self.assertEqual(screen.calls, 1)
+            # CONTRACT CHANGED 2026-08-27 (see the sibling cleanup-failure test): the
+            # resume no longer raises terminally, because doing so re-raised on every
+            # restart and became an unbounded restart loop. It discards the attempt.
+            #
+            # `screen.calls == 1` is the assertion this test is named for and it still
+            # holds -- THAT is "refuses duplicate compute", not the exception.
+            D.run_controller(
+                self.config(root), planner=planner, critic=critic,
+                screener=screen, lease=Lease((True,)),
+            )
+            self.assertEqual(screen.calls, 1,
+                             "the ambiguous inflight must never be recomputed")
+            state = json.loads((root / "out" / "state.json").read_text())
+            self.assertIsNone(state.get("inflight"))
+            self.assertEqual([r["status"] for r in state["iterations"]],
+                             ["inflight_discarded"])
+            self.assertIs(state["iterations"][0]["scientific_budget_spent"], False)
 
     def test_post_result_crash_records_dnr_attempt_exactly_once(self):
         with tempfile.TemporaryDirectory() as temp, \
