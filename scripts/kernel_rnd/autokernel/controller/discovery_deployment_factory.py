@@ -477,7 +477,7 @@ _INSTRUMENT_PATH = Path("/mnt/raid0/llm/llama.cpp-experimental")
 # earn its own T0/T1/T2 against the sealed production anchor before it means
 # anything, which is the drift catcher for a chain of small unreplicated wins.
 _INSTRUMENT_BRANCH = "ak/champion/llama-cpp-0db32c06e3e5"
-_INSTRUMENT_COMMIT = "5c278648a4af2735587b4023613310ccf2341f46"
+_INSTRUMENT_COMMIT = "ae028ee092d4267b7f3ccac4349edc0235d87f2a"
 
 #: CH-2 champion seeding: the ratified production `llama-server` digests, per backend,
 #: copied from the single source of truth `scripts/session/verify_llama_cpp.sh`
@@ -489,7 +489,7 @@ _RATIFIED_PRODUCTION_SERVER_SHA256 = MappingProxyType({
     "llama_cpu": "8ebb1355593121a231735d7b58ad076f4539d2c5e3847fa09d2922fa8a980499",
     "llama_gpu": "21cfb750dc0ba4b3add0674fcb9dd061d77b3604ebf8e1d063ba0e2c51902feb",
 })
-_INSTRUMENT_DIFF_SHA256 = "9bcc28d3a0d8d2fa94bc5adc953ebc6ed274a67d49c9949c79d65fc368c78af6"
+_INSTRUMENT_DIFF_SHA256 = "3b1d93a452ef6ba3731aedca9ba00969981b470772a37d97f10a605888110dac"
 _INSTRUMENT_TEST_SOURCE_SHA256 = "7571a536ba1305ad078948de2920aea33f9261ab9bb1b5714e55bd485ff335e9"
 _READY_CONTINUE_CONTRACT_SHA256 = "1411f5e81c1b0b3db6952523922c672d88a78aaff5945865c9ccc2b4fc5fd99f"
 # CHANGED by the champion: MoE-Spec adds an 8-line env-var fallback so
@@ -500,6 +500,12 @@ _READY_CONTINUE_CONTRACT_SHA256 = "1411f5e81c1b0b3db6952523922c672d88a78aaff5945
 _INSTRUMENT_BENCH_SOURCE_SHA256 = "8d2bd4f6114e82553eef345183bf81f9c4969bf6a743579db2f45554cc70eefa"
 _INSTRUMENT_BENCH_README_SHA256 = "6429015fe5025d35b65e6271520ea668267910f82922e618b27b80c909cec33f"
 _INSTRUMENT_DIFF_PATHS = frozenset({
+    # CH-9 (2026-08-28): route instrumentation for the MoE dispatch, plus a
+    # verbosity LEVEL so an empty route log is unambiguous. These are measurement
+    # apparatus, not kernel behaviour -- they add logging only, gated on an env var
+    # that defaults to off.
+    "ggml/src/ggml-cuda/ggml-cuda.cu",
+    "ggml/src/ggml-cuda/mmvq.cu",
     # The champion delta over frozen v9: the reviewed measurement apparatus
     # (iqk sources, test-backend-ops, llama-bench) PLUS the admitted members
     # MoE-Spec c7c37a0d9 and DFlash2 2046c64e9.
