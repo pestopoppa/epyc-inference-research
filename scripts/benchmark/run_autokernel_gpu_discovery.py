@@ -47,6 +47,43 @@ SCHEMA_TIMED_OUTPUT_INFRASTRUCTURE = (
     "epyc.autokernel.timed_output_infrastructure_ambiguity.v1")
 SOURCE_COMMIT = "0db32c06e3e550065b78311a6031ef3dd2c4f27c"
 READY_CONTINUE_INSTRUMENT_COMMIT = "5bbcc5498e4732162356953b7be96a53073a6706"
+#: The reviewed instrument is the ANCESTOR the timed-output oracle must descend from,
+#: not the only commit allowed to be it.
+#:
+#: WHY (2026-08-28). CH-3 made the aggregate CHAMPION the campaign's instrument, so
+#: gains compound instead of being re-derived against a fixed anchor forever. The gates
+#: below compared the anchor arm's source commit for EQUALITY with the constant above
+#: and so failed every champion-instrumented campaign outright:
+#:
+#:   RuntimeError: shared source-discovery reward requires the exact sealed 81bf32f11
+#:   timed-output instrument
+#:
+#: That killed campaign v36 -- supervisor dead, 0 scientific attempts.
+#:
+#: What the gate is actually protecting is that the timed-output oracle comes from the
+#: REVIEWED instrument, i.e. carries its measurement apparatus. A descendant does: the
+#: champion is built ON the instrument (its own review receipt enforces the delta), and
+#: `tests/test-autokernel-ready-continue-contract.py` is byte-identical between
+#: 5bbcc5498 and champion 270b48ed6 -- which is exactly what
+#: READY_CONTINUE_CONTRACT_SHA256 pins independently. Ancestry plus that unchanged
+#: contract blob is the same guarantee equality gave, without forbidding the champion.
+def _descends_from_reviewed_instrument(commit: str | None, *, tree: Path) -> bool:
+    """True when `commit` IS the reviewed instrument or a descendant of it.
+
+    `tree` is the ANCHOR BUILD directory -- the same path `build_identity` runs
+    `git -C ... rev-parse HEAD` in to derive `source_commit`, so it is guaranteed to
+    be inside the work tree that commit came from. There is no --instrument-path
+    argument on this runner.
+    """
+    if not isinstance(commit, str) or not commit:
+        return False
+    if commit == READY_CONTINUE_INSTRUMENT_COMMIT:
+        return True
+    result = subprocess.run(
+        ("git", "-C", str(tree), "merge-base", "--is-ancestor",
+         READY_CONTINUE_INSTRUMENT_COMMIT, commit),
+        check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return result.returncode == 0
 READY_CONTINUE_CONTRACT_SHA256 = "1411f5e81c1b0b3db6952523922c672d88a78aaff5945865c9ccc2b4fc5fd99f"
 CPU_LIST = "184-191"
 DEVICE_ID = "mi210_0"
@@ -2704,10 +2741,12 @@ def preflight(args: argparse.Namespace) -> dict:
     contract_sha256 = getattr(args, "instrument_ready_continue_contract_sha256", None)
     if requested_handshake and (
             not isinstance(instrument_commit, str)
-            or instrument_commit != READY_CONTINUE_INSTRUMENT_COMMIT
+            or not _descends_from_reviewed_instrument(
+                instrument_commit, tree=Path(args.anchor_build))
             or contract_sha256 != READY_CONTINUE_CONTRACT_SHA256
             or runtime_arms is None
-            or anchor_identity["source_commit"] != READY_CONTINUE_INSTRUMENT_COMMIT):
+            or not _descends_from_reviewed_instrument(
+                anchor_identity["source_commit"], tree=Path(args.anchor_build))):
         raise RuntimeError(
             "ready/continue requires the sealed 81bf32f11 instrument, exact contract, "
             "and instrument-derived anchor")
@@ -2715,7 +2754,8 @@ def preflight(args: argparse.Namespace) -> dict:
     if runtime_graphs not in {"off", "on"}:
         raise RuntimeError("runtime graph mode must be off or on")
     timed_output_oracle = runtime_arms is not None and runtime_graphs == "off"
-    if timed_output_oracle and anchor_identity["source_commit"] != READY_CONTINUE_INSTRUMENT_COMMIT:
+    if timed_output_oracle and not _descends_from_reviewed_instrument(
+            anchor_identity["source_commit"], tree=Path(args.anchor_build)):
         raise RuntimeError(
             "shared source-discovery reward requires the exact sealed 81bf32f11 "
             "timed-output instrument")
