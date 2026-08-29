@@ -70,3 +70,40 @@ class ADriftingArmIsNotAMeasurement(unittest.TestCase):
                           noise_floor_pct=1.0, warmup_pairs=1)
         # 1 discarded pair + 2 measured pairs, two arms each.
         self.assertEqual(len(calls), (1 + 2) * 2)
+
+
+class ADriftVetoMustNotReadAsACleanNull(unittest.TestCase):
+    """Run 10 recorded `akm-q8-1-wave64-eight-block` as "effect +1.126% did not clear
+    the 1.175% noise floor". True on its face and misleading: that run was VETOED for
+    drift (anchor +1.302%). The mechanism reads as tested and unpromising when it was
+    never resolved, which invites the planner to abandon a live idea -- the same class
+    of error as a fabricated refusal.
+    """
+
+    def _drifting(self):
+        return bench.Comparison(
+            surface="tg128", anchor_samples=[1.0], candidate_samples=[1.0],
+            effect=0.01126, estimator="median_over_median", pairs=9,
+            noise_floor_pct=1.175, residency={},
+            anchor_drift_pct=1.302, candidate_drift_pct=0.855)
+
+    def _settled(self):
+        return bench.Comparison(
+            surface="tg128", anchor_samples=[1.0], candidate_samples=[1.0],
+            effect=0.00109, estimator="median_over_median", pairs=9,
+            noise_floor_pct=1.175, residency={},
+            anchor_drift_pct=0.483, candidate_drift_pct=0.104)
+
+    def test_a_drift_veto_says_UNTESTED_not_unpromising(self):
+        from autokernel.loop import loop as loop_mod
+        reason = loop_mod._null_reason(self._drifting())
+        self.assertIn("NOT RESOLVED", reason)
+        self.assertIn("UNTESTED", reason)
+        self.assertIn("re-run", reason)
+        self.assertIn("+1.302", reason, "name the arm that moved")
+
+    def test_a_settled_null_still_reads_as_a_null(self):
+        from autokernel.loop import loop as loop_mod
+        reason = loop_mod._null_reason(self._settled())
+        self.assertIn("did not clear", reason)
+        self.assertNotIn("NOT RESOLVED", reason)

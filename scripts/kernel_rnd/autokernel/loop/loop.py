@@ -138,6 +138,29 @@ def _safe_step(hook):
     return beat
 
 
+def _null_reason(comparison: bench.Comparison) -> str:
+    """Say WHY a measurement was not decisive: missing the bar and being vetoed for
+    drift are different facts, and the planner must be able to tell them apart.
+
+    A drift veto reported as "did not clear the floor" reads as a clean null -- the
+    mechanism looks tested and unpromising when in fact it was never resolved. That
+    invites the planner to abandon a live idea, which is the same class of error as a
+    fabricated refusal.
+    """
+    if comparison.noise_floor_pct is None:
+        return "no noise floor declared"
+    if comparison.drifting:
+        return (f"NOT RESOLVED — the instrument drifted during the run "
+                f"(anchor {comparison.anchor_drift_pct:+.3f}%, candidate "
+                f"{comparison.candidate_drift_pct:+.3f}%, floor "
+                f"{comparison.noise_floor_pct:.3f}%). The raw effect was "
+                f"{comparison.effect * 100:+.3f}%, but an arm that is still moving "
+                f"resolves nothing. This mechanism is UNTESTED, not unpromising — "
+                f"re-run it rather than abandoning it")
+    return (f"effect {comparison.effect * 100:+.3f}% did not clear the "
+            f"{comparison.noise_floor_pct:.3f}% noise floor")
+
+
 def iterate(*, planner: Planner, critic: Critic,
             context: Mapping[str, Any],
             measure: Callable[[Hypothesis, Sequence[str]], bench.Comparison],
@@ -212,10 +235,7 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
             # sample vector, because a loop whose record of failure is thinner than
             # its record of success teaches its planner to repeat the failures.
             return Outcome("measured_null", hypothesis,
-                           [f"effect {comparison.effect * 100:+.3f}% did not clear the "
-                            f"{comparison.noise_floor_pct}% noise floor"
-                            if comparison.noise_floor_pct is not None
-                            else "no noise floor declared"],
+                           [_null_reason(comparison)],
                            comparison, verdicts)
 
         # Patch budget spent. Control returns to the HYPOTHESIS loop, so the planner
