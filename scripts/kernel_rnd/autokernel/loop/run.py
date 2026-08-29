@@ -100,7 +100,30 @@ def main(argv: list[str] | None = None) -> int:
             "inbox": read_inbox(),
         }
 
+    def keep_the_diff(hypothesis) -> Path | None:
+        """Preserve every candidate patch, kept or not.
+
+        `reset_tree` returns the worktree to the champion before the next iteration, so
+        a refused patch exists nowhere afterwards. Run 9 lost all ten: seven died on
+        `MUL_MAT failed on ROCm0` and not one of them can now be reproduced, re-read or
+        diagnosed. A negative written up without its diff is not evidence anyone can
+        act on -- and the whole point of durable memory is that the next iteration does
+        not re-derive what this one paid for.
+        """
+        diff = _git(args.worktree, "diff")
+        if not diff.strip():
+            return None
+        out = args.store / "patches"
+        out.mkdir(parents=True, exist_ok=True)
+        name = getattr(hypothesis, "mechanism_id", None) or "unnamed"
+        target = out / f"{name}.patch"
+        target.write_text(diff + "\n", encoding="utf-8")
+        return target
+
     def gate(hypothesis, paths):
+        # The diff first: a build that fails still leaves a patch worth reading, and
+        # this is the last moment it exists on disk.
+        keep_the_diff(hypothesis)
         # Callables, so a failed build actually short-circuits: an eagerly evaluated
         # op_correctness ran the suite against a stale binary and blamed this patch.
         return gates.run_all(

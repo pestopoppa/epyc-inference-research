@@ -53,3 +53,31 @@ class TheShortCircuitMustBeReal(unittest.TestCase):
         block = source.split("gates.run_all(", 1)[1][:320]
         self.assertIn("lambda: gates.compiles", block)
         self.assertIn("lambda: gates.op_correctness", block)
+
+
+class ARefusedPatchMustSurviveTheReset(unittest.TestCase):
+    """Run 9 lost all ten candidate patches.
+
+    `reset_tree` returns the worktree to the champion before each iteration, so a
+    refused patch exists nowhere afterwards. Seven of those ten died on `MUL_MAT failed
+    on ROCm0` and not one can be reproduced, re-read or diagnosed. A negative written up
+    without its diff is not evidence anyone can act on.
+    """
+
+    def test_the_runner_saves_the_diff_before_gating(self):
+        source = (Path(__file__).resolve().parent / "run.py").read_text()
+        self.assertIn("def keep_the_diff(", source)
+        # It must run BEFORE the gate, because a failed build still leaves a patch
+        # worth reading and that is the last moment it exists on disk.
+        gate_body = source.split("def gate(hypothesis, paths):", 1)[1][:400]
+        self.assertIn("keep_the_diff(hypothesis)", gate_body)
+        before = gate_body.index("keep_the_diff(hypothesis)")
+        self.assertLess(before, gate_body.index("gates.run_all"))
+
+    def test_an_empty_diff_writes_nothing(self):
+        """An actor that changed nothing must not leave an empty patch file that
+        later reads as a real attempt."""
+        source = (Path(__file__).resolve().parent / "run.py").read_text()
+        body = source.split("def keep_the_diff(", 1)[1][:1200]
+        self.assertIn("if not diff.strip():", body)
+        self.assertIn("return None", body)
