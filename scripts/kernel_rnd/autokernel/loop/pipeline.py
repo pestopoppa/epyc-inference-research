@@ -46,10 +46,21 @@ from typing import Any, Callable, Sequence
 
 from . import loop as loop_mod
 
-#: Beyond this, workers queue on the serialized tail rather than adding throughput.
-#: Derived from the measured split, not chosen: the tail is ~16% of an iteration, so
-#: ~6 workers saturate it and 3-4 leaves headroom for the tail growing under load.
-DEFAULT_WORKERS = 3
+#: Beyond this, lanes queue on the serialized tail rather than adding throughput.
+#: Derived from measurement, not chosen. Run 13 recorded per-phase wall time:
+#:
+#:     proposing a hypothesis   62.7 min  54.4%   concurrent
+#:     critic pass 1            21.4 min  18.6%   concurrent
+#:     authoring                 9.4 min   8.2%   concurrent
+#:     critic pass 2             6.1 min   5.3%   concurrent
+#:     measuring A/B            10.4 min   9.0%   SERIALIZED
+#:     building and gating       5.2 min   4.5%   SERIALIZED
+#:
+#: The tail is 13.5% of an iteration, so 1/0.135 = 7.4 lanes saturate it. Seven keeps
+#: the device busy without a queue forming in front of it. The planner alone is 54%,
+#: which is why overlapping ACROSS iterations is the only lever: those four calls are
+#: sequential WITHIN an iteration by construction.
+DEFAULT_WORKERS = 7
 
 
 class Superseded(RuntimeError):

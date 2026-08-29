@@ -155,3 +155,41 @@ class AnOracleThatCannotRunIsNotAFailedPatch(unittest.TestCase):
         body = inspect.getsource(gates.op_correctness).split('"""', 2)[-1]
         for token in ('"test"', '"-o", op', '"-b", backend', '"-j", "1"'):
             self.assertIn(token, body, token)
+
+
+class TheAnchorMustAdvanceWithTheChampion(unittest.TestCase):
+    """Run 13 kept four patches whose MARGINAL effects were +5.574%, -0.209%, -0.478%
+    and -2.864%. Only the first improved anything.
+
+    The anchor was a fixed binary while the candidate worktree accumulated every kept
+    patch, so each reported effect was cumulative against original v9. A patch that
+    made the champion WORSE still cleared the floor, because the accumulated total
+    did. The champion ended at +1.846% having been +5.574% after one patch.
+    """
+
+    def _source(self):
+        return (Path(__file__).resolve().parent / "run.py").read_text()
+
+    def test_the_anchor_arm_is_not_the_immutable_cli_argument(self):
+        source = self._source()
+        block = source.split("def measure_for(", 1)[1][:600]
+        self.assertIn('bench.Arm("anchor", anchor_build[0]', block)
+        self.assertNotIn('bench.Arm("anchor", args.anchor_build', block,
+                         "a static anchor makes every effect cumulative, not marginal")
+
+    def test_it_advances_only_after_the_commit_succeeds(self):
+        """An anchor advanced for a patch that did not land would silently raise the
+        bar for everything after it."""
+        source = self._source()
+        block = source.split("def commit(hypothesis, paths, comparison):", 1)[1][:900]
+        self.assertIn("archive.keep", block)
+        self.assertIn("promote_anchor", block)
+        self.assertLess(block.index("archive.keep"), block.index("promote_anchor("),
+                        "promotion must follow the commit, never precede it")
+
+    def test_the_promoted_build_is_moved_out_of_the_candidate_slot(self):
+        """The next iteration overwrites the candidate slot; an anchor sharing that
+        path would end up measuring against itself."""
+        block = self._source().split("def promote_anchor(", 1)[1][:800]
+        self.assertIn("shutil.move", block)
+        self.assertNotIn("shutil.copy", block)

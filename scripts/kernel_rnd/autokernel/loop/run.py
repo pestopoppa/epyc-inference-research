@@ -206,13 +206,26 @@ def main(argv: list[str] | None = None) -> int:
             )
         return gate
 
+    #: The anchor ADVANCES with the champion. It used to be a fixed binary while the
+    #: candidate worktree accumulated every kept patch, so a reported effect was
+    #: CUMULATIVE against original v9 rather than the marginal value of that patch --
+    #: and a patch that made the champion WORSE still cleared the floor as long as the
+    #: accumulated total did. Run 13 kept four that way: +5.574% marginal for the
+    #: first, then -0.209%, -0.478% and -2.864%. The champion ended at +1.846% having
+    #: been +5.574% after a single patch.
+    #:
+    #: "Screen against the champion so gains compound" was the requirement from the
+    #: start. A static anchor asks "does the accumulated tree beat v9"; the question
+    #: that decides a keep is "does THIS patch improve on the best we have".
+    anchor_build = [args.anchor_build]
+
     def measure_for(worker):
         def measure(hypothesis, paths):
             # The anchor build is SHARED across lanes and only ever read, so it needs
             # no per-lane copy; the candidate binary is per lane because each lane
             # built it from its own patch.
             return bench.compare(
-                bench.Arm("anchor", args.anchor_build / "bin" / "llama-bench"),
+                bench.Arm("anchor", anchor_build[0] / "bin" / "llama-bench"),
                 bench.Arm("candidate", worker.build_dir / "bin" / "llama-bench"),
                 args.model, pp=pp, tg=tg, pairs=args.pairs, noise_floor_pct=floor)
         return measure
@@ -234,15 +247,34 @@ def main(argv: list[str] | None = None) -> int:
                         "ggml/", "src/"],
                        capture_output=True, text=True, timeout=600, check=False)
 
+    def promote_anchor(build_dir: Path) -> None:
+        """The kept candidate build IS the new champion, already compiled.
+
+        Advancing the anchor therefore costs a directory rename, not a rebuild. It is
+        MOVED out of the candidate slot rather than copied, because the next iteration
+        overwrites that slot -- an anchor sharing a path with the next candidate is an
+        anchor that ends up measuring against itself.
+        """
+        generation = len(list(args.store.glob("anchor-gen-*"))) + 1
+        promoted = args.store / f"anchor-gen-{generation:03d}"
+        shutil.move(str(build_dir), str(promoted))
+        anchor_build[0] = promoted
+        print(f"anchor    advanced to {promoted.name} — subsequent effects are "
+              f"MARGINAL against this champion, not cumulative against v9")
+
     def commit(hypothesis, paths, comparison):
         # `branch="HEAD"` is correct HERE and only here: the sequential run has the
         # champion branch checked out, so advancing HEAD advances the branch. A lane is
         # DETACHED, and the same call there would leave the commit unreferenced --
         # which is why the pooled path uses `pool.advance_champion` instead.
-        return archive.keep(
+        head = archive.keep(
             args.worktree, branch="HEAD",
             message=pool.commit_message(hypothesis, comparison),
             paths=tuple(paths))
+        # Only after the commit succeeds: an anchor advanced for a patch that did not
+        # land would silently raise the bar for everything after it.
+        promote_anchor(args.candidate_build)
+        return head
 
     def gpu_reading(outcomes=()) -> dict:
         """Held versus busy. Both halves, or the number means nothing.
