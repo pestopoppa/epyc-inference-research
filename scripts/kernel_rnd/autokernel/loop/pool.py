@@ -156,7 +156,16 @@ def reset_to_champion(worker: pipeline.Worker, *,
     directory (which lives outside the tree) and any operator scratch survive.
     """
     head = champion_head(champion_tree, branch)
-    _git(worker.worktree, "checkout", "--detach", head)
+    # --force, and reset BEFORE clean. Without the force, the previous iteration's
+    # uncommitted patch blocks the checkout outright:
+    #
+    #   error: Your local changes to ggml/src/ggml-cuda/quantize.cu would be
+    #   overwritten by checkout
+    #
+    # which killed four of seven lanes in run 16. Discarding is the whole point of
+    # this function -- the lane is being returned to the champion, and the patch it is
+    # discarding was already written to <store>/patches before the gate ran.
+    _git(worker.worktree, "checkout", "--detach", "--force", head)
     _git(worker.worktree, "reset", "--hard", head)
     _git(worker.worktree, "clean", "-fd", "ggml/", "src/", check=False)
     return head

@@ -1032,3 +1032,68 @@ class TheStopSentinelAndPruning(unittest.TestCase):
             pool.prune_anchor_generations(store, keep=3, current=current)
             self.assertTrue(current.is_dir(), "the anchor in use must survive")
             self.assertLessEqual(len(list(store.glob("anchor-gen-*"))), 4)
+
+
+class NoLaneMayDieOutsideTheTry(unittest.TestCase):
+    """Run 16 lost four of seven lanes and carried on looking healthy at reduced
+    capacity. `reset_to_champion` sat OUTSIDE the try, so its failure killed the
+    thread rather than costing one iteration.
+
+    The failure itself was `git checkout --detach` refusing to overwrite the previous
+    iteration's uncommitted patch -- but the containment gap is the more important
+    defect: whatever an iteration does must be containable, or a run silently
+    degrades."""
+
+    def test_a_failing_reset_costs_one_iteration_not_the_lane(self):
+        calls = {"n": 0}
+
+        def reset(worker):
+            calls["n"] += 1
+            if calls["n"] <= 2:
+                raise RuntimeError("git checkout: local changes would be overwritten")
+            return "base"
+
+        recorded = []
+        outcomes = pipeline.run_pool(
+            workers=[pipeline.Worker("lane-0", Path("/w0"), Path("/b0"))],
+            make_planner=lambda w: _Planner(), make_critic=lambda w: _Critic(),
+            build_context=dict,
+            make_gate=lambda w: (
+                lambda h, p: (False, [gates.Verdict("compile", False, "build failed")])),
+            make_measure=lambda w: (lambda h, p: None),
+            commit=lambda *a: "x", champion_head=lambda: "base",
+            reset_to_champion=reset, record=recorded.append, iterations=4)
+        self.assertEqual(len(outcomes), 4, "the budget must be fully drawn")
+        self.assertEqual(sum(1 for o in outcomes if o.status == "lane_error"), 2)
+        self.assertIn("could not reach the champion", " ".join(outcomes[0].reasons))
+
+    def test_the_lane_keeps_working_afterwards(self):
+        """A lane that survives a bad reset must go on to do real iterations."""
+        calls = {"n": 0}
+
+        def reset(worker):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise RuntimeError("transient git lock")
+            return "base"
+
+        outcomes = pipeline.run_pool(
+            workers=[pipeline.Worker("lane-0", Path("/w0"), Path("/b0"))],
+            make_planner=lambda w: _Planner(), make_critic=lambda w: _Critic(),
+            build_context=dict,
+            make_gate=lambda w: (lambda h, p: (False, [gates.Verdict("compile", False, "nope")])),
+            make_measure=lambda w: (lambda h, p: None),
+            commit=lambda *a: "x", champion_head=lambda: "base",
+            reset_to_champion=reset, record=lambda o: None, iterations=3)
+        self.assertEqual(outcomes[0].status, "lane_error")
+        self.assertTrue(any(o.status != "lane_error" for o in outcomes[1:]),
+                        "the lane must recover, not just survive")
+
+
+class ResetToChampionMustDiscardTheOldPatch(unittest.TestCase):
+    def test_the_checkout_is_forced(self):
+        import inspect
+        from autokernel.loop import pool
+        body = inspect.getsource(pool.reset_to_champion).split('"""', 2)[-1]
+        self.assertIn('"--force"', body,
+                      "without it the previous iteration's patch blocks the checkout")

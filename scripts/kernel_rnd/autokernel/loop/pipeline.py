@@ -202,7 +202,22 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
     def lane(worker: Worker) -> None:
         planner, critic = make_planner(worker), make_critic(worker)
         while budget.take():
-            base = reset_to_champion(worker)
+            # INSIDE the try. This sat outside it, so a failure here killed the whole
+            # thread rather than costing one iteration -- run 16 lost four of seven
+            # lanes that way, silently, while the run carried on looking healthy at
+            # reduced capacity. Everything an iteration does must be containable.
+            try:
+                base = reset_to_champion(worker)
+            except Exception as exc:      # noqa: BLE001
+                with outcomes_lock:
+                    outcome = loop_mod.Outcome(
+                        "lane_error", None,
+                        [f"lane {worker.name} could not reach the champion: "
+                         f"{type(exc).__name__}: {exc}",
+                         traceback.format_exc()[-1500:]])
+                    outcomes.append(outcome)
+                    record(outcome)
+                continue
 
             # All three run INSIDE one `tail.session`, so they need no lock of their
             # own: the session is the atomic unit and the staleness check happens once,
