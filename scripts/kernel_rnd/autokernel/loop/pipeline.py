@@ -39,7 +39,9 @@ a failure of the science and must never be recorded as one.
 """
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass, field
+import traceback
 from pathlib import Path
 import threading
 from typing import Any, Callable, Sequence
@@ -113,6 +115,25 @@ class SerializedTail:
                 f"{current[:12]}: a kept patch must compound, so this candidate is "
                 f"re-formed rather than measured against a base it never saw")
 
+    @contextmanager
+    def session(self, base_head: str, clock=None):
+        """Hold the tail for ONE candidate attempt: build, oracle, A/B and commit.
+
+        Three separate acquisitions let a peer's keep land between them and turn an
+        already-measured candidate into a stale one -- probed at 4 lanes, 20 A/B runs
+        executed and 5 recorded a comparison. Held for the attempt, released between
+        patch rounds so authoring never serializes.
+        """
+        import time as _time
+        clock = clock or _time.monotonic
+        with self._lock:
+            self._check_base(base_head)
+            started = clock()
+            try:
+                yield
+            finally:
+                self.tail_seconds += clock() - started
+
     def call(self, base_head: str, work: Callable[[], Any], clock=None) -> Any:
         """Run one tail step exclusively, refusing a candidate whose base has moved.
 
@@ -152,17 +173,17 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
         while budget.take():
             base = reset_to_champion(worker)
 
-            def gate(hypothesis, paths, _w=worker, _b=base):
-                return tail.call(_b, lambda: make_gate(_w)(hypothesis, paths))
+            # All three run INSIDE one `tail.session`, so they need no lock of their
+            # own: the session is the atomic unit and the staleness check happens once,
+            # at its start, while the lock is held.
+            def gate(hypothesis, paths, _w=worker):
+                return make_gate(_w)(hypothesis, paths)
 
-            def measure(hypothesis, paths, _w=worker, _b=base):
-                return tail.call(_b, lambda: make_measure(_w)(hypothesis, paths))
+            def measure(hypothesis, paths, _w=worker):
+                return make_measure(_w)(hypothesis, paths)
 
-            def commit_one(hypothesis, paths, comparison, _w=worker, _b=base):
-                # Under the lock and re-checked: the champion is the one piece of
-                # shared mutable state, and two lanes advancing it at once is the
-                # race this whole design exists to prevent.
-                return tail.call(_b, lambda: commit(_w, hypothesis, paths, comparison))
+            def commit_one(hypothesis, paths, comparison, _w=worker):
+                return commit(_w, hypothesis, paths, comparison)
 
             def step(label, _w=worker):
                 if on_step is not None:
@@ -171,11 +192,22 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
             try:
                 outcome = loop_mod.iterate(
                     planner=planner, critic=critic, context=build_context(),
-                    measure=measure, gate=gate,
-                    commit=commit_one, on_step=step)
+                    measure=measure, gate=gate, commit=commit_one, on_step=step,
+                    tail_session=lambda _b=base: tail.session(_b))
             except Superseded as exc:
                 # Not a scientific result. The hypothesis and its reasons survive.
                 outcome = loop_mod.Outcome("superseded", None, [str(exc)])
+            except Exception as exc:      # noqa: BLE001 -- deliberate, see below
+                # A lane used to die on ANY exception that was not Superseded:
+                # RatchetRefused, a git timeout, an OSError. The thread ended with a
+                # traceback on stderr, the budget draw was lost, and nothing was
+                # published -- probed, a commit raising on 3 of 20 iterations returned
+                # 17 outcomes for a budget of 20. At seven lanes that loses work seven
+                # times as fast. The traceback is recorded so it cannot hide.
+                outcome = loop_mod.Outcome(
+                    "lane_error", None,
+                    [f"lane {worker.name}: {type(exc).__name__}: {exc}",
+                     traceback.format_exc()[-1500:]])
             with outcomes_lock:
                 outcomes.append(outcome)
                 record(outcome)

@@ -27,6 +27,7 @@ a ROCm toolchain.
 """
 from __future__ import annotations
 
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import traceback
@@ -177,7 +178,8 @@ def iterate(*, planner: Planner, critic: Critic,
             commit: Callable[[Hypothesis, Sequence[str], bench.Comparison], str],
             hypothesis_rounds: int = HYPOTHESIS_ROUNDS,
             patch_rounds: int = PATCH_ROUNDS,
-            on_step: Callable[[str], None] | None = None) -> Outcome:
+            on_step: Callable[[str], None] | None = None,
+            tail_session: Callable[[], Any] = nullcontext) -> Outcome:
     """One full turn. Pure control flow: every side effect is an injected callable."""
     working = dict(context)
     hypothesis_reasons: list[str] = []
@@ -187,7 +189,8 @@ def iterate(*, planner: Planner, critic: Critic,
                         hypothesis_reasons=hypothesis_reasons, measure=measure,
                         gate=gate, commit=commit,
                         hypothesis_rounds=hypothesis_rounds,
-                        patch_rounds=patch_rounds, on_step=_safe_step(on_step))
+                        patch_rounds=patch_rounds, on_step=_safe_step(on_step),
+                        tail_session=tail_session)
     except ActorTransient as exc:
         # The provider failed, not the science. This ends the ITERATION and is
         # recorded as such; the run continues, and a streak becomes visible in
@@ -208,7 +211,8 @@ def iterate(*, planner: Planner, critic: Critic,
 
 
 def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, commit,
-             hypothesis_rounds, patch_rounds, on_step=lambda _label: None) -> Outcome:
+             hypothesis_rounds, patch_rounds, on_step=lambda _label: None,
+             tail_session=nullcontext) -> Outcome:
     last_proposed: Hypothesis | None = None
     for _ in range(hypothesis_rounds):
         working["prior_hypothesis_rejections"] = list(hypothesis_reasons)
@@ -240,18 +244,30 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                 continue
 
             on_step("building and gating")
-            passed, verdicts = gate(hypothesis, paths)
-            if not passed:
-                # Compile and correctness failures loop back the same way; the
-                # toolchain's own message is the reason, so no critic is needed.
-                patch_reasons.append(verdicts[-1].reason if verdicts else "gate refused")
-                continue
+            # Build, oracle, A/B and commit are ONE atomic step for this candidate.
+            # Split across three separate acquisitions, a concurrent peer's keep
+            # landing in a gap turns an ALREADY-MEASURED candidate into a stale one:
+            # probed at 4 lanes, 20 A/B runs executed and only 5 recorded a
+            # comparison -- 15 completed measurements thrown away after the device
+            # time was spent. The same gap discards completed builds.
+            #
+            # Held per ATTEMPT, not per iteration: authoring sits between patch
+            # rounds, and holding across it would serialize formation, which is the
+            # 86% we are trying to overlap.
+            with tail_session():
+                passed, verdicts = gate(hypothesis, paths)
+                if not passed:
+                    # Compile and correctness failures loop back the same way; the
+                    # toolchain's own message is the reason, so no critic is needed.
+                    patch_reasons.append(
+                        verdicts[-1].reason if verdicts else "gate refused")
+                    continue
 
-            on_step("measuring A/B on the device")
-            comparison = measure(hypothesis, paths)
-            if comparison.decisive and comparison.effect > 0:
-                head = commit(hypothesis, paths, comparison)
-                return Outcome("kept", hypothesis, [], comparison, verdicts, head)
+                on_step("measuring A/B on the device")
+                comparison = measure(hypothesis, paths)
+                if comparison.decisive and comparison.effect > 0:
+                    head = commit(hypothesis, paths, comparison)
+                    return Outcome("kept", hypothesis, [], comparison, verdicts, head)
             # A null result IS a result. It is recorded with its mechanism and its
             # sample vector, because a loop whose record of failure is thinner than
             # its record of success teaches its planner to repeat the failures.

@@ -833,3 +833,87 @@ class DistinctAttemptsMustNotCollapse(unittest.TestCase):
             added = self._record(root, "2026-08-29T10:40:00Z")
             self.assertFalse(added)
             self.assertEqual(self._rows(root), 1)
+
+
+class TheTailIsAtomicPerAttempt(unittest.TestCase):
+    """Three separate acquisitions let a peer's keep land between gate and measure and
+    turn an ALREADY-MEASURED candidate into a stale one. Probed at 4 lanes before the
+    fix: 20 A/B runs executed, 5 recorded a comparison -- 15 completed measurements
+    discarded after the device time was spent."""
+
+    def test_gate_measure_and_commit_share_one_acquisition(self):
+        held = []
+        tail = pipeline.SerializedTail(lambda: "base")
+        order = []
+
+        def gate(h, p):
+            order.append(("gate", tail._lock.locked()))
+            return True, [gates.Verdict("compile", True)]
+
+        def measure(h, p):
+            order.append(("measure", tail._lock.locked()))
+            return bench.Comparison(
+                surface="tg128", anchor_samples=[1.0], candidate_samples=[1.05],
+                effect=0.05, estimator="median_over_median", pairs=9,
+                noise_floor_pct=1.0, residency={})
+
+        def commit(h, p, c):
+            order.append(("commit", tail._lock.locked()))
+            return "abc1234"
+
+        outcome = loop.iterate(
+            planner=_Planner(), critic=_Critic(), context={}, measure=measure,
+            gate=gate, commit=commit, tail_session=lambda: tail.session("base"))
+        self.assertEqual(outcome.status, "kept")
+        self.assertEqual([name for name, _ in order], ["gate", "measure", "commit"])
+        for name, locked in order:
+            self.assertTrue(locked, f"{name} ran outside the tail session")
+
+    def test_the_session_is_released_between_patch_rounds(self):
+        """Authoring must never serialize -- it is the 86% we are overlapping."""
+        tail = pipeline.SerializedTail(lambda: "base")
+        seen = []
+
+        def author(hypothesis, context):
+            seen.append(tail._lock.locked())
+            return ("a.cu",)
+
+        planner = _Planner()
+        planner.author = author
+        loop.iterate(
+            planner=planner, critic=_Critic(),
+            context={}, measure=lambda *a: None,
+            gate=lambda *a: (False, [gates.Verdict("compile", False, "nope")]),
+            commit=lambda *a: "x", tail_session=lambda: tail.session("base"))
+        self.assertTrue(seen, "authoring must have run")
+        self.assertFalse(any(seen), "authoring held the tail; formation is serialized")
+
+
+class ALaneMustNotDieSilently(unittest.TestCase):
+    """A lane used to end on any exception that was not Superseded, losing its budget
+    draw with only a traceback on stderr. Probed: a commit raising on 3 of 20
+    iterations returned 17 outcomes for a budget of 20. At seven lanes that loses work
+    seven times as fast."""
+
+    def test_an_unexpected_exception_becomes_a_recorded_outcome(self):
+        recorded = []
+        workers = [pipeline.Worker("lane-0", Path("/w0"), Path("/b0"))]
+        outcomes = pipeline.run_pool(
+            workers=workers,
+            make_planner=lambda w: _Planner(), make_critic=lambda w: _Critic(),
+            build_context=dict,
+            make_gate=lambda w: (lambda h, p: (_ for _ in ()).throw(
+                RuntimeError("git timed out"))),
+            make_measure=lambda w: (lambda h, p: None),
+            commit=lambda *a: "x", champion_head=lambda: "base",
+            reset_to_champion=lambda w: "base", record=recorded.append,
+            iterations=3)
+        self.assertEqual(len(outcomes), 3, "the budget must be fully drawn")
+        self.assertTrue(all(o.status == "lane_error" for o in outcomes))
+        self.assertIn("git timed out", " ".join(outcomes[0].reasons))
+        # `format_exc()[-1500:]` keeps the INNERMOST frames, which are the
+        # informative ones, so the "Traceback" header may be truncated away. Assert
+        # the raising frame is present instead -- that is what makes it diagnosable.
+        self.assertIn("test_pipeline.py", " ".join(outcomes[0].reasons),
+                      "the lane error must carry the frame that raised it")
+        self.assertEqual(len(recorded), 3)
