@@ -51,7 +51,7 @@ WORKER_BUILD_ROOT = Path("/mnt/raid0/llm/tmp/ak-loop-builds")
 
 #: More lanes than this queue on the serialized tail instead of adding throughput,
 #: and each one costs a full source tree plus a full build tree on the raid.
-MAX_WORKERS = 6
+MAX_WORKERS = 8
 
 
 def _git(repo: Path, *args: str, check: bool = True) -> str:
