@@ -315,7 +315,8 @@ def drive(*, workers: Sequence[pipeline.Worker], make_planner, make_critic,
         champion_head=lambda: champion_head(champion_tree, branch),
         reset_to_champion=reset or (lambda worker: reset_to_champion(
             worker, champion_tree=champion_tree, branch=branch)),
-        record=record, iterations=iterations, on_step=step, tail=tail)
+        record=record, iterations=iterations, on_step=step, tail=tail,
+        should_stop=should_stop)
     clock.close()
     return PoolResult(outcomes=outcomes, phase_seconds=clock.totals(),
                       wall_seconds=time.monotonic() - started,

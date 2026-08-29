@@ -1097,3 +1097,45 @@ class ResetToChampionMustDiscardTheOldPatch(unittest.TestCase):
         body = inspect.getsource(pool.reset_to_champion).split('"""', 2)[-1]
         self.assertIn('"--force"', body,
                       "without it the previous iteration's patch blocks the checkout")
+
+
+class TheStopMustReachTheLanes(unittest.TestCase):
+    """`drive` accepted `should_stop` and never forwarded it. The STOP sentinel was
+    set for three hours of run 16 and did nothing -- the parameter existed, the file
+    existed, the predicate was correct, and none of it was connected.
+
+    The test that was supposed to cover this asserted `pool.stop_requested()` returns
+    True for a file on disk. It does. It never checked that anything ASKS."""
+
+    def test_drive_forwards_the_predicate(self):
+        import inspect
+        from autokernel.loop import pool
+        call = inspect.getsource(pool.drive).split("run_pool(", 1)[1]
+        self.assertIn("should_stop=should_stop", call,
+                      "accepted and dropped is worse than not accepted at all")
+
+    def test_a_stop_actually_ends_an_unbounded_pool(self):
+        """End to end at the level that needs no git: an unbounded pool that ignores
+        the stop never terminates. Deliberately NOT via `pool.drive`, whose
+        champion_tree defaults to the LIVE tree -- a test that reaches for the running
+        loop's repository is a test that can hang on it."""
+        stop = {"now": False}
+        seen = {"n": 0}
+
+        def gate_for(worker):
+            def gate(h, p):
+                seen["n"] += 1
+                stop["now"] = True
+                return False, [gates.Verdict("compile", False, "nope")]
+            return gate
+
+        outcomes = pipeline.run_pool(
+            workers=[pipeline.Worker("lane-0", Path("/w0"), Path("/b0"))],
+            make_planner=lambda w: _Planner(), make_critic=lambda w: _Critic(),
+            build_context=dict, make_gate=gate_for,
+            make_measure=lambda w: (lambda h, p: None),
+            commit=lambda *a: "x", champion_head=lambda: "base",
+            reset_to_champion=lambda w: "base", record=lambda o: None,
+            iterations=None, should_stop=lambda: stop["now"])
+        self.assertEqual(len(outcomes), 1,
+                         "unbounded plus an ignored stop is a run that never ends")
