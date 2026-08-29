@@ -24,9 +24,38 @@ import time
 from ..controller import build_recipe, workload_contract
 from . import actors, archive, bench, claim, gates, hotspots, loop, status
 
-#: Measured 2026-08-28, n=20 alternating pairs. Prefill is the cheaper surface to
-#: detect on; decode has heavier tails.
-NOISE_FLOOR_PCT = {"pp512": 2.175 / (5 ** 0.5), "tg128": 3.452 / (5 ** 0.5)}
+#: Single-pair p95, measured 2026-08-28 over n=20 alternating A/A pairs. Prefill is
+#: the cheaper surface to detect on; decode has heavier tails.
+SINGLE_PAIR_P95 = {"pp512": 2.175, "tg128": 3.452}
+
+
+def noise_floor_pct(surface: str, pairs: int) -> float:
+    """The bar for THIS run, scaled to the pairs actually being run.
+
+    This was a dict of constants computed at 5 pairs, so `--pairs 9` still enforced
+    the 5-pair bar -- 1.544% on decode where the measured 9-pair floor is 1.175%, a
+    bar 31% higher than the instrument needs. Conservative rather than unsafe, but it
+    throws away the sensitivity the extra pairs were bought for.
+
+    Returns the MAX of two bounds, because neither dominates:
+
+      * sigma/sqrt(n), the parametric bound. Conservative where the tail is light.
+      * the exhaustively MEASURED floor for that pair count (`bench.MEASURED_FLOOR_PCT`).
+
+    Decode does not average down at sqrt(n): its measured floor goes 3.452 -> 1.502 (5)
+    -> 1.175 (9), while sqrt(n) predicts 1.544 -> 1.151. So at 9 pairs the parametric
+    bound sits BELOW what the instrument actually resolves, and using it alone would let
+    pure noise clear the bar. The guard test caught exactly this.
+
+    For a pair count with no measured row, the largest measured row at or below it is
+    used -- more pairs only ever lower the floor, so that is the conservative choice.
+    """
+    pairs = max(1, pairs)
+    parametric = SINGLE_PAIR_P95[surface] / (pairs ** 0.5)
+    rows = bench.MEASURED_FLOOR_PCT[surface]
+    usable = [count for count in rows if count <= pairs]
+    measured = rows[max(usable)] if usable else rows[min(rows)]
+    return max(parametric, measured)
 
 
 def _git(repo: Path, *args: str) -> str:
@@ -66,7 +95,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"anchor    {anchor_commit[:12]}   epoch {epoch[:12]}")
 
     pp, tg = (512, 0) if args.surface == "pp512" else (0, 128)
-    floor = NOISE_FLOOR_PCT[args.surface]
+    floor = noise_floor_pct(args.surface, args.pairs)
     print(f"surface   {args.surface}, {args.pairs} alternating pairs, "
           f"noise floor {floor:.3f}%")
 

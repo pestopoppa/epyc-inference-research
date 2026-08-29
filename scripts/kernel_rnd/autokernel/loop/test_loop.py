@@ -371,12 +371,33 @@ class TheEnforcedFloorNeverSitsBelowTheMeasuredOne(unittest.TestCase):
 
     def test_every_enforced_floor_is_at_or_above_its_measured_row(self):
         from autokernel.loop import run as run_mod
-        for surface, enforced in run_mod.NOISE_FLOOR_PCT.items():
-            measured = bench.MEASURED_FLOOR_PCT[surface][bench.MIN_PAIRS]
-            self.assertGreaterEqual(
-                enforced, measured,
-                f"{surface}: enforced {enforced:.3f}% sits BELOW the measured "
-                f"{measured:.3f}% at {bench.MIN_PAIRS} pairs -- noise would pass")
+        for surface in run_mod.SINGLE_PAIR_P95:
+            for pair_count in (5, 9):
+                enforced = run_mod.noise_floor_pct(surface, pair_count)
+                measured = bench.MEASURED_FLOOR_PCT[surface][pair_count]
+                self.assertGreaterEqual(
+                    enforced, measured,
+                    f"{surface}: enforced {enforced:.3f}% sits BELOW the measured "
+                    f"{measured:.3f}% at {pair_count} pairs -- noise would pass")
+
+    def test_the_floor_scales_with_the_pairs_ACTUALLY_run(self):
+        """It was a dict of constants computed at 5, so `--pairs 9` still enforced the
+        5-pair bar: 1.544% on decode where the measured 9-pair floor is 1.175%. Safe,
+        but it throws away the sensitivity the extra pairs were bought for."""
+        from autokernel.loop import run as run_mod
+        for surface in ("pp512", "tg128"):
+            self.assertGreater(run_mod.noise_floor_pct(surface, 5),
+                               run_mod.noise_floor_pct(surface, 9),
+                               "more pairs must lower the bar")
+
+    def test_decode_does_not_average_down_at_root_n(self):
+        """The parametric bound alone is UNSAFE on decode: sqrt(n) predicts 1.151% at
+        9 pairs while the instrument actually resolves 1.175%, so pure noise would
+        clear the bar. The floor takes the max of parametric and measured."""
+        from autokernel.loop import run as run_mod
+        self.assertLess(3.452 / (9 ** 0.5), bench.MEASURED_FLOOR_PCT["tg128"][9])
+        self.assertAlmostEqual(run_mod.noise_floor_pct("tg128", 9),
+                               bench.MEASURED_FLOOR_PCT["tg128"][9], places=6)
 
     def test_the_measured_table_is_monotonic_in_pair_count(self):
         """Averaging more pairs must not raise the floor; a non-monotonic row means
