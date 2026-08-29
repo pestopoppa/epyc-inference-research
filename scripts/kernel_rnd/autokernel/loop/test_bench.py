@@ -107,3 +107,31 @@ class ADriftVetoMustNotReadAsACleanNull(unittest.TestCase):
         reason = loop_mod._null_reason(self._settled())
         self.assertIn("did not clear", reason)
         self.assertNotIn("NOT RESOLVED", reason)
+
+
+class TheClockIsPartOfTheEvidence(unittest.TestCase):
+    """gfx90a exposes 500/800/1700 MHz and the host runs performance level `auto`, so a
+    benchmark can begin at 800 and ramp to 1700 -- a 2.125x clock change mid-measurement.
+    That is a candidate mechanism for the drift the veto keeps catching, so a drifting
+    result must be diagnosable from its own record rather than re-investigated by hand.
+    """
+
+    def test_the_sampler_reports_the_clock_range_and_stability(self):
+        from autokernel.loop import residency
+        sampler = residency.Sampler()
+        sampler.min_sclk, sampler.max_sclk = 800, 1700
+        proof = sampler.proof
+        self.assertEqual(proof["sclk_min_mhz"], 800)
+        self.assertEqual(proof["sclk_max_mhz"], 1700)
+        self.assertFalse(proof["clock_stable"], "800 -> 1700 is not a stable clock")
+
+    def test_a_steady_clock_reads_stable(self):
+        from autokernel.loop import residency
+        sampler = residency.Sampler()
+        sampler.min_sclk = sampler.max_sclk = 1700
+        self.assertTrue(sampler.proof["clock_stable"])
+
+    def test_an_unread_clock_is_not_reported_as_stable(self):
+        """Zero means the sysfs was unreadable, not that the clock never moved."""
+        from autokernel.loop import residency
+        self.assertFalse(residency.Sampler().proof["clock_stable"])

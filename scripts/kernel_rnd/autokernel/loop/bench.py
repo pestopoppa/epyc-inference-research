@@ -193,7 +193,13 @@ def compare(anchor: Arm, candidate: Arm, model: Path, *, pp: int, tg: int,
         residency={"invocations": len(proofs),
                    "resident": len(resident),
                    "peak_vram_bytes": max(p["peak_vram_bytes"] for p in proofs),
-                   "peak_kfd_processes": max(p["peak_kfd_processes"] for p in proofs)},
+                   "peak_kfd_processes": max(p["peak_kfd_processes"] for p in proofs),
+                   # Aggregated across every invocation in the comparison: if the
+                   # governor moved the clock at any point, the effect is partly a
+                   # measurement of DVFS rather than of the kernel.
+                   "sclk_min_mhz": min((p.get("sclk_min_mhz") or 0) for p in proofs),
+                   "sclk_max_mhz": max((p.get("sclk_max_mhz") or 0) for p in proofs),
+                   "clock_stable": all(p.get("clock_stable") for p in proofs)},
         device_seconds=time.monotonic() - started,
         anchor_drift_pct=drift_pct(anchor_samples),
         candidate_drift_pct=drift_pct(candidate_samples),
