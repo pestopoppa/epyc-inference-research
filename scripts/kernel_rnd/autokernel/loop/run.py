@@ -101,11 +101,13 @@ def main(argv: list[str] | None = None) -> int:
         }
 
     def gate(hypothesis, paths):
+        # Callables, so a failed build actually short-circuits: an eagerly evaluated
+        # op_correctness ran the suite against a stale binary and blamed this patch.
         return gates.run_all(
-            gates.compiles(args.worktree, args.candidate_build,
-                           cmake_defines=recipe.cmake_defines(),
-                           jobs=64, cpu_list="96-183"),
-            gates.op_correctness(args.candidate_build),
+            lambda: gates.compiles(args.worktree, args.candidate_build,
+                                   cmake_defines=recipe.cmake_defines(),
+                                   jobs=64, cpu_list="96-183"),
+            lambda: gates.op_correctness(args.candidate_build),
         )
 
     def measure(hypothesis, paths):

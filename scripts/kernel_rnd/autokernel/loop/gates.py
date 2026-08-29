@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 import subprocess
 
 from . import residency
@@ -109,10 +110,25 @@ def deterministic(build_dir: Path, model: Path, *, runs: int = 3) -> Verdict:
     return Verdict("determinism", True)
 
 
-def run_all(*verdicts: Verdict) -> tuple[bool, list[Verdict]]:
-    """Short-circuit at the first refusal; return every verdict for the record."""
-    collected = []
-    for verdict in verdicts:
+def run_all(*checks: "Callable[[], Verdict]") -> tuple[bool, list[Verdict]]:
+    """Short-circuit at the first refusal; return every verdict for the record.
+
+    Takes CALLABLES, not verdicts. It used to take `*verdicts: Verdict`, which made the
+    documented short-circuit impossible: Python evaluates every argument before the call,
+    so `run_all(compiles(...), op_correctness(...))` ran the correctness suite even when
+    the build had just FAILED -- against whatever binary happened to be left in the
+    candidate build directory from a previous iteration.
+
+    The recorded verdicts stayed correct -- the loop returns at the first failure, so the
+    eagerly computed correctness verdict was discarded rather than reported. What was lost
+    was time and meaning: every failed build in run 9 still paid for a full
+    `test-backend-ops` run, executed against whatever stale binary the previous iteration
+    left behind. A gate that runs after the gate before it refused is not a gate, even
+    when nobody reads its answer.
+    """
+    collected: list[Verdict] = []
+    for check in checks:
+        verdict = check()
         collected.append(verdict)
         if not verdict.passed:
             return False, collected
