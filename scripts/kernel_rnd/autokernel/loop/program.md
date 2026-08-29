@@ -172,6 +172,27 @@ authoring, not after the build:
   ground truth and is reset to the champion before every iteration, so "authoring returned no
   changed paths" means the edit never landed. Re-read the file before reporting paths.
 
+## A DERIVED marginal is not measured against the same bar
+
+Two effects measured against a common anchor give an exact marginal:
+
+    tput(B)/tput(anchor) / [ tput(A)/tput(anchor) ] = tput(B)/tput(A)
+
+The arithmetic is exact. The UNCERTAINTY is not the same. Each input carries the
+floor's p95; their ratio carries roughly **sqrt(2) times** it, because two independent
+errors compose. Comparing a derived marginal against the ordinary floor asks it to
+clear a bar calibrated for a directly measured quantity, and rejects real gains.
+
+This is not hypothetical: `akm-q4k-q8-sum-sidecar` was demoted from the champion on
+exactly that mistake. Its marginal was +1.088% against a 1.188% floor -- but the
+correct interval is +/-1.680%, so the honest verdict was UNDEMONSTRATED, not refuted.
+It may be worth up to +2.8%.
+
+**So: if you want a marginal, MEASURE it.** With the anchor advancing, a candidate is
+already compared against the current champion, and that number is direct. Only infer a
+marginal from two cumulative figures when you cannot measure it -- and when you do,
+widen the bar to sqrt(2) x floor and say that you did.
+
 ## What the correctness gate does NOT catch
 
 `test-backend-ops` is the gate, and it is necessary rather than sufficient. A real
