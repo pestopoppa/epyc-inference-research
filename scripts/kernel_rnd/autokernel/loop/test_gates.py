@@ -193,3 +193,34 @@ class TheAnchorMustAdvanceWithTheChampion(unittest.TestCase):
         block = self._source().split("def promote_anchor(", 1)[1][:800]
         self.assertIn("shutil.move", block)
         self.assertNotIn("shutil.copy", block)
+
+
+class ThePooledPathMustAdvanceTheAnchorToo(unittest.TestCase):
+    """The sequential path promotes the anchor inside its own commit. The pooled path
+    has a separate commit, and not doing it there would leave the anchor static across
+    every lane -- reproducing run 13's defect (cumulative effects reported as marginal,
+    a -2.864% regression committed as a keep) at seven times the rate."""
+
+    def _pooled_block(self):
+        source = (Path(__file__).resolve().parent / "run.py").read_text()
+        return source.split("def commit_pooled(", 1)[1][:1400]
+
+    def test_it_advances_the_champion_then_the_anchor(self):
+        block = self._pooled_block()
+        self.assertIn("pool.advance_champion", block)
+        self.assertIn("promote_anchor", block)
+        self.assertLess(block.index("pool.advance_champion"),
+                        block.index("promote_anchor("),
+                        "the anchor must follow the commit, never precede it")
+
+    def test_it_promotes_THIS_lanes_build(self):
+        """Another lane's build never contained the accepted patch."""
+        block = self._pooled_block()
+        self.assertIn("promote_anchor(worker.build_dir)", block)
+        self.assertNotIn("promote_anchor(args.candidate_build)", block)
+
+    def test_the_pooled_commit_is_actually_wired_in(self):
+        """A commit_pooled that nothing calls is the defect it was written to fix."""
+        source = (Path(__file__).resolve().parent / "run.py").read_text()
+        drive = source.split("return pool.drive(", 1)[1][:400]
+        self.assertIn("commit=commit_pooled", drive)

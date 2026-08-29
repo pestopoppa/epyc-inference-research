@@ -357,7 +357,27 @@ def main(argv: list[str] | None = None) -> int:
             publish("running", latest, hotspot_rows=hotspot_rows,
                     step=f"[{worker_name}] {label}")
 
+        def commit_pooled(worker, hypothesis, paths, comparison) -> str:
+            """Advance the champion branch, then the ANCHOR.
+
+            The sequential path promotes the anchor inside its own `commit`; the
+            pooled path has its own commit and did not, which would have left the
+            anchor static across every lane -- reproducing run 13's defect (cumulative
+            effects reported as marginal, a -2.864% regression committed as a keep) at
+            seven times the rate.
+
+            The promoted build is THIS LANE's, because this lane is the one that
+            built the accepted patch. Other lanes are mid-formation against the old
+            base and will be refused as `superseded` on their next tail entry, which
+            is exactly right: their candidates were never built on this champion.
+            """
+            head = pool.advance_champion(worker, hypothesis, paths, comparison,
+                                         champion_tree=args.worktree)
+            promote_anchor(worker.build_dir)
+            return head
+
         return pool.drive(
+            commit=commit_pooled,
             workers=pool.provision(args.workers, champion_tree=args.worktree,
                                    root=args.worker_root,
                                    build_root=args.worker_build_root,
