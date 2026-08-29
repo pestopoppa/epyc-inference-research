@@ -410,3 +410,53 @@ class TheEnforcedFloorNeverSitsBelowTheMeasuredOne(unittest.TestCase):
     def test_min_pairs_has_a_measured_row_at_all(self):
         for surface in ("pp512", "tg128"):
             self.assertIn(bench.MIN_PAIRS, bench.MEASURED_FLOOR_PCT[surface])
+
+
+class AnInstrumentFailureEndsTheIterationNotTheRun(unittest.TestCase):
+    """Run 12 died on iteration 1: llama-bench was SIGKILLed (rc=-9) mid-measurement
+    and BenchFailed escaped `iterate`, ending a ten-iteration run that had already
+    paid for its profile and was holding the device.
+
+    A provider transient was already handled this way. An instrument failure is the
+    same shape -- not the science failing -- and earlyoom on this host ignores
+    llama-server but not llama-bench, so an external kill is a standing hazard.
+    """
+
+    def test_a_bench_failure_is_recorded_and_the_run_continues(self):
+        def measure(hypothesis, paths):
+            raise bench.BenchFailed("llama-bench rc=-9: killed")
+        outcome = loop.iterate(
+            planner=_Planner(), critic=_Critic([], []), context={},
+            measure=measure,
+            gate=lambda *a: (True, [gates.Verdict("compile", True)]),
+            commit=lambda *a: "abc1234")
+        self.assertEqual(outcome.status, "bench_failed")
+        self.assertIn("rc=-9", " ".join(outcome.reasons))
+
+    def test_it_is_not_conflated_with_a_provider_transient(self):
+        """Merging them would hide a failing instrument behind a flaky API."""
+        def measure(hypothesis, paths):
+            raise bench.BenchFailed("only 3/10 invocations were sampled resident")
+        outcome = loop.iterate(
+            planner=_Planner(), critic=_Critic([], []), context={},
+            measure=measure,
+            gate=lambda *a: (True, [gates.Verdict("compile", True)]),
+            commit=lambda *a: "abc1234")
+        self.assertNotEqual(outcome.status, "planner_transient")
+
+    def test_the_run_keeps_going_after_one(self):
+        calls = {"n": 0}
+
+        def measure(hypothesis, paths):
+            calls["n"] += 1
+            raise bench.BenchFailed("killed")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            outcomes = loop.run(
+                planner=_Planner(), critic=_Critic([], []), build_context=dict,
+                measure=measure,
+                gate=lambda *a: (True, [gates.Verdict("compile", True)]),
+                commit=lambda *a: "abc1234", store_root=Path(tmp),
+                epoch="e" * 64, campaign_id="ak-loop", iterations=3)
+        self.assertEqual(len(outcomes), 3, "one killed bench must not end the run")
+        self.assertEqual(calls["n"], 3)

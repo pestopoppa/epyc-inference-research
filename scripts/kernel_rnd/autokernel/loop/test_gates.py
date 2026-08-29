@@ -70,9 +70,14 @@ class ARefusedPatchMustSurviveTheReset(unittest.TestCase):
         self.assertIn("def keep_the_diff(", source)
         # It must run BEFORE the gate, because a failed build still leaves a patch
         # worth reading and that is the last moment it exists on disk.
-        gate_body = source.split("def gate(hypothesis, paths):", 1)[1][:400]
-        self.assertIn("keep_the_diff(hypothesis)", gate_body)
-        before = gate_body.index("keep_the_diff(hypothesis)")
+        gate_body = source.split("def gate(hypothesis, paths):", 1)[1][:900]
+        # `keep_the_diff` takes the LANE as well as the hypothesis since the gate
+        # became per-worker: with concurrent lanes a bare `<mechanism>.patch` is two
+        # lanes overwriting one file, which loses diffs the same way run 9 did. The
+        # property under test is the ORDER, so match the call, not one spelling of
+        # its argument list.
+        self.assertIn("keep_the_diff(", gate_body)
+        before = gate_body.index("keep_the_diff(")
         self.assertLess(before, gate_body.index("gates.run_all"))
 
     def test_an_empty_diff_writes_nothing(self):

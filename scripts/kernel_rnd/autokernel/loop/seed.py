@@ -32,6 +32,7 @@ overwritten with identical content.
 from __future__ import annotations
 
 import argparse
+import hashlib
 from datetime import datetime, timezone
 import json
 from pathlib import Path
@@ -57,6 +58,13 @@ def install(store_root: Path, *, seeds: Path = SEEDS) -> dict:
     now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     added = 0
     for record in body["records"]:
+        # A seeded negative is a FIXED historical record, not an event in time: the
+        # same seed re-run must not duplicate it. Attempt identity is otherwise
+        # time-based (two transients minutes apart are genuinely distinct events), so
+        # seeds carry an explicit content digest, which `_attempt_id` prefers.
+        record = dict(record)
+        record.setdefault("proposal_sha256", hashlib.sha256(json.dumps(
+            record, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest())
         if archive.record(store_root, record, epoch=epoch, recorded_at=now,
                           campaign_id="ak-loop-seed"):
             added += 1

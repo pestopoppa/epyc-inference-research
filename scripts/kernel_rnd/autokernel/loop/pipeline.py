@@ -1,0 +1,182 @@
+#!/usr/bin/env python3
+"""Run several iterations concurrently, with one serialized tail.
+
+WHY
+---
+Run 11 spent 75.1 minutes on 10 iterations and 11.9 of them on the device -- 15.8%.
+The other 63 minutes were four sequential `gpt-5.6-sol` calls per iteration at high
+reasoning effort, plus a build and the op oracle. Those four calls are inherently
+sequential WITHIN an iteration: each one consumes the previous one's output. So the
+only way to hide that latency is to overlap ACROSS iterations.
+
+THE SPLIT
+---------
+Concurrent:  propose, critic pass 1, author, critic pass 2 -- pure actor latency, no
+             device, no build lane, no champion write.
+Serialized:  build, op oracle, A/B, champion commit -- all four contend. The build
+             takes 64 of the 88 lane cores, the oracle and the A/B need the one GPU,
+             and the commit advances a branch.
+
+Since the serialized tail is ~16% of wall time, three or four workers saturate it
+before it becomes the constraint. This buys throughput without weakening one statistic
+-- which matters, because five of the six instrument defects found on 2026-08-29 were
+forms of measuring less, and going faster by measuring less is the failure this whole
+rebuild exists to correct.
+
+THE CHAMPION IS THE SHARED MUTABLE THING
+----------------------------------------
+`ak-loop-tree` is a git WORKTREE of the frozen production clone, on branch
+`ak/loop-champion-20260828`. Git refuses to check one branch out in two worktrees, so
+each worker runs DETACHED at the champion commit and only the serialized tail advances
+the branch.
+
+That creates the one genuine hazard here: a worker authors against champion C0 while
+another worker's keep advances the champion to C1. Measuring the first candidate
+against C1 is wrong -- it was never built on it -- and against C0 is stale, because a
+kept patch is supposed to compound. So a candidate whose base has moved is recorded as
+`superseded` and its hypothesis returns to the pool with its reasons intact. It is not
+a failure of the science and must never be recorded as one.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from pathlib import Path
+import threading
+from typing import Any, Callable, Sequence
+
+from . import loop as loop_mod
+
+#: Beyond this, workers queue on the serialized tail rather than adding throughput.
+#: Derived from the measured split, not chosen: the tail is ~16% of an iteration, so
+#: ~6 workers saturate it and 3-4 leaves headroom for the tail growing under load.
+DEFAULT_WORKERS = 3
+
+
+class Superseded(RuntimeError):
+    """The champion advanced while this candidate was being authored."""
+
+
+@dataclass
+class Worker:
+    """One concurrent lane: its own worktree, its own build directory."""
+    name: str
+    worktree: Path
+    build_dir: Path
+
+
+@dataclass
+class Budget:
+    """A shared iteration count. Workers draw from it until it is spent."""
+    remaining: int
+    _lock: threading.Lock = field(default_factory=threading.Lock)
+
+    def take(self) -> bool:
+        with self._lock:
+            if self.remaining <= 0:
+                return False
+            self.remaining -= 1
+            return True
+
+
+class SerializedTail:
+    """Build, oracle, measure and commit -- one worker at a time.
+
+    Also the arbiter of champion staleness, because that decision can only be made
+    while holding the lock: any check made outside it is immediately racy.
+    """
+
+    def __init__(self, champion_head: Callable[[], str],
+                 lock: threading.Lock | None = None) -> None:
+        self._lock = lock or threading.Lock()
+        self._champion_head = champion_head
+        self.tail_seconds = 0.0
+        self.superseded = 0
+
+    def _check_base(self, base_head: str) -> None:
+        """Caller MUST hold the lock: a staleness check made outside it is racy."""
+        current = self._champion_head()
+        if current != base_head:
+            self.superseded += 1
+            raise Superseded(
+                f"authored against {base_head[:12]}, champion is now "
+                f"{current[:12]}: a kept patch must compound, so this candidate is "
+                f"re-formed rather than measured against a base it never saw")
+
+    def call(self, base_head: str, work: Callable[[], Any], clock=None) -> Any:
+        """Run one tail step exclusively, refusing a candidate whose base has moved.
+
+        Everything that contends goes through here: the build (64 of the 88 lane
+        cores), the op oracle and the A/B (the one GPU), and the champion commit (a
+        branch two workers must never advance at once).
+        """
+        import time as _time
+        clock = clock or _time.monotonic
+        with self._lock:
+            self._check_base(base_head)
+            started = clock()
+            try:
+                return work()
+            finally:
+                self.tail_seconds += clock() - started
+
+
+def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_context,
+             make_gate, make_measure, commit, champion_head: Callable[[], str],
+             reset_to_champion: Callable[[Worker], str],
+             record: Callable[[loop_mod.Outcome], None],
+             iterations: int, on_step: Callable[[str, str], None] | None = None,
+             tail: SerializedTail | None = None) -> list[loop_mod.Outcome]:
+    """Drive `iterations` iterations across `workers` concurrent lanes.
+
+    Every side effect is injected, exactly as in `loop.iterate`, so the whole pool is
+    testable with no GPU, no build toolchain and no API key.
+    """
+    budget = Budget(iterations)
+    tail = tail or SerializedTail(champion_head)
+    outcomes: list[loop_mod.Outcome] = []
+    outcomes_lock = threading.Lock()
+
+    def lane(worker: Worker) -> None:
+        planner, critic = make_planner(worker), make_critic(worker)
+        while budget.take():
+            base = reset_to_champion(worker)
+
+            def gate(hypothesis, paths, _w=worker, _b=base):
+                return tail.call(_b, lambda: make_gate(_w)(hypothesis, paths))
+
+            def measure(hypothesis, paths, _w=worker, _b=base):
+                return tail.call(_b, lambda: make_measure(_w)(hypothesis, paths))
+
+            def commit_one(hypothesis, paths, comparison, _w=worker, _b=base):
+                # Under the lock and re-checked: the champion is the one piece of
+                # shared mutable state, and two lanes advancing it at once is the
+                # race this whole design exists to prevent.
+                return tail.call(_b, lambda: commit(_w, hypothesis, paths, comparison))
+
+            def step(label, _w=worker):
+                if on_step is not None:
+                    on_step(_w.name, label)
+
+            try:
+                outcome = loop_mod.iterate(
+                    planner=planner, critic=critic, context=build_context(),
+                    measure=measure, gate=gate,
+                    commit=commit_one, on_step=step)
+            except Superseded as exc:
+                # Not a scientific result. The hypothesis and its reasons survive.
+                outcome = loop_mod.Outcome("superseded", None, [str(exc)])
+            with outcomes_lock:
+                outcomes.append(outcome)
+                record(outcome)
+
+    threads = [threading.Thread(target=lane, args=(w,), name=w.name, daemon=True)
+               for w in workers]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    return outcomes
+
+
+__all__ = ["Budget", "DEFAULT_WORKERS", "SerializedTail", "Superseded", "Worker",
+           "run_pool"]

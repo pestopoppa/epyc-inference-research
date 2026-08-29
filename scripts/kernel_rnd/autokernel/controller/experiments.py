@@ -124,7 +124,8 @@ class ExperimentStore:
         Idempotent on `attempt_id` so a resumed controller re-recording its own
         durable rows cannot inflate the history it will later read back.
         """
-        attempt_id = _attempt_id(attempt, campaign_id=campaign_id)
+        attempt_id = _attempt_id(attempt, campaign_id=campaign_id,
+                                 recorded_at=recorded_at)
         row = (
             attempt_id, recorded_at, campaign_id, deployment, epoch,
             _text(attempt.get("portfolio_hypothesis_id") or attempt.get("hypothesis_id")),
@@ -257,7 +258,8 @@ class ExperimentStore:
 
 # ------------------------------------------------------------------ helpers
 
-def _attempt_id(attempt: Mapping[str, Any], *, campaign_id: str) -> str:
+def _attempt_id(attempt: Mapping[str, Any], *, campaign_id: str,
+                recorded_at: str = "") -> str:
     """Stable identity for one attempt.
 
     Prefers the sealed result digest; falls back to the campaign plus the proposal
@@ -269,7 +271,19 @@ def _attempt_id(attempt: Mapping[str, Any], *, campaign_id: str) -> str:
         value = attempt.get(key)
         if isinstance(value, str) and value:
             return value
-    material = {"campaign_id": campaign_id, "turn": attempt.get("turn"),
+    # `turn` is never emitted by `Outcome.to_attempt()`, so it was always None and the
+    # identity collapsed to (campaign, status, mechanism, reason). Two DISTINCT
+    # attempts sharing that -- say two `planner_transient` rows 40 minutes apart, both
+    # reading "authoring returned no changed paths" -- hashed identically, the second
+    # was silently dropped, and `record` returned False with nobody reading it. The
+    # planner then reads a history that is missing its own repetitions, which is
+    # exactly the blindness this store exists to remove. Concurrency makes it acute:
+    # repetitive statuses are the ones several lanes produce at once.
+    material = {"campaign_id": campaign_id,
+                "turn": attempt.get("turn"),
+                "lane": attempt.get("lane"),
+                "recorded_at": recorded_at,
+                "turn_recorded_at": attempt.get("turn_recorded_at"),
                 "status": attempt.get("status"),
                 "mechanism_id": attempt.get("mechanism_id"),
                 "reason": attempt.get("reason")}

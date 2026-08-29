@@ -184,6 +184,18 @@ def iterate(*, planner: Planner, critic: Critic,
         # recorded as such; the run continues, and a streak becomes visible in
         # experiments.md rather than taking the campaign down with it.
         return Outcome("planner_transient", None, [str(exc)])
+    except bench.BenchFailed as exc:
+        # The INSTRUMENT failed, not the science, and it gets the same treatment for
+        # the same reason. Run 12 died on iteration 1 because `llama-bench` was
+        # SIGKILLed (rc=-9) mid-measurement and BenchFailed escaped `iterate`: one
+        # killed process ended a ten-iteration run that had already spent its profile
+        # and held the device. `earlyoom` on this host ignores llama-server and NOT
+        # llama-bench, so an external kill is a standing hazard rather than a freak.
+        #
+        # Recorded distinctly from a provider transient: "the benchmark could not be
+        # taken" is a different fact from "the actor would not answer", and merging
+        # them would hide an instrument failing behind an API being flaky.
+        return Outcome("bench_failed", None, [str(exc)])
 
 
 def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, commit,

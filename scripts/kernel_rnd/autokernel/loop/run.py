@@ -22,7 +22,8 @@ import sys
 import time
 
 from ..controller import build_recipe, workload_contract
-from . import actors, archive, bench, claim, gates, hotspots, loop, status
+from . import (actors, archive, bench, claim, gates, hotspots, loop, pipeline, pool,
+               status)
 
 #: Single-pair p95, measured 2026-08-28 over n=20 alternating A/A pairs. Prefill is
 #: the cheaper surface to detect on; decode has heavier tails.
@@ -79,6 +80,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", type=Path)
     parser.add_argument("--dry-run", action="store_true",
                         help="prove the wiring without a provider call or a build")
+    # ---- concurrency (DRAFT). 1 is today's sequential path, unchanged. ----------
+    parser.add_argument("--workers", type=int, default=1,
+                        help="concurrent lanes; 1 (default) is the sequential path "
+                             "and reaches none of the pooled code")
+    parser.add_argument("--worker-root", type=Path, default=pool.WORKER_ROOT,
+                        help="parent of the per-lane detached worktrees")
+    parser.add_argument("--worker-build-root", type=Path,
+                        default=pool.WORKER_BUILD_ROOT,
+                        help="parent of the per-lane candidate build directories")
     args = parser.parse_args(argv)
 
     # The workload must dispatch the kernels production dispatches. Refuse loudly.
@@ -144,7 +154,12 @@ def main(argv: list[str] | None = None) -> int:
             "inbox": read_inbox(),
         }
 
-    def keep_the_diff(hypothesis) -> Path | None:
+    #: The sequential run is one lane. Making it a `Worker` is what lets the gate,
+    #: the measurement and the patch archive be written ONCE and used by both paths --
+    #: a second copy of the build recipe wiring is a second thing to drift.
+    solo = pipeline.Worker("solo", args.worktree, args.candidate_build)
+
+    def keep_the_diff(worker, hypothesis) -> Path | None:
         """Preserve every candidate patch, kept or not.
 
         `reset_tree` returns the worktree to the champion before the next iteration, so
@@ -153,35 +168,57 @@ def main(argv: list[str] | None = None) -> int:
         diagnosed. A negative written up without its diff is not evidence anyone can
         act on -- and the whole point of durable memory is that the next iteration does
         not re-derive what this one paid for.
+
+        The filename carries the LANE. Mechanism ids repeat -- one bit-deposit rewrite
+        of `vec_dot_q5_0_q8_1_impl` was proposed 38 times -- so with concurrent lanes a
+        bare `<mechanism>.patch` is two lanes overwriting one file, which is run 9's
+        lost-diffs defect returning by a different route.
         """
-        diff = _git(args.worktree, "diff")
+        diff = _git(worker.worktree, "diff")
         if not diff.strip():
             return None
         out = args.store / "patches"
         out.mkdir(parents=True, exist_ok=True)
         name = getattr(hypothesis, "mechanism_id", None) or "unnamed"
-        target = out / f"{name}.patch"
+        target = out / f"{name}.{worker.name}.patch"
         target.write_text(diff + "\n", encoding="utf-8")
         return target
 
-    def gate(hypothesis, paths):
-        # The diff first: a build that fails still leaves a patch worth reading, and
-        # this is the last moment it exists on disk.
-        keep_the_diff(hypothesis)
-        # Callables, so a failed build actually short-circuits: an eagerly evaluated
-        # op_correctness ran the suite against a stale binary and blamed this patch.
-        return gates.run_all(
-            lambda: gates.compiles(args.worktree, args.candidate_build,
-                                   cmake_defines=recipe.cmake_defines(),
-                                   jobs=64, cpu_list="96-183"),
-            lambda: gates.op_correctness(args.candidate_build),
-        )
+    def gate_for(worker):
+        def gate(hypothesis, paths):
+            # The diff first: a build that fails still leaves a patch worth reading,
+            # and this is the last moment it exists on disk.
+            keep_the_diff(worker, hypothesis)
+            # Callables, so a failed build actually short-circuits: an eagerly
+            # evaluated op_correctness ran the suite against a stale binary and blamed
+            # this patch.
+            #
+            # `jobs=64, cpu_list="96-183"` is per BUILD, not per run. Under `--workers`
+            # this is safe only because the build runs inside the serialized tail: two
+            # concurrent 64-job builds would oversubscribe an 88-core lane and every
+            # build time recorded during the overlap would be a measurement of
+            # contention.
+            return gates.run_all(
+                lambda: gates.compiles(worker.worktree, worker.build_dir,
+                                       cmake_defines=recipe.cmake_defines(),
+                                       jobs=64, cpu_list="96-183"),
+                lambda: gates.op_correctness(worker.build_dir),
+            )
+        return gate
 
-    def measure(hypothesis, paths):
-        return bench.compare(
-            bench.Arm("anchor", args.anchor_build / "bin" / "llama-bench"),
-            bench.Arm("candidate", args.candidate_build / "bin" / "llama-bench"),
-            args.model, pp=pp, tg=tg, pairs=args.pairs, noise_floor_pct=floor)
+    def measure_for(worker):
+        def measure(hypothesis, paths):
+            # The anchor build is SHARED across lanes and only ever read, so it needs
+            # no per-lane copy; the candidate binary is per lane because each lane
+            # built it from its own patch.
+            return bench.compare(
+                bench.Arm("anchor", args.anchor_build / "bin" / "llama-bench"),
+                bench.Arm("candidate", worker.build_dir / "bin" / "llama-bench"),
+                args.model, pp=pp, tg=tg, pairs=args.pairs, noise_floor_pct=floor)
+        return measure
+
+    gate = gate_for(solo)
+    measure = measure_for(solo)
 
     def reset_tree() -> None:
         """Return the candidate tree to the champion before each iteration.
@@ -198,10 +235,13 @@ def main(argv: list[str] | None = None) -> int:
                        capture_output=True, text=True, timeout=600, check=False)
 
     def commit(hypothesis, paths, comparison):
+        # `branch="HEAD"` is correct HERE and only here: the sequential run has the
+        # champion branch checked out, so advancing HEAD advances the branch. A lane is
+        # DETACHED, and the same call there would leave the commit unreferenced --
+        # which is why the pooled path uses `pool.advance_champion` instead.
         return archive.keep(
             args.worktree, branch="HEAD",
-            message=(f"{hypothesis.mechanism_id}: {comparison.effect * 100:+.3f}% "
-                     f"on {comparison.surface} over {comparison.pairs} pairs"),
+            message=pool.commit_message(hypothesis, comparison),
             paths=tuple(paths))
 
     def gpu_reading(outcomes=()) -> dict:
@@ -244,6 +284,59 @@ def main(argv: list[str] | None = None) -> int:
         latest[:] = list(rows)
         publish("running", latest, hotspot_rows=hotspot_rows)
 
+    # ---------------------------------------------------------------------------
+    # THE CONCURRENT PATH (DRAFT). Everything above is the sequential run and is
+    # reached identically when `--workers 1`. Nothing below runs unless asked for.
+    # ---------------------------------------------------------------------------
+
+    def run_pooled() -> pool.PoolResult:
+        """Drive the same loop across N detached lanes.
+
+        WHAT IS PER-LANE THAT USED TO BE GLOBAL
+          * the worktree and the candidate build directory (`pipeline.Worker`);
+          * the planner and the critic, because each holds a workspace path;
+          * the saved patch filename, which now carries the lane;
+          * the phase clock -- `note_phase` keeps ONE (label, started) mark, so with
+            several lanes the interval is charged to whichever lane wrote last. The
+            pooled path uses `pool.PhaseClock`, whose totals are LANE-seconds and can
+            legitimately sum to more than the wall clock.
+
+        WHAT STAYS GLOBAL
+          * the GPU claim: one `flock` for the process. A second `hold()` on a second
+            descriptor in this same process would refuse itself.
+          * the anchor build, which is only ever read;
+          * `build_context`, `args.store` and the status file. `record` and the status
+            publish both happen under the pipeline's outcomes lock, so they are
+            serialized -- at the cost of a slow status write briefly blocking every
+            lane's recording.
+          * `epoch`/`anchor_commit` in the published status: they still describe the
+            champion the run STARTED from, which is what makes the archive rows
+            comparable across the run.
+        """
+        def record_pooled(outcome) -> None:
+            archive.record(args.store, outcome.to_attempt(), epoch=epoch,
+                           recorded_at=loop._now(), campaign_id="ak-loop")
+            latest.append(outcome)
+            publish("running", latest, hotspot_rows=hotspot_rows)
+
+        def step_pooled(worker_name: str, label: str) -> None:
+            # The step line names the lane: an unattributed "building and gating" on a
+            # pooled run says nothing about which of N lanes is where.
+            publish("running", latest, hotspot_rows=hotspot_rows,
+                    step=f"[{worker_name}] {label}")
+
+        return pool.drive(
+            workers=pool.provision(args.workers, champion_tree=args.worktree,
+                                   root=args.worker_root,
+                                   build_root=args.worker_build_root,
+                                   execute=True),
+            make_planner=lambda worker: actors.CodexPlanner(workspace=worker.worktree),
+            make_critic=lambda worker: actors.CodexCritic(workspace=worker.worktree),
+            build_context=build_context, make_gate=gate_for,
+            make_measure=measure_for, record=record_pooled,
+            iterations=args.iterations, champion_tree=args.worktree,
+            on_step=step_pooled)
+
     claim_started = None
     publish("starting")
     started = time.time()
@@ -265,17 +358,22 @@ def main(argv: list[str] | None = None) -> int:
                   f"than left to guess")
 
         publish("running", hotspot_rows=hotspot_rows)
+        pooled: pool.PoolResult | None = None
         try:
-            outcomes = loop.run(
-                planner=planner, critic=critic, build_context=build_context,
-                measure=measure, gate=gate, commit=commit,
-                store_root=args.store, epoch=epoch, campaign_id="ak-loop",
-                iterations=args.iterations, reset=reset_tree,
-                on_iteration=_remember,
-                on_step=lambda label: (note_phase(label),
-                                       publish("running", latest,
-                                               hotspot_rows=hotspot_rows,
-                                               step=label)) and None)
+            if args.workers > 1:
+                pooled = run_pooled()
+                outcomes = pooled.outcomes
+            else:
+                outcomes = loop.run(
+                    planner=planner, critic=critic, build_context=build_context,
+                    measure=measure, gate=gate, commit=commit,
+                    store_root=args.store, epoch=epoch, campaign_id="ak-loop",
+                    iterations=args.iterations, reset=reset_tree,
+                    on_iteration=_remember,
+                    on_step=lambda label: (note_phase(label),
+                                           publish("running", latest,
+                                                   hotspot_rows=hotspot_rows,
+                                                   step=label)) and None)
         except BaseException:
             # A crashed loop must SAY it crashed. Going quiet reads as "slow".
             publish("failed", hotspot_rows=hotspot_rows)
@@ -288,6 +386,12 @@ def main(argv: list[str] | None = None) -> int:
                    if outcome.status in {"kept", "measured_null"})
     print(f"\n{len(outcomes)} iterations in {elapsed / 60:.1f} min: "
           f"{measured} reached a measurement, {kept} kept")
+    if pooled is not None:
+        # The number that decides the lane count: once the tail approaches the wall
+        # clock every extra lane only queues on it.
+        print(f"pool      {args.workers} lanes, tail {pooled.tail_seconds / 60:.1f} "
+              f"min of {pooled.wall_seconds / 60:.1f} wall, "
+              f"{pooled.superseded} superseded")
     for index, outcome in enumerate(outcomes, start=1):
         effect = (f"{outcome.comparison.effect * 100:+.3f}%"
                   if outcome.comparison else "—")
@@ -296,15 +400,26 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.out:
         args.out.mkdir(parents=True, exist_ok=True)
-        (args.out / "loop-run.json").write_text(json.dumps({
+        body = {
             "schema": "epyc.autokernel.loop_run.v1",
             "epoch": epoch, "anchor_commit": anchor_commit,
             "surface": args.surface, "pairs": args.pairs,
             "noise_floor_pct": floor, "elapsed_s": round(elapsed, 1),
+            "workers": args.workers,
             "iterations": [outcome.to_attempt() for outcome in outcomes],
             "phase_seconds": {k: round(v, 1) for k, v in sorted(
                 phase_seconds.items(), key=lambda kv: -kv[1])},
-        }, indent=2), encoding="utf-8")
+        }
+        if pooled is not None:
+            # The pooled block REPLACES `phase_seconds` rather than sitting beside it:
+            # the sequential accumulator is never written on this path, so leaving it
+            # at {} beside a populated pooled block invites reading the empty one.
+            pooled_body = pooled.to_dict(workers=args.workers)
+            body["phase_seconds"] = pooled_body.pop("phase_lane_seconds")
+            body["phase_seconds_are_lane_seconds"] = True
+            body["pool"] = pooled_body
+        (args.out / "loop-run.json").write_text(json.dumps(body, indent=2),
+                                                encoding="utf-8")
         print(f"\nwrote {args.out / 'loop-run.json'}")
     return 0
 
