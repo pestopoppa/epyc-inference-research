@@ -106,6 +106,21 @@ def main(argv: list[str] | None = None) -> int:
     planner = actors.CodexPlanner(workspace=args.worktree)
     critic = actors.CodexCritic(workspace=args.worktree)
 
+    #: Wall seconds per phase, accumulated across the run. The loop is ~84% NOT
+    #: benchmarking (run 11: 11.9 of 75.1 min on device), and until now nothing
+    #: recorded WHICH phase held the rest -- turn_recorded_at is stamped at write
+    #: time, so per-iteration gaps all read 0.0. You cannot shorten what you have
+    #: not measured.
+    phase_seconds: dict[str, float] = {}
+    phase_mark: list = [None, None]
+
+    def note_phase(label: str) -> None:
+        previous, started = phase_mark
+        if previous is not None:
+            phase_seconds[previous] = phase_seconds.get(previous, 0.0) + (
+                time.monotonic() - started)
+        phase_mark[0], phase_mark[1] = label, time.monotonic()
+
     def read_inbox() -> list[str]:
         """Re-read every iteration, not once at startup.
 
@@ -257,9 +272,10 @@ def main(argv: list[str] | None = None) -> int:
                 store_root=args.store, epoch=epoch, campaign_id="ak-loop",
                 iterations=args.iterations, reset=reset_tree,
                 on_iteration=_remember,
-                on_step=lambda label: publish("running", latest,
-                                              hotspot_rows=hotspot_rows,
-                                              step=label))
+                on_step=lambda label: (note_phase(label),
+                                       publish("running", latest,
+                                               hotspot_rows=hotspot_rows,
+                                               step=label)) and None)
         except BaseException:
             # A crashed loop must SAY it crashed. Going quiet reads as "slow".
             publish("failed", hotspot_rows=hotspot_rows)
@@ -286,6 +302,8 @@ def main(argv: list[str] | None = None) -> int:
             "surface": args.surface, "pairs": args.pairs,
             "noise_floor_pct": floor, "elapsed_s": round(elapsed, 1),
             "iterations": [outcome.to_attempt() for outcome in outcomes],
+            "phase_seconds": {k: round(v, 1) for k, v in sorted(
+                phase_seconds.items(), key=lambda kv: -kv[1])},
         }, indent=2), encoding="utf-8")
         print(f"\nwrote {args.out / 'loop-run.json'}")
     return 0
