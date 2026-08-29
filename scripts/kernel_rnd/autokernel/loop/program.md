@@ -114,12 +114,18 @@ These are receipts, not priors. A hypothesis that contradicts one is dead on arr
   reason to decline one.
   (Source for all three: `handoffs/active/agentic-rocm-kernel-authoring.md`.)
 
-## Half of the prefill profile is not ours to patch
+## Half of the prefill profile runs in a vendor kernel — BY OUR OWN DISPATCH
 
 Measured on the contracted surface (pp512, DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M,
 2026-08-28). Any hotspot whose signature begins **`Cijk_...`** is a **rocBLAS/Tensile
-GEMM**, shipped as a vendor library. It is not in the llama.cpp tree, this loop cannot
-edit it, and a hypothesis targeting one is unimplementable here:
+GEMM** from a vendor library, so the loop cannot edit that kernel's *body*:
+
+**But it is reached by our own decision.** `ggml_cuda_should_use_mmq()`
+(`ggml/src/ggml-cuda/mmq.cu:240`) chooses between MMQ and dequant+GEMM, and for
+gfx90a/Q4_K it returns false purely because line :309 gates Q4_K/Q5_K at
+`ne11 <= 256` while pp512 has `ne11 = 512`. One constant, in our tree, routes ~76%
+of this surface into the vendor path. See seed `03-mmq-dispatch-threshold.md` —
+changing WHICH kernel runs is available even when changing that kernel is not.
 
 | share | patchable | kernel |
 |---|---|---|
