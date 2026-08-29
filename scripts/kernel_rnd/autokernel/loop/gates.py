@@ -69,17 +69,44 @@ def compiles(source_root: Path, build_dir: Path, *, cmake_defines: tuple,
     return Verdict("compile", True)
 
 
-def op_correctness(build_dir: Path, *, op: str = "MUL_MAT", backend: str = "ROCm0",
-                   suite_seed: int = 2026081301) -> Verdict:
-    """`test-backend-ops` on the op the patch touches. The real correctness gate."""
+#: Proof the suite actually EXECUTED. `test-backend-ops` prints this summary whether
+#: it passes or fails, so its ABSENCE means the run never happened.
+RAN_MARKER = "backends passed"
+
+
+def op_correctness(build_dir: Path, *, op: str = "MUL_MAT",
+                   backend: str = "ROCm0") -> Verdict:
+    """`test-backend-ops` on the op the patch touches. The real correctness gate.
+
+    THE DEFECT THIS SHAPE EXISTS TO PREVENT. This function used to pass
+    `--suite-seed <n>`, which `test-backend-ops` does not accept in this tree. The
+    binary printed its usage text and exited 1, and every candidate was therefore
+    refused with "MUL_MAT failed on ROCm0" -- a correctness verdict manufactured from
+    an argument error. It never ran once. Seven of ten run-9 iterations died on it,
+    and those refusals were recorded into durable memory as measured negatives.
+
+    A non-zero exit is NOT sufficient evidence that a test failed: it is equally
+    consistent with the tool refusing to run at all. So the pass/fail decision is made
+    on POSITIVE evidence that the suite executed, and an oracle that could not run
+    returns a distinct verdict that must never be read as "the patch is wrong".
+    """
     binary = build_dir / "bin" / "test-backend-ops"
     if not binary.is_file():
-        return Verdict("correctness", False, f"no test-backend-ops at {binary}")
-    argv = [str(binary), "test", "-o", op, "-b", backend, "-j", "1",
-            "--suite-seed", str(suite_seed)]
+        return Verdict("oracle_unavailable", False,
+                       f"no test-backend-ops at {binary}")
+    argv = [str(binary), "test", "-o", op, "-b", backend, "-j", "1"]
     done = subprocess.run(argv, capture_output=True, text=True,
                           timeout=CORRECTNESS_TIMEOUT_S,
                           env=residency.loader_env(binary))
+    output = done.stdout + done.stderr
+    if RAN_MARKER not in output:
+        # Usage text, a missing backend, a loader failure -- anything that means the
+        # suite did not execute. Blaming the patch for this is how a harness fault
+        # becomes a fabricated scientific result.
+        return Verdict("oracle_unavailable", False,
+                       f"test-backend-ops did not run (no {RAN_MARKER!r} in output); "
+                       f"this is a harness fault, NOT evidence about the patch",
+                       output[-2000:])
     if done.returncode != 0:
         return Verdict("correctness", False, f"{op} failed on {backend}",
                        done.stdout[-2000:] + done.stderr[-1000:])
