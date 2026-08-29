@@ -48,6 +48,8 @@ MEASURED_FLOOR_PCT = {
 #: Measured floor, 2026-08-28, n=20 alternating pairs. Below five pairs a single
 #: observation on decode can exceed a 3% bar on noise alone (4 of 20 did).
 MIN_PAIRS = 5
+#: Alternating pairs run and thrown away before measurement begins.
+WARMUP_PAIRS = 1
 
 
 class BenchFailed(RuntimeError):
@@ -75,6 +77,18 @@ class Comparison:
     #: leg is meaningless without it, and utilization is the number that would have
     #: caught 1.4 hours of GPU held against 29.0 hours of compiling.
     device_seconds: float = 0.0
+    #: Signed within-arm drift, anchor and candidate. A run whose arms are still
+    #: warming is not measuring steady-state throughput.
+    anchor_drift_pct: float = 0.0
+    candidate_drift_pct: float = 0.0
+
+    @property
+    def drifting(self) -> bool:
+        """True when either arm moved by more than the floor across the run."""
+        if self.noise_floor_pct is None:
+            return False
+        return max(abs(self.anchor_drift_pct),
+                   abs(self.candidate_drift_pct)) > self.noise_floor_pct
 
     @property
     def decisive(self) -> bool:
@@ -85,6 +99,10 @@ class Comparison:
         """
         if self.noise_floor_pct is None:
             return False
+        if self.drifting:
+            # An arm that is still warming is not resolving anything. Reporting this
+            # as an effect is how a first-use cost becomes a kernel finding.
+            return False
         return abs(self.effect * 100.0) > self.noise_floor_pct
 
     def to_dict(self) -> dict:
@@ -93,6 +111,9 @@ class Comparison:
             "effect_pct": self.effect * 100.0, "estimator": self.estimator,
             "pairs": self.pairs, "noise_floor_pct": self.noise_floor_pct,
             "decisive": self.decisive, "device_seconds": self.device_seconds,
+            "drifting": self.drifting,
+            "anchor_drift_pct": self.anchor_drift_pct,
+            "candidate_drift_pct": self.candidate_drift_pct,
             "anchor_samples": self.anchor_samples,
             "candidate_samples": self.candidate_samples,
             "residency": self.residency,
@@ -124,10 +145,20 @@ def run_once(binary: Path, model: Path, *, pp: int, tg: int, reps: int = 9,
 
 def compare(anchor: Arm, candidate: Arm, model: Path, *, pp: int, tg: int,
             pairs: int = MIN_PAIRS, reps: int = 9,
-            noise_floor_pct: float | None = None) -> Comparison:
-    """Alternating paired A/B. The arms swap every pair, never run as two blocks."""
+            noise_floor_pct: float | None = None,
+            warmup_pairs: int = WARMUP_PAIRS) -> Comparison:
+    """Alternating paired A/B. The arms swap every pair, never run as two blocks.
+
+    `warmup_pairs` are run and DISCARDED first. Without them the first measured pair
+    carries each binary's first-use cost, and that cost is not symmetric: the force-MMQ
+    probe's candidate was 4.3% slower on pair 1 than on pair 5 while the anchor was
+    flat, which alone produced a decisive-looking -1.469%.
+    """
     if pairs < 1:
         raise ValueError("compare needs at least one pair")
+    for _ in range(max(0, warmup_pairs)):
+        for arm in (anchor, candidate):
+            run_once(arm.binary, model, pp=pp, tg=tg, reps=reps)
     anchor_samples: list[float] = []
     candidate_samples: list[float] = []
     proofs: list[dict] = []
@@ -164,7 +195,27 @@ def compare(anchor: Arm, candidate: Arm, model: Path, *, pp: int, tg: int,
                    "peak_vram_bytes": max(p["peak_vram_bytes"] for p in proofs),
                    "peak_kfd_processes": max(p["peak_kfd_processes"] for p in proofs)},
         device_seconds=time.monotonic() - started,
+        anchor_drift_pct=drift_pct(anchor_samples),
+        candidate_drift_pct=drift_pct(candidate_samples),
     )
+
+
+def drift_pct(samples: Sequence[float]) -> float:
+    """Signed drift across a run: median(second half) vs median(first half), in %.
+
+    `spread_is_suspect` catches BIMODALITY (a max/min ratio). It cannot catch a
+    monotonic warm-up: the force-MMQ probe's candidate arm climbed +4.324% across five
+    pairs while the anchor stayed flat, and max/min was only 1.043 -- far under the 1.3
+    bar. The per-pair effect marched -4.491% -> -0.037%, so a headline of -1.469%
+    described first-use cost, not throughput.
+    """
+    values = [value for value in samples if value > 0]
+    if len(values) < 4:
+        return 0.0
+    half = len(values) // 2
+    early, late = st.median(values[:half]), st.median(values[half:])
+    centre = st.median(values)
+    return 0.0 if centre <= 0 else (late - early) / centre * 100.0
 
 
 def spread_is_suspect(samples: Sequence[float], ratio: float = 1.3) -> bool:
@@ -173,5 +224,6 @@ def spread_is_suspect(samples: Sequence[float], ratio: float = 1.3) -> bool:
     return bool(values) and (max(values) / min(values)) > ratio
 
 
-__all__ = ["Arm", "BenchFailed", "CPU_LIST", "Comparison", "MIN_PAIRS", "compare",
-           "run_once", "spread_is_suspect"]
+__all__ = ["Arm", "BenchFailed", "CPU_LIST", "Comparison", "MEASURED_FLOOR_PCT",
+           "MIN_PAIRS", "WARMUP_PAIRS", "compare", "drift_pct", "run_once",
+           "spread_is_suspect"]
