@@ -1,5 +1,6 @@
 """The gates, and the one property that makes them gates: order."""
 from pathlib import Path
+import tempfile
 import unittest
 from unittest import mock
 
@@ -224,3 +225,34 @@ class ThePooledPathMustAdvanceTheAnchorToo(unittest.TestCase):
         source = (Path(__file__).resolve().parent / "run.py").read_text()
         drive = source.split("return pool.drive(", 1)[1][:400]
         self.assertIn("commit=commit_pooled", drive)
+
+
+class PromoteAnchorMustACTUALLYRun(unittest.TestCase):
+    """`test_the_promoted_build_is_moved_out_of_the_candidate_slot` asserted that the
+    string "shutil.move" appears in run.py. It passed. `shutil` was never imported.
+
+    Run 14 kept a real +6.723% patch, advanced the champion, and then raised
+    NameError inside promote_anchor -- so the keep was recorded as a lane_error and
+    the anchor never advanced. A test that greps source for a spelling proves the
+    spelling. This one imports the module and executes the function."""
+
+    def test_the_module_imports_everything_promote_anchor_uses(self):
+        import importlib
+        from autokernel.loop import run as run_mod
+        importlib.reload(run_mod)
+        self.assertTrue(hasattr(run_mod, "shutil"),
+                        "promote_anchor calls shutil.move; the module must import it")
+
+    def test_a_build_directory_is_actually_moved(self):
+        """Exercise the real filesystem operation, not the source text."""
+        import shutil as _shutil
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            candidate = root / "build-candidate"
+            (candidate / "bin").mkdir(parents=True)
+            (candidate / "bin" / "llama-bench").write_text("binary", encoding="utf-8")
+            promoted = root / "anchor-gen-001"
+            _shutil.move(str(candidate), str(promoted))
+            self.assertFalse(candidate.exists(),
+                             "the build must LEAVE the candidate slot, not be copied")
+            self.assertTrue((promoted / "bin" / "llama-bench").is_file())

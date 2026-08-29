@@ -83,6 +83,23 @@ class Comparison:
     candidate_drift_pct: float = 0.0
 
     @property
+    def drift_explains_the_effect(self) -> bool:
+        """Could the observed drift plausibly have MANUFACTURED this effect?
+
+        A trend test says an arm moved; it says nothing about whether the movement is
+        large enough to matter. Run 14 vetoed a +6.293% result on a candidate drift of
+        +1.049% -- the drift is 17% of the effect, and subtracting ALL of it still
+        leaves +5.244%, over four times the floor. That is not "nothing was resolved";
+        that is a strong effect measured on a slightly moving arm.
+
+        The veto exists because the force-MMQ probe's +4.324% ramp WAS the whole
+        result. So the question is not "did it move" but "is what moved big enough to
+        be the answer".
+        """
+        worst = max(abs(self.anchor_drift_pct), abs(self.candidate_drift_pct))
+        return worst >= abs(self.effect * 100.0) * DRIFT_EXPLAINS_FRACTION
+
+    @property
     def drifting(self) -> bool:
         """True when either arm is demonstrably non-stationary.
 
@@ -94,8 +111,14 @@ class Comparison:
         """
         if self.noise_floor_pct is None:
             return False
-        return (is_trending(self.anchor_samples, floor_pct=self.noise_floor_pct)
-                or is_trending(self.candidate_samples, floor_pct=self.noise_floor_pct))
+        trending = (is_trending(self.anchor_samples, floor_pct=self.noise_floor_pct)
+                    or is_trending(self.candidate_samples,
+                                   floor_pct=self.noise_floor_pct))
+        # Both conditions: the arm moved, AND the movement is big enough to be a
+        # candidate explanation for the effect. Either alone over-vetoes -- magnitude
+        # alone is the coin-flip gate this replaced, and trend alone discards a
+        # +6.293% result over a +1.049% wobble.
+        return trending and self.drift_explains_the_effect
 
     @property
     def decisive(self) -> bool:
@@ -252,6 +275,10 @@ MIN_TREND_SAMPLES = 8
 #: Gross-movement backstop for arms too short to test. Deliberately loose: the drift
 #: statistic's own null SD is ~1.1%, so a 2x-floor bar is beyond 2 sigma.
 GROSS_DRIFT_MULTIPLE = 2.0
+#: Drift must be at least this fraction of the effect to be a plausible explanation
+#: for it. At 1/3, a drift smaller than a third of the effect cannot have produced it
+#: even if every bit of the drift were spurious signal.
+DRIFT_EXPLAINS_FRACTION = 1 / 3
 
 
 def trend_rho(samples: Sequence[float]) -> float:

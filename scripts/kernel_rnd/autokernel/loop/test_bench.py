@@ -213,3 +213,51 @@ class AnExternalKillIsRetriedAndACrashIsNot(unittest.TestCase):
                                       sleep=slept.append)
         self.assertEqual(value, 100.0)
         self.assertEqual(len(slept), 1, "one kill, one backoff, then the measurement")
+
+
+class DriftMustBeBigEnoughToExplainTheEffect(unittest.TestCase):
+    """A trend test says an arm MOVED. It says nothing about whether the movement is
+    large enough to be the answer.
+
+    Run 14 vetoed a +6.293% result on a candidate drift of +1.049% -- 17% of the
+    effect. Subtracting ALL of it still leaves +5.244%, over four times the floor.
+    That is a strong effect on a slightly moving arm, not an unresolved measurement.
+
+    The veto exists because the force-MMQ probe's +4.324% ramp WAS the whole result.
+    Both cases must come out right."""
+
+    #: Run 14's akm-q4k-reuse-q8-sum, verbatim.
+    def _big_effect_small_drift(self):
+        return bench.Comparison(
+            surface="tg128", anchor_samples=[100.0] * 20,
+            candidate_samples=[106.3] * 20, effect=0.06293,
+            estimator="median_over_median", pairs=20, noise_floor_pct=1.188,
+            residency={}, anchor_drift_pct=0.561, candidate_drift_pct=1.049)
+
+    def _drift_is_the_result(self):
+        """The force-MMQ shape: the drift is as big as the effect."""
+        return bench.Comparison(
+            surface="pp512", anchor_samples=[100.0] * 5,
+            candidate_samples=[101.4] * 5, effect=0.01469,
+            estimator="median_over_median", pairs=5, noise_floor_pct=0.973,
+            residency={}, anchor_drift_pct=-0.324, candidate_drift_pct=4.324)
+
+    def test_a_small_drift_does_not_veto_a_large_effect(self):
+        comparison = self._big_effect_small_drift()
+        self.assertFalse(comparison.drift_explains_the_effect,
+                         "1.049% cannot have manufactured 6.293%")
+
+    def test_a_drift_the_size_of_the_effect_still_vetoes(self):
+        comparison = self._drift_is_the_result()
+        self.assertTrue(comparison.drift_explains_the_effect,
+                        "4.324% absolutely can manufacture 1.469%")
+
+    def test_the_threshold_is_a_fraction_of_the_effect_not_the_floor(self):
+        """Comparing drift to the FLOOR is what over-vetoed: the floor knows nothing
+        about how big the effect is."""
+        comparison = self._big_effect_small_drift()
+        self.assertGreater(abs(comparison.candidate_drift_pct),
+                           comparison.noise_floor_pct * 0.8,
+                           "this drift is comparable to the floor")
+        self.assertFalse(comparison.drift_explains_the_effect,
+                         "yet it is small next to the effect, which is what matters")
