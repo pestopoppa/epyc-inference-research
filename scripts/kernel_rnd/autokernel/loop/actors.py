@@ -140,6 +140,28 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12) -> str:
         lines.append(program)
         lines.append("")
 
+    # Before anything else the planner is asked to look at candidates that were
+    # FORMED AND NEVER MEASURED. A lane authors against champion C0; another lane's
+    # keep advances it to C1; the first candidate is refused as superseded. That work
+    # is only wasted if nobody looks at it again -- the hypothesis, its falsifier and
+    # the champion it was formed against are all recorded, so it can be re-proposed
+    # against the champion that displaced it. Cheaper than deriving a new one, and it
+    # is a QUEUE, not a graveyard.
+    superseded = [row for row in (context.get("prior_experiments") or [])
+                  if row.get("status") == "superseded"][:limit]
+    if superseded:
+        lines.append("## Formed but never measured — consider these FIRST")
+        lines.append("Each was authored against a champion that moved before it could "
+                     "be measured. None was refuted. Re-propose one if it still "
+                     "addresses the current profile; say why if it does not.")
+        for row in superseded:
+            lines.append(f"- `{row.get('mechanism_id')}` — {row.get('statement') or ''}"
+                         + (f"\n    falsifier: {row['falsifier']}"
+                            if row.get("falsifier") else "")
+                         + (f"\n    {row['refusal_reason']}"
+                            if row.get("refusal_reason") else ""))
+        lines.append("")
+
     hotspots = context.get("kernel_hotspots") or []
     lines.append("## Where the device time actually goes (rocprofv3, current champion)")
     if hotspots:

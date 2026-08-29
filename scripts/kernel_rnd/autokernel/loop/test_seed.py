@@ -210,3 +210,40 @@ class TheProfileMustDescribeTheMeasuredSurface(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SupersededCandidatesReachThePlannerFirst(unittest.TestCase):
+    """Superseded work pays for itself only if the planner sees it. The journal knows
+    which champion each was formed against, so a candidate displaced by someone else's
+    keep can be re-proposed against the champion that displaced it -- cheaper than
+    deriving a new one."""
+
+    ROW = {"status": "superseded", "mechanism_id": "akm-q4k-lut-scale",
+           "statement": "replace the scale unpack with a LUT",
+           "falsifier": "tg128 does not move outside the floor",
+           "refusal_reason": "formed against 042cb2e41e38, champion advanced"}
+
+    def test_they_are_rendered_and_labelled_as_not_refuted(self):
+        text = actors.render_context({"prior_experiments": [self.ROW]})
+        self.assertIn("Formed but never measured", text)
+        self.assertIn("akm-q4k-lut-scale", text)
+        self.assertIn("None was refuted", text)
+
+    def test_they_come_before_the_profile_and_the_tried_list(self):
+        """'Consider these first' is only true if they are actually first."""
+        text = actors.render_context(
+            {"prior_experiments": [self.ROW],
+             "kernel_hotspots": [{"signature": "mul_mat_vec_q", "calls": 1,
+                                  "total_duration_ns": 1, "share_of_device_time": 0.5}]})
+        self.assertLess(text.index("Formed but never measured"),
+                        text.index("Where the device time actually goes"))
+
+    def test_the_falsifier_travels_with_it(self):
+        """It must arrive re-proposable, not just named."""
+        text = actors.render_context({"prior_experiments": [self.ROW]})
+        self.assertIn("tg128 does not move outside the floor", text)
+
+    def test_nothing_is_rendered_when_there_are_none(self):
+        text = actors.render_context({"prior_experiments": [
+            {"status": "measured_null", "mechanism_id": "akm-x"}]})
+        self.assertNotIn("Formed but never measured", text)

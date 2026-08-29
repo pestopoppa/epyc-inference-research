@@ -65,8 +65,21 @@ from . import loop as loop_mod
 DEFAULT_WORKERS = 7
 
 
-class Superseded(RuntimeError):
-    """The champion advanced while this candidate was being authored."""
+class Superseded(loop_mod.TailRefused):
+    """The champion advanced while this candidate was being authored.
+
+    Extends the loop's TailRefused so `iterate` catches it where the hypothesis is
+    still in scope and carries it out. A formed-but-unmeasured candidate is a QUEUE
+    ENTRY, not a loss: its patch may still help against the champion that displaced
+    it, and the planner is told to look at these first.
+    """
+
+    def __init__(self, message: str, *, base_head: str = "",
+                 champion_head: str = "") -> None:
+        super().__init__(message)
+        self.base_head = base_head
+        self.champion_head = champion_head
+        self.hypothesis = None
 
 
 @dataclass
@@ -111,9 +124,10 @@ class SerializedTail:
         if current != base_head:
             self.superseded += 1
             raise Superseded(
-                f"authored against {base_head[:12]}, champion is now "
-                f"{current[:12]}: a kept patch must compound, so this candidate is "
-                f"re-formed rather than measured against a base it never saw")
+                f"formed against {base_head[:12]}, champion advanced to "
+                f"{current[:12]} before it could be measured — NOT refuted, and not "
+                f"a failure of the science: reconsider it against the new champion",
+                base_head=base_head, champion_head=current)
 
     @contextmanager
     def session(self, base_head: str, clock=None):
@@ -195,8 +209,10 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
                     measure=measure, gate=gate, commit=commit_one, on_step=step,
                     tail_session=lambda _b=base: tail.session(_b))
             except Superseded as exc:
-                # Not a scientific result. The hypothesis and its reasons survive.
-                outcome = loop_mod.Outcome("superseded", None, [str(exc)])
+                # `iterate` already converted this into an Outcome carrying the
+                # hypothesis; reaching here means it escaped before one was formed.
+                outcome = loop_mod.Outcome(
+                    "superseded", getattr(exc, "hypothesis", None), [str(exc)])
             except Exception as exc:      # noqa: BLE001 -- deliberate, see below
                 # A lane used to die on ANY exception that was not Superseded:
                 # RatchetRefused, a git timeout, an OSError. The thread ended with a

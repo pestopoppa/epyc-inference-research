@@ -54,6 +54,17 @@ class RunAborted(RuntimeError):
 PROGRAM = Path(__file__).resolve().parent / "program.md"
 
 
+class TailRefused(RuntimeError):
+    """The serialized tail refused this candidate before it could be measured.
+
+    Defined HERE so `iterate` can catch it at the point where the hypothesis is still
+    in scope. Raised by the pool when the champion advanced under a lane, and the
+    candidate must carry its hypothesis out with it: a formed-but-unmeasured candidate
+    is a QUEUE ENTRY, not a loss, and the planner is supposed to reconsider it against
+    the new champion. Returning None here is how it became a loss.
+    """
+
+
 class ActorTransient(RuntimeError):
     """The actor provider failed in a way worth retrying.
 
@@ -191,6 +202,11 @@ def iterate(*, planner: Planner, critic: Critic,
                         hypothesis_rounds=hypothesis_rounds,
                         patch_rounds=patch_rounds, on_step=_safe_step(on_step),
                         tail_session=tail_session)
+    except TailRefused as exc:
+        # The candidate was formed and never measured. Carry the hypothesis: the
+        # patch may well still help against the champion that displaced it, and the
+        # planner is told to look at these FIRST.
+        return Outcome("superseded", getattr(exc, "hypothesis", None), [str(exc)])
     except ActorTransient as exc:
         # The provider failed, not the science. This ends the ITERATION and is
         # recorded as such; the run continues, and a streak becomes visible in
@@ -254,20 +270,29 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
             # Held per ATTEMPT, not per iteration: authoring sits between patch
             # rounds, and holding across it would serialize formation, which is the
             # 86% we are trying to overlap.
-            with tail_session():
-                passed, verdicts = gate(hypothesis, paths)
-                if not passed:
-                    # Compile and correctness failures loop back the same way; the
-                    # toolchain's own message is the reason, so no critic is needed.
-                    patch_reasons.append(
-                        verdicts[-1].reason if verdicts else "gate refused")
-                    continue
+            # The refusal is raised by the session's __enter__ (the staleness check
+            # happens under the lock), so it must be caught around the `with`, not
+            # around the call that builds it.
+            try:
+                with tail_session():
+                    passed, verdicts = gate(hypothesis, paths)
+                    if not passed:
+                        # Compile and correctness failures loop back the same way; the
+                        # toolchain's own message is the reason, so no critic is needed.
+                        patch_reasons.append(
+                            verdicts[-1].reason if verdicts else "gate refused")
+                        continue
 
-                on_step("measuring A/B on the device")
-                comparison = measure(hypothesis, paths)
-                if comparison.decisive and comparison.effect > 0:
-                    head = commit(hypothesis, paths, comparison)
-                    return Outcome("kept", hypothesis, [], comparison, verdicts, head)
+                    on_step("measuring A/B on the device")
+                    comparison = measure(hypothesis, paths)
+                    if comparison.decisive and comparison.effect > 0:
+                        head = commit(hypothesis, paths, comparison)
+                        return Outcome("kept", hypothesis, [], comparison, verdicts, head)
+            except TailRefused as exc:
+                # Formed and never measured. Carry the hypothesis out so the planner
+                # can reconsider it against the champion that displaced it.
+                exc.hypothesis = hypothesis
+                raise
             # A null result IS a result. It is recorded with its mechanism and its
             # sample vector, because a loop whose record of failure is thinner than
             # its record of success teaches its planner to repeat the failures.
@@ -356,5 +381,5 @@ def run(*, planner: Planner, critic: Critic, build_context: Callable[[], dict],
     return outcomes
 
 
-__all__ = ["ActorTransient", "MAX_CONSECUTIVE_ERRORS", "RunAborted", "Critic", "HYPOTHESIS_ROUNDS", "Hypothesis", "Outcome", "PATCH_ROUNDS",
+__all__ = ["ActorTransient", "TailRefused", "MAX_CONSECUTIVE_ERRORS", "RunAborted", "Critic", "HYPOTHESIS_ROUNDS", "Hypothesis", "Outcome", "PATCH_ROUNDS",
            "Planner", "Review", "iterate", "run"]

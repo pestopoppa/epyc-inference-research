@@ -37,7 +37,7 @@ def _sha(n: int) -> str:
     would let the reason name two heads that read identically -- the message would be
     technically correct and operationally useless.
     """
-    return f"{n:02d}" * 20
+    return f"{n:x}a{n:x}b{n:x}c".ljust(40, "d")[:40]
 
 
 def _hypothesis(mechanism: str = "akm-q5-bit-deposit") -> loop.Hypothesis:
@@ -498,7 +498,13 @@ class ASupersededCandidateIsNotAScientificFailure(unittest.TestCase):
     def test_the_row_written_to_durable_memory_carries_the_status_and_reason(self):
         row = self._superseded_outcome().to_attempt()
         self.assertEqual(row["status"], "superseded")
-        self.assertIn("champion is now", row["reason"])
+        # Assert the PROPERTIES, not a spelling: both heads must be named so the
+        # candidate can be re-formed against the champion that displaced it, and the
+        # reason must say plainly that it was not refuted.
+        self.assertIn(_sha(0)[:12], row["reason"], "name the base it was formed on")
+        self.assertIn(_sha(1)[:12], row["reason"],
+                      "name the champion that displaced it")
+        self.assertIn("NOT refuted", row["reason"])
 
     def test_the_tail_counts_supersessions_for_the_operator(self):
         champion = _Champion()
@@ -917,3 +923,47 @@ class ALaneMustNotDieSilently(unittest.TestCase):
         self.assertIn("test_pipeline.py", " ".join(outcomes[0].reasons),
                       "the lane error must carry the frame that raised it")
         self.assertEqual(len(recorded), 3)
+
+
+class ASupersededCandidateIsBankedNotBinned(unittest.TestCase):
+    """Superseded work is only waste if it is discarded. It carried
+    `hypothesis=None`, so the mechanism, its statement and its falsifier were thrown
+    away and the planner could never reconsider it -- the same defect as the
+    `refused_at_formation` rows that recorded `mechanism_id: None`.
+
+    A candidate formed against an older champion is a QUEUE ENTRY: its patch may still
+    help against the champion that displaced it, and the journal knows which champion
+    it was formed on."""
+
+    def test_the_hypothesis_survives_the_supersession(self):
+        tail = pipeline.SerializedTail(lambda: "b" * 40)
+        outcome = loop.iterate(
+            planner=_Planner(), critic=_Critic(), context={},
+            measure=lambda *a: None, gate=lambda *a: (True, []),
+            commit=lambda *a: "x",
+            tail_session=lambda: tail.session("a" * 40))
+        self.assertEqual(outcome.status, "superseded")
+        self.assertIsNotNone(outcome.hypothesis,
+                             "a binned hypothesis cannot be reconsidered")
+        row = outcome.to_attempt()
+        self.assertTrue(row.get("mechanism_id"))
+        self.assertTrue(row.get("falsifier"), "it must arrive re-proposable")
+
+    def test_it_names_both_champions_so_it_can_be_re_formed(self):
+        tail = pipeline.SerializedTail(lambda: "b" * 40)
+        outcome = loop.iterate(
+            planner=_Planner(), critic=_Critic(), context={},
+            measure=lambda *a: None, gate=lambda *a: (True, []),
+            commit=lambda *a: "x", tail_session=lambda: tail.session("a" * 40))
+        reason = " ".join(outcome.reasons)
+        self.assertIn("a" * 12, reason)
+        self.assertIn("b" * 12, reason)
+
+    def test_it_is_not_recorded_as_a_scientific_failure(self):
+        tail = pipeline.SerializedTail(lambda: "b" * 40)
+        outcome = loop.iterate(
+            planner=_Planner(), critic=_Critic(), context={},
+            measure=lambda *a: None, gate=lambda *a: (True, []),
+            commit=lambda *a: "x", tail_session=lambda: tail.session("a" * 40))
+        self.assertNotIn(outcome.status,
+                         {"measured_null", "refused_at_formation", "bench_failed"})
