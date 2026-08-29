@@ -129,17 +129,44 @@ class Comparison:
         }
 
 
+#: An EXTERNAL kill is retryable; a crash in the binary is not. Run 12 died on
+#: iteration 1 because `llama-bench` came back rc=-9 (SIGKILL) mid-measurement, and
+#: `earlyoom` on this host ignores `llama-server` and NOT `llama-bench`, so this is a
+#: standing hazard we cannot fix from userspace -- we can only survive it.
+#:
+#: -9 SIGKILL and -15 SIGTERM mean something outside the process ended it. A segfault
+#: (-11) or a bus error (-7) is the CANDIDATE failing and must never be retried into
+#: looking healthy.
+EXTERNAL_KILL_CODES = (-9, -15)
+KILL_RETRIES = 3
+KILL_BACKOFF_S = (5.0, 20.0, 60.0)
+
+
 def run_once(binary: Path, model: Path, *, pp: int, tg: int, reps: int = 9,
-             timeout_s: int = 3600) -> tuple[float, dict]:
-    """One llama-bench invocation with residency proven while it runs."""
+             timeout_s: int = 3600, sleep=time.sleep) -> tuple[float, dict]:
+    """One llama-bench invocation with residency proven while it runs.
+
+    Retries an EXTERNAL kill, because losing a whole run to a memory-pressure reaper
+    is pure waste: run 12 spent a profile and a device claim and returned nothing.
+    Does not retry a crash -- that is the candidate telling us something.
+    """
     argv = ["taskset", "-c", CPU_LIST, "numactl", "--interleave=all",
             str(binary), "-m", str(model), "-p", str(pp), "-n", str(tg),
             "-r", str(reps), "-ngl", "99", "-fa", "1", "-o", "json"]
-    with residency.Sampler() as sampler:
-        done = subprocess.run(argv, capture_output=True, text=True,
-                              timeout=timeout_s, env=residency.loader_env(binary))
+    for attempt in range(KILL_RETRIES + 1):
+        with residency.Sampler() as sampler:
+            done = subprocess.run(argv, capture_output=True, text=True,
+                                  timeout=timeout_s, env=residency.loader_env(binary))
+        if done.returncode in EXTERNAL_KILL_CODES and attempt < KILL_RETRIES:
+            sleep(KILL_BACKOFF_S[min(attempt, len(KILL_BACKOFF_S) - 1)])
+            continue
+        break
     if done.returncode != 0:
-        raise BenchFailed(f"llama-bench rc={done.returncode}: {done.stderr[-400:]}")
+        killed = " (external kill, retried "
+        killed = (f"{killed}{KILL_RETRIES}x and still killed)"
+                  if done.returncode in EXTERNAL_KILL_CODES else "")
+        raise BenchFailed(
+            f"llama-bench rc={done.returncode}{killed}: {done.stderr[-400:]}")
     try:
         rows = json.loads(done.stdout)
     except json.JSONDecodeError as exc:

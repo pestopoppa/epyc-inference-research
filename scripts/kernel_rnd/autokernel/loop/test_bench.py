@@ -157,3 +157,59 @@ class TheClockIsPartOfTheEvidence(unittest.TestCase):
         """Zero means the sysfs was unreadable, not that the clock never moved."""
         from autokernel.loop import residency
         self.assertFalse(residency.Sampler().proof["clock_stable"])
+
+
+class AnExternalKillIsRetriedAndACrashIsNot(unittest.TestCase):
+    """Run 12 died because llama-bench came back rc=-9 mid-measurement. earlyoom on
+    this host ignores llama-server and NOT llama-bench, so a memory-pressure reaper
+    ending a benchmark is a standing hazard we cannot fix from userspace -- only
+    survive.
+
+    A crash is different in kind: -11 is the CANDIDATE failing, and retrying it into
+    looking healthy would fabricate a result."""
+
+    def _run_with(self, codes):
+        from unittest import mock
+        seen = iter(codes)
+        slept = []
+
+        def fake(*a, **k):
+            return mock.Mock(returncode=next(seen), stdout="[]", stderr="killed")
+
+        with mock.patch.object(bench.subprocess, "run", side_effect=fake), \
+             mock.patch.object(bench.residency, "Sampler"), \
+             mock.patch.object(bench.residency, "loader_env", return_value={}):
+            try:
+                bench.run_once(Path("/b"), Path("/m"), pp=0, tg=128,
+                               sleep=slept.append)
+            except bench.BenchFailed as exc:
+                return slept, str(exc)
+        return slept, None
+
+    def test_a_sigkill_is_retried(self):
+        slept, error = self._run_with([-9, -9, -9, -9])
+        self.assertEqual(len(slept), bench.KILL_RETRIES, "must back off and retry")
+        self.assertIn("external kill", error)
+
+    def test_a_segfault_is_never_retried(self):
+        slept, error = self._run_with([-11])
+        self.assertEqual(slept, [], "a crashing candidate must not be retried")
+        self.assertNotIn("external kill", error)
+
+    def test_a_kill_that_then_succeeds_costs_only_the_backoff(self):
+        from unittest import mock
+        seen = iter([-9, 0])
+        slept = []
+        rows = '[{"n_prompt":0,"n_gen":128,"avg_ts":100.0}]'
+
+        def fake(*a, **k):
+            code = next(seen)
+            return mock.Mock(returncode=code, stdout=rows, stderr="")
+
+        with mock.patch.object(bench.subprocess, "run", side_effect=fake), \
+             mock.patch.object(bench.residency, "Sampler"), \
+             mock.patch.object(bench.residency, "loader_env", return_value={}):
+            value, _ = bench.run_once(Path("/b"), Path("/m"), pp=0, tg=128,
+                                      sleep=slept.append)
+        self.assertEqual(value, 100.0)
+        self.assertEqual(len(slept), 1, "one kill, one backoff, then the measurement")

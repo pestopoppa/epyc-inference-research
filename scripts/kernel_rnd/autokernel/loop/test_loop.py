@@ -460,3 +460,62 @@ class AnInstrumentFailureEndsTheIterationNotTheRun(unittest.TestCase):
                 epoch="e" * 64, campaign_id="ak-loop", iterations=3)
         self.assertEqual(len(outcomes), 3, "one killed bench must not end the run")
         self.assertEqual(calls["n"], 3)
+
+
+class NoSingleIterationMayEndTheRun(unittest.TestCase):
+    """Run 12 lost ten iterations, a profile and a held device to one SIGKILLed
+    benchmark. Before that a codex 401 took down 284 attempts. The iteration is the
+    unit of failure; the run is what has to survive.
+
+    A blanket catch that merely swallowed would be worse than the crash -- it would
+    spend a whole budget silently against a broken setup -- so the traceback is kept
+    and consecutive failures trip a breaker.
+    """
+
+    def _run(self, measure, iterations=5):
+        with tempfile.TemporaryDirectory() as tmp:
+            return loop.run(
+                planner=_Planner(), critic=_Critic([], []), build_context=dict,
+                measure=measure,
+                gate=lambda *a: (True, [gates.Verdict("compile", True)]),
+                commit=lambda *a: "abc1234", store_root=Path(tmp),
+                epoch="e" * 64, campaign_id="ak-loop", iterations=iterations)
+
+    def test_an_unexpected_exception_becomes_a_recorded_outcome(self):
+        calls = {"n": 0}
+
+        def measure(hypothesis, paths):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise OSError("transient disk hiccup")
+            return _comparison(0.05, floor=1.0)
+
+        outcomes = self._run(measure, iterations=3)
+        self.assertEqual(len(outcomes), 3, "the run must continue past the fault")
+        self.assertEqual(outcomes[0].status, "iteration_error")
+        self.assertIn("OSError", " ".join(outcomes[0].reasons))
+
+    def test_the_traceback_is_kept_not_swallowed(self):
+        outcomes = self._run(
+            lambda h, p: (_ for _ in ()).throw(RuntimeError("boom")), iterations=1)
+        self.assertIn("Traceback", " ".join(outcomes[0].reasons),
+                      "a swallowed exception is worse than the crash it replaced")
+
+    def test_one_off_faults_do_not_trip_the_breaker(self):
+        calls = {"n": 0}
+
+        def measure(hypothesis, paths):
+            calls["n"] += 1
+            if calls["n"] % 2:
+                raise OSError("every other one")
+            return _comparison(0.05, floor=1.0)
+
+        outcomes = self._run(measure, iterations=6)
+        self.assertEqual(len(outcomes), 6, "alternating faults must not abort")
+
+    def test_a_systematically_broken_run_stops_and_says_why(self):
+        with self.assertRaises(loop.RunAborted) as caught:
+            self._run(lambda h, p: (_ for _ in ()).throw(OSError("always")),
+                      iterations=20)
+        self.assertIn("consecutive", str(caught.exception))
+        self.assertIn("setup", str(caught.exception))

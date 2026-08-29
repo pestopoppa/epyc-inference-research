@@ -29,6 +29,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+import traceback
 from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol, Sequence
 
@@ -36,6 +37,14 @@ from . import archive, bench, gates
 
 HYPOTHESIS_ROUNDS = 3
 PATCH_ROUNDS = 2
+#: Consecutive failed iterations before the run gives up. One-off faults reset the
+#: count; this only trips when something about the SETUP is broken, and then it stops
+#: rather than spending the rest of the budget re-proving it.
+MAX_CONSECUTIVE_ERRORS = 3
+
+
+class RunAborted(RuntimeError):
+    """The run stopped because iterations were failing systematically."""
 
 
 #: The standing strategy, constraints and settled list. It is rendered into EVERY
@@ -286,12 +295,40 @@ def run(*, planner: Planner, critic: Critic, build_context: Callable[[], dict],
     for having happened. Injected rather than done here so the loop stays free of git.
     """
     outcomes: list[Outcome] = []
+    consecutive_errors = 0
     for _ in range(iterations):
-        if reset is not None:
-            reset()
-        outcome = iterate(planner=planner, critic=critic, context=build_context(),
-                          measure=measure, gate=gate, commit=commit,
-                          on_step=on_step)
+        try:
+            if reset is not None:
+                reset()
+            outcome = iterate(planner=planner, critic=critic,
+                              context=build_context(), measure=measure, gate=gate,
+                              commit=commit, on_step=on_step)
+            consecutive_errors = 0
+        except Exception as exc:      # noqa: BLE001 -- deliberate, see below
+            # NOTHING that goes wrong in one iteration may end the run. Run 12 lost
+            # ten iterations, a profile and a held device to a single SIGKILLed
+            # benchmark; before that, a codex 401 took down 284 attempts. The
+            # iteration is the unit of failure, and the run is what has to survive.
+            #
+            # A blanket catch that merely swallowed would be worse than the crash --
+            # it would burn a whole budget silently against a broken setup. So the
+            # traceback is recorded in full, and CONSECUTIVE failures trip a breaker:
+            # unrelated one-off faults reset the count, a systematically broken run
+            # stops and says why.
+            consecutive_errors += 1
+            outcome = Outcome("iteration_error", None,
+                              [f"{type(exc).__name__}: {exc}",
+                               traceback.format_exc()[-1500:]])
+            if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+                archive.record(store_root, outcome.to_attempt(), epoch=epoch,
+                               recorded_at=_now(), campaign_id=campaign_id)
+                outcomes.append(outcome)
+                raise RunAborted(
+                    f"{consecutive_errors} consecutive iterations failed; the last "
+                    f"was {type(exc).__name__}: {exc}. Something is broken about the "
+                    f"setup rather than about any one hypothesis, and continuing "
+                    f"would spend the remaining budget proving it repeatedly"
+                ) from exc
         archive.record(store_root, outcome.to_attempt(), epoch=epoch,
                        recorded_at=_now(), campaign_id=campaign_id)
         outcomes.append(outcome)
@@ -303,5 +340,5 @@ def run(*, planner: Planner, critic: Critic, build_context: Callable[[], dict],
     return outcomes
 
 
-__all__ = ["ActorTransient", "Critic", "HYPOTHESIS_ROUNDS", "Hypothesis", "Outcome", "PATCH_ROUNDS",
+__all__ = ["ActorTransient", "MAX_CONSECUTIVE_ERRORS", "RunAborted", "Critic", "HYPOTHESIS_ROUNDS", "Hypothesis", "Outcome", "PATCH_ROUNDS",
            "Planner", "Review", "iterate", "run"]
