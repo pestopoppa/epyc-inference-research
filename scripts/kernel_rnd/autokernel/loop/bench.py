@@ -84,11 +84,18 @@ class Comparison:
 
     @property
     def drifting(self) -> bool:
-        """True when either arm moved by more than the floor across the run."""
+        """True when either arm is demonstrably non-stationary.
+
+        Gated on a rank-trend test, not on the magnitude of a median-of-halves
+        contrast: that magnitude is mostly noise at these sample counts, and gating on
+        it destroyed 7 of 9 comparisons on this harness. `anchor_drift_pct` and
+        `candidate_drift_pct` remain REPORTED as diagnostics -- they are informative
+        about size -- they simply no longer decide anything on their own.
+        """
         if self.noise_floor_pct is None:
             return False
-        return max(abs(self.anchor_drift_pct),
-                   abs(self.candidate_drift_pct)) > self.noise_floor_pct
+        return (is_trending(self.anchor_samples, floor_pct=self.noise_floor_pct)
+                or is_trending(self.candidate_samples, floor_pct=self.noise_floor_pct))
 
     @property
     def decisive(self) -> bool:
@@ -114,6 +121,8 @@ class Comparison:
             "drifting": self.drifting,
             "anchor_drift_pct": self.anchor_drift_pct,
             "candidate_drift_pct": self.candidate_drift_pct,
+            "anchor_trend_rho": trend_rho(self.anchor_samples),
+            "candidate_trend_rho": trend_rho(self.candidate_samples),
             "anchor_samples": self.anchor_samples,
             "candidate_samples": self.candidate_samples,
             "residency": self.residency,
@@ -204,6 +213,62 @@ def compare(anchor: Arm, candidate: Arm, model: Path, *, pp: int, tg: int,
         anchor_drift_pct=drift_pct(anchor_samples),
         candidate_drift_pct=drift_pct(candidate_samples),
     )
+
+
+#: |rho| for a two-tailed Spearman test at alpha=0.05, by sample count. Distribution-
+#: free: it depends only on n, so it imports no calibration from another statistic.
+SPEARMAN_CRIT_05 = {5: 1.000, 6: 0.886, 7: 0.786, 8: 0.738, 9: 0.700, 10: 0.648,
+                    11: 0.618, 12: 0.587, 13: 0.560, 14: 0.538, 15: 0.521,
+                    16: 0.503, 17: 0.485, 18: 0.472, 19: 0.460, 20: 0.447}
+#: Below this, a rank-correlation trend test has no power worth having.
+MIN_TREND_SAMPLES = 8
+#: Gross-movement backstop for arms too short to test. Deliberately loose: the drift
+#: statistic's own null SD is ~1.1%, so a 2x-floor bar is beyond 2 sigma.
+GROSS_DRIFT_MULTIPLE = 2.0
+
+
+def trend_rho(samples: Sequence[float]) -> float:
+    """Spearman rank correlation of value against POSITION in the run.
+
+    This replaces a median-of-halves contrast as the drift GATE. On 9 samples that
+    contrast is a 4-vs-5 split: it consumes two order statistics, discards the other
+    seven, and has a null SD of ~1.10% against a 1.175% bar -- a coin flip. Measured
+    on this harness it vetoed 7 of 9 comparisons, including a reproducible +4.284%
+    (rerun +3.385%) that the planner itself was trying to resolve.
+
+    Rank correlation against position uses every sample and all of the ordering
+    information, and its null depends only on n.
+    """
+    values = [value for value in samples if value > 0]
+    n = len(values)
+    if n < 3:
+        return 0.0
+    order = sorted(range(n), key=lambda i: values[i])
+    rank = [0.0] * n
+    for position, index in enumerate(order):
+        rank[index] = float(position)
+    mean = (n - 1) / 2.0
+    num = sum((rank[i] - mean) * (i - mean) for i in range(n))
+    den = sum((rank[i] - mean) ** 2 for i in range(n)) * sum((i - mean) ** 2 for i in range(n))
+    return 0.0 if den <= 0 else num / (den ** 0.5)
+
+
+def is_trending(samples: Sequence[float], *, floor_pct: float | None = None) -> bool:
+    """True when the arm is demonstrably non-stationary.
+
+    Significant rank trend, OR -- for arms too short for the rank test to have power --
+    a gross median-of-halves movement. The backstop exists because at n=5 nothing is
+    detectable: the 2026-08-28 force-MMQ probe climbed +4.324% across five pairs and no
+    rank test at that n could call it, which is what `warmup_pairs` is really for.
+    """
+    values = [value for value in samples if value > 0]
+    n = len(values)
+    if n >= MIN_TREND_SAMPLES:
+        critical = SPEARMAN_CRIT_05.get(n, 0.447)
+        return abs(trend_rho(values)) >= critical
+    if floor_pct is None:
+        return False
+    return abs(drift_pct(values)) > floor_pct * GROSS_DRIFT_MULTIPLE
 
 
 def drift_pct(samples: Sequence[float]) -> float:

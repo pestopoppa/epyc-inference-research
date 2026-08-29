@@ -18,12 +18,20 @@ import threading
 
 VRAM_SYSFS = Path("/sys/class/drm/card2/device/mem_info_vram_used")
 KFD_PROC = Path("/sys/class/kfd/kfd/proc")
-#: The active DPM level. gfx90a here exposes 500 / 800 / 1700 MHz, and the host runs
-#: `power_dpm_force_performance_level = auto`, so a benchmark can begin at 800 and ramp
-#: to 1700 -- a 2.125x clock change mid-measurement. That is a candidate mechanism for
-#: the warm-up drift the A/B veto keeps catching, so every invocation now records it and
-#: a drifting result can be diagnosed from its own evidence rather than re-investigated.
-SCLK_SYSFS = Path("/sys/class/drm/card2/device/pp_dpm_sclk")
+#: The ACHIEVED core clock, in Hz. Not `pp_dpm_sclk`.
+#:
+#: The first version of this read `pp_dpm_sclk` and took the starred DPM level. Under
+#: `power_dpm_force_performance_level = high` that file stars BOTH levels:
+#:
+#:     0: 1700Mhz *
+#:     1: 1700Mhz *
+#:
+#: so the reader returned 1700 unconditionally, `min == max` by construction, and
+#: `clock_stable` was True on every run forever -- a check that cannot fail is not a
+#: check. It also could not see a droop BELOW the cap, and `pp_features` shows
+#: `APCC_DFLL` enabled (the DFLL droops on current spikes) plus DS_SOCCLK / DS_FCLK /
+#: DS_LCLK still dynamic under `high`. hwmon reports what the clock actually did.
+SCLK_HWMON = sorted(Path("/sys/class/drm/card2/device/hwmon").glob("hwmon*/freq1_input"))
 #: A model resident on the device moves VRAM well past this. Below it, "resident" is
 #: not proven -- which is a refusal, not a warning.
 RESIDENT_FLOOR_BYTES = 1 << 30
@@ -37,13 +45,15 @@ def vram_bytes() -> int:
 
 
 def sclk_mhz() -> int:
-    """The DPM level currently starred in `pp_dpm_sclk`, in MHz; 0 if unreadable."""
-    try:
-        for line in SCLK_SYSFS.read_text().splitlines():
-            if "*" in line:
-                return int(line.split(":")[1].strip().split("Mhz")[0])
-    except (OSError, ValueError, IndexError):
-        return 0
+    """The achieved core clock in MHz; 0 if unreadable.
+
+    Reads hwmon rather than the DPM table, so a droop below the pinned cap is visible.
+    """
+    for path in SCLK_HWMON:
+        try:
+            return int(path.read_text().strip()) // 1_000_000
+        except (OSError, ValueError):
+            continue
     return 0
 
 

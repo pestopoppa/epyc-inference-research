@@ -80,19 +80,40 @@ class ADriftVetoMustNotReadAsACleanNull(unittest.TestCase):
     of error as a fabricated refusal.
     """
 
-    def _drifting(self):
+    #: A genuinely non-stationary arm: monotone in position, rho = 1.0.
+    RAMPING = [260.0, 262.0, 264.0, 266.0, 268.0, 270.0, 272.0, 274.0, 276.0]
+    #: The measured anchor of run 11's akm-fattn-single-partition-direct. Its
+    #: median-of-halves drift was +1.599% and it was vetoed; its rank trend is
+    #: rho=+0.100, p=0.81 -- no trend at all. The arm minimum sits at position 7.
+    NOISY_BUT_FLAT = [261.27, 273.79, 266.99, 264.99, 271.83, 276.37, 260.66,
+                      270.29, 268.96]
+
+    def _comparison(self, anchor, effect):
         return bench.Comparison(
-            surface="tg128", anchor_samples=[1.0], candidate_samples=[1.0],
-            effect=0.01126, estimator="median_over_median", pairs=9,
+            surface="tg128", anchor_samples=anchor, candidate_samples=list(anchor),
+            effect=effect, estimator="median_over_median", pairs=9,
             noise_floor_pct=1.175, residency={},
-            anchor_drift_pct=1.302, candidate_drift_pct=0.855)
+            anchor_drift_pct=bench.drift_pct(anchor),
+            candidate_drift_pct=bench.drift_pct(anchor))
+
+    def _drifting(self):
+        return self._comparison(self.RAMPING, 0.01126)
 
     def _settled(self):
-        return bench.Comparison(
-            surface="tg128", anchor_samples=[1.0], candidate_samples=[1.0],
-            effect=0.00109, estimator="median_over_median", pairs=9,
-            noise_floor_pct=1.175, residency={},
-            anchor_drift_pct=0.483, candidate_drift_pct=0.104)
+        return self._comparison(self.NOISY_BUT_FLAT, 0.00109)
+
+    def test_the_flagship_false_veto_now_resolves(self):
+        """Real samples, not synthetic drift fields: this arm was vetoed at +1.599%
+        median-of-halves while having no rank trend whatsoever."""
+        self.assertGreater(abs(bench.drift_pct(self.NOISY_BUT_FLAT)), 1.175,
+                           "the OLD gate fired on this arm")
+        self.assertLess(abs(bench.trend_rho(self.NOISY_BUT_FLAT)), 0.700,
+                        "the NEW gate must not")
+        self.assertFalse(self._comparison(self.NOISY_BUT_FLAT, 0.02621).drifting)
+
+    def test_a_real_ramp_is_still_caught(self):
+        self.assertGreaterEqual(abs(bench.trend_rho(self.RAMPING)), 0.700)
+        self.assertTrue(self._comparison(self.RAMPING, 0.01126).drifting)
 
     def test_a_drift_veto_says_UNTESTED_not_unpromising(self):
         from autokernel.loop import loop as loop_mod
@@ -100,7 +121,8 @@ class ADriftVetoMustNotReadAsACleanNull(unittest.TestCase):
         self.assertIn("NOT RESOLVED", reason)
         self.assertIn("UNTESTED", reason)
         self.assertIn("re-run", reason)
-        self.assertIn("+1.302", reason, "name the arm that moved")
+        expected = f"{bench.drift_pct(self.RAMPING):+.3f}"
+        self.assertIn(expected, reason, "name the arm that moved, with its size")
 
     def test_a_settled_null_still_reads_as_a_null(self):
         from autokernel.loop import loop as loop_mod
