@@ -178,6 +178,33 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12) -> str:
         lines.append("(no profile yet — say so rather than guessing a target)")
 
     prior = context.get("prior_experiments") or []
+
+    # Mechanisms already CHARACTERISED by repeated measurement. Run 15 spent 9 of its
+    # 10 measurements re-sampling two unchanged patches: a near-floor result reads as
+    # "almost", so the planner re-proposed it. But re-measuring unchanged code adds no
+    # information -- it redraws the same noise. Pooling says what is actually known,
+    # and a characterised mechanism is FINISHED unless the code changes.
+    repeats: dict[str, list[float]] = {}
+    for row in prior:
+        effect = row.get("effect_fraction")
+        if row.get("mechanism_id") and isinstance(effect, (int, float)):
+            repeats.setdefault(row["mechanism_id"], []).append(effect * 100.0)
+    characterised = {k: v for k, v in repeats.items() if len(v) >= 3}
+    if characterised:
+        lines.append("## Characterised — do NOT re-measure these")
+        lines.append("Each was measured repeatedly on UNCHANGED code. Re-running one "
+                     "redraws the same noise and tells you nothing new. Change the "
+                     "mechanism or pick a different target.")
+        for mechanism, values in characterised.items():
+            values = sorted(values)
+            median = values[len(values) // 2]
+            positive = sum(1 for v in values if v > 0)
+            lines.append(
+                f"- `{mechanism}`: measured {len(values)}x, median {median:+.3f}%, "
+                f"{positive}/{len(values)} positive "
+                f"[{', '.join(f'{v:+.2f}' for v in values)}]")
+        lines.append("")
+
     lines.append("\n## Already tried")
     if prior:
         for row in list(prior)[:limit]:

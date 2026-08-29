@@ -31,6 +31,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+import shutil
 import subprocess
 import threading
 import time
@@ -315,3 +316,31 @@ __all__ = ["CHAMPION_BRANCH", "CHAMPION_TREE", "MAX_WORKERS", "PhaseClock",
            "PoolResult", "SOURCE_REPO", "WORKER_BUILD_ROOT", "WORKER_ROOT",
            "advance_champion", "champion_head", "check_lanes_are_disjoint",
            "commit_message", "drive", "provision", "reset_to_champion"]
+
+
+def promote_anchor(build_dir: Path, store: Path) -> Path:
+    """Make a kept candidate build the new anchor, and return its path.
+
+    THE WHOLE POINT. If the anchor does not advance, every effect is measured against
+    a baseline the champion already beat -- so it is CUMULATIVE, a patch that regresses
+    the champion still clears the floor, and recovering the marginal means inferring it
+    from two noisy numbers with sqrt(2) the uncertainty. Runs 13 and 14 both committed
+    patches that way. An advancing anchor makes every measurement directly marginal and
+    the whole problem stops existing.
+
+    MOVED, never copied: the next iteration rebuilds into the candidate slot, and an
+    anchor sharing that path is an anchor that ends up measuring against itself.
+
+    Lives here rather than inside `run.main` so a test can EXECUTE it. The predecessor
+    was a closure, and its test asserted that the string "shutil.move" appeared in the
+    source. It passed while `shutil` was never imported, so the promotion raised
+    NameError on the first real keep and the anchor silently never advanced.
+    """
+    if not (build_dir / "bin").is_dir():
+        raise ValueError(
+            f"{build_dir} has no bin/: refusing to promote a build that produced no "
+            f"binary, which would make every later comparison measure nothing")
+    generation = len(list(store.glob("anchor-gen-*"))) + 1
+    promoted = store / f"anchor-gen-{generation:03d}"
+    shutil.move(str(build_dir), str(promoted))
+    return promoted

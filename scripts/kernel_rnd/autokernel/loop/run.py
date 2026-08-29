@@ -249,19 +249,11 @@ def main(argv: list[str] | None = None) -> int:
                        capture_output=True, text=True, timeout=600, check=False)
 
     def promote_anchor(build_dir: Path) -> None:
-        """The kept candidate build IS the new champion, already compiled.
-
-        Advancing the anchor therefore costs a directory rename, not a rebuild. It is
-        MOVED out of the candidate slot rather than copied, because the next iteration
-        overwrites that slot -- an anchor sharing a path with the next candidate is an
-        anchor that ends up measuring against itself.
-        """
-        generation = len(list(args.store.glob("anchor-gen-*"))) + 1
-        promoted = args.store / f"anchor-gen-{generation:03d}"
-        shutil.move(str(build_dir), str(promoted))
-        anchor_build[0] = promoted
-        print(f"anchor    advanced to {promoted.name} — subsequent effects are "
-              f"MARGINAL against this champion, not cumulative against v9")
+        """Advance the anchor to a kept build. The mechanics live in `pool` so they
+        can be executed by a test rather than grepped for."""
+        anchor_build[0] = pool.promote_anchor(build_dir, args.store)
+        print(f"anchor    advanced to {anchor_build[0].name} — subsequent effects are "
+              f"MARGINAL against this champion, not cumulative")
 
     def commit(hypothesis, paths, comparison):
         # `branch="HEAD"` is correct HERE and only here: the sequential run has the

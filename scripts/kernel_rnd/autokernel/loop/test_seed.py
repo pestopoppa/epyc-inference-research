@@ -247,3 +247,31 @@ class SupersededCandidatesReachThePlannerFirst(unittest.TestCase):
         text = actors.render_context({"prior_experiments": [
             {"status": "measured_null", "mechanism_id": "akm-x"}]})
         self.assertNotIn("Formed but never measured", text)
+
+
+class TheLoopMustNotReSampleUnchangedCode(unittest.TestCase):
+    """Run 15 spent 9 of its 10 measurements on two unchanged patches. A near-floor
+    result reads as "almost", so the planner re-proposed it -- but re-measuring
+    unchanged code redraws the same noise and tells you nothing new. The loop has to
+    notice this itself; a human spotting it in the disposition table is not autonomy.
+    """
+
+    ROWS = [{"mechanism_id": "akm-q4k-reuse-q8-sum", "status": "measured_null",
+             "effect_fraction": e / 100} for e in (0.089, 0.971, 1.060, 0.596, 0.522)]
+
+    def test_a_repeatedly_measured_mechanism_is_marked_finished(self):
+        text = actors.render_context({"prior_experiments": self.ROWS})
+        self.assertIn("do NOT re-measure", text)
+        self.assertIn("measured 5x", text)
+
+    def test_the_pooled_estimate_is_shown_not_just_the_count(self):
+        """5 positive out of 5 is a sign test the planner can reason about."""
+        text = actors.render_context({"prior_experiments": self.ROWS})
+        self.assertIn("5/5 positive", text)
+        self.assertIn("median", text)
+
+    def test_two_measurements_are_not_yet_characterised(self):
+        """Repeating once is legitimate; a mechanism is only finished once it has
+        actually been pinned down."""
+        text = actors.render_context({"prior_experiments": self.ROWS[:2]})
+        self.assertNotIn("do NOT re-measure", text)
