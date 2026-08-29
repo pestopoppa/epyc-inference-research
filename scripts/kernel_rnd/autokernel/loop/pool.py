@@ -274,7 +274,8 @@ class PoolResult:
 
 def drive(*, workers: Sequence[pipeline.Worker], make_planner, make_critic,
           build_context: Callable[[], dict], make_gate, make_measure,
-          record: Callable[[loop_mod.Outcome], None], iterations: int,
+          record: Callable[[loop_mod.Outcome], None], iterations: int | None,
+          should_stop: Callable[[], bool] | None = None,
           champion_tree: Path = CHAMPION_TREE, branch: str = CHAMPION_BRANCH,
           reset: Callable[[pipeline.Worker], str] | None = None,
           commit: Callable[..., str] | None = None,
@@ -344,3 +345,35 @@ def promote_anchor(build_dir: Path, store: Path) -> Path:
     promoted = store / f"anchor-gen-{generation:03d}"
     shutil.move(str(build_dir), str(promoted))
     return promoted
+
+
+#: How many superseded anchor builds to keep. One to roll back to, one spare. At 201 MB
+#: each on a disk already at 91%, a continuously running loop that kept them all would
+#: repeat the superseded campaign's 41 GB of accumulated runtime state.
+ANCHOR_GENERATIONS_KEPT = 3
+
+#: Drop this file in the store to stop a continuous run at the next iteration boundary.
+#: A file rather than a signal because it works from any shell, any session, and needs
+#: no pid: the operator should never have to find a process to stop the loop politely.
+STOP_SENTINEL = "STOP"
+
+
+def stop_requested(store: Path) -> bool:
+    """True once the operator has asked the loop to wind down."""
+    return (store / STOP_SENTINEL).exists()
+
+
+def prune_anchor_generations(store: Path, *, keep: int = ANCHOR_GENERATIONS_KEPT,
+                             current: Path | None = None) -> list[Path]:
+    """Delete superseded anchor builds, never the one in use.
+
+    Returns what was removed. The current anchor is excluded explicitly rather than by
+    assuming it is the newest: promotion and pruning are separate steps, and an
+    assumption that they stay in step is the kind that holds until it does not.
+    """
+    generations = sorted(store.glob("anchor-gen-*"))
+    protected = {current.resolve()} if current else set()
+    doomed = [g for g in generations[:-keep] if g.resolve() not in protected]
+    for path in doomed:
+        shutil.rmtree(path, ignore_errors=True)
+    return doomed

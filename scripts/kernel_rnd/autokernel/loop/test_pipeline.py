@@ -967,3 +967,68 @@ class ASupersededCandidateIsBankedNotBinned(unittest.TestCase):
             commit=lambda *a: "x", tail_session=lambda: tail.session("a" * 40))
         self.assertNotIn(outcome.status,
                          {"measured_null", "refused_at_formation", "bench_failed"})
+
+
+class ContinuousOperation(unittest.TestCase):
+    """The loop exited after N iterations, so every continuation needed a human to
+    start it again. That is the difference between a tool someone runs and a loop that
+    works."""
+
+    def test_an_unbounded_budget_runs_until_told_to_stop(self):
+        drawn = {"n": 0}
+
+        def should_stop():
+            return drawn["n"] >= 25
+
+        budget = pipeline.Budget(None, should_stop=should_stop)
+        while budget.take():
+            drawn["n"] += 1
+        self.assertEqual(drawn["n"], 25, "unbounded must mean unbounded")
+        self.assertEqual(budget.drawn, 25)
+
+    def test_a_bounded_budget_still_stops_at_its_count(self):
+        budget = pipeline.Budget(4)
+        self.assertEqual(sum(1 for _ in iter(budget.take, False)), 4)
+
+    def test_a_stop_beats_a_remaining_count(self):
+        """A stop must be honoured even with budget left."""
+        budget = pipeline.Budget(100, should_stop=lambda: True)
+        self.assertFalse(budget.take())
+
+    def test_the_stop_is_checked_at_the_boundary_not_mid_iteration(self):
+        """A lane holding the device finishes and publishes before declining more."""
+        events = []
+        stop = {"now": False}
+        budget = pipeline.Budget(None, should_stop=lambda: stop["now"])
+        for _ in range(3):
+            self.assertTrue(budget.take())
+            events.append("iteration")
+        stop["now"] = True
+        self.assertFalse(budget.take())
+        self.assertEqual(events, ["iteration"] * 3)
+
+
+class TheStopSentinelAndPruning(unittest.TestCase):
+
+    def test_a_stop_file_in_the_store_requests_shutdown(self):
+        from autokernel.loop import pool
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Path(tmp)
+            self.assertFalse(pool.stop_requested(store))
+            (store / pool.STOP_SENTINEL).touch()
+            self.assertTrue(pool.stop_requested(store),
+                            "a file works from any shell and needs no pid")
+
+    def test_pruning_never_deletes_the_anchor_in_use(self):
+        """At 201 MB each on a disk at 91%, a continuous run that kept every
+        generation would repeat the superseded campaign's 41 GB of runtime state --
+        but deleting the one being measured against is worse than the disk."""
+        from autokernel.loop import pool
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Path(tmp)
+            for i in range(1, 7):
+                (store / f"anchor-gen-{i:03d}").mkdir()
+            current = store / "anchor-gen-002"
+            pool.prune_anchor_generations(store, keep=3, current=current)
+            self.assertTrue(current.is_dir(), "the anchor in use must survive")
+            self.assertLessEqual(len(list(store.glob("anchor-gen-*"))), 4)

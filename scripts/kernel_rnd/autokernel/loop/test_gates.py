@@ -189,11 +189,49 @@ class TheAnchorMustAdvanceWithTheChampion(unittest.TestCase):
                         "promotion must follow the commit, never precede it")
 
     def test_the_promoted_build_is_moved_out_of_the_candidate_slot(self):
-        """The next iteration overwrites the candidate slot; an anchor sharing that
-        path would end up measuring against itself."""
-        block = self._source().split("def promote_anchor(", 1)[1][:800]
-        self.assertIn("shutil.move", block)
-        self.assertNotIn("shutil.copy", block)
+        """EXECUTED, not grepped. Its predecessor asserted that the string
+        "shutil.move" appeared in the source; it passed while `shutil` was never
+        imported, so the first real keep raised NameError and the anchor silently
+        never advanced."""
+        from autokernel.loop import pool
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            store = root / "store"
+            store.mkdir()
+            candidate = root / "build-candidate"
+            (candidate / "bin").mkdir(parents=True)
+            (candidate / "bin" / "llama-bench").write_text("x", encoding="utf-8")
+
+            promoted = pool.promote_anchor(candidate, store)
+
+            self.assertTrue((promoted / "bin" / "llama-bench").is_file())
+            self.assertFalse(candidate.exists(),
+                             "the build must LEAVE the candidate slot, not be copied")
+            self.assertEqual(promoted.parent, store)
+
+    def test_generations_do_not_collide(self):
+        from autokernel.loop import pool
+        with tempfile.TemporaryDirectory() as tmp:
+            root, store = Path(tmp), Path(tmp) / "store"
+            store.mkdir()
+            seen = []
+            for _ in range(3):
+                candidate = root / "build-candidate"
+                (candidate / "bin").mkdir(parents=True)
+                seen.append(pool.promote_anchor(candidate, store))
+            self.assertEqual(len(set(seen)), 3, "each keep needs its own anchor")
+
+    def test_a_build_that_produced_no_binary_is_refused(self):
+        """Promoting an empty directory would make every later comparison measure
+        nothing at all."""
+        from autokernel.loop import pool
+        with tempfile.TemporaryDirectory() as tmp:
+            root, store = Path(tmp), Path(tmp) / "store"
+            store.mkdir()
+            empty = root / "empty"
+            empty.mkdir()
+            with self.assertRaises(ValueError):
+                pool.promote_anchor(empty, store)
 
 
 class ThePooledPathMustAdvanceTheAnchorToo(unittest.TestCase):

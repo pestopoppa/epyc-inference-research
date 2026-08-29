@@ -18,6 +18,7 @@ import argparse
 import json
 from pathlib import Path
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -75,7 +76,11 @@ def main(argv: list[str] | None = None) -> int:
                         default=Path("/mnt/raid0/llm/tmp/build-candidate-loop"))
     parser.add_argument("--model", type=Path, required=True)
     parser.add_argument("--store", type=Path, required=True)
-    parser.add_argument("--iterations", type=int, default=10)
+    parser.add_argument("--iterations", type=int, default=10,
+                        help="0 means run CONTINUOUSLY until stopped: drop a STOP "
+                             "file in the store, or send SIGTERM/SIGINT. Either is "
+                             "honoured at the next iteration boundary, so a lane "
+                             "holding the device finishes and publishes first.")
     parser.add_argument("--pairs", type=int, default=bench.MIN_PAIRS)
     parser.add_argument("--surface", choices=("pp512", "tg128"), default="pp512")
     parser.add_argument("--out", type=Path)
@@ -248,12 +253,58 @@ def main(argv: list[str] | None = None) -> int:
                         "ggml/", "src/"],
                        capture_output=True, text=True, timeout=600, check=False)
 
+    hotspot_rows: list = []
+
+    def reprofile() -> None:
+        """Re-derive the hotspots from the CURRENT champion.
+
+        A profile names where the time goes in one binary. Once a patch is kept that
+        binary no longer exists, and the accepted change moved the very distribution
+        the next hypothesis should aim at. A continuous run that profiled once would
+        spend hours aiming at a distribution it had already altered.
+        """
+        try:
+            rows = hotspots.profile(anchor_build[0] / "bin" / "llama-bench",
+                                    args.model, pp=pp, tg=tg)
+        except hotspots.ProfileFailed as exc:
+            print(f"profile   UNAVAILABLE ({exc}); the planner is told so rather than "
+                  f"left to guess")
+            return
+        hotspot_rows[:] = rows
+        print(f"profile   {len(rows)} hotspots; top: "
+              f"{rows[0].signature[:60] if rows else '(none)'}")
+
+    stopping = {"asked": False}
+
+    def _ask_stop(signum, _frame) -> None:
+        # Never abort mid-measurement: a killed A/B wastes the device time already
+        # spent and leaves a half-written candidate. Flag it and let the boundary
+        # handle it, exactly as the STOP file does.
+        stopping["asked"] = True
+        print(f"\nstopping  signal {signum} received — finishing the current "
+              f"iteration, then winding down")
+
+    for _sig in (signal.SIGTERM, signal.SIGINT):
+        signal.signal(_sig, _ask_stop)
+
+    def should_stop() -> bool:
+        return stopping["asked"] or pool.stop_requested(args.store)
+
     def promote_anchor(build_dir: Path) -> None:
         """Advance the anchor to a kept build. The mechanics live in `pool` so they
         can be executed by a test rather than grepped for."""
         anchor_build[0] = pool.promote_anchor(build_dir, args.store)
         print(f"anchor    advanced to {anchor_build[0].name} — subsequent effects are "
               f"MARGINAL against this champion, not cumulative")
+        # The champion moved, so the profile that named the hotspots is stale: the
+        # accepted patch changed the very distribution the next hypothesis should aim
+        # at. Re-profiling here is what makes a long run keep aiming at the truth
+        # rather than at wherever the time went hours ago.
+        reprofile()
+        dropped = pool.prune_anchor_generations(args.store, current=anchor_build[0])
+        if dropped:
+            print(f"anchor    pruned {len(dropped)} superseded generation(s) "
+                  f"(~{201 * len(dropped)} MB)")
 
     def commit(hypothesis, paths, comparison):
         # `branch="HEAD"` is correct HERE and only here: the sequential run has the
@@ -379,7 +430,8 @@ def main(argv: list[str] | None = None) -> int:
             make_critic=lambda worker: actors.CodexCritic(workspace=worker.worktree),
             build_context=build_context, make_gate=gate_for,
             make_measure=measure_for, record=record_pooled,
-            iterations=args.iterations, champion_tree=args.worktree,
+            iterations=(args.iterations or None), should_stop=should_stop,
+            champion_tree=args.worktree,
             on_step=step_pooled)
 
     claim_started = None
@@ -388,19 +440,9 @@ def main(argv: list[str] | None = None) -> int:
     with claim.hold() as receipt:
         claim_started = time.time()
         print(f"claim     held on {receipt['device_id']}\n")
-        try:
-            # The SAME surface the A/B will measure. Profiling decode and then
-            # measuring prefill aims every hypothesis at a route the instrument
-            # cannot see.
-            hotspot_rows = hotspots.profile(
-                args.anchor_build / "bin" / "llama-bench", args.model,
-                pp=pp, tg=tg)
-            print(f"profile   {len(hotspot_rows)} hotspots; top: "
-                  f"{hotspot_rows[0].signature[:60] if hotspot_rows else '(none)'}")
-        except hotspots.ProfileFailed as exc:
-            hotspot_rows = []
-            print(f"profile   UNAVAILABLE ({exc}); the planner is told so rather "
-                  f"than left to guess")
+        # Profiles the CURRENT anchor on the SAME surface the A/B will measure, and
+        # is re-run whenever a keep advances the champion.
+        reprofile()
 
         publish("running", hotspot_rows=hotspot_rows)
         pooled: pool.PoolResult | None = None
@@ -414,6 +456,7 @@ def main(argv: list[str] | None = None) -> int:
                     measure=measure, gate=gate, commit=commit,
                     store_root=args.store, epoch=epoch, campaign_id="ak-loop",
                     iterations=args.iterations, reset=reset_tree,
+                    should_stop=should_stop,
                     on_iteration=_remember,
                     on_step=lambda label: (note_phase(label),
                                            publish("running", latest,

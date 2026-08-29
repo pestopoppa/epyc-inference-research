@@ -92,15 +92,30 @@ class Worker:
 
 @dataclass
 class Budget:
-    """A shared iteration count. Workers draw from it until it is spent."""
-    remaining: int
+    """A shared iteration count, or none at all.
+
+    `remaining=None` means run until told to stop. That is the difference between a
+    tool someone runs and a loop that works: the previous shape exited after N
+    iterations, so every continuation needed a human to start it again.
+
+    `should_stop` is checked on every draw, so a stop is honoured at the next
+    iteration boundary rather than mid-measurement -- a lane holding the device
+    finishes what it started, publishes, and only then declines to take more.
+    """
+    remaining: int | None
+    should_stop: Callable[[], bool] | None = None
+    drawn: int = 0
     _lock: threading.Lock = field(default_factory=threading.Lock)
 
     def take(self) -> bool:
         with self._lock:
-            if self.remaining <= 0:
+            if self.should_stop is not None and self.should_stop():
                 return False
-            self.remaining -= 1
+            if self.remaining is not None:
+                if self.remaining <= 0:
+                    return False
+                self.remaining -= 1
+            self.drawn += 1
             return True
 
 
@@ -170,14 +185,16 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
              make_gate, make_measure, commit, champion_head: Callable[[], str],
              reset_to_champion: Callable[[Worker], str],
              record: Callable[[loop_mod.Outcome], None],
-             iterations: int, on_step: Callable[[str, str], None] | None = None,
-             tail: SerializedTail | None = None) -> list[loop_mod.Outcome]:
+             iterations: int | None,
+             on_step: Callable[[str, str], None] | None = None,
+             tail: SerializedTail | None = None,
+             should_stop: Callable[[], bool] | None = None) -> list[loop_mod.Outcome]:
     """Drive `iterations` iterations across `workers` concurrent lanes.
 
     Every side effect is injected, exactly as in `loop.iterate`, so the whole pool is
     testable with no GPU, no build toolchain and no API key.
     """
-    budget = Budget(iterations)
+    budget = Budget(iterations, should_stop=should_stop)
     tail = tail or SerializedTail(champion_head)
     outcomes: list[loop_mod.Outcome] = []
     outcomes_lock = threading.Lock()

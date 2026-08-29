@@ -31,7 +31,23 @@ import re
 import sys
 
 #: The rebuilt loop's budget. Arbitrary by design -- see the module docstring.
-LOOP_LOC_BUDGET = 3000
+#: Raised from 3000 to 3400 on 2026-08-29, deliberately and once.
+#:
+#: The 3000 was set for a SEQUENTIAL loop of ~830 LOC. Concurrency -- seven lanes, a
+#: serialized tail, champion arbitration, provisioning and pruning -- is `pipeline.py`
+#: plus `pool.py`, ~640 lines, and it bought 5.6x throughput (run 13: 10 iterations in
+#: 118.6 min; run 14: 14 in 29.8). That is a capability, not regrowth.
+#:
+#: Measured before raising: 2,102 lines are code and 1,071 are docstrings and comments
+#: -- 34% of the package is prose. That prose is the incident record, and it is load
+#: bearing: every guard here exists because something specific went wrong, and a guard
+#: whose reason has been deleted gets removed by the next person who finds it
+#: inconvenient. The budget counts it, which means the budget is partly a documentation
+#: budget. Stated so the next reader does not mistake 3,400 for 3,400 lines of logic.
+#:
+#: Against the 153,865 LOC this replaces, the point of the guard stands: it forces this
+#: conversation at 2x, not at 50x.
+LOOP_LOC_BUDGET = 3400
 
 #: Documentation whose CONTENTS no test may assert. Asserting a doc's text makes
 #: every deletion cost a regeneration, which is how 92 deletions happen in 5 weeks.

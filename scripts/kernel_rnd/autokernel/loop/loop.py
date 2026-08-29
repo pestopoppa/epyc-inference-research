@@ -317,7 +317,8 @@ def run(*, planner: Planner, critic: Critic, build_context: Callable[[], dict],
         measure: Callable[..., bench.Comparison],
         gate: Callable[..., tuple[bool, list[gates.Verdict]]],
         commit: Callable[..., str], store_root: Path, epoch: str,
-        campaign_id: str, iterations: int,
+        campaign_id: str, iterations: int | None,
+        should_stop: Callable[[], bool] | None = None,
         on_iteration: Callable[[list["Outcome"]], None] | None = None,
         reset: Callable[[], None] | None = None,
         on_step: Callable[[str], None] | None = None
@@ -337,7 +338,15 @@ def run(*, planner: Planner, critic: Critic, build_context: Callable[[], dict],
     """
     outcomes: list[Outcome] = []
     consecutive_errors = 0
-    for _ in range(iterations):
+    drawn = 0
+    while True:
+        # `iterations=None` runs until stopped. Checked at the BOUNDARY so a stop
+        # never interrupts a measurement that has already spent device time.
+        if should_stop is not None and should_stop():
+            break
+        if iterations is not None and drawn >= iterations:
+            break
+        drawn += 1
         try:
             if reset is not None:
                 reset()
