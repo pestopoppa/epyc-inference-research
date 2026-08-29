@@ -347,10 +347,14 @@ def promote_anchor(build_dir: Path, store: Path) -> Path:
     return promoted
 
 
-#: How many superseded anchor builds to keep. One to roll back to, one spare. At 201 MB
-#: each on a disk already at 91%, a continuously running loop that kept them all would
-#: repeat the superseded campaign's 41 GB of accumulated runtime state.
-ANCHOR_GENERATIONS_KEPT = 3
+#: Only the CURRENT anchor is needed. A patch is either in the champion or it is not,
+#: and the anchor build is just that commit compiled -- git has the commits, and a
+#: rebuild is 63 seconds. Keeping spares was caution without a use: promotion happens
+#: inside the exclusive tail session, so no lane is ever measuring against the old
+#: anchor while it is replaced, and superseded concurrent work is preserved elsewhere
+#: entirely (its patch in <store>/patches, its hypothesis in the journal). Anchor
+#: generations never protected that work and were never going to.
+ANCHOR_GENERATIONS_KEPT = 1
 
 #: Drop this file in the store to stop a continuous run at the next iteration boundary.
 #: A file rather than a signal because it works from any shell, any session, and needs
