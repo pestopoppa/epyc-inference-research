@@ -42,7 +42,7 @@ CPU_LIST = "184-191"
 #: lower an enforced floor beneath its row here.
 MEASURED_FLOOR_PCT = {
     "pp512": {1: 2.175, 3: 1.432, 5: 0.479, 9: 0.168, 20: 0.029},
-    "tg128": {1: 3.452, 3: 2.527, 5: 1.502, 9: 1.175, 20: 0.067},
+    "tg128": {1: 3.452, 3: 2.527, 5: 2.422, 9: 2.021, 20: 1.188},
 }
 
 #: Measured floor, 2026-08-28, n=20 alternating pairs. Below five pairs a single
