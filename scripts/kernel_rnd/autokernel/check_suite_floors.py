@@ -35,7 +35,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 # declared; raising it is a deliberate edit, and lowering it must be argued for.
 SUITE_FLOORS: dict[str, tuple[int, tuple[str, ...]]] = {
     "the decision arithmetic": (
-        101,
+        109,
         (
             "scripts/benchmark/test_screen_effect_estimator.py",
             "scripts/kernel_rnd/autokernel/controller/test_workload_contract.py",
