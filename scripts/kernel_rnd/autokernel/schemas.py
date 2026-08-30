@@ -2971,6 +2971,46 @@ def validate_evaluation_event(obj: Any) -> list:
 CHAMPION_BLOCKED_UNNAMED = "CHAMPION_BLOCKED"
 
 
+def _validate_champion_build_recipe(obj: Any, out: list) -> None:
+    """A champion must say how it was BUILT, not only which tree it came from.
+
+    Build flags are where this project's kernel wins have historically lived, so a
+    champion that records a source tree and nothing else cannot express one: two
+    champions differing only in their defines are the same record. The recipe is
+    that arm, and it is required — an absent one is the unset variable that put
+    `GGML_HIP_ROCWMMA_FATTN` at the CMake default OFF on a screening surface for a
+    month, a path measured to produce non-finite values on gfx90a under `-fa on`.
+
+    The shape validated here is `controller/build_recipe.BuildRecipe.to_dict()`.
+    The dataclass refuses an unjustified divergence at CONSTRUCTION; this refuses
+    one on the RECORD, which is a different reader: a journal entry can be
+    hand-assembled, replayed, or edited without ever passing through the class.
+    Only the structural half is duplicated — the schema string stays owned by the
+    module that defines the recipe, and `champion.champion_build_recipe` checks it.
+    """
+    recipe = _need_dict(obj, "build_recipe", out, "")
+    if recipe is _MISSING:
+        return
+    _need_str(recipe, "schema", out, "build_recipe.")
+    _need_str(recipe, "name", out, "build_recipe.")
+    flags = _need_list(recipe, "flags", out, "build_recipe.", non_empty=True)
+    if flags is _MISSING:
+        return
+    for i, flag in enumerate(flags):
+        prefix = f"build_recipe.flags[{i}]."
+        if not isinstance(flag, Mapping):
+            out.append(f"{prefix.rstrip('.')}: expected a mapping")
+            continue
+        name = _need_str(flag, "name", out, prefix)
+        _need_str(flag, "value", out, prefix)
+        diverges = _need_bool(flag, "diverges", out, prefix)
+        reason = flag.get("reason")
+        if diverges is True and not (isinstance(reason, str) and reason.strip()):
+            out.append(
+                f"{prefix}reason: {name!r} diverges from production with no stated "
+                f"reason; a screening surface may diverge, but never by omission")
+
+
 def validate_champion(obj: Any) -> list:
     """Validate a champion record — one composed lineage per source tree."""
     out: list = []
@@ -3029,6 +3069,8 @@ def validate_champion(obj: Any) -> list:
         # field is the rendered form of a computed signal, so it is required to
         # be present, and it is NOT a trigger (§1.2).
         _need_str(readiness, "reference_signal", out, "readiness.", allow_empty=True)
+
+    _validate_champion_build_recipe(obj, out)
 
     _need_sha256(obj, "affected_surface_union_sha256", out, "")
     _need_number(obj, "storage_gb", out, "", minimum=0)

@@ -48,6 +48,46 @@ class BuildRecipeError(ValueError):
 
 
 @dataclass(frozen=True)
+class NonAdoption:
+    """A config win that was measured, settled, and deliberately NOT adopted."""
+
+    setting: str
+    rejected_value: str
+    #: False for a runtime setting, which cannot be a CMake define at all.
+    is_cmake_flag: bool
+    finding: str
+
+
+#: CH-6, settled 2026-08-28: NEITHER standing config win enters the recipe.
+#:
+#: They are recorded HERE, beside the mechanism that would carry them, because the
+#: withdrawn numbers still circulate and a reader who meets only those will
+#: re-adopt them. The mechanism is a capability; adopting these two is not part of
+#: it.
+SETTLED_NON_ADOPTIONS = (
+    NonAdoption(
+        "GGML_HIP_MMQ_MFMA", "OFF", True,
+        "+23.09% on Qwen2.5-Coder-0.5B and +0.50% prefill / -0.28% decode on "
+        "Qwen3.8-27B, the production model. The 0.5B has n_embd=896, which is not "
+        "divisible by 256, so its K-quants fall back to Q5_0 and it never "
+        "dispatches the kernels production uses -- the win was measured on the "
+        "wrong model. Real where it was taken, worth nothing where the fleet runs."),
+    NonAdoption(
+        "n_ubatch", "1024", False,
+        "A NULL ARM, and not a build flag at all. llama.cpp clamps "
+        "n_ubatch = min(n_batch, n_ubatch), so the `-b 512 -ub 1024` screen ran ONE "
+        "byte-identical binary in both arms; the +46.9% is a bimodal sample whose "
+        "median landed on the fast mode. It could not have measured anything."),
+)
+
+#: (flag, value) -> why it was not adopted, for the defines a recipe can express.
+_SETTLED_FLAG_VALUES = {
+    (item.setting, item.rejected_value): item.finding
+    for item in SETTLED_NON_ADOPTIONS if item.is_cmake_flag
+}
+
+
+@dataclass(frozen=True)
 class Flag:
     """One CMake define, with where its value came from and why."""
 
@@ -65,6 +105,18 @@ class Flag:
     def __post_init__(self) -> None:
         if not self.name or not isinstance(self.value, str):
             raise BuildRecipeError("a build flag needs a name and a string value")
+        settled = _SETTLED_FLAG_VALUES.get((self.name, self.value))
+        if settled is not None and not self.reason.strip():
+            # Checked BEFORE the divergence rule, and not folded into it, for two
+            # reasons. It catches the one spelling divergence cannot -- declaring
+            # `production_value` to BE the rejected value makes the flag
+            # non-diverging, so no reason is ever demanded -- and where both apply
+            # it is the message that carries the correcting number, which is the
+            # thing a reader about to re-adopt from the withdrawn one needs.
+            raise BuildRecipeError(
+                f"{self.name}={self.value} was measured and NOT adopted (CH-6): "
+                f"{settled} Re-adopting it requires a stated reason, not the "
+                f"withdrawn number.")
         if self.diverges and not self.reason.strip():
             raise BuildRecipeError(
                 f"{self.name}={self.value} diverges from production "
@@ -153,5 +205,5 @@ def from_flags(name: str, flags: Sequence[Mapping[str, Any]], *,
 
 
 __all__ = ["BuildRecipe", "BuildRecipeError", "Flag", "HOUSE_GPU_RECIPE",
-           "PRODUCTION_RECIPE_IS_VERIFIABLE", "RECIPE_SCHEMA", "from_flags",
-           "recipe_for"]
+           "NonAdoption", "PRODUCTION_RECIPE_IS_VERIFIABLE", "RECIPE_SCHEMA",
+           "SETTLED_NON_ADOPTIONS", "from_flags", "recipe_for"]

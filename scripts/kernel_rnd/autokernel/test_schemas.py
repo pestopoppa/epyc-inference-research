@@ -450,9 +450,34 @@ def _event_v5(**overrides) -> dict:
     return record
 
 
+def _champion_build_recipe() -> dict:
+    """The shape `controller/build_recipe.BuildRecipe.to_dict()` emits.
+
+    Deliberately NOT the house recipe: this fixture's job is to be a VALID record,
+    and a divergence that carries its reason is the interesting valid case. That
+    the real recipe object round-trips through this validator is witnessed where
+    the real producer runs (`controller/test_champion.py`), never by a literal here.
+    """
+    return {
+        "schema": "epyc.autokernel.gpu_build_recipe.v1",
+        "name": "gfx90a-house-v1",
+        "production_reference_is_verifiable": False,
+        "flags": [
+            {"name": "GGML_HIP", "value": "ON", "production_value": "ON",
+             "diverges": False, "reason": None},
+            {"name": "GGML_NATIVE", "value": "OFF", "production_value": "ON",
+             "diverges": True,
+             "reason": "portable build for a fork on other hardware"},
+        ],
+        "divergences": ["GGML_NATIVE"],
+        "notes": None,
+    }
+
+
 def _champion() -> dict:
     return {
         "schema": S.SCHEMA_CHAMPION,
+        "build_recipe": _champion_build_recipe(),
         "source_tree": "llama.cpp",
         "anchor_commit": V8_COMMIT,
         "branch": "ak/champion/llama-20260802",
@@ -1563,6 +1588,24 @@ class ChampionRuleTest(unittest.TestCase):
         record = _champion()
         record["readiness"]["by_backend"]["sglang"] = {}
         self.assertTrue(S.validate_champion(record))
+
+    def test_a_recorded_divergence_without_a_reason_is_rejected(self):
+        """The rule the dataclass enforces at construction, enforced on the RECORD.
+
+        A journal entry can be hand-assembled, replayed or edited without ever
+        passing through `build_recipe.Flag`, so the construction-time refusal is
+        not by itself a guarantee about what is on the record.
+        """
+        record = _champion()
+        record["build_recipe"]["flags"][1]["reason"] = "   "
+        violations = S.validate_champion(record)
+        self.assertTrue(any("no stated reason" in v for v in violations), violations)
+
+    def test_a_champion_with_an_empty_flag_list_states_no_build(self):
+        record = _champion()
+        record["build_recipe"]["flags"] = []
+        self.assertTrue(any("build_recipe.flags" in v
+                            for v in S.validate_champion(record)))
 
 
 class ReleasePackageRuleTest(unittest.TestCase):

@@ -22,6 +22,7 @@ from enum import Enum
 from typing import Any, Mapping, Optional, Protocol, Sequence
 
 from .. import journal, schemas
+from . import build_recipe as recipes
 from .shared import ControllerError
 
 __all__ = [
@@ -32,7 +33,7 @@ __all__ = [
     "CompositionRunner", "ReanchorRunner", "JournalSnapshot",
     "read_validated_snapshot", "project_source_tree", "compatibility",
     "compatible_groups", "composition_request", "append_idempotent",
-    "CompositionReceipt",
+    "CompositionReceipt", "champion_build_recipe",
     "promote_composition", "seed_champion", "record_no_champion", "record_rejected_composition",
     "record_anchor_moved", "reanchor_champion", "champion_branch",
 ]
@@ -112,6 +113,38 @@ def _string_tuple(value: Any, name: str, *, sorted_unique: bool = True) -> tuple
     if sorted_unique and values != tuple(sorted(values)):
         raise EvidenceRefused(f"{name} must be in canonical sorted order")
     return values
+
+
+def champion_build_recipe(record: Mapping[str, Any]) -> recipes.BuildRecipe:
+    """The build recipe a champion record was built with.
+
+    A champion used to name a source tree and say NOTHING about how it was built,
+    which made a build-flag improvement inexpressible as a champion advance: two
+    champions could differ only in their compiler defines and be indistinguishable
+    on the record. The recipe is the missing arm, and it is the SAME versioned
+    object `build_recipe.py` already enforces -- so every flag is named and every
+    divergence from production carries its reason, here as well as at the builder.
+
+    Fail-closed: a champion that cannot state its build is refused rather than
+    defaulted to the house recipe. Defaulting is exactly how `GGML_HIP_ROCWMMA_FATTN`
+    reached production screening as an unset variable.
+    """
+    if not isinstance(record, Mapping):
+        raise EvidenceRefused("champion record must be a mapping")
+    raw = record.get("build_recipe")
+    if not isinstance(raw, Mapping):
+        raise EvidenceRefused("champion carries no build_recipe block")
+    if raw.get("schema") != recipes.RECIPE_SCHEMA:
+        raise EvidenceRefused(
+            f"champion build_recipe is not a {recipes.RECIPE_SCHEMA} record")
+    flags = raw.get("flags")
+    if not isinstance(flags, list) or not flags:
+        raise EvidenceRefused("champion build_recipe names no flags")
+    try:
+        return recipes.from_flags(_text(raw.get("name"), "build_recipe.name"),
+                                  flags, notes=str(raw.get("notes") or ""))
+    except recipes.BuildRecipeError as exc:
+        raise EvidenceRefused(f"champion build_recipe is invalid: {exc}") from exc
 
 
 @dataclass(frozen=True, order=True)
@@ -874,6 +907,10 @@ class CompositionRequest:
     absorbed_member_candidates: tuple[str, ...] = ()
     release_package_event_id: Optional[str] = None
     mode: str = "compose"
+    #: The build the combined tree is compiled with. It is part of the request
+    #: SPINE, so two requests over the same members and anchor that differ only in
+    #: their defines get different `request_sha256` and `combined_candidate_id`.
+    build_recipe: recipes.BuildRecipe = recipes.HOUSE_GPU_RECIPE
 
     def to_dict(self) -> dict:
         return {
@@ -889,6 +926,7 @@ class CompositionRequest:
             "absorbed_member_candidates": list(self.absorbed_member_candidates),
             "release_package_event_id": self.release_package_event_id,
             "mode": self.mode,
+            "build_recipe": self.build_recipe.to_dict(),
         }
 
 
@@ -933,9 +971,12 @@ def _required_t2_cells(candidates: Sequence[CandidateSnapshot],
 def composition_request(candidates: Sequence[CandidateSnapshot], *, anchor: AnchorIdentity,
                         evaluator: EvaluatorIdentity,
                         parent_champion_event_id: Optional[str] = None,
-                        mode: str = "compose") -> CompositionRequest:
+                        mode: str = "compose",
+                        build_recipe: Optional[recipes.BuildRecipe] = None
+                        ) -> CompositionRequest:
     if mode not in {"compose", "reanchor"}:
         raise ValueError("mode must be compose or reanchor")
+    recipe = recipes.HOUSE_GPU_RECIPE if build_recipe is None else build_recipe
     ordered = _lineage_order(candidates)
     report = compatibility(ordered, anchor=anchor, evaluator=evaluator)
     if not report.compatible:
@@ -948,6 +989,7 @@ def composition_request(candidates: Sequence[CandidateSnapshot], *, anchor: Anch
         "anchor": anchor.to_dict(), "evaluator": evaluator.to_dict(),
         "required_t2_cells": [cell.to_dict() for cell in _required_t2_cells(ordered, evaluator)],
         "compatibility_sha256": report.evidence_sha256, "mode": mode,
+        "build_recipe_sha256": recipe.sha256(),
     }
     digest = schemas.content_hash(spine)
     return CompositionRequest(
@@ -960,7 +1002,7 @@ def composition_request(candidates: Sequence[CandidateSnapshot], *, anchor: Anch
         required_t2_cells=_required_t2_cells(ordered, evaluator),
         compatibility_sha256=report.evidence_sha256,
         absorbed_member_candidates=(), release_package_event_id=None,
-        mode=mode,
+        mode=mode, build_recipe=recipe,
     )
 
 
@@ -1222,6 +1264,9 @@ def _champion_record(request: CompositionRequest, candidate: CandidateSnapshot,
         "status": status,
         "anchor": request.anchor.to_dict(),
         "evaluator": request.evaluator.to_dict(),
+        # Carried forward from the request, so an advance never silently
+        # re-defaults the build the champion is measured on.
+        "build_recipe": request.build_recipe.to_dict(),
         "lineage": {
             "membership_order": list(request.member_candidates),
             "parent_champion_event_id": request.parent_champion_event_id,
@@ -1293,7 +1338,9 @@ def _record_composition_failure(book: journal.Journal,
 
 
 def _empty_champion(anchor: AnchorIdentity, *, status: str, blocking: Sequence[str],
-                    detail: Mapping[str, Any]) -> dict:
+                    detail: Mapping[str, Any],
+                    build_recipe: Optional[recipes.BuildRecipe] = None) -> dict:
+    recipe = recipes.HOUSE_GPU_RECIPE if build_recipe is None else build_recipe
     record = {
         "schema": schemas.SCHEMA_CHAMPION, "source_tree": anchor.source_tree,
         "anchor_commit": anchor.commit, "branch": champion_branch(anchor.source_tree, anchor.commit),
@@ -1303,6 +1350,7 @@ def _empty_champion(anchor: AnchorIdentity, *, status: str, blocking: Sequence[s
         "affected_surface_union_sha256": schemas.content_hash([]), "storage_gb": 0.0,
         "blocking_conditions": list(blocking), "status": status,
         "anchor": anchor.to_dict(), "attempt": dict(detail),
+        "build_recipe": recipe.to_dict(),
     }
     violations = schemas.validate_champion(record)
     if violations:
@@ -1311,7 +1359,9 @@ def _empty_champion(anchor: AnchorIdentity, *, status: str, blocking: Sequence[s
 
 
 def seed_champion(book: journal.Journal, anchor: AnchorIdentity, *,
-                  reason: str) -> journal.JournalEntry:
+                  reason: str,
+                  build_recipe: Optional[recipes.BuildRecipe] = None
+                  ) -> journal.JournalEntry:
     """Champion₀: the aggregate EXISTS and currently equals the production anchor.
 
     This is a different state from :func:`record_no_champion`, and the difference is
@@ -1329,6 +1379,10 @@ def seed_champion(book: journal.Journal, anchor: AnchorIdentity, *,
     champion becomes claim-bearing only once a composition earns its own T0/T1/T2
     against this same anchor, which :func:`promote_composition` still enforces.
 
+    Champion₀ is the anchor PLUS the recipe it is built with (CH-1). "Equals
+    production" is a claim about a binary, and a source tree alone does not
+    determine one, so the seed states its defines instead of leaving them implied.
+
     Purity: this module may not build, benchmark or launch anything, so the anchor --
     including its measured per-backend binary and linkage digests -- must be derived
     by the caller (see ``champion_seed.production_anchor``) and handed in already
@@ -1337,7 +1391,8 @@ def seed_champion(book: journal.Journal, anchor: AnchorIdentity, *,
     return append_idempotent(
         book, journal.KIND_CHAMPION_UPDATED,
         _empty_champion(anchor, status="seeded_from_anchor", blocking=[],
-                        detail={"reason": _text(reason, "reason")}))
+                        detail={"reason": _text(reason, "reason")},
+                        build_recipe=build_recipe))
 
 
 def record_no_champion(book: journal.Journal, anchor: AnchorIdentity, *, reason: str) -> journal.JournalEntry:
@@ -1395,6 +1450,10 @@ def record_anchor_moved(book: journal.Journal, champion: Mapping[str, Any], *,
 def reanchor_champion(book: journal.Journal, *, prior_champion: Mapping[str, Any],
                       old_anchor: AnchorIdentity, new_anchor: AnchorIdentity,
                       evaluator: EvaluatorIdentity, runner: ReanchorRunner) -> journal.JournalEntry:
+    # Read the recipe BEFORE anything is journaled: a champion that cannot state
+    # its build cannot be advanced, and failing after the anchor-moved append would
+    # leave a champion the loop can neither use nor rebuild.
+    recipe = champion_build_recipe(prior_champion)
     moved = record_anchor_moved(book, prior_champion, old_anchor=old_anchor, new_anchor=new_anchor)
     snapshot = read_validated_snapshot(book)
     release_event, absorbed = _matching_release_receipt(snapshot, new_anchor)
@@ -1414,7 +1473,8 @@ def reanchor_champion(book: journal.Journal, *, prior_champion: Mapping[str, Any
                     "reason": "all prior champion members are present in production",
                     "absorbed_member_candidates": list(absorbed),
                     "release_package_event_id": release_event.event_id,
-                }))
+                },
+                build_recipe=recipe))
     candidates = [_candidate_snapshot(snapshot, candidate_id)
                   for candidate_id in remaining_ids]
     # Preserve source/patch evidence, but invalidate every old rate comparison.
@@ -1435,6 +1495,7 @@ def reanchor_champion(book: journal.Journal, *, prior_champion: Mapping[str, Any
         "absorbed_member_candidates": list(absorbed),
         "release_package_event_id": release_event.event_id,
         "mode": "reanchor",
+        "build_recipe_sha256": recipe.sha256(),
     }
     digest = schemas.content_hash(spine)
     request = CompositionRequest(
@@ -1446,7 +1507,7 @@ def reanchor_champion(book: journal.Journal, *, prior_champion: Mapping[str, Any
         compatibility_sha256=spine["compatibility_sha256"],
         absorbed_member_candidates=absorbed,
         release_package_event_id=release_event.event_id,
-        mode="reanchor")
+        mode="reanchor", build_recipe=recipe)
     return promote_composition(book, request, runner, snapshot=snapshot, reanchor=True)
 
 

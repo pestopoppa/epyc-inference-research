@@ -16,6 +16,7 @@ from .. import journal as J
 from .. import schemas as S
 from .. import test_campaign_footprint as footprint
 from .. import test_schemas as fixtures
+from . import build_recipe as BR
 from . import champion as C
 from . import sequencer as Q
 
@@ -30,6 +31,19 @@ def _concurrent_append(args: tuple[str, str, dict]) -> str:
     entry = C.append_idempotent(book, kind, payload)
     return entry.event_id
 
+
+#: A SECOND real recipe, differing from the house one in exactly one flag whose
+#: divergence carries its reason. Two champions that differ only here are the case
+#: the champion plane could not previously express at all.
+FORKED_RECIPE = BR.from_flags(
+    "gfx90a-portable-v1",
+    [{"name": flag.name, "value": flag.value,
+      "production_value": flag.production_value, "reason": flag.reason}
+     if flag.name != "GGML_NATIVE" else
+     {"name": "GGML_NATIVE", "value": "OFF", "production_value": "ON",
+      "reason": "portable build for a fork on other hardware"}
+     for flag in BR.HOUSE_GPU_RECIPE.flags],
+    notes="one flag off production, with the trade stated")
 
 ANCHOR_COMMIT = fixtures.V8_COMMIT
 NEW_ANCHOR_COMMIT = sha("new-production")[:40]
@@ -304,11 +318,13 @@ class AutoKernelLifecycleTests(unittest.TestCase):
         return materialize(self.book, cid, **args)
 
     def promote(self, candidates: tuple[C.CandidateSnapshot, ...] | None = None,
-                runner: FakeCompositionRunner | None = None):
+                runner: FakeCompositionRunner | None = None,
+                build_recipe: BR.BuildRecipe | None = None):
         candidates = candidates or (self.candidate(),)
         runner = runner or FakeCompositionRunner()
         request = C.composition_request(
-            candidates, anchor=self.anchor, evaluator=self.evaluator)
+            candidates, anchor=self.anchor, evaluator=self.evaluator,
+            build_recipe=build_recipe)
         return request, C.promote_composition(self.book, request, runner), runner
 
     def test_frontier_requires_validated_write_side_banking(self):
@@ -495,6 +511,109 @@ class AutoKernelLifecycleTests(unittest.TestCase):
                                 no_progress_turns=1)).run()
         self.assertEqual(result.stop_reason, Q.StopReason.NO_PROPOSAL)
         self.assertEqual(result.champions_updated, 1)
+
+    # ---------------------------------------------------------------- the build
+    # A champion says how it was BUILT, not only which tree it came from. Build
+    # flags are where this project's kernel wins have historically lived, and a
+    # champion that records only a source diff cannot express one: two champions
+    # differing solely in their defines were the same record. Every assertion
+    # below runs against records the real producers write -- promote_composition,
+    # seed_champion, reanchor_champion -- read back through the same reader the
+    # controller uses, never against a dict this file composed by hand.
+
+    def test_a_promoted_champion_records_the_build_it_was_compiled_with(self):
+        _, entry, _ = self.promote()
+        recipe = C.champion_build_recipe(entry.payload)
+        self.assertEqual(recipe.sha256(), BR.HOUSE_GPU_RECIPE.sha256())
+        names = {name for name, _ in recipe.cmake_defines()}
+        self.assertIn("GGML_HIP_ROCWMMA_FATTN", names)
+
+    def test_two_compositions_differing_only_in_the_build_are_distinguishable(self):
+        candidate = self.candidate()
+        house = C.composition_request(
+            (candidate,), anchor=self.anchor, evaluator=self.evaluator)
+        forked = C.composition_request(
+            (candidate,), anchor=self.anchor, evaluator=self.evaluator,
+            build_recipe=FORKED_RECIPE)
+        # Same members, same anchor, same evaluator: the build is the only difference.
+        self.assertEqual(house.member_candidates, forked.member_candidates)
+        self.assertNotEqual(house.request_sha256, forked.request_sha256)
+        self.assertNotEqual(house.combined_candidate_id,
+                            forked.combined_candidate_id)
+
+    def test_a_champion_advance_carries_its_recipe_forward(self):
+        one = self.candidate("akc-one")
+        two = self.candidate("akc-two")
+        _, active, _ = self.promote((one, two), build_recipe=FORKED_RECIPE)
+        self.assertEqual(C.champion_build_recipe(active.payload).sha256(),
+                         FORKED_RECIPE.sha256())
+        new = anchor(NEW_ANCHOR_COMMIT, "v9")
+        self._release_receipt(new, ("akc-one",))
+        runner = FakeCompositionRunner()
+        entry = C.reanchor_champion(
+            self.book, prior_champion=active.payload, old_anchor=self.anchor,
+            new_anchor=new, evaluator=self.evaluator, runner=runner)
+        # The rebuild is requested with the champion's OWN recipe, not a default:
+        # re-defaulting here would silently re-measure the champion on a build it
+        # was never compared on.
+        self.assertEqual(runner.calls[-1].build_recipe.sha256(),
+                         FORKED_RECIPE.sha256())
+        self.assertEqual(C.champion_build_recipe(entry.payload).sha256(),
+                         FORKED_RECIPE.sha256())
+
+    def test_an_anchor_move_preserves_the_recipe(self):
+        _, active, _ = self.promote(build_recipe=FORKED_RECIPE)
+        new = anchor(NEW_ANCHOR_COMMIT, "v9")
+        moved = C.record_anchor_moved(self.book, active.payload,
+                                      old_anchor=self.anchor, new_anchor=new)
+        self.assertEqual(moved.payload["status"], "anchor_moved")
+        self.assertEqual(C.champion_build_recipe(moved.payload).sha256(),
+                         FORKED_RECIPE.sha256())
+
+    def test_a_champion_that_cannot_state_its_build_is_not_advanced(self):
+        _, active, _ = self.promote()
+        amnesiac = dict(active.payload)
+        amnesiac.pop("build_recipe")
+        new = anchor(NEW_ANCHOR_COMMIT, "v9")
+        with self.assertRaises(C.EvidenceRefused):
+            C.reanchor_champion(
+                self.book, prior_champion=amnesiac, old_anchor=self.anchor,
+                new_anchor=new, evaluator=self.evaluator,
+                runner=FakeCompositionRunner())
+        # Refused BEFORE anything is journaled: a half-moved champion the loop can
+        # neither use nor rebuild is worse than a refusal.
+        view = C.read_validated_snapshot(self.book).views.champions["llama.cpp"]
+        self.assertEqual(view, active.payload)
+
+    def test_the_seed_states_the_build_production_is_compared_on(self):
+        entry = C.seed_champion(self.book, self.anchor,
+                                reason="CH-1: Champion0 = the frozen anchor plus "
+                                       "an explicit build recipe")
+        self.assertEqual(entry.payload["status"], "seeded_from_anchor")
+        self.assertEqual(C.champion_build_recipe(entry.payload).sha256(),
+                         BR.HOUSE_GPU_RECIPE.sha256())
+
+    def test_a_recipe_block_under_another_schema_is_refused(self):
+        """The record must be THE recipe contract, not a lookalike mapping.
+
+        Without this the reader would accept any mapping that happens to carry a
+        `flags` list -- and a second, informally-shaped recipe format is exactly
+        what the champion plane must not grow.
+        """
+        _, active, _ = self.promote()
+        record = copy.deepcopy(active.payload)
+        record["build_recipe"]["schema"] = "epyc.autokernel.some_other_thing.v1"
+        with self.assertRaises(C.EvidenceRefused):
+            C.champion_build_recipe(record)
+
+    def test_a_recipe_whose_divergence_lost_its_reason_is_refused_on_read(self):
+        _, active, _ = self.promote(build_recipe=FORKED_RECIPE)
+        record = copy.deepcopy(active.payload)
+        diverging = next(flag for flag in record["build_recipe"]["flags"]
+                         if flag["diverges"])
+        diverging["reason"] = None
+        with self.assertRaises(C.EvidenceRefused):
+            C.champion_build_recipe(record)
 
 
 class StaticBoundaryTests(unittest.TestCase):

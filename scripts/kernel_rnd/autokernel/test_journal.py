@@ -242,6 +242,17 @@ def _event(suffix: str = "0001") -> dict:
 def _champion() -> dict:
     return {
         "schema": S.SCHEMA_CHAMPION,
+        # A champion states the build it was compiled with, not only its tree.
+        "build_recipe": {
+            "schema": "epyc.autokernel.gpu_build_recipe.v1",
+            "name": "gfx90a-house-v1",
+            "production_reference_is_verifiable": False,
+            "flags": [{"name": "GGML_HIP", "value": "ON",
+                       "production_value": "ON", "diverges": False,
+                       "reason": None}],
+            "divergences": [],
+            "notes": None,
+        },
         "source_tree": "llama.cpp",
         "anchor_commit": V8_COMMIT,
         "branch": "ak/champion/llama-20260802",
