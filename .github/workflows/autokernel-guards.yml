@@ -45,6 +45,16 @@ jobs:
       - name: Prove the test runner is importable
         run: python3 -m pytest --version
 
+      # Installing pytest closes the hole this workflow fell into. It does not close the
+      # SHAPE of it: a suite that runs FEWER assertions than it used to reports exactly
+      # the same green as one that runs all of them. pytest refuses the TOTAL collapse
+      # on its own -- collecting nothing exits 5 -- but a rename, a moved package or a
+      # narrowed path that drops 178 of 196 tests passes silently. The counts are
+      # declared as floors so that losing coverage requires editing a number and saying
+      # why in the commit, the same way LOOP_LOC_BUDGET works.
+      - name: Prove the suites did not silently shrink
+        run: python3 scripts/kernel_rnd/autokernel/check_suite_floors.py
+
       - name: Regrowth guards
         run: python3 scripts/kernel_rnd/autokernel/check_regrowth_guards.py
 
@@ -70,7 +80,8 @@ jobs:
             scripts/kernel_rnd/autokernel/controller/test_experiments.py \
             scripts/kernel_rnd/autokernel/controller/test_gpu_utilization.py \
             scripts/kernel_rnd/autokernel/controller/test_kernel_hotspots.py \
-            scripts/kernel_rnd/autokernel/test_check_regrowth_guards.py
+            scripts/kernel_rnd/autokernel/test_check_regrowth_guards.py \
+            scripts/kernel_rnd/autokernel/test_check_suite_floors.py
 
       - name: The loop package
         # The rebuilt loop is the package every path filter above triggers on, and it
