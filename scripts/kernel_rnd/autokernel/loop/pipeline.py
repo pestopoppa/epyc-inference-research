@@ -198,6 +198,7 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
     tail = tail or SerializedTail(champion_head)
     outcomes: list[loop_mod.Outcome] = []
     outcomes_lock = threading.Lock()
+    aborted: list[BaseException] = []
 
     def lane(worker: Worker) -> None:
         planner, critic = make_planner(worker), make_critic(worker)
@@ -245,6 +246,13 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
                 # hypothesis; reaching here means it escaped before one was formed.
                 outcome = loop_mod.Outcome(
                     "superseded", getattr(exc, "hypothesis", None), [str(exc)])
+            except loop_mod.RunAborted as exc:
+                # Run-ending, not lane-ending: the anchor is SHARED, so a refused anchor
+                # voids every lane's next measurement. Zeroing the budget stops them all
+                # at their next draw -- continuous runs too: `remaining` is no longer None.
+                aborted.append(exc)
+                budget.remaining = 0
+                outcome = loop_mod.Outcome("run_aborted", None, [str(exc)])
             except Exception as exc:      # noqa: BLE001 -- deliberate, see below
                 # A lane used to die on ANY exception that was not Superseded:
                 # RatchetRefused, a git timeout, an OSError. The thread ended with a
@@ -266,6 +274,11 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
         thread.start()
     for thread in threads:
         thread.join()
+    if aborted:
+        # Re-raised after every lane has published, so the run ends the way a crashed
+        # run does -- `run.py` publishes `failed` -- rather than returning a normal
+        # result list that reads as a completed run.
+        raise aborted[0]
     return outcomes
 
 

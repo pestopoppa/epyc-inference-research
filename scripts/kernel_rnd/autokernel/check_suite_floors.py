@@ -48,7 +48,10 @@ SUITE_FLOORS: dict[str, tuple[int, tuple[str, ...]]] = {
             "scripts/kernel_rnd/autokernel/test_check_suite_floors.py",
         ),
     ),
-    "the loop package": (196, ("scripts/kernel_rnd/autokernel/loop/",)),
+    # 196 -> 222 on 2026-08-30: the promotion A/A guard (`loop/anchor.py`) and the
+    # rebuild-instead-of-move promotion contract. 26 new tests in `loop/test_anchor.py`,
+    # mutation-tested 18 of 18 in both directions.
+    "the loop package": (222, ("scripts/kernel_rnd/autokernel/loop/",)),
 }
 
 _COLLECTED = re.compile(r"(\d+) tests? collected")

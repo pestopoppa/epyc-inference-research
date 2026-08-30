@@ -7,6 +7,17 @@ from unittest import mock
 from autokernel.loop import gates
 
 
+def _champion_build(dest):
+    """Stand in for `gates.compiles`: produce the binary the anchor is measured with."""
+    (Path(dest) / "bin").mkdir(parents=True, exist_ok=True)
+    (Path(dest) / "bin" / "llama-bench").write_text("elf", encoding="utf-8")
+    return gates.Verdict("compile", True)
+
+
+def _broken_build(dest):
+    return gates.Verdict("compile", False, "build failed")
+
+
 class TheShortCircuitMustBeReal(unittest.TestCase):
     """`run_all` documented a short-circuit it could not perform.
 
@@ -188,50 +199,41 @@ class TheAnchorMustAdvanceWithTheChampion(unittest.TestCase):
         self.assertLess(block.index("archive.keep"), block.index("promote_anchor("),
                         "promotion must follow the commit, never precede it")
 
-    def test_the_promoted_build_is_moved_out_of_the_candidate_slot(self):
+    def test_the_promoted_build_is_BUILT_in_the_anchor_slot(self):
         """EXECUTED, not grepped. Its predecessor asserted that the string
         "shutil.move" appeared in the source; it passed while `shutil` was never
         imported, so the first real keep raised NameError and the anchor silently
-        never advanced."""
+        never advanced.
+
+        The contract itself changed on 2026-08-30: promotion BUILDS the champion into
+        the new slot instead of renaming a build directory into it. A CMake build
+        directory is not relocatable, and that is the leading root cause of run 18.
+        """
         from autokernel.loop import pool
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            store = root / "store"
-            store.mkdir()
-            candidate = root / "build-candidate"
-            (candidate / "bin").mkdir(parents=True)
-            (candidate / "bin" / "llama-bench").write_text("x", encoding="utf-8")
-
-            promoted = pool.promote_anchor(candidate, store)
-
+            store = Path(tmp)
+            promoted = pool.promote_anchor(store, build=_champion_build,
+                                           champion_commit="5ad3e36d")
             self.assertTrue((promoted / "bin" / "llama-bench").is_file())
-            self.assertFalse(candidate.exists(),
-                             "the build must LEAVE the candidate slot, not be copied")
             self.assertEqual(promoted.parent, store)
 
     def test_generations_do_not_collide(self):
         from autokernel.loop import pool
         with tempfile.TemporaryDirectory() as tmp:
-            root, store = Path(tmp), Path(tmp) / "store"
-            store.mkdir()
-            seen = []
-            for _ in range(3):
-                candidate = root / "build-candidate"
-                (candidate / "bin").mkdir(parents=True)
-                seen.append(pool.promote_anchor(candidate, store))
+            store = Path(tmp)
+            seen = [pool.promote_anchor(store, build=_champion_build,
+                                        champion_commit="5ad3e36d")
+                    for _ in range(3)]
             self.assertEqual(len(set(seen)), 3, "each keep needs its own anchor")
 
-    def test_a_build_that_produced_no_binary_is_refused(self):
-        """Promoting an empty directory would make every later comparison measure
-        nothing at all."""
+    def test_a_champion_that_will_not_build_is_refused(self):
+        """A promotion that produced no binary would make every later comparison
+        measure nothing at all."""
         from autokernel.loop import pool
         with tempfile.TemporaryDirectory() as tmp:
-            root, store = Path(tmp), Path(tmp) / "store"
-            store.mkdir()
-            empty = root / "empty"
-            empty.mkdir()
             with self.assertRaises(ValueError):
-                pool.promote_anchor(empty, store)
+                pool.promote_anchor(Path(tmp), build=_broken_build,
+                                    champion_commit="5ad3e36d")
 
 
 class ThePooledPathMustAdvanceTheAnchorToo(unittest.TestCase):
@@ -252,10 +254,12 @@ class ThePooledPathMustAdvanceTheAnchorToo(unittest.TestCase):
                         block.index("promote_anchor("),
                         "the anchor must follow the commit, never precede it")
 
-    def test_it_promotes_THIS_lanes_build(self):
-        """Another lane's build never contained the accepted patch."""
+    def test_it_never_promotes_a_lane_build_DIRECTORY(self):
+        """A lane's build directory is not relocatable, so it can no longer be handed
+        to the promotion at all: the champion is rebuilt into the anchor slot."""
         block = self._pooled_block()
-        self.assertIn("promote_anchor(worker.build_dir)", block)
+        self.assertIn("promote_anchor()", block)
+        self.assertNotIn("promote_anchor(worker.build_dir)", block)
         self.assertNotIn("promote_anchor(args.candidate_build)", block)
 
     def test_the_pooled_commit_is_actually_wired_in(self):
@@ -275,25 +279,18 @@ class PromoteAnchorMustACTUALLYRun(unittest.TestCase):
     spelling. This one imports the module and executes the function."""
 
     def test_the_module_imports_everything_promote_anchor_uses(self):
-        import importlib
-        from autokernel.loop import run as run_mod
-        importlib.reload(run_mod)
-        self.assertTrue(hasattr(run_mod, "shutil"),
-                        "promote_anchor calls shutil.move; the module must import it")
+        from autokernel.loop import pool
+        self.assertTrue(hasattr(pool, "json"),
+                        "promote_anchor writes provenance.json; pool must import json")
 
-    def test_a_build_directory_is_actually_moved(self):
-        """Exercise the real filesystem operation, not the source text."""
-        import shutil as _shutil
+    def test_the_promotion_actually_executes(self):
+        """Exercise the real function, not the source text."""
+        from autokernel.loop import pool
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            candidate = root / "build-candidate"
-            (candidate / "bin").mkdir(parents=True)
-            (candidate / "bin" / "llama-bench").write_text("binary", encoding="utf-8")
-            promoted = root / "anchor-gen-001"
-            _shutil.move(str(candidate), str(promoted))
-            self.assertFalse(candidate.exists(),
-                             "the build must LEAVE the candidate slot, not be copied")
+            promoted = pool.promote_anchor(Path(tmp), build=_champion_build,
+                                           champion_commit="5ad3e36d")
             self.assertTrue((promoted / "bin" / "llama-bench").is_file())
+            self.assertTrue((promoted / "provenance.json").is_file())
 
 
 class PromotionMustSurvivePruning(unittest.TestCase):
@@ -312,25 +309,22 @@ class PromotionMustSurvivePruning(unittest.TestCase):
             store = Path(tmp)
             seen = []
             for _ in range(5):
-                candidate = store / "cand"
-                (candidate / "bin").mkdir(parents=True)
-                promoted = pool.promote_anchor(candidate, store)
+                promoted = pool.promote_anchor(store, build=_champion_build,
+                                               champion_commit="5ad3e36d")
                 pool.prune_anchor_generations(store, current=promoted)
                 seen.append(promoted.name)
             self.assertEqual(len(set(seen)), 5, f"generations collided: {seen}")
 
-    def test_it_refuses_to_nest_into_an_existing_anchor(self):
-        """shutil.move into an existing directory NESTS. A nested anchor silently
-        leaves the old binary in place, so later comparisons measure a superseded
-        champion and nobody is told."""
+    def test_it_refuses_to_reuse_an_existing_anchor(self):
+        """Configuring into a slot that already holds a generation would build over
+        another champion's CMakeCache -- the relocation hazard by another route."""
         from autokernel.loop import pool
         with tempfile.TemporaryDirectory() as tmp:
             store = Path(tmp)
             (store / "anchor-gen-001").mkdir()
             (store / "anchor-gen-002").mkdir()
-            candidate = store / "cand"
-            (candidate / "bin").mkdir(parents=True)
             # numbering must step past BOTH, not reuse 002
-            promoted = pool.promote_anchor(candidate, store)
+            promoted = pool.promote_anchor(store, build=_champion_build,
+                                           champion_commit="5ad3e36d")
             self.assertEqual(promoted.name, "anchor-gen-003")
             self.assertTrue((promoted / "bin").is_dir())

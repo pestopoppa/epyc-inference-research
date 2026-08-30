@@ -17,15 +17,14 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-import shutil
 import signal
 import subprocess
 import sys
 import time
 
 from ..controller import build_recipe, workload_contract
-from . import (actors, archive, bench, claim, gates, hotspots, loop, pipeline, pool,
-               status)
+from . import (actors, anchor, archive, bench, claim, gates, hotspots, loop, pipeline,
+               pool, status)
 
 #: Single-pair p95, measured 2026-08-28 over n=20 alternating A/A pairs. Prefill is
 #: the cheaper surface to detect on; decode has heavier tails.
@@ -290,12 +289,48 @@ def main(argv: list[str] | None = None) -> int:
     def should_stop() -> bool:
         return stopping["asked"] or pool.stop_requested(args.store)
 
-    def promote_anchor(build_dir: Path) -> None:
-        """Advance the anchor to a kept build. The mechanics live in `pool` so they
-        can be executed by a test rather than grepped for."""
-        anchor_build[0] = pool.promote_anchor(build_dir, args.store)
+    anchor_guard_seen: list = []
+
+    def build_champion(dest: Path):
+        """The loop's recipe, compiled AT the path used. Shared by promotion and guard."""
+        return gates.compiles(args.worktree, dest, cmake_defines=recipe.cmake_defines(),
+                              jobs=64, cpu_list="96-183")
+
+    def verify_anchor() -> None:
+        """Prove the promoted binary IS the champion; `RunAborted` if not. Runs in the
+        serialized tail holding the claim: `commit` is called inside `tail_session`."""
+        def keep_verdict(verdict) -> None:
+            # Both outcomes, before any abort raises: store + status, so the dashboard
+            # says WHY a run stopped and the check is auditable after the fact.
+            archive.record(args.store, verdict.to_attempt(), epoch=epoch,
+                           recorded_at=loop._now(), campaign_id="ak-loop")
+            anchor_guard_seen.append(verdict.to_dict())
+            publish("running", latest, hotspot_rows=hotspot_rows)
+            print(f"anchor    {verdict.detail}")
+
+        anchor.verify(
+            champion_commit=_git(args.worktree, "rev-parse", "HEAD"),
+            anchor_build=anchor_build[0], noise_floor_pct=floor,
+            on_verdict=keep_verdict, build=build_champion,
+            compare=lambda promoted, fresh: bench.compare(
+                bench.Arm("promoted_anchor", promoted / "bin" / "llama-bench"),
+                bench.Arm("fresh_champion", fresh / "bin" / "llama-bench"),
+                args.model, pp=pp, tg=tg, pairs=args.pairs, noise_floor_pct=floor),
+            on_step=lambda label: publish("running", latest,
+                                          hotspot_rows=hotspot_rows, step=label))
+
+    def promote_anchor() -> None:
+        """Advance the anchor by BUILDING the champion into the new slot, never by
+        renaming a build directory in (CMake dirs are not relocatable). `pool` owns the
+        mechanics so a test can EXECUTE them rather than grep for them."""
+        anchor_build[0] = pool.promote_anchor(
+            args.store, build=build_champion, recipe=recipe.to_dict(),
+            champion_commit=_git(args.worktree, "rev-parse", "HEAD"))
         print(f"anchor    advanced to {anchor_build[0].name} — subsequent effects are "
               f"MARGINAL against this champion, not cumulative")
+        # FIRST, before the loop draws any further work: nothing below is worth doing
+        # against an anchor that is not the champion (run 18: 114 candidates, 6.5 h).
+        verify_anchor()
         # The champion moved, so the profile that named the hotspots is stale: the
         # accepted patch changed the very distribution the next hypothesis should aim
         # at. Re-profiling here is what makes a long run keep aiming at the truth
@@ -317,7 +352,7 @@ def main(argv: list[str] | None = None) -> int:
             paths=tuple(paths))
         # Only after the commit succeeds: an anchor advanced for a patch that did not
         # land would silently raise the bar for everything after it.
-        promote_anchor(args.candidate_build)
+        promote_anchor()
         return head
 
     def gpu_reading(outcomes=()) -> dict:
@@ -351,6 +386,7 @@ def main(argv: list[str] | None = None) -> int:
             outcomes=[o.to_attempt() for o in outcomes],
             iterations_planned=args.iterations, step=step,
             champion_head=_git(args.worktree, "rev-parse", "HEAD"),
+            anchor_guard=anchor_guard_seen[-1] if anchor_guard_seen else None,
             gpu=gpu if gpu is not None else gpu_reading(outcomes),
             hotspots=[row.to_dict() for row in hotspot_rows])
 
@@ -410,14 +446,15 @@ def main(argv: list[str] | None = None) -> int:
             effects reported as marginal, a -2.864% regression committed as a keep) at
             seven times the rate.
 
-            The promoted build is THIS LANE's, because this lane is the one that
-            built the accepted patch. Other lanes are mid-formation against the old
-            base and will be refused as `superseded` on their next tail entry, which
-            is exactly right: their candidates were never built on this champion.
+            The anchor is BUILT from the champion tree, not taken from this lane: a
+            lane's build directory is not relocatable, and the champion tree is what
+            `advance_champion` just reset onto the accepted commit. Other lanes are
+            mid-formation against the old base and are refused as `superseded` on their
+            next tail entry -- their candidates were never built on this champion.
             """
             head = pool.advance_champion(worker, hypothesis, paths, comparison,
                                          champion_tree=args.worktree)
-            promote_anchor(worker.build_dir)
+            promote_anchor()
             return head
 
         return pool.drive(

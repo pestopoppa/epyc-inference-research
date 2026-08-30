@@ -30,12 +30,13 @@ is stated rather than inferred.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import json
 from pathlib import Path
 import shutil
 import subprocess
 import threading
 import time
-from typing import Any, Callable, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 from . import archive, loop as loop_mod, pipeline
 
@@ -329,47 +330,48 @@ __all__ = ["CHAMPION_BRANCH", "CHAMPION_TREE", "MAX_WORKERS", "PhaseClock",
            "commit_message", "drive", "provision", "reset_to_champion"]
 
 
-def promote_anchor(build_dir: Path, store: Path) -> Path:
-    """Make a kept candidate build the new anchor, and return its path.
+def promote_anchor(store: Path, *, build: Callable[[Path], Any], champion_commit: str,
+                   recipe: Mapping[str, Any] | None = None) -> Path:
+    """BUILD the champion into a new anchor slot. Never MOVE a build directory into one.
 
-    THE WHOLE POINT. If the anchor does not advance, every effect is measured against
-    a baseline the champion already beat -- so it is CUMULATIVE, a patch that regresses
-    the champion still clears the floor, and recovering the marginal means inferring it
-    from two noisy numbers with sqrt(2) the uncertainty. Runs 13 and 14 both committed
-    patches that way. An advancing anchor makes every measurement directly marginal and
-    the whole problem stops existing.
+    THE WHOLE POINT of an advancing anchor: if it does not advance, every effect is
+    measured against a baseline the champion already beat -- CUMULATIVE, so a patch that
+    regresses the champion still clears the floor. Runs 13 and 14 both kept patches so.
 
-    MOVED, never copied: the next iteration rebuilds into the candidate slot, and an
-    anchor sharing that path is an anchor that ends up measuring against itself.
+    WHY BUILT, NOT MOVED. A CMake build directory is not relocatable: `CMakeCache.txt`
+    records absolute binary-dir, source-dir and compiler paths, so a renamed directory
+    still names where it was configured. That is the leading root cause of run 18 --
+    `anchor-gen-001/CMakeCache.txt` is stamped 06:01 and its libraries 08:29, both before
+    the run started at 09:37 and hours before the 11:03 promotion, so what sat in the
+    anchor slot was not the build the loop made. 114 measurements were taken against it.
 
-    Lives here rather than inside `run.main` so a test can EXECUTE it. The predecessor
-    was a closure, and its test asserted that the string "shutil.move" appeared in the
-    source. It passed while `shutil` was never imported, so the promotion raised
-    NameError on the first real keep and the anchor silently never advanced.
+    It also makes the champion PROMOTABLE: the freeze runbook wants a full build from a
+    named commit with a named recipe, validated as a whole -- never a relocated or
+    reconciled artifact. This yields ONE artifact that is both the measurement anchor and
+    the promotion candidate, `provenance.json` beside it naming both. One build per keep,
+    unconditionally; no move is kept as a fast path.
     """
-    if not (build_dir / "bin").is_dir():
-        raise ValueError(
-            f"{build_dir} has no bin/: refusing to promote a build that produced no "
-            f"binary, which would make every later comparison measure nothing")
     # MAX existing number + 1, never the COUNT. Counting collides the moment pruning
-    # holds the population steady: with keep=1 the count is always 1, so every
-    # promotion targeted anchor-gen-002 forever. The first move created it; the next
-    # moved INTO it (shutil.move into an existing directory nests rather than
-    # replaces), and the one after that collided outright.
-    #
-    # Run 17 lost 23 of its 30 champion advances to this. Not merely as errors: the
-    # anchor stopped advancing after the first keep, so every later effect was
-    # cumulative against a stale champion -- the exact defect the advancing anchor
-    # exists to prevent, reintroduced by the pruning that was meant to save disk.
+    # holds the population steady: with keep=1 the count is always 1, so every promotion
+    # targeted anchor-gen-002 forever. Run 17 lost 23 of its 30 champion advances to it,
+    # and the anchor then stopped advancing at all -- every later effect cumulative.
     used = [int(path.name.rsplit("-", 1)[1]) for path in store.glob("anchor-gen-*")
             if path.name.rsplit("-", 1)[1].isdigit()]
     promoted = store / f"anchor-gen-{(max(used) + 1) if used else 1:03d}"
     if promoted.exists():
         raise ValueError(
-            f"{promoted} already exists; refusing to move into it. A nested anchor "
-            f"silently keeps the OLD binary in place, so every later comparison "
-            f"measures against a champion that has already been superseded")
-    shutil.move(str(build_dir), str(promoted))
+            f"{promoted} already exists; refusing to build into it. Configuring over "
+            f"another generation's CMakeCache is the relocation hazard by another route")
+    promoted.mkdir(parents=True)
+    verdict = build(promoted)
+    if not getattr(verdict, "passed", False):
+        raise ValueError(
+            f"champion {champion_commit[:12]} would not build into {promoted} "
+            f"({getattr(verdict, 'reason', '') or '?'}); there is no anchor to measure "
+            f"the next candidate against")
+    (promoted / "provenance.json").write_text(json.dumps(
+        {"champion_commit": champion_commit, "build_recipe": dict(recipe or {}),
+         "built_at": str(promoted)}, sort_keys=True), encoding="utf-8")
     return promoted
 
 

@@ -354,6 +354,13 @@ def run(*, planner: Planner, critic: Critic, build_context: Callable[[], dict],
                               context=build_context(), measure=measure, gate=gate,
                               commit=commit, on_step=on_step)
             consecutive_errors = 0
+        except RunAborted:
+            # NEVER an iteration fault, so it must not be laundered into one: the
+            # blanket handler below would record it as `iteration_error` and draw the
+            # next iteration. The promotion A/A guard refused the binary in the anchor
+            # slot, so every later comparison would be against a champion that is not
+            # the champion -- run 18 continued 6.5 hours and 114 candidates that way.
+            raise
         except Exception as exc:      # noqa: BLE001 -- deliberate, see below
             # NOTHING that goes wrong in one iteration may end the run. Run 12 lost
             # ten iterations, a profile and a held device to a single SIGKILLed

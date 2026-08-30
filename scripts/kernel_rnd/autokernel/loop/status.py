@@ -51,6 +51,7 @@ def write(store_root: Path, *, state: str, epoch: str, campaign_id: str,
           gpu: Mapping[str, Any] | None = None,
           hotspots: Sequence[Mapping[str, Any]] = (),
           step: str | None = None,
+          anchor_guard: Mapping[str, Any] | None = None,
           stale_after_s: int = DEFAULT_STALE_AFTER_S) -> Path:
     """Atomically publish the loop's current standing.
 
@@ -89,6 +90,10 @@ def write(store_root: Path, *, state: str, epoch: str, campaign_id: str,
         "measurements_reached": measured,
         "dispositions": dict(sorted(counts.items())),
         "champion_head": champion_head,
+        # The last promotion A/A: did the binary in the anchor slot prove to BE the
+        # champion. `null` means no promotion has happened on this run, which is a
+        # different fact from "the check passed" and must stay distinguishable.
+        "anchor_guard": dict(anchor_guard) if anchor_guard else None,
         "gpu": dict(gpu or {}),
         "hotspots": [dict(row) for row in hotspots][:12],
         # Newest first: the operator reads the top of the list.
