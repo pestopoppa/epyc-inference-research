@@ -85,8 +85,17 @@ class LocBudget(unittest.TestCase):
                              "--budget", "1000"]), 0)
 
     def test_the_declared_budget_is_the_one_documented(self):
-        """3,000 against a subject of 42,494 -- the ratio is the point."""
-        self.assertEqual(guards.LOOP_LOC_BUDGET, 3000)
+        """3,400 against a subject of 42,494 -- the ratio is the point.
+
+        A tripwire, not an arithmetic check: it exists so the budget cannot move
+        without someone editing this literal and saying why. It was raised
+        3,000 -> 3,400 on 2026-08-29 for concurrency (pipeline.py plus pool.py,
+        ~640 lines, 5.6x throughput), with the rationale stated at the constant --
+        but this test was not updated with it, and CI could not report the drift,
+        because CI had been dying on a missing pytest since its very first run.
+        Those are one defect, not two: a guard nobody could see failing.
+        """
+        self.assertEqual(guards.LOOP_LOC_BUDGET, 3400)
 
 
 if __name__ == "__main__":

@@ -72,7 +72,13 @@ class Memory(unittest.TestCase):
                 self.assertEqual(reopened.mechanisms_tried(), ["akm-q5-bit-deposit"])
 
     def test_a_refused_attempt_with_no_result_is_still_remembered(self):
-        """A refusal the planner cannot see is a refusal it will earn again."""
+        """A refusal the planner cannot see is a refusal it will earn again.
+
+        A refusal never produces a `result_sha256`, so its identity falls back to the
+        hashed material. Re-recording the SAME row -- same `recorded_at`, which is what
+        a resumed controller replaying its own durable state does -- must not inflate
+        the history.
+        """
         with tempfile.TemporaryDirectory() as tmp, self.store(tmp) as store:
             refusal = {"status": "authoring_refused", "turn": 3,
                        "reason": "derives undeclared symbols ['<file-scope>']",
@@ -81,11 +87,41 @@ class Memory(unittest.TestCase):
                                          recorded_at="2026-08-28T00:00:02Z",
                                          campaign_id="c1"))
             self.assertFalse(store.record(refusal, epoch=EPOCH_A,
-                                          recorded_at="2026-08-28T00:00:03Z",
-                                          campaign_id="c1"))
+                                          recorded_at="2026-08-28T00:00:02Z",
+                                          campaign_id="c1"),
+                             "a resumed controller must not inflate its history")
+            self.assertEqual(store.count(), 1)
             recalled = store.recall(epoch=EPOCH_A)
             self.assertEqual(recalled[0]["refusal_reason"],
                              "derives undeclared symbols ['<file-scope>']")
+
+    def test_the_same_refusal_at_a_later_time_is_a_second_occurrence(self):
+        """Repetition is the signal, so it must survive into the history.
+
+        This asserts the deliberate identity change made on 2026-08-29: `recorded_at`
+        entered the hashed material because `turn` was never emitted by
+        `Outcome.to_attempt()`, so identity collapsed to
+        (campaign, status, mechanism, reason). Two DISTINCT attempts sharing that --
+        two `planner_transient` rows 40 minutes apart, both reading "authoring returned
+        no changed paths" -- hashed identically and the second was silently dropped.
+        The planner then read a history missing its own repetitions, which is exactly
+        the blindness this store exists to remove.
+
+        The previous version of this file asserted the opposite and went unnoticed for
+        two days, because CI died on a missing pytest before collecting it.
+        """
+        with tempfile.TemporaryDirectory() as tmp, self.store(tmp) as store:
+            refusal = {"status": "planner_transient",
+                       "reason": "authoring returned no changed paths",
+                       "mechanism_id": "akm-q5-bit-deposit"}
+            self.assertTrue(store.record(refusal, epoch=EPOCH_A,
+                                         recorded_at="2026-08-28T00:00:02Z",
+                                         campaign_id="c1"))
+            self.assertTrue(store.record(refusal, epoch=EPOCH_A,
+                                         recorded_at="2026-08-28T00:42:02Z",
+                                         campaign_id="c1"),
+                            "a repeated refusal is a fact the planner must see")
+            self.assertEqual(store.count(), 2)
 
     def test_cross_epoch_records_are_returned_but_marked_not_comparable(self):
         with tempfile.TemporaryDirectory() as tmp, self.store(tmp) as store:

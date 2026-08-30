@@ -31,6 +31,20 @@ jobs:
         with:
           python-version: '3.13'
 
+      # actions/setup-python ships a bare interpreter -- pytest is NOT preinstalled.
+      # Without this step the test step died on "No module named pytest" before it
+      # collected anything, which is how this workflow went 41 consecutive runs, from
+      # its first commit onward, without ever executing a single assertion. A step that
+      # cannot start is not a passing guard and is not a failing test; it is no guard
+      # at all, and it hid two real test regressions for two days.
+      - name: Install the test runner
+        run: python3 -m pip install --disable-pip-version-check pytest
+
+      # Fail loudly and specifically if the runner is still not importable, rather than
+      # letting a future dependency change reproduce the same silent two-day hole.
+      - name: Prove the test runner is importable
+        run: python3 -m pytest --version
+
       - name: Regrowth guards
         run: python3 scripts/kernel_rnd/autokernel/check_regrowth_guards.py
 
@@ -41,8 +55,14 @@ jobs:
         # about production at all, the gate-parameter diff that makes a moving
         # threshold visible, the build recipe that refuses an unexplained divergence,
         # the experiment memory, and the guards themselves.
+        #
+        # -rs prints the REASON for every skip. Two tests in test_workload_contract.py
+        # assert against the real GGUF files under /mnt/raid0 and skip on a runner,
+        # where those files do not exist. That is legitimate -- but it must be legible
+        # in the log, not an invisible subtraction from the pass count. A guard that
+        # silently no-ops is worse than one that is red.
         run: |
-          python3 -m pytest -q \
+          python3 -m pytest -q -rs \
             scripts/benchmark/test_screen_effect_estimator.py \
             scripts/kernel_rnd/autokernel/controller/test_workload_contract.py \
             scripts/kernel_rnd/autokernel/controller/test_build_recipe.py \
@@ -51,3 +71,17 @@ jobs:
             scripts/kernel_rnd/autokernel/controller/test_gpu_utilization.py \
             scripts/kernel_rnd/autokernel/controller/test_kernel_hotspots.py \
             scripts/kernel_rnd/autokernel/test_check_regrowth_guards.py
+
+      - name: The loop package
+        # The rebuilt loop is the package every path filter above triggers on, and it
+        # was the one thing this workflow never ran. It is entirely hardware-free:
+        # 196 tests, no GPU, no ROCm, no /mnt/raid0, no API key. The modules do name
+        # absolute host paths (residency.py globs /sys, pool.py names /mnt/raid0), but
+        # those are module constants -- a missing path globs empty at import and the
+        # tests drive the logic through temporary directories, so the suite is
+        # identical on this host and on a runner. Verified by running it from a clean
+        # `git archive` checkout: 196 passed in both.
+        # -rs for the same reason as above: any skip must state why. This suite is
+        # expected to skip NOTHING; if a skip ever appears here, the loop package has
+        # grown a hardware dependency and the log will name it.
+        run: python3 -m pytest -q -rs scripts/kernel_rnd/autokernel/loop/
