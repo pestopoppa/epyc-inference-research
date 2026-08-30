@@ -23,34 +23,86 @@ rather than rolled back on arithmetic.
 Non-promotable screening under P-AK-SEARCH-1. Holds the mi210_0 claim and proves
 residency on every invocation.
 """
+
+from __future__ import annotations
+
+import argparse
+import json
 from pathlib import Path
-from autokernel.controller import build_recipe
-from autokernel.loop import bench, claim, gates
-CHAMP = Path("/mnt/raid0/llm/tmp/build-champ-8fd1b23a")
-BASE = Path("/mnt/raid0/llm/tmp/build-anchor-champ")
-print("building current champion 8fd1b23a ...", flush=True)
-v = gates.compiles(Path("/mnt/raid0/llm/tmp/ak-loop-tree"), CHAMP,
-                   cmake_defines=tuple(build_recipe.HOUSE_GPU_RECIPE.cmake_defines()),
-                   jobs=64, cpu_list="96-183")
-print("  build:", v.gate, v.passed, v.reason, flush=True)
-if not v.passed:
-    print(v.detail[-800:]); raise SystemExit(1)
-ok = gates.op_correctness(CHAMP)
-print("  oracle:", ok.gate, ok.passed, ok.reason, flush=True)
-if not ok.passed:
-    print(ok.detail[-600:]); raise SystemExit(1)
-with claim.hold() as receipt:
-    print("  claim held on", receipt["device_id"], flush=True)
-    c = bench.compare(bench.Arm("run17-start", BASE / "bin" / "llama-bench"),
-                      bench.Arm("champion-now", CHAMP / "bin" / "llama-bench"),
-                      Path("/mnt/raid0/llm/models/DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf"),
-                      pp=0, tg=128, pairs=20, noise_floor_pct=1.188)
-d = c.to_dict()
-out = Path("/mnt/raid0/llm/autokernel/loop-memory/run17-audit")
-out.mkdir(parents=True, exist_ok=True)
-(out / "total.json").write_text(json.dumps(d, indent=2))
-print("\nTOTAL effect of run 17's 30 commits: %+.3f%%" % d["effect_pct"])
-print("  floor %.3f%%  decisive=%s  drifting=%s" % (d["noise_floor_pct"], d["decisive"], d["drifting"]))
-print("  drift anchor %+.3f%%  cand %+.3f%%" % (d["anchor_drift_pct"], d["candidate_drift_pct"]))
-r = d["residency"]
-print("  residency %s/%s  clock %s-%s stable=%s" % (r["resident"], r["invocations"], r["sclk_min_mhz"], r["sclk_max_mhz"], r["clock_stable"]))
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "kernel_rnd"))
+
+from autokernel.controller import build_recipe                      # noqa: E402
+from autokernel.loop import bench, claim, gates                     # noqa: E402
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--champion-tree", type=Path,
+                        default=Path("/mnt/raid0/llm/tmp/ak-loop-tree"),
+                        help="worktree at the champion commit to be audited")
+    parser.add_argument("--base-build", type=Path, required=True,
+                        help="an EXISTING build of the commit the block started from")
+    parser.add_argument("--champion-build", type=Path,
+                        default=Path("/mnt/raid0/llm/tmp/build-champion-audit"),
+                        help="where to build the champion; rebuilt if absent")
+    parser.add_argument("--model", type=Path,
+                        default=Path("/mnt/raid0/llm/models/"
+                                     "DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf"))
+    parser.add_argument("--surface", choices=("pp512", "tg128"), default="tg128")
+    parser.add_argument("--pairs", type=int, default=20)
+    parser.add_argument("--out", type=Path, required=True)
+    args = parser.parse_args(argv)
+
+    pp, tg = (512, 0) if args.surface == "pp512" else (0, 128)
+    floor = bench.MEASURED_FLOOR_PCT[args.surface].get(args.pairs, 1.188)
+
+    print(f"champion  {args.champion_tree}")
+    print(f"base      {args.base_build}")
+    verdict = gates.compiles(
+        args.champion_tree, args.champion_build,
+        cmake_defines=tuple(build_recipe.HOUSE_GPU_RECIPE.cmake_defines()),
+        jobs=64, cpu_list="96-183")
+    print(f"build     {verdict.gate} passed={verdict.passed} {verdict.reason}")
+    if not verdict.passed:
+        print(verdict.detail[-800:])
+        return 1
+
+    oracle = gates.op_correctness(args.champion_build)
+    print(f"oracle    {oracle.gate} passed={oracle.passed} {oracle.reason}")
+    if not oracle.passed:
+        print(oracle.detail[-600:])
+        return 1
+
+    with claim.hold() as receipt:
+        print(f"claim     held on {receipt['device_id']}")
+        comparison = bench.compare(
+            bench.Arm("base", args.base_build / "bin" / "llama-bench"),
+            bench.Arm("champion", args.champion_build / "bin" / "llama-bench"),
+            args.model, pp=pp, tg=tg, pairs=args.pairs, noise_floor_pct=floor)
+
+    body = comparison.to_dict()
+    body.update({"schema": "epyc.autokernel.champion_block_audit.v1",
+                 "authority": "screening_non_promotable",
+                 "champion_tree": str(args.champion_tree),
+                 "base_build": str(args.base_build)})
+    args.out.mkdir(parents=True, exist_ok=True)
+    (args.out / "champion-block-audit.json").write_text(
+        json.dumps(body, indent=2), encoding="utf-8")
+
+    residency = body["residency"]
+    print(f"\nBLOCK effect {comparison.effect * 100:+.3f}%  floor {floor:.3f}%")
+    print(f"  decisive={comparison.decisive}  drifting={comparison.drifting}")
+    print(f"  drift anchor {comparison.anchor_drift_pct:+.3f}%  "
+          f"candidate {comparison.candidate_drift_pct:+.3f}%")
+    print(f"  residency {residency['resident']}/{residency['invocations']}  "
+          f"clock {residency['sclk_min_mhz']}-{residency['sclk_max_mhz']} "
+          f"stable={residency['clock_stable']}")
+    print(f"\nwrote {args.out / 'champion-block-audit.json'}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
