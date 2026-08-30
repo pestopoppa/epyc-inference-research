@@ -351,8 +351,24 @@ def promote_anchor(build_dir: Path, store: Path) -> Path:
         raise ValueError(
             f"{build_dir} has no bin/: refusing to promote a build that produced no "
             f"binary, which would make every later comparison measure nothing")
-    generation = len(list(store.glob("anchor-gen-*"))) + 1
-    promoted = store / f"anchor-gen-{generation:03d}"
+    # MAX existing number + 1, never the COUNT. Counting collides the moment pruning
+    # holds the population steady: with keep=1 the count is always 1, so every
+    # promotion targeted anchor-gen-002 forever. The first move created it; the next
+    # moved INTO it (shutil.move into an existing directory nests rather than
+    # replaces), and the one after that collided outright.
+    #
+    # Run 17 lost 23 of its 30 champion advances to this. Not merely as errors: the
+    # anchor stopped advancing after the first keep, so every later effect was
+    # cumulative against a stale champion -- the exact defect the advancing anchor
+    # exists to prevent, reintroduced by the pruning that was meant to save disk.
+    used = [int(path.name.rsplit("-", 1)[1]) for path in store.glob("anchor-gen-*")
+            if path.name.rsplit("-", 1)[1].isdigit()]
+    promoted = store / f"anchor-gen-{(max(used) + 1) if used else 1:03d}"
+    if promoted.exists():
+        raise ValueError(
+            f"{promoted} already exists; refusing to move into it. A nested anchor "
+            f"silently keeps the OLD binary in place, so every later comparison "
+            f"measures against a champion that has already been superseded")
     shutil.move(str(build_dir), str(promoted))
     return promoted
 

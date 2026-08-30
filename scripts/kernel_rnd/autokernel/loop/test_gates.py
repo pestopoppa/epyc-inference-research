@@ -294,3 +294,43 @@ class PromoteAnchorMustACTUALLYRun(unittest.TestCase):
             self.assertFalse(candidate.exists(),
                              "the build must LEAVE the candidate slot, not be copied")
             self.assertTrue((promoted / "bin" / "llama-bench").is_file())
+
+
+class PromotionMustSurvivePruning(unittest.TestCase):
+    """Run 17 lost 23 of its 30 champion advances to this, and the errors were the
+    lesser harm: the anchor stopped advancing after the FIRST keep, so every later
+    effect was cumulative against a stale champion -- the defect the advancing anchor
+    exists to prevent, reintroduced by the pruning meant to save disk.
+
+    Numbering by COUNT collides the moment pruning holds the population steady. With
+    keep=1 the count is always 1, so every promotion targeted anchor-gen-002 forever.
+    """
+
+    def test_repeated_promote_and_prune_never_collides(self):
+        from autokernel.loop import pool
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Path(tmp)
+            seen = []
+            for _ in range(5):
+                candidate = store / "cand"
+                (candidate / "bin").mkdir(parents=True)
+                promoted = pool.promote_anchor(candidate, store)
+                pool.prune_anchor_generations(store, current=promoted)
+                seen.append(promoted.name)
+            self.assertEqual(len(set(seen)), 5, f"generations collided: {seen}")
+
+    def test_it_refuses_to_nest_into_an_existing_anchor(self):
+        """shutil.move into an existing directory NESTS. A nested anchor silently
+        leaves the old binary in place, so later comparisons measure a superseded
+        champion and nobody is told."""
+        from autokernel.loop import pool
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Path(tmp)
+            (store / "anchor-gen-001").mkdir()
+            (store / "anchor-gen-002").mkdir()
+            candidate = store / "cand"
+            (candidate / "bin").mkdir(parents=True)
+            # numbering must step past BOTH, not reuse 002
+            promoted = pool.promote_anchor(candidate, store)
+            self.assertEqual(promoted.name, "anchor-gen-003")
+            self.assertTrue((promoted / "bin").is_dir())
