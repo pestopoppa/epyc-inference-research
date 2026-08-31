@@ -49,11 +49,13 @@ import sys
 #: plus `pool.py`, ~640 lines, and it bought 5.6x throughput (run 13: 10 iterations in
 #: 118.6 min; run 14: 14 in 29.8). That is a capability, not regrowth.
 #:
-#: Measured 2026-08-31: 2,082 lines are code, 810 are docstrings and comments and 508
-#: are blank -- 23.8% prose, NOT the 34% this note claimed from 2026-08-29 to
-#: 2026-08-31. The old figure was never re-derived after the package grew, and an
-#: inflated prose share is exactly the number a future "just bump it, most of it is
-#: comments" argument would lean on. That prose is the incident record, and it is load
+#: The prose share is NOT written here any more -- `composition()` computes it and the
+#: guard prints it on every run. Three hand measurements of this one number, three
+#: different answers: 34% (2026-08-29, never re-derived as the package grew), 23.8%
+#: (2026-08-31, under-counted -- it missed full-line `#` comments), and the computed
+#: 30.8%. A stale prose share is exactly the number a future "just bump it, most of it
+#: is comments" argument leans on, so it may not live in a comment. That prose is the
+#: incident record, and it is load
 #: bearing: every guard here exists because something specific went wrong, and a guard
 #: whose reason has been deleted gets removed by the next person who finds it
 #: inconvenient. The budget counts it, which means the budget is partly a documentation
@@ -78,6 +80,40 @@ _DOC_READ = re.compile(
     r"(?:" + "|".join(re.escape(name) for name in
                       ("FOOTPRINT.md", "README.md", "program.md", "HYPOTHESES.md",
                        "HYPOTHESIS_PORTFOLIO_V2.md")) + r")")
+
+
+def composition(root: Path) -> tuple[int, int, int]:
+    """`(code, prose, blank)` for the loop package, computed rather than remembered.
+
+    Every hand measurement of this number has been wrong -- see the note at
+    LOOP_LOC_BUDGET. The budget counts all three, so the split is what tells a reader
+    whether a raise is buying capability or documentation.
+    """
+    import ast, io, tokenize
+    code = prose = blank = 0
+    for path in sorted(root.rglob("*.py")):
+        if path.name.startswith("test_"):
+            continue
+        src = path.read_text(encoding="utf-8")
+        marked: set[int] = set()
+        tree = ast.parse(src)
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.Module, ast.ClassDef,
+                                 ast.FunctionDef, ast.AsyncFunctionDef)):
+                if ast.get_docstring(node, clean=False) is not None and node.body:
+                    first = node.body[0]
+                    marked.update(range(first.lineno, (first.end_lineno or first.lineno) + 1))
+        for tok in tokenize.generate_tokens(io.StringIO(src).readline):
+            if tok.type == tokenize.COMMENT:
+                marked.add(tok.start[0])
+        for lineno, line in enumerate(src.splitlines(), 1):
+            if not line.strip():
+                blank += 1
+            elif lineno in marked:
+                prose += 1
+            else:
+                code += 1
+    return code, prose, blank
 
 
 def loop_package_loc(root: Path) -> tuple[int, list[tuple[str, int]]]:
@@ -133,6 +169,9 @@ def main(argv: list[str] | None = None) -> int:
     if not rows:
         print(f"loop package not present yet at {loop_root} — LOC budget not applicable")
     else:
+        code, prose, blank = composition(loop_root)
+        print(f"loop package composition: {code} code / {prose} prose / {blank} blank "
+              f"({100.0 * prose / max(1, code + prose + blank):.1f}% prose)")
         print(f"loop package: {total} LOC across {len(rows)} files "
               f"(budget {args.budget})")
         for name, count in sorted(rows, key=lambda item: -item[1])[:10]:
