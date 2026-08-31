@@ -156,7 +156,14 @@ def main(argv: list[str] | None = None) -> int:
         build = args.build_root / f"build-{name}"
         # Serial builds, inside nothing: no claim is needed to compile, and holding
         # the device across 2x -j64 builds is run 9's idle-while-claimed defect.
+        # llama-cli is IN the target list because greedy_once shells it. The first
+        # boundary run (2026-08-31 22:04Z) built only gates.compiles' default
+        # targets (llama-bench, test-backend-ops), passed the oracle, then died at
+        # the parity stage on a binary that was never built -- rc=1, no merge, and
+        # the whole step read red. The harness had never run end-to-end; this line
+        # is what end-to-end would have caught.
         verdict = gates.compiles(src, build, cmake_defines=recipe.cmake_defines(),
+                                 targets=("llama-bench", "test-backend-ops", "llama-cli"),
                                  jobs=64, cpu_list="96-183")
         if not verdict.passed:
             raise SystemExit(f"{name} build failed: {verdict.reason}")
