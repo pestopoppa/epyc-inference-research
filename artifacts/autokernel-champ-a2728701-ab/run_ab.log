@@ -1,0 +1,43 @@
+claim held: {'device_id': 'mi210_0', 'lock_path': '/mnt/raid0/llm/tmp/gpu_device.mi210_0.lock', 'pid': 2357443}
+=== tg128: 20 pairs + 1 warmup ===
+{
+ "surface": "tg128",
+ "effect_pct": 12.618108071254252,
+ "pairs": 20,
+ "noise_floor_pct": 1.188,
+ "decisive": true,
+ "drifting": false,
+ "anchor_drift_pct": 0.5782342021911885,
+ "candidate_drift_pct": -0.22899180885040232,
+ "residency": {
+  "invocations": 40,
+  "resident": 40,
+  "peak_vram_bytes": 1554894848,
+  "peak_kfd_processes": 1,
+  "sclk_min_mhz": 1700,
+  "sclk_max_mhz": 1700,
+  "clock_stable": true
+ }
+}
+=== pp512: 20 pairs + 1 warmup ===
+{
+ "surface": "pp512",
+ "effect_pct": 0.07810680587667651,
+ "pairs": 20,
+ "noise_floor_pct": null,
+ "decisive": false,
+ "drifting": false,
+ "anchor_drift_pct": 0.02374197255238479,
+ "candidate_drift_pct": -0.08721079039858345,
+ "residency": {
+  "invocations": 40,
+  "resident": 40,
+  "peak_vram_bytes": 1881018368,
+  "peak_kfd_processes": 1,
+  "sclk_min_mhz": 1700,
+  "sclk_max_mhz": 1700,
+  "clock_stable": true
+ }
+}
+DONE
+ab_rc=0
