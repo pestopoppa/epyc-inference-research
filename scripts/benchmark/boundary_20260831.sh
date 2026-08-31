@@ -571,6 +571,7 @@ main() {
         log "ABORT: run 21 could not be stopped; device steps skipped; writing failure report"
         evaluate_all_green
         step4_report
+        state_set driver_done 1   # the launch watcher keys on this, never on greenness
         return 1
     fi
     step1_funsafe
@@ -578,6 +579,7 @@ main() {
     step3_serving_refresh
     evaluate_all_green
     step4_report
+    state_set driver_done 1   # last act; the OP-32 launch watcher waits for exactly this
     log "=== boundary driver complete — run 22 NOT started (launch stays with the operator; the report carries the OP-32 all-green verdict and the ready command) ==="
     return 0
 }
