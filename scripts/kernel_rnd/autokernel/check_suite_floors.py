@@ -66,7 +66,13 @@ SUITE_FLOORS: dict[str, tuple[int, tuple[str, ...]]] = {
     # `loop/test_production.py`, over two fixtures lifted verbatim off disk -- the
     # live bundle and the real 20-pair sample vectors. Mutation-tested 41 of 41 in
     # both directions; 63 of the 67 new assertions are the first failure under one.
-    "the loop package": (271, ("scripts/kernel_rnd/autokernel/loop/",)),
+    # 271 -> 304 on 2026-08-31: the single-champion startup refusal
+    # (`loop/champion.py`, 25 tests in `loop/test_champion.py` reconstructing the
+    # actual incident geometry in temp git repos, refusal-before-claim ordering
+    # asserted) and the live-resolved frozen-production baseline
+    # (`loop/production.py`, 8 new tests including a real promotion driven through a
+    # temp frozen tree). Both mutation-tested in both directions.
+    "the loop package": (304, ("scripts/kernel_rnd/autokernel/loop/",)),
 }
 
 _COLLECTED = re.compile(r"(\d+) tests? collected")

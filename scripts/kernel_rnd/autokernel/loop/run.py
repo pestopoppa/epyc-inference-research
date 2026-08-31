@@ -23,8 +23,8 @@ import sys
 import time
 
 from ..controller import build_recipe, workload_contract
-from . import (actors, anchor, archive, bench, claim, gates, hotspots, loop, pipeline,
-               pool, production, status)
+from . import (actors, anchor, archive, bench, champion, claim, gates, hotspots, loop,
+               pipeline, pool, production, status)
 
 #: Single-pair p95, measured 2026-08-28 over n=20 alternating A/A pairs. Prefill is
 #: the cheaper surface to detect on; decode has heavier tails.
@@ -84,6 +84,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--worktree", type=Path, required=True,
                         help="candidate source tree the planner edits")
     parser.add_argument("--anchor-build", type=Path, required=True)
+    # THE single champion branch; the worktree must have it checked out at its tip or
+    # the loop refuses to start (`champion.verify_startup`).
+    parser.add_argument("--champion-branch", default=champion.CANONICAL_BRANCH)
+    # Proceed (loudly) on a hand-built anchor that carries no provenance.json;
+    # anchor-gen-* dirs never need or honour this.
+    parser.add_argument("--allow-unverified-anchor", action="store_true")
     parser.add_argument("--candidate-build", type=Path,
                         default=Path("/mnt/raid0/llm/tmp/build-candidate-loop"))
     parser.add_argument("--model", type=Path, required=True)
@@ -116,6 +122,15 @@ def main(argv: list[str] | None = None) -> int:
                         default=pool.WORKER_BUILD_ROOT,
                         help="parent of the per-lane candidate build directories")
     args = parser.parse_args(argv)
+
+    # FIRST, before the claim, the census, even the dry run's wiring proof: the loop
+    # optimises THE single champion branch or it does not start. See `champion` for
+    # the 2026-08-31 incident this refusal exists to make unrepeatable.
+    verified_head = champion.verify_startup(
+        worktree=args.worktree, branch=args.champion_branch,
+        anchor_build=args.anchor_build,
+        allow_unverified_anchor=args.allow_unverified_anchor)
+    print(f"champion  {args.champion_branch} @ {verified_head[:12]} — verified")
 
     # The workload must dispatch the kernels production dispatches. Refuse loudly.
     census = workload_contract.verify_workload(args.model)
@@ -320,21 +335,25 @@ def main(argv: list[str] | None = None) -> int:
         return gates.compiles(args.worktree, dest, cmake_defines=recipe.cmake_defines(),
                               jobs=64, cpu_list="96-183")
 
-    def build_baseline(dest: Path):
-        """Frozen production v9, built AT MOST ONCE, ever. Never in the production tree.
+    def build_baseline(dest: Path, commit: str):
+        """The frozen production kernel, built at most once PER FREEZE. Never in the
+        production tree itself.
 
-        The tree is checked before a single compiler is invoked: a source tree that has
-        moved off the frozen commit would produce a binary published under production's
-        name, which is the one way this headline can be quietly wrong. A refusal here is
-        a `Verdict`, not an exception -- `production.refresh` turns it into a skipped
-        refresh, and the run carries on.
+        `commit` is the LIVE-resolved freeze (`production.resolve_frozen`), not a
+        pinned constant: after a promotion the headline must follow the newly frozen
+        kernel, never stale v9. The build-source copy is checked against it before a
+        single compiler is invoked -- a copy that has not followed the promotion would
+        produce a binary published under the new freeze's name, which is the one way
+        this headline can be quietly wrong. A refusal here is a `Verdict`, not an
+        exception -- `production.refresh` turns it into a skipped refresh (the panel
+        reads SUPERSEDED, naming why), and the run carries on.
         """
         head = _git(production.BASELINE_TREE, "rev-parse", "HEAD")
-        if head != production.BASELINE_COMMIT:
+        if head != commit:
             return gates.Verdict("baseline-tree", False,
                                  f"{production.BASELINE_TREE} is at {head[:12]}, not "
-                                 f"the frozen production kernel "
-                                 f"{production.BASELINE_COMMIT[:12]}")
+                                 f"the frozen production kernel {commit[:12]}; "
+                                 f"refresh the copy to follow the promotion")
         return gates.compiles(production.BASELINE_TREE, dest,
                               cmake_defines=recipe.cmake_defines(),
                               jobs=64, cpu_list="96-183")
@@ -521,13 +540,15 @@ def main(argv: list[str] | None = None) -> int:
             next tail entry -- their candidates were never built on this champion.
             """
             head = pool.advance_champion(worker, hypothesis, paths, comparison,
-                                         champion_tree=args.worktree)
+                                         champion_tree=args.worktree,
+                                         branch=args.champion_branch)
             promote_anchor()
             return head
 
         return pool.drive(
             commit=commit_pooled,
             workers=pool.provision(args.workers, champion_tree=args.worktree,
+                                   champion_branch=args.champion_branch,
                                    root=args.worker_root,
                                    build_root=args.worker_build_root,
                                    execute=True),
@@ -536,7 +557,7 @@ def main(argv: list[str] | None = None) -> int:
             build_context=build_context, make_gate=gate_for,
             make_measure=measure_for, record=record_pooled,
             iterations=(args.iterations or None), should_stop=should_stop,
-            champion_tree=args.worktree,
+            champion_tree=args.worktree, branch=args.champion_branch,
             on_step=step_pooled)
 
     claim_started = None

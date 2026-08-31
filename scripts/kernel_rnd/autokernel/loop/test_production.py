@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 
@@ -57,6 +58,17 @@ MEASURED = json.loads(
 CHAMPION = MEASURED["champion_commit"]
 OTHER_CHAMPION = "9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f"
 FLOOR = 1.544
+
+#: The freeze these tests resolve, taken off the LIVE bundle rather than typed. The
+#: emitter no longer pins any baseline commit -- it resolves the frozen tree at every
+#: refresh (the 2026-08-31 "stale v9" correction) -- so the tests inject a resolver
+#: that answers what the real tree answered when the fixture was captured.
+V9 = PUBLISHED["baseline"]["commit"]
+V9_LABEL = PUBLISHED["baseline"]["label"]
+
+
+def _resolve():
+    return V9, V9_LABEL
 
 #: `capabilities` is the ONE field the live bundle carries that this emitter does not,
 #: and its absence is deliberate rather than an oversight: the reader treats a
@@ -112,11 +124,12 @@ def _warm_baseline(root: Path) -> Path:
 
 
 def _refresh(store: Path, base: Path, *, champion=CHAMPION, surface="tg128",
-             compare=None, build_baseline=None, champion_build=None):
+             compare=None, build_baseline=None, champion_build=None,
+             resolve=_resolve):
     return production.refresh(
         store=store, champion_commit=champion,
         champion_build=champion_build or (store / "anchor-gen-001"),
-        baseline_build=base, build_baseline=build_baseline,
+        baseline_build=base, build_baseline=build_baseline, resolve=resolve,
         compare=compare or (lambda _b, _c: _comparison(surface)))
 
 
@@ -255,8 +268,9 @@ class TheFrozenBaselineIsBuiltAtMostOnce(unittest.TestCase):
         self.base = self.store / "v9-build"
         self.builds = []
 
-    def _build(self, dest):
+    def _build(self, dest, commit=None):
         self.builds.append(Path(dest))
+        self.commits_given = getattr(self, "commits_given", []) + [commit]
         return _built(dest)
 
     def test_a_cold_cache_is_built_once_and_then_reused(self):
@@ -278,8 +292,10 @@ class TheFrozenBaselineIsBuiltAtMostOnce(unittest.TestCase):
         """So a cache later re-pointed at another tree is catchable at all. BROKEN
         READS: no stamp is written and `declared_commit` is forever None."""
         _refresh(self.store, self.base, build_baseline=self._build)
-        self.assertEqual(production.declared_commit(self.base),
-                         production.BASELINE_COMMIT)
+        self.assertEqual(production.declared_commit(self.base), V9)
+        # The builder is handed the RESOLVED commit, never a pinned constant: this is
+        # what lets `run.py`'s builder refuse a source copy that missed a promotion.
+        self.assertEqual(self.commits_given, [V9])
 
     def test_an_unstamped_cache_is_accepted(self):
         """The verified prebuilt predates the stamp; refusing it would force a
@@ -342,7 +358,7 @@ class _Promotion:
         self.build_baseline = build_baseline
         self.builds, self.refreshes, self.arms = [], [], []
 
-    def build(self, dest):
+    def build(self, dest, commit=None):
         self.builds.append(Path(dest))
         return _built(dest)
 
@@ -355,7 +371,7 @@ class _Promotion:
                       build=self.build, compare=lambda _a, _b: _aa())
         self.refreshes.append(production.refresh(
             store=self.headline_store, champion_commit=CHAMPION,
-            champion_build=promoted,
+            champion_build=promoted, resolve=_resolve,
             baseline_build=self.base, build_baseline=self.build_baseline,
             compare=lambda b, c: (self.arms.append((b, c)), self.compare(b, c))[1]))
         return "deadbeef"
@@ -410,13 +426,13 @@ class AFailedRefreshMustNotEndTheRun(unittest.TestCase):
     def test_a_baseline_that_will_not_build_leaves_the_run_running(self):
         promotion = _Promotion(
             self.store, base=self.store / "absent",
-            build_baseline=lambda d: gates.Verdict("compile", False, "no hipcc"))
+            build_baseline=lambda d, c: gates.Verdict("compile", False, "no hipcc"))
         planner, outcomes = _drive(promotion)
         self._assert_survived(promotion, planner, outcomes)
         self.assertIn("would not build", promotion.refreshes[0].reason)
 
     def test_a_builder_that_RAISES_leaves_the_run_running(self):
-        def explode(_dest):
+        def explode(_dest, _commit):
             raise OSError("disk full")
         promotion = _Promotion(self.store, base=self.store / "absent",
                                build_baseline=explode)
@@ -570,6 +586,149 @@ class TheEvidenceStaysResolvable(unittest.TestCase):
     def test_no_scratch_files_are_left_behind(self):
         _refresh(self.store, self.base)
         self.assertEqual([p.name for p in self.store.glob(".cvp-*")], [])
+
+
+# ---------------------------------------- the baseline FOLLOWS a production promotion
+
+
+def _sh(repo: Path, *args: str) -> str:
+    done = subprocess.run(
+        ["git", "-C", str(repo), "-c", "user.email=t@t", "-c", "user.name=t", *args],
+        capture_output=True, text=True, timeout=60)
+    if done.returncode != 0:
+        raise AssertionError(f"git {' '.join(args)}: {done.stderr}")
+    return done.stdout.strip()
+
+
+def _frozen_tree(root: Path, branch: str = "production-consolidated-v9") -> Path:
+    tree = root / "frozen"
+    tree.mkdir()
+    subprocess.run(["git", "-C", str(tree), "init", "-q", "-b", branch],
+                   capture_output=True, text=True, timeout=60)
+    (tree / "kernel.c").write_text("v9\n", encoding="utf-8")
+    _sh(tree, "add", "kernel.c")
+    _sh(tree, "commit", "-q", "-m", "freeze")
+    return tree
+
+
+class TheBaselineFollowsAPromotion(unittest.TestCase):
+    """Operator, 2026-08-31: "once we promote a new frozen version in the future, the
+    comparison should be against the newly promoted version, NOT stale v9. This is a
+    classic mistake." The emitter used to make it: a hardcoded BASELINE_COMMIT. The
+    baseline is now resolved LIVE from the frozen tree at every refresh, and this
+    class drives an actual promotion -- a temp frozen tree whose HEAD advances between
+    two refreshes -- and requires a second bundle with the NEW commit and a cache miss.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.store = Path(self.tmp.name) / "store"
+        self.store.mkdir()
+        self.root = Path(self.tmp.name) / "baselines"
+        self.root.mkdir()
+        self.tree = _frozen_tree(Path(self.tmp.name))
+        self.builds, self.commits_given = [], []
+
+    def _build(self, dest, commit):
+        self.builds.append(Path(dest))
+        self.commits_given.append(commit)
+        return _built(dest)
+
+    def _refresh_live(self):
+        return production.refresh(
+            store=self.store, champion_commit=CHAMPION,
+            champion_build=self.store / "anchor-gen-001",
+            resolve=lambda: production.resolve_frozen(self.tree),
+            baseline_root=self.root, build_baseline=self._build,
+            compare=lambda _b, _c: _comparison())
+
+    def test_resolve_frozen_reads_the_live_tree(self):
+        commit, label = production.resolve_frozen(self.tree)
+        # BROKEN READS: the old constant "0db32c06..." regardless of the tree -- the
+        # exact hardcoding the operator called out.
+        self.assertEqual(commit, _sh(self.tree, "rev-parse", "HEAD"))
+        self.assertEqual(label, "production-consolidated-v9")
+
+    def test_a_promotion_is_a_cache_miss_with_the_NEW_commit(self):
+        first = self._refresh_live()
+        self.assertTrue(first.published, first.reason)
+        v_old = _bundle(self.store)["baseline"]["commit"]
+        # THE PROMOTION: the frozen tree advances, exactly as a v10 cutover would.
+        (self.tree / "kernel.c").write_text("v10\n", encoding="utf-8")
+        _sh(self.tree, "add", "kernel.c")
+        _sh(self.tree, "commit", "-q", "-m", "promote v10")
+        v_new = _sh(self.tree, "rev-parse", "HEAD")
+        second = self._refresh_live()
+        self.assertTrue(second.published, second.reason)
+        # BROKEN READS (the killed hardcoding mutant): baseline.commit still v_old,
+        # one cached build reused, and the headline silently measures stale v9.
+        self.assertNotEqual(v_old, v_new)
+        self.assertEqual(_bundle(self.store)["baseline"]["commit"], v_new)
+        self.assertIn(v_new[:12], second.reason)
+        self.assertNotIn(v_old[:12], second.reason)
+        self.assertEqual(self.builds,
+                         [self.root / f"production-baseline-{v_old[:12]}",
+                          self.root / f"production-baseline-{v_new[:12]}"])
+        self.assertEqual(self.commits_given, [v_old, v_new])
+        # Each slot is stamped with ITS resolved commit, never a constant: this is
+        # what lets the declared-commit refusal catch a re-pointed cache post-v10.
+        self.assertEqual(production.declared_commit(self.builds[1]), v_new)
+
+    def test_the_same_freeze_is_a_cache_hit(self):
+        self._refresh_live()
+        self._refresh_live()
+        # BROKEN READS: 2 -- a full ROCm build per refresh with no promotion at all.
+        self.assertEqual(len(self.builds), 1)
+
+    def test_a_tree_off_the_production_contract_is_refused(self):
+        """BROKEN READS: published True with whatever HEAD an experimental checkout
+        had -- a headline measured against an unknown tree, under production's name."""
+        _sh(self.tree, "checkout", "-q", "-b", "experimental-fa-probe")
+        result = self._refresh_live()
+        self.assertFalse(result.published)
+        self.assertIn("experimental-fa-probe", result.reason)
+        self.assertIn("production-consolidated-", result.reason)
+        self.assertEqual(self.builds, [])
+        self.assertFalse((self.store / production.FILENAME).exists())
+
+    def test_an_unresolvable_tree_is_refused_not_fatal(self):
+        self.tree = Path(self.tmp.name) / "no-such-tree"
+        result = self._refresh_live()
+        self.assertFalse(result.published)
+        self.assertIn("previous bundle stands", result.reason)
+
+
+class TheVerifiedV9PrebuiltIsAdoptedNotRebuilt(unittest.TestCase):
+    """The legacy cache entry: `/mnt/raid0/llm/tmp/v9v-build-base` is verified against
+    production's shipped libraries (584/584 CPU, 918/918 GPU), so for exactly the v9
+    sha it IS the cache -- rebuilding a known-good tree is the opposite of the cache
+    contract, and adopting it for any OTHER sha would be the stale-baseline defect."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.legacy = self.root / "v9v-build-base"
+
+    def test_the_v9_sha_adopts_the_built_legacy_dir(self):
+        _built(self.legacy)
+        self.assertEqual(production.baseline_slot(
+            production.LEGACY_COMMIT, root=self.root, legacy=self.legacy),
+            self.legacy)
+
+    def test_a_missing_legacy_dir_falls_through_to_the_keyed_slot(self):
+        self.assertEqual(production.baseline_slot(
+            production.LEGACY_COMMIT, root=self.root, legacy=self.legacy),
+            self.root / f"production-baseline-{production.LEGACY_COMMIT[:12]}")
+
+    def test_any_other_commit_never_adopts_the_legacy_dir(self):
+        _built(self.legacy)
+        slot = production.baseline_slot(OTHER_CHAMPION, root=self.root,
+                                        legacy=self.legacy)
+        # BROKEN READS: the legacy path -- v10 measured against the v9 binary, with a
+        # bundle that CLAIMS the v10 sha. The worst version of the stale baseline.
+        self.assertEqual(slot, self.root / f"production-baseline-{OTHER_CHAMPION[:12]}")
 
 
 if __name__ == "__main__":

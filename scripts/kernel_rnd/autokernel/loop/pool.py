@@ -12,7 +12,8 @@ nothing in this module is reached. `--workers N` is the only way in.
 THE CHAMPION IS A BRANCH IN A WORKTREE
 --------------------------------------
 `/mnt/raid0/llm/tmp/ak-loop-tree` is a git worktree of `/mnt/raid0/llm/llama.cpp` with
-`ak/loop-champion-20260828` checked out. Git refuses to check one branch out in two
+THE single champion branch (`champion.CANONICAL_BRANCH`) checked out -- `run.py`
+refuses to start otherwise. Git refuses to check one branch out in two
 worktrees, so lanes run DETACHED at the champion commit and only `advance_champion`
 moves the branch.
 
@@ -38,13 +39,17 @@ import threading
 import time
 from typing import Any, Callable, Mapping, Sequence
 
-from . import archive, loop as loop_mod, pipeline
+from . import archive, champion as champion_mod, loop as loop_mod, pipeline
 
 #: The frozen production clone the champion worktree belongs to.
 SOURCE_REPO = Path("/mnt/raid0/llm/llama.cpp")
 #: The champion worktree: this branch is checked out HERE and nowhere else.
 CHAMPION_TREE = Path("/mnt/raid0/llm/tmp/ak-loop-tree")
-CHAMPION_BRANCH = "ak/loop-champion-20260828"
+#: THE single champion branch -- `champion.CANONICAL_BRANCH`, one source of truth.
+#: This default was `ak/loop-champion-20260828`, the sibling branch of the 2026-08-31
+#: single-champion incident; a caller that wants another branch must name it, and
+#: `run.py` refuses at startup unless the worktree actually has it checked out.
+CHAMPION_BRANCH = champion_mod.CANONICAL_BRANCH
 #: One detached worktree per lane, one build directory per lane. Both must be
 #: disjoint: two lanes cmake-configuring one build directory produce a `llama-bench`
 #: that belongs to neither of them.
