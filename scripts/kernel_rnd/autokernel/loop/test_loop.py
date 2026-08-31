@@ -469,3 +469,47 @@ class NoSingleIterationMayEndTheRun(unittest.TestCase):
             lambda h, p: (_ for _ in ()).throw(RuntimeError("boom")), iterations=1)
         self.assertIn("Traceback", " ".join(outcomes[0].reasons),
                       "a swallowed exception is worse than the crash it replaced")
+
+
+class AnUncalibratedMeasurementCannotBecomeAKeep(unittest.TestCase):
+    """Run-22 discipline at the loop's own keep gate: `decisive=None` is falsy, so a
+    positive raw effect on an uncalibrated surface records as measured_null with an
+    UNDECIDABLE reason -- and commit is never drawn. Mutation partner:
+    `AnUncalibratedSurfaceRefusesToDecide` (test_bench) pins the None itself."""
+
+    def _uncalibrated(self, effect=0.10, floor=1.0):
+        return bench.Comparison(
+            surface="dec-b4", anchor_samples=[100.0],
+            candidate_samples=[100.0 * (1 + effect)], effect=effect,
+            estimator="median_over_median", pairs=5, noise_floor_pct=floor,
+            residency={}, calibrated=False)
+
+    def test_a_huge_effect_on_an_uncalibrated_surface_is_not_kept(self):
+        committed = {}
+
+        def commit(hypothesis, paths, comparison):
+            committed["head"] = "deadbeef"      # reaching here IS the defect
+            return "deadbeef"
+
+        outcome = loop.iterate(
+            planner=_Planner(), critic=_Critic([], []), context={},
+            measure=lambda h, p: self._uncalibrated(),
+            gate=lambda h, p: (True, [gates.Verdict("compile", True)]),
+            commit=commit)
+        self.assertEqual(outcome.status, "measured_null")
+        self.assertEqual(committed, {}, "commit must never be drawn on decisive=None")
+
+    def test_the_reason_says_undecidable_and_names_the_surface(self):
+        reason = loop._null_reason(self._uncalibrated())
+        self.assertIn("UNDECIDABLE", reason)
+        self.assertIn("dec-b4", reason)
+        self.assertIn("--calibrate-surface", reason,
+                      "the reason must say how to make the surface decisive")
+
+    def test_a_calibrated_null_still_reads_as_a_floor_miss(self):
+        comparison = bench.Comparison(
+            surface="tg128", anchor_samples=[100.0], candidate_samples=[100.4],
+            effect=0.004, estimator="median_over_median", pairs=5,
+            noise_floor_pct=1.0, residency={})
+        self.assertNotIn("UNDECIDABLE", loop._null_reason(comparison))
+        self.assertIn("did not clear", loop._null_reason(comparison))

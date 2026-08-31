@@ -27,7 +27,7 @@ from . import (actors, anchor, archive, bench, champion, claim, gates, hotspots,
                pipeline, pool, production, status)
 
 
-def noise_floor_pct(surface: str, pairs: int) -> float:
+def noise_floor_pct(surface: str, pairs: int, store: Path | None = None) -> float | None:
     """The bar for THIS run, scaled to the pairs actually being run.
 
     This was a dict of constants computed at 5 pairs, so `--pairs 9` still enforced
@@ -51,12 +51,34 @@ def noise_floor_pct(surface: str, pairs: int) -> float:
     -> 1.175 (9), while sqrt(n) predicts 1.544 -> 1.151. So at 9 pairs the parametric
     bound sits BELOW what the instrument actually resolves, and using it alone would let
     pure noise clear the bar. The guard test caught exactly this.
+
+    None -- never a borrowed or guessed number -- when the surface is UNCALIBRATED
+    (`bench.floor_rows`): no built-in row and no store-written A/A calibration. The
+    run still measures and records on such a surface, but every comparison carries
+    `decisive: None` and `refuse_uncalibrated_keep` blocks the commit path.
     """
     pairs = max(1, pairs)
-    rows = bench.MEASURED_FLOOR_PCT[surface]
+    rows = bench.floor_rows(surface, store)
+    if rows is None:
+        return None
     parametric = rows[1] / (pairs ** 0.5)
     measured = rows[max(count for count in rows if count <= pairs)]
     return max(parametric, measured)
+
+
+def refuse_uncalibrated_keep(surface: str, calibrated: bool, comparison) -> None:
+    """The commit path's OWN check, independent of `Comparison.decisive`.
+
+    `iterate` only calls commit when decisive is truthy, so this looks redundant --
+    it exists because the historical defect was precisely a comparison object whose
+    decisive read True off a floor nobody had calibrated. The commit path re-derives
+    the refusal from the run-level calibration fact, so a doctored or stale
+    comparison cannot advance the champion on an uncalibrated surface.
+    """
+    if not calibrated or comparison.decisive is not True:
+        raise loop.RunAborted(f"keep refused on {surface}: " + (
+            "UNCALIBRATED surface — run --calibrate-surface" if not calibrated
+            else "comparison is not decisive"))
 
 
 def _git(repo: Path, *args: str) -> str:
@@ -75,6 +97,30 @@ def prior_experiments(args, epoch: str) -> list[dict]:
     """
     return archive.recall(args.store, epoch=epoch,
                           ranking_authorized=args.rank_prior_experiments)
+
+
+def calibrate(args, run=subprocess.run) -> int:
+    """A/A bootstrap-calibrate `--surface` into the store, then exit.
+
+    The METHOD lives in exactly one place -- `scripts/benchmark/
+    autokernel_aa_campaign.py`, the 2026-08-29 D8 instrument-characterisation
+    campaign (anchor against ANCHOR so the true effect is zero by construction;
+    three conditions, SETTLED / PREHEATED / POST_BUILD, isolating device settling
+    from host load; floor bootstrapped over fresh pairs via
+    `bench.bootstrap_floor`). This mode only points that instrument at the store:
+    `--write-calibration` makes it write `calibration/<surface>.json` with the
+    floor rows plus full provenance (all three condition records, model, anchor
+    commit), which is precisely the file `bench.floor_rows` reads and without
+    which this surface refuses decisive keeps. Two copies of the method would
+    drift; the run gets a MODE, the method keeps its one home.
+    """
+    script = Path(__file__).resolve().parents[3] / "benchmark" / "autokernel_aa_campaign.py"
+    return run([sys.executable, str(script), "--surface", args.surface,
+                "--pairs", str(args.calibrate_surface),
+                "--anchor-build", str(args.anchor_build),
+                "--worktree", str(args.worktree), "--model", str(args.model),
+                "--out", str(args.store / "calibration" / f"aa-{args.surface}"),
+                "--write-calibration", str(args.store)]).returncode
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -99,7 +145,10 @@ def main(argv: list[str] | None = None) -> int:
                              "the lane holding the serialized tail finishes "
                              "build/oracle/A-B/commit and publishes first.")
     parser.add_argument("--pairs", type=int, default=bench.MIN_PAIRS)
-    parser.add_argument("--surface", choices=("pp512", "tg128"), default="pp512")
+    parser.add_argument("--surface", choices=tuple(bench.SURFACES), default="pp512")
+    parser.add_argument("--calibrate-surface", type=int, metavar="N", default=None,
+                        help="A/A bootstrap-calibrate --surface: N pairs x 3 "
+                             "conditions (D8 method); floor lands in the store")
     parser.add_argument("--out", type=Path)
     parser.add_argument("--dry-run", action="store_true",
                         help="prove the wiring without a provider call or a build")
@@ -146,10 +195,14 @@ def main(argv: list[str] | None = None) -> int:
                               build_recipe=recipe.to_dict())
     print(f"anchor    {anchor_commit[:12]}   epoch {epoch[:12]}")
 
-    pp, tg = (512, 0) if args.surface == "pp512" else (0, 128)
-    floor = noise_floor_pct(args.surface, args.pairs)
+    pp, tg, ubatch = bench.SURFACES[args.surface]
+    if args.calibrate_surface:
+        return calibrate(args)
+    floor = noise_floor_pct(args.surface, args.pairs, store=args.store)
+    calibrated = floor is not None
     print(f"surface   {args.surface}, {args.pairs} alternating pairs, "
-          f"noise floor {floor:.3f}%")
+          + (f"noise floor {floor:.3f}%" if calibrated else
+             "UNCALIBRATED — decisive=None on every comparison; keeps refused"))
 
     if args.dry_run:
         print("\nDRY RUN — wiring proven, nothing spent.")
@@ -249,7 +302,8 @@ def main(argv: list[str] | None = None) -> int:
             return bench.compare(
                 bench.Arm("anchor", anchor_build[0] / "bin" / "llama-bench"),
                 bench.Arm("candidate", worker.build_dir / "bin" / "llama-bench"),
-                args.model, pp=pp, tg=tg, pairs=args.pairs, noise_floor_pct=floor)
+                args.model, pp=pp, tg=tg, pairs=args.pairs, noise_floor_pct=floor,
+                surface=args.surface, ubatch=ubatch, calibrated=calibrated)
         return measure
 
     hotspot_rows: list = []
@@ -334,7 +388,8 @@ def main(argv: list[str] | None = None) -> int:
             compare=lambda base, champ: bench.compare(
                 bench.Arm("production_v9", base / "bin" / "llama-bench"),
                 bench.Arm("champion", champ / "bin" / "llama-bench"),
-                args.model, pp=pp, tg=tg, pairs=args.pairs, noise_floor_pct=floor),
+                args.model, pp=pp, tg=tg, pairs=args.pairs, noise_floor_pct=floor,
+                surface=args.surface, ubatch=ubatch, calibrated=calibrated),
             on_step=lambda label: publish("running", latest,
                                           hotspot_rows=hotspot_rows, step=label))
         archive.record(args.store, outcome.to_attempt(), epoch=epoch,
@@ -360,7 +415,8 @@ def main(argv: list[str] | None = None) -> int:
             compare=lambda promoted, fresh: bench.compare(
                 bench.Arm("promoted_anchor", promoted / "bin" / "llama-bench"),
                 bench.Arm("fresh_champion", fresh / "bin" / "llama-bench"),
-                args.model, pp=pp, tg=tg, pairs=args.pairs, noise_floor_pct=floor),
+                args.model, pp=pp, tg=tg, pairs=args.pairs, noise_floor_pct=floor,
+                surface=args.surface, ubatch=ubatch, calibrated=calibrated),
             on_step=lambda label: publish("running", latest,
                                           hotspot_rows=hotspot_rows, step=label))
 
@@ -477,6 +533,7 @@ def main(argv: list[str] | None = None) -> int:
             mid-formation against the old base and are refused as `superseded` on their
             next tail entry -- their candidates were never built on this champion.
             """
+            refuse_uncalibrated_keep(args.surface, calibrated, comparison)
             head = pool.advance_champion(worker, hypothesis, paths, comparison,
                                          champion_tree=args.worktree,
                                          branch=args.champion_branch)

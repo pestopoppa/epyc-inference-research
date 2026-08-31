@@ -3,8 +3,11 @@
 Two rules carry everything: one statistic on BOTH arms, and an arm that is still
 warming is not resolving anything.
 """
+import json
 from pathlib import Path
+import tempfile
 import unittest
+from unittest import mock
 
 from autokernel.loop import bench
 
@@ -59,7 +62,8 @@ class ADriftingArmIsNotAMeasurement(unittest.TestCase):
         from unittest import mock
         calls = []
 
-        def fake_run_once(binary, model, *, pp, tg, reps=9, timeout_s=3600):
+        def fake_run_once(binary, model, *, pp, tg, ubatch=None, reps=9,
+                          timeout_s=3600):
             calls.append(str(binary))
             return 100.0, {"resident": True, "peak_vram_bytes": 1 << 31,
                            "peak_kfd_processes": 1}
@@ -261,3 +265,188 @@ class DriftMustBeBigEnoughToExplainTheEffect(unittest.TestCase):
                            "this drift is comparable to the floor")
         self.assertFalse(comparison.drift_explains_the_effect,
                          "yet it is small next to the effect, which is what matters")
+
+
+class AnUncalibratedSurfaceRefusesToDecide(unittest.TestCase):
+    """The run-22 surface-extension discipline, pinned against the historical defect.
+
+    pp512 once carried a stale floor row and the loop published fake `decisive=True`
+    off it. So the gate is the CALIBRATED flag, never the mere presence of a floor
+    number: a numeric floor on an uncalibrated surface must still refuse to decide,
+    and the refusal is None ("undecidable"), not False ("did not clear").
+    """
+
+    SETTLED_A = [100.0, 100.2, 99.9, 100.1, 100.0]
+    SETTLED_C = [110.0, 110.1, 109.9, 110.2, 110.0]      # +10%, far over any floor
+
+    def _comparison(self, *, calibrated, floor=1.0):
+        import statistics as st
+        return bench.Comparison(
+            surface="dec-b4", anchor_samples=self.SETTLED_A,
+            candidate_samples=self.SETTLED_C,
+            effect=(st.median(self.SETTLED_C) / st.median(self.SETTLED_A)) - 1.0,
+            estimator="median_over_median", pairs=5, noise_floor_pct=floor,
+            residency={}, calibrated=calibrated)
+
+    def test_a_fake_floor_cannot_make_an_uncalibrated_surface_decisive(self):
+        """THE historical defect: floor number present, calibration absent."""
+        comparison = self._comparison(calibrated=False, floor=1.0)
+        self.assertIsNone(comparison.decisive,
+                          "a floor nobody calibrated must not decide anything")
+
+    def test_decisive_none_is_falsy_so_every_keep_gate_refuses_it(self):
+        self.assertFalse(self._comparison(calibrated=False).decisive)
+
+    def test_a_calibrated_surface_still_decides_true(self):
+        """The other mutation direction: calibration must not refuse EVERYTHING."""
+        self.assertIs(self._comparison(calibrated=True).decisive, True)
+
+    def test_a_calibrated_miss_is_false_not_none(self):
+        comparison = bench.Comparison(
+            surface="tg128", anchor_samples=self.SETTLED_A,
+            candidate_samples=[100.1, 100.3, 100.0, 100.2, 100.1], effect=0.001,
+            estimator="median_over_median", pairs=5, noise_floor_pct=1.0,
+            residency={}, calibrated=True)
+        self.assertIs(comparison.decisive, False,
+                      "'did not clear' and 'undecidable' are different facts")
+
+    def test_to_dict_publishes_the_refusal_and_its_reason_flag(self):
+        row = self._comparison(calibrated=False).to_dict()
+        self.assertIsNone(row["decisive"])
+        self.assertIs(row["calibrated"], False)
+
+    def test_the_default_is_calibrated_for_the_two_measured_surfaces(self):
+        row = self._comparison(calibrated=True).to_dict()
+        self.assertIs(row["calibrated"], True)
+
+
+class TheSurfaceTableDrivesTheBatchWidth(unittest.TestCase):
+    """dec-b* rows must reach llama-bench as `-b N -ub N` -- the args VERIFIED against
+    tools/llama-bench/llama-bench.cpp in the champion tree (test_prompt submits
+    min(remaining, n_batch) sequential tokens per llama_decode; test_gen is hardwired
+    to one token, so no tg surface can ever express ne11 > 1)."""
+
+    def _argv_for(self, *, ubatch):
+        captured = {}
+
+        class FakeSampler:
+            proof = {"resident": True, "peak_vram_bytes": 1 << 31,
+                     "peak_kfd_processes": 1}
+            def __enter__(self):
+                return self
+            def __exit__(self, *exc):
+                return False
+
+        def fake_run(argv, **kwargs):
+            captured["argv"] = argv
+            return mock.Mock(returncode=0, stdout=json.dumps(
+                [{"n_prompt": 512, "n_gen": 0, "avg_ts": 100.0}]), stderr="")
+
+        with mock.patch.object(bench.subprocess, "run", side_effect=fake_run), \
+             mock.patch.object(bench.residency, "Sampler", FakeSampler), \
+             mock.patch.object(bench.residency, "loader_env", lambda _b: {}):
+            bench.run_once(Path("/b"), Path("/m.gguf"), pp=512, tg=0, ubatch=ubatch)
+        return captured["argv"]
+
+    def test_a_dec_surface_caps_both_batch_and_ubatch(self):
+        argv = self._argv_for(ubatch=4)
+        self.assertIn("-b", argv)
+        self.assertIn("-ub", argv)
+        self.assertEqual(argv[argv.index("-b") + 1], "4")
+        self.assertEqual(argv[argv.index("-ub") + 1], "4")
+
+    def test_the_classic_surfaces_pass_no_batch_flags(self):
+        argv = self._argv_for(ubatch=None)
+        self.assertNotIn("-b", argv)
+        self.assertNotIn("-ub", argv)
+
+    def test_compare_carries_the_surface_name_and_width_through(self):
+        seen = []
+
+        def fake_run_once(binary, model, *, pp, tg, ubatch=None, reps=9,
+                          timeout_s=3600):
+            seen.append(ubatch)
+            return 100.0, {"resident": True, "peak_vram_bytes": 1 << 31,
+                           "peak_kfd_processes": 1}
+
+        with mock.patch.object(bench, "run_once", side_effect=fake_run_once):
+            comparison = bench.compare(
+                bench.Arm("a", Path("/a")), bench.Arm("c", Path("/c")),
+                Path("/m.gguf"), pp=512, tg=0, pairs=2, noise_floor_pct=None,
+                warmup_pairs=1, surface="dec-b4", ubatch=4, calibrated=False)
+        self.assertEqual(comparison.surface, "dec-b4",
+                         "the record must name the surface, not masquerade as pp512")
+        self.assertIsNone(comparison.decisive)
+        self.assertEqual(set(seen), {4}, "every invocation, warm-up included, "
+                                         "must run at the surface's width")
+
+    def test_every_surface_row_is_wellformed(self):
+        for name, (pp, tg, ubatch) in bench.SURFACES.items():
+            with self.subTest(surface=name):
+                self.assertTrue((pp > 0) != (tg > 0),
+                                "exactly one of pp/tg drives a surface")
+                self.assertTrue(ubatch is None or 2 <= ubatch <= 8,
+                                "dec widths live in the verify regime ne11 2..8")
+
+    def test_the_seed_facing_names_exist(self):
+        """Seeds 05/07/10's scope lines name these surfaces; renaming them silently
+        would orphan the planner's own instructions."""
+        for name in ("dec-b2", "dec-b4", "dec-b8"):
+            self.assertIn(name, bench.SURFACES)
+
+
+class TheFloorComesFromCalibrationOnly(unittest.TestCase):
+    """`floor_rows` may answer from the measured built-in table or a store-written
+    A/A record -- NEVER from a default or a neighbouring surface."""
+
+    def test_builtin_surfaces_answer_from_the_measured_table(self):
+        self.assertIs(bench.floor_rows("tg128"), bench.MEASURED_FLOOR_PCT["tg128"])
+        self.assertIs(bench.floor_rows("pp512"), bench.MEASURED_FLOOR_PCT["pp512"])
+
+    def test_an_unknown_surface_is_uncalibrated_not_defaulted(self):
+        self.assertIsNone(bench.floor_rows("dec-b4"))
+
+    def test_a_store_record_calibrates_and_round_trips_int_keys(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Path(tmp)
+            (store / "calibration").mkdir()
+            (store / "calibration" / "dec-b4.json").write_text(json.dumps(
+                {"floor_pct": {"1": 3.0, "5": 2.0, "9": 1.5, "20": 1.0}}))
+            rows = bench.floor_rows("dec-b4", store=store)
+        self.assertEqual(rows, {1: 3.0, 5: 2.0, 9: 1.5, 20: 1.0})
+
+    def test_a_store_without_the_record_is_still_uncalibrated(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertIsNone(bench.floor_rows("dec-b4", store=Path(tmp)))
+
+
+class TheBootstrapFloorReproducesTheD8Row(unittest.TestCase):
+    """The archived 2026-08-29 SETTLED A/A samples must reproduce the ENFORCED tg128
+    floor: the k=5 bootstrap row IS where 2.422 came from. A method change that moves
+    it is a recalibration and must say so."""
+
+    STORE = Path("/mnt/raid0/llm/autokernel/loop-memory/aa-campaign/aa-campaign.json")
+
+    def _samples(self):
+        if not self.STORE.is_file():          # pragma: no cover - store-less host
+            self.skipTest("live store not present on this host")
+        settled = json.loads(self.STORE.read_text())["conditions"][0]
+        return settled["anchor_samples"], settled["candidate_samples"]
+
+    def test_k5_reproduces_the_enforced_floor_byte_for_byte(self):
+        anchor, candidate = self._samples()
+        rows = bench.bootstrap_floor(anchor, candidate)
+        self.assertEqual(rows[5], bench.MEASURED_FLOOR_PCT["tg128"][5])
+
+    def test_rows_cover_the_parametric_seed_and_are_monotone(self):
+        anchor, candidate = self._samples()
+        rows = bench.bootstrap_floor(anchor, candidate)
+        self.assertIn(1, rows, "run.noise_floor_pct seeds sigma/sqrt(n) from k=1")
+        ks = sorted(rows)
+        self.assertTrue(all(rows[a] >= rows[b] for a, b in zip(ks, ks[1:])),
+                        "more pairs may only lower a bootstrap floor")
+
+    def test_the_p95_is_a_tail_statistic_not_a_centre(self):
+        rows = bench.bootstrap_floor([100.0] * 20, [100.0] * 20)
+        self.assertEqual(set(rows.values()), {0.0},
+                         "identical arms have a zero floor at every k")

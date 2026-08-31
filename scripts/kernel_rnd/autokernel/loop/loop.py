@@ -174,6 +174,14 @@ def _null_reason(comparison: bench.Comparison) -> str:
     invites the planner to abandon a live idea, which is the same class of error as a
     fabricated refusal.
     """
+    if comparison.decisive is None:
+        # Uncalibrated surface: recorded, UNDECIDABLE. Not a null -- the instrument
+        # has no floor here, so "did not clear" would be a claim about a bar that
+        # does not exist. The planner may keep proposing against it; keeps wait for
+        # an A/A calibration campaign (`--calibrate-surface`).
+        return (f"UNDECIDABLE — surface {comparison.surface} has no bootstrap-"
+                f"calibrated noise floor; recorded (raw {comparison.effect * 100:+.3f}%),"
+                f" decisive=None, keeps refused until --calibrate-surface writes one")
     if comparison.noise_floor_pct is None:
         return "no noise floor declared"
     if comparison.drifting:

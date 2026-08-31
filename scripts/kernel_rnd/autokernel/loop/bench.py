@@ -21,6 +21,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 from pathlib import Path
+import random
 import statistics as st
 import subprocess
 import time
@@ -44,6 +45,22 @@ MEASURED_FLOOR_PCT = {
     "pp512": {1: 2.175, 3: 1.432, 5: 0.479, 9: 0.168, 20: 0.029},
     "tg128": {1: 3.452, 3: 2.527, 5: 2.422, 9: 2.021, 20: 1.188},
 }
+
+#: Every surface the loop can drive: name -> (pp, tg, ubatch). The dec-b* rows are the
+#: run-22 small-batch decode-regime surfaces the injected seed families (05 MTP verify,
+#: 07 Q8_0 GEMV at width, 10 MVQ->MMQ decode crossover) are unfalsifiable without:
+#: llama-bench's `test_gen` decodes exactly ONE token per `llama_decode`
+#: (`llama_batch_get_one(input, 1)`, tools/llama-bench/llama-bench.cpp:2429 in the
+#: champion tree -- VERIFIED, not assumed), so no tg surface can ever launch an
+#: ne11 > 1 matmul. `test_prompt` submits `min(remaining, n_batch)` sequential tokens
+#: per `llama_decode` (line 2393-2404), and `-ub N` caps the compute graph's ubatch, so
+#: `-p 512 -n 0 -b N -ub N` drives every weight matmul at ne11=N through the same
+#: ncols_dst=N MMVQ/MMQ dispatch a speculative/MTP verify step of N sequential tokens
+#: takes. What it does NOT express is PARALLEL-sequence decode (K seqs x 1 token --
+#: that is llama-batched-bench, a different harness); for the kernel-dispatch question
+#: the seeds ask (ne11 in 2..8 on the weight GEMMs) the regimes are identical.
+SURFACES = {"pp512": (512, 0, None), "tg128": (0, 128, None),
+            "dec-b2": (512, 0, 2), "dec-b4": (512, 0, 4), "dec-b8": (512, 0, 8)}
 
 #: Measured floor, 2026-08-28, n=20 alternating pairs. Below five pairs a single
 #: observation on decode can exceed a 3% bar on noise alone (4 of 20 did).
@@ -81,6 +98,11 @@ class Comparison:
     #: warming is not measuring steady-state throughput.
     anchor_drift_pct: float = 0.0
     candidate_drift_pct: float = 0.0
+    #: False when this surface has no bootstrap-calibrated noise floor. The flag is
+    #: what gates `decisive`, NOT the mere presence of a floor number: pp512's stale
+    #: table row produced fake `decisive=True` verdicts, so a numeric floor on an
+    #: uncalibrated surface must still refuse to decide.
+    calibrated: bool = True
 
     @property
     def drift_explains_the_effect(self) -> bool:
@@ -121,12 +143,19 @@ class Comparison:
         return trending and self.drift_explains_the_effect
 
     @property
-    def decisive(self) -> bool:
+    def decisive(self) -> bool | None:
         """True only if the effect clears the instrument's own noise floor.
 
         A result inside the floor is not a small win; it is not a measurement of
         anything. The old loop had no floor and a 3% bar that sat below it.
+
+        None -- not False -- on an uncalibrated surface: "measured, undecidable" is a
+        different fact from "measured, did not clear", and folding them together is
+        how a stale floor row once manufactured decisive keeps. None is falsy, so
+        every keep gate refuses it; `loop._null_reason` names it to the planner.
         """
+        if not self.calibrated:
+            return None
         if self.noise_floor_pct is None:
             return False
         if self.drifting:
@@ -141,7 +170,7 @@ class Comparison:
             "effect_pct": self.effect * 100.0, "estimator": self.estimator,
             "pairs": self.pairs, "noise_floor_pct": self.noise_floor_pct,
             "decisive": self.decisive, "device_seconds": self.device_seconds,
-            "drifting": self.drifting,
+            "drifting": self.drifting, "calibrated": self.calibrated,
             "anchor_drift_pct": self.anchor_drift_pct,
             "candidate_drift_pct": self.candidate_drift_pct,
             "anchor_trend_rho": trend_rho(self.anchor_samples),
@@ -165,17 +194,22 @@ KILL_RETRIES = 3
 KILL_BACKOFF_S = (5.0, 20.0, 60.0)
 
 
-def run_once(binary: Path, model: Path, *, pp: int, tg: int, reps: int = 9,
-             timeout_s: int = 3600, sleep=time.sleep) -> tuple[float, dict]:
+def run_once(binary: Path, model: Path, *, pp: int, tg: int, ubatch: int | None = None,
+             reps: int = 9, timeout_s: int = 3600, sleep=time.sleep) -> tuple[float, dict]:
     """One llama-bench invocation with residency proven while it runs.
 
     Retries an EXTERNAL kill, because losing a whole run to a memory-pressure reaper
     is pure waste: run 12 spent a profile and a device claim and returned nothing.
     Does not retry a crash -- that is the candidate telling us something.
+
+    `ubatch` (the dec-b* surfaces) caps BOTH `-b` and `-ub`, so every `llama_decode`
+    carries exactly that many sequential tokens -- see the SURFACES note. The JSON row
+    is still keyed pp{pp}/tg{tg} by llama-bench regardless of batch flags.
     """
     argv = ["taskset", "-c", CPU_LIST, "numactl", "--interleave=all",
             str(binary), "-m", str(model), "-p", str(pp), "-n", str(tg),
-            "-r", str(reps), "-ngl", "99", "-fa", "1", "-o", "json"]
+            "-r", str(reps), "-ngl", "99", "-fa", "1", "-o", "json"
+            ] + (["-b", str(ubatch), "-ub", str(ubatch)] if ubatch else [])
     for attempt in range(KILL_RETRIES + 1):
         with residency.Sampler() as sampler:
             done = subprocess.run(argv, capture_output=True, text=True,
@@ -205,7 +239,8 @@ def run_once(binary: Path, model: Path, *, pp: int, tg: int, reps: int = 9,
 def compare(anchor: Arm, candidate: Arm, model: Path, *, pp: int, tg: int,
             pairs: int = MIN_PAIRS, reps: int = 9,
             noise_floor_pct: float | None = None,
-            warmup_pairs: int = WARMUP_PAIRS) -> Comparison:
+            warmup_pairs: int = WARMUP_PAIRS, surface: str | None = None,
+            ubatch: int | None = None, calibrated: bool = True) -> Comparison:
     """Alternating paired A/B. The arms swap every pair, never run as two blocks.
 
     `warmup_pairs` are run and DISCARDED first. Without them the first measured pair
@@ -217,14 +252,15 @@ def compare(anchor: Arm, candidate: Arm, model: Path, *, pp: int, tg: int,
         raise ValueError("compare needs at least one pair")
     for _ in range(max(0, warmup_pairs)):
         for arm in (anchor, candidate):
-            run_once(arm.binary, model, pp=pp, tg=tg, reps=reps)
+            run_once(arm.binary, model, pp=pp, tg=tg, ubatch=ubatch, reps=reps)
     anchor_samples: list[float] = []
     candidate_samples: list[float] = []
     proofs: list[dict] = []
     started = time.monotonic()
     for _ in range(pairs):
         for arm, sink in ((anchor, anchor_samples), (candidate, candidate_samples)):
-            value, proof = run_once(arm.binary, model, pp=pp, tg=tg, reps=reps)
+            value, proof = run_once(arm.binary, model, pp=pp, tg=tg, ubatch=ubatch,
+                                    reps=reps)
             sink.append(value)
             proofs.append(proof)
 
@@ -244,11 +280,11 @@ def compare(anchor: Arm, candidate: Arm, model: Path, *, pp: int, tg: int,
     if centre <= 0:
         raise BenchFailed("anchor median is not positive; a relative effect is undefined")
     return Comparison(
-        surface=f"pp{pp}" if pp else f"tg{tg}",
+        surface=surface or (f"pp{pp}" if pp else f"tg{tg}"),
         anchor_samples=anchor_samples, candidate_samples=candidate_samples,
         effect=(st.median(candidate_samples) / centre) - 1.0,
         estimator="median_over_median", pairs=pairs,
-        noise_floor_pct=noise_floor_pct,
+        noise_floor_pct=noise_floor_pct, calibrated=calibrated,
         residency={"invocations": len(proofs),
                    "resident": len(resident),
                    "peak_vram_bytes": max(p["peak_vram_bytes"] for p in proofs),
@@ -349,6 +385,49 @@ def spread_is_suspect(samples: Sequence[float], ratio: float = 1.3) -> bool:
     return bool(values) and (max(values) / min(values)) > ratio
 
 
+def floor_rows(surface: str, store: Path | None = None) -> dict[int, float] | None:
+    """The floor table for a surface, or None when it is UNCALIBRATED.
+
+    Two sources, in order: the exhaustively measured built-in table above, then a
+    store-written A/A calibration record (`<store>/calibration/<surface>.json`, the
+    artifact `--calibrate-surface` writes). None on both misses -- never a default,
+    never a copy from a neighbouring surface: a borrowed floor is exactly the stale
+    pp512 row that once produced fake decisive keeps.
+    """
+    if surface in MEASURED_FLOOR_PCT:
+        return MEASURED_FLOOR_PCT[surface]
+    path = (store / "calibration" / f"{surface}.json") if store is not None else None
+    if path is None or not path.is_file():
+        return None
+    return {int(count): float(value) for count, value in
+            json.loads(path.read_text(encoding="utf-8"))["floor_pct"].items()}
+
+
+def bootstrap_floor(anchor: Sequence[float], candidate: Sequence[float],
+                    ks: Sequence[int] = (1, 3, 5, 9, 20), draws: int = 20000,
+                    seed: int = 20260829) -> dict[int, float]:
+    """p95 |median effect| at k pairs, BOOTSTRAPPED over fresh A/A pairs.
+
+    The D8 lesson, kept at the code: exhaustive subsets of ONE fixed sample cannot
+    exceed that sample's own observed tail, so the original subset construction
+    systematically understated p95 (the 2026-08-29 recalibration moved tg128's 5-pair
+    floor 1.502 -> 2.422). Resampling WITH replacement escapes the fixed-subset
+    ceiling; the rng is re-seeded per k so each row reproduces exactly regardless of
+    which other rows are requested (k=5 on the archived SETTLED samples reproduces
+    the enforced 2.422 byte-for-byte).
+    """
+    rows: dict[int, float] = {}
+    for k in ks:
+        rng = random.Random(seed)
+        effects = sorted(
+            abs(st.median([candidate[i] for i in idx])
+                / st.median([anchor[i] for i in idx]) - 1.0) * 100.0
+            for idx in ([rng.randrange(len(anchor)) for _ in range(k)]
+                        for _ in range(draws)))
+        rows[k] = round(effects[int(0.95 * (draws - 1))], 3)
+    return rows
+
+
 __all__ = ["Arm", "BenchFailed", "CPU_LIST", "Comparison", "MEASURED_FLOOR_PCT",
-           "MIN_PAIRS", "WARMUP_PAIRS", "compare", "drift_pct", "run_once",
-           "spread_is_suspect"]
+           "MIN_PAIRS", "SURFACES", "WARMUP_PAIRS", "bootstrap_floor", "compare",
+           "drift_pct", "floor_rows", "run_once", "spread_is_suspect"]

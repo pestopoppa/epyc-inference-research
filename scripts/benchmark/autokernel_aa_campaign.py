@@ -73,13 +73,15 @@ def permutation_null(values, *, samples: int = 20000, seed: int = 20260829):
 
 
 def one_condition(name: str, anchor: Path, model: Path, *, pairs: int, warmup: int,
-                  floor: float, surface_pp: int, surface_tg: int) -> dict:
+                  floor: float | None, surface_pp: int, surface_tg: int,
+                  surface: str | None = None, ubatch: int | None = None) -> dict:
     print(f"\n=== {name}: {pairs} A/A pairs, {warmup} warm-up pair(s) discarded")
     started = time.monotonic()
     comparison = bench.compare(
         bench.Arm("anchor-a", anchor), bench.Arm("anchor-b", anchor),
         model, pp=surface_pp, tg=surface_tg, pairs=pairs,
-        noise_floor_pct=floor, warmup_pairs=warmup)
+        noise_floor_pct=floor, warmup_pairs=warmup,
+        surface=surface, ubatch=ubatch, calibrated=False)
     body = comparison.to_dict()
     body["condition"] = name
     body["warmup_pairs"] = warmup
@@ -103,13 +105,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--model", type=Path,
                         default=Path("/mnt/raid0/llm/models/"
                                      "DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf"))
-    parser.add_argument("--surface", choices=("pp512", "tg128"), default="tg128")
+    parser.add_argument("--surface", choices=tuple(bench.SURFACES), default="tg128")
     parser.add_argument("--pairs", type=int, default=PAIRS)
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--write-calibration", type=Path, default=None, metavar="STORE",
+                        help="also write STORE/calibration/<surface>.json — the record "
+                             "`bench.floor_rows` reads and without which the loop "
+                             "refuses decisive keeps on this surface (run.py's "
+                             "--calibrate-surface mode passes this)")
     args = parser.parse_args(argv)
 
-    pp, tg = (512, 0) if args.surface == "pp512" else (0, 128)
-    floor = bench.MEASURED_FLOOR_PCT[args.surface].get(9, 1.175)
+    pp, tg, ubatch = bench.SURFACES[args.surface]
+    rows_now = bench.floor_rows(args.surface)
+    floor = rows_now.get(9, 1.175) if rows_now else None
     anchor = args.anchor_build / "bin" / "llama-bench"
     conditions = []
 
@@ -122,13 +130,15 @@ def main(argv: list[str] | None = None) -> int:
         time.sleep(SETTLE_S)
         conditions.append(one_condition(
             "SETTLED", anchor, args.model, pairs=args.pairs, warmup=1,
-            floor=floor, surface_pp=pp, surface_tg=tg))
+            floor=floor, surface_pp=pp, surface_tg=tg,
+            surface=args.surface, ubatch=ubatch))
 
         # PREHEATED — same as SETTLED but six warm-up pairs instead of one. Differs
         # from SETTLED only in device warm-up, so it isolates H2b.
         conditions.append(one_condition(
             "PREHEATED", anchor, args.model, pairs=args.pairs, warmup=6,
-            floor=floor, surface_pp=pp, surface_tg=tg))
+            floor=floor, surface_pp=pp, surface_tg=tg,
+            surface=args.surface, ubatch=ubatch))
 
         # POST_BUILD — a real -j64 build immediately before measuring, which is what
         # the loop actually does every iteration. Differs from SETTLED only in host
@@ -141,7 +151,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"    build {verdict.gate} passed={verdict.passed}")
         conditions.append(one_condition(
             "POST_BUILD", anchor, args.model, pairs=args.pairs, warmup=1,
-            floor=floor, surface_pp=pp, surface_tg=tg))
+            floor=floor, surface_pp=pp, surface_tg=tg,
+            surface=args.surface, ubatch=ubatch))
 
     # ---- analysis -----------------------------------------------------------
     print("\n" + "=" * 72)
@@ -170,20 +181,18 @@ def main(argv: list[str] | None = None) -> int:
                   f"{null[int(0.95 * (len(null) - 1))]:.3f}%  CV "
                   f"{100.0 * st.pstdev(values) / st.mean(values):.2f}%")
 
-    # H5 — a fresh floor, bootstrapped over pairs rather than re-subset from one sample.
+    # H5 — a fresh floor, bootstrapped over pairs rather than re-subset from one
+    # sample. The arithmetic moved to `bench.bootstrap_floor` (2026-08-31, run-22
+    # surface extension) so the loop's `--calibrate-surface` mode and this campaign
+    # share ONE implementation; it reseeds per k, so the k=5 row still reproduces the
+    # original 2026-08-29 value byte-for-byte, and k=1/3 rows now exist for the
+    # parametric seed `run.noise_floor_pct` needs.
     settled = conditions[0]
-    a, b = settled["anchor_samples"], settled["candidate_samples"]
-    rng = random.Random(20260829)
-    for k in (5, 9, 20):
-        effects = []
-        for _ in range(20000):
-            idx = [rng.randrange(len(a)) for _ in range(k)]
-            effects.append(abs(st.median([b[i] for i in idx])
-                               / st.median([a[i] for i in idx]) - 1.0) * 100.0)
-        effects.sort()
-        p95 = effects[int(0.95 * (len(effects) - 1))]
-        report.setdefault("bootstrap_floor_pct", {})[str(k)] = round(p95, 3)
-        enforced = bench.MEASURED_FLOOR_PCT[args.surface].get(k)
+    boot = bench.bootstrap_floor(settled["anchor_samples"],
+                                 settled["candidate_samples"])
+    for k, p95 in boot.items():
+        report.setdefault("bootstrap_floor_pct", {})[str(k)] = p95
+        enforced = (rows_now or {}).get(k)
         flag = "" if enforced is None or enforced >= p95 else "  <-- ENFORCED IS TOO LOW"
         print(f"  bootstrap floor at {k:>2} pairs: p95 {p95:.3f}%   "
               f"(current table: {enforced}){flag}")
@@ -192,6 +201,29 @@ def main(argv: list[str] | None = None) -> int:
     (args.out / "aa-campaign.json").write_text(json.dumps(report, indent=2),
                                                encoding="utf-8")
     print(f"\nwrote {args.out / 'aa-campaign.json'}")
+
+    if args.write_calibration is not None:
+        # The record `bench.floor_rows` reads: floor rows plus FULL provenance (every
+        # condition's samples, the model, the anchor commit), so a floor is always
+        # traceable to the samples and machine state that produced it. Written
+        # atomically -- the loop may be reading the store while this lands.
+        head = subprocess.run(["git", "-C", str(args.worktree), "rev-parse", "HEAD"],
+                              capture_output=True, text=True).stdout.strip()
+        target = args.write_calibration / "calibration" / f"{args.surface}.json"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        body = {"schema": "epyc.autokernel.surface_calibration.v1",
+                "surface": args.surface, "model": args.model.name,
+                "anchor_commit": head,
+                "bench_args": {"pp": pp, "tg": tg, "ubatch": ubatch},
+                "pairs_per_condition": args.pairs,
+                "recorded_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "method": "aa-bootstrap-3-condition (D8 2026-08-29)",
+                "floor_pct": {str(k): v for k, v in boot.items()},
+                "conditions": conditions}
+        tmp = target.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(body, indent=2), encoding="utf-8")
+        tmp.rename(target)
+        print(f"wrote {target} — the surface is now CALIBRATED for the loop")
     return 0
 
 

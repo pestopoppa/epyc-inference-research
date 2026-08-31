@@ -39,10 +39,16 @@ SUITE_FLOORS: dict[str, tuple[int, tuple[str, ...]]] = {
     # live loop-memory store, including the byte-identity of the default recall path
     # against digests captured from the pre-amendment function. The floor sat two under
     # the observed count before this edit; it is now level with it.
+    # 133 -> 144 on 2026-08-31 (run-22 prep): the -funsafe-math-optimizations CH-7
+    # admission harness. 11 new tests in
+    # `scripts/benchmark/test_autokernel_funsafe_math_admission.py` -- the greedy
+    # divergence detector, the one-line-geometry refusal (a confounded pair must not
+    # be measured) and the argparse wiring that names the prepared admission branch.
     "the decision arithmetic": (
-        133,
+        144,
         (
             "scripts/benchmark/test_screen_effect_estimator.py",
+            "scripts/benchmark/test_autokernel_funsafe_math_admission.py",
             "scripts/kernel_rnd/autokernel/controller/test_workload_contract.py",
             "scripts/kernel_rnd/autokernel/controller/test_build_recipe.py",
             "scripts/kernel_rnd/autokernel/controller/test_gate_parameters.py",
@@ -84,7 +90,19 @@ SUITE_FLOORS: dict[str, tuple[int, tuple[str, ...]]] = {
     # (`AStopAbandonsFormationAtTheNextStageBoundary`) pinning that a stop abandons
     # formation before the next actor call while a lane in the serialized tail
     # still completes. Net +5, floor level with the observed count.
-    "the loop package": (309, ("scripts/kernel_rnd/autokernel/loop/",)),
+    # 309 -> 338 on 2026-08-31: the run-22 loop-surface extension. 29 new tests:
+    # 18 in `loop/test_bench.py` (uncalibrated-refuses-decisive both directions --
+    # a fake floor must yield decisive=None, the historical pp512 defect; the dec-b*
+    # surface table and its `-b/-ub` argv, verified against llama-bench's own
+    # source; floor_rows never defaults; bootstrap_floor reproduces the enforced D8
+    # tg128 k=5 row 2.422 byte-for-byte from the archived SETTLED samples), 3 in
+    # `loop/test_loop.py` (a +10%% raw effect on an uncalibrated surface records
+    # measured_null/UNDECIDABLE and never draws commit) and 8 in the new
+    # `loop/test_calibration.py` (run-level floor discipline, the commit path's own
+    # refuse_uncalibrated_keep against a doctored decisive=True, the
+    # --calibrate-surface dispatch to the one D8 campaign home, and the
+    # write-calibration round trip that turns refusal into a real floor).
+    "the loop package": (338, ("scripts/kernel_rnd/autokernel/loop/",)),
 }
 
 _COLLECTED = re.compile(r"(\d+) tests? collected")
