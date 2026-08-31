@@ -56,17 +56,27 @@ if [ "$(state_get allgreen)" != "yes" ]; then
 fi
 
 # ----------------------------------------------------- resolve the final anchor
-# Same rule as the driver's step-2 anchor choice: merged -> champ2's build with
-# the unverified-anchor waiver (fresh build, no provenance record); unmerged ->
-# anchor-gen-005 whose provenance the refusal verifies.
-if [ "$(state_get step1_merged)" = "yes" ]; then
-    ANCHOR=/mnt/raid0/llm/tmp/champ2/build-hip
-    WAIVER=(--allow-unverified-anchor)
-else
-    ANCHOR="$STORE/anchor-gen-005"
-    WAIVER=()
+# BOTH branches use champ2/build-hip at the tip, rebuilt incrementally here.
+# Rewritten 21:40Z on 2026-08-31, minutes before arming: the original unmerged
+# path pinned anchor-gen-005, which the run-21 loop PRUNED when gens 006/007
+# were promoted — and gen-007 was then guard-REFUSED (+1.765% between two builds
+# of one commit, run 21 aborted itself). Anchoring run 22 on the surviving
+# gen-006 (32fad018) while the branch tip is 14ba0262 would re-create the
+# stale-anchor defect in miniature: every candidate would carry the fourth
+# keep's marginal baked in. A fresh tip build with the unverified-anchor waiver
+# is honest instead: run 22's startup refusal still checks provenance ancestry,
+# and its FIRST promotion guard re-verifies the anchor by measurement — the
+# same guard that just proved it catches a bad anchor in one iteration.
+ANCHOR=/mnt/raid0/llm/tmp/champ2/build-hip
+WAIVER=(--allow-unverified-anchor)
+say "rebuilding champ2/build-hip at the branch tip (incremental; no-op if step 3 left it current)"
+taskset -c 96-183 cmake --build /mnt/raid0/llm/tmp/champ2/build-hip -j64 >> "$LOG" 2>&1
+BRC=$?
+if [ $BRC -ne 0 ]; then
+    say "HOLD: tip rebuild failed (rc=$BRC) — run 22 NOT started"
+    touch "$WORK/RUN22-HELD"; exit 0
 fi
-say "anchor: $ANCHOR ${WAIVER[*]:-}"
+say "anchor: $ANCHOR ${WAIVER[*]:-} (tip build, first-keep guard re-verifies)"
 
 # ------------------------------------------------- final refusal check (dry-run)
 cd "$KRND" || { say "HOLD: cannot cd $KRND"; touch "$WORK/RUN22-HELD"; exit 0; }
