@@ -223,6 +223,9 @@ def main(argv: list[str] | None = None) -> int:
     #: start. A static anchor asks "does the accumulated tree beat v9"; the question
     #: that decides a keep is "does THIS patch improve on the best we have".
     anchor_build = [args.anchor_build]
+    # Run 19 advanced twice while the status published the run's STARTING commit, so a
+    # working anchor read as stuck. `epoch` still pins the start for comparability.
+    current_anchor_commit = [anchor_commit]
 
     def measure_for(worker):
         def measure(hypothesis, paths):
@@ -326,6 +329,7 @@ def main(argv: list[str] | None = None) -> int:
         anchor_build[0] = pool.promote_anchor(
             args.store, build=build_champion, recipe=recipe.to_dict(),
             champion_commit=_git(args.worktree, "rev-parse", "HEAD"))
+        current_anchor_commit[0] = _git(args.worktree, "rev-parse", "HEAD")
         print(f"anchor    advanced to {anchor_build[0].name} — subsequent effects are "
               f"MARGINAL against this champion, not cumulative")
         # FIRST, before the loop draws any further work: nothing below is worth doing
@@ -381,7 +385,7 @@ def main(argv: list[str] | None = None) -> int:
         """A loop that only reports when it succeeds looks identical to a stuck one."""
         status.write(
             args.store, state=state, epoch=epoch, campaign_id="ak-loop",
-            anchor_commit=anchor_commit, surface=args.surface, pairs=args.pairs,
+            anchor_commit=current_anchor_commit[0], surface=args.surface, pairs=args.pairs,
             noise_floor_pct=floor,
             outcomes=[o.to_attempt() for o in outcomes],
             iterations_planned=args.iterations, step=step,
@@ -421,9 +425,8 @@ def main(argv: list[str] | None = None) -> int:
             publish both happen under the pipeline's outcomes lock, so they are
             serialized -- at the cost of a slow status write briefly blocking every
             lane's recording.
-          * `epoch`/`anchor_commit` in the published status: they still describe the
-            champion the run STARTED from, which is what makes the archive rows
-            comparable across the run.
+          * `epoch`: pinned to the champion the run STARTED from, which is what makes
+            the archive rows comparable across the run.
         """
         def record_pooled(outcome) -> None:
             archive.record(args.store, outcome.to_attempt(), epoch=epoch,

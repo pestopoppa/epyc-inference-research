@@ -31,15 +31,29 @@ import re
 import sys
 
 #: The rebuilt loop's budget. Arbitrary by design -- see the module docstring.
-#: Raised from 3000 to 3400 on 2026-08-29, deliberately and once.
+#: Raised 3000 -> 3400 on 2026-08-29 and 3400 -> 3450 on 2026-08-31, each deliberately
+#: and each with its reason recorded here rather than in a commit nobody re-reads.
+#:
+#: THE 2026-08-31 RAISE, and why it is not the regrowth this guard exists to stop.
+#: The package sat at EXACTLY 3400, so no functional change of any size could land --
+#: a three-line bug fix (publish the anchor commit that candidates are actually
+#: measured against, not the one the run started from; run 19 advanced the champion
+#: twice while the dashboard reported it stuck) did not fit even after every comment
+#: was stripped from it. A budget that blocks a three-line correctness fix is not
+#: bounding regrowth, it is bounding maintenance. Raised by 50 -- enough that the next
+#: few honest fixes land, small enough that the conversation returns soon. Operator
+#: decision, 2026-08-31, asked for explicitly after the alternatives were put to them.
 #:
 #: The 3000 was set for a SEQUENTIAL loop of ~830 LOC. Concurrency -- seven lanes, a
 #: serialized tail, champion arbitration, provisioning and pruning -- is `pipeline.py`
 #: plus `pool.py`, ~640 lines, and it bought 5.6x throughput (run 13: 10 iterations in
 #: 118.6 min; run 14: 14 in 29.8). That is a capability, not regrowth.
 #:
-#: Measured before raising: 2,102 lines are code and 1,071 are docstrings and comments
-#: -- 34% of the package is prose. That prose is the incident record, and it is load
+#: Measured 2026-08-31: 2,082 lines are code, 810 are docstrings and comments and 508
+#: are blank -- 23.8% prose, NOT the 34% this note claimed from 2026-08-29 to
+#: 2026-08-31. The old figure was never re-derived after the package grew, and an
+#: inflated prose share is exactly the number a future "just bump it, most of it is
+#: comments" argument would lean on. That prose is the incident record, and it is load
 #: bearing: every guard here exists because something specific went wrong, and a guard
 #: whose reason has been deleted gets removed by the next person who finds it
 #: inconvenient. The budget counts it, which means the budget is partly a documentation
@@ -47,7 +61,7 @@ import sys
 #:
 #: Against the 153,865 LOC this replaces, the point of the guard stands: it forces this
 #: conversation at 2x, not at 50x.
-LOOP_LOC_BUDGET = 3400
+LOOP_LOC_BUDGET = 3450
 
 #: Documentation whose CONTENTS no test may assert. Asserting a doc's text makes
 #: every deletion cost a regeneration, which is how 92 deletions happen in 5 weeks.
