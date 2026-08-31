@@ -34,8 +34,13 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 # suite name -> (floor, paths). The floor is the count observed when the suite was
 # declared; raising it is a deliberate edit, and lowering it must be argued for.
 SUITE_FLOORS: dict[str, tuple[int, tuple[str, ...]]] = {
+    # 109 -> 133 on 2026-08-31: `P-AK-SEARCH-1-A3` epoch-scoped ranking. 22 new tests in
+    # `controller/test_experiments.py`, over a fixture of 200 real rows lifted from the
+    # live loop-memory store, including the byte-identity of the default recall path
+    # against digests captured from the pre-amendment function. The floor sat two under
+    # the observed count before this edit; it is now level with it.
     "the decision arithmetic": (
-        109,
+        133,
         (
             "scripts/benchmark/test_screen_effect_estimator.py",
             "scripts/kernel_rnd/autokernel/controller/test_workload_contract.py",
@@ -51,7 +56,11 @@ SUITE_FLOORS: dict[str, tuple[int, tuple[str, ...]]] = {
     # 196 -> 222 on 2026-08-30: the promotion A/A guard (`loop/anchor.py`) and the
     # rebuild-instead-of-move promotion contract. 26 new tests in `loop/test_anchor.py`,
     # mutation-tested 18 of 18 in both directions.
-    "the loop package": (222, ("scripts/kernel_rnd/autokernel/loop/",)),
+    # 222 -> 239 on 2026-08-31: `P-AK-SEARCH-1-A3` at the loop boundary. 17 new tests in
+    # `loop/test_ranking.py` -- the opt-in defaults, and the conformance property that a
+    # cross-epoch magnitude cannot reach the keep/null arithmetic. Mutation-tested 43 of
+    # 43 in both directions, every one of the 39 new assertions killed by at least one.
+    "the loop package": (239, ("scripts/kernel_rnd/autokernel/loop/",)),
 }
 
 _COLLECTED = re.compile(r"(\d+) tests? collected")

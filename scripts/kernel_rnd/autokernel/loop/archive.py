@@ -70,10 +70,18 @@ def record(store_root: Path, attempt: Mapping[str, Any], *, epoch: str,
         return added
 
 
-def recall(store_root: Path, *, epoch: str, limit: int = 40) -> list[dict]:
-    """What has been tried, most recent first, cross-epoch records marked stale."""
+def recall(store_root: Path, *, epoch: str, limit: int = 40,
+           ranking_authorized: bool = False) -> list[dict]:
+    """What has been tried, cross-epoch records marked stale.
+
+    Recency order by default. `ranking_authorized` is `P-AK-SEARCH-1-A3`'s epoch-scoped
+    ranking, off unless the caller asks (`run.py --rank-prior-experiments`): it returns
+    an order of merit instead, with cross-epoch magnitudes redacted. The default is
+    unchanged, and passing the flag is a decision with a name on it.
+    """
     with experiments.ExperimentStore(store_root) as store:
-        return store.recall(epoch=epoch, limit=limit)
+        return store.recall(epoch=epoch, limit=limit,
+                            ranking_authorized=ranking_authorized)
 
 
 def epoch_for(*, anchor_commit: str, build_recipe: Mapping[str, Any],

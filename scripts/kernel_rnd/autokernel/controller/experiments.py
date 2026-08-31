@@ -29,12 +29,26 @@ without a query tool.
 
 AUTHORITY BOUNDARY
 ------------------
-`P-AK-SEARCH-1` denial 4 permits a later campaign to use a prior record "for
+`P-AK-SEARCH-1` denial 4 permitted a later campaign to use a prior record "for
 hypothesis formation only -- never to rank, bank, compose, or contribute to
-readiness". Recall therefore returns records for FORMATION by default.
-`ranking_authorized` stays False until the operator amends that denial (decision D1
-in `handoffs/active/autokernel-rebuild-program.md`); nothing here decides what to run
-next, and nothing here banks anything.
+readiness". Recall therefore returns records for FORMATION by default, and
+`ranking_authorized` is the switch on that boundary.
+
+`P-AK-SEARCH-1-A3` (RATIFIED 2026-08-31) narrows denial 4 and nothing else. Within a
+fixed epoch a campaign MAY read prior campaigns' records to RANK its own next attempt;
+a cross-epoch record stays readable as evidence that a mechanism was tried, never as a
+comparable magnitude, and is carried with an explicit staleness marker. Banking,
+composition, readiness contribution and promotion authority are untouched, as is the
+campaign calibration block: a campaign still derives its own thresholds, and this
+clause governs what it may READ, never what it may skip. Nothing here decides what to
+run next, and nothing here banks anything -- ranking produces an ORDER, and the order
+is an input to a planner that still has to propose, gate and measure.
+
+The flag therefore defaults to False and the default path is byte-for-byte what it was
+before A3: `ranking_authorized=False` returns the same rows, in the same recency order,
+with the same keys. Opting in is a caller's explicit act (`run.py
+--rank-prior-experiments`), which is what makes "who authorised this ordering" a
+question with an answer.
 """
 from __future__ import annotations
 
@@ -70,6 +84,176 @@ CREATE TABLE IF NOT EXISTS experiments (
 CREATE INDEX IF NOT EXISTS experiments_epoch ON experiments (epoch_sha256);
 CREATE INDEX IF NOT EXISTS experiments_mechanism ON experiments (mechanism_id);
 """
+
+#: Every field that carries a MEASURED MAGNITUDE. `P-AK-SEARCH-1-A3` clause 2 says a
+#: cross-epoch record's measured value "MUST NOT be ranked, compared, or presented as
+#: comparable"; these are the fields that could carry one, and under ranking they are
+#: set to None on a stale row rather than merely flagged.
+#:
+#: Flagging is what the store did before, and flagging is not enough. `stale_epoch`
+#: was already True on every cross-epoch row -- and `loop/actors.py` pooled those rows'
+#: `effect_fraction` values into a median printed under the heading "Characterised --
+#: do NOT re-measure these", because the pooling loop read the number and not the flag.
+#: Measured against the live store: for the first ~20 rows of epoch `6a4dccec` that
+#: block told the planner `akm-q4k-q8-sum-sidecar`: measured 4x, median -8.814%` where
+#: all four magnitudes came from a DIFFERENT epoch. A marker only works on a reader who
+#: checks it; deleting the number works on every reader.
+_MAGNITUDE_FIELDS = ("effect_fraction", "exact_attribution_effect_fraction",
+                     "target_runtime_effect_fraction")
+
+#: MERIT BY OUTCOME CLASS -- what kind of fact is this row?
+#:
+#: The ranking signal is deliberately built out of the CLASS of a record and the
+#: REPETITION of its mechanism, and out of no magnitude at all. Two reasons, one
+#: practical and one structural.
+#:
+#: Practical: what ranking actually decides here is which rows survive truncation.
+#: `render_context` shows the planner ~12-40 rows. The live store holds 1,002 rows over
+#: 313 distinct mechanisms, and its newest 40 contain 18 of them -- so plain recency
+#: hides 94% of what has already been tried, which is precisely the failure this store
+#: was built for (one bit-deposit rewrite proposed 38 times). Ordering by effect size
+#: would not fix that; ordering by what a row TELLS you does.
+#:
+#: Structural: A3 permits same-epoch magnitude to be ranked, and this declines the
+#: permission. A scorer that never reads a magnitude field cannot leak one, and that is
+#: a property a test can assert directly against the code object. Buying a cheap
+#: conformance proof for a signal we do not need is the right trade.
+#:
+#: A resolved measurement and a critic refusal are the two classes that say "do not
+#: spend the next iteration here". `superseded` ranks just under them for the opposite
+#: reason: it is work that was formed, never refuted, and is directly re-proposable --
+#: `render_context` already surfaces it first. Harness events (`planner_transient`,
+#: `lane_error`, `bench_failed`) say nothing about any mechanism; they are 308 of the
+#: live store's 1,002 rows and they are what floods a recency window.
+_STATUS_MERIT = {
+    "kept": 5.0,
+    "measured_null": 5.0,
+    "superseded": 4.0,
+    "refused_at_formation": 3.0,
+    "bench_failed": 1.0,
+    "lane_error": 0.5,
+    "anchor_verified": 0.25,
+    "planner_transient": 0.25,
+}
+
+#: An unrecognised status is not noise and not a measurement. Ranked between the two,
+#: so a status added later degrades to "worth showing" rather than to "invisible".
+_UNKNOWN_STATUS_MERIT = 2.0
+
+#: REPETITION IS THE SIGNAL. A mechanism the loop has already returned to N times is
+#: the one it is most likely to return to again, so its history is worth the planner's
+#: window. Capped, because after half a dozen the fact is established. Live store, for
+#: scale: `akm-q4k-q8-sum-sidecar` has 54 rows and 7 formation refusals; the median
+#: mechanism has one.
+#:
+#: The bonus lands on the mechanism's MOST RECENT row only. Spreading it over every row
+#: was the first implementation and it was wrong in a way the fixture caught: ranking
+#: the live slice put 12 rows from 3 mechanisms in a window that plain recency filled
+#: with 8. That is the recency flood again wearing the opposite hat -- one mechanism
+#: evicting every other -- and it would have shipped as an improvement.
+_REPEAT_MERIT = 1.0
+_REPEAT_CAP = 6
+
+#: How many rows of one mechanism keep full merit before duplicates start decaying.
+#: THREE, because that is `render_context`'s own arity: its "Characterised -- do NOT
+#: re-measure" block fires at `len(values) >= 3`. A ranker that starved its consumer of
+#: the third sample would silently disable that block while appearing to improve the
+#: window, so the ranker's breadth rule is pinned to the number the consumer uses.
+_FULL_MERIT_OCCURRENCES = 3
+
+#: Past that, each further row of the same mechanism halves. A fourth measurement of an
+#: already characterised mechanism is not a fourth fact; it is the same fact again, and
+#: the window is better spent on a mechanism the planner has not seen. Floored so an
+#: old duplicate never sinks below a fresh harness error it is more informative than.
+_DUPLICATE_DECAY = 0.5
+_DUPLICATE_DECAY_CAP = 4
+
+#: THE VALIDITY PENALTY, and the whole of A3 clause 2's "weight rather than a ban".
+#: A cross-epoch row still ranks -- it is evidence the mechanism was tried, and that is
+#: exactly what stops a re-proposal -- but it ranks below an otherwise identical
+#: same-epoch row. This is AP-28's shape (`repl_memory/strategy_store.py` applies a
+#: context-hash validity penalty at retrieve time); the number is a judgement, not a
+#: measurement: 0.5 keeps a repeated stale refusal ahead of a fresh harness error and
+#: behind a fresh measurement, which is the ordering the clause describes.
+_STALE_VALIDITY = 0.5
+
+#: How many rows the ranker is allowed to SEE before it truncates to `limit`.
+#: Ranking only the rows recency already selected would re-implement the flood it
+#: exists to fix, so the pool is widened; bounded because the store is append-only and
+#: is expected to outgrow one run by a lot (1,002 rows after four days).
+RANKING_POOL = 2000
+
+
+def _merit(row: Mapping[str, Any], occurrences: int, ordinal: int) -> float:
+    """How much this record should influence the choice of the next attempt.
+
+    `occurrences` is how many rows in the pool share this row's mechanism; `ordinal` is
+    this row's position among them, newest first. Both are counts of ROWS. Neither is,
+    nor is derived from, a measured value.
+
+    READS NO MAGNITUDE. Not "avoids reading one" -- the names in `_MAGNITUDE_FIELDS` do
+    not appear in this function's code object at all, which is what `test_experiments`
+    asserts against `_merit.__code__`. That is the conformance property, and it is
+    stronger than the clause requires: A3 permits a same-epoch magnitude to be ranked
+    and this declines the permission, because a scorer that can read no magnitude
+    cannot leak a stale one, and that is a property a test can prove rather than survey.
+
+    Four terms:
+
+      * the outcome CLASS (`_STATUS_MERIT`) -- a fact about a mechanism, or about the
+        harness?
+      * REPETITION (`_REPEAT_MERIT`), on the mechanism's newest row only;
+      * DUPLICATE DECAY (`_DUPLICATE_DECAY`) past `_FULL_MERIT_OCCURRENCES`, which is
+        what keeps the window broad;
+      * the cross-epoch VALIDITY PENALTY (`_STALE_VALIDITY`) -- A3 clause 2's weight,
+        the whole of "a weight rather than a ban".
+    """
+    merit = _STATUS_MERIT.get(row["status"], _UNKNOWN_STATUS_MERIT)
+    if row["mechanism_id"]:
+        if ordinal == 0:
+            merit += _REPEAT_MERIT * min(occurrences - 1, _REPEAT_CAP)
+        elif ordinal >= _FULL_MERIT_OCCURRENCES:
+            merit *= _DUPLICATE_DECAY ** min(
+                ordinal - _FULL_MERIT_OCCURRENCES + 1, _DUPLICATE_DECAY_CAP)
+    return merit if row["same_epoch"] else merit * _STALE_VALIDITY
+
+
+def rank(recalled: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Redact cross-epoch magnitudes, then order by merit. In that order.
+
+    Redaction happens FIRST and unconditionally, so the scorer that runs after it is
+    looking at rows from which the stale numbers are already gone. Belt and braces
+    against the same property, deliberately: `_merit` cannot read a magnitude, and by
+    the time it runs there is no stale magnitude left to read.
+
+    The sort is stable and keyed on merit alone, so rows of equal merit keep the
+    recency order they arrived in -- the pre-A3 ordering survives as the tiebreak
+    rather than being replaced by an arbitrary one.
+    """
+    occurrences: dict[str, int] = {}
+    for row in recalled:
+        mechanism = row["mechanism_id"]
+        if mechanism:
+            occurrences[mechanism] = occurrences.get(mechanism, 0) + 1
+    # `recalled` arrives newest first, so a running count IS the row's ordinal within
+    # its mechanism, newest first.
+    seen: dict[str, int] = {}
+    merits: list[float] = []
+    for row in recalled:
+        stale = not row["same_epoch"]
+        if stale:
+            for field in _MAGNITUDE_FIELDS:
+                row[field] = None
+        # Stated on same-epoch rows too. A consumer that has to infer "not redacted"
+        # from a missing key is a consumer that gets it wrong on the empty case.
+        row["magnitude_redacted"] = stale
+        mechanism = row["mechanism_id"]
+        ordinal = seen.get(mechanism, 0) if mechanism else 0
+        if mechanism:
+            seen[mechanism] = ordinal + 1
+        merits.append(_merit(row, occurrences.get(mechanism, 1), ordinal))
+    order = sorted(range(len(recalled)), key=lambda index: -merits[index])
+    return [recalled[index] for index in order]
 
 
 def epoch_sha256(*, anchor_commit: str | None, build_recipe: Mapping[str, Any] | None,
@@ -155,17 +339,26 @@ class ExperimentStore:
 
     def recall(self, *, epoch: str, limit: int = 40,
                ranking_authorized: bool = False) -> list[dict[str, Any]]:
-        """Prior attempts, most recent first, each marked same-epoch or stale.
+        """Prior attempts, each marked same-epoch or stale.
 
-        `ranking_authorized` is the P-AK-SEARCH-1 denial-4 boundary (decision D1).
-        While it is False this returns records for HYPOTHESIS FORMATION and nothing
-        computes an order of merit from them; a cross-epoch record is still returned,
-        because knowing a mechanism was already tried is formation, not ranking --
-        but it is marked `stale_epoch` so its NUMBER is never read as comparable.
+        `ranking_authorized` is the `P-AK-SEARCH-1` denial-4 boundary, narrowed by
+        `P-AK-SEARCH-1-A3`.
+
+        FALSE (the default) is the pre-A3 behaviour, unchanged to the byte: most recent
+        first, no order of merit computed from anything, cross-epoch rows returned
+        because knowing a mechanism was already tried is FORMATION rather than ranking,
+        and marked `stale_epoch` so their number is not read as comparable.
+
+        TRUE returns an ORDER OF MERIT over a wider pool (`RANKING_POOL`), truncated to
+        `limit` after ranking rather than before it, with cross-epoch rows carrying a
+        validity penalty AND their magnitudes redacted -- see `_MAGNITUDE_FIELDS`.
+        Ranking is all it turns on: nothing here banks, composes, contributes to
+        readiness, or relaxes a threshold the campaign derives for itself.
         """
+        pool = max(int(limit), RANKING_POOL) if ranking_authorized else int(limit)
         rows = self._connection.execute(
             "SELECT * FROM experiments ORDER BY recorded_at DESC, rowid DESC LIMIT ?",
-            (int(limit),)).fetchall()
+            (pool,)).fetchall()
         recalled = []
         for row in rows:
             same_epoch = row["epoch_sha256"] == epoch
@@ -192,7 +385,9 @@ class ExperimentStore:
                 "comparable_measurement": same_epoch,
                 "ranking_authorized": bool(ranking_authorized),
             })
-        return recalled
+        if not ranking_authorized:
+            return recalled
+        return rank(recalled)[:int(limit)]
 
     def mechanisms_tried(self, *, epoch: str | None = None) -> list[str]:
         """Distinct mechanism ids, optionally within one epoch."""
@@ -318,4 +513,5 @@ def _jsonable(value: Any) -> Any:
     return str(value)
 
 
-__all__ = ["ExperimentStore", "epoch_sha256", "SCHEMA_VERSION"]
+__all__ = ["ExperimentStore", "RANKING_POOL", "epoch_sha256", "rank",
+           "SCHEMA_VERSION"]

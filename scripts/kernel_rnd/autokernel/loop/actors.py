@@ -184,10 +184,32 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12) -> str:
     # "almost", so the planner re-proposed it. But re-measuring unchanged code adds no
     # information -- it redraws the same noise. Pooling says what is actually known,
     # and a characterised mechanism is FINISHED unless the code changes.
+    #
+    # `comparable_measurement` is load bearing here and was MISSING. This pooled every
+    # row carrying a number -- cross-epoch ones included -- into one median printed
+    # under a heading that tells the planner not to re-measure. Against the live store,
+    # through the first ~20 rows of epoch `6a4dccec`, it read "`akm-q4k-q8-sum-sidecar`:
+    # measured 4x, median -8.814%" with all four magnitudes taken against a DIFFERENT
+    # anchor and build: a cross-epoch magnitude deciding a mechanism was finished. That
+    # is what `P-AK-SEARCH-1` denial 4 forbade and what `-A3` clause 2 still forbids --
+    # A3 moved the ORDERING question only, never the comparability one. It bit at every
+    # epoch transition, because a new epoch's first recall window is the old epoch's
+    # tail. The marker was right there on the row and the loop read the number instead,
+    # which is why `experiments.rank()` now deletes the number as well as marking it.
+    #
+    # BOTH markers, and a row carrying NEITHER is still pooled. `recall()` always writes
+    # both -- `test_ranking.py` asserts that, which is what makes this the whole real
+    # path -- so the two spellings are complements there and the only rows this default
+    # reaches are hand-built ones with no provenance to judge. Requiring a positive
+    # `comparable_measurement` instead was the first version and it silently switched
+    # the block off for every synthetic context, `test_seed.py`'s five-sample run-15
+    # regression included: a conformance fix that disables the feature it is protecting.
     repeats: dict[str, list[float]] = {}
     for row in prior:
         effect = row.get("effect_fraction")
-        if row.get("mechanism_id") and isinstance(effect, (int, float)):
+        if (row.get("mechanism_id") and isinstance(effect, (int, float))
+                and not row.get("stale_epoch")
+                and row.get("comparable_measurement", True)):
             repeats.setdefault(row["mechanism_id"], []).append(effect * 100.0)
     characterised = {k: v for k, v in repeats.items() if len(v) >= 3}
     if characterised:

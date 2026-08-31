@@ -65,6 +65,19 @@ def _git(repo: Path, *args: str) -> str:
                           capture_output=True, text=True, timeout=600).stdout.strip()
 
 
+def prior_experiments(args, epoch: str) -> list[dict]:
+    """The history the planner gets, and the one place `-A3` is turned on.
+
+    A named function rather than three lines inside `build_context`, because the CLI
+    flag existing and the flag REACHING the store are different facts, and only one
+    of them was testable inline. A mutation that parsed `--rank-prior-experiments` and
+    then recalled with the authority hardcoded off passed every test written against
+    the parser; this is the seam that catches it.
+    """
+    return archive.recall(args.store, epoch=epoch,
+                          ranking_authorized=args.rank_prior_experiments)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -85,6 +98,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", type=Path)
     parser.add_argument("--dry-run", action="store_true",
                         help="prove the wiring without a provider call or a build")
+    # `P-AK-SEARCH-1-A3` (RATIFIED 2026-08-31) narrows denial 4 to permit epoch-scoped
+    # ranking. Off by default and named on the command line, so an ordering that
+    # influenced a run is attributable to a flag someone typed. It grants ranking and
+    # nothing else -- banking, composition, readiness contribution and promotion are
+    # untouched, and the campaign still derives its own thresholds.
+    parser.add_argument("--rank-prior-experiments", action="store_true",
+                        help="P-AK-SEARCH-1-A3: order recalled records by merit "
+                             "instead of recency, cross-epoch magnitudes redacted")
     # ---- concurrency (DRAFT). 1 is today's sequential path, unchanged. ----------
     parser.add_argument("--workers", type=int, default=1,
                         help="concurrent lanes; 1 (default) is the sequential path "
@@ -155,7 +176,7 @@ def main(argv: list[str] | None = None) -> int:
         return {
             "program": loop.PROGRAM.read_text(encoding="utf-8"),
             "kernel_hotspots": [row.to_dict() for row in hotspot_rows],
-            "prior_experiments": archive.recall(args.store, epoch=epoch),
+            "prior_experiments": prior_experiments(args, epoch),
             "inbox": read_inbox(),
         }
 
