@@ -69,12 +69,37 @@ class LocBudget(unittest.TestCase):
             self.assertEqual([name for name, _ in rows], ["loop.py"])
 
     def test_the_budget_fires_when_exceeded(self):
+        """CODE over the code budget fails. The subject is code, not lines."""
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            (root / "big.py").write_text("x\n" * 50, encoding="utf-8")
+            (root / "big.py").write_text("x = 1\n" * 50, encoding="utf-8")
             self.assertEqual(
                 guards.main(["--package", str(root), "--loop-package", str(root),
-                             "--budget", "10"]), 1)
+                             "--code-budget", "10"]), 1)
+
+    def test_prose_alone_can_never_trip_the_budget(self):
+        """The whole reason the instrument changed, asserted.
+
+        Under the old total-line count the cheapest way to land a fix was to delete the
+        incident record the guard's own note calls load bearing -- so a package that is
+        almost entirely comment MUST still pass, and the same file's code MUST NOT.
+        Reads exit 1 under a total-line count; exit 0 is the property being bought.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "prose.py").write_text('"""d."""\n' + "# note\n" * 400 + "x = 1\n",
+                                           encoding="utf-8")
+            self.assertEqual(
+                guards.main(["--package", str(root), "--loop-package", str(root),
+                             "--code-budget", "10", "--budget", "10"]), 0)
+
+    def test_a_total_over_budget_is_reported_and_not_a_violation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "big.py").write_text("# c\n" * 400 + "x = 1\n", encoding="utf-8")
+            self.assertEqual(
+                guards.main(["--package", str(root), "--loop-package", str(root),
+                             "--budget", "10", "--code-budget", "1000"]), 0)
 
     def test_the_budget_passes_when_respected(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -82,7 +107,7 @@ class LocBudget(unittest.TestCase):
             (root / "small.py").write_text("x\n" * 5, encoding="utf-8")
             self.assertEqual(
                 guards.main(["--package", str(root), "--loop-package", str(root),
-                             "--budget", "1000"]), 0)
+                             "--code-budget", "1000"]), 0)
 
     def test_the_declared_budget_is_the_one_documented(self):
         """3,450 against a subject of 42,494 -- the ratio is the point.
@@ -96,6 +121,7 @@ class LocBudget(unittest.TestCase):
         Those are one defect, not two: a guard nobody could see failing.
         """
         self.assertEqual(guards.LOOP_LOC_BUDGET, 3450)
+        self.assertEqual(guards.LOOP_CODE_BUDGET, 2100)
 
 
 if __name__ == "__main__":

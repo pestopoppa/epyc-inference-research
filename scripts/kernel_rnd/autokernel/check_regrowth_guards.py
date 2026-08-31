@@ -65,6 +65,26 @@ import sys
 #: conversation at 2x, not at 50x.
 LOOP_LOC_BUDGET = 3450
 
+#: THE ENFORCED BUDGET, 2026-08-31. `LOOP_LOC_BUDGET` above is still printed, because a
+#: total-line number is the review burden a reader wants to see -- but it no longer
+#: FAILS anything, and this does.
+#:
+#: Counting every line put the guard and its own doctrine in opposition. The note above
+#: says the package's prose is the incident record and is load bearing; a total-line
+#: budget makes deleting that prose the cheapest way to land a fix. That is not
+#: hypothetical: on 2026-08-31 the package sat at exactly its budget and a three-line
+#: correctness fix did not fit even after every comment was stripped from it, and the
+#: budget was raised rather than the record deleted. The next person will not be as
+#: scrupulous. A guard whose cheapest satisfaction is the thing it forbids is a guard
+#: that will eventually be satisfied that way.
+#:
+#: Code-only, so a comment buys nothing and only deleting CODE fits. 2,100 against
+#: today's 1,848 is 252 lines -- one more subsystem the size of pool.py's driver, or
+#: thirty small fixes, before the conversation returns. Against the 153,865 LOC this
+#: replaces the ratio the module docstring defends is unchanged: it still forces the
+#: argument at 2x, not at 50x.
+LOOP_CODE_BUDGET = 2100
+
 #: Documentation whose CONTENTS no test may assert. Asserting a doc's text makes
 #: every deletion cost a regeneration, which is how 92 deletions happen in 5 weeks.
 GUARDED_DOCS = ("FOOTPRINT.md", "README.md", "program.md", "HYPOTHESES.md",
@@ -156,6 +176,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--loop-package", type=Path, default=None,
                         help="the rebuilt loop package (default <package>/loop)")
     parser.add_argument("--budget", type=int, default=LOOP_LOC_BUDGET)
+    parser.add_argument("--code-budget", type=int, default=LOOP_CODE_BUDGET)
     parser.add_argument("--check-doc-assertions", action="store_true",
                         help="also fail on tests that pin documentation prose. Off by "
                              "default while the superseded suites still exist; the "
@@ -177,11 +198,18 @@ def main(argv: list[str] | None = None) -> int:
         for name, count in sorted(rows, key=lambda item: -item[1])[:10]:
             print(f"    {count:>6}  {name}")
         if total > args.budget:
-            print(f"\nVIOLATION: the loop package is {total} LOC, over its "
-                  f"{args.budget} budget by {total - args.budget}.\n"
-                  f"  This budget is arbitrary and that is the point: it forces the "
-                  f"conversation at 2x rather than at 50x. Raise it deliberately, in "
-                  f"a commit that says why, or delete something.", file=sys.stderr)
+            # REPORTED, NOT ENFORCED. The total is the review burden; the code count is
+            # the thing bounded. Failing on the total is what made deleting the incident
+            # record the cheapest way to pass.
+            print(f"\nNOTE: the loop package is {total} LOC, over the reported "
+                  f"{args.budget}. Not a violation — see LOOP_CODE_BUDGET.")
+        if code > args.code_budget:
+            print(f"\nVIOLATION: the loop package is {code} lines of CODE, over its "
+                  f"{args.code_budget} budget by {code - args.code_budget}.\n"
+                  f"  Comments and docstrings are excluded on purpose, so deleting the "
+                  f"incident record cannot satisfy this: only deleting code fits. "
+                  f"Raise it deliberately, in a commit that says why, or delete "
+                  f"something.", file=sys.stderr)
             problems += 1
 
     hits = doc_coupled_tests(args.package)
