@@ -60,7 +60,13 @@ SUITE_FLOORS: dict[str, tuple[int, tuple[str, ...]]] = {
     # `loop/test_ranking.py` -- the opt-in defaults, and the conformance property that a
     # cross-epoch magnitude cannot reach the keep/null arithmetic. Mutation-tested 43 of
     # 43 in both directions, every one of the 39 new assertions killed by at least one.
-    "the loop package": (239, ("scripts/kernel_rnd/autokernel/loop/",)),
+    # 239 -> 271 on 2026-08-31: the champion-vs-production headline emitter
+    # (`loop/production.py`), published at every champion advance so the dashboard's
+    # cumulative number stops being a hand measurement. 32 new tests in
+    # `loop/test_production.py`, over two fixtures lifted verbatim off disk -- the
+    # live bundle and the real 20-pair sample vectors. Mutation-tested 41 of 41 in
+    # both directions; 63 of the 67 new assertions are the first failure under one.
+    "the loop package": (271, ("scripts/kernel_rnd/autokernel/loop/",)),
 }
 
 _COLLECTED = re.compile(r"(\d+) tests? collected")

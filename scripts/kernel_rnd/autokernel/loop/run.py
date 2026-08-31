@@ -24,7 +24,7 @@ import time
 
 from ..controller import build_recipe, workload_contract
 from . import (actors, anchor, archive, bench, claim, gates, hotspots, loop, pipeline,
-               pool, status)
+               pool, production, status)
 
 #: Single-pair p95, measured 2026-08-28 over n=20 alternating A/A pairs. Prefill is
 #: the cheaper surface to detect on; decode has heavier tails.
@@ -320,6 +320,45 @@ def main(argv: list[str] | None = None) -> int:
         return gates.compiles(args.worktree, dest, cmake_defines=recipe.cmake_defines(),
                               jobs=64, cpu_list="96-183")
 
+    def build_baseline(dest: Path):
+        """Frozen production v9, built AT MOST ONCE, ever. Never in the production tree.
+
+        The tree is checked before a single compiler is invoked: a source tree that has
+        moved off the frozen commit would produce a binary published under production's
+        name, which is the one way this headline can be quietly wrong. A refusal here is
+        a `Verdict`, not an exception -- `production.refresh` turns it into a skipped
+        refresh, and the run carries on.
+        """
+        head = _git(production.BASELINE_TREE, "rev-parse", "HEAD")
+        if head != production.BASELINE_COMMIT:
+            return gates.Verdict("baseline-tree", False,
+                                 f"{production.BASELINE_TREE} is at {head[:12]}, not "
+                                 f"the frozen production kernel "
+                                 f"{production.BASELINE_COMMIT[:12]}")
+        return gates.compiles(production.BASELINE_TREE, dest,
+                              cmake_defines=recipe.cmake_defines(),
+                              jobs=64, cpu_list="96-183")
+
+    def publish_headline() -> None:
+        """Refresh the dashboard headline for the champion that was just promoted.
+
+        The champion arm is `anchor_build[0]` -- the slot `pool.promote_anchor` built
+        from this commit and `anchor.verify` just proved holds the champion. No second
+        build is paid for here, and nothing below is allowed to end the run.
+        """
+        outcome = production.refresh(
+            store=args.store, champion_commit=current_anchor_commit[0],
+            champion_build=anchor_build[0], build_baseline=build_baseline,
+            compare=lambda base, champ: bench.compare(
+                bench.Arm("production_v9", base / "bin" / "llama-bench"),
+                bench.Arm("champion", champ / "bin" / "llama-bench"),
+                args.model, pp=pp, tg=tg, pairs=args.pairs, noise_floor_pct=floor),
+            on_step=lambda label: publish("running", latest,
+                                          hotspot_rows=hotspot_rows, step=label))
+        archive.record(args.store, outcome.to_attempt(), epoch=epoch,
+                       recorded_at=loop._now(), campaign_id="ak-loop")
+        print(f"headline  {outcome.reason}")
+
     def verify_anchor() -> None:
         """Prove the promoted binary IS the champion; `RunAborted` if not. Runs in the
         serialized tail holding the claim: `commit` is called inside `tail_session`."""
@@ -356,6 +395,11 @@ def main(argv: list[str] | None = None) -> int:
         # FIRST, before the loop draws any further work: nothing below is worth doing
         # against an anchor that is not the champion (run 18: 114 candidates, 6.5 h).
         verify_anchor()
+        # AFTER the guard, never before: a headline measured against a slot that does
+        # not hold the champion is the same void number, published where the operator
+        # reads it. The guard aborts, so reaching this line means the arm is the
+        # champion.
+        publish_headline()
         # The champion moved, so the profile that named the hotspots is stale: the
         # accepted patch changed the very distribution the next hypothesis should aim
         # at. Re-profiling here is what makes a long run keep aiming at the truth

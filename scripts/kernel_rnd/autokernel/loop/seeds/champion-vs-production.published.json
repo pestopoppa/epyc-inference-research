@@ -1,0 +1,41 @@
+{
+ "schema": "epyc.autokernel.champion_vs_production.v1",
+ "generated_at": "2026-08-30T20:21:39Z",
+ "stale_after_s": 1209600,
+ "baseline": {
+  "commit": "0db32c06e3e550065b78311a6031ef3dd2c4f27c",
+  "label": "production-consolidated-v9"
+ },
+ "champion": {
+  "commit": "5ad3e36dfb3acc9eda3dd3d5e137dce69a629cdd"
+ },
+ "effect_fraction": 0.0852412041859627,
+ "metric": "tg128_tok_s",
+ "metric_direction": "higher_better",
+ "surface": "tg128",
+ "pairs": 20,
+ "noise_floor_pct": 1.188,
+ "evidence": "/mnt/raid0/llm/tmp/v9v-out/champion-vs-v9.json",
+ "capabilities": [
+  {
+   "name": "rocWMMA FlashAttention compiled in",
+   "evidence": "CMakeCache GGML_HIP_ROCWMMA_FATTN=ON in both arms; flash_attn_ext_wmma_f16 is a defined symbol in libggml-hip.so (this is the opposite of the CMake default, so the recipe sets it deliberately)"
+  },
+  {
+   "name": "FlashAttention vec kernel for head-size 128, F16 K/V, no softcap",
+   "evidence": "the ONLY device-kernel the champion adds over v9: ggml_cuda_flash_attn_ext_vec_case_impl<128,1,(ggml_type)1,(ggml_type)1,false> present in champion libggml-hip.so, absent in base; mangled-symbol sets differ by exactly this one entry, nothing removed"
+  },
+  {
+   "name": "MFMA MMA path for CDNA in MMQ",
+   "evidence": "CMakeCache GGML_HIP_MMQ_MFMA=ON in both arms"
+  },
+  {
+   "name": "HIP graphs",
+   "evidence": "CMakeCache GGML_HIP_GRAPHS=ON in both arms"
+  },
+  {
+   "name": "25 GPU quant types pass MUL_MAT and MUL_MAT_ID on ROCm0",
+   "evidence": "test-backend-ops case enumeration, rc=0 with '2/2 backends passed' on both builds; corroborated by 21 mul_mat_q_case and 22 mul_mat_vec_q template instantiations in the fatbin"
+  }
+ ]
+}

@@ -42,6 +42,32 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
+def write_json(store_root: Path, name: str, body: Any, *,
+               prefix: str = ".status-") -> Path:
+    """Publish one JSON document into the store, atomically.
+
+    Extracted from `write` because a second publisher (`production.py`, the
+    champion-vs-production bundle the dashboard headline reads) needs exactly this
+    and a second copy of a durability primitive is a second thing to get subtly
+    wrong. `prefix` names the scratch file so a store holding several publishers'
+    temporaries stays greppable -- and so a test that asserts THIS publisher left
+    none behind is still asserting over a pattern this publisher actually uses.
+    """
+    store_root.mkdir(parents=True, exist_ok=True)
+    target = store_root / name
+    handle, temporary = tempfile.mkstemp(dir=str(store_root), prefix=prefix)
+    try:
+        with os.fdopen(handle, "w", encoding="utf-8") as stream:
+            json.dump(body, stream, indent=2, sort_keys=True)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, target)
+    except BaseException:
+        Path(temporary).unlink(missing_ok=True)
+        raise
+    return target
+
+
 def write(store_root: Path, *, state: str, epoch: str, campaign_id: str,
           anchor_commit: str, surface: str, pairs: int,
           noise_floor_pct: float | None,
@@ -105,19 +131,7 @@ def write(store_root: Path, *, state: str, epoch: str, campaign_id: str,
             for row in list(outcomes)[-10:][::-1]],
     }
 
-    store_root.mkdir(parents=True, exist_ok=True)
-    target = store_root / STATUS_FILENAME
-    handle, temporary = tempfile.mkstemp(dir=str(store_root), prefix=".status-")
-    try:
-        with os.fdopen(handle, "w", encoding="utf-8") as stream:
-            json.dump(body, stream, indent=2, sort_keys=True)
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temporary, target)
-    except BaseException:
-        Path(temporary).unlink(missing_ok=True)
-        raise
-    return target
+    return write_json(store_root, STATUS_FILENAME, body)
 
 
 def read(store_root: Path) -> dict[str, Any] | None:
@@ -160,4 +174,4 @@ def freshness(body: Mapping[str, Any] | None, *, now: datetime | None = None
 
 
 __all__ = ["DEFAULT_STALE_AFTER_S", "STATUS_FILENAME", "STATUS_SCHEMA", "freshness",
-           "read", "write"]
+           "read", "write", "write_json"]
