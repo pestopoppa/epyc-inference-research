@@ -182,6 +182,13 @@ t_ordering_divergence_merge() {
         grep -q "fake loop-status for tests" "$T/work/step0-stop.log"
     assert "ordering: OP-32 verdict ALL GREEN in report" grep -q "ALL GREEN" "$T/report.md"
     assert "ordering: state allgreen=yes" grep -q "^allgreen=yes$" "$T/work/state"
+    # operator ruling 2026-08-31: the boundary refresh runs --minimal, and the
+    # report must say so plainly (measured vs skipped) so nobody mistakes the
+    # bundle for the full evidence sweep.
+    assert "refresh: invoked with --minimal" \
+        bash -c "grep '^serving_refresh' '$T/calls.log' | grep -q -- '--minimal'"
+    assert "report: names the MINIMAL refresh and the skipped G2 paired control" \
+        bash -c "grep -q 'MINIMAL refresh' '$T/report.md' && grep -q 'kv_unified=1 paired control' '$T/report.md'"
     assert_run22_never_launched "ordering" "$T"
 }
 
@@ -367,6 +374,10 @@ run_mutations() {
     # M8: all-green ignores missing calibrations -> calib-fail test must catch
     mutate_and_expect_kill green_ignores_calib \
         's/echo "step2: \$surface calibration missing or failed"/:/' t_calib_failure_continues
+    # M9: --minimal dropped from the refresh (silent full-grid regression) ->
+    # the ordering test's argv assertion must catch
+    mutate_and_expect_kill refresh_not_minimal \
+        's/--date "\$refresh_date" --minimal/--date "$refresh_date"/' t_ordering_divergence_merge
 }
 
 # ------------------------------------------------------------------ main

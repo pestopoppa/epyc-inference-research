@@ -262,7 +262,15 @@ evidence `{args.funsafe_json}`)
 - dec-b4: {floors['dec-b4']}
 - dec-b8: {floors['dec-b8']}
 
-## Serving evidence bundle
+## Serving evidence bundle — MINIMAL refresh, not the full evidence sweep
+
+**This bundle is a `--minimal` refresh** (operator ruling 2026-08-31).
+Measured in full: champion-vs-frozen-anchor validation (the no-regression gate)
+and DF2-6 greedy parity. Reduced: the DF2-5 concurrency grid ran its
+kv_unified=0 half only — the half the bundle consumes — **skipping the G2
+kv_unified=1 paired control** (as `serving_evidence_refresh.py --minimal`
+defines it). Do NOT mistake this for the full 24-cell sweep; the full grid is
+reserved for promotion time, when the evidence is load-bearing.
 
 - Headline: {headline}
 - Path: `{bundle_path}` (canonical: `{args.surface_dir}/operator_gate_bundle.json`)

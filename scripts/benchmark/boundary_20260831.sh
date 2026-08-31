@@ -377,11 +377,16 @@ step3_serving_refresh() {
     fi
     pid=$(state_get run21_pid)
     [[ -n "$pid" ]] && pid_flag=(--loop-pid "$pid")
-    log "step3: serving evidence refresh, full grid, --date $refresh_date (log: $lf)"
+    # --minimal per the operator ruling (2026-08-31, boundary scope): the boundary
+    # needs the headline + no-regression gate on the new champion (~2h); the full
+    # 24-cell sweep is reserved for promotion time. Minimal = the concurrency grid
+    # runs its kv_unified=0 half only (the half the bundle consumes), at the cost
+    # of the G2 paired control; anchor validation and greedy parity run in full.
+    log "step3: serving evidence refresh, MINIMAL mode, --date $refresh_date (log: $lf)"
 
     heavy serving_refresh "$lf" \
         python3 "$BENCH_DIR/serving_evidence_refresh.py" \
-        --date "$refresh_date" "${pid_flag[@]}"
+        --date "$refresh_date" --minimal "${pid_flag[@]}"
     rc=$?
     if [[ $rc -eq 0 ]]; then
         log "step3: refresh complete — bundle published"
@@ -511,10 +516,15 @@ step2  dec-b2/b4/b8 floor calibrations (D8 method, N=$CALIB_PAIRS pairs x 3 cond
                     --surface <dec-b2|dec-b4|dec-b8> --calibrate-surface $CALIB_PAIRS [waiver]
   writes        $STORE/calibration/<surface>.json ; one failure logs and continues
 
-step3  serving evidence refresh (FULL grid, no --minimal)
+step3  serving evidence refresh (MINIMAL mode — operator ruling 2026-08-31)
   run           python3 $BENCH_DIR/serving_evidence_refresh.py \\
-                    --date <pinned at first attempt, UTC> --loop-pid $pid
+                    --date <pinned at first attempt, UTC> --minimal --loop-pid $pid
                 (its own preflight refuses a live loop; step0 guarantees dead)
+  minimal =     concurrency grid runs kv_unified=0 only (the half the bundle
+                consumes, ~1.3h instead of ~2.6h) at the cost of the G2 paired
+                control; anchor validation + greedy parity still run in full.
+                Full 24-cell sweep reserved for promotion time. Boundary total
+                estimate ~3.5-5h.
 
 step4  run-22 readiness package -> $REPORT
   per-step outcomes+timestamps+logs; flag verdict + merged-or-not; three floors;
