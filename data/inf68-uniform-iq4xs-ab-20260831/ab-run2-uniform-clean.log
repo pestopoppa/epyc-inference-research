@@ -1,0 +1,16 @@
+[region-lock] acquiring regions ['q0', 'q1', 'q2', 'q3'] as role='bench' (timeout_s=0.0) …
+[region-lock] held ['q0', 'q1', 'q2', 'q3'] after 0.0s wait; running: taskset -c 0-95 numactl --interleave=all /mnt/raid0/llm/tmp/inf68-baseline-tree/build-cpu/bin/llama-bench -m /mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/IQ4_XS-uniform/Qwen3.8-Flash-Next-IQ4_XS-uniform.gguf -t 48,64 -r 5 -p 512 -n 128 -mmp 0
+[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=23 activation=15 ne00=10240)
+[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=13 activation=99 ne00=2560)
+[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=23 activation=15 n_as=512)
+[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=7 activation=99 ne00=640)
+[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=14 activation=99 ne00=2560)
+| model                          |       size |     params | backend    | threads | mmap |            test |                  t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | ------: | ---: | --------------: | -------------------: |
+| qwen4exp A3B IQ4_XS - 4.25 bpw |  91.63 GiB |   176.94 B | CPU        |      48 |    0 |           pp512 |        161.22 ± 0.53 |
+[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=7 activation=99 n_as=512)
+| qwen4exp A3B IQ4_XS - 4.25 bpw |  91.63 GiB |   176.94 B | CPU        |      48 |    0 |           tg128 |         10.52 ± 0.05 |
+| qwen4exp A3B IQ4_XS - 4.25 bpw |  91.63 GiB |   176.94 B | CPU        |      64 |    0 |           pp512 |        169.40 ± 1.47 |
+| qwen4exp A3B IQ4_XS - 4.25 bpw |  91.63 GiB |   176.94 B | CPU        |      64 |    0 |           tg128 |          9.79 ± 0.08 |
+
+build: 7cdd7c97b (10151)
