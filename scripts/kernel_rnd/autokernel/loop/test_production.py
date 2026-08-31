@@ -28,7 +28,9 @@ not, and why each is still not noise:
   * the two `planner.proposals == 3` lines in the survival tests. Their claim -- the
     loop kept drawing work -- IS killed (M19 lets `Unavailable` escape, M20 removes
     the blanket containment, M40 raises on the success path), but the escape reaches
-    `loop.run`, which turns three consecutive faults into `RunAborted`, so the test
+    `loop.run`, which turns three consecutive faults into `RunAborted` (breaker owned
+    by `pipeline.run_pool` since 95eeb0ae; the ERROR-before-assertion dynamic these
+    sequential-seam tests exercise is unchanged), so the test
     dies as an ERROR before the assertion is evaluated. The subject is proven; the
     line is simply never the first thing to fail.
   * `len(promotion.refreshes) == 3`, shadowed by the two lines above it: a structural
