@@ -77,6 +77,16 @@ class _Incident(unittest.TestCase):
         self.repo.mkdir()
         subprocess.run(["git", "-C", str(self.repo), "init", "-q", "-b", CANONICAL],
                        capture_output=True, text=True, timeout=60)
+        # LOCAL identity, because the PRODUCTION commit paths under test
+        # (`archive.keep`, `pool.advance_champion`) run bare `git commit` and
+        # inherit whatever identity the environment provides. On this host a
+        # global gitconfig exists; on a CI runner none does, so without this the
+        # suite is green locally and red on the runner with "Author identity
+        # unknown" — which is exactly what run 33384448851 reported. The
+        # fixture's own `_sh` passes `-c user.*` per call and so never noticed.
+        for k, v in (("user.email", "t@t"), ("user.name", "t")):
+            subprocess.run(["git", "-C", str(self.repo), "config", k, v],
+                           capture_output=True, text=True, timeout=60)
         self.base = _commit(self.repo, "v9 freeze")           # bare frozen v9
         self.research = _commit(self.repo, "dflash2 + iqk")   # admitted research
         self.champion_tip = _commit(self.repo, "spec-decode")
