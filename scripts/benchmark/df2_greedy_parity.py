@@ -79,8 +79,15 @@ def read_vram() -> int:
         return -1
 
 
-def arm_argv(build_bin: Path, arm: str, ctx: int) -> list[str]:
-    argv = [
+def arm_argv(build_bin: Path, arm: str, ctx: int,
+             pin_host_cores: str | None = None) -> list[str]:
+    # Optional because the 2026-08-28 originals ran UNPINNED (every arm equally).
+    # The standing GPU recipe pins llama-server host threads to the codified list
+    # (`evaluator/recipes.py:gpu_host_cpu_list()` -- 184-191, NOT 88-95); a refresh
+    # passes it. Parity verdicts are token comparisons, so pinning cannot change a
+    # PASS/FAIL -- it standardises the timing environment only.
+    argv = ["taskset", "-c", pin_host_cores] if pin_host_cores else []
+    argv += [
         str(build_bin / "llama-server"),
         "-m", str(TARGET),
         "-np", "1", "-c", str(ctx),
@@ -152,11 +159,12 @@ def ask(prompt: str, max_tokens: int) -> dict:
 
 
 def run_arm(build_bin: Path, out: Path, arm: str, prompts: list[dict],
-            max_tokens: int, ctx: int) -> dict:
+            max_tokens: int, ctx: int,
+            pin_host_cores: str | None = None) -> dict:
     arm_dir = out / arm
     arm_dir.mkdir(parents=True, exist_ok=True)
     log = arm_dir / "server.stderr"
-    argv = arm_argv(build_bin, arm, ctx)
+    argv = arm_argv(build_bin, arm, ctx, pin_host_cores)
     (arm_dir / "server_command.txt").write_text(" ".join(argv) + "\n", encoding="utf-8")
 
     env = dict(os.environ)
@@ -215,6 +223,10 @@ def main() -> int:
     ap.add_argument("--ctx", type=int, default=32768)
     ap.add_argument("--n-prompts", type=int, default=12)
     ap.add_argument("--only-arm", action="append", default=None)
+    ap.add_argument("--pin-host-cores", default=None,
+                    help="taskset the server to this cpu list (pass the codified "
+                         "GPU host-thread list; the 2026-08-28 originals ran "
+                         "unpinned)")
     args = ap.parse_args()
 
     prompts = json.loads(QUESTIONS.read_text())[: args.n_prompts]
@@ -234,7 +246,8 @@ def main() -> int:
         print(f"[{time.strftime('%H:%M:%S')}] arm {arm}", flush=True)
         try:
             results[arm] = run_arm(args.build_bin, args.out, arm, prompts,
-                                   args.max_tokens, args.ctx)
+                                   args.max_tokens, args.ctx,
+                                   args.pin_host_cores)
         except (ArmRefused, Exception) as exc:  # noqa: BLE001 - recorded, not hidden
             print(f"  REFUSED: {exc}", flush=True)
             refusals.append({"arm": arm, "reason": str(exc)})

@@ -52,3 +52,25 @@ line; the harness refuses a confounded pair (`verify_one_line_geometry`).
 Note: at admission time the champion has likely advanced past `4925b2084`; re-merge
 (trivial — one deleted line) rather than re-cutting, and re-run the harness only if the
 merge was not clean.
+
+## The full run-21→22 boundary checklist (added 2026-08-31)
+
+The section above is step 2 of a larger boundary. The whole boundary, **in order** —
+each step's owner, gate, and device-time estimate (estimates derive from the measured
+originals cited per step; none is a promise):
+
+| # | Step | How / where | Gate to proceed | Est. device time |
+|---|---|---|---|---|
+| 1 | **Stop run 21** (pid 2767457) | STOP file in `/mnt/raid0/llm/autokernel/loop-memory`, or SIGTERM; forming lanes abandon at their next stage boundary, the lane holding the serialized tail finishes build/oracle/A-B/commit and publishes | loop process exited; mi210_0 claim (`/mnt/raid0/llm/tmp/gpu_device.mi210_0.lock`) acquirable | minutes–~1 h (tail lane drains) |
+| 2 | **Flag parity/speed A/B** (`-funsafe-math-optimizations` removal) | `autokernel_funsafe_math_admission.py --out artifacts/funsafe-math-admission` — see the sections above; builds are serial on cores 96-183 outside the claim | operator reads `verdict_hint`/`parity`/`ab` and **ratifies or declines**; on ratify, merge onto the current champion + loop gates | ~1–1.5 h (2 fresh HIP builds dominate; the 1.5B greedy probes and 20-pair tg128 A/B are minutes) |
+| 3 | **dec-b2/b4/b8 surface calibrations** | `python3 -m autokernel.loop.run --calibrate-surface N --surface dec-b2` (then b4, b8) with the run-21 argv's worktree/anchor/model/store — the D8 three-condition A/A method, floors land in `store/calibration/<surface>.json` | `bench.floor_rows` answers for all three surfaces (the loop refuses uncalibrated keeps three layers deep, so run 22 cannot use these surfaces without this step) | ~30–60 min total (1.5B model; rough — first calibration of these surfaces, no prior to derive from) |
+| 4 | **Serving evidence refresh** (this package's sibling) | `serving_evidence_refresh.py --date $(date -u +%Y%m%d) --loop-pid 2767457` — full procedure, verification and publish contract in [`serving_evidence_refresh_runbook.md`](serving_evidence_refresh_runbook.md). Runs AFTER step 2 so the bundle attests the tip run 22 starts from | dated bundle sealed, canonical bundle atomically replaced, `/kernel` shows the new `champion.commit` with `body_generated_at` freshness | ~3.5–4 h full grid / ~2 h `--minimal` (measured originals: 2.63 h grid + ~45 min anchor + ~25 min parity) |
+| 5 | **Run-22 readiness package** | assemble for the operator: champion tip (post-merge if step 2 ratified), calibration records present, refreshed bundle sha + headline, run-22 argv (run-21 argv + any new `--surface`), open refusals if any | package written; no device needed | ~10 min, zero device |
+| 6 | **Operator go** | operator reviews 2's verdict, 4's bundle, 5's package; starts run 22 | run 22 launched from the ratified champion tip | — |
+
+Ordering rationale, one line each: 2 before 4 so the serving bundle attests run-22's
+actual base; 3 before 6 because run 22's new surfaces are unusable uncalibrated; 4
+before 5 because the readiness package cites the refreshed bundle. If step 2's
+operator decision is *pending* at step 4 time, refresh the current tip anyway and note
+that a later merge re-opens the attestation gap. Total boundary window: roughly
+**5–7.5 h** of device time (4 dominates; `--minimal` trims ~1.5 h).

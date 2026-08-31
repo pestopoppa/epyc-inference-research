@@ -107,8 +107,17 @@ def read_vram() -> int:
         return -1
 
 
-def cell_server_argv(build_bin: Path, arm: str, conc: int, kvu: bool) -> list[str]:
-    argv = [
+def cell_server_argv(build_bin: Path, arm: str, conc: int, kvu: bool,
+                     pin_host_cores: str | None = None) -> list[str]:
+    # Optional because the 2026-08-27 originals ran UNPINNED (both arms equally, so
+    # their comparison is internally consistent). The standing GPU recipe pins
+    # llama-server host threads to the codified list (`evaluator/recipes.py:
+    # gpu_host_cpu_list()`, sourced from architect_bench_gpu_lib.sh -- 184-191,
+    # node-3 SMT siblings, NOT 88-95). A refresh passes it; deltas against the
+    # unpinned 2026-08-27 absolute numbers are then cross-protocol and only
+    # within-bundle comparisons are claim-grade.
+    argv = ["taskset", "-c", pin_host_cores] if pin_host_cores else []
+    argv += [
         str(build_bin / "llama-server"),
         "-m", str(TARGET),
         # Rule 1: -np is pinned TO the in-flight count, never above it, so the sweep
@@ -167,12 +176,13 @@ def stop_server(proc: subprocess.Popen) -> None:
 
 
 def run_cell(build_bin: Path, out_root: Path, arm: str, conc: int, kvu: bool,
-             run_id: str, max_tokens: int, n_questions: int) -> dict:
+             run_id: str, max_tokens: int, n_questions: int,
+             pin_host_cores: str | None = None) -> dict:
     cell = f"{arm}_c{conc}_kvu{int(kvu)}"
     cell_dir = out_root / cell
     cell_dir.mkdir(parents=True, exist_ok=True)
     log = cell_dir / "server.stderr"
-    argv = cell_server_argv(build_bin, arm, conc, kvu)
+    argv = cell_server_argv(build_bin, arm, conc, kvu, pin_host_cores)
     (cell_dir / "server_command.txt").write_text(" ".join(argv) + "\n", encoding="utf-8")
 
     env = dict(os.environ)
@@ -292,6 +302,14 @@ def main() -> int:
     ap.add_argument("--n-questions", type=int, default=12)
     ap.add_argument("--only-arm", action="append", default=None)
     ap.add_argument("--only-conc", action="append", type=int, default=None)
+    ap.add_argument("--only-kvu", type=int, choices=(0, 1), default=None,
+                    help="restrict rule 5's paired control to one side (the "
+                         "operator-gate bundle consumes only kvu=0; a minimal "
+                         "refresh may skip kvu=1 and say so)")
+    ap.add_argument("--pin-host-cores", default=None,
+                    help="taskset the server to this cpu list (pass the codified "
+                         "GPU host-thread list; the 2026-08-27 originals ran "
+                         "unpinned)")
     args = ap.parse_args()
 
     for path in (TARGET, DFLASH2, QUESTIONS, RUNNER):
@@ -304,19 +322,21 @@ def main() -> int:
 
     arms = tuple(args.only_arm) if args.only_arm else ARMS
     concs = tuple(args.only_conc) if args.only_conc else CONCURRENCIES
+    kvus = (KV_UNIFIED if args.only_kvu is None else (bool(args.only_kvu),))
 
     args.out.mkdir(parents=True, exist_ok=True)
     ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     cells, rows, refusals = [], [], []
 
-    for kvu in KV_UNIFIED:
+    for kvu in kvus:
         for arm in arms:
             for conc in concs:
                 label = f"{arm}_c{conc}_kvu{int(kvu)}"
                 print(f"[{time.strftime('%H:%M:%S')}] cell {label}", flush=True)
                 try:
                     cell = run_cell(args.build_bin, args.out, arm, conc, kvu,
-                                    args.run_id, args.max_tokens, args.n_questions)
+                                    args.run_id, args.max_tokens, args.n_questions,
+                                    args.pin_host_cores)
                 except CellRefused as exc:
                     print(f"  REFUSED: {exc}", flush=True)
                     refusals.append({"cell": label, "reason": str(exc)})

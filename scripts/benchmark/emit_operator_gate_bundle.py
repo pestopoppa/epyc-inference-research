@@ -44,11 +44,23 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import time
 
 SCHEMA = "epyc.autokernel.operator_gate_bundle.v1"
 AUTHORITY = "operator_gated_manual_research"
 ARTIFACTS = Path("/mnt/raid0/llm/artifacts-df25")
 LLAMA = Path("/mnt/raid0/llm/llama.cpp")
+
+#: The 2026-08-28 originals, kept as defaults so a bare invocation re-seals the
+#: same evidence. A REFRESH names its own dated artifacts on the command line;
+#: nothing here needs editing to run the boundary refresh
+#: (`serving_evidence_refresh.py` passes all three).
+DEFAULT_ANCHOR_ARTIFACT = (
+    ARTIFACTS / "champion_anchor_20260828" / "champion_anchor_validation.json")
+DEFAULT_CONCURRENCY_ARTIFACT = (
+    ARTIFACTS / "dflash2_concurrency_20260827" / "cells.json")
+DEFAULT_PARITY_ARTIFACT = (
+    ARTIFACTS / "dflash2_greedy_parity_20260828" / "parity_report.json")
 
 
 def sha256_file(path: Path) -> str | None:
@@ -74,8 +86,7 @@ def _git(*args: str) -> str | None:
     return result.stdout.strip() or None if result.returncode == 0 else None
 
 
-def _anchor_validation() -> dict:
-    path = ARTIFACTS / "champion_anchor_20260828" / "champion_anchor_validation.json"
+def _anchor_validation(path: Path) -> dict:
     data = _json(path)
     gate = {"gate": "no_regression_vs_production_anchor", "kind": "throughput",
             "artifact": str(path), "artifact_sha256": sha256_file(path)}
@@ -93,8 +104,7 @@ def _anchor_validation() -> dict:
             "claim": "champion default path does not regress the frozen anchor"}
 
 
-def _concurrency_gate() -> dict:
-    path = ARTIFACTS / "dflash2_concurrency_20260827" / "cells.json"
+def _concurrency_gate(path: Path) -> dict:
     cells = _json(path)
     gate = {"gate": "dflash2_vs_production_serving_path", "kind": "throughput",
             "artifact": str(path), "artifact_sha256": sha256_file(path)}
@@ -117,8 +127,7 @@ def _concurrency_gate() -> dict:
                       "cannot load the DFlash2 drafter at all")}
 
 
-def _parity_gate() -> dict:
-    path = ARTIFACTS / "dflash2_greedy_parity_20260828" / "parity_report.json"
+def _parity_gate(path: Path) -> dict:
     data = _json(path)
     gate = {"gate": "greedy_parity", "kind": "correctness",
             "artifact": str(path), "artifact_sha256": sha256_file(path)}
@@ -138,8 +147,18 @@ def _parity_gate() -> dict:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--champion-branch", default="ak/champion/llama-cpp-0db32c06e3e5")
+    ap.add_argument("--champion-commit", default=None,
+                    help="expected commit for --champion-branch; REFUSED on "
+                         "mismatch so a bundle cannot silently seal a different "
+                         "champion than the one the gates were run on")
     ap.add_argument("--production-commit",
                     default="0db32c06e3e550065b78311a6031ef3dd2c4f27c")
+    ap.add_argument("--anchor-artifact", type=Path,
+                    default=DEFAULT_ANCHOR_ARTIFACT)
+    ap.add_argument("--concurrency-artifact", type=Path,
+                    default=DEFAULT_CONCURRENCY_ARTIFACT)
+    ap.add_argument("--parity-artifact", type=Path,
+                    default=DEFAULT_PARITY_ARTIFACT)
     ap.add_argument("--out", required=True, type=Path)
     args = ap.parse_args()
 
@@ -147,8 +166,15 @@ def main() -> int:
     if not champion_commit:
         print(f"REFUSED: cannot resolve {args.champion_branch}", file=sys.stderr)
         return 2
+    if args.champion_commit and not champion_commit.startswith(args.champion_commit):
+        print(f"REFUSED: {args.champion_branch} is at {champion_commit[:12]}, "
+              f"not the expected {args.champion_commit[:12]} -- the branch moved "
+              "since the gates ran; re-run the gates or re-pin", file=sys.stderr)
+        return 2
 
-    gates = [_anchor_validation(), _concurrency_gate(), _parity_gate()]
+    gates = [_anchor_validation(args.anchor_artifact),
+             _concurrency_gate(args.concurrency_artifact),
+             _parity_gate(args.parity_artifact)]
     missing = [g["gate"] for g in gates if g["status"] == "MISSING"]
 
     serving = next((g for g in gates
@@ -170,6 +196,12 @@ def main() -> int:
     bundle = {
         "schema": SCHEMA,
         "authority": AUTHORITY,
+        # The bundle's own date, in the body. Without it the reader's only date is
+        # file mtime, which a copy or a `touch` moves with no new measurement --
+        # the 2026-08-31 false-STALE on /kernel was exactly this. The dashboard's
+        # `_read_operator_gate_bundle` prefers this field (labelled
+        # `generated_at_source: body_generated_at`) and only falls back to mtime.
+        "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         # Said in the artifact itself so a reader cannot mistake it for a campaign
         # receipt even out of context.
         "promotion_claim": False,
