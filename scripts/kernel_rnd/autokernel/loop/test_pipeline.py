@@ -232,8 +232,13 @@ class TheSerializedTailIsMutuallyExclusive(unittest.TestCase):
             return None
 
         def lane():
+            # Through `session`, the ONE way production enters the tail: `iterate`
+            # wraps gate, measure and commit in it. The `call` shortcut this used to
+            # exercise was deleted as dead code — a lock proven through an API nothing
+            # ships with proves nothing about the shipped path.
             for _ in range(calls):
-                tail.call(_sha(0), work)
+                with tail.session(_sha(0)):
+                    work()
 
         runners = [threading.Thread(target=lane, name=f"t{i}") for i in range(threads)]
         for runner in runners:
@@ -549,12 +554,14 @@ class TheStalenessCheckHappensInsideTheLock(unittest.TestCase):
             return _sha(0)
 
         tail = pipeline.SerializedTail(head, lock=lock)
-        tail.call(_sha(0), lambda: "work")
-        tail.call(_sha(0), lambda: "work")
+        with tail.session(_sha(0)):
+            pass
+        with tail.session(_sha(0)):
+            pass
 
         self.assertEqual(len(held_at_each_read), 2,
-                         "the champion ref was not read once per tail call, so the "
-                         "staleness check is not running at all")
+                         "the champion ref was not read once per tail session, so "
+                         "the staleness check is not running at all")
         self.assertTrue(
             all(held_at_each_read),
             "the champion ref was read WITHOUT the tail lock held: between that read "
@@ -903,19 +910,34 @@ class ALaneMustNotDieSilently(unittest.TestCase):
 
     def test_an_unexpected_exception_becomes_a_recorded_outcome(self):
         recorded = []
+        draws = {"n": 0}
         workers = [pipeline.Worker("lane-0", Path("/w0"), Path("/b0"))]
+
+        def reset(worker):
+            draws["n"] += 1
+            return "base"
+
+        def flaky(worker):
+            # Faults on iterations 1 and 3, healthy null on 2: two containments are
+            # proven without ever presenting the consecutive streak that is now —
+            # correctly — the breaker's business (see ThePoolBreaker).
+            def gate(h, p):
+                if draws["n"] % 2:
+                    raise RuntimeError("git timed out")
+                return True, [gates.Verdict("compile", True)]
+            return gate
+
         outcomes = pipeline.run_pool(
             workers=workers,
             make_planner=lambda w: _Planner(), make_critic=lambda w: _Critic(),
-            build_context=dict,
-            make_gate=lambda w: (lambda h, p: (_ for _ in ()).throw(
-                RuntimeError("git timed out"))),
-            make_measure=lambda w: (lambda h, p: None),
+            build_context=dict, make_gate=flaky,
+            make_measure=lambda w: (lambda h, p: _comparison(0.02, floor=3.452)),
             commit=lambda *a: "x", champion_head=lambda: "base",
-            reset_to_champion=lambda w: "base", record=recorded.append,
+            reset_to_champion=reset, record=recorded.append,
             iterations=3)
         self.assertEqual(len(outcomes), 3, "the budget must be fully drawn")
-        self.assertTrue(all(o.status == "lane_error" for o in outcomes))
+        self.assertEqual([o.status for o in outcomes],
+                         ["lane_error", "measured_null", "lane_error"])
         self.assertIn("git timed out", " ".join(outcomes[0].reasons))
         # `format_exc()[-1500:]` keeps the INNERMOST frames, which are the
         # informative ones, so the "Traceback" header may be truncated away. Assert
@@ -1139,3 +1161,292 @@ class TheStopMustReachTheLanes(unittest.TestCase):
             iterations=None, should_stop=lambda: stop["now"])
         self.assertEqual(len(outcomes), 1,
                          "unbounded plus an ignored stop is a run that never ends")
+
+
+# ---------------------------------------------------------------- (h) the breaker
+
+
+class ThePoolBreaker(unittest.TestCase):
+    """N consecutive errored iterations ACROSS the pool stop the run and say why.
+
+    The breaker used to live only in `loop.run`, which only the (now deleted)
+    sequential CLI path called: `run_pool` at `--iterations 0` would spin forever
+    against a systematically broken setup — every build failing, say — which is
+    run-18-shaped waste with no brake. The count is pool-wide, not per-lane, because
+    a broken SETUP errors every lane; a fault belonging to one hypothesis is
+    interleaved with healthy outcomes and resets the count. Refusals, nulls,
+    supersessions and transients are the loop WORKING and must never trip it.
+    """
+
+    def _pool(self, *, lanes=1, iterations=None, gate=None, cap=40):
+        draws = {"n": 0}
+        draws_lock = threading.Lock()
+        recorded: list[loop.Outcome] = []
+        raised: list[BaseException] = []
+
+        def reset(worker):
+            with draws_lock:
+                draws["n"] += 1
+            return _sha(0)
+
+        def always_raise(worker):
+            return lambda h, p: (_ for _ in ()).throw(
+                RuntimeError("build toolchain broken"))
+
+        try:
+            pipeline.run_pool(
+                workers=_workers(lanes),
+                make_planner=lambda w: _Planner(), make_critic=lambda w: _Critic(),
+                build_context=dict,
+                make_gate=gate or always_raise,
+                make_measure=lambda w: (lambda h, p: _comparison(0.02, floor=3.452)),
+                commit=lambda *a: "x", champion_head=lambda: _sha(0),
+                reset_to_champion=reset, record=recorded.append,
+                iterations=iterations,
+                # A SAFETY NET for mutants only, never the mechanism: a breaker that
+                # does not trip would otherwise hang an unbounded pool forever.
+                should_stop=lambda: draws["n"] >= cap)
+        except loop.RunAborted as exc:
+            raised.append(exc)
+        return draws["n"], recorded, raised
+
+    def test_a_systematically_broken_unbounded_pool_stops_and_says_why(self):
+        """BROKEN READS: drawn == 40 (only the safety cap ended it) and raised == []."""
+        drawn, recorded, raised = self._pool()
+        self.assertEqual(drawn, pipeline.MAX_CONSECUTIVE_ERRORS,
+                         f"the pool drew {drawn} iterations against a setup that "
+                         f"errors every one of them")
+        self.assertEqual(len(raised), 1, "the run must end the way a crashed run "
+                                         "does, so run.py publishes `failed`")
+        message = str(raised[0])
+        self.assertIn("consecutive", message)
+        self.assertIn("setup", message)
+        self.assertIn("build toolchain broken", message,
+                      "the reason must carry the last fault, or the operator "
+                      "diagnoses a stopped run from nothing")
+        self.assertTrue(all(o.status == "lane_error" for o in recorded))
+
+    def test_the_count_is_pool_wide_not_per_lane(self):
+        """BROKEN READS (a per-lane counter): ~lanes x MAX errors recorded before
+        anything trips — a 7-lane run would pay 21 broken iterations, not 3."""
+        lanes = 3
+        drawn, recorded, raised = self._pool(lanes=lanes)
+        self.assertEqual(len(raised), 1)
+        self.assertLessEqual(
+            len(recorded), pipeline.MAX_CONSECUTIVE_ERRORS + lanes - 1,
+            f"{len(recorded)} errored iterations were paid for; a pool-wide count "
+            f"trips at {pipeline.MAX_CONSECUTIVE_ERRORS} plus at most one "
+            f"in-flight iteration per other lane")
+        self.assertGreaterEqual(len(recorded), pipeline.MAX_CONSECUTIVE_ERRORS)
+
+    def test_one_off_faults_reset_the_count(self):
+        """Ported from the sequential loop's breaker suite when the breaker moved
+        here. BROKEN READS (the reset arm deleted): RunAborted on the fifth
+        iteration and fewer than six outcomes."""
+        draws = {"n": 0}
+
+        def alternating(worker):
+            def gate(h, p):
+                if draws["n"] % 2:
+                    raise RuntimeError("every other iteration")
+                return True, [gates.Verdict("compile", True)]
+            return gate
+
+        recorded: list[loop.Outcome] = []
+
+        def reset(worker):
+            draws["n"] += 1
+            return _sha(0)
+
+        outcomes = pipeline.run_pool(
+            workers=_workers(1),
+            make_planner=lambda w: _Planner(), make_critic=lambda w: _Critic(),
+            build_context=dict, make_gate=alternating,
+            make_measure=lambda w: (lambda h, p: _comparison(0.02, floor=3.452)),
+            commit=lambda *a: "x", champion_head=lambda: _sha(0),
+            reset_to_champion=reset, record=recorded.append, iterations=6)
+        self.assertEqual(len(outcomes), 6, "alternating faults must not abort")
+        self.assertEqual(sum(1 for o in outcomes if o.status == "lane_error"), 3)
+
+    def test_refusals_are_the_loop_working_and_never_trip_it(self):
+        """BROKEN READS (statuses widened): RunAborted after three refusals — the
+        planner being told no is not the setup being broken."""
+
+        def refusing(worker):
+            return lambda h, p: (False, [gates.Verdict("compile", False,
+                                                       "does not apply")])
+
+        drawn, recorded, raised = self._pool(gate=refusing, iterations=8)
+        self.assertEqual(raised, [])
+        self.assertEqual(len(recorded), 8)
+        self.assertTrue(all(o.status == "refused_at_formation" for o in recorded))
+
+    def test_nulls_are_the_loop_working_and_never_trip_it(self):
+        def passing(worker):
+            return lambda h, p: (True, [gates.Verdict("compile", True)])
+
+        drawn, recorded, raised = self._pool(gate=passing, iterations=8)
+        self.assertEqual(raised, [])
+        self.assertEqual(len(recorded), 8)
+        self.assertTrue(all(o.status == "measured_null" for o in recorded))
+
+
+# ---------------------------------------------------------------- (i) drain tiers
+
+
+class _CountingActor:
+    """Planner and critic in one, counting every actor call and able to flip the
+    stop flag from inside a named call — the instant run 20's operator pressed STOP."""
+
+    def __init__(self, stop: dict, flip_inside: str = "") -> None:
+        self.stop, self.flip_inside = stop, flip_inside
+        self.calls = {"propose": 0, "review_hypothesis": 0, "author": 0,
+                      "review_patch": 0}
+
+    def _hit(self, name: str) -> None:
+        self.calls[name] += 1
+        if name == self.flip_inside:
+            self.stop["now"] = True
+
+    def propose(self, context):
+        self._hit("propose")
+        return _hypothesis()
+
+    def author(self, hypothesis, context):
+        self._hit("author")
+        return ("ggml/src/ggml-cuda/vecdotq.cuh",)
+
+    def review_hypothesis(self, hypothesis, context):
+        self._hit("review_hypothesis")
+        return loop.Review(True)
+
+    def review_patch(self, hypothesis, paths, context):
+        self._hit("review_patch")
+        return loop.Review(True)
+
+
+class AStopAbandonsFormationAtTheNextStageBoundary(unittest.TestCase):
+    """Run 20 spent ~50 minutes 'draining' with the GPU at 0% while seven lanes
+    politely completed multi-minute codex conversations for results nobody would
+    use; the operator had to order a kill. On stop, a lane that does NOT hold the
+    serialized tail abandons BEFORE its next actor call; only the lane holding the
+    tail finishes build → oracle → A/B → commit.
+    """
+
+    def _iterate(self, actor, stop, *, gate=None, measure=None, commit=None):
+        ran = {"gate": 0, "measure": 0, "commit": 0}
+
+        def default_gate(h, p):
+            ran["gate"] += 1
+            return True, [gates.Verdict("compile", True)]
+
+        def default_measure(h, p):
+            ran["measure"] += 1
+            return _comparison(0.05, floor=1.0)
+
+        def default_commit(h, p, c):
+            ran["commit"] += 1
+            return "abc1234"
+
+        outcome = loop.iterate(
+            planner=actor, critic=actor, context={},
+            measure=measure or default_measure, gate=gate or default_gate,
+            commit=commit or default_commit,
+            should_abandon=lambda: stop["now"])
+        return outcome, ran
+
+    def test_no_further_actor_call_is_drawn_after_a_stop_at_any_boundary(self):
+        """The mutation that matters most: drop any ONE of the boundary checks and
+        the stage after it still draws its multi-minute call. Counted per stage."""
+        downstream = {"propose": ("review_hypothesis", "author", "review_patch"),
+                      "review_hypothesis": ("author", "review_patch"),
+                      "author": ("review_patch",)}
+        for flip_inside, must_not_run in downstream.items():
+            with self.subTest(stop_lands_during=flip_inside):
+                stop = {"now": False}
+                actor = _CountingActor(stop, flip_inside=flip_inside)
+                outcome, ran = self._iterate(actor, stop)
+                self.assertEqual(outcome.status, "stopped_mid_formation")
+                for name in must_not_run:
+                    self.assertEqual(
+                        actor.calls[name], 0,
+                        f"a stop during {flip_inside} still drew {name}: that is "
+                        f"run 20's polite drain, one actor call at a time")
+                self.assertEqual(ran, {"gate": 0, "measure": 0, "commit": 0},
+                                 "an abandoned candidate must never reach the tail")
+        with self.subTest(stop_lands_during="the budget draw"):
+            # A stop that lands between the draw and the first planner call: the
+            # before-propose check is the only thing standing between it and one
+            # more multi-minute proposal.
+            stop = {"now": True}
+            actor = _CountingActor(stop)
+            outcome, ran = self._iterate(actor, stop)
+            self.assertEqual(outcome.status, "stopped_mid_formation")
+            self.assertEqual(actor.calls["propose"], 0,
+                             "a proposal was drawn after the stop")
+
+    def test_abandonment_is_neither_an_error_nor_a_refusal(self):
+        """The planner's memory must not read a drain as a verdict: a refusal row
+        teaches it the mechanism was tried and rejected, an error row feeds the
+        breaker. It is neither — the mechanism was never attempted."""
+        stop = {"now": False}
+        actor = _CountingActor(stop, flip_inside="propose")
+        outcome, _ = self._iterate(actor, stop)
+        self.assertEqual(outcome.status, "stopped_mid_formation")
+        self.assertNotIn(outcome.status,
+                         {"refused_at_formation", "measured_null", "lane_error",
+                          "iteration_error", "planner_transient", "superseded"})
+        row = outcome.to_attempt()
+        self.assertEqual(row["mechanism_id"], _hypothesis().mechanism_id,
+                         "name what was in flight, as refusal rows must")
+        self.assertIn("never attempted", row["reason"])
+        self.assertIsNone(outcome.comparison)
+
+    def test_a_lane_holding_the_tail_still_completes_its_measurement(self):
+        """The other direction, mutation-tested: a stop landing once formation is
+        DONE must not abandon — the actor spend is sunk, and the A/B banks it.
+        BROKEN READS (a check added inside the tail): stopped_mid_formation with
+        gate/measure/commit never run, throwing away a formed candidate."""
+        stop = {"now": False}
+        actor = _CountingActor(stop, flip_inside="review_patch")
+        outcome, ran = self._iterate(actor, stop)
+        self.assertEqual(outcome.status, "kept")
+        self.assertEqual(ran, {"gate": 1, "measure": 1, "commit": 1},
+                         "the tail must run to completion — never mid-A/B")
+
+    def test_the_pool_wires_the_stop_into_formation(self):
+        """End to end through `run_pool`: the same predicate that stops the budget
+        abandons formation. BROKEN READS (the `should_abandon=should_stop` wiring
+        dropped): the critic is called after the stop and the outcomes read
+        `measured_null`, exactly run 20's drain."""
+        stop = {"now": False}
+        critic_calls = {"n": 0}
+
+        class _StopOnPropose(_Planner):
+            def propose(self, context):
+                stop["now"] = True
+                return _hypothesis()
+
+        class _CountingCritic(_Critic):
+            def review_hypothesis(self, hypothesis, context):
+                critic_calls["n"] += 1
+                return loop.Review(True)
+
+        recorded: list[loop.Outcome] = []
+        outcomes = pipeline.run_pool(
+            workers=_workers(2),
+            make_planner=lambda w: _StopOnPropose(),
+            make_critic=lambda w: _CountingCritic(),
+            build_context=dict,
+            make_gate=lambda w: (lambda h, p: (True, [gates.Verdict("compile", True)])),
+            make_measure=lambda w: (lambda h, p: _comparison(0.02, floor=3.452)),
+            commit=lambda *a: "x", champion_head=lambda: _sha(0),
+            reset_to_champion=lambda w: _sha(0), record=recorded.append,
+            iterations=None, should_stop=lambda: stop["now"])
+        self.assertEqual(critic_calls["n"], 0,
+                         "an actor call was drawn after the stop")
+        self.assertTrue(outcomes, "at least one lane was mid-formation at the stop")
+        self.assertTrue(all(o.status == "stopped_mid_formation" for o in outcomes),
+                        f"got {[o.status for o in outcomes]}")
+        self.assertEqual(len(recorded), len(outcomes),
+                         "abandonments must be recorded like any other outcome")

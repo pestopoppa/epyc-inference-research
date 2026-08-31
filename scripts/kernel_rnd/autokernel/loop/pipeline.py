@@ -64,22 +64,26 @@ from . import loop as loop_mod
 #: sequential WITHIN an iteration by construction.
 DEFAULT_WORKERS = 7
 
+#: Consecutive errored iterations ACROSS the whole pool -- not per lane -- before the
+#: run gives up. Moved here from `loop.py` when the sequential CLI path was deleted:
+#: an unbraked `--iterations 0` pool against a systematically broken setup (every
+#: build failing, say) would spin forever, which is run-18-shaped waste with no brake.
+#: One-off faults reset the count. Refusals, nulls, supersessions, transients and
+#: mid-formation stops are NOT errors and never trip it -- they are the loop working.
+MAX_CONSECUTIVE_ERRORS = 3
+
 
 class Superseded(loop_mod.TailRefused):
     """The champion advanced while this candidate was being authored.
 
     Extends the loop's TailRefused so `iterate` catches it where the hypothesis is
-    still in scope and carries it out. A formed-but-unmeasured candidate is a QUEUE
-    ENTRY, not a loss: its patch may still help against the champion that displaced
-    it, and the planner is told to look at these first.
+    still in scope and carries it out (as `self.hypothesis`; both heads are named in
+    the message). A formed-but-unmeasured candidate is a QUEUE ENTRY, not a loss: its
+    patch may still help against the champion that displaced it, and the planner is
+    told to look at these first.
     """
 
-    def __init__(self, message: str, *, base_head: str = "",
-                 champion_head: str = "") -> None:
-        super().__init__(message)
-        self.base_head = base_head
-        self.champion_head = champion_head
-        self.hypothesis = None
+    hypothesis = None
 
 
 @dataclass
@@ -141,8 +145,7 @@ class SerializedTail:
             raise Superseded(
                 f"formed against {base_head[:12]}, champion advanced to "
                 f"{current[:12]} before it could be measured — NOT refuted, and not "
-                f"a failure of the science: reconsider it against the new champion",
-                base_head=base_head, champion_head=current)
+                f"a failure of the science: reconsider it against the new champion")
 
     @contextmanager
     def session(self, base_head: str, clock=None):
@@ -163,24 +166,6 @@ class SerializedTail:
             finally:
                 self.tail_seconds += clock() - started
 
-    def call(self, base_head: str, work: Callable[[], Any], clock=None) -> Any:
-        """Run one tail step exclusively, refusing a candidate whose base has moved.
-
-        Everything that contends goes through here: the build (64 of the 88 lane
-        cores), the op oracle and the A/B (the one GPU), and the champion commit (a
-        branch two workers must never advance at once).
-        """
-        import time as _time
-        clock = clock or _time.monotonic
-        with self._lock:
-            self._check_base(base_head)
-            started = clock()
-            try:
-                return work()
-            finally:
-                self.tail_seconds += clock() - started
-
-
 def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_context,
              make_gate, make_measure, commit, champion_head: Callable[[], str],
              reset_to_champion: Callable[[Worker], str],
@@ -199,6 +184,33 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
     outcomes: list[loop_mod.Outcome] = []
     outcomes_lock = threading.Lock()
     aborted: list[BaseException] = []
+    consecutive_errors = [0]
+
+    def keep(outcome: loop_mod.Outcome) -> None:
+        """Append, record, and arm THE breaker -- one place, under one lock.
+
+        The count is pool-wide because the thing it detects is pool-wide: a broken
+        SETUP errors every lane, while a fault that belongs to one hypothesis is
+        interleaved with other lanes' healthy outcomes and resets the count. Tripping
+        zeroes the budget so every lane stops at its next draw, and the `RunAborted`
+        re-raised after the join makes the run exit non-zero, publishing why --
+        exactly the anchor-guard abort's path.
+        """
+        with outcomes_lock:
+            outcomes.append(outcome)
+            record(outcome)
+            if outcome.status in ("lane_error", "iteration_error"):
+                consecutive_errors[0] += 1
+                if consecutive_errors[0] >= MAX_CONSECUTIVE_ERRORS and not aborted:
+                    budget.remaining = 0
+                    aborted.append(loop_mod.RunAborted(
+                        f"{consecutive_errors[0]} consecutive iterations failed "
+                        f"across the pool (last: "
+                        f"{outcome.reasons[0] if outcome.reasons else 'unknown'}); "
+                        f"the setup is broken, not any one hypothesis — stopping "
+                        f"rather than spending the budget re-proving it"))
+            else:
+                consecutive_errors[0] = 0
 
     def lane(worker: Worker) -> None:
         planner, critic = make_planner(worker), make_critic(worker)
@@ -210,14 +222,11 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
             try:
                 base = reset_to_champion(worker)
             except Exception as exc:      # noqa: BLE001
-                with outcomes_lock:
-                    outcome = loop_mod.Outcome(
-                        "lane_error", None,
-                        [f"lane {worker.name} could not reach the champion: "
-                         f"{type(exc).__name__}: {exc}",
-                         traceback.format_exc()[-1500:]])
-                    outcomes.append(outcome)
-                    record(outcome)
+                keep(loop_mod.Outcome(
+                    "lane_error", None,
+                    [f"lane {worker.name} could not reach the champion: "
+                     f"{type(exc).__name__}: {exc}",
+                     traceback.format_exc()[-1500:]]))
                 continue
 
             # All three run INSIDE one `tail.session`, so they need no lock of their
@@ -237,10 +246,16 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
                     on_step(_w.name, label)
 
             try:
+                # `should_abandon` is the stop predicate itself: once a stop is asked,
+                # a lane still FORMING abandons at its next stage boundary instead of
+                # completing multi-minute actor calls for results nobody will use
+                # (run 20 drained for ~50 min at 0% GPU that way). A lane holding the
+                # tail is unaffected -- `iterate` never polls inside the tail session.
                 outcome = loop_mod.iterate(
                     planner=planner, critic=critic, context=build_context(),
                     measure=measure, gate=gate, commit=commit_one, on_step=step,
-                    tail_session=lambda _b=base: tail.session(_b))
+                    tail_session=lambda _b=base: tail.session(_b),
+                    should_abandon=should_stop)
             except Superseded as exc:
                 # `iterate` already converted this into an Outcome carrying the
                 # hypothesis; reaching here means it escaped before one was formed.
@@ -264,9 +279,7 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
                     "lane_error", None,
                     [f"lane {worker.name}: {type(exc).__name__}: {exc}",
                      traceback.format_exc()[-1500:]])
-            with outcomes_lock:
-                outcomes.append(outcome)
-                record(outcome)
+            keep(outcome)
 
     threads = [threading.Thread(target=lane, args=(w,), name=w.name, daemon=True)
                for w in workers]
@@ -282,5 +295,5 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
     return outcomes
 
 
-__all__ = ["Budget", "DEFAULT_WORKERS", "SerializedTail", "Superseded", "Worker",
-           "run_pool"]
+__all__ = ["Budget", "DEFAULT_WORKERS", "MAX_CONSECUTIVE_ERRORS", "SerializedTail",
+           "Superseded", "Worker", "run_pool"]

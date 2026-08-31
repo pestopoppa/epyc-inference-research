@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""DRAFT — the concurrent path's real-world wiring: git worktrees, refs, timing.
+"""The concurrent path's real-world wiring: git worktrees, refs, timing.
 
 `pipeline` is pure control flow with every side effect injected. This module is the
 other half: it turns a lane number into a real detached worktree with its own build
 directory, turns "advance the champion" into an atomic ref update, and fixes the
 accounting that only made sense with one lane.
 
-OPT-IN AND REVERSIBLE. `run.py --workers 1` is today's sequential path, byte for byte;
-nothing in this module is reached. `--workers N` is the only way in.
+THE run path since 2026-08-31: `run.py` deleted its separate sequential wiring once
+the pool owned the consecutive-error breaker, so every run — `--workers 1` included —
+goes through here. (`loop.run` survives only as a test seam.)
 
 THE CHAMPION IS A BRANCH IN A WORKTREE
 --------------------------------------
@@ -22,11 +23,10 @@ five lanes mid-run. A lane whose directory is momentarily absent (a stale NFS ha
 a lane being re-provisioned) is indistinguishable to `prune` from a lane that is gone
 for good, and `prune` resolves that ambiguity by deleting. Nothing here calls either.
 
-NOT SAFE TO RUN BESIDE A SEQUENTIAL RUN. `advance_champion` resets the champion tree,
-so a `--workers N` run and a `--workers 1` run must never hold the same champion tree
-at once. In practice the GPU claim already enforces this -- both paths run under one
-`claim.hold()` -- but the claim is about the device and this is about the tree, so it
-is stated rather than inferred.
+ONE RUN PER CHAMPION TREE. `advance_champion` resets the champion tree, so two runs
+must never hold the same champion tree at once. In practice the GPU claim already
+enforces this -- every run holds one `claim.hold()` -- but the claim is about the
+device and this is about the tree, so it is stated rather than inferred.
 """
 from __future__ import annotations
 

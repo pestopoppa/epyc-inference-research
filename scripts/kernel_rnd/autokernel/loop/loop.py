@@ -38,10 +38,16 @@ from . import archive, bench, gates
 
 HYPOTHESIS_ROUNDS = 3
 PATCH_ROUNDS = 2
-#: Consecutive failed iterations before the run gives up. One-off faults reset the
-#: count; this only trips when something about the SETUP is broken, and then it stops
-#: rather than spending the rest of the budget re-proving it.
-MAX_CONSECUTIVE_ERRORS = 3
+
+#: NOT an error and NOT a refusal. The run was told to stop while this candidate was
+#: still forming, so the lane abandons rather than drawing further actor calls for a
+#: result nobody will use (run 20: ~50 min of "draining" with the GPU at 0% while
+#: seven lanes politely completed codex conversations). The planner's memory must
+#: read this as "never attempted" -- neither a verdict on the mechanism nor a refusal
+#: of it.
+STOPPED_MID_FORMATION = (
+    "run stop requested while this candidate was still forming; abandoned before "
+    "the next actor call. No verdict on the mechanism — it was never attempted")
 
 
 class RunAborted(RuntimeError):
@@ -190,8 +196,16 @@ def iterate(*, planner: Planner, critic: Critic,
             hypothesis_rounds: int = HYPOTHESIS_ROUNDS,
             patch_rounds: int = PATCH_ROUNDS,
             on_step: Callable[[str], None] | None = None,
-            tail_session: Callable[[], Any] = nullcontext) -> Outcome:
-    """One full turn. Pure control flow: every side effect is an injected callable."""
+            tail_session: Callable[[], Any] = nullcontext,
+            should_abandon: Callable[[], bool] | None = None) -> Outcome:
+    """One full turn. Pure control flow: every side effect is an injected callable.
+
+    `should_abandon` is the DRAIN TIER for a lane that does not hold the serialized
+    tail: polled at every stage boundary of FORMATION (before each planner call,
+    critic pass and authoring turn), and never inside the tail — a candidate that
+    reaches the tail finishes build → oracle → A/B → commit exactly as before, so a
+    stop can never kill a measurement mid-A/B.
+    """
     working = dict(context)
     hypothesis_reasons: list[str] = []
 
@@ -201,7 +215,8 @@ def iterate(*, planner: Planner, critic: Critic,
                         gate=gate, commit=commit,
                         hypothesis_rounds=hypothesis_rounds,
                         patch_rounds=patch_rounds, on_step=_safe_step(on_step),
-                        tail_session=tail_session)
+                        tail_session=tail_session,
+                        should_abandon=should_abandon or (lambda: False))
     except TailRefused as exc:
         # The candidate was formed and never measured. Carry the hypothesis: the
         # patch may well still help against the champion that displaced it, and the
@@ -228,15 +243,28 @@ def iterate(*, planner: Planner, critic: Critic,
 
 def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, commit,
              hypothesis_rounds, patch_rounds, on_step=lambda _label: None,
-             tail_session=nullcontext) -> Outcome:
+             tail_session=nullcontext,
+             should_abandon=lambda: False) -> Outcome:
     last_proposed: Hypothesis | None = None
+
+    def stopped() -> Outcome:
+        # Names whatever was in flight, exactly as a refusal row must.
+        return Outcome("stopped_mid_formation", last_proposed,
+                       [STOPPED_MID_FORMATION])
+
     for _ in range(hypothesis_rounds):
+        # Polled BEFORE each actor call, never after: the whole point is that no
+        # further multi-minute call is drawn once the run has been told to stop.
+        if should_abandon():
+            return stopped()
         working["prior_hypothesis_rejections"] = list(hypothesis_reasons)
         on_step("proposing a hypothesis")
         hypothesis = planner.propose(working)
         last_proposed = hypothesis
 
         # ---- CRITIC PASS 1: the hypothesis, before any patch exists ----------
+        if should_abandon():
+            return stopped()
         on_step("critic pass 1: reviewing the hypothesis")
         verdict = critic.review_hypothesis(hypothesis, working)
         if not verdict.accepted:
@@ -246,11 +274,15 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
 
         patch_reasons: list[str] = []
         for _ in range(patch_rounds):
+            if should_abandon():
+                return stopped()
             working["prior_patch_rejections"] = list(patch_reasons)
             on_step("authoring the patch")
             paths = planner.author(hypothesis, working)
 
             # ---- CRITIC PASS 2: the diff, BEFORE the build ------------------
+            if should_abandon():
+                return stopped()
             on_step("critic pass 2: reviewing the diff")
             patch_verdict = critic.review_patch(hypothesis, paths, working)
             if not patch_verdict.accepted:
@@ -317,43 +349,34 @@ def run(*, planner: Planner, critic: Critic, build_context: Callable[[], dict],
         measure: Callable[..., bench.Comparison],
         gate: Callable[..., tuple[bool, list[gates.Verdict]]],
         commit: Callable[..., str], store_root: Path, epoch: str,
-        campaign_id: str, iterations: int | None,
-        should_stop: Callable[[], bool] | None = None,
-        on_iteration: Callable[[list["Outcome"]], None] | None = None,
-        reset: Callable[[], None] | None = None,
-        on_step: Callable[[str], None] | None = None
+        campaign_id: str, iterations: int,
+        on_iteration: Callable[[list["Outcome"]], None] | None = None
         ) -> list[Outcome]:
     """Drive `iterate` and persist every outcome, kept or not.
+
+    TEST-ONLY SEAM since 2026-08-31: every production run drives `pipeline.run_pool`
+    (via `run.py`, `--workers` >= 1 all pooled), and the sequential CLI path that
+    called this was deleted. It survives because `test_loop`, `test_anchor` and
+    `test_production` drive the real anchor-guard and headline composition through
+    it with fakes — a driver those suites can hold still. It shrank to what those
+    suites use: the consecutive-error BREAKER moved to `pipeline.run_pool`
+    (`pipeline.MAX_CONSECUTIVE_ERRORS`) — the pool owns the real one, and this seam
+    only contains single-iteration faults without counting them — and the
+    `should_stop` / `reset` / `on_step` hooks went with the CLI path (the pool's
+    equivalents are `Budget.should_stop` + `should_abandon`, `reset_to_champion`
+    and the lane-labelled `on_step`).
 
     `on_iteration` fires after EVERY iteration, including refused and transient ones.
     Publishing status is not the loop's concern, but a loop that only reports when it
     succeeds is indistinguishable from one that is stuck -- which is what "STOPPED,
     authoring/build are event-silent by design" looked like on the old dashboard.
-
-    `reset` runs BEFORE each iteration and returns the worktree to the champion.
-    Without it a failed authoring attempt leaves its edits behind, and the next
-    iteration's "the worktree actually changed" ground-truth check is satisfied by the
-    PREVIOUS iteration's leftovers -- a check that passes without the thing it checks
-    for having happened. Injected rather than done here so the loop stays free of git.
     """
     outcomes: list[Outcome] = []
-    consecutive_errors = 0
-    drawn = 0
-    while True:
-        # `iterations=None` runs until stopped. Checked at the BOUNDARY so a stop
-        # never interrupts a measurement that has already spent device time.
-        if should_stop is not None and should_stop():
-            break
-        if iterations is not None and drawn >= iterations:
-            break
-        drawn += 1
+    for _ in range(iterations):
         try:
-            if reset is not None:
-                reset()
             outcome = iterate(planner=planner, critic=critic,
                               context=build_context(), measure=measure, gate=gate,
-                              commit=commit, on_step=on_step)
-            consecutive_errors = 0
+                              commit=commit)
         except RunAborted:
             # NEVER an iteration fault, so it must not be laundered into one: the
             # blanket handler below would record it as `iteration_error` and draw the
@@ -366,26 +389,11 @@ def run(*, planner: Planner, critic: Critic, build_context: Callable[[], dict],
             # ten iterations, a profile and a held device to a single SIGKILLed
             # benchmark; before that, a codex 401 took down 284 attempts. The
             # iteration is the unit of failure, and the run is what has to survive.
-            #
-            # A blanket catch that merely swallowed would be worse than the crash --
-            # it would burn a whole budget silently against a broken setup. So the
-            # traceback is recorded in full, and CONSECUTIVE failures trip a breaker:
-            # unrelated one-off faults reset the count, a systematically broken run
-            # stops and says why.
-            consecutive_errors += 1
+            # The traceback is recorded in full so containment cannot hide the fault;
+            # the consecutive-failure BREAKER is the pool's (`pipeline.run_pool`).
             outcome = Outcome("iteration_error", None,
                               [f"{type(exc).__name__}: {exc}",
                                traceback.format_exc()[-1500:]])
-            if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
-                archive.record(store_root, outcome.to_attempt(), epoch=epoch,
-                               recorded_at=_now(), campaign_id=campaign_id)
-                outcomes.append(outcome)
-                raise RunAborted(
-                    f"{consecutive_errors} consecutive iterations failed; the last "
-                    f"was {type(exc).__name__}: {exc}. Something is broken about the "
-                    f"setup rather than about any one hypothesis, and continuing "
-                    f"would spend the remaining budget proving it repeatedly"
-                ) from exc
         archive.record(store_root, outcome.to_attempt(), epoch=epoch,
                        recorded_at=_now(), campaign_id=campaign_id)
         outcomes.append(outcome)
@@ -397,5 +405,6 @@ def run(*, planner: Planner, critic: Critic, build_context: Callable[[], dict],
     return outcomes
 
 
-__all__ = ["ActorTransient", "TailRefused", "MAX_CONSECUTIVE_ERRORS", "RunAborted", "Critic", "HYPOTHESIS_ROUNDS", "Hypothesis", "Outcome", "PATCH_ROUNDS",
-           "Planner", "Review", "iterate", "run"]
+__all__ = ["ActorTransient", "TailRefused", "RunAborted", "Critic",
+           "HYPOTHESIS_ROUNDS", "Hypothesis", "Outcome", "PATCH_ROUNDS",
+           "Planner", "Review", "STOPPED_MID_FORMATION", "iterate", "run"]

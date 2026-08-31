@@ -301,43 +301,11 @@ class ProviderTransientsEndAnIterationNotTheRun(unittest.TestCase):
         self.assertEqual([o.status for o in outcomes], ["planner_transient"] * 3)
 
 
-class TheTreeIsResetBeforeEachIteration(unittest.TestCase):
-    """A failed authoring attempt must not satisfy the NEXT iteration's ground truth.
-
-    Run 5 ended with `mmq.cu` still modified by an attempt that never passed. The
-    worktree check asks "did the actor actually change something", and a leftover
-    answers yes on the previous iteration's behalf -- a check that passes without the
-    thing it checks for having happened.
-    """
-
-    def _planner(self):
-        planner = mock.Mock()
-        planner.propose.side_effect = loop.ActorTransient("no hypothesis")
-        return planner
-
-    def test_reset_runs_before_every_iteration(self):
-        order = []
-        planner = self._planner()
-        planner.propose.side_effect = lambda ctx: order.append("propose") or (_ for _ in ()).throw(
-            loop.ActorTransient("no hypothesis"))
-        with tempfile.TemporaryDirectory() as tmp:
-            loop.run(planner=planner, critic=mock.Mock(),
-                         build_context=dict, measure=mock.Mock(), gate=mock.Mock(),
-                         commit=mock.Mock(), store_root=Path(tmp), epoch="e" * 64,
-                         campaign_id="ak-loop", iterations=3,
-                         reset=lambda: order.append("reset"))
-        self.assertEqual(order, ["reset", "propose"] * 3,
-                         "every iteration must start from the champion, not from "
-                         "the previous attempt's leftovers")
-
-    def test_the_loop_still_runs_without_a_reset_hook(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            outcomes = loop.run(
-                planner=self._planner(), critic=mock.Mock(), build_context=dict,
-                measure=mock.Mock(), gate=mock.Mock(), commit=mock.Mock(),
-                store_root=Path(tmp), epoch="e" * 64, campaign_id="ak-loop",
-                iterations=2)
-        self.assertEqual(len(outcomes), 2)
+# `TheTreeIsResetBeforeEachIteration` was deleted with the sequential CLI path: the
+# reset-before-every-iteration property now lives where production runs it —
+# `pool.reset_to_champion` at the top of every `run_pool` lane — and is pinned by
+# `test_pipeline.NoLaneMayDieOutsideTheTry` plus the staleness tests, which need the
+# reset's returned base to pass at all.
 
 
 class ARefusalNamesWhatWasRefused(unittest.TestCase):
@@ -371,7 +339,7 @@ class TheEnforcedFloorNeverSitsBelowTheMeasuredOne(unittest.TestCase):
 
     def test_every_enforced_floor_is_at_or_above_its_measured_row(self):
         from autokernel.loop import run as run_mod
-        for surface in run_mod.SINGLE_PAIR_P95:
+        for surface in bench.MEASURED_FLOOR_PCT:
             for pair_count in (5, 9):
                 enforced = run_mod.noise_floor_pct(surface, pair_count)
                 measured = bench.MEASURED_FLOOR_PCT[surface][pair_count]
@@ -467,9 +435,10 @@ class NoSingleIterationMayEndTheRun(unittest.TestCase):
     benchmark. Before that a codex 401 took down 284 attempts. The iteration is the
     unit of failure; the run is what has to survive.
 
-    A blanket catch that merely swallowed would be worse than the crash -- it would
-    spend a whole budget silently against a broken setup -- so the traceback is kept
-    and consecutive failures trip a breaker.
+    A blanket catch that merely swallowed would be worse than the crash, so the
+    traceback is kept. The consecutive-failure BREAKER belongs to the production
+    path — `pipeline.run_pool` — and is tested in `test_pipeline.py`
+    (`ThePoolBreaker`); this seam only contains and records.
     """
 
     def _run(self, measure, iterations=5):
@@ -500,22 +469,3 @@ class NoSingleIterationMayEndTheRun(unittest.TestCase):
             lambda h, p: (_ for _ in ()).throw(RuntimeError("boom")), iterations=1)
         self.assertIn("Traceback", " ".join(outcomes[0].reasons),
                       "a swallowed exception is worse than the crash it replaced")
-
-    def test_one_off_faults_do_not_trip_the_breaker(self):
-        calls = {"n": 0}
-
-        def measure(hypothesis, paths):
-            calls["n"] += 1
-            if calls["n"] % 2:
-                raise OSError("every other one")
-            return _comparison(0.05, floor=1.0)
-
-        outcomes = self._run(measure, iterations=6)
-        self.assertEqual(len(outcomes), 6, "alternating faults must not abort")
-
-    def test_a_systematically_broken_run_stops_and_says_why(self):
-        with self.assertRaises(loop.RunAborted) as caught:
-            self._run(lambda h, p: (_ for _ in ()).throw(OSError("always")),
-                      iterations=20)
-        self.assertIn("consecutive", str(caught.exception))
-        self.assertIn("setup", str(caught.exception))

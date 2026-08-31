@@ -191,12 +191,15 @@ class TheAnchorMustAdvanceWithTheChampion(unittest.TestCase):
 
     def test_it_advances_only_after_the_commit_succeeds(self):
         """An anchor advanced for a patch that did not land would silently raise the
-        bar for everything after it."""
+        bar for everything after it. Since the sequential path's deletion the one
+        commit is `commit_pooled`: the champion ref moves, THEN the anchor builds."""
         source = self._source()
-        block = source.split("def commit(hypothesis, paths, comparison):", 1)[1][:900]
-        self.assertIn("archive.keep", block)
+        block = source.split(
+            "def commit_pooled(worker, hypothesis, paths, comparison)", 1)[1][:1400]
+        self.assertIn("advance_champion", block)
         self.assertIn("promote_anchor", block)
-        self.assertLess(block.index("archive.keep"), block.index("promote_anchor("),
+        self.assertLess(block.index("advance_champion"),
+                        block.index("promote_anchor("),
                         "promotion must follow the commit, never precede it")
 
     def test_the_promoted_build_is_BUILT_in_the_anchor_slot(self):

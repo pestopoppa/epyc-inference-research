@@ -36,10 +36,6 @@ def _git(repo: Path, *args: str, check: bool = True) -> str:
     return done.stdout.strip()
 
 
-def champion_head(repo: Path, branch: str) -> str:
-    return _git(repo, "rev-parse", branch)
-
-
 def keep(repo: Path, *, branch: str, message: str, paths: tuple[str, ...]) -> str:
     """Commit an accepted patch onto the champion branch, and return the new head.
 
@@ -53,7 +49,7 @@ def keep(repo: Path, *, branch: str, message: str, paths: tuple[str, ...]) -> st
     if not staged:
         raise RatchetRefused("nothing staged; the patch produced no committable change")
     _git(repo, "commit", "-q", "-m", message)
-    return champion_head(repo, "HEAD")
+    return _git(repo, "rev-parse", "HEAD")
 
 
 def record(store_root: Path, attempt: Mapping[str, Any], *, epoch: str,
@@ -91,4 +87,4 @@ def epoch_for(*, anchor_commit: str, build_recipe: Mapping[str, Any],
                                     host_state=host_state)
 
 
-__all__ = ["RatchetRefused", "champion_head", "epoch_for", "keep", "recall", "record"]
+__all__ = ["RatchetRefused", "epoch_for", "keep", "recall", "record"]

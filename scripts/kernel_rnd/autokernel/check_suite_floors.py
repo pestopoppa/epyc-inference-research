@@ -72,7 +72,19 @@ SUITE_FLOORS: dict[str, tuple[int, tuple[str, ...]]] = {
     # asserted) and the live-resolved frozen-production baseline
     # (`loop/production.py`, 8 new tests including a real promotion driven through a
     # temp frozen tree). Both mutation-tested in both directions.
-    "the loop package": (304, ("scripts/kernel_rnd/autokernel/loop/",)),
+    # 304 -> 309 on 2026-08-31: the sequential CLI path deletion. FOUR tests deleted,
+    # each because its subject moved into the pool rather than because it was
+    # inconvenient: the two `loop.run` breaker tests (the consecutive-error breaker
+    # moved to `pipeline.run_pool`, re-pinned there by five `ThePoolBreaker` tests
+    # covering pool-wide counting, reset-on-success and the never-trip statuses) and
+    # the two `TheTreeIsResetBeforeEachIteration` tests (the reset hook left the
+    # test-only `loop.run` seam; the property lives in `pool.reset_to_champion` at
+    # the top of every lane, which the pool's staleness and containment suites
+    # cannot pass without). NINE added: the five above plus four drain-tier tests
+    # (`AStopAbandonsFormationAtTheNextStageBoundary`) pinning that a stop abandons
+    # formation before the next actor call while a lane in the serialized tail
+    # still completes. Net +5, floor level with the observed count.
+    "the loop package": (309, ("scripts/kernel_rnd/autokernel/loop/",)),
 }
 
 _COLLECTED = re.compile(r"(\d+) tests? collected")

@@ -26,10 +26,6 @@ from ..controller import build_recipe, workload_contract
 from . import (actors, anchor, archive, bench, champion, claim, gates, hotspots, loop,
                pipeline, pool, production, status)
 
-#: Single-pair p95, measured 2026-08-28 over n=20 alternating A/A pairs. Prefill is
-#: the cheaper surface to detect on; decode has heavier tails.
-SINGLE_PAIR_P95 = {"pp512": 2.175, "tg128": 3.452}
-
 
 def noise_floor_pct(surface: str, pairs: int) -> float:
     """The bar for THIS run, scaled to the pairs actually being run.
@@ -41,22 +37,25 @@ def noise_floor_pct(surface: str, pairs: int) -> float:
 
     Returns the MAX of two bounds, because neither dominates:
 
-      * sigma/sqrt(n), the parametric bound. Conservative where the tail is light.
-      * the exhaustively MEASURED floor for that pair count (`bench.MEASURED_FLOOR_PCT`).
+      * sigma/sqrt(n), the parametric bound, seeded from the MEASURED single-pair p95
+        (`bench.MEASURED_FLOOR_PCT[surface][1]` -- the same exhaustive A/A table, so
+        there is exactly ONE copy of that number and nothing to drift; a byte-copy of
+        the k=1 column used to live here with nothing enforcing agreement).
+        Conservative where the tail is light.
+      * the exhaustively MEASURED floor for that pair count, taking the largest
+        measured row at or below it -- more pairs only ever lower the floor, so that
+        is the conservative choice. `max(...)` never sees an empty sequence: the
+        table carries a k=1 row (the parametric seed) and `pairs` is clamped to >= 1.
 
     Decode does not average down at sqrt(n): its measured floor goes 3.452 -> 1.502 (5)
     -> 1.175 (9), while sqrt(n) predicts 1.544 -> 1.151. So at 9 pairs the parametric
     bound sits BELOW what the instrument actually resolves, and using it alone would let
     pure noise clear the bar. The guard test caught exactly this.
-
-    For a pair count with no measured row, the largest measured row at or below it is
-    used -- more pairs only ever lower the floor, so that is the conservative choice.
     """
     pairs = max(1, pairs)
-    parametric = SINGLE_PAIR_P95[surface] / (pairs ** 0.5)
     rows = bench.MEASURED_FLOOR_PCT[surface]
-    usable = [count for count in rows if count <= pairs]
-    measured = rows[max(usable)] if usable else rows[min(rows)]
+    parametric = rows[1] / (pairs ** 0.5)
+    measured = rows[max(count for count in rows if count <= pairs)]
     return max(parametric, measured)
 
 
@@ -90,15 +89,15 @@ def main(argv: list[str] | None = None) -> int:
     # Proceed (loudly) on a hand-built anchor that carries no provenance.json;
     # anchor-gen-* dirs never need or honour this.
     parser.add_argument("--allow-unverified-anchor", action="store_true")
-    parser.add_argument("--candidate-build", type=Path,
-                        default=Path("/mnt/raid0/llm/tmp/build-candidate-loop"))
     parser.add_argument("--model", type=Path, required=True)
     parser.add_argument("--store", type=Path, required=True)
     parser.add_argument("--iterations", type=int, default=10,
                         help="0 means run CONTINUOUSLY until stopped: drop a STOP "
-                             "file in the store, or send SIGTERM/SIGINT. Either is "
-                             "honoured at the next iteration boundary, so a lane "
-                             "holding the device finishes and publishes first.")
+                             "file in the store, or send SIGTERM/SIGINT. On a stop, "
+                             "a lane still FORMING abandons at its next stage "
+                             "boundary (no further planner/critic call is drawn); "
+                             "the lane holding the serialized tail finishes "
+                             "build/oracle/A-B/commit and publishes first.")
     parser.add_argument("--pairs", type=int, default=bench.MIN_PAIRS)
     parser.add_argument("--surface", choices=("pp512", "tg128"), default="pp512")
     parser.add_argument("--out", type=Path)
@@ -112,10 +111,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--rank-prior-experiments", action="store_true",
                         help="P-AK-SEARCH-1-A3: order recalled records by merit "
                              "instead of recency, cross-epoch magnitudes redacted")
-    # ---- concurrency (DRAFT). 1 is today's sequential path, unchanged. ----------
-    parser.add_argument("--workers", type=int, default=1,
-                        help="concurrent lanes; 1 (default) is the sequential path "
-                             "and reaches none of the pooled code")
+    # ---- concurrency. EVERY run is pooled; --workers 1 is a one-lane pool. The
+    # separate sequential path was deleted 2026-08-31 once the pool owned the
+    # consecutive-error breaker -- two run paths were two things to drift.
+    parser.add_argument("--workers", type=int, default=pipeline.DEFAULT_WORKERS,
+                        help="concurrent lanes (default: the measured tail-saturation "
+                             "point; see pipeline.DEFAULT_WORKERS)")
     parser.add_argument("--worker-root", type=Path, default=pool.WORKER_ROOT,
                         help="parent of the per-lane detached worktrees")
     parser.add_argument("--worker-build-root", type=Path,
@@ -154,24 +155,6 @@ def main(argv: list[str] | None = None) -> int:
         print("\nDRY RUN — wiring proven, nothing spent.")
         return 0
 
-    planner = actors.CodexPlanner(workspace=args.worktree)
-    critic = actors.CodexCritic(workspace=args.worktree)
-
-    #: Wall seconds per phase, accumulated across the run. The loop is ~84% NOT
-    #: benchmarking (run 11: 11.9 of 75.1 min on device), and until now nothing
-    #: recorded WHICH phase held the rest -- turn_recorded_at is stamped at write
-    #: time, so per-iteration gaps all read 0.0. You cannot shorten what you have
-    #: not measured.
-    phase_seconds: dict[str, float] = {}
-    phase_mark: list = [None, None]
-
-    def note_phase(label: str) -> None:
-        previous, started = phase_mark
-        if previous is not None:
-            phase_seconds[previous] = phase_seconds.get(previous, 0.0) + (
-                time.monotonic() - started)
-        phase_mark[0], phase_mark[1] = label, time.monotonic()
-
     def read_inbox() -> list[str]:
         """Re-read every iteration, not once at startup.
 
@@ -195,15 +178,10 @@ def main(argv: list[str] | None = None) -> int:
             "inbox": read_inbox(),
         }
 
-    #: The sequential run is one lane. Making it a `Worker` is what lets the gate,
-    #: the measurement and the patch archive be written ONCE and used by both paths --
-    #: a second copy of the build recipe wiring is a second thing to drift.
-    solo = pipeline.Worker("solo", args.worktree, args.candidate_build)
-
     def keep_the_diff(worker, hypothesis) -> Path | None:
         """Preserve every candidate patch, kept or not.
 
-        `reset_tree` returns the worktree to the champion before the next iteration, so
+        `pool.reset_to_champion` returns a lane to the champion before each iteration, so
         a refused patch exists nowhere afterwards. Run 9 lost all ten: seven died on
         `MUL_MAT failed on ROCm0` and not one of them can now be reproduced, re-read or
         diagnosed. A negative written up without its diff is not evidence anyone can
@@ -274,23 +252,6 @@ def main(argv: list[str] | None = None) -> int:
                 args.model, pp=pp, tg=tg, pairs=args.pairs, noise_floor_pct=floor)
         return measure
 
-    gate = gate_for(solo)
-    measure = measure_for(solo)
-
-    def reset_tree() -> None:
-        """Return the candidate tree to the champion before each iteration.
-
-        Run 5 left `mmq.cu` modified by an authoring attempt that never passed, so the
-        next iteration's worktree ground-truth check would have been satisfied by that
-        leftover rather than by anything the planner did. Resets to HEAD, not to a
-        fixed commit, so a kept patch stays on the champion branch.
-        """
-        subprocess.run(["git", "-C", str(args.worktree), "reset", "--hard", "HEAD"],
-                       capture_output=True, text=True, timeout=600, check=False)
-        subprocess.run(["git", "-C", str(args.worktree), "clean", "-fd",
-                        "ggml/", "src/"],
-                       capture_output=True, text=True, timeout=600, check=False)
-
     hotspot_rows: list = []
 
     def reprofile() -> None:
@@ -316,11 +277,13 @@ def main(argv: list[str] | None = None) -> int:
 
     def _ask_stop(signum, _frame) -> None:
         # Never abort mid-measurement: a killed A/B wastes the device time already
-        # spent and leaves a half-written candidate. Flag it and let the boundary
-        # handle it, exactly as the STOP file does.
+        # spent and leaves a half-written candidate. Flag it and let the stage
+        # boundaries handle it, exactly as the STOP file does: forming lanes abandon
+        # before their next actor call, the tail holder finishes and publishes.
         stopping["asked"] = True
-        print(f"\nstopping  signal {signum} received — finishing the current "
-              f"iteration, then winding down")
+        print(f"\nstopping  signal {signum} received — forming lanes abandon at "
+              f"their next stage boundary; a lane holding the tail finishes its "
+              f"measurement and publishes first")
 
     for _sig in (signal.SIGTERM, signal.SIGINT):
         signal.signal(_sig, _ask_stop)
@@ -429,20 +392,6 @@ def main(argv: list[str] | None = None) -> int:
             print(f"anchor    pruned {len(dropped)} superseded generation(s) "
                   f"(~{201 * len(dropped)} MB)")
 
-    def commit(hypothesis, paths, comparison):
-        # `branch="HEAD"` is correct HERE and only here: the sequential run has the
-        # champion branch checked out, so advancing HEAD advances the branch. A lane is
-        # DETACHED, and the same call there would leave the commit unreferenced --
-        # which is why the pooled path uses `pool.advance_champion` instead.
-        head = archive.keep(
-            args.worktree, branch="HEAD",
-            message=pool.commit_message(hypothesis, comparison),
-            paths=tuple(paths))
-        # Only after the commit succeeds: an anchor advanced for a patch that did not
-        # land would silently raise the bar for everything after it.
-        promote_anchor()
-        return head
-
     def gpu_reading(outcomes=()) -> dict:
         """Held versus busy. Both halves, or the number means nothing.
 
@@ -480,26 +429,16 @@ def main(argv: list[str] | None = None) -> int:
 
     latest: list = []
 
-    def _remember(rows) -> None:
-        latest[:] = list(rows)
-        publish("running", latest, hotspot_rows=hotspot_rows)
-
-    # ---------------------------------------------------------------------------
-    # THE CONCURRENT PATH (DRAFT). Everything above is the sequential run and is
-    # reached identically when `--workers 1`. Nothing below runs unless asked for.
-    # ---------------------------------------------------------------------------
-
     def run_pooled() -> pool.PoolResult:
-        """Drive the same loop across N detached lanes.
+        """Drive the loop across N detached lanes. THE run path -- the sequential
+        `loop.run` wiring was deleted 2026-08-31 (it survives only as a test seam).
 
-        WHAT IS PER-LANE THAT USED TO BE GLOBAL
+        WHAT IS PER-LANE
           * the worktree and the candidate build directory (`pipeline.Worker`);
           * the planner and the critic, because each holds a workspace path;
-          * the saved patch filename, which now carries the lane;
-          * the phase clock -- `note_phase` keeps ONE (label, started) mark, so with
-            several lanes the interval is charged to whichever lane wrote last. The
-            pooled path uses `pool.PhaseClock`, whose totals are LANE-seconds and can
-            legitimately sum to more than the wall clock.
+          * the saved patch filename, which carries the lane;
+          * the phase clock -- `pool.PhaseClock`, whose totals are LANE-seconds and
+            can legitimately sum to more than the wall clock.
 
         WHAT STAYS GLOBAL
           * the GPU claim: one `flock` for the process. A second `hold()` on a second
@@ -527,11 +466,10 @@ def main(argv: list[str] | None = None) -> int:
         def commit_pooled(worker, hypothesis, paths, comparison) -> str:
             """Advance the champion branch, then the ANCHOR.
 
-            The sequential path promotes the anchor inside its own `commit`; the
-            pooled path has its own commit and did not, which would have left the
-            anchor static across every lane -- reproducing run 13's defect (cumulative
-            effects reported as marginal, a -2.864% regression committed as a keep) at
-            seven times the rate.
+            The promotion once lived only in the sequential path's commit, which
+            would have left the anchor static across every lane -- reproducing run
+            13's defect (cumulative effects reported as marginal, a -2.864%
+            regression committed as a keep) at seven times the rate.
 
             The anchor is BUILT from the champion tree, not taken from this lane: a
             lane's build directory is not relocatable, and the champion tree is what
@@ -571,23 +509,9 @@ def main(argv: list[str] | None = None) -> int:
         reprofile()
 
         publish("running", hotspot_rows=hotspot_rows)
-        pooled: pool.PoolResult | None = None
         try:
-            if args.workers > 1:
-                pooled = run_pooled()
-                outcomes = pooled.outcomes
-            else:
-                outcomes = loop.run(
-                    planner=planner, critic=critic, build_context=build_context,
-                    measure=measure, gate=gate, commit=commit,
-                    store_root=args.store, epoch=epoch, campaign_id="ak-loop",
-                    iterations=args.iterations, reset=reset_tree,
-                    should_stop=should_stop,
-                    on_iteration=_remember,
-                    on_step=lambda label: (note_phase(label),
-                                           publish("running", latest,
-                                                   hotspot_rows=hotspot_rows,
-                                                   step=label)) and None)
+            pooled = run_pooled()
+            outcomes = pooled.outcomes
         except BaseException:
             # A crashed loop must SAY it crashed. Going quiet reads as "slow".
             publish("failed", hotspot_rows=hotspot_rows)
@@ -600,12 +524,11 @@ def main(argv: list[str] | None = None) -> int:
                    if outcome.status in {"kept", "measured_null"})
     print(f"\n{len(outcomes)} iterations in {elapsed / 60:.1f} min: "
           f"{measured} reached a measurement, {kept} kept")
-    if pooled is not None:
-        # The number that decides the lane count: once the tail approaches the wall
-        # clock every extra lane only queues on it.
-        print(f"pool      {args.workers} lanes, tail {pooled.tail_seconds / 60:.1f} "
-              f"min of {pooled.wall_seconds / 60:.1f} wall, "
-              f"{pooled.superseded} superseded")
+    # The number that decides the lane count: once the tail approaches the wall
+    # clock every extra lane only queues on it.
+    print(f"pool      {args.workers} lanes, tail {pooled.tail_seconds / 60:.1f} "
+          f"min of {pooled.wall_seconds / 60:.1f} wall, "
+          f"{pooled.superseded} superseded")
     for index, outcome in enumerate(outcomes, start=1):
         effect = (f"{outcome.comparison.effect * 100:+.3f}%"
                   if outcome.comparison else "—")
@@ -614,6 +537,10 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.out:
         args.out.mkdir(parents=True, exist_ok=True)
+        # `phase_seconds` are LANE-seconds (`pool.PhaseClock`): with N lanes they can
+        # legitimately sum to more than the wall clock, and the flag beside them says
+        # so to any reader that predates the pooled accounting.
+        pooled_body = pooled.to_dict(workers=args.workers)
         body = {
             "schema": "epyc.autokernel.loop_run.v1",
             "epoch": epoch, "anchor_commit": anchor_commit,
@@ -621,17 +548,10 @@ def main(argv: list[str] | None = None) -> int:
             "noise_floor_pct": floor, "elapsed_s": round(elapsed, 1),
             "workers": args.workers,
             "iterations": [outcome.to_attempt() for outcome in outcomes],
-            "phase_seconds": {k: round(v, 1) for k, v in sorted(
-                phase_seconds.items(), key=lambda kv: -kv[1])},
+            "phase_seconds": pooled_body.pop("phase_lane_seconds"),
+            "phase_seconds_are_lane_seconds": True,
+            "pool": pooled_body,
         }
-        if pooled is not None:
-            # The pooled block REPLACES `phase_seconds` rather than sitting beside it:
-            # the sequential accumulator is never written on this path, so leaving it
-            # at {} beside a populated pooled block invites reading the empty one.
-            pooled_body = pooled.to_dict(workers=args.workers)
-            body["phase_seconds"] = pooled_body.pop("phase_lane_seconds")
-            body["phase_seconds_are_lane_seconds"] = True
-            body["pool"] = pooled_body
         (args.out / "loop-run.json").write_text(json.dumps(body, indent=2),
                                                 encoding="utf-8")
         print(f"\nwrote {args.out / 'loop-run.json'}")
