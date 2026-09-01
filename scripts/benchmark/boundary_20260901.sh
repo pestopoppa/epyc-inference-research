@@ -481,11 +481,18 @@ evaluate_all_green() {
 
 # ---------------------------------------------------------------- step 7: readiness (+ preauth launch)
 run24_argv_doc() {  # the proposed run-24 command, single source for report + launch
+    # Anchor = the loop's own latest guard-verified anchor-gen (A/A'd against the
+    # champion by the run-23 advance chain), NEVER an incremental tip rebuild under
+    # --allow-unverified-anchor: the incremental champ2 build is the exact pattern
+    # that failed digest attestation on 2026-08-31, and the waiver would mask it.
+    # If the tip moved after the last anchor promotion (a 21:59Z keep), the loop's
+    # startup refusal correctly HOLDS run 24 for morning — fail-closed, by design.
+    local anchor; anchor="${BOUNDARY_RUN24_ANCHOR:-$(latest_anchor_gen)}"
     cat <<EOF
 cd $LANE_ROOT/scripts/kernel_rnd && \\
   setsid nohup python3 -u -m autokernel.loop.run \\
       --worktree $CHAMP_TREE \\
-      --anchor-build $CHAMP_TREE/build-hip --allow-unverified-anchor \\
+      --anchor-build ${anchor:-<no provenance-carrying anchor-gen in $STORE>} \\
       --model $MODEL_SCREEN \\
       --confirm-model $MODEL_27B --confirm-pairs 5 --confirm-surfaces dec-b4,dec-b8 \\
       --store $STORE \\
@@ -513,18 +520,21 @@ launch_run24() {  # the 20260831 watcher mechanism, folded in; call ONLY preauth
     local lf="$WORK_DIR/step7-launch.log" dry rc p cl found=""
     log "step7: PREAUTH_RUN24 present + all green — launching run 24 (watcher mechanism)"
 
-    # Tip rebuild (incremental; the watcher's anchor choice: tip build + waiver,
-    # first-keep guard re-verifies by measurement).
-    if ! heavy tip_rebuild "$lf" taskset -c 96-183 cmake --build "$CHAMP_TREE/build-hip" -j64; then
-        state_set run24_launch "held_tip_rebuild_failed"
-        log "step7: HOLD — tip rebuild failed (see $lf); run 24 NOT started"; return 0
+    # Anchor for run 24: the loop's own latest guard-verified anchor-gen — see the
+    # rationale in run24_argv_doc. No tip rebuild, no --allow-unverified-anchor.
+    local anchor; anchor="${BOUNDARY_RUN24_ANCHOR:-$(latest_anchor_gen)}"
+    if [[ -z "$anchor" || ! -x "$anchor/bin/llama-bench" ]]; then
+        state_set run24_launch "held_no_verified_anchor"
+        log "step7: HOLD — no provenance-carrying anchor-gen with bin/llama-bench in $STORE; run 24 NOT started"; return 0
     fi
 
     # Final refusal check: the loop's own --dry-run must exit 0 AND print "— verified".
+    # No waiver flag: the startup refusal (anchor attachment == champion tip) must
+    # itself pass, or the launch holds for morning with the refusal in the log.
     rc=0
     dry=$( cd "$LANE_ROOT/scripts/kernel_rnd" && python3 -m autokernel.loop.run \
-            --worktree "$CHAMP_TREE" --anchor-build "$CHAMP_TREE/build-hip" \
-            --allow-unverified-anchor --model "$MODEL_SCREEN" \
+            --worktree "$CHAMP_TREE" --anchor-build "$anchor" \
+            --model "$MODEL_SCREEN" \
             --confirm-model "$MODEL_27B" --confirm-pairs 5 --confirm-surfaces dec-b4,dec-b8 \
             --store "$STORE" --iterations 0 --surface dec-b4 --pairs 20 --dry-run 2>&1 ) || rc=$?
     echo "$dry" >> "$lf"
@@ -536,7 +546,7 @@ launch_run24() {  # the 20260831 watcher mechanism, folded in; call ONLY preauth
     ( cd "$LANE_ROOT/scripts/kernel_rnd" && \
       setsid nohup python3 -u -m autokernel.loop.run \
           --worktree "$CHAMP_TREE" \
-          --anchor-build "$CHAMP_TREE/build-hip" --allow-unverified-anchor \
+          --anchor-build "$anchor" \
           --model "$MODEL_SCREEN" \
           --confirm-model "$MODEL_27B" --confirm-pairs 5 --confirm-surfaces dec-b4,dec-b8 \
           --store "$STORE" \
@@ -661,7 +671,7 @@ step6  per surface: cd $LANE_ROOT/scripts/kernel_rnd && python3 -u -m autokernel
        --store $STORE --surface <s> --calibrate-surface $CALIB_PAIRS
        => $STORE/calibration/<s>.$MODEL_27B_STEM.json (keyed floors; ~5-6h total)
 step7  $READINESS + run-24 command file; launch ONLY if $PREAUTH_TOKEN exists AND all
-       gating steps green (tip rebuild -> loop --dry-run '— verified' -> setsid launch
+       gating steps green (latest verified anchor-gen -> loop --dry-run '— verified' -> setsid launch
        -> read-only /proc scan -> $RUN24_PIDFILE); otherwise stop at the package
 
 -- proposed run-24 command (two-rung: screen 1.5B / confirm 27B) --
