@@ -95,16 +95,37 @@ def greedy_once(binary: Path, model: Path, prompt: str, *, n_tokens: int,
     loop's own benchmark invocations, so the parity probe runs the binary it
     measures (`ldd` cannot prove HIP residency; the loader env at least removes
     the wrong-ggml-generation failure mode)."""
+    # -st (--single-turn) is LOAD-BEARING. This tree's llama-cli ignores -no-cnv
+    # when the model carries a chat template, drops into conversation mode, and on
+    # a non-tty stdin loops printing "> " forever instead of exiting on EOF -- the
+    # second boundary attempt (2026-09-01 01:13Z) timed out at 600 s with 9.3 GB
+    # of prompt characters in the pipe. --single-turn generates the predefined
+    # prompt and exits.
     argv = ["taskset", "-c", bench.CPU_LIST, "numactl", "--interleave=all",
             str(binary), "-m", str(model), "-p", prompt, "--temp", "0",
-            "--seed", str(seed), "-n", str(n_tokens), "-no-cnv", "--simple-io",
-            "--no-display-prompt", "-ngl", "99", "-fa", "1"]
+            "--seed", str(seed), "-n", str(n_tokens), "-st", "-no-cnv",
+            "--simple-io", "--no-display-prompt", "-ngl", "99", "-fa", "1"]
     done = subprocess.run(argv, capture_output=True, text=True, timeout=timeout_s,
-                          env=residency.loader_env(binary))
+                          stdin=subprocess.DEVNULL, env=residency.loader_env(binary))
     if done.returncode != 0:
         raise bench.BenchFailed(
             f"llama-cli rc={done.returncode}: {done.stderr[-400:]}")
-    return done.stdout
+    # Compare GENERATION ONLY, never the raw stream. The chrome around it
+    # includes `build : bNNNNN-<commit>` -- the commit DIFFERS BETWEEN ARMS BY
+    # CONSTRUCTION, so a raw-stream comparison reads every pair as divergent,
+    # which under the operator's conditional would have auto-merged on a
+    # fabricated "quality demonstrated". The generation sits between the echoed
+    # "> <prompt>" line and the "[ Prompt: ... ]" stats line.
+    out = done.stdout
+    start = out.find("\n> ")
+    if start != -1:
+        start = out.find("\n", start + 3)      # end of the echoed-prompt line
+    stop = out.rfind("\n[ Prompt:")
+    if start == -1 or stop == -1 or stop <= start:
+        raise bench.BenchFailed(
+            "could not locate the generation slice between the prompt echo and "
+            f"the stats line; refusing to compare chrome. tail: {out[-300:]!r}")
+    return out[start:stop]
 
 
 def verify_one_line_geometry(tree: Path, admission_commit: str) -> str:
