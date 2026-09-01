@@ -1,0 +1,6 @@
+0.24.352.465 I slot print_timing: id  0 | task 154 | draft acceptance = 0.24017 (  116 accepted /   483 generated), mean len =  2.68
+0.29.224.936 I slot print_timing: id  0 | task 226 | draft acceptance = 0.28571 (  124 accepted /   434 generated), mean len =  3.00
+0.33.723.276 I slot print_timing: id  0 | task 290 | draft acceptance = 0.28321 (  113 accepted /   399 generated), mean len =  2.98
+0.39.278.421 I slot print_timing: id  0 | task 349 | draft acceptance = 0.59184 (  290 accepted /   490 generated), mean len =  5.14
+0.47.032.994 I slot print_timing: id  0 | task 422 | draft acceptance = 0.43271 (  299 accepted /   691 generated), mean len =  3.99
+0.55.767.234 I slot print_timing: id  0 | task 525 | draft acceptance = 0.37080 (  287 accepted /   774 generated), mean len =  3.56
