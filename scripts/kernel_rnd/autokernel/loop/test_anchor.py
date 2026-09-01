@@ -579,5 +579,235 @@ class TheVerdictIsOnTheStatusSurface(unittest.TestCase):
         self.assertIsNone(self._write()["anchor_guard"])
 
 
+# ------------------------------------------- the hash pre-check triad (R22-3)
+#
+# Builds of one commit are DETERMINISTIC on this host (R21-10: two builds of
+# `ce1df3aa` differed by exactly one `.dynstr` byte -- the RUNPATH). So the guard's
+# question is answerable by code-section digest before a pair is spent, and an
+# above-floor A/A on hash-identical binaries indicts the SESSION, not the anchor.
+
+#: Run 21's abort: a +1.765% A/A reading against a pooled A/A sigma of 0.417% --
+#: a 4.2-sigma instrument excursion on binaries that were provably code-identical.
+RUN_21_EXCURSION_PCT = 1.765
+
+DIGEST = "6385a354c413f83465c03aa6b8acc50d5886ddd8b7248c3e8866d9aa1f027fed"
+
+
+class _DigestRecorder(_Recorder):
+    """A `_Recorder` whose injected `digest` returns per-path values in sequence.
+
+    `plan` maps a path substring to the list of digests successive calls return
+    (the last value repeats), so a heal that rebuilds the scratch can be given a
+    different answer the second time -- or the same one, for the never-converges
+    case."""
+
+    def __init__(self, comparison, plan, **kwargs):
+        super().__init__(comparison, **kwargs)
+        self.plan = {key: list(values) for key, values in plan.items()}
+        self.digest_calls: list[Path] = []
+
+    def digest(self, path):
+        self.digest_calls.append(Path(path))
+        for key, values in self.plan.items():
+            if key in str(path):
+                return values.pop(0) if len(values) > 1 else values[0]
+        return None
+
+    def run(self, **kwargs):
+        return super().run(digest=self.digest, **kwargs)
+
+
+class TheRun21ExcursionMustNotAbortAHashProvenAnchor(unittest.TestCase):
+    """Historical scenario (a): run 21's abort, reconstructed.
+
+    The promoted anchor and the fresh champion build were code-identical (the
+    R21-10 probe proved it after the fact), and the A/A read +1.765% -- 4.2 sigma
+    of instrument excursion. The old guard aborted a healthy run; the triad must
+    record `anchor_guard_excursion` and CONTINUE, because the hash has already
+    answered the guard's actual question.
+    """
+
+    def _excursion(self):
+        return _DigestRecorder(_comparison(RUN_21_EXCURSION_PCT),
+                               {"anchor-gen": [DIGEST], "scratch": [DIGEST]})
+
+    def test_the_fixture_is_above_the_floor(self):
+        self.assertGreater(RUN_21_EXCURSION_PCT, FLOOR,
+                           "run 21's excursion must exceed the floor or this suite "
+                           "is not testing the abort-vs-continue decision at all")
+
+    def test_it_records_an_excursion_and_returns(self):
+        recorder = self._excursion()
+        # BROKEN READS (the pre-R22-3 guard, i.e. the hash-check-dropped mutant):
+        # loop.RunAborted here, ending a healthy run on an instrument excursion.
+        verdict = recorder.run()
+        self.assertTrue(verdict.passed)
+        self.assertTrue(verdict.excursion)
+        self.assertAlmostEqual(verdict.effect_pct, RUN_21_EXCURSION_PCT, places=3)
+        self.assertIn("IDENTICAL code digests", verdict.detail)
+
+    def test_the_archived_row_says_excursion_not_verified(self):
+        row = self._excursion().run().to_attempt()
+        # BROKEN READS: "anchor_verified" -- an above-floor session reading
+        # laundered into a clean bill of health nobody can find afterwards.
+        self.assertEqual(row["status"], "anchor_guard_excursion")
+
+    def test_the_aa_still_runs_as_a_session_health_sample(self):
+        recorder = self._excursion()
+        recorder.run()
+        # BROKEN READS: no "compare" -- a hash short-circuit that stops sampling
+        # session health, which is the only signal run 21's fault class leaves.
+        self.assertIn("compare", recorder.order)
+        self.assertEqual(recorder.order.count("build"), 1,
+                         "identical digests must not trigger the heal rebuild")
+
+    def test_an_inside_floor_reading_is_not_an_excursion(self):
+        verdict = _DigestRecorder(_comparison(0.420),
+                                  {"anchor-gen": [DIGEST], "scratch": [DIGEST]}).run()
+        # BROKEN READS: excursion True on healthy A/A noise -- every clean
+        # promotion flagged, and the flag stops meaning anything.
+        self.assertFalse(verdict.excursion)
+        self.assertEqual(verdict.to_attempt()["status"], "anchor_verified")
+
+    def test_a_digest_of_none_is_not_proof(self):
+        """None == None must never read as "hash-proven". A build whose library
+        cannot be hashed falls back to the A/A-only contract, where run 21's
+        reading aborts -- conservative, and exactly the pre-triad behaviour."""
+        recorder = _DigestRecorder(_comparison(RUN_21_EXCURSION_PCT), {})
+        with self.assertRaises(loop.RunAborted):
+            recorder.run()
+        self.assertFalse(recorder.verdicts[0].excursion)
+
+
+class TheRun18MismatchIsProvenByHashAlone(unittest.TestCase):
+    """Historical scenario (b): run 18's fault class, caught deterministically.
+
+    The binary in the anchor slot is not the champion, so its `.hip_fatbin` (and
+    `.text`) digest cannot match a fresh build's. The triad aborts on the hash,
+    spending ZERO of the 20 pairs the A/A would have cost, and names both digests
+    so the abort carries its own evidence.
+    """
+
+    def _mismatch(self, comparison=None):
+        return _DigestRecorder(comparison or _comparison(0.0),
+                               {"anchor-gen": ["a" * 64], "scratch": ["f" * 64]})
+
+    def test_differing_digests_abort_without_spending_a_pair(self):
+        recorder = self._mismatch()
+        with self.assertRaises(loop.RunAborted) as caught:
+            recorder.run()
+        # BROKEN READS (digests-differ-continues mutant): no exception, and a
+        # "compare" entry -- 20 pairs of device time spent measuring a slot the
+        # hash had already indicted, then run 18's void numbers after it.
+        self.assertNotIn("compare", recorder.order)
+        self.assertIn("a" * 64, str(caught.exception))
+        self.assertIn("f" * 64, str(caught.exception))
+        self.assertIn("run 18", str(caught.exception).lower())
+
+    def test_the_abort_verdict_is_recorded_with_both_digests(self):
+        recorder = self._mismatch()
+        with self.assertRaises(loop.RunAborted):
+            recorder.run()
+        self.assertEqual(len(recorder.verdicts), 1)
+        row = recorder.verdicts[0].to_attempt()
+        self.assertEqual(row["status"], "anchor_mismatch")
+        self.assertEqual(row["anchor_guard"]["anchor_digest"], "a" * 64)
+        self.assertEqual(row["anchor_guard"]["fresh_digest"], "f" * 64)
+        self.assertEqual(row["anchor_guard"]["pairs"], 0)
+
+    def test_one_heal_is_attempted_then_the_abort_stands(self):
+        recorder = self._mismatch()
+        with self.assertRaises(loop.RunAborted):
+            recorder.run()
+        # Exactly two builds (the fresh one, then ONE heal) and two cleans (the
+        # heal's rmtree precedes its rebuild: an incremental rebuild is the fault
+        # class itself). BROKEN READS: build-count 1 (no heal -- a transient
+        # scratch corruption aborts a healthy run) or 3+ (the heal loops).
+        self.assertEqual(recorder.order.count("build"), 2)
+        self.assertEqual(recorder.order.count("clean"), 2)
+
+    def test_the_heal_never_loops(self):
+        recorder = self._mismatch()
+        original = recorder.build
+
+        def counting_build(dest):
+            if recorder.order.count("build") >= 4:
+                raise AssertionError("heal-once is rebuilding in a loop")
+            return original(dest)
+
+        recorder.build = counting_build
+        with self.assertRaises(loop.RunAborted):
+            recorder.run()
+        self.assertEqual(recorder.order.count("build"), 2)
+
+    def test_a_transient_scratch_corruption_heals_and_the_run_continues(self):
+        """First scratch digest wrong, the rebuilt one right: the guard's OWN
+        artifact glitched, not the anchor. Abort here and every transient build
+        corruption kills a healthy run -- the backstop exists for this case."""
+        recorder = _DigestRecorder(
+            _comparison(0.420),
+            {"anchor-gen": ["a" * 64], "scratch": ["f" * 64, "a" * 64]})
+        verdict = recorder.run()
+        self.assertTrue(verdict.passed)
+        self.assertFalse(verdict.excursion, "a healed pair is proven, and 0.420% "
+                                            "is inside the floor: not an excursion")
+        self.assertEqual(recorder.order.count("build"), 2)
+        self.assertIn("compare", recorder.order)
+
+    def test_a_heal_whose_rebuild_fails_still_aborts(self):
+        recorder = _DigestRecorder(_comparison(0.0),
+                                   {"anchor-gen": ["a" * 64], "scratch": ["f" * 64]})
+        calls = {"n": 0}
+        original = recorder.build
+
+        def failing_second_build(dest):
+            calls["n"] += 1
+            if calls["n"] >= 2:
+                recorder.order.append("build")
+                return gates.Verdict("compile", False, "OOM during heal rebuild")
+            return original(dest)
+
+        recorder.build = failing_second_build
+        with self.assertRaises(loop.RunAborted) as caught:
+            recorder.run()
+        self.assertIn("unavailable", str(caught.exception))
+
+
+class TheComparisonIsPersistedOnEveryMeasuredVerdict(unittest.TestCase):
+    """Run 21's abort left no samples, drift or clock record -- the verdict said
+    +1.765% and discarded the `Comparison` that could say WHY. Every verdict that
+    measured must now embed `comparison.to_dict()` in the archived row."""
+
+    def _row(self, recorder):
+        return recorder.verdicts[0].to_attempt()["anchor_guard"]
+
+    def test_a_passing_verdict_carries_its_comparison(self):
+        recorder = _Recorder(_comparison(0.420))
+        recorder.run()
+        embedded = self._row(recorder)["comparison"]
+        # BROKEN READS: KeyError -- the archived row again carries only a number.
+        self.assertEqual(embedded["anchor_samples"], [100.0] * 9)
+        self.assertEqual(embedded["pairs"], 5)
+        self.assertIn("anchor_drift_pct", embedded)
+
+    def test_an_aborting_verdict_carries_it_too(self):
+        recorder = _Recorder(_comparison(RUN_18_EFFECT_PCT))
+        with self.assertRaises(loop.RunAborted):
+            recorder.run()
+        embedded = self._row(recorder)["comparison"]
+        self.assertAlmostEqual(embedded["effect_pct"], RUN_18_EFFECT_PCT, places=3)
+        self.assertEqual(len(embedded["candidate_samples"]), 9)
+
+    def test_an_excursion_verdict_carries_comparison_and_digests(self):
+        recorder = _DigestRecorder(_comparison(RUN_21_EXCURSION_PCT),
+                                   {"anchor-gen": [DIGEST], "scratch": [DIGEST]})
+        recorder.run()
+        row = self._row(recorder)
+        self.assertAlmostEqual(row["comparison"]["effect_pct"],
+                               RUN_21_EXCURSION_PCT, places=3)
+        self.assertEqual(row["anchor_digest"], DIGEST)
+        self.assertEqual(row["fresh_digest"], DIGEST)
+
+
 if __name__ == "__main__":
     unittest.main()

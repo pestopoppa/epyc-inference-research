@@ -220,6 +220,29 @@ class TheAnchorMustAdvanceWithTheChampion(unittest.TestCase):
                         block.index("publish_headline()"),
                         "the headline must never publish ahead of the A/A guard")
 
+    def test_the_guard_is_wired_with_the_real_code_digest(self):
+        """R22-3: the hash pre-check only exists if `run.py` actually injects it.
+
+        `anchor.verify(digest=None)` is the A/A-only fallback, so dropping this one
+        kwarg silently reverts the whole triad -- run 21's healthy run aborts again
+        and run 18's mismatch costs 20 pairs again -- while every injected-double
+        test stays green. Same wiring-only blind spot as the ordering test above."""
+        source = self._source()
+        # `verify_anchor` nests `keep_verdict`, so cut at the NEXT top-level def.
+        block = source.split("def verify_anchor()", 1)[1]
+        block = block.split("def promote_anchor", 1)[0]
+        self.assertIn("digest=anchor_integrity.build_digest", block)
+
+    def test_an_excursion_note_reaches_the_headline_refresh(self):
+        """The excursion-flagged promotion still publishes -- the anchor is
+        hash-proven -- but the bundle must say the session's A/A read above the
+        floor. `publish_headline` is the only caller that can carry that note."""
+        source = self._source()
+        block = source.split("def publish_headline()", 1)[1].split("def ", 1)[0]
+        self.assertIn("anchor_guard_seen", block)
+        self.assertIn("excursion", block)
+        self.assertIn("note=", block)
+
     def test_the_promoted_build_is_BUILT_in_the_anchor_slot(self):
         """EXECUTED, not grepped. Its predecessor asserted that the string
         "shutil.move" appeared in the source; it passed while `shutil` was never

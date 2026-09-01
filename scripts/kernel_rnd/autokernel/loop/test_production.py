@@ -129,12 +129,12 @@ def _warm_baseline(root: Path) -> Path:
 
 def _refresh(store: Path, base: Path, *, champion=CHAMPION, surface="tg128",
              compare=None, build_baseline=None, champion_build=None,
-             resolve=_resolve):
+             resolve=_resolve, note=None):
     return production.refresh(
         store=store, champion_commit=champion,
         champion_build=champion_build or (store / "anchor-gen-001"),
         baseline_build=base, build_baseline=build_baseline, resolve=resolve,
-        compare=compare or (lambda _b, _c: _comparison(surface)))
+        compare=compare or (lambda _b, _c: _comparison(surface)), note=note)
 
 
 def _bundle(store: Path) -> dict:
@@ -732,6 +732,35 @@ class TheVerifiedV9PrebuiltIsAdoptedNotRebuilt(unittest.TestCase):
         # BROKEN READS: the legacy path -- v10 measured against the v9 binary, with a
         # bundle that CLAIMS the v10 sha. The worst version of the stale baseline.
         self.assertEqual(slot, self.root / f"production-baseline-{OTHER_CHAMPION[:12]}")
+
+
+class TheExcursionNoteRidesTheBundle(unittest.TestCase):
+    """R22-3: an excursion-flagged promotion still publishes its headline -- the
+    anchor is hash-proven -- but the bundle must carry the guard's excursion note,
+    because the number was measured in a session whose own A/A read above the
+    floor and a reader weighing the headline needs to know that."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.store = Path(self.tmp.name)
+
+    def test_a_note_is_published_verbatim(self):
+        note = ("anchor guard: +1.765% ABOVE the floor with IDENTICAL code "
+                "digests (R21-10 instrument excursion); continuing")
+        result = _refresh(self.store, _warm_baseline(self.store), note=note)
+        self.assertTrue(result.published,
+                        "an excursion must not stop the headline: the anchor is "
+                        "hash-proven, and run 21 showed what withholding costs")
+        # BROKEN READS: KeyError -- the headline publishes clean and the session's
+        # 4.2-sigma excursion is invisible where the operator reads the number.
+        self.assertEqual(_bundle(self.store)["anchor_guard_excursion"], note)
+
+    def test_no_note_means_no_key(self):
+        _refresh(self.store, _warm_baseline(self.store))
+        # BROKEN READS: an `anchor_guard_excursion: null` key on every clean
+        # promotion -- a permanent warning slot that reads as noise within a week.
+        self.assertNotIn("anchor_guard_excursion", _bundle(self.store))
 
 
 if __name__ == "__main__":

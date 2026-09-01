@@ -215,7 +215,7 @@ def refresh(*, store: Path, champion_commit: str, champion_build: Path,
             baseline_root: Path = BASELINE_ROOT,
             resolve: Callable[[], tuple[str, str]] = resolve_frozen,
             build_baseline: Callable[[Path, str], Any] | None = None,
-            on_step: Callable[[str], Any] = lambda _label: None,
+            on_step: Callable[[str], Any] = lambda _label: None, note: str | None = None,
             now: Callable[[], str] = status._now) -> Refresh:
     """Measure the champion against frozen production and publish it. NEVER raises.
 
@@ -260,6 +260,11 @@ def refresh(*, store: Path, champion_commit: str, champion_build: Path,
             "noise_floor_pct": comparison.noise_floor_pct,
             "evidence": str(evidence),
             "mechanism_id": MECHANISM_ID,
+            # R22-3: present only when the promotion's anchor guard recorded an
+            # instrument excursion. The headline still publishes -- the anchor is
+            # hash-proven -- but the number was taken in a session whose A/A read
+            # above the floor, and a reader weighing the number needs to know.
+            **({"anchor_guard_excursion": note} if note else {}),
         }, prefix=".cvp-")
         # Built INSIDE the containment. The headline sentence formats fields off the
         # comparison, and a formatting error on the SUCCESS path would otherwise be

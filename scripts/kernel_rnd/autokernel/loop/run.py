@@ -22,7 +22,7 @@ import subprocess
 import sys
 import time
 
-from ..controller import build_recipe, workload_contract
+from ..controller import anchor_integrity, build_recipe, workload_contract
 from . import (actors, anchor, archive, bench, champion, claim, gates, hotspots, loop,
                pipeline, pool, production, status)
 
@@ -385,6 +385,10 @@ def main(argv: list[str] | None = None) -> int:
         outcome = production.refresh(
             store=args.store, champion_commit=current_anchor_commit[0],
             champion_build=anchor_build[0], build_baseline=build_baseline,
+            # An excursion-flagged promotion still publishes (the anchor is
+            # hash-proven), but the bundle must carry the session-health note.
+            note=next((g["detail"] for g in anchor_guard_seen[-1:]
+                       if g.get("excursion")), None),
             compare=lambda base, champ: bench.compare(
                 bench.Arm("production_v9", base / "bin" / "llama-bench"),
                 bench.Arm("champion", champ / "bin" / "llama-bench"),
@@ -411,6 +415,7 @@ def main(argv: list[str] | None = None) -> int:
         anchor.verify(
             champion_commit=_git(args.worktree, "rev-parse", "HEAD"),
             anchor_build=anchor_build[0], noise_floor_pct=floor,
+            digest=anchor_integrity.build_digest,
             on_verdict=keep_verdict, build=build_champion,
             compare=lambda promoted, fresh: bench.compare(
                 bench.Arm("promoted_anchor", promoted / "bin" / "llama-bench"),

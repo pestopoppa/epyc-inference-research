@@ -44,9 +44,18 @@ SUITE_FLOORS: dict[str, tuple[int, tuple[str, ...]]] = {
     # `scripts/benchmark/test_autokernel_funsafe_math_admission.py` -- the greedy
     # divergence detector, the one-line-geometry refusal (a confounded pair must not
     # be measured) and the argparse wiring that names the prepared admission branch.
+    # 144 -> 155 on 2026-09-01 (R22-3): the anchor guard's code-section digest
+    # (`controller/anchor_integrity.py`). 11 new tests in
+    # `controller/test_anchor_integrity.py`, proven against the REAL R21-10
+    # deterministic build pair staged at /mnt/raid0/llm/tmp/r2110-build-{a,b}:
+    # identical digests across a genuine RUNPATH-only difference, and a detected
+    # flip in each covered section of a scratch copy. The real-pair tests skip
+    # (never pass vacuously green as 0) if the fixture is unstaged, but they still
+    # COLLECT, so the floor counts them.
     "the decision arithmetic": (
-        144,
+        155,
         (
+            "scripts/kernel_rnd/autokernel/controller/test_anchor_integrity.py",
             "scripts/benchmark/test_screen_effect_estimator.py",
             "scripts/benchmark/test_autokernel_funsafe_math_admission.py",
             "scripts/kernel_rnd/autokernel/controller/test_workload_contract.py",
@@ -111,7 +120,20 @@ SUITE_FLOORS: dict[str, tuple[int, tuple[str, ...]]] = {
     # promotion body, closing a mutation hole found at the port — swapping
     # `verify_anchor()`/`publish_headline()` survived every suite, because the
     # end-to-end tests compose the modules themselves and cannot see that wiring.
-    "the loop package": (339, ("scripts/kernel_rnd/autokernel/loop/",)),
+    # 339 -> 358 on 2026-09-01 (R22-3): the anchor-guard robustness triad, built
+    # against R21-10's root cause (builds of one commit are deterministic here, so
+    # an above-floor A/A on hash-identical binaries indicts the SESSION). 19 new
+    # tests: 15 in `loop/test_anchor.py` reconstructing both historical scenarios
+    # (run 21's +1.765% excursion on identical digests -> recorded, run continues;
+    # run 18's differing digests -> abort with zero pairs spent, both digests
+    # named), the heal-once backstop (recovers, never loops, failed rebuild still
+    # aborts) and the Comparison-persisted-in-every-verdict contract; 2 in
+    # `loop/test_gates.py` pinning run.py's wiring (the digest kwarg, and the
+    # excursion note riding into the headline refresh -- each is one dropped line
+    # that silently reverts the triad while every injected-double test stays
+    # green); 2 in `loop/test_production.py` for the bundle's excursion note
+    # (published verbatim, and ABSENT -- not null -- on a clean promotion).
+    "the loop package": (358, ("scripts/kernel_rnd/autokernel/loop/",)),
 }
 
 _COLLECTED = re.compile(r"(\d+) tests? collected")
