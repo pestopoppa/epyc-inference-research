@@ -1,0 +1,4 @@
+  93.4 tok/s median | runs: [91.0, 93.4, 97.1] | write a python function that merges two sorted lis
+  39.6 tok/s median | runs: [38.3, 40.2, 39.6] | explain the difference between mmap and read for l
+  61.1 tok/s median | runs: [57.6, 61.1, 62.9] | write a bash script that watches a directory and p
+OVERALL: mean 64.6 median 61.1
