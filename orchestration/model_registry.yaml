@@ -11171,6 +11171,46 @@ deprecated_models:
       copy as deleted with the bartowski Q6_K_L retained; the on-disk copy contradicted the record.
     deleted: 2026-08-31
 
+  - model: Qwen3-Coder-REAP-246B-A35B Q4_K_M
+    path_was: /mnt/raid0/llm/models/Qwen3-Coder-REAP-246B-A35B-Q4_K_M.gguf
+    size_gb: 139
+    reason: >-
+      LEDGER BACKFILL 2026-09-01 (audit). Deletion was already on record in this file's
+      `deprecated_reason` for the role — "Role removed in the 2026-05 production stack
+      consolidation; model REAP-246B deprecated + GGUF deleted 2026-05-27" — but no
+      deprecated_models row existed, so the machine-readable ledger could not see it.
+      Former architect_coding (139 GB, 8.0 t/s, 82% quality).
+    deleted: 2026-05-27
+
+  - model: SuperGemma4-31b-abliterated Q4_K_M
+    path_was: /mnt/raid0/llm/models/SuperGemma4-31b-abliterated.Q4_K_M.gguf
+    size_gb: null
+    reason: >-
+      LEDGER BACKFILL 2026-09-01 (audit). Quoting the existing `deprecated_reason`: "GGUF deleted
+      2026-05-27 (unreferenced abliterated SuperGemma4-31b variant)." Size not recorded at deletion
+      time and deliberately left null rather than estimated.
+    deleted: 2026-05-27
+
+  - model: nexusraven-v2-13b Q4_K_M
+    path_was: /mnt/raid0/llm/models/nexusraven-v2-13b.Q4_K_M.gguf
+    size_gb: null
+    reason: >-
+      LEDGER BACKFILL 2026-09-01 (audit). Quoting the existing `deprecated_reason`:
+      "nexusraven-v2-13b GGUF deleted 2026-05-27 (unreferenced)." Size not recorded at deletion
+      time and deliberately left null rather than estimated.
+    deleted: 2026-05-27
+
+  - model: MiniCPM-o-4_5 (multimodal asset set)
+    path_was: /mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/
+    size_gb: 22
+    reason: >-
+      LEDGER BACKFILL 2026-09-01 (audit). Recorded in the handoff record as "RESOLVED 2026-07-31 —
+      no longer parked; the decision was taken and it is NO. MiniCPM-o is DEPRECATED and the
+      ~22 GB of assets are DELETED", on 42 questions (OCRBench + ChartQA, MI210). Eleven separate
+      paths in this registry (model quants, vision/audio/tts projectors, token2wav) cited the
+      directory; none had a ledger row.
+    deleted: 2026-07-31
+
 optimized_params:
   frontdoor:
     temperature: 0.0736042256959058
