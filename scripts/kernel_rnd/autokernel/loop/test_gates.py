@@ -202,6 +202,24 @@ class TheAnchorMustAdvanceWithTheChampion(unittest.TestCase):
                         block.index("promote_anchor("),
                         "promotion must follow the commit, never precede it")
 
+    def test_the_guard_runs_before_the_headline_is_published(self):
+        """promote -> verify -> publish_headline, in `run.py`'s own promotion body.
+
+        A headline refreshed BEFORE `verify_anchor` would publish a number measured
+        against a slot nobody has yet proven holds the champion -- run 18's void
+        number, on the panel the operator reads. Found as a live mutation hole at
+        the R21-7 port: swapping the two calls survived every suite, because the
+        end-to-end tests compose the modules themselves and cannot see this wiring.
+        Source-order pinned here the same way the commit->promotion order is."""
+        source = self._source()
+        block = source.split("def promote_anchor()", 1)[1]
+        block = block.split("def ", 1)[0]        # promote_anchor's body only
+        self.assertIn("verify_anchor()", block)
+        self.assertIn("publish_headline()", block)
+        self.assertLess(block.index("verify_anchor()"),
+                        block.index("publish_headline()"),
+                        "the headline must never publish ahead of the A/A guard")
+
     def test_the_promoted_build_is_BUILT_in_the_anchor_slot(self):
         """EXECUTED, not grepped. Its predecessor asserted that the string
         "shutil.move" appeared in the source; it passed while `shutil` was never

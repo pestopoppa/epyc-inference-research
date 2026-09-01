@@ -487,7 +487,8 @@ def main(argv: list[str] | None = None) -> int:
 
     def run_pooled() -> pool.PoolResult:
         """Drive the loop across N detached lanes. THE run path -- the sequential
-        `loop.run` wiring was deleted 2026-08-31 (it survives only as a test seam).
+        `loop.run` wiring was deleted 2026-08-31, and the `loop.run` seam itself on
+        2026-09-01 (R21-7): `iterate` under `pipeline.run_pool` is the only loop.
 
         WHAT IS PER-LANE
           * the worktree and the candidate build directory (`pipeline.Worker`);

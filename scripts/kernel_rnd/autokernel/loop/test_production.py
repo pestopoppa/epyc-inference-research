@@ -15,11 +15,12 @@ lifted verbatim off disk:
     `bench.Comparison` in this file is the REAL dataclass over those REAL samples, so
     `effect`, `surface`, `pairs` and the floor are what the instrument produced.
 
-The behavioural claims are driven through the real `loop.run`, the real
-`pool.promote_anchor` and the real `anchor.verify`, composed the way `run.main`
-composes them. Only the build and the benchmark are doubles. Asserting that
-`refresh` returned `published=False` proves nothing about the RUN; what matters is
-how many iterations the loop drew afterwards.
+The behavioural claims are driven single-lane through the real `pipeline.run_pool`
+-- the production driver, ported off the deleted `loop.run` seam (R21-7) -- with
+the real `pool.promote_anchor` and the real `anchor.verify`, composed the way
+`run.main` composes them. Only the build and the benchmark are doubles. Asserting
+that `refresh` returned `published=False` proves nothing about the RUN; what
+matters is how many iterations the loop drew afterwards.
 
 MUTATION COVERAGE, 2026-08-31: 41 mutations of shipping code, 41 killed; 63 of the 67
 assertions here are the FIRST failure under at least one of them. The four that are
@@ -27,10 +28,10 @@ not, and why each is still not noise:
 
   * the two `planner.proposals == 3` lines in the survival tests. Their claim -- the
     loop kept drawing work -- IS killed (M19 lets `Unavailable` escape, M20 removes
-    the blanket containment, M40 raises on the success path), but the escape reaches
-    `loop.run`, which turns three consecutive faults into `RunAborted` (breaker owned
-    by `pipeline.run_pool` since 95eeb0ae; the ERROR-before-assertion dynamic these
-    sequential-seam tests exercise is unchanged), so the test
+    the blanket containment, M40 raises on the success path), but the escape becomes
+    three consecutive `lane_error` outcomes and `pipeline.run_pool`'s breaker raises
+    `RunAborted` after the join (re-verified through the pool driver at the R21-7
+    port), so the test
     dies as an ERROR before the assertion is evaluated. The subject is proven; the
     line is simply never the first thing to fail.
   * `len(promotion.refreshes) == 3`, shadowed by the two lines above it: a structural
@@ -50,6 +51,7 @@ import unittest
 
 from autokernel.loop import (anchor, archive, bench, gates, loop, production,
                              pool, status)
+from autokernel.loop.test_loop import drive_single_lane
 
 SEEDS = Path(__file__).resolve().parent / "seeds"
 PUBLISHED = json.loads(
@@ -381,11 +383,10 @@ class _Promotion:
 
 def _drive(promotion, iterations=3):
     planner = _Planner()
-    outcomes = loop.run(
-        planner=planner, critic=_Critic(), build_context=dict,
+    outcomes = drive_single_lane(
+        planner=planner, critic=_Critic(),
         measure=lambda h, p: _comparison(), commit=promotion,
         gate=lambda h, p: (True, [gates.Verdict("compile", True)]),
-        store_root=promotion.store, epoch="e", campaign_id="c",
         iterations=iterations)
     return planner, outcomes
 
@@ -409,8 +410,8 @@ class AFailedRefreshMustNotEndTheRun(unittest.TestCase):
 
     def _assert_survived(self, promotion, planner, outcomes):
         # BROKEN READS for every case below, if `refresh` let anything escape:
-        # proposals == 1, `loop.run` raises, and a run 11 hours into its budget dies
-        # to a REPORTING failure.
+        # three lane_errors, the pool breaker's RunAborted out of `_drive`, and a
+        # run 11 hours into its budget dies to a REPORTING failure.
         self.assertEqual(planner.proposals, 3)
         self.assertEqual([o.status for o in outcomes], ["kept"] * 3)
         self.assertEqual(len(promotion.refreshes), 3)

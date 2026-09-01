@@ -25,6 +25,7 @@ import unittest
 
 from autokernel.loop import anchor, bench, gates, loop, pipeline, pool
 from autokernel.loop import run as run_mod
+from autokernel.loop.test_loop import drive_single_lane
 
 #: The bar the run itself enforces on prefill at 5 pairs. Read from `run.noise_floor_pct`
 #: rather than typed, so a change to the run's floor cannot leave this suite testing a
@@ -305,19 +306,23 @@ class _Critic:
         return loop.Review(True)
 
 
-class TheAbortMustStopTheSequentialLoop(unittest.TestCase):
+class TheAbortMustStopASingleLanePool(unittest.TestCase):
     """Asserting that `RunAborted` was constructed proves nothing about the loop. This
-    asserts the loop's BEHAVIOUR: how many iterations it drew after the refusal."""
+    asserts the loop's BEHAVIOUR: how many iterations it drew after the refusal.
+
+    Single lane, so the count is EXACT — proposals == 1, not a bound. That exactness
+    is the detector for abort LAUNDERING: a pool that catches `RunAborted` in its
+    blanket handler still aborts eventually (three lane_errors arm the breaker), so
+    `assertRaises` alone stays green; only the draw count says the refusal was
+    honoured at the first opportunity rather than re-proven three times."""
 
     def _run(self, commit, iterations=6):
         planner = _Planner()
-        with tempfile.TemporaryDirectory() as tmp:
-            outcomes = loop.run(
-                planner=planner, critic=_Critic(), build_context=dict,
-                measure=lambda h, p: _comparison(5.0),
-                gate=lambda h, p: (True, [gates.Verdict("compile", True)]),
-                commit=commit, store_root=Path(tmp), epoch="e", campaign_id="c",
-                iterations=iterations)
+        outcomes = drive_single_lane(
+            planner=planner, critic=_Critic(),
+            measure=lambda h, p: _comparison(5.0),
+            gate=lambda h, p: (True, [gates.Verdict("compile", True)]),
+            commit=commit, iterations=iterations)
         return planner, outcomes
 
     def test_it_stops_drawing_work_after_a_refused_anchor(self):
@@ -325,16 +330,16 @@ class TheAbortMustStopTheSequentialLoop(unittest.TestCase):
             raise loop.RunAborted("anchor guard: the anchor slot does NOT hold the "
                                   "champion")
         planner = _Planner()
-        with tempfile.TemporaryDirectory() as tmp, \
-                self.assertRaises(loop.RunAborted):
-            loop.run(planner=planner, critic=_Critic(), build_context=dict,
-                     measure=lambda h, p: _comparison(5.0),
-                     gate=lambda h, p: (True, [gates.Verdict("compile", True)]),
-                     commit=commit, store_root=Path(tmp), epoch="e", campaign_id="c",
-                     iterations=6)
-        # BROKEN READS: proposals == 6 and NO exception -- the blanket `except
-        # Exception` in `loop.run` records `iteration_error`, resets nothing, and keeps
-        # drawing. That is run 18 continuing against a bad anchor, in miniature.
+        with self.assertRaises(loop.RunAborted):
+            drive_single_lane(
+                planner=planner, critic=_Critic(),
+                measure=lambda h, p: _comparison(5.0),
+                gate=lambda h, p: (True, [gates.Verdict("compile", True)]),
+                commit=commit, iterations=6)
+        # BROKEN READS: proposals == 3 and the breaker's RunAborted instead of the
+        # guard's -- a blanket handler laundering the abort into `lane_error` keeps
+        # drawing until the breaker trips. That is run 18 continuing against a bad
+        # anchor, in miniature, with the brake taking the credit.
         self.assertEqual(planner.proposals, 1)
 
     def test_a_healthy_keep_still_draws_its_whole_budget(self):
@@ -483,12 +488,13 @@ class PromotionBuildsTheAnchorWhereItIsUsed(unittest.TestCase):
 
 class PromoteThenVerifyEndToEnd(unittest.TestCase):
     """The real `pool.promote_anchor` and the real `anchor.verify`, composed the way
-    `run.main` composes them, driven by the real `loop.run`. Only the build and the
-    benchmark are doubles -- everything between them is the shipping code."""
+    `run.main` composes them, driven single-lane through the real `pipeline.run_pool`
+    -- the production driver. Only the build and the benchmark are doubles --
+    everything between them is the shipping code."""
 
     def _drive(self, effect_pct, *, iterations=3):
         planner = _Planner()
-        recorded, verdicts = [], []
+        verdicts = []
         tmp = tempfile.TemporaryDirectory()
         store = Path(tmp.name)
 
@@ -508,12 +514,11 @@ class PromoteThenVerifyEndToEnd(unittest.TestCase):
             return "deadbeef"
 
         def run():
-            return loop.run(
-                planner=planner, critic=_Critic(), build_context=dict,
+            return drive_single_lane(
+                planner=planner, critic=_Critic(),
                 measure=lambda h, p: _comparison(5.0),
                 gate=lambda h, p: (True, [gates.Verdict("compile", True)]),
-                commit=commit, store_root=store, epoch="e", campaign_id="c",
-                iterations=iterations, on_iteration=recorded.append)
+                commit=commit, iterations=iterations)
         return planner, verdicts, store, run, tmp
 
     def test_a_bad_anchor_stops_the_run_after_one_iteration(self):

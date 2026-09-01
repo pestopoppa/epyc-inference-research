@@ -30,11 +30,10 @@ from __future__ import annotations
 from contextlib import nullcontext
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-import traceback
 from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol, Sequence
 
-from . import archive, bench, gates
+from . import bench, gates
 
 HYPOTHESIS_ROUNDS = 3
 PATCH_ROUNDS = 2
@@ -353,66 +352,15 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
     return Outcome("refused_at_formation", last_proposed, hypothesis_reasons)
 
 
-def run(*, planner: Planner, critic: Critic, build_context: Callable[[], dict],
-        measure: Callable[..., bench.Comparison],
-        gate: Callable[..., tuple[bool, list[gates.Verdict]]],
-        commit: Callable[..., str], store_root: Path, epoch: str,
-        campaign_id: str, iterations: int,
-        on_iteration: Callable[[list["Outcome"]], None] | None = None
-        ) -> list[Outcome]:
-    """Drive `iterate` and persist every outcome, kept or not.
-
-    TEST-ONLY SEAM since 2026-08-31: every production run drives `pipeline.run_pool`
-    (via `run.py`, `--workers` >= 1 all pooled), and the sequential CLI path that
-    called this was deleted. It survives because `test_loop`, `test_anchor` and
-    `test_production` drive the real anchor-guard and headline composition through
-    it with fakes — a driver those suites can hold still. It shrank to what those
-    suites use: the consecutive-error BREAKER moved to `pipeline.run_pool`
-    (`pipeline.MAX_CONSECUTIVE_ERRORS`) — the pool owns the real one, and this seam
-    only contains single-iteration faults without counting them — and the
-    `should_stop` / `reset` / `on_step` hooks went with the CLI path (the pool's
-    equivalents are `Budget.should_stop` + `should_abandon`, `reset_to_champion`
-    and the lane-labelled `on_step`).
-
-    `on_iteration` fires after EVERY iteration, including refused and transient ones.
-    Publishing status is not the loop's concern, but a loop that only reports when it
-    succeeds is indistinguishable from one that is stuck -- which is what "STOPPED,
-    authoring/build are event-silent by design" looked like on the old dashboard.
-    """
-    outcomes: list[Outcome] = []
-    for _ in range(iterations):
-        try:
-            outcome = iterate(planner=planner, critic=critic,
-                              context=build_context(), measure=measure, gate=gate,
-                              commit=commit)
-        except RunAborted:
-            # NEVER an iteration fault, so it must not be laundered into one: the
-            # blanket handler below would record it as `iteration_error` and draw the
-            # next iteration. The promotion A/A guard refused the binary in the anchor
-            # slot, so every later comparison would be against a champion that is not
-            # the champion -- run 18 continued 6.5 hours and 114 candidates that way.
-            raise
-        except Exception as exc:      # noqa: BLE001 -- deliberate, see below
-            # NOTHING that goes wrong in one iteration may end the run. Run 12 lost
-            # ten iterations, a profile and a held device to a single SIGKILLed
-            # benchmark; before that, a codex 401 took down 284 attempts. The
-            # iteration is the unit of failure, and the run is what has to survive.
-            # The traceback is recorded in full so containment cannot hide the fault;
-            # the consecutive-failure BREAKER is the pool's (`pipeline.run_pool`).
-            outcome = Outcome("iteration_error", None,
-                              [f"{type(exc).__name__}: {exc}",
-                               traceback.format_exc()[-1500:]])
-        archive.record(store_root, outcome.to_attempt(), epoch=epoch,
-                       recorded_at=_now(), campaign_id=campaign_id)
-        outcomes.append(outcome)
-        if on_iteration is not None:
-            try:
-                on_iteration(outcomes)
-            except Exception:      # noqa: BLE001 - reporting must never kill the loop
-                pass
-    return outcomes
-
+# `run`, the sequential driver, is GONE (R21-7, 2026-09-01). It outlived the
+# sequential CLI path (deleted 2026-08-31) only as a test seam, and the suites that
+# held it still — test_loop, test_anchor, test_production — now drive
+# `pipeline.run_pool` as a one-lane pool, the same shape `run.py --workers 1`
+# builds. Its `except RunAborted: raise` lives on as the pool lane's RunAborted
+# handler; its blanket containment as the lane's `lane_error`; its per-outcome
+# `archive.record` as `run.py`'s injected `record`. `iterate` is the whole of this
+# module's control flow now, and the pool is its only driver.
 
 __all__ = ["ActorTransient", "TailRefused", "RunAborted", "Critic",
            "HYPOTHESIS_ROUNDS", "Hypothesis", "Outcome", "PATCH_ROUNDS",
-           "Planner", "Review", "STOPPED_MID_FORMATION", "iterate", "run"]
+           "Planner", "Review", "STOPPED_MID_FORMATION", "iterate"]

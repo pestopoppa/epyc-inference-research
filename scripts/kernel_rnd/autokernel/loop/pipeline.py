@@ -199,7 +199,9 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
         with outcomes_lock:
             outcomes.append(outcome)
             record(outcome)
-            if outcome.status in ("lane_error", "iteration_error"):
+            # `lane_error` is the only error status left: `iteration_error` was the
+            # deleted sequential driver's spelling of the same containment (R21-7).
+            if outcome.status == "lane_error":
                 consecutive_errors[0] += 1
                 if consecutive_errors[0] >= MAX_CONSECUTIVE_ERRORS and not aborted:
                     budget.remaining = 0

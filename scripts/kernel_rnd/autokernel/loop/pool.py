@@ -8,7 +8,8 @@ accounting that only made sense with one lane.
 
 THE run path since 2026-08-31: `run.py` deleted its separate sequential wiring once
 the pool owned the consecutive-error breaker, so every run — `--workers 1` included —
-goes through here. (`loop.run` survives only as a test seam.)
+goes through here. (`loop.run`, which then survived only as a test seam, was deleted
+outright on 2026-09-01 (R21-7): the suites drive `pipeline.run_pool` single-lane.)
 
 THE CHAMPION IS A BRANCH IN A WORKTREE
 --------------------------------------

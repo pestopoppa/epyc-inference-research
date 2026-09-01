@@ -6,11 +6,31 @@ can act on it, whether budgets stay independent, and whether a candidate that is
 faster can be reported as faster.
 """
 from pathlib import Path
-import tempfile
 import unittest
 from unittest import mock
 
-from autokernel.loop import bench, gates, loop
+from autokernel.loop import bench, gates, loop, pipeline
+
+
+def drive_single_lane(*, planner, critic, measure, gate, commit, iterations,
+                      build_context=dict, record=None):
+    """Drive `pipeline.run_pool` — THE production path — as a one-lane pool.
+
+    This replaced the deleted `loop.run` test seam (R21-7): the properties these
+    suites pin (fault containment, abort propagation, budget draw) belong to the
+    path production actually runs, so the driver is the pool at `--workers 1` —
+    which is exactly what `run.py --workers 1` builds — not a private sequential
+    loop kept alive for the fakes. The champion head is pinned, so the staleness
+    check never fires and one lane runs strictly in order.
+    """
+    worker = pipeline.Worker("lane0", Path("/w/lane0"), Path("/b/lane0"))
+    return pipeline.run_pool(
+        workers=[worker], make_planner=lambda w: planner,
+        make_critic=lambda w: critic, build_context=build_context,
+        make_gate=lambda w: gate, make_measure=lambda w: measure,
+        commit=lambda w, h, p, c: commit(h, p, c),
+        champion_head=lambda: "c0", reset_to_champion=lambda w: "c0",
+        record=record or (lambda outcome: None), iterations=iterations)
 
 
 def _hypothesis(mechanism="akm-q5-bit-deposit"):
@@ -287,17 +307,16 @@ class ProviderTransientsEndAnIterationNotTheRun(unittest.TestCase):
         self.assertIn("no changed paths", row["reason"])
 
     def test_a_run_continues_past_a_transient(self):
-        """The property that matters: one bad provider call is not a dead campaign."""
-        import tempfile
-        with tempfile.TemporaryDirectory() as tmp:
-            outcomes = loop.run(
-                planner=self._Exploding("author"), critic=_Critic([], []),
-                build_context=dict,
-                measure=lambda h, p: _comparison(0.05),
-                gate=lambda h, p: (True, []),
-                commit=lambda h, p, c: "head",
-                store_root=Path(tmp), epoch="e" * 64,
-                campaign_id="ak-test", iterations=3)
+        """The property that matters: one bad provider call is not a dead campaign.
+
+        Driven through the production pool. A transient is contained INSIDE
+        `iterate`, so it reaches the pool as a recorded outcome, never trips the
+        consecutive-error breaker, and the lane keeps drawing its budget."""
+        outcomes = drive_single_lane(
+            planner=self._Exploding("author"), critic=_Critic([], []),
+            measure=lambda h, p: _comparison(0.05),
+            gate=lambda h, p: (True, []),
+            commit=lambda h, p, c: "head", iterations=3)
         self.assertEqual([o.status for o in outcomes], ["planner_transient"] * 3)
 
 
@@ -413,20 +432,20 @@ class AnInstrumentFailureEndsTheIterationNotTheRun(unittest.TestCase):
         self.assertNotEqual(outcome.status, "planner_transient")
 
     def test_the_run_keeps_going_after_one(self):
+        """`bench_failed` is contained inside `iterate`, so the pool sees a recorded
+        outcome — not an error status — and the breaker never arms."""
         calls = {"n": 0}
 
         def measure(hypothesis, paths):
             calls["n"] += 1
             raise bench.BenchFailed("killed")
 
-        with tempfile.TemporaryDirectory() as tmp:
-            outcomes = loop.run(
-                planner=_Planner(), critic=_Critic([], []), build_context=dict,
-                measure=measure,
-                gate=lambda *a: (True, [gates.Verdict("compile", True)]),
-                commit=lambda *a: "abc1234", store_root=Path(tmp),
-                epoch="e" * 64, campaign_id="ak-loop", iterations=3)
+        outcomes = drive_single_lane(
+            planner=_Planner(), critic=_Critic([], []), measure=measure,
+            gate=lambda *a: (True, [gates.Verdict("compile", True)]),
+            commit=lambda *a: "abc1234", iterations=3)
         self.assertEqual(len(outcomes), 3, "one killed bench must not end the run")
+        self.assertEqual([o.status for o in outcomes], ["bench_failed"] * 3)
         self.assertEqual(calls["n"], 3)
 
 
@@ -435,20 +454,18 @@ class NoSingleIterationMayEndTheRun(unittest.TestCase):
     benchmark. Before that a codex 401 took down 284 attempts. The iteration is the
     unit of failure; the run is what has to survive.
 
-    A blanket catch that merely swallowed would be worse than the crash, so the
-    traceback is kept. The consecutive-failure BREAKER belongs to the production
-    path — `pipeline.run_pool` — and is tested in `test_pipeline.py`
-    (`ThePoolBreaker`); this seam only contains and records.
+    Driven through the production pool: an exception that escapes `iterate` is the
+    lane's blanket containment (`lane_error`), one-off faults reset the breaker's
+    count, and a blanket catch that merely swallowed would be worse than the crash,
+    so the traceback is kept. The BREAKER itself is tested in `test_pipeline.py`
+    (`ThePoolBreaker`).
     """
 
     def _run(self, measure, iterations=5):
-        with tempfile.TemporaryDirectory() as tmp:
-            return loop.run(
-                planner=_Planner(), critic=_Critic([], []), build_context=dict,
-                measure=measure,
-                gate=lambda *a: (True, [gates.Verdict("compile", True)]),
-                commit=lambda *a: "abc1234", store_root=Path(tmp),
-                epoch="e" * 64, campaign_id="ak-loop", iterations=iterations)
+        return drive_single_lane(
+            planner=_Planner(), critic=_Critic([], []), measure=measure,
+            gate=lambda *a: (True, [gates.Verdict("compile", True)]),
+            commit=lambda *a: "abc1234", iterations=iterations)
 
     def test_an_unexpected_exception_becomes_a_recorded_outcome(self):
         calls = {"n": 0}
@@ -461,14 +478,21 @@ class NoSingleIterationMayEndTheRun(unittest.TestCase):
 
         outcomes = self._run(measure, iterations=3)
         self.assertEqual(len(outcomes), 3, "the run must continue past the fault")
-        self.assertEqual(outcomes[0].status, "iteration_error")
+        self.assertEqual(outcomes[0].status, "lane_error")
+        self.assertEqual([o.status for o in outcomes[1:]], ["kept"] * 2,
+                         "one fault, then the lane is back to work")
         self.assertIn("OSError", " ".join(outcomes[0].reasons))
 
     def test_the_traceback_is_kept_not_swallowed(self):
+        """The pool records the traceback's LAST 1500 chars, so the header line can
+        be truncated away on a deep stack; the frames are the evidence that survives.
+        Asserting on the "Traceback" banner would pin a spelling, not the record."""
         outcomes = self._run(
             lambda h, p: (_ for _ in ()).throw(RuntimeError("boom")), iterations=1)
-        self.assertIn("Traceback", " ".join(outcomes[0].reasons),
+        recorded = " ".join(outcomes[0].reasons)
+        self.assertIn('File "', recorded,
                       "a swallowed exception is worse than the crash it replaced")
+        self.assertIn("RuntimeError: boom", recorded)
 
 
 class AnUncalibratedMeasurementCannotBecomeAKeep(unittest.TestCase):

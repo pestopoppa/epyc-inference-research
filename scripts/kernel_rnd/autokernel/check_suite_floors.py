@@ -102,7 +102,16 @@ SUITE_FLOORS: dict[str, tuple[int, tuple[str, ...]]] = {
     # refuse_uncalibrated_keep against a doctored decisive=True, the
     # --calibrate-surface dispatch to the one D8 campaign home, and the
     # write-calibration round trip that turns refusal into a real floor).
-    "the loop package": (338, ("scripts/kernel_rnd/autokernel/loop/",)),
+    # 338 -> 339 on 2026-09-01 (R21-7): the `loop.run` test seam deleted outright.
+    # ZERO tests deleted — all thirteen tests that drove it (3 in test_loop, 4 in
+    # test_anchor, 9 via test_production's _drive) were ported to drive
+    # `pipeline.run_pool` as a one-lane pool, the shape `run.py --workers 1` builds,
+    # with the same assertions (exact draw counts, abort propagation, containment).
+    # ONE added: test_gates' verify-before-publish ordering check on `run.py`'s
+    # promotion body, closing a mutation hole found at the port — swapping
+    # `verify_anchor()`/`publish_headline()` survived every suite, because the
+    # end-to-end tests compose the modules themselves and cannot see that wiring.
+    "the loop package": (339, ("scripts/kernel_rnd/autokernel/loop/",)),
 }
 
 _COLLECTED = re.compile(r"(\d+) tests? collected")
