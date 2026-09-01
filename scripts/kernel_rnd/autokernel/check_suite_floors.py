@@ -59,9 +59,20 @@ SUITE_FLOORS: dict[str, tuple[int, tuple[str, ...]]] = {
     # `controller/test_inbox.py`, including the historical scenario (good seed +
     # invalid UTF-8 + chmod-000 together). Mutation-tested with the loop-side
     # suite: 12 of 12 in both directions.
+    # 162 -> 181 on 2026-09-01: the D1-D6 production-shaped rung, controller side
+    # (§5.1). test_workload_contract 9 -> 20: the census-based production family
+    # (Q8_0 accepted iff production is Q8_0-dominant, same workload refused against
+    # a K-quant production -- the family FOLLOWS the reference), the loud
+    # unreadable-production refusal, and both rung-parity branches (confirm mismatch
+    # never waivable, screen waiver a visible record). 8 new in test_rung_confirm.py:
+    # `configure`'s startup refusals (non-production-shaped confirm model, unknown /
+    # empty surfaces, zero pairs, unreadable reference) and the built gate's floors
+    # and waiver visibility. The gate's decision arithmetic is pinned loop-side in
+    # loop/test_confirm.py.
     "the decision arithmetic": (
-        162,
+        181,
         (
+            "scripts/kernel_rnd/autokernel/controller/test_rung_confirm.py",
             "scripts/kernel_rnd/autokernel/controller/test_inbox.py",
             "scripts/kernel_rnd/autokernel/controller/test_anchor_integrity.py",
             "scripts/benchmark/test_screen_effect_estimator.py",
@@ -148,7 +159,18 @@ SUITE_FLOORS: dict[str, tuple[int, tuple[str, ...]]] = {
     # automatic pooled commit path asserting the promoted anchor built llama-server
     # while the candidate-lane and guard builds stayed narrow. Doubles as R22-6's
     # end-to-end: the same run survives a poisoned inbox with both skips noted.
-    "the loop package": (369, ("scripts/kernel_rnd/autokernel/loop/",)),
+    # 369 -> 385 on 2026-09-01: the D1-D6 production-shaped rung, loop side
+    # (§5.2/§5.3). +5 in `loop/test_bench.py` (floors keyed by (surface, workload):
+    # built-in table refuses other models, keyed store hit, recorded-model mismatch
+    # refused, legacy filename honoured only when its recorded model matches -- the
+    # live dec-b* artifacts, checked read-only against the real store) and +1 in
+    # `loop/test_calibration.py` (the campaign writes the keyed filename). 10 new in
+    # `loop/test_confirm.py`: candidate->confirm promotion, the R23-5 inversion
+    # landing as keep_candidate with BOTH measurements recorded, uncalibrated
+    # confirm surface fail-closed, unconfigured == single-rung bit-identical
+    # (defaults OFF pinned in run.py source), and the rung (model) on every
+    # comparison/status/headline record.
+    "the loop package": (385, ("scripts/kernel_rnd/autokernel/loop/",)),
 }
 
 _COLLECTED = re.compile(r"(\d+) tests? collected")

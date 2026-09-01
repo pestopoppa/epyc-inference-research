@@ -360,7 +360,8 @@ class TheEnforcedFloorNeverSitsBelowTheMeasuredOne(unittest.TestCase):
         from autokernel.loop import run as run_mod
         for surface in bench.MEASURED_FLOOR_PCT:
             for pair_count in (5, 9):
-                enforced = run_mod.noise_floor_pct(surface, pair_count)
+                enforced = run_mod.noise_floor_pct(
+                    surface, pair_count, f"{bench.MEASURED_FLOOR_MODEL_STEM}.gguf")
                 measured = bench.MEASURED_FLOOR_PCT[surface][pair_count]
                 self.assertGreaterEqual(
                     enforced, measured,
@@ -373,8 +374,9 @@ class TheEnforcedFloorNeverSitsBelowTheMeasuredOne(unittest.TestCase):
         but it throws away the sensitivity the extra pairs were bought for."""
         from autokernel.loop import run as run_mod
         for surface in ("pp512", "tg128"):
-            self.assertGreater(run_mod.noise_floor_pct(surface, 5),
-                               run_mod.noise_floor_pct(surface, 9),
+            model = f"{bench.MEASURED_FLOOR_MODEL_STEM}.gguf"
+            self.assertGreater(run_mod.noise_floor_pct(surface, 5, model),
+                               run_mod.noise_floor_pct(surface, 9, model),
                                "more pairs must lower the bar")
 
     def test_decode_does_not_average_down_at_root_n(self):
@@ -383,7 +385,9 @@ class TheEnforcedFloorNeverSitsBelowTheMeasuredOne(unittest.TestCase):
         clear the bar. The floor takes the max of parametric and measured."""
         from autokernel.loop import run as run_mod
         self.assertLess(3.452 / (9 ** 0.5), bench.MEASURED_FLOOR_PCT["tg128"][9])
-        self.assertAlmostEqual(run_mod.noise_floor_pct("tg128", 9),
+        self.assertAlmostEqual(
+            run_mod.noise_floor_pct("tg128", 9,
+                                    f"{bench.MEASURED_FLOOR_MODEL_STEM}.gguf"),
                                bench.MEASURED_FLOOR_PCT["tg128"][9], places=6)
 
     def test_the_measured_table_is_monotonic_in_pair_count(self):

@@ -30,7 +30,8 @@ from autokernel.loop.test_loop import drive_single_lane
 #: The bar the run itself enforces on prefill at 5 pairs. Read from `run.noise_floor_pct`
 #: rather than typed, so a change to the run's floor cannot leave this suite testing a
 #: bar the loop no longer uses. It is 0.973% today.
-FLOOR = run_mod.noise_floor_pct("pp512", 5)
+FLOOR = run_mod.noise_floor_pct("pp512", 5,
+                                f"{bench.MEASURED_FLOOR_MODEL_STEM}.gguf")
 
 #: Run 18's post-promotion median effect (n=114), and the champion advance the promotion
 #: had just kept. The guard must fire on either sign: the anchor being 9.5% too fast and

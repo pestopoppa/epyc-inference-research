@@ -32,7 +32,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-from autokernel.loop import archive, champion, claim, pipeline, pool
+from autokernel.loop import archive, bench, champion, claim, pipeline, pool
 from autokernel.loop import run as run_mod
 
 CANONICAL = champion.CANONICAL_BRANCH
@@ -102,7 +102,7 @@ class _Incident(unittest.TestCase):
 
     def argv(self, *extra: str) -> list[str]:
         return ["--worktree", str(self.repo), "--anchor-build", str(self.anchor),
-                "--model", str(self.root / "m.gguf"), "--store", str(self.store),
+                "--model", str(self.root / f"{bench.MEASURED_FLOOR_MODEL_STEM}.gguf"), "--store", str(self.store),
                 *extra]
 
 

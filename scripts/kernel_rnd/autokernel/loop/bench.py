@@ -45,6 +45,12 @@ MEASURED_FLOOR_PCT = {
     "pp512": {1: 2.175, 3: 1.432, 5: 0.479, 9: 0.168, 20: 0.029},
     "tg128": {1: 3.452, 3: 2.527, 5: 2.422, 9: 2.021, 20: 1.188},
 }
+#: The workload the table above was measured on. Floors are WORKLOAD properties
+#: (§5.2, docs/design/autokernel-production-shaped-rung.md): this table is the
+#: 1.5B's keyed calibration, not a model-blind built-in, and `floor_rows` refuses
+#: to serve it to any other model -- a floor borrowed across rungs manufactures
+#: exactly the fake-decisive keeps the `calibrated` flag exists to prevent.
+MEASURED_FLOOR_MODEL_STEM = "DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M"
 
 #: Every surface the loop can drive: name -> (pp, tg, ubatch). The dec-b* rows are the
 #: run-22 small-batch decode-regime surfaces the injected seed families (05 MTP verify,
@@ -103,6 +109,10 @@ class Comparison:
     #: table row produced fake `decisive=True` verdicts, so a numeric floor on an
     #: uncalibrated surface must still refuse to decide.
     calibrated: bool = True
+    #: The rung (model) this comparison was measured on. Carried on every record
+    #: (§5.3): with two rungs, an effect without its model is a number without its
+    #: instrument, and run histories across rungs must never merge.
+    model: str | None = None
 
     @property
     def drift_explains_the_effect(self) -> bool:
@@ -166,7 +176,7 @@ class Comparison:
 
     def to_dict(self) -> dict:
         return {
-            "surface": self.surface, "effect": self.effect,
+            "surface": self.surface, "model": self.model, "effect": self.effect,
             "effect_pct": self.effect * 100.0, "estimator": self.estimator,
             "pairs": self.pairs, "noise_floor_pct": self.noise_floor_pct,
             "decisive": self.decisive, "device_seconds": self.device_seconds,
@@ -284,7 +294,7 @@ def compare(anchor: Arm, candidate: Arm, model: Path, *, pp: int, tg: int,
         anchor_samples=anchor_samples, candidate_samples=candidate_samples,
         effect=(st.median(candidate_samples) / centre) - 1.0,
         estimator="median_over_median", pairs=pairs,
-        noise_floor_pct=noise_floor_pct, calibrated=calibrated,
+        noise_floor_pct=noise_floor_pct, calibrated=calibrated, model=str(model),
         residency={"invocations": len(proofs),
                    "resident": len(resident),
                    "peak_vram_bytes": max(p["peak_vram_bytes"] for p in proofs),
@@ -385,22 +395,35 @@ def spread_is_suspect(samples: Sequence[float], ratio: float = 1.3) -> bool:
     return bool(values) and (max(values) / min(values)) > ratio
 
 
-def floor_rows(surface: str, store: Path | None = None) -> dict[int, float] | None:
-    """The floor table for a surface, or None when it is UNCALIBRATED.
+def floor_rows(surface: str, model: Path | str,
+               store: Path | None = None) -> dict[int, float] | None:
+    """The floor table for (surface, workload-class), or None when UNCALIBRATED.
 
-    Two sources, in order: the exhaustively measured built-in table above, then a
-    store-written A/A calibration record (`<store>/calibration/<surface>.json`, the
-    artifact `--calibrate-surface` writes). None on both misses -- never a default,
-    never a copy from a neighbouring surface: a borrowed floor is exactly the stale
-    pp512 row that once produced fake decisive keeps.
+    Keyed by BOTH axes since 2026-09-01 (§5.2): floors are workload properties, and
+    the surface-only lookup this replaces would have served the 1.5B's dec-b4 floor
+    to a 27B run without a word. Sources, in order: the built-in table (the 1.5B's
+    keyed entry -- see MEASURED_FLOOR_MODEL_STEM), then a store-written A/A record
+    at `calibration/<surface>.<model-stem>.json`, then the LEGACY surface-only
+    filename `calibration/<surface>.json` -- accepted only when its recorded
+    "model" matches the run's, so the live dec-b* artifacts (measured on the 1.5B,
+    each recording it) keep working with no store mutation. A recorded-model
+    mismatch on either filename returns None (uncalibrated -> keeps refused),
+    never the other model's rows.
     """
-    if surface in MEASURED_FLOOR_PCT:
+    stem = Path(model).stem
+    if surface in MEASURED_FLOOR_PCT and stem == MEASURED_FLOOR_MODEL_STEM:
         return MEASURED_FLOOR_PCT[surface]
-    path = (store / "calibration" / f"{surface}.json") if store is not None else None
-    if path is None or not path.is_file():
+    if store is None:
         return None
-    return {int(count): float(value) for count, value in
-            json.loads(path.read_text(encoding="utf-8"))["floor_pct"].items()}
+    for name in (f"{surface}.{stem}.json", f"{surface}.json"):
+        path = store / "calibration" / name
+        if path.is_file():
+            body = json.loads(path.read_text(encoding="utf-8"))
+            if Path(str(body.get("model") or "")).stem != stem:
+                return None
+            return {int(count): float(value) for count, value in
+                    body["floor_pct"].items()}
+    return None
 
 
 def bootstrap_floor(anchor: Sequence[float], candidate: Sequence[float],
@@ -428,6 +451,7 @@ def bootstrap_floor(anchor: Sequence[float], candidate: Sequence[float],
     return rows
 
 
-__all__ = ["Arm", "BenchFailed", "CPU_LIST", "Comparison", "MEASURED_FLOOR_PCT",
-           "MIN_PAIRS", "SURFACES", "WARMUP_PAIRS", "bootstrap_floor", "compare",
-           "drift_pct", "floor_rows", "run_once", "spread_is_suspect"]
+__all__ = ["Arm", "BenchFailed", "CPU_LIST", "Comparison",
+           "MEASURED_FLOOR_MODEL_STEM", "MEASURED_FLOOR_PCT", "MIN_PAIRS",
+           "SURFACES", "WARMUP_PAIRS", "bootstrap_floor", "compare", "drift_pct",
+           "floor_rows", "run_once", "spread_is_suspect"]

@@ -71,6 +71,7 @@ def write_json(store_root: Path, name: str, body: Any, *,
 def write(store_root: Path, *, state: str, epoch: str, campaign_id: str,
           anchor_commit: str, surface: str, pairs: int,
           noise_floor_pct: float | None,
+          model: str | None = None,
           outcomes: Sequence[Mapping[str, Any]] = (),
           iterations_planned: int = 0,
           champion_head: str | None = None,
@@ -91,12 +92,16 @@ def write(store_root: Path, *, state: str, epoch: str, campaign_id: str,
         status = str(row.get("status", "unknown"))
         counts[status] = counts.get(status, 0) + 1
 
-    measured = sum(counts.get(key, 0) for key in ("kept", "measured_null"))
+    measured = sum(counts.get(key, 0)
+                   for key in ("kept", "measured_null", "keep_candidate"))
     body = {
         "schema": STATUS_SCHEMA,
         "generated_at": _now(),
         "stale_after_s": int(stale_after_s),
         "state": state,
+        # The rung this run measures on (§5.3): with two rungs live, run histories
+        # that do not carry their model would silently merge across instruments.
+        "model": model,
         # What the loop is doing RIGHT NOW. An iteration can run far longer
         # than the freshness envelope -- a single planner call exceeded 18
         # minutes once the bundle carried the program and the seeds -- so

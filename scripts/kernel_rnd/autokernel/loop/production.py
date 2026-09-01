@@ -255,6 +255,9 @@ def refresh(*, store: Path, champion_commit: str, champion_build: Path,
             "effect_fraction": float(comparison.effect),
             "metric": f"{comparison.surface}_tok_s",
             "metric_direction": "higher_better",
+            # The rung the headline was measured on, off the comparison like every
+            # other fact here (§5.3): an off-production-shape headline must SAY so.
+            "model": comparison.model,
             "surface": comparison.surface,
             "pairs": comparison.pairs,
             "noise_floor_pct": comparison.noise_floor_pct,
