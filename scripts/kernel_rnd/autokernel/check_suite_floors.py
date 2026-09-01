@@ -52,9 +52,17 @@ SUITE_FLOORS: dict[str, tuple[int, tuple[str, ...]]] = {
     # flip in each covered section of a scratch copy. The real-pair tests skip
     # (never pass vacuously green as 0) if the fixture is unstaged, but they still
     # COLLECT, so the floor counts them.
+    # 155 -> 162 on 2026-09-01 (R22-6): the hardened inbox reader
+    # (`controller/inbox.py`) — one unreadable file in the live inbox used to raise
+    # inside `build_context` on every iteration and trip the pool breaker, making
+    # the operator's injection channel a kill switch. 7 new tests in
+    # `controller/test_inbox.py`, including the historical scenario (good seed +
+    # invalid UTF-8 + chmod-000 together). Mutation-tested with the loop-side
+    # suite: 12 of 12 in both directions.
     "the decision arithmetic": (
-        155,
+        162,
         (
+            "scripts/kernel_rnd/autokernel/controller/test_inbox.py",
             "scripts/kernel_rnd/autokernel/controller/test_anchor_integrity.py",
             "scripts/benchmark/test_screen_effect_estimator.py",
             "scripts/benchmark/test_autokernel_funsafe_math_admission.py",
@@ -133,7 +141,14 @@ SUITE_FLOORS: dict[str, tuple[int, tuple[str, ...]]] = {
     # that silently reverts the triad while every injected-double test stays
     # green); 2 in `loop/test_production.py` for the bundle's excursion note
     # (published verbatim, and ABSENT -- not null -- on a clean promotion).
-    "the loop package": (358, ("scripts/kernel_rnd/autokernel/loop/",)),
+    # 358 -> 369 on 2026-09-01 (R22-7): production-complete promotion builds. 11 new
+    # tests in `loop/test_promotion_targets.py`: the PROMOTION_TARGETS /
+    # DEFAULT_TARGETS split, provenance recording the exact tuple handed to the
+    # build, and the acceptance end-to-end — one simulated keep through `run.main`'s
+    # automatic pooled commit path asserting the promoted anchor built llama-server
+    # while the candidate-lane and guard builds stayed narrow. Doubles as R22-6's
+    # end-to-end: the same run survives a poisoned inbox with both skips noted.
+    "the loop package": (369, ("scripts/kernel_rnd/autokernel/loop/",)),
 }
 
 _COLLECTED = re.compile(r"(\d+) tests? collected")

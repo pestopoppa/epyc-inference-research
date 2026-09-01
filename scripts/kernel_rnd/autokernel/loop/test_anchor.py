@@ -413,7 +413,7 @@ class PromotionBuildsTheAnchorWhereItIsUsed(unittest.TestCase):
     def _promote(self, store, *, passes=True, commit=CHAMPION, recipe=None):
         seen = []
 
-        def build(dest):
+        def build(dest, targets=gates.DEFAULT_TARGETS):
             seen.append(Path(dest))
             if passes:
                 (Path(dest) / "bin").mkdir(parents=True, exist_ok=True)
@@ -498,7 +498,7 @@ class PromoteThenVerifyEndToEnd(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         store = Path(tmp.name)
 
-        def build(dest):
+        def build(dest, targets=gates.DEFAULT_TARGETS):
             (Path(dest) / "bin").mkdir(parents=True, exist_ok=True)
             (Path(dest) / "bin" / "llama-bench").write_text("elf", encoding="utf-8")
             return gates.Verdict("compile", True)

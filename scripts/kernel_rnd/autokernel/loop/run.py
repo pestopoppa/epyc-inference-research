@@ -22,7 +22,7 @@ import subprocess
 import sys
 import time
 
-from ..controller import anchor_integrity, build_recipe, workload_contract
+from ..controller import anchor_integrity, build_recipe, inbox, workload_contract
 from . import (actors, anchor, archive, bench, champion, claim, gates, hotspots, loop,
                pipeline, pool, production, status)
 
@@ -208,27 +208,15 @@ def main(argv: list[str] | None = None) -> int:
         print("\nDRY RUN — wiring proven, nothing spent.")
         return 0
 
-    def read_inbox() -> list[str]:
-        """Re-read every iteration, not once at startup.
-
-        The inbox is how a hypothesis reaches the planner from outside the loop -- from a
-        handoff, a backlog row, or the operator mid-run. Reading it once means anything
-        dropped in after launch is invisible until the next restart, which is how the
-        channel stayed empty while the backlog held measured levers for the exact kernels
-        the planner was re-deriving.
-        """
-        inbox_dir = args.store / "inbox"
-        if not inbox_dir.is_dir():
-            return []
-        return [path.read_text(encoding="utf-8").strip()
-                for path in sorted(inbox_dir.glob("*.md"))]
-
     def build_context() -> dict:
         return {
             "program": loop.PROGRAM.read_text(encoding="utf-8"),
             "kernel_hotspots": [row.to_dict() for row in hotspot_rows],
             "prior_experiments": prior_experiments(args, epoch),
-            "inbox": read_inbox(),
+            # Re-read EVERY iteration, never cached at startup, and hardened so one
+            # unreadable file cannot kill the run through the breaker (R22-6): the
+            # rationale for both lives on `controller.inbox.read_inbox`'s docstring.
+            "inbox": inbox.read_inbox(args.store / "inbox"),
         }
 
     def keep_the_diff(worker, hypothesis) -> Path | None:
@@ -347,10 +335,18 @@ def main(argv: list[str] | None = None) -> int:
 
     anchor_guard_seen: list = []
 
-    def build_champion(dest: Path):
-        """The loop's recipe, compiled AT the path used. Shared by promotion and guard."""
+    def build_champion(dest: Path, targets: tuple = gates.DEFAULT_TARGETS):
+        """The loop's recipe, compiled AT the path used. Shared by promotion and guard —
+        at DIFFERENT widths (R22-7). `pool.promote_anchor` calls this with
+        `gates.PROMOTION_TARGETS` (llama-server included: a champion that is not
+        production-complete is not promotable — operator ruling, 2026-09-01), while
+        the anchor guard's throwaway fresh build and its heal retry take the narrow
+        default: the guard answers "is the anchor slot the champion", its digest
+        hashes `bin/libggml-hip.so` alone, and paying server link time per keep for
+        a binary nobody runs would buy nothing. Candidate lane builds (`gate_for`)
+        stay narrow for the same reason at hundreds of iterations per run."""
         return gates.compiles(args.worktree, dest, cmake_defines=recipe.cmake_defines(),
-                              jobs=64, cpu_list="96-183")
+                              jobs=64, cpu_list="96-183", targets=targets)
 
     def build_baseline(dest: Path, commit: str):
         """The frozen production kernel, built at most once PER FREEZE. Never in the

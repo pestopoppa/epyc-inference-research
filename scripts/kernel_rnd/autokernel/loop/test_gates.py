@@ -7,14 +7,14 @@ from unittest import mock
 from autokernel.loop import gates
 
 
-def _champion_build(dest):
+def _champion_build(dest, targets=gates.DEFAULT_TARGETS):
     """Stand in for `gates.compiles`: produce the binary the anchor is measured with."""
     (Path(dest) / "bin").mkdir(parents=True, exist_ok=True)
     (Path(dest) / "bin" / "llama-bench").write_text("elf", encoding="utf-8")
     return gates.Verdict("compile", True)
 
 
-def _broken_build(dest):
+def _broken_build(dest, targets=gates.DEFAULT_TARGETS):
     return gates.Verdict("compile", False, "build failed")
 
 

@@ -362,7 +362,7 @@ class _Promotion:
         self.build_baseline = build_baseline
         self.builds, self.refreshes, self.arms = [], [], []
 
-    def build(self, dest, commit=None):
+    def build(self, dest, targets=None, commit=None):
         self.builds.append(Path(dest))
         return _built(dest)
 

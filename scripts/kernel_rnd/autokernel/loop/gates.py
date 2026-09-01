@@ -25,6 +25,18 @@ from . import residency
 CORRECTNESS_TIMEOUT_S = 1800
 BUILD_TIMEOUT_S = 7200
 
+#: Per-ITERATION builds: candidate lanes and the anchor guard's fresh build. The
+#: bench binary and the op oracle are all a measurement needs, and at hundreds of
+#: iterations per run every extra link is paid for by nobody.
+DEFAULT_TARGETS = ("llama-bench", "test-backend-ops")
+#: Per-KEEP promotion builds (`pool.promote_anchor`). Every `anchor-gen-NNN` before
+#: R22-7 was bench-only; the operator's ruling (2026-09-01, verbatim): "The whole
+#: point of a champion is that it needs to be extremely easy to promote into
+#: production… If we're not compiling llama-servers that's a problem." A superset of
+#: DEFAULT_TARGETS by construction, so the promoted artifact can never lack a binary
+#: the loop itself measured with.
+PROMOTION_TARGETS = (*DEFAULT_TARGETS, "llama-cli", "llama-server")
+
 
 @dataclass(frozen=True)
 class Verdict:
@@ -40,8 +52,7 @@ class Verdict:
 
 
 def compiles(source_root: Path, build_dir: Path, *, cmake_defines: tuple,
-             jobs: int, cpu_list: str | None, targets: tuple = (
-                 "llama-bench", "test-backend-ops"),
+             jobs: int, cpu_list: str | None, targets: tuple = DEFAULT_TARGETS,
              cmake: str = "cmake") -> Verdict:
     """Configure and build. A compile failure is cheap, automatic planner feedback."""
     prefix = ("taskset", "-c", cpu_list) if cpu_list else ()
@@ -162,5 +173,6 @@ def run_all(*checks: "Callable[[], Verdict]") -> tuple[bool, list[Verdict]]:
     return True, collected
 
 
-__all__ = ["BUILD_TIMEOUT_S", "CORRECTNESS_TIMEOUT_S", "Verdict", "compiles",
-           "deterministic", "op_correctness", "run_all"]
+__all__ = ["BUILD_TIMEOUT_S", "CORRECTNESS_TIMEOUT_S", "DEFAULT_TARGETS",
+           "PROMOTION_TARGETS", "Verdict", "compiles", "deterministic",
+           "op_correctness", "run_all"]

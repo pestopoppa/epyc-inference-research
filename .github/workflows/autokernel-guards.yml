@@ -79,6 +79,7 @@ jobs:
             scripts/benchmark/test_screen_effect_estimator.py \
             scripts/benchmark/test_autokernel_funsafe_math_admission.py \
             scripts/kernel_rnd/autokernel/controller/test_anchor_integrity.py \
+            scripts/kernel_rnd/autokernel/controller/test_inbox.py \
             scripts/kernel_rnd/autokernel/controller/test_workload_contract.py \
             scripts/kernel_rnd/autokernel/controller/test_build_recipe.py \
             scripts/kernel_rnd/autokernel/controller/test_gate_parameters.py \

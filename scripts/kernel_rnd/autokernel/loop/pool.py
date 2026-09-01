@@ -40,7 +40,7 @@ import threading
 import time
 from typing import Any, Callable, Mapping, Sequence
 
-from . import archive, champion as champion_mod, loop as loop_mod, pipeline
+from . import archive, champion as champion_mod, gates, loop as loop_mod, pipeline
 
 #: The frozen production clone the champion worktree belongs to.
 SOURCE_REPO = Path("/mnt/raid0/llm/llama.cpp")
@@ -336,8 +336,9 @@ __all__ = ["CHAMPION_BRANCH", "CHAMPION_TREE", "MAX_WORKERS", "PhaseClock",
            "commit_message", "drive", "provision", "reset_to_champion"]
 
 
-def promote_anchor(store: Path, *, build: Callable[[Path], Any], champion_commit: str,
-                   recipe: Mapping[str, Any] | None = None) -> Path:
+def promote_anchor(store: Path, *, build: Callable[..., Any], champion_commit: str,
+                   recipe: Mapping[str, Any] | None = None,
+                   targets: Sequence[str] = gates.PROMOTION_TARGETS) -> Path:
     """BUILD the champion into a new anchor slot. Never MOVE a build directory into one.
 
     THE WHOLE POINT of an advancing anchor: if it does not advance, every effect is
@@ -356,6 +357,16 @@ def promote_anchor(store: Path, *, build: Callable[[Path], Any], champion_commit
     reconciled artifact. This yields ONE artifact that is both the measurement anchor and
     the promotion candidate, `provenance.json` beside it naming both. One build per keep,
     unconditionally; no move is kept as a fast path.
+
+    `targets` (R22-7) is why "promotable" is now true rather than aspirational: every
+    generation before it held llama-bench and the op oracle and NO `llama-server`, so
+    the artifact whose whole point is being easy to promote could not serve a request.
+    It defaults to `gates.PROMOTION_TARGETS` HERE -- inside the champion-advancement
+    step every keep runs, not in any caller -- so an unattended keep cannot produce a
+    bench-only anchor, and the SAME tuple is handed to `build` and written to
+    `provenance.json`: one fact, one source, and an artifact whose record omits
+    `llama-server` is detectably incomplete. Candidate-lane and guard builds are NOT
+    widened -- they call `gates.compiles` on its narrow per-iteration default.
     """
     # MAX existing number + 1, never the COUNT. Counting collides the moment pruning
     # holds the population steady: with keep=1 the count is always 1, so every promotion
@@ -369,7 +380,7 @@ def promote_anchor(store: Path, *, build: Callable[[Path], Any], champion_commit
             f"{promoted} already exists; refusing to build into it. Configuring over "
             f"another generation's CMakeCache is the relocation hazard by another route")
     promoted.mkdir(parents=True)
-    verdict = build(promoted)
+    verdict = build(promoted, tuple(targets))
     if not getattr(verdict, "passed", False):
         raise ValueError(
             f"champion {champion_commit[:12]} would not build into {promoted} "
@@ -377,7 +388,8 @@ def promote_anchor(store: Path, *, build: Callable[[Path], Any], champion_commit
             f"the next candidate against")
     (promoted / "provenance.json").write_text(json.dumps(
         {"champion_commit": champion_commit, "build_recipe": dict(recipe or {}),
-         "built_at": str(promoted)}, sort_keys=True), encoding="utf-8")
+         "targets": list(targets), "built_at": str(promoted)},
+        sort_keys=True), encoding="utf-8")
     return promoted
 
 
