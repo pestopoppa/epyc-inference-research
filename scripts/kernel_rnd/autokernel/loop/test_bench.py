@@ -397,27 +397,92 @@ class TheSurfaceTableDrivesTheBatchWidth(unittest.TestCase):
 
 class TheFloorComesFromCalibrationOnly(unittest.TestCase):
     """`floor_rows` may answer from the measured built-in table or a store-written
-    A/A record -- NEVER from a default or a neighbouring surface."""
+    A/A record -- NEVER from a default, a neighbouring surface, or (since §5.2)
+    ANOTHER MODEL's calibration: floors are workload properties, and the
+    surface-only keying this replaces would have served the 1.5B's floor to a 27B
+    run without a word."""
+
+    #: The workload the built-in table belongs to, and a second rung it must not leak
+    #: to. Filenames, because `floor_rows` keys by the model STEM (the same GGUF via
+    #: the lmstudio symlink farm must still hit its own floor).
+    CALIBRATED = f"{bench.MEASURED_FLOOR_MODEL_STEM}.gguf"
+    OTHER = "Qwen3.8-27B-Q8_0.gguf"
+    ROWS = {"floor_pct": {"1": 3.0, "5": 2.0, "9": 1.5, "20": 1.0}}
 
     def test_builtin_surfaces_answer_from_the_measured_table(self):
-        self.assertIs(bench.floor_rows("tg128"), bench.MEASURED_FLOOR_PCT["tg128"])
-        self.assertIs(bench.floor_rows("pp512"), bench.MEASURED_FLOOR_PCT["pp512"])
+        self.assertIs(bench.floor_rows("tg128", self.CALIBRATED),
+                      bench.MEASURED_FLOOR_PCT["tg128"])
+        self.assertIs(bench.floor_rows("pp512", self.CALIBRATED),
+                      bench.MEASURED_FLOOR_PCT["pp512"])
+
+    def test_the_builtin_table_is_keyed_to_its_model_not_model_blind(self):
+        """MEASURED_FLOOR_PCT demoted to the 1.5B's keyed entry (§5.2): a different
+        rung on a built-in surface is UNCALIBRATED, never handed the 1.5B's floor."""
+        self.assertIsNone(bench.floor_rows("tg128", self.OTHER))
+        self.assertIsNone(bench.floor_rows("pp512", self.OTHER))
 
     def test_an_unknown_surface_is_uncalibrated_not_defaulted(self):
-        self.assertIsNone(bench.floor_rows("dec-b4"))
+        self.assertIsNone(bench.floor_rows("dec-b4", self.CALIBRATED))
 
-    def test_a_store_record_calibrates_and_round_trips_int_keys(self):
+    def test_a_keyed_store_record_calibrates_and_round_trips_int_keys(self):
         with tempfile.TemporaryDirectory() as tmp:
             store = Path(tmp)
             (store / "calibration").mkdir()
-            (store / "calibration" / "dec-b4.json").write_text(json.dumps(
-                {"floor_pct": {"1": 3.0, "5": 2.0, "9": 1.5, "20": 1.0}}))
-            rows = bench.floor_rows("dec-b4", store=store)
+            (store / "calibration" / "dec-b4.Qwen3.8-27B-Q8_0.json").write_text(
+                json.dumps({"model": self.OTHER, **self.ROWS}))
+            rows = bench.floor_rows("dec-b4", self.OTHER, store=store)
+            self.assertEqual(rows, {1: 3.0, 5: 2.0, 9: 1.5, 20: 1.0})
+            self.assertIsNone(
+                bench.floor_rows("dec-b4", self.CALIBRATED, store=store),
+                "one model's keyed calibration must not leak to another")
+
+    def test_a_keyed_record_whose_recorded_model_disagrees_is_refused(self):
+        """The filename is not evidence -- the recorded "model" is verified, and a
+        mismatch means someone misfiled a floor: refuse, never serve it."""
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Path(tmp)
+            (store / "calibration").mkdir()
+            (store / "calibration" / "dec-b4.Qwen3.8-27B-Q8_0.json").write_text(
+                json.dumps({"model": self.CALIBRATED, **self.ROWS}))
+            self.assertIsNone(bench.floor_rows("dec-b4", self.OTHER, store=store))
+
+    def test_a_legacy_record_with_the_matching_model_still_hits(self):
+        """The live store's dec-b*.json (measured on the 1.5B, each recording it)
+        must keep working with NO store mutation: legacy filename, model verified."""
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Path(tmp)
+            (store / "calibration").mkdir()
+            (store / "calibration" / "dec-b4.json").write_text(
+                json.dumps({"model": self.CALIBRATED, **self.ROWS}))
+            rows = bench.floor_rows("dec-b4", self.CALIBRATED, store=store)
         self.assertEqual(rows, {1: 3.0, 5: 2.0, 9: 1.5, 20: 1.0})
+
+    def test_a_legacy_record_for_a_different_model_is_uncalibrated(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Path(tmp)
+            (store / "calibration").mkdir()
+            (store / "calibration" / "dec-b4.json").write_text(
+                json.dumps({"model": self.CALIBRATED, **self.ROWS}))
+            self.assertIsNone(bench.floor_rows("dec-b4", self.OTHER, store=store))
+
+    def test_the_live_store_legacy_artifacts_resolve_for_their_own_model(self):
+        """Backward compatibility against the REAL store, read-only: the dec-b*
+        artifacts were measured on the 1.5B and must still be found for it."""
+        live = Path("/mnt/raid0/llm/autokernel/loop-memory")
+        if not (live / "calibration" / "dec-b4.json").is_file():
+            self.skipTest("live store not present on this host")
+        for surface in ("dec-b2", "dec-b4", "dec-b8"):
+            with self.subTest(surface=surface):
+                rows = bench.floor_rows(surface, self.CALIBRATED, store=live)
+                self.assertIsInstance(rows, dict)
+                self.assertIn(5, rows)
+                self.assertIsNone(bench.floor_rows(surface, self.OTHER, store=live),
+                                  "the 27B must NOT inherit the 1.5B's floor")
 
     def test_a_store_without_the_record_is_still_uncalibrated(self):
         with tempfile.TemporaryDirectory() as tmp:
-            self.assertIsNone(bench.floor_rows("dec-b4", store=Path(tmp)))
+            self.assertIsNone(
+                bench.floor_rows("dec-b4", self.CALIBRATED, store=Path(tmp)))
 
 
 class TheBootstrapFloorReproducesTheD8Row(unittest.TestCase):
