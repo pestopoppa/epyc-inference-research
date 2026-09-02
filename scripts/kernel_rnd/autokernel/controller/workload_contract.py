@@ -31,6 +31,17 @@ smaller and cheaper than production -- that is the point of screening -- but it 
 not dispatch different kernels, because then a measurement on it is not evidence
 about production at all.
 
+The production family is CENSUSED from the declared production model, never
+hard-coded (2026-09-01, §5.1 of docs/design/autokernel-production-shaped-rung.md).
+The hard-coded set this replaced was written in the K/I-quant era and never followed
+the 2026-08-14 Q8_0 cutover, so `verify_workload` REFUSED production's own model --
+the same drift class one level up. Reading the family off production's GGUF means
+the next cutover cannot recur it.
+
+`rung_matches_production` is the finer instrument on top: exact dominant-quant and
+n_embd-class parity, required for a CONFIRM rung, recorded-but-WAIVED for a SCREEN
+rung -- the waiver is a visible artifact, never a silent assumption.
+
 This is a structural gate, not a note in a README. The defect it closes was invisible
 for a month precisely because it lived in a filename.
 """
@@ -52,13 +63,31 @@ GGML_TYPE_NAMES: Mapping[int, str] = {
     23: "IQ3_S", 24: "IQ2_S", 25: "IQ4_XS", 30: "BF16",
 }
 
-#: Quantisations the production stack actually dispatches (K-quants and I-quants).
-#: A screening workload dominated by anything outside this set measures a kernel
-#: production never runs.
-PRODUCTION_QUANT_FAMILY = frozenset({
+#: Float carriers -- present in every GGUF, never the kernel a workload exercises.
+FLOAT_TYPES = frozenset({"F32", "F16", "BF16"})
+
+#: Superblock quants (K-quants and I-quants). These are DELIBERATE quantisation
+#: choices: llama.cpp's silent-fallback path lands on legacy quants, never on these,
+#: so a superblock-dominant workload is never the Qwen2.5-Coder accident. They stay
+#: admissible as SCREEN workloads whatever production's dominant is -- the quant-axis
+#: mismatch a screen carries is `rung_matches_production`'s recorded waiver, not this
+#: gate's refusal. (This set was previously named PRODUCTION_QUANT_FAMILY and WAS the
+#: whole gate; the production family is now censused, see `production_quant_family`.)
+SUPERBLOCK_QUANT_FAMILY = frozenset({
     "Q2_K", "Q3_K", "Q4_K", "Q5_K", "Q6_K", "Q8_K",
     "IQ1_S", "IQ2_XXS", "IQ2_XS", "IQ2_S", "IQ3_XXS", "IQ3_S", "IQ4_NL", "IQ4_XS",
 })
+
+#: The DECLARED production model -- the reference GGUF the family is censused from.
+#: Default documented here because `run.py` threads no path yet: Qwen3.8-27B-Q8_0 is
+#: the 2026-08-14 cutover's serving model (arch qwen35, n_embd 5120, dominant Q8_0,
+#: censused -- not read off the filename). A promotion that changes the serving model
+#: updates THIS constant or passes `production_model` explicitly.
+PRODUCTION_MODEL = Path("/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf")
+
+#: Rung roles for `rung_matches_production`.
+SCREEN_RUNG = "screen"
+CONFIRM_RUNG = "confirm"
 
 #: K-quant superblock. A hidden dimension not divisible by this cannot carry
 #: K-quants, and llama.cpp will fall back silently.
@@ -82,7 +111,7 @@ class WorkloadCensus:
     def dominant_quant(self) -> str | None:
         """The most common NON-float tensor type: the kernel this model exercises."""
         quantised = {name: count for name, count in self.tensor_types.items()
-                     if name not in {"F32", "F16", "BF16"}}
+                     if name not in FLOAT_TYPES}
         if not quantised:
             return None
         return max(quantised.items(), key=lambda item: (item[1], item[0]))[0]
@@ -92,10 +121,16 @@ class WorkloadCensus:
         return isinstance(self.n_embd, int) and self.n_embd % K_SUPERBLOCK == 0
 
     @property
-    def in_production_family(self) -> bool:
-        return self.dominant_quant in PRODUCTION_QUANT_FAMILY
+    def quantised_types(self) -> frozenset[str]:
+        """Every non-float tensor type this model carries: the kernels it dispatches."""
+        return frozenset(name for name in self.tensor_types
+                         if name not in FLOAT_TYPES)
 
     def to_dict(self) -> dict[str, Any]:
+        # `in_production_family` left this record 2026-09-01: a census cannot know
+        # the family by itself any more -- membership is a two-census fact
+        # (`verify_workload` / `rung_matches_production`), and a stale boolean here
+        # would be the drift this change exists to close.
         return {
             "schema": WORKLOAD_SCHEMA,
             "path": self.path,
@@ -103,7 +138,6 @@ class WorkloadCensus:
             "n_embd": self.n_embd,
             "superblock_compatible": self.superblock_compatible,
             "dominant_quant": self.dominant_quant,
-            "in_production_family": self.in_production_family,
             "tensor_types": dict(sorted(self.tensor_types.items())),
         }
 
@@ -174,7 +208,48 @@ def read_census(path: Path | str) -> WorkloadCensus:
         tensor_types=dict(counts))
 
 
-def verify_workload(path: Path | str) -> WorkloadCensus:
+def production_census(production_model: Path | str = PRODUCTION_MODEL
+                      ) -> WorkloadCensus:
+    """Census the declared production model, or refuse LOUDLY.
+
+    Never fail-open: a production GGUF that cannot be read must refuse every
+    workload with a message naming why, because a silent pass here reopens the
+    filename-trust hole one level up -- the loop would verify workloads against a
+    family nobody censused.
+    """
+    try:
+        return read_census(production_model)
+    except (OSError, WorkloadContractError) as exc:
+        raise WorkloadContractError(
+            f"cannot census the declared production model {production_model}: {exc}. "
+            f"Refusing to verify ANY workload -- with no production census there is "
+            f"no production family to check against, and passing on a guess is the "
+            f"drift this census replaced the hard-coded family to prevent. Fix the "
+            f"production model path (PRODUCTION_MODEL) or pass production_model "
+            f"explicitly.") from exc
+
+
+def production_quant_family(production: WorkloadCensus) -> frozenset[str]:
+    """The admissible dominant quants, censused from production's own tensor table.
+
+    Superblock quants (never fallback artifacts; screens keep quant-axis latitude,
+    with the mismatch recorded by `rung_matches_production`) plus every quantised
+    type production actually carries -- which is what admits a deliberate
+    legacy-family production model like Q8_0 without re-admitting the silent-fallback
+    targets (Q5_0, Q4_1, ...) production does not dispatch.
+    """
+    carried = production.quantised_types
+    if not carried:
+        raise WorkloadContractError(
+            f"{production.path}: the declared production model carries no quantised "
+            f"tensors at all ({dict(production.tensor_types)}); it cannot define a "
+            f"production quant family, and no workload can be verified against it")
+    return SUPERBLOCK_QUANT_FAMILY | carried
+
+
+def verify_workload(path: Path | str, *,
+                    production_model: Path | str = PRODUCTION_MODEL,
+                    production: WorkloadCensus | None = None) -> WorkloadCensus:
     """Census the workload, or refuse it with the reason.
 
     Two independent refusals, because they fail differently:
@@ -182,8 +257,12 @@ def verify_workload(path: Path | str) -> WorkloadCensus:
       * a hidden dimension not divisible by 256 means K-quants CANNOT be used and
         llama.cpp will fall back silently -- the failure is invisible in the filename
         and in every log;
-      * a dominant quant outside the production family means the screen exercises a
-        kernel production never dispatches, whatever the hidden dimension is.
+      * a dominant quant outside the CENSUSED production family means the workload
+        exercises a kernel production never dispatches, whatever the hidden
+        dimension is.
+
+    `production` short-circuits the production census when the caller already holds
+    one (tests, and callers verifying several workloads against one reference).
     """
     census = read_census(path)
     if not census.superblock_compatible:
@@ -193,14 +272,94 @@ def verify_workload(path: Path | str) -> WorkloadCensus:
             f"silently. Observed dominant tensor type: {census.dominant_quant}. "
             f"This is exactly the Qwen2.5-Coder-0.5B defect: a file named Q4_K_M "
             f"that is 132x Q5_0 and 12x Q4_K.")
-    if not census.in_production_family:
+    reference = production if production is not None \
+        else production_census(production_model)
+    family = production_quant_family(reference)
+    if census.dominant_quant not in family:
         raise WorkloadContractError(
             f"{census.path}: dominant quantisation {census.dominant_quant} is "
-            f"outside the production family {sorted(PRODUCTION_QUANT_FAMILY)}. A "
-            f"screening workload may be smaller than production, but it may not "
-            f"dispatch different kernels -- a measurement on it is not evidence "
-            f"about production.")
+            f"outside the production family {sorted(family)}, censused from "
+            f"{reference.path} (dominant {reference.dominant_quant}). A workload "
+            f"may be smaller than production, but it may not dispatch different "
+            f"kernels -- a measurement on it is not evidence about production.")
     return census
+
+
+@dataclass(frozen=True)
+class RungParity:
+    """Whether a rung's workload matches production's dispatch shape, structurally.
+
+    `exact` is dominant-quant equality AND n_embd-class equality. A CONFIRM rung
+    must be exact -- its whole job is gating keeps on the production shape. A SCREEN
+    rung that is not exact gets `waived=True`: the run proceeds, but the mismatch is
+    a visible artifact in this record, never a silent assumption -- R23-5 is what a
+    silent one costs (+17.26% at b1 that is -1.46% on the production shape).
+    """
+
+    rung: str
+    workload: str
+    production: str
+    workload_dominant: str | None
+    production_dominant: str | None
+    workload_n_embd: int | None
+    production_n_embd: int | None
+    dominant_quant_match: bool
+    n_embd_class_match: bool
+    exact: bool
+    waived: bool
+    detail: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "schema": "epyc.autokernel.rung_parity.v1",
+            "rung": self.rung, "workload": self.workload,
+            "production": self.production,
+            "workload_dominant": self.workload_dominant,
+            "production_dominant": self.production_dominant,
+            "workload_n_embd": self.workload_n_embd,
+            "production_n_embd": self.production_n_embd,
+            "dominant_quant_match": self.dominant_quant_match,
+            "n_embd_class_match": self.n_embd_class_match,
+            "exact": self.exact, "waived": self.waived, "detail": self.detail,
+        }
+
+
+def rung_matches_production(census: WorkloadCensus, production: WorkloadCensus, *,
+                            rung: str) -> RungParity:
+    """Structured rung-vs-production parity. Never raises on a mismatch: the CALLER
+    decides what a non-exact result means for its rung, and this record is what it
+    decides on (and what it must persist).
+
+    n_embd CLASS is the n_embd value itself: the width selects tile/launch geometry
+    and whether `fixed-<width>` specializations dispatch at all, and no coarser
+    bucketing has a measured basis (4096 vs 5120 was scored "near" and still cannot
+    dispatch a fixed-5120 specialization).
+    """
+    if rung not in (SCREEN_RUNG, CONFIRM_RUNG):
+        raise WorkloadContractError(
+            f"unknown rung role {rung!r}: expected {SCREEN_RUNG!r} or {CONFIRM_RUNG!r}")
+    quant_match = (census.dominant_quant is not None
+                   and census.dominant_quant == production.dominant_quant)
+    width_match = (isinstance(census.n_embd, int)
+                   and census.n_embd == production.n_embd)
+    exact = quant_match and width_match
+    waived = (not exact) and rung == SCREEN_RUNG
+    detail = (f"{rung} rung {census.path}: dominant "
+              f"{census.dominant_quant}{'==' if quant_match else '!='}"
+              f"{production.dominant_quant}, n_embd "
+              f"{census.n_embd}{'==' if width_match else '!='}"
+              f"{production.n_embd} vs production "
+              + ("-- EXACT" if exact else
+                 ("-- MISMATCH WAIVED for the screen rung: measurements here are "
+                  "null-killers, not production evidence" if waived else
+                  "-- MISMATCH, not waivable for a confirm rung")))
+    return RungParity(
+        rung=rung, workload=census.path, production=production.path,
+        workload_dominant=census.dominant_quant,
+        production_dominant=production.dominant_quant,
+        workload_n_embd=census.n_embd, production_n_embd=production.n_embd,
+        dominant_quant_match=quant_match, n_embd_class_match=width_match,
+        exact=exact, waived=waived, detail=detail)
 
 
 def write_minimal_gguf(path: Path | str, *, architecture: str = "qwen2",
@@ -250,6 +409,9 @@ def write_minimal_gguf(path: Path | str, *, architecture: str = "qwen2",
     return path
 
 
-__all__ = ["GGML_TYPE_NAMES", "K_SUPERBLOCK", "PRODUCTION_QUANT_FAMILY",
-           "WORKLOAD_SCHEMA", "WorkloadCensus", "WorkloadContractError",
-           "read_census", "verify_workload", "write_minimal_gguf"]
+__all__ = ["CONFIRM_RUNG", "FLOAT_TYPES", "GGML_TYPE_NAMES", "K_SUPERBLOCK",
+           "PRODUCTION_MODEL", "RungParity", "SCREEN_RUNG",
+           "SUPERBLOCK_QUANT_FAMILY", "WORKLOAD_SCHEMA", "WorkloadCensus",
+           "WorkloadContractError", "production_census", "production_quant_family",
+           "read_census", "rung_matches_production", "verify_workload",
+           "write_minimal_gguf"]

@@ -109,14 +109,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--pairs", type=int, default=PAIRS)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--write-calibration", type=Path, default=None, metavar="STORE",
-                        help="also write STORE/calibration/<surface>.json — the record "
-                             "`bench.floor_rows` reads and without which the loop "
+                        help="also write STORE/calibration/<surface>.<model-stem>.json — the "
+                             "record `bench.floor_rows` reads (keyed by surface AND "
+                             "workload, §5.2) and without which the loop "
                              "refuses decisive keeps on this surface (run.py's "
                              "--calibrate-surface mode passes this)")
     args = parser.parse_args(argv)
 
     pp, tg, ubatch = bench.SURFACES[args.surface]
-    rows_now = bench.floor_rows(args.surface)
+    rows_now = bench.floor_rows(args.surface, args.model)
     floor = rows_now.get(9, 1.175) if rows_now else None
     anchor = args.anchor_build / "bin" / "llama-bench"
     conditions = []
@@ -209,7 +210,12 @@ def main(argv: list[str] | None = None) -> int:
         # atomically -- the loop may be reading the store while this lands.
         head = subprocess.run(["git", "-C", str(args.worktree), "rev-parse", "HEAD"],
                               capture_output=True, text=True).stdout.strip()
-        target = args.write_calibration / "calibration" / f"{args.surface}.json"
+        # Keyed by (surface, workload-class) since 2026-09-01 (§5.2): floors are
+        # workload properties, and two rungs must never share a filename. The
+        # pre-keying dec-b* artifacts stay readable through floor_rows's
+        # legacy-filename path (recorded "model" verified, never trusted blind).
+        target = (args.write_calibration / "calibration"
+                  / f"{args.surface}.{args.model.stem}.json")
         target.parent.mkdir(parents=True, exist_ok=True)
         body = {"schema": "epyc.autokernel.surface_calibration.v1",
                 "surface": args.surface, "model": args.model.name,

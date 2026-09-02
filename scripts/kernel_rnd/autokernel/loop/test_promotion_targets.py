@@ -158,7 +158,7 @@ class TheKeepBuildsAProductionCompleteAnchor(unittest.TestCase):
             {"champion_commit": self.tip, "build_recipe": {"name": "house-gpu"}}),
             encoding="utf-8")
         self.startup_anchor = startup_anchor
-        (self.root / "m.gguf").write_text("", encoding="utf-8")
+        (self.root / f"{bench.MEASURED_FLOOR_MODEL_STEM}.gguf").write_text("", encoding="utf-8")
 
         # R22-6's live shape, riding along: one good seed, two unreadable files.
         inbox_dir = self.store / "inbox"
@@ -242,7 +242,7 @@ class TheKeepBuildsAProductionCompleteAnchor(unittest.TestCase):
 
         argv = ["--worktree", str(self.repo),
                 "--anchor-build", str(self.startup_anchor),
-                "--model", str(self.root / "m.gguf"), "--store", str(self.store),
+                "--model", str(self.root / f"{bench.MEASURED_FLOOR_MODEL_STEM}.gguf"), "--store", str(self.store),
                 "--iterations", "1", "--workers", "1",
                 "--worker-root", str(self.root / "lanes"),
                 "--worker-build-root", str(self.root / "builds")]

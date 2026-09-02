@@ -70,6 +70,19 @@ class TailRefused(RuntimeError):
     """
 
 
+class ConfirmVetoed(RuntimeError):
+    """The confirm rung refused to promote a screen keep (§5.3, D1-D6).
+
+    Raised by the COMMIT callable when the two-rung gate is configured and the
+    keep-candidate showed a decisive regression (or an uncalibrated surface) on the
+    production-shaped confirm rung. Not an error and not a null: the screen
+    measured a real positive, the confirm measured why it must not be committed --
+    R23-5's +17.26%-at-b1 / -1.46%-at-b8 inversion is the class. The candidate is
+    recorded as `keep_candidate` with the screen comparison; the full confirm
+    record (both measurements) is in `<store>/confirm/`.
+    """
+
+
 class ActorTransient(RuntimeError):
     """The actor provider failed in a way worth retrying.
 
@@ -325,7 +338,16 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                     on_step("measuring A/B on the device")
                     comparison = measure(hypothesis, paths)
                     if comparison.decisive and comparison.effect > 0:
-                        head = commit(hypothesis, paths, comparison)
+                        # A screen keep is a KEEP_CANDIDATE; with a confirm rung
+                        # configured, `commit` measures it on the production shape
+                        # and vetoes rather than committing (§5.3). Unconfigured,
+                        # commit never raises ConfirmVetoed and this is the same
+                        # single-rung keep as ever.
+                        try:
+                            head = commit(hypothesis, paths, comparison)
+                        except ConfirmVetoed as veto:
+                            return Outcome("keep_candidate", hypothesis,
+                                           [str(veto)], comparison, verdicts)
                         return Outcome("kept", hypothesis, [], comparison, verdicts, head)
             except TailRefused as exc:
                 # Formed and never measured. Carry the hypothesis out so the planner
@@ -361,6 +383,6 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
 # `archive.record` as `run.py`'s injected `record`. `iterate` is the whole of this
 # module's control flow now, and the pool is its only driver.
 
-__all__ = ["ActorTransient", "TailRefused", "RunAborted", "Critic",
+__all__ = ["ActorTransient", "ConfirmVetoed", "TailRefused", "RunAborted", "Critic",
            "HYPOTHESIS_ROUNDS", "Hypothesis", "Outcome", "PATCH_ROUNDS",
            "Planner", "Review", "STOPPED_MID_FORMATION", "iterate"]

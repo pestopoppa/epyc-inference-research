@@ -30,30 +30,49 @@ def _load_aa_campaign():
     return module
 
 
+#: The workload the built-in floor table belongs to (§5.2: floors key by surface AND
+#: workload-class, so every lookup below must name its model).
+THE_1P5B = f"{bench.MEASURED_FLOOR_MODEL_STEM}.gguf"
+
+
 class TheFloorIsCalibrationOrNothing(unittest.TestCase):
     """`run.noise_floor_pct` may answer from the measured table or a store-written
     A/A record. For anything else the answer is None -- never a borrowed number."""
 
     def test_the_builtin_surfaces_are_unchanged_by_the_extension(self):
-        self.assertAlmostEqual(run_mod.noise_floor_pct("pp512", 5), 0.9727, places=3)
-        self.assertAlmostEqual(run_mod.noise_floor_pct("tg128", 5), 2.422, places=3)
+        self.assertAlmostEqual(run_mod.noise_floor_pct("pp512", 5, THE_1P5B),
+                               0.9727, places=3)
+        self.assertAlmostEqual(run_mod.noise_floor_pct("tg128", 5, THE_1P5B),
+                               2.422, places=3)
 
     def test_an_unknown_surface_has_no_floor_not_a_default_one(self):
-        self.assertIsNone(run_mod.noise_floor_pct("dec-b4", 5))
-        self.assertIsNone(run_mod.noise_floor_pct("dec-b8", 20))
+        self.assertIsNone(run_mod.noise_floor_pct("dec-b4", 5, THE_1P5B))
+        self.assertIsNone(run_mod.noise_floor_pct("dec-b8", 20, THE_1P5B))
+
+    def test_a_builtin_surface_on_another_rung_has_no_floor_either(self):
+        """§5.2: the built-in table is the 1.5B's keyed entry. A confirm rung on
+        tg128 refuses to decide until its OWN A/A campaign lands."""
+        self.assertIsNone(
+            run_mod.noise_floor_pct("tg128", 5, "Qwen3.8-27B-Q8_0.gguf"))
 
     def test_a_store_calibration_gives_the_surface_a_real_floor(self):
         with tempfile.TemporaryDirectory() as tmp:
             store = Path(tmp)
             (store / "calibration").mkdir()
             (store / "calibration" / "dec-b4.json").write_text(json.dumps(
-                {"floor_pct": {"1": 3.0, "3": 2.4, "5": 2.0, "9": 1.6, "20": 1.2}}))
-            floor = run_mod.noise_floor_pct("dec-b4", 5, store=store)
+                {"model": THE_1P5B,
+                 "floor_pct": {"1": 3.0, "3": 2.4, "5": 2.0, "9": 1.6, "20": 1.2}}))
+            floor = run_mod.noise_floor_pct("dec-b4", 5, THE_1P5B, store=store)
             # max(parametric 3.0/sqrt(5)=1.342, measured row 2.0) -- the same
             # two-bound arithmetic the built-in surfaces get.
             self.assertAlmostEqual(floor, 2.0, places=6)
-            self.assertIsNone(run_mod.noise_floor_pct("dec-b8", 5, store=store),
-                              "one surface's calibration must not leak to another")
+            self.assertIsNone(
+                run_mod.noise_floor_pct("dec-b8", 5, THE_1P5B, store=store),
+                "one surface's calibration must not leak to another")
+            self.assertIsNone(
+                run_mod.noise_floor_pct("dec-b4", 5, "Qwen3.8-27B-Q8_0.gguf",
+                                        store=store),
+                "one model's calibration must not leak to another")
 
 
 class TheCommitPathRefusesForItself(unittest.TestCase):
@@ -136,7 +155,8 @@ class TheCampaignWritesWhatTheLoopReads(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             store = Path(tmp) / "store"
-            self.assertIsNone(run_mod.noise_floor_pct("dec-b4", 5, store=store),
+            model = "/tmp/m.gguf"
+            self.assertIsNone(run_mod.noise_floor_pct("dec-b4", 5, model, store=store),
                               "before calibration the surface must refuse")
             with mock.patch.object(aa.bench, "compare", self._fake_compare), \
                  mock.patch.object(aa.claim, "hold", FakeClaim), \
@@ -148,23 +168,29 @@ class TheCampaignWritesWhatTheLoopReads(unittest.TestCase):
                                    lambda *a, **k: types.SimpleNamespace(
                                        stdout="feedcafe\n", returncode=0)):
                 rc = aa.main(["--surface", "dec-b4", "--pairs", str(self.PAIRS),
-                              "--worktree", tmp, "--model", "/tmp/m.gguf",
-                              "--out", str(store / "calibration" / "aa-dec-b4"),
+                              "--worktree", tmp, "--model", model,
+                              "--out", str(store / "calibration" / "aa-dec-b4.m"),
                               "--write-calibration", str(store)])
             self.assertEqual(rc, 0)
+            # §5.2: the campaign writes the KEYED filename, and the loop's lookup
+            # finds it for the calibrated model only.
             record = json.loads(
-                (store / "calibration" / "dec-b4.json").read_text())
+                (store / "calibration" / "dec-b4.m.json").read_text())
             self.assertEqual(record["surface"], "dec-b4")
+            self.assertEqual(record["model"], "m.gguf")
             self.assertEqual(record["bench_args"], {"pp": 512, "tg": 0, "ubatch": 4})
             self.assertEqual(len(record["conditions"]), 3,
                              "SETTLED, PREHEATED and POST_BUILD all land as provenance")
             self.assertEqual(record["anchor_commit"], "feedcafe")
-            floor = run_mod.noise_floor_pct("dec-b4", 5, store=store)
+            floor = run_mod.noise_floor_pct("dec-b4", 5, model, store=store)
             self.assertIsInstance(floor, float,
                                   "after calibration the surface decides again")
             self.assertGreater(floor, 0.0)
+            self.assertIsNone(
+                run_mod.noise_floor_pct("dec-b4", 5, THE_1P5B, store=store),
+                "the fresh calibration is keyed to its model, not surface-wide")
             # And the campaign artifact itself still lands beside it.
-            self.assertTrue((store / "calibration" / "aa-dec-b4" /
+            self.assertTrue((store / "calibration" / "aa-dec-b4.m" /
                              "aa-campaign.json").is_file())
 
 

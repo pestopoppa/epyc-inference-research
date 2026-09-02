@@ -22,12 +22,14 @@ import subprocess
 import sys
 import time
 
-from ..controller import anchor_integrity, build_recipe, inbox, workload_contract
+from ..controller import (anchor_integrity, build_recipe, inbox, rung_confirm,
+                          workload_contract)
 from . import (actors, anchor, archive, bench, champion, claim, gates, hotspots, loop,
                pipeline, pool, production, status)
 
 
-def noise_floor_pct(surface: str, pairs: int, store: Path | None = None) -> float | None:
+def noise_floor_pct(surface: str, pairs: int, model: Path | str,
+                    store: Path | None = None) -> float | None:
     """The bar for THIS run, scaled to the pairs actually being run.
 
     This was a dict of constants computed at 5 pairs, so `--pairs 9` still enforced
@@ -56,9 +58,12 @@ def noise_floor_pct(surface: str, pairs: int, store: Path | None = None) -> floa
     (`bench.floor_rows`): no built-in row and no store-written A/A calibration. The
     run still measures and records on such a surface, but every comparison carries
     `decisive: None` and `refuse_uncalibrated_keep` blocks the commit path.
+
+    `model` keys the lookup alongside the surface (§5.2): floors are workload
+    properties, and a second rung must never inherit the first rung's floor.
     """
     pairs = max(1, pairs)
-    rows = bench.floor_rows(surface, store)
+    rows = bench.floor_rows(surface, model, store)
     if rows is None:
         return None
     parametric = rows[1] / (pairs ** 0.5)
@@ -119,7 +124,8 @@ def calibrate(args, run=subprocess.run) -> int:
                 "--pairs", str(args.calibrate_surface),
                 "--anchor-build", str(args.anchor_build),
                 "--worktree", str(args.worktree), "--model", str(args.model),
-                "--out", str(args.store / "calibration" / f"aa-{args.surface}"),
+                "--out", str(args.store / "calibration"
+                             / f"aa-{args.surface}.{args.model.stem}"),
                 "--write-calibration", str(args.store)]).returncode
 
 
@@ -149,6 +155,20 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--calibrate-surface", type=int, metavar="N", default=None,
                         help="A/A bootstrap-calibrate --surface: N pairs x 3 "
                              "conditions (D8 method); floor lands in the store")
+    # ---- the two-rung screen/confirm keep gate (§5.3, operator-approved D1-D6).
+    # OFF unless --confirm-model is given: single-rung behavior is bit-identical
+    # without it, so the running run's semantics are untouched until the boundary
+    # that enables it.
+    parser.add_argument("--confirm-model", type=Path, default=None,
+                        help="production-shaped confirm rung: a screen keep is a "
+                             "KEEP_CANDIDATE until it survives this model's "
+                             "confirm surfaces (D1); headline moves to this rung")
+    parser.add_argument("--confirm-pairs", type=int,
+                        default=rung_confirm.DEFAULT_PAIRS,
+                        help="pairs per confirm surface (D3; 5 = calibrated k=5 row)")
+    parser.add_argument("--confirm-surfaces",
+                        default=",".join(rung_confirm.DEFAULT_SURFACES),
+                        help="comma-separated confirm gate surfaces (D2)")
     parser.add_argument("--out", type=Path)
     parser.add_argument("--dry-run", action="store_true",
                         help="prove the wiring without a provider call or a build")
@@ -198,11 +218,27 @@ def main(argv: list[str] | None = None) -> int:
     pp, tg, ubatch = bench.SURFACES[args.surface]
     if args.calibrate_surface:
         return calibrate(args)
-    floor = noise_floor_pct(args.surface, args.pairs, store=args.store)
+    floor = noise_floor_pct(args.surface, args.pairs, args.model, store=args.store)
     calibrated = floor is not None
     print(f"surface   {args.surface}, {args.pairs} alternating pairs, "
           + (f"noise floor {floor:.3f}%" if calibrated else
              "UNCALIBRATED — decisive=None on every comparison; keeps refused"))
+    # §5.3: configured once at startup, refused loudly here if misconfigured -- a
+    # confirm rung that is not production-shaped must never gate a keep.
+    confirm = None if args.confirm_model is None else rung_confirm.configure(
+        model=args.confirm_model, pairs=args.confirm_pairs,
+        surfaces=args.confirm_surfaces, store=args.store, screen_census=census,
+        known_surfaces=tuple(bench.SURFACES),
+        floor_for=lambda s: noise_floor_pct(s, args.confirm_pairs,
+                                            args.confirm_model, store=args.store))
+    if confirm is not None:
+        print(f"confirm   {confirm.describe()}")
+    # D4: with the two-rung gate on, the champion-vs-production headline is measured
+    # on the confirm rung -- the standing +17.9% was the screen shape, which is the
+    # "headline must be the production recipe" defect. Floor re-keyed to that model.
+    headline_model = args.confirm_model or args.model
+    headline_floor = floor if args.confirm_model is None else noise_floor_pct(
+        args.surface, args.pairs, headline_model, store=args.store)
 
     if args.dry_run:
         print("\nDRY RUN — wiring proven, nothing spent.")
@@ -292,6 +328,19 @@ def main(argv: list[str] | None = None) -> int:
                 bench.Arm("candidate", worker.build_dir / "bin" / "llama-bench"),
                 args.model, pp=pp, tg=tg, pairs=args.pairs, noise_floor_pct=floor,
                 surface=args.surface, ubatch=ubatch, calibrated=calibrated)
+        return measure
+
+    def confirm_measure(worker):
+        """The confirm rung's A/B for one keep-candidate (§5.3): same arms, the
+        production-shaped model, the confirm surface's own keyed floor."""
+        def measure(surface, floor_pct):
+            cpp, ctg, cub = bench.SURFACES[surface]
+            return bench.compare(
+                bench.Arm("anchor", anchor_build[0] / "bin" / "llama-bench"),
+                bench.Arm("candidate", worker.build_dir / "bin" / "llama-bench"),
+                args.confirm_model, pp=cpp, tg=ctg, pairs=args.confirm_pairs,
+                noise_floor_pct=floor_pct, surface=surface, ubatch=cub,
+                calibrated=floor_pct is not None)
         return measure
 
     hotspot_rows: list = []
@@ -388,8 +437,9 @@ def main(argv: list[str] | None = None) -> int:
             compare=lambda base, champ: bench.compare(
                 bench.Arm("production_v9", base / "bin" / "llama-bench"),
                 bench.Arm("champion", champ / "bin" / "llama-bench"),
-                args.model, pp=pp, tg=tg, pairs=args.pairs, noise_floor_pct=floor,
-                surface=args.surface, ubatch=ubatch, calibrated=calibrated),
+                headline_model, pp=pp, tg=tg, pairs=args.pairs,
+                noise_floor_pct=headline_floor, surface=args.surface, ubatch=ubatch,
+                calibrated=headline_floor is not None),
             on_step=lambda label: publish("running", latest,
                                           hotspot_rows=hotspot_rows, step=label))
         archive.record(args.store, outcome.to_attempt(), epoch=epoch,
@@ -476,7 +526,7 @@ def main(argv: list[str] | None = None) -> int:
         status.write(
             args.store, state=state, epoch=epoch, campaign_id="ak-loop",
             anchor_commit=current_anchor_commit[0], surface=args.surface, pairs=args.pairs,
-            noise_floor_pct=floor,
+            noise_floor_pct=floor, model=str(args.model),
             outcomes=[o.to_attempt() for o in outcomes],
             iterations_planned=args.iterations, step=step,
             champion_head=_git(args.worktree, "rev-parse", "HEAD"),
@@ -536,6 +586,14 @@ def main(argv: list[str] | None = None) -> int:
             next tail entry -- their candidates were never built on this champion.
             """
             refuse_uncalibrated_keep(args.surface, calibrated, comparison)
+            # §5.3: one extra bench.compare per confirm surface, in this same
+            # serialized tail. The veto is caught at `iterate`'s keep gate and the
+            # candidate lands as `keep_candidate`, never `kept`.
+            if confirm is not None:
+                verdict = confirm.gate(hypothesis.mechanism_id, comparison,
+                                       confirm_measure(worker))
+                if not verdict["promoted"]:
+                    raise loop.ConfirmVetoed(verdict["reason"])
             head = pool.advance_champion(worker, hypothesis, paths, comparison,
                                          champion_tree=args.worktree,
                                          branch=args.champion_branch)
@@ -580,7 +638,7 @@ def main(argv: list[str] | None = None) -> int:
     publish("complete", outcomes, hotspot_rows=hotspot_rows)
     kept = sum(1 for outcome in outcomes if outcome.status == "kept")
     measured = sum(1 for outcome in outcomes
-                   if outcome.status in {"kept", "measured_null"})
+                   if outcome.status in {"kept", "measured_null", "keep_candidate"})
     print(f"\n{len(outcomes)} iterations in {elapsed / 60:.1f} min: "
           f"{measured} reached a measurement, {kept} kept")
     # The number that decides the lane count: once the tail approaches the wall

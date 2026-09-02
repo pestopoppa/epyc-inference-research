@@ -83,7 +83,19 @@ LOOP_LOC_BUDGET = 3450
 #: thirty small fixes, before the conversation returns. Against the 153,865 LOC this
 #: replaces the ratio the module docstring defends is unchanged: it still forces the
 #: argument at 2x, not at 50x.
-LOOP_CODE_BUDGET = 2100
+#:
+#: 2,100 -> 2,160 on 2026-09-01: the operator-approved D1-D6 production-shaped rung
+#: (docs/design/autokernel-production-shaped-rung.md §5.1-§5.3). +60 lines of loop
+#: code, all wiring: the (surface, workload)-keyed floor lookup in bench.py, the
+#: Comparison/status/headline records carrying their rung, the three --confirm-*
+#: flags, one closure and one guarded gate call at commit_pooled, and the
+#: ConfirmVetoed catch at the keep gate. The gate's decision arithmetic, the parity
+#: checks and the census-based family live in `controller/` (rung_confirm.py,
+#: workload_contract.py) -- the uncounted library -- on purpose. Raised by the
+#: minimum that lands the approved work with 3 lines to spare, because a budget the
+#: package sits EXACTLY on blocks the next three-line correctness fix (the
+#: 2026-08-31 lesson above).
+LOOP_CODE_BUDGET = 2160
 
 #: Documentation whose CONTENTS no test may assert. Asserting a doc's text makes
 #: every deletion cost a regeneration, which is how 92 deletions happen in 5 weeks.
