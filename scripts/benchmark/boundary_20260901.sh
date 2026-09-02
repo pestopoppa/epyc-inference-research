@@ -282,15 +282,25 @@ run_gate_suite() {  # in the LANE, post-merge; floors/guards absolute, pytest is
     # operator approved the delta gate that morning), so an absolute-green pytest gate here
     # can never pass. Refuse only on failures the merge INTRODUCES: baseline = the pre-merge
     # tag in a throwaway detached worktree.
+    # ENVIRONMENT PARITY: both sides run in fresh detached worktrees. Some legacy tests
+    # audit the git-cleanliness of the checkout they run in (e.g. ArenaCampaignTest's
+    # 'controller source checkout is not clean'), so fresh-worktree-vs-live-lane compares
+    # environments, not commits — measured 2026-09-02: same test, same commit 74b936b5,
+    # passes in a fresh worktree and fails in the working lane.
     local base_fail="$WORK_DIR/step2-pytest-baseline-failures.txt"
     local merged_fail="$WORK_DIR/step2-pytest-merged-failures.txt"
-    local basewt="$WORK_DIR/step2-baseline-wt" new_fail
-    lane_git worktree remove --force "$basewt" >> "$lf" 2>&1 || true
+    local basewt="$WORK_DIR/step2-baseline-wt" mergedwt="$WORK_DIR/step2-merged-wt" new_fail
+    lane_git worktree remove --force "$basewt"   >> "$lf" 2>&1 || true
+    lane_git worktree remove --force "$mergedwt" >> "$lf" 2>&1 || true
     lane_git worktree add --detach "$basewt" "$PRE_MERGE_TAG" >> "$lf" 2>&1 \
         || { log "step2: could not create baseline worktree at $PRE_MERGE_TAG"; return 1; }
-    pytest_failures "$basewt"    "$WORK_DIR/step2-pytest-baseline.log" > "$base_fail"
-    lane_git worktree remove --force "$basewt" >> "$lf" 2>&1 || true
-    pytest_failures "$LANE_ROOT" "$WORK_DIR/step2-pytest-merged.log"   > "$merged_fail"
+    lane_git worktree add --detach "$mergedwt" "$(lane_git rev-parse HEAD)" >> "$lf" 2>&1 \
+        || { lane_git worktree remove --force "$basewt" >> "$lf" 2>&1 || true; \
+             log "step2: could not create merged worktree at lane HEAD"; return 1; }
+    pytest_failures "$basewt"   "$WORK_DIR/step2-pytest-baseline.log" > "$base_fail"
+    pytest_failures "$mergedwt" "$WORK_DIR/step2-pytest-merged.log"   > "$merged_fail"
+    lane_git worktree remove --force "$basewt"   >> "$lf" 2>&1 || true
+    lane_git worktree remove --force "$mergedwt" >> "$lf" 2>&1 || true
     grep -qaE '[0-9]+ passed' "$WORK_DIR/step2-pytest-baseline.log" \
         || { log "step2: baseline pytest produced no pass count — collection broke; refusing"; rc=1; }
     grep -qaE '[0-9]+ passed' "$WORK_DIR/step2-pytest-merged.log" \
