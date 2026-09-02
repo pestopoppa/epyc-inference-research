@@ -267,13 +267,42 @@ step1_stop_run23() {
 }
 
 # ---------------------------------------------------------------- step 2: merge gate
-run_gate_suite() {  # in the LANE, post-merge; every red refuses progression
+pytest_failures() {  # pytest_failures <rootdir> <logfile> — failing/erroring node ids on stdout
+    ( cd "$1" && python3 -m pytest -q -rfE --tb=no \
+          scripts/kernel_rnd/autokernel/loop/ scripts/kernel_rnd/autokernel/controller/ ) > "$2" 2>&1 || true
+    grep -aE '^(FAILED|ERROR) ' "$2" | awk '{print $1, $2}' | sort -u
+}
+
+run_gate_suite() {  # in the LANE, post-merge; floors/guards absolute, pytest is a DELTA gate
     local lf="$1" rc=0
     ( cd "$LANE_ROOT" && heavy suite_floors    "$lf" python3 scripts/kernel_rnd/autokernel/check_suite_floors.py )    || { log "step2: check_suite_floors.py RED"; rc=1; }
     ( cd "$LANE_ROOT" && heavy regrowth_guards "$lf" python3 scripts/kernel_rnd/autokernel/check_regrowth_guards.py ) || { log "step2: check_regrowth_guards.py RED"; rc=1; }
-    ( cd "$LANE_ROOT" && heavy pytest_gate     "$lf" python3 -m pytest -q -rs \
-          scripts/kernel_rnd/autokernel/loop/ scripts/kernel_rnd/autokernel/controller/ ) \
-        || { log "step2: pytest loop/+controller/ RED"; rc=1; }
+    # The controller/ scope carries pre-existing legacy red the rung payload does not own
+    # (76F+10E, byte-identical failing sets measured at 74b936b5 and 9c40429d, 2026-09-02;
+    # operator approved the delta gate that morning), so an absolute-green pytest gate here
+    # can never pass. Refuse only on failures the merge INTRODUCES: baseline = the pre-merge
+    # tag in a throwaway detached worktree.
+    local base_fail="$WORK_DIR/step2-pytest-baseline-failures.txt"
+    local merged_fail="$WORK_DIR/step2-pytest-merged-failures.txt"
+    local basewt="$WORK_DIR/step2-baseline-wt" new_fail
+    lane_git worktree remove --force "$basewt" >> "$lf" 2>&1 || true
+    lane_git worktree add --detach "$basewt" "$PRE_MERGE_TAG" >> "$lf" 2>&1 \
+        || { log "step2: could not create baseline worktree at $PRE_MERGE_TAG"; return 1; }
+    pytest_failures "$basewt"    "$WORK_DIR/step2-pytest-baseline.log" > "$base_fail"
+    lane_git worktree remove --force "$basewt" >> "$lf" 2>&1 || true
+    pytest_failures "$LANE_ROOT" "$WORK_DIR/step2-pytest-merged.log"   > "$merged_fail"
+    grep -qaE '[0-9]+ passed' "$WORK_DIR/step2-pytest-baseline.log" \
+        || { log "step2: baseline pytest produced no pass count — collection broke; refusing"; rc=1; }
+    grep -qaE '[0-9]+ passed' "$WORK_DIR/step2-pytest-merged.log" \
+        || { log "step2: merged pytest produced no pass count — collection broke; refusing"; rc=1; }
+    new_fail=$(comm -13 "$base_fail" "$merged_fail")
+    if [[ -n "$new_fail" ]]; then
+        log "step2: pytest delta gate RED — failures introduced by the merge (first 20):"
+        printf '%s\n' "$new_fail" | head -20 | while IFS= read -r ln; do log "step2:   $ln"; done
+        rc=1
+    else
+        log "step2: pytest delta gate green — $(wc -l < "$merged_fail") pre-existing failures (baseline $(wc -l < "$base_fail")), 0 introduced"
+    fi
     return $rc
 }
 
