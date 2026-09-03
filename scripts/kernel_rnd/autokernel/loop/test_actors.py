@@ -264,7 +264,7 @@ class Backends(unittest.TestCase):
     """
 
     def test_the_defaults_are_the_operator_choice(self):
-        self.assertEqual(actors.PLANNER_DEFAULT.describe(), "claude:claude-fable-5-1@medium")
+        self.assertEqual(actors.PLANNER_DEFAULT.describe(), "claude:claude-opus-5@high")
         self.assertEqual(actors.CRITIC_DEFAULT.describe(), "codex:gpt-5.6-sol@high")
         self.assertIs(actors.AgentPlanner(workspace=Path("/tmp")).backend,
                       actors.PLANNER_DEFAULT)
@@ -272,14 +272,14 @@ class Backends(unittest.TestCase):
                       actors.CRITIC_DEFAULT)
 
     def test_a_claude_model_routes_to_the_claude_cli(self):
-        b = actors.backend_for("claude-fable-5-1", "medium")
+        b = actors.backend_for("claude-opus-5", "high")
         argv = b.argv("PROMPT", Path("/ws"))
         self.assertEqual(argv[0], actors.CLAUDE)
         self.assertEqual(argv[1], "-p")
         self.assertIn("--dangerously-skip-permissions", argv)
         self.assertIn("--no-session-persistence", argv)
-        self.assertEqual(argv[argv.index("--model") + 1], "claude-fable-5-1")
-        self.assertEqual(argv[argv.index("--effort") + 1], "medium")
+        self.assertEqual(argv[argv.index("--model") + 1], "claude-opus-5")
+        self.assertEqual(argv[argv.index("--effort") + 1], "high")
         self.assertEqual(argv[argv.index("--output-format") + 1], "text")
         note = argv[argv.index("--append-system-prompt") + 1]
         self.assertIn("DETACHED git worktree", note)

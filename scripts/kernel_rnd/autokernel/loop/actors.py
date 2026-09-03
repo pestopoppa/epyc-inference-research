@@ -91,8 +91,12 @@ def backend_for(model: str, effort: str) -> Backend:
     return Backend("codex", model, effort, CODEX)
 
 
-#: Operator choice, 2026-09-03: planner Fable 5.1 at medium, critic gpt-5.6-sol at high.
-PLANNER_DEFAULT = backend_for("claude-fable-5-1", "medium")
+#: Operator choice. Planner started as Fable 5.1 @medium (2026-09-03); switched the same
+#: day to Opus 5 @high after run 27 measured the Fable-@medium latency at ~75s/call (2
+#: planner calls/iteration -> 54-71% GPU-idle-while-claimed) -- run 27 still landed a
+#: +23.3% Q8_0 keep, so the switch is a throughput trade, not a quality complaint. Critic
+#: stays gpt-5.6-sol @high through codex.
+PLANNER_DEFAULT = backend_for("claude-opus-5", "high")
 CRITIC_DEFAULT = backend_for("gpt-5.6-sol", "high")
 
 
