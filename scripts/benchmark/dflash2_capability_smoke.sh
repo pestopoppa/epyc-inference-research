@@ -31,8 +31,14 @@ N_PREDICT=384
 mkdir -p "$OUT"
 [[ -x "$BUILD/bin/llama-server" ]] || { echo "REFUSE: no llama-server in $BUILD/bin" >&2; exit 2; }
 [[ -f "$TARGET" && -f "$DRAFTER" ]] || { echo "REFUSE: model or drafter missing" >&2; exit 2; }
-"$BUILD/bin/llama-server" --help 2>&1 | grep -q "draft-dflash" \
-    || { echo "REFUSE: build does not list draft-dflash in --spec-type" >&2; exit 2; }
+# NOTE: capture first, match second. `... --help | grep -q` is a FALSE-REFUSAL trap under
+# `set -o pipefail`: grep -q exits on the first match and closes the pipe, llama-server takes
+# SIGPIPE (141), and pipefail reports the *successful* match as a failed pipeline.
+HELP_TXT="$("$BUILD/bin/llama-server" --help 2>&1 || true)"
+case "$HELP_TXT" in
+    *draft-dflash*) ;;
+    *) echo "REFUSE: build does not list draft-dflash in --spec-type" >&2; exit 2 ;;
+esac
 
 export LD_LIBRARY_PATH="$BUILD/bin"
 
