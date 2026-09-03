@@ -264,7 +264,7 @@ class Backends(unittest.TestCase):
     """
 
     def test_the_defaults_are_the_operator_choice(self):
-        self.assertEqual(actors.PLANNER_DEFAULT.describe(), "claude:claude-opus-5@high")
+        self.assertEqual(actors.PLANNER_DEFAULT.describe(), "opencode:deepseek/deepseek-v4-flash@max")
         self.assertEqual(actors.CRITIC_DEFAULT.describe(), "codex:gpt-5.6-sol@high")
         self.assertIs(actors.AgentPlanner(workspace=Path("/tmp")).backend,
                       actors.PLANNER_DEFAULT)
@@ -295,6 +295,19 @@ class Backends(unittest.TestCase):
         # are load-bearing, not cosmetic.
         self.assertEqual(argv[argv.index("-c") + 1], 'model_reasoning_effort="high"')
         self.assertEqual(argv[argv.index("-C") + 1], "/ws")
+        self.assertEqual(argv[-1], "PROMPT")
+
+    def test_a_provider_slash_model_routes_to_opencode(self):
+        b = actors.backend_for("deepseek/deepseek-v4-flash", "max")
+        self.assertEqual(b.kind, "opencode")
+        argv = b.argv("PROMPT", Path("/ws"))
+        self.assertEqual(argv[0], actors.OPENCODE)
+        self.assertEqual(argv[1], "run")
+        self.assertIn("--auto", argv)
+        self.assertEqual(argv[argv.index("--dir") + 1], "/ws")
+        self.assertEqual(argv[argv.index("-m") + 1], "deepseek/deepseek-v4-flash")
+        # opencode calls reasoning effort a "variant"; "max" must reach it.
+        self.assertEqual(argv[argv.index("--variant") + 1], "max")
         self.assertEqual(argv[-1], "PROMPT")
 
     def test_an_unknown_kind_refuses_rather_than_guessing(self):

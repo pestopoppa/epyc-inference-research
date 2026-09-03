@@ -40,6 +40,7 @@ from .loop import ActorTransient, Hypothesis, Review
 
 CODEX = "/usr/local/share/npm-global/bin/codex"
 CLAUDE = "/home/node/.local/bin/claude"
+OPENCODE = "/usr/local/share/npm-global/bin/opencode"
 DEFAULT_TIMEOUT_S = 1800
 #: 30s -> 1800s. The streak is what the operator needs to see, not each retry.
 BACKOFF_S = (30, 120, 480, 1800)
@@ -62,8 +63,8 @@ class Backend:
     `argv` is the whole contract -- everything else in this module is backend-blind
     and only ever sees stdout. Keep the prompt LAST for both CLIs.
     """
-    kind: str       # "codex" | "claude"
-    model: str
+    kind: str       # "codex" | "claude" | "opencode"
+    model: str      # bare id for codex/claude; "provider/model" for opencode
     effort: str
     binary: str
 
@@ -78,6 +79,16 @@ class Backend:
                     "--no-session-persistence", "--output-format", "text",
                     "--model", self.model, "--effort", self.effort,
                     "--append-system-prompt", _CLAUDE_SANDBOX_NOTE, prompt]
+        if self.kind == "opencode":
+            # opencode drives an EXTERNAL provider (deepseek): the prompt egresses
+            # off-host, unlike the codex/claude CLIs. `--variant` is opencode's name
+            # for reasoning effort ("max"); `--auto` approves non-denied permissions
+            # (the opencode.jsonc deny-list still blocks destructive verbs); `--dir`
+            # is the worktree. Final message lands on stdout, chrome on stderr, so the
+            # JSON parser sees a clean object. No system-prompt flag exists here; the
+            # actor prompt already carries the "edit only, do not build" contract.
+            return [self.binary, "run", "--auto", "--dir", str(workspace),
+                    "-m", self.model, "--variant", self.effort, prompt]
         raise ValueError(f"unknown backend kind {self.kind!r}")
 
     def describe(self) -> str:
@@ -85,18 +96,24 @@ class Backend:
 
 
 def backend_for(model: str, effort: str) -> Backend:
-    """`claude-*` models go through the claude CLI; everything else through codex."""
+    """Route by model id: `claude-*` -> claude CLI, `provider/model` (a `/`) ->
+    opencode (external providers), everything else -> codex."""
     if model.startswith("claude-"):
         return Backend("claude", model, effort, CLAUDE)
+    if "/" in model:
+        return Backend("opencode", model, effort, OPENCODE)
     return Backend("codex", model, effort, CODEX)
 
 
-#: Operator choice. Planner started as Fable 5.1 @medium (2026-09-03); switched the same
-#: day to Opus 5 @high after run 27 measured the Fable-@medium latency at ~75s/call (2
-#: planner calls/iteration -> 54-71% GPU-idle-while-claimed) -- run 27 still landed a
-#: +23.3% Q8_0 keep, so the switch is a throughput trade, not a quality complaint. Critic
-#: stays gpt-5.6-sol @high through codex.
-PLANNER_DEFAULT = backend_for("claude-opus-5", "high")
+#: Operator choice, 2026-09-03, settled after three same-day switches: planner is
+#: DeepSeek V4 Flash @max via opencode (the pre-wired backup model). The path was
+#: Fable 5.1 @medium -> Opus 5 @high -> here; the Opus default never launched. DeepSeek
+#: authored a file in a real champion worktree in ~4s in smoke, versus Fable's ~75s, so
+#: the choice buys back the throughput Fable @medium cost (run 27: 54-71% GPU-idle). NOTE:
+#: opencode drives an EXTERNAL provider, so planner prompts egress off-host -- a different
+#: trust boundary than the codex/claude CLIs, surfaced to and accepted by the operator.
+#: Critic stays gpt-5.6-sol @high through codex (local OpenAI path).
+PLANNER_DEFAULT = backend_for("deepseek/deepseek-v4-flash", "max")
 CRITIC_DEFAULT = backend_for("gpt-5.6-sol", "high")
 
 
@@ -474,6 +491,6 @@ class AgentCritic:
             context)
 
 
-__all__ = ["BACKOFF_S", "Backend", "CLAUDE", "CODEX", "CRITIC_DEFAULT",
+__all__ = ["BACKOFF_S", "Backend", "CLAUDE", "CODEX", "CRITIC_DEFAULT", "OPENCODE",
            "PLANNER_DEFAULT", "AgentCritic", "AgentPlanner", "ProviderTransient",
            "backend_for", "render_context"]
