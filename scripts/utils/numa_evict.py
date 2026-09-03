@@ -26,6 +26,22 @@ pages on that node. Do this on every node and the subsequent
 ``--interleave=all`` load stripes evenly because every node can honour its
 share.
 
+SIZING — THE FORCING FORM (root cause of the 2026-09-02 recurrences, D8x)
+-----------------------------------------------------------------------
+The first version of this helper sized the allocation as ``TARGET - free``.
+That frees NOTHING when a node is merely short: an allocation smaller than
+what is already free is satisfied from the free pages, no reclaim happens,
+and releasing it puts free back exactly where it was — below target. Runs
+"evicted to >= 40 GiB" and still skewed (B4, D7a, PROF) because of this.
+
+The forcing form: whenever ``free < TARGET`` allocate ``TARGET + HEADROOM``
+GiB (headroom 2). That is strictly more than is free, so the kernel MUST
+reclaim ``TARGET + 2 - free`` of page cache on that node, and after release
+the node holds >= TARGET + 2 GiB genuinely free. Per-node verify, up to two
+passes (concurrent page-cache growth can steal pass one). A node at or above
+target gets no allocation at all. `plan_allocation_gib` is the one place the
+rule lives; the tests mutation-check it against the weak form.
+
 This is prophylactic only. It does not prove placement — prove that in-window
 with ``numa_placement_check.sh <pid>`` against the running model process.
 
@@ -35,10 +51,11 @@ USAGE
     python3 scripts/utils/numa_evict.py --target-gib 60
     python3 scripts/utils/numa_evict.py --nodes 0,2 --target-gib 40
     python3 scripts/utils/numa_evict.py --dry-run          # report only
+    python3 scripts/utils/numa_evict.py --passes 3         # more retries
 
 Exit codes: 0 = every requested node reached the target; 1 = at least one node
-is still short (the caller should treat the following measurement as suspect);
-2 = usage / environment error.
+is still short after every pass (the caller should treat the following
+measurement as suspect); 2 = usage / environment error.
 """
 
 from __future__ import annotations
@@ -54,6 +71,14 @@ MIB = 1024 * 1024
 
 # Refuse absurd requests: a single node on this class of host is ~256 GiB.
 MAX_TARGET_GIB = 200
+
+# The forcing form: a node below target is pushed to TARGET + FORCE_HEADROOM_GIB
+# (strictly more than can already be free, so reclaim is unavoidable).
+FORCE_HEADROOM_GIB = 2
+
+# Concurrent page-cache growth (a download, a build) can steal what pass one
+# freed; pass two re-checks every node and forces again where needed.
+DEFAULT_PASSES = 2
 
 
 # ---------------------------------------------------------------------------
@@ -203,6 +228,81 @@ def _child_main(gib: int) -> int:
 
 
 # ---------------------------------------------------------------------------
+# Sizing and the pass loop (pure; the tests drive these with fakes)
+# ---------------------------------------------------------------------------
+
+def plan_allocation_gib(
+    free_mb: int, target_gib: int, headroom_gib: int = FORCE_HEADROOM_GIB
+) -> int:
+    """GiB to allocate-and-touch on a node with `free_mb` free (FORCING form).
+
+    0 when the node is already at or above target; otherwise TARGET + headroom,
+    which is strictly more than is free and therefore forces the kernel to
+    reclaim on that node. Never the weak ``TARGET - free`` — an allocation
+    that fits in the free pages reclaims nothing and leaves free unchanged.
+
+    >>> plan_allocation_gib(39 * 1024, 40)
+    42
+    >>> plan_allocation_gib(40 * 1024, 40)
+    0
+    """
+    if free_mb // 1024 >= target_gib:
+        return 0
+    return target_gib + headroom_gib
+
+
+def run_eviction(
+    nodes: list[int],
+    target_gib: int,
+    *,
+    query_free_mb,
+    evict,
+    passes: int = DEFAULT_PASSES,
+    headroom_gib: int = FORCE_HEADROOM_GIB,
+    dry_run: bool = False,
+    log=print,
+) -> tuple[list[int], list[tuple[int, int, int]]]:
+    """Force >= target on every node, verifying per node, up to `passes` times.
+
+    `query_free_mb()` -> {node: free MB}; `evict(node, gib)` -> bool runs one
+    membind'd allocate-and-touch. Returns (nodes still short after the last
+    pass, the allocations made as (pass, node, gib)). A dry run plans pass one
+    and allocates nothing.
+    """
+    allocations: list[tuple[int, int, int]] = []
+    free = query_free_mb()
+    short: list[int] = [n for n in nodes if free.get(n, 0) // 1024 < target_gib]
+    for pass_no in range(1, max(1, passes) + 1):
+        if not short:
+            break
+        for node in nodes:
+            gib = plan_allocation_gib(free.get(node, 0), target_gib, headroom_gib)
+            if gib == 0:
+                if pass_no == 1:
+                    log(f"  node {node}: {free.get(node, 0)} MB free — at target, skipping")
+                continue
+            log(
+                f"  pass {pass_no} node {node}: {free.get(node, 0)} MB free < {target_gib} GiB"
+                f" -> forcing {gib} GiB under --membind={node}"
+            )
+            allocations.append((pass_no, node, gib))
+            if dry_run:
+                continue
+            if not evict(node, gib):
+                log(f"  pass {pass_no} node {node}: eviction child FAILED")
+        if dry_run:
+            break
+        free = query_free_mb()
+        short = [n for n in nodes if free.get(n, 0) // 1024 < target_gib]
+        log(
+            f"  after pass {pass_no}: "
+            + " ".join(f"n{n}={free.get(n, 0)}MB" for n in sorted(free))
+            + (f" — still short: {short}" if short else " — every node at target")
+        )
+    return short, allocations
+
+
+# ---------------------------------------------------------------------------
 # The parent
 # ---------------------------------------------------------------------------
 
@@ -237,6 +337,10 @@ def main(argv: list[str] | None = None) -> int:
                     help="'all' (default), or a list like '0,2' / '0-3'")
     ap.add_argument("--dry-run", action="store_true",
                     help="report per-node free and what would be reclaimed; allocate nothing")
+    ap.add_argument("--passes", type=int, default=DEFAULT_PASSES,
+                    help=f"verify-and-retry passes (default: {DEFAULT_PASSES})")
+    ap.add_argument("--headroom-gib", type=int, default=FORCE_HEADROOM_GIB,
+                    help=f"GiB above target to force when a node is short (default: {FORCE_HEADROOM_GIB})")
     ap.add_argument("--timeout-s", type=int, default=600,
                     help="per-node timeout for the allocate-and-touch child (default: 600)")
     ap.add_argument("--child-gib", type=int, default=None,
@@ -248,6 +352,12 @@ def main(argv: list[str] | None = None) -> int:
 
     if not 1 <= args.target_gib <= MAX_TARGET_GIB:
         print(f"--target-gib must be in 1..{MAX_TARGET_GIB}", file=sys.stderr)
+        return 2
+    if args.passes < 1 or args.headroom_gib < 1:
+        print("--passes and --headroom-gib must be >= 1", file=sys.stderr)
+        return 2
+    if args.target_gib + args.headroom_gib > MAX_TARGET_GIB:
+        print(f"--target-gib + --headroom-gib must be <= {MAX_TARGET_GIB}", file=sys.stderr)
         return 2
 
     try:
@@ -266,31 +376,32 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
 
-    print(f"numa_evict: target {args.target_gib} GiB free per node; nodes {nodes}")
+    print(
+        f"numa_evict: target {args.target_gib} GiB free per node; nodes {nodes}; "
+        f"forcing form (+{args.headroom_gib} GiB), up to {args.passes} pass(es)"
+    )
     print("  free BEFORE: " + " ".join(f"n{n}={before[n]}MB" for n in sorted(before)))
 
-    for node in nodes:
-        need = args.target_gib - before[node] // 1024 + 1
-        if need <= 0:
-            print(f"  node {node}: {before[node]} MB free — already at target, skipping")
-            continue
-        print(f"  node {node}: {before[node]} MB free -> reclaiming {need} GiB under --membind={node}")
-        if args.dry_run:
-            continue
-        if not evict_node(node, need, args.timeout_s):
-            print(f"  node {node}: eviction child FAILED", file=sys.stderr)
+    short, allocations = run_eviction(
+        nodes,
+        args.target_gib,
+        query_free_mb=lambda: parse_free_mb(numactl_hardware()),
+        evict=lambda node, gib: evict_node(node, gib, args.timeout_s),
+        passes=args.passes,
+        headroom_gib=args.headroom_gib,
+        dry_run=args.dry_run,
+    )
 
-    after = parse_free_mb(numactl_hardware()) if not args.dry_run else before
-    print("  free AFTER:  " + " ".join(f"n{n}={after.get(n, 0)}MB" for n in sorted(after)))
-
-    short = [n for n in nodes if after.get(n, 0) // 1024 < args.target_gib]
     if args.dry_run:
-        print("  (dry run — nothing allocated)")
+        print(f"  (dry run — nothing allocated; would force {len(allocations)} node(s))")
         return 0
+    after = parse_free_mb(numactl_hardware())
+    print("  free AFTER:  " + " ".join(f"n{n}={after.get(n, 0)}MB" for n in sorted(after)))
     if short:
         print(
-            f"  WARNING: nodes {short} are still below {args.target_gib} GiB free. "
-            "--interleave=all may still skew; verify with numa_placement_check.sh.",
+            f"  WARNING: nodes {short} are still below {args.target_gib} GiB free after "
+            f"{args.passes} pass(es). --interleave=all may still skew; verify with "
+            "numa_placement_check.sh.",
             file=sys.stderr,
         )
         return 1
