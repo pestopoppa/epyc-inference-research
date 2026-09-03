@@ -476,8 +476,12 @@ class TheFloorComesFromCalibrationOnly(unittest.TestCase):
                 rows = bench.floor_rows(surface, self.CALIBRATED, store=live)
                 self.assertIsInstance(rows, dict)
                 self.assertIn(5, rows)
-                self.assertIsNone(bench.floor_rows(surface, self.OTHER, store=live),
-                                  "the 27B must NOT inherit the 1.5B's floor")
+                # Either uncalibrated (None) or the 27B's OWN keyed record -- never the
+                # 1.5B's rows. The 27B gained its own dec-b4/dec-b8 floors on
+                # 2026-09-02, which turned the original `assertIsNone` into a stale
+                # encoding of a transient ("the 27B has no calibration yet").
+                self.assertNotEqual(bench.floor_rows(surface, self.OTHER, store=live),
+                                    rows, "the 27B must NOT inherit the 1.5B's floor")
 
     def test_a_store_without_the_record_is_still_uncalibrated(self):
         with tempfile.TemporaryDirectory() as tmp:
