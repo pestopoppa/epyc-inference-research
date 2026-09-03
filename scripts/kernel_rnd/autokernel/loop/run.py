@@ -183,6 +183,13 @@ def main(argv: list[str] | None = None) -> int:
     # ---- concurrency. EVERY run is pooled; --workers 1 is a one-lane pool. The
     # separate sequential path was deleted 2026-08-31 once the pool owned the
     # consecutive-error breaker -- two run paths were two things to drift.
+    parser.add_argument("--planner-model", default=actors.PLANNER_DEFAULT.model,
+                        help="planner/author model; claude-* routes via the claude CLI, "
+                             "anything else via codex (default: %(default)s)")
+    parser.add_argument("--planner-effort", default=actors.PLANNER_DEFAULT.effort)
+    parser.add_argument("--critic-model", default=actors.CRITIC_DEFAULT.model,
+                        help="critic model, both passes (default: %(default)s)")
+    parser.add_argument("--critic-effort", default=actors.CRITIC_DEFAULT.effort)
     parser.add_argument("--workers", type=int, default=pipeline.DEFAULT_WORKERS,
                         help="concurrent lanes (default: the measured tail-saturation "
                              "point; see pipeline.DEFAULT_WORKERS)")
@@ -233,6 +240,10 @@ def main(argv: list[str] | None = None) -> int:
                                             args.confirm_model, store=args.store))
     if confirm is not None:
         print(f"confirm   {confirm.describe()}")
+    planner_backend = actors.backend_for(args.planner_model, args.planner_effort)
+    critic_backend = actors.backend_for(args.critic_model, args.critic_effort)
+    print(f"actors    planner={planner_backend.describe()}  "
+          f"critic={critic_backend.describe()}")
     # D4: with the two-rung gate on, the champion-vs-production headline is measured
     # on the confirm rung -- the standing +17.9% was the screen shape, which is the
     # "headline must be the production recipe" defect. Floor re-keyed to that model.
@@ -607,8 +618,10 @@ def main(argv: list[str] | None = None) -> int:
                                    root=args.worker_root,
                                    build_root=args.worker_build_root,
                                    execute=True),
-            make_planner=lambda worker: actors.CodexPlanner(workspace=worker.worktree),
-            make_critic=lambda worker: actors.CodexCritic(workspace=worker.worktree),
+            make_planner=lambda worker: actors.AgentPlanner(
+                workspace=worker.worktree, backend=planner_backend),
+            make_critic=lambda worker: actors.AgentCritic(
+                workspace=worker.worktree, backend=critic_backend),
             build_context=build_context, make_gate=gate_for,
             make_measure=measure_for, record=record_pooled,
             iterations=(args.iterations or None), should_stop=should_stop,

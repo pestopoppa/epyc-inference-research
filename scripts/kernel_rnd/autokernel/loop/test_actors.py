@@ -111,7 +111,7 @@ class ContextBundle(unittest.TestCase):
 class PlannerContract(unittest.TestCase):
 
     def test_a_complete_hypothesis_parses(self):
-        planner = actors.CodexPlanner(workspace=Path("/tmp"))
+        planner = actors.AgentPlanner(workspace=Path("/tmp"))
         payload = ('{"mechanism_id": "akm-q4k-branchless", "statement": "s", '
                    '"falsifier": "f", "target_surface": "ggml/src/ggml-cuda/mmvq.cu", '
                    '"target_symbol": "vec_dot_q4_K_q8_1"}')
@@ -121,7 +121,7 @@ class PlannerContract(unittest.TestCase):
         self.assertEqual(got.mechanism_id, "akm-q4k-branchless")
 
     def test_an_incomplete_hypothesis_is_a_transient(self):
-        planner = actors.CodexPlanner(workspace=Path("/tmp"))
+        planner = actors.AgentPlanner(workspace=Path("/tmp"))
         with mock.patch.object(actors, "_run_agent",
                                return_value='{"mechanism_id": "akm-x"}'):
             with self.assertRaises(actors.ProviderTransient) as caught:
@@ -129,7 +129,7 @@ class PlannerContract(unittest.TestCase):
         self.assertIn("missing", str(caught.exception))
 
     def test_authoring_with_no_paths_is_a_transient(self):
-        planner = actors.CodexPlanner(workspace=Path("/tmp"))
+        planner = actors.AgentPlanner(workspace=Path("/tmp"))
         with mock.patch.object(actors, "_run_agent", return_value='{"paths": []}'):
             with self.assertRaises(actors.ProviderTransient):
                 planner.author(
@@ -140,7 +140,7 @@ class CriticContract(unittest.TestCase):
 
     def test_a_reasonless_rejection_is_made_explicit_not_crashed_on(self):
         """The loop refuses a reasonless rejection; the critic must not hand it one."""
-        critic = actors.CodexCritic(workspace=Path("/tmp"))
+        critic = actors.AgentCritic(workspace=Path("/tmp"))
         with mock.patch.object(actors, "_run_agent",
                                return_value='{"accepted": false}'):
             review = critic.review_hypothesis(
@@ -149,7 +149,7 @@ class CriticContract(unittest.TestCase):
         self.assertIn("without stating a reason", review.reason)
 
     def test_an_acceptance_passes_through(self):
-        critic = actors.CodexCritic(workspace=Path("/tmp"))
+        critic = actors.AgentCritic(workspace=Path("/tmp"))
         with mock.patch.object(actors, "_run_agent",
                                return_value='{"accepted": true}'):
             self.assertTrue(critic.review_hypothesis(
@@ -193,7 +193,7 @@ class PlaceholderEchoes(unittest.TestCase):
             self.assertFalse(actors._is_placeholder(real), real)
 
     def test_authoring_refuses_an_echoed_template(self):
-        planner = actors.CodexPlanner(workspace=Path("/tmp"))
+        planner = actors.AgentPlanner(workspace=Path("/tmp"))
         with mock.patch.object(actors, "_run_agent",
                                return_value='{"paths": ["<relative path you changed>"]}'):
             with self.assertRaises(actors.ProviderTransient) as caught:
@@ -201,7 +201,7 @@ class PlaceholderEchoes(unittest.TestCase):
         self.assertIn("echoed the prompt template", str(caught.exception))
 
     def test_a_hypothesis_echoing_the_template_is_refused(self):
-        planner = actors.CodexPlanner(workspace=Path("/tmp"))
+        planner = actors.AgentPlanner(workspace=Path("/tmp"))
         payload = ('{"mechanism_id": "akm-<short-slug>", "statement": "s", '
                    '"falsifier": "f", "target_surface": "a.cu", '
                    '"target_symbol": "<the function you will change>"}')
@@ -215,7 +215,7 @@ class TheWorktreeIsTheGroundTruth(unittest.TestCase):
     """An actor that SAYS it changed a file and did not must not pass."""
 
     def test_an_unchanged_worktree_refuses_the_claimed_path(self):
-        planner = actors.CodexPlanner(workspace=Path("/tmp"))
+        planner = actors.AgentPlanner(workspace=Path("/tmp"))
         with mock.patch.object(actors, "_run_agent",
                                return_value='{"paths": ["ggml/src/ggml-cuda/mmvq.cu"]}'), \
              mock.patch.object(actors.subprocess, "run") as ran:
@@ -225,7 +225,7 @@ class TheWorktreeIsTheGroundTruth(unittest.TestCase):
         self.assertIn("worktree is unchanged", str(caught.exception))
 
     def test_a_genuinely_changed_worktree_passes(self):
-        planner = actors.CodexPlanner(workspace=Path("/tmp"))
+        planner = actors.AgentPlanner(workspace=Path("/tmp"))
         with mock.patch.object(actors, "_run_agent",
                                return_value='{"paths": ["ggml/src/ggml-cuda/mmvq.cu"]}'), \
              mock.patch.object(actors.subprocess, "run") as ran:
@@ -237,7 +237,7 @@ class TheWorktreeIsTheGroundTruth(unittest.TestCase):
 class TheActorMustNotSpendTheLoopsCompute(unittest.TestCase):
     def test_the_authoring_prompt_forbids_building(self):
         """codex started its own `cmake --build -j 16` on the first real run."""
-        planner = actors.CodexPlanner(workspace=Path("/tmp"))
+        planner = actors.AgentPlanner(workspace=Path("/tmp"))
         captured = {}
 
         def capture(prompt, **kwargs):
@@ -254,3 +254,58 @@ class TheActorMustNotSpendTheLoopsCompute(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Backends(unittest.TestCase):
+    """The per-role model split is the operator's choice; these pin its wiring.
+
+    Each assertion names an exact argv token, so a mutation that drops a flag,
+    reorders the prompt, or un-quotes the codex TOML value is visible AND counted.
+    """
+
+    def test_the_defaults_are_the_operator_choice(self):
+        self.assertEqual(actors.PLANNER_DEFAULT.describe(), "claude:claude-fable-5-1@medium")
+        self.assertEqual(actors.CRITIC_DEFAULT.describe(), "codex:gpt-5.6-sol@high")
+        self.assertIs(actors.AgentPlanner(workspace=Path("/tmp")).backend,
+                      actors.PLANNER_DEFAULT)
+        self.assertIs(actors.AgentCritic(workspace=Path("/tmp")).backend,
+                      actors.CRITIC_DEFAULT)
+
+    def test_a_claude_model_routes_to_the_claude_cli(self):
+        b = actors.backend_for("claude-fable-5-1", "medium")
+        argv = b.argv("PROMPT", Path("/ws"))
+        self.assertEqual(argv[0], actors.CLAUDE)
+        self.assertEqual(argv[1], "-p")
+        self.assertIn("--dangerously-skip-permissions", argv)
+        self.assertIn("--no-session-persistence", argv)
+        self.assertEqual(argv[argv.index("--model") + 1], "claude-fable-5-1")
+        self.assertEqual(argv[argv.index("--effort") + 1], "medium")
+        self.assertEqual(argv[argv.index("--output-format") + 1], "text")
+        note = argv[argv.index("--append-system-prompt") + 1]
+        self.assertIn("DETACHED git worktree", note)
+        self.assertIn("Never build", note)
+        self.assertEqual(argv[-1], "PROMPT")
+
+    def test_any_other_model_routes_to_codex_with_quoted_toml_effort(self):
+        b = actors.backend_for("gpt-5.6-sol", "high")
+        argv = b.argv("PROMPT", Path("/ws"))
+        self.assertEqual(argv[:3], [actors.CODEX, "exec", "--skip-git-repo-check"])
+        self.assertEqual(argv[argv.index("-m") + 1], "gpt-5.6-sol")
+        # codex parses -c as TOML: an unquoted bare word is rejected, so the quotes
+        # are load-bearing, not cosmetic.
+        self.assertEqual(argv[argv.index("-c") + 1], 'model_reasoning_effort="high"')
+        self.assertEqual(argv[argv.index("-C") + 1], "/ws")
+        self.assertEqual(argv[-1], "PROMPT")
+
+    def test_an_unknown_kind_refuses_rather_than_guessing(self):
+        with self.assertRaises(ValueError):
+            actors.Backend("gemini", "x", "y", "/bin/x").argv("p", Path("/ws"))
+
+    def test_run_agent_invokes_the_backend_argv_in_the_workspace(self):
+        b = actors.backend_for("claude-fable-5-1", "medium")
+        done = mock.Mock(returncode=0, stdout="{}", stderr="")
+        with mock.patch.object(actors.subprocess, "run", return_value=done) as ran:
+            actors._run_agent("PROMPT", workspace=Path("/ws"), backend=b)
+        argv = ran.call_args.args[0]
+        self.assertEqual(argv, b.argv("PROMPT", Path("/ws")))
+        self.assertEqual(ran.call_args.kwargs["cwd"], "/ws")

@@ -16,6 +16,16 @@ bundle that was empty: no refusal reasons, no memory, no profile. Everything thi
 assembles is something the loop measured and previously discarded -- the hotspot
 table `rocprofv3` produced on every attempt, the refusals it filtered on the wrong
 status string, and the history every crash reset to zero.
+
+**Two backends, chosen per role (2026-09-03).** The planner runs Claude Fable 5.1 at
+medium effort through the `claude` CLI; the critic stays on `gpt-5.6-sol` at high
+through `codex exec`. Each is an external coding agent invoked headless in the lane's
+detached worktree. Note for the Claude backend: the worktree carries the llama-tree
+freeze overlay `CLAUDE.md`, which scopes its never-edit rule to the
+`production-consolidated-*` branch -- measured 2026-09-03, Fable authors correctly in a
+detached lane with that overlay loaded, and `--bare` (which would skip it) is not an
+option because it refuses OAuth and this host has no API key. The sandbox note
+appended to the system prompt makes the scoping explicit rather than inferred.
 """
 from __future__ import annotations
 
@@ -29,9 +39,61 @@ from typing import Any, Mapping, Sequence
 from .loop import ActorTransient, Hypothesis, Review
 
 CODEX = "/usr/local/share/npm-global/bin/codex"
+CLAUDE = "/home/node/.local/bin/claude"
 DEFAULT_TIMEOUT_S = 1800
 #: 30s -> 1800s. The streak is what the operator needs to see, not each retry.
 BACKOFF_S = (30, 120, 480, 1800)
+
+#: Appended to the Claude backend's system prompt. The lane worktree ships the
+#: production freeze overlay; this states the scoping that overlay itself declares.
+_CLAUDE_SANDBOX_NOTE = (
+    "You are running headless as the AutoKernel planner inside a DETACHED git worktree "
+    "of the champion kernel tree. This worktree exists to be edited: it is not the "
+    "frozen production-consolidated branch, and the freeze rule in this tree's "
+    "CLAUDE.md applies to that branch, not to this sandbox. Make the requested edits "
+    "directly. Never build, compile, benchmark or test -- the loop owns the build and "
+    "the GPU. Reply exactly as instructed.")
+
+
+@dataclass(frozen=True)
+class Backend:
+    """One external coding agent: which binary, which model, how much reasoning.
+
+    `argv` is the whole contract -- everything else in this module is backend-blind
+    and only ever sees stdout. Keep the prompt LAST for both CLIs.
+    """
+    kind: str       # "codex" | "claude"
+    model: str
+    effort: str
+    binary: str
+
+    def argv(self, prompt: str, workspace: Path) -> list[str]:
+        if self.kind == "codex":
+            # `-c` takes TOML: the value must be quoted or codex rejects it.
+            return [self.binary, "exec", "--skip-git-repo-check",
+                    "-m", self.model, "-c", f'model_reasoning_effort="{self.effort}"',
+                    "-C", str(workspace), prompt]
+        if self.kind == "claude":
+            return [self.binary, "-p", "--dangerously-skip-permissions",
+                    "--no-session-persistence", "--output-format", "text",
+                    "--model", self.model, "--effort", self.effort,
+                    "--append-system-prompt", _CLAUDE_SANDBOX_NOTE, prompt]
+        raise ValueError(f"unknown backend kind {self.kind!r}")
+
+    def describe(self) -> str:
+        return f"{self.kind}:{self.model}@{self.effort}"
+
+
+def backend_for(model: str, effort: str) -> Backend:
+    """`claude-*` models go through the claude CLI; everything else through codex."""
+    if model.startswith("claude-"):
+        return Backend("claude", model, effort, CLAUDE)
+    return Backend("codex", model, effort, CODEX)
+
+
+#: Operator choice, 2026-09-03: planner Fable 5.1 at medium, critic gpt-5.6-sol at high.
+PLANNER_DEFAULT = backend_for("claude-fable-5-1", "medium")
+CRITIC_DEFAULT = backend_for("gpt-5.6-sol", "high")
 
 
 class ProviderTransient(ActorTransient):
@@ -43,10 +105,11 @@ class ProviderTransient(ActorTransient):
 
 
 def _run_agent(prompt: str, *, workspace: Path, timeout_s: int = DEFAULT_TIMEOUT_S,
-               binary: str = CODEX) -> str:
-    argv = [binary, "exec", "--skip-git-repo-check", "-C", str(workspace), prompt]
+               backend: Backend = CRITIC_DEFAULT) -> str:
+    argv = backend.argv(prompt, workspace)
     try:
-        done = subprocess.run(argv, capture_output=True, text=True, timeout=timeout_s)
+        done = subprocess.run(argv, capture_output=True, text=True, timeout=timeout_s,
+                              cwd=str(workspace))
     except subprocess.TimeoutExpired as exc:
         # A hung container held a turn forever in v27; a bounded invocation is a
         # transient, not a terminal fault.
@@ -272,11 +335,11 @@ state a falsifier that could actually fail."""
 
 
 @dataclass
-class CodexPlanner:
-    """Proposes and authors through an external coding agent."""
+class AgentPlanner:
+    """Proposes and authors through an external coding agent (default: Fable 5.1)."""
 
     workspace: Path
-    binary: str = CODEX
+    backend: Backend = PLANNER_DEFAULT
     timeout_s: int = DEFAULT_TIMEOUT_S
     transient_streak: int = 0
 
@@ -284,7 +347,7 @@ class CodexPlanner:
         prompt = _HYPOTHESIS_TASK.format(context=render_context(context))
         raw, streak = _with_backoff(
             lambda: _run_agent(prompt, workspace=self.workspace,
-                               timeout_s=self.timeout_s, binary=self.binary))
+                               timeout_s=self.timeout_s, backend=self.backend))
         self.transient_streak = streak
         body = _extract_json(raw)
         missing = {"mechanism_id", "statement", "falsifier", "target_surface",
@@ -320,7 +383,7 @@ class CodexPlanner:
             '{"paths": ["ggml/src/ggml-cuda/<file>"]}')
         raw, streak = _with_backoff(
             lambda: _run_agent(prompt, workspace=self.workspace,
-                               timeout_s=self.timeout_s, binary=self.binary))
+                               timeout_s=self.timeout_s, backend=self.backend))
         self.transient_streak = streak
         paths = _extract_json(raw).get("paths")
         if not isinstance(paths, list) or not paths:
@@ -351,11 +414,12 @@ Reject when: {grounds}"""
 
 
 @dataclass
-class CodexCritic:
-    """Two passes: the hypothesis before any patch, the diff before the build."""
+class AgentCritic:
+    """Two passes: the hypothesis before any patch, the diff before the build
+    (default: gpt-5.6-sol at high)."""
 
     workspace: Path
-    binary: str = CODEX
+    backend: Backend = CRITIC_DEFAULT
     timeout_s: int = DEFAULT_TIMEOUT_S
 
     def _review(self, subject: str, grounds: str,
@@ -364,7 +428,7 @@ class CodexCritic:
                                      context=render_context(context))
         raw, _ = _with_backoff(
             lambda: _run_agent(prompt, workspace=self.workspace,
-                               timeout_s=self.timeout_s, binary=self.binary))
+                               timeout_s=self.timeout_s, backend=self.backend))
         body = _extract_json(raw)
         accepted = bool(body.get("accepted"))
         reason = str(body.get("reason") or "")
@@ -401,5 +465,6 @@ class CodexCritic:
             context)
 
 
-__all__ = ["BACKOFF_S", "CODEX", "CodexCritic", "CodexPlanner", "ProviderTransient",
-           "render_context"]
+__all__ = ["BACKOFF_S", "Backend", "CLAUDE", "CODEX", "CRITIC_DEFAULT",
+           "PLANNER_DEFAULT", "AgentCritic", "AgentPlanner", "ProviderTransient",
+           "backend_for", "render_context"]
