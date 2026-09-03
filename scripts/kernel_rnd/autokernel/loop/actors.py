@@ -115,8 +115,13 @@ def _run_agent(prompt: str, *, workspace: Path, timeout_s: int = DEFAULT_TIMEOUT
         # transient, not a terminal fault.
         raise ProviderTransient(f"actor exceeded {timeout_s}s") from exc
     if done.returncode != 0:
+        # Both tails. `claude -p` reports its own errors ("Not logged in", usage
+        # limits, refusals) on STDOUT with a non-zero exit and an EMPTY stderr --
+        # run 27 logged 74 transients reading "actor exited 1: " and nothing else,
+        # because this path used to throw the only channel that carried the reason.
         raise ProviderTransient(
-            f"actor exited {done.returncode}: {done.stderr[-400:]}")
+            f"actor exited {done.returncode} [{backend.describe()}]: "
+            f"stderr={done.stderr[-300:]!r} stdout={done.stdout[-300:]!r}")
     return done.stdout
 
 
