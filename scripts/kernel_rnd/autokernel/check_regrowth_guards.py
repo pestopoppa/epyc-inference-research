@@ -95,7 +95,17 @@ LOOP_LOC_BUDGET = 3450
 #: minimum that lands the approved work with 3 lines to spare, because a budget the
 #: package sits EXACTLY on blocks the next three-line correctness fix (the
 #: 2026-08-31 lesson above).
-LOOP_CODE_BUDGET = 2160
+#:
+#: 2,160 -> 2,210 on 2026-09-03: the operator-directed per-role model split --
+#: planner on Claude Fable 5.1 at medium via the `claude` CLI, critic on gpt-5.6-sol
+#: at high via `codex exec`. +44 lines of loop code, all wiring: the `Backend`
+#: dataclass whose `argv` is the whole per-CLI contract (TOML-quoted codex effort;
+#: claude headless flags plus the sandbox note the freeze overlay makes necessary),
+#: `backend_for`, the two role defaults, four `--planner-*`/`--critic-*` flags and
+#: the `actors` banner line that records which models drove a run -- provenance
+#: the R23-19 headline incident showed is not optional. Raised by the minimum that
+#: lands it with 6 lines to spare, for the same reason as the raise above.
+LOOP_CODE_BUDGET = 2210
 
 #: Documentation whose CONTENTS no test may assert. Asserting a doc's text makes
 #: every deletion cost a regeneration, which is how 92 deletions happen in 5 weeks.

@@ -251,10 +251,10 @@ class TheKeepBuildsAProductionCompleteAnchor(unittest.TestCase):
              mock.patch.object(gates, "op_correctness",
                                lambda _b: gates.Verdict("op_correctness", True)), \
              mock.patch.object(run_mod.bench, "compare", fake_compare), \
-             mock.patch.object(run_mod.actors, "CodexPlanner",
-                               lambda workspace: _Planner(workspace)), \
-             mock.patch.object(run_mod.actors, "CodexCritic",
-                               lambda workspace: _Critic(workspace)), \
+             mock.patch.object(run_mod.actors, "AgentPlanner",
+                               lambda workspace, **_: _Planner(workspace)), \
+             mock.patch.object(run_mod.actors, "AgentCritic",
+                               lambda workspace, **_: _Critic(workspace)), \
              mock.patch.object(run_mod.pool, "provision", fake_provision), \
              mock.patch.object(run_mod.claim, "hold", fake_hold), \
              mock.patch.object(run_mod.hotspots, "profile",
