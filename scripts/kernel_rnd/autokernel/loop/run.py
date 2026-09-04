@@ -405,8 +405,18 @@ def main(argv: list[str] | None = None) -> int:
         hashes `bin/libggml-hip.so` alone, and paying server link time per keep for
         a binary nobody runs would buy nothing. Candidate lane builds (`gate_for`)
         stay narrow for the same reason at hundreds of iterations per run."""
+        # R23-40 (2026-09-03): jobs=1, NOT 64. This recipe feeds BOTH the promoted
+        # anchor and the guard's fresh comparison build, and `-j64` HIP builds of one
+        # commit are NON-reproducible on this host -- three same-recipe builds of
+        # 445e93a8 differed in every code section (.text/.hip_fatbin/.rodata), so the
+        # digest guard aborted the run (Run-18 fault class). The build-path sections
+        # are already excluded from the digest (R21-10), so this is genuine parallel-
+        # build non-determinism. Serial build makes the promoted anchor and the fresh
+        # guard build bit-identical. Cost is per-KEEP only (rare), never per-iteration:
+        # lane candidate builds (`gate_for`) keep jobs=64. A future toolchain-flag fix
+        # (hipcc determinism at -j64) could restore parallel anchor builds; filed R23-41.
         return gates.compiles(args.worktree, dest, cmake_defines=recipe.cmake_defines(),
-                              jobs=64, cpu_list="96-183", targets=targets)
+                              jobs=1, cpu_list="96-183", targets=targets)
 
     def build_baseline(dest: Path, commit: str):
         """The frozen production kernel, built at most once PER FREEZE. Never in the
