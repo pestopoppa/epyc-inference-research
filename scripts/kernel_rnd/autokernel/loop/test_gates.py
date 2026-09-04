@@ -203,22 +203,35 @@ class TheAnchorMustAdvanceWithTheChampion(unittest.TestCase):
                         "promotion must follow the commit, never precede it")
 
     def test_the_guard_runs_before_the_headline_is_published(self):
-        """promote -> verify -> publish_headline, in `run.py`'s own promotion body.
+        """The guard (`verify_anchor`) must precede any headline publish.
 
         A headline refreshed BEFORE `verify_anchor` would publish a number measured
         against a slot nobody has yet proven holds the champion -- run 18's void
         number, on the panel the operator reads. Found as a live mutation hole at
         the R21-7 port: swapping the two calls survived every suite, because the
         end-to-end tests compose the modules themselves and cannot see this wiring.
-        Source-order pinned here the same way the commit->promotion order is."""
+
+        R23-44 relocated the headline: `promote_anchor` advances the ACCUMULATOR and
+        runs the guard but NO LONGER publishes; `publish_headline` moved into
+        `accumulate_after_keep`, fired only when a bundle's SERVING gate promotes the
+        champion of record. The ordering guarantee is preserved structurally: in
+        `commit_pooled`, `promote_anchor()` (which contains `verify_anchor()`) is
+        called before `accumulate_after_keep()` (which contains `publish_headline()`),
+        and inside accumulate_after_keep the publish sits on the PROMOTE branch after
+        the champion-of-record snapshot. Pinned here the same way the order is."""
         source = self._source()
-        block = source.split("def promote_anchor()", 1)[1]
-        block = block.split("def ", 1)[0]        # promote_anchor's body only
-        self.assertIn("verify_anchor()", block)
-        self.assertIn("publish_headline()", block)
-        self.assertLess(block.index("verify_anchor()"),
-                        block.index("publish_headline()"),
-                        "the headline must never publish ahead of the A/A guard")
+        # promote_anchor advances the accumulator + guards, and must NOT publish.
+        promote = source.split("def promote_anchor()", 1)[1].split("\n    def ", 1)[0]
+        self.assertIn("verify_anchor()", promote)
+        self.assertNotIn("publish_headline()", promote)
+        # the headline lives in accumulate_after_keep, after the cor snapshot.
+        accum = source.split("def accumulate_after_keep(", 1)[1].split("\n    def ", 1)[0]
+        self.assertIn("publish_headline()", accum)
+        self.assertLess(accum.index("snapshot_cor("), accum.index("publish_headline()"))
+        # commit_pooled calls promote_anchor (guard) BEFORE accumulate_after_keep (headline).
+        commit = source.split("def commit_pooled(", 1)[1].split("return pool.drive(", 1)[0]
+        self.assertLess(commit.index("promote_anchor()"),
+                        commit.index("accumulate_after_keep("))
 
     def test_the_guard_is_wired_with_the_real_code_digest(self):
         """R22-3: the hash pre-check only exists if `run.py` actually injects it.
@@ -372,3 +385,45 @@ class PromotionMustSurvivePruning(unittest.TestCase):
                                            champion_commit="5ad3e36d")
             self.assertEqual(promoted.name, "anchor-gen-003")
             self.assertTrue((promoted / "bin").is_dir())
+
+
+class TwoTierChampionWiring(unittest.TestCase):
+    """R23-44: the accumulator advances on bench keeps; the champion of record advances
+    only when a bundle's serving gate promotes it. These pin the run.py wiring the unit
+    tests on accumulate.py cannot see (same wiring-only blind spot as the guard-order test)."""
+
+    def _source(self):
+        return (Path(__file__).resolve().parent / "run.py").read_text()
+
+    def test_keep_gate_is_the_bench_confirm_rung_not_a_per_keep_serving_gate(self):
+        src = self._source()
+        # the removed per-keep serving gate must be gone; the keep gate is confirm.gate
+        self.assertNotIn("def serving_confirm", src)
+        commit = src.split("def commit_pooled(", 1)[1].split("return pool.drive(", 1)[0]
+        self.assertIn("confirm.gate(", commit)
+        self.assertIn("accumulate_after_keep(hypothesis.mechanism_id)", commit)
+
+    def test_serving_gate_compares_champion_of_record_against_accumulator(self):
+        src = self._source()
+        accum = src.split("def accumulate_after_keep(", 1)[1].split("\n    def ", 1)[0]
+        # the serving A-arm is the champion-of-record build, B-arm the accumulator anchor
+        self.assertIn("serving.compare(serving_recipe, cor_build[0], anchor_build[0]", accum)
+        # it only fires when the bundle clears the threshold
+        self.assertIn("accumulate.Decision.FIRE_SERVING", accum)
+        # promote advances cor + snapshots + headline; divergence journals evidence
+        self.assertIn("accumulate.Outcome.PROMOTE", accum)
+        self.assertIn("planner_evidence", accum)
+        self.assertIn("measured_divergence", accum)
+
+    def test_cor_build_is_snapshotted_before_the_loop_and_protected_from_pruning(self):
+        src = self._source()
+        # cor lives in a slot NOT matching anchor-gen-*, so prune_anchor_generations cannot hit it
+        self.assertIn('cor_slot = args.store / "cor-build"', src)
+        # snapshot happens at startup under the claim, before run_pooled
+        held = src.split("with claim.hold()", 1)[1].split("pooled = run_pooled()", 1)[0]
+        self.assertIn("snapshot_cor(args.anchor_build)", held)
+
+    def test_fire_multiple_arg_defaults_to_operator_range(self):
+        src = self._source()
+        arg = src.split('"--fire-multiple"', 1)[1][:120]
+        self.assertIn("default=2.5", arg)

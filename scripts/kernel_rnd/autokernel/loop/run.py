@@ -18,14 +18,15 @@ import argparse
 import json
 from pathlib import Path
 import signal
+import shutil
 import subprocess
 import sys
 import time
 
 from ..controller import (anchor_integrity, build_recipe, inbox, rung_confirm,
                           workload_contract)
-from . import (actors, anchor, archive, bench, champion, claim, gates, hotspots, loop,
-               serving,
+from . import (accumulate, actors, anchor, archive, bench, champion, claim, gates,
+               hotspots, loop, serving,
                pipeline, pool, production, status)
 
 
@@ -177,7 +178,11 @@ def main(argv: list[str] | None = None) -> int:
                         help="canonical serving recipe JSON; a keep must improve serving "
                              "throughput under it (llama-server), not just the bench screen")
     parser.add_argument("--serving-pairs", type=int, default=5,
-                        help="paired serving A/B runs per keep-candidate")
+                        help="paired serving A/B runs per bundle at the serving gate")
+    parser.add_argument("--fire-multiple", type=float, default=2.5,
+                        help="R23-44: run the serving gate once the accumulator's compounded "
+                             "bench gain over the champion of record reaches this multiple of "
+                             "the serving floor (operator: 2-3x; default 2.5)")
     parser.add_argument("--out", type=Path)
     parser.add_argument("--dry-run", action="store_true",
                         help="prove the wiring without a provider call or a build")
@@ -347,6 +352,25 @@ def main(argv: list[str] | None = None) -> int:
     # Run 19 advanced twice while the status published the run's STARTING commit, so a
     # working anchor read as stuck. `epoch` still pins the start for comparability.
     current_anchor_commit = [anchor_commit]
+    # R23-44 two-tier champion (operator 2026-09-04): the anchor above is the ACCUMULATOR,
+    # advancing on every bench keep so keeps compound. The CHAMPION OF RECORD is the last
+    # commit a serving gate DEMONSTRATED, the one the headline shows and a promotion would
+    # ship. Its build is the serving A-arm and must survive the accumulator's own pruning,
+    # so it lives in a `cor-build` slot -- prune_anchor_generations only touches `anchor-gen-*`.
+    cor_commit = [anchor_commit]
+    cor_slot = args.store / "cor-build"
+    cor_build = [args.anchor_build]
+    accum_policy = accumulate.AccumulatorPolicy(fire_multiple=args.fire_multiple)
+    bundle = [accumulate.Bundle(champion_of_record=anchor_commit, tip=anchor_commit)]
+
+    def snapshot_cor(from_build: Path) -> None:
+        """Copy the champion-of-record's built binaries into the protected `cor-build` slot.
+        A copy, not a rebuild: llama-server/llama-bench dlopen their ggml libs from their own
+        bin/ via LD_LIBRARY_PATH (serving/bench set it), so the binaries run from a copy and
+        no CMakeCache is needed -- and a copy cannot drift from the build the loop measured."""
+        shutil.rmtree(cor_slot, ignore_errors=True)
+        shutil.copytree(from_build, cor_slot)
+        cor_build[0] = cor_slot
 
     def measure_for(worker):
         def measure(hypothesis, paths):
@@ -372,32 +396,6 @@ def main(argv: list[str] | None = None) -> int:
                 noise_floor_pct=floor_pct, surface=surface, ubatch=cub,
                 calibrated=floor_pct is not None)
         return measure
-
-    def serving_confirm(worker) -> dict:
-        """R23-43 keep gate: the candidate must improve SERVING throughput on
-        llama-server under the champion's canonical recipe. Fail-closed when the
-        serving floor is uncalibrated (a keep against an unmeasured serving noise
-        floor is the fake-decisive defect), and veto a non-improvement or a
-        decisive regression. The full paired record lands in <store>/serving/."""
-        row = serving.compare(serving_recipe, anchor_build[0], worker.build_dir,
-                              pairs=args.serving_pairs, floor_pct=serving_floor_pct)
-        if row["decisive"] is None:
-            promoted, reason = False, (
-                f"{serving_recipe.name}: UNCALIBRATED serving floor — run the "
-                f"serving-floor calibration before gating keeps on it")
-        elif not row["decisive"]:
-            promoted, reason = False, (
-                f"{serving_recipe.name}: serving change {row['effect_pct']:+.3f}% is "
-                f"within the {row['noise_floor_pct']}% floor — not a demonstrated serving win")
-        elif row["effect"] < 0:
-            promoted, reason = False, (
-                f"{serving_recipe.name}: decisive serving REGRESSION "
-                f"{row['effect_pct']:+.3f}% (floor {row['noise_floor_pct']}%)")
-        else:
-            promoted, reason = True, (
-                f"serving win under {serving_recipe.name}: {row['effect_pct']:+.3f}% "
-                f"({row['anchor_tok_s']:.1f} -> {row['candidate_tok_s']:.1f} tok/s, np{serving_recipe.np})")
-        return {"promoted": promoted, "reason": reason, "row": row}
 
     hotspot_rows: list = []
 
@@ -550,11 +548,10 @@ def main(argv: list[str] | None = None) -> int:
         # FIRST, before the loop draws any further work: nothing below is worth doing
         # against an anchor that is not the champion (run 18: 114 candidates, 6.5 h).
         verify_anchor()
-        # AFTER the guard, never before: a headline measured against a slot that does
-        # not hold the champion is the same void number, published where the operator
-        # reads it. The guard aborts, so reaching this line means the arm is the
-        # champion.
-        publish_headline()
+        # R23-44: the headline no longer publishes here. This is the ACCUMULATOR advancing;
+        # the headline follows the CHAMPION OF RECORD, which advances only when a bundle
+        # passes the serving gate (`accumulate_after_keep`). Between serving promotions the
+        # dashboard headline correctly holds at the last serving-demonstrated champion.
         # The champion moved, so the profile that named the hotspots is stale: the
         # accepted patch changed the very distribution the next hypothesis should aim
         # at. Re-profiling here is what makes a long run keep aiming at the truth
@@ -564,6 +561,65 @@ def main(argv: list[str] | None = None) -> int:
         if dropped:
             print(f"anchor    pruned {len(dropped)} superseded generation(s) "
                   f"(~{201 * len(dropped)} MB)")
+
+    def accumulate_after_keep(mechanism_id: str) -> None:
+        """R23-44 compound-then-gate. The accumulator just advanced on a bench keep; batch it
+        and, only when the bundle's compounded bench gain over the champion of record clears
+        `fire_multiple` x the serving floor, spend the serving gate ONCE on the whole bundle.
+
+        No serving_recipe -> no serving tier: the loop reverts to a pure bench-keep loop.
+
+        On a serving win the champion of record advances to the accumulator tip and the
+        headline follows it; on a divergence (bundle cleared bench, serving did not confirm)
+        the champion of record HOLDS, the bundle is KEPT, and the divergence is journaled as
+        planner evidence naming the bundled keeps (operator 2026-09-04)."""
+        if serving_recipe is None:
+            return
+        head = _git(args.worktree, "rev-parse", "HEAD")
+        # compounded bench: champion-of-record build (A) vs the just-advanced accumulator (B),
+        # re-measured (never a product of marginal effects -- keeps interact) because this is
+        # the number the fire threshold reads and the serving gate will be asked to confirm.
+        comp = bench.compare(
+            bench.Arm("champion_of_record", cor_build[0] / "bin" / "llama-bench"),
+            bench.Arm("accumulator", anchor_build[0] / "bin" / "llama-bench"),
+            args.model, pp=pp, tg=tg, pairs=args.pairs, noise_floor_pct=floor,
+            surface=args.surface, ubatch=ubatch, calibrated=calibrated).to_dict()
+        bundle[0].add_keep(mechanism_id, head, comp["effect"] * 100.0)
+        thr = (f"{accum_policy.fire_threshold_pct(serving_floor_pct):.2f}"
+               if serving_floor_pct is not None else "uncalibrated")
+        print(f"accum     bundle {len(bundle[0].keeps)} keep(s), "
+              f"{bundle[0].compounded_bench_pct:+.2f}% compounded bench vs champion of record "
+              f"(serving gate fires at {thr}%)")
+        if accumulate.decide_after_keep(bundle[0], serving_floor_pct,
+                                        accum_policy) is not accumulate.Decision.FIRE_SERVING:
+            return
+        # The bundle is big enough for the ~3.5% serving floor to resolve -- spend the gate ONCE.
+        sv_row = serving.compare(serving_recipe, cor_build[0], anchor_build[0],
+                                 pairs=args.serving_pairs, floor_pct=serving_floor_pct)
+        plan = accumulate.resolve(bundle[0], sv_row, accum_policy)
+        status.write_json(
+            args.store / "serving", f"bundle-{head[:12]}.json",
+            {"outcome": plan["outcome"].value, "reason": plan["reason"],
+             "bundled_keeps": list(bundle[0].keeps),
+             "planner_evidence": plan.get("planner_evidence"), **sv_row}, prefix=".sv-")
+        print(f"serving   {plan['reason']}")
+        if plan["outcome"] is accumulate.Outcome.PROMOTE:
+            # The champion of record advances to the accumulator tip. Snapshot its build into
+            # the protected slot, publish the headline against it, and start a fresh bundle.
+            cor_commit[0] = plan["new_champion_of_record"]
+            snapshot_cor(anchor_build[0])
+            publish_headline()
+            bundle[0] = accumulate.Bundle(champion_of_record=head, tip=head)
+        else:
+            # DIVERGED + HOLD: hand the divergence to the planner as journal evidence so it can
+            # revert/revise a bundled keep or re-aim; the champion of record and the bundle hold.
+            archive.record(
+                args.store,
+                {"schema": "epyc.autokernel.attempt.v1", "campaign_id": "ak-loop",
+                 "mechanism_id": f"serving-divergence-{head[:12]}", "status": "measured_divergence",
+                 "hypothesis": plan["reason"], "planner_evidence": plan["planner_evidence"],
+                 "serving": sv_row},
+                epoch=epoch, recorded_at=loop._now(), campaign_id="ak-loop")
 
     def gpu_reading(outcomes=()) -> dict:
         """Held versus busy. Both halves, or the number means nothing.
@@ -652,21 +708,12 @@ def main(argv: list[str] | None = None) -> int:
             next tail entry -- their candidates were never built on this champion.
             """
             refuse_uncalibrated_keep(args.surface, calibrated, comparison)
-            # §5.3: one extra bench.compare per confirm surface, in this same
-            # serialized tail. The veto is caught at `iterate`'s keep gate and the
-            # candidate lands as `keep_candidate`, never `kept`.
-            # R23-43: the SERVING keep gate is primary when a recipe is configured --
-            # a keep must move real serving throughput, not just the bench screen.
-            if serving_recipe is not None:
-                sv = serving_confirm(worker)
-                status.write_json(
-                    args.store / "serving", f"{hypothesis.mechanism_id}.json",
-                    {"mechanism_id": hypothesis.mechanism_id, "promoted": sv["promoted"],
-                     "reason": sv["reason"], **sv["row"]}, prefix=".sv-")
-                if not sv["promoted"]:
-                    raise loop.ConfirmVetoed(sv["reason"])
-            # The bench confirm rung still runs if BOTH are configured (belt and
-            # suspenders); with only --serving-recipe it is skipped.
+            # R23-44: the BENCH confirm rung is the KEEP GATE -- a cheap, deterministic screen
+            # a keep must clear to enter the accumulator (§5.3: one extra bench.compare per
+            # confirm surface, in this same serialized tail; the veto lands the candidate as
+            # keep_candidate, never kept). The SERVING gate is NO LONGER per-keep: it cannot
+            # resolve a 1-3% keep against the ~3.5% serving floor, so it fires on the BUNDLE in
+            # accumulate_after_keep once the compounded gain clears the floor.
             if confirm is not None:
                 verdict = confirm.gate(hypothesis.mechanism_id, comparison,
                                        confirm_measure(worker))
@@ -676,6 +723,9 @@ def main(argv: list[str] | None = None) -> int:
                                          champion_tree=args.worktree,
                                          branch=args.champion_branch)
             promote_anchor()
+            # The accumulator advanced; batch this keep and, if the bundle now clears the
+            # serving floor, spend the one serving gate that can advance the champion of record.
+            accumulate_after_keep(hypothesis.mechanism_id)
             return head
 
         return pool.drive(
@@ -701,6 +751,13 @@ def main(argv: list[str] | None = None) -> int:
     with claim.hold() as receipt:
         claim_started = time.time()
         print(f"claim     held on {receipt['device_id']}\n")
+        # R23-44: snapshot the starting champion into the protected champion-of-record slot
+        # BEFORE the accumulator can advance and prune. The serving gate reads cor_build as
+        # its A-arm; without this snapshot the first accumulator prune could delete it.
+        if serving_recipe is not None:
+            snapshot_cor(args.anchor_build)
+            print(f"cor       champion of record {cor_commit[0][:12]} -> cor-build "
+                  f"(serving A-arm; headline follows serving-demonstrated advances only)")
         # Profiles the CURRENT anchor on the SAME surface the A/B will measure, and
         # is re-run whenever a keep advances the champion.
         reprofile()
