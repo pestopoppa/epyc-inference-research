@@ -427,3 +427,16 @@ class TwoTierChampionWiring(unittest.TestCase):
         src = self._source()
         arg = src.split('"--fire-multiple"', 1)[1][:120]
         self.assertIn("default=2.5", arg)
+
+    def test_publish_exposes_accumulator_state_for_the_dashboard(self):
+        # R23-44 observability: the loop status must carry the bundle so the dashboard
+        # can render keeps accumulating toward the serving gate.
+        src = self._source()
+        self.assertIn("def accumulator_state(", src)
+        pub = src.split("def publish(", 1)[1].split("\n    def ", 1)[0]
+        self.assertIn("accumulator=accumulator_state()", pub)
+        acc = src.split("def accumulator_state(", 1)[1].split("\n    def ", 1)[0]
+        for field in ("compounded_bench_pct", "fire_threshold_pct", "n_keeps",
+                      "progress_fraction", "champion_of_record"):
+            self.assertIn(field, acc)
+

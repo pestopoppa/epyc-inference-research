@@ -119,7 +119,11 @@ LOOP_LOC_BUDGET = 3450
 #: champion-of-record that advances only when a bundle compounds past the serving floor
 #: AND the one serving gate confirms it). A per-keep serving gate vetoes every 1-3% keep
 #: against the ~3.5% floor; batching makes the serving gate resolvable. NEW capability.
-LOOP_CODE_BUDGET = 2500
+#: 2,500 -> 2,560 on 2026-09-04: R23-44 observability — `accumulator_state()` in run.py
+#: exposes the two-tier bundle (keeps, compounded %, fire threshold, progress fraction) in the
+#: loop status so the dashboard can render keeps accumulating toward the serving gate; the
+#: operator asked to watch the bundle build. NEW observability surface, not regrowth.
+LOOP_CODE_BUDGET = 2560
 
 #: Documentation whose CONTENTS no test may assert. Asserting a doc's text makes
 #: every deletion cost a regeneration, which is how 92 deletions happen in 5 weeks.
