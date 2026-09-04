@@ -195,7 +195,7 @@ class TheAnchorMustAdvanceWithTheChampion(unittest.TestCase):
         commit is `commit_pooled`: the champion ref moves, THEN the anchor builds."""
         source = self._source()
         block = source.split(
-            "def commit_pooled(worker, hypothesis, paths, comparison)", 1)[1][:2200]
+            "def commit_pooled(worker, hypothesis, paths, comparison)", 1)[1][:2900]
         self.assertIn("advance_champion", block)
         self.assertIn("promote_anchor", block)
         self.assertLess(block.index("advance_champion"),
@@ -288,7 +288,7 @@ class ThePooledPathMustAdvanceTheAnchorToo(unittest.TestCase):
 
     def _pooled_block(self):
         source = (Path(__file__).resolve().parent / "run.py").read_text()
-        return source.split("def commit_pooled(", 1)[1][:2200]
+        return source.split("def commit_pooled(", 1)[1][:2900]  # widened for the R23-43 serving gate
 
     def test_it_advances_the_champion_then_the_anchor(self):
         block = self._pooled_block()

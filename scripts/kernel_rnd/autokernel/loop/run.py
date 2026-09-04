@@ -25,6 +25,7 @@ import time
 from ..controller import (anchor_integrity, build_recipe, inbox, rung_confirm,
                           workload_contract)
 from . import (actors, anchor, archive, bench, champion, claim, gates, hotspots, loop,
+               serving,
                pipeline, pool, production, status)
 
 
@@ -169,6 +170,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--confirm-surfaces",
                         default=",".join(rung_confirm.DEFAULT_SURFACES),
                         help="comma-separated confirm gate surfaces (D2)")
+    # R23-43: the SERVING keep gate. When set, a screen keep must ALSO improve serving
+    # throughput on llama-server under the champion's canonical recipe -- the only
+    # performance that matters (operator 2026-09-04). Supersedes the bench confirm rung.
+    parser.add_argument("--serving-recipe", type=Path, default=None,
+                        help="canonical serving recipe JSON; a keep must improve serving "
+                             "throughput under it (llama-server), not just the bench screen")
+    parser.add_argument("--serving-pairs", type=int, default=5,
+                        help="paired serving A/B runs per keep-candidate")
     parser.add_argument("--out", type=Path)
     parser.add_argument("--dry-run", action="store_true",
                         help="prove the wiring without a provider call or a build")
@@ -240,6 +249,16 @@ def main(argv: list[str] | None = None) -> int:
                                             args.confirm_model, store=args.store))
     if confirm is not None:
         print(f"confirm   {confirm.describe()}")
+    serving_recipe = None
+    serving_floor_pct = None
+    if args.serving_recipe is not None:
+        serving_recipe = serving.Recipe.load(args.serving_recipe)
+        floor_path = (args.store / f"serving-floor.{serving_recipe.name}.json")
+        if floor_path.is_file():
+            serving_floor_pct = json.loads(floor_path.read_text()).get("floor_pct")
+        print(f"serving   {serving_recipe.describe()} — keep gate on llama-server; "
+              + (f"floor {serving_floor_pct}%" if serving_floor_pct is not None
+                 else "UNCALIBRATED (keeps refused until the serving floor is calibrated)"))
     planner_backend = actors.backend_for(args.planner_model, args.planner_effort)
     critic_backend = actors.backend_for(args.critic_model, args.critic_effort)
     print(f"actors    planner={planner_backend.describe()}  "
@@ -353,6 +372,32 @@ def main(argv: list[str] | None = None) -> int:
                 noise_floor_pct=floor_pct, surface=surface, ubatch=cub,
                 calibrated=floor_pct is not None)
         return measure
+
+    def serving_confirm(worker) -> dict:
+        """R23-43 keep gate: the candidate must improve SERVING throughput on
+        llama-server under the champion's canonical recipe. Fail-closed when the
+        serving floor is uncalibrated (a keep against an unmeasured serving noise
+        floor is the fake-decisive defect), and veto a non-improvement or a
+        decisive regression. The full paired record lands in <store>/serving/."""
+        row = serving.compare(serving_recipe, anchor_build[0], worker.build_dir,
+                              pairs=args.serving_pairs, floor_pct=serving_floor_pct)
+        if row["decisive"] is None:
+            promoted, reason = False, (
+                f"{serving_recipe.name}: UNCALIBRATED serving floor — run the "
+                f"serving-floor calibration before gating keeps on it")
+        elif not row["decisive"]:
+            promoted, reason = False, (
+                f"{serving_recipe.name}: serving change {row['effect_pct']:+.3f}% is "
+                f"within the {row['noise_floor_pct']}% floor — not a demonstrated serving win")
+        elif row["effect"] < 0:
+            promoted, reason = False, (
+                f"{serving_recipe.name}: decisive serving REGRESSION "
+                f"{row['effect_pct']:+.3f}% (floor {row['noise_floor_pct']}%)")
+        else:
+            promoted, reason = True, (
+                f"serving win under {serving_recipe.name}: {row['effect_pct']:+.3f}% "
+                f"({row['anchor_tok_s']:.1f} -> {row['candidate_tok_s']:.1f} tok/s, np{serving_recipe.np})")
+        return {"promoted": promoted, "reason": reason, "row": row}
 
     hotspot_rows: list = []
 
@@ -610,6 +655,18 @@ def main(argv: list[str] | None = None) -> int:
             # §5.3: one extra bench.compare per confirm surface, in this same
             # serialized tail. The veto is caught at `iterate`'s keep gate and the
             # candidate lands as `keep_candidate`, never `kept`.
+            # R23-43: the SERVING keep gate is primary when a recipe is configured --
+            # a keep must move real serving throughput, not just the bench screen.
+            if serving_recipe is not None:
+                sv = serving_confirm(worker)
+                status.write_json(
+                    args.store / "serving", f"{hypothesis.mechanism_id}.json",
+                    {"mechanism_id": hypothesis.mechanism_id, "promoted": sv["promoted"],
+                     "reason": sv["reason"], **sv["row"]}, prefix=".sv-")
+                if not sv["promoted"]:
+                    raise loop.ConfirmVetoed(sv["reason"])
+            # The bench confirm rung still runs if BOTH are configured (belt and
+            # suspenders); with only --serving-recipe it is skipped.
             if confirm is not None:
                 verdict = confirm.gate(hypothesis.mechanism_id, comparison,
                                        confirm_measure(worker))
