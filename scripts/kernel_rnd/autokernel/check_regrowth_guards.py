@@ -112,7 +112,14 @@ LOOP_LOC_BUDGET = 3450
 #: ~0%). `loop/serving.py` (+~140 code: the general recipe, the np-concurrent aggregate-tok/s
 #: measurement, the paired A/B, the A/A floor) plus headroom for the keep-gate wiring in
 #: loop.py/run.py. This is a NEW capability the loop did not have, not regrowth of removed prose.
-LOOP_CODE_BUDGET = 2400
+#: 2,400 -> 2,500 on 2026-09-04: R23-44 compound-then-gate policy core (operator directive:
+#: "collect llama-bench keeps until they compound to 2x-3x noise floor before the
+#: llama-server final champion advancement gate"). `loop/accumulate.py` (+~90 code: a
+#: two-tier champion -- an accumulator that advances on cheap bench keeps, a
+#: champion-of-record that advances only when a bundle compounds past the serving floor
+#: AND the one serving gate confirms it). A per-keep serving gate vetoes every 1-3% keep
+#: against the ~3.5% floor; batching makes the serving gate resolvable. NEW capability.
+LOOP_CODE_BUDGET = 2500
 
 #: Documentation whose CONTENTS no test may assert. Asserting a doc's text makes
 #: every deletion cost a regeneration, which is how 92 deletions happen in 5 weeks.
