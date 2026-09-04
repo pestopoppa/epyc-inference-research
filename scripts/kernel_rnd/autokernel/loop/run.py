@@ -642,6 +642,30 @@ def main(argv: list[str] | None = None) -> int:
                 round(max(0.0, 1.0 - busy / held), 4) if held > 0 else None),
         }
 
+    def accumulator_state() -> dict | None:
+        """The two-tier champion's live bundle, for the dashboard (R23-44): how many
+        bench keeps have accumulated on the champion of record and how far their
+        compounded gain has climbed toward the serving gate's fire threshold. None when
+        there is no serving tier (no --serving-recipe)."""
+        if serving_recipe is None:
+            return None
+        thr = (accum_policy.fire_threshold_pct(serving_floor_pct)
+               if serving_floor_pct is not None else None)
+        comp = bundle[0].compounded_bench_pct
+        return {
+            "champion_of_record": cor_commit[0],
+            "accumulator_tip": bundle[0].tip,
+            "keeps": list(bundle[0].keeps),
+            "n_keeps": len(bundle[0].keeps),
+            "compounded_bench_pct": round(comp, 3),
+            "serving_floor_pct": serving_floor_pct,
+            "fire_multiple": accum_policy.fire_multiple,
+            "fire_threshold_pct": round(thr, 3) if thr is not None else None,
+            "progress_fraction": (round(min(comp / thr, 1.0), 4)
+                                  if thr and thr > 0 else None),
+            "fires_next": bool(thr is not None and comp >= thr),
+        }
+
     def publish(state: str, outcomes=(), gpu=None, hotspot_rows=(),
                 step: str | None = None) -> None:
         """A loop that only reports when it succeeds looks identical to a stuck one."""
@@ -653,6 +677,7 @@ def main(argv: list[str] | None = None) -> int:
             iterations_planned=args.iterations, step=step,
             champion_head=_git(args.worktree, "rev-parse", "HEAD"),
             anchor_guard=anchor_guard_seen[-1] if anchor_guard_seen else None,
+            accumulator=accumulator_state(),
             gpu=gpu if gpu is not None else gpu_reading(outcomes),
             hotspots=[row.to_dict() for row in hotspot_rows])
 

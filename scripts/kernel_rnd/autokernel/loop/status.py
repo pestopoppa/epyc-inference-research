@@ -79,6 +79,7 @@ def write(store_root: Path, *, state: str, epoch: str, campaign_id: str,
           hotspots: Sequence[Mapping[str, Any]] = (),
           step: str | None = None,
           anchor_guard: Mapping[str, Any] | None = None,
+          accumulator: Mapping[str, Any] | None = None,
           stale_after_s: int = DEFAULT_STALE_AFTER_S) -> Path:
     """Atomically publish the loop's current standing.
 
@@ -125,6 +126,10 @@ def write(store_root: Path, *, state: str, epoch: str, campaign_id: str,
         # champion. `null` means no promotion has happened on this run, which is a
         # different fact from "the check passed" and must stay distinguishable.
         "anchor_guard": dict(anchor_guard) if anchor_guard else None,
+        # R23-44: the two-tier champion's bundle — how many cheap bench keeps have
+        # accumulated and how far their compounded gain has climbed toward the serving
+        # gate's fire threshold. `null` on a run with no serving recipe (no second tier).
+        "accumulator": dict(accumulator) if accumulator else None,
         "gpu": dict(gpu or {}),
         "hotspots": [dict(row) for row in hotspots][:12],
         # Newest first: the operator reads the top of the list.
