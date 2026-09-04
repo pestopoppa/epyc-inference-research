@@ -105,7 +105,14 @@ LOOP_LOC_BUDGET = 3450
 #: the `actors` banner line that records which models drove a run -- provenance
 #: the R23-19 headline incident showed is not optional. Raised by the minimum that
 #: lands it with 6 lines to spare, for the same reason as the raise above.
-LOOP_CODE_BUDGET = 2210
+#:
+#: 2,210 -> 2,400 on 2026-09-04: R23-43, the serving-throughput measurement core (operator
+#: directive: keeps are demonstrated on llama-server under the champion's canonical recipe,
+#: not a llama-bench proxy -- proven necessary when +35% of dec-b4 bench moved DFlash2 serving
+#: ~0%). `loop/serving.py` (+~140 code: the general recipe, the np-concurrent aggregate-tok/s
+#: measurement, the paired A/B, the A/A floor) plus headroom for the keep-gate wiring in
+#: loop.py/run.py. This is a NEW capability the loop did not have, not regrowth of removed prose.
+LOOP_CODE_BUDGET = 2400
 
 #: Documentation whose CONTENTS no test may assert. Asserting a doc's text makes
 #: every deletion cost a regeneration, which is how 92 deletions happen in 5 weeks.

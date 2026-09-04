@@ -1,0 +1,23 @@
+{
+  "schema": "epyc.autokernel.canonical_recipe.v1",
+  "name": "qwen3.8-27b-q8-gpu-dflash2-np4",
+  "model": "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf",
+  "device": "ROCm0",
+  "ngl": 99,
+  "spec_decode": {"type": "draft-dflash", "drafter": "/mnt/raid0/llm/models/Qwen3.8-27B-DFlash2-Q8_0.gguf", "ngld": 99, "draft_n_max": 8},
+  "np": 4,
+  "ctx": 16384,
+  "threads": 8,
+  "batch": 2048,
+  "ubatch": 2048,
+  "ctk": "f16",
+  "ctv": "f16",
+  "fa": "on",
+  "kv_unified": false,
+  "extra_flags": [],
+  "n_predict": 256,
+  "temperature": 0.6,
+  "top_p": 0.95,
+  "top_k": 20,
+  "metric": "aggregate_tok_s"
+}
