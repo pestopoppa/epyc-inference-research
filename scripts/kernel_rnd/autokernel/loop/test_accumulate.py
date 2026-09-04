@@ -55,24 +55,39 @@ def test_resolve_promote_advances_champion_to_tip():
     assert r["action"] is None
 
 
-def test_resolve_divergence_holds_champion_and_names_action():
-    p = A.AccumulatorPolicy(on_divergence=A.DivergenceAction.ROLLBACK)
-    b = _bundle(cor="cor0", tip="tip9", keeps=["m1", "m2", "m3"], pct=10.4)
+def test_default_divergence_is_hold_with_planner_evidence():
+    # operator 2026-09-04: default HOLD, and the divergence must reach the planner as
+    # evidence naming the bundled keeps so it can revert/revise one of them.
+    p = A.AccumulatorPolicy()
+    assert p.on_divergence is A.DivergenceAction.HOLD
+    b = _bundle(cor="cor0", keeps=["m1", "m2", "m3"], pct=10.4)
     r = A.resolve(b, {"decisive": False, "effect": 0.005, "effect_pct": 0.5,
                       "noise_floor_pct": 3.536}, p)
     assert r["outcome"] is A.Outcome.DIVERGED
     assert r["new_champion_of_record"] == "cor0"          # HOLDS, does not move
-    assert r["action"] is A.DivergenceAction.ROLLBACK
-    assert "DIVERGENCE" in r["reason"]
+    assert r["action"] is A.DivergenceAction.HOLD
+    ev = r["planner_evidence"]
+    assert ev["kind"] == "serving_divergence"
+    assert ev["bundled_keeps"] == ["m1", "m2", "m3"]      # named, so the planner can revise one
+    assert ev["compounded_bench_pct"] == 10.4
+    assert "revert" in ev["hint"] or "revis" in ev["hint"]
 
 
-def test_resolve_divergence_hold_action_keeps_bundle():
-    p = A.AccumulatorPolicy(on_divergence=A.DivergenceAction.HOLD)
-    b = _bundle(cor="cor0", tip="tip9", keeps=["m1"], pct=9.0)
+def test_rollback_action_still_available_when_selected():
+    p = A.AccumulatorPolicy(on_divergence=A.DivergenceAction.ROLLBACK)
+    b = _bundle(cor="cor0", keeps=["m1"], pct=9.0)
     r = A.resolve(b, {"decisive": True, "effect": -0.02, "effect_pct": -2.0,
                       "noise_floor_pct": 3.536}, p)
-    assert r["action"] is A.DivergenceAction.HOLD
+    assert r["action"] is A.DivergenceAction.ROLLBACK
     assert r["new_champion_of_record"] == "cor0"
+
+
+def test_promote_carries_no_planner_evidence():
+    p = A.AccumulatorPolicy()
+    b = _bundle(cor="cor0", keeps=["m1"], pct=9.1)
+    r = A.resolve(b, {"decisive": True, "effect": 0.07, "effect_pct": 7.0,
+                      "noise_floor_pct": 3.536}, p)
+    assert "planner_evidence" not in r
 
 
 def test_bundle_add_keep_tracks_tip_and_compounded():

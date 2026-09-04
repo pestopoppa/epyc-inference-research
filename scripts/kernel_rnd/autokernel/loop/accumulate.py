@@ -56,20 +56,30 @@ class Outcome(enum.Enum):
 
 class DivergenceAction(enum.Enum):
     """What the loop does with the accumulated commits when a bundle diverges. The caller
-    picks one; this module only NAMES the choice so the decision is explicit and logged."""
+    picks one; this module only NAMES the choice so the decision is explicit and logged.
+
+    Operator decision 2026-09-04: HOLD, and write the divergence into the JOURNAL as
+    evidence the planner reads -- "keep batching but update journal evidence so the planner
+    can strategize accordingly and potentially modify previously batched/bundled keeps".
+    So divergence is not a dead end and not a blind pile-on: the bundle stays, the finding
+    goes to the planner, and the planner may add keeps aimed at the serving gap OR revert /
+    revise specific keeps already in the bundle (it authors in a worktree on the champion
+    branch, so a revert is just another authored patch). `resolve` emits that evidence."""
     ROLLBACK = "rollback"   #: reset the accumulator to the champion of record, discard the bundle
-    HOLD = "hold"           #: keep the bundle on the accumulator, keep batching from here
-    #: (a future BISECT action -- find which keeps transferred -- is deliberately not built
-    #: yet: it costs O(log n) extra serving gates and only pays off once divergence is common.)
+    HOLD = "hold"           #: keep the bundle; the planner gets the evidence and may revise it
+    #: (a future BISECT action -- automatically find which keeps transferred -- is deliberately
+    #: not built: the operator's HOLD+evidence hands that judgement to the PLANNER, which sees
+    #: the whole context bundle, rather than spending O(log n) serving gates to bisect blindly.)
 
 
 @dataclass(frozen=True)
 class AccumulatorPolicy:
     """The thresholds. `fire_multiple` is the operator's 2-3x; `on_divergence` is the
-    caller's choice for the divergence case (default ROLLBACK: the conservative reading of
-    'only serving advances the champion' -- a bundle that did not transfer is not kept)."""
+    caller's choice for the divergence case (default HOLD: the operator's 2026-09-04 ruling
+    -- keep the bundle and hand the divergence to the planner as journal evidence, so it can
+    add keeps aimed at the serving gap or revise the keeps already bundled)."""
     fire_multiple: float = 2.5
-    on_divergence: DivergenceAction = DivergenceAction.ROLLBACK
+    on_divergence: DivergenceAction = DivergenceAction.HOLD  # operator 2026-09-04
 
     def fire_threshold_pct(self, serving_floor_pct: float) -> float:
         return self.fire_multiple * serving_floor_pct
@@ -140,7 +150,21 @@ def resolve(bundle: Bundle, serving_row: dict, policy: AccumulatorPolicy) -> dic
                    f"+{bundle.compounded_bench_pct:.2f}% bench but serving said "
                    f"{serving_row.get('effect_pct', 0.0):+.3f}% (decisive={serving_row.get('decisive')}, "
                    f"floor {serving_row.get('noise_floor_pct')}%); champion of record HOLDS at "
-                   f"{bundle.champion_of_record[:12]}, action={policy.on_divergence.value}")}
+                   f"{bundle.champion_of_record[:12]}, action={policy.on_divergence.value}"),
+        # The planner READS this next iteration (operator 2026-09-04): it is the evidence that
+        # a bench-only gain did not transfer, and it names the keeps in the bundle so the planner
+        # can revert or revise a specific one instead of only appending. NOT a grade -- a
+        # strategy signal, so the planner stops mining a non-predictive vein.
+        "planner_evidence": {
+            "kind": "serving_divergence",
+            "bundled_keeps": list(bundle.keeps),
+            "compounded_bench_pct": bundle.compounded_bench_pct,
+            "serving_effect_pct": serving_row.get("effect_pct", 0.0),
+            "serving_decisive": serving_row.get("decisive"),
+            "serving_floor_pct": serving_row.get("noise_floor_pct"),
+            "hint": ("bench gains in this bundle did not transfer to serving; consider reverting or "
+                     "revising one of the bundled keeps, or aim the next hypothesis at the serving "
+                     "gap rather than the bench surface")}}
 
 
 __all__ = ["Decision", "Outcome", "DivergenceAction", "AccumulatorPolicy", "Bundle",
