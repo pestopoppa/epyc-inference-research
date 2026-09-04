@@ -4,7 +4,12 @@
   "model": "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf",
   "device": "ROCm0",
   "ngl": 99,
-  "spec_decode": {"type": "draft-dflash", "drafter": "/mnt/raid0/llm/models/Qwen3.8-27B-DFlash2-Q8_0.gguf", "ngld": 99, "draft_n_max": 8},
+  "spec_decode": {
+    "type": "draft-dflash",
+    "drafter": "/mnt/raid0/llm/models/Qwen3.8-27B-DFlash2-Q8_0.gguf",
+    "ngld": 99,
+    "draft_n_max": 8
+  },
   "np": 4,
   "ctx": 16384,
   "threads": 8,
@@ -15,9 +20,9 @@
   "fa": "on",
   "kv_unified": false,
   "extra_flags": [],
-  "n_predict": 256,
-  "temperature": 0.6,
+  "n_predict": 384,
+  "temperature": 0.0,
   "top_p": 0.95,
-  "top_k": 20,
+  "top_k": 1,
   "metric": "aggregate_tok_s"
 }

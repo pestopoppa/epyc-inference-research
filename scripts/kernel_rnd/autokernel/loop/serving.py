@@ -128,23 +128,30 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
         else:
             raise ServerDied("server not healthy within boot timeout")
 
-        def one(i: int) -> int:
+        def one(i: int) -> tuple[int, float]:
             body = json.dumps({"prompt": _PROMPTS[i % len(_PROMPTS)],
                                "n_predict": recipe.n_predict, "temperature": recipe.temperature,
                                "top_p": recipe.top_p, "top_k": recipe.top_k,
                                "cache_prompt": False}).encode()
             req = urllib.request.Request(f"http://127.0.0.1:{port}/completion", data=body,
                                          headers={"Content-Type": "application/json"})
-            d = json.loads(urllib.request.urlopen(req, timeout=600).read())
-            return int(d.get("timings", {}).get("predicted_n", 0))
+            t = json.loads(urllib.request.urlopen(req, timeout=600).read()).get("timings", {})
+            # per-request decode rate, NOT wall-clock: each slot reports its own
+            # predicted_n / predicted_ms, so the aggregate is the sum of the concurrent
+            # slots' rates and is immune to the scheduling-tail jitter that made the
+            # wall-clock aggregate ~5-10% noisy even at greedy (R23-43).
+            return int(t.get("predicted_n", 0)), float(t.get("predicted_per_second", 0.0))
 
-        t0 = time.time()
+        # Warmup: one full np-wide round discarded, so cold-cache/clock-ramp does not
+        # land in the measured sample (the first calibration run read high, then settled).
         with cf.ThreadPoolExecutor(recipe.np) as ex:
-            toks = list(ex.map(one, range(recipe.np)))
-        wall = time.time() - t0
-        if min(toks) < recipe.n_predict // 2 or wall <= 0:
-            raise ServerDied(f"degenerate measurement: tokens={toks} wall={wall:.2f}")
-        return sum(toks) / wall
+            list(ex.map(one, range(recipe.np)))
+        with cf.ThreadPoolExecutor(recipe.np) as ex:
+            rows = list(ex.map(one, range(recipe.np)))
+        toks = [n for n, _ in rows]
+        if min(toks) < recipe.n_predict // 2:
+            raise ServerDied(f"degenerate measurement: tokens={toks}")
+        return sum(rate for _, rate in rows)
     finally:
         srv.terminate()
         try:
