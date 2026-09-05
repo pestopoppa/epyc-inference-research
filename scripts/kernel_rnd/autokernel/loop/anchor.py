@@ -125,15 +125,31 @@ def verify(*, champion_commit: str, anchor_build: Path,
         clean(scratch_build)
         f_dig = digest(scratch_build) if build(scratch_build).passed else None
         if a_dig != f_dig:
+            # R23-45 instrumentation: localize the mismatch to the compiler or the
+            # linker before aborting, so a recurrence is self-diagnosing rather than a
+            # 3-build post-mortem. `linker_only` True = identical objects, different
+            # LIBRARY (link non-determinism); else `objects_differing` names the .o the
+            # compiler produced differently. 2026-09-04: 1/435 differed (an unrelated
+            # host tool object), GPU code identical -- a rare host-side glitch.
+            try:
+                from ..controller import anchor_integrity as _ai
+                odiff = _ai.object_diff(anchor_build, scratch_build)
+            except Exception as _exc:  # never let instrumentation mask the abort
+                odiff = {"error": str(_exc)}
+            _loc = ("LINKER (objects identical, LIBRARY differs)" if odiff.get("linker_only")
+                    else f"COMPILER on {odiff.get('n_differing')} object(s): "
+                         f"{odiff.get('objects_differing')}" if "error" not in odiff
+                    else f"unlocalized ({odiff['error']})")
             verdict = AnchorVerdict(
                 False, champion_commit, str(anchor_build), 0.0, noise_floor_pct,
                 # Both digests named in full: the abort IS the evidence (run 21's
                 # left none), and a truncated hash cannot be re-checked by hand.
                 "none", 0, f"anchor guard: code-section digests DIFFER even after one "
                 f"heal — promoted anchor {Path(anchor_build).name} is {a_dig}, a fresh "
-                f"champion build is {f_dig or 'unavailable'}. Run 18's fault class, "
-                f"proven with zero pairs spent. Aborting",
-                evidence={"anchor_digest": a_dig, "fresh_digest": f_dig})
+                f"champion build is {f_dig or 'unavailable'}. Localized to {_loc}. Run "
+                f"18's fault class, proven with zero pairs spent. Aborting",
+                evidence={"anchor_digest": a_dig, "fresh_digest": f_dig,
+                          "object_diff": odiff})
             if on_verdict is not None: on_verdict(verdict)  # noqa: E701 — loop budget
             raise loop_mod.RunAborted(verdict.detail)
     on_step("anchor guard: A/A against the promoted anchor")
