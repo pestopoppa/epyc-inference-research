@@ -118,5 +118,30 @@ def build_digest(build_dir: Path | str) -> str | None:
     return code_digest(Path(build_dir) / LIBRARY)
 
 
-__all__ = ["CODE_SECTIONS", "LIBRARY", "build_digest", "code_digest",
+def object_manifest(build_dir: Path | str) -> dict[str, str]:
+    """Map each compiled object under `build_dir` to its sha256. The inputs the linker
+    folds into LIBRARY -- so a digest mismatch can be localized to the compiler or the
+    linker instead of only named (R23-45)."""
+    root = Path(build_dir)
+    return {str(o.relative_to(root)): hashlib.sha256(o.read_bytes()).hexdigest()
+            for o in sorted(root.rglob("*.o"))}
+
+
+def object_diff(anchor_build: Path | str, scratch_build: Path | str) -> dict:
+    """Localize an anchor-guard digest mismatch. `linker_only` is True when the two
+    builds share every object BYTE-FOR-BYTE yet LIBRARY still differs -- i.e. the
+    compiler was deterministic and the LINKER is the non-deterministic step (the
+    2026-09-04 host .text/.rodata layout drift). Otherwise `objects_differing` names the
+    objects the compiler produced differently, which is a different bug entirely."""
+    a, b = object_manifest(anchor_build), object_manifest(scratch_build)
+    common = sorted(set(a) & set(b))
+    differ = [k for k in common if a[k] != b[k]]
+    return {"n_objects": len(common), "n_differing": len(differ),
+            "objects_differing": differ[:20],
+            "only_in_anchor": sorted(set(a) - set(b))[:20],
+            "only_in_scratch": sorted(set(b) - set(a))[:20],
+            "linker_only": not differ and set(a) == set(b)}
+
+
+__all__ = ["CODE_SECTIONS", "LIBRARY", "build_digest", "object_diff", "object_manifest", "code_digest",
            "section_spans"]
