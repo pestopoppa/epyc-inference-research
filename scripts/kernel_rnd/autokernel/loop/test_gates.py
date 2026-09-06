@@ -225,9 +225,10 @@ class TheAnchorMustAdvanceWithTheChampion(unittest.TestCase):
         self.assertIn("verify_anchor()", promote)
         self.assertNotIn("publish_headline()", promote)
         # the headline lives in accumulate_after_keep, after the cor snapshot.
-        accum = source.split("def accumulate_after_keep(", 1)[1].split("\n    def ", 1)[0]
+        accum = source.split("def _accumulate_after_keep(", 1)[1].split("\n    def ", 1)[0]
         self.assertIn("publish_headline()", accum)
-        self.assertLess(accum.index("snapshot_cor("), accum.index("publish_headline()"))
+        # cor is re-POINTED at the verified gen (never copied) before the headline publishes
+        self.assertLess(accum.index("cor_build[0] = anchor_build[0]"), accum.index("publish_headline()"))
         # commit_pooled calls promote_anchor (guard) BEFORE accumulate_after_keep (headline).
         commit = source.split("def commit_pooled(", 1)[1].split("return pool.drive(", 1)[0]
         self.assertLess(commit.index("promote_anchor()"),
@@ -405,7 +406,7 @@ class TwoTierChampionWiring(unittest.TestCase):
 
     def test_serving_gate_compares_champion_of_record_against_accumulator(self):
         src = self._source()
-        accum = src.split("def accumulate_after_keep(", 1)[1].split("\n    def ", 1)[0]
+        accum = src.split("def _accumulate_after_keep(", 1)[1].split("\n    def ", 1)[0]
         # the serving A-arm is the champion-of-record build, B-arm the accumulator anchor
         self.assertIn("serving.compare(serving_recipe, cor_build[0], anchor_build[0]", accum)
         # it only fires when the bundle clears the threshold
@@ -415,14 +416,24 @@ class TwoTierChampionWiring(unittest.TestCase):
         self.assertIn("planner_evidence", accum)
         self.assertIn("measured_divergence", accum)
 
-    def test_cor_build_is_snapshotted_before_the_loop_and_protected_from_pruning(self):
+    def test_cor_build_is_a_protected_pointer_never_a_copy(self):
         src = self._source()
-        # cor lives in a slot NOT matching anchor-gen-*, so prune_anchor_generations cannot hit it
-        self.assertIn('cor_slot = args.store / "cor-build"', src)
-        # snapshot happens at startup under the claim, before run_pooled
-        held = src.split("with claim.hold()", 1)[1].split("pooled = run_pooled()", 1)[0]
-        self.assertIn("snapshot_cor(args.anchor_build)", held)
+        # 2026-09-06: cor_build POINTS at the real anchor gen. A copied CMake build carries an
+        # absolute RUNPATH into the source gen, which prune deleted, killing every accumulate
+        # step. So: no copy, and the gen is handed to prune as `protect`.
+        self.assertNotIn("snapshot_cor(", src)
+        self.assertNotIn("shutil.copytree", src)
+        self.assertIn("cor_build = [args.anchor_build]", src)
+        self.assertIn("protect=[cor_build[0]]", src)
+        # a serving PROMOTE re-points cor at the verified accumulator gen
+        self.assertIn("cor_build[0] = anchor_build[0]", src)
 
+    def test_accumulate_failure_is_loud_and_never_unrecords_the_keep(self):
+        src = self._source()
+        wrapper = src.split("def accumulate_after_keep(", 1)[1].split("\n    def ", 1)[0]
+        self.assertIn("except Exception", wrapper)
+        self.assertIn("accum     FAILED", wrapper)
+        self.assertIn("accum-error-", wrapper)
     def test_fire_multiple_arg_defaults_to_operator_range(self):
         src = self._source()
         arg = src.split('"--fire-multiple"', 1)[1][:120]
