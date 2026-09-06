@@ -244,7 +244,7 @@ class TheAnchorMustAdvanceWithTheChampion(unittest.TestCase):
         # `verify_anchor` nests `keep_verdict`, so cut at the NEXT top-level def.
         block = source.split("def verify_anchor()", 1)[1]
         block = block.split("def promote_anchor", 1)[0]
-        self.assertIn("digest=anchor_integrity.build_digest", block)
+        self.assertIn("digest=anchor_integrity.object_digest", block)
 
     def test_an_excursion_note_reaches_the_headline_refresh(self):
         """The excursion-flagged promotion still publishes -- the anchor is

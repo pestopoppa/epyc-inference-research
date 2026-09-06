@@ -525,7 +525,10 @@ def main(argv: list[str] | None = None) -> int:
         anchor.verify(
             champion_commit=_git(args.worktree, "rev-parse", "HEAD"),
             anchor_build=anchor_build[0], noise_floor_pct=floor,
-            digest=anchor_integrity.build_digest,
+            # 2026-09-06: OBJECT digest, not the linked .so. The compiler is reproducible
+            # (0/379 objects ever differed); the linker is not (four distinct .so digests
+            # for one commit aborted every keep on link noise). Objects prove identity.
+            digest=anchor_integrity.object_digest,
             on_verdict=keep_verdict, build=build_champion,
             compare=lambda promoted, fresh: bench.compare(
                 bench.Arm("promoted_anchor", promoted / "bin" / "llama-bench"),

@@ -98,9 +98,9 @@ def verify(*, champion_commit: str, anchor_build: Path,
     `loop.RunAborted`, the run-ending path: a wrong anchor voids every measurement after
     it, so continuing is worse than stopping.
 
-    `digest` (R22-3, root-caused by R21-10) is the HASH PRE-CHECK: builds of one
-    commit are deterministic on this host, so `digest(build_dir)` -- code sections
-    only, RUNPATH and friends excluded (`controller/anchor_integrity.py`) -- settles
+    `digest` (R22-3, root-caused by R21-10) is the HASH PRE-CHECK: compilation of one
+    commit is deterministic on this host (the LINK is not), so `digest(build_dir)` --
+    the OBJECT digest (`controller/anchor_integrity.object_digest`) -- settles
     the guard's question before a pair is spent. Digests DIFFER: run 18's fault class
     proven; one heal (rmtree + rebuild + re-hash) is allowed for a corrupted scratch
     build, then abort naming both digests. Digests IDENTICAL: the anchor provably IS
@@ -109,8 +109,12 @@ def verify(*, champion_commit: str, anchor_build: Path,
     +1.765% against a pooled A/A σ of 0.417%) -- recorded, never an abort. None from
     `digest`, or no digest wired, falls back to the A/A-only behaviour above.
     """
-    clean(scratch_build)
-    on_step("anchor guard: building the champion fresh")
+    # 2026-09-06: INCREMENTAL, not clean. A keep touches one file; CMake recompiles only
+    # that object and reuses the rest, so the guard's comparison build takes minutes,
+    # not the 20-min clean rebuild that doubled every keep's cost. Safe because the
+    # digest is now over the OBJECTS (deterministic per source file) -- the relinked .so
+    # is never compared. The heal below still does a clean rebuild as the fallback.
+    on_step("anchor guard: building the champion (incremental)")
     built = build(scratch_build)
     if not getattr(built, "passed", False):
         raise loop_mod.RunAborted(
