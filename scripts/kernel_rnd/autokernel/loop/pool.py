@@ -414,7 +414,8 @@ def stop_requested(store: Path) -> bool:
 
 
 def prune_anchor_generations(store: Path, *, keep: int = ANCHOR_GENERATIONS_KEPT,
-                             current: Path | None = None) -> list[Path]:
+                             current: Path | None = None,
+                             protect: Sequence[Path] = ()) -> list[Path]:
     """Delete superseded anchor builds, never the one in use.
 
     Returns what was removed. The current anchor is excluded explicitly rather than by
@@ -422,7 +423,10 @@ def prune_anchor_generations(store: Path, *, keep: int = ANCHOR_GENERATIONS_KEPT
     assumption that they stay in step is the kind that holds until it does not.
     """
     generations = sorted(store.glob("anchor-gen-*"))
-    protected = {current.resolve()} if current else set()
+    # `protect` (R23-44, 2026-09-06): the champion-of-record gen is the serving A-arm and
+    # must outlive the accumulator generations built on top of it -- pruning it broke
+    # every accumulate step (its binaries carry an absolute RUNPATH into the gen dir).
+    protected = ({current.resolve()} if current else set()) | {Path(x).resolve() for x in protect}
     doomed = [g for g in generations[:-keep] if g.resolve() not in protected]
     for path in doomed:
         shutil.rmtree(path, ignore_errors=True)

@@ -355,22 +355,15 @@ def main(argv: list[str] | None = None) -> int:
     # R23-44 two-tier champion (operator 2026-09-04): the anchor above is the ACCUMULATOR,
     # advancing on every bench keep so keeps compound. The CHAMPION OF RECORD is the last
     # commit a serving gate DEMONSTRATED, the one the headline shows and a promotion would
-    # ship. Its build is the serving A-arm and must survive the accumulator's own pruning,
-    # so it lives in a `cor-build` slot -- prune_anchor_generations only touches `anchor-gen-*`.
+    # ship. Its build is the serving A-arm: cor_build POINTS at the real anchor gen (never a
+    # copy -- a copied CMake build carries an absolute RUNPATH into the source gen, which
+    # broke every accumulate step once prune deleted it, 2026-09-06) and that gen is passed
+    # to prune_anchor_generations as `protect` so it outlives the generations built on it.
     cor_commit = [anchor_commit]
-    cor_slot = args.store / "cor-build"
     cor_build = [args.anchor_build]
     accum_policy = accumulate.AccumulatorPolicy(fire_multiple=args.fire_multiple)
     bundle = [accumulate.Bundle(champion_of_record=anchor_commit, tip=anchor_commit)]
 
-    def snapshot_cor(from_build: Path) -> None:
-        """Copy the champion-of-record's built binaries into the protected `cor-build` slot.
-        A copy, not a rebuild: llama-server/llama-bench dlopen their ggml libs from their own
-        bin/ via LD_LIBRARY_PATH (serving/bench set it), so the binaries run from a copy and
-        no CMakeCache is needed -- and a copy cannot drift from the build the loop measured."""
-        shutil.rmtree(cor_slot, ignore_errors=True)
-        shutil.copytree(from_build, cor_slot)
-        cor_build[0] = cor_slot
 
     def measure_for(worker):
         def measure(hypothesis, paths):
@@ -560,7 +553,8 @@ def main(argv: list[str] | None = None) -> int:
         # at. Re-profiling here is what makes a long run keep aiming at the truth
         # rather than at wherever the time went hours ago.
         reprofile()
-        dropped = pool.prune_anchor_generations(args.store, current=anchor_build[0])
+        dropped = pool.prune_anchor_generations(args.store, current=anchor_build[0],
+                                                protect=[cor_build[0]])
         if dropped:
             print(f"anchor    pruned {len(dropped)} superseded generation(s) "
                   f"(~{201 * len(dropped)} MB)")
@@ -578,6 +572,18 @@ def main(argv: list[str] | None = None) -> int:
         planner evidence naming the bundled keeps (operator 2026-09-04)."""
         if serving_recipe is None:
             return
+        try:
+            _accumulate_after_keep(mechanism_id)
+        except Exception as exc:  # the keep is already committed AND promoted: a
+            # bookkeeping failure here must be LOUD, never a silent un-record (the
+            # 2026-09-06 gen-018 keep vanished from dispositions with no trace).
+            print(f"accum     FAILED — keep {mechanism_id} stands but its bundle entry is "
+                  f"lost: {type(exc).__name__}: {exc}")
+            status.write_json(args.store / "serving", f"accum-error-{mechanism_id}.json",
+                              {"mechanism_id": mechanism_id, "error": str(exc)},
+                              prefix=".sv-")
+
+    def _accumulate_after_keep(mechanism_id: str) -> None:
         head = _git(args.worktree, "rev-parse", "HEAD")
         # compounded bench: champion-of-record build (A) vs the just-advanced accumulator (B),
         # re-measured (never a product of marginal effects -- keeps interact) because this is
@@ -610,7 +616,7 @@ def main(argv: list[str] | None = None) -> int:
             # The champion of record advances to the accumulator tip. Snapshot its build into
             # the protected slot, publish the headline against it, and start a fresh bundle.
             cor_commit[0] = plan["new_champion_of_record"]
-            snapshot_cor(anchor_build[0])
+            cor_build[0] = anchor_build[0]  # point at the verified gen; prune protects it
             publish_headline()
             bundle[0] = accumulate.Bundle(champion_of_record=head, tip=head)
         else:
@@ -783,9 +789,9 @@ def main(argv: list[str] | None = None) -> int:
         # BEFORE the accumulator can advance and prune. The serving gate reads cor_build as
         # its A-arm; without this snapshot the first accumulator prune could delete it.
         if serving_recipe is not None:
-            snapshot_cor(args.anchor_build)
-            print(f"cor       champion of record {cor_commit[0][:12]} -> cor-build "
-                  f"(serving A-arm; headline follows serving-demonstrated advances only)")
+            print(f"cor       champion of record {cor_commit[0][:12]} = {cor_build[0].name} "
+                  f"(serving A-arm, protected from prune; headline follows serving-"
+                  f"demonstrated advances only)")
         # Profiles the CURRENT anchor on the SAME surface the A/B will measure, and
         # is re-run whenever a keep advances the champion.
         reprofile()
