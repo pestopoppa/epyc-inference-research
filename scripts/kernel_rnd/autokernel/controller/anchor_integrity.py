@@ -118,6 +118,41 @@ def build_digest(build_dir: Path | str) -> str | None:
     return code_digest(Path(build_dir) / LIBRARY)
 
 
+#: Objects that are part of the LIBRARY (the champion kernel + the llama library it serves),
+#: as opposed to the executables. Executables are target-set dependent -- PROMOTION_TARGETS
+#: builds llama-cli/llama-server/mtmd that the guard's narrow build does not -- so they must
+#: never enter the identity digest; the library code must.
+_IDENTITY_EXCLUDE = ("tools/", "examples/", "tests/", "pocs/")
+
+
+def object_digest(build_dir: Path | str) -> str | None:
+    """The DETERMINISTIC identity of a build: one hash over the sha256 of every library
+    object. This is what the anchor guard should compare, and why (2026-09-06, "resolve
+    this once and for all"):
+
+    Across every digest mismatch investigated, the COMPILER was byte-reproducible -- 0 of
+    379 objects differed -- while the LINKER was not: `libggml-hip.so`'s host .text/.rodata
+    layout varied across links of IDENTICAL objects (four distinct .so digests for one
+    commit). Hashing the linked .so therefore aborted every keep on link noise that changes
+    nothing about the kernel. Hashing the objects keys the guard on the layer that is
+    deterministic AND that proves champion identity: a stale anchor (run 18's fault class,
+    built from the wrong commit) has a DIFFERENT object for the mutated file, so it is still
+    caught -- more precisely than before, because the diff names the file.
+
+    Executables are excluded (`_IDENTITY_EXCLUDE`): they are target-set dependent and not
+    the champion. None when the build dir holds no library objects."""
+    root = Path(build_dir)
+    rows = []
+    for o in sorted(root.rglob("*.o")):
+        rel = str(o.relative_to(root))
+        if rel.startswith(_IDENTITY_EXCLUDE):
+            continue
+        rows.append(f"{rel}:{hashlib.sha256(o.read_bytes()).hexdigest()}")
+    if not rows:
+        return None
+    return hashlib.sha256("\n".join(rows).encode()).hexdigest()
+
+
 def object_manifest(build_dir: Path | str) -> dict[str, str]:
     """Map each compiled object under `build_dir` to its sha256. The inputs the linker
     folds into LIBRARY -- so a digest mismatch can be localized to the compiler or the
@@ -140,8 +175,10 @@ def object_diff(anchor_build: Path | str, scratch_build: Path | str) -> dict:
             "objects_differing": differ[:20],
             "only_in_anchor": sorted(set(a) - set(b))[:20],
             "only_in_scratch": sorted(set(b) - set(a))[:20],
-            "linker_only": not differ and set(a) == set(b)}
+            # no COMMON object differs => whatever differs is the link (the executables in
+            # only_in_* are target-set extras, not LIBRARY inputs)
+            "linker_only": not differ}
 
 
-__all__ = ["CODE_SECTIONS", "LIBRARY", "build_digest", "object_diff", "object_manifest", "code_digest",
+__all__ = ["CODE_SECTIONS", "LIBRARY", "build_digest", "object_diff", "object_digest", "object_manifest", "code_digest",
            "section_spans"]

@@ -159,7 +159,7 @@ class TheRun18DefectMustAbortTheRun(unittest.TestCase):
         with self.assertRaises(loop.RunAborted):
             recorder.run()
         self.assertEqual(len(recorder.verdicts), 1)
-        self.assertEqual(recorder.order, ["clean", "build", "compare", "verdict"])
+        self.assertEqual(recorder.order, ["build", "compare", "verdict"])
         row = recorder.verdicts[0].to_attempt()
         self.assertEqual(row["status"], "anchor_mismatch")
         self.assertAlmostEqual(row["effect_fraction"], RUN_18_EFFECT_PCT / 100.0,
@@ -206,7 +206,7 @@ class AChampionThatWillNotBuildIsNotAPass(unittest.TestCase):
         self.assertIn("undefined symbol", str(caught.exception))
         # BROKEN READS: order == ["clean", "build", "compare"] -- an A/A taken against a
         # scratch tree containing no llama-bench, i.e. BenchFailed blamed on the loop.
-        self.assertEqual(recorder.order, ["clean", "build"])
+        self.assertEqual(recorder.order, ["build"])
         self.assertEqual(recorder.compared, [])
 
 
@@ -263,8 +263,14 @@ class TheScratchTreeIsWipedFirst(unittest.TestCase):
         recorder.run()
         # BROKEN READS: ["build", "clean", "compare"] -- the champion compiled on top of
         # the PREVIOUS champion's object files, then the wipe removes the evidence.
-        self.assertEqual(recorder.order[:2], ["clean", "build"])
-        self.assertEqual(recorder.cleaned, [Path("/scratch/build-anchor-verify")])
+        # 2026-09-06: the scratch is NO LONGER wiped first. The build is INCREMENTAL --
+        # CMake recompiles only the changed sources -- because the digest is over the
+        # OBJECTS (deterministic per source file), never the relinked .so. A wipe here
+        # would re-impose the 20-min clean rebuild that doubled every keep's cost for
+        # nothing. The heal (on a digest mismatch) is the one place a clean happens.
+        self.assertEqual(recorder.order[0], "build")
+        self.assertNotIn("clean", recorder.order)
+        self.assertEqual(recorder.cleaned, [])  # nothing wiped on the normal path
         self.assertEqual(recorder.built_into, [Path("/scratch/build-anchor-verify")])
 
     def test_the_anchor_is_the_first_arm(self):
@@ -720,12 +726,13 @@ class TheRun18MismatchIsProvenByHashAlone(unittest.TestCase):
         recorder = self._mismatch()
         with self.assertRaises(loop.RunAborted):
             recorder.run()
-        # Exactly two builds (the fresh one, then ONE heal) and two cleans (the
-        # heal's rmtree precedes its rebuild: an incremental rebuild is the fault
-        # class itself). BROKEN READS: build-count 1 (no heal -- a transient
+        # Exactly two builds (the incremental one, then ONE heal) and ONE clean: the
+        # heal's rmtree precedes its rebuild. (2026-09-06: the initial clean is gone --
+        # the first build is incremental and the digest is over objects, so a stale
+        # object cannot pass.) BROKEN READS: build-count 1 (no heal -- a transient
         # scratch corruption aborts a healthy run) or 3+ (the heal loops).
         self.assertEqual(recorder.order.count("build"), 2)
-        self.assertEqual(recorder.order.count("clean"), 2)
+        self.assertEqual(recorder.order.count("clean"), 1)
 
     def test_the_heal_never_loops(self):
         recorder = self._mismatch()
