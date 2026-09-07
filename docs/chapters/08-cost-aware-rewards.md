@@ -548,6 +548,70 @@ Replay-based candidate promotion now uses a regret-optimized objective alongside
 
 </details>
 
+## Cost-Accounting Grammar: Where the Meter Is Attached (2026-09-07)
+
+A cost-aware router is a system that **spends tokens deciding**. That makes the placement of the
+token meter a first-class design question for this chapter, not an implementation detail: a reward
+whose cost term is computed from an incomplete meter optimizes the wrong objective, and the defect
+is invisible in the readout. A 2026-09-07 `/research-intake` pass produced a clean **contrast pair**
+— two systems that measure the same quantity, one wrongly and one correctly — which is recorded here
+as a worked example of measurement grammar.
+
+**The negative half — counting only the executed model.** A meta-model orchestration system
+(JIT-Agent, `intake-1320#record`) reports token cost as the executed harness's *final validation
+round only*, structurally excluding the meta-model that generated the harness and the selector that
+chose it. That is a **nameable accounting failure**, not a rounding difference: the excluded work is
+exactly the work the system exists to do. **Our own cost-aware router could commit it.** Every
+routing decision consumes prompt and completion tokens in the router itself; a reward that prices
+only the *routed* specialist's tokens makes deliberation free and therefore unbounded, which is the
+same pathology `lambda` exists to suppress on the execution side.
+
+**The positive half — count at a boundary the benchmark owns.** Harness-Bench (`intake-1332#record`)
+rewrites the harness's own provider `baseUrl` to point at a local forwarding proxy the benchmark
+owns, forwards every request upstream, logs the returned usage block, and sums over the whole run.
+Planner calls, summarizers, compaction passes, sub-agent spawns and retries are therefore counted
+**by construction**, with no cooperation from and no self-report by the measured system. The judge
+is correctly excluded because the proxy's lifetime ends before the rubric model runs. This is the
+same doctrine as our write-side-hook rule, stated for token accounting: *the meter lives in the same
+layer that spends the tokens* (`intake-1333#record`).
+
+**The two defects of the good design — carry them, because we would inherit both.**
+
+1. **Silent zero-fill.** When a response body is neither JSON nor an SSE stream carrying a usage
+   object, the proxy logs input/output/cache/total as `0` and the run still counts. A stream with no
+   terminal usage event is silently recorded as **free**. A meter that cannot distinguish "zero
+   tokens" from "no reading" must record the missing reading, and an aggregate must refuse to sum
+   over unmeasured runs rather than treating them as cheap.
+2. **Two instruments feeding one column.** The runner prefers the proxy summary and otherwise falls
+   back to the measured harness's own session log — the self-report the proxy exists to avoid — and
+   the published table never says which rows came from which instrument. Mixing instruments inside
+   one reported column is the accounting analogue of the `dataset_sha256` / `test_profile` mismatch
+   that [Chapter 06's paired-McNemar gate](06-benchmarking-framework.md#paired-significance-testing-quant-ab)
+   refuses outright.
+
+**Rule adopted for this chapter's cost terms.** Any cost figure entering a reward, a routing
+decision or a report must name (a) the boundary at which it was metered, (b) what that boundary
+structurally excludes, and (c) how unmeasured calls are represented — never as zero. Where two
+instruments could produce the same column, the instrument is recorded per row or the rows are not
+pooled.
+
+*Scope note: `MEASUREMENT.md` and `agents/shared/MEASUREMENT_POLICY.md` are human-amendment-only.
+This section is chapter-local doctrine and a **proposed** wording; promoting it to measurement policy
+is an operator-run action, not a session write.*
+
+### Reporting: CPM and quality-per-dollar beside quality
+
+Wherever a gate reports a scored task set, report **CPM** (completions per million tokens) and
+**quality-per-dollar** alongside the quality number, not instead of it (`intake-1333#record`). This
+is a **reporting change, not a measurement campaign** — both are derived from quantities a scored
+run already has once the meter is placed correctly above.
+
+The reason to report them together is that quality alone is monotone in spend: a system can buy a
+higher score by emitting more tokens, and that trade is invisible in a quality column. CPM makes
+token maxing visible directly; quality-per-dollar makes it visible in the same units the router's
+cost term already uses. Both need a **scored** task set — a quality figure per task — so they attach
+to eval-gate reporting, not to raw journal accounting, where no per-task quality exists.
+
 ## References
 
 <details>
