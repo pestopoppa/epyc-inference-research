@@ -7,7 +7,7 @@ Run 11 spent 75.1 minutes on 10 iterations and 11.9 of them on the device -- 15.
 The other 63 minutes were four sequential actor calls per iteration (all `gpt-5.6-sol`
 at high reasoning effort when measured; the role split has since moved -- as of
 2026-09-07 the planner runs gpt-5.6-sol at high via `codex exec` and the critic runs
-Claude Fable 5.1 at high via the `claude` CLI), plus a build and the op oracle. Those
+Claude Fable 5.1 at medium via the `claude` CLI), plus a build and the op oracle. Those
 four calls are inherently
 sequential WITHIN an iteration: each one consumes the previous one's output. So the
 only way to hide that latency is to overlap ACROSS iterations.
