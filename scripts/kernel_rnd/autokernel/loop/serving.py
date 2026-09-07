@@ -68,6 +68,13 @@ class Recipe:
     fa: str = "on"
     kv_unified: bool = False
     extra_flags: tuple = ()
+    #: CPU affinity for the server's host threads, e.g. "184-191". None = UNPINNED, which is
+    #: what every floor calibrated to date measured, so it stays the default: setting it
+    #: changes the measured condition and INVALIDATES the recipe's serving floor until that
+    #: floor is re-calibrated (R23-49). Unpinned host threads are free to land on 0-95, the
+    #: CPU campaign's bench region -- kernel-verified 2026-09-07, every logical CPU on this
+    #: host shares a physical core with 0-95, so this pollutes their arms and our own.
+    cpu_list: str | None = None
     #: workload
     n_predict: int = 256
     temperature: float = 0.6
@@ -83,7 +90,8 @@ class Recipe:
         return cls(**d)
 
     def server_argv(self, build_dir: Path, port: int) -> list[str]:
-        argv = [str(Path(build_dir) / "bin" / "llama-server"),
+        argv = ["taskset", "-c", self.cpu_list] if self.cpu_list else []
+        argv += [str(Path(build_dir) / "bin" / "llama-server"),
                 "-m", self.model, "-np", str(self.np), "-c", str(self.ctx),
                 "-t", str(self.threads), "-tb", str(self.threads),
                 "-b", str(self.batch), "-ub", str(self.ubatch),
@@ -102,7 +110,8 @@ class Recipe:
 
     def describe(self) -> str:
         sd = self.spec_decode.get("type", "none")
-        return f"{self.name} [np{self.np} {sd} {self.metric}]"
+        pin = f" cpu={self.cpu_list}" if self.cpu_list else " cpu=unpinned"
+        return f"{self.name} [np{self.np} {sd} {self.metric}{pin}]"
 
 
 class ServerDied(RuntimeError):
