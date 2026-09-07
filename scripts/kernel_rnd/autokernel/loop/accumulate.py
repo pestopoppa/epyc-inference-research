@@ -39,6 +39,8 @@ injects the compounded-bench number and the serving-gate row; `accumulate` decid
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
+import json
 import enum
 
 
@@ -104,6 +106,73 @@ class Bundle:
 
     def is_empty(self) -> bool:
         return not self.keeps
+
+    #: The bundle is DURABLE STATE, not per-process state. Measured defect 2026-09-07: it
+    #: was constructed fresh from the anchor at every startup, so each restart (a) reset the
+    #: keeps to zero and (b) silently advanced the champion of record to the accumulated tip
+    #: -- LAUNDERING bench-only keeps into the serving-demonstrated slot they had never
+    #: reached. Five keeps and +6.13% were absorbed that way across run 29's restarts, and
+    #: the serving gate has NEVER fired: the bundle peaked at +5.19% against an +8.84%
+    #: threshold and was reset before it could get there. Persisting it is what makes
+    #: "compound until the gate fires" survive the restarts that a long campaign guarantees.
+    FILENAME = "accumulator-bundle.json"
+    SCHEMA = "epyc.autokernel.accumulator_bundle.v1"
+
+    def to_dict(self) -> dict:
+        return {"schema": self.SCHEMA, "champion_of_record": self.champion_of_record,
+                "tip": self.tip, "keeps": list(self.keeps),
+                "compounded_bench_pct": self.compounded_bench_pct}
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "Bundle":
+        if d.get("schema") != cls.SCHEMA:
+            raise ValueError(f"unknown bundle schema {d.get('schema')!r}")
+        return cls(champion_of_record=d["champion_of_record"], tip=d["tip"],
+                   keeps=list(d.get("keeps", [])),
+                   compounded_bench_pct=float(d.get("compounded_bench_pct", 0.0)))
+
+    def save(self, store: Path) -> Path:
+        p = Path(store) / self.FILENAME
+        p.write_text(json.dumps(self.to_dict(), indent=2), encoding="utf-8")
+        return p
+
+
+def load_bundle(store: Path, *, anchor_commit: str, is_ancestor) -> tuple:
+    """Restore the bundle, or explain why a fresh one is correct. Returns (bundle, note).
+
+    `is_ancestor(a, b)` must answer "is commit a an ancestor of (or equal to) b" against the
+    REAL champion branch -- the persisted state is only trustworthy if the tree still
+    contains it. Two rejections, both of which must start fresh rather than guess:
+      * the champion of record is not an ancestor of the current anchor -> the branch was
+        rewound or rebuilt under us, so the bundle describes a lineage that no longer exists;
+      * the anchor is BEHIND the persisted tip -> generations were dropped, so keeps the
+        bundle claims are no longer in the tree.
+    A fresh bundle here is honest; silently keeping a stale one would re-introduce the very
+    laundering this function exists to stop."""
+    p = Path(store) / Bundle.FILENAME
+    if not p.is_file():
+        return Bundle(champion_of_record=anchor_commit, tip=anchor_commit), "no persisted bundle — starting fresh"
+    try:
+        b = Bundle.from_dict(json.loads(p.read_text()))
+    except Exception as exc:
+        return (Bundle(champion_of_record=anchor_commit, tip=anchor_commit),
+                f"persisted bundle unreadable ({exc}) — starting fresh")
+    if not is_ancestor(b.champion_of_record, anchor_commit):
+        return (Bundle(champion_of_record=anchor_commit, tip=anchor_commit),
+                f"champion of record {b.champion_of_record[:12]} is not an ancestor of anchor "
+                f"{anchor_commit[:12]} — branch rewound, starting fresh")
+    if not is_ancestor(b.tip, anchor_commit):
+        return (Bundle(champion_of_record=anchor_commit, tip=anchor_commit),
+                f"anchor {anchor_commit[:12]} is behind persisted tip {b.tip[:12]} — "
+                "generations dropped, starting fresh")
+    if b.tip != anchor_commit:
+        # The anchor moved ahead of the bundle while the loop was down (a keep committed but
+        # not recorded, or a hand commit). Trust the TREE for the tip and say so.
+        b.tip = anchor_commit
+        return b, (f"restored {len(b.keeps)} keep(s), {b.compounded_bench_pct:+.2f}% vs cor "
+                   f"{b.champion_of_record[:12]}; tip advanced to the anchor")
+    return b, (f"restored {len(b.keeps)} keep(s), {b.compounded_bench_pct:+.2f}% vs cor "
+               f"{b.champion_of_record[:12]}")
 
 
 def decide_after_keep(bundle: Bundle, serving_floor_pct: float,

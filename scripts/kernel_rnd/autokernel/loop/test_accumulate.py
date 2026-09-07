@@ -96,3 +96,83 @@ def test_bundle_add_keep_tracks_tip_and_compounded():
     b.add_keep("m2", "c2", 6.5)
     assert b.tip == "c2" and b.keeps == ["m1", "m2"] and b.compounded_bench_pct == 6.5
     assert not _bundle().is_empty.__self__.keeps  # empty bundle is empty
+
+
+def _linear(*order):
+    """is_ancestor for a straight-line history, oldest to newest."""
+    idx = {c: i for i, c in enumerate(order)}
+    return lambda a, b: a in idx and b in idx and idx[a] <= idx[b]
+
+
+def test_bundle_survives_a_restart():
+    """MEASURED DEFECT 2026-09-07: the bundle was built fresh from the anchor at every
+    startup, so a restart reset the keeps AND advanced the champion of record to the
+    accumulated tip -- laundering bench-only keeps into the serving-demonstrated slot they
+    had never reached. Five keeps / +6.13% were absorbed that way across run 29's restarts,
+    and the serving gate NEVER fired: the bundle peaked at +5.19% against an +8.84%
+    threshold and was reset before it could get there."""
+    import tempfile, shutil
+    from pathlib import Path
+    store = Path(tempfile.mkdtemp())
+    try:
+        b = A.Bundle(champion_of_record="cor0", tip="cor0")
+        b.add_keep("m1", "k1", 2.031)
+        b.add_keep("m2", "k2", 3.014)
+        b.save(store)
+        got, note = A.load_bundle(store, anchor_commit="k2",
+                                  is_ancestor=_linear("cor0", "k1", "k2"))
+        assert got.champion_of_record == "cor0", "cor must NOT advance to the anchor"
+        assert got.keeps == ["m1", "m2"]
+        assert abs(got.compounded_bench_pct - 3.014) < 1e-9
+        assert "restored 2 keep(s)" in note
+    finally:
+        shutil.rmtree(store, ignore_errors=True)
+
+
+def test_bundle_load_rejects_state_the_tree_no_longer_contains():
+    """A persisted bundle is only trustworthy while the branch still contains it. Both
+    rejections must start FRESH rather than guess -- silently keeping stale state would
+    re-introduce the laundering this function exists to stop."""
+    import tempfile, shutil
+    from pathlib import Path
+    store = Path(tempfile.mkdtemp())
+    try:
+        # (a) rewound branch: the cor is not an ancestor of the anchor
+        A.Bundle(champion_of_record="gone", tip="gone", keeps=["m1"],
+                 compounded_bench_pct=5.0).save(store)
+        got, note = A.load_bundle(store, anchor_commit="a1", is_ancestor=_linear("a1"))
+        assert got.is_empty() and got.champion_of_record == "a1"
+        assert "not an ancestor" in note, note
+        # (b) anchor behind the persisted tip: generations were dropped
+        A.Bundle(champion_of_record="cor0", tip="k2", keeps=["m1"],
+                 compounded_bench_pct=3.0).save(store)
+        got, note = A.load_bundle(store, anchor_commit="k1",
+                                  is_ancestor=_linear("cor0", "k1", "k2"))
+        assert got.is_empty() and "behind persisted tip" in note, note
+        # (c) unreadable file: start fresh, never raise into the loop's startup
+        (store / A.Bundle.FILENAME).write_text("{not json", encoding="utf-8")
+        got, note = A.load_bundle(store, anchor_commit="a1", is_ancestor=_linear("a1"))
+        assert got.is_empty() and "unreadable" in note, note
+        # (d) no file at all
+        (store / A.Bundle.FILENAME).unlink()
+        got, note = A.load_bundle(store, anchor_commit="a1", is_ancestor=_linear("a1"))
+        assert got.is_empty() and "no persisted bundle" in note, note
+    finally:
+        shutil.rmtree(store, ignore_errors=True)
+
+
+def test_anchor_ahead_of_bundle_keeps_the_cor_and_advances_only_the_tip():
+    """A keep committed while the loop was down moves the anchor past the bundle's tip.
+    Trust the TREE for the tip, but never let that promote the champion of record."""
+    import tempfile, shutil
+    from pathlib import Path
+    store = Path(tempfile.mkdtemp())
+    try:
+        A.Bundle(champion_of_record="cor0", tip="k1", keeps=["m1"],
+                 compounded_bench_pct=2.0).save(store)
+        got, note = A.load_bundle(store, anchor_commit="k2",
+                                  is_ancestor=_linear("cor0", "k1", "k2"))
+        assert got.champion_of_record == "cor0" and got.tip == "k2"
+        assert "tip advanced" in note, note
+    finally:
+        shutil.rmtree(store, ignore_errors=True)
