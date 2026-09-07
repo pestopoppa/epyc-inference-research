@@ -362,10 +362,21 @@ def main(argv: list[str] | None = None) -> int:
     # copy -- a copied CMake build carries an absolute RUNPATH into the source gen, which
     # broke every accumulate step once prune deleted it, 2026-09-06) and that gen is passed
     # to prune_anchor_generations as `protect` so it outlives the generations built on it.
-    cor_commit = [anchor_commit]
-    cor_build = [args.anchor_build]
     accum_policy = accumulate.AccumulatorPolicy(fire_multiple=args.fire_multiple)
-    bundle = [accumulate.Bundle(champion_of_record=anchor_commit, tip=anchor_commit)]
+    # The bundle is DURABLE (2026-09-07). Constructing it fresh here reset the keeps on every
+    # restart AND advanced the champion of record to the accumulated tip, laundering
+    # bench-only keeps into the serving-demonstrated slot; five keeps and +6.13% were absorbed
+    # that way, and the gate never fired because the bundle was reset before reaching +8.84%.
+    def _is_ancestor(a: str, b: str) -> bool:
+        return subprocess.run(["git", "-C", str(args.worktree), "merge-base",
+                               "--is-ancestor", a, b],
+                              capture_output=True).returncode == 0
+    restored, note = accumulate.load_bundle(args.store, anchor_commit=anchor_commit,
+                                            is_ancestor=_is_ancestor)
+    bundle = [restored]
+    cor_commit = [restored.champion_of_record]
+    cor_build = [args.anchor_build]
+    print(f"accum     {note}")
 
 
     def measure_for(worker):
@@ -602,6 +613,7 @@ def main(argv: list[str] | None = None) -> int:
             args.model, pp=pp, tg=tg, pairs=args.pairs, noise_floor_pct=floor,
             surface=args.surface, ubatch=ubatch, calibrated=calibrated).to_dict()
         bundle[0].add_keep(mechanism_id, head, comp["effect"] * 100.0)
+        bundle[0].save(args.store)   # durable BEFORE the gate decision, so a crash keeps it
         thr = (f"{accum_policy.fire_threshold_pct(serving_floor_pct):.2f}"
                if serving_floor_pct is not None else "uncalibrated")
         print(f"accum     bundle {len(bundle[0].keeps)} keep(s), "
@@ -627,6 +639,7 @@ def main(argv: list[str] | None = None) -> int:
             cor_build[0] = anchor_build[0]  # point at the verified gen; prune protects it
             publish_headline()
             bundle[0] = accumulate.Bundle(champion_of_record=head, tip=head)
+            bundle[0].save(args.store)
         else:
             # DIVERGED + HOLD: hand the divergence to the planner as journal evidence so it can
             # revert/revise a bundled keep or re-aim; the champion of record and the bundle hold.
