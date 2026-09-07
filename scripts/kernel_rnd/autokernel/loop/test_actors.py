@@ -264,8 +264,8 @@ class Backends(unittest.TestCase):
     """
 
     def test_the_defaults_are_the_operator_choice(self):
-        self.assertEqual(actors.PLANNER_DEFAULT.describe(), "opencode:deepseek/deepseek-v4-flash@max")
-        self.assertEqual(actors.CRITIC_DEFAULT.describe(), "codex:gpt-5.6-sol@high")
+        self.assertEqual(actors.PLANNER_DEFAULT.describe(), "codex:gpt-5.6-sol@high")
+        self.assertEqual(actors.CRITIC_DEFAULT.describe(), "claude:claude-fable-5-1@high")
         self.assertIs(actors.AgentPlanner(workspace=Path("/tmp")).backend,
                       actors.PLANNER_DEFAULT)
         self.assertIs(actors.AgentCritic(workspace=Path("/tmp")).backend,

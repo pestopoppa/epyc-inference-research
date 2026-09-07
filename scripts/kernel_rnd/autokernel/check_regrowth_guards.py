@@ -96,9 +96,11 @@ LOOP_LOC_BUDGET = 3450
 #: package sits EXACTLY on blocks the next three-line correctness fix (the
 #: 2026-08-31 lesson above).
 #:
-#: 2,160 -> 2,210 on 2026-09-03: the operator-directed per-role model split --
-#: planner on Claude Fable 5.1 at medium via the `claude` CLI, critic on gpt-5.6-sol
-#: at high via `codex exec`. +44 lines of loop code, all wiring: the `Backend`
+#: 2,160 -> 2,210 on 2026-09-03: the operator-directed per-role model split (the roles
+#: have since been swapped -- as of 2026-09-07 the planner is gpt-5.6-sol at high via
+#: `codex exec` and the critic is Claude Fable 5.1 at high via the `claude` CLI; the
+#: line count is unchanged by that, only the two default constants moved).
+#: +44 lines of loop code, all wiring: the `Backend`
 #: dataclass whose `argv` is the whole per-CLI contract (TOML-quoted codex effort;
 #: claude headless flags plus the sandbox note the freeze overlay makes necessary),
 #: `backend_for`, the two role defaults, four `--planner-*`/`--critic-*` flags and
