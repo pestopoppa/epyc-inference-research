@@ -34,10 +34,22 @@ BENCHMARK_DIR = Path(__file__).resolve().parent
 if str(BENCHMARK_DIR) not in sys.path:
     sys.path.insert(0, str(BENCHMARK_DIR))
 
-from v7_quality_gate_runner import query_server_meta, score_response  # noqa: E402
+from v7_quality_gate_runner import query_server_meta  # noqa: E402
+# CJ-11: migrated off the two-valued `bool(response) and score_response(...)`
+# idiom, in which ANY truthy third value coerces to a PASS. Imported from the
+# canonical library directly rather than through the v7_quality_gate_runner
+# re-export shim, so this migration does not perturb that module's sha256 (it is
+# pinned by laguna_q4_cpu_bench_runner's provenance block).
+from answer_scoring import score_response_or_error  # noqa: E402
+from gate_verdict_vocab import (  # noqa: E402
+    VERDICT_FAIL, VERDICT_OUT_OF_COVERAGE, VERDICT_PASS,
+)
 
 
-CAPTURE_SCHEMA_VERSION = "architect_interleaved_sequential.v1"
+# v2 (CJ-11): every arm row gains `verdict` (pass/fail/out-of-coverage) and
+# `cause`, and an undecidable arm is EXCLUDED from the e-process and from the
+# saturation rate rather than being folded in as a wrong answer.
+CAPTURE_SCHEMA_VERSION = "architect_interleaved_sequential.v2"
 
 
 def _load_sequential_primitives():
@@ -231,6 +243,7 @@ def run_interleaved(
         "pairs": pairs,
         "stop_reason": None,
         "provisional_transport_pairs": 0,
+        "undecided_pairs": 0,
     }
     capture_out.parent.mkdir(parents=True, exist_ok=True)
     with capture_out.open("x", encoding="utf-8") as capture:
@@ -249,16 +262,34 @@ def run_interleaved(
                 )
                 response = str(meta.get("text") or "")
                 error = str(meta.get("error") or "")
+                # CJ-11: three-valued. `correct` stays a strict bool for every
+                # existing reader; the undecidable state lives in `verdict` and
+                # its CJ-8 cause code, and NEVER in `correct`. `verdict is True`
+                # (not `and`) is the guard: no third value, truthy or otherwise,
+                # can reach `correct` as a pass.
+                verdict, cause = score_response_or_error(response, expected, question)
                 arm_rows[arm.label] = {
                     "arm": arm.label,
                     "url": arm.url,
-                    "correct": bool(response) and score_response(response, expected, question),
+                    "correct": verdict is True,
+                    "verdict": (VERDICT_OUT_OF_COVERAGE if verdict is None
+                                else (VERDICT_PASS if verdict else VERDICT_FAIL)),
+                    "cause": cause,
                     "response": response,
                     "finish_reason": str(meta.get("finish_reason") or ""),
                     "request_error": error,
                 }
 
             complete = not any(row["request_error"] for row in arm_rows.values())
+            # `paired_complete` keeps its historical TRANSPORT meaning. Decidability
+            # is a SEPARATE gate: an arm the scorer could not decide is not evidence
+            # about that arm, so the pair must not enter the sequential test. A
+            # parse-failure rate folded in as a wrong answer is a scoring artifact,
+            # not a quality signal.
+            undecided_arms = {label: row["cause"]
+                              for label, row in arm_rows.items()
+                              if row["verdict"] == VERDICT_OUT_OF_COVERAGE}
+            decided = not undecided_arms
             pair = {
                 "sequence_index": index,
                 "suite": suite,
@@ -266,8 +297,11 @@ def run_interleaved(
                 "difficulty_key": difficulty,
                 "arms": arm_rows,
                 "paired_complete": complete,
+                "paired_decided": decided,
             }
-            if complete:
+            if undecided_arms:
+                pair["undecided"] = undecided_arms
+            if complete and decided:
                 candidate_correct = bool(arm_rows[candidate_arm]["correct"])
                 baseline_correct = bool(arm_rows[baseline_arm]["correct"])
                 delta = int(candidate_correct) - int(baseline_correct)
@@ -278,16 +312,27 @@ def run_interleaved(
                     "baseline": {"z": -delta, "update": asdict(baseline_update)},
                 }
                 stop_reason = _pair_stop_reason(candidate_state, baseline_state, policy=policy)
-            else:
+            elif not complete:
                 result["provisional_transport_pairs"] += 1
                 pair["sequential"] = {"state": "not_updated_transport_failure"}
+            else:
+                result["undecided_pairs"] += 1
+                pair["sequential"] = {"state": "not_updated_undecided",
+                                      "causes": undecided_arms}
 
             tier = tier_counts.setdefault(
-                difficulty, {arm.label: {"n": 0, "correct": 0} for arm in arms}
+                difficulty,
+                {arm.label: {"n": 0, "correct": 0, "undecided": 0} for arm in arms},
             )
             for label, row in arm_rows.items():
-                tier[label]["n"] += 1
-                tier[label]["correct"] += int(bool(row["correct"]))
+                # An undecided arm is excluded from the saturation RATE (it is
+                # not a decision, so it belongs in neither numerator nor
+                # denominator) and counted separately so the exclusion is visible.
+                if row["verdict"] == VERDICT_OUT_OF_COVERAGE:
+                    tier[label]["undecided"] += 1
+                else:
+                    tier[label]["n"] += 1
+                    tier[label]["correct"] += int(bool(row["correct"]))
                 capture.write(json.dumps({
                     "schema_version": CAPTURE_SCHEMA_VERSION,
                     "suite": suite,
@@ -307,7 +352,8 @@ def run_interleaved(
             )
             if stop_reason is None and at_tier_boundary:
                 saturated = all(
-                    stats["n"] >= saturation.min_items
+                    stats["n"] > 0
+                    and stats["n"] >= saturation.min_items
                     and stats["correct"] / stats["n"] >= saturation.min_accuracy
                     for stats in tier.values()
                 )

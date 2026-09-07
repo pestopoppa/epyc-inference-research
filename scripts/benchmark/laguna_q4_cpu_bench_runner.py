@@ -68,7 +68,12 @@ EXPECTED_SWEBENCH_PYTHON_SHA256 = "9544d2a29138833e6177d45dbc57468d37710b5080c90
 EXPECTED_UV_SHA256 = "0c7b00d4f2c10d0bf66b26e4f432388d7782e1071d913f921eae0b8e35cb3c80"
 # v4 lossless-capture runner sealed with the format-tolerant converter above.
 EXPECTED_RAW_EVALUATOR_SHA256 = "79721927e95293d070aba294bf422a24b1182dde07310d461d9e3ddaf6c84b0e"
-EXPECTED_ANSWER_SCORING_SHA256 = "2253e6b1d378e7a929299ebee55ebb7e553a9ec24f2c489504cf2aaef24aabea"
+# Re-pinned 2026-09-07 (CJ-11: score_response_or_error added; score_response
+# unchanged). NOTE: the previous value here did NOT match the file on disk at
+# any point in this change -- it was already stale, as are the neighbouring
+# v7_quality_gate_runner / code_exec_scorer pins. Only THIS pin is re-pinned;
+# clearing the rest of this provenance block is a separate, deliberate act.
+EXPECTED_ANSWER_SCORING_SHA256 = "4a1498cdd59c21b2e01415888b219ef529c4caf9ba24306e0285a305d298fbfd"
 EXPECTED_CODE_EXEC_SCORER_SHA256 = "12b8c9408d4b2f606929e37316c3f1c3d8f6252925dfb7bf6bdea541c3ef23cc"
 EXPECTED_SWEBENCH_TREE_SHA256 = "f60e756fd46da88cb9640d5c5e1a4df6476e7b72ab49161f16ce4b493e589608"
 EXPECTED_DATASET_ADAPTERS_SHA256 = "f6c60252e9a759017e452b6d101cb6ee410a362469588b09a2475f02cef5c91f"
