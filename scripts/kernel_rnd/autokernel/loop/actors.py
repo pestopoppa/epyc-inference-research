@@ -19,7 +19,7 @@ status string, and the history every crash reset to zero.
 
 **Two backends, chosen per role (operator directive 2026-09-07).** The planner runs
 `gpt-5.6-sol` at high effort through `codex exec`; the critic runs Claude Fable 5.1 at
-high effort through the `claude` CLI. A third backend, `opencode`, stays wired and is
+medium effort through the `claude` CLI. A third backend, `opencode`, stays wired and is
 reachable by naming a `provider/model` id on `--planner-model`/`--critic-model`, but it
 is no longer any role's default -- it drives an EXTERNAL provider, so a prompt sent
 through it egresses off-host, a different trust boundary from the two local CLIs.
@@ -113,7 +113,7 @@ def backend_for(model: str, effort: str) -> Backend:
 
 #: Operator choice, 2026-09-07: "switch back to codex/fable as planner/critic as
 #: defaults again". Planner is gpt-5.6-sol @high via `codex exec`; critic is Claude
-#: Fable 5.1 @high via the `claude` CLI -- the same role split `controller/
+#: Fable 5.1 @medium via the `claude` CLI -- the same role split `controller/
 #: discovery_controller.py` pins (SOL planner, FABLE5_CRITIC critic).
 #:
 #: The 2026-09-03 path this reverts: Fable 5.1 @medium planner + sol @high critic
@@ -122,7 +122,11 @@ def backend_for(model: str, effort: str) -> Backend:
 #: GPU-idle. Both defaults are now LOCAL CLIs again, so no actor prompt egresses
 #: off-host; opencode remains available as an explicit `provider/model` opt-in.
 PLANNER_DEFAULT = backend_for("gpt-5.6-sol", "high")
-CRITIC_DEFAULT = backend_for("claude-fable-5-1", "high")
+#: Critic effort is MEDIUM, not high (operator 2026-09-07, pre-emptive): Fable measured
+#: ~75 s/call at medium as run 27's planner and left the GPU 54-71% idle-while-claimed;
+#: the critic makes the same 2 calls/iteration, so @high would re-create that stall on
+#: the critic side. Raise with --critic-effort high if pass-1 rejections get sloppy.
+CRITIC_DEFAULT = backend_for("claude-fable-5-1", "medium")
 
 
 class ProviderTransient(ActorTransient):
@@ -451,7 +455,7 @@ Reject when: {grounds}"""
 @dataclass
 class AgentCritic:
     """Two passes: the hypothesis before any patch, the diff before the build
-    (default: Claude Fable 5.1 at high via the `claude` CLI)."""
+    (default: Claude Fable 5.1 at medium via the `claude` CLI)."""
 
     workspace: Path
     backend: Backend = CRITIC_DEFAULT
