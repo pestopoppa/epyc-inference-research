@@ -17,12 +17,17 @@ assembles is something the loop measured and previously discarded -- the hotspot
 table `rocprofv3` produced on every attempt, the refusals it filtered on the wrong
 status string, and the history every crash reset to zero.
 
-**Two backends, chosen per role (2026-09-03).** The planner runs Claude Fable 5.1 at
-medium effort through the `claude` CLI; the critic stays on `gpt-5.6-sol` at high
-through `codex exec`. Each is an external coding agent invoked headless in the lane's
-detached worktree. Note for the Claude backend: the worktree carries the llama-tree
-freeze overlay `CLAUDE.md`, which scopes its never-edit rule to the
-`production-consolidated-*` branch -- measured 2026-09-03, Fable authors correctly in a
+**Two backends, chosen per role (operator directive 2026-09-07).** The planner runs
+`gpt-5.6-sol` at high effort through `codex exec`; the critic runs Claude Fable 5.1 at
+high effort through the `claude` CLI. A third backend, `opencode`, stays wired and is
+reachable by naming a `provider/model` id on `--planner-model`/`--critic-model`, but it
+is no longer any role's default -- it drives an EXTERNAL provider, so a prompt sent
+through it egresses off-host, a different trust boundary from the two local CLIs.
+
+Each backend is an external coding agent invoked headless in the lane's detached
+worktree. Note for the Claude backend: the worktree carries the llama-tree freeze
+overlay `CLAUDE.md`, which scopes its never-edit rule to the
+`production-consolidated-*` branch -- measured 2026-09-03, Fable works correctly in a
 detached lane with that overlay loaded, and `--bare` (which would skip it) is not an
 option because it refuses OAuth and this host has no API key. The sandbox note
 appended to the system prompt makes the scoping explicit rather than inferred.
@@ -48,12 +53,13 @@ BACKOFF_S = (30, 120, 480, 1800)
 #: Appended to the Claude backend's system prompt. The lane worktree ships the
 #: production freeze overlay; this states the scoping that overlay itself declares.
 _CLAUDE_SANDBOX_NOTE = (
-    "You are running headless as the AutoKernel planner inside a DETACHED git worktree "
-    "of the champion kernel tree. This worktree exists to be edited: it is not the "
-    "frozen production-consolidated branch, and the freeze rule in this tree's "
-    "CLAUDE.md applies to that branch, not to this sandbox. Make the requested edits "
-    "directly. Never build, compile, benchmark or test -- the loop owns the build and "
-    "the GPU. Reply exactly as instructed.")
+    "You are running headless as an AutoKernel actor (planner or critic) inside a "
+    "DETACHED git worktree of the champion kernel tree. This worktree exists to be "
+    "edited: it is not the frozen production-consolidated branch, and the freeze rule "
+    "in this tree's CLAUDE.md applies to that branch, not to this sandbox. If the task "
+    "asks for an edit, make it directly; if it asks for a review, answer it. Never "
+    "build, compile, benchmark or test -- the loop owns the build and the GPU. Reply "
+    "exactly as instructed.")
 
 
 @dataclass(frozen=True)
@@ -105,16 +111,18 @@ def backend_for(model: str, effort: str) -> Backend:
     return Backend("codex", model, effort, CODEX)
 
 
-#: Operator choice, 2026-09-03, settled after three same-day switches: planner is
-#: DeepSeek V4 Flash @max via opencode (the pre-wired backup model). The path was
-#: Fable 5.1 @medium -> Opus 5 @high -> here; the Opus default never launched. DeepSeek
-#: authored a file in a real champion worktree in ~4s in smoke, versus Fable's ~75s, so
-#: the choice buys back the throughput Fable @medium cost (run 27: 54-71% GPU-idle). NOTE:
-#: opencode drives an EXTERNAL provider, so planner prompts egress off-host -- a different
-#: trust boundary than the codex/claude CLIs, surfaced to and accepted by the operator.
-#: Critic stays gpt-5.6-sol @high through codex (local OpenAI path).
-PLANNER_DEFAULT = backend_for("deepseek/deepseek-v4-flash", "max")
-CRITIC_DEFAULT = backend_for("gpt-5.6-sol", "high")
+#: Operator choice, 2026-09-07: "switch back to codex/fable as planner/critic as
+#: defaults again". Planner is gpt-5.6-sol @high via `codex exec`; critic is Claude
+#: Fable 5.1 @high via the `claude` CLI -- the same role split `controller/
+#: discovery_controller.py` pins (SOL planner, FABLE5_CRITIC critic).
+#:
+#: The 2026-09-03 path this reverts: Fable 5.1 @medium planner + sol @high critic
+#: (f81bbeb6) -> Opus 5 @high planner (1ffe4fdf, never launched) -> DeepSeek V4 Flash
+#: @max via opencode (c2bfe916), taken for throughput after run 27 measured 54-71%
+#: GPU-idle. Both defaults are now LOCAL CLIs again, so no actor prompt egresses
+#: off-host; opencode remains available as an explicit `provider/model` opt-in.
+PLANNER_DEFAULT = backend_for("gpt-5.6-sol", "high")
+CRITIC_DEFAULT = backend_for("claude-fable-5-1", "high")
 
 
 class ProviderTransient(ActorTransient):
@@ -362,7 +370,8 @@ state a falsifier that could actually fail."""
 
 @dataclass
 class AgentPlanner:
-    """Proposes and authors through an external coding agent (default: Fable 5.1)."""
+    """Proposes and authors through an external coding agent (default: gpt-5.6-sol
+    at high via `codex exec`)."""
 
     workspace: Path
     backend: Backend = PLANNER_DEFAULT
@@ -442,7 +451,7 @@ Reject when: {grounds}"""
 @dataclass
 class AgentCritic:
     """Two passes: the hypothesis before any patch, the diff before the build
-    (default: gpt-5.6-sol at high)."""
+    (default: Claude Fable 5.1 at high via the `claude` CLI)."""
 
     workspace: Path
     backend: Backend = CRITIC_DEFAULT

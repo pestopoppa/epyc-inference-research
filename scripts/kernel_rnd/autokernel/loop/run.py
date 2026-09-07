@@ -199,10 +199,13 @@ def main(argv: list[str] | None = None) -> int:
     # consecutive-error breaker -- two run paths were two things to drift.
     parser.add_argument("--planner-model", default=actors.PLANNER_DEFAULT.model,
                         help="planner/author model; claude-* routes via the claude CLI, "
-                             "anything else via codex (default: %(default)s)")
+                             "a provider/model id via opencode (external provider: the "
+                             "prompt egresses off-host), anything else via codex "
+                             "(default: %(default)s)")
     parser.add_argument("--planner-effort", default=actors.PLANNER_DEFAULT.effort)
     parser.add_argument("--critic-model", default=actors.CRITIC_DEFAULT.model,
-                        help="critic model, both passes (default: %(default)s)")
+                        help="critic model, both passes; same routing as "
+                             "--planner-model (default: %(default)s)")
     parser.add_argument("--critic-effort", default=actors.CRITIC_DEFAULT.effort)
     parser.add_argument("--workers", type=int, default=pipeline.DEFAULT_WORKERS,
                         help="concurrent lanes (default: the measured tail-saturation "
