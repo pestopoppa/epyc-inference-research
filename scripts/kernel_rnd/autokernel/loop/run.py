@@ -544,10 +544,15 @@ def main(argv: list[str] | None = None) -> int:
         # FIRST, before the loop draws any further work: nothing below is worth doing
         # against an anchor that is not the champion (run 18: 114 candidates, 6.5 h).
         verify_anchor()
-        # R23-44: the headline no longer publishes here. This is the ACCUMULATOR advancing;
-        # the headline follows the CHAMPION OF RECORD, which advances only when a bundle
-        # passes the serving gate (`accumulate_after_keep`). Between serving promotions the
-        # dashboard headline correctly holds at the last serving-demonstrated champion.
+        # AFTER the guard, never before (run 18's void number). 2026-09-07: publishing here
+        # is RESTORED. R23-44 had moved it to the serving-PROMOTE branch only, so the
+        # champion-vs-production headline froze for the whole accumulation phase -- the
+        # operator saw a 3.8-day-old, two-generations-stale number on the OLD surface
+        # (dec-b4) marked SUPERSEDED while 5 keeps had landed. The headline is a BENCH
+        # cumulative gain on the current surface and must stay fresh per keep; the
+        # serving-demonstrated state is the accumulator card's champion_of_record, not
+        # this number. Cost: one tip-vs-production bench per keep (the pre-R23-44 cost).
+        publish_headline()
         # The champion moved, so the profile that named the hotspots is stale: the
         # accepted patch changed the very distribution the next hypothesis should aim
         # at. Re-profiling here is what makes a long run keep aiming at the truth

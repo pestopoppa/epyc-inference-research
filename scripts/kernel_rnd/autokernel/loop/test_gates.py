@@ -223,7 +223,11 @@ class TheAnchorMustAdvanceWithTheChampion(unittest.TestCase):
         # promote_anchor advances the accumulator + guards, and must NOT publish.
         promote = source.split("def promote_anchor()", 1)[1].split("\n    def ", 1)[0]
         self.assertIn("verify_anchor()", promote)
-        self.assertNotIn("publish_headline()", promote)
+        # 2026-09-07: per-keep headline RESTORED in promote_anchor (guard first, then
+        # headline) -- R23-44 had frozen the headline for the whole accumulation phase.
+        self.assertIn("publish_headline()", promote)
+        self.assertLess(promote.index("verify_anchor()"), promote.index("publish_headline()"),
+                        "the headline must never publish ahead of the guard")
         # the headline lives in accumulate_after_keep, after the cor snapshot.
         accum = source.split("def _accumulate_after_keep(", 1)[1].split("\n    def ", 1)[0]
         self.assertIn("publish_headline()", accum)
