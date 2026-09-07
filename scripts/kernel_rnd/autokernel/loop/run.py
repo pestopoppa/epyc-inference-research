@@ -549,6 +549,10 @@ def main(argv: list[str] | None = None) -> int:
         """Advance the anchor by BUILDING the champion into the new slot, never by
         renaming a build directory in (CMake dirs are not relocatable). `pool` owns the
         mechanics so a test can EXECUTE them rather than grep for them."""
+        # R23-52: the keep path was silent for 30+ min (clean anchor build + guard + headline +
+        # reprofile + accumulate) and the dashboard read the loop as dead. Heartbeat every sub-stage.
+        publish("running", latest, hotspot_rows=hotspot_rows,
+                step="keep: building the new anchor generation (clean build)")
         anchor_build[0] = pool.promote_anchor(
             args.store, build=build_champion, recipe=recipe.to_dict(),
             champion_commit=_git(args.worktree, "rev-parse", "HEAD"))
@@ -566,7 +570,11 @@ def main(argv: list[str] | None = None) -> int:
         # cumulative gain on the current surface and must stay fresh per keep; the
         # serving-demonstrated state is the accumulator card's champion_of_record, not
         # this number. Cost: one tip-vs-production bench per keep (the pre-R23-44 cost).
+        publish("running", latest, hotspot_rows=hotspot_rows,
+                step="keep: champion-vs-production headline bench")
         publish_headline()
+        publish("running", latest, hotspot_rows=hotspot_rows,
+                step="keep: re-profiling the new champion (rocprofv3)")
         # The champion moved, so the profile that named the hotspots is stale: the
         # accepted patch changed the very distribution the next hypothesis should aim
         # at. Re-profiling here is what makes a long run keep aiming at the truth
@@ -604,6 +612,8 @@ def main(argv: list[str] | None = None) -> int:
 
     def _accumulate_after_keep(mechanism_id: str) -> None:
         head = _git(args.worktree, "rev-parse", "HEAD")
+        publish("running", latest, hotspot_rows=hotspot_rows,
+                step=f"keep: accumulate — champion-of-record vs tip bench ({mechanism_id})")
         # compounded bench: champion-of-record build (A) vs the just-advanced accumulator (B),
         # re-measured (never a product of marginal effects -- keeps interact) because this is
         # the number the fire threshold reads and the serving gate will be asked to confirm.
