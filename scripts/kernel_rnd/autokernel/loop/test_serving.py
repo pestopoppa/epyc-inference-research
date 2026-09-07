@@ -77,6 +77,34 @@ class Arithmetic(unittest.TestCase):
         self.assertGreater(out["floor_pct"], 0.0)
         self.assertEqual(out["samples"], 5)
 
+class ServerAffinity(unittest.TestCase):
+    """R23-49: the server's host threads must be PINNABLE, and unpinned must stay the
+    default until the serving floor is re-calibrated under a pin.
+
+    Kernel-verified 2026-09-07: every logical CPU on this host shares a physical core with
+    0-95, the CPU campaign's bench region, so an unpinned llama-server lands on the cores
+    another campaign is timing -- and its own numbers inherit that contention. The fix is
+    real but it CHANGES THE MEASURED CONDITION, so it cannot be switched on silently: the
+    default stays None, and a recipe that sets it declares a different measurement.
+    """
+
+    def test_unpinned_is_the_default_and_prepends_nothing(self):
+        r = serving.Recipe(name="r", model="/m.gguf")
+        self.assertIsNone(r.cpu_list)
+        argv = r.server_argv(Path("/b"), 8080)
+        self.assertTrue(argv[0].endswith("llama-server"), argv[0])
+        self.assertNotIn("taskset", argv)
+
+    def test_cpu_list_prepends_taskset_before_the_binary(self):
+        r = serving.Recipe(name="r", model="/m.gguf", cpu_list="184-191")
+        argv = r.server_argv(Path("/b"), 8080)
+        self.assertEqual(argv[:3], ["taskset", "-c", "184-191"])
+        self.assertTrue(argv[3].endswith("llama-server"), argv[3])
+
+    def test_describe_states_the_pin_so_an_artifact_records_the_condition(self):
+        self.assertIn("cpu=unpinned", serving.Recipe(name="r", model="/m").describe())
+        self.assertIn("cpu=184-191",
+                      serving.Recipe(name="r", model="/m", cpu_list="184-191").describe())
 
 if __name__ == "__main__":
     unittest.main()
