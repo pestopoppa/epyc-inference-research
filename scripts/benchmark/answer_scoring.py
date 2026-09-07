@@ -491,3 +491,161 @@ def score_response(response: str, expected: str, q: dict) -> bool:
         return False
 
     return response.strip() == expected.strip()
+
+
+# ── CJ-11: three-valued sibling of score_response ────────────────────────────
+# `score_response` is TWO-VALUED and stays that way, byte-for-byte. Live callers
+# wrap it as `bool(resp) and score_response(...)`, so ANY truthy third return
+# value coerces to a PASS there and inflates quality. The undecidable outcome is
+# therefore expressed by a SECOND function with a different return type, never by
+# widening the first, and callers migrate one at a time.
+#
+# The layering is deliberately "new wraps old", not "old is a shell over new":
+# leaving `score_response`'s body untouched makes the no-behaviour-change claim
+# provable by `git diff` rather than by argument. `_undecidable_cause` is a PURE
+# pre-check that `score_response` never calls, so it cannot introduce a new raise
+# path into the two-valued function.
+#
+# Cause codes come from the CJ-8 closed registry (gate_verdict_vocab, itself a
+# vendored copy of epyc-root:scripts/benchmark/gate_verdict.py). A free-text
+# cause is not foldable, so the registry is closed and this module never invents
+# a code.
+
+try:  # sibling module; answer_scoring is always imported with its dir on sys.path
+    from gate_verdict_vocab import (  # noqa: E402
+        CAUSE_EMPTY, CAUSE_UNPARSED, CAUSE_NO_REFERENCE, CAUSE_UNSUPPORTED,
+        CAUSE_CHECKER_ERROR, CAUSES,
+    )
+except ImportError:  # pragma: no cover - path-independent fallback
+    # Same precedent as epyc-orchestrator's seeding_scoring._load_orchestrator_debug_scorer:
+    # resolve the sibling by PATH so the vocabulary can never be shadowed by, or
+    # lost to, whatever won the sys.path race.
+    import importlib.util as _ilu
+    import sys as _sys
+    from pathlib import Path as _Path
+
+    _vocab_path = _Path(__file__).resolve().parent / "gate_verdict_vocab.py"
+    _spec = _ilu.spec_from_file_location("_answer_scoring_gate_verdict_vocab", _vocab_path)
+    if _spec is None or _spec.loader is None:  # pragma: no cover - defensive
+        raise
+    _vocab = _ilu.module_from_spec(_spec)
+    _sys.modules["_answer_scoring_gate_verdict_vocab"] = _vocab
+    _spec.loader.exec_module(_vocab)
+    CAUSE_EMPTY = _vocab.CAUSE_EMPTY
+    CAUSE_UNPARSED = _vocab.CAUSE_UNPARSED
+    CAUSE_NO_REFERENCE = _vocab.CAUSE_NO_REFERENCE
+    CAUSE_UNSUPPORTED = _vocab.CAUSE_UNSUPPORTED
+    CAUSE_CHECKER_ERROR = _vocab.CAUSE_CHECKER_ERROR
+    CAUSES = _vocab.CAUSES
+
+
+#: The scoring methods `score_response` actually dispatches on. Anything else
+#: falls through to its trailing `response.strip() == expected.strip()`, which is
+#: a fallback, not a checker: the method was not understood.
+SCORING_METHODS = (
+    "multiple_choice", "exact_match", "math_numeric", "math_symbolic",
+    "ordered_subsequence", "code_execution",
+)
+
+
+def _undecidable_cause(response: str, expected: str, q: dict) -> str | None:
+    """Return the CJ-8 cause code for an undecidable item, else ``None``.
+
+    PURE and TOTAL: no I/O, no mutation, and it must never raise — the callers
+    below rely on that, and `score_response` deliberately does not call it at all.
+
+    Precedence, most-fundamental-first, because several can hold at once and only
+    one code is reported:
+
+      1. ``unsupported``   — the method is outside this checker's competence, so
+                             nothing downstream of it means anything.
+      2. ``empty``         — a response arrived carrying nothing. Fix generation.
+      3. ``no_reference``  — no gold/oracle for this item: no ``expected`` for the
+                             comparison methods, no ``concepts`` for
+                             ordered_subsequence, no test/entry_point or
+                             test_cases for code_execution, or a gold the math
+                             checkers cannot canonicalize. Fix the corpus join.
+      4. ``unparsed``      — a non-empty response arrived and no answer could be
+                             extracted. Fix the extractor; a parse-failure rate
+                             read as a quality gap is a scoring artifact.
+
+    Note what is deliberately NOT here: ``exact_match`` has no ``unparsed`` case,
+    because `extract_exact_answer` falls back to the whole stripped response and
+    so always yields a candidate for a non-empty response. Inventing one would be
+    a scoring change wearing a taxonomy's clothes.
+    """
+    scoring_method = q.get("scoring_method", "multiple_choice")
+    scoring_config = q.get("scoring_config", {}) or {}
+
+    if scoring_method not in SCORING_METHODS:
+        return CAUSE_UNSUPPORTED
+
+    if not str(response or "").strip():
+        return CAUSE_EMPTY
+
+    if scoring_method == "ordered_subsequence":
+        # score_response RAISES on an empty concept list (the vacuity guard). The
+        # three-valued path reports it instead of crashing: a bad suite config is
+        # a missing reference, not a wrong answer.
+        return None if (scoring_config.get("concepts") or []) else CAUSE_NO_REFERENCE
+
+    if scoring_method == "code_execution":
+        functional = bool(scoring_config.get("test")) and bool(scoring_config.get("entry_point"))
+        if functional or scoring_config.get("test_cases"):
+            return None
+        # score_response returns False here — an item with NO oracle scored as a
+        # wrong answer. That is the single largest silent-fail in the dispatch.
+        return CAUSE_NO_REFERENCE
+
+    # Every remaining method compares against `expected`.
+    if not str(expected or "").strip():
+        return CAUSE_NO_REFERENCE
+
+    if scoring_method == "multiple_choice":
+        return None if extract_letter_answer(response) else CAUSE_UNPARSED
+
+    if scoring_method == "math_numeric":
+        if parse_math_number(expected) is None:
+            return CAUSE_NO_REFERENCE
+        return None if parse_math_number(extract_boxed(response)) is not None else CAUSE_UNPARSED
+
+    if scoring_method == "math_symbolic":
+        if not gold_symbolically_parseable(expected):
+            return CAUSE_NO_REFERENCE
+        return None if extract_boxed(response) else CAUSE_UNPARSED
+
+    return None  # exact_match: a non-empty response always yields a candidate
+
+
+def score_response_or_error(response: str, expected: str,
+                            q: dict) -> tuple[bool | None, str | None]:
+    """Three-valued sibling of :func:`score_response`.
+
+    Returns ``(True|False, None)`` on a DECIDED item and ``(None, cause)`` on an
+    undecidable one, where ``cause`` is a code from the CJ-8 closed registry
+    (:data:`gate_verdict_vocab.CAUSES`). Shape and naming follow
+    ``epyc-orchestrator:scripts/benchmark/seeding_scoring.score_answer_or_error``.
+
+    The point of the ``None`` — and the reason this is a new function rather than
+    a widened `score_response` — is the live call idiom
+    ``bool(resp) and score_response(...)``: any truthy third value would coerce
+    to a PASS there, converting "we could not check this" into "the model got it
+    right". ``None`` is falsy, so even a caller that has NOT migrated cannot be
+    inflated by it; a migrated caller must still decide explicitly whether to
+    exclude the item or record it, and may never count it as a pass.
+
+    A raising checker (`code_exec_scorer`, a malformed suite config) becomes
+    ``(None, checker_error)`` rather than propagating: `score_response` keeps its
+    exceptions, this function converts them, exactly as the seeding precedent
+    converts ``ScoringUnavailableError``.
+    """
+    try:
+        cause = _undecidable_cause(response, expected, q)
+    except Exception:  # pragma: no cover - _undecidable_cause is total by contract
+        return None, CAUSE_CHECKER_ERROR
+    if cause is not None:
+        return None, cause
+    try:
+        return bool(score_response(response, expected, q)), None
+    except Exception:
+        return None, CAUSE_CHECKER_ERROR

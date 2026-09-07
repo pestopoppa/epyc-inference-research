@@ -9,7 +9,37 @@ Inputs are two JSON files with per-suite eval results. Both must have the
 same suites. The baseline is measured on the current production kernel
 (v6); the candidate is measured on the experimental kernel (v7).
 
-Output is a Markdown report + an exit code (0 PASS, 1 FAIL).
+Output is a Markdown report + an exit code.
+
+CJ-8 (2026-09-07): THE VERDICT IS THREE-VALUED, and the exit code is 0/1/2.
+
+Before this, three different events all produced ``pass: False`` and exit 1:
+
+  * a real REGRESSION (candidate lost accuracy) — a decision about the kernel;
+  * INSUFFICIENT evidence (``candidate_n < min_n``) — no decision at all, and
+    the docstring of ``check_suite`` claimed it was "advisory, not blocking"
+    while the code blocked on it;
+  * a suite MISSING from either file — no decision at all.
+
+They have different remedies (revert the kernel / run more questions / fix the
+join) and a two-valued gate cannot tell an operator which. Undecidable inputs are
+now ``out-of-coverage`` with a cause code and **exit 2**.
+
+EXIT 2 IS STILL BLOCKING. ``run_v9_quality_gate.sh`` is ``set -e``, so a non-zero
+exit aborts the promotion exactly as before. Nothing that used to block now
+promotes; the blocking status is merely NAMED.
+
+The one behaviour change in the other direction is deliberate and is a bug fix:
+``bl.get("accuracy", 0)`` used to read a MISSING baseline accuracy as 0.0, which
+made ``delta = cand_acc - 0.0`` positive and **silently passed the suite**. A
+corrupt baseline file disarmed the very gate that exists to stop a quality-losing
+kernel from promoting. An absent accuracy is now ``out-of-coverage``/``absent``
+and blocks.
+
+  0 = every suite decided and within threshold
+  1 = at least one suite DECIDED against the candidate (regression)
+  2 = nothing was decided against the candidate, but at least one suite could
+      not be decided at all
 
 Gate criteria (default):
   - Each suite: candidate accuracy >= baseline accuracy - regression_threshold
@@ -26,9 +56,28 @@ loosen. Default 0.05 is the production threshold for v7 promotion.
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import sys
 from pathlib import Path
+
+# The shared CJ-8 vocabulary, loaded by path: scripts/benchmark/ is not a
+# package, and this module is invoked as a script from a promotion shell script.
+_GVV_PATH = Path(__file__).resolve().parent / "gate_verdict_vocab.py"
+_GVV_SPEC = importlib.util.spec_from_file_location("gate_verdict_vocab", _GVV_PATH)
+assert _GVV_SPEC is not None and _GVV_SPEC.loader is not None
+gvv = importlib.util.module_from_spec(_GVV_SPEC)
+sys.modules.setdefault("gate_verdict_vocab", gvv)
+_GVV_SPEC.loader.exec_module(gvv)
+
+PASS = gvv.VERDICT_PASS
+FAIL = gvv.VERDICT_FAIL
+OUT_OF_COVERAGE = gvv.VERDICT_OUT_OF_COVERAGE
+
+#: 0 pass / 1 fail / 2 could-not-check.
+EXIT_PASS = gvv.EXIT_PASS
+EXIT_FAIL = gvv.EXIT_FAIL
+EXIT_OUT_OF_COVERAGE = gvv.EXIT_OUT_OF_COVERAGE
 
 
 # ---------------------------------------------------------------------------
@@ -37,45 +86,96 @@ from pathlib import Path
 
 
 def check_suite(
-    baseline_acc: float,
-    candidate_acc: float,
-    baseline_n: int,
-    candidate_n: int,
+    baseline_acc: float | None,
+    candidate_acc: float | None,
+    baseline_n: int | None,
+    candidate_n: int | None,
     regression_threshold: float,
     min_n: int = 50,
-) -> tuple[bool, str]:
+) -> tuple[str, str | None, str]:
     """Check a single suite for regression.
 
-    Returns (pass, explanation).
+    Returns ``(verdict, cause, explanation)`` where ``verdict`` is one of
+    ``pass`` / ``fail`` / ``out-of-coverage`` and ``cause`` is a CJ-8 cause code,
+    mandatory on ``out-of-coverage`` and ``None`` on the two decided verdicts.
 
-    Regression is flagged when:
+    A REGRESSION is a decision about the candidate:
       candidate_acc < baseline_acc - regression_threshold
 
-    Additionally, if the candidate has fewer than `min_n` questions, the
-    result is flagged as insufficient evidence (advisory, not blocking).
+    Everything else that stops this function reaching that comparison is NOT a
+    decision about the candidate and must not be spelled as one:
+
+    * an ABSENT accuracy on either side — the file did not carry the number;
+    * fewer than ``min_n`` questions — the run is too thin to rule either way.
+
+    Both keep BLOCKING (the caller exits non-zero on them); they simply stop
+    claiming the candidate lost accuracy.
     """
+    if baseline_acc is None or candidate_acc is None:
+        which = "baseline" if baseline_acc is None else "candidate"
+        return (
+            OUT_OF_COVERAGE,
+            gvv.CAUSE_ABSENT,
+            f"NOT ASSESSABLE: the {which} record carries no 'accuracy' field, so "
+            f"no comparison was performed. Previously a missing accuracy read as "
+            f"0.0 — on the BASELINE side that made the delta positive and passed "
+            f"the suite, disarming the gate.",
+        )
+
     delta = candidate_acc - baseline_acc
+
+    if candidate_n is None:
+        return (
+            OUT_OF_COVERAGE,
+            gvv.CAUSE_ABSENT,
+            f"NOT ASSESSABLE: the candidate record carries no 'n', so the "
+            f"evidence floor (>= {min_n}) could not be evaluated.",
+        )
 
     if candidate_n < min_n:
         return (
-            False,
+            OUT_OF_COVERAGE,
+            gvv.CAUSE_INSUFFICIENT_COVERAGE,
             f"INSUFFICIENT: only {candidate_n} questions (need >= {min_n}); "
             f"accuracy {candidate_acc:.1%} vs baseline {baseline_acc:.1%} "
-            f"(delta {delta:+.1%})",
+            f"(delta {delta:+.1%}). This is NOT a regression finding — the run is "
+            f"too thin to rule either way.",
         )
 
     if delta < -regression_threshold:
         return (
-            False,
+            FAIL,
+            None,
             f"REGRESSION: {candidate_acc:.1%} vs baseline {baseline_acc:.1%} "
             f"(delta {delta:+.1%}, threshold -{regression_threshold:.1%})",
         )
 
     return (
-        True,
+        PASS,
+        None,
         f"OK: {candidate_acc:.1%} vs baseline {baseline_acc:.1%} "
         f"(delta {delta:+.1%})",
     )
+
+
+def _opt_float(record: dict, key: str) -> float | None:
+    """Read a numeric field, returning None when it is ABSENT or unreadable.
+
+    Deliberately NOT ``float(record.get(key, 0))``: a suite that never reported
+    a number and a suite that genuinely measured 0.0 are different events, and
+    collapsing them is how a corrupt file reads as a confident measurement.
+    """
+    if key not in record or record[key] is None:
+        return None
+    try:
+        return float(record[key])
+    except (TypeError, ValueError):
+        return None
+
+
+def _opt_int(record: dict, key: str) -> int | None:
+    value = _opt_float(record, key)
+    return None if value is None else int(value)
 
 
 # ---------------------------------------------------------------------------
@@ -88,13 +188,20 @@ def compare(
     candidate: dict,
     regression_threshold: float,
     min_n: int = 50,
-) -> tuple[list[dict], dict, bool, str]:
-    """Per-suite comparison. Returns (rows, summary, passed, verdict_text).
+) -> tuple[list[dict], dict, str, str]:
+    """Per-suite comparison. Returns ``(rows, summary, verdict, verdict_text)``.
 
-    Each suite in both JSON files is compared. A suite is defined as
-    regression if candidate accuracy < baseline accuracy - threshold.
+    ``verdict`` is the CJ-8 three-valued fold over the per-suite verdicts:
 
-    The gate passes only if ALL suites pass.
+    * a DECIDED ``fail`` outranks everything -- if any suite ran and rejected the
+      candidate, that is the finding and the undecided remainder is noise beside
+      it;
+    * otherwise, any undecided suite makes the WHOLE comparison undecided
+      (``out-of-coverage``), because a gate that could not read part of its
+      surface has not cleared the candidate on that part;
+    * only an all-decided, all-within-threshold comparison is ``pass``.
+
+    Note the ordering: undecided never becomes ``pass``. The gate still blocks.
     """
     baseline_suites = {s["suite"]: s for s in baseline.get("suites", [])}
     candidate_suites = {s["suite"]: s for s in candidate.get("suites", [])}
@@ -104,91 +211,128 @@ def compare(
     rows: list[dict] = []
     n_pass = 0
     n_fail = 0
-    n_missing = 0
+    n_out_of_coverage = 0
+    by_cause: dict[str, int] = {}
+
+    def _record(row: dict) -> None:
+        nonlocal n_pass, n_fail, n_out_of_coverage
+        rows.append(row)
+        if row["verdict"] == PASS:
+            n_pass += 1
+        elif row["verdict"] == FAIL:
+            n_fail += 1
+        else:
+            n_out_of_coverage += 1
+            by_cause[row["cause"]] = by_cause.get(row["cause"], 0) + 1
 
     for suite in all_suites:
         bl = baseline_suites.get(suite)
         cand = candidate_suites.get(suite)
 
-        if bl is None:
-            rows.append({
+        # CJ-8. A suite present on only one side was never COMPARED. That says
+        # nothing about the candidate's quality; it says the two runs cover
+        # different surfaces. It still blocks -- it is simply no longer counted
+        # as a suite the candidate failed.
+        if bl is None or cand is None:
+            which = "baseline" if bl is None else "candidate"
+            present = cand if bl is None else bl
+            _record({
                 "suite": suite,
-                "baseline_acc": None,
-                "candidate_acc": None,
-                "baseline_n": None,
-                "candidate_n": None,
+                "baseline_acc": None if bl is None else _opt_float(bl, "accuracy"),
+                "candidate_acc": None if cand is None else _opt_float(cand, "accuracy"),
+                "baseline_n": None if bl is None else _opt_int(bl, "n"),
+                "candidate_n": None if cand is None else _opt_int(cand, "n"),
                 "delta": None,
+                "verdict": OUT_OF_COVERAGE,
+                "cause": gvv.CAUSE_ABSENT,
                 "pass": False,
-                "status": "missing from baseline",
+                "status": (
+                    f"NOT ASSESSABLE: suite missing from {which}; the two runs "
+                    f"do not cover the same surface, so no comparison exists "
+                    f"(n on the present side: {_opt_int(present, 'n')})"
+                ),
             })
-            n_missing += 1
             continue
 
-        if cand is None:
-            rows.append({
-                "suite": suite,
-                "baseline_acc": bl.get("accuracy"),
-                "candidate_acc": None,
-                "baseline_n": bl.get("n"),
-                "candidate_n": None,
-                "delta": None,
-                "pass": False,
-                "status": "missing from candidate",
-            })
-            n_fail += 1
-            continue
+        bl_acc = _opt_float(bl, "accuracy")
+        cand_acc = _opt_float(cand, "accuracy")
+        bl_n = _opt_int(bl, "n")
+        cand_n = _opt_int(cand, "n")
 
-        bl_acc = float(bl.get("accuracy", 0))
-        cand_acc = float(cand.get("accuracy", 0))
-        bl_n = int(bl.get("n", 0))
-        cand_n = int(cand.get("n", 0))
-
-        suite_pass, explanation = check_suite(
+        verdict, cause, explanation = check_suite(
             bl_acc, cand_acc, bl_n, cand_n,
             regression_threshold, min_n,
         )
 
-        delta = cand_acc - bl_acc
+        delta = None if (bl_acc is None or cand_acc is None) else cand_acc - bl_acc
 
-        rows.append({
+        _record({
             "suite": suite,
             "baseline_acc": bl_acc,
             "candidate_acc": cand_acc,
             "baseline_n": bl_n,
             "candidate_n": cand_n,
             "delta": delta,
-            "pass": suite_pass,
+            "verdict": verdict,
+            "cause": cause,
+            # `pass` is retained for readers that only ever asked "may this
+            # promote", and it answers no for BOTH a regression and an
+            # undecidable suite. The three-valued split rides `verdict`.
+            "pass": verdict == PASS,
             "status": explanation,
         })
-
-        if suite_pass:
-            n_pass += 1
-        else:
-            n_fail += 1
 
     summary = {
         "n_suites": len(all_suites),
         "n_pass": n_pass,
         "n_fail": n_fail,
-        "n_missing": n_missing,
+        "n_out_of_coverage": n_out_of_coverage,
+        "out_of_coverage_by_cause": dict(sorted(by_cause.items())),
+        # Retained key: it used to mean "suites absent from the baseline". It now
+        # means every suite that could not be decided, of which that is one kind.
+        "n_missing": n_out_of_coverage,
         "regression_threshold": regression_threshold,
         "min_n": min_n,
+        "resolved_coverage": (
+            (n_pass + n_fail) / len(all_suites) if all_suites else None
+        ),
     }
 
-    if n_fail > 0 or n_missing > 0:
-        passed = False
-        verdict = (
-            f"FAIL: {n_fail} suite(s) with regression/insufficient evidence, "
-            f"{n_missing} missing. {n_pass}/{summary['n_suites']} passed."
+    # A DECIDED fail outranks an undecided suite. Only when nothing was decided
+    # against the candidate does the undecided mass set the verdict -- and it
+    # sets it to `out-of-coverage`, never to `pass`.
+    if not all_suites:
+        gate_verdict = OUT_OF_COVERAGE
+        verdict_text = (
+            "NOT ASSESSABLE: neither file declared any suite, so the comparison "
+            "asserted NOTHING. A gate that asserted nothing has not passed -- it "
+            "has not run."
+        )
+    elif n_fail > 0:
+        gate_verdict = FAIL
+        verdict_text = (
+            f"FAIL: {n_fail} suite(s) regressed beyond the "
+            f"-{regression_threshold:.1%} threshold. "
+            f"{n_pass}/{summary['n_suites']} passed, "
+            f"{n_out_of_coverage} not decided."
+        )
+    elif n_out_of_coverage > 0:
+        top = ", ".join(f"{c}={n}" for c, n in sorted(by_cause.items())) or "none"
+        gate_verdict = OUT_OF_COVERAGE
+        verdict_text = (
+            f"NOT ASSESSABLE: no suite regressed, but {n_out_of_coverage} of "
+            f"{summary['n_suites']} could not be decided (by cause: {top}). "
+            f"This BLOCKS promotion -- it is not a pass. Resolved coverage "
+            f"{summary['resolved_coverage']:.1%}."
         )
     else:
-        passed = True
-        verdict = (
+        gate_verdict = PASS
+        verdict_text = (
             f"PASS: all {n_pass}/{summary['n_suites']} suites within "
             f"regression threshold (-{regression_threshold:.1%})."
         )
 
-    return rows, summary, passed, verdict
+    return rows, summary, gate_verdict, verdict_text
 
 
 # ---------------------------------------------------------------------------
@@ -230,7 +374,9 @@ def render_markdown(
         bl_disp = f"{row['baseline_acc']:.1%}" if row.get("baseline_acc") is not None else "—"
         ca_disp = f"{row['candidate_acc']:.1%}" if row.get("candidate_acc") is not None else "—"
         delta_disp = f"{row['delta']:+.1%}" if row.get("delta") is not None else "—"
-        tick = "✓" if row["pass"] else "✗"
+        # Three glyphs, not two: an undecided suite must not wear the same mark
+        # as a suite the candidate lost.
+        tick = {PASS: "✓", FAIL: "✗"}.get(row["verdict"], "?")
         lines.append(
             f"| {row['suite']} | {bl_disp} | {ca_disp} | {delta_disp} | "
             f"{tick} {row['status']} |"
@@ -240,8 +386,18 @@ def render_markdown(
     lines.append("")
     lines.append(f"- Suites evaluated: {summary['n_suites']}")
     lines.append(f"- Passed: {summary['n_pass']}")
-    lines.append(f"- Failed: {summary['n_fail']}")
-    lines.append(f"- Missing: {summary['n_missing']}")
+    lines.append(f"- Failed (decided regression): {summary['n_fail']}")
+    lines.append(f"- Not decided (out-of-coverage): {summary['n_out_of_coverage']}")
+    if summary["out_of_coverage_by_cause"]:
+        causes = ", ".join(
+            f"{c}={n}" for c, n in summary["out_of_coverage_by_cause"].items()
+        )
+        lines.append(f"  - by cause: {causes}")
+    coverage = summary.get("resolved_coverage")
+    lines.append(
+        "- Resolved coverage: "
+        + ("undefined (no suites)" if coverage is None else f"{coverage:.1%}")
+    )
     lines.append("")
     return "\n".join(lines)
 
@@ -282,7 +438,7 @@ def main() -> int:
     with args.candidate.open() as f:
         candidate = json.load(f)
 
-    rows, summary, passed, verdict_text = compare(
+    rows, summary, verdict, verdict_text = compare(
         baseline, candidate, args.regression_threshold, args.min_n,
     )
 
@@ -292,7 +448,10 @@ def main() -> int:
     )
     args.output.write_text(report)
     print(report)
-    return 0 if passed else 1
+    # 0 pass / 1 fail / 2 could-not-check. BOTH non-zero codes block: a wrapper
+    # testing `!= 0` (run_v9_quality_gate.sh is `set -e`) is unaffected, and one
+    # that wants to tell a regression from an unreadable input can now do so.
+    return gvv.EXIT_BY_VERDICT[verdict]
 
 
 if __name__ == "__main__":
