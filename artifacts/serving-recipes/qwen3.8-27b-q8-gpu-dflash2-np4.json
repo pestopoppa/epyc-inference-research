@@ -20,6 +20,7 @@
   "fa": "on",
   "kv_unified": false,
   "extra_flags": [],
+  "cpu_list": "184-191",
   "n_predict": 384,
   "temperature": 0.0,
   "top_p": 0.95,
