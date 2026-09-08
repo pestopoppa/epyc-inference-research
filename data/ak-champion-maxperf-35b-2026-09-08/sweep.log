@@ -1,0 +1,10 @@
+build /mnt/raid0/llm/tmp/build-fold-ef81196d5  recipe qwen3.6-35b-a3b-q8-gpu-mtp  np sweep [1, 2, 4, 8]  x3 launches each
+np= 1  aggregate   111.41 tok/s   per-slot  111.41   spread p95dev 2.35%  runs [112.7, 108.8, 111.4]  [53s]
+np= 2  aggregate   130.54 tok/s   per-slot   65.27   spread p95dev 1.38%  runs [128.7, 130.5, 130.9]  [65s]
+np= 4  aggregate   189.57 tok/s   per-slot   47.39   spread p95dev 1.13%  runs [189.6, 189.4, 191.7]  [81s]
+np= 8  aggregate   242.75 tok/s   per-slot   30.34   spread p95dev 1.23%  runs [239.9, 245.7, 242.8]  [118s]
+
+=== MAXIMUM PERFORMANCE, Qwen3.6-35B-A3B-MTP-Q8_0, champion ef81196d5 + MTP ===
+  best AGGREGATE : 242.75 tok/s at np=8
+  single stream  : 111.41214311121891 tok/s (np=1)
+written: /mnt/raid0/llm/tmp/maxperf-35b-20260908/sweep.json
