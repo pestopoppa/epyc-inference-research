@@ -292,8 +292,15 @@ class Recipe:
                 "--host", "127.0.0.1", "--port", str(port), "--metrics", "--slots"]
         sd = self.spec_decode
         if sd.get("type", "none") != "none":
-            argv += ["-md", sd["drafter"], "-ngld", str(sd.get("ngld", self.ngl)),
-                     "--spec-type", sd["type"]]
+            # A SELF-DRAFTING model carries its draft head inside the weights (MTP, and any
+            # future variant of it), so there is no second GGUF and `-md` must NOT be passed.
+            # Requiring `drafter` unconditionally made every self-drafting model inexpressible
+            # as a recipe -- found 2026-09-08 trying to sweep Qwen3.6-35B-A3B-MTP. `drafter`
+            # is therefore OPTIONAL, and its absence is the declaration that the model drafts
+            # for itself; `ngld` is likewise only meaningful with a separate drafter.
+            if sd.get("drafter"):
+                argv += ["-md", sd["drafter"], "-ngld", str(sd.get("ngld", self.ngl))]
+            argv += ["--spec-type", sd["type"]]
             if "draft_n_max" in sd:
                 argv += ["--spec-draft-n-max", str(sd["draft_n_max"])]
         argv += ["--kv-unified" if self.kv_unified else "--no-kv-unified"]
