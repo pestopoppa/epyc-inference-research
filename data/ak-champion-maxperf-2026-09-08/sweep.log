@@ -1,0 +1,10 @@
+build /mnt/raid0/llm/tmp/build-fold-ef81196d5  recipe qwen3.8-27b-q8-gpu-dflash2-np4  np sweep [1, 2, 4, 8]  x3 launches each
+np= 1  aggregate    79.25 tok/s   per-slot   79.25   spread p95dev 0.44%  runs [79.2, 79.2, 79.6]  [49s]
+np= 2  aggregate   109.41 tok/s   per-slot   54.70   spread p95dev 1.60%  runs [109.4, 108.9, 111.2]  [76s]
+np= 4  aggregate   167.76 tok/s   per-slot   41.94   spread p95dev 3.33%  runs [167.8, 162.2, 169.7]  [96s]
+np= 8  aggregate   179.12 tok/s   per-slot   22.39   spread p95dev 1.82%  runs [182.4, 178.2, 179.1]  [176s]
+
+=== MAXIMUM PERFORMANCE, Qwen3.8-27B-Q8_0, champion ef81196d5 + DFlash2 ===
+  best AGGREGATE : 179.12 tok/s at np=8
+  single stream  : 79.24525498398998 tok/s (np=1)
+written: /mnt/raid0/llm/tmp/maxperf-20260908/sweep.json

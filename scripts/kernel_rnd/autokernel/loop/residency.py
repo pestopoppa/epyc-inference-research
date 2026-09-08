@@ -14,6 +14,7 @@ reading of 0% VRAM is the NORMAL result and not evidence of a CPU run.
 from __future__ import annotations
 
 from pathlib import Path
+import statistics
 import threading
 
 VRAM_SYSFS = Path("/sys/class/drm/card2/device/mem_info_vram_used")
@@ -76,10 +77,20 @@ class Sampler:
         self.min_sclk = 0
         self.max_sclk = 0
         self.samples = 0
+        #: Every SUCCESSFUL VRAM read, in order. Kept because a peak alone cannot
+        #: distinguish "the device held the model throughout" from "one spike"; and
+        #: because its LENGTH is the only thing that separates a window that read zero
+        #: from a window whose sysfs node could not be read at all. `vram_bytes()`
+        #: returns -1 on a failed read and -1 never enters this list, so
+        #: `len(vram_readings) == 0` with `samples > 0` means UNSAMPLEABLE, not idle.
+        self.vram_readings: list[int] = []
 
     def _loop(self) -> None:
         while not self._stop.is_set():
-            self.peak_vram = max(self.peak_vram, vram_bytes())
+            vram = vram_bytes()
+            if vram >= 0:
+                self.vram_readings.append(vram)
+                self.peak_vram = max(self.peak_vram, vram)
             self.peak_kfd = max(self.peak_kfd, kfd_processes())
             clock = sclk_mhz()
             if clock:
@@ -100,8 +111,18 @@ class Sampler:
 
     @property
     def proof(self) -> dict:
+        # Snapshot: the sampling thread may still be appending, and `statistics.median`
+        # sorts a copy either way.
+        readings = list(self.vram_readings)
         return {
             "peak_vram_bytes": self.peak_vram,
+            # The peak answers "did it ever get there"; the median answers "did it STAY
+            # there". A window whose peak clears the floor on one sample out of forty is
+            # not the same evidence as one that held the model for the whole run.
+            "median_vram_bytes": int(statistics.median(readings)) if readings else 0,
+            # Successful reads, NOT loop iterations. Zero here with a non-zero `samples`
+            # is an unreadable instrument, which is a different fact from a zero reading.
+            "vram_reads": len(readings),
             "peak_kfd_processes": self.peak_kfd,
             "sclk_min_mhz": self.min_sclk,
             "sclk_max_mhz": self.max_sclk,

@@ -1,0 +1,134 @@
+{
+  "achieved_power_note": "at n=24 per arm the primary p95_dev permutation test has ~0.97 power against a 3x sd ratio and ~0.69 against 2x (coarse simulation, PREREGISTRATION.md 3.3). A null is BOUNDED by those, never unqualified.",
+  "action": "NULL. Do not adopt. Close R23-58. Report as a BOUNDED null (see the achieved-power line) -- 'no effect' unqualified is not permitted.",
+  "arm_off": {
+    "cv_pct": 3.671,
+    "max": 178.24184644552278,
+    "max_dev_pct": 8.735,
+    "mean": 167.1794167586037,
+    "median": 167.11671102232276,
+    "min": 152.51981917937678,
+    "n": 24,
+    "p95_dev_pct": 6.657,
+    "range_pct": 15.392,
+    "runs": [
+      168.09981317621634,
+      168.13567389145442,
+      177.56402957999325,
+      164.82881000560116,
+      164.91362761204846,
+      165.4200402350681,
+      164.51731839663825,
+      160.30360247235004,
+      165.87937458731014,
+      159.33958365246997,
+      166.1336088684292,
+      152.51981917937678,
+      172.95162453617837,
+      173.3501922431485,
+      168.5130807224294,
+      169.39242329968565,
+      174.13726349949843,
+      178.24184644552278,
+      164.72641045315214,
+      173.44217973745037,
+      172.69281334596127,
+      160.5433673797363,
+      168.24550559597216,
+      158.41399329079778
+    ],
+    "sd": 6.135198028374096
+  },
+  "arm_on": {
+    "cv_pct": 3.905,
+    "max": 174.50518761066536,
+    "max_dev_pct": 9.898,
+    "mean": 166.98939490150048,
+    "median": 169.39622753056562,
+    "min": 152.62899858028447,
+    "n": 24,
+    "p95_dev_pct": 9.334,
+    "range_pct": 12.914,
+    "runs": [
+      168.57931269948622,
+      162.76844724489584,
+      174.50518761066536,
+      174.08966301081418,
+      163.7781012788195,
+      159.93575777932602,
+      160.12480471114623,
+      171.5295237191503,
+      173.2708529484003,
+      171.82799659388675,
+      172.85569428107704,
+      152.62899858028447,
+      159.0078894636236,
+      172.11374042955288,
+      166.11161837657315,
+      173.8107699387492,
+      170.21301015468106,
+      162.8729674143368,
+      159.0042038573495,
+      172.19308211723015,
+      153.5856006683125,
+      171.95091460699228,
+      168.5794449064502,
+      172.4078952442081
+    ],
+    "sd": 6.614882444099999
+  },
+  "build": {
+    "binaries": {
+      "/mnt/raid0/llm/tmp/build-fold-ef81196d5/bin/libllama-common.so.0.0.10301": "51e26826d5c183451c3d77f664439ad283259c3887c6f49497e9b7d5de389b4b",
+      "/mnt/raid0/llm/tmp/build-fold-ef81196d5/bin/llama-server": "869effe5f5cda7f72bd78c8ee168a30f5878b3f32558cd0c02cd38a62a77db37"
+    },
+    "build_dir": "/mnt/raid0/llm/tmp/build-fold-ef81196d5",
+    "cmake_flags": {
+      "AMDGPU_TARGETS": "gfx90a",
+      "GGML_HIP": "ON",
+      "GGML_HIP_ROCWMMA_FATTN": "ON",
+      "GGML_NATIVE": "ON"
+    },
+    "linked_common_library": "/mnt/raid0/llm/tmp/build-fold-ef81196d5/bin/libllama-common.so.0.0.10301",
+    "provenance_json": null,
+    "source": {
+      "dir": "/mnt/raid0/llm/tmp/fold-ef81196d5-src",
+      "dirty": false,
+      "head": "ef81196d5bdd4190b46dff4ae7eecc333a46c8ce"
+    }
+  },
+  "cell": "T0/D0",
+  "champion_commit": "ef81196d5bdd4190b46dff4ae7eecc333a46c8ce",
+  "claim_i_level": {
+    "alpha": 0.043,
+    "detail": "5/10 ON faster",
+    "look": 2,
+    "verdict": "T0"
+  },
+  "claim_ii_dispersion": {
+    "alpha": 0.05,
+    "n_per_arm": 24,
+    "p_p95": 0.31585342073289635,
+    "p_sd_log": 0.5853870730646347,
+    "permutation": {
+      "draws": 200000,
+      "exhaustive": false,
+      "scheme": "within-couple label swap on median-normalised runs",
+      "seed": 2358
+    },
+    "rho_p95": 0.7131990572101993,
+    "rho_sd_log": 0.9178863694166476,
+    "statistic": "ratio of spread.p95_dev_pct (OFF/ON), serving._spread",
+    "verdict": "D0"
+  },
+  "couples_launched": 24,
+  "elapsed_s": 1607.4,
+  "n_valid_couples": 24,
+  "registration": "/mnt/raid0/llm/tmp/r2358-shim-serving-20260908/PREREGISTRATION.md",
+  "schema": "epyc.r2358.verdict.v1",
+  "window_comparability": {
+    "note": "descriptive, NOT a gate: the standing floor was calibrated on bff30cebe under a different recipe_hash (no env, no readback).",
+    "off_arm_p95_dev_pct": 6.657,
+    "standing_floor_pct": 4.581
+  }
+}
