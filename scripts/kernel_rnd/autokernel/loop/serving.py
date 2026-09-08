@@ -36,6 +36,8 @@ import subprocess
 import time
 import urllib.request
 
+from . import residency
+
 #: Schema of the on-disk recipe file, and part of the recipe's identity: a schema bump
 #: changes what the fields MEAN, so it must change the hash too.
 RECIPE_SCHEMA = "epyc.autokernel.canonical_recipe.v1"
@@ -50,6 +52,19 @@ LOADER_OWNED_ENV = ("LD_LIBRARY_PATH", "HSA_OVERRIDE_GFX_VERSION")
 
 #: `env_readback` key standing for "the recipe does not set this variable at all".
 UNSET = "unset"
+
+#: Schema of the per-launch residency block. Additive: every consumer reads it via
+#: `.get()`, and a record written before R23-60 simply has no block.
+RESIDENCY_SCHEMA = "epyc.autokernel.serving_residency.v1"
+#: Sampled DURING the launch, over a window that encloses the request phase, and the
+#: device held at least `residency.RESIDENT_FLOOR_BYTES`.
+RESIDENCY_PROVEN = "proven"
+#: The instrument could not be read, or the window did not cover the request phase.
+#: NOT a claim that the launch ran on the CPU -- a claim that nobody knows. It is a
+#: recorded fact rather than a refusal because an unreadable sysfs node is an
+#: INSTRUMENT failure, and refusing every launch on one would stop the campaign on a
+#: fault that says nothing about the measurement.
+RESIDENCY_UNPROVEN = "unproven"
 
 #: Characters a recipe name may carry VERBATIM into `serving-floor.<name>.json`: safe in a
 #: filename and as an unquoted shell word -- no `/`, no whitespace, no glob metacharacter,
@@ -320,6 +335,20 @@ class ServerDied(RuntimeError):
     """The server exited during load or measurement -- a build/config fault, not noise."""
 
 
+class ServingNotResident(RuntimeError):
+    """The launch was SAMPLED, over a window covering the request phase, and the device
+    never held the model. The measurement did not happen on the GPU.
+
+    Deliberately NOT the same failure as an unreadable instrument. This is a positive
+    observation of absence over a window that DID overlap the phenomenon, so it is a
+    refusal for the same reason `EnvReadbackFailed` is one: a CPU-resident arm silently
+    filed as a GPU number is unrecoverable after the fact -- no later reader can tell,
+    and no re-analysis can rescue it. Distinct class and distinct message, because
+    "the knob did not take effect" and "this did not run on the device" are different
+    defects with different fixes.
+    """
+
+
 class ServingFloorMismatch(RuntimeError):
     """The floor on disk was calibrated under a DIFFERENT recipe than the one running.
 
@@ -378,58 +407,213 @@ def verify_env_readback(recipe: Recipe, pid: int, *,
     return observed
 
 
+
+# ---------------------------------------------------------------------------
+# GPU residency for the SERVING path (R23-60).
+#
+# The bench path has proven residency per invocation since the rebuild; this path did
+# not, so every serving number taken before 2026-09-08 -- the 4.581% floor and the gate
+# reading included -- is un-PROVEN as GPU-resident. That is a missing proof, not a
+# suspected defect, and it cannot be retro-fitted: a residency tuple invented on read
+# claims warrant the original run never captured.
+#
+# One mechanism, shared with bench: `residency.Sampler`, `residency.RESIDENT_FLOOR_BYTES`.
+# No second threshold is defined here.
+# ---------------------------------------------------------------------------
+
+def covers_request_phase(record: Mapping) -> bool:
+    """Did the sampling window actually ENCLOSE the phase it claims to be evidence about?
+
+    Containment, which is strictly stronger than overlap -- the launch controls both
+    clocks, so anything less is a bug rather than a limitation. This is the predicate a
+    READER applies to the recorded timestamps: a measurement whose window does not
+    overlap the phenomenon is not evidence of its absence, which is exactly why a
+    post-hoc 0% VRAM reading is the NORMAL result on a finished llama-bench and proves
+    nothing. Missing timestamps are False: an unknown window is not a covering one.
+    """
+    window_start, window_end = record.get("window_start"), record.get("window_end")
+    request_start, request_end = record.get("request_start"), record.get("request_end")
+    if None in (window_start, window_end, request_start, request_end):
+        return False
+    return window_start <= request_start and request_end <= window_end
+
+
+def _residency_record(sampler, *, window_start: float, window_end: float,
+                      request_start: float | None,
+                      request_end: float | None) -> dict:
+    """One launch's residency evidence: what bench records, plus the window it covers.
+
+    `status` is three-valued in effect: `proven`, `unproven`, or -- when the window DID
+    cover the request phase and the device was empty throughout -- a refusal raised by
+    `_refuse_if_not_resident`, which never reaches a record a reader could mistake for a
+    result.
+    """
+    proof = dict(sampler.proof)
+    sampled = bool(proof.get("samples")) and bool(proof.get("vram_reads"))
+    record = {"schema": RESIDENCY_SCHEMA, **proof,
+              # Distinguishes an unreadable instrument from a device read as empty.
+              "sampled": sampled,
+              "resident_floor_bytes": residency.RESIDENT_FLOOR_BYTES,
+              "window_start": window_start, "window_end": window_end,
+              "window_s": round(window_end - window_start, 3),
+              "request_start": request_start, "request_end": request_end}
+    record["covers_request_phase"] = covers_request_phase(record)
+    record["status"] = (
+        RESIDENCY_PROVEN
+        if sampled and record["covers_request_phase"] and proof.get("resident")
+        else RESIDENCY_UNPROVEN)
+    return record
+
+
+def _refuse_if_not_resident(recipe: Recipe, record: Mapping) -> None:
+    """Abort a launch MEASURED non-resident. Record, but do not abort, an unsampled one.
+
+    The asymmetry is the same one `verify_env_readback` enforces, and it is not a
+    preference: a launch whose window covered the request phase and read an empty device
+    is positive evidence that the number is not a GPU number, and a CPU-resident arm
+    filed as GPU is unrecoverable. A launch nobody could sample is an instrument fault --
+    it carries `unproven` and travels with the number, so a reader can refuse it later
+    with the whole record in hand.
+    """
+    if record.get("status") == RESIDENCY_PROVEN:
+        return
+    if not (record.get("sampled") and record.get("covers_request_phase")):
+        return
+    raise ServingNotResident(
+        f"{recipe.describe()}: GPU RESIDENCY REFUTED -- peak VRAM "
+        f"{record.get('peak_vram_bytes')} B (median {record.get('median_vram_bytes')} B) "
+        f"over {record.get('samples')} samples spanning the request phase "
+        f"[{record.get('request_start')}, {record.get('request_end')}], below the "
+        f"{residency.RESIDENT_FLOOR_BYTES} B resident floor. This launch did not execute "
+        f"on the device -- refusing to return a serving number that would be filed as a "
+        f"GPU result.")
+
+
+def _residency_fold(records: Sequence[Mapping]) -> dict:
+    """Aggregate per-launch evidence for a row, in the shape `bench.compare` folds it.
+
+    `status` is `proven` only when EVERY launch in the row is proven: a row is a claim
+    about all of its launches, and one unproven launch makes the row's provenance
+    unproven no matter how the rest sampled.
+    """
+    rows = [dict(record) for record in records]
+    fold = {"schema": RESIDENCY_SCHEMA,
+            "status": RESIDENCY_UNPROVEN if not rows else (
+                RESIDENCY_PROVEN
+                if all(r.get("status") == RESIDENCY_PROVEN for r in rows)
+                else RESIDENCY_UNPROVEN),
+            "invocations": len(rows),
+            "resident": sum(1 for r in rows if r.get("resident")),
+            "proven": sum(1 for r in rows if r.get("status") == RESIDENCY_PROVEN),
+            "resident_floor_bytes": residency.RESIDENT_FLOOR_BYTES}
+    if not rows:
+        return fold
+    fold.update({
+        "peak_vram_bytes": max((r.get("peak_vram_bytes") or 0) for r in rows),
+        "median_vram_bytes": int(statistics.median(
+            [(r.get("median_vram_bytes") or 0) for r in rows])),
+        "peak_kfd_processes": max((r.get("peak_kfd_processes") or 0) for r in rows),
+        "sclk_min_mhz": min((r.get("sclk_min_mhz") or 0) for r in rows),
+        "sclk_max_mhz": max((r.get("sclk_max_mhz") or 0) for r in rows),
+        "clock_stable": all(r.get("clock_stable") for r in rows),
+        "samples": sum((r.get("samples") or 0) for r in rows),
+        "covers_request_phase": all(r.get("covers_request_phase") for r in rows),
+        "window_start": min((r.get("window_start") or 0.0) for r in rows),
+        "window_end": max((r.get("window_end") or 0.0) for r in rows)})
+    return fold
+
+
 def _measure_once(recipe: Recipe, build_dir: Path, port: int,
-                  boot_timeout_s: int = 360) -> float:
+                  boot_timeout_s: int = 360, *,
+                  evidence: list | None = None) -> float:
     """Launch the server under `recipe`, fire `np` concurrent requests, return aggregate
-    tok/s. The server is always stopped, even on error."""
+    tok/s. The server is always stopped, even on error.
+
+    GPU residency is sampled ACROSS THE WHOLE LAUNCH -- the sampler starts before
+    `Popen` and stops after teardown, so the window encloses both the model load and the
+    request phase, and the record carries both pairs of timestamps so a reader can
+    confirm the overlap instead of taking it on trust. "I invoked the HIP build" is not
+    evidence of a HIP run and `ldd` cannot supply one: llama.cpp dlopens
+    `libggml-hip.so`, so the executable shows no HIP linkage either way.
+
+    `evidence`, when given, receives this launch's residency record -- appended in a
+    `finally`, so a failed launch still leaves its window on the record rather than
+    vanishing. Passing a sink is OPTIONAL and the residency REFUSAL is not: a launch
+    measured non-resident raises `ServingNotResident` whether or not anyone asked for
+    the record.
+    """
     argv = recipe.server_argv(build_dir, port)
-    srv = subprocess.Popen(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                           env=recipe.server_env(build_dir))
+    sampler = residency.Sampler()
+    window_start = time.time()
+    request_start: float | None = None
+    request_end: float | None = None
     try:
-        for _ in range(boot_timeout_s // 2):
-            if srv.poll() is not None:
-                raise ServerDied(f"server exited {srv.returncode} during load ({recipe.describe()})")
+        with sampler:
+            srv = subprocess.Popen(argv, stdout=subprocess.DEVNULL,
+                                   stderr=subprocess.DEVNULL,
+                                   env=recipe.server_env(build_dir))
             try:
-                urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=2)
-                break
-            except Exception:
-                time.sleep(2)
-        else:
-            raise ServerDied("server not healthy within boot timeout")
-        # The env arm is verified on the LIVE process, before a single token is measured.
-        verify_env_readback(recipe, srv.pid)
+                for _ in range(boot_timeout_s // 2):
+                    if srv.poll() is not None:
+                        raise ServerDied(f"server exited {srv.returncode} during load ({recipe.describe()})")
+                    try:
+                        urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=2)
+                        break
+                    except Exception:
+                        time.sleep(2)
+                else:
+                    raise ServerDied("server not healthy within boot timeout")
+                # The env arm is verified on the LIVE process, before a single token is measured.
+                verify_env_readback(recipe, srv.pid)
 
-        def one(i: int) -> tuple[int, float]:
-            body = json.dumps({"prompt": _PROMPTS[i % len(_PROMPTS)],
-                               "n_predict": recipe.n_predict, "temperature": recipe.temperature,
-                               "top_p": recipe.top_p, "top_k": recipe.top_k,
-                               "cache_prompt": False}).encode()
-            req = urllib.request.Request(f"http://127.0.0.1:{port}/completion", data=body,
-                                         headers={"Content-Type": "application/json"})
-            t = json.loads(urllib.request.urlopen(req, timeout=600).read()).get("timings", {})
-            # per-request decode rate, NOT wall-clock: each slot reports its own
-            # predicted_n / predicted_ms, so the aggregate is the sum of the concurrent
-            # slots' rates and is immune to the scheduling-tail jitter that made the
-            # wall-clock aggregate ~5-10% noisy even at greedy (R23-43).
-            return int(t.get("predicted_n", 0)), float(t.get("predicted_per_second", 0.0))
+                def one(i: int) -> tuple[int, float]:
+                    body = json.dumps({"prompt": _PROMPTS[i % len(_PROMPTS)],
+                                       "n_predict": recipe.n_predict, "temperature": recipe.temperature,
+                                       "top_p": recipe.top_p, "top_k": recipe.top_k,
+                                       "cache_prompt": False}).encode()
+                    req = urllib.request.Request(f"http://127.0.0.1:{port}/completion", data=body,
+                                                 headers={"Content-Type": "application/json"})
+                    t = json.loads(urllib.request.urlopen(req, timeout=600).read()).get("timings", {})
+                    # per-request decode rate, NOT wall-clock: each slot reports its own
+                    # predicted_n / predicted_ms, so the aggregate is the sum of the concurrent
+                    # slots' rates and is immune to the scheduling-tail jitter that made the
+                    # wall-clock aggregate ~5-10% noisy even at greedy (R23-43).
+                    return int(t.get("predicted_n", 0)), float(t.get("predicted_per_second", 0.0))
 
-        # Warmup: one full np-wide round discarded, so cold-cache/clock-ramp does not
-        # land in the measured sample (the first calibration run read high, then settled).
-        with cf.ThreadPoolExecutor(recipe.np) as ex:
-            list(ex.map(one, range(recipe.np)))
-        with cf.ThreadPoolExecutor(recipe.np) as ex:
-            rows = list(ex.map(one, range(recipe.np)))
-        toks = [n for n, _ in rows]
-        if min(toks) < recipe.n_predict // 2:
-            raise ServerDied(f"degenerate measurement: tokens={toks}")
-        return sum(rate for _, rate in rows)
+                # The request phase proper starts HERE, warmup included: the
+                # residency window must overlap the work, not merely the boot.
+                request_start = time.time()
+                # Warmup: one full np-wide round discarded, so cold-cache/clock-ramp does not
+                # land in the measured sample (the first calibration run read high, then settled).
+                with cf.ThreadPoolExecutor(recipe.np) as ex:
+                    list(ex.map(one, range(recipe.np)))
+                with cf.ThreadPoolExecutor(recipe.np) as ex:
+                    rows = list(ex.map(one, range(recipe.np)))
+                request_end = time.time()
+                toks = [n for n, _ in rows]
+                if min(toks) < recipe.n_predict // 2:
+                    raise ServerDied(f"degenerate measurement: tokens={toks}")
+                value = sum(rate for _, rate in rows)
+            finally:
+                srv.terminate()
+                try:
+                    srv.wait(30)
+                except Exception:
+                    srv.kill()
+                    srv.wait(10)
     finally:
-        srv.terminate()
-        try:
-            srv.wait(30)
-        except Exception:
-            srv.kill()
-            srv.wait(10)
+        window_end = time.time()
+        record = _residency_record(sampler, window_start=window_start,
+                                   window_end=window_end,
+                                   request_start=request_start,
+                                   request_end=request_end)
+        if evidence is not None:
+            evidence.append(record)
+    # Success path only. An exception already in flight carries its own reason, and
+    # replacing it with a residency refusal would hide the real fault -- while the
+    # record above is appended either way, so a failed launch still leaves its window.
+    _refuse_if_not_resident(recipe, record)
+    return value
 
 
 def _spread(runs: Sequence[float]) -> dict:
@@ -466,9 +650,14 @@ def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs:
     fresh server per side (drift control). Effect = median(candidate)/median(anchor) - 1.
     `decisive` is None when uncalibrated (no floor), so the keep gate fails closed."""
     a_runs, c_runs = [], []
+    # Per-launch residency evidence, one record per server launch, per arm. Written by
+    # `_measure_once`; a launch it could not sample lands here as `unproven` and a launch
+    # it sampled as non-resident never gets here at all -- it raises.
+    a_residency: list[dict] = []
+    c_residency: list[dict] = []
     for _ in range(pairs):
-        a_runs.append(_measure_once(recipe, anchor_build, port))
-        c_runs.append(_measure_once(recipe, candidate_build, port))
+        a_runs.append(_measure_once(recipe, anchor_build, port, evidence=a_residency))
+        c_runs.append(_measure_once(recipe, candidate_build, port, evidence=c_residency))
     a_med, c_med = statistics.median(a_runs), statistics.median(c_runs)
     effect = c_med / a_med - 1.0
     decisive = None if floor_pct is None else (abs(effect) * 100.0 >= floor_pct)
@@ -484,14 +673,22 @@ def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs:
             "noise_floor_pct": floor_pct, "decisive": decisive,
             "anchor_samples": a_runs, "candidate_samples": c_runs,
             # Reporting only -- no decision rule reads these (see `_spread`).
-            "anchor_spread": _spread(a_runs), "candidate_spread": _spread(c_runs)}
+            "anchor_spread": _spread(a_runs), "candidate_spread": _spread(c_runs),
+            # PROVENANCE, not a decision input: no gate reads these. The row states
+            # whether its own launches were shown to run on the device, so a later
+            # reader never has to assume it -- and cannot be handed a tuple invented
+            # after the fact, which is the one thing no re-analysis can supply.
+            "residency": _residency_fold(a_residency + c_residency),
+            "anchor_residency": a_residency, "candidate_residency": c_residency}
 
 
 def calibrate_floor(recipe: Recipe, build_dir: Path, *, samples: int, port: int = 18311) -> dict:
     """A/A the serving metric `samples` times on ONE build: the run-to-run spread IS the
     noise floor a keep must clear. floor = p95 of |pairwise effect| against the median,
     reported at a few sample counts so a keep at N pairs is judged against the N-pair bar."""
-    runs = [_measure_once(recipe, build_dir, port) for _ in range(samples)]
+    launch_residency: list[dict] = []
+    runs = [_measure_once(recipe, build_dir, port, evidence=launch_residency)
+            for _ in range(samples)]
     # `floor_pct` IS this arm's p95 deviation from its own median -- taken from `_spread`
     # so the floor and the per-arm spread reported by `compare` can never drift apart.
     sp = _spread(runs)
@@ -500,7 +697,12 @@ def calibrate_floor(recipe: Recipe, build_dir: Path, *, samples: int, port: int 
             "recipe_describe": recipe.describe(),
             "metric": recipe.metric, "np": recipe.np, "samples": samples,
             "median_tok_s": sp["median"], "floor_pct": sp["p95_dev_pct"],
-            "runs": runs, "cv_pct": sp["cv_pct"], "spread": sp}
+            "runs": runs, "cv_pct": sp["cv_pct"], "spread": sp,
+            # A floor is a bar every future keep is judged against, so the row records
+            # whether the launches that DEFINED it were proven resident. `write_floor`
+            # carries this to disk.
+            "residency": _residency_fold(launch_residency),
+            "launch_residency": launch_residency}
 
 
 # ---------------------------------------------------------------------------
@@ -565,6 +767,25 @@ class FloorReading:
     def verified(self) -> bool:
         return self.provenance == "verified"
 
+    @property
+    def residency_status(self) -> str:
+        """`proven` only when the file says so. Absent evidence reads as `unproven`,
+        never as proven -- the same fail-closed direction `provenance` takes."""
+        block = self.row.get("residency") or {}
+        return str(block.get("status") or RESIDENCY_UNPROVEN)
+
+
+def _stamped_residency(block: object) -> dict:
+    """The residency block a floor file carries, never absent and never invented."""
+    if isinstance(block, Mapping) and block:
+        return dict(block)
+    return dict(_residency_fold(()),
+                note="this floor carries no per-launch residency evidence: it was "
+                     "calibrated before the serving path sampled (R23-60), or by a "
+                     "harness that did not record it. Not a claim that it ran off the "
+                     "device -- a statement that nothing proves it ran on one. "
+                     "Recalibrate to obtain the proof; it cannot be added afterwards.")
+
 
 def write_floor(store: Path | str, recipe: Recipe, row: Mapping, *,
                 conditions: Mapping | None = None) -> Path:
@@ -594,6 +815,10 @@ def write_floor(store: Path | str, recipe: Recipe, row: Mapping, *,
     body["recipe_hash"] = recipe.recipe_hash
     body["recipe_describe"] = recipe.describe()
     body["recipe_env"] = dict(recipe.env or {})
+    # A floor whose provenance is silent reads as a floor whose provenance is fine. A row
+    # with no residency block is stamped `unproven` EXPLICITLY -- it is not a claim that
+    # the calibration ran on the CPU, it is a refusal to let the absence pass unremarked.
+    body["residency"] = _stamped_residency(body.get("residency"))
     target = floor_path(store, recipe)
     target.parent.mkdir(parents=True, exist_ok=True)
     temporary = target.with_name(f".sv-floor-{os.getpid()}-{target.name}")
@@ -638,7 +863,9 @@ def load_floor(store: Path | str, recipe: Recipe) -> FloorReading:
     return FloorReading(row.get("floor_pct"), "verified", path, row)
 
 
-__all__ = ["FLOOR_KEY_MAX", "LOADER_OWNED_ENV", "RECIPE_SCHEMA", "UNSET",
+__all__ = ["FLOOR_KEY_MAX", "LOADER_OWNED_ENV", "RECIPE_SCHEMA", "RESIDENCY_PROVEN",
+           "RESIDENCY_SCHEMA", "RESIDENCY_UNPROVEN", "UNSET",
            "EnvReadbackFailed", "FloorReading", "Recipe", "RecipeError", "ServerDied",
-           "ServingFloorMismatch", "calibrate_floor", "compare", "floor_key", "floor_path",
-           "load_floor", "verify_env_readback", "write_floor"]
+           "ServingFloorMismatch", "ServingNotResident", "calibrate_floor", "compare",
+           "covers_request_phase", "floor_key", "floor_path", "load_floor",
+           "verify_env_readback", "write_floor"]
