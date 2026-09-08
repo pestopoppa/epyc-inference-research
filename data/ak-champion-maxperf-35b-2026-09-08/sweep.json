@@ -1,0 +1,138 @@
+{
+  "1": {
+    "median_aggregate_tok_s": 111.41214311121891,
+    "per_slot_tok_s": 111.41214311121891,
+    "runs": [
+      112.6826030385568,
+      108.79388940987815,
+      111.41214311121891
+    ],
+    "cv_pct": 1.453,
+    "p95_dev_pct": 2.35,
+    "sd_pct": 1.6190331325079708,
+    "min": 108.79388940987815,
+    "max": 112.6826030385568,
+    "residency": {
+      "schema": "epyc.autokernel.serving_residency.v1",
+      "status": "proven",
+      "invocations": 3,
+      "resident": 3,
+      "proven": 3,
+      "resident_floor_bytes": 1073741824,
+      "peak_vram_bytes": 39450705920,
+      "median_vram_bytes": 38167478272,
+      "peak_kfd_processes": 1,
+      "sclk_min_mhz": 1700,
+      "sclk_max_mhz": 1700,
+      "clock_stable": true,
+      "samples": 211,
+      "covers_request_phase": true,
+      "window_start": 1788896250.883094,
+      "window_end": 1788896303.5262203
+    },
+    "recipe_hash": "89556d8f43bda310f45d9a85b85b6d8d19ef1331fb88be530b8f007d3025a815",
+    "seconds": 52.6
+  },
+  "2": {
+    "median_aggregate_tok_s": 130.54049251865328,
+    "per_slot_tok_s": 65.27024625932664,
+    "runs": [
+      128.74190908475333,
+      130.54049251865328,
+      130.87066842640448
+    ],
+    "cv_pct": 0.717,
+    "p95_dev_pct": 1.378,
+    "sd_pct": 0.9354461106531938,
+    "min": 128.74190908475333,
+    "max": 130.87066842640448,
+    "residency": {
+      "schema": "epyc.autokernel.serving_residency.v1",
+      "status": "proven",
+      "invocations": 3,
+      "resident": 3,
+      "proven": 3,
+      "resident_floor_bytes": 1073741824,
+      "peak_vram_bytes": 39617933312,
+      "median_vram_bytes": 39609524224,
+      "peak_kfd_processes": 1,
+      "sclk_min_mhz": 1700,
+      "sclk_max_mhz": 1700,
+      "clock_stable": true,
+      "samples": 261,
+      "covers_request_phase": true,
+      "window_start": 1788896303.5268269,
+      "window_end": 1788896368.6958046
+    },
+    "recipe_hash": "52942f58cf630606f03f3e1f9aae3618c50b0e68444e81f105d046f92d118901",
+    "seconds": 65.2
+  },
+  "4": {
+    "median_aggregate_tok_s": 189.57495077327906,
+    "per_slot_tok_s": 47.393737693319764,
+    "runs": [
+      189.57495077327906,
+      189.36964565435375,
+      191.71425340867177
+    ],
+    "cv_pct": 0.559,
+    "p95_dev_pct": 1.128,
+    "sd_pct": 1.0601861198898215,
+    "min": 189.36964565435375,
+    "max": 191.71425340867177,
+    "residency": {
+      "schema": "epyc.autokernel.serving_residency.v1",
+      "status": "proven",
+      "invocations": 3,
+      "resident": 3,
+      "proven": 3,
+      "resident_floor_bytes": 1073741824,
+      "peak_vram_bytes": 40266182656,
+      "median_vram_bytes": 40251555840,
+      "peak_kfd_processes": 1,
+      "sclk_min_mhz": 1700,
+      "sclk_max_mhz": 1700,
+      "clock_stable": true,
+      "samples": 325,
+      "covers_request_phase": true,
+      "window_start": 1788896368.6963942,
+      "window_end": 1788896449.7201138
+    },
+    "recipe_hash": "773ea5a59aa9335170b5a2cd97027f55aabb35ef84f467d2470dcedcb8767fe4",
+    "seconds": 81.0
+  },
+  "8": {
+    "median_aggregate_tok_s": 242.75451550808393,
+    "per_slot_tok_s": 30.34431443851049,
+    "runs": [
+      239.8778774036049,
+      245.73147064062078,
+      242.75451550808393
+    ],
+    "cv_pct": 0.984,
+    "p95_dev_pct": 1.226,
+    "sd_pct": 2.389836406063443,
+    "min": 239.8778774036049,
+    "max": 245.73147064062078,
+    "residency": {
+      "schema": "epyc.autokernel.serving_residency.v1",
+      "status": "proven",
+      "invocations": 3,
+      "resident": 3,
+      "proven": 3,
+      "resident_floor_bytes": 1073741824,
+      "peak_vram_bytes": 41644150784,
+      "median_vram_bytes": 41630449664,
+      "peak_kfd_processes": 1,
+      "sclk_min_mhz": 1700,
+      "sclk_max_mhz": 1700,
+      "clock_stable": true,
+      "samples": 474,
+      "covers_request_phase": true,
+      "window_start": 1788896449.7206974,
+      "window_end": 1788896567.994979
+    },
+    "recipe_hash": "8762bffd946a8bd51e1af30cbc6817869fd2e50b6d86f3c0385890688e65edcf",
+    "seconds": 118.3
+  }
+}

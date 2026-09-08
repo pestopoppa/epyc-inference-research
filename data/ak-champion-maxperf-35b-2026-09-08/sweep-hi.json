@@ -1,0 +1,70 @@
+{
+  "12": {
+    "median_aggregate_tok_s": 268.1202509348024,
+    "per_slot_tok_s": 22.343354244566868,
+    "runs": [
+      263.66029227582294,
+      273.1533496048621,
+      268.1202509348024
+    ],
+    "cv_pct": 1.446,
+    "p95_dev_pct": 1.877,
+    "sd_pct": 3.8778781557098854,
+    "min": 263.66029227582294,
+    "max": 273.1533496048621,
+    "residency": {
+      "schema": "epyc.autokernel.serving_residency.v1",
+      "status": "proven",
+      "invocations": 3,
+      "resident": 3,
+      "proven": 3,
+      "resident_floor_bytes": 1073741824,
+      "peak_vram_bytes": 43117342720,
+      "median_vram_bytes": 43053060096,
+      "peak_kfd_processes": 1,
+      "sclk_min_mhz": 1700,
+      "sclk_max_mhz": 1700,
+      "clock_stable": true,
+      "samples": 611,
+      "covers_request_phase": true,
+      "window_start": 1788898020.1721756,
+      "window_end": 1788898173.003197
+    },
+    "recipe_hash": "a28b951447d344e10f5f04224de63c4ace8b44d2fd9b942c08dac146106b7d51",
+    "seconds": 152.8
+  },
+  "16": {
+    "median_aggregate_tok_s": 310.95759830952534,
+    "per_slot_tok_s": 19.434849894345334,
+    "runs": [
+      318.8260554860624,
+      309.41345365602103,
+      310.95759830952534
+    ],
+    "cv_pct": 1.325,
+    "p95_dev_pct": 2.53,
+    "sd_pct": 4.121678113757405,
+    "min": 309.41345365602103,
+    "max": 318.8260554860624,
+    "residency": {
+      "schema": "epyc.autokernel.serving_residency.v1",
+      "status": "proven",
+      "invocations": 3,
+      "resident": 3,
+      "proven": 3,
+      "resident_floor_bytes": 1073741824,
+      "peak_vram_bytes": 44421775360,
+      "median_vram_bytes": 44409145344,
+      "peak_kfd_processes": 1,
+      "sclk_min_mhz": 1700,
+      "sclk_max_mhz": 1700,
+      "clock_stable": true,
+      "samples": 695,
+      "covers_request_phase": true,
+      "window_start": 1788898173.0038526,
+      "window_end": 1788898346.6415439
+    },
+    "recipe_hash": "a1191ee27f15e8677f857e595e4cf9f05f2f91103035364fd849d5ab3b6c1bf9",
+    "seconds": 173.6
+  }
+}
