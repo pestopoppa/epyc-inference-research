@@ -33,6 +33,12 @@ bundle is recorded as a measured divergence. What happens to the accumulated com
 is a policy choice the caller selects (`DivergenceAction`); this module computes the
 decision and leaves the git/build mechanics to the loop.
 
+R23-54 (operator 2026-09-08) ADDED A SECOND, MANDATORY TRIGGER. `fire_multiple` is a
+heuristic over the proxy, and the gate's first firing showed the proxy failing at that
+very job (+5.958% bench vs -2.18% serving, n=10). So the gate now also fires every
+`SERVING_GATE_EVERY_KEEPS` = 4 keeps regardless of the compounded estimate, and every
+gate record names its `trigger` -- "threshold", "cadence" or "both".
+
 This module is pure: it holds NO build directories and runs NO measurements. The loop
 injects the compounded-bench number and the serving-gate row; `accumulate` decides.
 """
@@ -42,6 +48,25 @@ from dataclasses import dataclass, field
 from pathlib import Path
 import json
 import enum
+
+
+#: R23-54 (operator ruling 2026-09-08): the serving gate is MANDATORY on a fixed KEEP
+#: CADENCE -- it fires every N keeps REGARDLESS of the compounded bench estimate.
+#:
+#: WHY. Until R23-54 the gate fired on one trigger only: the accumulator's compounded
+#: llama-bench estimate crossing `fire_multiple` x the serving floor. That trigger is a
+#: HEURISTIC built on the proxy, and the gate's FIRST firing (2026-09-08) measured the
+#: proxy failing at exactly the job the trigger gives it: the bench estimate said +5.958%
+#: while serving said "cannot tell, probably slightly negative" (-2.18%, n=10). A proxy
+#: that cannot decide whether a bundle gained cannot be trusted to decide WHEN to spend
+#: the instrument that can. So the bench estimate keeps its trigger -- it is still the
+#: cheap early signal -- but it no longer holds a veto over the schedule: after N keeps
+#: the gate runs on cadence and the bundle gets a real serving reading either way.
+#:
+#: N = 4: four 1-3% keeps is the batch size at which the ~3.5% serving floor has a
+#: plausible chance of resolving the bundle, and it bounds how far the accumulator can
+#: drift from serving-demonstrated reality (at most 4 keeps of unverified bench gain).
+SERVING_GATE_EVERY_KEEPS = 4
 
 
 class Decision(enum.Enum):
@@ -79,9 +104,14 @@ class AccumulatorPolicy:
     """The thresholds. `fire_multiple` is the operator's 2-3x; `on_divergence` is the
     caller's choice for the divergence case (default HOLD: the operator's 2026-09-04 ruling
     -- keep the bundle and hand the divergence to the planner as journal evidence, so it can
-    add keeps aimed at the serving gap or revise the keeps already bundled)."""
+    add keeps aimed at the serving gap or revise the keeps already bundled).
+
+    `every_keeps` is R23-54's mandatory cadence (operator 2026-09-08): the second,
+    proxy-independent trigger. It is a field only so a test can shorten it; the ruling's
+    value is the module constant `SERVING_GATE_EVERY_KEEPS`."""
     fire_multiple: float = 2.5
     on_divergence: DivergenceAction = DivergenceAction.HOLD  # operator 2026-09-04
+    every_keeps: int = SERVING_GATE_EVERY_KEEPS              # operator 2026-09-08 (R23-54)
 
     def fire_threshold_pct(self, serving_floor_pct: float) -> float:
         return self.fire_multiple * serving_floor_pct
@@ -98,11 +128,24 @@ class Bundle:
     tip: str
     keeps: list = field(default_factory=list)
     compounded_bench_pct: float = 0.0
+    #: R23-54: keeps landed since the serving gate last RAN (any outcome), not since it
+    #: last promoted -- the cadence measures how long the accumulator has gone without a
+    #: real serving reading. Durable like the rest of the bundle, so restarts (which run 29
+    #: proved are guaranteed) cannot postpone the gate forever by resetting the count.
+    keeps_since_serving_gate: int = 0
 
     def add_keep(self, mechanism_id: str, tip: str, compounded_bench_pct: float) -> None:
         self.keeps.append(mechanism_id)
         self.tip = tip
         self.compounded_bench_pct = compounded_bench_pct
+        self.keeps_since_serving_gate += 1
+
+    def mark_serving_gate_fired(self) -> None:
+        """The serving gate RAN -- reset the cadence counter. Called on every outcome
+        (PROMOTE, DIVERGED), because the counter tracks readings taken, not verdicts won:
+        resetting only on a promote would make a diverging bundle re-fire the expensive
+        gate on every subsequent keep."""
+        self.keeps_since_serving_gate = 0
 
     def is_empty(self) -> bool:
         return not self.keeps
@@ -121,15 +164,21 @@ class Bundle:
     def to_dict(self) -> dict:
         return {"schema": self.SCHEMA, "champion_of_record": self.champion_of_record,
                 "tip": self.tip, "keeps": list(self.keeps),
-                "compounded_bench_pct": self.compounded_bench_pct}
+                "compounded_bench_pct": self.compounded_bench_pct,
+                "keeps_since_serving_gate": int(self.keeps_since_serving_gate)}
 
     @classmethod
     def from_dict(cls, d: dict) -> "Bundle":
         if d.get("schema") != cls.SCHEMA:
             raise ValueError(f"unknown bundle schema {d.get('schema')!r}")
+        # `keeps_since_serving_gate` is ADDITIVE (R23-54), so the schema id does NOT bump:
+        # a bundle written before 2026-09-08 is still a valid v1 bundle and loads with the
+        # counter at 0. That default is also the safe one -- it starts the cadence at this
+        # bundle's next keep rather than firing an unscheduled gate on restore.
         return cls(champion_of_record=d["champion_of_record"], tip=d["tip"],
                    keeps=list(d.get("keeps", [])),
-                   compounded_bench_pct=float(d.get("compounded_bench_pct", 0.0)))
+                   compounded_bench_pct=float(d.get("compounded_bench_pct", 0.0)),
+                   keeps_since_serving_gate=int(d.get("keeps_since_serving_gate", 0) or 0))
 
     def save(self, store: Path) -> Path:
         p = Path(store) / self.FILENAME
@@ -175,16 +224,46 @@ def load_bundle(store: Path, *, anchor_commit: str, is_ancestor) -> tuple:
                f"{b.champion_of_record[:12]}")
 
 
+def gate_trigger(bundle: Bundle, serving_floor_pct: float | None,
+                 policy: AccumulatorPolicy) -> str | None:
+    """WHY the serving gate should fire now, or None to keep accumulating.
+
+    Two independent triggers (R23-54, operator 2026-09-08):
+      * "threshold" -- the compounded bench estimate cleared `fire_multiple` x floor. The
+        original R23-44 trigger: cheap, early, and a PROXY.
+      * "cadence"   -- `every_keeps` keeps have landed since the gate last RAN. Mandatory,
+        and deliberately blind to the bench estimate, because 2026-09-08 measured the
+        estimate (+5.958%) disagreeing with serving (-2.18%, n=10) on the same bundle.
+      * "both"      -- both hold; recorded distinctly so a reader is never left guessing
+        which one carried the firing.
+
+    THE FAIL-CLOSED GUARD IS UNCHANGED. An uncalibrated floor (None) blocks BOTH triggers:
+    without a floor the gate's own `decisive` is None, so it can only ever return DIVERGED
+    (`classify_serving`). Cadence-firing there would spend hours of llama-server time on a
+    reading that cannot promote anything -- that is not strictness the ruling removed, it
+    is a gate that cannot judge, which R23-43's grammar has always refused to spend."""
+    if serving_floor_pct is None:
+        return None
+    threshold = bundle.compounded_bench_pct >= policy.fire_threshold_pct(serving_floor_pct)
+    cadence = (policy.every_keeps > 0
+               and bundle.keeps_since_serving_gate >= policy.every_keeps)
+    if threshold and cadence:
+        return "both"
+    if threshold:
+        return "threshold"
+    if cadence:
+        return "cadence"
+    return None
+
+
 def decide_after_keep(bundle: Bundle, serving_floor_pct: float,
                       policy: AccumulatorPolicy) -> Decision:
-    """After a keep lands: does the compounded bench gain clear `fire_multiple` x floor?
-    An uncalibrated floor (None) can never be cleared, so the loop keeps accumulating
-    rather than firing a gate it cannot judge (fail-closed, same as R23-43)."""
-    if serving_floor_pct is None:
-        return Decision.ACCUMULATE
-    if bundle.compounded_bench_pct >= policy.fire_threshold_pct(serving_floor_pct):
-        return Decision.FIRE_SERVING
-    return Decision.ACCUMULATE
+    """After a keep lands: fire the serving gate, or keep batching? Fires when EITHER
+    trigger in `gate_trigger` holds -- the compounded bench estimate clearing
+    `fire_multiple` x floor, OR R23-54's mandatory every-`every_keeps` cadence."""
+    return (Decision.FIRE_SERVING
+            if gate_trigger(bundle, serving_floor_pct, policy) is not None
+            else Decision.ACCUMULATE)
 
 
 def classify_serving(serving_row: dict) -> Outcome:
@@ -236,5 +315,6 @@ def resolve(bundle: Bundle, serving_row: dict, policy: AccumulatorPolicy) -> dic
                      "gap rather than the bench surface")}}
 
 
-__all__ = ["Decision", "Outcome", "DivergenceAction", "AccumulatorPolicy", "Bundle",
-           "decide_after_keep", "classify_serving", "resolve"]
+__all__ = ["SERVING_GATE_EVERY_KEEPS", "Decision", "Outcome", "DivergenceAction",
+           "AccumulatorPolicy", "Bundle", "gate_trigger", "decide_after_keep",
+           "classify_serving", "resolve"]

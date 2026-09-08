@@ -379,6 +379,10 @@ def main(argv: list[str] | None = None) -> int:
     bundle = [restored]
     cor_commit = [restored.champion_of_record]
     cor_build = [args.anchor_build]
+    # R23-54: the last serving-gate firing and WHY it fired ("threshold" | "cadence" |
+    # "both"), for the status body the dashboard reads. Per-run, not durable: the durable
+    # fact is the bundle's counter; this is the narration of the most recent reading.
+    last_gate = [None]
     print(f"accum     {note}")
 
 
@@ -631,27 +635,46 @@ def main(argv: list[str] | None = None) -> int:
                if serving_floor_pct is not None else "uncalibrated")
         print(f"accum     bundle {len(bundle[0].keeps)} keep(s), "
               f"{bundle[0].compounded_bench_pct:+.2f}% compounded bench vs champion of record "
-              f"(serving gate fires at {thr}%)")
-        if accumulate.decide_after_keep(bundle[0], serving_floor_pct,
-                                        accum_policy) is not accumulate.Decision.FIRE_SERVING:
+              f"(serving gate fires at {thr}%, or on cadence at "
+              f"{bundle[0].keeps_since_serving_gate}/{accum_policy.every_keeps} keeps)")
+        # R23-54 (operator 2026-09-08): EITHER trigger fires the gate — the compounded bench
+        # estimate clearing the threshold, or the mandatory every-4-keeps cadence. The
+        # estimate keeps its early trigger but no longer holds a veto over the schedule.
+        trigger = accumulate.gate_trigger(bundle[0], serving_floor_pct, accum_policy)
+        if trigger is None:
             return
-        # The bundle is big enough for the ~3.5% serving floor to resolve -- spend the gate ONCE.
+        # The gate is being spent -- once, on the whole bundle.
         sv_row = serving.compare(serving_recipe, cor_build[0], anchor_build[0],
                                  pairs=args.serving_pairs, floor_pct=serving_floor_pct)
         plan = accumulate.resolve(bundle[0], sv_row, accum_policy)
+        # WHY it fired is part of the reading: a cadence firing at +2% compounded is a
+        # different fact from a threshold firing at +9%, and the 2026-09-08 divergence is
+        # the reason a reader must never have to infer which one happened.
+        last_gate[0] = {"trigger": trigger, "outcome": plan["outcome"].value,
+                        "at_commit": head, "keeps": len(bundle[0].keeps),
+                        "compounded_bench_pct": round(bundle[0].compounded_bench_pct, 3),
+                        "serving_effect_pct": sv_row.get("effect_pct"),
+                        "serving_decisive": sv_row.get("decisive"),
+                        "at": loop._now()}
         status.write_json(
             args.store / "serving", f"bundle-{head[:12]}.json",
-            {"outcome": plan["outcome"].value, "reason": plan["reason"],
+            {"outcome": plan["outcome"].value, "trigger": trigger, "reason": plan["reason"],
+             "keeps_since_serving_gate": bundle[0].keeps_since_serving_gate,
+             "gate_every_keeps": accum_policy.every_keeps,
              "bundled_keeps": list(bundle[0].keeps),
              "planner_evidence": plan.get("planner_evidence"), **sv_row}, prefix=".sv-")
-        print(f"serving   {plan['reason']}")
+        print(f"serving   [trigger={trigger}] {plan['reason']}")
         if plan["outcome"] is accumulate.Outcome.PROMOTE:
             # The champion of record advances to the accumulator tip. Snapshot its build into
             # the protected slot, publish the headline against it, and start a fresh bundle.
             cor_commit[0] = plan["new_champion_of_record"]
             cor_build[0] = anchor_build[0]  # point at the verified gen; prune protects it
             publish_headline()
+            # Fresh bundle: no keeps, and the R23-54 cadence counter starts at 0 because the
+            # gate just ran (a fresh Bundle defaults to 0; mark it anyway so the reset is not
+            # an accident of the constructor).
             bundle[0] = accumulate.Bundle(champion_of_record=head, tip=head)
+            bundle[0].mark_serving_gate_fired()
             bundle[0].save(args.store)
         else:
             # DIVERGED + HOLD: hand the divergence to the planner as journal evidence so it can
@@ -661,8 +684,13 @@ def main(argv: list[str] | None = None) -> int:
                 {"schema": "epyc.autokernel.attempt.v1", "campaign_id": "ak-loop",
                  "mechanism_id": f"serving-divergence-{head[:12]}", "status": "measured_divergence",
                  "hypothesis": plan["reason"], "planner_evidence": plan["planner_evidence"],
-                 "serving": sv_row},
+                 "trigger": trigger, "serving": sv_row},
                 epoch=epoch, recorded_at=loop._now(), campaign_id="ak-loop")
+            # R23-54: the gate RAN, so the cadence counter resets even though the bundle
+            # HOLDS. It counts readings taken, not verdicts won — without this a diverged
+            # bundle would re-fire the expensive gate on every single subsequent keep.
+            bundle[0].mark_serving_gate_fired()
+            bundle[0].save(args.store)
 
     def gpu_reading(outcomes=()) -> dict:
         """Held versus busy. Both halves, or the number means nothing.
@@ -695,6 +723,10 @@ def main(argv: list[str] | None = None) -> int:
         thr = (accum_policy.fire_threshold_pct(serving_floor_pct)
                if serving_floor_pct is not None else None)
         comp = bundle[0].compounded_bench_pct
+        # R23-54: the cadence half of the trigger, so the card can say "2/4 keeps to the
+        # mandatory gate" and name the reason the last gate fired instead of leaving a
+        # reader to infer it from the compounded number that 2026-09-08 proved unreliable.
+        trig = accumulate.gate_trigger(bundle[0], serving_floor_pct, accum_policy)
         return {
             "champion_of_record": cor_commit[0],
             "accumulator_tip": bundle[0].tip,
@@ -706,7 +738,11 @@ def main(argv: list[str] | None = None) -> int:
             "fire_threshold_pct": round(thr, 3) if thr is not None else None,
             "progress_fraction": (round(min(comp / thr, 1.0), 4)
                                   if thr and thr > 0 else None),
-            "fires_next": bool(thr is not None and comp >= thr),
+            "keeps_since_serving_gate": bundle[0].keeps_since_serving_gate,
+            "gate_every_keeps": accum_policy.every_keeps,
+            "next_trigger": trig,
+            "fires_next": trig is not None,
+            "last_serving_gate": last_gate[0],
         }
 
     last_step = [None]

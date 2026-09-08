@@ -413,8 +413,16 @@ class TwoTierChampionWiring(unittest.TestCase):
         accum = src.split("def _accumulate_after_keep(", 1)[1].split("\n    def ", 1)[0]
         # the serving A-arm is the champion-of-record build, B-arm the accumulator anchor
         self.assertIn("serving.compare(serving_recipe, cor_build[0], anchor_build[0]", accum)
-        # it only fires when the bundle clears the threshold
-        self.assertIn("accumulate.Decision.FIRE_SERVING", accum)
+        # it fires only on a named trigger (R23-54: threshold OR the 4-keep cadence), and
+        # the trigger is recorded — never left for a reader to infer from the compounded
+        # number the 2026-09-08 divergence discredited.
+        self.assertIn("accumulate.gate_trigger(bundle[0], serving_floor_pct, accum_policy)",
+                      accum)
+        self.assertIn("if trigger is None:", accum)
+        self.assertIn('"trigger": trigger', accum)
+        # the cadence counter resets on BOTH outcomes, and each reset is persisted
+        self.assertEqual(2, accum.count("mark_serving_gate_fired()"),
+                         "the cadence counter must reset on promote AND on divergence")
         # promote advances cor + snapshots + headline; divergence journals evidence
         self.assertIn("accumulate.Outcome.PROMOTE", accum)
         self.assertIn("planner_evidence", accum)
