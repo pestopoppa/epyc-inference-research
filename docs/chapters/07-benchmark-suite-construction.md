@@ -660,6 +660,49 @@ Each is small, local, and independently verifiable; they are listed here rather 
 - [ ] **Classify `code_execution` timeouts separately from wrong answers.** On a shared 192-thread box a timeout is a resource event, not a capability signal, and merging the two makes contention read as a model regression.
 - [ ] **Add a staleness cadence for the Web Research suite.** Live-data questions with no re-validation schedule reproduce the known failure where environment drift breaks a fraction of tasks and reads as a model regression -- one published case measured 28% *under*estimation from exactly this.
 
+### Task-admission criteria and the inert-gate lesson (2026-09-07)
+
+The six checks above screen a **question**. A suite of *agentic* tasks -- anything with a sandbox, a
+tool surface and a multi-step trajectory -- needs a second screen, applied to the **task** before it
+is admitted. Four criteria, adopted from a harness benchmark's construction protocol
+(`intake-1332#record`):
+
+9. **Realism** -- the task reflects a plausible user workflow, not a synthetic exercise built to be
+   scorable.
+10. **Solvability** -- the task can be completed using the resources actually provided in the
+    sandbox. A task whose solution needs something absent measures the environment, not the agent.
+11. **Oracle-checkability** -- success is verifiable by deterministic checks or a specified rubric.
+    This is the agentic-task form of quality gate 4 above, and it is what makes a trajectory scorable
+    without human judgment.
+12. **Integrity** -- the agent cannot obtain credit by reading hidden answers, modifying protected
+    fixtures, or bypassing the constraint the task is about. This is the criterion that fails
+    silently: a task passes 9--11 and still measures nothing, because the shortcut exists and is
+    cheaper than the work.
+
+**The task score is multiplicative**, not additive: `TaskScore = Security x Completion x Process`. A
+multiplicative form is the right choice, because a trajectory that completes the objective by
+violating the constraint should score **zero**, not "high on two of three factors". An additive or
+weighted-mean score lets a violated constraint be bought back by good completion, which is exactly
+the outcome criterion 12 exists to forbid.
+
+**The lesson, recorded because we would otherwise repeat it: a factor with zero variance is not
+evidence.** In the source study the `Security` factor returned **100.0 on 5,194 of 5,194
+trajectories** -- across every system evaluated, the binary gate never fired once. A multiplicative
+factor that is identically 1 is **inert**: it changes no ranking, separates no system, and cannot
+support the paper's claims about permission-sensitive workflows and permission boundaries, which rest
+on **zero observed violations**. Two readings remain open and the readout cannot distinguish them:
+either the tasks never create exploitable permission surface, or the gate does not detect what it
+claims to detect.
+
+The operational consequence for suite construction here is a reporting requirement on any gate we
+add, deterministic or rubric-based:
+
+- [ ] **Report every gate's firing rate alongside its pass rate.** A gate that has never returned
+      anything but pass is a candidate defect, not a proven-clean surface, and it must be either
+      exercised by a deliberately violating fixture (a negative control -- the same construction the
+      *Verifier Robustness* section below requires of assertions) or reported as unexercised. A gate
+      with no observed failures licenses no claim about the property it gates.
+
 ## Verifier Robustness: Structure-Derived Assertions and Negative Checks
 
 Not all deterministic scoring is equally brittle. The failure modes we have actually hit are

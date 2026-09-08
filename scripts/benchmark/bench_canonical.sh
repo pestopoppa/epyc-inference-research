@@ -72,6 +72,13 @@ SOURCE_ROOT=""
 LIBRARY_PATH=""
 GGML_IQK=1
 GGML_IQK_Q8_0=""
+# INF-70/C7: NUMA pre-eviction + in-window placement proof. Defaults come from
+# canonical_recipe.CANONICAL_PRE_EVICT_GIB / CANONICAL_MAX_NODE_SHARE_PCT and are
+# re-read from the module below so the two cannot drift apart.
+PRE_EVICT_GIB=""
+MAX_NODE_SHARE=""
+ALLOW_SKEW=0
+LOG_DIR=""
 EXTRA_ARGS=()
 
 usage() {
@@ -92,6 +99,18 @@ Usage: $(basename "$0") -m MODEL [OPTIONS] [-- EXTRA_BENCH_FLAGS...]
                       (all three explicit identity options are required together)
   --ggml-iqk {0,1}    Set the GGML_IQK runtime gate (default: 1)
   --ggml-iqk-q8-0 1   Explicitly enable the Q8_0 IQK sub-gate
+  --pre-evict-gib N   Force >= N GiB free on every NUMA node before the model
+                      load (default: canonical_recipe.CANONICAL_PRE_EVICT_GIB
+                      = 40). 0 disables it. Without this, --interleave=all is
+                      silently ignored on any full node and decode measures
+                      -25% (INF-70/C7, 2026-09-02).
+  --max-node-share P  Placement-proof threshold, percent (default:
+                      canonical_recipe.CANONICAL_MAX_NODE_SHARE_PCT = 40).
+  --allow-skew        Record the placement proof but do not fail the run when
+                      it shows skew. Use ONLY for deliberately-skewed arms.
+  --log-dir DIR       Where the bench log and its REQUIRED placement-proof row
+                      are written (default:
+                      /mnt/raid0/llm/tmp/canonical-bench/<UTC>-<model>).
   --dry-run           Validate + print the canonical command without executing
                       llama-bench. Use this to verify the wiring without firing
                       inference (respects feedback_no_concurrent_inference).
@@ -121,6 +140,10 @@ while [[ $# -gt 0 ]]; do
         --library-path) LIBRARY_PATH="$2"; shift 2 ;;
         --ggml-iqk) GGML_IQK="$2"; shift 2 ;;
         --ggml-iqk-q8-0) GGML_IQK_Q8_0="$2"; shift 2 ;;
+        --pre-evict-gib) PRE_EVICT_GIB="$2"; shift 2 ;;
+        --max-node-share) MAX_NODE_SHARE="$2"; shift 2 ;;
+        --allow-skew) ALLOW_SKEW=1; shift ;;
+        --log-dir) LOG_DIR="$2"; shift 2 ;;
         --dry-run) DRY_RUN=1; shift ;;
         -h|--help) usage; exit 0 ;;
         --) shift; EXTRA_ARGS=("$@"); break ;;
@@ -222,6 +245,23 @@ else
     LOCK_PREFIX="$REGION_LOCK run --cpu-list $BENCH_CPU_LIST --role bench-canonical --tag canonical:$(basename "$BINARY") --"
 fi
 
+# --- INF-70/C7: NUMA placement defaults, read from the single source of truth ---
+if [[ -z "$PRE_EVICT_GIB" || -z "$MAX_NODE_SHARE" ]]; then
+    read -r _DEF_EVICT _DEF_SHARE < <(python3 -c "
+import sys; sys.path.insert(0, '${REPO_DIR}/scripts/lib')
+import canonical_recipe as r
+print(r.CANONICAL_PRE_EVICT_GIB, r.CANONICAL_MAX_NODE_SHARE_PCT)")
+    PRE_EVICT_GIB="${PRE_EVICT_GIB:-$_DEF_EVICT}"
+    MAX_NODE_SHARE="${MAX_NODE_SHARE:-$_DEF_SHARE}"
+fi
+NUMA_EVICT="${REPO_DIR}/scripts/utils/numa_evict.py"
+PLACEMENT_CHECK="${REPO_DIR}/scripts/utils/numa_placement_check.sh"
+RUN_TAG="$(date -u +%Y%m%dT%H%M%SZ)-$(basename "$MODEL" .gguf)"
+LOG_DIR="${LOG_DIR:-/mnt/raid0/llm/tmp/canonical-bench/${RUN_TAG}}"
+BENCH_LOG="${LOG_DIR}/bench.log"
+PLACEMENT_LOG="${LOG_DIR}/placement.log"
+EVICT_LOG="${LOG_DIR}/pre-evict.log"
+
 echo "=== Canonical bench command ===" >&2
 echo "Binary:    $BINARY" >&2
 echo "Env:       $ENV_EXPORTS" >&2
@@ -234,16 +274,96 @@ fi
 if [[ "$USE_PERF" -eq 1 ]]; then
     echo "Perf wrap: $CANONICAL_PERF_EVENTS" >&2
 fi
+if [[ "$PRE_EVICT_GIB" -gt 0 ]]; then
+    echo "Pre-evict: ${PRE_EVICT_GIB} GiB per NUMA node (INF-70/C7)" >&2
+else
+    echo "Pre-evict: DISABLED (--pre-evict-gib 0) — placement may skew" >&2
+fi
+echo "Placement: proof required, max node share ${MAX_NODE_SHARE}%" >&2
+echo "Logs:      $LOG_DIR" >&2
 echo "=================================" >&2
 
 # --dry-run: print the command but do not execute. Respects
 # feedback_no_concurrent_inference for verifying wrapper wiring.
 if [[ "$DRY_RUN" -eq 1 ]]; then
-    echo "DRY RUN — skipping llama-bench execution." >&2
+    echo "DRY RUN — skipping NUMA pre-eviction and llama-bench execution." >&2
     exit 0
 fi
 
-# Execute
+mkdir -p "$LOG_DIR"
+
+# --- INF-70/C7 step 1: pre-load NUMA eviction --------------------------------
+# `numactl --interleave=all` is a per-allocation HINT the kernel abandons for
+# any node with no free pages, silently. Measured 2026-09-02: a 98 GB artifact
+# landed 57.7/10.7/8.0/17.7 GB across nodes 0-3 and decode fell 25% (10.09 ->
+# 7.65 t/s) with an identical command line. Allocating and touching N GiB per
+# node under --membind forces the kernel to reclaim page cache ON that node;
+# freeing it leaves genuinely free pages so the interleave can be honoured.
+if [[ "$PRE_EVICT_GIB" -gt 0 ]]; then
+    if [[ ! -f "$NUMA_EVICT" ]]; then
+        echo "ERROR: numa_evict.py not found at $NUMA_EVICT" >&2
+        exit 1
+    fi
+    echo "=== Pre-load NUMA eviction (${PRE_EVICT_GIB} GiB/node) ===" >&2
+    if ! python3 "$NUMA_EVICT" --target-gib "$PRE_EVICT_GIB" 2>&1 | tee "$EVICT_LOG" >&2; then
+        echo "WARNING: pre-eviction did not reach the target on every node." >&2
+        echo "         Continuing; the placement proof below is the gate." >&2
+    fi
+fi
+
+# --- INF-70/C7 step 2: helpers for the in-window placement proof -------------
+# Find the largest-RSS process in OUR OWN descendant tree. Never search by name
+# (shared host; a name pattern is a wildcard over other sessions' processes) —
+# walk /proc/<pid>/task/<pid>/children instead. The model loader is always the
+# biggest thing we started.
+largest_rss_descendant() {
+    local root="$1" best="$1" bestrss=0 rss kids k
+    local -a queue=("$root")
+    local i=0
+    while [[ $i -lt ${#queue[@]} ]]; do
+        local cur="${queue[$i]}"; i=$((i + 1))
+        [[ -r "/proc/$cur/statm" ]] || continue
+        rss=$(awk '{print $2}' "/proc/$cur/statm" 2>/dev/null) || rss=0
+        [[ -n "$rss" ]] || rss=0
+        if [[ "$rss" -gt "$bestrss" ]]; then bestrss="$rss"; best="$cur"; fi
+        for f in /proc/"$cur"/task/*/children; do
+            [[ -r "$f" ]] || continue
+            read -r kids < "$f" || kids=""
+            for k in $kids; do queue+=("$k"); done
+        done
+    done
+    echo "$best $bestrss"
+}
+
+# Sample placement once the resident set has stopped growing (i.e. the weights
+# are loaded) and the process is still alive. A sample taken after the run is
+# not evidence: the pages are gone.
+sample_placement_in_window() {
+    local root="$1" prev=0 stable=0 cand rss
+    local floor_pages=$((1024 * 1024 * 1024 / 4096))   # 1 GiB
+    while kill -0 "$root" 2>/dev/null; do
+        read -r cand rss < <(largest_rss_descendant "$root")
+        if [[ "$rss" -ge "$floor_pages" ]]; then
+            if [[ "$rss" -le "$prev" ]]; then
+                stable=$((stable + 1))
+            else
+                stable=0
+            fi
+            prev="$rss"
+            if [[ "$stable" -ge 2 ]]; then
+                bash "$PLACEMENT_CHECK" "$cand" \
+                    --threshold "$MAX_NODE_SHARE" \
+                    --label "canonical:$(basename "$MODEL")" > "$PLACEMENT_LOG" 2>&1
+                echo "$?" > "${PLACEMENT_LOG}.rc"
+                return 0
+            fi
+        fi
+        sleep 3
+    done
+    return 1
+}
+
+# --- INF-70/C7 step 3: run, sampling placement in-window ---------------------
 if [[ "$USE_PERF" -eq 1 ]]; then
     PERF_BIN="${PERF_BIN:-perf}"
     if ! command -v "$PERF_BIN" >/dev/null 2>&1; then
@@ -256,7 +376,43 @@ if [[ "$USE_PERF" -eq 1 ]]; then
     # AFTER perf's -- (so perf sees the env-prefix, not its own argv).
     # region-lock is OUTERMOST so the regions stay held for the whole measured
     # run, perf wrapper included.
-    eval "$LOCK_PREFIX sudo $PERF_BIN stat -e $CANONICAL_PERF_EVENTS -- env $ENV_EXPORTS ${CMD_ARGS[*]@Q}"
+    RUN_CMD="$LOCK_PREFIX sudo $PERF_BIN stat -e $CANONICAL_PERF_EVENTS -- env $ENV_EXPORTS ${CMD_ARGS[*]@Q}"
 else
-    eval "$LOCK_PREFIX env $ENV_EXPORTS ${CMD_ARGS[*]@Q}"
+    RUN_CMD="$LOCK_PREFIX env $ENV_EXPORTS ${CMD_ARGS[*]@Q}"
 fi
+
+eval "$RUN_CMD" > >(tee "$BENCH_LOG") 2>&1 &
+RUN_PID=$!
+sample_placement_in_window "$RUN_PID" || true
+wait "$RUN_PID"
+BENCH_RC=$?
+
+# --- INF-70/C7 step 4: the placement proof is a REQUIRED row ------------------
+echo "" >&2
+echo "=== Placement proof (required) ===" >&2
+if [[ ! -s "$PLACEMENT_LOG" ]]; then
+    echo "ERROR: no placement proof was captured for this run." >&2
+    echo "       $PLACEMENT_LOG is missing or empty — the run is an OBSERVATION," >&2
+    echo "       not a measurement (a window that misses the phenomenon proves nothing)." >&2
+    exit 1
+fi
+cat "$PLACEMENT_LOG" >&2
+PLACEMENT_RC=$(cat "${PLACEMENT_LOG}.rc" 2>/dev/null || echo 1)
+echo "Bench log:       $BENCH_LOG" >&2
+echo "Placement proof: $PLACEMENT_LOG (exit $PLACEMENT_RC)" >&2
+
+if [[ "$PLACEMENT_RC" == "3" ]]; then
+    if [[ "$ALLOW_SKEW" -eq 1 ]]; then
+        echo "WARNING: placement is SKEWED; --allow-skew given, reporting anyway." >&2
+        echo "         Do not quote this run as a canonical number." >&2
+    else
+        echo "ERROR: placement is SKEWED — this timing is not a valid measurement." >&2
+        echo "       Re-run after python3 $NUMA_EVICT --target-gib $PRE_EVICT_GIB," >&2
+        echo "       or pass --allow-skew if the skew IS the variable under test." >&2
+        exit 3
+    fi
+elif [[ "$PLACEMENT_RC" != "0" ]]; then
+    echo "WARNING: the placement check itself failed (exit $PLACEMENT_RC); see the log." >&2
+fi
+
+exit "$BENCH_RC"

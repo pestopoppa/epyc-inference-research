@@ -382,6 +382,40 @@ Seven rules and two runnable pilots, derived from a 2026-08-10 `/research-intake
 - [ ] **CH-P1 -- KL-divergence pilot.** `llama-perplexity --kl-divergence` already exists in the frozen v8 tree (`common/arg.cpp:2313-2320`, `tools/perplexity/perplexity.cpp:1695`) and computes true full-vocab token-level KL against saved base logits. This chapter currently contains **zero** divergence terms. Run it on a small pair -- Qwen3-1.7B Q4_K_M vs Q8_0 -- and report `Mean KLD ± unc` plus the percentile ladder, to establish what the axis looks like before CH-5 is wired into the eval-scoring path. CPU-only, roughly 1--2 h, no new dependency.
 - [ ] **CH-P2 -- Trivial-agent baselines.** Score a do-nothing agent, a list-all-function-names agent, a constant-"B" answerer, and an empty-string responder against the existing suites. **Zero inference -- this is scorer-side only.** A suite whose floor is not measured cannot report a model result as capability: the batch's most decisive evaluation findings all came from exactly this check, and it costs a scorer run.
 
+## Methodology Rules Adopted 2026-09-07 (research-intake)
+
+**CH-8 -- The arms differed in more than the named variable.** A controlled comparison is only
+evidence about its named variable if the arms are identical in everything else the model can see.
+The failure is not exotic: it looks like a well-run ablation, the identity of the variable is stated
+in the abstract, and the confound is visible only in the release.
+
+*Worked example (`intake-1341#record`).* A study claiming that harness design alone shifts an
+agent's multi-step behaviour compares a **raw reference arm** against five **mediated arms**. In the
+release, the reference harness sets its structured-observation field to empty, while all five
+mediated harnesses serialize the task fixture's metadata -- **including the fixture's answer key**
+(the expected-failure-mode list) -- into the prompt-visible observation. The two headline channels
+the paper reports are exactly the two that leak feeds. The thesis may well be true; this comparison
+cannot establish it, because the whole difference is attributed to the named variable (harness) while
+a second variable (injected task metadata) moved with it. The correct disposition is to carry the
+thesis on other evidence and never cite this demonstration for it.
+
+**The rule, generalized from data identity to context identity.** This chapter's paired-McNemar path
+already refuses a comparison whose arms disagree on `dataset_sha256` or `test_profile`
+(`require_matched_comparison` in `scripts/autopilot/paired_stats.py`) -- a gate on the identity of
+*what was scored*. CH-8 is the same idea one level out: a gate on the identity of *what the model was
+shown*. Before running a comparison, enumerate every field that reaches the model's context in each
+arm -- system prompt, tool schemas, observation payloads, metadata blocks, retrieved content -- and
+assert that the set differs only in the named variable. A field that is empty in one arm and
+populated in another is a second variable, whether or not anyone intended it as one.
+
+Practical form: the arm definition is an artifact, and the diff between arm definitions is the
+statement of what was varied. Where a comparison cannot produce that diff, it reports "arms not
+context-matched" rather than a delta attributed to a name.
+
+*Scope note: as with the 2026-08-10 rules, `MEASUREMENT.md` and `agents/shared/MEASUREMENT_POLICY.md`
+are human-amendment-only. CH-8 is chapter-local methodology and a **proposed** wording; promoting it
+to measurement policy is an operator-run action.*
+
 ## Permanent Results
 
 Benchmark results persist in `benchmarks/results/` even after models are deleted from disk. This matters because storage is finite, new models arrive constantly, and you need historical comparisons to spot trends. Each result includes the full configuration (MoE settings, K values, quantization) so any run can be reproduced later.

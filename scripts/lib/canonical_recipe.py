@@ -14,6 +14,12 @@ Recipe history:
   launcher had drifted away from this recipe (missing taskset, mmap defaulted
   to ON, AOCC libomp resolved instead of clang-20). The recipe is now codified
   to prevent silent drift.
+- During the 2026-09-02 INF-70/C7 session an EIGHTH drift class was found that
+  no command-shape validator could ever have caught: the recipe was correct and
+  `--interleave=all` was ignored anyway, because the nodes had no free pages.
+  See CANONICAL_PRE_EVICT_GIB below; the remedy is a pre-load step
+  (scripts/utils/numa_evict.py) plus an in-window proof
+  (scripts/utils/numa_placement_check.sh), both wired into bench_canonical.sh.
 - During the 2026-05-28 post-reboot session SEVEN compounding drift bugs were
   caught in one bench run (wrong binary, wrong libomp, missing OMP_DYNAMIC=false,
   THP defrag reset, perf_event_paranoid reset, broken ik_llama bench binary with
@@ -61,6 +67,33 @@ CANONICAL_PREFIX: list[str] = ["taskset", "-c", "0-95", "numactl", "--interleave
 # which on EPYC NUMA defeats the --interleave=all striping. Bulk read (no-mmap)
 # loads weights into anonymous mmap pages that respect the numactl policy.
 CANONICAL_BENCH_FLAGS_LLAMA_BENCH: list[str] = ["-t", "96", "-fa", "1", "-mmp", "0"]
+
+# Pre-load NUMA eviction target, in GiB per node.
+#
+# `numactl --interleave=all` is a per-allocation POLICY HINT, not a guarantee:
+# when the round robin reaches a node with no free pages the kernel silently
+# falls back to a node that has some, rather than reclaiming on the intended
+# one. Page cache counts as "not free", so on a box that has been serving for
+# hours the striping quietly collapses — same command line, same flags, no
+# warning, no error. Measured 2026-09-02 (INF-70/C7): the 98 GB
+# Qwen3.8-Flash-Next IQ4_XS uniform artifact landed 57.7/10.7/8.0/17.7 GB
+# across nodes 0-3 (61% on node 0 against an even 25%) and decode measured
+# 7.65 t/s against 10.09 t/s with clean placement — **-25%**, purely from
+# remote-node traffic on a bandwidth-bound decode. The remedy is to allocate
+# and TOUCH this many GiB per node under `numactl --membind=<node>` before the
+# load (a hard binding forces reclaim on that node) and then free it, so every
+# node can honour its interleave share; `scripts/utils/numa_evict.py` does
+# exactly that and `scripts/utils/numa_placement_check.sh` proves the result
+# in-window against the live pid. 40 GiB clears a quarter of the largest
+# artifact we bench plus KV/scratch headroom; bench_canonical.sh applies it
+# by default and records the placement proof next to every bench log.
+CANONICAL_PRE_EVICT_GIB: int = 40
+
+# Maximum share of a process's resident bytes that may sit on a single NUMA
+# node before its timing is refused as unrepresentative. Even interleave over
+# 4 nodes is 25%; 40% leaves room for KV cache, scratch and the loader's own
+# heap while still catching the 61% failure above.
+CANONICAL_MAX_NODE_SHARE_PCT: int = 40
 
 # Subprocess env contributions. These are merged with os.environ.copy() in
 # build_canonical_env() — the existing shell env is preserved unless explicitly
