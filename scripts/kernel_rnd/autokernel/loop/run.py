@@ -262,14 +262,33 @@ def main(argv: list[str] | None = None) -> int:
         print(f"confirm   {confirm.describe()}")
     serving_recipe = None
     serving_floor_pct = None
+    #: "verified" (the floor file carries THIS recipe's hash) | "unverified" (a floor
+    #: written before floors were stamped -- grandfathered, and every record it touches
+    #: says so) | "absent" (uncalibrated). Travels into the serving record and the status
+    #: payload, because a reader cannot otherwise tell a checked floor from an assumed one.
+    serving_floor_provenance = "absent"
     if args.serving_recipe is not None:
         serving_recipe = serving.Recipe.load(args.serving_recipe)
-        floor_path = (args.store / f"serving-floor.{serving_recipe.name}.json")
-        if floor_path.is_file():
-            serving_floor_pct = json.loads(floor_path.read_text()).get("floor_pct")
+        # The floor is keyed by recipe IDENTITY, not by recipe NAME. This used to be a
+        # bare `json.loads(...)["floor_pct"]` off a name-keyed path, so ANY recipe edit
+        # silently reused the old floor and the gate judged one condition against
+        # another's bar -- R23-49 (pinning cpu_list to 184-191 voided the unpinned floor)
+        # was caught only because a human noticed. `load_floor` REFUSES a mismatch here,
+        # at the one point the floor is loaded FOR the gate, rather than degrading to
+        # "no floor": an absent floor already blocks both triggers (R23-54), so a silent
+        # downgrade would read as a cadence bug instead of the stale floor it is.
+        floor_reading = serving.load_floor(args.store, serving_recipe)
+        serving_floor_pct = floor_reading.floor_pct
+        serving_floor_provenance = floor_reading.provenance
         print(f"serving   {serving_recipe.describe()} — keep gate on llama-server; "
-              + (f"floor {serving_floor_pct}%" if serving_floor_pct is not None
+              + (f"floor {serving_floor_pct}% [{serving_floor_provenance}]"
+                 if serving_floor_pct is not None
                  else "UNCALIBRATED (keeps refused until the serving floor is calibrated)"))
+        if serving_floor_provenance == "unverified":
+            print(f"serving   WARNING {floor_reading.path.name} carries no recipe_hash: it "
+                  f"predates identity-stamped floors, so NOTHING proves it was calibrated "
+                  f"under this recipe. It is used, and every record it touches is stamped "
+                  f"floor_provenance=unverified. Recalibrate it.")
     planner_backend = actors.backend_for(args.planner_model, args.planner_effort)
     critic_backend = actors.backend_for(args.critic_model, args.critic_effort)
     print(f"actors    planner={planner_backend.describe()}  "
@@ -651,6 +670,7 @@ def main(argv: list[str] | None = None) -> int:
         # different fact from a threshold firing at +9%, and the 2026-09-08 divergence is
         # the reason a reader must never have to infer which one happened.
         last_gate[0] = {"trigger": trigger, "outcome": plan["outcome"].value,
+                        "floor_provenance": serving_floor_provenance,
                         "at_commit": head, "keeps": len(bundle[0].keeps),
                         "compounded_bench_pct": round(bundle[0].compounded_bench_pct, 3),
                         "serving_effect_pct": sv_row.get("effect_pct"),
@@ -659,6 +679,10 @@ def main(argv: list[str] | None = None) -> int:
         status.write_json(
             args.store / "serving", f"bundle-{head[:12]}.json",
             {"outcome": plan["outcome"].value, "trigger": trigger, "reason": plan["reason"],
+             # Whether the floor this verdict was judged against was ever proven to belong
+             # to this recipe. A grandfathered floor still gates, but it must never be
+             # indistinguishable from a verified one in the record it produced.
+             "floor_provenance": serving_floor_provenance,
              "keeps_since_serving_gate": bundle[0].keeps_since_serving_gate,
              "gate_every_keeps": accum_policy.every_keeps,
              "bundled_keeps": list(bundle[0].keeps),
@@ -684,7 +708,8 @@ def main(argv: list[str] | None = None) -> int:
                 {"schema": "epyc.autokernel.attempt.v1", "campaign_id": "ak-loop",
                  "mechanism_id": f"serving-divergence-{head[:12]}", "status": "measured_divergence",
                  "hypothesis": plan["reason"], "planner_evidence": plan["planner_evidence"],
-                 "trigger": trigger, "serving": sv_row},
+                 "trigger": trigger, "floor_provenance": serving_floor_provenance,
+                 "serving": sv_row},
                 epoch=epoch, recorded_at=loop._now(), campaign_id="ak-loop")
             # R23-54: the gate RAN, so the cadence counter resets even though the bundle
             # HOLDS. It counts readings taken, not verdicts won — without this a diverged
@@ -734,6 +759,9 @@ def main(argv: list[str] | None = None) -> int:
             "n_keeps": len(bundle[0].keeps),
             "compounded_bench_pct": round(comp, 3),
             "serving_floor_pct": serving_floor_pct,
+            # R23-49's lesson on the surface: a floor nobody could prove belonged to this
+            # recipe looked exactly like one that did.
+            "serving_floor_provenance": serving_floor_provenance,
             "fire_multiple": accum_policy.fire_multiple,
             "fire_threshold_pct": round(thr, 3) if thr is not None else None,
             "progress_fraction": (round(min(comp / thr, 1.0), 4)

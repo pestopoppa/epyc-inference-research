@@ -51,6 +51,18 @@ LOADER_OWNED_ENV = ("LD_LIBRARY_PATH", "HSA_OVERRIDE_GFX_VERSION")
 #: `env_readback` key standing for "the recipe does not set this variable at all".
 UNSET = "unset"
 
+#: Characters a recipe name may carry VERBATIM into `serving-floor.<name>.json`: safe in a
+#: filename and as an unquoted shell word -- no `/`, no whitespace, no glob metacharacter,
+#: no leading dot. `+` and `=` are in the set deliberately, so a `with_env` arm name
+#: (`base+GGML_NOHUGEPAGE_PROCESS=1`) stays readable on disk instead of being hashed away.
+_FLOOR_SAFE_CHARS = frozenset(
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._+=@-")
+
+#: Cap on the floor-file key, leaving room for the `serving-floor.` prefix and the `.json`
+#: suffix inside the 255-byte filename limit. A name derived by `with_env` twice grows
+#: without bound otherwise, and the failure would land as ENAMETOOLONG mid-campaign.
+FLOOR_KEY_MAX = 120
+
 #: Prompts fired at the server. Distinct so the slots do not share a KV prefix (a shared
 #: prefix would understate the real per-request work); enough of them to cover np up to 8.
 _PROMPTS = (
@@ -232,10 +244,16 @@ class Recipe:
         ONE recipe file, with no JSON editing. A `None` value REMOVES a variable, so the
         control arm of an ON recipe is `with_env(KNOB=None)`.
 
-        The name gets the override appended by default, because the serving floor is keyed
-        by recipe NAME (`serving-floor.<name>.json`) and a different env is a different
-        measured condition: reusing the name would silently judge the new arm against the
-        old arm's floor. Pass `name=` to override deliberately.
+        The name gets the override appended by default, because the serving floor FILE is
+        keyed by recipe name (`serving-floor.<name>.json`) and a different env is a
+        different measured condition: reusing the name would point the new arm at the old
+        arm's floor file. Pass `name=` to override deliberately.
+
+        The name is no longer the only guard, and was never a sufficient one: `load_floor`
+        refuses any floor whose stamped `recipe_hash` is not this recipe's, so even a
+        deliberate `name=` collision is caught at the point of use instead of being judged
+        against the wrong bar. The filename is `floor_key(name)`, not the raw name -- an
+        env VALUE reaches the name here and may carry `/` or whitespace.
         """
         merged = dict(self.env or {})
         for key, value in overrides.items():
@@ -300,6 +318,19 @@ class EnvReadbackFailed(RuntimeError):
 
 class ServerDied(RuntimeError):
     """The server exited during load or measurement -- a build/config fault, not noise."""
+
+
+class ServingFloorMismatch(RuntimeError):
+    """The floor on disk was calibrated under a DIFFERENT recipe than the one running.
+
+    A floor is a property of the measured CONDITION, not of the recipe's NAME. The store
+    keys it by name (`serving-floor.<name>.json`) and nothing used to check that the file
+    was produced by the recipe now being gated -- so any recipe edit silently reused the
+    old floor and the gate judged one condition against another's bar. R23-49 is the
+    standing proof: pinning `cpu_list` to 184-191 voided the unpinned floor, and only a
+    human noticing forced the recalibration. An `env` arm makes this sharper still: its
+    entire purpose is to change DISPERSION, which is to change the floor itself.
+    """
 
 
 def _status_fields(text: str) -> dict[str, str]:
@@ -472,5 +503,142 @@ def calibrate_floor(recipe: Recipe, build_dir: Path, *, samples: int, port: int 
             "runs": runs, "cv_pct": sp["cv_pct"], "spread": sp}
 
 
-__all__ = ["LOADER_OWNED_ENV", "RECIPE_SCHEMA", "UNSET", "EnvReadbackFailed", "Recipe",
-           "RecipeError", "ServerDied", "calibrate_floor", "compare", "verify_env_readback"]
+# ---------------------------------------------------------------------------
+# The floor FILE: keyed by recipe IDENTITY, not by recipe NAME.
+#
+# `serving-floor.<name>.json` is a name-keyed cache of a number that is only meaningful
+# under one measured condition. Loading it by name alone is how a stale floor gets to
+# judge a new condition without anyone being told. Everything below exists so that the
+# recipe's identity is WRITTEN into the file and CHECKED when it is read back.
+# ---------------------------------------------------------------------------
+
+def floor_key(name: str) -> str:
+    """The filesystem-safe, deterministic key `serving-floor.<key>.json` uses.
+
+    A name that is already safe and bounded is used VERBATIM, so the shipped
+    `serving-floor.qwen3.8-27b-q8-gpu-dflash2-np4.json` keeps exactly the path it has
+    today. Anything else is sanitised AND suffixed with a digest OF THE ORIGINAL NAME:
+    sanitising alone would map two different recipes onto one floor file, which is the
+    very defect this module now refuses -- an env value like `/tmp/a b` reaches the name
+    through `with_env`, and `_`-substitution on its own is not injective.
+    """
+    if not isinstance(name, str) or not name:
+        raise RecipeError("recipe name is empty: a floor file cannot be keyed by it")
+    if (len(name) <= FLOOR_KEY_MAX and not name.startswith(".")
+            and all(ch in _FLOOR_SAFE_CHARS for ch in name)):
+        return name
+    digest = hashlib.sha256(name.encode("utf-8")).hexdigest()[:8]
+    cleaned = "".join(ch if ch in _FLOOR_SAFE_CHARS else "_" for ch in name).lstrip(".")
+    cleaned = cleaned[:FLOOR_KEY_MAX - len(digest) - 1] or "recipe"
+    return f"{cleaned}-{digest}"
+
+
+def floor_path(store: Path | str, recipe: Recipe) -> Path:
+    """Where THIS recipe's serving floor lives. One place, so a reader and a writer can
+    never disagree about the filename."""
+    return Path(store) / f"serving-floor.{floor_key(recipe.name)}.json"
+
+
+@dataclass(frozen=True)
+class FloorReading:
+    """A floor loaded FOR A GATE DECISION, with the provenance of its identity check.
+
+    `provenance` is three-valued and every value is explicit, because "no floor" and
+    "a floor whose provenance nobody checked" are different facts and only one of them
+    is safe to grandfather:
+
+      * ``verified``   -- the file carries this recipe's `recipe_hash`;
+      * ``unverified`` -- the file predates identity stamping and carries no hash at all;
+        it is USED (hard-failing would block the loop on every existing floor) but every
+        record it touches is stamped so a reader can tell it apart. Recalibrate.
+      * ``absent``     -- no floor file. Uncalibrated: both gate triggers stay blocked
+        (R23-54) and `compare` returns `decisive: None`.
+
+    A file whose hash DISAGREES is not a provenance value -- it raises.
+    """
+    floor_pct: float | None
+    provenance: str
+    path: Path
+    row: dict = field(default_factory=dict)
+
+    @property
+    def verified(self) -> bool:
+        return self.provenance == "verified"
+
+
+def write_floor(store: Path | str, recipe: Recipe, row: Mapping, *,
+                conditions: Mapping | None = None) -> Path:
+    """Persist a calibrated floor WITH the identity of the recipe it was calibrated under.
+
+    THE ONE WRITER. `calibrate_floor` already returns `recipe_hash` / `recipe_describe` /
+    `recipe`, but a returned dict proves nothing about what reached the disk -- and the
+    file is the only thing a later run sees. This stamps them at top level, refuses a row
+    produced by a DIFFERENT recipe (the copy-paste that would otherwise file one arm's
+    A/A under another arm's name), and writes atomically so a crashed calibration cannot
+    leave a half-written floor for a gate to read.
+
+    `conditions` is free-form provenance for humans (host state, harness, timestamp); it
+    is merged, never allowed to overwrite the identity keys.
+    """
+    body = dict(row)
+    stamped = body.get("recipe_hash")
+    if stamped is not None and stamped != recipe.recipe_hash:
+        raise ServingFloorMismatch(
+            f"refusing to file this floor under {recipe.name!r}: the row was produced by "
+            f"recipe_hash {stamped}, but the recipe writing it is {recipe.recipe_hash} "
+            f"({recipe.describe()}). A floor filed under the wrong recipe is worse than "
+            f"no floor -- it is a bar nobody will question.")
+    if conditions:
+        body["conditions"] = {**dict(body.get("conditions") or {}), **dict(conditions)}
+    body["recipe"] = recipe.name
+    body["recipe_hash"] = recipe.recipe_hash
+    body["recipe_describe"] = recipe.describe()
+    body["recipe_env"] = dict(recipe.env or {})
+    target = floor_path(store, recipe)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = target.with_name(f".sv-floor-{os.getpid()}-{target.name}")
+    try:
+        temporary.write_text(json.dumps(body, indent=2, sort_keys=True), encoding="utf-8")
+        os.replace(temporary, target)
+    except BaseException:
+        temporary.unlink(missing_ok=True)
+        raise
+    return target
+
+
+def load_floor(store: Path | str, recipe: Recipe) -> FloorReading:
+    """Load the serving floor for `recipe`, or REFUSE one calibrated under another.
+
+    Fail-closed, and deliberately NOT by degrading to "no floor": an absent floor already
+    blocks both gate triggers (R23-54), so a silent downgrade would surface as a cadence
+    bug -- the gate quietly never firing -- rather than as the stale floor it is. The
+    caller gets an exception naming both hashes, or a reading it can trust the provenance
+    of.
+    """
+    path = floor_path(store, recipe)
+    if not path.is_file():
+        return FloorReading(None, "absent", path, {})
+    row = json.loads(path.read_text(encoding="utf-8"))
+    stamped = row.get("recipe_hash")
+    if stamped is None:
+        # Grandfathered: written before floors carried an identity. Proceed -- hard-failing
+        # here would block the loop at relaunch on every floor that exists today -- but the
+        # provenance travels with every record the number touches.
+        return FloorReading(row.get("floor_pct"), "unverified", path, row)
+    if stamped != recipe.recipe_hash:
+        raise ServingFloorMismatch(
+            f"serving floor {path.name} was calibrated under a DIFFERENT recipe: the file "
+            f"carries recipe_hash {stamped}, the live recipe is {recipe.recipe_hash} "
+            f"({recipe.describe()}). A floor is a property of the measured CONDITION, not "
+            f"of the recipe's NAME -- recalibrate the floor for THIS recipe "
+            f"(serving.calibrate_floor + serving.write_floor) before any gate is judged "
+            f"against it. Refusing rather than falling back to 'no floor': an absent floor "
+            f"merely blocks both gate triggers (R23-54) and would read as a cadence bug "
+            f"instead of a stale floor.")
+    return FloorReading(row.get("floor_pct"), "verified", path, row)
+
+
+__all__ = ["FLOOR_KEY_MAX", "LOADER_OWNED_ENV", "RECIPE_SCHEMA", "UNSET",
+           "EnvReadbackFailed", "FloorReading", "Recipe", "RecipeError", "ServerDied",
+           "ServingFloorMismatch", "calibrate_floor", "compare", "floor_key", "floor_path",
+           "load_floor", "verify_env_readback", "write_floor"]
