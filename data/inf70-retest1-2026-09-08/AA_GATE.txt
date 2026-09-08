@@ -1,0 +1,32 @@
+  ARM AA1: tw=25.845054688478697 pp=227.80169354469066 screen=CLEAN other_p50=49.8 other_max=103.7 announced_max=102.8
+  ARM AA2: tw=25.976835485526482 pp=224.13595303685207 screen=CLEAN other_p50=48.9 other_max=66.1 announced_max=103.3
+  ARM AA3: tw=25.9626240427709 pp=219.03049287153456 screen=CLEAN other_p50=51.4 other_max=69.7 announced_max=102.9
+  ARM AA4: tw=24.775634267196875 pp=223.98934177109788 screen=CLEAN other_p50=55.9 other_max=60.6 announced_max=106.4
+  ARM AA5: tw=24.16598973611554 pp=221.28278721711445 screen=CLEAN other_p50=119.9 other_max=136.0 announced_max=107.6
+{
+ "labels": [
+  "AA1",
+  "AA2",
+  "AA3",
+  "AA4",
+  "AA5"
+ ],
+ "values": [
+  25.8451,
+  25.9768,
+  25.9626,
+  24.7756,
+  24.166
+ ],
+ "n": 5,
+ "mean": 25.3452,
+ "sd": 0.8284,
+ "cv_pct": 3.268,
+ "spread_pct": 7.145,
+ "n_pairs": 10,
+ "pair_p95_pct": 7.223,
+ "pair_median_pct": 4.452,
+ "pair_max_pct": 7.223
+}
+AA_GATE=STOP pair_p95=7.223%  (PASS<=1.20, DEGRADED<=2.00, else STOP)
+POWER: sd=3.268%  detectable at n=3/side: 7.471%  n=5/side: 5.787%  n=8/side: 4.575%
