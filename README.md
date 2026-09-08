@@ -132,6 +132,33 @@ python3 /mnt/raid0/llm/epyc-orchestrator/scripts/benchmark/seed_specialist_routi
 
 ---
 
+## Build configuration — read this before forking or reproducing
+
+**Our builds are tuned to one specific machine, on purpose.** This repository is a
+single-host research program (EPYC 9655 + MI210, gfx90a, ROCm 6.2), and the guiding rule
+for every build flag is *match what production on this host actually runs* — because a
+kernel improvement that does not transfer to the production binary is not an improvement
+for us. That choice trades away portability, and if you fork this work you will probably
+want to trade it back.
+
+The flags that are host-specific rather than universal:
+
+| Flag | We use | Why, and what a fork should consider |
+|---|---|---|
+| `AMDGPU_TARGETS` | `gfx90a` | Our MI210. Set your own architecture. |
+| `GGML_NATIVE` | `ON` | Emits code tuned to this host's CPU (`-march=native`). **Portable builds should use `OFF`** — a NATIVE=ON binary may not run, or may not be comparable, on a different CPU. We take ON because every reference build on this host is ON and matching production is what makes a measured win transferable *here*. |
+| `GGML_HIP_ROCWMMA_FATTN` | `ON` | **Not merely a tuning choice — the CMake default (`OFF`) is unsafe on gfx90a.** With `-fa on`, the non-rocWMMA flash-attention path produces non-finite values at longer sequence lengths (measured 2026-08-27: all 12 pinned long prompts failed with `non-finite target features`, while a 25-character prompt passed on the same binary — prompt length is the discriminator, so short smoke tests hide it). If you build for gfx90a with flash attention, turn this ON. |
+| `GGML_HIP_MMQ_MFMA` | CMake default (`ON`) | Left at the default. Note our own screens found OFF faster on one small-model prefill surface, and *inverting* on MoE workloads at low batch — treat it as workload-dependent, not a global default. |
+
+Numbers published here are therefore valid **for this hardware and these flags**. Reproducing
+them on other hardware requires re-measuring, not re-reading — see [`MEASUREMENT.md`](../../MEASUREMENT.md)
+in `epyc-root` for the claim grammar that governs what a measurement is allowed to assert.
+
+The AutoKernel GPU build contract is defined in one place:
+`scripts/kernel_rnd/autokernel/controller/discovery_deployment_factory.py` (`cmake_defines`).
+
+---
+
 ## Repository Layout
 
 ```

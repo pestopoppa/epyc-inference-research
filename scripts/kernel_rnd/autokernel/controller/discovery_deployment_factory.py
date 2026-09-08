@@ -2049,8 +2049,33 @@ def _static_registry(config: deployment.DiscoveryDeployment,
         instrument_path=config.instrument_path,
         operations_root=config.operations_root,
         build_root=config.build_root,
+        # GGML_HIP_ROCWMMA_FATTN defaults to OFF (ggml/CMakeLists.txt:219), so omitting
+        # it built every GPU candidate against a DIFFERENT flash-attention kernel than
+        # production runs -- production, the AK-BH factorial builds and the standalone
+        # DF2 build are all ON. Two consequences, both measured 2026-08-27:
+        #   * a win found on the OFF kernel need not transfer to production, which is
+        #     the entire point of the search;
+        #   * on gfx90a with `-fa on` the OFF path produces NON-FINITE values at longer
+        #     sequence lengths -- a champion built that way failed all 12 pinned
+        #     olympiadbench prompts with "rejecting DFlash batch after 3020800/3020800
+        #     non-finite target features", while a 25-character prompt passed on the
+        #     same binary (prompt length is the discriminator, so short smoke tests
+        #     hide it).
+        # Pinned ON by operator ruling 2026-08-27 (CH-8): comparability with prior GPU
+        # screens is explicitly NOT a constraint -- "if it leads to better performance
+        # finds, I don't care if it breaks comparability with prior GPU screens. We only
+        # added the GPU recently anyways." Prior GPU screens are therefore superseded,
+        # not reconciled; they were taken on a kernel production does not run.
+        # GGML_NATIVE follows the same rule and was flipped ON by the same ruling: every
+        # reference build on this host (production, the AK-BH factorial arms, the
+        # standalone DF2 build) is NATIVE=ON, so building candidates OFF measured a
+        # different CPU codegen than production runs. OFF is the more portable choice --
+        # it is what you would want if these builds had to reproduce on another machine
+        # -- but this is a single-host program and matching production is what makes a
+        # find transferable. Forks: see the build-configuration note in the repo README.
         cmake_defines=(("GGML_HIP", "ON"), ("AMDGPU_TARGETS", "gfx90a"),
-                       ("GGML_NATIVE", "OFF")))
+                       ("GGML_HIP_ROCWMMA_FATTN", "ON"),
+                       ("GGML_NATIVE", "ON")))
     snapshot_files, snapshot_semantics = _production_runtime_snapshot(config.production_path)
     snapshot = ProductionSnapshotBinding(
         config.production_path, snapshot_files, snapshot_semantics,

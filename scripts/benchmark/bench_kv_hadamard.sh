@@ -14,6 +14,24 @@ export LD_LIBRARY_PATH="/mnt/raid0/llm/llama.cpp-experimental/build-hadamard/bin
 LLAMA_SERVER="/mnt/raid0/llm/llama.cpp-experimental/build-hadamard/bin/llama-server"
 MODEL="/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen2.5-Coder-32B-Instruct-GGUF/Qwen2.5-Coder-32B-Instruct-Q4_K_M.gguf"
 
+# NIB2-58a: this is a FRESH experimental build, launched with LD_LIBRARY_PATH
+# set by hand — precisely the shape of the 2026-07-31 incident (a HIP build
+# silently resolved the FROZEN production CPU-only ggml and ran full-CPU while
+# printing `use gpu = 1`). Prove this server resolves ITS OWN libraries under
+# the export above before any KV numbers are collected. Exit code 1 or 2 from
+# the verifier both mean "do not trust the measurement".
+LINKAGE_VERIFIER="/mnt/raid0/llm/epyc-inference-research/scripts/utils/verify_ggml_linkage.sh"
+if [ ! -r "$LINKAGE_VERIFIER" ]; then
+  echo "FAIL: ggml linkage verifier not readable: $LINKAGE_VERIFIER"
+  exit 1
+fi
+if ! bash "$LINKAGE_VERIFIER" "$LLAMA_SERVER" "/mnt/raid0/llm/llama.cpp-experimental"; then
+  echo "FAIL: ggml linkage check FAILED for $LLAMA_SERVER"
+  echo "      This binary resolves another tree's ggml — do not measure it."
+  exit 1
+fi
+echo "OK: $LLAMA_SERVER resolves its own ggml"
+
 DATA_DIR="/mnt/raid0/llm/epyc-inference-research/data/kv_cache_quant"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 RESULTS_FILE="${DATA_DIR}/hadamard_${TIMESTAMP}.csv"
