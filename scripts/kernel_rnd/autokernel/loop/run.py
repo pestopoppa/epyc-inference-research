@@ -21,10 +21,13 @@ import signal
 import shutil
 import subprocess
 import sys
+import threading
 import time
 
 from ..controller import (anchor_integrity, build_recipe, inbox, rung_confirm,
                           workload_contract)
+HEARTBEAT_S = 30  # status heartbeat period; envelope = 6x this
+
 from . import (accumulate, actors, anchor, archive, bench, champion, claim, gates,
                hotspots, loop, serving,
                pipeline, pool, production, status)
@@ -706,9 +709,23 @@ def main(argv: list[str] | None = None) -> int:
             "fires_next": bool(thr is not None and comp >= thr),
         }
 
+    last_step = [None]
+
+    def actor_health(outcomes) -> dict:
+        """What the dashboard needs to say 'the critic is failing' instead of 'running'."""
+        rows = [o.to_attempt() for o in list(outcomes)[-60:]]
+        fails = [r for r in rows if r.get("status") == "planner_transient"]
+        last = next((r for r in reversed(rows) if r.get("status") == "planner_transient"), None)
+        reason = str((last or {}).get("refusal_reason") or "")[:200]
+        return {"recent_attempts": len(rows), "planner_transient": len(fails),
+                "failing": len(rows) >= 5 and len(fails) * 2 > len(rows),
+                "last_failure": reason or None}
+
     def publish(state: str, outcomes=(), gpu=None, hotspot_rows=(),
                 step: str | None = None) -> None:
         """A loop that only reports when it succeeds looks identical to a stuck one."""
+        if step is not None:
+            last_step[0] = step
         status.write(
             args.store, state=state, epoch=epoch, campaign_id="ak-loop",
             anchor_commit=current_anchor_commit[0], surface=args.surface, pairs=args.pairs,
@@ -719,9 +736,28 @@ def main(argv: list[str] | None = None) -> int:
             anchor_guard=anchor_guard_seen[-1] if anchor_guard_seen else None,
             accumulator=accumulator_state(),
             gpu=gpu if gpu is not None else gpu_reading(outcomes),
-            hotspots=[row.to_dict() for row in hotspot_rows])
+            hotspots=[row.to_dict() for row in hotspot_rows],
+            # heartbeat every HEARTBEAT_S below, so the envelope can be tight: silence now
+            # means the PROCESS is gone, not that a build or a 20-pair bench is long.
+            stale_after_s=HEARTBEAT_S * 6,
+            actor_health=actor_health(outcomes))
 
     latest: list = []
+
+    # R23-52b (operator 2026-09-08: "the ENTIRE point of the dashboard is up-to-date visibility").
+    # Stage-boundary writes left the dashboard blind for 30-47 min during builds and long gates.
+    # A daemon thread re-publishes the LAST known step every HEARTBEAT_S with fresh
+    # generated_at; the main thread's publishes carry the new step whenever a stage changes.
+    _hb_stop = threading.Event()
+
+    def _heartbeat() -> None:
+        while not _hb_stop.wait(HEARTBEAT_S):
+            try:
+                publish("running", latest, hotspot_rows=hotspot_rows, step=last_step[0])
+            except Exception as exc:  # never let the heartbeat kill the loop
+                print(f"heartbeat  skipped: {exc}", file=sys.stderr)
+
+    threading.Thread(target=_heartbeat, name="status-heartbeat", daemon=True).start()
 
     def run_pooled() -> pool.PoolResult:
         """Drive the loop across N detached lanes. THE run path -- the sequential

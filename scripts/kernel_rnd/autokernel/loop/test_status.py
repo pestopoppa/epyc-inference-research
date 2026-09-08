@@ -254,3 +254,18 @@ class EveryLongCallBeats(unittest.TestCase):
             measure=mock.Mock(), gate=mock.Mock(), commit=mock.Mock(),
             on_step=mock.Mock(side_effect=RuntimeError("disk full")))
         self.assertEqual(outcome.status, "planner_transient")
+
+
+def test_actor_health_is_carried_in_the_status_body(tmp_path):
+    """R23-52b: 135 critic failures (session limit) were invisible — status said 'running'."""
+    from pathlib import Path
+    import json
+    from autokernel.loop import status as S
+    p = S.write(Path(tmp_path), state="running", epoch="e", campaign_id="c", anchor_commit="a",
+                surface="tg128", pairs=20, noise_floor_pct=0.6, model="m", outcomes=[],
+                iterations_planned=0, champion_head="h",
+                actor_health={"recent_attempts": 10, "planner_transient": 9, "failing": True,
+                              "last_failure": "actor exited 1: You've hit your session limit"})
+    body = json.loads(Path(p).read_text())
+    assert body["actor_health"]["failing"] is True
+    assert "session limit" in body["actor_health"]["last_failure"]

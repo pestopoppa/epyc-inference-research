@@ -80,7 +80,8 @@ def write(store_root: Path, *, state: str, epoch: str, campaign_id: str,
           step: str | None = None,
           anchor_guard: Mapping[str, Any] | None = None,
           accumulator: Mapping[str, Any] | None = None,
-          stale_after_s: int = DEFAULT_STALE_AFTER_S) -> Path:
+          stale_after_s: int = DEFAULT_STALE_AFTER_S,
+          actor_health: dict | None = None) -> Path:
     """Atomically publish the loop's current standing.
 
     Atomic because a dashboard polling a half-written file is how a surface reports
@@ -99,6 +100,9 @@ def write(store_root: Path, *, state: str, epoch: str, campaign_id: str,
         "schema": STATUS_SCHEMA,
         "generated_at": _now(),
         "stale_after_s": int(stale_after_s),
+        # R23-52b: the planner/critic CLIs can fail for hours (session limit 2026-09-07,
+        # 135 iterations) while the loop still reports "running"; surface it.
+        "actor_health": actor_health,
         "state": state,
         # The rung this run measures on (§5.3): with two rungs live, run histories
         # that do not carry their model would silently merge across instruments.
