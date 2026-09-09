@@ -11,6 +11,7 @@ from . import experiment_plan as ep
 from . import planned_serving as ps
 from . import serving
 from .test_experiment_plan import plan_dict
+from .test_experiment_plan import _v2_plan_dict
 from .test_resolved_recipe import _policy, _resolve
 
 
@@ -48,6 +49,20 @@ def _plan(anchor_template, candidate_template, anchor, candidate):
     body["anchor_identity"] = ps.arm_identity(anchor_template, anchor)
     body["candidate_identity"] = ps.arm_identity(candidate_template, candidate)
     body["required_witnesses"] = ["identity", "teardown"]
+    return ep.ExperimentPlan.from_dict(body)
+
+
+def _v2_plan(anchor_template, candidate_template, anchor, candidate):
+    body = _v2_plan_dict()
+    body["metric"] = "aggregate_tok_s"
+    instrument = body["loaded_instrument"]
+    body["anchor_identity"] = ps.arm_identity(
+        anchor_template, anchor, loaded_instrument=instrument)
+    body["candidate_identity"] = ps.arm_identity(
+        candidate_template, candidate, loaded_instrument=instrument)
+    body["required_witnesses"] = ["identity", "teardown"]
+    body["expected_units"] = body["expected_units"][:2]
+    body["stopping"]["n_per_arm"] = 1
     return ep.ExperimentPlan.from_dict(body)
 
 
@@ -115,6 +130,87 @@ def test_cpu_runtime_recipes_share_binary_consume_exact_order_and_prompt_bytes()
     assert result.admissible_view.complete and result.use_status == "policy_undefined"
     assert len(artifacts) == 2 * len(plan.expected_units)
     assert calls[0][3][0] == ("p1", prompts.prompts[0].body)
+
+
+def test_v2_requires_factory_and_carries_one_reference_per_actual_unit():
+    at, ct, anchor, candidate = _recipes()
+    plan, prompts = _v2_plan(at, ct, anchor, candidate), _prompts(at)
+    kwargs = dict(plan=plan, anchor_template=at, candidate_template=ct,
+                  anchor_recipe=anchor, candidate_recipe=candidate, prompts=prompts,
+                  stage_provider=Provider(), artifact_sink=lambda _: None,
+                  lineage_id="lineage-1", clock=lambda: 1.0,
+                  measure=_measure([]))
+    with pytest.raises(ps.TrustedStageProviderRequired, match="observation authority"):
+        ps.run_planned_comparison(**kwargs)
+
+    class Factory:
+        def __init__(self):
+            self.created = []
+
+        def create(self, *, unit, fence, recipe):
+            session = object()
+            self.created.append((unit.unit_id, fence.fence_id, recipe.execution_digest, session))
+            return session
+
+        def finish_reference(self, *, unit, session):
+            assert self.created[-1][3] is session
+            body = {"schema": "epyc.autokernel.lifecycle_observation_reference.v1",
+                    "observation_id": f"obs-{unit.unit_id}", "unit_id": unit.unit_id,
+                    "process_generation_id": unit.process_id, "fence_id": f"fence-{unit.unit_id}",
+                    "active_claim_ref": "claim:1", "target_pid": 101,
+                    "target_start_ticks": 100, "descendant_binding_ref": "descendant:1",
+                    "worker_id": "worker-1",
+                    "worker_generation": 1, "grant_id": "grant-1", "grant_generation": 1,
+                    "container_id": "container-1", "instrument_identity_sha256": "c" * 64,
+                    "observation_content_sha256": "e" * 64, "shutdown_status": "resolved",
+                    "successor_permitted": True,
+                    "artifact": {"locator": f"{unit.unit_id}.json", "sha256": "f" * 64,
+                                 "verified": True}}
+            return {**body, "reference_digest": schemas.content_hash(body)}
+
+    factory, artifacts = Factory(), []
+    kwargs["artifact_sink"] = artifacts.append
+    result = ps.run_planned_comparison(**kwargs, observation_session_factory=factory)
+    assert result.schema == ps.RUN_SCHEMA_V2
+    assert len(result.lifecycle_observation_references) == 2
+    assert all(row["schema"] == ps.ARTIFACT_SCHEMA_V2 for row in artifacts)
+    assert [row["kind"] for row in artifacts] == [
+        "native_observation", "completed_attempt", "native_observation", "completed_attempt"]
+
+
+def test_v2_unresolved_observer_fences_successor_unit():
+    at, ct, anchor, candidate = _recipes()
+    plan, prompts = _v2_plan(at, ct, anchor, candidate), _prompts(at)
+
+    class UnresolvedFactory:
+        def create(self, *, unit, fence, recipe):
+            return unit.unit_id
+
+        def finish_reference(self, *, unit, session):
+            body = {"schema": "epyc.autokernel.lifecycle_observation_reference.v1",
+                    "observation_id": f"obs-{unit.unit_id}", "unit_id": unit.unit_id,
+                    "process_generation_id": unit.process_id, "fence_id": f"fence-{unit.unit_id}",
+                    "active_claim_ref": "claim:1", "target_pid": 101,
+                    "target_start_ticks": 100, "descendant_binding_ref": "descendant:1",
+                    "worker_id": "worker-1",
+                    "worker_generation": 1, "grant_id": "grant-1", "grant_generation": 1,
+                    "container_id": "container-1", "instrument_identity_sha256": "c" * 64,
+                    "observation_content_sha256": "e" * 64, "shutdown_status": "unresolved",
+                    "successor_permitted": False,
+                    "artifact": {"locator": f"{unit.unit_id}.json", "sha256": "f" * 64,
+                                 "verified": True}}
+            return {**body, "reference_digest": schemas.content_hash(body)}
+
+    calls = []
+    result = ps.run_planned_comparison(
+        plan, anchor_template=at, candidate_template=ct, anchor_recipe=anchor,
+        candidate_recipe=candidate, prompts=prompts, stage_provider=Provider(),
+        artifact_sink=lambda _: None, lineage_id="lineage-1", clock=lambda: 1.0,
+        measure=_measure(calls), observation_session_factory=UnresolvedFactory())
+    assert len(calls) == 1
+    assert not result.execution_complete
+    assert result.paused_reason == "lifecycle observer shutdown is unresolved"
+    assert len(result.lifecycle_observation_references) == 1
 
 
 def test_default_refuses_and_identity_mismatch_precedes_provider_or_measurement():

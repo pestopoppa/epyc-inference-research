@@ -254,6 +254,7 @@ CANDIDATE_TRANSACTION_OPERATIONS = frozenset({
 })
 KIND_PLANNED_SERVING_ARM_CAPTURED = "PLANNED_SERVING_ARM_CAPTURED"
 PLANNED_SERVING_ARM_CAPTURE_SCHEMA = "epyc.autokernel.unified_arm_capture.v1"
+PLANNED_SERVING_ARM_CAPTURE_SCHEMA_V2 = "epyc.autokernel.unified_arm_capture.v2"
 KIND_WORKER_LIFECYCLE = "WORKER_LIFECYCLE"
 WORKER_LIFECYCLE_SCHEMA = "epyc.autokernel.worker_lifecycle_event.v1"
 KIND_WORKER_ACQUISITION = "WORKER_ACQUISITION"
@@ -1189,12 +1190,16 @@ def _validate_native_payload(kind: str, payload: Mapping[str, Any]) -> list:
         except Exception as exc:
             out.append(f"maintenance execution event: {exc}")
     elif kind == KIND_PLANNED_SERVING_ARM_CAPTURED:
+        capture_schema = payload.get("schema")
+        is_v2 = capture_schema == PLANNED_SERVING_ARM_CAPTURE_SCHEMA_V2
         expected = {"schema", "measurement_id", "carrier", "artifact"}
         if set(payload) != expected:
             out.append("payload: native capture has missing/unknown fields")
-        if payload.get("schema") != PLANNED_SERVING_ARM_CAPTURE_SCHEMA:
+        if capture_schema not in {
+                PLANNED_SERVING_ARM_CAPTURE_SCHEMA,
+                PLANNED_SERVING_ARM_CAPTURE_SCHEMA_V2}:
             out.append(
-                f"schema: must be {PLANNED_SERVING_ARM_CAPTURE_SCHEMA!r}")
+                "schema: must be a supported planned-serving capture schema")
         measurement_id = payload.get("measurement_id")
         if not isinstance(measurement_id, str) or not _SHA256_RE.fullmatch(measurement_id):
             out.append("measurement_id: required lowercase SHA-256")
@@ -1217,13 +1222,17 @@ def _validate_native_payload(kind: str, payload: Mapping[str, Any]) -> list:
             "record_class", "intended_use", "protocol_id", "protocol_status",
             "instrument_id", "interval", "carrier_digest",
         }
+        if is_v2:
+            carrier_fields |= {"loaded_instrument", "lifecycle_observations"}
         if not isinstance(carrier, Mapping) or set(carrier) != carrier_fields:
             out.append("carrier: native carrier has missing/unknown fields")
         else:
-            if (carrier.get("schema") != PLANNED_SERVING_ARM_CAPTURE_SCHEMA
+            if (carrier.get("schema") != capture_schema
                     or carrier.get("measurement_id") != measurement_id):
                 out.append("carrier: schema/measurement_id binding mismatch")
-            if carrier.get("producer") != "epyc.autokernel.measurement_capture/v1":
+            producer = ("epyc.autokernel.measurement_capture/v2" if is_v2
+                        else "epyc.autokernel.measurement_capture/v1")
+            if carrier.get("producer") != producer:
                 out.append("carrier.producer: unsupported producer")
             if (not isinstance(carrier.get("arm"), str)
                     or carrier.get("arm") not in {"anchor", "candidate"}):
@@ -1256,11 +1265,16 @@ def _validate_native_payload(kind: str, payload: Mapping[str, Any]) -> list:
                 lineage = carrier.get("lineage_id")
                 try:
                     plan_digest = schemas.content_hash(dict(plan))
-                    expected_measurement_id = schemas.content_hash({
-                        "producer": "epyc.autokernel.measurement_capture/v1",
-                        "plan_digest": plan_digest, "lineage_id": lineage,
-                        "arm": arm,
-                    })
+                    identity = {"producer": producer,
+                                "plan_digest": plan_digest, "lineage_id": lineage,
+                                "arm": arm}
+                    if is_v2:
+                        loaded = carrier.get("loaded_instrument")
+                        identity |= {"capture_schema": capture_schema,
+                                     "instrument_identity_sha256": (
+                                         loaded.get("identity_sha256")
+                                         if isinstance(loaded, Mapping) else None)}
+                    expected_measurement_id = schemas.content_hash(identity)
                 except Exception:
                     expected_measurement_id = None
                     plan_digest = None
@@ -3160,6 +3174,7 @@ __all__ = [
     "CANDIDATE_TRANSACTION_SCHEMA", "CANDIDATE_TRANSACTION_PHASES",
     "CANDIDATE_TRANSACTION_OPERATIONS",
     "KIND_PLANNED_SERVING_ARM_CAPTURED", "PLANNED_SERVING_ARM_CAPTURE_SCHEMA",
+    "PLANNED_SERVING_ARM_CAPTURE_SCHEMA_V2",
     "tombstone_view_key",
     "Journal", "JournalEntry", "JournalDefect", "ShardRef", "TornTail",
     "ReadReport", "Cursor", "Views",

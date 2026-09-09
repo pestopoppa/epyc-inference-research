@@ -18,6 +18,7 @@ from . import campaign_control
 from . import experiment_plan as ep
 from . import measurement_capture as mc
 from . import native_capture_control as nc
+from . import observation_binding as ob
 from . import planned_serving as ps
 from . import scheduling
 from . import unified_driver
@@ -71,11 +72,27 @@ class UnknownParentEvidenceProducer:
     """
 
     def __init__(self, authority: unified_worker.ParentUnitEvidenceAuthority,
-                 plan: ep.ExperimentPlan) -> None:
+                 prepared: unified_worker.PreparedPlannedServingStage,
+                 lifecycle: worker_lifecycle.WorkerLifecycle | None = None,
+                 observation_configuration: ob.ParentObservationConfiguration | None = None
+                 ) -> None:
         if not isinstance(authority, unified_worker.ParentUnitEvidenceAuthority):
             raise DriverExecutionRefused("parent evidence cache is not the fixed bounded type")
         self.authority = authority
-        self.plan = ep.ExperimentPlan.from_dict(plan.to_dict())
+        self.prepared = unified_worker.PreparedPlannedServingStage.from_dict(
+            prepared.to_dict())
+        self.plan = self.prepared.plan
+        if lifecycle is not None and not isinstance(lifecycle, worker_lifecycle.WorkerLifecycle):
+            raise DriverExecutionRefused("observation lifecycle owner is untyped")
+        if (observation_configuration is not None
+                and not isinstance(observation_configuration,
+                                   ob.ParentObservationConfiguration)):
+            raise DriverExecutionRefused("observation configuration is untyped")
+        self.lifecycle = lifecycle
+        self.observation_configuration = observation_configuration
+        self._bindings: dict[tuple[str, int, str, str, str],
+                             ob.ObservationUnitBinding] = {}
+        self._targets: dict[tuple[str, int, str, str, str], Mapping[str, Any]] = {}
         self._stop = threading.Event()
         self._errors: list[BaseException] = []
         self._thread = threading.Thread(target=self._run, name="autokernel-parent-evidence",
@@ -83,6 +100,26 @@ class UnknownParentEvidenceProducer:
 
     def start(self) -> None:
         self._thread.start()
+
+    def _completion_for(self, fence: ps.StageFence,
+                        observation: Mapping[str, Any]) -> ps.StageCompletion:
+        del observation
+        witnesses = MappingProxyType({
+            name: ep.Witness("unknown", None)
+            for name in self.plan.required_witnesses})
+        return ps.StageCompletion(
+            fence.fence_id, True, witnesses, "flagged_but_retained",
+            "registered parent observation evaluator is unavailable")
+
+    def _record_target(self, binding_key: tuple[str, int, str, str, str],
+                       binding: ob.ObservationUnitBinding,
+                       target: Mapping[str, Any]) -> None:
+        del binding
+        prior = self._targets.get(binding_key)
+        if prior is not None and prior != target:
+            raise DriverExecutionRefused(
+                "observation target retry conflicts with prior authority")
+        self._targets[binding_key] = target
 
     def _run(self) -> None:
         while not self._stop.is_set():
@@ -99,17 +136,110 @@ class UnknownParentEvidenceProducer:
                     if (not isinstance(key, str) or not isinstance(fence, ps.StageFence)
                             or not isinstance(observation, Mapping)):
                         raise DriverExecutionRefused("completion notice is malformed")
-                    witnesses = MappingProxyType({
-                        name: ep.Witness("unknown", None)
-                        for name in self.plan.required_witnesses})
                     self.authority.publish_completion(
-                        key, ps.StageCompletion(
-                            fence.fence_id, True, witnesses, "flagged_but_retained",
-                            "registered parent observation evaluator is unavailable"))
+                        key, self._completion_for(fence, observation))
                 elif kind == "continuation":
                     if not isinstance(key, str):
                         raise DriverExecutionRefused("continuation notice is malformed")
                     self.authority.publish_continuation(key, False)
+                elif kind == "observation_binding":
+                    start = notice.get("start")
+                    unit = notice.get("unit")
+                    fence = notice.get("fence")
+                    recipe_digest = notice.get("recipe_identity_digest")
+                    if (not isinstance(key, str)
+                            or not isinstance(start, unified_worker.WorkerStart)
+                            or not isinstance(unit, ep.UnitSpec)
+                            or not isinstance(fence, ps.StageFence)
+                            or not isinstance(recipe_digest, str)
+                            or self.lifecycle is None
+                            or self.observation_configuration is None):
+                        raise DriverExecutionRefused(
+                            "observation binding notice lacks parent authority")
+                    recipe = (self.prepared.runtime_pair.anchor
+                              if unit.arm == "anchor"
+                              else self.prepared.runtime_pair.candidate)
+                    if recipe.execution_digest != recipe_digest:
+                        raise DriverExecutionRefused(
+                            "observation binding recipe identity differs")
+                    configuration = self.observation_configuration
+                    requested = configuration.requested_effective_states.get(recipe_digest)
+                    if requested is None:
+                        raise DriverExecutionRefused(
+                            "observation recipe configuration is unavailable")
+                    claim = self.lifecycle.describe_active_observation_claim(
+                        start=start, unit_id=unit.unit_id,
+                        process_generation_id=unit.process_id,
+                        deadline=fence.valid_until)
+                    held = claim["held_claim"]
+                    if list(requested["logical_cpus"]) != list(held["logical_cpus"]):
+                        raise DriverExecutionRefused(
+                            "requested CPU placement differs from the active held claim")
+                    required_dsos = configuration.required_gpu_dsos.get(recipe_digest, ())
+                    if (recipe.backend == "cpu" and (held["gpu_devices"] or required_dsos)) \
+                            or (recipe.backend == "gpu"
+                                and (not held["gpu_devices"] or not required_dsos)):
+                        raise DriverExecutionRefused(
+                            "observation backend differs from held GPU/DSO evidence")
+                    instrument = ob.LoadedInstrumentReference.from_dict(
+                        unified_worker._plain(self.plan.loaded_instrument))
+                    worker_binding = {
+                        "worker_id": start.worker_id,
+                        "worker_incarnation": start.worker_generation,
+                        "grant_id": start.grant_id,
+                        "grant_generation": start.grant_generation,
+                        "container_identity": unified_worker._plain(start.cgroup_identity)}
+                    observation_id = "observation-" + unified_worker._digest({
+                        "start": start.to_dict(), "sequence": notice.get("sequence"),
+                        "unit": unit.to_dict(), "fence_id": fence.fence_id,
+                        "claim_digest": claim["claim_digest"]})
+                    binding = ob.ObservationUnitBinding.from_dict(
+                        ob.ObservationUnitBinding(
+                            observation_id, unit.unit_id, unit.process_id,
+                            fence.fence_id, start.clock_domain,
+                            start.child_process.boot_id, worker_binding,
+                            start.container_id, claim["active_claim_ref"], held,
+                            requested,
+                            tuple(key for key, _value in recipe.readback_expectations),
+                            tuple(required_dsos), configuration.cadence_s,
+                            configuration.gap_limit_s, configuration.budgets,
+                            instrument).to_dict())
+                    binding_key = (start.worker_id, start.worker_generation,
+                                   unit.unit_id, unit.process_id, fence.fence_id)
+                    prior = self._bindings.get(binding_key)
+                    if prior is not None and prior != binding:
+                        raise DriverExecutionRefused(
+                            "observation binding retry conflicts with prior authority")
+                    self._bindings[binding_key] = binding
+                    self.authority.publish_observation_binding(key, binding)
+                elif kind == "observation_target":
+                    start = notice.get("start")
+                    unit = notice.get("unit")
+                    fence = notice.get("fence")
+                    pid = notice.get("pid")
+                    if (not isinstance(key, str)
+                            or not isinstance(start, unified_worker.WorkerStart)
+                            or not isinstance(unit, ep.UnitSpec)
+                            or not isinstance(fence, ps.StageFence)
+                            or not isinstance(pid, int) or isinstance(pid, bool)
+                            or self.lifecycle is None):
+                        raise DriverExecutionRefused("observation target notice is malformed")
+                    binding_key = (start.worker_id, start.worker_generation,
+                                   unit.unit_id, unit.process_id, fence.fence_id)
+                    binding = self._bindings.get(binding_key)
+                    if binding is None:
+                        raise DriverExecutionRefused(
+                            "observation target lacks its exact parent binding")
+                    captured = self.lifecycle.capture_owned_descendant(
+                        start=start, unit_id=unit.unit_id,
+                        process_generation_id=unit.process_id,
+                        fence_id=fence.fence_id, pid=pid,
+                        binding_digest=binding.to_dict()["binding_digest"])
+                    target = {name: captured[name] for name in (
+                        "pid", "start_ticks", "boot_id", "worker_binding",
+                        "binding_ref")}
+                    self._record_target(binding_key, binding, target)
+                    self.authority.publish_observation_target(key, target)
                 else:
                     raise DriverExecutionRefused("parent evidence notice kind is unsupported")
             except BaseException as exc:
@@ -308,13 +438,25 @@ class UnifiedDriverExecution:
     """Single-owner selected-runtime executor with exact retry boundaries."""
 
     def __init__(self, *, driver: unified_driver.UnifiedCampaignDriver,
-                 controller: Any) -> None:
+                 controller: Any,
+                 observation_verifiers: ob.ParentObservationVerifiers =
+                 ob.ParentObservationVerifiers(),
+                 observation_configuration: ob.ParentObservationConfiguration | None = None
+                 ) -> None:
         if (not isinstance(driver, unified_driver.UnifiedCampaignDriver)
                 or not isinstance(controller, campaign_control.CampaignController)):
             raise DriverExecutionRefused(
                 "driver/controller must be the current typed owners")
         if driver.controller is not controller:
             raise DriverExecutionRefused("driver/controller ownership differs")
+        if not isinstance(observation_verifiers, ob.ParentObservationVerifiers):
+            raise DriverExecutionRefused(
+                "observation verifiers must be the concrete parent adapter set")
+        if (observation_configuration is not None
+                and not isinstance(observation_configuration,
+                                   ob.ParentObservationConfiguration)):
+            raise DriverExecutionRefused(
+                "observation configuration must be the concrete parent type")
         self.driver = driver
         self.controller = controller
         self._launched: set[str] = set()
@@ -323,6 +465,8 @@ class UnifiedDriverExecution:
         self._receipts: dict[str, DriverExecutionReceipt] = {}
         self._capture_store: mc.ArtifactStore | None = None
         self._active_fence: nc.TrustedWorkerResultFence | None = None
+        self._observation_verifiers = observation_verifiers
+        self._observation_configuration = observation_configuration
         self._lock = threading.RLock()
         self._closed = False
         self._admission_closed = False
@@ -396,7 +540,8 @@ class UnifiedDriverExecution:
                 base["campaign_id"], base["config_digest"], base["config_generation"],
                 base["supervisor_id"], base["supervisor_incarnation"]),
             store=self._capture_store,
-            fence_provider=lambda _measurement_id, _context: self._active_fence)
+            fence_provider=lambda _measurement_id, _context: self._active_fence,
+            observation_verifiers=self._observation_verifiers)
         try:
             self.controller.register_native_capture(validator)
         except Exception:
@@ -452,6 +597,15 @@ class UnifiedDriverExecution:
         if self._successor_fence is not None:
             raise DriverExecutionUncertain(self._successor_fence)
         prepared = self.driver.materialize_runtime(outcome)
+        if prepared.schema == unified_worker.PREPARED_SCHEMA_V2:
+            lifecycle = getattr(self.controller, "_worker_lifecycle", None)
+            provider = getattr(self.controller, "_lifecycle_provider", None)
+            if (not isinstance(lifecycle, worker_lifecycle.WorkerLifecycle)
+                    or self._observation_configuration is None
+                    or not callable(getattr(
+                        provider, "describe_active_observation_claim", None))):
+                raise worker_lifecycle.WaitingAuthority(
+                    "v2 parent observation claim/configuration authority is unavailable")
         selection = scheduling.Selection.from_dict(outcome.selection)
         if selection.proposal is None:
             raise DriverExecutionRefused("issued runtime selection lacks a proposal")
@@ -461,7 +615,10 @@ class UnifiedDriverExecution:
         readiness = self.controller.unified_driver_readiness()
         authority = unified_worker.ParentUnitEvidenceAuthority(
             max_records=max(8, len(prepared.plan.expected_units) * 2))
-        producer = UnknownParentEvidenceProducer(authority, prepared.plan)
+        producer = UnknownParentEvidenceProducer(
+            authority, prepared,
+            getattr(self.controller, "_worker_lifecycle", None),
+            self._observation_configuration)
         invocation = unified_worker.PlannedWorkerInvocation.open(prepared, authority)
         request_id = selection.proposal.proposal_id
         try:

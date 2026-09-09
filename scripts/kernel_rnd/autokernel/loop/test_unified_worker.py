@@ -15,13 +15,16 @@ import pytest
 
 from .. import schemas
 from . import experiment_plan as ep
+from . import measurement_capture as mc
 from . import native_capture_control as nc
+from . import observation_binding as ob
 from . import planned_serving as ps
 from . import scheduling
 from . import unified_planner as up
 from . import unified_worker as uw
 from . import worker_lifecycle as wl
 from .test_worker_lifecycle import Harness
+from .test_lifecycle_observation import _budgets, _fixture, _write_process
 from .test_experiment_plan import plan_dict, raw_dict
 from . import test_unified_planner as fixtures
 
@@ -169,6 +172,50 @@ def _measure(template, build_dir, port, **kwargs):
     return 10.0
 
 
+def _observed_measure(template, build_dir, port, **kwargs):
+    session = kwargs["observation_session"]
+    session.start()
+    session.phase("load")
+    session.attach_target(101)
+    for phase in ("placement", "health", "warmup", "measurement"):
+        session.phase(phase)
+    session.checkpoint("measurement_end")
+    session.phase("teardown")
+    session.finish()
+    return _measure(template, build_dir, port, **kwargs)
+
+
+def _v2_prepared(tmp_path):
+    prepared = _prepared(tmp_path)
+    store = mc.ArtifactStore(prepared.artifact_root)
+    instrument = ob.seal_loaded_instrument(
+        store=store, measurement_callable=_observed_measure,
+        fence_clock=time.monotonic, serving_timer=time.time)
+    store.close()
+    plan_row = prepared.plan.to_dict()
+    plan_row |= {"schema": ep.PLAN_SCHEMA_V2, "loaded_instrument": instrument.to_dict(),
+        "anchor_identity": ps.arm_identity(
+            prepared.runtime_pair.anchor.template, prepared.runtime_pair.anchor,
+            loaded_instrument=instrument.to_dict()),
+        "candidate_identity": ps.arm_identity(
+            prepared.runtime_pair.candidate.template, prepared.runtime_pair.candidate,
+            loaded_instrument=instrument.to_dict())}
+    plan = ep.ExperimentPlan.from_dict(plan_row)
+    dispatch = uw._plain(prepared.dispatch)
+    proposal_row = dispatch["proposal"] | {"experiment_plan_digest": plan.digest}
+    proposal = up.UnifiedProposal.from_dict(proposal_row)
+    dispatch["proposal"] = proposal.to_dict()
+    dispatch["experiment_intent"]["proposal_digest"] = proposal.digest
+    dispatch["experiment_intent"]["experiment_plan_digest"] = plan.digest
+    dispatch = up.DispatchRequest(**dispatch).to_dict()
+    body = prepared.body() | {"schema": uw.PREPARED_SCHEMA_V2,
+        "dispatch": dispatch, "plan": plan.to_dict(),
+        "capture_context_base": uw._plain(prepared.capture_context_base)
+            | {"instrument_id": instrument.identity_sha256}}
+    return uw.PreparedPlannedServingStage.from_dict(
+        {**body, "prepared_digest": uw._digest(body)}), instrument
+
+
 def _terminal_and_fence(prepared, start, reference, *, current=True):
     terminal = wl.TerminalWorker(
         start.worker_id, start.worker_generation, "request-1", prepared.plan.digest,
@@ -253,6 +300,92 @@ def test_inherited_socket_authority_is_bounded_and_returns_typed_permit(tmp_path
     assert not thread.is_alive() and permit.unit_id == unit.unit_id and permit.allowed
 
 
+def test_bounded_v2_observation_messages_bind_unit_worker_and_actual_pid(tmp_path):
+    prepared = _prepared(tmp_path)
+    start = _start(prepared)
+    unit = prepared.plan.expected_units[0]
+    fence = ps.StageFence(
+        "fence-observation", unit.unit_id, unit.process_id, start.lineage_id,
+        start.grant_id, start.container_id, start.clock_domain, 10.0,
+        start.supervisor_id, start.supervisor_incarnation, start.config_generation,
+        start.worker_id, start.worker_generation)
+    instrument = ob.LoadedInstrumentReference(
+        "a" * 64, True, mc.StoredArtifact("instrument.json", "b" * 64, True))
+    worker_binding = {"worker_id": start.worker_id,
+        "worker_incarnation": start.worker_generation, "grant_id": start.grant_id,
+        "grant_generation": start.grant_generation,
+        "container_identity": uw._plain(start.cgroup_identity)}
+    budgets = {"max_samples": 16, "max_pending_markers": 8, "max_processes": 8,
+        "max_read_bytes": 65536, "max_proc_entries": 32,
+        "max_retained_bytes": 1024 * 1024, "max_map_entries": 16,
+        "max_fd_entries": 16, "max_cpu_ids": 16, "max_numa_rows": 8,
+        "max_dso_entries": 4, "phase_ack_timeout_s": 0.1,
+        "join_timeout_s": 0.1, "max_probe_duration_s": 0.1}
+    binding = ob.ObservationUnitBinding.from_dict(ob.ObservationUnitBinding(
+        "obs-1", unit.unit_id, unit.process_id, fence.fence_id,
+        start.clock_domain, start.child_process.boot_id, worker_binding,
+        start.container_id, "claim:1", {"logical_cpus": [0], "gpu_devices": []},
+        {"logical_cpus": [0], "numa_nodes": [0], "thp_mode": "madvise"},
+        (), (), 1.0, 2.0, budgets, instrument).to_dict())
+    child, parent = socket.socketpair(socket.AF_UNIX, socket.SOCK_STREAM)
+    errors = []
+
+    def watcher():
+        try:
+            request = uw.read_bounded_message(parent)
+            assert request["schema"] == uw.OBSERVATION_BINDING_REQUEST_SCHEMA
+            body = {"schema": uw.OBSERVATION_BINDING_SCHEMA, "nonce": start.nonce,
+                    "sequence": 1, "binding": binding.to_dict()}
+            uw.write_bounded_message(
+                parent, {**body, "response_digest": uw._digest(body)})
+            request = uw.read_bounded_message(parent)
+            assert request["schema"] == uw.OBSERVATION_TARGET_REQUEST_SCHEMA
+            response = {"schema": uw.OBSERVATION_TARGET_RECEIPT_SCHEMA,
+                "nonce": start.nonce, "sequence": 1, "unit_id": unit.unit_id,
+                "process_generation_id": unit.process_id, "fence_id": fence.fence_id,
+                "pid": request["pid"], "start_ticks": 999,
+                "boot_id": start.child_process.boot_id,
+                "worker_binding": worker_binding, "binding_ref": "event:descendant"}
+            uw.write_bounded_message(
+                parent, {**response, "response_digest": uw._digest(response)})
+        except BaseException as exc:
+            errors.append(exc)
+        finally:
+            parent.close()
+
+    thread = threading.Thread(target=watcher)
+    thread.start()
+    authority = uw.InheritedUnitAuthority(child, start=start, clock=lambda: 1.0)
+    assert authority.observation_binding(
+        sequence=1, unit=unit, fence=fence,
+        recipe_identity_digest=prepared.runtime_pair.anchor.execution_digest) == binding
+    target = authority.observation_target(
+        sequence=1, unit=unit, fence=fence, pid=123)
+    authority.close()
+    thread.join(timeout=1.0)
+    assert not thread.is_alive() and errors == []
+    assert target["pid"] == 123 and target["binding_ref"] == "event:descendant"
+
+
+def test_observation_requests_share_parent_retained_key_bound(tmp_path):
+    prepared, start = _prepared(tmp_path), None
+    start = _start(prepared)
+    unit = prepared.plan.expected_units[0]
+    fence = ps.StageFence(
+        "fence-bound", unit.unit_id, unit.process_id, start.lineage_id,
+        start.grant_id, start.container_id, start.clock_domain, 10.0,
+        start.supervisor_id, start.supervisor_incarnation, start.config_generation,
+        start.worker_id, start.worker_generation)
+    cache = uw.ParentUnitEvidenceAuthority(max_records=1)
+    cache.request_observation_binding(
+        start=start, sequence=1, unit=unit, fence=fence,
+        recipe_identity_digest=prepared.runtime_pair.anchor.execution_digest)
+    cache.next_notice(timeout=0.1)
+    with pytest.raises(uw.WorkerBridgeRefused, match="retained-key bound"):
+        cache.request_observation_target(
+            start=start, sequence=1, unit=unit, fence=fence, pid=123)
+
+
 def test_fixed_order_and_whole_comparison_deadline_cannot_be_extended(tmp_path):
     prepared, start = _prepared(tmp_path), None
     start = _start(prepared)
@@ -315,6 +448,88 @@ def test_tampered_recipe_dso_is_refused_before_any_authority(tmp_path):
     with pytest.raises(uw.WorkerBridgeRefused, match="typed input"):
         uw.PreparedPlannedServingStage.from_dict(
             {**body, "prepared_digest": uw._digest(body)})
+
+
+def test_v2_worker_envelopes_are_distinct_and_cannot_wrap_a_v1_plan(tmp_path):
+    prepared = _prepared(tmp_path)
+    body = prepared.body()
+    body["schema"] = uw.PREPARED_SCHEMA_V2
+    with pytest.raises(uw.WorkerBridgeRefused, match="schema versions differ"):
+        uw.PreparedPlannedServingStage.from_dict(
+            {**body, "prepared_digest": uw._digest(body)})
+
+    reference = uw.PlannedWorkerResultReference(
+        "nonce-0123456789abcdef", "a" * 64, "worker-1", 7,
+        "b" * 64, "result.json", "c" * 64,
+        schema=uw.RESULT_REFERENCE_SCHEMA_V2)
+    assert uw.PlannedWorkerResultReference.from_dict(reference.to_dict()) == reference
+
+
+def test_v2_direct_worker_uses_concrete_observer_factory_and_result_envelope(tmp_path):
+    prepared, instrument = _v2_prepared(tmp_path)
+    start = _start(prepared)
+    start_body = start.body() | {"provider_deadline": time.monotonic() + 20.0}
+    start = uw.WorkerStart.from_dict(
+        {**start_body, "start_digest": uw._digest(start_body)})
+    probe_root = tmp_path / "fake-proc-sys"
+    probe_root.mkdir()
+    probe, proc, _pressure, _vram, _kfd, container = _fixture(probe_root)
+    _write_process(proc, 101, start=999, ticks=1)
+
+    class ObservedAuthority(Authority):
+        def admit(self, *, sequence, plan_digest, unit, prior_completion_digest):
+            del plan_digest, prior_completion_digest
+            return uw.UnitPermit(
+                sequence, unit.unit_id, unit.process_id, f"fence-{sequence}",
+                start.provider_deadline, start.grant_id, start.grant_generation,
+                start.container_id, True, "test held")
+
+        def observation_binding(self, *, sequence, unit, fence,
+                                recipe_identity_digest):
+            assert sequence == unit.order_index + 1 and recipe_identity_digest
+            return ob.ObservationUnitBinding.from_dict(ob.ObservationUnitBinding(
+                f"obs-{unit.unit_id}", unit.unit_id, unit.process_id, fence.fence_id,
+                start.clock_domain, "boot-fixture",
+                {"worker_id": start.worker_id,
+                 "worker_incarnation": start.worker_generation,
+                 "grant_id": start.grant_id,
+                 "grant_generation": start.grant_generation,
+                 "container_identity": container}, start.container_id,
+                "claim:test", {"logical_cpus": [0], "gpu_devices": []},
+                {"logical_cpus": [0], "numa_nodes": [0], "thp_mode": "madvise"},
+                (), (), 10.0, 11.0, _budgets(), instrument).to_dict())
+
+        def observation_target(self, *, sequence, unit, fence, pid):
+            del sequence, unit, fence
+            return {"pid": pid, "start_ticks": 999, "boot_id": "boot-fixture",
+                "worker_binding": {"worker_id": start.worker_id,
+                    "worker_incarnation": start.worker_generation,
+                    "grant_id": start.grant_id,
+                    "grant_generation": start.grant_generation,
+                    "container_identity": container},
+                "binding_ref": "event:test-owned-descendant"}
+
+    reference = uw.run_prepared_stage(
+        prepared, start, _test_authority=ObservedAuthority(),
+        _test_membership_probe=lambda _: None, _test_measure=_observed_measure,
+        _test_observation_probe=probe, clock=time.monotonic)
+    assert reference.schema == uw.RESULT_REFERENCE_SCHEMA_V2
+    store = mc.ArtifactStore(prepared.artifact_root)
+    result = uw.PlannedWorkerResult.from_dict(
+        store.read(reference.result_locator, reference.result_sha256)).to_dict()
+    store.close()
+    assert result["schema"] == uw.RESULT_SCHEMA_V2
+    assert len(result["lifecycle_observation_references"]) == 2
+    assert all(row["descendant_binding_ref"] == "event:test-owned-descendant"
+               for row in result["lifecycle_observation_references"])
+    terminal, fence = _terminal_and_fence(prepared, start, reference)
+    captured = {}
+    receipts = uw.ingest_deferred_result(
+        reference, prepared=prepared, start=start, terminal=terminal, fence=fence,
+        capture_transaction=lambda key, value: captured.setdefault(
+            key, json.loads(json.dumps(value))))
+    assert len(receipts) == len(captured) == 2
+    assert all(row["schema"] == mc.CAPTURE_SCHEMA_V2 for row in captured.values())
 
 
 def test_stale_worker_fence_and_tampered_reference_never_call_parent(tmp_path):

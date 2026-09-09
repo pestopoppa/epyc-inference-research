@@ -29,7 +29,9 @@ from . import campaign_command_v2
 from . import maintenance_execution as maintenance_module
 from . import scheduling
 from . import worker_lifecycle as worker_lifecycle_module
-from .native_capture_control import NativeCaptureRefused, NativeCaptureValidator
+from .native_capture_control import (CurrentOwnerToken, NativeCaptureRefused,
+                                     NativeCaptureValidator,
+                                     PrevalidatedNativeCapture)
 from .campaign import ResolvedCampaign
 
 COMMAND_SCHEMA = "epyc.autokernel.campaign_command.v1"
@@ -2362,10 +2364,9 @@ class CampaignController:
         def capture(measurement_id: str, payload: Mapping[str, Any]):
             if threading.get_ident() != thread_id:
                 raise ControlRefused("native capture callback belongs to another thread")
-            with self._mutex:
-                return self._capture_native_locked(
-                    measurement_id, payload, token=token,
-                    lifetime_token=lifetime, thread_id=thread_id)
+            return self._capture_native(
+                measurement_id, payload, token=token,
+                lifetime_token=lifetime, thread_id=thread_id)
 
         try:
             yield capture
@@ -2373,20 +2374,71 @@ class CampaignController:
             with self._mutex:
                 self._native_capabilities.discard(token)
 
-    def _capture_native_locked(
+    def _capture_native(
             self, measurement_id: str, payload: Mapping[str, Any], *, token: object,
             lifetime_token: object | None, thread_id: int):
-        if (threading.get_ident() != thread_id or not self._mutex._is_owned()
-                or lifetime_token is None or lifetime_token is not self._lifetime_token
-                or token not in self._native_capabilities):
-            raise ControlRefused("native capture callback is not current owner")
-        self._require_active_locked()
+        """Prevalidate v2 artifacts outside the mutex; retain v1's exact path."""
+        is_v2 = isinstance(payload, Mapping) \
+            and payload.get("schema") == "epyc.autokernel.unified_arm_capture.v2"
+        if not is_v2:
+            with self._mutex:
+                return self._capture_native_locked(
+                    measurement_id, payload, token=token,
+                    lifetime_token=lifetime_token, thread_id=thread_id)
         if not isinstance(measurement_id, str) or not isinstance(payload, Mapping):
             raise NativeCaptureRefused("native capture identity/payload is malformed")
         try:
             supplied_digest = schemas.content_hash(dict(payload))
         except Exception as exc:
             raise NativeCaptureRefused("native capture payload is not canonical JSON") from exc
+        with self._mutex:
+            self._require_native_capability_locked(
+                token=token, lifetime_token=lifetime_token, thread_id=thread_id)
+            prior = self._native_records.get(measurement_id)
+            if prior is not None:
+                if self._native_payload_digests[measurement_id] != supplied_digest:
+                    raise NativeCaptureRefused(
+                        "measurement_id was already used for different capture bytes")
+                return copy.deepcopy(prior)
+            if self.desired_state == "drained":
+                raise NativeCaptureRefused("drained controller refuses new native captures")
+            validator = self._native_validator
+            if validator is None:
+                raise NativeCaptureRefused(
+                    "trusted native capture validator is not connected")
+        prevalidated = validator.prevalidate(measurement_id, payload)
+        with self._mutex:
+            return self._capture_native_locked(
+                measurement_id, payload, token=token,
+                lifetime_token=lifetime_token, thread_id=thread_id,
+                supplied_digest=supplied_digest, prevalidated=prevalidated,
+                expected_validator=validator)
+
+    def _require_native_capability_locked(self, *, token: object,
+                                          lifetime_token: object | None,
+                                          thread_id: int) -> None:
+        if (threading.get_ident() != thread_id or not self._mutex._is_owned()
+                or lifetime_token is None or lifetime_token is not self._lifetime_token
+                or token not in self._native_capabilities):
+            raise ControlRefused("native capture callback is not current owner")
+        self._require_active_locked()
+
+    def _capture_native_locked(
+            self, measurement_id: str, payload: Mapping[str, Any], *, token: object,
+            lifetime_token: object | None, thread_id: int,
+            supplied_digest: str | None = None,
+            prevalidated: PrevalidatedNativeCapture | None = None,
+            expected_validator: NativeCaptureValidator | None = None):
+        self._require_native_capability_locked(
+            token=token, lifetime_token=lifetime_token, thread_id=thread_id)
+        if not isinstance(measurement_id, str) or not isinstance(payload, Mapping):
+            raise NativeCaptureRefused("native capture identity/payload is malformed")
+        if supplied_digest is None:
+            try:
+                supplied_digest = schemas.content_hash(dict(payload))
+            except Exception as exc:
+                raise NativeCaptureRefused(
+                    "native capture payload is not canonical JSON") from exc
         prior = self._native_records.get(measurement_id)
         if prior is not None:
             if self._native_payload_digests[measurement_id] != supplied_digest:
@@ -2401,7 +2453,29 @@ class CampaignController:
         if self._native_validator is None:
             raise NativeCaptureRefused(
                 "trusted native capture validator is not connected")
-        validated = self._native_validator.validate(measurement_id, payload)
+        if prevalidated is None:
+            validated = self._native_validator.validate(measurement_id, payload)
+        else:
+            if self._native_validator is not expected_validator:
+                raise NativeCaptureRefused(
+                    "native capture validator changed during prevalidation")
+            if self._worker_lifecycle is None:
+                raise NativeCaptureRefused("worker lifecycle is unavailable")
+            try:
+                fence, grant_generation = self._worker_lifecycle.current_result_owner(
+                    worker_id=prevalidated.context.worker_id,
+                    worker_generation=prevalidated.context.worker_incarnation,
+                    grant_id=prevalidated.context.grant_id,
+                    container_id=prevalidated.context.container_id,
+                    lineage_id=prevalidated.context.lineage_id)
+            except Exception as exc:
+                raise NativeCaptureRefused(
+                    "v2 native capture current lifecycle owner is unavailable") from exc
+            owner_token = CurrentOwnerToken(
+                prevalidated.measurement_id, prevalidated.payload_digest,
+                grant_generation, fence)
+            validated = self._native_validator.validate_prevalidated(
+                prevalidated, owner_token)
         row = validated.payload()
         if validated.payload_digest != supplied_digest:
             raise NativeCaptureRefused("validated native payload differs from callback bytes")

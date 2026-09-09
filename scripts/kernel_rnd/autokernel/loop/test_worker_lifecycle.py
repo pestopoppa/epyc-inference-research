@@ -11,7 +11,9 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
+from types import MappingProxyType, SimpleNamespace
 
 import pytest
 
@@ -248,6 +250,213 @@ def _captured(events):
         print(f"OWNED_TEST_PID pid={identity.pid} start_ticks={identity.start_ticks} "
               f"boot_id={identity.boot_id} alive={lifecycle.same_process(identity)}")
     return identities
+
+
+def _descendant_event(events):
+    stage = next(row for row in events if row["event"] == "WORKER_STAGE")
+    child = next(row for row in events if row["event"] == "OWNED_CHILD_CAPTURED")
+    return {**copy.deepcopy(stage), "event": "OWNED_DESCENDANT_CAPTURED", "data": {
+        "role": "planned-serving-server", "unit_id": "anchor-0",
+        "process_generation_id": "anchor-process-0", "fence_id": "fence-1",
+        "process": copy.deepcopy(child["data"]["process"]),
+        "container_identity": copy.deepcopy(child["data"]["container"]),
+        "binding_digest": "d" * 64}}
+
+
+def test_descendant_event_is_closed_side_event_and_legacy_reader_refuses_first():
+    harness = Harness()
+    try:
+        harness.engine.run_stage(harness.request("pass"))
+        descendant = _descendant_event(harness.events)
+        position = next(index for index, row in enumerate(harness.events)
+                        if row["event"] == "WORKER_STAGE") + 1
+        candidate = [*harness.events[:position], descendant, *harness.events[position:]]
+        projection = lifecycle.project_events(candidate)
+        assert not projection.active and len(projection.terminal) == 1
+
+        # The accepted pre-extension reader checked its frozen vocabulary before
+        # appending or projecting.  Exercise that ordering with an immutable target.
+        accepted_v1_events = lifecycle.EVENTS - {"OWNED_DESCENDANT_CAPTURED"}
+        legacy_store: list[dict] = []
+        frozen_before = MappingProxyType(copy.deepcopy(descendant))
+        with pytest.raises(lifecycle.LifecycleRefused, match="unsupported"):
+            if frozen_before["event"] not in accepted_v1_events:
+                raise lifecycle.LifecycleRefused(
+                    "lifecycle event schema/type is unsupported")
+            legacy_store.append(copy.deepcopy(descendant))
+        assert legacy_store == [] and dict(frozen_before) == descendant
+
+        changed = copy.deepcopy(descendant)
+        changed["data"]["role"] = "arbitrary-child"
+        with pytest.raises(lifecycle.LifecycleRefused, match="role"):
+            lifecycle.validate_event(changed)
+    finally:
+        harness.close()
+
+
+def test_owned_descendant_exact_retry_is_bounded_and_never_recaptures_pid(monkeypatch):
+    owner = object.__new__(lifecycle.WorkerLifecycle)
+    owner.monotonic = lambda: 1.0
+    owner._observation_lock = threading.Lock()
+    owner._descendant_receipts = {}
+    target = lifecycle.ProcessIdentity(4243, 123, "boot-a")
+    container_identity = {"path": "/mock/container", "dev": 1, "ino": 2,
+                          "uid": 1, "nlink": 2, "mode": 0o700}
+    container = SimpleNamespace(pids=lambda: [target.pid])
+    owner._observation_context = {
+        "deadline": 2.0, "worker_id": "worker-a", "worker_generation": 1,
+        "authorization": SimpleNamespace(container=container),
+        "container_identity": container_identity,
+        "planned_child": lifecycle.ProcessIdentity(4242, 100, "boot-a"),
+        "request": object(), "grant": SimpleNamespace(grant_id="grant-a", generation=1),
+        "container_id": "container-a"}
+    owner._observation_start_matches = lambda start, context: True
+    owner._is_descendant_process = lambda captured, ancestor: True
+    owner._emit = lambda *args, **kwargs: {"event": "OWNED_DESCENDANT_CAPTURED",
+                                          "data": kwargs["data"]}
+    monkeypatch.setattr(lifecycle, "process_identity", lambda pid: target)
+    monkeypatch.setattr(lifecycle, "same_process", lambda identity: True)
+    monkeypatch.setattr(lifecycle, "_same_container", lambda *args: None)
+    arguments = dict(start=object(), unit_id="unit-a",
+                     process_generation_id="generation-a", fence_id="fence-a",
+                     pid=target.pid, binding_digest="a" * 64)
+    first = owner.capture_owned_descendant(**arguments)
+    monkeypatch.setattr(lifecycle, "process_identity",
+                        lambda pid: (_ for _ in ()).throw(AssertionError("recaptured PID")))
+    assert owner.capture_owned_descendant(**arguments) is first
+    assert len(owner._descendant_receipts) == 1
+    with pytest.raises(lifecycle.ContainmentFailure, match="retry conflicts"):
+        owner.capture_owned_descendant(**(arguments | {"binding_digest": "b" * 64}))
+    assert len(owner._descendant_receipts) == 1
+
+
+def test_descendant_walk_rechecks_each_stat_incarnation_and_ancestor(monkeypatch):
+    target = lifecycle.ProcessIdentity(4243, 123, "boot-a")
+    ancestor = lifecycle.ProcessIdentity(4242, 100, "boot-a")
+    rows = {
+        4243: (4242, 999),  # target was reused after its initial capture
+        4242: (1, 100),
+    }
+
+    def stat_row(path):
+        pid = int(path.parent.name)
+        parent, start = rows[pid]
+        fields = ["0"] * 22
+        fields[0], fields[1], fields[19] = "S", str(parent), str(start)
+        return f"{pid} (fixture) {' '.join(fields)}".encode()
+
+    monkeypatch.setattr(Path, "read_bytes", stat_row)
+    monkeypatch.setattr(lifecycle, "process_identity", lambda pid: ancestor)
+    assert not lifecycle.WorkerLifecycle._is_descendant_process(target, ancestor)
+
+    rows[4243] = (4242, 123)
+    rows[4242] = (1, 101)  # the ancestor itself changed incarnation
+    assert not lifecycle.WorkerLifecycle._is_descendant_process(target, ancestor)
+
+
+def test_descendant_walk_rejects_reparented_chain(monkeypatch):
+    target = lifecycle.ProcessIdentity(4244, 124, "boot-a")
+    middle = lifecycle.ProcessIdentity(4243, 123, "boot-a")
+    ancestor = lifecycle.ProcessIdentity(4242, 100, "boot-a")
+    init = lifecycle.ProcessIdentity(1, 50, "boot-a")
+    rows = {4244: (4243, 124), 4243: (1, 123), 1: (0, 50)}
+    identities = {4243: middle, 1: init}
+
+    def stat_row(path):
+        pid = int(path.parent.name)
+        parent, start = rows[pid]
+        fields = ["0"] * 22
+        fields[0], fields[1], fields[19] = "S", str(parent), str(start)
+        return f"{pid} (fixture) {' '.join(fields)}".encode()
+
+    monkeypatch.setattr(Path, "read_bytes", stat_row)
+    monkeypatch.setattr(lifecycle, "process_identity", lambda pid: identities[pid])
+    assert not lifecycle.WorkerLifecycle._is_descendant_process(target, ancestor)
+
+
+def test_descendant_reparented_before_publication_is_not_emitted(monkeypatch):
+    owner = object.__new__(lifecycle.WorkerLifecycle)
+    owner.monotonic = lambda: 1.0
+    owner._observation_lock = threading.Lock()
+    owner._descendant_receipts = {}
+    target = lifecycle.ProcessIdentity(4243, 123, "boot-a")
+    ancestor = lifecycle.ProcessIdentity(4242, 100, "boot-a")
+    container_identity = {"path": "/mock/container", "dev": 1, "ino": 2,
+                          "uid": 1, "nlink": 2, "mode": 0o700}
+    owner._observation_context = {
+        "deadline": 2.0, "worker_id": "worker-a", "worker_generation": 1,
+        "authorization": SimpleNamespace(
+            container=SimpleNamespace(pids=lambda: [target.pid])),
+        "container_identity": container_identity, "planned_child": ancestor,
+        "request": object(), "grant": SimpleNamespace(grant_id="grant-a", generation=1),
+        "container_id": "container-a"}
+    owner._observation_start_matches = lambda start, context: True
+    ancestry = iter((True, False))
+    owner._is_descendant_process = lambda captured, parent: next(ancestry)
+    emitted = []
+    owner._emit = lambda *args, **kwargs: emitted.append(kwargs)
+    monkeypatch.setattr(lifecycle, "process_identity", lambda pid: target)
+    monkeypatch.setattr(lifecycle, "same_process", lambda identity: True)
+    monkeypatch.setattr(lifecycle, "_same_container", lambda *args: None)
+    with pytest.raises(lifecycle.ContainmentFailure, match="not an actual member"):
+        owner.capture_owned_descendant(
+            start=object(), unit_id="unit-a", process_generation_id="generation-a",
+            fence_id="fence-a", pid=target.pid, binding_digest="a" * 64)
+    assert emitted == [] and owner._descendant_receipts == {}
+
+
+def test_delegated_cgroup_real_tiny_child_membership_and_cleanup():
+    """Prove real cgroup-v2 membership only; no controller or isolation claim."""
+    cgroup = Path("/sys/fs/cgroup") / (
+        f"autokernel-native-v2-pytest-{os.getpid()}-{time.time_ns()}")
+    try:
+        cgroup.mkdir(mode=0o700)
+    except OSError as exc:
+        pytest.skip(f"delegated cgroup mkdir refused: {type(exc).__name__}: errno={exc.errno}")
+    child = None
+    captured = None
+    unavailable = None
+    try:
+        child = subprocess.Popen(
+            (sys.executable, "-B", "-c", "import time; time.sleep(5)"),
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL, close_fds=True)
+        captured = lifecycle.process_identity(child.pid)
+        try:
+            (cgroup / "cgroup.procs").write_text(f"{child.pid}\n", encoding="ascii")
+        except OSError as exc:
+            unavailable = (
+                f"delegated cgroup move refused: {type(exc).__name__}: errno={exc.errno}")
+        else:
+            assert (f"0::/{cgroup.name}" in
+                    Path(f"/proc/{child.pid}/cgroup").read_text(encoding="ascii").splitlines())
+            assert child.pid in {int(value) for value in
+                                 (cgroup / "cgroup.procs").read_text(
+                                     encoding="ascii").splitlines()}
+    finally:
+        if child is not None and child.poll() is None:
+            if captured is None or not lifecycle.same_process(captured):
+                pytest.fail("owned cgroup child identity changed before cleanup")
+            child.terminate()
+        if child is not None:
+            child.wait(timeout=2)
+        if captured is not None:
+            assert not lifecycle.same_process(captured)
+        deadline = time.monotonic() + 1.0
+        while cgroup.exists():
+            try:
+                cgroup.rmdir()
+                break
+            except OSError:
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(0.01)
+        assert not cgroup.exists()
+    if unavailable is not None:
+        pytest.skip(unavailable)
+    assert captured is not None
+    print(f"OWNED_REAL_CGROUP_PID pid={captured.pid} "
+          f"start_ticks={captured.start_ticks} alive=false group_removed=true")
 
 
 def test_provider_authored_held_receipt_binds_exact_durable_terminal():

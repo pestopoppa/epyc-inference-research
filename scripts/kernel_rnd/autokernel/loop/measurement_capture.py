@@ -29,8 +29,10 @@ from . import experiment_plan as ep
 
 
 CAPTURE_SCHEMA = "epyc.autokernel.unified_arm_capture.v1"
+CAPTURE_SCHEMA_V2 = "epyc.autokernel.unified_arm_capture.v2"
 JOURNAL_KIND = "PLANNED_SERVING_ARM_CAPTURED"
 PRODUCER_ID = "epyc.autokernel.measurement_capture/v1"
+PRODUCER_ID_V2 = "epyc.autokernel.measurement_capture/v2"
 _ARMS = frozenset({"anchor", "candidate"})
 _PROTOCOL_STATUSES = frozenset({"ratified", "unratified", "unknown"})
 
@@ -519,6 +521,7 @@ class _MeasurementCaptureBuilder:
             -> tuple[tuple[str, Mapping[str, Any], StoredArtifact], ...]:
         """Seal one carrier per arm without crossing the controller boundary."""
         plan = ep.ExperimentPlan.from_dict(_plain(summary["plan"]))
+        v2 = plan.schema == ep.PLAN_SCHEMA_V2
         if summary.get("plan_digest") != plan.digest:
             raise CaptureError("final capture plan digest mismatch")
         if (self.context.campaign_id != plan.campaign_id
@@ -554,6 +557,13 @@ class _MeasurementCaptureBuilder:
         if not isinstance(rows, list):
             raise CaptureError("admissible view selected_rows must be an array")
         results: list[tuple[str, Mapping[str, Any], StoredArtifact]] = []
+        lifecycle_refs = summary.get("lifecycle_observation_references", [])
+        if v2:
+            if not isinstance(lifecycle_refs, (list, tuple)):
+                raise CaptureError("v2 lifecycle observation references must be an array")
+            loaded_instrument = _plain(plan.loaded_instrument)
+        elif "lifecycle_observation_references" in summary:
+            raise CaptureError("v1 capture cannot carry lifecycle observation references")
         for arm in ("anchor", "candidate"):
             arm_rows = [row for row in rows if isinstance(row, Mapping)
                         and row.get("arm") == arm]
@@ -576,10 +586,16 @@ class _MeasurementCaptureBuilder:
                                    "independent_n": len(values),
                                    "reps_basis": "scored independent process launches",
                                    "per_launch_values": values}
-            measurement_id = schemas.content_hash({
-                "producer": PRODUCER_ID, "plan_digest": plan.digest,
-                "lineage_id": summary["lineage_id"], "arm": arm})
-            body = _plain({"schema": CAPTURE_SCHEMA, "producer": PRODUCER_ID,
+            producer = PRODUCER_ID_V2 if v2 else PRODUCER_ID
+            capture_schema = CAPTURE_SCHEMA_V2 if v2 else CAPTURE_SCHEMA
+            identity = {"producer": producer, "plan_digest": plan.digest,
+                        "lineage_id": summary["lineage_id"], "arm": arm}
+            if v2:
+                identity |= {"capture_schema": capture_schema,
+                             "instrument_identity_sha256":
+                                 loaded_instrument["identity_sha256"]}
+            measurement_id = schemas.content_hash(identity)
+            body = _plain({"schema": capture_schema, "producer": producer,
                     "measurement_id": measurement_id, "arm": arm,
                     "arm_locator": f"planned-serving:{plan.digest}:{summary['lineage_id']}:{arm}",
                     "plan": plan.to_dict(),
@@ -603,9 +619,16 @@ class _MeasurementCaptureBuilder:
                     "interval": self._interval(raw_artifacts) if any(
                         item["document"].get("kind") == "native_observation"
                         for item in raw_artifacts) else None})
+            if v2:
+                unit_ids = {row["document"]["unit_id"] for row in raw_artifacts
+                            if row["document"].get("arm") == arm}
+                arm_refs = [row for row in lifecycle_refs
+                            if isinstance(row, Mapping) and row.get("unit_id") in unit_ids]
+                body |= {"loaded_instrument": loaded_instrument,
+                         "lifecycle_observations": _plain(arm_refs)}
             carrier = dict(body, carrier_digest=schemas.content_hash(body))
             sealed = self.store.write(f"carrier:{measurement_id}", carrier)
-            payload = {"schema": CAPTURE_SCHEMA, "measurement_id": measurement_id,
+            payload = {"schema": capture_schema, "measurement_id": measurement_id,
                        "carrier": carrier, "artifact": sealed.to_dict()}
             results.append((measurement_id, payload, sealed))
         return tuple(results)
@@ -773,6 +796,6 @@ class NativeMeasurementSink(_MeasurementCaptureBuilder):
         return tuple(results)
 
 
-__all__ = ["ArtifactStore", "CAPTURE_SCHEMA", "CaptureContext", "CaptureError",
+__all__ = ["ArtifactStore", "CAPTURE_SCHEMA", "CAPTURE_SCHEMA_V2", "CaptureContext", "CaptureError",
            "DeferredNativeMeasurementSink", "JOURNAL_KIND", "NativeMeasurementSink",
-           "PRODUCER_ID", "StoredArtifact"]
+           "PRODUCER_ID", "PRODUCER_ID_V2", "StoredArtifact"]

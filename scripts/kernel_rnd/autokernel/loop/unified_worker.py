@@ -43,16 +43,20 @@ if __package__ in {None, ""}:  # fixed absolute-script entry under isolated Pyth
         isolated_yaml.safe_load = _yaml_unavailable
         sys.modules["yaml"] = isolated_yaml
     from autokernel.loop import experiment_plan as ep
+    from autokernel.loop import lifecycle_observation as lo
     from autokernel.loop import measurement_capture as mc
     from autokernel.loop import native_capture_control as nc
+    from autokernel.loop import observation_binding as ob
     from autokernel.loop import planned_serving as ps
     from autokernel.loop import serving
     from autokernel.loop import unified_planner as up
     from autokernel.loop import worker_lifecycle as wl
 else:
     from . import experiment_plan as ep
+    from . import lifecycle_observation as lo
     from . import measurement_capture as mc
     from . import native_capture_control as nc
+    from . import observation_binding as ob
     from . import planned_serving as ps
     from . import serving
     from . import unified_planner as up
@@ -60,6 +64,7 @@ else:
 
 
 PREPARED_SCHEMA = "epyc.autokernel.prepared_planned_serving_stage.v1"
+PREPARED_SCHEMA_V2 = "epyc.autokernel.prepared_planned_serving_stage.v2"
 HELLO_SCHEMA = "epyc.autokernel.planned_worker_hello.v1"
 INVOCATION_SCHEMA = "epyc.autokernel.planned_worker_invocation.v1"
 START_SCHEMA = "epyc.autokernel.planned_worker_start.v1"
@@ -69,8 +74,17 @@ UNIT_COMPLETION_REQUEST_SCHEMA = "epyc.autokernel.planned_worker_unit_completion
 UNIT_COMPLETION_SCHEMA = "epyc.autokernel.planned_worker_unit_completion.v1"
 CONTINUATION_REQUEST_SCHEMA = "epyc.autokernel.planned_worker_continuation_request.v1"
 CONTINUATION_SCHEMA = "epyc.autokernel.planned_worker_continuation.v1"
+OBSERVATION_BINDING_REQUEST_SCHEMA = \
+    "epyc.autokernel.planned_worker_observation_binding_request.v1"
+OBSERVATION_BINDING_SCHEMA = "epyc.autokernel.planned_worker_observation_binding.v1"
+OBSERVATION_TARGET_REQUEST_SCHEMA = \
+    "epyc.autokernel.planned_worker_observation_target_request.v1"
+OBSERVATION_TARGET_RECEIPT_SCHEMA = \
+    "epyc.autokernel.planned_worker_observation_target_receipt.v1"
 RESULT_SCHEMA = "epyc.autokernel.planned_worker_result.v1"
 RESULT_REFERENCE_SCHEMA = "epyc.autokernel.planned_worker_result_reference.v1"
+RESULT_SCHEMA_V2 = "epyc.autokernel.planned_worker_result.v2"
+RESULT_REFERENCE_SCHEMA_V2 = "epyc.autokernel.planned_worker_result_reference.v2"
 MAX_MESSAGE_BYTES = 256 * 1024
 MAX_RESULT_BYTES = 16 * 1024 * 1024
 
@@ -90,6 +104,15 @@ class _ParentUnitEvidenceProtocol(Protocol):
                             plan: ep.ExperimentPlan,
                             prompts: ps.FrozenPromptManifest,
                             previous_lineage_id: str) -> bool: ...
+
+    def observation_binding(self, *, start: "WorkerStart", sequence: int,
+                            unit: ep.UnitSpec, fence: ps.StageFence,
+                            recipe_identity_digest: str
+                            ) -> ob.ObservationUnitBinding: ...
+
+    def observation_target(self, *, start: "WorkerStart", sequence: int,
+                           unit: ep.UnitSpec, fence: ps.StageFence,
+                           pid: int) -> Mapping[str, Any]: ...
 
 
 def _plain(value: Any) -> Any:
@@ -175,7 +198,7 @@ class PreparedPlannedServingStage:
                              "runtime_pair", "capture_context_base", "artifact_root",
                              "previous", "max_stage_seconds", "teardown_seconds",
                              "prepared_digest"}, "prepared planned-serving stage")
-        if row["schema"] != PREPARED_SCHEMA:
+        if row["schema"] not in {PREPARED_SCHEMA, PREPARED_SCHEMA_V2}:
             raise WorkerBridgeRefused("prepared stage schema is unsupported")
         supplied_digest = _sha(row.pop("prepared_digest"), "prepared_digest")
         if supplied_digest != _digest(row):
@@ -187,6 +210,9 @@ class PreparedPlannedServingStage:
             pair = up.RuntimeArmPair.from_dict(_plain(row["runtime_pair"]))
         except Exception as exc:
             raise WorkerBridgeRefused(f"prepared typed input is invalid: {exc}") from exc
+        if ((row["schema"] == PREPARED_SCHEMA_V2) !=
+                (plan.schema == ep.PLAN_SCHEMA_V2)):
+            raise WorkerBridgeRefused("prepared stage and plan schema versions differ")
         proposal = up.UnifiedProposal.from_dict(_plain(dispatch.proposal))
         bindings = (
             dispatch.execution_authorized is False,
@@ -197,9 +223,13 @@ class PreparedPlannedServingStage:
         if not all(bindings):
             raise WorkerBridgeRefused(
                 f"dispatch, plan, and runtime pair bindings differ: {bindings}")
-        if (dict(plan.anchor_identity) != ps.arm_identity(pair.anchor.template, pair.anchor)
-                or dict(plan.candidate_identity)
-                   != ps.arm_identity(pair.candidate.template, pair.candidate)):
+        loaded = (_plain(plan.loaded_instrument)
+                  if plan.schema == ep.PLAN_SCHEMA_V2 else None)
+        if (dict(plan.anchor_identity) != ps.arm_identity(
+                    pair.anchor.template, pair.anchor, loaded_instrument=loaded)
+                or dict(plan.candidate_identity) != ps.arm_identity(
+                    pair.candidate.template, pair.candidate,
+                    loaded_instrument=loaded)):
             raise WorkerBridgeRefused("plan arm identities differ from resolved recipes")
         base = _exact(row["capture_context_base"], {
             "campaign_id", "config_digest", "supervisor_id", "supervisor_incarnation",
@@ -248,7 +278,8 @@ class PreparedPlannedServingStage:
         return cls(_freeze(dispatch.to_dict()), plan, prompts, pair, _freeze(base), root,
                    None if previous is None else _freeze(previous),
                    _finite(row["max_stage_seconds"], "max_stage_seconds", positive=True),
-                   _finite(row["teardown_seconds"], "teardown_seconds", positive=True))
+                   _finite(row["teardown_seconds"], "teardown_seconds", positive=True),
+                   row["schema"])
 
     def body(self) -> dict[str, Any]:
         return {"schema": self.schema, "dispatch": _plain(self.dispatch),
@@ -396,6 +427,8 @@ class ParentUnitEvidenceAuthority:
 
     def __init__(self, *, completions: Mapping[str, ps.StageCompletion] | None = None,
                  continuations: Mapping[str, bool] | None = None,
+                 observation_bindings: Mapping[str, ob.ObservationUnitBinding] | None = None,
+                 observation_targets: Mapping[str, Mapping[str, Any]] | None = None,
                  max_records: int = 64) -> None:
         if not isinstance(max_records, int) or isinstance(max_records, bool) \
                 or not 1 <= max_records <= 1024:
@@ -416,10 +449,28 @@ class ParentUnitEvidenceAuthority:
             if type(value) is not bool:
                 raise WorkerBridgeRefused("continuation cache values must be boolean")
             self._continuations[key] = value
-        if set(self._completions) & set(self._continuations):
+        self._observation_bindings: dict[str, ob.ObservationUnitBinding] = {}
+        for key, value in dict(observation_bindings or {}).items():
+            _sha(key, "observation binding cache key")
+            if not isinstance(value, ob.ObservationUnitBinding):
+                raise WorkerBridgeRefused("observation binding cache requires typed values")
+            self._observation_bindings[key] = ob.ObservationUnitBinding.from_dict(
+                value.to_dict())
+        self._observation_targets: dict[str, Mapping[str, Any]] = {}
+        for key, value in dict(observation_targets or {}).items():
+            _sha(key, "observation target cache key")
+            self._observation_targets[key] = _freeze(_plain(value))
+        caches = (set(self._completions), set(self._continuations),
+                  set(self._observation_bindings), set(self._observation_targets))
+        if sum(len(items) for items in caches) != len(set().union(*caches)):
             raise WorkerBridgeRefused("parent evidence cache key changes evidence kind")
-        if len(set(self._completions) | set(self._continuations)) > max_records:
+        if len(set().union(*caches)) > max_records:
             raise WorkerBridgeRefused("parent evidence cache exceeds its record bound")
+
+    def _retained_keys(self) -> set[str]:
+        return (set(self._requested) | set(self._completions)
+                | set(self._continuations) | set(self._observation_bindings)
+                | set(self._observation_targets))
 
     def _reserve_request(self, key: str, kind: str,
                          notice: Mapping[str, Any]) -> None:
@@ -428,8 +479,7 @@ class ParentUnitEvidenceAuthority:
             if prior_kind != kind:
                 raise WorkerBridgeRefused("parent evidence request key changes kind")
             return
-        retained = (set(self._requested) | set(self._completions)
-                    | set(self._continuations))
+        retained = self._retained_keys()
         if key not in retained and len(retained) >= self._max_records:
             raise WorkerBridgeRefused("parent evidence retained-key bound exceeded")
         try:
@@ -526,6 +576,93 @@ class ParentUnitEvidenceAuthority:
         """Producer-side wait; lifecycle/watchdog code never calls this method."""
         return self._notices.get(timeout=timeout)
 
+    @staticmethod
+    def observation_binding_key(*, start: WorkerStart, sequence: int,
+                                unit: ep.UnitSpec, fence: ps.StageFence,
+                                recipe_identity_digest: str) -> str:
+        return _digest({"start": start.to_dict(), "sequence": sequence,
+                        "unit": unit.to_dict(), "fence_id": fence.fence_id,
+                        "recipe_identity_digest": recipe_identity_digest})
+
+    def request_observation_binding(self, *, start: WorkerStart, sequence: int,
+                                    unit: ep.UnitSpec, fence: ps.StageFence,
+                                    recipe_identity_digest: str
+                                    ) -> tuple[str, ob.ObservationUnitBinding | None]:
+        key = self.observation_binding_key(
+            start=start, sequence=sequence, unit=unit, fence=fence,
+            recipe_identity_digest=_sha(recipe_identity_digest,
+                                        "recipe identity digest"))
+        notice = MappingProxyType({"kind": "observation_binding", "key": key,
+            "start": start, "sequence": sequence, "unit": unit, "fence": fence,
+            "recipe_identity_digest": recipe_identity_digest})
+        with self._lock:
+            found = self._observation_bindings.get(key)
+            if key in self._retained_keys() - set(self._observation_bindings) \
+                    and self._requested.get(key) != "observation_binding":
+                raise WorkerBridgeRefused("observation binding key changes evidence kind")
+            if found is None:
+                self._reserve_request(key, "observation_binding", notice)
+            return key, found
+
+    def poll_observation_binding(self, key: str) -> ob.ObservationUnitBinding | None:
+        _sha(key, "observation binding evidence key")
+        with self._lock:
+            return self._observation_bindings.get(key)
+
+    def publish_observation_binding(self, key: str,
+                                    binding: ob.ObservationUnitBinding) -> None:
+        _sha(key, "observation binding evidence key")
+        if not isinstance(binding, ob.ObservationUnitBinding):
+            raise WorkerBridgeRefused("published observation binding is untyped")
+        binding = ob.ObservationUnitBinding.from_dict(binding.to_dict())
+        with self._lock:
+            if self._requested.get(key) != "observation_binding":
+                raise WorkerBridgeRefused("observation binding was not requested")
+            prior = self._observation_bindings.get(key)
+            if prior is not None and prior != binding:
+                raise WorkerBridgeRefused("observation binding evidence conflicts")
+            self._observation_bindings[key] = binding
+
+    @staticmethod
+    def observation_target_key(*, start: WorkerStart, sequence: int,
+                               unit: ep.UnitSpec, fence: ps.StageFence, pid: int) -> str:
+        return _digest({"start": start.to_dict(), "sequence": sequence,
+                        "unit": unit.to_dict(), "fence_id": fence.fence_id,
+                        "pid": _positive(pid, "observation target pid")})
+
+    def request_observation_target(self, *, start: WorkerStart, sequence: int,
+                                   unit: ep.UnitSpec, fence: ps.StageFence,
+                                   pid: int) -> tuple[str, Mapping[str, Any] | None]:
+        key = self.observation_target_key(
+            start=start, sequence=sequence, unit=unit, fence=fence, pid=pid)
+        notice = MappingProxyType({"kind": "observation_target", "key": key,
+            "start": start, "sequence": sequence, "unit": unit, "fence": fence,
+            "pid": pid})
+        with self._lock:
+            found = self._observation_targets.get(key)
+            if key in self._retained_keys() - set(self._observation_targets) \
+                    and self._requested.get(key) != "observation_target":
+                raise WorkerBridgeRefused("observation target key changes evidence kind")
+            if found is None:
+                self._reserve_request(key, "observation_target", notice)
+            return key, found
+
+    def poll_observation_target(self, key: str) -> Mapping[str, Any] | None:
+        _sha(key, "observation target evidence key")
+        with self._lock:
+            return self._observation_targets.get(key)
+
+    def publish_observation_target(self, key: str, target: Mapping[str, Any]) -> None:
+        _sha(key, "observation target evidence key")
+        target = _freeze(_plain(target))
+        with self._lock:
+            if self._requested.get(key) != "observation_target":
+                raise WorkerBridgeRefused("observation target was not requested")
+            prior = self._observation_targets.get(key)
+            if prior is not None and prior != target:
+                raise WorkerBridgeRefused("observation target evidence conflicts")
+            self._observation_targets[key] = target
+
 
 class UnitAuthority(Protocol):
     """Live inherited capability implemented by the parent-side watcher."""
@@ -537,6 +674,11 @@ class UnitAuthority(Protocol):
     def verify_continuation(self, raw: ep.RawUnit, plan: ep.ExperimentPlan,
                             prompts: ps.FrozenPromptManifest,
                             previous_lineage_id: str) -> bool: ...
+    def observation_binding(self, *, sequence: int, unit: ep.UnitSpec,
+                            fence: ps.StageFence, recipe_identity_digest: str
+                            ) -> ob.ObservationUnitBinding: ...
+    def observation_target(self, *, sequence: int, unit: ep.UnitSpec,
+                           fence: ps.StageFence, pid: int) -> Mapping[str, Any]: ...
 
 
 class InheritedUnitAuthority:
@@ -595,7 +737,7 @@ class InheritedUnitAuthority:
         body = {"schema": UNIT_COMPLETION_REQUEST_SCHEMA, "nonce": self.start.nonce,
                 "sequence": sequence, "fence_id": fence.fence_id,
                 "observation": _plain(observation)}
-        row = _exact(self._exchange({**body, "request_digest": _digest(body)}), {
+        row = _exact(_plain(self._exchange({**body, "request_digest": _digest(body)})), {
             "schema", "nonce", "sequence", "fence_id", "terminal", "stage_witnesses",
             "recorded_screen", "reason", "completion_digest"}, "unit completion")
         if (row["schema"] != UNIT_COMPLETION_SCHEMA or row["nonce"] != self.start.nonce
@@ -620,7 +762,7 @@ class InheritedUnitAuthority:
                 "sequence": raw.observed_order_index + 1, "raw_unit": raw.to_dict(),
                 "plan_digest": plan.digest, "prompt_manifest_digest": prompts.digest,
                 "previous_lineage_id": previous_lineage_id}
-        row = _exact(self._exchange({**body, "request_digest": _digest(body)}), {
+        row = _exact(_plain(self._exchange({**body, "request_digest": _digest(body)})), {
             "schema", "nonce", "sequence", "raw_artifact_digest", "accepted", "reason",
             "continuation_digest"}, "continuation response")
         if (row["schema"] != CONTINUATION_SCHEMA or row["nonce"] != self.start.nonce
@@ -632,6 +774,66 @@ class InheritedUnitAuthority:
         if supplied != _digest(row):
             raise WorkerBridgeRefused("continuation response digest differs")
         return row["accepted"]
+
+    def observation_binding(self, *, sequence: int, unit: ep.UnitSpec,
+                            fence: ps.StageFence, recipe_identity_digest: str
+                            ) -> ob.ObservationUnitBinding:
+        body = {"schema": OBSERVATION_BINDING_REQUEST_SCHEMA,
+                "nonce": self.start.nonce, "sequence": sequence,
+                "unit_id": unit.unit_id,
+                "process_generation_id": unit.process_id,
+                "fence_id": fence.fence_id,
+                "recipe_identity_digest": recipe_identity_digest}
+        row = _exact(_plain(self._exchange({**body, "request_digest": _digest(body)})), {
+            "schema", "nonce", "sequence", "binding", "response_digest"},
+            "observation binding response")
+        supplied = _sha(row.pop("response_digest"), "observation binding response digest")
+        if (row["schema"] != OBSERVATION_BINDING_SCHEMA
+                or row["nonce"] != self.start.nonce or row["sequence"] != sequence
+                or supplied != _digest(row)):
+            raise WorkerBridgeRefused("observation binding response differs")
+        binding = ob.ObservationUnitBinding.from_dict(row["binding"])
+        if (binding.unit_id != unit.unit_id
+                or binding.process_generation_id != unit.process_id
+                or binding.fence_id != fence.fence_id
+                or binding.worker_binding != self._worker_binding()
+                or binding.container_id != self.start.container_id):
+            raise WorkerBridgeRefused("observation binding identity differs")
+        return binding
+
+    def _worker_binding(self) -> Mapping[str, Any]:
+        return _freeze({"worker_id": self.start.worker_id,
+            "worker_incarnation": self.start.worker_generation,
+            "grant_id": self.start.grant_id,
+            "grant_generation": self.start.grant_generation,
+            "container_identity": _plain(self.start.cgroup_identity)})
+
+    def observation_target(self, *, sequence: int, unit: ep.UnitSpec,
+                           fence: ps.StageFence, pid: int) -> Mapping[str, Any]:
+        body = {"schema": OBSERVATION_TARGET_REQUEST_SCHEMA,
+                "nonce": self.start.nonce, "sequence": sequence,
+                "unit_id": unit.unit_id,
+                "process_generation_id": unit.process_id,
+                "fence_id": fence.fence_id,
+                "pid": _positive(pid, "observation target pid")}
+        row = _exact(_plain(self._exchange({**body, "request_digest": _digest(body)})), {
+            "schema", "nonce", "sequence", "unit_id", "process_generation_id",
+            "fence_id", "pid", "start_ticks", "boot_id", "worker_binding",
+            "binding_ref", "response_digest"}, "observation target receipt")
+        supplied = _sha(row.pop("response_digest"), "observation target response digest")
+        if (row["schema"] != OBSERVATION_TARGET_RECEIPT_SCHEMA
+                or row["nonce"] != self.start.nonce or row["sequence"] != sequence
+                or row["unit_id"] != unit.unit_id
+                or row["process_generation_id"] != unit.process_id
+                or row["fence_id"] != fence.fence_id or row["pid"] != pid
+                or row["boot_id"] != self.start.child_process.boot_id
+                or row["worker_binding"] != self._worker_binding()
+                or supplied != _digest(row)):
+            raise WorkerBridgeRefused("observation target receipt binding differs")
+        _positive(row["start_ticks"], "observation target start ticks")
+        _text(row["binding_ref"], "observation target binding reference")
+        return _freeze({key: row[key] for key in (
+            "pid", "start_ticks", "boot_id", "worker_binding", "binding_ref")})
 
     def close(self) -> None:
         self.closed = True
@@ -811,11 +1013,15 @@ class PlannedWorkerResult:
 
     @classmethod
     def from_dict(cls, value: Any) -> "PlannedWorkerResult":
-        row = _exact(value, {"schema", "nonce", "prepared_digest", "plan_digest",
+        schema = value.get("schema") if isinstance(value, Mapping) else None
+        fields = {"schema", "nonce", "prepared_digest", "plan_digest",
             "lineage_id", "stage_id", "worker_id", "worker_generation", "grant_id",
             "grant_generation", "container_id", "completed_unit_ids", "run", "captures",
-            "result_digest"}, "planned worker result")
-        if row["schema"] != RESULT_SCHEMA:
+            "result_digest"}
+        if schema == RESULT_SCHEMA_V2:
+            fields |= {"lifecycle_observation_references"}
+        row = _exact(value, fields, "planned worker result")
+        if row["schema"] not in {RESULT_SCHEMA, RESULT_SCHEMA_V2}:
             raise WorkerBridgeRefused("planned worker result schema is unsupported")
         supplied = _sha(row.pop("result_digest"), "result_digest")
         if supplied != _digest(row):
@@ -833,11 +1039,15 @@ class PlannedWorkerResult:
                 or len(set(completed)) != len(completed)):
             raise WorkerBridgeRefused("completed_unit_ids must be unique text")
         try:
-            run_row = _exact(row["run"], {"schema", "plan_digest", "prompt_manifest_digest",
+            run_fields = {"schema", "plan_digest", "prompt_manifest_digest",
                 "lineage_id", "anchor_identity", "candidate_identity", "raw_units",
                 "admissible_view", "use_status", "execution_complete", "paused_reason",
-                "capture_receipts"}, "planned serving run")
-            if run_row["schema"] != ps.RUN_SCHEMA:
+                "capture_receipts"}
+            if schema == RESULT_SCHEMA_V2:
+                run_fields |= {"lifecycle_observation_references"}
+            run_row = _exact(row["run"], run_fields, "planned serving run")
+            expected_run_schema = ps.RUN_SCHEMA_V2 if schema == RESULT_SCHEMA_V2 else ps.RUN_SCHEMA
+            if run_row["schema"] != expected_run_schema:
                 raise WorkerBridgeRefused("planned serving run schema is unsupported")
             if (run_row["plan_digest"] != row["plan_digest"]
                     or run_row["lineage_id"] != row["lineage_id"]
@@ -856,6 +1066,17 @@ class PlannedWorkerResult:
                         or _sha(capture["payload_digest"], "payload_digest")
                         != _digest(capture["payload"])):
                     raise WorkerBridgeRefused("deferred capture digest/binding mismatch")
+            if schema == RESULT_SCHEMA_V2:
+                references = [ob.LifecycleObservationReference.from_dict(
+                                  _plain(item)).to_dict()
+                              for item in row["lifecycle_observation_references"]]
+                if (references != _plain(run_row["lifecycle_observation_references"])
+                        or len(references) not in {len(completed), len(completed) + 1}
+                        or len({item["unit_id"] for item in references}) != len(references)
+                        or [item["unit_id"] for item in references[:len(completed)]]
+                           != list(completed)):
+                    raise WorkerBridgeRefused(
+                        "v2 result observation references differ from fixed completed units")
         except WorkerBridgeRefused:
             raise
         except Exception as exc:
@@ -887,7 +1108,7 @@ class PlannedWorkerResultReference:
         row = _exact(value, {"schema", "nonce", "prepared_digest", "worker_id",
                              "worker_generation", "result_digest", "result_locator",
                              "result_sha256", "reference_digest"}, "result reference")
-        if row["schema"] != RESULT_REFERENCE_SCHEMA:
+        if row["schema"] not in {RESULT_REFERENCE_SCHEMA, RESULT_REFERENCE_SCHEMA_V2}:
             raise WorkerBridgeRefused("result reference schema is unsupported")
         supplied = _sha(row.pop("reference_digest"), "reference_digest")
         if supplied != _digest(row):
@@ -898,7 +1119,7 @@ class PlannedWorkerResultReference:
                    _positive(row["worker_generation"], "worker_generation"),
                    _sha(row["result_digest"], "result_digest"),
                    _text(row["result_locator"], "result_locator"),
-                   _sha(row["result_sha256"], "result_sha256"))
+                   _sha(row["result_sha256"], "result_sha256"), row["schema"])
 
     def body(self) -> dict[str, Any]:
         return {"schema": self.schema, "nonce": self.nonce,
@@ -977,6 +1198,11 @@ class PlannedWorkerInvocation:
         self._pending_completion: tuple[str, dict[str, Any], int,
                                         ps.StageFence] | None = None
         self._pending_continuation: tuple[str, ep.RawUnit, int] | None = None
+        self._pending_observation_binding: tuple[
+            str, int, ep.UnitSpec, ps.StageFence] | None = None
+        self._pending_observation_target: tuple[
+            str, int, ep.UnitSpec, ps.StageFence, int] | None = None
+        self._active_observation_binding: ob.ObservationUnitBinding | None = None
         self._launched = False
         self._closed = False
 
@@ -1228,6 +1454,7 @@ class PlannedWorkerInvocation:
                 "recorded_screen": completion.recorded_screen,
                 "reason": completion.reason}})
         self._active = None
+        self._active_observation_binding = None
         self._pending_completion = None
         self._next += 1
 
@@ -1275,6 +1502,116 @@ class PlannedWorkerInvocation:
         self._pending_continuation = None
         self._continuation_next += 1
 
+    def handle_observation_binding(self, value: Mapping[str, Any]) -> None:
+        if (self.prepared.schema != PREPARED_SCHEMA_V2
+                or self.start is None or self._active is None
+                or self._pending_observation_binding is not None
+                or self._active_observation_binding is not None):
+            raise WorkerBridgeRefused("observation binding request is premature or overlaps")
+        row = _exact(value, {"schema", "nonce", "sequence", "unit_id",
+            "process_generation_id", "fence_id", "recipe_identity_digest",
+            "request_digest"}, "observation binding request")
+        supplied = _sha(row.pop("request_digest"), "observation binding request digest")
+        sequence, fence = self._active
+        ordered = tuple(sorted(self.prepared.plan.expected_units,
+                               key=lambda item: item.order_index))
+        if self._next >= len(ordered):
+            raise WorkerBridgeRefused("observation binding has no fixed unit")
+        unit = ordered[self._next]
+        recipe = (self.prepared.runtime_pair.anchor if unit.arm == "anchor"
+                  else self.prepared.runtime_pair.candidate)
+        if (row["schema"] != OBSERVATION_BINDING_REQUEST_SCHEMA
+                or row["nonce"] != self.start.nonce or row["sequence"] != sequence
+                or row["unit_id"] != unit.unit_id
+                or row["process_generation_id"] != unit.process_id
+                or row["fence_id"] != fence.fence_id
+                or row["recipe_identity_digest"] != recipe.execution_digest
+                or supplied != _digest(row)):
+            raise WorkerBridgeRefused("observation binding request identity differs")
+        key, binding = self.parent_authority.request_observation_binding(
+            start=self.start, sequence=sequence, unit=unit, fence=fence,
+            recipe_identity_digest=recipe.execution_digest)
+        self._pending_observation_binding = (key, sequence, unit, fence)
+        if binding is not None:
+            self._finish_observation_binding(binding)
+
+    def _finish_observation_binding(self, binding: ob.ObservationUnitBinding) -> None:
+        if self.start is None or self._pending_observation_binding is None:
+            raise WorkerBridgeRefused("parent observation binding is out of order")
+        _key, sequence, unit, fence = self._pending_observation_binding
+        binding = ob.ObservationUnitBinding.from_dict(binding.to_dict())
+        worker_binding = {"worker_id": self.start.worker_id,
+            "worker_incarnation": self.start.worker_generation,
+            "grant_id": self.start.grant_id,
+            "grant_generation": self.start.grant_generation,
+            "container_identity": _plain(self.start.cgroup_identity)}
+        if (binding.unit_id != unit.unit_id
+                or binding.process_generation_id != unit.process_id
+                or binding.fence_id != fence.fence_id
+                or binding.worker_binding != worker_binding
+                or binding.container_id != self.start.container_id):
+            raise WorkerBridgeRefused("parent observation binding differs from active unit")
+        body = {"schema": OBSERVATION_BINDING_SCHEMA, "nonce": self.start.nonce,
+                "sequence": sequence, "binding": binding.to_dict()}
+        self._queue(self._control.fileno(),
+                    {**body, "response_digest": _digest(body)}, MAX_MESSAGE_BYTES)
+        self._active_observation_binding = binding
+        self._pending_observation_binding = None
+
+    def handle_observation_target(self, value: Mapping[str, Any]) -> None:
+        if (self.prepared.schema != PREPARED_SCHEMA_V2
+                or self.start is None or self._active is None
+                or self._pending_observation_binding is not None
+                or self._active_observation_binding is None
+                or self._pending_observation_target is not None):
+            raise WorkerBridgeRefused("observation target request is premature or overlaps")
+        row = _exact(value, {"schema", "nonce", "sequence", "unit_id",
+            "process_generation_id", "fence_id", "pid", "request_digest"},
+            "observation target request")
+        supplied = _sha(row.pop("request_digest"), "observation target request digest")
+        sequence, fence = self._active
+        ordered = tuple(sorted(self.prepared.plan.expected_units,
+                               key=lambda item: item.order_index))
+        if self._next >= len(ordered):
+            raise WorkerBridgeRefused("observation target has no fixed unit")
+        unit = ordered[self._next]
+        if (row["schema"] != OBSERVATION_TARGET_REQUEST_SCHEMA
+                or row["nonce"] != self.start.nonce or row["sequence"] != sequence
+                or row["unit_id"] != unit.unit_id
+                or row["process_generation_id"] != unit.process_id
+                or row["fence_id"] != fence.fence_id
+                or isinstance(row["pid"], bool) or not isinstance(row["pid"], int)
+                or row["pid"] < 1 or supplied != _digest(row)):
+            raise WorkerBridgeRefused("observation target request identity differs")
+        key, target = self.parent_authority.request_observation_target(
+            start=self.start, sequence=sequence, unit=unit, fence=fence, pid=row["pid"])
+        self._pending_observation_target = (key, sequence, unit, fence, row["pid"])
+        if target is not None:
+            self._finish_observation_target(target)
+
+    def _finish_observation_target(self, target: Mapping[str, Any]) -> None:
+        if self.start is None or self._pending_observation_target is None:
+            raise WorkerBridgeRefused("parent observation target is out of order")
+        _key, sequence, unit, fence, pid = self._pending_observation_target
+        target = _exact(_plain(target), {"pid", "start_ticks", "boot_id",
+            "worker_binding", "binding_ref"}, "parent observation target")
+        if (target["pid"] != pid or target["boot_id"] != self.start.child_process.boot_id
+                or target["worker_binding"] != {"worker_id": self.start.worker_id,
+                    "worker_incarnation": self.start.worker_generation,
+                    "grant_id": self.start.grant_id,
+                    "grant_generation": self.start.grant_generation,
+                    "container_identity": _plain(self.start.cgroup_identity)}):
+            raise WorkerBridgeRefused("parent observation target differs from active owner")
+        _positive(target["start_ticks"], "observation target start ticks")
+        _text(target["binding_ref"], "observation target binding reference")
+        body = {"schema": OBSERVATION_TARGET_RECEIPT_SCHEMA,
+                "nonce": self.start.nonce, "sequence": sequence,
+                "unit_id": unit.unit_id, "process_generation_id": unit.process_id,
+                "fence_id": fence.fence_id, **target}
+        self._queue(self._control.fileno(),
+                    {**body, "response_digest": _digest(body)}, MAX_MESSAGE_BYTES)
+        self._pending_observation_target = None
+
     def poll_evidence(self) -> None:
         if self._pending_completion is not None:
             completion = self.parent_authority.poll_completion(
@@ -1286,6 +1623,16 @@ class PlannedWorkerInvocation:
                 self._pending_continuation[0])
             if accepted is not None:
                 self._finish_continuation(accepted)
+        if self._pending_observation_binding is not None:
+            binding = self.parent_authority.poll_observation_binding(
+                self._pending_observation_binding[0])
+            if binding is not None:
+                self._finish_observation_binding(binding)
+        if self._pending_observation_target is not None:
+            target = self.parent_authority.poll_observation_target(
+                self._pending_observation_target[0])
+            if target is not None:
+                self._finish_observation_target(target)
 
     def result_reference(self) -> PlannedWorkerResultReference:
         if self._reference is None or self._accepted_digest is None:
@@ -1330,7 +1677,8 @@ def run_prepared_stage(prepared: PreparedPlannedServingStage, start: WorkerStart
                        wall_clock: Callable[[], str] = ps._utc_now,
                        _test_authority: UnitAuthority | None = None,
                        _test_membership_probe: MembershipProbe | None = None,
-                       _test_measure: Callable[..., float] | None = None) \
+                       _test_measure: Callable[..., float] | None = None,
+                       _test_observation_probe: Any | None = None) \
         -> PlannedWorkerResultReference:
     """Run the actual planned consumer and seal one result; tests may inject measurement."""
     prepared = PreparedPlannedServingStage.from_dict(prepared.to_dict())
@@ -1359,6 +1707,27 @@ def run_prepared_stage(prepared: PreparedPlannedServingStage, start: WorkerStart
     store = mc.ArtifactStore(prepared.artifact_root)
     try:
         sink = mc.DeferredNativeMeasurementSink(context=context, store=store)
+        observation_factory = None
+        if prepared.schema == PREPARED_SCHEMA_V2:
+            if prepared.previous is not None:
+                raise WorkerBridgeRefused(
+                    "v2 continuation requires an original observation-bound unit range")
+            selected_measure = _test_measure or serving._measure_once
+            instrument = ob.seal_loaded_instrument(
+                store=store, measurement_callable=selected_measure,
+                fence_clock=clock, serving_timer=time.time)
+            expected_instrument = ob.LoadedInstrumentReference.from_dict(
+                _plain(prepared.plan.loaded_instrument))
+            if instrument != expected_instrument or not instrument.configuration_complete:
+                raise WorkerBridgeRefused(
+                    "actual loaded serving instrument differs or is incomplete")
+            probe = _test_observation_probe
+            if probe is None:
+                probe = lo.FilesystemProbe()
+            observation_factory = ob.ContainedObservationFactory(
+                authority=active_authority, store=store, instrument=instrument,
+                probe=probe, monotonic=clock, wall_clock=wall_clock,
+                max_units=len(prepared.plan.expected_units))
         previous_raws: Sequence[ep.RawUnit] = ()
         previous_lineage: str | None = None
         continuation = None
@@ -1375,21 +1744,28 @@ def run_prepared_stage(prepared: PreparedPlannedServingStage, start: WorkerStart
             stage_provider=provider, artifact_sink=sink, lineage_id=start.lineage_id,
             clock=clock, clock_domain=start.clock_domain, wall_clock=wall_clock,
             measure=_test_measure or serving._measure_once, previous_raws=previous_raws,
-            previous_lineage_id=previous_lineage, continuation_verifier=continuation)
+            previous_lineage_id=previous_lineage, continuation_verifier=continuation,
+            observation_session_factory=observation_factory)
         completed = [item.unit_id for item in run.raw_units]
-        body = {"schema": RESULT_SCHEMA, "nonce": start.nonce,
+        result_schema = RESULT_SCHEMA_V2 if observation_factory is not None else RESULT_SCHEMA
+        body = {"schema": result_schema, "nonce": start.nonce,
             "prepared_digest": prepared.prepared_digest, "plan_digest": prepared.plan.digest,
             "lineage_id": start.lineage_id, "stage_id": start.stage_id,
             "worker_id": start.worker_id, "worker_generation": start.worker_generation,
             "grant_id": start.grant_id, "grant_generation": start.grant_generation,
             "container_id": start.container_id, "completed_unit_ids": completed,
             "run": run.to_dict(), "captures": [_plain(item) for item in sink.captures]}
+        if observation_factory is not None:
+            body["lifecycle_observation_references"] = _plain(
+                run.lifecycle_observation_references)
         result = PlannedWorkerResult.from_dict({**body, "result_digest": _digest(body)})
         namespace = f"planned-worker-result:{prepared.prepared_digest}:{start.nonce}"
         sealed = store.write(namespace, result.to_dict())
         return PlannedWorkerResultReference(
             start.nonce, prepared.prepared_digest, start.worker_id, start.worker_generation,
-            result.result_digest, sealed.locator, sealed.sha256)
+            result.result_digest, sealed.locator, sealed.sha256,
+            RESULT_REFERENCE_SCHEMA_V2 if observation_factory is not None
+            else RESULT_REFERENCE_SCHEMA)
     finally:
         store.close()
         if authority is not None:
@@ -1406,6 +1782,9 @@ def ingest_deferred_result(reference: PlannedWorkerResultReference, *,
     reference = PlannedWorkerResultReference.from_dict(reference.to_dict())
     prepared = PreparedPlannedServingStage.from_dict(prepared.to_dict())
     start = WorkerStart.from_dict(start.to_dict())
+    v2 = prepared.schema == PREPARED_SCHEMA_V2
+    if (reference.schema == RESULT_REFERENCE_SCHEMA_V2) is not v2:
+        raise WorkerBridgeRefused("prepared/result reference schema versions differ")
     if not isinstance(terminal, wl.TerminalWorker) or not isinstance(
             fence, nc.TrustedWorkerResultFence):
         raise WorkerBridgeRefused("terminal result fence is untyped")
@@ -1442,6 +1821,8 @@ def ingest_deferred_result(reference: PlannedWorkerResultReference, *,
         result = PlannedWorkerResult.from_dict(body)
         if result.result_digest != reference.result_digest:
             raise WorkerBridgeRefused("result reference points to a different result digest")
+        if (result.body["schema"] == RESULT_SCHEMA_V2) is not v2:
+            raise WorkerBridgeRefused("sealed result schema differs from its reference")
         store.verify(f"planned-worker-result:{prepared.prepared_digest}:{start.nonce}",
                      result.to_dict())
         row = result.to_dict()
@@ -1459,6 +1840,12 @@ def ingest_deferred_result(reference: PlannedWorkerResultReference, *,
         completed = row["completed_unit_ids"]
         if completed != expected[:len(completed)]:
             raise WorkerBridgeRefused("sealed result completed units are not a fixed prefix")
+        if v2:
+            reference_units = [item["unit_id"] for item in
+                               row["lifecycle_observation_references"]]
+            if reference_units != expected[:len(reference_units)]:
+                raise WorkerBridgeRefused(
+                    "sealed observation references are not a fixed unit prefix")
         run_row = row["run"]
         if (run_row["prompt_manifest_digest"] != prepared.prompts.digest
                 or run_row["anchor_identity"] != _plain(prepared.plan.anchor_identity)
@@ -1474,11 +1861,13 @@ def ingest_deferred_result(reference: PlannedWorkerResultReference, *,
             raise WorkerBridgeRefused("sealed run receipts differ from deferred captures")
         validated_captures: list[tuple[str, Mapping[str, Any]]] = []
         arms = []
-        validator = nc.NativeCaptureValidator(
-            binding=nc.NativeCaptureBinding(
-                start.campaign_id, start.config_digest, start.config_generation,
-                start.supervisor_id, start.supervisor_incarnation),
-            store=store, fence_provider=lambda _measurement_id, _context: fence)
+        validator = None
+        if not v2:
+            validator = nc.NativeCaptureValidator(
+                binding=nc.NativeCaptureBinding(
+                    start.campaign_id, start.config_digest, start.config_generation,
+                    start.supervisor_id, start.supervisor_incarnation),
+                store=store, fence_provider=lambda _measurement_id, _context: fence)
         for capture in row["captures"]:
             payload = capture["payload"]
             if _digest(payload) != capture["payload_digest"]:
@@ -1487,10 +1876,13 @@ def ingest_deferred_result(reference: PlannedWorkerResultReference, *,
             store.verify(f"carrier:{capture['measurement_id']}", payload["carrier"])
             if receipt != payload["artifact"]:
                 raise WorkerBridgeRefused("deferred carrier receipt differs from payload")
-            normalized = validator.validate(capture["measurement_id"], payload)
+            normalized_payload = _plain(payload) if v2 else payload
+            if validator is not None:
+                normalized_payload = validator.validate(
+                    capture["measurement_id"], payload).payload()
             arm = payload["carrier"].get("arm")
             arms.append(arm)
-            validated_captures.append((capture["measurement_id"], normalized.payload()))
+            validated_captures.append((capture["measurement_id"], normalized_payload))
         if arms != [arm for arm in ("anchor", "candidate") if arm in arms]:
             raise WorkerBridgeRefused("deferred captures are duplicate or out of arm order")
         return tuple(capture_transaction(measurement_id, payload)
@@ -1604,7 +1996,8 @@ def _write_fd_message(fd: int, value: Mapping[str, Any], *, limit: int) -> None:
 
 def run_from_fds(*, start_fd: int, control_fd: int, result_fd: int,
                  _test_membership_probe: MembershipProbe | None = None,
-                 _test_measure: Callable[..., float] | None = None) -> None:
+                 _test_measure: Callable[..., float] | None = None,
+                 _test_observation_probe: Any | None = None) -> None:
     """Fixed production child entry: hello, one invocation, one sealed result reference."""
     if len({start_fd, control_fd, result_fd}) != 3 or min(start_fd, control_fd, result_fd) < 3:
         raise WorkerBridgeRefused("planned-worker descriptors must be distinct inherited FDs")
@@ -1634,7 +2027,8 @@ def run_from_fds(*, start_fd: int, control_fd: int, result_fd: int,
         reference = run_prepared_stage(
             prepared, start, authority=authority,
             _test_membership_probe=_test_membership_probe,
-            _test_measure=_test_measure)
+            _test_measure=_test_measure,
+            _test_observation_probe=_test_observation_probe)
         _write_fd_message(result_fd, reference.to_dict(), limit=MAX_MESSAGE_BYTES)
     finally:
         os.close(start_fd)
@@ -1667,8 +2061,9 @@ if __name__ == "__main__":
 
 
 __all__ = ["CONTINUATION_REQUEST_SCHEMA", "CONTINUATION_SCHEMA", "HELLO_SCHEMA",
-           "INVOCATION_SCHEMA", "MAX_MESSAGE_BYTES", "MAX_RESULT_BYTES", "PREPARED_SCHEMA", "RESULT_SCHEMA",
-           "RESULT_REFERENCE_SCHEMA", "START_SCHEMA", "UNIT_COMPLETION_REQUEST_SCHEMA",
+           "INVOCATION_SCHEMA", "MAX_MESSAGE_BYTES", "MAX_RESULT_BYTES", "PREPARED_SCHEMA",
+           "PREPARED_SCHEMA_V2", "RESULT_SCHEMA", "RESULT_SCHEMA_V2",
+           "RESULT_REFERENCE_SCHEMA", "RESULT_REFERENCE_SCHEMA_V2", "START_SCHEMA", "UNIT_COMPLETION_REQUEST_SCHEMA",
            "UNIT_COMPLETION_SCHEMA", "UNIT_PERMIT_SCHEMA", "UNIT_REQUEST_SCHEMA",
            "InheritedUnitAuthority", "MembershipProbe", "OwnedWorkerStageProvider",
            "ParentUnitEvidenceAuthority", "PlannedWorkerInvocation",

@@ -9,10 +9,12 @@ import threading
 
 import pytest
 
+from .. import schemas
 from . import experiment_plan as ep
 from . import measurement_capture as mc
 from . import planned_serving as ps
 from .test_planned_serving import _measure, _plan, _prompts, _recipes
+from .test_planned_serving import _v2_plan
 
 
 def _process_exclusive(root, ready, acquired):
@@ -143,6 +145,55 @@ def test_deferred_sink_reuses_exact_carrier_builder_without_transaction(tmp_path
     assert [mc._plain(item["payload"]) for item in sink.captures] == list(entries.values())
     assert all("journal_entry" not in item for item in result.capture_receipts)
     assert direct.execution_complete and result.execution_complete
+
+
+def test_v2_deferred_carrier_has_distinct_identity_and_closed_observation_membership(tmp_path):
+    at, ct, anchor, candidate = _recipes()
+    plan = _v2_plan(at, ct, anchor, candidate)
+    context = _context(at, ct, anchor, candidate)
+    store = mc.ArtifactStore(tmp_path / "v2-artifacts")
+    sink = mc.DeferredNativeMeasurementSink(context=context, store=store)
+
+    class Factory:
+        def create(self, *, unit, fence, recipe):
+            return unit.unit_id
+
+        def finish_reference(self, *, unit, session):
+            assert session == unit.unit_id
+            body = {"schema": "epyc.autokernel.lifecycle_observation_reference.v1",
+                    "observation_id": f"obs-{unit.unit_id}", "unit_id": unit.unit_id,
+                    "process_generation_id": unit.process_id, "fence_id": f"f-{unit.unit_id}",
+                    "active_claim_ref": "claim:1", "target_pid": 101,
+                    "target_start_ticks": 100, "descendant_binding_ref": "descendant:1",
+                    "worker_id": "worker-1",
+                    "worker_generation": 1, "grant_id": "grant-1", "grant_generation": 1,
+                    "container_id": "container-1", "instrument_identity_sha256": "c" * 64,
+                    "observation_content_sha256": "e" * 64, "shutdown_status": "resolved",
+                    "successor_permitted": True,
+                    "artifact": {"locator": f"{unit.unit_id}.json", "sha256": "f" * 64,
+                                 "verified": True}}
+            return {**body, "reference_digest": schemas.content_hash(body)}
+
+    ticks = iter(("2026-09-09T00:00:00Z", "2026-09-09T00:00:01Z",
+                  "2026-09-09T00:00:02Z", "2026-09-09T00:00:03Z"))
+    result = ps.run_planned_comparison(
+        plan, anchor_template=at, candidate_template=ct, anchor_recipe=anchor,
+        candidate_recipe=candidate, prompts=_prompts(at), stage_provider=CaptureProvider(),
+        artifact_sink=sink, lineage_id="lineage-1", clock=lambda: 1.0,
+        wall_clock=lambda: next(ticks), measure=_measure([]),
+        observation_session_factory=Factory())
+    assert result.schema == ps.RUN_SCHEMA_V2
+    assert len(sink.captures) == 2
+    for capture in sink.captures:
+        carrier = capture["payload"]["carrier"]
+        assert carrier["schema"] == mc.CAPTURE_SCHEMA_V2
+        assert carrier["producer"] == mc.PRODUCER_ID_V2
+        assert carrier["loaded_instrument"] == plan.loaded_instrument
+        assert len(carrier["lifecycle_observations"]) == 1
+        legacy_id = schemas.content_hash({"producer": mc.PRODUCER_ID,
+            "plan_digest": plan.digest, "lineage_id": "lineage-1", "arm": carrier["arm"]})
+        assert capture["measurement_id"] != legacy_id
+    store.close()
 
 
 def test_artifact_store_reads_only_exact_pinned_digest(tmp_path):

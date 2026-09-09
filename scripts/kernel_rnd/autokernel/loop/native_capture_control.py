@@ -17,11 +17,34 @@ from typing import Any, Callable, Mapping
 from .. import schemas
 from . import experiment_plan as ep
 from . import measurement_capture as mc
+from . import observation_binding as ob
 from . import planned_serving as ps
 
 
 class NativeCaptureRefused(mc.CaptureError):
     """A carrier lacks exact structure, artifacts, or trusted result ownership."""
+
+
+@dataclass(frozen=True)
+class PrevalidatedNativeCapture:
+    """Large immutable v2 artifact work completed outside the controller mutex."""
+
+    measurement_id: str
+    payload_digest: str
+    context: mc.CaptureContext
+    grant_generation: int
+    observation_links: tuple[ob.ValidatedObservationLink, ...]
+    validated: ValidatedNativeCapture
+
+
+@dataclass(frozen=True)
+class CurrentOwnerToken:
+    """Short-lived controller-mutex token for one exact prevalidated payload."""
+
+    measurement_id: str
+    payload_digest: str
+    grant_generation: int
+    fence: TrustedWorkerResultFence
 
 
 def _text(value: Any, label: str) -> str:
@@ -146,7 +169,9 @@ class NativeCaptureValidator:
     """Validate one new carrier against controller identity and current result fence."""
 
     def __init__(self, *, binding: NativeCaptureBinding, store: mc.ArtifactStore,
-                 fence_provider: FenceProvider | None = None) -> None:
+                 fence_provider: FenceProvider | None = None,
+                 observation_verifiers: ob.ParentObservationVerifiers =
+                 ob.ParentObservationVerifiers()) -> None:
         if not isinstance(binding, NativeCaptureBinding):
             raise NativeCaptureRefused("binding must be NativeCaptureBinding")
         self.binding = NativeCaptureBinding.from_dict(binding.to_dict())
@@ -156,6 +181,9 @@ class NativeCaptureValidator:
         if fence_provider is not None and not callable(fence_provider):
             raise NativeCaptureRefused("fence_provider must be callable")
         self.fence_provider = fence_provider
+        if not isinstance(observation_verifiers, ob.ParentObservationVerifiers):
+            raise NativeCaptureRefused("observation verifiers must be the concrete adapter set")
+        self.observation_verifiers = observation_verifiers
 
     def validate(self, measurement_id: str,
                  payload: Mapping[str, Any]) -> ValidatedNativeCapture:
@@ -164,6 +192,9 @@ class NativeCaptureValidator:
         fields = {"schema", "measurement_id", "carrier", "artifact"}
         if not isinstance(row, dict) or set(row) != fields:
             raise NativeCaptureRefused("native capture payload has missing/unknown fields")
+        if row["schema"] == mc.CAPTURE_SCHEMA_V2:
+            raise NativeCaptureRefused(
+                "v2 capture requires outside-lock prevalidation and a current-owner token")
         if row["schema"] != mc.CAPTURE_SCHEMA:
             raise NativeCaptureRefused("unsupported native capture payload schema")
         if row["measurement_id"] != measurement_id:
@@ -192,6 +223,48 @@ class NativeCaptureValidator:
             json.dumps(row, sort_keys=True, separators=(",", ":"),
                        ensure_ascii=False, allow_nan=False))
 
+    def prevalidate(self, measurement_id: str,
+                    payload: Mapping[str, Any]) -> PrevalidatedNativeCapture:
+        """Perform all potentially large v2 reads before controller serialization."""
+        measurement_id = _sha(measurement_id, "measurement_id")
+        row = _plain(payload)
+        if (not isinstance(row, dict)
+                or set(row) != {"schema", "measurement_id", "carrier", "artifact"}
+                or row["schema"] != mc.CAPTURE_SCHEMA_V2
+                or row["measurement_id"] != measurement_id):
+            raise NativeCaptureRefused("v2 native capture payload is malformed")
+        carrier = row["carrier"]
+        if not isinstance(carrier, dict):
+            raise NativeCaptureRefused("v2 native carrier must be an object")
+        self._validate_carrier(measurement_id, carrier)
+        context = mc.CaptureContext.from_dict(carrier["capture_context"])
+        self._validate_binding(context)
+        self._verify_artifacts(measurement_id, carrier, row["artifact"])
+        grant_generation, links = self._verify_observations(carrier)
+        validated = ValidatedNativeCapture(
+            measurement_id, schemas.content_hash(row), carrier["status"], False,
+            json.dumps(row, sort_keys=True, separators=(",", ":"),
+                       ensure_ascii=False, allow_nan=False))
+        return PrevalidatedNativeCapture(measurement_id, schemas.content_hash(row),
+                                         context, grant_generation, links, validated)
+
+    def validate_prevalidated(self, prevalidated: PrevalidatedNativeCapture,
+                              token: CurrentOwnerToken) -> ValidatedNativeCapture:
+        """Check only exact current ownership; caller holds the controller mutex."""
+        if type(prevalidated) is not PrevalidatedNativeCapture \
+                or type(token) is not CurrentOwnerToken:
+            raise NativeCaptureRefused("typed prevalidation/current-owner token required")
+        if (token.measurement_id != prevalidated.measurement_id
+                or token.payload_digest != prevalidated.payload_digest
+                or isinstance(token.grant_generation, bool)
+                or token.grant_generation < 1
+                or token.grant_generation != prevalidated.grant_generation):
+            raise NativeCaptureRefused("current-owner token binds another payload")
+        fence = TrustedWorkerResultFence.from_dict(token.fence.to_dict())
+        self._validate_supplied_fence(prevalidated.measurement_id,
+                                      prevalidated.context, fence)
+        return prevalidated.validated
+
     def _validate_binding(self, context: mc.CaptureContext) -> None:
         expected = self.binding
         if (context.campaign_id != expected.campaign_id
@@ -212,6 +285,10 @@ class NativeCaptureValidator:
             raise NativeCaptureRefused(
                 "trusted worker-result fence provider returned an untyped value")
         fence = TrustedWorkerResultFence.from_dict(supplied.to_dict())
+        self._validate_supplied_fence(measurement_id, context, fence)
+
+    def _validate_supplied_fence(self, measurement_id: str, context: mc.CaptureContext,
+                                 fence: TrustedWorkerResultFence) -> None:
         pairs = (
             (fence.campaign_id, context.campaign_id),
             (fence.config_digest, context.config_digest),
@@ -241,9 +318,14 @@ class NativeCaptureValidator:
             "record_class", "intended_use", "protocol_id", "protocol_status",
             "instrument_id", "interval", "carrier_digest",
         }
+        v2 = carrier.get("schema") == mc.CAPTURE_SCHEMA_V2
+        if v2:
+            fields |= {"loaded_instrument", "lifecycle_observations"}
         if set(carrier) != fields:
             raise NativeCaptureRefused("native carrier has missing/unknown fields")
-        if carrier["schema"] != mc.CAPTURE_SCHEMA or carrier["producer"] != mc.PRODUCER_ID:
+        if ((not v2 and (carrier["schema"] != mc.CAPTURE_SCHEMA
+                         or carrier["producer"] != mc.PRODUCER_ID))
+                or (v2 and carrier["producer"] != mc.PRODUCER_ID_V2)):
             raise NativeCaptureRefused("native carrier schema/producer is unsupported")
         if carrier["measurement_id"] != measurement_id:
             raise NativeCaptureRefused("carrier measurement_id differs from callback identity")
@@ -251,10 +333,16 @@ class NativeCaptureValidator:
         if not isinstance(arm, str) or arm not in {"anchor", "candidate"}:
             raise NativeCaptureRefused("native carrier arm is invalid")
         plan = ep.ExperimentPlan.from_dict(carrier["plan"])
-        expected_id = schemas.content_hash({
-            "producer": mc.PRODUCER_ID, "plan_digest": plan.digest,
-            "lineage_id": carrier["lineage_id"], "arm": arm,
-        })
+        identity = {"producer": carrier["producer"], "plan_digest": plan.digest,
+                    "lineage_id": carrier["lineage_id"], "arm": arm}
+        if v2:
+            if plan.schema != ep.PLAN_SCHEMA_V2 \
+                    or carrier["loaded_instrument"] != _plain(plan.loaded_instrument):
+                raise NativeCaptureRefused("v2 carrier loaded instrument differs from plan")
+            identity |= {"capture_schema": mc.CAPTURE_SCHEMA_V2,
+                         "instrument_identity_sha256":
+                             carrier["loaded_instrument"].get("identity_sha256")}
+        expected_id = schemas.content_hash(identity)
         if expected_id != measurement_id:
             raise NativeCaptureRefused("measurement_id does not bind plan/lineage/arm")
         if carrier["arm_locator"] != \
@@ -345,7 +433,10 @@ class NativeCaptureValidator:
             and plan.unit == "process"
             and plan.estimator_id == "median.v1"
             and plan.estimand == "level"
-            and carrier["instrument_id"] == "planned-serving/v1"
+            and (carrier["instrument_id"] == "planned-serving/v1"
+                 if carrier["schema"] == mc.CAPTURE_SCHEMA else
+                 carrier["instrument_id"]
+                 == carrier["loaded_instrument"]["identity_sha256"])
         )
         if diagnostic is None and not supported_measurement:
             raise NativeCaptureRefused(
@@ -429,7 +520,10 @@ class NativeCaptureValidator:
             if artifact_digest in documents:
                 raise NativeCaptureRefused("raw artifact digest is duplicated")
             documents[artifact_digest] = document
-            if document.get("schema") != ps.ARTIFACT_SCHEMA:
+            expected_artifact_schema = (ps.ARTIFACT_SCHEMA_V2
+                                        if carrier["schema"] == mc.CAPTURE_SCHEMA_V2
+                                        else ps.ARTIFACT_SCHEMA)
+            if document.get("schema") != expected_artifact_schema:
                 raise NativeCaptureRefused("raw artifact schema is unsupported")
             kind = document.get("kind")
             if not isinstance(kind, str) or kind not in {
@@ -463,6 +557,13 @@ class NativeCaptureValidator:
                     "artifact_digest",
                 },
             }
+            if expected_artifact_schema == ps.ARTIFACT_SCHEMA_V2:
+                if kind == "continued_unit":
+                    raise NativeCaptureRefused(
+                        "v2 continuation requires an original v2 observation reference")
+                shapes["native_observation"] |= {"lifecycle_observation"}
+                shapes["completed_attempt"] |= {
+                    "lifecycle_observation_content_sha256"}
             if set(document) != shapes[kind]:
                 raise NativeCaptureRefused(f"raw {kind} artifact shape is not closed")
             if document.get("arm") != carrier["arm"]:
@@ -535,6 +636,62 @@ class NativeCaptureValidator:
             raise NativeCaptureRefused("carrier artifact byte verification failed") from exc
         if carrier_artifact != sealed.to_dict():
             raise NativeCaptureRefused("carrier locator/hash differs from verified bytes")
+
+    def _verify_observations(self, carrier: Mapping[str, Any]) \
+            -> tuple[int, tuple[ob.ValidatedObservationLink, ...]]:
+        """Reopen v2 observation/instrument bytes; never trust child verdict labels."""
+        if carrier["schema"] != mc.CAPTURE_SCHEMA_V2:
+            raise NativeCaptureRefused("observation verification is v2-only")
+        try:
+            instrument = ob.LoadedInstrumentReference.from_dict(
+                carrier["loaded_instrument"])
+        except Exception as exc:
+            raise NativeCaptureRefused("v2 loaded instrument reference is invalid") from exc
+        refs = carrier["lifecycle_observations"]
+        if not isinstance(refs, list):
+            raise NativeCaptureRefused("v2 lifecycle observations must be an array")
+        native = [item["document"] for item in carrier["raw_artifacts"]
+                  if item["document"].get("kind") == "native_observation"]
+        attempts = [item["document"] for item in carrier["raw_artifacts"]
+                    if item["document"].get("kind") == "completed_attempt"]
+        by_unit = {item.get("unit_id"): item for item in native}
+        if (len(by_unit) != len(native) or len(refs) != len(native)
+                or {item.get("unit_id") for item in refs} != set(by_unit)):
+            raise NativeCaptureRefused(
+                "v2 requires exactly one lifecycle observation per executed arm unit")
+        links: list[ob.ValidatedObservationLink] = []
+        for raw_ref in refs:
+            try:
+                reference = ob.LifecycleObservationReference.from_dict(raw_ref)
+                document = by_unit[reference.unit_id]
+                if (document.get("process_generation_id") != reference.process_generation_id
+                        or document.get("lifecycle_observation") != reference.to_dict()):
+                    raise NativeCaptureRefused(
+                        "lifecycle observation differs from raw unit binding")
+                matching = [row for row in attempts if row.get("unit_id") == reference.unit_id]
+                if (len(matching) != 1
+                        or matching[0].get("lifecycle_observation_content_sha256")
+                           != reference.observation_content_sha256):
+                    raise NativeCaptureRefused(
+                        "completed attempt does not bind lifecycle observation content")
+                links.append(ob.validate_reopened_observation(reference, store=self.store,
+                    expected={"plan_digest": schemas.content_hash(carrier["plan"]),
+                              "unit_id": reference.unit_id,
+                              "process_generation_id": reference.process_generation_id,
+                              "fence_id": document["fence_id"],
+                              "active_claim_ref": reference.active_claim_ref,
+                              "container_id": carrier["capture_context"]["container_id"],
+                              "capture_context": carrier["capture_context"]},
+                    instrument=instrument, verifiers=self.observation_verifiers))
+            except NativeCaptureRefused:
+                raise
+            except Exception as exc:
+                raise NativeCaptureRefused(
+                    "parent lifecycle observation validation failed") from exc
+        generations = {row["grant_generation"] for row in refs}
+        if len(generations) != 1:
+            raise NativeCaptureRefused("v2 observations disagree on grant generation")
+        return next(iter(generations)), tuple(links)
 
     @staticmethod
     def _rederive_view(plan: ep.ExperimentPlan, carrier: Mapping[str, Any],
@@ -734,6 +891,7 @@ class NativeCaptureValidator:
         return values[0][0], values[1][0], values[0][1], values[1][1]
 
 
-__all__ = ["FenceProvider", "NativeCaptureBinding", "NativeCaptureRefused",
-           "NativeCaptureValidator", "TrustedWorkerResultFence",
+__all__ = ["CurrentOwnerToken", "FenceProvider", "NativeCaptureBinding",
+           "NativeCaptureRefused", "NativeCaptureValidator",
+           "PrevalidatedNativeCapture", "TrustedWorkerResultFence",
            "ValidatedNativeCapture"]

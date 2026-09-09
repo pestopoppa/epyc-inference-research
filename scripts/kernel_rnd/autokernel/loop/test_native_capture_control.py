@@ -5,6 +5,7 @@ from contextlib import contextmanager
 import copy
 import json
 import threading
+import time
 
 import pytest
 
@@ -13,10 +14,13 @@ from . import campaign_control as control
 from . import experiment_plan as ep
 from . import measurement_capture as mc
 from . import native_capture_control as native
+from . import lifecycle_observation as lo
+from . import observation_binding as ob
 from . import planned_serving as ps
 from .test_campaign_control import _command, _resolved
 from .test_measurement_capture import _context
 from .test_planned_serving import _measure, _plan, _prompts, _recipes
+from .test_lifecycle_observation import Clock, _budgets, _fixture, _resolver, _write_process
 
 
 class _Provider:
@@ -244,6 +248,103 @@ def test_fence_types_and_callback_failures_refuse(tmp_path):
             native.TrustedWorkerResultFence.from_dict(
                 {**_fence(context).to_dict(), "worker_incarnation": True})
         store.close()
+
+
+def test_v2_large_artifacts_prevalidate_then_exact_current_owner_token(tmp_path):
+    at, ct, anchor, candidate = _recipes()
+    store = mc.ArtifactStore(tmp_path / "v2-artifacts")
+    selected_measure = _measure([])
+    instrument = ob.seal_loaded_instrument(
+        store=store, measurement_callable=selected_measure,
+        fence_clock=time.monotonic, serving_timer=time.time)
+    plan_row = _plan(at, ct, anchor, candidate).to_dict()
+    plan_row |= {"schema": ep.PLAN_SCHEMA_V2, "unit": "process",
+                 "loaded_instrument": instrument.to_dict(),
+                 "anchor_identity": ps.arm_identity(
+                     at, anchor, loaded_instrument=instrument.to_dict()),
+                 "candidate_identity": ps.arm_identity(
+                     ct, candidate, loaded_instrument=instrument.to_dict())}
+    plan = ep.ExperimentPlan.from_dict(plan_row)
+    base_context = _context(at, ct, anchor, candidate).to_dict()
+    base_context["instrument_id"] = instrument.identity_sha256
+    context = mc.CaptureContext.from_dict(base_context)
+
+    class Factory:
+        def __init__(self):
+            self.records = {}
+
+        def create(self, *, unit, fence, recipe):
+            root = tmp_path / f"observer-{unit.unit_id}"
+            root.mkdir()
+            probe, proc, _, _, _, container = _fixture(root)
+            _write_process(proc, 101, start=100, ticks=1)
+            binding = ob.ObservationUnitBinding.from_dict(ob.ObservationUnitBinding(
+                f"obs-{unit.unit_id}", unit.unit_id, unit.process_id, fence.fence_id,
+                "monotonic", "boot-fixture",
+                {"worker_id": context.worker_id,
+                 "worker_incarnation": context.worker_incarnation,
+                 "grant_id": context.grant_id, "grant_generation": 5,
+                 "container_identity": container}, context.container_id,
+                "journal:active-claim", {"logical_cpus": [0], "gpu_devices": []},
+                {"logical_cpus": [0], "numa_nodes": [0], "thp_mode": "madvise"},
+                (), (), 10.0, 11.0, _budgets(), instrument).to_dict())
+            observation_context = {"schema": lo.CONTEXT_SCHEMA,
+                "observation_id": binding.observation_id, "backend": "cpu",
+                "instrument_identity_digest": instrument.identity_sha256,
+                "recipe_identity_digest": recipe.execution_digest,
+                "clock_domain": binding.clock_domain, "cadence_s": binding.cadence_s,
+                "gap_limit_s": binding.gap_limit_s, "boot_id": binding.boot_id,
+                "worker_binding": ob._plain(binding.worker_binding),
+                "requested_effective_state": ob._plain(binding.requested_effective_state),
+                "held_claim": ob._plain(binding.held_claim), "runtime_witness_keys": [],
+                "required_gpu_dsos": [], "budgets": ob._plain(binding.budgets)}
+            session = lo.ObservationSession(
+                observation_context, probe=probe,
+                owned_identity_resolver=_resolver(observation_context), monotonic=Clock())
+            session.start()
+            session.phase("load")
+            session.attach_target(101)
+            for phase in ("placement", "health", "warmup", "measurement", "teardown"):
+                session.phase(phase)
+            session.finish()
+            self.records[unit.unit_id] = (session, binding)
+            return session
+
+        def finish_reference(self, *, unit, session):
+            actual, binding = self.records[unit.unit_id]
+            assert actual is session
+            return ob.seal_observation(
+                store=store, binding=binding, record=session.record()).to_dict()
+
+    sink = mc.DeferredNativeMeasurementSink(context=context, store=store)
+    ticks = iter(("2026-09-09T00:00:00Z", "2026-09-09T00:00:01Z",
+                  "2026-09-09T00:00:02Z", "2026-09-09T00:00:03Z"))
+    ps.run_planned_comparison(
+        plan, anchor_template=at, candidate_template=ct, anchor_recipe=anchor,
+        candidate_recipe=candidate, prompts=_prompts(at), stage_provider=_Provider(context),
+        artifact_sink=sink, lineage_id=context.lineage_id, clock=lambda: 1.0,
+        wall_clock=lambda: next(ticks), measure=selected_measure,
+        observation_session_factory=Factory())
+    measurement_id, payload = sink.captures[0]["measurement_id"], sink.captures[0]["payload"]
+    validator = native.NativeCaptureValidator(binding=_binding(context), store=store)
+    with pytest.raises(native.NativeCaptureRefused, match="requires outside-lock"):
+        validator.validate(measurement_id, payload)
+    prevalidated = validator.prevalidate(measurement_id, payload)
+    violations = journal_module._validate_native_payload(
+        journal_module.KIND_PLANNED_SERVING_ARM_CAPTURED,
+        prevalidated.validated.payload())
+    assert violations == [], violations
+    assert len(prevalidated.observation_links) == 1
+    assert prevalidated.observation_links[0].observation_status == "unknown"
+    assert prevalidated.observation_links[0].purpose_status == "unknown"
+    token = native.CurrentOwnerToken(measurement_id, prevalidated.payload_digest, 5,
+                                     _fence(context))
+    assert validator.validate_prevalidated(prevalidated, token) == prevalidated.validated
+    with pytest.raises(native.NativeCaptureRefused, match="another payload"):
+        validator.validate_prevalidated(prevalidated,
+            native.CurrentOwnerToken(measurement_id, prevalidated.payload_digest, 6,
+                                     _fence(context)))
+    store.close()
 
 
 @pytest.mark.parametrize(("path", "value"), [
