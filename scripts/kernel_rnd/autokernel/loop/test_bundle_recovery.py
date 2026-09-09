@@ -218,12 +218,74 @@ def test_journal_read_oserror_is_typed_recovery_refusal(tmp_path):
                           is_ancestor=_linear("cor0", "k2"))
 
 
-def test_missing_all_state_and_unreadable_legacy_only_state_refuse(tmp_path):
+@pytest.mark.parametrize("existing_directory", [False, True])
+def test_new_empty_store_initializes_durable_baseline(tmp_path, existing_directory):
+    store = tmp_path / "new-store"
+    if existing_directory:
+        store.mkdir()
+    restored, note = A.load_bundle(
+        store, anchor_commit="anchor", is_ancestor=_linear("anchor"))
+    assert restored.champion_of_record == restored.tip == "anchor"
+    assert restored.keeps == [] and restored.keeps_since_serving_gate == 0
+    assert restored.compounded_bench_pct == 0.0
+    assert "new empty baseline" in note
+    assert len(_saved_events(store)) == 1
+    before = _tree_bytes(store)
+    again, _ = A.load_bundle(
+        store, anchor_commit="anchor", is_ancestor=_linear("anchor"))
+    assert again.to_dict() == restored.to_dict()
+    assert _tree_bytes(store) == before
+
+
+@pytest.mark.parametrize("existing_directory", [False, True])
+def test_read_only_missing_state_does_not_create_baseline(tmp_path, existing_directory):
+    store = tmp_path / "new-store"
+    if existing_directory:
+        store.mkdir()
     with pytest.raises(A.BundleRecoveryRequired, match="no accumulator state"):
-        A.load_bundle(tmp_path, anchor_commit="anchor", is_ancestor=lambda a, b: True)
+        A.load_bundle(store, anchor_commit="anchor", is_ancestor=_linear("anchor"),
+                      read_only=True)
+    assert store.exists() is existing_directory
+    assert _tree_bytes(store) == {}
+
+
+@pytest.mark.parametrize("historical_name", ["experiments.db", "anchor-gen-001", "status.json"])
+def test_populated_store_without_bundle_cannot_be_reinitialized(tmp_path, historical_name):
+    (tmp_path / historical_name).write_text("original", encoding="utf-8")
+    before = _tree_bytes(tmp_path)
+    with pytest.raises(A.BundleRecoveryRequired, match="no accumulator state"):
+        A.load_bundle(tmp_path, anchor_commit="anchor", is_ancestor=_linear("anchor"))
+    assert _tree_bytes(tmp_path) == before
+
+
+def test_unreadable_legacy_only_state_still_refuses(tmp_path):
     (tmp_path / A.Bundle.FILENAME).write_text("{bad", encoding="utf-8")
     with pytest.raises(A.BundleRecoveryRequired, match="unreadable or invalid"):
         A.load_bundle(tmp_path, anchor_commit="anchor", is_ancestor=lambda a, b: True)
+
+
+def test_new_store_rejects_symlink_without_writing_target(tmp_path):
+    target = tmp_path / "target"
+    target.mkdir()
+    store = tmp_path / "store"
+    store.symlink_to(target, target_is_directory=True)
+    with pytest.raises(A.BundleRecoveryRequired, match="symlink"):
+        A.load_bundle(store, anchor_commit="anchor", is_ancestor=_linear("anchor"))
+    assert list(target.iterdir()) == []
+
+
+def test_new_store_does_not_overwrite_racing_original_snapshot(tmp_path, monkeypatch):
+    original_initialize = journal.Journal.initialize
+    def initialize_with_original(book):
+        original_initialize(book)
+        if not book.read_all():
+            with book.write_lock():
+                A._append_snapshot_locked(book, _bundle().to_dict(),
+                                          provenance="current_snapshot")
+    monkeypatch.setattr(journal.Journal, "initialize", initialize_with_original)
+    with pytest.raises(A.BundleRecoveryRequired, match="changed during initialization"):
+        A.load_bundle(tmp_path, anchor_commit="anchor", is_ancestor=_linear("anchor"))
+    assert _saved_events(tmp_path)[0].payload["snapshot"] == _bundle().to_dict()
 
 
 @pytest.mark.parametrize(

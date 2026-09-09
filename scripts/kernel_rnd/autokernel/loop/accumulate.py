@@ -377,11 +377,11 @@ def load_bundle(store: Path, *, anchor_commit: str, is_ancestor,
                 read_only: bool = False) -> tuple:
     """Restore authoritative journal state, importing legacy JSON only once.
 
-    The JSON file is a projection. Missing state and any state whose lineage or
-    journal integrity cannot be proved raise ``BundleRecoveryRequired``. Corrupt
-    history requires inspection/restoration of authoritative evidence; it must
-    never be replaced with a fresh seed. ``seed_bundle`` is only for a genuinely
-    new campaign/baseline under existing authority, never for repairing history.
+    The JSON file is a projection. A write-capable caller may initialize an
+    absent or empty store with the supplied baseline and no accumulated keeps.
+    Missing state in a populated store, or invalid lineage/journal integrity,
+    raises ``BundleRecoveryRequired``; existing history is never reset. Read-only
+    consumers cannot invent a baseline for missing historical state.
     """
     store = Path(store)
     p = store / Bundle.FILENAME
@@ -390,7 +390,34 @@ def load_bundle(store: Path, *, anchor_commit: str, is_ancestor,
 
     journal_exists = journal_root.exists()
     if not journal_exists and legacy is None:
-        raise BundleRecoveryRequired(f"no accumulator state: {legacy_error}")
+        if read_only:
+            raise BundleRecoveryRequired(f"no accumulator state: {legacy_error}")
+        try:
+            if store.is_symlink():
+                raise BundleRecoveryRequired("new accumulator store cannot be a symlink")
+            with os.scandir(store) as contents:
+                if next(contents, None) is not None:
+                    raise BundleRecoveryRequired(f"no accumulator state: {legacy_error}")
+        except FileNotFoundError:
+            pass  # A genuinely new store, not a lost snapshot in an existing history.
+        except OSError as exc:
+            raise BundleRecoveryRequired(f"cannot inspect new accumulator store: {exc}") from exc
+        baseline = Bundle.from_dict(Bundle(
+            champion_of_record=anchor_commit, tip=anchor_commit).to_dict())
+        _require_valid_ancestry(baseline, anchor_commit, is_ancestor)
+        book = journal.Journal(str(journal_root))
+        book.initialize()
+        with book.write_lock():
+            # A concurrent initializer must not be overwritten by this baseline.
+            # Nor may a file that appeared after the empty-store check be hidden.
+            if _read_entries(book) or any(
+                    item.name != JOURNAL_DIRNAME for item in store.iterdir()):
+                raise BundleRecoveryRequired("accumulator store changed during initialization; retry recovery")
+            snapshot = baseline.to_dict()
+            _append_snapshot_locked(book, snapshot, provenance="current_snapshot")
+            status.write_json(store, Bundle.FILENAME, snapshot,
+                              prefix=".accumulator-bundle-")
+        return baseline, "no persisted bundle — initialized a new empty baseline"
 
     if read_only and not journal_exists:
         # Dry consumers may inspect an importable v1 projection, but may not
