@@ -17,8 +17,9 @@ from pathlib import Path
 import stat
 import time
 from types import MappingProxyType
-from typing import Any, Mapping, Sequence
+from typing import Any, Collection, Literal, Mapping, Sequence
 
+from .. import journal as journal_module
 from . import campaign, campaign_control, campaign_service, experiment_plan, planned_serving
 from . import scheduling, scoped_evidence, unified_planner
 
@@ -32,6 +33,7 @@ OUTCOME_SCHEMA = "epyc.autokernel.unified_driver_outcome.v1"
 EXECUTION_INPUT_SCHEMA = "epyc.autokernel.unified_execution_input.v1"
 MATERIALIZATION_BINDING_SCHEMA = "epyc.autokernel.unified_materialization_binding.v1"
 SELECTED_PROFILE_WORK_SCHEMA = "epyc.autokernel.selected_profile_work.v1"
+WORK_KINDS = frozenset({"runtime_comparison", "actor_preparation", "profile_preparation"})
 
 
 class DriverRefused(RuntimeError):
@@ -415,6 +417,7 @@ class UnifiedCampaignDriver:
                  actor_identities: Mapping[str, Mapping[str, Any]],
                  native_artifact_sink_ref: str,
                  execution_inputs: Mapping[str, Mapping[str, Any] | ExecutionInput] | None = None,
+                 executable_work_kinds: Collection[str] | None = None,
                  monotonic_clock=time.monotonic) -> None:
         self.resolved = campaign.ResolvedCampaign.from_dict(resolved_campaign.to_dict())
         self.controller = controller
@@ -454,12 +457,22 @@ class UnifiedCampaignDriver:
             parsed_inputs[key] = parsed
         self.execution_inputs = MappingProxyType(parsed_inputs)
         self.sink_ref = native_artifact_sink_ref
+        raw_kinds = WORK_KINDS if executable_work_kinds is None else executable_work_kinds
+        if (isinstance(raw_kinds, (str, bytes)) or not isinstance(raw_kinds, Collection)
+                or not raw_kinds or any(not isinstance(item, str) for item in raw_kinds)):
+            raise DriverRefused("executable work kinds must be a nonempty known set")
+        kinds = frozenset(raw_kinds)
+        if not kinds <= WORK_KINDS:
+            raise DriverRefused("executable work kinds must be a nonempty known set")
+        self._executable_work_kinds = kinds
         if not callable(monotonic_clock):
             raise DriverRefused("monotonic_clock must be callable")
         self._monotonic_clock = monotonic_clock
         self._pending: PlanningCatalog | None = None
+        self._pending_context_reasons: tuple[str, ...] = ()
         self._issued_catalog: PlanningCatalog | None = None
         self._issued_transition_id: str | None = None
+        self._restored_issue: Mapping[str, Any] | None = None
         self._poisoned = False
 
     @property
@@ -498,14 +511,18 @@ class UnifiedCampaignDriver:
         _sha(row["scheduler_projection_digest"], "scheduler projection digest")
         return _freeze(row)
 
-    def _record(self, catalog: PlanningCatalog) -> DriverOutcome:
+    def _record(self, catalog: PlanningCatalog,
+                context_reasons: Sequence[str] = ()) -> DriverOutcome:
         callback = getattr(self.controller, "unified_driver_transaction")
         try:
             receipt = _mapping(callback(catalog.to_dict()), "driver transaction receipt")
+        except campaign_control.DriverAdmissionClosed:
+            raise
         except campaign_control.ControlRefused as exc:
             raise DriverRefused(f"controller refused driver catalog: {exc}") from exc
         except BaseException as exc:
             self._pending = catalog
+            self._pending_context_reasons = tuple(context_reasons)
             self._poisoned = True
             raise DriverTransactionUncertain(
                 "driver transaction outcome is uncertain; exact retry required") from exc
@@ -514,12 +531,14 @@ class UnifiedCampaignDriver:
                 or receipt["catalog_id"] != catalog.catalog_id
                 or receipt["status"] not in {"accepted", "duplicate", "not_selected"}):
             self._pending = catalog
+            self._pending_context_reasons = tuple(context_reasons)
             self._poisoned = True
             raise DriverTransactionUncertain("driver transaction returned an invalid receipt")
         try:
             selection = scheduling.Selection.from_dict(receipt["selection"])
         except Exception as exc:
             self._pending = catalog
+            self._pending_context_reasons = tuple(context_reasons)
             self._poisoned = True
             raise DriverTransactionUncertain("driver transaction selection is invalid") from exc
         stages = {scheduling.StageProposal.from_dict(_thaw(item)).digest
@@ -527,29 +546,115 @@ class UnifiedCampaignDriver:
         if receipt["transition_id"] != _digest({
                     "catalog_id": catalog.catalog_id, "selection": selection.to_dict()}):
             self._pending = catalog
+            self._pending_context_reasons = tuple(context_reasons)
             self._poisoned = True
             raise DriverTransactionUncertain("driver transaction identity differs")
         if receipt["status"] == "not_selected":
             if selection.status == "selected":
                 raise DriverTransactionUncertain("not-selected receipt contains a selection")
-            return DriverOutcome("waiting", tuple(selection.reasons) or (selection.status,),
+            reasons = (*selection.reasons, *context_reasons)
+            return DriverOutcome("waiting", reasons or (selection.status,),
                                  None, selection.to_dict())
         if (selection.status != "selected" or selection.proposal is None
                 or selection.proposal.digest not in stages):
             self._pending = catalog
+            self._pending_context_reasons = tuple(context_reasons)
             self._poisoned = True
             raise DriverTransactionUncertain("driver transaction selected outside exact catalog")
         self._pending = None
+        self._pending_context_reasons = ()
         self._poisoned = False
         self._issued_catalog = catalog
         self._issued_transition_id = receipt["transition_id"]
-        return DriverOutcome("intent_recorded", (receipt["status"],),
+        self._restored_issue = None
+        return DriverOutcome("intent_recorded", (receipt["status"], *context_reasons),
                              receipt["transition_id"], selection.to_dict())
 
     def retry_pending(self) -> DriverOutcome:
         if self._pending is None:
             raise DriverRefused("driver has no uncertain transition to retry")
-        return self._record(self._pending)
+        return self._record(self._pending, self._pending_context_reasons)
+
+    def restore_issued_intent(self, record: Mapping[str, Any]) -> DriverOutcome:
+        """Restore one exact controller-replayed intent without selecting again."""
+        if self._pending is not None or self._poisoned or self._issued_catalog is not None:
+            raise DriverRefused("driver already owns pending or issued work")
+        fields = {"schema", "catalog_id", "campaign_id", "config_generation",
+                  "config_digest", "supervisor_incarnation", "catalog", "selection",
+                  "prior_projection_digest", "after_projection_digest", "transition_id"}
+        row = dict(_mapping(record, "replayed driver intent"))
+        if set(row) != fields or row["schema"] != journal_module.UNIFIED_DRIVER_ISSUED_SCHEMA:
+            raise DriverRefused("replayed driver intent fields/schema differ")
+        raw_catalog = dict(_mapping(row["catalog"], "replayed driver catalog"))
+        supplied_id = raw_catalog.pop("catalog_id", None)
+        try:
+            catalog = PlanningCatalog(**raw_catalog)
+            selection = scheduling.Selection.from_dict(row["selection"])
+        except Exception as exc:
+            raise DriverRefused(f"replayed driver intent is malformed: {exc}") from exc
+        transition_id = _digest({"catalog_id": catalog.catalog_id,
+                                 "selection": selection.to_dict()})
+        readiness = self._readiness()
+        pending = getattr(self.controller, "unified_driver_pending_intent", lambda: None)()
+        identity = ("campaign_id", "config_digest", "config_generation")
+        if (supplied_id != catalog.catalog_id or row["catalog_id"] != catalog.catalog_id
+                or transition_id != row["transition_id"] or selection.status != "selected"
+                or selection.proposal is None
+                or row["campaign_id"] != self.resolved.campaign_id
+                or row["config_digest"] != campaign_control.resolved_config_digest(self.resolved)
+                or readiness is None or any(row[name] != readiness[name] for name in identity)
+                or readiness["supervisor_incarnation"] < row["supervisor_incarnation"]
+                or readiness["scheduler_projection_digest"] != row["after_projection_digest"]
+                or catalog.controller_binding["supervisor_incarnation"]
+                   != row["supervisor_incarnation"]
+                or catalog.controller_binding["scheduler_projection_digest"]
+                   != row["prior_projection_digest"]
+                or pending != row):
+            raise DriverRefused("replayed driver intent identity/projection differs")
+        stages = {scheduling.StageProposal.from_dict(_thaw(item)).digest
+                  for item in catalog.stage_proposals}
+        if selection.proposal.digest not in stages:
+            raise DriverRefused("replayed selection is outside its exact catalog")
+        self._issued_catalog = catalog
+        self._issued_transition_id = transition_id
+        self._restored_issue = _freeze(row)
+        return DriverOutcome("intent_recorded", ("restored",), transition_id,
+                             selection.to_dict())
+
+    def issued_work_kind(self, outcome: DriverOutcome) -> Literal[
+            "runtime_comparison", "actor_preparation", "profile_preparation"]:
+        """Return the closed kind of the exact currently issued controller intent."""
+        if (not isinstance(outcome, DriverOutcome)
+                or outcome.status != "intent_recorded"
+                or outcome.transition_id is None or outcome.selection is None
+                or self._issued_catalog is None or self._issued_transition_id is None
+                or outcome.transition_id != self._issued_transition_id):
+            raise DriverRefused("work kind requires the current exact issued intent")
+        selection = scheduling.Selection.from_dict(_thaw(outcome.selection))
+        if (selection.status != "selected" or selection.proposal is None
+                or outcome.transition_id != _digest({
+                    "catalog_id": self._issued_catalog.catalog_id,
+                    "selection": selection.to_dict()})):
+            raise DriverRefused("issued intent transition/selection differs")
+        work = self._issued_catalog.work_by_stage_digest.get(selection.proposal.digest)
+        if work is None or work["kind"] not in WORK_KINDS:
+            raise DriverRefused("issued intent has no closed work kind")
+        readiness = self._readiness()
+        if readiness is None:
+            raise DriverRefused("controller readiness is unavailable")
+        binding = self._issued_catalog.controller_binding
+        identity = ("campaign_id", "config_digest", "config_generation")
+        if any(readiness[name] != binding[name] for name in identity):
+            raise DriverRefused("issued intent belongs to stale controller identity")
+        if self._restored_issue is None:
+            if readiness["supervisor_incarnation"] != binding["supervisor_incarnation"]:
+                raise DriverRefused(
+                    "current exact issued intent belongs to stale controller identity")
+        elif (readiness["supervisor_incarnation"] < binding["supervisor_incarnation"]
+              or self.controller.unified_driver_pending_intent()
+                 != _thaw(self._restored_issue)):
+            raise DriverRefused("restored issued intent is no longer pending")
+        return work["kind"]
 
     def materialize_runtime(self, outcome: DriverOutcome):
         """Build the one bridge-owned prepared record selected by the controller.
@@ -561,6 +666,7 @@ class UnifiedCampaignDriver:
                 or outcome.selection is None or self._issued_catalog is None
                 or outcome.transition_id != self._issued_transition_id):
             raise DriverRefused("runtime materialization requires the current issued intent")
+        self.issued_work_kind(outcome)
         selection = scheduling.Selection.from_dict(_thaw(outcome.selection))
         if selection.proposal is None:
             raise DriverRefused("issued intent has no selected proposal")
@@ -765,11 +871,26 @@ class UnifiedCampaignDriver:
                                 "experiment_plan": plan.to_dict()},
                     "stage_plan_binding": "experiment_plan",
                     "stage_plan_digest": plan.digest}
+        unavailable = []
+        executable_stages = []
+        for stage in stages:
+            kind = work_by_digest[stage.digest]["kind"]
+            if kind not in self._executable_work_kinds:
+                unavailable.append(
+                    f"target:{stage.target_revision}:{kind}:executor_unavailable")
+                continue
+            executable_stages.append(stage)
+        if not executable_stages:
+            return DriverOutcome(
+                "waiting", tuple((*missing_inputs, *unavailable))
+                or ("no scheduler-ready work",), None, None)
+        executable_work = {
+            stage.digest: work_by_digest[stage.digest] for stage in executable_stages}
         catalog = PlanningCatalog(
             self.campaign_digest, _thaw(readiness),
             readiness["scheduler_projection_digest"], float(now),
-            tuple(stage.to_dict() for stage in stages), work_by_digest)
-        return self._record(catalog)
+            tuple(stage.to_dict() for stage in executable_stages), executable_work)
+        return self._record(catalog, unavailable)
 
 
 @dataclass(frozen=True)
@@ -816,9 +937,10 @@ class DriverConfig:
         return cls(**row)
 
 
-def load_config(path: Path) -> DriverConfig:
+def load_config_document(path: Path) -> Mapping[str, Any]:
     try:
-        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        named_before = os.stat(path, follow_symlinks=False)
+        fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_NOFOLLOW", 0))
         try:
             before = os.fstat(fd)
             if (not stat.S_ISREG(before.st_mode) or before.st_uid != os.getuid()
@@ -833,15 +955,36 @@ def load_config(path: Path) -> DriverConfig:
                 chunks.append(chunk)
                 remaining -= len(chunk)
             after = os.fstat(fd)
-            if (len(b"".join(chunks)) > 4 * 1024 * 1024
-                    or (before.st_dev, before.st_ino, before.st_size)
-                    != (after.st_dev, after.st_ino, after.st_size)):
+            named_after = os.stat(path, follow_symlinks=False)
+            payload = b"".join(chunks)
+            before_identity = (before.st_dev, before.st_ino, before.st_mode,
+                               before.st_uid, before.st_nlink, before.st_size,
+                               before.st_mtime_ns, before.st_ctime_ns)
+            after_identity = (after.st_dev, after.st_ino, after.st_mode,
+                              after.st_uid, after.st_nlink, after.st_size,
+                              after.st_mtime_ns, after.st_ctime_ns)
+            named_before_identity = (
+                named_before.st_dev, named_before.st_ino, named_before.st_mode,
+                named_before.st_uid, named_before.st_nlink, named_before.st_size,
+                named_before.st_mtime_ns, named_before.st_ctime_ns)
+            named_after_identity = (
+                named_after.st_dev, named_after.st_ino, named_after.st_mode,
+                named_after.st_uid, named_after.st_nlink, named_after.st_size,
+                named_after.st_mtime_ns, named_after.st_ctime_ns)
+            if (len(payload) > 4 * 1024 * 1024
+                    or before_identity != after_identity
+                    or named_before_identity != before_identity
+                    or named_after_identity != after_identity):
                 raise DriverRefused("unified driver config changed during bounded read")
         finally:
             os.close(fd)
-        return DriverConfig.from_dict(json.loads(b"".join(chunks).decode("utf-8")))
+        return _mapping(json.loads(payload.decode("utf-8")), "unified driver config")
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise DriverRefused(f"cannot load unified driver config: {exc}") from exc
+
+
+def load_config(path: Path) -> DriverConfig:
+    return DriverConfig.from_dict(load_config_document(path))
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -850,12 +993,35 @@ def _parser() -> argparse.ArgumentParser:
     modes = parser.add_mutually_exclusive_group(required=True)
     modes.add_argument("--once", action="store_true")
     modes.add_argument("--listen", metavar="HOST:PORT")
+    modes.add_argument("--dry-run", action="store_true")
     return parser
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None, *, provider_registry: Any = None) -> int:
     args = _parser().parse_args(argv)
-    config = load_config(args.config)
+    document = load_config_document(args.config)
+    if document.get("schema") != CONFIG_SCHEMA:
+        from . import standalone_inputs
+        manifest = standalone_inputs.StartupManifest.from_dict(document)
+        materialized = standalone_inputs.materialize(manifest)
+        if args.dry_run:
+            print(json.dumps(materialized.preflight(), sort_keys=True))
+            return 0
+        if args.once:
+            raise DriverRefused("standalone startup manifest requires --dry-run or --listen")
+        if provider_registry is None:
+            raise DriverRefused("standalone provider registry is unavailable")
+        factory = standalone_inputs.runtime_factory(materialized, provider_registry)
+        service_args = [
+            "--resolved-campaign", manifest.driver_config.resolved_campaign_path,
+            "--store", manifest.driver_config.store_path,
+            "--config-generation", str(manifest.driver_config.config_generation),
+            "--snapshot-version", "3", "--listen", args.listen,
+        ]
+        return campaign_service.main(service_args, runtime_factory=factory)
+    config = DriverConfig.from_dict(document)
+    if args.dry_run:
+        raise DriverRefused("legacy driver config has no closed standalone dry-run schema")
     resolved = campaign_service.load_resolved(Path(config.resolved_campaign_path))
     scheduler_config = scheduling.SchedulerConfig.from_dict(_thaw(config.scheduler_config))
     scheduler_state = scheduling.SchedulerState.from_dict(_thaw(config.scheduler_state))
@@ -906,4 +1072,4 @@ __all__ = ["CATALOG_SCHEMA", "CONFIG_SCHEMA", "DriverConfig", "DriverOutcome", "
            "SELECTED_PROFILE_WORK_SCHEMA", "SelectedProfileWork",
            "READINESS_SCHEMA",
            "TRANSACTION_RECEIPT_SCHEMA", "UnifiedCampaignDriver",
-           "load_config", "main"]
+           "load_config_document", "load_config", "main"]
