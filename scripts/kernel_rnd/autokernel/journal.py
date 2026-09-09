@@ -240,6 +240,7 @@ KIND_PREFLIGHT_ATTESTATION = "PREFLIGHT_ATTESTATION"
 KIND_LOOP_BUNDLE_SAVED = "LOOP_BUNDLE_SAVED"
 KIND_CAMPAIGN_SUPERVISOR_EVENT = "CAMPAIGN_SUPERVISOR_EVENT"
 CAMPAIGN_SUPERVISOR_EVENT_SCHEMA = "epyc.autokernel.campaign_supervisor_event.v1"
+CAMPAIGN_SUPERVISOR_EVENT_SCHEMA_V2 = "epyc.autokernel.campaign_supervisor_event.v2"
 CAMPAIGN_SUPERVISOR_EVENTS = frozenset({
     "START", "CONTROL_ACCEPTED",
 })
@@ -252,6 +253,12 @@ CANDIDATE_TRANSACTION_OPERATIONS = frozenset({
 })
 KIND_PLANNED_SERVING_ARM_CAPTURED = "PLANNED_SERVING_ARM_CAPTURED"
 PLANNED_SERVING_ARM_CAPTURE_SCHEMA = "epyc.autokernel.unified_arm_capture.v1"
+KIND_WORKER_LIFECYCLE = "WORKER_LIFECYCLE"
+WORKER_LIFECYCLE_SCHEMA = "epyc.autokernel.worker_lifecycle_event.v1"
+KIND_WORKER_ACQUISITION = "WORKER_ACQUISITION"
+WORKER_ACQUISITION_SCHEMA = "epyc.autokernel.worker_acquisition_transition.v1"
+KIND_CAMPAIGN_COMMAND_V2 = "CAMPAIGN_COMMAND_V2"
+CAMPAIGN_COMMAND_V2_SCHEMA = "epyc.autokernel.campaign_command_transition.v2"
 LOOP_BUNDLE_SAVED_SCHEMA = "epyc.autokernel.loop_bundle_saved.v1"
 LOOP_BUNDLE_SNAPSHOT_SCHEMA_V1 = "epyc.autokernel.accumulator_bundle.v1"
 LOOP_BUNDLE_SNAPSHOT_SCHEMA_V2 = "epyc.autokernel.accumulator_bundle.v2"
@@ -280,6 +287,9 @@ NATIVE_KINDS = frozenset({
     KIND_CAMPAIGN_SUPERVISOR_EVENT,
     KIND_CANDIDATE_TRANSACTION,
     KIND_PLANNED_SERVING_ARM_CAPTURED,
+    KIND_WORKER_LIFECYCLE,
+    KIND_WORKER_ACQUISITION,
+    KIND_CAMPAIGN_COMMAND_V2,
     KIND_MICROBENCH_RUN_COMPLETED,
     KIND_T0_REFUSAL,
     KIND_POST_T0_QUIET_BOUNDARY,
@@ -1076,7 +1086,28 @@ def _validate_native_payload(kind: str, payload: Mapping[str, Any]) -> list:
     out: list = []
     if not isinstance(payload, Mapping):
         return ["payload: required mapping"]
-    if kind == KIND_PLANNED_SERVING_ARM_CAPTURED:
+    if kind in {KIND_WORKER_LIFECYCLE, KIND_WORKER_ACQUISITION,
+                KIND_CAMPAIGN_COMMAND_V2}:
+        try:
+            if __package__:
+                from .loop.worker_lifecycle import (
+                    validate_acquisition_transition, validate_command_transition_v2,
+                    validate_event,
+                )
+            else:
+                from autokernel.loop.worker_lifecycle import (
+                    validate_acquisition_transition, validate_command_transition_v2,
+                    validate_event,
+                )
+            if kind == KIND_WORKER_LIFECYCLE:
+                validate_event(payload)
+            elif kind == KIND_WORKER_ACQUISITION:
+                validate_acquisition_transition(payload)
+            else:
+                validate_command_transition_v2(payload)
+        except Exception as exc:
+            out.append(f"lifecycle/control event: {exc}")
+    elif kind == KIND_PLANNED_SERVING_ARM_CAPTURED:
         expected = {"schema", "measurement_id", "carrier", "artifact"}
         if set(payload) != expected:
             out.append("payload: native capture has missing/unknown fields")
@@ -1299,11 +1330,16 @@ def _validate_native_payload(kind: str, payload: Mapping[str, Any]) -> list:
             out.append(f"missing required field(s) {missing}")
         if extra:
             out.append(f"unknown field(s) {extra}")
-        if payload.get("schema") != CAMPAIGN_SUPERVISOR_EVENT_SCHEMA:
-            out.append(f"schema: must be {CAMPAIGN_SUPERVISOR_EVENT_SCHEMA!r}")
         event = payload.get("event")
         if not isinstance(event, str) or event not in CAMPAIGN_SUPERVISOR_EVENTS:
             out.append(f"event: must be one of {sorted(CAMPAIGN_SUPERVISOR_EVENTS)}")
+        schema = payload.get("schema")
+        if schema == CAMPAIGN_SUPERVISOR_EVENT_SCHEMA_V2:
+            if event != "START":
+                out.append("schema: v2 supervisor schema is restricted to START")
+        elif schema != CAMPAIGN_SUPERVISOR_EVENT_SCHEMA:
+            out.append(
+                "schema: must be the v1 supervisor schema or v2 START schema")
         for key in ("campaign_id", "config_digest"):
             value = payload.get(key)
             if not isinstance(value, str) or not value.strip():
@@ -1332,8 +1368,12 @@ def _validate_native_payload(kind: str, payload: Mapping[str, Any]) -> list:
                     "paused", "running", "drained"}:
                 out.append("data.desired_state: invalid")
             observed_state = data.get("observed_state")
-            if not isinstance(observed_state, str) or observed_state not in {
-                    "paused", "running", "drained", "waiting_prerequisite"}:
+            allowed_observed = {
+                "paused", "running", "drained", "waiting_prerequisite"}
+            if schema == CAMPAIGN_SUPERVISOR_EVENT_SCHEMA_V2:
+                allowed_observed |= {"pausing", "draining", "ownership_unresolved"}
+            if not isinstance(observed_state, str) \
+                    or observed_state not in allowed_observed:
                 out.append("data.observed_state: invalid")
             reason = data.get("prerequisite_reason")
             if reason is not None and (not isinstance(reason, str) or not reason.strip()):
@@ -3024,7 +3064,11 @@ __all__ = [
     "KIND_OPERATOR_RELEASE_DRY_RUN_REQUESTED",
     "KIND_OPERATOR_RELEASE_DRY_RUN_TERMINATED",
     "KIND_CAMPAIGN_SUPERVISOR_EVENT", "CAMPAIGN_SUPERVISOR_EVENT_SCHEMA",
+    "CAMPAIGN_SUPERVISOR_EVENT_SCHEMA_V2",
     "CAMPAIGN_SUPERVISOR_EVENTS", "KIND_CANDIDATE_TRANSACTION",
+    "KIND_WORKER_LIFECYCLE", "WORKER_LIFECYCLE_SCHEMA",
+    "KIND_WORKER_ACQUISITION", "WORKER_ACQUISITION_SCHEMA",
+    "KIND_CAMPAIGN_COMMAND_V2", "CAMPAIGN_COMMAND_V2_SCHEMA",
     "CANDIDATE_TRANSACTION_SCHEMA", "CANDIDATE_TRANSACTION_PHASES",
     "CANDIDATE_TRANSACTION_OPERATIONS",
     "KIND_PLANNED_SERVING_ARM_CAPTURED", "PLANNED_SERVING_ARM_CAPTURE_SCHEMA",

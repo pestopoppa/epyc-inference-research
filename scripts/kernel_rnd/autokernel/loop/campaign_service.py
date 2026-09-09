@@ -459,6 +459,8 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--resolved-campaign", type=Path, required=True)
     parser.add_argument("--store", type=Path, required=True)
     parser.add_argument("--config-generation", type=int, default=1)
+    parser.add_argument("--snapshot-version", type=int, choices=(1, 2), default=1,
+                        help="explicit projection contract; v2 does not create grant authority")
     parser.add_argument("--refresh-interval", type=float,
                         default=DEFAULT_REFRESH_INTERVAL_S)
     parser.add_argument("--request-deadline", type=float,
@@ -491,7 +493,8 @@ def main(argv: list[str] | None = None) -> int:
                           "execution_authorized": False}, sort_keys=True))
         return 0
     controller = CampaignController(
-        resolved, args.store, config_generation=args.config_generation)
+        resolved, args.store, config_generation=args.config_generation,
+        snapshot_version=args.snapshot_version)
     controller.__enter__()
     if args.once:
         try:
