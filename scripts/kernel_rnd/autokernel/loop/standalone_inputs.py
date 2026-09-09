@@ -727,6 +727,29 @@ def runtime_factory(materialized: MaterializedInputs, registry: ProviderRegistry
     if report["status"] != "ready":
         raise StandaloneInputsRefused(
             "startup prerequisites unavailable: " + ", ".join(report["missing_prerequisites"]))
+    config = materialized.manifest.driver_config
+    scheduler_config_document = unified_driver._thaw(config.scheduler_config)
+    scheduler_state_document = unified_driver._thaw(config.scheduler_state)
+
+    def fresh_scheduler() -> scheduling.SchedulerEngine:
+        try:
+            scheduler_config = scheduling.SchedulerConfig.from_dict(
+                copy.deepcopy(scheduler_config_document))
+            scheduler_state = scheduling.SchedulerState.from_dict(
+                copy.deepcopy(scheduler_state_document))
+            return scheduling.SchedulerEngine(scheduler_config, scheduler_state)
+        except Exception as exc:
+            raise StandaloneInputsRefused(
+                f"startup scheduler seed is invalid: {exc}") from exc
+
+    initial_scheduler = fresh_scheduler()
+    supplied_scheduler = materialized.inputs.scheduler_engine
+    if (not isinstance(supplied_scheduler, scheduling.SchedulerEngine)
+            or supplied_scheduler.config.to_dict() != initial_scheduler.config.to_dict()
+            or supplied_scheduler.export_state().to_dict()
+               != initial_scheduler.export_state().to_dict()):
+        raise StandaloneInputsRefused(
+            "materialized scheduler differs from the immutable startup seed")
     lifecycle = registry.get(materialized.manifest.lifecycle_provider_id)
     readiness = registry.get(materialized.manifest.readiness_provider_id)
     verifier = registry.evidence_verifier(materialized.manifest.evidence_verifier_id)
@@ -758,22 +781,22 @@ def runtime_factory(materialized: MaterializedInputs, registry: ProviderRegistry
             profile_binding=InstalledProfilePreparationBinding(mechanisms))
 
     def build(resolved: campaign.ResolvedCampaign, args):
-        config = materialized.manifest.driver_config
         if (resolved.to_dict() != materialized.resolved.to_dict()
                 or Path(args.store).absolute() != Path(config.store_path).absolute()
                 or args.config_generation != config.config_generation
                 or args.snapshot_version != 3):
             raise StandaloneInputsRefused("service and startup manifest identities differ")
+        scheduler_engine = fresh_scheduler()
         controller = campaign_control.CampaignController(
             resolved, Path(config.store_path), config_generation=config.config_generation,
             readiness_check=readiness.readiness_check, snapshot_version=3,
-            scheduler_engine=materialized.inputs.scheduler_engine,
+            scheduler_engine=scheduler_engine,
             lifecycle_provider=provider)
         controller.__enter__()
         try:
-            current_inputs = verified_inputs
+            current_inputs = replace(verified_inputs, scheduler_engine=scheduler_engine)
             if materialized.manifest.evidence_feed is not None:
-                current_inputs = replace(verified_inputs, feed_owner=feed_runtime.FeedRuntimeOwner(
+                current_inputs = replace(current_inputs, feed_owner=feed_runtime.FeedRuntimeOwner(
                     materialized.manifest.evidence_feed, binding))
             if current_inputs.native_evidence_configuration is not None:
                 snapshot_kwargs = ({} if current_inputs.retention_runtime_recipe_snapshots is None else {

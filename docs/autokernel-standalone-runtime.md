@@ -86,6 +86,12 @@ default provider remains unavailable.
 
 `standalone_inputs.py` supplies the closed typed materializer and provider-registry
 factory; `startup_factory.py` constructs its manifest from pinned enrollment output.
+Each invocation of one runtime factory reconstructs a fresh scheduler from the
+manifest's original immutable configuration and state. The controller and runtime
+share that one new instance; neither receives the materializer's validation instance.
+This permits an in-process owner restart to replay the same Journal without carrying
+the prior owner's mutated scheduler projection. A materialized input whose scheduler
+already differs from its manifest seed is refused rather than silently reset.
 The unified CLI consumes that manifest, and `campaign_service.py` recovers before
 opening the listener, runs one service-owned non-daemon runtime thread, latches stop
 during durable drain, and joins it before controller close. The startup materializer

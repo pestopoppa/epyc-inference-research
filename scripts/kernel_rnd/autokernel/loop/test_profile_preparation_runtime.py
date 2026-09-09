@@ -216,7 +216,14 @@ def test_actual_installed_profile_retains_original_output_but_binding_gate_block
 
 def test_synthetic_original_provider_settles_feedback_expiry_and_fresh_restart(tmp_path, monkeypatch):
     materialized, registry, target, _, counter, profile = _fixture(tmp_path, selected_provider=True)
-    controller, runtime = _start(materialized, registry)
+    seed = materialized.inputs.scheduler_engine.export_state().to_dict()
+    config = materialized.manifest.driver_config
+    args = SimpleNamespace(store=config.store_path,
+                           config_generation=config.config_generation, snapshot_version=3)
+    factory = si.runtime_factory(materialized, registry)
+    controller, runtime = factory(materialized.resolved, args)
+    controller.apply_command(_command(materialized.resolved, "resume", "resume", 0))
+    assert runtime.recover().status == "recovered"
     try:
         result = runtime.tick()
         assert result.status == "settled"
@@ -245,11 +252,8 @@ def test_synthetic_original_provider_settles_feedback_expiry_and_fresh_restart(t
     finally:
         runtime.close()
         controller.close()
-    materialized = si.materialize(materialized.manifest)
-    config = materialized.manifest.driver_config
-    reopened, restarted = si.runtime_factory(materialized, registry)(materialized.resolved,
-        SimpleNamespace(store=config.store_path, config_generation=config.config_generation,
-                        snapshot_version=3))
+    assert materialized.inputs.scheduler_engine.export_state().to_dict() == seed
+    reopened, restarted = factory(materialized.resolved, args)
     try:
         assert restarted.recover().status == "recovered"
         assert ud._thaw(reopened.current_verified_profile_result(target)) == snapshot
@@ -400,19 +404,24 @@ def test_runtime_source_refusal_is_bounded_and_keeps_issued_intent(tmp_path, mon
 
 def test_actual_profile_restart_reopens_original_diagnosis_without_live_issuance(tmp_path):
     materialized, registry, target, _, counter, _ = _fixture(tmp_path)
-    controller, runtime = _start(materialized, registry)
+    seed = materialized.inputs.scheduler_engine.export_state().to_dict()
+    config = materialized.manifest.driver_config
+    args = SimpleNamespace(store=config.store_path,
+                           config_generation=config.config_generation, snapshot_version=3)
+    factory = si.runtime_factory(materialized, registry)
+    controller, runtime = factory(materialized.resolved, args)
+    controller.apply_command(_command(materialized.resolved, "resume", "resume", 0))
+    assert runtime.recover().status == "recovered"
     with pytest.raises(sr.StandaloneRuntimeUncertain):
         runtime.tick()
     original = ud._thaw(controller.current_verified_profile_result(target))
     store = controller.store
     runtime.close()
     controller.close()
-    # Fresh scheduler/controller/owner; no held receipt registry is carried over.
-    materialized = si.materialize(materialized.manifest)
-    config = materialized.manifest.driver_config
-    reopened, restarted = si.runtime_factory(materialized, registry)(materialized.resolved,
-        SimpleNamespace(store=config.store_path, config_generation=config.config_generation,
-                        snapshot_version=3))
+    # The same factory creates a fresh scheduler/controller/owner. No held receipt
+    # registry or mutated scheduler instance is carried over.
+    assert materialized.inputs.scheduler_engine.export_state().to_dict() == seed
+    reopened, restarted = factory(materialized.resolved, args)
     try:
         assert reopened is not controller
         assert restarted.profile_executor is not runtime.profile_executor
