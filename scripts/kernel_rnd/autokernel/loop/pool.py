@@ -33,8 +33,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import json
+import os
 from pathlib import Path
 import shutil
+import stat
 import subprocess
 import threading
 import time
@@ -413,21 +415,229 @@ def stop_requested(store: Path) -> bool:
     return (store / STOP_SENTINEL).exists()
 
 
+@dataclass(frozen=True)
+class PruneReport:
+    """Truthful result of one bounded legacy anchor-generation cleanup."""
+
+    status: str
+    removed: tuple[Path, ...] = ()
+    failed: tuple[tuple[Path, str], ...] = ()
+    skipped: tuple[Path, ...] = ()
+    quarantined: tuple[tuple[Path, Path, str], ...] = ()
+    retention_unknown: tuple[str, ...] = ()
+    reclaimed_bytes: int | None = None
+
+
 def prune_anchor_generations(store: Path, *, keep: int = ANCHOR_GENERATIONS_KEPT,
                              current: Path | None = None,
-                             protect: Sequence[Path] = ()) -> list[Path]:
-    """Delete superseded anchor builds, never the one in use.
+                             protect: Sequence[Path] = (), unified: bool = False,
+                             retention_plan=None, retention_snapshot=None) -> PruneReport:
+    """Delete confirmed superseded legacy anchor builds, never the one in use.
 
-    Returns what was removed. The current anchor is excluded explicitly rather than by
+    Reports only confirmed-absent paths as removed. The current anchor is excluded rather than by
     assuming it is the newest: promotion and pruning are separate steps, and an
     assumption that they stay in step is the kind that holds until it does not.
+    Unified deletion is disabled here even when a complete plan is bound to the exact
+    supplied snapshot: it requires the native controller-root and tombstone consumer.
+    Legacy callers retain explicit current/protect behavior.
     """
-    generations = sorted(store.glob("anchor-gen-*"))
+    if isinstance(keep, bool) or not isinstance(keep, int) or keep <= 0:
+        raise ValueError("keep must be a positive non-boolean integer")
+    store = Path(store)
+    literal_store = Path(os.path.abspath(store))
+    try:
+        captured_store = os.stat(literal_store, follow_symlinks=False)
+    except OSError as exc:
+        raise ValueError("anchor store must be an existing non-symlink directory") from exc
+    if not stat.S_ISDIR(captured_store.st_mode):
+        raise ValueError("anchor store must be an existing non-symlink directory")
+    if (literal_store == Path(literal_store.anchor)
+            or literal_store.resolve() == Path.home().resolve()):
+        raise ValueError("anchor store cannot be a broad filesystem/home root")
+    open_flags = os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        parent_fd = os.open(literal_store, open_flags)
+    except OSError as exc:
+        raise ValueError("anchor store could not be opened without following links") from exc
+    try:
+        opened_store = os.fstat(parent_fd)
+        if ((captured_store.st_dev, captured_store.st_ino)
+                != (opened_store.st_dev, opened_store.st_ino)):
+            raise ValueError("anchor store identity changed before discovery")
+        store_location = Path(os.readlink(f"/proc/self/fd/{parent_fd}"))
+        generation_names = tuple(sorted(
+            name for name in os.listdir(parent_fd) if name.startswith("anchor-gen-")))
+        generations = tuple(literal_store / name for name in generation_names)
+    except BaseException:
+        os.close(parent_fd)
+        raise
     # `protect` (R23-44, 2026-09-06): the champion-of-record gen is the serving A-arm and
     # must outlive the accumulator generations built on top of it -- pruning it broke
     # every accumulate step (its binaries carry an absolute RUNPATH into the gen dir).
-    protected = ({current.resolve()} if current else set()) | {Path(x).resolve() for x in protect}
-    doomed = [g for g in generations[:-keep] if g.resolve() not in protected]
-    for path in doomed:
-        shutil.rmtree(path, ignore_errors=True)
-    return doomed
+    protected_paths = ([Path(current)] if current is not None else []) \
+        + [Path(item) for item in protect]
+    if unified:
+        try:
+            reason = "complete unified retention closure was not supplied"
+            if retention_plan is not None and retention_snapshot is not None:
+                try:
+                    from . import retention
+                    retention.validate_plan_snapshot(retention_plan, retention_snapshot)
+                except (TypeError, ValueError) as exc:
+                    reason = str(exc)
+                else:
+                    reason = ("native current-controller root authority and existing "
+                              "tombstone expiry consumer are not connected")
+            return PruneReport(status="retention_unknown", skipped=generations,
+                               retention_unknown=(reason,))
+        finally:
+            os.close(parent_fd)
+
+    protected_names: set[str] = set()
+    try:
+        for item in protected_paths:
+            item_abs = Path(os.path.abspath(item))
+            item_real = item_abs.resolve(strict=False)
+            for candidate in (item_abs, item_real):
+                for parent in (literal_store, store_location):
+                    try:
+                        relative = candidate.relative_to(parent)
+                    except ValueError:
+                        continue
+                    if relative.parts and relative.parts[0].startswith("anchor-gen-"):
+                        protected_names.add(relative.parts[0])
+    except BaseException:
+        os.close(parent_fd)
+        raise
+
+    doomed = [generation for generation in generations[:-keep]
+              if generation.name not in protected_names]
+    skipped = [generation for generation in generations if generation not in doomed]
+    removed: list[Path] = []
+    failed: list[tuple[Path, str]] = []
+    quarantined: list[tuple[Path, Path, str]] = []
+    def store_unchanged() -> bool:
+        try:
+            current_store = os.stat(literal_store, follow_symlinks=False)
+        except OSError:
+            return False
+        return (stat.S_ISDIR(current_store.st_mode)
+                and (current_store.st_dev, current_store.st_ino)
+                == (opened_store.st_dev, opened_store.st_ino))
+
+    def exists_at(name: str, *, dir_fd: int = parent_fd) -> bool:
+        try:
+            os.stat(name, dir_fd=dir_fd, follow_symlinks=False)
+        except FileNotFoundError:
+            return False
+        return True
+
+    if not doomed:
+        os.close(parent_fd)
+        return PruneReport(status="completed", skipped=tuple(skipped),
+                           reclaimed_bytes=None)
+
+    private_name = f".anchor-prune-private-{os.getpid()}-{time.time_ns()}"
+    quarantine_fd: int | None = None
+    private_opened = None
+
+    def private_unchanged() -> bool:
+        if private_opened is None:
+            return False
+        try:
+            visible = os.stat(private_name, dir_fd=parent_fd,
+                              follow_symlinks=False)
+        except OSError:
+            return False
+        return (stat.S_ISDIR(visible.st_mode)
+                and (visible.st_dev, visible.st_ino)
+                == (private_opened.st_dev, private_opened.st_ino))
+
+    try:
+        if not store_unchanged():
+            raise OSError("anchor store identity changed before quarantine creation")
+        os.mkdir(private_name, mode=0o700, dir_fd=parent_fd)
+        quarantine_fd = os.open(private_name, open_flags, dir_fd=parent_fd)
+        os.fchmod(quarantine_fd, 0o700)
+        private_opened = os.fstat(quarantine_fd)
+        private_visible = os.stat(private_name, dir_fd=parent_fd, follow_symlinks=False)
+        if ((private_visible.st_dev, private_visible.st_ino)
+                != (private_opened.st_dev, private_opened.st_ino)
+                or private_opened.st_uid != os.geteuid()
+                or stat.S_IMODE(private_opened.st_mode) != 0o700):
+            raise OSError("private cleanup quarantine identity or ownership changed")
+
+        for path in doomed:
+            try:
+                if not store_unchanged():
+                    raise OSError("anchor store identity changed before cleanup")
+                if exists_at(path.name, dir_fd=quarantine_fd):
+                    raise OSError("refusing to overwrite an existing cleanup quarantine")
+                before = os.stat(path.name, dir_fd=parent_fd, follow_symlinks=False)
+                if stat.S_ISLNK(before.st_mode):
+                    raise OSError("refusing to delete an anchor-generation symlink")
+                if not stat.S_ISDIR(before.st_mode):
+                    raise OSError("refusing to delete a non-directory anchor generation")
+                if not store_unchanged():
+                    raise OSError("anchor store identity changed at cleanup boundary")
+                if not private_unchanged():
+                    raise OSError("private cleanup quarantine identity changed before move")
+                os.rename(path.name, path.name,
+                          src_dir_fd=parent_fd, dst_dir_fd=quarantine_fd)
+                isolated = os.stat(path.name, dir_fd=quarantine_fd,
+                                   follow_symlinks=False)
+                if ((isolated.st_dev, isolated.st_ino) != (before.st_dev, before.st_ino)
+                        or not stat.S_ISDIR(isolated.st_mode)):
+                    raise OSError("quarantined generation identity differs from validated target")
+                if not store_unchanged() or not private_unchanged():
+                    raise OSError("store or quarantine identity changed at destructive boundary")
+                shutil.rmtree(path.name, dir_fd=quarantine_fd)
+                if (exists_at(path.name, dir_fd=quarantine_fd)
+                        or exists_at(path.name, dir_fd=parent_fd)):
+                    raise OSError("generation path still exists after cleanup")
+                if not store_unchanged() or not private_unchanged():
+                    raise OSError("store or quarantine identity changed during cleanup")
+            except OSError as exc:
+                reason = f"{type(exc).__name__}: {exc}"
+                recovery_path: Path | None = None
+                if exists_at(path.name, dir_fd=quarantine_fd):
+                    try:
+                        owned_location = Path(os.readlink(
+                            f"/proc/self/fd/{quarantine_fd}"))
+                    except OSError as recovery_exc:
+                        reason += ("; owned quarantine remains but its recovery path "
+                                   f"is unavailable: {recovery_exc}")
+                    else:
+                        recovery_path = owned_location / path.name
+                if not private_unchanged():
+                    reason += ("; public quarantine pathname changed; foreign "
+                               "replacement left untouched")
+                failed.append((path, reason))
+                if recovery_path is not None:
+                    quarantined.append((path, recovery_path, reason))
+                continue
+            removed.append(path)
+    finally:
+        try:
+            if quarantine_fd is not None:
+                try:
+                    private_is_empty = not os.listdir(quarantine_fd)
+                    private_identity_ok = private_unchanged()
+                except OSError as exc:
+                    failed.append((literal_store / private_name,
+                                   f"quarantine finalization failed: {exc}"))
+                    private_is_empty = False
+                    private_identity_ok = False
+                finally:
+                    os.close(quarantine_fd)
+                if private_is_empty and private_identity_ok and store_unchanged():
+                    try:
+                        os.rmdir(private_name, dir_fd=parent_fd)
+                    except OSError:
+                        pass
+        finally:
+            os.close(parent_fd)
+    return PruneReport(status="partial" if failed else "completed",
+                       removed=tuple(removed), failed=tuple(failed),
+                       skipped=tuple(skipped), quarantined=tuple(quarantined),
+                       reclaimed_bytes=None)
