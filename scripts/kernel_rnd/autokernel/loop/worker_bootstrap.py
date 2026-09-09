@@ -17,6 +17,7 @@ import selectors
 import signal
 import subprocess
 import sys
+from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 
@@ -163,7 +164,8 @@ def _drain_child(child: subprocess.Popen[bytes], stdout_fd: int,
 
 
 def run(*, gate_fd: int, contract_fd: int, outcome_fd: int,
-        stdout_fd: int, stderr_fd: int) -> int:
+        stdout_fd: int, stderr_fd: int,
+        planned_fds: tuple[int, int, int] | None = None) -> int:
     raw = _read_bounded(contract_fd, MAX_CONTRACT_BYTES)
     os.close(contract_fd)
     try:
@@ -174,6 +176,26 @@ def run(*, gate_fd: int, contract_fd: int, outcome_fd: int,
     os.close(gate_fd)
     if token != b"G":
         raise BootstrapRefused("bootstrap execution gate was not released")
+    child_pass_fds: tuple[int, ...] = ()
+    if planned_fds is not None:
+        if (len(set(planned_fds)) != 3 or min(planned_fds) < 3
+                or set(planned_fds) & {gate_fd, contract_fd, outcome_fd,
+                                      stdout_fd, stderr_fd}):
+            raise BootstrapRefused("planned-worker descriptors are invalid")
+        argv = contract["argv"]
+        expected_worker = Path(__file__).with_name("unified_worker.py").resolve()
+        if (len(argv) != 10 or argv[0] != str(Path(sys.executable).resolve(strict=True))
+                or argv[1:3] != ["-I", "-B"]
+                or Path(argv[3]).resolve() != expected_worker
+                or argv[4::2] != ["--start-fd", "--control-fd", "--result-fd"]):
+            raise BootstrapRefused("planned descriptors require the fixed worker entrypoint")
+        try:
+            declared = tuple(int(item) for item in argv[5::2])
+        except ValueError as exc:
+            raise BootstrapRefused("planned worker descriptor argv is invalid") from exc
+        if declared != planned_fds:
+            raise BootstrapRefused("planned worker argv differs from inherited descriptors")
+        child_pass_fds = planned_fds
 
     child: subprocess.Popen[bytes] | None = None
     requested_signal: int | None = None
@@ -193,7 +215,10 @@ def run(*, gate_fd: int, contract_fd: int, outcome_fd: int,
         child = subprocess.Popen(
             contract["argv"], cwd=contract["cwd"], env=contract["env"],
             stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            close_fds=True)
+            close_fds=True, pass_fds=child_pass_fds)
+        for fd in child_pass_fds:
+            os.close(fd)
+        child_pass_fds = ()
         output = _drain_child(child, stdout_fd, stderr_fd)
         return_code = child.returncode
         outcome = {
@@ -210,7 +235,7 @@ def run(*, gate_fd: int, contract_fd: int, outcome_fd: int,
     finally:
         for item, handler in previous.items():
             signal.signal(item, handler)
-        for fd in (stdout_fd, stderr_fd, outcome_fd):
+        for fd in (*child_pass_fds, stdout_fd, stderr_fd, outcome_fd):
             try:
                 os.close(fd)
             except OSError:
@@ -224,15 +249,24 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--outcome-fd", type=int, required=True)
     parser.add_argument("--stdout-fd", type=int, required=True)
     parser.add_argument("--stderr-fd", type=int, required=True)
+    parser.add_argument("--planned-start-fd", type=int)
+    parser.add_argument("--planned-control-fd", type=int)
+    parser.add_argument("--planned-result-fd", type=int)
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
+        supplied = (args.planned_start_fd, args.planned_control_fd,
+                    args.planned_result_fd)
+        if any(item is not None for item in supplied) and not all(
+                item is not None for item in supplied):
+            raise BootstrapRefused("planned-worker descriptors must be supplied together")
+        planned = None if supplied == (None, None, None) else supplied
         return run(gate_fd=args.gate_fd, contract_fd=args.contract_fd,
                    outcome_fd=args.outcome_fd, stdout_fd=args.stdout_fd,
-                   stderr_fd=args.stderr_fd)
+                   stderr_fd=args.stderr_fd, planned_fds=planned)
     except BootstrapRefused as exc:
         print(f"worker bootstrap refused: {exc}", file=sys.stderr)
         return 125

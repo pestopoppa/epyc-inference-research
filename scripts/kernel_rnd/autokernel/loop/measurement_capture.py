@@ -324,6 +324,29 @@ class ArtifactStore:
         with self._exclusive():
             return self._verify_locked(namespace, body)
 
+    def read(self, locator: str, sha256: str) -> Mapping[str, Any]:
+        """Read one exact sealed locator through the same pinned private-store checks."""
+        locator = _text(locator, "artifact locator")
+        _sha(sha256, "artifact sha256")
+        if ("/" in locator or locator.startswith(".") or not locator.endswith(".json")
+                or len(locator) > 256):
+            raise CaptureError("artifact locator is not a private store leaf")
+        with self._exclusive():
+            try:
+                self._runtime.verify()
+                raw = self._durable_read(locator)
+            except (OSError, SecureRuntimeError) as exc:
+                raise CaptureError(f"artifact read failed: {exc}") from exc
+        if hashlib.sha256(raw).hexdigest() != sha256:
+            raise CaptureError("artifact bytes differ from requested digest")
+        try:
+            value = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise CaptureError("artifact bytes are not JSON") from exc
+        if not isinstance(value, dict):
+            raise CaptureError("artifact body is not an object")
+        return _freeze(value)
+
     def _verify_locked(self, namespace: str, body: Mapping[str, Any]) -> StoredArtifact:
         name, encoded, raw_body = self._identity(namespace, body)
         temporary = f".{name}.stage"
@@ -446,16 +469,12 @@ class ArtifactStore:
 CaptureTransaction = Callable[[str, Mapping[str, Any]], Any]
 
 
-class NativeMeasurementSink:
-    """Real planned-serving sink that seals raw artifacts then journals arm carriers."""
+class _MeasurementCaptureBuilder:
+    """Shared raw/carrier builder; subclasses choose deferred or direct publication."""
 
-    def __init__(self, *, context: CaptureContext, store: ArtifactStore,
-                 capture_transaction: CaptureTransaction):
+    def __init__(self, *, context: CaptureContext, store: ArtifactStore):
         self.context = CaptureContext.from_dict(context.to_dict())
         self.store = store
-        if not callable(capture_transaction):
-            raise CaptureError("serialized capture transaction is required")
-        self.capture_transaction = capture_transaction
         self._artifacts: list[tuple[dict[str, Any], StoredArtifact]] = []
 
     def __call__(self, artifact: Mapping[str, Any]) -> Mapping[str, Any]:
@@ -484,8 +503,9 @@ class NativeMeasurementSink:
         self._artifacts.append((copied, stored))
         return stored.to_dict()
 
-    def finalize_run(self, summary: Mapping[str, Any]) -> tuple[Mapping[str, Any], ...]:
-        """Seal one carrier per arm and append it through the serialized transaction."""
+    def _build_payloads(self, summary: Mapping[str, Any]) \
+            -> tuple[tuple[str, Mapping[str, Any], StoredArtifact], ...]:
+        """Seal one carrier per arm without crossing the controller boundary."""
         plan = ep.ExperimentPlan.from_dict(_plain(summary["plan"]))
         if summary.get("plan_digest") != plan.digest:
             raise CaptureError("final capture plan digest mismatch")
@@ -521,7 +541,7 @@ class NativeMeasurementSink:
         rows = view.get("selected_rows")
         if not isinstance(rows, list):
             raise CaptureError("admissible view selected_rows must be an array")
-        results: list[Mapping[str, Any]] = []
+        results: list[tuple[str, Mapping[str, Any], StoredArtifact]] = []
         for arm in ("anchor", "candidate"):
             arm_rows = [row for row in rows if isinstance(row, Mapping)
                         and row.get("arm") == arm]
@@ -575,12 +595,7 @@ class NativeMeasurementSink:
             sealed = self.store.write(f"carrier:{measurement_id}", carrier)
             payload = {"schema": CAPTURE_SCHEMA, "measurement_id": measurement_id,
                        "carrier": carrier, "artifact": sealed.to_dict()}
-            # Idempotence/conflict handling belongs inside this callback's single serialized
-            # lookup+append boundary.  The content-addressed artifact is evidence, not a WAL.
-            entry = self.capture_transaction(measurement_id, payload)
-            results.append(MappingProxyType({"measurement_id": measurement_id,
-                                             "artifact": sealed.to_dict(),
-                                             "journal_entry": entry}))
+            results.append((measurement_id, payload, sealed))
         return tuple(results)
 
     @staticmethod
@@ -691,5 +706,61 @@ class NativeMeasurementSink:
         return None
 
 
+class DeferredNativeMeasurementSink(_MeasurementCaptureBuilder):
+    """Child-only sink that seals exact native payloads but has no Journal callback."""
+
+    def __init__(self, *, context: CaptureContext, store: ArtifactStore):
+        super().__init__(context=context, store=store)
+        self._captures: tuple[Mapping[str, Any], ...] = ()
+
+    @property
+    def captures(self) -> tuple[Mapping[str, Any], ...]:
+        return self._captures
+
+    def finalize_run(self, summary: Mapping[str, Any]) -> tuple[Mapping[str, Any], ...]:
+        captures: list[Mapping[str, Any]] = []
+        receipts: list[Mapping[str, Any]] = []
+        for measurement_id, payload, sealed in self._build_payloads(summary):
+            plain = _plain(payload)
+            digest = schemas.content_hash(plain)
+            captures.append(MappingProxyType({
+                "measurement_id": measurement_id,
+                "payload": _freeze(plain),
+                "payload_digest": digest,
+                "artifact": _freeze(sealed.to_dict()),
+            }))
+            receipts.append(MappingProxyType({
+                "measurement_id": measurement_id,
+                "payload_digest": digest,
+                "artifact": _freeze(sealed.to_dict()),
+            }))
+        self._captures = tuple(captures)
+        return tuple(receipts)
+
+
+class NativeMeasurementSink(_MeasurementCaptureBuilder):
+    """Real planned-serving sink that seals raw artifacts then journals arm carriers."""
+
+    def __init__(self, *, context: CaptureContext, store: ArtifactStore,
+                 capture_transaction: CaptureTransaction):
+        super().__init__(context=context, store=store)
+        if not callable(capture_transaction):
+            raise CaptureError("serialized capture transaction is required")
+        self.capture_transaction = capture_transaction
+
+    def finalize_run(self, summary: Mapping[str, Any]) -> tuple[Mapping[str, Any], ...]:
+        """Preserve the direct same-thread serialized transaction semantics."""
+        results: list[Mapping[str, Any]] = []
+        for measurement_id, payload, sealed in self._build_payloads(summary):
+            # Idempotence/conflict handling belongs inside this callback's single serialized
+            # lookup+append boundary.  The content-addressed artifact is evidence, not a WAL.
+            entry = self.capture_transaction(measurement_id, payload)
+            results.append(MappingProxyType({"measurement_id": measurement_id,
+                                             "artifact": sealed.to_dict(),
+                                             "journal_entry": entry}))
+        return tuple(results)
+
+
 __all__ = ["ArtifactStore", "CAPTURE_SCHEMA", "CaptureContext", "CaptureError",
-           "JOURNAL_KIND", "NativeMeasurementSink", "PRODUCER_ID", "StoredArtifact"]
+           "DeferredNativeMeasurementSink", "JOURNAL_KIND", "NativeMeasurementSink",
+           "PRODUCER_ID", "StoredArtifact"]

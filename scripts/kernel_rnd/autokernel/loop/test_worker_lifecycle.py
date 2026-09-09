@@ -18,6 +18,7 @@ import pytest
 from ..controller.discovery_supervisor_secure import RuntimeRoot
 from . import worker_bootstrap as bootstrap
 from . import worker_lifecycle as lifecycle
+from . import scheduling
 
 
 def _now() -> str:
@@ -160,6 +161,44 @@ class MockProvider:
             "absent_released", None, "fixture confirms absent/released")
 
 
+class ReceiptProvider(MockProvider):
+    def close_held_receipt(self, *, authorization, request, worker_id,
+                           worker_generation, container_identity,
+                           lifecycle_started_at, released_at, deadline):
+        del container_identity, deadline
+        receipt = scheduling.HeldClaimReceipt(
+            f"receipt:{authorization.grant.grant_id}:{worker_generation}",
+            request.request_id, "cpu", "search", lifecycle_started_at,
+            released_at, worker_generation, authorization.grant.generation,
+            (f"claim:{authorization.container_id}",), 0.5, (), 1024,
+            ("0",), {request.request_id: 1.0})
+        return lifecycle.TrustedHeldClaimReceipt(
+            request.request_id, request.plan_digest, worker_id, worker_generation,
+            authorization.grant.grant_id, authorization.grant.generation,
+            authorization.container_id, authorization.grant.clock_domain,
+            lifecycle_started_at, released_at, receipt)
+
+
+class AdvancingClock:
+    def __init__(self) -> None:
+        self.value = time.monotonic()
+
+    def __call__(self) -> float:
+        self.value += 0.0001
+        return self.value
+
+
+class LateReceiptProvider(ReceiptProvider):
+    def __init__(self, root: Path, clock: AdvancingClock) -> None:
+        super().__init__(root)
+        self.clock = clock
+
+    def close_held_receipt(self, **kwargs):
+        receipt = super().close_held_receipt(**kwargs)
+        self.clock.value = kwargs["deadline"] + 0.1
+        return receipt
+
+
 class Harness:
     def __init__(self, *, provider=True, binding_current=True, refresh=None,
                  release_ok=True) -> None:
@@ -209,6 +248,59 @@ def _captured(events):
         print(f"OWNED_TEST_PID pid={identity.pid} start_ticks={identity.start_ticks} "
               f"boot_id={identity.boot_id} alive={lifecycle.same_process(identity)}")
     return identities
+
+
+def test_provider_authored_held_receipt_binds_exact_durable_terminal():
+    harness = Harness()
+    provider = ReceiptProvider(harness.path / "containers")
+    harness.provider = provider
+    harness.engine.provider = provider
+    try:
+        terminal = harness.engine.run_stage(harness.request("pass"))
+        receipt = harness.engine.trusted_held_claim_receipt(terminal)
+        assert receipt.ownership_generation == terminal.worker_generation
+        assert receipt.allocation_generation == terminal.grant_generation
+        assert receipt.beneficiary_shares == {terminal.request_id: 1.0}
+        assert receipt.ended_at > receipt.started_at
+        for identity in _captured(harness.events):
+            assert not lifecycle.same_process(identity)
+    finally:
+        harness.close()
+
+
+def test_late_held_receipt_return_refuses_result_but_preserves_cost_facts():
+    harness = Harness()
+    clock = AdvancingClock()
+    provider = LateReceiptProvider(harness.path / "containers", clock)
+    harness.provider = provider
+    harness.engine.provider = provider
+    harness.engine.monotonic = clock
+    try:
+        with pytest.raises(lifecycle.LifecycleRefused, match="returned after lifecycle deadline"):
+            harness.engine.run_stage(
+                harness.request("pass", stage_seconds=1.0, teardown_seconds=0.5))
+        terminal, = harness.engine._terminals.values()
+        assert terminal.accepted is False
+        assert provider.released
+        assert not provider.authorization.container.path.exists()
+        receipt = harness.engine.trusted_held_claim_receipt(terminal)
+        assert receipt.proposal_id == terminal.request_id
+        assert receipt.ownership_generation == terminal.worker_generation
+        assert receipt.ended_at > receipt.started_at
+        for identity in _captured(harness.events):
+            assert not lifecycle.same_process(identity)
+    finally:
+        harness.close()
+
+
+def test_missing_held_receipt_capability_never_fabricates_zero_usage():
+    harness = Harness()
+    try:
+        terminal = harness.engine.run_stage(harness.request("pass"))
+        with pytest.raises(lifecycle.WaitingAuthority, match="unavailable"):
+            harness.engine.trusted_held_claim_receipt(terminal)
+    finally:
+        harness.close()
 
 
 def test_contract_is_closed_digest_bound_and_rejects_secrets():

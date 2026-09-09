@@ -8,10 +8,14 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 from dataclasses import dataclass, replace
+from pathlib import Path
+import stat
 from types import MappingProxyType
 from typing import Any, Callable, Mapping, Sequence
 
+from .. import schemas
 from . import campaign, experiment_plan, scheduling, scoped_evidence, serving
 from .resolved_recipe import (CanonicalResolvedRecipe, ResolvedRecipe, ResolutionError,
                               EnvironmentPolicy,
@@ -24,6 +28,8 @@ OPPORTUNITY_SCHEMA = "epyc.autokernel.planning_opportunity.v1"
 DIMENSION_SCHEMA = "epyc.autokernel.runtime_dimension.v1"
 PAIR_SCHEMA = "epyc.autokernel.runtime_arm_pair.v1"
 ANCHOR_SCHEMA = "epyc.autokernel.runtime_anchor.v1"
+LOCAL_ANCHOR_SCHEMA = "epyc.autokernel.local_runtime_anchor.v1"
+ACTOR_PREPARATION_SCHEMA = "epyc.autokernel.actor_preparation.v1"
 DISPATCH_SCHEMA = "epyc.autokernel.planner_dispatch_request.v1"
 INTENT_SCHEMA = "epyc.autokernel.experiment_intent.v1"
 RESULT_SCHEMA = "epyc.autokernel.unified_planning_result.v1"
@@ -51,6 +57,23 @@ def _canonical(value: Any) -> bytes:
 
 def _digest(value: Any) -> str:
     return hashlib.sha256(_canonical(value)).hexdigest()
+
+
+def serving_arm_identity(recipe: ResolvedRecipe) -> Mapping[str, Any]:
+    """Return the full arm identity consumed by planned_serving.arm_identity."""
+    return _freeze({
+        "backend": recipe.backend,
+        "template_hash": recipe.template_hash,
+        "resolved_execution_digest": recipe.execution_digest,
+        "resolved_snapshot_digest": recipe.snapshot_digest,
+        "workload_digest": schemas.content_hash(recipe.workload.to_dict()),
+        "model_digest": recipe.model.sha256,
+        "drafter_digest": recipe.drafter.sha256 if recipe.drafter else None,
+        "executable_digest": recipe.executable.sha256,
+        "dso_set_digest": schemas.content_hash([
+            {"load_name": Path(item.path).name, "sha256": item.sha256}
+            for item in recipe.dsos]),
+    })
 
 
 def _mapping(value: Any, label: str) -> Mapping[str, Any]:
@@ -326,6 +349,118 @@ class RuntimeAnchor:
                 "environment_policy": self.environment_policy.to_dict()}
 
 
+@dataclass(frozen=True)
+class LocalRuntimeAnchor:
+    """Explicit local recipe/artifact verification request, never production authority."""
+
+    target_revision_digest: str
+    recipe_sidecar_path: str
+    recipe_sidecar_sha256: str
+    schema: str = LOCAL_ANCHOR_SCHEMA
+
+    @classmethod
+    def from_dict(cls, value: Any) -> "LocalRuntimeAnchor":
+        row = _exact(value, {"schema", "target_revision_digest", "recipe_sidecar_path",
+                             "recipe_sidecar_sha256"},
+                     "local runtime anchor")
+        if row["schema"] != LOCAL_ANCHOR_SCHEMA:
+            raise PlanningRefused("local runtime anchor schema is unsupported")
+        digest = _text(row["target_revision_digest"], "target_revision_digest")
+        sidecar_digest = _text(row["recipe_sidecar_sha256"], "recipe_sidecar_sha256")
+        for supplied, label in ((digest, "target_revision_digest"),
+                                (sidecar_digest, "recipe_sidecar_sha256")):
+            if len(supplied) != 64 or any(c not in "0123456789abcdef" for c in supplied):
+                raise PlanningRefused(f"{label} must be SHA-256")
+        path = Path(_text(row["recipe_sidecar_path"], "recipe_sidecar_path"))
+        if not path.is_absolute():
+            raise PlanningRefused("local recipe sidecar path must be absolute")
+        return cls(digest, str(path), sidecar_digest)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"schema": self.schema,
+                "target_revision_digest": self.target_revision_digest,
+                "recipe_sidecar_path": self.recipe_sidecar_path,
+                "recipe_sidecar_sha256": self.recipe_sidecar_sha256}
+
+
+_MAX_LOCAL_RECIPE_BYTES = 2 * 1024 * 1024
+
+
+def _verified_file(path_text: str, expected: str, label: str) -> bytes:
+    path = Path(path_text)
+    descriptor: int | None = None
+    try:
+        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        info = os.fstat(descriptor)
+        if (not stat.S_ISREG(info.st_mode) or info.st_size < 1
+                or info.st_size > _MAX_LOCAL_RECIPE_BYTES):
+            raise PlanningRefused(f"{label} is not a regular non-symlink file")
+        raw = bytearray()
+        while len(raw) <= _MAX_LOCAL_RECIPE_BYTES:
+            chunk = os.read(descriptor, min(65536, _MAX_LOCAL_RECIPE_BYTES + 1 - len(raw)))
+            if not chunk:
+                break
+            raw.extend(chunk)
+        after = os.fstat(descriptor)
+        named = os.stat(path, follow_symlinks=False)
+    except OSError as exc:
+        raise PlanningRefused(f"cannot read {label}: {exc}") from exc
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+    if (len(raw) > _MAX_LOCAL_RECIPE_BYTES
+            or (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns)
+            != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns)
+            or (after.st_dev, after.st_ino) != (named.st_dev, named.st_ino)):
+        raise PlanningRefused(f"{label} changed while being verified")
+    result = bytes(raw)
+    if hashlib.sha256(result).hexdigest() != expected:
+        raise PlanningRefused(f"{label} SHA-256 differs")
+    return result
+
+
+def _prepare_local_anchor(target: campaign.TargetRevision,
+                          anchor: LocalRuntimeAnchor) -> CanonicalResolvedRecipe:
+    if "seed" not in target.enrolled_as:
+        raise PlanningRefused("local runtime anchor is restricted to enrolled seeds")
+    raw = _verified_file(anchor.recipe_sidecar_path, anchor.recipe_sidecar_sha256,
+                         "local recipe sidecar")
+    try:
+        payload = json.loads(raw)
+        recipe = resolved_recipe_from_dict(payload)
+    except (json.JSONDecodeError, ResolutionError, TypeError, ValueError) as exc:
+        raise PlanningRefused(f"local recipe sidecar is invalid: {exc}") from exc
+    if not isinstance(recipe, CanonicalResolvedRecipe):
+        raise PlanningRefused("local seed requires a canonical reconstructable recipe")
+    execution = target.execution
+    if any(item is None for item in (execution.model, execution.build, execution.recipe)):
+        raise PlanningRefused("local seed lacks enrolled model/build/recipe identity")
+    if execution.recipe.sha256 != anchor.recipe_sidecar_sha256:
+        raise PlanningRefused("local recipe sidecar differs from enrolled recipe identity")
+    checks = {
+        "backend": recipe.backend == execution.backend,
+        "model": (recipe.model.sha256, recipe.model.path)
+                 == (execution.model.sha256, execution.model.path),
+        "executable": (recipe.executable.sha256, recipe.executable.path)
+                      == (execution.build.sha256, execution.build.path),
+        "drafter_presence": (recipe.drafter is None) == (execution.drafter is None),
+        "drafter": ((recipe.drafter is None and execution.drafter is None) or
+                    (recipe.drafter is not None and execution.drafter is not None
+                     and (recipe.drafter.sha256, recipe.drafter.path)
+                     == (execution.drafter.sha256, execution.drafter.path))),
+        "context": recipe.template.ctx == execution.context,
+        "concurrency": recipe.template.np == execution.concurrency,
+        "speculation": recipe.template.spec_decode.get("type", "none")
+                       == execution.speculation,
+        "environment": ({key: value for key, value in recipe.launch_env
+                         if key != "LD_LIBRARY_PATH"} == dict(execution.env)),
+    }
+    failed = sorted(name for name, passed in checks.items() if not passed)
+    if failed:
+        raise PlanningRefused(f"local recipe differs from enrolled seed: {failed}")
+    return recipe
+
+
 def _bind_runtime_anchor(target: campaign.TargetRevision, anchor: RuntimeAnchor,
                          export: Mapping[str, Any],
                          resolved_rows: Mapping[str, CanonicalResolvedRecipe]
@@ -389,6 +524,7 @@ class PreparedRuntimeAnchors:
     manifest_digest: str
     resolved_campaign_digest: str
     recipes: Mapping[str, CanonicalResolvedRecipe]
+    runtime_prerequisites: Mapping[str, tuple[str, ...]]
     export_digests: tuple[str, ...]
     _token: object
 
@@ -400,7 +536,7 @@ class PreparedRuntimeAnchors:
 
 def prepare_runtime_anchors(
         resolved_campaign: campaign.ResolvedCampaign,
-        anchors: Mapping[str, Mapping[str, Any] | RuntimeAnchor],
+        anchors: Mapping[str, Mapping[str, Any] | RuntimeAnchor | LocalRuntimeAnchor],
         ) -> PreparedRuntimeAnchors:
     """Validate each unique export/policy once, outside the planning hot path."""
     if not isinstance(resolved_campaign, campaign.ResolvedCampaign):
@@ -412,11 +548,20 @@ def prepare_runtime_anchors(
         raise PlanningRefused(f"resolved campaign is invalid: {exc}") from exc
     targets = {_target_digest(target): target for target in resolved_campaign.targets}
     normalized: dict[str, RuntimeAnchor] = {}
+    local: dict[str, LocalRuntimeAnchor] = {}
     groups: dict[tuple[str, str], list[RuntimeAnchor]] = {}
     for key, raw in anchors.items():
         if key not in targets:
             raise PlanningRefused("runtime anchor names an unknown target revision")
-        anchor = RuntimeAnchor.from_dict(raw.to_dict() if isinstance(raw, RuntimeAnchor) else raw)
+        supplied = raw.to_dict() if isinstance(raw, (RuntimeAnchor, LocalRuntimeAnchor)) else raw
+        if isinstance(supplied, Mapping) and supplied.get("schema") == LOCAL_ANCHOR_SCHEMA:
+            local_anchor = LocalRuntimeAnchor.from_dict(supplied)
+            if local_anchor.target_revision_digest != key:
+                raise PlanningRefused(
+                    "local runtime anchor map key differs from its target revision")
+            local[key] = local_anchor
+            continue
+        anchor = RuntimeAnchor.from_dict(supplied)
         if anchor.target_revision_digest != key:
             raise PlanningRefused("runtime anchor map key differs from its target revision")
         export_label = anchor.production_export.get("export_sha256")
@@ -426,6 +571,7 @@ def prepare_runtime_anchors(
         groups.setdefault(group, []).append(anchor)
         normalized[key] = anchor
     prepared: dict[str, CanonicalResolvedRecipe] = {}
+    prerequisites: dict[str, tuple[str, ...]] = {}
     verified_exports: dict[tuple[str, str], Mapping[str, Any]] = {}
     for group, members in groups.items():
         from .production_enrollment import (ProductionEnrollmentError,
@@ -461,9 +607,16 @@ def prepare_runtime_anchors(
             if member in members:
                 prepared[key] = _bind_runtime_anchor(
                     targets[key], member, export, rows)
+    for key, anchor in local.items():
+        prepared[key] = _prepare_local_anchor(targets[key], anchor)
+        prerequisites[key] = (
+            "local_artifact_byte_verification_required",
+            "local_first_launch_correctness_required",
+        )
     return PreparedRuntimeAnchors(
         resolved_campaign.campaign_id, resolved_campaign.manifest_digest,
         _digest(resolved_campaign.to_dict()), MappingProxyType(prepared),
+        MappingProxyType(prerequisites),
         tuple(sorted(key[0] for key in verified_exports)), _PREPARED_TOKEN)
 
 
@@ -660,9 +813,9 @@ class UnifiedProposal:
         if row["kind"] == "runtime_recipe":
             pair = RuntimeArmPair.from_dict(row["runtime_pair"])
             row["runtime_pair"] = _freeze(pair.to_dict())
-            if ({"execution_digest": pair.anchor.execution_digest}
+            if (_thaw(serving_arm_identity(pair.anchor))
                     != _thaw(row["control_identity"]) or
-                    {"execution_digest": pair.candidate.execution_digest}
+                    _thaw(serving_arm_identity(pair.candidate))
                     != _thaw(row["intervention_identity"])):
                 raise PlanningRefused("runtime pair differs from proposal arm identities")
         elif row["runtime_pair"] is not None:
@@ -699,6 +852,84 @@ class UnifiedProposal:
     @property
     def digest(self) -> str:
         return _digest(self.to_dict())
+
+
+@dataclass(frozen=True)
+class ActorPreparationRequest:
+    actor_kind: str
+    actor_identity: Mapping[str, Any]
+    prompt: str
+    mandatory_conflicts: tuple[Mapping[str, Any], ...]
+    proposal: UnifiedProposal
+    cache_key: str
+    schema: str = ACTOR_PREPARATION_SCHEMA
+
+    def __post_init__(self) -> None:
+        if self.schema != ACTOR_PREPARATION_SCHEMA or self.actor_kind not in {
+                "source", "build_recipe"}:
+            raise PlanningRefused("actor preparation schema/kind is unsupported")
+        _text(self.prompt, "actor preparation prompt")
+        proposal = UnifiedProposal.from_dict(self.proposal.to_dict())
+        identity = _freeze(_mapping(self.actor_identity, "actor identity"))
+        if (proposal.kind != self.actor_kind
+                or proposal.experiment_plan_digest is not None
+                or proposal.runtime_pair is not None):
+            raise PlanningRefused("actor preparation proposal is not pending preparation")
+        conflicts = tuple(_freeze(_mapping(item, "mandatory conflict"))
+                          for item in self.mandatory_conflicts)
+        expected = _digest({"actor_kind": self.actor_kind,
+                            "actor_identity": _thaw(identity), "prompt": self.prompt,
+                            "mandatory_conflicts": [_thaw(item) for item in conflicts],
+                            "proposal": proposal.to_dict()})
+        if self.cache_key != expected:
+            raise PlanningRefused("actor preparation cache key differs from exact dependencies")
+        object.__setattr__(self, "mandatory_conflicts", conflicts)
+        object.__setattr__(self, "actor_identity", identity)
+        object.__setattr__(self, "proposal", proposal)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"schema": self.schema, "actor_kind": self.actor_kind,
+                "actor_identity": _thaw(self.actor_identity),
+                "prompt": self.prompt,
+                "mandatory_conflicts": [_thaw(item) for item in self.mandatory_conflicts],
+                "proposal": self.proposal.to_dict(), "cache_key": self.cache_key}
+
+
+def _actor_preparation(target: campaign.TargetRevision, opportunity: Opportunity,
+                       snapshot: scoped_evidence.ProposalSnapshot, prompt: str,
+                       conflicts: tuple[Mapping[str, Any], ...], sink_ref: str,
+                       actor_identity: Mapping[str, Any]
+                       ) -> ActorPreparationRequest:
+    body = {
+        "schema": PROPOSAL_SCHEMA,
+        "proposal_id": f"prepare:{opportunity.kind}:{opportunity.opportunity_id}:"
+                       f"{_digest(snapshot.to_dict())[:16]}",
+        "target_revision_digest": _target_digest(target),
+        "backend": target.execution.backend,
+        "parent_identity": {"target_ids": list(target.target_ids),
+                            "target_revision": target.revision},
+        "control_identity": _thaw(opportunity.claim_key.control_identity),
+        "intervention_identity": _thaw(opportunity.claim_key.intervention_identity),
+        "kind": opportunity.kind, "mechanism_id": opportunity.mechanism_id,
+        "estimand": opportunity.estimand, "metric": opportunity.metric,
+        "metric_direction": opportunity.metric_direction,
+        "effect_question": _thaw(opportunity.effect_question),
+        "changed_factors": list(opportunity.changed_factors),
+        "instrument": opportunity.instrument, "unit": opportunity.unit,
+        "required_witnesses": list(opportunity.required_witnesses),
+        "stage_class": opportunity.stage_class,
+        "estimated_duration_seconds": opportunity.estimated_duration_seconds,
+        "experiment_plan_digest": None, "native_artifact_sink_ref": sink_ref,
+        "runtime_pair": None, "claim_key": opportunity.claim_key.to_dict(),
+        "evidence_snapshot": snapshot.to_dict(),
+    }
+    proposal = UnifiedProposal.from_dict(body)
+    cache_key = _digest({"actor_kind": opportunity.kind,
+                         "actor_identity": _thaw(actor_identity), "prompt": prompt,
+                         "mandatory_conflicts": [_thaw(item) for item in conflicts],
+                         "proposal": proposal.to_dict()})
+    return ActorPreparationRequest(
+        opportunity.kind, actor_identity, prompt, conflicts, proposal, cache_key)
 
 
 @dataclass(frozen=True)
@@ -780,8 +1011,8 @@ def _runtime_proposal(target: campaign.TargetRevision, opportunity: Opportunity,
         "target_revision_digest": _target_digest(target), "backend": target.execution.backend,
         "parent_identity": {"target_ids": list(target.target_ids),
                             "target_revision": target.revision},
-        "control_identity": {"execution_digest": pair.anchor.execution_digest},
-        "intervention_identity": {"execution_digest": pair.candidate.execution_digest},
+        "control_identity": _thaw(serving_arm_identity(pair.anchor)),
+        "intervention_identity": _thaw(serving_arm_identity(pair.candidate)),
         "kind": "runtime_recipe", "mechanism_id": opportunity.mechanism_id,
         "estimand": opportunity.estimand, "metric": opportunity.metric,
         "metric_direction": opportunity.metric_direction,
@@ -802,10 +1033,11 @@ def _runtime_proposal(target: campaign.TargetRevision, opportunity: Opportunity,
 class PlanningResult:
     proposals: tuple[UnifiedProposal, ...]
     stage_proposals: tuple[scheduling.StageProposal, ...]
+    actor_preparations: tuple[ActorPreparationRequest, ...]
     dispositions: tuple[Mapping[str, Any], ...]
     selection: scheduling.Selection | None
     dispatch: DispatchRequest | None
-    scheduler_state: scheduling.SchedulerState
+    scheduler_state: scheduling.SchedulerState | None
     schema: str = RESULT_SCHEMA
 
 
@@ -815,15 +1047,19 @@ def plan_iteration(*, resolved_campaign: campaign.ResolvedCampaign,
                    runtime_anchors: PreparedRuntimeAnchors,
                    runtime_dimensions: Mapping[str, Sequence[Mapping[str, Any] | RuntimeDimension]],
                    source_actor: Callable[[str, tuple[Mapping[str, Any], ...],
-                                           scoped_evidence.ProposalSnapshot], Mapping[str, Any]],
+                                           scoped_evidence.ProposalSnapshot], Mapping[str, Any]] | None,
                    build_actor: Callable[[str, tuple[Mapping[str, Any], ...],
-                                          scoped_evidence.ProposalSnapshot], Mapping[str, Any]],
+                                          scoped_evidence.ProposalSnapshot], Mapping[str, Any]] | None,
                    scheduler_engine: scheduling.SchedulerEngine,
                    experiment_plans: Mapping[str, experiment_plan.ExperimentPlan | Mapping[str, Any]],
                    now: float, native_artifact_sink_ref: str,
                    stage_handler: Callable[[DispatchRequest], None] | None = None,
                    stop_requested: Callable[[], bool] = lambda: False,
-                   max_prompt_chars: int = 12000) -> PlanningResult:
+                   max_prompt_chars: int = 12000,
+                   defer_actor_preparation: bool = False,
+                   issue_selection: bool = True,
+                   actor_identities: Mapping[str, Mapping[str, Any]] | None = None
+                   ) -> PlanningResult:
     """Plan once, ask the real scheduler, and optionally record its dispatch request."""
     if not isinstance(resolved_campaign, campaign.ResolvedCampaign):
         raise PlanningRefused("resolved_campaign must be a validated ResolvedCampaign")
@@ -841,9 +1077,14 @@ def plan_iteration(*, resolved_campaign: campaign.ResolvedCampaign,
         raise PlanningRefused("max_prompt_chars must be an integer >= 256")
     if not isinstance(scheduler_engine, scheduling.SchedulerEngine):
         raise PlanningRefused("scheduler_engine must be the persistent operational scheduler")
+    if type(defer_actor_preparation) is not bool:
+        raise PlanningRefused("defer_actor_preparation must be boolean")
+    if type(issue_selection) is not bool:
+        raise PlanningRefused("issue_selection must be boolean")
     sink_ref = _text(native_artifact_sink_ref, "native_artifact_sink_ref")
     proposals: list[UnifiedProposal] = []
     stages: list[scheduling.StageProposal] = []
+    actor_preparations: list[ActorPreparationRequest] = []
     dispositions: list[Mapping[str, Any]] = []
     stop = False
     for target in sorted(resolved_campaign.targets, key=lambda row: row.target_ids):
@@ -899,6 +1140,14 @@ def plan_iteration(*, resolved_campaign: campaign.ResolvedCampaign,
                     dispositions.append(_freeze({"opportunity_id": opportunity.opportunity_id,
                                                  "status": "runtime_anchor_missing"}))
                     continue
+                pending_runtime = runtime_anchors.runtime_prerequisites.get(digest, ())
+                if pending_runtime:
+                    dispositions.append(_freeze({
+                        "opportunity_id": opportunity.opportunity_id,
+                        "status": "runtime_prerequisite",
+                        "reasons": list(pending_runtime),
+                    }))
+                    continue
                 try:
                     pairs = enumerate_runtime_dimensions(anchor, dimensions)
                 except PlanningRefused as exc:
@@ -931,22 +1180,40 @@ def plan_iteration(*, resolved_campaign: campaign.ResolvedCampaign,
                                 or plan.unit != opportunity.unit
                                 or plan.changed_factors != opportunity.changed_factors
                                 or plan.required_witnesses != opportunity.required_witnesses
-                                or _thaw(plan.anchor_identity).get("execution_digest")
-                                   != pair.anchor.execution_digest
-                                or _thaw(plan.candidate_identity).get("execution_digest")
-                                   != pair.candidate.execution_digest):
+                                or _thaw(opportunity.claim_key.control_identity)
+                                   != _thaw(serving_arm_identity(pair.anchor))
+                                or _thaw(opportunity.claim_key.intervention_identity)
+                                   != _thaw(serving_arm_identity(pair.candidate))
+                                or _thaw(plan.anchor_identity)
+                                   != _thaw(serving_arm_identity(pair.anchor))
+                                or _thaw(plan.candidate_identity)
+                                   != _thaw(serving_arm_identity(pair.candidate))):
                             raise PlanningRefused(
                                 "experiment plan differs from proposal/arm identities")
                         generated.append(_runtime_proposal(target, opportunity, pair, snapshot,
                                                            plan.digest, sink_ref))
             else:
-                actor = source_actor if opportunity.kind == "source" else build_actor
-                try:
-                    generated.append(UnifiedProposal.from_dict(actor(prompt, conflicts, snapshot)))
-                except Exception as exc:
-                    dispositions.append(_freeze({"opportunity_id": opportunity.opportunity_id,
-                                                 "status": "actor_failed", "reason": str(exc)}))
-                    continue
+                if defer_actor_preparation:
+                    identity = (actor_identities or {}).get(opportunity.kind)
+                    if identity is None:
+                        raise PlanningRefused(
+                            f"{opportunity.kind} actor loaded identity is required")
+                    preparation = _actor_preparation(
+                        target, opportunity, snapshot, prompt, conflicts, sink_ref, identity)
+                    generated.append(preparation.proposal)
+                    actor_preparations.append(preparation)
+                else:
+                    actor = source_actor if opportunity.kind == "source" else build_actor
+                    if not callable(actor):
+                        raise PlanningRefused("source/build actor callback is unavailable")
+                    try:
+                        generated.append(UnifiedProposal.from_dict(
+                            actor(prompt, conflicts, snapshot)))
+                    except Exception as exc:
+                        dispositions.append(_freeze({
+                            "opportunity_id": opportunity.opportunity_id,
+                            "status": "actor_failed", "reason": str(exc)}))
+                        continue
             for proposal in generated:
                 if opportunity.kind != "runtime_recipe" \
                         and proposal.experiment_plan_digest is not None:
@@ -990,33 +1257,58 @@ def plan_iteration(*, resolved_campaign: campaign.ResolvedCampaign,
                     full_region=profile.resource_cost.physical_region_fraction == 1.0,
                     compatibility_authority_refs=(), safe_chunking_declared=False))
     if stop or stop_requested():
-        return PlanningResult(tuple(proposals), tuple(stages), tuple(dispositions), None,
-                              None, scheduler_engine.export_state())
+        return PlanningResult(tuple(proposals), tuple(stages), tuple(actor_preparations),
+                              tuple(dispositions), None, None, None)
+    if not issue_selection:
+        return PlanningResult(tuple(proposals), tuple(stages), tuple(actor_preparations),
+                              tuple(dispositions), None, None, None)
     selection = scheduler_engine.select_stage(stages, now=now)
     next_state = scheduler_engine.export_state()
-    dispatch = None
-    if selection.status == "selected" and selection.proposal is not None:
-        selected = next(item for item in proposals
-                        if item.proposal_id == selection.proposal.proposal_id)
-        intent = _freeze({"schema": INTENT_SCHEMA,
-                          "status": ("ready_comparison" if
-                                     selected.experiment_plan_digest is not None
-                                     else "pending_plan_preparation"),
-                          "proposal_digest": selected.digest,
-                          "stage_proposal_digest": selection.proposal.digest,
-                          "experiment_plan_digest": selected.experiment_plan_digest,
-                          "claim_key": selected.claim_key.to_dict(),
-                          "effect_question": _thaw(selected.effect_question),
-                          "arm_scalars_are_gain_evidence": False})
-        dispatch = DispatchRequest(_freeze(selection.to_dict()),
-                                   _freeze(selected.to_dict()), intent)
-        if stage_handler is not None:
-            stage_handler(dispatch)
-    return PlanningResult(tuple(proposals), tuple(stages), tuple(dispositions), selection,
-                          dispatch, next_state)
+    dispatch = materialize_selection(
+        PlanningResult(tuple(proposals), tuple(stages), tuple(actor_preparations),
+                       tuple(dispositions), None, None, next_state),
+        selection, stage_handler=stage_handler)
+    return PlanningResult(tuple(proposals), tuple(stages), tuple(actor_preparations),
+                          tuple(dispositions), selection, dispatch, next_state)
 
 
-__all__ = ["DispatchRequest", "Opportunity", "PlanningRefused", "PlanningResult",
-           "PreparedRuntimeAnchors", "RuntimeAnchor", "RuntimeArmPair", "RuntimeDimension",
+def materialize_selection(planning: PlanningResult,
+                          selection: scheduling.Selection | Mapping[str, Any], *,
+                          stage_handler: Callable[[DispatchRequest], None] | None = None
+                          ) -> DispatchRequest | None:
+    """Bind one scheduler-issued selection to its already-enumerated exact proposal."""
+    if not isinstance(planning, PlanningResult):
+        raise PlanningRefused("planning must be a PlanningResult")
+    selected_row = (selection if isinstance(selection, scheduling.Selection)
+                    else scheduling.Selection.from_dict(selection))
+    if selected_row.status != "selected" or selected_row.proposal is None:
+        return None
+    matching_stages = [item for item in planning.stage_proposals
+                       if item.digest == selected_row.proposal.digest]
+    matching = [item for item in planning.proposals
+                if item.proposal_id == selected_row.proposal.proposal_id]
+    if len(matching_stages) != 1 or len(matching) != 1:
+        raise PlanningRefused("selection is not from this enumerated planning result")
+    selected = matching[0]
+    intent = _freeze({"schema": INTENT_SCHEMA,
+                      "status": ("ready_comparison" if
+                                 selected.experiment_plan_digest is not None
+                                 else "pending_plan_preparation"),
+                      "proposal_digest": selected.digest,
+                      "stage_proposal_digest": selected_row.proposal.digest,
+                      "experiment_plan_digest": selected.experiment_plan_digest,
+                      "claim_key": selected.claim_key.to_dict(),
+                      "effect_question": _thaw(selected.effect_question),
+                      "arm_scalars_are_gain_evidence": False})
+    dispatch = DispatchRequest(_freeze(selected_row.to_dict()),
+                               _freeze(selected.to_dict()), intent)
+    if stage_handler is not None:
+        stage_handler(dispatch)
+    return dispatch
+
+
+__all__ = ["ActorPreparationRequest", "DispatchRequest", "LocalRuntimeAnchor",
+           "Opportunity", "PlanningRefused", "PlanningResult", "PreparedRuntimeAnchors",
+           "RuntimeAnchor", "RuntimeArmPair", "RuntimeDimension",
            "TargetProfile", "UnifiedProposal", "enumerate_runtime_dimensions",
-           "plan_iteration", "prepare_runtime_anchors"]
+           "materialize_selection", "plan_iteration", "prepare_runtime_anchors"]

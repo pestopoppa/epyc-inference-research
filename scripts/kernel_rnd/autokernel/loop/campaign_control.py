@@ -24,6 +24,7 @@ from ..controller.discovery_supervisor_secure import (
     RuntimeRoot, SecureRuntimeError, object_identity,
 )
 from . import status
+from . import scheduling
 from . import worker_lifecycle as worker_lifecycle_module
 from .native_capture_control import NativeCaptureRefused, NativeCaptureValidator
 from .campaign import ResolvedCampaign
@@ -31,6 +32,10 @@ from .campaign import ResolvedCampaign
 COMMAND_SCHEMA = "epyc.autokernel.campaign_command.v1"
 SNAPSHOT_SCHEMA = "epyc.autokernel.campaign_snapshot.v1"
 SNAPSHOT_SCHEMA_V2 = "epyc.autokernel.campaign_snapshot.v2"
+SNAPSHOT_SCHEMA_V3 = "epyc.autokernel.campaign_snapshot.v3"
+UNIFIED_PROJECTION_SCHEMA = "epyc.autokernel.unified_campaign_projection.v1"
+DRIVER_SETTLEMENT_SCHEMA = "epyc.autokernel.unified_driver_settlement_request.v1"
+DRIVER_SETTLEMENT_RECEIPT_SCHEMA = "epyc.autokernel.unified_driver_settlement_receipt.v1"
 SNAPSHOT_FILE = "campaign-snapshot.json"
 _CANDIDATE_REPLAYER_TOKEN = object()
 OPERATIONS = frozenset({"pause", "resume", "drain"})
@@ -44,6 +49,7 @@ SNAPSHOT_V2_FIELDS = frozenset({
     "execution_capability_available", "worker_lifecycle_revision",
     "prerequisite_reason",
 })
+SNAPSHOT_V3_FIELDS = SNAPSHOT_V2_FIELDS | {"unified"}
 ACTIVE_WORKER_V2_FIELDS = frozenset({
     "worker_id", "worker_generation", "request_id", "plan_digest", "lineage_id",
     "stage_id", "state", "grant_id", "grant_generation", "container_id",
@@ -231,6 +237,118 @@ def validate_snapshot_v2(value: Mapping[str, Any]) -> dict[str, Any]:
         row["active_worker"] = dict(active)
     elif row["worker_activity_at"] is not None or row["execution_authorized"]:
         raise ControlRefused("v2 snapshot has worker activity/authority without active worker")
+    return row
+
+
+def validate_snapshot_v3(value: Mapping[str, Any]) -> dict[str, Any]:
+    if not isinstance(value, Mapping) or set(value) != SNAPSHOT_V3_FIELDS:
+        raise ControlRefused("v3 snapshot has missing/unknown fields")
+    row = copy.deepcopy(dict(value))
+    unified = row.pop("unified")
+    base = dict(row)
+    base["schema"] = SNAPSHOT_SCHEMA_V2
+    base["producer_schema"] = SNAPSHOT_SCHEMA_V2
+    validate_snapshot_v2(base)
+    if row["schema"] != SNAPSHOT_SCHEMA_V3 or row["producer_schema"] != SNAPSHOT_SCHEMA_V3:
+        raise ControlRefused("v3 snapshot schema identity is invalid")
+    expected = {"schema", "scheduler", "resources", "actors", "evidence",
+                "candidate", "targets"}
+    if not isinstance(unified, Mapping) or set(unified) != expected \
+            or unified.get("schema") != UNIFIED_PROJECTION_SCHEMA:
+        raise ControlRefused("v3 unified projection fields/schema differ")
+    closed = {
+        "resources": {"schema", "status", "reason", "requested", "granted", "held", "used"},
+        "actors": {"schema", "status", "reason", "clock_semantics", "items"},
+        "evidence": {"schema", "status", "reason", "frontier_digest", "lag_seconds"},
+        "candidate": {"schema", "status", "reason", "accumulated_identity",
+                      "validated_identity", "frozen_production_identity", "validation_debt"},
+        "targets": {"schema", "status", "reason", "total", "ready", "prerequisite",
+                    "production_enrolled", "seed_enrolled", "items_page_ref"},
+    }
+    nested_schemas = {
+        "resources": "epyc.autokernel.unified_resource_status.v1",
+        "actors": "epyc.autokernel.unified_actor_status.v1",
+        "evidence": "epyc.autokernel.unified_evidence_status.v1",
+        "candidate": "epyc.autokernel.unified_candidate_status.v1",
+        "targets": "epyc.autokernel.unified_target_status.v1",
+    }
+    for name, fields in closed.items():
+        item = unified.get(name)
+        if (not isinstance(item, Mapping) or set(item) != fields
+                or item.get("schema") != nested_schemas[name]):
+            raise ControlRefused(f"v3 unified {name} fields differ")
+        if item["status"] not in {"available", "unknown", "not_connected"}:
+            raise ControlRefused(f"v3 unified {name} status is invalid")
+        if not isinstance(item["reason"], str) or not item["reason"]:
+            raise ControlRefused(f"v3 unified {name} reason is invalid")
+    scheduler_row = unified.get("scheduler")
+    scheduler_fields = {"schema", "projection_digest", "config_digest", "policy_digest",
+                        "round_number", "accounting_epoch", "capacity", "pending_selection_digest",
+                        "status", "reason", "campaign_attempts", "campaign_charged_seconds",
+                        "accounting", "coverage_debt_count"}
+    if not isinstance(scheduler_row, Mapping) or set(scheduler_row) != scheduler_fields:
+        raise ControlRefused("v3 unified scheduler fields differ")
+    if scheduler_row.get("schema") != "epyc.autokernel.unified_scheduler_projection.v1":
+        raise ControlRefused("v3 unified scheduler schema differs")
+    for name in ("projection_digest", "config_digest", "policy_digest"):
+        value = scheduler_row[name]
+        if not isinstance(value, str) or len(value) != 64 \
+                or any(char not in "0123456789abcdef" for char in value):
+            raise ControlRefused(f"v3 scheduler {name} is invalid")
+    if scheduler_row["status"] not in {"available", "unknown", "not_connected"} \
+            or not isinstance(scheduler_row["reason"], str) or not scheduler_row["reason"]:
+        raise ControlRefused("v3 scheduler status/reason is invalid")
+    try:
+        scheduling.ResourceVector.from_dict(scheduler_row["capacity"])
+        scheduling.AccountingView.from_dict(scheduler_row["accounting"])
+    except Exception as exc:
+        raise ControlRefused(f"v3 scheduler capacity/accounting is invalid: {exc}") from exc
+    pending = scheduler_row["pending_selection_digest"]
+    if pending is not None and (not isinstance(pending, str) or len(pending) != 64
+                                or any(char not in "0123456789abcdef" for char in pending)):
+        raise ControlRefused("v3 scheduler pending selection digest is invalid")
+    for name in ("round_number", "accounting_epoch", "campaign_attempts",
+                 "coverage_debt_count"):
+        if (not isinstance(scheduler_row[name], int) or isinstance(scheduler_row[name], bool)
+                or scheduler_row[name] < 0):
+            raise ControlRefused(f"v3 scheduler {name} is invalid")
+    if (isinstance(scheduler_row["campaign_charged_seconds"], bool)
+            or not isinstance(scheduler_row["campaign_charged_seconds"], (int, float))
+            or not math.isfinite(scheduler_row["campaign_charged_seconds"])
+            or scheduler_row["campaign_charged_seconds"] < 0):
+        raise ControlRefused("v3 scheduler charged seconds is invalid")
+    for name in ("total", "ready", "prerequisite", "production_enrolled", "seed_enrolled"):
+        value = unified["targets"][name]
+        if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+            raise ControlRefused(f"v3 targets {name} is invalid")
+    if unified["targets"]["ready"] + unified["targets"]["prerequisite"] \
+            != unified["targets"]["total"]:
+        raise ControlRefused("v3 target counts disagree")
+    if (unified["targets"]["production_enrolled"] > unified["targets"]["total"]
+            or unified["targets"]["seed_enrolled"] > unified["targets"]["total"]
+            or unified["targets"]["items_page_ref"] is not None):
+        raise ControlRefused("v3 target enrollment counts/page reference are invalid")
+    for name in ("resources", "actors", "evidence", "candidate"):
+        item = unified[name]
+        if item["status"] != "not_connected":
+            raise ControlRefused(f"v3 {name} v1 supports only not_connected")
+    resources = unified["resources"]
+    if any(resources[name] is not None for name in ("requested", "granted", "held", "used")):
+        raise ControlRefused("v3 disconnected resources must be null")
+    actors = unified["actors"]
+    if actors["clock_semantics"] != (
+            "UTC wall-clock projection; runtime fences remain monotonic") \
+            or not isinstance(actors["items"], list) or actors["items"]:
+        raise ControlRefused("v3 disconnected actor projection is invalid")
+    evidence = unified["evidence"]
+    if evidence["frontier_digest"] is not None or evidence["lag_seconds"] is not None:
+        raise ControlRefused("v3 disconnected evidence values must be null")
+    candidate = unified["candidate"]
+    if any(candidate[name] is not None for name in (
+            "accumulated_identity", "validated_identity", "frozen_production_identity",
+            "validation_debt")):
+        raise ControlRefused("v3 disconnected candidate values must be null")
+    row["unified"] = unified
     return row
 
 
@@ -473,6 +591,7 @@ class CampaignController:
                  config_generation: int = 1,
                  readiness_check: Callable[[], tuple[bool, str | None]] | None = None,
                  snapshot_version: int = 1,
+                 scheduler_engine: scheduling.SchedulerEngine | None = None,
                  lifecycle_provider: Any = None,
                  lifecycle_dependency_check: Callable[[], bool | None] | None = None,
                  clock: Callable[[], str] = _now) -> None:
@@ -481,10 +600,17 @@ class CampaignController:
         if not isinstance(config_generation, int) or isinstance(config_generation, bool) \
                 or config_generation < 1:
             raise ValueError("config_generation must be positive")
-        if snapshot_version not in {1, 2}:
-            raise ValueError("snapshot_version must be 1 or 2")
+        if snapshot_version not in {1, 2, 3}:
+            raise ValueError("snapshot_version must be 1, 2, or 3")
         if snapshot_version == 1 and lifecycle_provider is not None:
             raise ControlRefused("worker lifecycle provider requires explicit snapshot v2")
+        if scheduler_engine is not None and snapshot_version != 3:
+            raise ControlRefused("unified scheduler requires explicit snapshot v3")
+        if snapshot_version == 3 and scheduler_engine is None:
+            raise ControlRefused("snapshot v3 requires the controller-owned unified scheduler")
+        if scheduler_engine is not None and not isinstance(
+                scheduler_engine, scheduling.SchedulerEngine):
+            raise TypeError("scheduler_engine must be SchedulerEngine")
         try:
             normalized = ResolvedCampaign.from_dict(resolved.to_dict())
         except Exception as exc:
@@ -509,6 +635,7 @@ class CampaignController:
         self._worker_projection = worker_lifecycle_module.project_events([])
         self._worker_run_active = False
         self.readiness_check = readiness_check or (lambda: (False, "execution authority absent"))
+        self._cached_driver_readiness = (False, "provider readiness not refreshed")
         self.clock = clock
         self._mutex = threading.RLock()
         self._lease_fd: int | None = None
@@ -542,6 +669,17 @@ class CampaignController:
         self._native_payload_digests: dict[str, str] = {}
         self._native_validator: NativeCaptureValidator | None = None
         self._native_capabilities: set[object] = set()
+        self._scheduler_engine = scheduler_engine
+        self._driver_issued: dict[str, dict[str, Any]] = {}
+        self._driver_settled: dict[str, dict[str, Any]] = {}
+        self._driver_settlement_validator: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None
+        self._driver_artifact_store: Any = None
+        self._supervisor_id: str | None = None
+        if scheduler_engine is not None and (
+                scheduler_engine.scheduler_id != normalized.campaign_id
+                or scheduler_engine.config.config_id != normalized.campaign_id):
+            raise ControlRefused(
+                "unified scheduler IDs must exactly bind the resolved campaign")
 
     def _acquire(self) -> None:
         runtime: RuntimeRoot | None = None
@@ -620,7 +758,7 @@ class CampaignController:
                 })
                 self._entered = True
                 self._poisoned = False
-                if self.snapshot_version == 2:
+                if self.snapshot_version in {2, 3}:
                     self._initialize_worker_lifecycle_locked()
                 return self
             except BaseException:
@@ -633,6 +771,7 @@ class CampaignController:
         last_revision = 0
         saw_start = False
         saw_v2_start = False
+        saw_v3_start = False
         candidate_pending: tuple[str, str, str] | None = None
         candidate_pending_payload: Mapping[str, Any] | None = None
         candidate_prepared = False
@@ -654,7 +793,7 @@ class CampaignController:
                 if violations:
                     raise journal_module.JournalCorruption(
                         "invalid worker lifecycle history: " + "; ".join(violations))
-                if self.snapshot_version != 2:
+                if self.snapshot_version not in {2, 3}:
                     raise ControlRefused(
                         "store contains worker lifecycle v2; reopen explicitly as v2")
                 row = entry.payload
@@ -682,7 +821,7 @@ class CampaignController:
                 if violations:
                     raise journal_module.JournalCorruption(
                         "invalid worker acquisition history: " + "; ".join(violations))
-                if self.snapshot_version != 2:
+                if self.snapshot_version not in {2, 3}:
                     raise ControlRefused(
                         "store contains worker acquisition v2; reopen explicitly as v2")
                 row = worker_lifecycle_module.validate_acquisition_transition(entry.payload)
@@ -741,7 +880,7 @@ class CampaignController:
                 if violations:
                     raise journal_module.JournalCorruption(
                         "invalid v2 command history: " + "; ".join(violations))
-                if self.snapshot_version != 2:
+                if self.snapshot_version not in {2, 3}:
                     raise ControlRefused(
                         "store contains campaign controls v2; reopen explicitly as v2")
                 row = worker_lifecycle_module.validate_command_transition_v2(entry.payload)
@@ -797,6 +936,80 @@ class CampaignController:
                 native_records[measurement_id] = copy.deepcopy(entry)
                 native_payload_digests[measurement_id] = digest
                 continue
+            if entry.kind == journal_module.KIND_UNIFIED_DRIVER_ISSUED:
+                violations = journal_module._validate_native_payload(entry.kind, entry.payload)
+                if violations:
+                    raise journal_module.JournalCorruption(
+                        "invalid unified driver history: " + "; ".join(violations))
+                if self.snapshot_version != 3 or self._scheduler_engine is None:
+                    raise ControlRefused(
+                        "store contains unified scheduler history; reopen with v3 scheduler")
+                from . import unified_driver as driver_module
+                row = copy.deepcopy(dict(entry.payload))
+                if (not saw_start or row["campaign_id"] != self.resolved.campaign_id
+                        or row["config_generation"] != self.config_generation
+                        or row["config_digest"] != self.config_digest
+                        or row["supervisor_incarnation"] != last_incarnation):
+                    raise journal_module.JournalCorruption(
+                        "unified driver issue breaks controller binding")
+                catalog_row = dict(row["catalog"])
+                supplied_id = catalog_row.pop("catalog_id", None)
+                catalog = driver_module.PlanningCatalog(**catalog_row)
+                if supplied_id != catalog.catalog_id or row["catalog_id"] != catalog.catalog_id:
+                    raise journal_module.JournalCorruption(
+                        "unified driver catalog identity differs")
+                current = self._scheduler_engine.operational_projection().projection_digest
+                if current != row["prior_projection_digest"]:
+                    raise journal_module.JournalCorruption(
+                        "unified scheduler replay prior projection differs")
+                preview = self._scheduler_engine.preview_selection(
+                    [scheduling.StageProposal.from_dict(item)
+                     for item in catalog.stage_proposals], now=catalog.observed_at)
+                expected_transition = driver_module._digest({
+                    "catalog_id": catalog.catalog_id,
+                    "selection": preview.selection.to_dict()})
+                if (preview.selection.to_dict() != row["selection"]
+                        or preview.after.projection_digest != row["after_projection_digest"]
+                        or preview.prior.projection_digest != row["prior_projection_digest"]
+                        or expected_transition != row["transition_id"]):
+                    raise journal_module.JournalCorruption(
+                        "unified scheduler replay transition differs")
+                self._scheduler_engine.apply_preview(preview)
+                if row["catalog_id"] in self._driver_issued:
+                    raise journal_module.JournalCorruption(
+                        "unified driver catalog is issued more than once")
+                self._driver_issued[row["catalog_id"]] = row
+                continue
+            if entry.kind == journal_module.KIND_UNIFIED_DRIVER_SETTLED:
+                violations = journal_module._validate_native_payload(entry.kind, entry.payload)
+                if violations:
+                    raise journal_module.JournalCorruption(
+                        "invalid unified driver settlement: " + "; ".join(violations))
+                if self.snapshot_version != 3 or self._scheduler_engine is None:
+                    raise ControlRefused(
+                        "store contains unified settlement history; reopen with v3 scheduler")
+                row = copy.deepcopy(dict(entry.payload))
+                issued = self._driver_issued.get(row["catalog_id"])
+                if (issued is None or row["transition_id"] != issued["transition_id"]
+                        or row["selection"] != issued["selection"]
+                        or row["campaign_id"] != self.resolved.campaign_id
+                        or row["config_generation"] != self.config_generation
+                        or row["config_digest"] != self.config_digest
+                        or row["supervisor_incarnation"] != last_incarnation):
+                    raise journal_module.JournalCorruption(
+                        "unified settlement breaks issued/controller binding")
+                preview = self._scheduler_engine.preview_accounting(
+                    row["selection"], row["receipt"], outcome=row["outcome"])
+                if (preview.prior.projection_digest != row["prior_projection_digest"]
+                        or preview.after.projection_digest != row["after_projection_digest"]):
+                    raise journal_module.JournalCorruption(
+                        "unified settlement replay projection differs")
+                self._scheduler_engine.apply_accounting_preview(preview)
+                if row["transition_id"] in self._driver_settled:
+                    raise journal_module.JournalCorruption(
+                        "unified driver transition is settled more than once")
+                self._driver_settled[row["transition_id"]] = row
+                continue
             if entry.kind == journal_module.KIND_CANDIDATE_TRANSACTION:
                 candidate_entries.append(copy.deepcopy(entry))
                 row = entry.payload
@@ -848,10 +1061,19 @@ class CampaignController:
             if violations:
                 raise journal_module.JournalCorruption(
                     "invalid campaign supervisor history: " + "; ".join(violations))
-            if row["schema"] == journal_module.CAMPAIGN_SUPERVISOR_EVENT_SCHEMA_V2:
-                if self.snapshot_version != 2:
+            if row["schema"] == journal_module.CAMPAIGN_SUPERVISOR_EVENT_SCHEMA_V3:
+                if self.snapshot_version != 3:
+                    raise ControlRefused(
+                        "store is fenced for controller v3; older-reader downgrade is refused")
+                saw_v2_start = True
+                saw_v3_start = True
+            elif row["schema"] == journal_module.CAMPAIGN_SUPERVISOR_EVENT_SCHEMA_V2:
+                if self.snapshot_version not in {2, 3}:
                     raise ControlRefused(
                         "store is fenced for controller v2; v1 downgrade is refused")
+                if saw_v3_start:
+                    raise journal_module.JournalCorruption(
+                        "v2 supervisor START cannot follow the durable v3 fence")
                 saw_v2_start = True
             elif saw_v2_start:
                 raise journal_module.JournalCorruption(
@@ -973,6 +1195,7 @@ class CampaignController:
             "config_digest": self.config_digest,
             "store": str(self.store),
         })
+        self._supervisor_id = supervisor_id
         binding = worker_lifecycle_module.CampaignBinding(
             self.resolved.campaign_id, self.config_digest, self.config_generation,
             supervisor_id, self.supervisor_incarnation)
@@ -1168,7 +1391,7 @@ class CampaignController:
         """Run one provider-authorized stage without holding the command lock."""
         with self._mutex:
             self._require_active_locked()
-            if self.snapshot_version != 2 or self._worker_lifecycle is None:
+            if self.snapshot_version not in {2, 3} or self._worker_lifecycle is None:
                 raise ControlRefused("worker lifecycle requires explicit snapshot v2")
             if (self._worker_run_active or self._worker_projection.active
                     or self._acquisition_projection.pending is not None):
@@ -1190,7 +1413,7 @@ class CampaignController:
         """Reconcile retained v2 ownership outside the controller command lock."""
         with self._mutex:
             self._require_active_locked()
-            if self.snapshot_version != 2 or self._worker_lifecycle is None:
+            if self.snapshot_version not in {2, 3} or self._worker_lifecycle is None:
                 raise ControlRefused("worker reconciliation requires explicit snapshot v2")
             if self._worker_run_active:
                 raise ControlRefused("worker execution is already active")
@@ -1240,7 +1463,7 @@ class CampaignController:
         self._journal_cursor = entry.seq
 
     def _settle_v2_commands_locked(self) -> None:
-        if self.snapshot_version != 2 or self._worker_run_active \
+        if self.snapshot_version not in {2, 3} or self._worker_run_active \
                 or self._worker_projection.active \
                 or self._acquisition_projection.pending is not None:
             return
@@ -1534,11 +1757,13 @@ class CampaignController:
         self._verify_store()
         if self._journal is None:
             raise ControlRefused("controller journal is unavailable")
-        if self.snapshot_version == 2 and event != "START":
-            raise ControlRefused("v2 supervisor schema is restricted to START")
-        schema = (journal_module.CAMPAIGN_SUPERVISOR_EVENT_SCHEMA_V2
-                  if self.snapshot_version == 2
-                  else journal_module.CAMPAIGN_SUPERVISOR_EVENT_SCHEMA)
+        if self.snapshot_version in {2, 3} and event != "START":
+            raise ControlRefused("versioned supervisor schema is restricted to START")
+        schema = (journal_module.CAMPAIGN_SUPERVISOR_EVENT_SCHEMA_V3
+                  if self.snapshot_version == 3 else
+                  journal_module.CAMPAIGN_SUPERVISOR_EVENT_SCHEMA_V2
+                  if self.snapshot_version == 2 else
+                  journal_module.CAMPAIGN_SUPERVISOR_EVENT_SCHEMA)
         entry = self._journal.append(journal_module.KIND_CAMPAIGN_SUPERVISOR_EVENT, {
             "schema": schema,
             "event": event, "campaign_id": self.resolved.campaign_id,
@@ -1662,10 +1887,291 @@ class CampaignController:
                 context._close()
                 self._candidate_context_token = None
 
+    def _unified_driver_readiness_locked(self) -> dict[str, Any]:
+        self._require_active_locked()
+        if self._scheduler_engine is None:
+            raise ControlRefused("unified scheduler is unavailable")
+        provider_ready, provider_reason = self._cached_driver_readiness
+        admission_open = self.desired_state == "running" and not self._poisoned
+        reason = ("ready" if admission_open and provider_ready else
+                  (provider_reason or self.prerequisite_reason
+                   or f"admissions_closed:{self.desired_state}"))
+        return {
+            "schema": "epyc.autokernel.unified_driver_readiness.v1",
+            "campaign_id": self.resolved.campaign_id,
+            "config_digest": self.config_digest,
+            "config_generation": self.config_generation,
+            "supervisor_incarnation": self.supervisor_incarnation,
+            "control_revision": self.control_revision,
+            "admission_open": admission_open,
+            "provider_available": provider_ready,
+            "reason": reason,
+            "scheduler_projection_digest":
+                self._scheduler_engine.operational_projection().projection_digest,
+        }
+
+    def unified_driver_readiness(self) -> dict[str, Any]:
+        with self._mutex:
+            return copy.deepcopy(self._unified_driver_readiness_locked())
+
+    def unified_driver_materialization_binding(
+            self, *, catalog_id: str, transition_id: str,
+            selection: Mapping[str, Any]) -> dict[str, Any]:
+        """Return the current private artifact/capture base without execution authority."""
+        with self._mutex:
+            self._require_active_locked()
+            if self.snapshot_version != 3 or self._supervisor_id is None:
+                raise ControlRefused("unified runtime materialization requires snapshot v3")
+            issued = self._driver_issued.get(catalog_id)
+            if (issued is None or issued["transition_id"] != transition_id
+                    or transition_id in self._driver_settled
+                    or issued["selection"] != copy.deepcopy(selection)
+                    or issued["supervisor_incarnation"] != self.supervisor_incarnation
+                    or issued["config_generation"] != self.config_generation
+                    or issued["config_digest"] != self.config_digest):
+                raise ControlRefused(
+                    "runtime materialization requires a current exact issued selection")
+            if self._driver_artifact_store is None:
+                from .measurement_capture import ArtifactStore
+                self._driver_artifact_store = ArtifactStore(
+                    self.store / "unified-native-artifacts")
+            return {
+                "schema": "epyc.autokernel.unified_materialization_binding.v1",
+                "campaign_id": self.resolved.campaign_id,
+                "config_digest": self.config_digest,
+                "config_generation": self.config_generation,
+                "supervisor_id": self._supervisor_id,
+                "supervisor_incarnation": self.supervisor_incarnation,
+                "artifact_root": str(self._driver_artifact_store.root),
+            }
+
+    def refresh_unified_driver_readiness(self) -> dict[str, Any]:
+        """Refresh provider readiness outside the controller's serialization mutex."""
+        with self._mutex:
+            self._require_active_locked()
+            lifetime_token = self._lifetime_token
+            incarnation = self.supervisor_incarnation
+            readiness_check = self.readiness_check
+        try:
+            result = readiness_check()
+        except Exception as exc:
+            result = (False, f"driver readiness check failed: {exc}")
+        if (not isinstance(result, tuple) or len(result) != 2
+                or type(result[0]) is not bool or (result[1] is not None and (
+                    not isinstance(result[1], str) or not result[1].strip()))):
+            raise ControlRefused("driver readiness check returned malformed result")
+        with self._mutex:
+            self._require_active_locked()
+            if (lifetime_token is None or lifetime_token is not self._lifetime_token
+                    or incarnation != self.supervisor_incarnation
+                    or readiness_check is not self.readiness_check):
+                raise ControlRefused(
+                    "driver readiness result belongs to a stale controller lifetime")
+            self._cached_driver_readiness = (result[0], result[1])
+            return copy.deepcopy(self._unified_driver_readiness_locked())
+
+    def unified_driver_transaction(self, value: Mapping[str, Any]) -> dict[str, Any]:
+        """Derive and durably issue one bounded scheduler selection under ownership."""
+        with self._mutex:
+            readiness = self._unified_driver_readiness_locked()
+            if not isinstance(value, Mapping):
+                raise ControlRefused("unified driver catalog must be a mapping")
+            from . import unified_driver as driver_module
+            raw = copy.deepcopy(dict(value))
+            supplied_id = raw.pop("catalog_id", None)
+            try:
+                catalog = driver_module.PlanningCatalog(**raw)
+            except Exception as exc:
+                raise ControlRefused(f"invalid unified driver catalog: {exc}") from exc
+            if supplied_id != catalog.catalog_id:
+                raise ControlRefused("unified driver catalog_id differs from content")
+            prior = self._driver_issued.get(catalog.catalog_id)
+            if prior is not None:
+                return {
+                    "schema": driver_module.TRANSACTION_RECEIPT_SCHEMA,
+                    "catalog_id": catalog.catalog_id,
+                    "transition_id": prior["transition_id"], "status": "duplicate",
+                    "selection": copy.deepcopy(prior["selection"]),
+                }
+            if not readiness["admission_open"] or not readiness["provider_available"]:
+                raise ControlRefused(readiness["reason"])
+            if (catalog.campaign_digest != resolved_config_digest(self.resolved)
+                    or dict(catalog.controller_binding) != readiness
+                    or catalog.scheduler_projection_digest
+                       != readiness["scheduler_projection_digest"]):
+                raise ControlRefused("unified driver catalog binding is stale or foreign")
+            assert self._scheduler_engine is not None
+            preview = self._scheduler_engine.preview_selection(
+                [scheduling.StageProposal.from_dict(item)
+                 for item in catalog.stage_proposals], now=catalog.observed_at)
+            transition_id = driver_module._digest({
+                "catalog_id": catalog.catalog_id,
+                "selection": preview.selection.to_dict()})
+            if preview.selection.status != "selected":
+                return {
+                    "schema": driver_module.TRANSACTION_RECEIPT_SCHEMA,
+                    "catalog_id": catalog.catalog_id, "transition_id": transition_id,
+                    "status": "not_selected", "selection": preview.selection.to_dict(),
+                }
+            event = {
+                "schema": journal_module.UNIFIED_DRIVER_ISSUED_SCHEMA,
+                "catalog_id": catalog.catalog_id,
+                "campaign_id": self.resolved.campaign_id,
+                "config_generation": self.config_generation,
+                "config_digest": self.config_digest,
+                "supervisor_incarnation": self.supervisor_incarnation,
+                "catalog": catalog.to_dict(), "selection": preview.selection.to_dict(),
+                "prior_projection_digest": preview.prior.projection_digest,
+                "after_projection_digest": preview.after.projection_digest,
+                "transition_id": transition_id,
+            }
+            self._verify_store()
+            assert self._journal is not None
+            try:
+                entry = self._journal.append(
+                    journal_module.KIND_UNIFIED_DRIVER_ISSUED, event,
+                    record_id=transition_id)
+                self._verify_journal_layout(self.store / "journal")
+                self._scheduler_engine.apply_preview(preview)
+            except BaseException:
+                self._poisoned = True
+                raise
+            self._journal_cursor = entry.seq
+            self._driver_issued[catalog.catalog_id] = copy.deepcopy(event)
+            return {
+                "schema": driver_module.TRANSACTION_RECEIPT_SCHEMA,
+                "catalog_id": catalog.catalog_id, "transition_id": transition_id,
+                "status": "accepted", "selection": preview.selection.to_dict(),
+            }
+
+    def register_unified_settlement_validator(
+            self, validator: Callable[[Mapping[str, Any]], Mapping[str, Any]]) -> None:
+        """Install the trusted worker-owner terminal/held-receipt verifier."""
+        if not callable(validator):
+            raise TypeError("unified settlement validator must be callable")
+        with self._mutex:
+            self._require_active_locked()
+            if self._driver_settlement_validator is not None:
+                raise ControlRefused("unified settlement validator is already registered")
+            self._driver_settlement_validator = validator
+
+    def unified_driver_settle(self, value: Mapping[str, Any]) -> dict[str, Any]:
+        """Verify outside the mutex, then journal and apply exact held accounting."""
+        with self._mutex:
+            self._require_active_locked()
+            if not isinstance(value, Mapping):
+                raise ControlRefused("unified settlement request must be a mapping")
+            supplied = copy.deepcopy(dict(value))
+            transition_id = supplied.get("transition_id")
+            if isinstance(transition_id, str):
+                prior_settlement = self._driver_settled.get(transition_id)
+                if prior_settlement is not None:
+                    semantic_names = (
+                        "catalog_id", "transition_id", "selection", "receipt", "outcome",
+                        "terminal_refs")
+                    expected_fields = {"schema", *semantic_names}
+                    if (set(supplied) != expected_fields
+                            or supplied.get("schema") != DRIVER_SETTLEMENT_SCHEMA):
+                        raise ControlRefused(
+                            "settlement retry conflicts with durable content")
+                    semantic = {name: supplied[name] for name in semantic_names}
+                    durable = {name: prior_settlement[name] for name in semantic_names}
+                    if semantic != durable:
+                        raise ControlRefused(
+                            "settlement retry conflicts with durable content")
+                    return {
+                        "schema": DRIVER_SETTLEMENT_RECEIPT_SCHEMA,
+                        "transition_id": transition_id, "status": "duplicate",
+                        "accounting_projection_digest":
+                            prior_settlement["after_projection_digest"],
+                    }
+            validator = self._driver_settlement_validator
+            if validator is None:
+                raise ControlRefused("trusted unified settlement validator is unavailable")
+            lifetime_token = self._lifetime_token
+            incarnation = self.supervisor_incarnation
+        try:
+            verified = validator(supplied)
+        except Exception as exc:
+            raise ControlRefused(f"trusted unified settlement verification failed: {exc}") from exc
+        if not isinstance(verified, Mapping):
+            raise ControlRefused("trusted unified settlement verifier returned malformed data")
+        row = copy.deepcopy(dict(verified))
+        expected = {"schema", "catalog_id", "transition_id", "selection", "receipt",
+                    "outcome", "terminal_refs"}
+        if set(row) != expected or row.get("schema") != DRIVER_SETTLEMENT_SCHEMA:
+            raise ControlRefused("unified settlement request fields/schema differ")
+        if (not isinstance(row["terminal_refs"], list) or not row["terminal_refs"]
+                or any(not isinstance(item, str) or not item for item in row["terminal_refs"])
+                or len(row["terminal_refs"]) != len(set(row["terminal_refs"]))):
+            raise ControlRefused("unified settlement terminal refs are invalid")
+        try:
+            selection = scheduling.Selection.from_dict(row["selection"])
+            receipt = scheduling.HeldClaimReceipt.from_dict(row["receipt"])
+        except Exception as exc:
+            raise ControlRefused(
+                f"trusted unified settlement verifier returned invalid bindings: {exc}") from exc
+        if row["outcome"] not in scheduling.OUTCOMES:
+            raise ControlRefused("unified settlement outcome is unsupported")
+        with self._mutex:
+            self._require_active_locked()
+            if (lifetime_token is None or lifetime_token is not self._lifetime_token
+                    or incarnation != self.supervisor_incarnation
+                    or validator is not self._driver_settlement_validator):
+                raise ControlRefused(
+                    "settlement verification belongs to a stale controller lifetime")
+            prior_settlement = self._driver_settled.get(row["transition_id"])
+            if prior_settlement is not None:
+                semantic = {name: row[name] for name in (
+                    "catalog_id", "transition_id", "selection", "receipt", "outcome",
+                    "terminal_refs")}
+                durable = {name: prior_settlement[name] for name in semantic}
+                if semantic != durable:
+                    raise ControlRefused("settlement retry conflicts with durable content")
+                return {"schema": DRIVER_SETTLEMENT_RECEIPT_SCHEMA,
+                        "transition_id": row["transition_id"], "status": "duplicate",
+                        "accounting_projection_digest":
+                            prior_settlement["after_projection_digest"]}
+            issued = self._driver_issued.get(row["catalog_id"])
+            if (issued is None or issued["transition_id"] != row["transition_id"]
+                    or issued["selection"] != selection.to_dict()):
+                raise ControlRefused("settlement does not bind an issued transition")
+            assert self._scheduler_engine is not None
+            preview = self._scheduler_engine.preview_accounting(
+                selection, receipt, outcome=row["outcome"])
+            event = {
+                "schema": journal_module.UNIFIED_DRIVER_SETTLED_SCHEMA,
+                "catalog_id": row["catalog_id"], "transition_id": row["transition_id"],
+                "campaign_id": self.resolved.campaign_id,
+                "config_generation": self.config_generation,
+                "config_digest": self.config_digest,
+                "supervisor_incarnation": self.supervisor_incarnation,
+                "selection": selection.to_dict(), "receipt": receipt.to_dict(),
+                "outcome": row["outcome"], "terminal_refs": list(row["terminal_refs"]),
+                "prior_projection_digest": preview.prior.projection_digest,
+                "after_projection_digest": preview.after.projection_digest,
+            }
+            self._verify_store()
+            assert self._journal is not None
+            try:
+                entry = self._journal.append(
+                    journal_module.KIND_UNIFIED_DRIVER_SETTLED, event,
+                    record_id=row["transition_id"])
+                self._verify_journal_layout(self.store / "journal")
+                self._scheduler_engine.apply_accounting_preview(preview)
+            except BaseException:
+                self._poisoned = True
+                raise
+            self._journal_cursor = entry.seq
+            self._driver_settled[row["transition_id"]] = copy.deepcopy(event)
+            return {"schema": DRIVER_SETTLEMENT_RECEIPT_SCHEMA,
+                    "transition_id": row["transition_id"], "status": "accepted",
+                    "accounting_projection_digest": preview.after.projection_digest}
+
     def apply_command(self, value: Mapping[str, Any]) -> dict[str, Any]:
         with self._mutex:
             self._require_active_locked()
-            if self.snapshot_version == 2:
+            if self.snapshot_version in {2, 3}:
                 return self._apply_command_v2_locked(value)
             row = validate_command(value)
             if row["campaign_id"] != self.resolved.campaign_id \
@@ -1726,6 +2232,12 @@ class CampaignController:
 
     def _snapshot_locked(self) -> dict[str, Any]:
         self._require_active_locked()
+        if self.snapshot_version == 3:
+            base = self._snapshot_v2_locked()
+            base["schema"] = SNAPSHOT_SCHEMA_V3
+            base["producer_schema"] = SNAPSHOT_SCHEMA_V3
+            base["unified"] = self._unified_projection_locked()
+            return validate_snapshot_v3(base)
         if self.snapshot_version == 2:
             return self._snapshot_v2_locked()
         self.sequence += 1
@@ -1832,6 +2344,64 @@ class CampaignController:
             "prerequisite_reason": prerequisite_reason,
         })
 
+    def _unified_projection_locked(self) -> dict[str, Any]:
+        assert self._scheduler_engine is not None
+        projection = self._scheduler_engine.operational_projection()
+        body = projection.body
+        accounting = self._scheduler_engine.accounting_view().to_dict()
+        targets = tuple(self.resolved.targets)
+        ready = sum(item.status == "ready" for item in targets)
+        prerequisite = len(targets) - ready
+        seed_enrolled = sum("seed" in item.enrolled_as for item in targets)
+        production_enrolled = sum("production" in item.enrolled_as for item in targets)
+        return {
+            "schema": UNIFIED_PROJECTION_SCHEMA,
+            "scheduler": {
+                "schema": "epyc.autokernel.unified_scheduler_projection.v1",
+                "projection_digest": projection.projection_digest,
+                "config_digest": body["config_digest"], "policy_digest": body["policy_digest"],
+                "round_number": body["round_number"],
+                "accounting_epoch": body["accounting_epoch"],
+                "capacity": self._scheduler_engine.capacity.to_dict(),
+                "pending_selection_digest": (body["issued_selection_digests"][-1]
+                                             if body["issued_selection_digests"] else None),
+                "status": "available", "reason": "controller-owned scheduler projection",
+                "campaign_attempts": body["campaign_attempts"],
+                "campaign_charged_seconds": body["campaign_charged_seconds"],
+                "accounting": accounting,
+                "coverage_debt_count": len(body["coverage_debt"]),
+            },
+            "resources": {
+                "schema": "epyc.autokernel.unified_resource_status.v1",
+                "status": "not_connected", "reason": "resource telemetry not connected",
+                "requested": None, "granted": None, "held": None, "used": None,
+            },
+            "actors": {
+                "schema": "epyc.autokernel.unified_actor_status.v1",
+                "status": "not_connected", "reason": "actor result cache not connected",
+                "clock_semantics": "UTC wall-clock projection; runtime fences remain monotonic",
+                "items": [],
+            },
+            "evidence": {
+                "schema": "epyc.autokernel.unified_evidence_status.v1",
+                "status": "not_connected", "reason": "evidence frontier not connected",
+                "frontier_digest": None, "lag_seconds": None,
+            },
+            "candidate": {
+                "schema": "epyc.autokernel.unified_candidate_status.v1",
+                "status": "not_connected", "reason": "candidate projection not connected",
+                "accumulated_identity": None, "validated_identity": None,
+                "frozen_production_identity": None, "validation_debt": None,
+            },
+            "targets": {
+                "schema": "epyc.autokernel.unified_target_status.v1",
+                "status": "available", "reason": "resolved campaign summary",
+                "total": len(targets), "ready": ready, "prerequisite": prerequisite,
+                "production_enrolled": production_enrolled, "seed_enrolled": seed_enrolled,
+                "items_page_ref": None,
+            },
+        }
+
     def snapshot(self) -> dict[str, Any]:
         with self._mutex:
             return self._snapshot_locked()
@@ -1857,7 +2427,7 @@ class CampaignController:
 
     def close(self) -> None:
         with self._mutex:
-            if self.snapshot_version == 2 and self._entered \
+            if self.snapshot_version in {2, 3} and self._entered \
                     and (self._worker_run_active or self._worker_projection.active
                          or self._acquisition_projection.pending is not None):
                 raise ControlRefused(
@@ -1881,6 +2451,11 @@ class CampaignController:
             self._native_payload_digests = {}
             self._native_validator = None
             self._native_capabilities = set()
+            self._driver_issued = {}
+            self._driver_settled = {}
+            self._driver_settlement_validator = None
+            artifact_store, self._driver_artifact_store = self._driver_artifact_store, None
+            self._supervisor_id = None
             self._worker_lifecycle = None
             self._active_worker_events = []
             self._active_acquisition_events = []
@@ -1889,6 +2464,8 @@ class CampaignController:
             self._worker_last_generation = 0
             self._worker_projection = worker_lifecycle_module.project_events([])
             self._lifetime_token = None
+            if artifact_store is not None:
+                artifact_store.close()
             if fd is not None:
                 try:
                     fcntl.flock(fd, fcntl.LOCK_UN)
@@ -1904,5 +2481,7 @@ class CampaignController:
 __all__ = ["ACTIVE_WORKER_V2_FIELDS", "AdmissionDecision", "CampaignController",
            "COMMAND_SCHEMA", "ControlRefused", "SNAPSHOT_FILE", "SNAPSHOT_SCHEMA",
            "SNAPSHOT_SCHEMA_V2", "SNAPSHOT_V2_FIELDS", "TrustedGrant",
+           "SNAPSHOT_SCHEMA_V3", "SNAPSHOT_V3_FIELDS", "UNIFIED_PROJECTION_SCHEMA",
+           "DRIVER_SETTLEMENT_SCHEMA", "DRIVER_SETTLEMENT_RECEIPT_SCHEMA",
            "command_digest", "may_start_stage", "resolved_config_digest",
-           "validate_command", "validate_snapshot_v2"]
+           "validate_command", "validate_snapshot_v2", "validate_snapshot_v3"]

@@ -111,6 +111,40 @@ def test_changed_same_measurement_is_refused_by_serialized_transaction(tmp_path)
     assert len(result.capture_receipts) == 2
 
 
+def test_deferred_sink_reuses_exact_carrier_builder_without_transaction(tmp_path):
+    (tmp_path / "direct").mkdir()
+    direct, entries, _ = _run(tmp_path / "direct")
+    at, ct, anchor, candidate = _recipes()
+    plan = ep.ExperimentPlan.from_dict({**_plan(at, ct, anchor, candidate).to_dict(),
+                                       "unit": "process"})
+    (tmp_path / "deferred").mkdir()
+    sink = mc.DeferredNativeMeasurementSink(
+        context=_context(at, ct, anchor, candidate),
+        store=mc.ArtifactStore(tmp_path / "deferred" / "artifacts"))
+    ticks = iter(("2026-09-09T00:00:00Z", "2026-09-09T00:00:01Z",
+                  "2026-09-09T00:00:02Z", "2026-09-09T00:00:03Z"))
+    result = ps.run_planned_comparison(
+        plan, anchor_template=at, candidate_template=ct, anchor_recipe=anchor,
+        candidate_recipe=candidate, prompts=_prompts(at), stage_provider=CaptureProvider(),
+        artifact_sink=sink, lineage_id="lineage-1", clock=lambda: 1.0,
+        wall_clock=lambda: next(ticks), measure=_measure([]))
+    assert len(result.capture_receipts) == len(sink.captures) == 2
+    assert [mc._plain(item["payload"]) for item in sink.captures] == list(entries.values())
+    assert all("journal_entry" not in item for item in result.capture_receipts)
+    assert direct.execution_complete and result.execution_complete
+
+
+def test_artifact_store_reads_only_exact_pinned_digest(tmp_path):
+    store = mc.ArtifactStore(tmp_path / "store")
+    body = {"sealed": [1, 2, 3]}
+    receipt = store.write("result", body)
+    assert mc._plain(store.read(receipt.locator, receipt.sha256)) == body
+    with pytest.raises(mc.CaptureError, match="digest"):
+        store.read(receipt.locator, "0" * 64)
+    with pytest.raises(mc.CaptureError):
+        store.read("../escape", receipt.sha256)
+
+
 def test_failed_or_partial_slot_is_retained_diagnostic_without_scalar(tmp_path):
     result, entries, _ = _run(tmp_path, measure=_measure([], partial=True))
     assert not result.execution_complete

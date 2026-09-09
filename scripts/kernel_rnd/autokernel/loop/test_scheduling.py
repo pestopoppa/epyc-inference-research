@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import FrozenInstanceError
+from dataclasses import FrozenInstanceError, replace
 
 import pytest
 
@@ -61,6 +61,98 @@ def choose(cfg, state, rows, now=0.0, outages=()):
 
 def account(cfg, state, selected, prop, *, rid="r", outcome="invalid", **kwargs):
     return S.account_stage(cfg, state, selected, receipt(prop, rid, **kwargs), outcome=outcome)
+
+
+def test_operational_preview_is_bounded_mutation_free_and_exactly_applicable(monkeypatch):
+    cfg = S.SchedulerConfig.from_dict(config())
+    engine = S.SchedulerEngine(cfg, S.initial_state(cfg, "scheduler"))
+    before = engine.operational_projection()
+    monkeypatch.setattr(engine, "export_state", lambda: pytest.fail("hot path exported history"))
+    preview = engine.preview_selection([proposal("p")], now=1)
+    assert preview.selection.status == "selected"
+    assert engine.operational_projection().projection_digest == before.projection_digest
+    assert engine.apply_preview(preview) is True
+    assert engine.apply_preview(preview) is False
+    forged = replace(preview, after=before)
+    with pytest.raises(S.SchedulingRefused, match="locally derived"):
+        engine.apply_preview(forged)
+
+
+def test_operational_preview_refuses_stale_projection():
+    cfg = S.SchedulerConfig.from_dict(config())
+    engine = S.SchedulerEngine(cfg, S.initial_state(cfg, "scheduler"))
+    first = engine.preview_selection([proposal("p")], now=1)
+    engine.select_stage([proposal("q")], now=1)
+    with pytest.raises(S.SchedulingRefused, match="stale"):
+        engine.apply_preview(first)
+
+
+def test_operational_preview_is_engine_owned_deeply_immutable_and_seed_bounded():
+    cfg = S.SchedulerConfig.from_dict(config())
+    state = S.initial_state(cfg, "scheduler").to_dict()
+    state["seed_accounts"] = [S.SeedAccount(
+        seed_id=f"seed-{index}", backend="cpu", target_revision=f"revision-{index}",
+        alias_identity=f"alias-{index}", seed_ids=(f"seed-{index}",),
+        first_submitted_at=index, attempts=2, boosted=False).to_dict()
+        for index in range(1000)]
+    engine = S.SchedulerEngine(cfg, state)
+    projection = engine.operational_projection()
+    assert len(S._canonical(projection.to_dict())) < 4000
+    with pytest.raises(TypeError):
+        projection.body["accounting_view"]["gpu_device_seconds"]["gpu0"] = 1
+    preview = engine.preview_selection([proposal("p")], now=1)
+    other = S.SchedulerEngine(cfg, state)
+    with pytest.raises(S.SchedulingRefused, match="locally derived"):
+        other.apply_preview(preview)
+    forged_after = S.OperationalProjection(
+        S._plain(preview.after.body) | {"round_number": 99})
+    forged_body = {"schema": preview.schema,
+                   "prior_digest": preview.prior.projection_digest,
+                   "selection": preview.selection.to_dict(),
+                   "after_digest": forged_after.projection_digest}
+    forged = replace(preview, after=forged_after,
+                     preview_digest=S.digest(forged_body))
+    with pytest.raises(S.SchedulingRefused, match="locally derived"):
+        engine.apply_preview(forged)
+
+
+def test_accounting_preview_is_mutation_free_exact_retry_and_history_free(monkeypatch):
+    cfg = S.SchedulerConfig.from_dict(config())
+    engine = S.SchedulerEngine(cfg, S.initial_state(cfg, "scheduler"))
+    selected = engine.select_stage([proposal("p")], now=0)
+    before = engine.operational_projection().projection_digest
+    monkeypatch.setattr(engine, "export_state", lambda: pytest.fail("settlement exported history"))
+    preview = engine.preview_accounting(
+        selected, receipt(proposal("p")), outcome="valid_comparison")
+    assert engine.operational_projection().projection_digest == before
+    assert engine.accounting_view().receipt_count == 0
+    assert engine.apply_accounting_preview(preview) is True
+    assert engine.apply_accounting_preview(preview) is False
+    assert engine.accounting_view().receipt_count == 1
+    with pytest.raises(S.SchedulingRefused, match="locally derived"):
+        S.SchedulerEngine(cfg, S.initial_state(cfg, "scheduler")).apply_accounting_preview(
+            preview)
+
+
+@pytest.mark.parametrize("conflicting", [False, True])
+def test_duplicate_preview_preserves_older_receipt_and_later_history(conflicting):
+    cfg = S.SchedulerConfig.from_dict(config())
+    engine = S.SchedulerEngine(cfg, S.initial_state(cfg, "scheduler"))
+    first = proposal("first")
+    selected = engine.select_stage([first], now=0)
+    original = receipt(first, "receipt-first")
+    assert engine.account_stage(selected, original, outcome="valid_comparison")
+    second = proposal("second", submitted=6)
+    selected_second = engine.select_stage([second], now=6)
+    assert engine.account_stage(
+        selected_second,
+        receipt(second, "receipt-second", start=6, end=8, claims=("claim-2",)),
+        outcome="failed")
+    before = engine.export_state().to_dict()
+    attempted = original if not conflicting else original | {"ended_at": 4.0}
+    with pytest.raises(S.SchedulingRefused):
+        engine.preview_accounting(selected, attempted, outcome="valid_comparison")
+    assert engine.export_state().to_dict() == before
 
 
 def test_strict_direct_normalization_freezes_nested_inputs_and_rejects_bool_nan_unknown():

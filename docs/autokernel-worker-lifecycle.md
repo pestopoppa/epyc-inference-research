@@ -74,6 +74,45 @@ owned cleanup completed. It is not a measurement grade, candidate keep, archive 
 gain. Native evidence must still pass the accepted `NativeCaptureValidator` with the lifecycle's typed
 `TrustedWorkerResultFence`. The science clock does not advance on process completion.
 
+## Planned-serving child bridge
+
+The optional planned path is selected only by a typed `PlannedWorkerInvocation`; the ordinary
+`run_stage(request)` path is unchanged. Its request must name the repository's exact
+`unified_worker.py` entrypoint under the pinned interpreter with `-I -B`, match the prepared plan and
+artifact-contract digests, and use exactly one start pipe, one Unix socketpair control channel, and one
+result pipe. `worker_bootstrap.py` passes those descriptors only for that fixed entrypoint. The child
+environment remains the closed request environment rather than inherited credentials, user site,
+`PYTHONPATH`, or working-directory imports.
+
+After the bootstrap gate, the actual process running the planned consumer sends its PID/start-ticks/
+boot identity. The parent confirms that exact descendant in the provider-owned container before
+sending `WorkerStart`, which also binds request/plan/stage, worker/grant generations, container inode,
+and the one provider deadline. Parent endpoints and frame buffers are nonblocking and bounded; the
+existing watchdog drains control, result, and bootstrap outcome independently while it refreshes the
+grant and enforces pause/drain. The watchdog uses only immutable digest-keyed cached completion and
+continuation evidence. It never calls an arbitrary blocking evidence callback.
+
+The child alone invokes the planned-serving comparison. Production always requires default Linux
+cgroup-v2 membership verification and the real measurement function; fake placement and measurement
+are Python-only fork-test injections and cannot be selected by JSON, argv, environment, or a bootstrap
+descriptor. The child seals raw artifacts and the full result once, returning only a bounded
+content-addressed reference. Lifecycle exposes that reference only after durable
+`WORKER_RESULT_ACCEPTED`; the terminal result digest is the digest of the exact reference envelope.
+Parent ingestion checks terminal request/plan/stage, grant generation, current worker fence, all run and
+carrier bindings, every artifact digest, and fixed arm order before the first native callback. A late or
+substitute same-worker reference is refused.
+
+Resource accounting is a separate provider-authored capability. After exact release and
+within the same lifecycle deadline, an optional `close_held_receipt` returns a typed binding
+around the existing scheduler `HeldClaimReceipt`, covering the pre-authorization-through-
+release interval and exact worker/grant/container generations. The lifecycle exposes it only
+for its durably registered terminal. Providers without that capability remain visibly
+unavailable for settlement; no zero-usage or recipe-derived geometry is fabricated. The
+lifecycle rechecks its clock after the provider returns: a late return makes the terminal stale
+and visibly refused, while a valid already-returned receipt remains attached so released
+ownership and cost facts are not discarded. This post-return check cannot interrupt a blocking
+provider; real providers must enforce the supplied deadline internally.
+
 ## Closed v2 snapshot
 
 `epyc.autokernel.campaign_snapshot.v2` has exactly these top-level fields:
