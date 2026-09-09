@@ -11,7 +11,10 @@ import json
 import math
 import os
 from pathlib import Path
+import select
+import signal
 import socket
+import sys
 import threading
 import time
 from typing import Any, Mapping
@@ -465,6 +468,7 @@ def _parser() -> argparse.ArgumentParser:
                         default=DEFAULT_REFRESH_INTERVAL_S)
     parser.add_argument("--request-deadline", type=float,
                         default=TOTAL_REQUEST_DEADLINE_S)
+    parser.add_argument("--shutdown-deadline", type=float, default=30.0)
     parser.add_argument("--trusted-origin")
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument("--once", action="store_true")
@@ -481,6 +485,8 @@ def main(argv: list[str] | None = None) -> int:
         raise ControlRefused("producer refresh interval must be positive and finite")
     if not math.isfinite(args.request_deadline) or args.request_deadline <= 0:
         raise ControlRefused("total request deadline must be positive and finite")
+    if not math.isfinite(args.shutdown_deadline) or args.shutdown_deadline <= 0:
+        raise ControlRefused("shutdown deadline must be positive and finite")
     listen = parse_listen(args.listen) if args.listen else None
     token = os.environ.get("AUTOKERNEL_CONTROL_TOKEN", "") if listen else None
     if listen and not token:
@@ -513,14 +519,56 @@ def main(argv: list[str] | None = None) -> int:
         controller.close()
         raise
     try:
+        read_fd, write_fd = os.pipe2(os.O_NONBLOCK | os.O_CLOEXEC)
+        previous_sigterm = signal.getsignal(signal.SIGTERM)
+
+        def notify_shutdown(_signum, _frame):
+            try:
+                os.write(write_fd, b"x")
+            except BlockingIOError:
+                pass
+
+        signal.signal(signal.SIGTERM, notify_shutdown)
         try:
             service.start()
+            shutdown_requested = False
+            shutdown_deadline = None
+            deadline_reported = False
             while service.thread is not None and service.thread.is_alive():
-                service.thread.join(timeout=0.25)
+                readable, _, _ = select.select([read_fd], [], [], 0.25)
+                if readable:
+                    try:
+                        os.read(read_fd, 4096)
+                    except BlockingIOError:
+                        pass
+                    if not shutdown_requested:
+                        controller.request_shutdown_drain()
+                        shutdown_requested = True
+                        shutdown_deadline = time.monotonic() + args.shutdown_deadline
+                if shutdown_requested:
+                    try:
+                        controller.reconcile_shutdown_ownership()
+                    except ControlRefused as exc:
+                        if not deadline_reported:
+                            print(f"shutdown ownership unresolved: {exc}",
+                                  file=sys.stderr, flush=True)
+                    try:
+                        assert shutdown_deadline is not None
+                        controller.await_shutdown_drain(shutdown_deadline)
+                    except ControlRefused as exc:
+                        if not deadline_reported:
+                            print(f"shutdown remains unresolved: {exc}",
+                                  file=sys.stderr, flush=True)
+                            deadline_reported = True
+                        continue
+                    break
                 if service.publisher_error is not None:
                     raise ControlRefused(
                         f"snapshot publisher failed: {service.publisher_error}")
         finally:
+            signal.signal(signal.SIGTERM, previous_sigterm)
+            os.close(read_fd)
+            os.close(write_fd)
             service.close()
     except BaseException:
         # If bounded service close refuses, its threads may still own controller

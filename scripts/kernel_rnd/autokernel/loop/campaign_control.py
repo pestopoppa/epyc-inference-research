@@ -17,6 +17,7 @@ from pathlib import Path
 import stat
 import types
 import threading
+import time
 from typing import Any, Callable, Mapping
 
 from .. import journal as journal_module, schemas
@@ -24,6 +25,7 @@ from ..controller.discovery_supervisor_secure import (
     RuntimeRoot, SecureRuntimeError, object_identity, read_stable_fd,
 )
 from . import status
+from . import campaign_command_v2
 from . import scheduling
 from . import worker_lifecycle as worker_lifecycle_module
 from .native_capture_control import NativeCaptureRefused, NativeCaptureValidator
@@ -640,6 +642,7 @@ class CampaignController:
         self._cached_driver_readiness = (False, "provider readiness not refreshed")
         self.clock = clock
         self._mutex = threading.RLock()
+        self._shutdown_condition = threading.Condition(self._mutex)
         self._lease_fd: int | None = None
         self._lock_identity: dict[str, int] | None = None
         self._journal_root_identity: dict[str, int] | None = None
@@ -657,6 +660,9 @@ class CampaignController:
         self.observed_state = "paused"
         self.prerequisite_reason: str | None = "explicit resume required"
         self._command_results: dict[str, dict[str, Any]] = {}
+        self._command_requests: dict[str, dict[str, Any]] = {}
+        self._shutdown_requested = False
+        self._shutdown_drain_request_id: str | None = None
         self._candidate_pending: tuple[str, str, str] | None = None
         self._candidate_pending_payload: Mapping[str, Any] | None = None
         self._candidate_prepared = False
@@ -897,6 +903,7 @@ class CampaignController:
                     raise journal_module.JournalCorruption(
                         "v2 command breaks campaign/config/supervisor binding")
                 result = row["result"]
+                command = dict(row["command"])
                 request_id = result["request_id"]
                 if row["phase"] == "ACCEPTED":
                     if row["control_revision"] != last_revision + 1 \
@@ -916,6 +923,46 @@ class CampaignController:
                     self.observed_state = result["observed_state"]
                     self.prerequisite_reason = result["prerequisite_reason"]
                 self._command_results[request_id] = copy.deepcopy(result)
+                self._command_requests[request_id] = command
+                continue
+            if entry.kind == journal_module.KIND_CAMPAIGN_COMMAND_V3:
+                violations = journal_module._validate_native_payload(entry.kind, entry.payload)
+                if violations:
+                    raise journal_module.JournalCorruption(
+                        "invalid v3 command history: " + "; ".join(violations))
+                if self.snapshot_version not in {2, 3}:
+                    raise ControlRefused(
+                        "store contains campaign controls v3; reopen explicitly as v2/v3")
+                row = campaign_command_v2.validate_transition(entry.payload)
+                if (not saw_start or row["campaign_id"] != self.resolved.campaign_id
+                        or row["config_generation"] != self.config_generation
+                        or row["config_digest"] != self.config_digest
+                        or row["supervisor_incarnation"] != last_incarnation):
+                    raise journal_module.JournalCorruption(
+                        "v3 command transition breaks current writer binding")
+                result = row["result"]
+                command = row["command"]
+                request_id = result["request_id"]
+                if row["phase"] == "ACCEPTED":
+                    if (row["control_revision"] != last_revision + 1
+                            or request_id in self._command_results):
+                        raise journal_module.JournalCorruption(
+                            "v3 command acceptance breaks revision/idempotency")
+                    last_revision = row["control_revision"]
+                else:
+                    prior = self._command_results.get(request_id)
+                    accepted = self._command_requests.get(request_id)
+                    if (prior is None or prior.get("completed") is not False
+                            or accepted != command or row["control_revision"] > last_revision
+                            or prior["payload_digest"] != result["payload_digest"]):
+                        raise journal_module.JournalCorruption(
+                            "v3 completion lacks exact accepted command")
+                if row["control_revision"] == last_revision:
+                    self.desired_state = result["desired_state"]
+                    self.observed_state = result["observed_state"]
+                    self.prerequisite_reason = result["prerequisite_reason"]
+                self._command_results[request_id] = copy.deepcopy(result)
+                self._command_requests[request_id] = copy.deepcopy(command)
                 continue
             if entry.kind == journal_module.KIND_PLANNED_SERVING_ARM_CAPTURED:
                 row = entry.payload
@@ -1621,8 +1668,12 @@ class CampaignController:
     def _append_v2_command_locked(self, phase: str, command: Mapping[str, Any],
                                   result: Mapping[str, Any]) -> None:
         assert self._journal is not None and self._worker_lifecycle is not None
-        row = worker_lifecycle_module.validate_command_transition_v2({
-            "schema": worker_lifecycle_module.COMMAND_TRANSITION_SCHEMA,
+        fenced = command.get("schema") == campaign_command_v2.COMMAND_SCHEMA
+        validator = (campaign_command_v2.validate_transition if fenced
+                     else worker_lifecycle_module.validate_command_transition_v2)
+        row = validator({
+            "schema": (campaign_command_v2.TRANSITION_SCHEMA if fenced
+                       else worker_lifecycle_module.COMMAND_TRANSITION_SCHEMA),
             "phase": phase, "campaign_id": self.resolved.campaign_id,
             "config_digest": self.config_digest,
             "config_generation": self.config_generation,
@@ -1633,7 +1684,9 @@ class CampaignController:
             "result": dict(result),
         })
         try:
-            entry = self._journal.append(journal_module.KIND_CAMPAIGN_COMMAND_V2, row)
+            entry = self._journal.append(
+                journal_module.KIND_CAMPAIGN_COMMAND_V3 if fenced
+                else journal_module.KIND_CAMPAIGN_COMMAND_V2, row)
             self._verify_journal_layout(self.store / "journal")
         except BaseException:
             self._poisoned = True
@@ -1657,7 +1710,7 @@ class CampaignController:
                 "completion_reason": "owned workers quiesced and claims released",
                 "observed_state": "paused" if operation == "pause" else "drained",
             })
-            command = {
+            command = copy.deepcopy(self._command_requests.get(request_id)) or {
                 "schema": COMMAND_SCHEMA, "campaign_id": self.resolved.campaign_id,
                 "config_generation": self.config_generation, "request_id": request_id,
                 "operation": operation, "payload": {},
@@ -1670,6 +1723,7 @@ class CampaignController:
             if result["control_revision"] == self.control_revision:
                 self.observed_state = result["observed_state"]
                 self.prerequisite_reason = result["prerequisite_reason"]
+        self._shutdown_condition.notify_all()
 
     def _supersede_pending_pause_locked(self) -> None:
         for request_id, prior in tuple(self._command_results.items()):
@@ -1682,7 +1736,7 @@ class CampaignController:
                 "desired_state": "drained", "observed_state": "draining",
                 "prerequisite_reason": None,
             })
-            command = {
+            command = copy.deepcopy(self._command_requests.get(request_id)) or {
                 "schema": COMMAND_SCHEMA, "campaign_id": self.resolved.campaign_id,
                 "config_generation": self.config_generation, "request_id": request_id,
                 "operation": "pause", "payload": {},
@@ -1692,18 +1746,29 @@ class CampaignController:
             result = worker_lifecycle_module.validate_command_result_v2(result)
             self._append_v2_command_locked("COMPLETED", command, result)
             self._command_results[request_id] = result
+        self._shutdown_condition.notify_all()
 
     def _apply_command_v2_locked(self, value: Mapping[str, Any]) -> dict[str, Any]:
-        row = validate_command(value)
-        if row["campaign_id"] != self.resolved.campaign_id \
-                or row["config_generation"] != self.config_generation:
-            raise ControlRefused("command campaign/config generation does not match")
+        fenced = isinstance(value, Mapping) \
+            and value.get("schema") == campaign_command_v2.COMMAND_SCHEMA
+        row = (campaign_command_v2.validate_command(value) if fenced
+               else validate_command(value))
         prior = self._command_results.get(row["request_id"])
         if prior is not None:
-            if prior["payload_digest"] != row["payload_digest"]:
+            accepted = self._command_requests.get(row["request_id"])
+            if ((fenced and accepted != row)
+                    or (not fenced and prior["payload_digest"] != row["payload_digest"])):
                 raise ControlRefused("request_id was already used for different semantics")
             self._publish_snapshot_locked()
             return copy.deepcopy(prior)
+        if self._shutdown_requested and row["operation"] == "resume":
+            raise ControlRefused("supervisor shutdown has latched workload admission closed")
+        if row["campaign_id"] != self.resolved.campaign_id \
+                or row["config_generation"] != self.config_generation:
+            raise ControlRefused("command campaign/config generation does not match")
+        if fenced and (row["config_digest"] != self.config_digest
+                       or row["supervisor_incarnation"] != self.supervisor_incarnation):
+            raise ControlRefused("command config/supervisor identity does not match")
         pending = [result for result in self._command_results.values()
                    if result.get("completed") is False]
         if pending and not (row["operation"] == "drain"
@@ -1757,10 +1822,111 @@ class CampaignController:
         self.desired_state, self.observed_state = desired, observed
         self.prerequisite_reason = prerequisite
         self._command_results[row["request_id"]] = result
+        self._command_requests[row["request_id"]] = copy.deepcopy(row)
         if row["operation"] == "drain":
             self._supersede_pending_pause_locked()
         self._publish_snapshot_locked()
+        self._shutdown_condition.notify_all()
         return copy.deepcopy(result)
+
+    def request_shutdown_drain(self) -> dict[str, Any]:
+        """Latch shutdown and reuse or persist the compatible durable drain."""
+        with self._mutex:
+            self._require_active_locked()
+            self._shutdown_requested = True
+            drains = [result for result in self._command_results.values()
+                      if result.get("accepted") is True
+                      and result.get("operation") == "drain"
+                      and result.get("desired_state") == "drained"]
+            if drains:
+                prior = max(drains, key=lambda result: result["control_revision"])
+                if prior["control_revision"] != self.control_revision \
+                        or self.desired_state != "drained":
+                    raise ControlRefused("durable drain is not the current control state")
+                self._shutdown_drain_request_id = prior["request_id"]
+                return copy.deepcopy(prior)
+            if self.snapshot_version == 1:
+                request_id = (f"service-sigterm-drain:{self.resolved.campaign_id}:"
+                              f"{self.config_generation}:{self.supervisor_incarnation}")
+                command = {
+                    "schema": COMMAND_SCHEMA,
+                    "campaign_id": self.resolved.campaign_id,
+                    "config_generation": self.config_generation,
+                    "request_id": request_id, "operation": "drain", "payload": {},
+                    "expected_control_revision": self.control_revision,
+                }
+                command["payload_digest"] = command_digest(
+                    operation="drain", payload={}, campaign_id=self.resolved.campaign_id,
+                    config_generation=self.config_generation)
+                result = self.apply_command(command)
+                self._shutdown_drain_request_id = request_id
+                return result
+            request_id = (f"service-sigterm-drain:{self.resolved.campaign_id}:"
+                          f"{self.config_generation}:{self.supervisor_incarnation}")
+            prior_command = self._command_requests.get(request_id)
+            if prior_command is not None:
+                result = self._apply_command_v2_locked(copy.deepcopy(prior_command))
+                self._shutdown_drain_request_id = request_id
+                return result
+            command = {
+                "schema": campaign_command_v2.COMMAND_SCHEMA,
+                "campaign_id": self.resolved.campaign_id,
+                "config_generation": self.config_generation,
+                "config_digest": self.config_digest,
+                "supervisor_incarnation": self.supervisor_incarnation,
+                "request_id": request_id, "operation": "drain", "payload": {},
+                "expected_control_revision": self.control_revision,
+            }
+            command["payload_digest"] = campaign_command_v2.command_digest(
+                operation="drain", payload={}, campaign_id=self.resolved.campaign_id,
+                config_generation=self.config_generation, config_digest=self.config_digest,
+                supervisor_incarnation=self.supervisor_incarnation, request_id=request_id,
+                expected_control_revision=self.control_revision)
+            result = self._apply_command_v2_locked(command)
+            self._shutdown_drain_request_id = request_id
+            return result
+
+    def await_shutdown_drain(self, deadline: float) -> dict[str, Any]:
+        """Wait boundedly for durable drain; elapsed time grants no cleanup authority."""
+        if (not isinstance(deadline, (int, float)) or isinstance(deadline, bool)
+                or not math.isfinite(float(deadline))):
+            raise ControlRefused("shutdown deadline is invalid")
+        with self._shutdown_condition:
+            while True:
+                self._require_active_locked()
+                request_id = self._shutdown_drain_request_id
+                if request_id is None:
+                    raise ControlRefused("shutdown drain was not requested")
+                result = self._command_results.get(request_id)
+                clean = bool(result and result.get("completed") is True
+                             and result.get("observed_state") == "drained"
+                             and self._shutdown_requested
+                             and self.desired_state == "drained"
+                             and not self._worker_run_active
+                             and not self._worker_projection.active
+                             and self._acquisition_projection.pending is None)
+                if clean:
+                    return copy.deepcopy(result)
+                remaining = float(deadline) - time.monotonic()
+                if remaining <= 0:
+                    raise ControlRefused(
+                        "shutdown drain deadline expired; ownership retained")
+                self._shutdown_condition.wait(timeout=remaining)
+
+    def reconcile_shutdown_ownership(self) -> bool:
+        """Use only this controller's lifecycle engine to reconcile stranded ownership."""
+        with self._mutex:
+            self._require_active_locked()
+            if self._worker_run_active:
+                return False
+            needs_recovery = bool(
+                self._worker_projection.active
+                or self._acquisition_projection.pending is not None)
+            if not needs_recovery:
+                self._settle_v2_commands_locked()
+                return True
+        self.reconcile_workers()
+        return True
 
     def register_native_capture(self, validator: NativeCaptureValidator) -> None:
         """Install the explicit trusted worker-result consumer for this lifetime.
@@ -2629,6 +2795,7 @@ class CampaignController:
             self._native_payload_digests = {}
             self._native_validator = None
             self._native_capabilities = set()
+            self._command_requests = {}
             self._driver_issued = {}
             self._driver_settled = {}
             self._driver_settlement_validator = None
