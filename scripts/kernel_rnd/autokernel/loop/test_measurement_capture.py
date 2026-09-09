@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 import json
+import multiprocessing
 import os
 import threading
 
@@ -12,6 +13,16 @@ from . import experiment_plan as ep
 from . import measurement_capture as mc
 from . import planned_serving as ps
 from .test_planned_serving import _measure, _plan, _prompts, _recipes
+
+
+def _process_exclusive(root, ready, acquired):
+    store = mc.ArtifactStore(root)
+    try:
+        ready.set()
+        with store.exclusive():
+            acquired.set()
+    finally:
+        store.close()
 
 
 class CaptureProvider:
@@ -318,6 +329,63 @@ def test_same_store_serializes_threads_and_nested_context_keeps_outer_lock(tmp_p
         assert not acquired.wait(0.05)
     thread.join(timeout=1.0)
     assert acquired.is_set()
+    store.close()
+
+
+def test_public_exclusive_is_reentrant_for_nested_write_and_exact_retry(tmp_path):
+    store = mc.ArtifactStore(tmp_path / "store")
+    with store.exclusive():
+        first = store.write("nested", {"value": 1})
+        second = store.write("nested", {"value": 1})
+    assert first == second
+    assert list(store.root.iterdir()) == [store.root / first.locator]
+    store.close()
+
+
+def test_public_exclusive_refuses_closed_and_replaced_roots(tmp_path):
+    store = mc.ArtifactStore(tmp_path / "closed")
+    store.close()
+    with pytest.raises(mc.CaptureError, match="closed"):
+        with store.exclusive():
+            pass
+
+    store = mc.ArtifactStore(tmp_path / "replace")
+    original = tmp_path / "original-root"
+    store.root.rename(original)
+    store.root.mkdir(mode=0o700)
+    with pytest.raises(mc.SecureRuntimeError, match="identity changed"):
+        with store.exclusive():
+            pass
+    store.close()
+
+
+def test_public_exclusive_serializes_threads_and_processes_on_same_root(tmp_path):
+    root = tmp_path / "store"
+    store = mc.ArtifactStore(root)
+    thread_entered = threading.Event()
+    thread_acquired = threading.Event()
+
+    def thread_waiter():
+        thread_entered.set()
+        with store.exclusive():
+            thread_acquired.set()
+
+    context = multiprocessing.get_context("spawn")
+    process_ready = context.Event()
+    process_acquired = context.Event()
+    with store.exclusive():
+        thread = threading.Thread(target=thread_waiter)
+        thread.start()
+        process = context.Process(
+            target=_process_exclusive, args=(root, process_ready, process_acquired))
+        process.start()
+        assert thread_entered.wait(1.0) and process_ready.wait(1.0)
+        assert not thread_acquired.wait(0.05)
+        assert not process_acquired.wait(0.05)
+    thread.join(timeout=2.0)
+    process.join(timeout=2.0)
+    assert thread_acquired.is_set() and process_acquired.is_set()
+    assert process.exitcode == 0
     store.close()
 
 
