@@ -251,8 +251,9 @@ def test_driver_requires_concrete_parent_observation_verifiers(tmp_path, monkeyp
         controller.close()
 
 
-def _owned_stack(tmp_path, monkeypatch, *, return_code=0):
-    driver, _old, enrolled, _target, target_digest = runtime_driver(git_source=True)
+def _owned_stack(tmp_path, monkeypatch, *, return_code=0, recipe=None):
+    driver, _old, enrolled, _target, target_digest = runtime_driver(
+        git_source=True, recipe=recipe)
     original_input = driver.execution_inputs[target_digest]
     prompt_body = original_input.prompt_manifest.to_dict()
     prompt_body["prompts"] = prompt_body["prompts"][:1]
@@ -320,12 +321,13 @@ def _owned_stack(tmp_path, monkeypatch, *, return_code=0):
     return driver, controller, lifecycle, engine
 
 
-def _as_observed_v2(prepared, measurement_callable):
+def _as_observed_v2(prepared, measurement_callable, *, scientific_adapters=None):
     store = mc.ArtifactStore(prepared.artifact_root)
     try:
         instrument = ob.seal_loaded_instrument(
             store=store, measurement_callable=measurement_callable,
-            fence_clock=time.monotonic, serving_timer=time.time)
+            fence_clock=time.monotonic, serving_timer=time.time,
+            scientific_adapters=scientific_adapters)
     finally:
         store.close()
     plan_row = prepared.plan.to_dict() | {
@@ -365,8 +367,10 @@ def _observation_configuration(prepared):
 
 
 def _run_real_controller_child_v2_capture_and_restart(
-        tmp_path, monkeypatch, *, producer_type):
-    driver, controller, lifecycle, engine = _owned_stack(tmp_path, monkeypatch)
+        tmp_path, monkeypatch, *, producer_type, recipe=None,
+        scientific_adapters=None):
+    driver, controller, lifecycle, engine = _owned_stack(
+        tmp_path, monkeypatch, recipe=recipe)
     # Restore the actual lifecycle watcher; this test does not inject a completion.
     monkeypatch.undo()
     issued = driver.tick(now=1.0)
@@ -374,6 +378,7 @@ def _run_real_controller_child_v2_capture_and_restart(
     measure_module_path = tmp_path / "fixture_measure.py"
     measure_module_path.write_text("""
 import hashlib
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -389,6 +394,25 @@ def _stat(pid, start, ticks):
 def observed_measure(template, build_dir, port, **kwargs):
     del build_dir, port
     session = kwargs['observation_session']
+    preparation_root = os.environ.get('AUTOKERNEL_MODEL_PREPARATION_ROOT')
+    if preparation_root:
+        selected = kwargs['resolved_recipe']
+        matches = []
+        for path in Path(preparation_root).iterdir():
+            if not path.is_file():
+                continue
+            try:
+                row = json.loads(path.read_bytes())
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                continue
+            if row.get('schema') == 'epyc.autokernel.scheduled_model_preparation_binding.v1':
+                preparation = row['preparation']
+                if (preparation['recipe_execution_digest'] == selected.execution_digest
+                        and preparation['entry_path'] == selected.model.path
+                        and preparation['entry_sha256'] == selected.model.sha256):
+                    matches.append(row)
+        if len(matches) != 1:
+            raise AssertionError('measurement started before model preparation receipt')
     proc_root = Path(os.environ['AUTOKERNEL_FIXTURE_PROC_ROOT'])
     pid_log = Path(os.environ['AUTOKERNEL_FIXTURE_PID_LOG'])
     server = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(5)'],
@@ -441,7 +465,8 @@ def observed_measure(template, build_dir, port, **kwargs):
     sys.modules["fixture_measure"] = measure_module
     spec.loader.exec_module(measure_module)
     prepared, _instrument = _as_observed_v2(
-        prepared, measure_module.observed_measure)
+        prepared, measure_module.observed_measure,
+        scientific_adapters=scientific_adapters)
     store = mc.ArtifactStore(prepared.artifact_root)
     validator = nc.NativeCaptureValidator(
         binding=nc.NativeCaptureBinding(
@@ -511,6 +536,8 @@ probe = lo.FilesystemProbe(proc_root=proc, sysfs_cpu_root=cpu,
 os.environ['AUTOKERNEL_FIXTURE_PROC_ROOT'] = {str(probe_root / 'proc')!r}
 os.environ['AUTOKERNEL_FIXTURE_PID_LOG'] = {str(pid_log)!r}
 os.environ['AUTOKERNEL_FIXTURE_CPUS'] = {','.join(str(value) for value in fixture_cpus)!r}
+os.environ['AUTOKERNEL_MODEL_PREPARATION_ROOT'] = {
+    str(prepared.artifact_root) if scientific_adapters is not None else ''!r}
 uw.run_from_fds(start_fd=args.start_fd, control_fd=args.control_fd,
     result_fd=args.result_fd, _test_membership_probe=lambda _start: None,
     _test_measure=observed_measure,
@@ -541,8 +568,12 @@ uw.run_from_fds(start_fd=args.start_fd, control_fd=args.control_fd,
     finally:
         producer.stop_and_join()
     assert terminal.accepted
-    assert controller._lifecycle_provider.claim_threads == [
-        "autokernel-parent-evidence"] * len(prepared.plan.expected_units)
+    claim_threads = controller._lifecycle_provider.claim_threads
+    assert all(name == "autokernel-parent-evidence" for name in claim_threads)
+    if scientific_adapters is None:
+        assert len(claim_threads) == len(prepared.plan.expected_units)
+    else:
+        assert len(claim_threads) >= len(prepared.plan.expected_units)
     start = invocation.start
     assert start is not None
     reference = invocation.result_reference()

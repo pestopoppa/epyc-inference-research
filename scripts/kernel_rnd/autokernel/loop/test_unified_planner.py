@@ -24,7 +24,7 @@ def resolved_campaign(*, backend="cpu", include_missing=False, model_digit="a",
                       concurrency=1, target_env=None, recipe_sha=None,
                       campaign_id="unified-test", request_id="request-1",
                       as_seed=False, recipe_path=None, build_ref="production:test:executable",
-                      model_path=None, build_path=None):
+                      model_path=None, build_path=None, model_sha=None):
     def target(target_id, model="model"):
         return {"schema": campaign.TARGET_SCHEMA, "request_id": request_id,
                 "target_id": target_id, "backend": backend, "model_ref": model,
@@ -59,6 +59,8 @@ def resolved_campaign(*, backend="cpu", include_missing=False, model_digit="a",
         registry["recipe"]["production:test:recipe"]["path"] = str(recipe_path)
     if model_path is not None:
         registry["model"]["model"]["path"] = str(model_path)
+    if model_sha is not None:
+        registry["model"]["model"]["sha256"] = model_sha
     if build_path is not None:
         registry["build"][build_ref]["path"] = str(build_path)
     return campaign.resolve_manifest(campaign.CampaignManifest.from_dict(raw),
@@ -67,10 +69,11 @@ def resolved_campaign(*, backend="cpu", include_missing=False, model_digit="a",
 
 def canonical_recipe(*, backend="cpu", threads=4, policy_keys=(), launch_extra=None,
                      numa_policy=None, background_threads=True,
-                     instance_mode="full") -> CanonicalResolvedRecipe:
+                     instance_mode="full", model_path="/models/model.gguf",
+                     model_sha256="a" * 64) -> CanonicalResolvedRecipe:
     root = Path("/build")
     template = serving.Recipe(
-        name=f"{backend}-recipe", model="/models/model.gguf",
+        name=f"{backend}-recipe", model=model_path,
         device="none" if backend == "cpu" else "ROCm0",
         ngl=0 if backend == "cpu" else 99, cpu_list="0-3", threads=threads,
         np=1, ctx=128)
@@ -86,7 +89,7 @@ def canonical_recipe(*, backend="cpu", threads=4, policy_keys=(), launch_extra=N
     launch.update(launch_extra or {})
     artifacts = {
         "model": {"schema": ARTIFACT_SCHEMA, "role": "model",
-                  "path": template.model, "sha256": "a" * 64},
+                  "path": template.model, "sha256": model_sha256},
         "drafter": None,
         "executable": {"schema": ARTIFACT_SCHEMA, "role": "executable",
                        "path": "/build/bin/llama-server", "sha256": "b" * 64},

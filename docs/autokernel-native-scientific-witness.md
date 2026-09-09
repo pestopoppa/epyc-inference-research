@@ -14,6 +14,24 @@ source pins, and the separate entry-file digest used by native serving recipes.
 Per-unit checks reopen that original receipt and check file metadata continuity;
 they do not hash model contents during measurement or treat metadata as hashes.
 
+The scheduled native parent integration performs this preparation while the
+planned child is blocked waiting for its observation binding.  The parent first
+joins the selected target, canonical recipe execution digest and recipe model
+entry to a closed `ScheduledModelPreparation`; it then revalidates the same
+provider-owned active claim before and after the complete inventory hash.  Only
+after the original receipt's entry digest matches the selected recipe can the
+binding be returned, so warmup and measured requests cannot overtake model
+verification.  Reuse of that exact model reopens the original receipt and checks
+metadata continuity instead of hashing the inventory again.
+
+The full-byte validator is synchronous and has no cancellation callback.  It
+runs on the bounded parent-evidence thread without holding controller or
+lifecycle locks, so lifecycle teardown and deadline enforcement remain live;
+however, a blocked filesystem read may outlive the stage deadline.  In that
+case the closing claim check refuses the preparation and no observation binding
+or measurement is admitted.  This implementation does not claim prompt hash
+cancellation of a blocked kernel read.
+
 `collect_issued` reserves a bounded registry entry under a short lock, then runs
 the owning T0 collectors outside the lock. It retains immutable original inputs,
 ordered raw captures and the complete 17-gate report. In-flight duplicates refuse
@@ -43,7 +61,7 @@ separately passed 85 tests and 15 subtests (0.30 seconds). Ten touched source/te
 paths passed Ruff; diff checks were clean. Synthetic subprocess-boundary fixtures
 exercise the owning collectors and reducer, not real model or GPU performance.
 
-Actual scheduled preparation/configuration injection, contained same-server
+Installed standalone configuration injection, contained same-server
 multi-request evidence, remaining required witnesses, installed dry run and
 monitored hardware acceptance are still required. No champion or production
 admission follows from this implementation or these tests.

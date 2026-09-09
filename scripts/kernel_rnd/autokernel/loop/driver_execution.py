@@ -146,6 +146,13 @@ class UnknownParentEvidenceProducer:
         del notice
         return {"outcome": "unavailable"}
 
+    def _before_observation_binding(self, *, start: unified_worker.WorkerStart,
+                                    unit: ep.UnitSpec, fence: ps.StageFence,
+                                    recipe: Any,
+                                    claim: Mapping[str, Any]) -> None:
+        """Optional parent preparation while the child is blocked on its binding."""
+        del start, unit, fence, recipe, claim
+
     def _run(self) -> None:
         while not self._stop.is_set():
             try:
@@ -215,6 +222,8 @@ class UnknownParentEvidenceProducer:
                                 and (not held["gpu_devices"] or not required_dsos)):
                         raise DriverExecutionRefused(
                             "observation backend differs from held GPU/DSO evidence")
+                    self._before_observation_binding(
+                        start=start, unit=unit, fence=fence, recipe=recipe, claim=claim)
                     instrument = ob.LoadedInstrumentReference.from_dict(
                         unified_worker._plain(self.plan.loaded_instrument))
                     worker_binding = {
@@ -728,7 +737,8 @@ class UnifiedDriverExecution:
             producer = NativeParentEvidenceService(
                 authority, prepared, self.controller._worker_lifecycle,
                 self._observation_configuration, registry=registry,
-                scientific_adapters=self._native_evidence_configuration.scientific_adapters)
+                scientific_adapters=self._native_evidence_configuration.scientific_adapters,
+                model_preparations=self._native_evidence_configuration.model_preparations)
             self._parent_evidence_registries[transition_id] = registry
         invocation = unified_worker.PlannedWorkerInvocation.open(prepared, authority)
         request_id = selection.proposal.proposal_id
