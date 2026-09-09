@@ -14,7 +14,7 @@ import time
 from types import MappingProxyType
 from typing import Any, Mapping, Sequence
 
-from . import campaign, campaign_control, driver_execution, experiment_plan
+from . import campaign, campaign_control, driver_execution, experiment_plan, feed_runtime
 from . import scheduling, scoped_evidence, unified_driver, unified_planner, worker_lifecycle
 
 CONFIG_SCHEMA = "epyc.autokernel.standalone_runtime_config.v1"
@@ -104,6 +104,7 @@ class StandaloneRuntimeInputs:
     actor_identities: Mapping[str, Mapping[str, Any]]
     execution_inputs: Mapping[str, unified_driver.ExecutionInput | Mapping[str, Any]]
     native_artifact_sink_ref: str
+    feed_owner: Any = None
 
 
 @dataclass(frozen=True)
@@ -229,6 +230,10 @@ class StandaloneRuntime:
             raise StandaloneRuntimeRefused("runtime requires the indexed SchedulerEngine")
         if not callable(monotonic_clock):
             raise StandaloneRuntimeRefused("runtime clock must be callable")
+        if inputs.feed_owner is not None:
+            if not isinstance(inputs.feed_owner, feed_runtime.FeedRuntimeOwner):
+                raise StandaloneRuntimeRefused("runtime requires a concrete feed owner")
+            feed_runtime.validate_paths(inputs.feed_owner.config, controller.store)
         readiness = controller.unified_driver_readiness()
         if (
             readiness["scheduler_projection_digest"]
@@ -250,6 +255,7 @@ class StandaloneRuntime:
             execution_inputs=inputs.execution_inputs,
             monotonic_clock=monotonic_clock,
             executable_work_kinds={"runtime_comparison"},
+            feed_owner=inputs.feed_owner,
         )
         executor = driver_execution.UnifiedDriverExecution(driver=driver, controller=controller)
         return cls(
@@ -420,6 +426,9 @@ class StandaloneRuntime:
                 outcome.to_dict(),
                 receipt.to_dict(),
             )
+        except feed_runtime.FeedRuntimeRefused as exc:
+            return RuntimeTickResult(
+                "recovery_required", str(exc), self._delay(unavailable=True), self._snapshot())
         except unified_driver.DriverTransactionUncertain as exc:
             self._mark_uncertain("driver_transaction_retry_required", str(exc), retry=retry)
             raise StandaloneRuntimeUncertain(str(exc)) from exc
@@ -477,6 +486,14 @@ class StandaloneRuntime:
         return self._drive(retry=True)
 
     def run(self, stop_event: threading.Event) -> RuntimeTickResult:
+        try:
+            return self._run_owned(stop_event)
+        finally:
+            owner = self.driver.feed_owner
+            if owner is not None:
+                owner.close()
+
+    def _run_owned(self, stop_event: threading.Event) -> RuntimeTickResult:
         if not isinstance(stop_event, threading.Event):
             raise StandaloneRuntimeRefused("run requires a threading.Event")
         last = (
@@ -552,6 +569,17 @@ class StandaloneRuntime:
             return RuntimeShutdownResult(
                 "shutdown_incomplete", "runtime operation remains active", self._snapshot()
             )
+        owner = self.driver.feed_owner
+        if owner is not None:
+            try:
+                feed_closed = owner.close_if_owner()
+            except Exception as exc:
+                return RuntimeShutdownResult(
+                    "shutdown_incomplete", f"evidence cleanup failed: {exc}", self._snapshot())
+            if not feed_closed:
+                return RuntimeShutdownResult(
+                    "shutdown_incomplete", "execution-thread evidence cleanup remains active",
+                    self._snapshot())
         try:
             self.executor.close()
         except driver_execution.DriverExecutionUncertain as exc:

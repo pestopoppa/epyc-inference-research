@@ -1063,7 +1063,8 @@ def plan_iteration(*, resolved_campaign: campaign.ResolvedCampaign,
     """Plan once, ask the real scheduler, and optionally record its dispatch request."""
     if not isinstance(resolved_campaign, campaign.ResolvedCampaign):
         raise PlanningRefused("resolved_campaign must be a validated ResolvedCampaign")
-    if not isinstance(evidence_index, scoped_evidence.EvidenceIndex):
+    from .feed_runtime import FeedEvidenceView
+    if not isinstance(evidence_index, (scoped_evidence.EvidenceIndex, FeedEvidenceView)):
         raise PlanningRefused("evidence_index must be an EvidenceIndex")
     if (not isinstance(runtime_anchors, PreparedRuntimeAnchors)
             or runtime_anchors._token is not _PREPARED_TOKEN
@@ -1127,9 +1128,9 @@ def plan_iteration(*, resolved_campaign: campaign.ResolvedCampaign,
                 dispositions.append(_freeze({"opportunity_id": opportunity.opportunity_id,
                                              "status": "claim_scope_mismatch"}))
                 continue
-            retrieval = evidence_index.retrieve(opportunity.claim_key.target_scope,
-                                                opportunity.claim_key, "rank", limit=40)
-            snapshot = evidence_index.proposal_snapshot(opportunity.claim_key, intended_use="rank")
+            evidence_bundle = evidence_index.planning_evidence(
+                opportunity.claim_key, intended_use="rank")
+            retrieval, snapshot = evidence_bundle.retrieval, evidence_bundle.snapshot
             prompt, conflicts = _prompt(target, profile, opportunity, retrieval,
                                          max_chars=max_prompt_chars)
             generated: list[UnifiedProposal] = []

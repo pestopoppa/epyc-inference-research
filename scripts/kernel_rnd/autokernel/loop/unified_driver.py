@@ -497,6 +497,7 @@ class UnifiedCampaignDriver:
                  native_artifact_sink_ref: str,
                  execution_inputs: Mapping[str, Mapping[str, Any] | ExecutionInput] | None = None,
                  executable_work_kinds: Collection[str] | None = None,
+                 feed_owner: Any = None,
                  monotonic_clock=time.monotonic) -> None:
         self.resolved = campaign.ResolvedCampaign.from_dict(resolved_campaign.to_dict())
         self.controller = controller
@@ -508,6 +509,12 @@ class UnifiedCampaignDriver:
                 value.to_dict() if isinstance(value, unified_planner.TargetProfile) else value)
             for key, value in profiles.items()})
         self.evidence = evidence_index
+        from .feed_runtime import FeedRuntimeOwner
+        if feed_owner is not None and not isinstance(feed_owner, FeedRuntimeOwner):
+            raise DriverRefused("driver feed owner must be the installed concrete owner")
+        self.feed_owner = feed_owner
+        if feed_owner is not None:
+            self.evidence = feed_owner.view
         self.runtime_anchors = runtime_anchors
         self.runtime_dimensions = MappingProxyType({
             key: tuple(item if isinstance(item, unified_planner.RuntimeDimension)
@@ -913,6 +920,14 @@ class UnifiedCampaignDriver:
             raise DriverRefused("driver clock must be finite")
         if stop_requested():
             return DriverOutcome("stopped", ("stop requested before scheduling",), None, None)
+        if self.feed_owner is not None:
+            from .feed_runtime import FeedNotReady
+            try:
+                self.feed_owner.drain()
+            except FeedNotReady as exc:
+                return DriverOutcome("waiting", (str(exc),), None, None)
+            if stop_requested():
+                return DriverOutcome("stopped", ("stop requested after evidence drain",), None, None)
         readiness = self._readiness()
         if readiness is None:
             return DriverOutcome("waiting", ("controller driver transaction unavailable",),

@@ -8,7 +8,7 @@ trusted callbacks supplied by an eventual registered adapter.
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import math
 import re
 from types import MappingProxyType
@@ -646,6 +646,35 @@ def _mandatory_signature_digest(claim: ClaimKey) -> str:
 _EMPTY_EVIDENCE_DIGEST = schemas.content_hash([])
 
 
+@dataclass(frozen=True)
+class PlanningEvidence:
+    retrieval: RetrievalResult
+    snapshot: ProposalSnapshot
+
+
+@dataclass(frozen=True)
+class ProjectionCompleteness:
+    """Additional negative evidence only; this never grants supported use."""
+
+    evicted_keys: tuple[tuple[str, str], ...] = ()
+
+    def __post_init__(self) -> None:
+        keys = tuple(sorted(set(tuple(item) for item in self.evicted_keys)))
+        if any(len(item) != 2 or item[0] not in {"dependency", "signature"}
+               or not isinstance(item[1], str) or not item[1] for item in keys):
+            raise EvidenceValidationError("invalid projection completeness keys")
+        object.__setattr__(self, "evicted_keys", keys)
+
+    @property
+    def digest(self) -> str:
+        return schemas.content_hash({"evicted_keys": [list(item) for item in self.evicted_keys]})
+
+    def bind(self, fences: Mapping[str, str]) -> Mapping[str, str]:
+        return MappingProxyType({key: schemas.content_hash({
+            "local": value, "projection_completeness": self.digest})
+            for key, value in fences.items()})
+
+
 class EvidenceIndex:
     """In-memory projection with prebuilt claim/dependency reverse indices."""
 
@@ -672,8 +701,9 @@ class EvidenceIndex:
         ids = [row.finding_id for row in normalized]
         if len(set(ids)) != len(ids):
             raise EvidenceValidationError("EvidenceIndex.findings: duplicate finding_id")
-        self.findings = normalized
-        self._by_claim: dict[str, tuple[Finding, ...]] = {}
+        self._findings = list(normalized)
+        self._finding_digests = {row.finding_id: row.digest for row in normalized}
+        self._by_claim: dict[str, list[Finding]] = {}
         claim_build: dict[str, list[Finding]] = defaultdict(list)
         mandatory_build: dict[tuple[str, ...], list[Finding]] = defaultdict(list)
         observed_signatures: set[tuple[str, ...]] = set()
@@ -685,14 +715,18 @@ class EvidenceIndex:
                 mandatory_build[_mandatory_signature(row.claim_key)].append(row)
             for dep in row.claim_key.dependency_identities:
                 dep_build[dep].add(row.claim_key.digest)
-        self._by_claim = {key: tuple(value) for key, value in claim_build.items()}
+        self._by_claim = dict(claim_build)
         self._mandatory_by_signature = {
-            key: tuple(value) for key, value in mandatory_build.items()}
+            key: list(value) for key, value in mandatory_build.items()}
         self._semantic_fences = {
             schemas.content_hash(list(key)): schemas.content_hash(
                 sorted(row.digest for row in mandatory_build.get(key, ())))
             for key in observed_signatures}
-        self._dependency_claims = {key: frozenset(value) for key, value in dep_build.items()}
+        self._mandatory_digests = {
+            schemas.content_hash(list(key)): {row.digest for row in rows}
+            for key, rows in mandatory_build.items()}
+        self._dirty_signatures: set[str] = set()
+        self._dependency_claims = {key: set(value) for key, value in dep_build.items()}
         self._generations: dict[str, int] = {
             dep: 0 for row in normalized for dep in row.claim_key.dependency_identities}
         self._dependency_fences: dict[str, int] = {
@@ -701,14 +735,18 @@ class EvidenceIndex:
             dep: max((row.frontier for row in normalized
                       if dep in row.claim_key.dependency_identities), default=0)
             for dep in self._generations}
-        self._dependency_evidence_digests: dict[str, str] = {
-            dep: schemas.content_hash(sorted(
-                row.digest for row in normalized
-                if dep in row.claim_key.dependency_identities))
+        self._dependency_finding_digests = {
+            dep: {row.digest for row in normalized
+                  if dep in row.claim_key.dependency_identities}
             for dep in self._generations}
+        self._dependency_evidence_digests: dict[str, str] = {
+            dep: schemas.content_hash(sorted(digests))
+            for dep, digests in self._dependency_finding_digests.items()}
+        self._dirty_dependencies: set[str] = set()
         self._global_fence_generation = 0
         self._invalidations: list[InvalidationEvent] = []
         self._quarantines: list[Quarantine] = []
+        self._quarantine_digests: dict[str, str] = {}
         self._seen_events: dict[str, str] = {}
         self._frontier = max((row.frontier for row in normalized), default=0)
         for raw in invalidations:
@@ -727,8 +765,90 @@ class EvidenceIndex:
         return MappingProxyType(dict(self._generations))
 
     @property
+    def findings(self) -> tuple[Finding, ...]:
+        return tuple(self._findings)
+
+    @property
     def quarantines(self) -> tuple[Quarantine, ...]:
         return tuple(self._quarantines)
+
+    def ingest_finding(self, raw: Finding | Mapping[str, Any]) -> bool:
+        """Incrementally add one finding without rebuilding unrelated indices."""
+        finding = (Finding.from_dict(raw) if isinstance(raw, Mapping)
+                   else _normalize(Finding, raw, "EvidenceIndex.ingest_finding"))
+        prior = self._finding_digests.get(finding.finding_id)
+        if prior is not None:
+            if prior != finding.digest:
+                raise EvidenceValidationError(
+                    f"finding_id {finding.finding_id!r} reused with different content")
+            return False
+        self._finding_digests[finding.finding_id] = finding.digest
+        self._findings.append(finding)
+        claim_digest = finding.claim_key.digest
+        self._by_claim.setdefault(claim_digest, []).append(finding)
+        signature = _mandatory_signature(finding.claim_key)
+        signature_digest = schemas.content_hash(list(signature))
+        self._semantic_fences.setdefault(signature_digest, _EMPTY_EVIDENCE_DIGEST)
+        if finding.conclusion in {"refutation", "conflict", "retraction"}:
+            self._mandatory_by_signature.setdefault(signature, []).append(finding)
+            self._mandatory_digests.setdefault(signature_digest, set()).add(finding.digest)
+            self._dirty_signatures.add(signature_digest)
+        for dep in finding.claim_key.dependency_identities:
+            self._dependency_claims.setdefault(dep, set()).add(claim_digest)
+            self._generations.setdefault(dep, 0)
+            self._dependency_fences.setdefault(dep, 0)
+            self._dependency_frontiers[dep] = max(
+                self._dependency_frontiers.get(dep, 0), finding.frontier)
+            self._dependency_finding_digests.setdefault(dep, set()).add(finding.digest)
+            self._dirty_dependencies.add(dep)
+        self._frontier = max(self._frontier, finding.frontier)
+        return True
+
+    def _refresh_fence_digests(self) -> None:
+        for dep in self._dirty_dependencies:
+            self._dependency_evidence_digests[dep] = schemas.content_hash(
+                sorted(self._dependency_finding_digests[dep]))
+        self._dirty_dependencies.clear()
+        for signature in self._dirty_signatures:
+            self._semantic_fences[signature] = schemas.content_hash(
+                sorted(self._mandatory_digests.get(signature, ())))
+        self._dirty_signatures.clear()
+
+    def ingest_invalidation(self, raw: InvalidationEvent | Mapping[str, Any]) -> None:
+        """Incrementally apply one dependency-generation event."""
+        self._ingest_invalidation(raw)
+
+    def ingest_quarantine(self, raw: Quarantine | Mapping[str, Any]) -> bool:
+        """Incrementally apply one already-validated feed quarantine."""
+        row = (Quarantine.from_dict(raw) if isinstance(raw, Mapping)
+               else _normalize(Quarantine, raw, "EvidenceIndex.ingest_quarantine"))
+        digest = schemas.content_hash(row.to_dict())
+        prior = self._quarantine_digests.get(row.event_id)
+        if prior is not None:
+            if prior != digest:
+                raise EvidenceValidationError(
+                    f"quarantine event_id {row.event_id!r} reused with different content")
+            return False
+        self._quarantine_digests[row.event_id] = digest
+        self._quarantines.append(row)
+        if row.global_scope:
+            self._global_fence_generation += 1
+        else:
+            for dep in row.affected_dependencies:
+                self._dependency_fences[dep] = self._dependency_fences.get(dep, 0) + 1
+                self._generations.setdefault(dep, 0)
+                self._dependency_evidence_digests.setdefault(
+                    dep, _EMPTY_EVIDENCE_DIGEST)
+                self._dependency_finding_digests.setdefault(dep, set())
+                self._dependency_frontiers[dep] = max(
+                    self._dependency_frontiers.get(dep, 0), row.frontier)
+        self._frontier = max(self._frontier, row.frontier)
+        return True
+
+    def set_projection_available(self, available: bool) -> None:
+        if not isinstance(available, bool):
+            raise EvidenceValidationError("projection availability must be boolean")
+        self.projection_available = available
 
     def _quarantine(self, raw: Any, reason: str) -> None:
         deps: tuple[str, ...] = ()
@@ -809,7 +929,9 @@ class EvidenceIndex:
                    for dep in finding.claim_key.dependency_identities)
 
     def retrieve(self, scope: Mapping[str, Any], claim_key: ClaimKey,
-                 intended_use: str, limit: int = 40) -> RetrievalResult:
+                 intended_use: str, limit: int = 40, *,
+                 projection_completeness: ProjectionCompleteness | None = None
+                 ) -> RetrievalResult:
         claim = _normalize(ClaimKey, claim_key, "retrieve.claim_key")
         normalized_scope = _mapping(scope, "retrieve.scope")
         if _thaw(normalized_scope) != _thaw(claim.target_scope):
@@ -821,6 +943,13 @@ class EvidenceIndex:
         verified_use = intended_use in _VERIFIED_USES
         retrieval_reasons: list[str] = []
         support_reasons: list[str] = []
+        if projection_completeness is not None:
+            if not isinstance(projection_completeness, ProjectionCompleteness):
+                raise EvidenceValidationError("projection completeness must be typed")
+            if projection_completeness.evicted_keys:
+                retrieval_reasons.append(
+                    "relevant durable projection was evicted: "
+                    + projection_completeness.digest)
         if not self.projection_available:
             retrieval_reasons.append("asynchronous projection unavailable; local fences retained")
         if verified_use and (self._scope_verifier is None or self._use_verifier is None
@@ -929,12 +1058,15 @@ class EvidenceIndex:
         ordinary.sort(key=rank)
         mandatory.sort(key=lambda row: (row.finding.frontier, row.finding.finding_id))
         reasons = retrieval_reasons + support_reasons
-        support_basis_digest = schemas.content_hash({
+        support_body = {
             "claim_digest": claim.digest, "intended_use": intended_use,
             "current_epoch": self.current_epoch,
             "support_rule_identity": self._support_rule_identity,
             "ordinary": [row.to_dict() for row in ordinary],
-            "mandatory": [row.to_dict() for row in mandatory]})
+            "mandatory": [row.to_dict() for row in mandatory]}
+        if projection_completeness is not None:
+            support_body["projection_completeness"] = projection_completeness.digest
+        support_basis_digest = schemas.content_hash(support_body)
         body = {"schema": RETRIEVAL_SCHEMA,
                 "findings": [row.to_dict() for row in ordinary[:limit]],
                 "mandatory_conflicts": [row.to_dict() for row in mandatory],
@@ -954,10 +1086,22 @@ class EvidenceIndex:
 
     def proposal_snapshot(self, claim_key: ClaimKey, *,
                           intended_use: str) -> ProposalSnapshot:
+        return self.planning_evidence(claim_key, intended_use=intended_use).snapshot
+
+    def planning_evidence(self, claim_key: ClaimKey, *, intended_use: str,
+                          projection_completeness: ProjectionCompleteness | None = None
+                          ) -> PlanningEvidence:
+        """One verifier evaluation supplies both prompt retrieval and its snapshot."""
+        self._refresh_fence_digests()
         claim = _normalize(ClaimKey, claim_key, "proposal_snapshot.claim_key")
         intended_use = _enum(intended_use, _INTENDED_USES,
                              "proposal_snapshot.intended_use")
-        retrieval = self.retrieve(claim.target_scope, claim, intended_use, limit=40)
+        before = self.fence_snapshot()
+        retrieval = self.retrieve(
+            claim.target_scope, claim, intended_use, limit=40,
+            projection_completeness=projection_completeness)
+        if self.fence_snapshot() != before:
+            raise EvidenceValidationError("evidence changed during its exact planning query")
         generations = MappingProxyType(dict(retrieval.dependency_generations))
         fences = MappingProxyType({dep: self._dependency_fences.get(dep, 0)
                                    for dep in generations})
@@ -980,7 +1124,7 @@ class EvidenceIndex:
                       "support_rule_identity": self._support_rule_identity,
                       "global_fence_generation": self._global_fence_generation,
                       "quarantines": [row.to_dict() for row in self._quarantines]}
-        return ProposalSnapshot(PROPOSAL_SCHEMA, claim.digest, intended_use,
+        snapshot = ProposalSnapshot(PROPOSAL_SCHEMA, claim.digest, intended_use,
                                 generations, fences, dependency_frontiers,
                                 dependency_evidence_digests, semantic_fences,
                                 self.current_epoch, self._support_rule_identity,
@@ -989,8 +1133,16 @@ class EvidenceIndex:
                                 retrieval.retrieval_complete,
                                 retrieval.supported_for_intended_use,
                                 schemas.content_hash(index_body))
+        if projection_completeness is not None:
+            snapshot = replace(snapshot,
+                semantic_fences=projection_completeness.bind(snapshot.semantic_fences),
+                index_digest=schemas.content_hash({
+                    "index": snapshot.index_digest,
+                    "projection_completeness": projection_completeness.digest}))
+        return PlanningEvidence(retrieval, snapshot)
 
     def fence_snapshot(self) -> LocalFenceSnapshot:
+        self._refresh_fence_digests()
         return LocalFenceSnapshot(
             LOCAL_FENCE_SCHEMA, self.projection_available,
             self._global_fence_generation,
@@ -1144,6 +1296,7 @@ class EvidenceIndex:
         return AdmissionResult("eligible", (), ())
 
     def to_dict(self) -> dict[str, Any]:
+        self._refresh_fence_digests()
         body = {"schema": INDEX_SCHEMA, "current_epoch": self.current_epoch,
                 "projection_available": self.projection_available,
                 "findings": [row.to_dict() for row in self.findings],
@@ -1210,6 +1363,8 @@ class EvidenceIndex:
         if len(set(quarantine_ids)) != len(quarantine_ids):
             raise EvidenceValidationError("EvidenceIndex.quarantines: duplicate event_id")
         index._quarantines = list(quarantines)
+        index._quarantine_digests = {
+            row.event_id: schemas.content_hash(row.to_dict()) for row in quarantines}
         index._dependency_fences = {dep: 0 for dep in index._generations}
         index._global_fence_generation = 0
         for row in quarantines:
@@ -1784,7 +1939,7 @@ __all__ = [
     "COEXISTENCE_SCHEMA", "EvidenceValidationError", "ClaimKey", "SourceRef",
     "Finding", "InvalidationEvent", "Quarantine", "RetrievedFinding",
     "RetrievalResult", "LocalFenceSnapshot", "ProposalSnapshot", "AdmissionResult",
-    "EvidenceIndex",
+    "EvidenceIndex", "PlanningEvidence", "ProjectionCompleteness",
     "TransferReceipt", "TransferDisposition", "transfer_disposition", "Route",
     "RouteRevocation", "RouteDisposition", "route_disposition",
     "RejectAuditDecision", "select_reject_audit", "CoexistenceReceipt",

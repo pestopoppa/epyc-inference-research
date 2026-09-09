@@ -16,9 +16,10 @@ from typing import Any, Callable, Mapping
 
 from . import (campaign, campaign_control, campaign_service, experiment_plan,
                scheduling, scoped_evidence, standalone_runtime, unified_driver,
-               unified_planner)
+               unified_planner, feed_runtime)
 
 MANIFEST_SCHEMA = "epyc.autokernel.standalone_inputs.v1"
+FEED_MANIFEST_SCHEMA = "epyc.autokernel.standalone_inputs.v2"
 PREFLIGHT_SCHEMA = "epyc.autokernel.standalone_inputs_preflight.v1"
 _PROVIDER_METHODS = (
     "authorize", "inspect_pending", "refresh", "release", "inspect",
@@ -82,6 +83,7 @@ class StartupManifest:
     evidence_verifier_id: str
     manifest_digest: str
     schema: str = MANIFEST_SCHEMA
+    evidence_feed: feed_runtime.FeedConfig | None = None
 
     @classmethod
     def from_dict(cls, value: Any) -> "StartupManifest":
@@ -89,7 +91,10 @@ class StartupManifest:
         fields = {"schema", "driver_config", "evidence_index", "actor_identities",
                   "lifecycle_provider_id", "readiness_provider_id",
                   "evidence_verifier_id", "manifest_digest"}
-        if set(row) != fields or row["schema"] != MANIFEST_SCHEMA:
+        feed_mode = row.get("schema") == FEED_MANIFEST_SCHEMA
+        if feed_mode:
+            fields = (fields - {"evidence_index", "evidence_verifier_id"}) | {"evidence_feed"}
+        if set(row) != fields or row["schema"] not in {MANIFEST_SCHEMA, FEED_MANIFEST_SCHEMA}:
             raise StandaloneInputsRefused("startup manifest fields/schema differ")
         supplied_digest = row.pop("manifest_digest")
         if (not isinstance(supplied_digest, str) or len(supplied_digest) != 64
@@ -99,7 +104,8 @@ class StartupManifest:
             config = unified_driver.DriverConfig.from_dict(row["driver_config"])
         except Exception as exc:
             raise StandaloneInputsRefused(f"driver config is invalid: {exc}") from exc
-        evidence = _freeze(_mapping(row["evidence_index"], "evidence_index"))
+        evidence = _freeze(_mapping(row.get("evidence_index", {}), "evidence_index"))
+        feed = feed_runtime.FeedConfig.from_dict(row["evidence_feed"]) if feed_mode else None
         actor_rows = _mapping(row["actor_identities"], "actor_identities")
         if not set(actor_rows) <= {"source", "build"}:
             raise StandaloneInputsRefused("actor identities contain an unsupported actor kind")
@@ -112,12 +118,12 @@ class StartupManifest:
             config, evidence, MappingProxyType(actors),
             _text(row["lifecycle_provider_id"], "lifecycle_provider_id"),
             _text(row["readiness_provider_id"], "readiness_provider_id"),
-            _text(row["evidence_verifier_id"], "evidence_verifier_id"),
-            supplied_digest,
+            "" if feed_mode else _text(row["evidence_verifier_id"], "evidence_verifier_id"),
+            supplied_digest, row["schema"], feed,
         )
 
     def body(self) -> dict[str, Any]:
-        return {
+        result = {
             "schema": self.schema,
             "driver_config": {
                 "schema": self.driver_config.schema,
@@ -141,6 +147,13 @@ class StartupManifest:
             "readiness_provider_id": self.readiness_provider_id,
             "evidence_verifier_id": self.evidence_verifier_id,
         }
+        if self.schema == FEED_MANIFEST_SCHEMA:
+            if self.evidence_feed is None:
+                raise StandaloneInputsRefused("feed manifest requires typed feed configuration")
+            result.pop("evidence_index")
+            result.pop("evidence_verifier_id")
+            result["evidence_feed"] = self.evidence_feed.to_dict()
+        return result
 
     def to_dict(self) -> dict[str, Any]:
         return self.body() | {"manifest_digest": self.manifest_digest}
@@ -170,7 +183,9 @@ class ProviderRegistry:
 
     def __init__(self, bindings: Mapping[str, ProviderBinding], *,
                  evidence_verifiers: Mapping[str, EvidenceVerifierBinding] | None = None,
-                 profile_executions: Mapping[str, Any] | None = None) -> None:
+                 profile_executions: Mapping[str, Any] | None = None,
+                 evidence_feeds: Mapping[str, feed_runtime.InstalledFeedBinding] | None = None
+                 ) -> None:
         if not isinstance(bindings, Mapping):
             raise StandaloneInputsRefused("provider registry must be a mapping")
         normalized = {}
@@ -193,6 +208,13 @@ class ProviderRegistry:
             _text(identifier, "profile execution identifier")
             profiles[identifier] = execution
         self._profile_executions = MappingProxyType(profiles)
+        feeds = {}
+        for identifier, binding in (evidence_feeds or {}).items():
+            _text(identifier, "feed binding identifier")
+            if not isinstance(binding, feed_runtime.InstalledFeedBinding):
+                raise StandaloneInputsRefused("evidence feed binding must be installed and typed")
+            feeds[identifier] = binding
+        self._evidence_feeds = MappingProxyType(feeds)
 
     def get(self, identifier: str) -> ProviderBinding | None:
         return self._bindings.get(identifier)
@@ -202,6 +224,9 @@ class ProviderRegistry:
 
     def profile_execution(self, identifier: str) -> Any:
         return self._profile_executions.get(identifier)
+
+    def evidence_feed(self, identifier: str) -> feed_runtime.InstalledFeedBinding | None:
+        return self._evidence_feeds.get(identifier)
 
 
 @dataclass(frozen=True)
@@ -214,12 +239,14 @@ class MaterializedInputs:
 
     def preflight(self, registry: ProviderRegistry | None = None) -> dict[str, Any]:
         missing = list(self.missing_prerequisites)
+        feed = self.manifest.evidence_feed
         if registry is None:
             missing.extend((
                 f"lifecycle_provider:{self.manifest.lifecycle_provider_id}:unavailable",
                 f"readiness_provider:{self.manifest.readiness_provider_id}:unavailable",
-                f"evidence_verifier:{self.manifest.evidence_verifier_id}:unavailable",
             ))
+            missing.append(f"evidence_feed:{feed.binding_id}:unavailable" if feed is not None
+                           else f"evidence_verifier:{self.manifest.evidence_verifier_id}:unavailable")
             for target in self.pending_profile_targets:
                 mechanism_id = self.inputs.profile_requests[
                     target].profile_contract["adapter_id"]
@@ -241,7 +268,13 @@ class MaterializedInputs:
             verifier = registry.evidence_verifier(self.manifest.evidence_verifier_id)
             callbacks = (() if verifier is None else (
                 verifier.scope_verifier, verifier.use_verifier, verifier.result_verifier))
-            if verifier is None or any(not callable(item) for item in callbacks):
+            if feed is not None:
+                binding = registry.evidence_feed(feed.binding_id)
+                if binding is None:
+                    missing.append(f"evidence_feed:{feed.binding_id}:unavailable")
+                elif binding.current_epoch != feed.expected_epoch:
+                    missing.append(f"evidence_feed:{feed.binding_id}:epoch_mismatch")
+            elif verifier is None or any(not callable(item) for item in callbacks):
                 missing.append(
                     f"evidence_verifier:{self.manifest.evidence_verifier_id}:unavailable")
             elif (not verifier.support_rule_identity
@@ -298,7 +331,12 @@ def materialize(value: StartupManifest) -> MaterializedInputs:
         scheduler_engine = scheduling.SchedulerEngine(scheduler_config, scheduler_state)
         anchors = unified_planner.prepare_runtime_anchors(
             resolved, unified_driver._thaw(config.runtime_anchors))
-        evidence = scoped_evidence.EvidenceIndex.from_dict(_thaw(value.evidence_index))
+        if value.evidence_feed is None:
+            evidence = scoped_evidence.EvidenceIndex.from_dict(_thaw(value.evidence_index))
+        else:
+            feed_runtime.validate_paths(value.evidence_feed, Path(config.store_path))
+            evidence = scoped_evidence.EvidenceIndex(
+                (), current_epoch=value.evidence_feed.expected_epoch, projection_available=False)
         profiles = {}
         for key, item in config.profiles.items():
             profile = unified_planner.TargetProfile.from_dict(unified_driver._thaw(item))
@@ -314,6 +352,9 @@ def materialize(value: StartupManifest) -> MaterializedInputs:
                 unified_driver._thaw(item)) for item in items)
         plans = {key: experiment_plan.ExperimentPlan.from_dict(
             unified_driver._thaw(item)) for key, item in config.experiment_plans.items()}
+        if value.evidence_feed is not None and any(
+                plan.epoch != value.evidence_feed.expected_epoch for plan in plans.values()):
+            raise StandaloneInputsRefused("experiment plan epoch differs from configured feed epoch")
         requests = {}
         for key, item in config.profile_requests.items():
             request = unified_driver.ProfilePreparationRequest.from_dict(
@@ -351,7 +392,7 @@ def materialize(value: StartupManifest) -> MaterializedInputs:
                 item.kind == "runtime_recipe" for item in profile.opportunities)
     for kind in sorted(required_actor_kinds - set(value.actor_identities)):
         missing.append(f"actor_identity:{kind}:unavailable")
-    if not evidence.projection_available:
+    if value.evidence_feed is None and not evidence.projection_available:
         missing.append("evidence_index:projection_unavailable")
     if native_runtime_requested:
         missing.append("native_observation:typed_source_runtime_consumer_unavailable")
@@ -376,24 +417,19 @@ def runtime_factory(materialized: MaterializedInputs, registry: ProviderRegistry
     lifecycle = registry.get(materialized.manifest.lifecycle_provider_id)
     readiness = registry.get(materialized.manifest.readiness_provider_id)
     verifier = registry.evidence_verifier(materialized.manifest.evidence_verifier_id)
-    assert lifecycle is not None and readiness is not None and verifier is not None
+    assert lifecycle is not None and readiness is not None
     provider = lifecycle.lifecycle_provider
     if any(not callable(getattr(provider, name, None)) for name in _PROVIDER_METHODS):
         raise StandaloneInputsRefused("lifecycle provider lacks the trusted provider contract")
     if not callable(readiness.readiness_check):
         raise StandaloneInputsRefused("readiness provider lacks a bounded readiness check")
-    try:
-        evidence = scoped_evidence.EvidenceIndex.from_dict(
-            _thaw(materialized.manifest.evidence_index),
-            scope_verifier=verifier.scope_verifier,
-            use_verifier=verifier.use_verifier,
-            result_verifier=verifier.result_verifier,
-            support_rule_identity=verifier.support_rule_identity)
-    except Exception as exc:
-        raise StandaloneInputsRefused(f"evidence verifier binding is invalid: {exc}") from exc
-    if evidence._recorded_support_rule_identity != verifier.support_rule_identity:
-        raise StandaloneInputsRefused("evidence verifier support rule differs from projection")
-    verified_inputs = replace(materialized.inputs, evidence_index=evidence)
+    if materialized.manifest.evidence_feed is not None:
+        binding = registry.evidence_feed(materialized.manifest.evidence_feed.binding_id)
+        assert binding is not None
+        verified_inputs = materialized.inputs
+    else:
+        assert verifier is not None
+        verified_inputs = _verified_snapshot_inputs(materialized, verifier)
 
     def build(resolved: campaign.ResolvedCampaign, args):
         config = materialized.manifest.driver_config
@@ -409,14 +445,33 @@ def runtime_factory(materialized: MaterializedInputs, registry: ProviderRegistry
             lifecycle_provider=provider)
         controller.__enter__()
         try:
+            current_inputs = verified_inputs
+            if materialized.manifest.evidence_feed is not None:
+                current_inputs = replace(verified_inputs, feed_owner=feed_runtime.FeedRuntimeOwner(
+                    materialized.manifest.evidence_feed, binding))
             runtime = standalone_runtime.StandaloneRuntime.compose(
-                controller=controller, inputs=verified_inputs)
+                controller=controller, inputs=current_inputs)
         except BaseException:
             controller.close()
             raise
         return controller, runtime
 
     return build
+
+
+def _verified_snapshot_inputs(materialized, verifier):
+    try:
+        evidence = scoped_evidence.EvidenceIndex.from_dict(
+            _thaw(materialized.manifest.evidence_index),
+            scope_verifier=verifier.scope_verifier,
+            use_verifier=verifier.use_verifier,
+            result_verifier=verifier.result_verifier,
+            support_rule_identity=verifier.support_rule_identity)
+    except Exception as exc:
+        raise StandaloneInputsRefused(f"evidence verifier binding is invalid: {exc}") from exc
+    if evidence._recorded_support_rule_identity != verifier.support_rule_identity:
+        raise StandaloneInputsRefused("evidence verifier support rule differs from projection")
+    return replace(materialized.inputs, evidence_index=evidence)
 
 
 __all__ = ["MANIFEST_SCHEMA", "PREFLIGHT_SCHEMA", "EvidenceVerifierBinding", "MaterializedInputs",
