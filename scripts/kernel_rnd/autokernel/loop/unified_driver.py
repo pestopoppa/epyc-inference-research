@@ -604,6 +604,16 @@ class UnifiedCampaignDriver:
         if proposal.runtime_pair is None:
             raise DriverRefused("runtime proposal lacks its frozen arm pair")
         pair = unified_planner.RuntimeArmPair.from_dict(_thaw(proposal.runtime_pair))
+        from . import unified_worker
+        prepared_schema = unified_worker.PREPARED_SCHEMA
+        if plan.schema != experiment_plan.PLAN_SCHEMA:
+            # Select the envelope from the already-issued plan; never upgrade a
+            # selected v1 plan or rewrite its proposal/selection digests here.
+            loaded = _mapping(_thaw(plan.loaded_instrument), "loaded instrument pin")
+            if execution_input.instrument_id != loaded["identity_sha256"]:
+                raise DriverRefused(
+                    "execution instrument_id differs from the v2 loaded instrument pin")
+            prepared_schema = unified_worker.PREPARED_SCHEMA_V2
         sources = {}
         for name, recipe in (("anchor", pair.anchor), ("candidate", pair.candidate)):
             sources[name] = {
@@ -623,9 +633,8 @@ class UnifiedCampaignDriver:
             "protocol_status": plan.protocol_status,
             "source_identities": sources,
         }
-        from . import unified_worker
         body = {
-            "schema": unified_worker.PREPARED_SCHEMA,
+            "schema": prepared_schema,
             "dispatch": dispatch.to_dict(), "plan": plan.to_dict(),
             "prompt_manifest": execution_input.prompt_manifest.to_dict(),
             "runtime_pair": pair.to_dict(), "capture_context_base": capture_base,
