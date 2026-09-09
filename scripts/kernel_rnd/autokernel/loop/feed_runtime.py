@@ -17,11 +17,17 @@ from .journal_feed_owner import DrainLimits, FeedOwnerPending
 from .validation_semantic_adapter import _source_bytes
 
 CONFIG_SCHEMA = "epyc.autokernel.standalone_evidence_feed.v1"
-ROOT_SOURCES = (
+ROOT_SOURCES_V1 = (
     "scripts/vidya/adapters/autokernel_unified_arm.py",
     "scripts/vidya/claim_tuple.py", "scripts/vidya/frames.py", "scripts/vidya/ledger.py",
     "scripts/vidya/canonical.py", "scripts/vidya/lattice.py",
 )
+ROOT_SOURCES_V2 = ROOT_SOURCES_V1 + (
+    "scripts/vidya/adapters/autokernel_final_trial.py",
+)
+ROOT_SOURCES = ROOT_SOURCES_V2
+ROOT_PROJECTION_SCHEMA_V1 = "epyc.autokernel.root_feed_projection.v1"
+ROOT_PROJECTION_SCHEMA_V2 = "epyc.autokernel.root_feed_projection.v2"
 
 
 class FeedRuntimeRefused(RuntimeError):
@@ -36,6 +42,22 @@ def _text(value: Any, label: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise FeedRuntimeRefused(f"{label} must be nonempty text")
     return value
+
+
+def _root_source_schema(pins: Mapping[str, str]) -> str:
+    if not isinstance(pins, Mapping):
+        raise FeedRuntimeRefused("installed ROOT requires its exact source closure pins")
+    fields = set(pins)
+    if fields == set(ROOT_SOURCES_V1):
+        schema = ROOT_PROJECTION_SCHEMA_V1
+    elif fields == set(ROOT_SOURCES_V2):
+        schema = ROOT_PROJECTION_SCHEMA_V2
+    else:
+        raise FeedRuntimeRefused("installed ROOT requires its exact source closure pins")
+    if any(not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{64}", value) is None
+           for value in pins.values()):
+        raise FeedRuntimeRefused("installed ROOT source digest is malformed")
+    return schema
 
 
 @dataclass(frozen=True)
@@ -97,10 +119,18 @@ class LoadedFeedProjection:
     ledger: ModuleType
     source_sha256: Mapping[str, str]
 
+    @property
+    def source_schema(self) -> str:
+        return _root_source_schema(self.source_sha256)
+
     @classmethod
     def load(cls, root: Path, pins: Mapping[str, str]) -> LoadedFeedProjection:
         # Reuse the canonical pinned-loader's bounded stable read. Execute only
         # those captured bytes, with a closed ROOT import closure; no pyc/cache.
+        if not isinstance(pins, Mapping):
+            raise FeedRuntimeRefused("installed ROOT requires its exact source closure pins")
+        pins = dict(pins)
+        schema = _root_source_schema(pins)
         sources = {path: _source_bytes(root / path, digest) for path, digest in pins.items()}
         names = {"canonical": "scripts/vidya/canonical.py",
                  "lattice": "scripts/vidya/lattice.py",
@@ -108,10 +138,28 @@ class LoadedFeedProjection:
                  "frames": "scripts/vidya/frames.py",
                  "ledger": "scripts/vidya/ledger.py",
                  "autokernel_unified_arm": "scripts/vidya/adapters/autokernel_unified_arm.py"}
+        if schema == ROOT_PROJECTION_SCHEMA_V2:
+            names["autokernel_final_trial"] = ROOT_SOURCES_V2[-1]
         modules: dict[str, ModuleType] = {}
         prefix = "_autokernel_feed_" + uuid.uuid4().hex
+        # This namespace is retained by the import closure, not ambient module
+        # lookup. ROOT's final reader imports the already-loaded arm in reverse.
+        adapters = ModuleType(prefix + "_adapters")
 
         def pinned_import(name, globals=None, locals=None, fromlist=(), level=0):
+            if level:
+                arm = modules.get("autokernel_unified_arm")
+                final = modules.get("autokernel_final_trial")
+                if (level == 1 and arm is not None and globals is arm.__dict__
+                        and name == "autokernel_final_trial"
+                        and fromlist in (("REFERENCE_SCHEMA",), ("validate_final",))):
+                    if final is None:
+                        raise FeedRuntimeRefused("six-file ROOT closure has no final-v3 helper capability")
+                    return final
+                if (level == 1 and final is not None and globals is final.__dict__
+                        and name == "" and fromlist == ("autokernel_unified_arm",)):
+                    return adapters
+                raise FeedRuntimeRefused("ROOT relative import is outside the captured closure")
             if level == 0 and name in names:
                 if name not in modules:
                     raise FeedRuntimeRefused("pinned ROOT dependency imported before loading")
@@ -128,6 +176,9 @@ class LoadedFeedProjection:
                 sys.modules[qualified] = module  # dataclasses resolves its own module.
                 registered.append(qualified)
                 modules[name] = module
+                if name in {"autokernel_unified_arm", "autokernel_final_trial"}:
+                    module.__package__ = adapters.__name__
+                    setattr(adapters, name, module)
                 exec(compile(sources[path], str(root / path), "exec", dont_inherit=True),
                      module.__dict__)
             adapter, claim = modules["autokernel_unified_arm"], modules["claim_tuple"]
@@ -182,12 +233,12 @@ class InstalledFeedBinding:
 
     def __post_init__(self) -> None:
         root = Path(self.root_repo)
-        if not root.is_absolute() or set(self.root_source_sha256) != set(ROOT_SOURCES):
+        if not root.is_absolute():
+            raise FeedRuntimeRefused("installed ROOT requires its exact source closure pins")
+        if not isinstance(self.root_source_sha256, Mapping):
             raise FeedRuntimeRefused("installed ROOT requires its exact source closure pins")
         pins = dict(self.root_source_sha256)
-        if any(not isinstance(v, str) or len(v) != 64
-               or any(c not in "0123456789abcdef" for c in v) for v in pins.values()):
-            raise FeedRuntimeRefused("installed ROOT source digest is malformed")
+        _root_source_schema(pins)
         object.__setattr__(self, "root_repo", root)
         object.__setattr__(self, "root_source_sha256", MappingProxyType(pins))
         _text(self.current_epoch, "installed epoch")
