@@ -14,6 +14,7 @@ from .. import journal as journal_module
 from . import candidate_manifest as cm
 from . import candidate_transactions as transactions
 from . import campaign_control as control
+from . import kernel_mutation_guard
 from . import measurement_capture as mc
 from .test_campaign_control import _resolved
 from .test_candidate_manifest import (
@@ -753,7 +754,7 @@ def test_git_backend_refuses_unplanned_ref_and_production_branch(
 
 def test_frozen_kernel_roots_are_complete_and_exact_root_is_refused(
         tmp_path, monkeypatch):
-    assert transactions.FROZEN_PRODUCTION_ROOTS == frozenset({
+    assert kernel_mutation_guard.FROZEN_PRODUCTION_ROOTS == frozenset({
         Path("/mnt/raid0/llm/llama.cpp"), Path("/mnt/raid0/llm/whisper.cpp"),
         Path("/mnt/raid0/llm/qwentts.cpp"),
     })
@@ -764,7 +765,7 @@ def test_frozen_kernel_roots_are_complete_and_exact_root_is_refused(
                     "user.email=test@example.invalid", "commit", "--allow-empty", "-qm",
                     "base"], check=True)
     monkeypatch.setattr(
-        transactions, "FROZEN_PRODUCTION_ROOTS", frozenset({repo.resolve()}))
+        kernel_mutation_guard, "FROZEN_PRODUCTION_ROOTS", frozenset({repo.resolve()}))
     with pytest.raises(transactions.CandidateTransactionError,
                        match="canonical frozen production"):
         transactions.GitCandidateBackend({"research": repo}, campaign_id="campaign")
@@ -788,6 +789,31 @@ def test_experimental_linked_worktree_may_share_production_object_database(tmp_p
     backend = transactions.GitCandidateBackend({"research": linked},
                                                 campaign_id="campaign")
     assert backend.plan("request", _real_manifest(linked).sources)
+
+
+def test_git_backend_rechecks_branch_guard_before_prepared_ref_cas(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    subprocess.run(["git", "-C", str(repo), "config", "user.name", "Test"],
+                   check=True)
+    subprocess.run(["git", "-C", str(repo), "config", "user.email",
+                    "test@example.invalid"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "--allow-empty", "-qm", "base"],
+                   check=True)
+    manifest = _real_manifest(repo)
+    backend = transactions.GitCandidateBackend({"research": repo},
+                                                campaign_id="campaign")
+    planned = backend.plan("request", manifest.sources)[0]
+    subprocess.run(["git", "-C", str(repo), "branch", "-m",
+                    "production-speech-v999"], check=True)
+
+    with pytest.raises(transactions.CandidateRecoveryRequired,
+                       match="became frozen"):
+        backend.prepare(planned)
+    assert subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "-q", "--verify", planned.ref],
+        capture_output=True, check=False).returncode != 0
 
 
 def test_git_backend_refuses_redirect_environment_and_replaced_git_directory(

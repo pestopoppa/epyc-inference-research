@@ -54,13 +54,30 @@ With neither `--once` nor `--listen`, this is non-mutating inspection. `--once` 
 publishes one durable snapshot, and closes it. `--listen 127.0.0.1:PORT` requires a bearer secret in
 `AUTOKERNEL_CONTROL_TOKEN`; `/health` is transport-only, while `/snapshot` and `/commands` require
 authentication. `/health` is transport-only and performs no journal read, fsync, or snapshot
-publication. The service-owned publisher writes an initial snapshot and refreshes it at the finite
+publication. Its response carries the immutable campaign/config/supervisor/stream identity captured
+when the service is constructed plus a digest of the loaded transport bytecode and selected constants,
+so a new listener on the same port cannot freshen an old snapshot or substitute an actor-supplied
+producer label. The digest uses the controller's stable code-object projection, so interpreter adaptive
+specialization and warm execution do not change the loaded identity.
+An optional `--trusted-origin` (or `AUTOKERNEL_TRUSTED_HUB_ORIGIN`) enables exact-origin CORS for
+the browser; absent or mismatched origins receive no wildcard fallback. Preflight advertises only
+`GET, POST, OPTIONS` and `Authorization, Content-Type`, sets `Vary: Origin`, and never enables
+credential cookies. CLI clients without an Origin header remain supported.
+
+The service-owned publisher writes an initial snapshot and refreshes it at the finite
 configured interval without observer traffic; it stops before the controller lease is released, and
 a publication failure is retained and makes transport health unhealthy. These health-only snapshots
 advance publication sequence and heartbeat time, but never journal cursor or scientific-result time.
-V1 accepts numeric
-loopback binds only, bounded JSON headers/bodies and read time, and no filesystem or shell fields.
+V1 accepts numeric loopback binds only, bounded JSON headers/bodies and read time, a finite total
+request deadline enforced by one service-owned/joined connection watchdog, and no filesystem or shell
+fields. A trickling client cannot retain the synchronous listener indefinitely. If a client disconnects
+after command application, the journal-before-ack and idempotent request contract remains authoritative;
+retry uses the same request ID and payload digest.
 
 Remaining AKU-07/09 work includes durable launch intent, owned-child/container reconciliation,
-the real trusted grant/provider adapter, bounded worker execution, service-manager deployment, and
-the existing hub’s direct producer consumer. These tests and seams do not complete AKU-07.
+the real trusted grant/provider adapter, bounded worker execution and service-manager deployment.
+The existing hub's matching management-v1 reader/control consumer is implemented as a separate
+source slice; it does not prove deployment or live reliability. A browser needs an explicitly configured,
+browser-reachable gateway URL (normally an already-established authenticated tunnel); `127.0.0.1`
+means the browser's host, not the dashboard hub. Source publication does not deploy such a gateway.
+These tests and seams do not complete AKU-07.
