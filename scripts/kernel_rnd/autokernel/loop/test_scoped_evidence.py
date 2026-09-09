@@ -68,6 +68,27 @@ def trusted_index(findings, invalidations=(), **kwargs):
             "support_rule_identity", "test:registered-support:v1"), **kwargs)
 
 
+def test_incremental_ingest_matches_constructor_and_preserves_order_invariant_fences():
+    claim = E.ClaimKey.from_dict(claim_dict())
+    rows = [finding(claim, 1), finding(claim, 2, conclusion="refutation")]
+    constructed = trusted_index(rows)
+    incremental = trusted_index([])
+    for row in rows:
+        assert incremental.ingest_finding(row)
+    reversed_index = trusted_index(reversed(rows))
+
+    expected = constructed.retrieve(scope(), claim, "screen_out").to_dict()
+    assert incremental.retrieve(scope(), claim, "screen_out").to_dict() == expected
+    assert reversed_index.retrieve(scope(), claim, "screen_out").to_dict() == expected
+    expected_proposal = constructed.proposal_snapshot(
+        claim, intended_use="screen_out").to_dict()
+    assert incremental.proposal_snapshot(
+        claim, intended_use="screen_out").to_dict() == expected_proposal
+    assert reversed_index.proposal_snapshot(
+        claim, intended_use="screen_out").to_dict() == expected_proposal
+    assert incremental.fence_snapshot().to_dict() == constructed.fence_snapshot().to_dict()
+
+
 def test_strict_immutable_claim_and_direct_constructor_revalidation():
     original = claim_dict()
     claim = E.ClaimKey.from_dict(original)

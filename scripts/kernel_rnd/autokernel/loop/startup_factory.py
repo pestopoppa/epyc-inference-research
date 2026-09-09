@@ -19,6 +19,7 @@ from . import campaign, campaign_cli, experiment_plan, planned_serving, producti
 from . import scheduling, scoped_evidence, unified_driver, unified_planner
 
 REQUEST_SCHEMA = "epyc.autokernel.startup_factory_request.v1"
+FEED_REQUEST_SCHEMA = "epyc.autokernel.startup_factory_request.v2"
 RECEIPT_SCHEMA = "epyc.autokernel.startup_factory_receipt.v1"
 MAX_INPUT_BYTES = 4 * 1024 * 1024
 TARGET_FIELDS = {"profile", "profile_request", "execution", "runtime_dimensions"}
@@ -146,8 +147,11 @@ def build_startup(request: Mapping[str, Any], *, output_dir: Path) -> dict[str, 
               "environment_policy", "target_defaults", "targets", "experiment_plans",
               "evidence_index", "actor_identities", "providers", "native_artifact_sink_ref",
               "dry_run_runner"}
+    feed_mode = request.get("schema") == FEED_REQUEST_SCHEMA
+    if feed_mode:
+        fields = (fields - {"evidence_index"}) | {"evidence_feed"}
     request = _closed(request, fields, "factory request")
-    if request["schema"] != REQUEST_SCHEMA:
+    if request["schema"] not in {REQUEST_SCHEMA, FEED_REQUEST_SCHEMA}:
         raise StartupFactoryRefused("unsupported factory request schema")
     output_dir = Path(output_dir)
     store_path = Path(request["store_path"])
@@ -245,7 +249,15 @@ def build_startup(request: Mapping[str, Any], *, output_dir: Path) -> dict[str, 
     if state.scheduler_id != resolved.campaign_id:
         raise StartupFactoryRefused("scheduler state belongs to another campaign")
     scheduling.SchedulerEngine(config, state)
-    evidence = scoped_evidence.EvidenceIndex.from_dict(pins.read(request["evidence_index"], "evidence index"))
+    evidence = None
+    feed = None
+    if feed_mode:
+        from .feed_runtime import FeedConfig, validate_paths
+        feed = FeedConfig.from_dict(request["evidence_feed"])
+        validate_paths(feed, store_path)
+    else:
+        evidence = scoped_evidence.EvidenceIndex.from_dict(
+            pins.read(request["evidence_index"], "evidence index"))
     policy = unified_planner.EnvironmentPolicy.from_dict(request["environment_policy"])
     anchors, profiles, profile_requests, dimensions, executions = {}, {}, {}, {}, {}
     target_map = {}
@@ -302,7 +314,10 @@ def build_startup(request: Mapping[str, Any], *, output_dir: Path) -> dict[str, 
         raise StartupFactoryRefused("experiment plans must be an explicit mapping")
     plans = {key: experiment_plan.ExperimentPlan.from_dict(pins.read(pin, "experiment plan")).to_dict()
              for key, pin in request["experiment_plans"].items()}
-    providers = _closed(request["providers"], {"lifecycle", "readiness", "evidence_verifier"}, "providers")
+    provider_fields = {"lifecycle", "readiness"}
+    if not feed_mode:
+        provider_fields.add("evidence_verifier")
+    providers = _closed(request["providers"], provider_fields, "providers")
     driver_config = unified_driver.DriverConfig.from_dict({
         "schema": unified_driver.CONFIG_SCHEMA,
         "resolved_campaign_path": str(output_dir / "resolved-campaign.json"),
@@ -315,9 +330,16 @@ def build_startup(request: Mapping[str, Any], *, output_dir: Path) -> dict[str, 
     config_body = {field: unified_driver._thaw(getattr(driver_config, field))
                    for field in driver_config.__dataclass_fields__}
     body = {"schema": standalone_inputs.MANIFEST_SCHEMA, "driver_config": config_body,
-            "evidence_index": evidence.to_dict(), "actor_identities": request["actor_identities"],
+            "actor_identities": request["actor_identities"],
             "lifecycle_provider_id": providers["lifecycle"], "readiness_provider_id": providers["readiness"],
-            "evidence_verifier_id": providers["evidence_verifier"]}
+            }
+    if feed is not None:
+        body.update(schema=standalone_inputs.FEED_MANIFEST_SCHEMA,
+                    evidence_feed=feed.to_dict())
+    else:
+        assert evidence is not None
+        body.update(evidence_index=evidence.to_dict(),
+                    evidence_verifier_id=providers["evidence_verifier"])
     manifest = standalone_inputs.StartupManifest.from_dict(
         body | {"manifest_digest": standalone_inputs._digest(body)})
     runner = _closed(request["dry_run_runner"], {"python", "pythonpath"}, "dry-run runner")
