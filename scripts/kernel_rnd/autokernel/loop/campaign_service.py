@@ -17,7 +17,7 @@ import socket
 import sys
 import threading
 import time
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 from .campaign import ResolvedCampaign
 from .campaign_control import (
@@ -47,6 +47,8 @@ def _loaded_service_build_identity() -> dict[str, Any]:
         ("_OwnedHTTPServer._deadline_watchdog", _OwnedHTTPServer._deadline_watchdog),
         ("CampaignHTTPService.__init__", CampaignHTTPService.__init__),
         ("CampaignHTTPService._transport_health", CampaignHTTPService._transport_health),
+        ("CampaignHTTPService.report_runtime_unresolved",
+         CampaignHTTPService.report_runtime_unresolved),
         ("CampaignHTTPService.start", CampaignHTTPService.start),
         ("CampaignHTTPService.close", CampaignHTTPService.close),
     ]
@@ -456,14 +458,112 @@ class CampaignHTTPService:
         with self._lock:
             return self._publisher_error
 
+    def report_runtime_unresolved(self) -> None:
+        """Expose a fixed non-authoritative failure without accepting runtime work."""
+        with self._lock:
+            self._publisher_error = "runtime owner stopped unresolved"
+
+
+RuntimeFactory = Callable[
+    [ResolvedCampaign, argparse.Namespace],
+    tuple[CampaignController, Any],
+]
+
+
+class _RuntimeExecution:
+    """Own the sole non-HTTP runtime thread and retain its terminal state."""
+
+    def __init__(self, runtime: Any) -> None:
+        self.runtime = runtime
+        self.stop_event = threading.Event()
+        self._lock = threading.Lock()
+        self.result: Any = None
+        self.error: BaseException | None = None
+        self.thread = threading.Thread(
+            target=self._run, name="campaign-runtime-owner", daemon=False)
+
+    def _run(self) -> None:
+        from . import standalone_runtime as runtime_module
+
+        try:
+            result = self.runtime.run(self.stop_event)
+            if not isinstance(result, runtime_module.RuntimeTickResult):
+                raise ControlRefused("runtime worker returned an untyped result")
+            with self._lock:
+                self.result = result
+        except BaseException as exc:
+            with self._lock:
+                self.error = exc
+
+    def start(self) -> None:
+        self.thread.start()
+
+    def request_stop(self) -> None:
+        self.runtime.request_stop()
+        self.stop_event.set()
+
+    def finished(self) -> bool:
+        return not self.thread.is_alive()
+
+    def join(self, deadline: float) -> bool:
+        self.thread.join(timeout=max(0.0, deadline - time.monotonic()))
+        return not self.thread.is_alive()
+
+
+def _close_runtime(runtime: Any, deadline: float):
+    from . import standalone_runtime as runtime_module
+
+    result = runtime.close(deadline=deadline)
+    if not isinstance(result, runtime_module.RuntimeShutdownResult):
+        raise ControlRefused("runtime close returned an untyped result")
+    return result
+
+
+def _runtime_owner(runtime_factory: RuntimeFactory, resolved: ResolvedCampaign,
+                   args: argparse.Namespace
+                   ) -> tuple[CampaignController, Any]:
+    from . import standalone_runtime as runtime_module
+
+    if not callable(runtime_factory):
+        raise ControlRefused("runtime_factory must be callable or absent")
+    value = runtime_factory(resolved, args)
+    if not isinstance(value, tuple) or len(value) != 2:
+        raise ControlRefused("runtime_factory must return (controller, runtime)")
+    controller, runtime = value
+    if not isinstance(controller, CampaignController) \
+            or not isinstance(runtime, runtime_module.StandaloneRuntime):
+        raise ControlRefused(
+            "runtime_factory returned an untyped owner; factory retains cleanup authority")
+    if runtime.controller is not controller:
+        raise ControlRefused(
+            "runtime and service controllers differ; typed owners remain retained")
+    try:
+        if controller.snapshot_version != 3:
+            raise ControlRefused("runtime service requires snapshot v3")
+        if (controller.resolved.to_dict() != resolved.to_dict()
+                or controller.config_generation != args.config_generation
+                or controller.store != Path(args.store).absolute()):
+            raise ControlRefused("runtime owner identity differs from service configuration")
+        controller.snapshot()  # public active-owner check after factory-controlled replay
+        return controller, runtime
+    except BaseException as exc:
+        runtime.request_stop()
+        closed = _close_runtime(runtime, time.monotonic() + args.shutdown_deadline)
+        if closed.status == "closed":
+            controller.close()
+            raise
+        raise ControlRefused(
+            f"runtime owner validation failed and cleanup remains unresolved: "
+            f"{closed.reason}") from exc
+
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--resolved-campaign", type=Path, required=True)
     parser.add_argument("--store", type=Path, required=True)
     parser.add_argument("--config-generation", type=int, default=1)
-    parser.add_argument("--snapshot-version", type=int, choices=(1, 2), default=1,
-                        help="explicit projection contract; v2 does not create grant authority")
+    parser.add_argument("--snapshot-version", type=int, choices=(1, 2, 3), default=1,
+                        help="v3 execution requires an installed typed runtime_factory")
     parser.add_argument("--refresh-interval", type=float,
                         default=DEFAULT_REFRESH_INTERVAL_S)
     parser.add_argument("--request-deadline", type=float,
@@ -476,7 +576,7 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None, *, runtime_factory: RuntimeFactory | None = None) -> int:
     args = _parser().parse_args(argv)
     resolved = load_resolved(args.resolved_campaign)
     if args.config_generation < 1:
@@ -498,10 +598,18 @@ def main(argv: list[str] | None = None) -> int:
                           "requested_manifest_digest": resolved.manifest_digest,
                           "execution_authorized": False}, sort_keys=True))
         return 0
-    controller = CampaignController(
-        resolved, args.store, config_generation=args.config_generation,
-        snapshot_version=args.snapshot_version)
-    controller.__enter__()
+    if runtime_factory is not None and (args.once or listen is None):
+        raise ControlRefused("runtime_factory requires the listening service mode")
+    if runtime_factory is None and args.snapshot_version == 3:
+        raise ControlRefused("snapshot v3 service requires a connected runtime_factory")
+    runtime = None
+    if runtime_factory is None:
+        controller = CampaignController(
+            resolved, args.store, config_generation=args.config_generation,
+            snapshot_version=args.snapshot_version)
+        controller.__enter__()
+    else:
+        controller, runtime = _runtime_owner(runtime_factory, resolved, args)
     if args.once:
         try:
             print(json.dumps(controller.publish_snapshot(), sort_keys=True))
@@ -509,15 +617,13 @@ def main(argv: list[str] | None = None) -> int:
         finally:
             controller.close()
     assert listen is not None and token is not None
-    try:
-        service = CampaignHTTPService(controller, *listen, token,
-                                      refresh_interval=args.refresh_interval,
-                                      total_request_deadline=args.request_deadline,
-                                      allowed_origin=(args.trusted_origin
-                                                      or os.environ.get(TRUSTED_ORIGIN_ENV)))
-    except BaseException:
-        controller.close()
-        raise
+    execution = None
+    runtime_closed = runtime is None
+    service = None
+    read_fd = None
+    write_fd = None
+    previous_sigterm = None
+    handler_attempted = False
     try:
         read_fd, write_fd = os.pipe2(os.O_NONBLOCK | os.O_CLOEXEC)
         previous_sigterm = signal.getsignal(signal.SIGTERM)
@@ -528,55 +634,146 @@ def main(argv: list[str] | None = None) -> int:
             except BlockingIOError:
                 pass
 
+        handler_attempted = True
         signal.signal(signal.SIGTERM, notify_shutdown)
-        try:
-            service.start()
-            shutdown_requested = False
-            shutdown_deadline = None
-            deadline_reported = False
-            while service.thread is not None and service.thread.is_alive():
-                readable, _, _ = select.select([read_fd], [], [], 0.25)
-                if readable:
-                    try:
-                        os.read(read_fd, 4096)
-                    except BlockingIOError:
-                        pass
-                    if not shutdown_requested:
-                        controller.request_shutdown_drain()
-                        shutdown_requested = True
-                        shutdown_deadline = time.monotonic() + args.shutdown_deadline
-                if shutdown_requested:
-                    try:
-                        controller.reconcile_shutdown_ownership()
-                    except ControlRefused as exc:
+        if runtime is not None:
+            recovered = runtime.recover()
+            from . import standalone_runtime as runtime_module
+            if not isinstance(recovered, runtime_module.RuntimeTickResult):
+                raise ControlRefused("runtime recovery returned an untyped result")
+            if recovered.status not in {"recovered", "settled"}:
+                raise ControlRefused(f"runtime recovery unavailable: {recovered.reason}")
+            pending_signal, _, _ = select.select([read_fd], [], [], 0)
+            if pending_signal:
+                os.read(read_fd, 4096)
+                deadline = time.monotonic() + args.shutdown_deadline
+                controller.request_shutdown_drain()
+                runtime.request_stop()
+                closed = _close_runtime(runtime, deadline)
+                if closed.status != "closed":
+                    raise ControlRefused(
+                        f"runtime cleanup remains unresolved: {closed.reason}")
+                runtime_closed = True
+                controller.await_shutdown_drain(deadline)
+                controller.close()
+                return 0
+        service = CampaignHTTPService(
+            controller, *listen, token, refresh_interval=args.refresh_interval,
+            total_request_deadline=args.request_deadline,
+            allowed_origin=(args.trusted_origin or os.environ.get(TRUSTED_ORIGIN_ENV)))
+        service.start()
+        if runtime is not None:
+            execution = _RuntimeExecution(runtime)
+            execution.start()
+        shutdown_requested = False
+        shutdown_deadline = None
+        deadline_reported = False
+        runtime_unresolved = False
+        while True:
+            readable, _, _ = select.select([read_fd], [], [], 0.25)
+            worker_finished = execution is not None and execution.finished()
+            if worker_finished and execution is not None \
+                    and execution.result is not None \
+                    and execution.result.status == "recovery_required":
+                runtime_unresolved = True
+                service.report_runtime_unresolved()
+            publisher_failed = service.publisher_error is not None
+            transport_stopped = service.thread is None or not service.thread.is_alive()
+            if readable:
+                try:
+                    os.read(read_fd, 4096)
+                except BlockingIOError:
+                    pass
+            if (readable or worker_finished or publisher_failed or transport_stopped) \
+                    and not shutdown_requested:
+                controller.request_shutdown_drain()
+                shutdown_requested = True
+                shutdown_deadline = time.monotonic() + args.shutdown_deadline
+                if execution is not None:
+                    execution.request_stop()
+            if shutdown_requested:
+                try:
+                    controller.reconcile_shutdown_ownership()
+                except ControlRefused as exc:
+                    if not deadline_reported:
+                        print(f"shutdown ownership unresolved: {exc}",
+                              file=sys.stderr, flush=True)
+                try:
+                    assert shutdown_deadline is not None
+                    controller.await_shutdown_drain(shutdown_deadline)
+                except ControlRefused as exc:
+                    if not deadline_reported:
+                        print(f"shutdown remains unresolved: {exc}",
+                              file=sys.stderr, flush=True)
+                        deadline_reported = True
+                    continue
+                if runtime_unresolved:
+                    # A typed unresolved terminal cannot become absence proof merely
+                    # because the runtime thread returned and the drain is quiescent.
+                    continue
+                if execution is not None and not execution.join(shutdown_deadline):
+                    if not deadline_reported:
+                        print("shutdown runtime thread remains owned",
+                              file=sys.stderr, flush=True)
+                        deadline_reported = True
+                    continue
+                if runtime is not None:
+                    closed = _close_runtime(runtime, shutdown_deadline)
+                    if closed.status != "closed":
                         if not deadline_reported:
-                            print(f"shutdown ownership unresolved: {exc}",
-                                  file=sys.stderr, flush=True)
-                    try:
-                        assert shutdown_deadline is not None
-                        controller.await_shutdown_drain(shutdown_deadline)
-                    except ControlRefused as exc:
-                        if not deadline_reported:
-                            print(f"shutdown remains unresolved: {exc}",
+                            print(f"shutdown runtime unresolved: {closed.reason}",
                                   file=sys.stderr, flush=True)
                             deadline_reported = True
                         continue
-                    break
-                if service.publisher_error is not None:
-                    raise ControlRefused(
-                        f"snapshot publisher failed: {service.publisher_error}")
-        finally:
-            signal.signal(signal.SIGTERM, previous_sigterm)
-            os.close(read_fd)
-            os.close(write_fd)
-            service.close()
+                    runtime_closed = True
+                break
+        if execution is not None and execution.error is not None:
+            raise ControlRefused(
+                f"runtime worker failed: {type(execution.error).__name__}")
+        if execution is not None and execution.result is not None \
+                and execution.result.status == "recovery_required":
+            raise ControlRefused(
+                f"runtime worker stopped unresolved: {execution.result.reason}")
+        service.close()
+        service = None
+        controller.close()
+        return 0
     except BaseException:
-        # If bounded service close refuses, its threads may still own controller
-        # calls. Retain the lease until process teardown instead of claiming a
-        # clean handoff to another supervisor incarnation.
+        if execution is not None and execution.thread.is_alive():
+            # The non-daemon runtime thread and entered controller retain ownership.
+            raise
+        if runtime is not None and not runtime_closed:
+            closed = _close_runtime(runtime, time.monotonic() + args.shutdown_deadline)
+            runtime_closed = closed.status == "closed"
+            if not runtime_closed:
+                raise ControlRefused(
+                    f"runtime cleanup remains unresolved: {closed.reason}")
+        if service is not None:
+            service.close()
+        controller.close()
         raise
-    controller.close()
-    return 0
+    finally:
+        restored = not handler_attempted
+        if handler_attempted and previous_sigterm is not None:
+            try:
+                signal.signal(signal.SIGTERM, previous_sigterm)
+                restored = True
+            except BaseException:
+                # Keep the self-pipe valid if its handler could still be installed.
+                restored = False
+        if restored:
+            descriptor_error = None
+            for descriptor in (read_fd, write_fd):
+                if descriptor is not None:
+                    try:
+                        os.close(descriptor)
+                    except OSError as exc:
+                        descriptor_error = descriptor_error or exc
+            if descriptor_error is not None:
+                raise descriptor_error
+        else:
+            raise ControlRefused(
+                "SIGTERM handler restoration failed; self-pipe ownership retained")
 
 
 if __name__ == "__main__":
@@ -585,5 +782,5 @@ if __name__ == "__main__":
 
 __all__ = ["CampaignHTTPService", "DEFAULT_REFRESH_INTERVAL_S", "HEALTH_SCHEMA",
            "MAX_BODY", "MAX_HEADERS", "TOTAL_REQUEST_DEADLINE_S",
-           "TRUSTED_ORIGIN_ENV", "load_resolved", "main", "make_handler",
+           "RuntimeFactory", "TRUSTED_ORIGIN_ENV", "load_resolved", "main", "make_handler",
            "parse_listen", "validate_origin"]

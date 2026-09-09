@@ -1085,7 +1085,7 @@ def test_exact_provider_denial_is_durable_and_safe_to_retry(
         controller.close()
 
 
-def test_denial_proof_does_not_cross_controller_incarnation(
+def test_denial_proof_does_not_cross_controller_incarnation_or_iterate_history(
         tmp_path, monkeypatch):
     driver, controller, _lifecycle, engine = _owned_stack(tmp_path, monkeypatch)
     connector = de.UnifiedDriverExecution(driver=driver, controller=controller)
@@ -1109,6 +1109,12 @@ def test_denial_proof_does_not_cross_controller_incarnation(
     with campaign_control.CampaignController(
             driver.resolved, tmp_path / "controller", snapshot_version=3,
             scheduler_engine=replay_engine) as replayed:
+        class NonIterableAttemptIndex(set):
+            def __iter__(self):
+                raise AssertionError("logical-attempt lookup must not iterate history")
+
+        replayed._worker_historical_logical_attempts = NonIterableAttemptIndex(
+            replayed._worker_historical_logical_attempts)
         assert replayed.worker_attempt_status(
             request_id=selection.proposal.proposal_id, plan_digest=prepared.plan.digest,
             lineage_id=f"driver:{issued.transition_id}",

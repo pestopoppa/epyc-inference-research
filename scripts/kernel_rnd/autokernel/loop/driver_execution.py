@@ -470,6 +470,7 @@ class _FailedAttempt:
     terminal: worker_lifecycle.TerminalWorker
     held: scheduling.HeldClaimReceipt
     reference: unified_worker.PlannedWorkerResultReference | None = None
+    recovered: bool = False
 
 
 class UnifiedDriverExecution:
@@ -558,12 +559,13 @@ class UnifiedDriverExecution:
             if trusted["terminal_refs"][-1] != expected_result:
                 raise DriverExecutionRefused("sealed result terminal reference differs")
         else:
-            recovered = self.controller.worker_terminal_for_request(
-                request_id=attempt.terminal.request_id,
-                plan_digest=attempt.terminal.plan_digest,
-                lineage_id=attempt.terminal.lineage_id,
-                stage_id=attempt.terminal.stage_id)
             terminal_ref = f"lifecycle:{unified_driver._digest(_terminal_body(attempt.terminal))}"
+            recovered = (attempt.terminal if attempt.recovered else
+                         self.controller.worker_terminal_for_request(
+                             request_id=attempt.terminal.request_id,
+                             plan_digest=attempt.terminal.plan_digest,
+                             lineage_id=attempt.terminal.lineage_id,
+                             stage_id=attempt.terminal.stage_id))
             if recovered != attempt.terminal or trusted["terminal_refs"] != [terminal_ref]:
                 raise DriverExecutionRefused("failed lifecycle terminal differs")
             if attempt.reference is not None:
@@ -609,6 +611,48 @@ class UnifiedDriverExecution:
                 raise DriverExecutionUncertain(
                     "driver execution admission is closed during producer teardown")
             return self._execute_locked(outcome)
+
+    def recover_issued(self, outcome: unified_driver.DriverOutcome) -> DriverExecutionReceipt:
+        """Reconcile and resume one exact restored durable issue without reselection."""
+        with self._lock:
+            if self._closed:
+                raise DriverExecutionRefused("driver execution connector is closed")
+            transition_id = outcome.transition_id
+            if transition_id is None or self.driver.issued_work_kind(outcome) != "runtime_comparison":
+                raise DriverExecutionRefused("recovery requires an exact restored runtime intent")
+            prepared = self.driver.materialize_runtime(outcome)
+            selection = scheduling.Selection.from_dict(outcome.selection)
+            if selection.proposal is None or self.driver._issued_catalog is None:
+                raise DriverExecutionRefused("restored runtime selection is incomplete")
+            request_id = selection.proposal.proposal_id
+            lineage_id = f"driver:{transition_id}"
+            stage_id = f"runtime:{transition_id}"
+            terminal = self.controller.reconcile_workers()
+            if terminal is not None:
+                if (terminal.request_id != request_id
+                        or terminal.plan_digest != prepared.plan.digest
+                        or terminal.lineage_id != lineage_id
+                        or terminal.stage_id != stage_id):
+                    raise DriverExecutionUncertain(
+                        "reconciled lifecycle belongs to another issued request")
+                try:
+                    held = self.controller.worker_held_claim_receipt(terminal)
+                except Exception as exc:
+                    raise worker_lifecycle.WaitingAuthority(
+                        "reconciled terminal lacks a trusted held receipt") from exc
+                failed = _FailedAttempt(
+                    self.driver._issued_catalog.catalog_id, transition_id, selection,
+                    prepared, terminal, held, recovered=True)
+                self._launched.add(transition_id)
+                self._finished[transition_id] = failed
+                return self._finish(failed)
+            status = self.controller.worker_attempt_status(
+                request_id=request_id, plan_digest=prepared.plan.digest,
+                lineage_id=lineage_id, stage_id=stage_id)
+            if status == "not_acquired":
+                return self._execute_locked(outcome)
+            raise worker_lifecycle.WaitingAuthority(
+                f"restored lifecycle ownership is {status}; exact recovery remains fenced")
 
     def _stop_producer(self, producer: UnknownParentEvidenceProducer) \
             -> BaseException | None:

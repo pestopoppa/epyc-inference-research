@@ -69,6 +69,10 @@ class ControlRefused(RuntimeError):
     """A control or supervisor transition failed closed."""
 
 
+class DriverAdmissionClosed(ControlRefused):
+    """A driver issue lost the race with a durable admission close."""
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
@@ -642,6 +646,7 @@ class CampaignController:
         self._worker_projection = worker_lifecycle_module.project_events([])
         self._worker_run_active = False
         self._worker_no_acquisition: tuple[Any, ...] | None = None
+        self._worker_historical_logical_attempts: set[tuple[Any, ...]] = set()
         self.readiness_check = readiness_check or (lambda: (False, "execution authority absent"))
         self._cached_driver_readiness = (False, "provider readiness not refreshed")
         self.clock = clock
@@ -782,9 +787,29 @@ class CampaignController:
                 self.supervisor_incarnation += 1
                 self.stream_epoch += 1
                 self.sequence = 0
+                start_observed = self.observed_state
+                pending_runtime = False
+                for issued in self._driver_issued.values():
+                    if issued["transition_id"] in self._driver_settled:
+                        continue
+                    selection = issued.get("selection")
+                    catalog = issued.get("catalog")
+                    if not isinstance(selection, Mapping) or not isinstance(catalog, Mapping):
+                        continue
+                    work = catalog.get("work_by_stage_digest")
+                    selected = (work.get(selection.get("proposal_digest"))
+                                if isinstance(work, Mapping) else None)
+                    if (isinstance(selected, Mapping)
+                            and selected.get("kind") == "runtime_comparison"):
+                        pending_runtime = True
+                        break
+                if (self.snapshot_version == 3
+                        and start_observed == "ownership_unresolved"
+                        and pending_runtime):
+                    start_observed = "waiting_prerequisite"
                 self._append_event("START", {
                     "desired_state": self.desired_state,
-                    "observed_state": self.observed_state,
+                    "observed_state": start_observed,
                     "prerequisite_reason": self.prerequisite_reason,
                     "lock_identity": copy.deepcopy(self._lock_identity),
                 })
@@ -905,6 +930,8 @@ class CampaignController:
                         raise journal_module.JournalCorruption(
                             "worker lifecycle continuation breaks durable owner binding")
                 worker_events.append(copy.deepcopy(dict(entry.payload)))
+                self._worker_historical_logical_attempts.add(
+                    self._worker_attempt_key(row)[5:])
                 continue
             if entry.kind == journal_module.KIND_ACTOR_PREPARATION:
                 try:
@@ -952,6 +979,8 @@ class CampaignController:
                     raise ControlRefused(
                         "store contains worker acquisition v2; reopen explicitly as v2")
                 row = worker_lifecycle_module.validate_acquisition_transition(entry.payload)
+                self._worker_historical_logical_attempts.add(
+                    self._worker_attempt_key(row)[5:])
                 if row["phase"] == "INTENT":
                     if (acquisition_events or not saw_start
                             or row["campaign_id"] != self.resolved.campaign_id
@@ -1509,6 +1538,8 @@ class CampaignController:
             self._worker_last_generation = max(
                 self._worker_last_generation, row["worker_generation"])
             self._worker_projection = projection
+            self._worker_historical_logical_attempts.add(
+                self._worker_attempt_key(row)[5:])
             self._active_worker_events = (
                 candidate_events if projection.active else [])
             if (not projection.active
@@ -1574,6 +1605,8 @@ class CampaignController:
             self._worker_last_generation = max(
                 self._worker_last_generation, row["worker_generation"])
             self._acquisition_projection = projection
+            self._worker_historical_logical_attempts.add(
+                self._worker_attempt_key(row)[5:])
             self._active_acquisition_events = (
                 candidate_events if projection.pending is not None else [])
             if (row["phase"] == "RESOLVED"
@@ -2064,7 +2097,7 @@ class CampaignController:
 
     def worker_attempt_status(self, *, request_id: str, plan_digest: str,
                               lineage_id: str, stage_id: str) -> str:
-        """Classify an exact request; absence alone remains unknown."""
+        """Classify an exact request; only an issued-before-acquisition absence is proof."""
         with self._mutex:
             self._require_active_locked()
             if self._worker_lifecycle is None:
@@ -2083,8 +2116,27 @@ class CampaignController:
             attempt_key = self._worker_attempt_key_fields(
                 self._worker_lifecycle.binding, request_id, plan_digest,
                 lineage_id, stage_id)
-            return ("not_acquired" if attempt_key == self._worker_no_acquisition
-                    else "unknown")
+            if attempt_key == self._worker_no_acquisition:
+                return "not_acquired"
+            if attempt_key[5:] in self._worker_historical_logical_attempts:
+                return "unknown"
+            for issued in self._driver_issued.values():
+                if issued["transition_id"] in self._driver_settled:
+                    continue
+                selection = issued["selection"]
+                proposal = selection.get("proposal") if isinstance(selection, Mapping) else None
+                if (not isinstance(proposal, Mapping)
+                        or proposal.get("proposal_id") != request_id
+                        or lineage_id != f"driver:{issued['transition_id']}"
+                        or stage_id != f"runtime:{issued['transition_id']}"):
+                    continue
+                work = issued["catalog"]["work_by_stage_digest"].get(
+                    selection.get("proposal_digest"))
+                if (isinstance(work, Mapping)
+                        and work.get("stage_plan_binding") == "experiment_plan"
+                        and work.get("stage_plan_digest") == plan_digest):
+                    return "not_acquired"
+            return "unknown"
 
     def reconcile_workers(self):
         """Reconcile retained v2 ownership outside the controller command lock."""
@@ -3018,10 +3070,21 @@ class CampaignController:
             if self.snapshot_version != 3 or self._supervisor_id is None:
                 raise ControlRefused("unified runtime materialization requires snapshot v3")
             issued = self._driver_issued.get(catalog_id)
+            issued_work = None
+            if issued is not None:
+                issued_selection = issued.get("selection")
+                issued_catalog = issued.get("catalog")
+                work_by_digest = (issued_catalog.get("work_by_stage_digest")
+                                  if isinstance(issued_catalog, Mapping) else None)
+                if isinstance(issued_selection, Mapping) and isinstance(work_by_digest, Mapping):
+                    issued_work = work_by_digest.get(
+                        issued_selection.get("proposal_digest"))
             if (issued is None or issued["transition_id"] != transition_id
                     or transition_id in self._driver_settled
                     or issued["selection"] != copy.deepcopy(selection)
-                    or issued["supervisor_incarnation"] != self.supervisor_incarnation
+                    or (issued["supervisor_incarnation"] != self.supervisor_incarnation
+                        and (not isinstance(issued_work, Mapping)
+                             or issued_work.get("kind") != "runtime_comparison"))
                     or issued["config_generation"] != self.config_generation
                     or issued["config_digest"] != self.config_digest):
                 raise ControlRefused(
@@ -3039,6 +3102,18 @@ class CampaignController:
                 "supervisor_incarnation": self.supervisor_incarnation,
                 "artifact_root": str(self._driver_artifact_store.root),
             }
+
+    def unified_driver_pending_intent(self) -> Mapping[str, Any] | None:
+        """Return the one exact replayed issued-but-unsettled driver record."""
+        with self._mutex:
+            self._require_active_locked()
+            if self.snapshot_version != 3 or self._scheduler_engine is None:
+                raise ControlRefused("pending unified intent requires snapshot v3")
+            pending = [copy.deepcopy(row) for row in self._driver_issued.values()
+                       if row["transition_id"] not in self._driver_settled]
+            if len(pending) > 1:
+                raise ControlRefused("multiple unsettled unified driver intents conflict")
+            return None if not pending else pending[0]
 
     def refresh_unified_driver_readiness(self) -> dict[str, Any]:
         """Refresh provider readiness outside the controller's serialization mutex."""
@@ -3088,7 +3163,9 @@ class CampaignController:
                     "transition_id": prior["transition_id"], "status": "duplicate",
                     "selection": copy.deepcopy(prior["selection"]),
                 }
-            if not readiness["admission_open"] or not readiness["provider_available"]:
+            if not readiness["admission_open"]:
+                raise DriverAdmissionClosed(f"admissions_closed:{self.desired_state}")
+            if not readiness["provider_available"]:
                 raise ControlRefused(readiness["reason"])
             if (catalog.campaign_digest != resolved_config_digest(self.resolved)
                     or dict(catalog.controller_binding) != readiness
@@ -4084,7 +4161,8 @@ class CampaignController:
 
 
 __all__ = ["ACTIVE_WORKER_V2_FIELDS", "AdmissionDecision", "CampaignController",
-           "COMMAND_SCHEMA", "ControlRefused", "SNAPSHOT_FILE", "SNAPSHOT_SCHEMA",
+           "COMMAND_SCHEMA", "ControlRefused", "DriverAdmissionClosed",
+           "SNAPSHOT_FILE", "SNAPSHOT_SCHEMA",
            "SNAPSHOT_SCHEMA_V2", "SNAPSHOT_V2_FIELDS", "TrustedGrant",
            "SNAPSHOT_SCHEMA_V3", "SNAPSHOT_V3_FIELDS", "UNIFIED_PROJECTION_SCHEMA",
            "DRIVER_SETTLEMENT_SCHEMA", "DRIVER_SETTLEMENT_RECEIPT_SCHEMA",
