@@ -690,3 +690,226 @@ def test_unjoined_idle_reader_finishes_with_unknown_zero_active_cost(tmp_path):
     assert session.record() == frozen
     assert session.reconcile_shutdown() is True
     assert session.record() == frozen
+
+
+@pytest.mark.parametrize("duration,cadence,markers,expected", [
+    (32.0, 0.1, 9, 329), (1.0, 0.25, 9, 13), (1.01, 0.25, 9, 14),
+    (0.1, 1.0, 0, 1), (5.0, 1.0, 9, 14),
+])
+def test_required_sample_capacity(duration, cadence, markers, expected):
+    assert lo.required_sample_capacity(max_duration_s=duration,
+        cadence_s=cadence, nonperiodic_samples=markers) == expected
+
+
+@pytest.mark.parametrize("field,value", [
+    ("max_duration_s", True), ("max_duration_s", 0), ("max_duration_s", -1),
+    ("max_duration_s", float("inf")), ("max_duration_s", float("nan")),
+    ("cadence_s", True), ("cadence_s", 0), ("cadence_s", -1),
+    ("cadence_s", float("inf")), ("cadence_s", float("nan")),
+    ("nonperiodic_samples", True), ("nonperiodic_samples", -1),
+    ("nonperiodic_samples", 1.5),
+])
+def test_sample_capacity_refuses_invalid_numeric_inputs(field, value):
+    values = {"max_duration_s": 32.0, "cadence_s": 0.1, "nonperiodic_samples": 9}
+    with pytest.raises(lo.ObservationError):
+        lo.required_sample_capacity(**(values | {field: value}))
+
+
+def test_sample_capacity_refuses_overflow_without_allocating_samples():
+    with pytest.raises(lo.ObservationError, match="finite"):
+        lo.required_sample_capacity(max_duration_s=1e308, cadence_s=1e-308,
+                                    nonperiodic_samples=9)
+
+
+class ScriptedCondition:
+    """Single-thread deterministic scheduler harness, not an evidence probe."""
+
+    def __init__(self, wait):
+        self.wait_callback = wait
+        self.depth = 0
+        self.waits = []
+
+    def __enter__(self):
+        self.depth += 1
+
+    def __exit__(self, *_args):
+        self.depth -= 1
+
+    def wait(self, timeout):
+        self.waits.append(timeout)
+        self.wait_callback(timeout)
+        return True  # Wakeups do not themselves establish expiry.
+
+    def notify(self):
+        pass
+
+
+def _scripted_reader(tmp_path):
+    session, *_ = _session(tmp_path)
+    session.context["cadence_s"] = 1.0
+    session._started = session._accepting = True
+    session._phase = "placement"
+    clock = [0.0]
+    samples = []
+    condition = ScriptedCondition(lambda timeout: clock.__setitem__(0, clock[0] + timeout))
+    session._condition = condition
+    def time_pair():
+        assert condition.depth == 0, "clock read must remain outside state lock"
+        return clock[0], "2026-09-09T00:00:00Z"
+    session._time_pair = time_pair
+    session._capture_marker = lambda marker: marker
+    def commit(sample, marker):
+        session._active_reads -= 1
+        samples.append((sample["phase"], sample["kind"], sample["marker_monotonic_s"]))
+        marker["done"].set()
+        session._stopping = True
+    session._commit = commit
+    return session, clock, samples, condition
+
+
+def test_empty_spurious_wakes_keep_due_time_without_early_or_postponed_samples(tmp_path):
+    session, clock, samples, condition = _scripted_reader(tmp_path)
+    def wake(_remaining):
+        assert len(condition.waits) <= 4, "spurious wake restarted the cadence forever"
+        clock[0] += 0.25
+    condition.wait_callback = wake
+    session._run()
+    assert condition.waits == [1.0, 0.75, 0.5, 0.25]
+    assert samples == [("placement", "periodic", 1.0)]
+    assert session._scheduled == 1
+
+
+@pytest.mark.parametrize("race", ["phase", "checkpoint", "stop"])
+def test_unlocked_periodic_clock_race_does_not_queue_stale_phase_or_overtake_marker(tmp_path, race):
+    session, clock, samples, _ = _scripted_reader(tmp_path)
+    original_clock = session._time_pair
+    clock_calls = 0
+    def racing_clock():
+        nonlocal clock_calls
+        clock_calls += 1
+        if clock_calls == 2:
+            with session._condition:
+                if race == "stop":
+                    session._stopping = True
+                else:
+                    if race == "phase":
+                        session._phase = "health"
+                    session._enqueue_locked(session._phase,
+                        "boundary" if race == "phase" else "checkpoint", clock[0],
+                        "2026-09-09T00:00:00Z", None if race == "phase" else "fixture-checkpoint")
+        return original_clock()
+    session._time_pair = racing_clock
+    session._run()
+    expected = ([] if race == "stop" else [
+        ("health", "boundary", 1.0) if race == "phase" else ("placement", "checkpoint", 1.0)])
+    assert samples == expected
+    assert session._scheduled == len(expected)
+    assert not session._pending
+
+
+@pytest.mark.parametrize("shortfall", [0, 1])
+def test_exact_periodic_allowance_plus_nine_hooks_reaches_capacity_boundary(tmp_path, shortfall):
+    # Zero-cost scripted reads exercise the worst count, not hardware evidence:
+    # all 100 periodic deadlines elapse in placement before the last five hooks.
+    session, clock, samples, condition = _scripted_reader(tmp_path)
+    duration, cadence, periodic_allowance = 100.0, 1.0, 100
+    capacity = lo.required_sample_capacity(max_duration_s=duration,
+        cadence_s=cadence, nonperiodic_samples=9)
+    assert capacity == periodic_allowance + 9
+    session.context["budgets"]["max_samples"] = capacity - shortfall
+    session._phase = "setup"
+    session._wait_marker = lambda *_args: None
+    periodic_count = 0
+    hooks = []
+    def commit(sample, marker):
+        nonlocal periodic_count
+        session._active_reads -= 1
+        samples.append((sample["phase"], sample["kind"], sample["marker_monotonic_s"]))
+        marker["done"].set()
+        if sample["kind"] == "periodic":
+            periodic_count += 1
+            assert periodic_count <= periodic_allowance
+            if periodic_count == periodic_allowance:
+                session.phase("health")
+            return
+        hooks.append((sample["phase"], sample["kind"], sample["marker_label"]))
+        if sample["kind"] == "target_attached":
+            session.phase("placement")
+        elif sample["kind"] == "checkpoint":
+            session.phase("teardown")
+            if shortfall:
+                session._stopping = True  # The last hook was explicitly refused.
+        elif sample["phase"] == "setup":
+            session.phase("load")
+        elif sample["phase"] == "load":
+            session.attach_target(101)
+        elif sample["phase"] == "health":
+            session.phase("warmup")
+        elif sample["phase"] == "warmup":
+            session.phase("measurement")
+        elif sample["phase"] == "measurement":
+            session.checkpoint("measurement_end")
+        elif sample["phase"] == "teardown":
+            session._stopping = True
+    session._commit = commit
+    with session._condition:
+        session._enqueue_locked("setup", "boundary", 0.0, "2026-09-09T00:00:00Z")
+    session._run()
+    expected_hooks = [
+        ("setup", "boundary", None), ("load", "boundary", None),
+        ("load", "target_attached", None), ("placement", "boundary", None),
+        ("health", "boundary", None), ("warmup", "boundary", None),
+        ("measurement", "boundary", None),
+        ("measurement", "checkpoint", "measurement_end"),
+        ("teardown", "boundary", None)]
+    assert clock[0] == duration
+    assert condition.waits == [cadence] * periodic_allowance
+    assert [row for row in samples if row[1] == "periodic"] == [
+        ("placement", "periodic", float(index)) for index in range(1, 101)]
+    assert hooks == (expected_hooks if not shortfall else expected_hooks[:-1])
+    assert len(samples) == session._scheduled == capacity - shortfall
+    assert session._dropped_markers == shortfall
+    assert [row["code"] for row in session._issues] == (
+        ["sample_budget_exhausted"] if shortfall else [])
+    assert not session._pending
+
+
+def test_sized_long_placement_retains_measurement_end_and_teardown(tmp_path):
+    cadence, duration = 0.02, 2.0
+    capacity = lo.required_sample_capacity(max_duration_s=duration,
+        cadence_s=cadence, nonperiodic_samples=9)
+    session, *_ = _session(tmp_path, budgets=_budgets(max_samples=capacity))
+    session.context.update(cadence_s=cadence, gap_limit_s=0.1)
+    session.monotonic = time.monotonic
+    observed_placement = threading.Event()
+    capture = session._capture_marker
+    periodic_count = 0
+    def count(sample):
+        nonlocal periodic_count
+        value = capture(sample)
+        if sample["kind"] == "periodic" and sample["phase"] == "placement":
+            periodic_count += 1
+            if periodic_count == 8:
+                observed_placement.set()
+        return value
+    session._capture_marker = count
+    session.start()
+    try:
+        session.phase("load")
+        session.attach_target(101)
+        session.phase("placement")
+        assert observed_placement.wait(1.0)
+        for phase in ("health", "warmup", "measurement"):
+            session.phase(phase)
+        session.checkpoint("measurement_end")
+    finally:
+        session.phase("teardown")
+        record = session.finish()
+    assert record["ended_monotonic_s"] - record["started_monotonic_s"] <= duration
+    assert record["observer_cost"]["sample_count"] <= capacity
+    assert record["observer_cost"]["dropped_marker_count"] == 0
+    markers = [(row["phase"], row["kind"], row["marker_label"]) for row in record["samples"]]
+    assert ("measurement", "checkpoint", "measurement_end") in markers
+    assert ("teardown", "boundary", None) in markers
+    assert {row["phase"] for row in record["samples"]} == set(lo.PHASES)
+    assert not any(row["code"] == "sample_budget_exhausted" for row in record["issues"])

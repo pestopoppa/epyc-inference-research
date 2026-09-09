@@ -365,11 +365,40 @@ def _observation_configuration(prepared):
         for recipe in (prepared.runtime_pair.anchor, prepared.runtime_pair.candidate)}
     return ob.ParentObservationConfiguration(
         # Original owning T0 collection runs while placement is still held.
-        # A 10 ms / 64-sample fixture exhausted its capacity before later
-        # mandatory markers under scheduling pressure. Pin a bounded ~25 s
-        # periodic allowance; retain the 4 MiB byte cap and real marker checks.
+        # Its declared 30 s stage + 2 s teardown needs 329 samples at 100 ms.
+        # Pin sufficient finite capacity; retain the 4 MiB byte cap and real
+        # marker checks, rather than sizing from a successful run's duration.
         requested, {}, 0.1, 0.2, _budgets(
-            max_samples=256, phase_ack_timeout_s=0.5, join_timeout_s=0.5))
+            max_samples=512, phase_ack_timeout_s=0.5, join_timeout_s=0.5))
+
+
+def test_native_sample_admission_precedes_thread_provider_and_child(tmp_path, monkeypatch):
+    from dataclasses import replace
+    from . import serving
+    driver, controller, lifecycle, _ = _owned_stack(tmp_path, monkeypatch)
+    try:
+        outcome = driver.tick(now=1.0)
+        prepared, _ = _as_observed_v2(driver.materialize_runtime(outcome), serving._measure_once)
+        configuration = _observation_configuration(prepared)
+        required = ob.validate_planned_sample_capacity(configuration,
+            max_stage_seconds=prepared.max_stage_seconds,
+            teardown_seconds=prepared.teardown_seconds)
+        insufficient = replace(configuration, budgets={**configuration.budgets, "max_samples": required - 1})
+        authority = unified_worker.ParentUnitEvidenceAuthority(max_records=32)
+        def forbidden(*_args, **_kwargs):
+            pytest.fail("undersized observation reached thread, provider or launch")
+        with monkeypatch.context() as patch:
+            patch.setattr(threading, "Thread", forbidden)
+            patch.setattr(lifecycle.provider, "authorize", forbidden)
+            patch.setattr(wl.subprocess, "Popen", forbidden)
+            with pytest.raises(ob.ObservationBindingError, match="sample capacity insufficient"):
+                de.UnknownParentEvidenceProducer(authority, prepared, lifecycle, insufficient)
+        producer = de.UnknownParentEvidenceProducer(authority, prepared, lifecycle, configuration)
+        assert producer._thread.ident is None
+        assert producer.prepared == prepared
+        assert insufficient.budgets["max_samples"] == required - 1
+    finally:
+        controller.close()
 
 
 def _run_real_controller_child_v2_capture_and_restart(

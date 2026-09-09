@@ -32,6 +32,7 @@ SEMANTIC_PHASES = ("load", "placement", "warmup", "measurement", "teardown")
 BUILTIN_PROVENANCE_SCHEMA = "epyc.autokernel.loaded_builtin_callable.v1"
 _MAX_PROVIDER_BYTES = 128 * 1024 * 1024
 _MAX_MAPS_BYTES = 4 * 1024 * 1024
+NATIVE_SERVING_SAMPLE_SCHEDULE_SCHEMA = "epyc.autokernel.native_serving_sample_schedule.v1"
 
 
 class ObservationBindingError(RuntimeError):
@@ -67,9 +68,9 @@ class ParentObservationConfiguration:
             dsos[digest] = tuple(_freeze(_plain(item)) for item in supplied)
         if set(dsos) - set(states):
             raise ObservationBindingError("GPU DSO configuration lacks a recipe state")
-        cadence = float(self.cadence_s)
-        gap = float(self.gap_limit_s)
-        if not (cadence > 0 and gap >= cadence):
+        cadence = lo._finite(self.cadence_s, "observation cadence", positive=True)
+        gap = lo._finite(self.gap_limit_s, "observation gap", positive=True)
+        if gap < cadence:
             raise ObservationBindingError("observation cadence/gap configuration is invalid")
         if not isinstance(self.budgets, Mapping) or set(self.budgets) != lo.BUDGET_FIELDS:
             raise ObservationBindingError("observation budgets are not the closed observer set")
@@ -78,6 +79,24 @@ class ParentObservationConfiguration:
         object.__setattr__(self, "cadence_s", cadence)
         object.__setattr__(self, "gap_limit_s", gap)
         object.__setattr__(self, "budgets", _freeze(_plain(self.budgets)))
+
+
+def validate_planned_sample_capacity(configuration: ParentObservationConfiguration, *,
+                                     max_stage_seconds: float, teardown_seconds: float) -> int:
+    """Admit count capacity before launch; it is not an observation verdict."""
+    if not isinstance(configuration, ParentObservationConfiguration):
+        raise ObservationBindingError("sample admission requires the concrete parent configuration")
+    stage = lo._finite(max_stage_seconds, "stage maximum duration", positive=True)
+    teardown = lo._finite(teardown_seconds, "teardown maximum duration", positive=True)
+    required = lo.required_sample_capacity(max_duration_s=stage + teardown,
+        cadence_s=configuration.cadence_s, nonperiodic_samples=len(lo.PHASES) + 2)
+    available = lo._integer(configuration.budgets["max_samples"], "max_samples", 1)
+    if available < required:
+        raise ObservationBindingError(
+            f"observation sample capacity insufficient: configured={available}, "
+            f"required={required}, maximum_duration_s={stage + teardown}, "
+            f"cadence_s={configuration.cadence_s}")
+    return required
 
 
 def _plain(value: Any) -> Any:
@@ -609,6 +628,11 @@ def loaded_planned_serving_identity(*, measurement_callable: Callable[..., Any],
         supporting_callables=(serving_timer, serving.verify_env_readback,
             serving.covers_request_phase, serving._residency_record,
             serving._refuse_if_not_resident, lo.ObservationSession.start,
+            lo.required_sample_capacity, validate_planned_sample_capacity,
+            ParentObservationConfiguration.__post_init__,
+            UnknownParentEvidenceProducer.__init__,
+            lo.ObservationSession._run, lo.ObservationSession._enqueue_locked,
+            lo.ObservationSession._commit,
             lo.ObservationSession.attach_target, lo.ObservationSession.phase,
             lo.ObservationSession.checkpoint, lo.ObservationSession.finish,
             lo.ObservationSession.reconcile_shutdown, lo.FilesystemProbe.capture,
@@ -635,6 +659,12 @@ def loaded_planned_serving_identity(*, measurement_callable: Callable[..., Any],
             "detector_version": lo.DETECTOR_VERSION, "phases": list(lo.PHASES),
             "parent_readback_phase": "health",
             "parent_window_markers": ["health", "warmup", "measurement", "measurement_end", "teardown"],
+            "native_serving_sample_schedule": {
+                "schema": NATIVE_SERVING_SAMPLE_SCHEDULE_SCHEMA,
+                "phase_boundaries": list(lo.PHASES), "target_attachments": 1,
+                "checkpoints": ["measurement_end"],
+                "duration_bound": "max_stage_seconds+teardown_seconds",
+                "sample_bound": "ceil(duration/cadence)+phase_boundaries+target_attachments+checkpoints"},
             "server_response_source": _plain(server_response_source),
             "producer_source_closure": _plain(loaded_producer_source_closure(
                 scientific_adapters=scientific_adapters)),

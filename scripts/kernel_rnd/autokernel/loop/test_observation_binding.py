@@ -18,6 +18,41 @@ from .test_lifecycle_observation import (Clock, _budgets, _fixture, _resolver,
                                          _set_ticks, _write_process)
 
 
+def _capacity_configuration(max_samples=329, *, cadence=0.1, gap=0.2):
+    return ob.ParentObservationConfiguration({}, {}, cadence, gap,
+                                             _budgets(max_samples=max_samples))
+
+
+def test_planned_capacity_exact_boundary_preserves_configuration():
+    configuration = _capacity_configuration()
+    before = ob._plain(configuration.budgets)
+    assert ob.validate_planned_sample_capacity(configuration,
+        max_stage_seconds=30.0, teardown_seconds=2.0) == 329
+    assert ob._plain(configuration.budgets) == before
+    with pytest.raises(ob.ObservationBindingError, match="configured=328, required=329"):
+        ob.validate_planned_sample_capacity(_capacity_configuration(328),
+            max_stage_seconds=30.0, teardown_seconds=2.0)
+    with pytest.raises(ob.ObservationBindingError, match="required=339"):
+        ob.validate_planned_sample_capacity(configuration,
+            max_stage_seconds=30.0, teardown_seconds=3.0)
+
+
+@pytest.mark.parametrize("field,value", [
+    ("cadence", True), ("cadence", float("inf")), ("cadence", float("nan")),
+    ("gap", True), ("gap", float("inf")), ("gap", float("nan")),
+])
+def test_parent_observation_configuration_uses_strict_context_numeric_semantics(field, value):
+    with pytest.raises(lo.ObservationError):
+        _capacity_configuration(**{field: value})
+
+
+@pytest.mark.parametrize("available", [True, 0, -1, 329.0])
+def test_planned_capacity_requires_integer_sample_budget(available):
+    with pytest.raises(lo.ObservationError):
+        ob.validate_planned_sample_capacity(_capacity_configuration(available),
+            max_stage_seconds=30.0, teardown_seconds=2.0)
+
+
 def _instrument(store):
     return ob.seal_loaded_instrument(store=store,
         measurement_callable=serving._measure_once,
@@ -64,6 +99,14 @@ print(json.dumps(ob._plain(row), sort_keys=True))
         assert parent["clock_callable"]["implementation_status"] == "pinned"
         assert parent["supporting_callables"][0]["implementation_status"] == "pinned"
         assert parent["configuration_complete"] is True
+        schedule = parent["used_constants"]["native_serving_sample_schedule"]
+        assert schedule["schema"] == ob.NATIVE_SERVING_SAMPLE_SCHEDULE_SCHEMA
+        assert tuple(schedule["phase_boundaries"]) == lo.PHASES
+        assert len(schedule["phase_boundaries"]) + schedule["target_attachments"] + len(schedule["checkpoints"]) == 9
+        names = {item["qualname"] for item in parent["supporting_callables"]}
+        assert {"required_sample_capacity", "validate_planned_sample_capacity",
+                "ObservationSession._run", "ObservationSession._enqueue_locked",
+                "ObservationSession._commit", "UnknownParentEvidenceProducer.__init__"} <= names
         provenance = parent["used_constants"]["builtin_callable_provenance"]
         assert provenance["fence_clock"]["provider_artifact"]["sha256"]
         assert provenance["serving_timer"]["clock"]["name"] == "time"
