@@ -7,7 +7,7 @@ import subprocess
 
 import pytest
 
-from autokernel.loop import archive
+from autokernel.loop import archive, kernel_mutation_guard
 
 
 def _git(repo: Path, *args: str, check: bool = True) -> str:
@@ -199,6 +199,42 @@ def test_repository_subdirectory_is_not_accepted_as_repo_root(tmp_path):
     with pytest.raises(archive.RatchetRefused, match="actual root"):
         archive.keep(repo / "nested", branch="main", message="wrong root",
                      paths=("file.txt",))
+
+
+def test_frozen_root_is_refused_before_hooks_or_git_mutation(tmp_path, monkeypatch):
+    repo = _repo(tmp_path)
+    marker = tmp_path / "hook-ran"
+    _install_hook(repo, "pre-commit", f"touch {marker}\n")
+    parent = _git(repo, "rev-parse", "HEAD")
+    (repo / "selected.txt").write_text("candidate\n", encoding="utf-8")
+    monkeypatch.setattr(
+        kernel_mutation_guard, "FROZEN_PRODUCTION_ROOTS", frozenset({repo}))
+
+    with pytest.raises(archive.RatchetRefused,
+                       match="canonical frozen production checkout"):
+        archive.keep(repo, branch="main", message="must refuse",
+                     paths=("selected.txt",))
+
+    assert not marker.exists()
+    assert _git(repo, "rev-parse", "HEAD") == parent
+
+
+def test_branch_becoming_production_is_refused_before_ref_cas(tmp_path):
+    repo = _repo(tmp_path)
+    parent = _git(repo, "rev-parse", "HEAD")
+    frozen_branch = "production-consolidated-v999"
+    _git(repo, "branch", frozen_branch)
+    (repo / "selected.txt").write_text("candidate\n", encoding="utf-8")
+    _install_hook(
+        repo, "pre-commit",
+        f"git symbolic-ref HEAD refs/heads/{frozen_branch}\n")
+
+    with pytest.raises(archive.RatchetRefused,
+                       match="frozen production branch"):
+        archive.keep(repo, branch="main", message="must refuse branch swap",
+                     paths=("selected.txt",))
+
+    assert _git(repo, "rev-parse", f"refs/heads/{frozen_branch}") == parent
 
 
 def test_ambient_repository_redirection_is_refused_without_mutating_environment(

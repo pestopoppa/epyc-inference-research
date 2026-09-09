@@ -16,6 +16,7 @@ import tempfile
 from typing import Any, Mapping
 
 from ..controller import experiments
+from . import kernel_mutation_guard
 
 
 class RatchetRefused(RuntimeError):
@@ -130,7 +131,12 @@ def _require_private_diff(repo: Path, expected: str, paths: tuple[str, ...],
 
 
 def _verify_head_binding(repo: Path, symbolic: str, expected: str) -> None:
+    current_root = Path(_git(repo, "rev-parse", "--show-toplevel")).resolve()
+    if current_root != repo:
+        raise RatchetRefused(
+            f"repository root changed before commit: expected {repo}, found {current_root}")
     current_symbolic = _git(repo, "symbolic-ref", "-q", "HEAD", check=False)
+    _guard_kernel_mutation(repo, current_symbolic)
     if current_symbolic != symbolic:
         before = symbolic or "detached HEAD"
         after = current_symbolic or "detached HEAD"
@@ -139,6 +145,13 @@ def _verify_head_binding(repo: Path, symbolic: str, expected: str) -> None:
     if current_head != expected:
         raise RatchetRefused(
             f"HEAD moved before commit: expected {expected}, found {current_head}")
+
+
+def _guard_kernel_mutation(repo: Path, branch: str | None) -> None:
+    try:
+        kernel_mutation_guard.ensure_kernel_mutation_allowed(repo, branch)
+    except kernel_mutation_guard.FrozenKernelMutationRefused as exc:
+        raise RatchetRefused(str(exc)) from exc
 
 
 def keep(repo: Path, *, branch: str, message: str, paths: tuple[str, ...]) -> str:
@@ -164,6 +177,7 @@ def keep(repo: Path, *, branch: str, message: str, paths: tuple[str, ...]) -> st
     repo = _verified_repo(Path(repo))
     accepted = _validated_paths(repo, paths)
     symbolic = _git(repo, "symbolic-ref", "-q", "HEAD", check=False)
+    _guard_kernel_mutation(repo, symbolic)
     if branch == "HEAD":
         target = symbolic or "HEAD"
         no_deref = not symbolic

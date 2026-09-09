@@ -21,6 +21,7 @@ from typing import Any, Callable, Mapping, Sequence
 from .. import journal as journal_module
 from . import candidate_manifest as cm
 from . import campaign_control as campaign_control_module
+from . import kernel_mutation_guard
 from . import measurement_capture as mc
 from . import status
 
@@ -30,11 +31,7 @@ POINTER_FILE = "candidate-state.json"
 POINTER_SCHEMA = "epyc.autokernel.candidate_state_pointer.v1"
 OWNED_REF_PREFIX = "refs/autokernel/candidates"
 TRANSITION_RECEIPT_SCHEMA = "epyc.autokernel.candidate_transition_receipt.v1"
-FROZEN_PRODUCTION_ROOTS = frozenset(Path(value) for value in (
-    "/mnt/raid0/llm/llama.cpp", "/mnt/raid0/llm/whisper.cpp",
-    "/mnt/raid0/llm/qwentts.cpp",
-))
-_FROZEN_BRANCH_PREFIXES = ("production-consolidated-", "production-speech-")
+FROZEN_PRODUCTION_ROOTS = kernel_mutation_guard.FROZEN_PRODUCTION_ROOTS
 _GIT_REDIRECT_ENV = frozenset({
     "GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_OBJECT_DIRECTORY",
     "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_INDEX_FILE",
@@ -131,13 +128,13 @@ class GitCandidateBackend:
             if path != actual:
                 raise CandidateTransactionError(
                     f"repository {repo_id!r} must name its exact root")
-            if path in FROZEN_PRODUCTION_ROOTS:
-                raise CandidateTransactionError("canonical frozen production checkout is refused")
             branch = _run_git(path, "symbolic-ref", "--short", "-q", "HEAD",
                               check=False)
-            if branch.startswith(_FROZEN_BRANCH_PREFIXES):
+            try:
+                kernel_mutation_guard.ensure_kernel_mutation_allowed(path, branch)
+            except kernel_mutation_guard.FrozenKernelMutationRefused as exc:
                 raise CandidateTransactionError(
-                    f"repository {repo_id!r} is checked out on a frozen production branch")
+                    f"repository {repo_id!r}: {exc}") from exc
             self._repos[repo_id] = path
             info = os.lstat(path)
             if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid():
@@ -255,11 +252,14 @@ class GitCandidateBackend:
         common_current = (common_info.st_dev, common_info.st_ino, common_info.st_uid,
                           stat.S_IMODE(common_info.st_mode))
         branch = _run_git(repo, "symbolic-ref", "--short", "-q", "HEAD", check=False)
+        try:
+            kernel_mutation_guard.ensure_kernel_mutation_allowed(repo, branch)
+        except kernel_mutation_guard.FrozenKernelMutationRefused as exc:
+            raise CandidateRecoveryRequired(
+                f"validated repository became frozen for {repo_id!r}: {exc}") from exc
         if (current != self._repo_identities[repo_id]
                 or git_current != self._git_dir_identities[repo_id]
                 or common_current != self._common_dir_identities[repo_id]
-                or repo in FROZEN_PRODUCTION_ROOTS
-                or branch.startswith(_FROZEN_BRANCH_PREFIXES)
                 or Path(_run_git(repo, "rev-parse", "--show-toplevel")).resolve() != repo
                 or Path(_run_git(repo, "rev-parse", "--absolute-git-dir")).resolve()
                 != self._git_dirs[repo_id]
