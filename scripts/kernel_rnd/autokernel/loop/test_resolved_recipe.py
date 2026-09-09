@@ -77,6 +77,14 @@ def test_resolution_does_not_change_legacy_hash_or_shipped_gpu_commands():
         assert resolved.capability.supported
 
 
+def test_canonical_topology_accepts_retained_taskset_then_numactl_order():
+    command = ["/build/bin/llama-server", "-m", "/models/m", "--host", "127.0.0.1",
+               "--port", "18497", "-np", "1", "-c", "8192", "-t", "48"]
+    for prefix in (["taskset", "-c", "0-95"],
+                   ["taskset", "-c", "0-95", "numactl", "--membind=0,1"],
+                   ["numactl", "--interleave=all", "--", "taskset", "-c", "0-95"]):
+        assert rr.canonical_recipe_projection(
+            name="closed", command_argv=command, topology_prefix=prefix).cpu_list == "0-95"
 def test_normalized_identity_ignores_only_relocation_label_and_listen_port():
     first_recipe = serving.Recipe(name="first-label", model="/models/one.gguf")
     first = _resolve(first_recipe, build=Path("/build-one"), port=18001)
