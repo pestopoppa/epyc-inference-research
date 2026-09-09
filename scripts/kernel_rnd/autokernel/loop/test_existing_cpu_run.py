@@ -104,6 +104,10 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(dry_run)
 
                 def propose(context):
                     assert context["target"]["scope"] == "experimental candidate, NOT canonical champion"
+                    assert context["program"].startswith("CPU EXPERIMENTAL TARGET")
+                    assert "overrides inapplicable GPU instructions below" in context["program"]
+                    assert "Author/review source only" in context["program"]
+                    assert context["program"].endswith(run.loop.PROGRAM.read_text(encoding="utf-8"))
                     hypothesis = replace(base_propose(context), mechanism_id=f"cpu-{len(issued) + 1}")
                     issued.append(hypothesis)
                     return hypothesis
@@ -150,11 +154,40 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(dry_run)
             assert len(issued) == 5 and len(oracles) == 5
             assert held == [True, False]
             result = json.loads((fixture.root / "result/loop-run.json").read_text())
+            epoch_inputs = {"cpu_execution_digest": selected.execution_digest,
+                            "frozen_prompt_digest": manifest.digest}
+            expected_epoch = run.archive.epoch_for(
+                anchor_commit=original_head, build_recipe=run.build_recipe.NATIVE_CPU_RECIPE.to_dict(),
+                host_state=epoch_inputs)
+            assert result["epoch"] == expected_epoch
+            # Same source/build but a different target or original request must not
+            # be ranked as same-epoch evidence. No altered live recipe is launched.
+            for field in epoch_inputs:
+                changed = {**epoch_inputs, field: "0" * 64}
+                assert run.archive.epoch_for(
+                    anchor_commit=original_head,
+                    build_recipe=run.build_recipe.NATIVE_CPU_RECIPE.to_dict(),
+                    host_state=changed) != expected_epoch
             assert result["baseline_scope"] == "experimental_candidate_not_champion"
             assert [row["status"] for row in result["iterations"]] == [
                 "measured_null", "measured_null", "measured_null", "kept", "measured_null"]
             assert all(row["comparison"]["request_digest"] == result["floor_request_digest"]
                        for row in result["iterations"])
             assert run._git(fixture.repo, "rev-parse", branch) != original_head
+    finally:
+        fixture.doCleanups()
+
+
+def test_gpu_actor_program_and_epoch_inputs_remain_legacy_exact():
+    fixture = promotion_fixture.TheKeepBuildsAProductionCompleteAnchor()
+    fixture.setUp()
+    try:
+        original_epoch = run.archive.epoch_for
+        with mock.patch.object(run.archive, "epoch_for", wraps=original_epoch) as epoch:
+            rc, _calls, planners, _scratch, log = fixture._run_one_keep()
+        assert rc == 0, log
+        epoch.assert_called_once_with(
+            anchor_commit=fixture.tip, build_recipe=run.build_recipe.HOUSE_GPU_RECIPE.to_dict())
+        assert planners[0].contexts[0]["program"] == run.loop.PROGRAM.read_text(encoding="utf-8")
     finally:
         fixture.doCleanups()

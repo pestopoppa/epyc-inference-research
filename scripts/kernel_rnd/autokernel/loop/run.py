@@ -367,7 +367,11 @@ def main(argv: list[str] | None = None) -> int:
 
     anchor_commit = _git(args.worktree, "rev-parse", "HEAD")
     epoch = archive.epoch_for(anchor_commit=anchor_commit,
-                              build_recipe=recipe.to_dict())
+                              build_recipe=recipe.to_dict(),
+                              **({"host_state": {
+                                  "cpu_execution_digest": cpu_launch.execution_digest,
+                                  "frozen_prompt_digest": manifest.digest}}
+                                 if cpu_launch else {}))
     print(f"anchor    {anchor_commit[:12]}   epoch {epoch[:12]}")
 
     pp, tg, ubatch = bench.SURFACES[args.surface]
@@ -447,8 +451,22 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     def build_context() -> dict:
+        program = loop.PROGRAM.read_text(encoding="utf-8")
+        if cpu_launch:
+            program = (
+                "CPU EXPERIMENTAL TARGET — overrides inapplicable GPU instructions below.\n"
+                "Use the selected CPU launch, frozen requests and build recipe in target. "
+                "Do not follow ROCm/rocprofv3, GPU residency, -ngl 99 or GPU-specific "
+                "kernel-probe instructions for this target. CPU profiling is unavailable; "
+                "do not invent hotspots or reuse GPU timing evidence as CPU evidence. "
+                "Author/review source only: the existing loop owns compilation, the CPU "
+                "oracle, resource locking and paired serving measurements. Preserve the "
+                "selected request, cache/seed/speculation and placement conditions. "
+                "Keeps remain on the explicitly selected experimental candidate branch; "
+                "they do not promote the canonical champion or production.\n\n"
+                + program)
         return {
-            "program": loop.PROGRAM.read_text(encoding="utf-8"),
+            "program": program,
             "kernel_hotspots": [row.to_dict() for row in hotspot_rows],
             "prior_experiments": prior_experiments(args, epoch),
             # Re-read EVERY iteration, never cached at startup, and hardened so one
