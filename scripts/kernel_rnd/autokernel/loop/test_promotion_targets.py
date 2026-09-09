@@ -301,6 +301,25 @@ class TheKeepBuildsAProductionCompleteAnchor(unittest.TestCase):
         # Every build was compiled AT the directory it serves (never relocated).
         self.assertEqual(promotion[0]["source"], self.repo)
 
+    def test_legacy_keep_prunes_with_original_current_and_protected_anchor(self):
+        """Legacy keeps must not select the intentionally disabled unified pruner.
+
+        Exercise the real run.main keep path, but intercept cleanup before any
+        deletion. The hardened legacy pruner and its safety tests stay unchanged.
+        """
+        with mock.patch.object(
+                run_mod.pool, "prune_anchor_generations", autospec=True,
+                return_value=pool.PruneReport(status="complete")) as prune:
+            rc, _calls, _planners, _scratch, log = self._run_one_keep()
+
+        self.assertEqual(rc, 0, log)
+        self.assertIn("kept", log)
+        prune.assert_called_once_with(
+            self.store, current=self.store / "anchor-gen-002",
+            protect=[self.startup_anchor])
+        self.assertTrue(self.startup_anchor.is_dir())
+        self.assertTrue((self.store / "anchor-gen-002").is_dir())
+
     def test_the_unreadable_inbox_files_could_not_kill_the_keep(self):
         """R22-6 end-to-end: same run, poisoned live-shaped inbox. BROKEN READS
         (bare reader): zero keeps, three lane_errors, breaker abort, rc != 0."""

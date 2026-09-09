@@ -613,7 +613,7 @@ def main(argv: list[str] | None = None) -> int:
         # rather than at wherever the time went hours ago.
         reprofile()
         cleanup = pool.prune_anchor_generations(
-            args.store, current=anchor_build[0], protect=[cor_build[0]], unified=True)
+            args.store, current=anchor_build[0], protect=[cor_build[0]])
         if cleanup.removed:
             print(f"anchor    pruned {len(cleanup.removed)} superseded generation(s); "
                   "reclaimed bytes unknown (not scanned on measurement path)")
