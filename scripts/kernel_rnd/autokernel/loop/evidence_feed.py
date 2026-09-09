@@ -1130,25 +1130,26 @@ class EvidenceFeed:
             return None
         return f"{worker}:{generation}"
 
-    def _remember_profile_terminal(self, row: journal_module.JournalEntry) -> None:
+    def _remember_profile_terminal(self, row: journal_module.JournalEntry) -> bool:
         if self.profile_adapter is None:
-            return
+            return False
         key = self._profile_terminal_key(row.payload)
         if key is None:
-            return
+            return False
         encoded = _canonical(row.envelope()).decode()
         prior = self._db.execute(
             "SELECT value, seq FROM profile_terminals WHERE id = ?", (key,)).fetchone()
         if prior is not None:
             if prior != (encoded, row.seq):
                 raise FeedError("profile terminal identity was reused with different bytes")
-            return
+            return True
         count = self._db.execute("SELECT count(*) FROM profile_terminals").fetchone()[0]
         if count >= self.max_projection_entries:
             raise FeedProjectionPending(
                 "unjoined profile terminal capacity exhausted; source cursor remains before event")
         self._set_derived_row(
             "profile_terminals", (key,), (key, encoded, row.seq))
+        return True
 
     @staticmethod
     def _profile_terminal_ref(envelope: Mapping[str, Any]) -> str | None:
@@ -1169,13 +1170,13 @@ class EvidenceFeed:
         return "lifecycle:" + _digest(body)
 
     def _release_failed_profile_terminal(
-            self, row: journal_module.JournalEntry, *, replay: bool) -> None:
+            self, row: journal_module.JournalEntry, *, replay: bool) -> bool:
         payload = row.payload
         if self.profile_adapter is None or payload.get("outcome") != "failed":
-            return
+            return False
         references = payload.get("terminal_refs")
         if not isinstance(references, list) or not references:
-            return
+            return False
         released = 0
         for key, encoded in self._db.execute(
                 "SELECT id, value FROM profile_terminals").fetchall():
@@ -1197,6 +1198,7 @@ class EvidenceFeed:
                 row.event_id,
                 f"released {released} profile terminal after exact failed driver settlement",
                 replay=replay)
+        return bool(released)
 
     def _process_profile(self, row: journal_module.JournalEntry, *, replay: bool) -> None:
         if self.profile_adapter is None:
@@ -1311,12 +1313,14 @@ class EvidenceFeed:
             if row.kind == journal_module.KIND_PLANNED_SERVING_ARM_CAPTURED:
                 self._process_measurement(row, replay=replay)
             elif row.kind == journal_module.KIND_WORKER_LIFECYCLE:
-                self._remember_profile_terminal(row)
+                if not self._remember_profile_terminal(row):
+                    self._diagnose(row.event_id, "operational_zero_tuple", replay=replay)
             elif (row.kind == journal_module.KIND_ACTOR_PREPARATION
                   and row.payload.get("event") == "PROFILE_VERIFIED"):
                 self._process_profile(row, replay=replay)
             elif row.kind == journal_module.KIND_UNIFIED_DRIVER_SETTLED:
-                self._release_failed_profile_terminal(row, replay=replay)
+                if not self._release_failed_profile_terminal(row, replay=replay):
+                    self._diagnose(row.event_id, "operational_zero_tuple", replay=replay)
             elif row.kind in {journal_module.KIND_SUPERSEDED,
                               journal_module.KIND_RETRIEVAL_SUPERSEDED}:
                 self._invalidate_source_target(row, replay=replay)

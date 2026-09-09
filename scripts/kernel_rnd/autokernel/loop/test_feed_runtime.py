@@ -515,11 +515,11 @@ def inspect_publication(frame, event, value):
             publication_checks["publisher_snapshots"] += threading.current_thread().name == "campaign-snapshot-publisher"
         elif event == "return":
             publication_depth[ident] -= 1
-            if threading.current_thread().name == "campaign-snapshot-publisher":
-                (root / "publisher-observed").write_text("published")
             if isinstance(value, dict) and value.get("unified", {}).get("evidence", {}).get("data"):
                 row = value["unified"]["evidence"]
                 publication_checks["observed_frontiers"].append([row["observed_at"], row["data"]["projection_frontier"]])
+                if threading.current_thread().name == "campaign-snapshot-publisher":
+                    (root / "publisher-observed").write_text("published-evidence-frontier")
     if event == "c_call" and type(getattr(value, "__self__", None)).__module__ == "sqlite3":
         publication_checks["sqlite_reads" if publication_depth.get(ident, 0) else "outside_sqlite"] += 1
     if event == "call" and frame.f_code in artifact_codes and publication_depth.get(ident, 0):
