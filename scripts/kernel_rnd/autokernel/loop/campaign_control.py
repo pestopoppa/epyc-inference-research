@@ -21,7 +21,7 @@ from typing import Any, Callable, Mapping
 
 from .. import journal as journal_module, schemas
 from ..controller.discovery_supervisor_secure import (
-    RuntimeRoot, SecureRuntimeError, object_identity,
+    RuntimeRoot, SecureRuntimeError, object_identity, read_stable_fd,
 )
 from . import status
 from . import scheduling
@@ -36,6 +36,7 @@ SNAPSHOT_SCHEMA_V3 = "epyc.autokernel.campaign_snapshot.v3"
 UNIFIED_PROJECTION_SCHEMA = "epyc.autokernel.unified_campaign_projection.v1"
 DRIVER_SETTLEMENT_SCHEMA = "epyc.autokernel.unified_driver_settlement_request.v1"
 DRIVER_SETTLEMENT_RECEIPT_SCHEMA = "epyc.autokernel.unified_driver_settlement_receipt.v1"
+_MAX_WORKER_STDOUT_BYTES = 64 * 1024 * 1024
 SNAPSHOT_FILE = "campaign-snapshot.json"
 _CANDIDATE_REPLAYER_TOKEN = object()
 OPERATIONS = frozenset({"pause", "resume", "drain"})
@@ -1479,6 +1480,89 @@ class CampaignController:
             if self._worker_lifecycle is None:
                 raise ControlRefused("worker lifecycle is unavailable")
             return self._worker_lifecycle.trusted_held_claim_receipt(terminal)
+
+    def read_worker_stdout(
+            self, *, request_id: str, plan_digest: str, lineage_id: str,
+            stage_id: str, worker_id: str, worker_generation: int,
+            result_digest: str, max_bytes: int) -> bytes:
+        """Read one exact terminal's pinned private stdout without exposing a path."""
+        if (not isinstance(worker_id, str) or not worker_id
+                or not isinstance(worker_generation, int)
+                or isinstance(worker_generation, bool) or worker_generation < 1
+                or not isinstance(result_digest, str) or len(result_digest) != 64
+                or any(char not in "0123456789abcdef" for char in result_digest)
+                or not isinstance(max_bytes, int) or isinstance(max_bytes, bool)
+                or max_bytes < 1 or max_bytes > _MAX_WORKER_STDOUT_BYTES):
+            raise worker_lifecycle_module.LifecycleRefused(
+                "retained worker stdout request is invalid or exceeds its byte ceiling")
+        with self._mutex:
+            self._require_active_locked()
+            lifecycle = self._worker_lifecycle
+            runtime = self._runtime_root
+            lifetime = self._lifetime_token
+            if lifecycle is None or runtime is None or lifetime is None:
+                raise worker_lifecycle_module.LifecycleRefused(
+                    "retained worker stdout owner is unavailable")
+            terminal = lifecycle.terminal_for_request(
+                request_id=request_id, plan_digest=plan_digest,
+                lineage_id=lineage_id, stage_id=stage_id)
+            if (terminal is None
+                    or terminal.worker_id != worker_id
+                    or terminal.worker_generation != worker_generation
+                    or terminal.result_digest != result_digest):
+                raise worker_lifecycle_module.LifecycleRefused(
+                    "retained worker stdout terminal/result identity differs")
+            pinned_identity = dict(lifecycle.stdout_identity_for_terminal(terminal))
+            pinned_proof = dict(lifecycle.stdout_proof_for_terminal(terminal))
+            if pinned_proof["stdout_truncated"]:
+                raise worker_lifecycle_module.LifecycleRefused(
+                    "retained worker stdout was truncated")
+
+        leaf = lifecycle.stdout_leaf(worker_id, worker_generation)
+        fd = -1
+        try:
+            runtime.verify()
+            fd = runtime.open_leaf(leaf, os.O_RDONLY | os.O_NONBLOCK)
+            fcntl.flock(fd, fcntl.LOCK_SH | fcntl.LOCK_NB)
+            raw, observed_identity = read_stable_fd(
+                fd, limit=max_bytes, require_owned=True, require_single_link=True)
+            named = os.stat(leaf, dir_fd=runtime.fd, follow_symlinks=False)
+            if (not stat.S_ISREG(named.st_mode)
+                    or stat.S_IMODE(named.st_mode) != 0o600
+                    or observed_identity != pinned_identity
+                    or object_identity(named) != observed_identity):
+                raise SecureRuntimeError("retained worker stdout object was replaced")
+            runtime.verify()
+        except (OSError, SecureRuntimeError) as exc:
+            raise worker_lifecycle_module.LifecycleRefused(
+                "retained worker stdout is unavailable, oversized, or replaced") from exc
+        finally:
+            if fd >= 0:
+                os.close(fd)
+
+        if (len(raw) != pinned_proof["stdout_bytes"]
+                or hashlib.sha256(raw).hexdigest() != pinned_proof["stdout_sha256"]):
+            raise worker_lifecycle_module.LifecycleRefused(
+                "retained worker stdout content differs from authenticated outcome")
+
+        with self._mutex:
+            self._require_active_locked()
+            if (self._lifetime_token is not lifetime
+                    or self._worker_lifecycle is not lifecycle
+                    or self._runtime_root is not runtime):
+                raise worker_lifecycle_module.LifecycleRefused(
+                    "retained worker stdout owner changed during read")
+            current = lifecycle.terminal_for_request(
+                request_id=request_id, plan_digest=plan_digest,
+                lineage_id=lineage_id, stage_id=stage_id)
+            if (current != terminal
+                    or dict(lifecycle.stdout_identity_for_terminal(current))
+                       != pinned_identity
+                    or dict(lifecycle.stdout_proof_for_terminal(current))
+                       != pinned_proof):
+                raise worker_lifecycle_module.LifecycleRefused(
+                    "retained worker stdout terminal changed during read")
+        return raw
 
     def worker_attempt_status(self, *, request_id: str, plan_digest: str,
                               lineage_id: str, stage_id: str) -> str:

@@ -41,6 +41,15 @@ generation, stale binding, uncertain terminal publication, or missing held recei
 remains an explicit reconciliation failure. Replay alone does not restore live
 provider or result authority.
 
+`CampaignController.read_worker_stdout()` exposes bounded bytes for an exact current
+request/plan/lineage/stage/worker/generation/result binding, never a path or runtime
+handle. It checks the terminal-time private file identity and the bootstrap's recorded
+stdout length and SHA-256; truncated output is unavailable. Reads and hashing occur
+outside the controller mutex, followed by a current-owner recheck. Lock contention,
+missing/replaced/nonregular files, and same-inode content changes refuse. Optional
+stdout identity capture failure does not erase the durable terminal or provider-held
+cost. This is output integrity, not authority for an actor's proposed changes.
+
 A controller refusal or `WaitingAuthority` is retryable only from an exact
 current-lifetime pre-engine refusal or a durable, binding-matched provider denial.
 Empty projections and unseen or prior-incarnation requests are not proof.

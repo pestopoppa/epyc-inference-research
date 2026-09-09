@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import fcntl
 import os
 import json
 from pathlib import Path
@@ -16,7 +17,7 @@ from . import campaign_control as control
 from . import campaign_service as service
 from . import worker_lifecycle as lifecycle
 from .test_campaign_control import _command, _resolved
-from .test_worker_lifecycle import MockProvider
+from .test_worker_lifecycle import MockProvider, ReceiptProvider
 
 
 def _request(root: Path, revision: int, code: str) -> lifecycle.StageRequest:
@@ -289,6 +290,252 @@ def test_denied_attempt_generation_gap_replays_before_next_success(tmp_path):
         fourth = recovered.run_worker_stage(replace(
             _request(tmp_path, 1, "pass"), request_id="fourth-attempt"))
         assert fourth.worker_generation == third.worker_generation + 1
+
+
+def test_controller_reads_only_exact_pinned_terminal_stdout(tmp_path):
+    resolved = _resolved("campaign-v2-stdout")
+    provider = MockProvider(tmp_path / "containers")
+    (tmp_path / "containers").mkdir(mode=0o700)
+    controller = control.CampaignController(
+        resolved, tmp_path / "store", snapshot_version=2,
+        lifecycle_provider=provider, readiness_check=lambda: (True, None))
+    controller.__enter__()
+    try:
+        controller.apply_command(_command(resolved, "resume", "resume", 0))
+        request = replace(
+            _request(tmp_path, 1, "print('actor-json')"),
+            request_id="stdout-request", plan_digest="7" * 64,
+            lineage_id="stdout-lineage", stage_id="stdout-stage")
+        terminal = controller.run_worker_stage(request)
+        assert terminal.accepted and terminal.result_digest is not None
+        arguments = {
+            "request_id": request.request_id, "plan_digest": request.plan_digest,
+            "lineage_id": request.lineage_id, "stage_id": request.stage_id,
+            "worker_id": terminal.worker_id,
+            "worker_generation": terminal.worker_generation,
+            "result_digest": terminal.result_digest, "max_bytes": 4096,
+        }
+        assert controller.read_worker_stdout(**arguments) == b"actor-json\n"
+        with pytest.raises(lifecycle.LifecycleRefused, match="identity differs"):
+            controller.read_worker_stdout(**(arguments | {"result_digest": "8" * 64}))
+        with pytest.raises(lifecycle.LifecycleRefused, match="oversized"):
+            controller.read_worker_stdout(**(arguments | {"max_bytes": 1}))
+
+        leaf = lifecycle.WorkerLifecycle.stdout_leaf(
+            terminal.worker_id, terminal.worker_generation)
+        locked_fd = os.open(leaf, os.O_RDONLY, dir_fd=controller._runtime_root.fd)
+        try:
+            fcntl.flock(locked_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            started = time.monotonic()
+            with pytest.raises(lifecycle.LifecycleRefused, match="unavailable"):
+                controller.read_worker_stdout(**arguments)
+            assert time.monotonic() - started < 0.15
+        finally:
+            os.close(locked_fd)
+
+        stdout_path = tmp_path / "store" / leaf
+        with stdout_path.open("r+b") as stream:
+            stream.write(b"ACTOR-JSON\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        with pytest.raises(lifecycle.LifecycleRefused, match="content differs"):
+            controller.read_worker_stdout(**arguments)
+
+        replacement = tmp_path / "store" / "replacement.stdout"
+        replacement.write_bytes(b"actor-json\n")
+        replacement.chmod(0o600)
+        os.replace(replacement, tmp_path / "store" / leaf)
+        with pytest.raises(lifecycle.LifecycleRefused, match="replaced"):
+            controller.read_worker_stdout(**arguments)
+        (tmp_path / "store" / leaf).unlink()
+        os.mkfifo(tmp_path / "store" / leaf, mode=0o600)
+        started = time.monotonic()
+        with pytest.raises(lifecycle.LifecycleRefused, match="replaced"):
+            controller.read_worker_stdout(**arguments)
+        assert time.monotonic() - started < 0.15
+        (tmp_path / "store" / leaf).unlink()
+        (tmp_path / "store" / leaf).mkdir(mode=0o700)
+        with pytest.raises(lifecycle.LifecycleRefused, match="replaced"):
+            controller.read_worker_stdout(**arguments)
+        (tmp_path / "store" / leaf).rmdir()
+        with pytest.raises(lifecycle.LifecycleRefused, match="unavailable"):
+            controller.read_worker_stdout(**arguments)
+    finally:
+        controller.close()
+
+
+def test_controller_stdout_read_does_not_hold_mutex_and_close_fences_return(
+        tmp_path, monkeypatch):
+    resolved = _resolved("campaign-v2-stdout-close")
+    provider = MockProvider(tmp_path / "containers")
+    (tmp_path / "containers").mkdir(mode=0o700)
+    controller = control.CampaignController(
+        resolved, tmp_path / "store", snapshot_version=2,
+        lifecycle_provider=provider, readiness_check=lambda: (True, None))
+    controller.__enter__()
+    controller.apply_command(_command(resolved, "resume", "resume", 0))
+    request = replace(
+        _request(tmp_path, 1, "print('bounded')"),
+        request_id="stdout-close-request", plan_digest="8" * 64,
+        lineage_id="stdout-close-lineage", stage_id="stdout-close-stage")
+    terminal = controller.run_worker_stage(request)
+    assert terminal.result_digest is not None
+    entered, release = threading.Event(), threading.Event()
+    original = control.read_stable_fd
+
+    def blocked_read(*args, **kwargs):
+        entered.set()
+        assert release.wait(2)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(control, "read_stable_fd", blocked_read)
+    errors = []
+
+    def read():
+        try:
+            controller.read_worker_stdout(
+                request_id=request.request_id, plan_digest=request.plan_digest,
+                lineage_id=request.lineage_id, stage_id=request.stage_id,
+                worker_id=terminal.worker_id,
+                worker_generation=terminal.worker_generation,
+                result_digest=terminal.result_digest, max_bytes=4096)
+        except BaseException as exc:
+            errors.append(exc)
+
+    thread = threading.Thread(target=read)
+    try:
+        thread.start()
+        assert entered.wait(2)
+        started = time.monotonic()
+        controller.close()
+        assert time.monotonic() - started < 0.15
+        release.set()
+        thread.join(2)
+        assert not thread.is_alive()
+        assert len(errors) == 1
+        assert isinstance(errors[0], lifecycle.LifecycleRefused)
+    finally:
+        release.set()
+        thread.join(2)
+        controller.close()
+
+
+@pytest.mark.parametrize("failure", ["secure_open", "fstat"])
+def test_stdout_identity_capture_failure_preserves_terminal_and_held_cost(
+        tmp_path, monkeypatch, failure):
+    resolved = _resolved(f"campaign-v2-stdout-capture-{failure}")
+    provider = ReceiptProvider(tmp_path / "containers")
+    (tmp_path / "containers").mkdir(mode=0o700)
+    with control.CampaignController(
+            resolved, tmp_path / "store", snapshot_version=2,
+            lifecycle_provider=provider,
+            readiness_check=lambda: (True, None)) as controller:
+        controller.apply_command(_command(resolved, "resume", "resume", 0))
+        engine = controller._worker_lifecycle
+        request = replace(
+            _request(tmp_path, 1, "print('retained terminal')"),
+            request_id=f"stdout-capture-{failure}", plan_digest="a" * 64,
+            lineage_id="stdout-capture-lineage", stage_id="stdout-capture-stage")
+        if failure == "secure_open":
+            original_open = engine.runtime.open_leaf
+
+            def faulty_open(name, flags, mode=0o600):
+                if (name.endswith(".stdout.log")
+                        and flags & os.O_ACCMODE == os.O_RDONLY):
+                    raise lifecycle.SecureRuntimeError("fixture secure refusal")
+                return original_open(name, flags, mode)
+
+            monkeypatch.setattr(engine.runtime, "open_leaf", faulty_open)
+        else:
+            original_open = engine.runtime.open_leaf
+            original_fstat = lifecycle.os.fstat
+            targeted = {"fd": -1}
+
+            def tracked_open(name, flags, mode=0o600):
+                fd = original_open(name, flags, mode)
+                if (name.endswith(".stdout.log")
+                        and flags & os.O_ACCMODE == os.O_RDONLY):
+                    targeted["fd"] = fd
+                return fd
+
+            def faulty_fstat(fd):
+                if fd == targeted["fd"]:
+                    targeted["fd"] = -1
+                    raise OSError("fixture fstat refusal")
+                return original_fstat(fd)
+
+            monkeypatch.setattr(engine.runtime, "open_leaf", tracked_open)
+            monkeypatch.setattr(lifecycle.os, "fstat", faulty_fstat)
+        terminal = controller.run_worker_stage(request)
+        assert terminal.accepted and terminal.result_digest is not None
+        assert controller.worker_terminal_for_request(
+            request_id=request.request_id, plan_digest=request.plan_digest,
+            lineage_id=request.lineage_id, stage_id=request.stage_id) == terminal
+        assert controller.worker_held_claim_receipt(terminal).proposal_id == request.request_id
+        with pytest.raises(lifecycle.LifecycleRefused, match="unavailable"):
+            controller.read_worker_stdout(
+                request_id=request.request_id, plan_digest=request.plan_digest,
+                lineage_id=request.lineage_id, stage_id=request.stage_id,
+                worker_id=terminal.worker_id,
+                worker_generation=terminal.worker_generation,
+                result_digest=terminal.result_digest, max_bytes=4096)
+
+
+def test_truncated_stdout_is_not_available_as_authenticated_actor_output(tmp_path):
+    resolved = _resolved("campaign-v2-stdout-truncated")
+    provider = ReceiptProvider(tmp_path / "containers")
+    (tmp_path / "containers").mkdir(mode=0o700)
+    with control.CampaignController(
+            resolved, tmp_path / "store", snapshot_version=2,
+            lifecycle_provider=provider,
+            readiness_check=lambda: (True, None)) as controller:
+        controller.apply_command(_command(resolved, "resume", "resume", 0))
+        request = replace(
+            _request(tmp_path, 1, "import os; os.write(1, b'x' * 65537)"),
+            request_id="stdout-truncated-request", plan_digest="b" * 64,
+            lineage_id="stdout-truncated-lineage", stage_id="stdout-truncated-stage")
+        terminal = controller.run_worker_stage(request)
+        assert terminal.accepted and terminal.result_digest is not None
+        assert controller.worker_held_claim_receipt(terminal).proposal_id == request.request_id
+        with pytest.raises(lifecycle.LifecycleRefused, match="truncated"):
+            controller.read_worker_stdout(
+                request_id=request.request_id, plan_digest=request.plan_digest,
+                lineage_id=request.lineage_id, stage_id=request.stage_id,
+                worker_id=terminal.worker_id,
+                worker_generation=terminal.worker_generation,
+                result_digest=terminal.result_digest, max_bytes=65537)
+
+
+def test_missing_stdout_identity_does_not_erase_terminal_or_held_cost(
+        tmp_path, monkeypatch):
+    resolved = _resolved("campaign-v2-stdout-missing")
+    provider = ReceiptProvider(tmp_path / "containers")
+    (tmp_path / "containers").mkdir(mode=0o700)
+    with control.CampaignController(
+            resolved, tmp_path / "store", snapshot_version=2,
+            lifecycle_provider=provider,
+            readiness_check=lambda: (True, None)) as controller:
+        controller.apply_command(_command(resolved, "resume", "resume", 0))
+        engine = controller._worker_lifecycle
+        monkeypatch.setattr(engine, "_stdout_identity", lambda *_args: None)
+        request = replace(
+            _request(tmp_path, 1, "print('retained terminal')"),
+            request_id="stdout-missing-request", plan_digest="9" * 64,
+            lineage_id="stdout-missing-lineage", stage_id="stdout-missing-stage")
+        terminal = controller.run_worker_stage(request)
+        assert terminal.accepted and terminal.result_digest is not None
+        assert controller.worker_terminal_for_request(
+            request_id=request.request_id, plan_digest=request.plan_digest,
+            lineage_id=request.lineage_id, stage_id=request.stage_id) == terminal
+        held = controller.worker_held_claim_receipt(terminal)
+        assert held.proposal_id == request.request_id
+        with pytest.raises(lifecycle.LifecycleRefused, match="unavailable"):
+            controller.read_worker_stdout(
+                request_id=request.request_id, plan_digest=request.plan_digest,
+                lineage_id=request.lineage_id, stage_id=request.stage_id,
+                worker_id=terminal.worker_id,
+                worker_generation=terminal.worker_generation,
+                result_digest=terminal.result_digest, max_bytes=4096)
 
 
 def _capture_failure(target, callback, *args):
