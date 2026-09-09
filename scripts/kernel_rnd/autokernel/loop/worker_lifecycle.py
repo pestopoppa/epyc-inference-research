@@ -20,6 +20,7 @@ import signal
 import stat
 import subprocess
 import sys
+import threading
 import time
 import types
 from typing import Any, Callable, Mapping, Protocol, Sequence
@@ -36,6 +37,7 @@ from .worker_bootstrap import MAX_OUTCOME_BYTES, OUTCOME_SCHEMA, make_contract
 
 EVENT_SCHEMA = "epyc.autokernel.worker_lifecycle_event.v1"
 ACQUISITION_SCHEMA = "epyc.autokernel.worker_acquisition_transition.v1"
+ACTIVE_OBSERVATION_CLAIM_SCHEMA = "epyc.autokernel.active_observation_claim.v1"
 RESULT_SCHEMA = "epyc.autokernel.worker_terminal_result.v1"
 COMMAND_TRANSITION_SCHEMA = "epyc.autokernel.campaign_command_transition.v2"
 COMMAND_RESULT_SCHEMA = "epyc.autokernel.campaign_command_result.v2"
@@ -49,6 +51,7 @@ EXPENSIVE_STAGES = frozenset({
 })
 EVENTS = frozenset({
     "OWNED_LAUNCH_INTENT", "OWNED_CONTAINER_CREATED", "OWNED_CHILD_CAPTURED",
+    "OWNED_DESCENDANT_CAPTURED",
     "OWNED_EXEC_RELEASE_INTENT", "OWNED_EXEC_RELEASED", "WORKER_STAGE",
     "WORKER_RESULT_RETAINED", "OWNED_TEARDOWN_STARTED", "OWNED_TEARDOWN_FAILED",
     "OWNED_TERMINAL", "WORKER_RESULT_ACCEPTED", "WORKER_RESULT_STALE",
@@ -91,6 +94,14 @@ def _freeze_json(value: Any) -> Any:
         return types.MappingProxyType({key: _freeze_json(item) for key, item in value.items()})
     if isinstance(value, list):
         return tuple(_freeze_json(item) for item in value)
+    return value
+
+
+def _plain_json(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {key: _plain_json(item) for key, item in value.items()}
+    if isinstance(value, tuple):
+        return [_plain_json(item) for item in value]
     return value
 
 
@@ -420,6 +431,10 @@ class TrustedGrantProvider(Protocol):
                            container_identity: Mapping[str, Any] | None,
                            lifecycle_started_at: float, released_at: float,
                            deadline: float) -> TrustedHeldClaimReceipt: ...
+    def describe_active_observation_claim(
+            self, *, authorization: AuthorizedLaunch, request: StageRequest,
+            unit_id: str, process_generation_id: str,
+            deadline: float) -> Mapping[str, Any]: ...
 
 
 @dataclass(frozen=True)
@@ -566,6 +581,7 @@ def project_events(events: Sequence[Mapping[str, Any]]) -> LifecycleProjection:
     latest: dict[str, dict[str, Any]] = {}
     terminal: dict[str, dict[str, Any]] = {}
     ownership_terminal: set[str] = set()
+    descendants: dict[tuple[str, str, str, str], Mapping[str, Any]] = {}
     last_new_generation: int | None = None
     allowed = {
         "OWNED_LAUNCH_INTENT": {None},
@@ -608,6 +624,16 @@ def project_events(events: Sequence[Mapping[str, Any]]) -> LifecycleProjection:
             raise LifecycleRefused("worker_id was reused with another generation")
         generations[worker] = row["worker_generation"]
         event = row["event"]
+        if event == "OWNED_DESCENDANT_CAPTURED":
+            if states.get(worker) != "WORKER_STAGE":
+                raise LifecycleRefused(
+                    "owned descendant capture is outside the active worker stage")
+            key = (worker, row["data"]["unit_id"],
+                   row["data"]["process_generation_id"], row["data"]["fence_id"])
+            if key in descendants:
+                raise LifecycleRefused("owned descendant capture is duplicated")
+            descendants[key] = row
+            continue
         if event != "WORKER_UNRESOLVED" and states.get(worker) not in allowed[event]:
             raise LifecycleRefused(
                 f"worker lifecycle transition {states.get(worker)!r} -> {event!r} is invalid")
@@ -752,6 +778,35 @@ def _validate_event_data(event: str, supplied: Mapping[str, Any]) -> dict[str, A
             raise LifecycleRefused("captured container identity fields are invalid")
         _sha(data["contract_digest"], "contract_digest")
         data["process"], data["container"] = dict(process), dict(data["container"])
+        return data
+    if event == "OWNED_DESCENDANT_CAPTURED":
+        data = _exact_data(supplied, {"role", "unit_id", "process_generation_id",
+                                     "fence_id", "process", "container_identity",
+                                     "binding_digest"}, event)
+        if data["role"] != "planned-serving-server":
+            raise LifecycleRefused("owned descendant role is unsupported")
+        for name in ("unit_id", "process_generation_id", "fence_id"):
+            _text(data[name], f"owned descendant {name}")
+        process = data["process"]
+        if not isinstance(process, Mapping) or set(process) != {
+                "pid", "start_ticks", "boot_id"}:
+            raise LifecycleRefused("owned descendant process identity is not closed")
+        _positive(process["pid"], "owned descendant pid")
+        _positive(process["start_ticks"], "owned descendant start_ticks")
+        _text(process["boot_id"], "owned descendant boot_id")
+        container = data["container_identity"]
+        if (not isinstance(container, Mapping)
+                or set(container) != _CONTAINER_IDENTITY_FIELDS):
+            raise LifecycleRefused("owned descendant container identity is not closed")
+        if not isinstance(container["path"], str) or not Path(container["path"]).is_absolute():
+            raise LifecycleRefused("owned descendant container path is invalid")
+        if any(not isinstance(container[name], int) or isinstance(container[name], bool)
+               or container[name] < 0
+               for name in _CONTAINER_IDENTITY_FIELDS - {"path"}):
+            raise LifecycleRefused("owned descendant container identity fields are invalid")
+        _sha(data["binding_digest"], "owned descendant binding_digest")
+        data["process"] = dict(process)
+        data["container_identity"] = dict(container)
         return data
     if event in {"OWNED_EXEC_RELEASE_INTENT", "OWNED_EXEC_RELEASED"}:
         data = _exact_data(supplied, {"contract_digest"}, event)
@@ -1073,6 +1128,9 @@ class WorkerLifecycle:
         self._held_receipts: dict[tuple[str, int], TrustedHeldClaimReceipt] = {}
         self._stdout_identities: dict[tuple[str, int], dict[str, int]] = {}
         self._stdout_proofs: dict[tuple[str, int], dict[str, Any]] = {}
+        self._observation_lock = threading.Lock()
+        self._observation_context: dict[str, Any] | None = None
+        self._descendant_receipts: dict[tuple[str, str, str, int], Mapping[str, Any]] = {}
 
     def _register_terminal(self, terminal: TerminalWorker,
                            binding: CampaignBinding | None = None,
@@ -1117,7 +1175,8 @@ class WorkerLifecycle:
 
     def _emit(self, event: str, *, worker_id: str, worker_generation: int,
               request: StageRequest, grant: GrantReceipt, container_id: str,
-              data: Mapping[str, Any], event_binding: CampaignBinding | None = None) -> None:
+              data: Mapping[str, Any], event_binding: CampaignBinding | None = None
+              ) -> Mapping[str, Any]:
         binding = event_binding or self.binding
         row = validate_event({
             "schema": EVENT_SCHEMA, "event": event,
@@ -1135,6 +1194,200 @@ class WorkerLifecycle:
         })
         self.event_sink(row)
         self.fault_hook(event)
+        return _freeze_json(row)
+
+    @staticmethod
+    def _observation_start_matches(start: Any, context: Mapping[str, Any]) -> bool:
+        request = context["request"]
+        grant = context["grant"]
+        planned_child = context.get("planned_child")
+        container_identity = context["container_identity"]
+        return all((
+            getattr(start, "request_id", None) == request.request_id,
+            getattr(start, "plan_digest", None) == request.plan_digest,
+            getattr(start, "lineage_id", None) == request.lineage_id,
+            getattr(start, "stage_id", None) == request.stage_id,
+            getattr(start, "campaign_id", None) == context["binding"].campaign_id,
+            getattr(start, "config_digest", None) == context["binding"].config_digest,
+            getattr(start, "config_generation", None) == context["binding"].config_generation,
+            getattr(start, "supervisor_id", None) == context["binding"].supervisor_id,
+            getattr(start, "supervisor_incarnation", None)
+                == context["binding"].supervisor_incarnation,
+            getattr(start, "worker_id", None) == context["worker_id"],
+            getattr(start, "worker_generation", None) == context["worker_generation"],
+            getattr(start, "grant_id", None) == grant.grant_id,
+            getattr(start, "grant_generation", None) == grant.generation,
+            getattr(start, "container_id", None) == context["container_id"],
+            planned_child is not None,
+            getattr(start, "child_process", None) == planned_child,
+            dict(getattr(start, "cgroup_identity", {})) == dict(container_identity),
+            getattr(start, "clock_domain", None) == grant.clock_domain,
+        ))
+
+    def describe_active_observation_claim(
+            self, *, start: Any, unit_id: str, process_generation_id: str,
+            deadline: float) -> Mapping[str, Any]:
+        """Describe the already-held claim outside the lifecycle watchdog."""
+        _text(unit_id, "observation unit_id")
+        _text(process_generation_id, "observation process_generation_id")
+        deadline = _finite(deadline, "observation claim deadline", positive=True)
+        with self._observation_lock:
+            context = self._observation_context
+            if context is None or not self._observation_start_matches(start, context):
+                raise WaitingAuthority("observation claim owner is no longer current")
+            token = context["token"]
+            authorization = context["authorization"]
+            request = context["request"]
+            provider_deadline = min(deadline, context["deadline"])
+        if self.monotonic() >= provider_deadline:
+            raise WaitingAuthority("active observation claim deadline already expired")
+        describe = getattr(self.provider, "describe_active_observation_claim", None)
+        if not callable(describe):
+            raise WaitingAuthority("trusted active observation claim is unavailable")
+        try:
+            supplied = describe(
+                authorization=authorization, request=request, unit_id=unit_id,
+                process_generation_id=process_generation_id,
+                deadline=provider_deadline)
+        except BaseException as exc:
+            raise WaitingAuthority("trusted active observation claim is unavailable") from exc
+        returned_at = self.monotonic()
+        with self._observation_lock:
+            current = self._observation_context
+            if (returned_at > provider_deadline or current is None
+                    or current["token"] is not token
+                    or not self._observation_start_matches(start, current)):
+                raise WaitingAuthority("active observation claim returned late or stale")
+        fields = {"schema", "grant_id", "grant_generation", "container_id",
+                  "held_claim", "active_claim_ref", "claim_digest"}
+        if not isinstance(supplied, Mapping) or set(supplied) != fields:
+            raise WaitingAuthority("trusted active observation claim is malformed")
+        row = dict(supplied)
+        claim_digest = _sha(row.pop("claim_digest"), "active claim digest")
+        held = row.get("held_claim")
+        if (row.get("schema") != ACTIVE_OBSERVATION_CLAIM_SCHEMA
+                or row.get("grant_id") != authorization.grant.grant_id
+                or row.get("grant_generation") != authorization.grant.generation
+                or row.get("container_id") != authorization.container_id
+                or not isinstance(held, Mapping)
+                or set(held) != {"logical_cpus", "gpu_devices"}
+                or not isinstance(held["logical_cpus"], list)
+                or not held["logical_cpus"]
+                or any(not isinstance(item, int) or isinstance(item, bool) or item < 0
+                       for item in held["logical_cpus"])
+                or len(set(held["logical_cpus"])) != len(held["logical_cpus"])
+                or not isinstance(held["gpu_devices"], list)
+                or len(set(held["gpu_devices"])) != len(held["gpu_devices"])
+                or any(not isinstance(item, str) or not item.strip()
+                       for item in held["gpu_devices"])):
+            raise WaitingAuthority("trusted active observation claim is malformed")
+        _text(row["active_claim_ref"], "active_claim_ref")
+        row["held_claim"] = {"logical_cpus": sorted(held["logical_cpus"]),
+                             "gpu_devices": sorted(held["gpu_devices"])}
+        if _digest(row) != claim_digest:
+            raise WaitingAuthority("trusted active observation claim digest differs")
+        return _freeze_json({**row, "claim_digest": claim_digest})
+
+    @staticmethod
+    def _is_descendant_process(identity: ProcessIdentity,
+                               ancestor: ProcessIdentity) -> bool:
+        current = identity
+        seen: set[int] = set()
+        for _ in range(256):
+            if current.pid in seen or current.boot_id != ancestor.boot_id:
+                return False
+            seen.add(current.pid)
+            try:
+                raw = Path(f"/proc/{current.pid}/stat").read_bytes()
+                opened = raw.find(b"(")
+                close = raw.rfind(b")")
+                fields = raw[close + 1:].split()
+                if (opened < 1 or close < opened or len(fields) < 20
+                        or int(raw[:opened].strip()) != current.pid
+                        or int(fields[19]) != current.start_ticks):
+                    return False
+                if current == ancestor:
+                    return identity != ancestor
+                parent_pid = int(fields[1])
+                if parent_pid < 1:
+                    return False
+                current = process_identity(parent_pid)
+            except (OSError, ValueError, LifecycleRefused):
+                return False
+        return False
+
+    def capture_owned_descendant(
+            self, *, start: Any, unit_id: str, process_generation_id: str,
+            fence_id: str, pid: int, binding_digest: str) -> Mapping[str, Any]:
+        """Capture and durably bind an actual serving descendant outside the watchdog."""
+        for value, label in ((unit_id, "unit_id"),
+                             (process_generation_id, "process_generation_id"),
+                             (fence_id, "fence_id")):
+            _text(value, f"owned descendant {label}")
+        _positive(pid, "owned descendant pid")
+        binding_digest = _sha(binding_digest, "owned descendant binding_digest")
+        with self._observation_lock:
+            context = self._observation_context
+            if (context is None or self.monotonic() >= context["deadline"]
+                    or not self._observation_start_matches(start, context)):
+                raise WaitingAuthority("owned descendant owner is no longer current")
+            key = (context["worker_id"], unit_id, process_generation_id, pid)
+            prior = self._descendant_receipts.get(key)
+            if prior is not None:
+                if (prior["fence_id"] != fence_id
+                        or prior["binding_digest"] != binding_digest):
+                    raise ContainmentFailure("owned descendant retry conflicts")
+                return prior
+            token = context
+            container = context["authorization"].container
+            container_identity = dict(context["container_identity"])
+            planned_child = context.get("planned_child")
+        captured = process_identity(pid)
+        _same_container(container, container_identity)
+        member = pid in container.pids()
+        descendant = (planned_child is not None
+                      and self._is_descendant_process(captured, planned_child))
+        # Repeat every external ownership fact immediately before the short
+        # current-owner transaction.  These proc/container reads remain outside
+        # the observation lock used by teardown/context clearing.
+        target_current = same_process(captured)
+        ancestor_current = planned_child is not None and same_process(planned_child)
+        descendant_current = (planned_child is not None
+                              and self._is_descendant_process(captured, planned_child))
+        _same_container(container, container_identity)
+        member_current = pid in container.pids()
+        with self._observation_lock:
+            context = self._observation_context
+            if (context is not token or self.monotonic() >= token["deadline"]
+                    or not self._observation_start_matches(start, token)):
+                raise WaitingAuthority("owned descendant owner changed during capture")
+            if (not descendant or not descendant_current or not member or not target_current
+                    or not ancestor_current or not member_current):
+                raise ContainmentFailure(
+                    "serving target is not an actual member descendant of its worker")
+            row = self._emit(
+                "OWNED_DESCENDANT_CAPTURED", worker_id=context["worker_id"],
+                worker_generation=context["worker_generation"],
+                request=context["request"], grant=context["grant"],
+                container_id=context["container_id"], data={
+                    "role": "planned-serving-server", "unit_id": unit_id,
+                    "process_generation_id": process_generation_id,
+                    "fence_id": fence_id, "process": captured.to_dict(),
+                    "container_identity": dict(context["container_identity"]),
+                    "binding_digest": binding_digest})
+            receipt = _freeze_json({
+                "pid": captured.pid, "start_ticks": captured.start_ticks,
+                "boot_id": captured.boot_id,
+                "worker_binding": {
+                    "worker_id": context["worker_id"],
+                    "worker_incarnation": context["worker_generation"],
+                    "grant_id": context["grant"].grant_id,
+                    "grant_generation": context["grant"].generation,
+                    "container_identity": dict(context["container_identity"])},
+                "binding_ref": _digest(_plain_json(row)), "fence_id": fence_id,
+                "binding_digest": binding_digest, "process": captured.to_dict()})
+            self._descendant_receipts[key] = receipt
+            return receipt
 
     def _emit_acquisition(self, phase: str, identity: ProspectiveAcquisitionIdentity,
                           *, deadline: float | None = None,
@@ -1438,15 +1691,36 @@ class WorkerLifecycle:
                        worker_generation=generation, request=request, grant=grant,
                        container_id=container_id,
                        data={"stage": request.stage, "activity_at": self.wall_clock()})
-            result = self._wait_outcome(
-                process, outcome_read, nonce, contract["contract_digest"], request,
-                authorization, grant,
-                min(overall_deadline - request.teardown_seconds,
-                    grant.deadline - request.teardown_seconds),
-                planned_invocation=planned_invocation,
-                container_identity=container_identity,
-                worker_id=worker_id, worker_generation=generation,
-                container_id=container_id)
+            observation_token = object()
+            with self._observation_lock:
+                if self._observation_context is not None:
+                    raise ContainmentFailure("observation owner overlaps another worker")
+                self._descendant_receipts.clear()
+                self._observation_context = {
+                    "token": observation_token, "binding": self.binding,
+                    "authorization": authorization, "request": request, "grant": grant,
+                    "worker_id": worker_id, "worker_generation": generation,
+                    "container_id": container_id, "captured": captured,
+                    "planned_child": None,
+                    "container_identity": dict(container_identity),
+                    "deadline": min(overall_deadline - request.teardown_seconds,
+                                    grant.deadline - request.teardown_seconds)}
+            try:
+                result = self._wait_outcome(
+                    process, outcome_read, nonce, contract["contract_digest"], request,
+                    authorization, grant,
+                    min(overall_deadline - request.teardown_seconds,
+                        grant.deadline - request.teardown_seconds),
+                    planned_invocation=planned_invocation,
+                    container_identity=container_identity,
+                    worker_id=worker_id, worker_generation=generation,
+                    container_id=container_id)
+            finally:
+                with self._observation_lock:
+                    if (self._observation_context is not None
+                            and self._observation_context["token"] is observation_token):
+                        self._observation_context = None
+                        self._descendant_receipts.clear()
             close_owned(outcome_read)
             outcome_read = None
             retained_digest = (planned_invocation.reference_digest
@@ -1674,6 +1948,14 @@ class WorkerLifecycle:
                                 dict(container_identity), held_grant.clock_domain,
                                 deadline)
                             planned_invocation.queue_start(start)
+                            with self._observation_lock:
+                                context = self._observation_context
+                                if (context is None
+                                        or context["worker_id"] != worker_id
+                                        or context["worker_generation"] != worker_generation):
+                                    raise LifecycleRefused(
+                                        "planned child observation owner is no longer current")
+                                context["planned_child"] = child
                         elif schema == "epyc.autokernel.planned_worker_unit_request.v1":
                             sequence, unit, _prior = \
                                 planned_invocation.validate_unit_request(message)
@@ -1702,6 +1984,12 @@ class WorkerLifecycle:
                             planned_invocation.handle_completion(message)
                         elif schema == "epyc.autokernel.planned_worker_continuation_request.v1":
                             planned_invocation.handle_continuation(message)
+                        elif schema == \
+                                "epyc.autokernel.planned_worker_observation_binding_request.v1":
+                            planned_invocation.handle_observation_binding(message)
+                        elif schema == \
+                                "epyc.autokernel.planned_worker_observation_target_request.v1":
+                            planned_invocation.handle_observation_target(message)
                         else:
                             raise LifecycleRefused("planned worker control schema is unsupported")
         try:
@@ -1854,6 +2142,24 @@ class WorkerLifecycle:
             self.binding.supervisor_incarnation, terminal.worker_id,
             terminal.worker_generation, terminal.grant_id, terminal.container_id,
             terminal.lineage_id, is_current, is_current)
+
+    def current_result_owner(self, *, worker_id: str, worker_generation: int,
+                             grant_id: str, container_id: str,
+                             lineage_id: str) \
+            -> tuple[TrustedWorkerResultFence, int]:
+        """Resolve one accepted in-memory terminal without provider or process I/O."""
+        key = (_text(worker_id, "worker_id"),
+               _positive(worker_generation, "worker_generation"))
+        terminal = self._terminals.get(key)
+        if (terminal is None or not terminal.accepted
+                or terminal.grant_id != _text(grant_id, "grant_id")
+                or terminal.container_id != _text(container_id, "container_id")
+                or terminal.lineage_id != _text(lineage_id, "lineage_id")):
+            raise LifecycleRefused("native capture has no exact accepted lifecycle result")
+        fence = self.trusted_result_fence(terminal)
+        if not fence.current or not fence.result_accepted:
+            raise LifecycleRefused("native capture lifecycle result is stale")
+        return fence, terminal.grant_generation
 
     def terminal_for_request(self, *, request_id: str, plan_digest: str,
                              lineage_id: str, stage_id: str) -> TerminalWorker | None:
@@ -2127,7 +2433,8 @@ class WorkerLifecycle:
             "planned-serving callback placement is not proven inside the owned worker")
 
 
-__all__ = ["ACQUISITION_SCHEMA", "AcquisitionProjection", "AuthorizationDenied",
+__all__ = ["ACQUISITION_SCHEMA", "ACTIVE_OBSERVATION_CLAIM_SCHEMA",
+           "AcquisitionProjection", "AuthorizationDenied",
            "AuthorizedLaunch", "CampaignBinding", "COMMAND_RESULT_FIELDS",
            "COMMAND_RESULT_SCHEMA", "COMMAND_TRANSITION_SCHEMA", "ContainmentFailure",
            "EVENTS", "EVENT_SCHEMA", "EXPENSIVE_STAGES", "GrantReceipt", "LifecycleRefused",

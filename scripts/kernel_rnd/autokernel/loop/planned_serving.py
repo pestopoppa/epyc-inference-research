@@ -17,6 +17,7 @@ from typing import Any, Protocol
 
 from .. import schemas
 from . import experiment_plan as ep
+from . import observation_binding as ob
 from . import resolved_recipe as rr
 from . import serving
 
@@ -24,6 +25,8 @@ from . import serving
 PROMPT_SCHEMA = "epyc.autokernel.frozen_prompt_manifest.v1"
 ARTIFACT_SCHEMA = "epyc.autokernel.planned_serving_artifact.v1"
 RUN_SCHEMA = "epyc.autokernel.planned_serving_run.v1"
+ARTIFACT_SCHEMA_V2 = "epyc.autokernel.planned_serving_artifact.v2"
+RUN_SCHEMA_V2 = "epyc.autokernel.planned_serving_run.v2"
 STAGES = ("setup", "load", "placement", "readback", "warmup", "request", "teardown")
 
 
@@ -53,6 +56,14 @@ def _freeze(value: Any) -> Any:
         return MappingProxyType({key: _freeze(item) for key, item in value.items()})
     if isinstance(value, (list, tuple)):
         return tuple(_freeze(item) for item in value)
+    return value
+
+
+def _plain(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {key: _plain(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_plain(item) for item in value]
     return value
 
 
@@ -210,6 +221,15 @@ class TrustedStageProvider(Protocol):
     def guard(self, fence: StageFence): ...
 
 
+class ObservationSessionFactory(Protocol):
+    """Child-side factory; authority resolution remains on the inherited socket."""
+
+    def create(self, *, unit: ep.UnitSpec, fence: StageFence,
+               recipe: rr.ResolvedRecipe) -> Any: ...
+
+    def finish_reference(self, *, unit: ep.UnitSpec, session: Any) -> Mapping[str, Any]: ...
+
+
 ArtifactSink = Callable[[Mapping[str, Any]], Any]
 Measure = Callable[..., float]
 ContinuationVerifier = Callable[
@@ -230,9 +250,10 @@ class PlannedServingRun:
     execution_complete: bool
     paused_reason: str | None
     capture_receipts: tuple[Mapping[str, Any], ...] = ()
+    lifecycle_observation_references: tuple[Mapping[str, Any], ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
-        return {"schema": self.schema, "plan_digest": self.plan_digest,
+        body = {"schema": self.schema, "plan_digest": self.plan_digest,
                 "prompt_manifest_digest": self.prompt_manifest_digest,
                 "lineage_id": self.lineage_id,
                 "anchor_identity": dict(self.anchor_identity),
@@ -243,6 +264,10 @@ class PlannedServingRun:
                 "execution_complete": self.execution_complete,
                 "paused_reason": self.paused_reason,
                 "capture_receipts": [dict(item) for item in self.capture_receipts]}
+        if self.schema == RUN_SCHEMA_V2:
+            body["lifecycle_observation_references"] = [
+                dict(item) for item in self.lifecycle_observation_references]
+        return body
 
 
 def _validated_fence(value: Any, spec: ep.UnitSpec, lineage_id: str,
@@ -314,9 +339,10 @@ def _dso_digest(recipe: rr.ResolvedRecipe) -> str:
                                   "sha256": item.sha256} for item in recipe.dsos])
 
 
-def arm_identity(template: serving.Recipe, recipe: rr.ResolvedRecipe) -> dict[str, Any]:
+def arm_identity(template: serving.Recipe, recipe: rr.ResolvedRecipe, *,
+                 loaded_instrument: Mapping[str, Any] | None = None) -> dict[str, Any]:
     """Canonical exact identity expected in an ExperimentPlan arm mapping."""
-    return {"backend": recipe.backend,
+    body = {"backend": recipe.backend,
             "template_hash": template.recipe_hash,
             "resolved_execution_digest": recipe.execution_digest,
             "resolved_snapshot_digest": recipe.snapshot_digest,
@@ -325,6 +351,17 @@ def arm_identity(template: serving.Recipe, recipe: rr.ResolvedRecipe) -> dict[st
             "drafter_digest": recipe.drafter.sha256 if recipe.drafter else None,
             "executable_digest": recipe.executable.sha256,
             "dso_set_digest": _dso_digest(recipe)}
+    if loaded_instrument is not None:
+        if not isinstance(loaded_instrument, Mapping):
+            raise PlannedServingError("loaded instrument reference must be an object")
+        body |= {"schema": "epyc.autokernel.serving_arm_identity.v2",
+                 "instrument_identity_sha256": _sha(
+                     loaded_instrument.get("identity_sha256"), "instrument identity"),
+                 "instrument_configuration_complete":
+                     loaded_instrument.get("configuration_complete")}
+        if not isinstance(body["instrument_configuration_complete"], bool):
+            raise PlannedServingError("instrument completeness must be boolean")
+    return body
 
 
 def _normalized_plan(plan: ep.ExperimentPlan) -> ep.ExperimentPlan:
@@ -366,7 +403,8 @@ def run_planned_comparison(plan: ep.ExperimentPlan, *,
                            measure: Measure = serving._measure_once,
                            previous_raws: Sequence[ep.RawUnit] = (),
                            previous_lineage_id: str | None = None,
-                           continuation_verifier: ContinuationVerifier | None = None) \
+                           continuation_verifier: ContinuationVerifier | None = None,
+                           observation_session_factory: ObservationSessionFactory | None = None) \
         -> PlannedServingRun:
     """Run exactly the plan's frozen unit order through fresh `_measure_once` launches."""
     plan = _normalized_plan(plan)
@@ -379,6 +417,15 @@ def run_planned_comparison(plan: ep.ExperimentPlan, *,
         raise TrustedStageProviderRequired("trusted stage-fence provider is not connected")
     if artifact_sink is None:
         raise PlannedServingError("explicit raw artifact sink is required")
+    v2 = plan.schema == ep.PLAN_SCHEMA_V2
+    if v2 and observation_session_factory is None:
+        raise TrustedStageProviderRequired(
+            "v2 lifecycle observation authority is not connected")
+    if not v2 and observation_session_factory is not None:
+        raise PlannedServingError("v1 execution cannot be relabelled with lifecycle evidence")
+    if v2 and previous_raws:
+        raise PlannedServingError(
+            "v2 continuation requires an original v2 observation reference")
     if previous_raws:
         if not plan.continuation_allowed:
             raise PlannedServingError("plan does not permit completed-unit continuation")
@@ -394,7 +441,8 @@ def run_planned_comparison(plan: ep.ExperimentPlan, *,
     actual_identities: dict[str, dict[str, Any]] = {}
     for arm, (template, recipe) in arms.items():
         recipe.validate_launch(template, recipe.build_dir, recipe.port)
-        actual_identities[arm] = arm_identity(template, recipe)
+        actual_identities[arm] = arm_identity(
+            template, recipe, loaded_instrument=plan.loaded_instrument if v2 else None)
         if expected_identities[arm] != actual_identities[arm]:
             raise PlannedServingError(f"{arm} resolved identity does not match frozen plan")
         if plan.metric != recipe.workload.metric:
@@ -445,6 +493,7 @@ def run_planned_comparison(plan: ep.ExperimentPlan, *,
         if not structurally_complete or verified is not True:
             raise PlannedServingError("previous unit is not eligible for exact continuation")
     paused_reason: str | None = None
+    lifecycle_references: list[Mapping[str, Any]] = []
     for spec in sorted(plan.expected_units, key=lambda item: item.order_index):
         template, recipe = arms[spec.arm]
         frozen_requests = requests_by_unit[spec.unit_id]
@@ -479,6 +528,10 @@ def run_planned_comparison(plan: ep.ExperimentPlan, *,
         if clock() >= fence.valid_until:
             raise PlannedServingError("stage fence expired before launch")
         observations: list[dict[str, Any]] = []
+        observation_session = None
+        if observation_session_factory is not None:
+            observation_session = observation_session_factory.create(
+                unit=spec, fence=fence, recipe=recipe)
         value: float | None = None
         error: str | None = None
         observed_started_at, observed_started = _wall_timestamp(
@@ -489,10 +542,13 @@ def run_planned_comparison(plan: ep.ExperimentPlan, *,
         try:
             with guard_factory(fence) as guard:
                 _validated_guard(guard, fence)
+                measure_kwargs = {"resolved_recipe": recipe,
+                                  "frozen_requests": frozen_requests,
+                                  "observation": observations}
+                if observation_session is not None:
+                    measure_kwargs["observation_session"] = observation_session
                 value = float(measure(template, recipe.build_dir, recipe.port,
-                                      resolved_recipe=recipe,
-                                      frozen_requests=frozen_requests,
-                                      observation=observations))
+                                      **measure_kwargs))
         except Exception as exc:
             if isinstance(exc, UnsupportedContainment):
                 raise
@@ -517,7 +573,28 @@ def run_planned_comparison(plan: ep.ExperimentPlan, *,
         if not isinstance(observation.get("requests"), list):
             error = error or "measurement observation requests must be a list"
             observation = dict(observation, requests=[])
-        native_body = {"schema": ARTIFACT_SCHEMA, "kind": "native_observation",
+        lifecycle_reference = None
+        if observation_session_factory is not None:
+            try:
+                lifecycle_reference = observation_session_factory.finish_reference(
+                    unit=spec, session=observation_session)
+            except Exception as exc:
+                error = error or f"lifecycle observation reference failed: {type(exc).__name__}: {exc}"
+            if not isinstance(lifecycle_reference, Mapping):
+                error = error or "lifecycle observation reference is unavailable"
+                lifecycle_reference = None
+            else:
+                try:
+                    normalized_reference = ob.LifecycleObservationReference.from_dict(
+                        lifecycle_reference)
+                    lifecycle_reference = normalized_reference.to_dict()
+                    if not normalized_reference.successor_permitted:
+                        error = error or "lifecycle observer shutdown is unresolved"
+                except Exception as exc:
+                    error = error or f"lifecycle observation reference invalid: {exc}"
+                    lifecycle_reference = None
+        artifact_schema = ARTIFACT_SCHEMA_V2 if v2 else ARTIFACT_SCHEMA
+        native_body = {"schema": artifact_schema, "kind": "native_observation",
                        "plan_digest": plan.digest, "unit_id": spec.unit_id,
                        "arm": spec.arm, "process_generation_id": spec.process_id,
                        "lineage_id": lineage_id, "fence_id": fence.fence_id,
@@ -533,6 +610,9 @@ def run_planned_comparison(plan: ep.ExperimentPlan, *,
                        "comparison_identities": actual_identities,
                        "observations": retained_observations,
                        "selected_observation": observation, "value": value, "error": error}
+        if v2:
+            native_body["lifecycle_observation"] = (
+                None if lifecycle_reference is None else _plain(lifecycle_reference))
         native_digest = schemas.content_hash(native_body)
         artifact_sink(_freeze(dict(native_body, artifact_digest=native_digest)))
         try:
@@ -568,7 +648,7 @@ def run_planned_comparison(plan: ep.ExperimentPlan, *,
         if screen != "clean" and reason is None:
             reason = completion.reason or "recorded screen was not clean"
         witnesses = dict(completion.stage_witnesses)
-        artifact_body = {"schema": ARTIFACT_SCHEMA, "kind": "completed_attempt",
+        artifact_body = {"schema": artifact_schema, "kind": "completed_attempt",
                          "plan_digest": plan.digest,
                          "unit_id": spec.unit_id, "arm": spec.arm,
                          "process_generation_id": spec.process_id,
@@ -590,8 +670,14 @@ def run_planned_comparison(plan: ep.ExperimentPlan, *,
                          "terminal": terminal, "value": value,
                          "provider_recorded_screen": original_screen,
                          "recorded_screen": screen, "reason": reason}
+        if v2:
+            artifact_body["lifecycle_observation_content_sha256"] = (
+                lifecycle_reference.get("observation_content_sha256")
+                if lifecycle_reference is not None else None)
         artifact_digest = schemas.content_hash(artifact_body)
         artifact_sink(_freeze(dict(artifact_body, artifact_digest=artifact_digest)))
+        if lifecycle_reference is not None:
+            lifecycle_references.append(_freeze(dict(lifecycle_reference)))
         if not terminal:
             paused_reason = reason or "unit did not complete"
             break
@@ -618,6 +704,8 @@ def run_planned_comparison(plan: ep.ExperimentPlan, *,
                 "admissible_view": view.to_dict(),
                 "execution_complete": view.complete,
                 "paused_reason": paused_reason,
+                **({"lifecycle_observation_references": [
+                    _plain(item) for item in lifecycle_references]} if v2 else {}),
             }))
         except Exception as exc:
             raise PlannedServingError("native measurement capture finalization failed") from exc
@@ -626,16 +714,19 @@ def run_planned_comparison(plan: ep.ExperimentPlan, *,
                 or any(not isinstance(item, Mapping) for item in finalized)):
             raise PlannedServingError("native measurement capture returned malformed receipts")
         capture_receipts = tuple(_freeze(dict(item)) for item in finalized)
-    return PlannedServingRun(RUN_SCHEMA, plan.digest, prompts.digest, lineage_id,
+    return PlannedServingRun(RUN_SCHEMA_V2 if v2 else RUN_SCHEMA,
+                             plan.digest, prompts.digest, lineage_id,
                              _freeze(actual_identities["anchor"]),
                              _freeze(actual_identities["candidate"]),
                              tuple(raws), view, "policy_undefined", view.complete,
-                             paused_reason, capture_receipts)
+                             paused_reason, capture_receipts,
+                             tuple(lifecycle_references))
 
 
-__all__ = ["ARTIFACT_SCHEMA", "PROMPT_SCHEMA", "RUN_SCHEMA", "FrozenPrompt",
+__all__ = ["ARTIFACT_SCHEMA", "ARTIFACT_SCHEMA_V2", "PROMPT_SCHEMA", "RUN_SCHEMA",
+           "RUN_SCHEMA_V2", "FrozenPrompt",
            "FrozenPromptManifest", "ExecutionGuard", "PlannedServingError",
            "PlannedServingRun", "STAGES", "StageCompletion", "StageFence", "StagePaused",
-           "TrustedStageProvider",
+           "TrustedStageProvider", "ObservationSessionFactory",
            "TrustedStageProviderRequired", "UnsupportedContainment", "arm_identity",
            "run_planned_comparison"]

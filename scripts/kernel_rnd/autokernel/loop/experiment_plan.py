@@ -16,6 +16,7 @@ from .. import schemas
 
 
 PLAN_SCHEMA = "epyc.autokernel.experiment_plan.v1"
+PLAN_SCHEMA_V2 = "epyc.autokernel.experiment_plan.v2"
 UNIT_SCHEMA = "epyc.autokernel.raw_unit.v1"
 VIEW_SCHEMA = "epyc.autokernel.admissible_unit_view.v1"
 CALIBRATION_SCHEMA = "epyc.autokernel.calibration_receipt.v1"
@@ -56,7 +57,7 @@ RECORD_PHASE = {
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
 __all__ = [
-    "PLAN_SCHEMA", "UNIT_SCHEMA", "VIEW_SCHEMA", "CALIBRATION_SCHEMA",
+    "PLAN_SCHEMA", "PLAN_SCHEMA_V2", "UNIT_SCHEMA", "VIEW_SCHEMA", "CALIBRATION_SCHEMA",
     "DISPOSITION_SCHEMA", "A2_PROTOCOL_REF",
     "PlanValidationError", "UnsupportedStoppingRule", "UnitSpec",
     "ExperimentPlan", "Witness", "RawUnit", "AdmissibleUnitView",
@@ -225,6 +226,7 @@ class ExperimentPlan:
     calibration_ref: str | None
     policy_snapshot: Mapping[str, Any]
     continuation_allowed: bool
+    loaded_instrument: Mapping[str, Any] | None = None
 
     FIELDS = {"schema", "plan_id", "campaign_id", "target_revision", "epoch",
               "instrument_class", "category", "phase", "protocol_ref",
@@ -234,13 +236,40 @@ class ExperimentPlan:
               "candidate_identity", "expected_units", "stopping",
               "required_witnesses", "calibration_ref", "policy_snapshot",
               "continuation_allowed"}
+    V2_FIELDS = FIELDS | {"loaded_instrument"}
 
     @classmethod
     def from_dict(cls, obj: Mapping[str, Any]) -> "ExperimentPlan":
-        _exact(obj, cls.FIELDS, "ExperimentPlan")
-        if obj["schema"] != PLAN_SCHEMA:
+        schema = obj.get("schema") if isinstance(obj, Mapping) else None
+        _exact(obj, cls.V2_FIELDS if schema == PLAN_SCHEMA_V2 else cls.FIELDS,
+               "ExperimentPlan")
+        if schema not in {PLAN_SCHEMA, PLAN_SCHEMA_V2}:
             raise PlanValidationError(
                 f"ExperimentPlan.schema: unsupported {obj['schema']!r}")
+        loaded_instrument = None
+        if schema == PLAN_SCHEMA_V2:
+            loaded = obj["loaded_instrument"]
+            _exact(loaded, {"schema", "identity_sha256", "configuration_complete",
+                            "artifact", "reference_digest"},
+                   "ExperimentPlan.loaded_instrument")
+            if loaded["schema"] != \
+                    "epyc.autokernel.loaded_serving_instrument_reference.v1":
+                raise PlanValidationError("ExperimentPlan.loaded_instrument schema is unsupported")
+            if not isinstance(loaded["configuration_complete"], bool):
+                raise PlanValidationError("loaded instrument completeness must be boolean")
+            _digest(loaded["identity_sha256"], "loaded instrument identity")
+            artifact = loaded["artifact"]
+            _exact(artifact, {"locator", "sha256", "verified"},
+                   "ExperimentPlan.loaded_instrument.artifact")
+            if artifact["verified"] is not True:
+                raise PlanValidationError("loaded instrument artifact must be verified")
+            _text(artifact["locator"], "loaded instrument locator")
+            _digest(artifact["sha256"], "loaded instrument artifact digest")
+            body = {key: loaded[key] for key in loaded if key != "reference_digest"}
+            if _digest(loaded["reference_digest"], "loaded instrument reference digest") \
+                    != schemas.content_hash(body):
+                raise PlanValidationError("loaded instrument reference digest mismatch")
+            loaded_instrument = _freeze(loaded, "ExperimentPlan.loaded_instrument")
         units_obj = obj["expected_units"]
         if not isinstance(units_obj, (list, tuple)):
             raise PlanValidationError("ExperimentPlan.expected_units: expected array")
@@ -336,8 +365,17 @@ class ExperimentPlan:
             raise PlanValidationError("ExperimentPlan.anchor_identity: non-empty object required")
         if not isinstance(candidate, Mapping) or not candidate:
             raise PlanValidationError("ExperimentPlan.candidate_identity: non-empty object required")
+        if schema == PLAN_SCHEMA_V2:
+            identity_digest = loaded_instrument["identity_sha256"]  # type: ignore[index]
+            complete = loaded_instrument["configuration_complete"]  # type: ignore[index]
+            for label, identity in (("anchor", anchor), ("candidate", candidate)):
+                if identity.get("schema") != "epyc.autokernel.serving_arm_identity.v2" \
+                        or identity.get("instrument_identity_sha256") != identity_digest \
+                        or identity.get("instrument_configuration_complete") is not complete:
+                    raise PlanValidationError(
+                        f"ExperimentPlan.{label}_identity does not bind loaded instrument")
         return cls(
-            schema=PLAN_SCHEMA,
+            schema=schema,
             plan_id=_text(obj["plan_id"], "ExperimentPlan.plan_id"),  # type: ignore[arg-type]
             campaign_id=_text(obj["campaign_id"], "ExperimentPlan.campaign_id"),  # type: ignore[arg-type]
             target_revision=_text(obj["target_revision"], "ExperimentPlan.target_revision"),  # type: ignore[arg-type]
@@ -372,10 +410,12 @@ class ExperimentPlan:
                                   "ExperimentPlan.calibration_ref", nullable=True),
             policy_snapshot=_freeze(policy, "ExperimentPlan.policy_snapshot"),
             continuation_allowed=obj["continuation_allowed"],
+            loaded_instrument=loaded_instrument,
         )
 
     def to_dict(self) -> dict[str, Any]:
-        return {name: (_thaw(getattr(self, name))) for name in self.FIELDS
+        fields = self.V2_FIELDS if self.schema == PLAN_SCHEMA_V2 else self.FIELDS
+        return {name: (_thaw(getattr(self, name))) for name in fields
                 if name != "expected_units"} | {
                     "expected_units": [item.to_dict() for item in self.expected_units]}
 

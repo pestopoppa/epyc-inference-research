@@ -1,5 +1,9 @@
 from dataclasses import FrozenInstanceError, replace
+import copy
 import math
+import subprocess
+import sys
+import types
 
 import pytest
 
@@ -98,6 +102,62 @@ def test_plan_round_trip_digest_and_immutable_inputs():
         plan.anchor_identity["source"] = "changed"
     with pytest.raises(FrozenInstanceError):
         plan.epoch = "later"
+
+
+def _v2_plan_dict():
+    source = plan_dict(instrument="serving")
+    instrument = {"schema": "epyc.autokernel.loaded_serving_instrument_reference.v1",
+                  "identity_sha256": "c" * 64, "configuration_complete": False,
+                  "artifact": {"locator": "instrument.json", "sha256": "d" * 64,
+                               "verified": True}}
+    from autokernel import schemas
+    instrument["reference_digest"] = schemas.content_hash(instrument)
+    source["schema"] = E.PLAN_SCHEMA_V2
+    source["loaded_instrument"] = instrument
+    for arm in ("anchor_identity", "candidate_identity"):
+        source[arm] |= {"schema": "epyc.autokernel.serving_arm_identity.v2",
+                        "instrument_identity_sha256": "c" * 64,
+                        "instrument_configuration_complete": False}
+    return source
+
+
+def test_v2_plan_round_trip_and_v1_reader_refuses_before_input_mutation():
+    source = _v2_plan_dict()
+    plan = E.ExperimentPlan.from_dict(source)
+    assert plan.schema == E.PLAN_SCHEMA_V2
+    assert plan.to_dict() == source
+
+    old_source = subprocess.run([
+        "git", "show",
+        "d75bc9ec129be0fff8dfb0e7b476d4ce86cb4455:scripts/kernel_rnd/autokernel/loop/experiment_plan.py"
+    ], check=True, capture_output=True, text=True).stdout
+    old = types.ModuleType("autokernel.loop._accepted_v1_experiment_plan")
+    old.__package__ = "autokernel.loop"
+    sys.modules[old.__name__] = old
+    try:
+        exec(compile(old_source, "accepted-v1-experiment-plan.py", "exec"), old.__dict__)
+    finally:
+        sys.modules.pop(old.__name__, None)
+    untouched = copy.deepcopy(source)
+    with pytest.raises(old.PlanValidationError):
+        old.ExperimentPlan.from_dict(source)
+    assert source == untouched
+    legacy = plan_dict()
+    assert old.ExperimentPlan.from_dict(legacy).to_dict() == \
+        E.ExperimentPlan.from_dict(legacy).to_dict()
+    assert old.ExperimentPlan.from_dict(legacy).digest == \
+        E.ExperimentPlan.from_dict(legacy).digest
+
+
+def test_v2_cannot_drop_or_relabel_loaded_identity():
+    source = _v2_plan_dict()
+    del source["loaded_instrument"]
+    with pytest.raises(E.PlanValidationError):
+        E.ExperimentPlan.from_dict(source)
+    continued_v1 = plan_dict()
+    continued_v1["loaded_instrument"] = _v2_plan_dict()["loaded_instrument"]
+    with pytest.raises(E.PlanValidationError):
+        E.ExperimentPlan.from_dict(continued_v1)
 
 
 @pytest.mark.parametrize("mutation", [
