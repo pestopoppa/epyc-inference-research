@@ -8,6 +8,7 @@ import pytest
 
 from .. import schemas
 from . import experiment_plan as ep
+from . import measurement_capture as mc
 from . import planned_serving as ps
 from . import serving
 from .test_experiment_plan import plan_dict
@@ -85,7 +86,9 @@ class Provider:
                                 fence.process_generation_id, fence.lineage_id,
                                 fence.grant_id, fence.container_id, True, True)
 
-    def complete(self, fence, observation):
+    def complete(self, fence, observation, *, native_observation=None):
+        if native_observation is not None:
+            assert set(native_observation) == {"locator", "sha256", "verified"}
         return ps.StageCompletion(fence.fence_id, self.terminal,
                                   {"identity": ep.Witness("pass", f"id:{fence.unit_id}"),
                                    "teardown": ep.Witness("pass", f"td:{fence.unit_id}")},
@@ -132,7 +135,7 @@ def test_cpu_runtime_recipes_share_binary_consume_exact_order_and_prompt_bytes()
     assert calls[0][3][0] == ("p1", prompts.prompts[0].body)
 
 
-def test_v2_requires_factory_and_carries_one_reference_per_actual_unit():
+def test_v2_requires_factory_and_carries_one_reference_per_actual_unit(tmp_path):
     at, ct, anchor, candidate = _recipes()
     plan, prompts = _v2_plan(at, ct, anchor, candidate), _prompts(at)
     kwargs = dict(plan=plan, anchor_template=at, candidate_template=ct,
@@ -169,8 +172,15 @@ def test_v2_requires_factory_and_carries_one_reference_per_actual_unit():
             return {**body, "reference_digest": schemas.content_hash(body)}
 
     factory, artifacts = Factory(), []
-    kwargs["artifact_sink"] = artifacts.append
-    result = ps.run_planned_comparison(**kwargs, observation_session_factory=factory)
+    store = mc.ArtifactStore(tmp_path / "artifacts")
+    def sink(artifact):
+        artifacts.append(artifact)
+        return store.write(f"raw:{artifact['artifact_digest']}", artifact).to_dict()
+    kwargs["artifact_sink"] = sink
+    try:
+        result = ps.run_planned_comparison(**kwargs, observation_session_factory=factory)
+    finally:
+        store.close()
     assert result.schema == ps.RUN_SCHEMA_V2
     assert len(result.lifecycle_observation_references) == 2
     assert all(row["schema"] == ps.ARTIFACT_SCHEMA_V2 for row in artifacts)
@@ -178,7 +188,7 @@ def test_v2_requires_factory_and_carries_one_reference_per_actual_unit():
         "native_observation", "completed_attempt", "native_observation", "completed_attempt"]
 
 
-def test_v2_unresolved_observer_fences_successor_unit():
+def test_v2_unresolved_observer_fences_successor_unit(tmp_path):
     at, ct, anchor, candidate = _recipes()
     plan, prompts = _v2_plan(at, ct, anchor, candidate), _prompts(at)
 
@@ -202,11 +212,17 @@ def test_v2_unresolved_observer_fences_successor_unit():
             return {**body, "reference_digest": schemas.content_hash(body)}
 
     calls = []
-    result = ps.run_planned_comparison(
-        plan, anchor_template=at, candidate_template=ct, anchor_recipe=anchor,
-        candidate_recipe=candidate, prompts=prompts, stage_provider=Provider(),
-        artifact_sink=lambda _: None, lineage_id="lineage-1", clock=lambda: 1.0,
-        measure=_measure(calls), observation_session_factory=UnresolvedFactory())
+    store = mc.ArtifactStore(tmp_path / "artifacts")
+    try:
+        result = ps.run_planned_comparison(
+            plan, anchor_template=at, candidate_template=ct, anchor_recipe=anchor,
+            candidate_recipe=candidate, prompts=prompts, stage_provider=Provider(),
+            artifact_sink=lambda artifact: store.write(
+                f"raw:{artifact['artifact_digest']}", artifact).to_dict(),
+            lineage_id="lineage-1", clock=lambda: 1.0,
+            measure=_measure(calls), observation_session_factory=UnresolvedFactory())
+    finally:
+        store.close()
     assert len(calls) == 1
     assert not result.execution_complete
     assert result.paused_reason == "lifecycle observer shutdown is unresolved"

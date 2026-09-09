@@ -10,6 +10,7 @@ from __future__ import annotations
 import copy
 import queue
 import threading
+from contextlib import nullcontext
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, Mapping
@@ -93,6 +94,7 @@ class UnknownParentEvidenceProducer:
         self._bindings: dict[tuple[str, int, str, str, str],
                              ob.ObservationUnitBinding] = {}
         self._targets: dict[tuple[str, int, str, str, str], Mapping[str, Any]] = {}
+        self._claims: dict[tuple[str, int, str, str, str], Mapping[str, Any]] = {}
         self._stop = threading.Event()
         self._errors: list[BaseException] = []
         self._thread = threading.Thread(target=self._run, name="autokernel-parent-evidence",
@@ -121,6 +123,29 @@ class UnknownParentEvidenceProducer:
                 "observation target retry conflicts with prior authority")
         self._targets[binding_key] = target
 
+    def _artifact_completion_for(self, notice: Mapping[str, Any]) -> ps.StageCompletion:
+        """Default still grants no warrant; even its v2 input must be an actual artifact."""
+        packet = notice["request"]
+        ref = unified_worker._native_reference(packet["native_observation"])
+        store = mc.ArtifactStore(self.prepared.artifact_root)
+        try:
+            native = store.read(ref["locator"], ref["sha256"])
+            native_digest = native["artifact_digest"]
+            if native_digest != unified_worker._digest({
+                    key: value for key, value in native.items() if key != "artifact_digest"}):
+                raise DriverExecutionRefused("native completion artifact digest differs")
+            store.verify(f"raw:{native_digest}", native)
+            observation = native["selected_observation"]
+            if not isinstance(observation, Mapping):
+                raise DriverExecutionRefused("native completion observation is malformed")
+            return self._completion_for(notice["fence"], observation)
+        finally:
+            store.close()
+
+    def _phase_for(self, notice: Mapping[str, Any]) -> Mapping[str, Any]:
+        del notice
+        return {"outcome": "unavailable"}
+
     def _run(self) -> None:
         while not self._stop.is_set():
             try:
@@ -138,6 +163,15 @@ class UnknownParentEvidenceProducer:
                         raise DriverExecutionRefused("completion notice is malformed")
                     self.authority.publish_completion(
                         key, self._completion_for(fence, observation))
+                elif kind == "artifact_completion":
+                    if (not isinstance(key, str)
+                            or not isinstance(notice.get("request"), Mapping)):
+                        raise DriverExecutionRefused("artifact completion notice is malformed")
+                    self.authority.publish_completion(key, self._artifact_completion_for(notice))
+                elif kind == "observation_phase":
+                    if not isinstance(key, str):
+                        raise DriverExecutionRefused("observation phase notice is malformed")
+                    self.authority.publish_observation_phase(key, self._phase_for(notice))
                 elif kind == "continuation":
                     if not isinstance(key, str):
                         raise DriverExecutionRefused("continuation notice is malformed")
@@ -211,6 +245,10 @@ class UnknownParentEvidenceProducer:
                         raise DriverExecutionRefused(
                             "observation binding retry conflicts with prior authority")
                     self._bindings[binding_key] = binding
+                    prior_claim = self._claims.get(binding_key)
+                    if prior_claim is not None and prior_claim != claim:
+                        raise DriverExecutionRefused("observation claim retry conflicts")
+                    self._claims[binding_key] = claim
                     self.authority.publish_observation_binding(key, binding)
                 elif kind == "observation_target":
                     start = notice.get("start")
@@ -441,7 +479,8 @@ class UnifiedDriverExecution:
                  controller: Any,
                  observation_verifiers: ob.ParentObservationVerifiers =
                  ob.ParentObservationVerifiers(),
-                 observation_configuration: ob.ParentObservationConfiguration | None = None
+                 observation_configuration: ob.ParentObservationConfiguration | None = None,
+                 native_evidence_configuration: Any | None = None
                  ) -> None:
         if (not isinstance(driver, unified_driver.UnifiedCampaignDriver)
                 or not isinstance(controller, campaign_control.CampaignController)):
@@ -467,6 +506,16 @@ class UnifiedDriverExecution:
         self._active_fence: nc.TrustedWorkerResultFence | None = None
         self._observation_verifiers = observation_verifiers
         self._observation_configuration = observation_configuration
+        if native_evidence_configuration is not None:
+            from .native_parent_service import NativeFactualEvidenceConfiguration
+            from .native_parent_receipt_replay import NativeParentReceiptReplayer
+            if type(native_evidence_configuration) is not NativeFactualEvidenceConfiguration:
+                raise DriverExecutionRefused("native factual evidence configuration is untyped")
+            self._parent_receipt_replayer = NativeParentReceiptReplayer()
+        else:
+            self._parent_receipt_replayer = None
+        self._native_evidence_configuration = native_evidence_configuration
+        self._parent_evidence_registries: dict[str, Any] = {}
         self._lock = threading.RLock()
         self._closed = False
         self._admission_closed = False
@@ -541,7 +590,8 @@ class UnifiedDriverExecution:
                 base["supervisor_id"], base["supervisor_incarnation"]),
             store=self._capture_store,
             fence_provider=lambda _measurement_id, _context: self._active_fence,
-            observation_verifiers=self._observation_verifiers)
+            observation_verifiers=self._observation_verifiers,
+            parent_receipt_replayer=self._parent_receipt_replayer)
         try:
             self.controller.register_native_capture(validator)
         except Exception:
@@ -597,6 +647,9 @@ class UnifiedDriverExecution:
         if self._successor_fence is not None:
             raise DriverExecutionUncertain(self._successor_fence)
         prepared = self.driver.materialize_runtime(outcome)
+        if (self._native_evidence_configuration is not None
+                and prepared.schema != unified_worker.PREPARED_SCHEMA_V2):
+            raise DriverExecutionRefused("native factual evidence requires an already-issued v2 plan")
         if prepared.schema == unified_worker.PREPARED_SCHEMA_V2:
             lifecycle = getattr(self.controller, "_worker_lifecycle", None)
             provider = getattr(self.controller, "_lifecycle_provider", None)
@@ -613,12 +666,25 @@ class UnifiedDriverExecution:
         if catalog is None:
             raise DriverExecutionRefused("driver no longer owns the issued catalog")
         readiness = self.controller.unified_driver_readiness()
-        authority = unified_worker.ParentUnitEvidenceAuthority(
-            max_records=max(8, len(prepared.plan.expected_units) * 2))
-        producer = UnknownParentEvidenceProducer(
-            authority, prepared,
-            getattr(self.controller, "_worker_lifecycle", None),
-            self._observation_configuration)
+        records_per_unit = 4 if prepared.schema == unified_worker.PREPARED_SCHEMA_V2 else 2
+        record_capacity = max(8, len(prepared.plan.expected_units) * records_per_unit)
+        if record_capacity > 1024:
+            raise DriverExecutionRefused("prepared parent notices exceed the fixed evidence cache bound")
+        authority = unified_worker.ParentUnitEvidenceAuthority(max_records=record_capacity)
+        if self._native_evidence_configuration is None:
+            producer = UnknownParentEvidenceProducer(
+                authority, prepared,
+                getattr(self.controller, "_worker_lifecycle", None),
+                self._observation_configuration)
+        else:
+            from .native_parent_service import NativeParentEvidenceService
+            from .native_parent_receipt_replay import IssuedNativeEvidenceRegistry
+            registry = IssuedNativeEvidenceRegistry(
+                artifact_root=prepared.artifact_root, max_units=len(prepared.plan.expected_units))
+            producer = NativeParentEvidenceService(
+                authority, prepared, self.controller._worker_lifecycle,
+                self._observation_configuration, registry=registry)
+            self._parent_evidence_registries[transition_id] = registry
         invocation = unified_worker.PlannedWorkerInvocation.open(prepared, authority)
         request_id = selection.proposal.proposal_id
         try:
@@ -726,15 +792,20 @@ class UnifiedDriverExecution:
                 (None if attempt.reference is None else attempt.reference.to_dict()), (),
                 request, settlement)
             self._receipts[attempt.transition_id] = receipt
+            self._parent_evidence_registries.pop(attempt.transition_id, None)
             return receipt
         self._install_capture_validator(attempt.prepared)
         self._active_fence = attempt.fence
         try:
-            with self.controller.native_capture_callback() as capture:
-                entries = unified_worker.ingest_deferred_result(
-                    attempt.reference, prepared=attempt.prepared, start=attempt.start,
-                    terminal=attempt.terminal, fence=attempt.fence,
-                    capture_transaction=capture)
+            registry = self._parent_evidence_registries.get(attempt.transition_id)
+            scope = (self._parent_receipt_replayer.using(registry)
+                     if self._parent_receipt_replayer is not None else nullcontext())
+            with scope:
+                with self.controller.native_capture_callback() as capture:
+                    entries = unified_worker.ingest_deferred_result(
+                        attempt.reference, prepared=attempt.prepared, start=attempt.start,
+                        terminal=attempt.terminal, fence=attempt.fence,
+                        capture_transaction=capture)
         finally:
             self._active_fence = None
         measurement_ids = tuple(entry.record_id for entry in entries)
@@ -762,6 +833,7 @@ class UnifiedDriverExecution:
             _terminal_body(attempt.terminal), attempt.reference.to_dict(), measurement_ids,
             request, settlement)
         self._receipts[attempt.transition_id] = receipt
+        self._parent_evidence_registries.pop(attempt.transition_id, None)
         return receipt
 
     @staticmethod

@@ -150,7 +150,9 @@ class Authority:
             f"fence-{sequence}", 10.0, "grant-1", 4,
             "epyc-autokernel-test", allowed, "paused by parent" if not allowed else "held")
 
-    def complete(self, *, sequence, fence, observation):
+    def complete(self, *, sequence, fence, observation, native_observation=None):
+        if native_observation is not None:
+            assert set(native_observation) == {"locator", "sha256", "verified"}
         return ps.StageCompletion(fence.fence_id, True, {
             name: ep.Witness("pass", f"{name}:{sequence}") for name in
             ("native-capture-v1", "identity", "teardown", "contention", "placement",
@@ -477,6 +479,13 @@ def test_v2_direct_worker_uses_concrete_observer_factory_and_result_envelope(tmp
     _write_process(proc, 101, start=999, ticks=1)
 
     class ObservedAuthority(Authority):
+        def observation_phase(self, *, sequence, unit, fence, binding, target,
+                              phase, boundary_monotonic_s):
+            assert phase == "health" and sequence == unit.order_index + 1
+            assert binding.fence_id == fence.fence_id and target["pid"] == 101
+            assert boundary_monotonic_s > 0
+            return {"outcome": "unavailable"}
+
         def admit(self, *, sequence, plan_digest, unit, prior_completion_digest):
             del plan_digest, prior_completion_digest
             return uw.UnitPermit(

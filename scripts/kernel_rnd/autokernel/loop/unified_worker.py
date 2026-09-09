@@ -71,7 +71,13 @@ START_SCHEMA = "epyc.autokernel.planned_worker_start.v1"
 UNIT_REQUEST_SCHEMA = "epyc.autokernel.planned_worker_unit_request.v1"
 UNIT_PERMIT_SCHEMA = "epyc.autokernel.planned_worker_unit_permit.v1"
 UNIT_COMPLETION_REQUEST_SCHEMA = "epyc.autokernel.planned_worker_unit_completion_request.v1"
+UNIT_COMPLETION_REQUEST_SCHEMA_V2 = "epyc.autokernel.planned_worker_unit_completion_request.v2"
 UNIT_COMPLETION_SCHEMA = "epyc.autokernel.planned_worker_unit_completion.v1"
+UNIT_CHAIN_SCHEMA_V2 = "epyc.autokernel.planned_worker_unit_chain.v2"
+OBSERVATION_PHASE_REQUEST_SCHEMA = \
+    "epyc.autokernel.planned_worker_observation_phase_request.v1"
+OBSERVATION_PHASE_ACK_SCHEMA = \
+    "epyc.autokernel.planned_worker_observation_phase_ack.v1"
 CONTINUATION_REQUEST_SCHEMA = "epyc.autokernel.planned_worker_continuation_request.v1"
 CONTINUATION_SCHEMA = "epyc.autokernel.planned_worker_continuation.v1"
 OBSERVATION_BINDING_REQUEST_SCHEMA = \
@@ -91,6 +97,39 @@ MAX_RESULT_BYTES = 16 * 1024 * 1024
 
 class WorkerBridgeRefused(RuntimeError):
     """The closed request, live authority, placement, or result boundary was refused."""
+
+
+def _native_reference(value: Any) -> dict[str, Any]:
+    row = _exact(_plain(value), {"locator", "sha256", "verified"}, "native artifact reference")
+    locator = _text(row["locator"], "native artifact locator")
+    if ("/" in locator or locator.startswith(".") or not locator.endswith(".json")
+            or len(locator) > 256 or type(row["verified"]) is not bool):
+        raise WorkerBridgeRefused("native artifact reference is not a closed private-store leaf")
+    _sha(row["sha256"], "native artifact bytes")
+    return row
+
+
+def _artifact_completion_request(*, start: "WorkerStart", sequence: int,
+                                 fence: ps.StageFence, native_observation: Mapping[str, Any]
+                                 ) -> dict[str, Any]:
+    body = {"schema": UNIT_COMPLETION_REQUEST_SCHEMA_V2, "nonce": start.nonce,
+            "sequence": sequence, "fence_id": fence.fence_id,
+            "native_observation": _native_reference(native_observation)}
+    return {**body, "request_digest": _digest(body)}
+
+
+def _completion_value(completion: ps.StageCompletion) -> dict[str, Any]:
+    return {"fence_id": completion.fence_id, "terminal": completion.terminal,
+            "stage_witnesses": {key: item.to_dict()
+                               for key, item in completion.stage_witnesses.items()},
+            "recorded_screen": completion.recorded_screen, "reason": completion.reason}
+
+
+def _v2_completion_chain(request: Mapping[str, Any], completion: ps.StageCompletion) -> str:
+    return _digest({"schema": UNIT_CHAIN_SCHEMA_V2, "sequence": request["sequence"],
+                    "fence_id": request["fence_id"],
+                    "completion_request_digest": request["request_digest"],
+                    "completion": _completion_value(completion)})
 
 
 class _ParentUnitEvidenceProtocol(Protocol):
@@ -457,6 +496,7 @@ class ParentUnitEvidenceAuthority:
             self._observation_bindings[key] = ob.ObservationUnitBinding.from_dict(
                 value.to_dict())
         self._observation_targets: dict[str, Mapping[str, Any]] = {}
+        self._phase_acks: dict[str, Mapping[str, Any]] = {}
         for key, value in dict(observation_targets or {}).items():
             _sha(key, "observation target cache key")
             self._observation_targets[key] = _freeze(_plain(value))
@@ -470,7 +510,60 @@ class ParentUnitEvidenceAuthority:
     def _retained_keys(self) -> set[str]:
         return (set(self._requested) | set(self._completions)
                 | set(self._continuations) | set(self._observation_bindings)
-                | set(self._observation_targets))
+                | set(self._observation_targets) | set(self._phase_acks))
+
+    @staticmethod
+    def artifact_completion_key(*, start: WorkerStart, request: Mapping[str, Any]) -> str:
+        return _digest({"start": start.to_dict(), "artifact_completion": _plain(request)})
+
+    def request_artifact_completion(self, *, start: WorkerStart, sequence: int,
+                                    fence: ps.StageFence, request: Mapping[str, Any]
+                                    ) -> tuple[str, ps.StageCompletion | None]:
+        request = _freeze(_plain(request))
+        key = self.artifact_completion_key(start=start, request=request)
+        notice = MappingProxyType({"kind": "artifact_completion", "key": key,
+            "start": start, "sequence": sequence, "fence": fence, "request": request})
+        with self._lock:
+            found = self._completions.get(key)
+            if key in self._retained_keys() - set(self._completions) \
+                    and self._requested.get(key) != "completion":
+                raise WorkerBridgeRefused("artifact completion key changes evidence kind")
+            if found is None:
+                self._reserve_request(key, "completion", notice)
+            return key, found
+
+    def request_observation_phase(self, *, start: WorkerStart, unit: ep.UnitSpec,
+                                  fence: ps.StageFence, request: Mapping[str, Any]
+                                  ) -> tuple[str, Mapping[str, Any] | None]:
+        request = _freeze(_plain(request))
+        key = _digest({"start": start.to_dict(), "phase_notice": request})
+        notice = MappingProxyType({"kind": "observation_phase", "key": key,
+            "start": start, "unit": unit, "fence": fence, "request": request})
+        with self._lock:
+            found = self._phase_acks.get(key)
+            if key in self._retained_keys() - set(self._phase_acks) \
+                    and self._requested.get(key) != "observation_phase":
+                raise WorkerBridgeRefused("phase notice key changes evidence kind")
+            if found is None:
+                self._reserve_request(key, "observation_phase", notice)
+            return key, found
+
+    def poll_observation_phase(self, key: str) -> Mapping[str, Any] | None:
+        _sha(key, "phase notice key")
+        with self._lock:
+            return self._phase_acks.get(key)
+
+    def publish_observation_phase(self, key: str, ack: Mapping[str, Any]) -> None:
+        _sha(key, "phase notice key")
+        ack = _freeze(_plain(ack))
+        if set(ack) != {"outcome"} or ack["outcome"] not in {"captured", "unavailable"}:
+            raise WorkerBridgeRefused("phase acknowledgement is not a transport outcome")
+        with self._lock:
+            if self._requested.get(key) != "observation_phase":
+                raise WorkerBridgeRefused("phase notice was not requested")
+            if key in self._phase_acks and self._phase_acks[key] != ack:
+                raise WorkerBridgeRefused("phase acknowledgement conflicts")
+            self._phase_acks[key] = ack
 
     def _reserve_request(self, key: str, kind: str,
                          notice: Mapping[str, Any]) -> None:
@@ -670,7 +763,11 @@ class UnitAuthority(Protocol):
     def admit(self, *, sequence: int, plan_digest: str, unit: ep.UnitSpec,
               prior_completion_digest: str | None) -> UnitPermit: ...
     def complete(self, *, sequence: int, fence: ps.StageFence,
-                 observation: Mapping[str, Any]) -> ps.StageCompletion: ...
+                 observation: Mapping[str, Any],
+                 native_observation: Mapping[str, Any] | None = None) -> ps.StageCompletion: ...
+    def observation_phase(self, *, sequence: int, unit: ep.UnitSpec, fence: ps.StageFence,
+                          binding: ob.ObservationUnitBinding, target: Mapping[str, Any],
+                          phase: str, boundary_monotonic_s: float) -> Mapping[str, Any]: ...
     def verify_continuation(self, raw: ep.RawUnit, plan: ep.ExperimentPlan,
                             prompts: ps.FrozenPromptManifest,
                             previous_lineage_id: str) -> bool: ...
@@ -698,29 +795,37 @@ class InheritedUnitAuthority:
         self.total_limit = total_limit
         self.total_bytes = 0
         self.closed = False
+        self._exchange_lock = threading.Lock()
 
-    def _exchange(self, request: Mapping[str, Any]) -> Mapping[str, Any]:
-        if self.closed:
-            raise WorkerBridgeRefused("unit authority channel is closed")
-        deadline = self.start.provider_deadline
-        if deadline - self.clock() <= 0:
+    def _exchange(self, request: Mapping[str, Any], *,
+                  deadline: float | None = None) -> Mapping[str, Any]:
+        deadline = (self.start.provider_deadline if deadline is None
+                    else min(self.start.provider_deadline, deadline))
+        remaining = deadline - self.clock()
+        if remaining <= 0 or not self._exchange_lock.acquire(timeout=remaining):
+            self.close()
             raise WorkerBridgeRefused("comparison-wide provider deadline expired")
-        raw = exact_canonical(request)
-        self.total_bytes += len(raw)
-        if self.total_bytes > self.total_limit:
-            self.close()
-            raise WorkerBridgeRefused("unit authority total byte limit exceeded")
         try:
-            write_bounded_message(self.sock, request, deadline=deadline, clock=self.clock)
-            response = read_bounded_message(self.sock, deadline=deadline, clock=self.clock)
-        except (OSError, TimeoutError, WorkerBridgeRefused) as exc:
-            self.close()
-            raise WorkerBridgeRefused("unit authority channel timed out or failed") from exc
-        self.total_bytes += len(exact_canonical(response))
-        if self.total_bytes > self.total_limit:
-            self.close()
-            raise WorkerBridgeRefused("unit authority total byte limit exceeded")
-        return response
+            if self.closed or deadline <= self.clock():
+                raise WorkerBridgeRefused("unit authority channel is closed or expired")
+            raw = exact_canonical(request)
+            self.total_bytes += len(raw)
+            if self.total_bytes > self.total_limit:
+                self.close()
+                raise WorkerBridgeRefused("unit authority total byte limit exceeded")
+            try:
+                write_bounded_message(self.sock, request, deadline=deadline, clock=self.clock)
+                response = read_bounded_message(self.sock, deadline=deadline, clock=self.clock)
+            except (OSError, TimeoutError, WorkerBridgeRefused) as exc:
+                self.close()
+                raise WorkerBridgeRefused("unit authority channel timed out or failed") from exc
+            self.total_bytes += len(exact_canonical(response))
+            if self.total_bytes > self.total_limit:
+                self.close()
+                raise WorkerBridgeRefused("unit authority total byte limit exceeded")
+            return response
+        finally:
+            self._exchange_lock.release()
 
     def admit(self, *, sequence: int, plan_digest: str, unit: ep.UnitSpec,
               prior_completion_digest: str | None) -> UnitPermit:
@@ -733,11 +838,17 @@ class InheritedUnitAuthority:
                                     expected_sequence=sequence)
 
     def complete(self, *, sequence: int, fence: ps.StageFence,
-                 observation: Mapping[str, Any]) -> ps.StageCompletion:
-        body = {"schema": UNIT_COMPLETION_REQUEST_SCHEMA, "nonce": self.start.nonce,
-                "sequence": sequence, "fence_id": fence.fence_id,
-                "observation": _plain(observation)}
-        row = _exact(_plain(self._exchange({**body, "request_digest": _digest(body)})), {
+                 observation: Mapping[str, Any],
+                 native_observation: Mapping[str, Any] | None = None) -> ps.StageCompletion:
+        if native_observation is None:
+            body = {"schema": UNIT_COMPLETION_REQUEST_SCHEMA, "nonce": self.start.nonce,
+                    "sequence": sequence, "fence_id": fence.fence_id,
+                    "observation": _plain(observation)}
+            request = {**body, "request_digest": _digest(body)}
+        else:
+            request = _artifact_completion_request(start=self.start, sequence=sequence,
+                fence=fence, native_observation=native_observation)
+        row = _exact(_plain(self._exchange(request)), {
             "schema", "nonce", "sequence", "fence_id", "terminal", "stage_witnesses",
             "recorded_screen", "reason", "completion_digest"}, "unit completion")
         if (row["schema"] != UNIT_COMPLETION_SCHEMA or row["nonce"] != self.start.nonce
@@ -754,6 +865,32 @@ class InheritedUnitAuthority:
             raise WorkerBridgeRefused("unit completion witnesses are invalid") from exc
         return ps.StageCompletion(row["fence_id"], row["terminal"], witnesses,
                                   row["recorded_screen"], row["reason"])
+
+    def observation_phase(self, *, sequence: int, unit: ep.UnitSpec,
+                          fence: ps.StageFence, binding: ob.ObservationUnitBinding,
+                          target: Mapping[str, Any], phase: str,
+                          boundary_monotonic_s: float) -> Mapping[str, Any]:
+        if phase != "health":
+            raise WorkerBridgeRefused("only the declared live health readback is supported")
+        body = {"schema": OBSERVATION_PHASE_REQUEST_SCHEMA, "nonce": self.start.nonce,
+            "sequence": sequence, "unit_id": unit.unit_id,
+            "process_generation_id": unit.process_id, "fence_id": fence.fence_id,
+            "binding_digest": binding.to_dict()["binding_digest"],
+            "descendant_binding_ref": _sha(target["binding_ref"], "descendant binding"),
+            "phase": phase, "boundary_monotonic_s": _finite(boundary_monotonic_s, "phase boundary")}
+        request = {**body, "request_digest": _digest(body)}
+        response = _exact(_plain(self._exchange(request, deadline=min(
+            fence.valid_until, self.clock() + binding.budgets["phase_ack_timeout_s"]))), set((
+                "schema", "nonce", "sequence", "unit_id", "process_generation_id",
+                "fence_id", "request_digest", "outcome", "response_digest")), "phase acknowledgement")
+        digest = _sha(response.pop("response_digest"), "phase acknowledgement digest")
+        if (digest != _digest(response) or response["schema"] != OBSERVATION_PHASE_ACK_SCHEMA
+                or response["request_digest"] != request["request_digest"]
+                or response["outcome"] not in ("captured", "unavailable")
+                or any(response[name] != body[name] for name in (
+                    "nonce", "sequence", "unit_id", "process_generation_id", "fence_id"))):
+            raise WorkerBridgeRefused("phase acknowledgement differs from request")
+        return _freeze(response)
 
     def verify_continuation(self, raw: ep.RawUnit, plan: ep.ExperimentPlan,
                             prompts: ps.FrozenPromptManifest,
@@ -981,12 +1118,17 @@ class OwnedWorkerStageProvider:
                                 fence.grant_id, fence.container_id, True, True)
 
     def complete(self, fence: ps.StageFence,
-                 observation: Mapping[str, Any]) -> ps.StageCompletion:
+                 observation: Mapping[str, Any], *,
+                 native_observation: Mapping[str, Any] | None = None) -> ps.StageCompletion:
         if self._active is None or self._active[1] != fence:
             raise WorkerBridgeRefused("completion does not match active unit")
         sequence = self._active[0]
+        v2 = self.prepared.schema == PREPARED_SCHEMA_V2
+        if v2 != (native_observation is not None):
+            raise WorkerBridgeRefused("completion artifact differs from prepared schema version")
+        kwargs = {"native_observation": native_observation} if v2 else {}
         completion = self.authority.complete(
-            sequence=sequence, fence=fence, observation=_freeze(_plain(observation)))
+            sequence=sequence, fence=fence, observation=_freeze(_plain(observation)), **kwargs)
         if not isinstance(completion, ps.StageCompletion):
             raise WorkerBridgeRefused("live unit authority returned untyped completion")
         self._prior_digest = _digest({"sequence": sequence, "fence_id": fence.fence_id,
@@ -997,6 +1139,10 @@ class OwnedWorkerStageProvider:
                                                               in completion.stage_witnesses.items()},
                                           "recorded_screen": completion.recorded_screen,
                                           "reason": completion.reason}})
+        if v2:
+            request = _artifact_completion_request(start=self.start, sequence=sequence,
+                fence=fence, native_observation=native_observation)
+            self._prior_digest = _v2_completion_chain(request, completion)
         self._active = None
         self._next += 1
         return completion
@@ -1203,6 +1349,9 @@ class PlannedWorkerInvocation:
         self._pending_observation_target: tuple[
             str, int, ep.UnitSpec, ps.StageFence, int] | None = None
         self._active_observation_binding: ob.ObservationUnitBinding | None = None
+        self._active_observation_target: Mapping[str, Any] | None = None
+        self._active_phase_request: Mapping[str, Any] | None = None
+        self._pending_observation_phase: tuple[str, Mapping[str, Any]] | None = None
         self._launched = False
         self._closed = False
 
@@ -1411,21 +1560,32 @@ class PlannedWorkerInvocation:
 
     def handle_completion(self, value: Mapping[str, Any]) -> None:
         if (self.start is None or self._active is None
-                or self._pending_completion is not None):
+                or self._pending_completion is not None
+                or self._pending_observation_phase is not None):
             raise WorkerBridgeRefused("planned completion has no active unit")
+        v2 = self.prepared.schema == PREPARED_SCHEMA_V2
+        field = "native_observation" if v2 else "observation"
         row = _exact(value, {"schema", "nonce", "sequence", "fence_id",
-                             "observation", "request_digest"},
+                             field, "request_digest"},
                      "planned unit completion request")
         supplied = _sha(row.pop("request_digest"), "request_digest")
         sequence, fence = self._active
-        if (row["schema"] != UNIT_COMPLETION_REQUEST_SCHEMA
-                or row["nonce"] != self.start.nonce or row["sequence"] != sequence
+        expected_schema = UNIT_COMPLETION_REQUEST_SCHEMA_V2 if v2 else UNIT_COMPLETION_REQUEST_SCHEMA
+        if (row["schema"] != expected_schema
+                or row["nonce"] != self.start.nonce or type(row["sequence"]) is not int
+                or row["sequence"] != sequence
                 or row["fence_id"] != fence.fence_id or supplied != _digest(row)
-                or not isinstance(row["observation"], Mapping)):
+                or not isinstance(row[field], Mapping)):
             raise WorkerBridgeRefused("planned completion request binding differs")
-        key, completion = self.parent_authority.request_completion(
-            start=self.start, sequence=sequence, fence=fence,
-            observation=_freeze(_plain(row["observation"])))
+        if v2:
+            row[field] = _native_reference(row[field])
+            row["request_digest"] = supplied
+            key, completion = self.parent_authority.request_artifact_completion(
+                start=self.start, sequence=sequence, fence=fence, request=row)
+        else:
+            key, completion = self.parent_authority.request_completion(
+                start=self.start, sequence=sequence, fence=fence,
+                observation=_freeze(_plain(row["observation"])))
         self._pending_completion = (key, row, sequence, fence)
         if completion is not None:
             self._finish_completion(completion)
@@ -1445,16 +1605,16 @@ class PlannedWorkerInvocation:
                 "reason": completion.reason}
         self._queue(self._control.fileno(),
                     {**body, "completion_digest": _digest(body)}, MAX_MESSAGE_BYTES)
-        self._prior_completion_digest = _digest({
-            "sequence": sequence, "fence_id": fence.fence_id,
-            "observation": row["observation"], "completion": {
-                "fence_id": completion.fence_id, "terminal": completion.terminal,
-                "stage_witnesses": {key: item.to_dict()
-                                    for key, item in completion.stage_witnesses.items()},
-                "recorded_screen": completion.recorded_screen,
-                "reason": completion.reason}})
+        if self.prepared.schema == PREPARED_SCHEMA_V2:
+            self._prior_completion_digest = _v2_completion_chain(row, completion)
+        else:
+            self._prior_completion_digest = _digest({
+                "sequence": sequence, "fence_id": fence.fence_id,
+                "observation": row["observation"], "completion": _completion_value(completion)})
         self._active = None
         self._active_observation_binding = None
+        self._active_observation_target = None
+        self._active_phase_request = None
         self._pending_completion = None
         self._next += 1
 
@@ -1610,9 +1770,66 @@ class PlannedWorkerInvocation:
                 "fence_id": fence.fence_id, **target}
         self._queue(self._control.fileno(),
                     {**body, "response_digest": _digest(body)}, MAX_MESSAGE_BYTES)
+        self._active_observation_target = _freeze(target)
         self._pending_observation_target = None
 
+    def handle_observation_phase(self, value: Mapping[str, Any]) -> None:
+        if (self.prepared.schema != PREPARED_SCHEMA_V2 or self.start is None
+                or self._active is None or self._active_observation_binding is None
+                or self._active_observation_target is None
+                or self._pending_observation_binding is not None
+                or self._pending_observation_target is not None
+                or self._pending_completion is not None):
+            raise WorkerBridgeRefused("phase notice lacks its active owned target")
+        row = _exact(_plain(value), {"schema", "nonce", "sequence", "unit_id",
+            "process_generation_id", "fence_id", "binding_digest", "descendant_binding_ref",
+            "phase", "boundary_monotonic_s", "request_digest"}, "phase notice")
+        supplied = _sha(row.pop("request_digest"), "phase notice digest")
+        sequence, fence = self._active
+        unit = sorted(self.prepared.plan.expected_units, key=lambda item: item.order_index)[self._next]
+        if (row["schema"] != OBSERVATION_PHASE_REQUEST_SCHEMA
+                or row["nonce"] != self.start.nonce or type(row["sequence"]) is not int
+                or row["sequence"] != sequence or row["unit_id"] != unit.unit_id
+                or row["process_generation_id"] != unit.process_id
+                or row["fence_id"] != fence.fence_id or row["phase"] != "health"
+                or row["binding_digest"] != self._active_observation_binding.to_dict()["binding_digest"]
+                or row["descendant_binding_ref"] != self._active_observation_target["binding_ref"]
+                or supplied != _digest(row)):
+            raise WorkerBridgeRefused("phase notice identity differs from parent unit")
+        _finite(row["boundary_monotonic_s"], "phase boundary")
+        row["request_digest"] = supplied
+        if self._active_phase_request is not None and self._active_phase_request != row:
+            raise WorkerBridgeRefused("same-unit health notice retry conflicts")
+        if self._pending_observation_phase is not None:
+            return
+        self._active_phase_request = _freeze(row)
+        key, ack = self.parent_authority.request_observation_phase(
+            start=self.start, unit=unit, fence=fence, request=row)
+        self._pending_observation_phase = (key, _freeze(row))
+        if ack is not None:
+            self._finish_observation_phase(ack)
+
+    def _finish_observation_phase(self, ack: Mapping[str, Any]) -> None:
+        if self.start is None or self._pending_observation_phase is None:
+            raise WorkerBridgeRefused("phase acknowledgement is out of order")
+        _key, request = self._pending_observation_phase
+        ack = _exact(_plain(ack), {"outcome"}, "phase transport acknowledgement")
+        if ack["outcome"] not in {"captured", "unavailable"}:
+            raise WorkerBridgeRefused("phase acknowledgement cannot carry a witness")
+        body = {"schema": OBSERVATION_PHASE_ACK_SCHEMA,
+            **{key: request[key] for key in ("nonce", "sequence", "unit_id",
+                "process_generation_id", "fence_id", "request_digest")},
+            "outcome": ack["outcome"]}
+        self._queue(self._control.fileno(),
+                    {**body, "response_digest": _digest(body)}, MAX_MESSAGE_BYTES)
+        self._pending_observation_phase = None
+
     def poll_evidence(self) -> None:
+        if self._pending_observation_phase is not None:
+            ack = self.parent_authority.poll_observation_phase(
+                self._pending_observation_phase[0])
+            if ack is not None:
+                self._finish_observation_phase(ack)
         if self._pending_completion is not None:
             completion = self.parent_authority.poll_completion(
                 self._pending_completion[0])
