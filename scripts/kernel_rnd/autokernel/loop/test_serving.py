@@ -6,6 +6,7 @@ DF2-5-validated np4 command, and the paired A/B / floor arithmetic is right and
 fail-closed when uncalibrated.
 """
 import dataclasses
+import json
 from pathlib import Path
 import unittest
 from unittest import mock
@@ -76,6 +77,165 @@ class Arithmetic(unittest.TestCase):
             out = serving.calibrate_floor(RECIPE, Path("/b"), samples=5)
         self.assertGreater(out["floor_pct"], 0.0)
         self.assertEqual(out["samples"], 5)
+
+
+class PlannedObservationSeam(unittest.TestCase):
+    def test_frozen_requests_drive_actual_launcher_seam_and_collect_slots(self):
+        recipe = serving.Recipe(name="planned", model="/m", np=2, n_predict=4)
+        requests = tuple((f"p{i}", json.dumps({"prompt": f"prompt-{i}"}).encode())
+                         for i in range(2))
+
+        class FakeProcess:
+            pid = 4321
+            returncode = None
+
+            def poll(self):
+                return None
+
+            def terminate(self):
+                return None
+
+            def wait(self, timeout):
+                return 0
+
+            def kill(self):
+                raise AssertionError("graceful fake teardown should not kill")
+
+        class FakeSampler:
+            proof = {"samples": 2, "vram_reads": 2, "resident": True,
+                     "peak_vram_bytes": 2**30, "median_vram_bytes": 2**30,
+                     "peak_kfd_processes": 1, "sclk_min_mhz": 1000,
+                     "sclk_max_mhz": 1000, "clock_stable": True}
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                return False
+
+        class Response:
+            def __init__(self, body):
+                self.body = body
+
+            def read(self):
+                return self.body
+
+        def urlopen(request, timeout):
+            if isinstance(request, str):
+                return Response(b"ok")
+            return Response(json.dumps({"stop": True, "timings": {
+                "predicted_n": 4, "predicted_per_second": 10.0}}).encode())
+
+        observations = []
+        with mock.patch.object(serving.subprocess, "Popen", return_value=FakeProcess()), \
+                mock.patch.object(serving.residency, "Sampler", return_value=FakeSampler()), \
+                mock.patch.object(serving.urllib.request, "urlopen", side_effect=urlopen), \
+                mock.patch.object(serving, "verify_env_readback"):
+            value = serving._measure_once(recipe, Path("/b"), 18000,
+                                          frozen_requests=requests,
+                                          observation=observations)
+        self.assertEqual(value, 20.0)
+        measured = [row for row in observations[0]["requests"]
+                    if row["phase"] == "measurement"]
+        self.assertEqual([row["prompt_id"] for row in measured],
+                         ["p0", "p1"])
+        self.assertTrue(all(row["terminal"] for row in observations[0]["requests"]))
+        self.assertEqual(observations[0]["process_pid"], 4321)
+        self.assertEqual(observations[0]["teardown"], "terminated")
+
+    def test_partial_slot_failure_retains_warmup_and_measurement_records(self):
+        recipe = serving.Recipe(name="planned", model="/m", np=2, n_predict=4)
+        requests = tuple((f"p{i}", json.dumps({"prompt": f"prompt-{i}"}).encode())
+                         for i in range(2))
+
+        class FakeProcess:
+            pid = 4321
+            returncode = None
+
+            def poll(self):
+                return None
+
+            def terminate(self):
+                return None
+
+            def wait(self, timeout):
+                return 0
+
+            def kill(self):
+                return None
+
+        class FakeSampler:
+            proof = {"samples": 2, "vram_reads": 2, "resident": True,
+                     "peak_vram_bytes": 2**30, "median_vram_bytes": 2**30,
+                     "peak_kfd_processes": 1, "sclk_min_mhz": 1000,
+                     "sclk_max_mhz": 1000, "clock_stable": True}
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                return False
+
+        class Response:
+            def __init__(self, body):
+                self.body = body
+
+            def read(self):
+                return self.body
+
+        def urlopen(request, timeout):
+            if isinstance(request, str):
+                return Response(b"ok")
+            if b"prompt-1" in request.data:
+                raise OSError("slot failed")
+            return Response(json.dumps({"stop": True, "timings": {
+                "predicted_n": 4, "predicted_per_second": 10.0}}).encode())
+
+        observations = []
+        with mock.patch.object(serving.subprocess, "Popen", return_value=FakeProcess()), \
+                mock.patch.object(serving.residency, "Sampler", return_value=FakeSampler()), \
+                mock.patch.object(serving.urllib.request, "urlopen", side_effect=urlopen), \
+                mock.patch.object(serving, "verify_env_readback"):
+            with self.assertRaises(serving.ServerDied):
+                serving._measure_once(recipe, Path("/b"), 18000,
+                                      frozen_requests=requests,
+                                      observation=observations)
+        rows = observations[0]["requests"]
+        self.assertEqual([(row["phase"], row["slot_index"]) for row in rows],
+                         [("warmup", 0), ("warmup", 1),
+                          ("measurement", 0), ("measurement", 1)])
+        self.assertEqual(sum(row["error"] is not None for row in rows), 2)
+
+        malformed = (
+            {"stop": True},
+            {"stop": True, "timings": {"predicted_n": True,
+                                         "predicted_per_second": 10.0}},
+            {"stop": True, "timings": {"predicted_n": 4,
+                                         "predicted_per_second": float("inf")}},
+        )
+        for payload in malformed:
+            with self.subTest(payload=payload):
+                observations = []
+
+                def malformed_urlopen(request, timeout):
+                    return Response(b"ok" if isinstance(request, str)
+                                    else json.dumps(payload).encode())
+
+                with mock.patch.object(serving.subprocess, "Popen",
+                                       return_value=FakeProcess()), \
+                        mock.patch.object(serving.residency, "Sampler",
+                                          return_value=FakeSampler()), \
+                        mock.patch.object(serving.urllib.request, "urlopen",
+                                          side_effect=malformed_urlopen), \
+                        mock.patch.object(serving, "verify_env_readback"):
+                    with self.assertRaises(serving.ServerDied):
+                        serving._measure_once(recipe, Path("/b"), 18000,
+                                              frozen_requests=requests,
+                                              observation=observations)
+                self.assertTrue(all(row["error"] for row
+                                    in observations[0]["requests"]))
+                self.assertTrue(all(row["predicted_n"] is None for row
+                                    in observations[0]["requests"]))
 
 class ServerAffinity(unittest.TestCase):
     """R23-49: the server's host threads must be PINNABLE, and unpinned must stay the

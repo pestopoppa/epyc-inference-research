@@ -30,6 +30,7 @@ from dataclasses import dataclass, field, replace
 import concurrent.futures as cf
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import statistics
@@ -614,7 +615,9 @@ def _residency_fold(records: Sequence[Mapping]) -> dict:
 def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                   boot_timeout_s: int = 360, *,
                   evidence: list | None = None,
-                  resolved_recipe: "ResolvedRecipe | None" = None) -> float:
+                  resolved_recipe: "ResolvedRecipe | None" = None,
+                  frozen_requests: Sequence[tuple[str, bytes]] | None = None,
+                  observation: list | None = None) -> float:
     """Launch the server under `recipe`, fire `np` concurrent requests, return aggregate
     tok/s. The server is always stopped, even on error.
 
@@ -631,6 +634,19 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
     measured non-resident raises `ServingNotResident` whether or not anyone asked for
     the record.
     """
+    request_rows: list[dict] = []
+    process_pid: int | None = None
+    teardown = "not_started"
+    failure: str | None = None
+    if frozen_requests is not None:
+        if len(frozen_requests) != recipe.np:
+            raise RecipeError("frozen request count must equal recipe.np")
+        for prompt_id, body in frozen_requests:
+            if not isinstance(prompt_id, str) or not prompt_id.strip() \
+                    or not isinstance(body, bytes) or not body:
+                raise RecipeError("frozen requests need non-empty prompt IDs and body bytes")
+        if len({item[0] for item in frozen_requests}) != len(frozen_requests):
+            raise RecipeError("frozen request prompt IDs must be unique within a launch")
     backend = "gpu"
     if resolved_recipe is not None:
         # Refuse unsupported capabilities or moved inputs before sampler/Popen.
@@ -650,6 +666,7 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
             srv = subprocess.Popen(argv, stdout=subprocess.DEVNULL,
                                    stderr=subprocess.DEVNULL,
                                    env=launch_env)
+            process_pid = srv.pid
             try:
                 for _ in range(boot_timeout_s // 2):
                     if srv.poll() is not None:
@@ -669,19 +686,51 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                         recipe, srv.pid,
                         expectations=resolved_recipe.readback_expectations)
 
-                def one(i: int) -> tuple[int, float]:
-                    body = json.dumps({"prompt": _PROMPTS[i % len(_PROMPTS)],
-                                       "n_predict": recipe.n_predict, "temperature": recipe.temperature,
-                                       "top_p": recipe.top_p, "top_k": recipe.top_k,
-                                       "cache_prompt": False}).encode()
-                    req = urllib.request.Request(f"http://127.0.0.1:{port}/completion", data=body,
-                                                 headers={"Content-Type": "application/json"})
-                    t = json.loads(urllib.request.urlopen(req, timeout=600).read()).get("timings", {})
-                    # per-request decode rate, NOT wall-clock: each slot reports its own
-                    # predicted_n / predicted_ms, so the aggregate is the sum of the concurrent
-                    # slots' rates and is immune to the scheduling-tail jitter that made the
-                    # wall-clock aggregate ~5-10% noisy even at greedy (R23-43).
-                    return int(t.get("predicted_n", 0)), float(t.get("predicted_per_second", 0.0))
+                def one(i: int, phase: str) -> tuple[int, float, bool, dict]:
+                    if frozen_requests is None:
+                        prompt_id = f"legacy-slot-{i}"
+                        body = json.dumps({"prompt": _PROMPTS[i % len(_PROMPTS)],
+                                           "n_predict": recipe.n_predict,
+                                           "temperature": recipe.temperature,
+                                           "top_p": recipe.top_p, "top_k": recipe.top_k,
+                                           "cache_prompt": False}).encode()
+                    else:
+                        prompt_id, body = frozen_requests[i]
+                    record = {"phase": phase, "slot_index": i, "prompt_id": prompt_id,
+                              "request_sha256": hashlib.sha256(body).hexdigest(),
+                              "predicted_n": None, "predicted_per_second": None,
+                              "terminal": False, "error": None}
+                    try:
+                        req = urllib.request.Request(
+                            f"http://127.0.0.1:{port}/completion", data=body,
+                            headers={"Content-Type": "application/json"})
+                        response = json.loads(urllib.request.urlopen(req, timeout=600).read())
+                        timings = response.get("timings", {})
+                        # per-request decode rate, NOT wall-clock: each slot reports its own
+                        # predicted_n / predicted_ms; the aggregate remains the sum of rates.
+                        if frozen_requests is not None:
+                            if not isinstance(timings, Mapping):
+                                raise ValueError("response timings must be an object")
+                            tokens = timings.get("predicted_n")
+                            rate = timings.get("predicted_per_second")
+                            if isinstance(tokens, bool) or not isinstance(tokens, int) \
+                                    or tokens < 0:
+                                raise ValueError("predicted_n must be a non-negative integer")
+                            if isinstance(rate, bool) or not isinstance(rate, (int, float)) \
+                                    or not math.isfinite(float(rate)) or rate < 0:
+                                raise ValueError(
+                                    "predicted_per_second must be a finite non-negative number")
+                            rate = float(rate)
+                        else:
+                            tokens = int(timings.get("predicted_n", 0))
+                            rate = float(timings.get("predicted_per_second", 0.0))
+                        terminal = response.get("stop") is True
+                        record.update(predicted_n=tokens, predicted_per_second=rate,
+                                      terminal=terminal)
+                        return tokens, rate, terminal, record
+                    except Exception as exc:
+                        record["error"] = f"{type(exc).__name__}: {exc}"
+                        return 0, 0.0, False, record
 
                 # The request phase proper starts HERE, warmup included: the
                 # residency window must overlap the work, not merely the boot.
@@ -689,21 +738,31 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                 # Warmup: one full np-wide round discarded, so cold-cache/clock-ramp does not
                 # land in the measured sample (the first calibration run read high, then settled).
                 with cf.ThreadPoolExecutor(recipe.np) as ex:
-                    list(ex.map(one, range(recipe.np)))
+                    warmup_rows = list(ex.map(lambda i: one(i, "warmup"), range(recipe.np)))
                 with cf.ThreadPoolExecutor(recipe.np) as ex:
-                    rows = list(ex.map(one, range(recipe.np)))
+                    rows = list(ex.map(lambda i: one(i, "measurement"), range(recipe.np)))
                 request_end = time.time()
-                toks = [n for n, _ in rows]
-                if min(toks) < recipe.n_predict // 2:
+                request_rows = [row[3] for row in warmup_rows + rows]
+                toks = [row[0] for row in rows]
+                if any(row[3]["error"] for row in warmup_rows + rows):
+                    raise ServerDied("one or more serving slots failed; see collected observation")
+                if frozen_requests is None and min(toks) < recipe.n_predict // 2:
                     raise ServerDied(f"degenerate measurement: tokens={toks}")
-                value = sum(rate for _, rate in rows)
+                if frozen_requests is not None and not all(row[2] for row in warmup_rows + rows):
+                    raise ServerDied("frozen request lacks explicit terminal completion")
+                value = sum(row[1] for row in rows)
             finally:
                 srv.terminate()
                 try:
                     srv.wait(30)
+                    teardown = "terminated"
                 except Exception:
                     srv.kill()
                     srv.wait(10)
+                    teardown = "killed"
+    except Exception as exc:
+        failure = f"{type(exc).__name__}: {exc}"
+        raise
     finally:
         window_end = time.time()
         record = _residency_record(sampler, window_start=window_start,
@@ -712,6 +771,11 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                                    request_end=request_end, backend=backend)
         if evidence is not None:
             evidence.append(record)
+        if observation is not None:
+            observation.append({"schema": "epyc.autokernel.serving_observation.v1",
+                                "process_pid": process_pid, "requests": request_rows,
+                                "residency": record, "teardown": teardown,
+                                "failure": failure})
     # Success path only. An exception already in flight carries its own reason, and
     # replacing it with a residency refusal would hide the real fault -- while the
     # record above is appended either way, so a failed launch still leaves its window.
