@@ -473,15 +473,19 @@ class DiskPressureTest(_TmpTest):
         self.assertGreater(state.total_bytes, 0)
 
     def test_floor_boundary_is_strict_less_than(self):
-        policy = ST.StoragePolicy(campaign_quota_gb=1.0, headroom_floor_gb=0.0,
-                                  largest_single_allocation_gb=0.0,
-                                  allocation_safety_factor=1.0)
-        free = ST.disk_pressure(self.tmp, policy).free_bytes
+        gib = 1024 ** 3
+        observed = unittest.mock.Mock(f_bavail=4, f_frsize=gib, f_blocks=8)
         exact = ST.StoragePolicy(campaign_quota_gb=1.0,
-                                 headroom_floor_gb=free / (1024 ** 3),
+                                 headroom_floor_gb=4.0,
                                  largest_single_allocation_gb=0.0,
                                  allocation_safety_factor=1.0)
-        self.assertEqual(ST.disk_pressure(self.tmp, exact).state, ST.STORAGE_OK)
+        above = ST.StoragePolicy(campaign_quota_gb=1.0,
+                                 headroom_floor_gb=5.0,
+                                 largest_single_allocation_gb=0.0,
+                                 allocation_safety_factor=1.0)
+        with unittest.mock.patch.object(ST.os, "statvfs", return_value=observed):
+            self.assertEqual(ST.disk_pressure(self.tmp, exact).state, ST.STORAGE_OK)
+            self.assertEqual(ST.disk_pressure(self.tmp, above).state, ST.DISK_PRESSURE)
 
     def test_unreadable_filesystem_raises_rather_than_assuming_healthy(self):
         with self.assertRaises(OSError):

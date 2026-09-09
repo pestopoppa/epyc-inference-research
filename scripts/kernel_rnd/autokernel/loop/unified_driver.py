@@ -31,6 +31,7 @@ TRANSACTION_RECEIPT_SCHEMA = "epyc.autokernel.unified_driver_transaction_receipt
 OUTCOME_SCHEMA = "epyc.autokernel.unified_driver_outcome.v1"
 EXECUTION_INPUT_SCHEMA = "epyc.autokernel.unified_execution_input.v1"
 MATERIALIZATION_BINDING_SCHEMA = "epyc.autokernel.unified_materialization_binding.v1"
+SELECTED_PROFILE_WORK_SCHEMA = "epyc.autokernel.selected_profile_work.v1"
 
 
 class DriverRefused(RuntimeError):
@@ -178,6 +179,81 @@ class ProfilePreparationRequest:
                 "target_revision_digest": self.target_revision_digest,
                 "stage_proposal": self.stage_proposal.to_dict(),
                 "profile_contract": _thaw(self.profile_contract)}
+
+
+@dataclass(frozen=True)
+class SelectedProfileWork:
+    """Exact current selected profile advice; never grant or execution authority."""
+
+    catalog_id: str
+    transition_id: str
+    selection: scheduling.Selection
+    profile_request: ProfilePreparationRequest
+    stage_plan_digest: str
+    controller_binding: Mapping[str, Any]
+    execution_authorized: bool = False
+    schema: str = SELECTED_PROFILE_WORK_SCHEMA
+
+    def __post_init__(self) -> None:
+        if self.schema != SELECTED_PROFILE_WORK_SCHEMA or self.execution_authorized is not False:
+            raise DriverRefused("selected profile work schema/authority is invalid")
+        object.__setattr__(self, "catalog_id", _sha(self.catalog_id, "profile catalog_id"))
+        object.__setattr__(self, "transition_id", _sha(
+            self.transition_id, "profile transition_id"))
+        selection = (scheduling.Selection.from_dict(self.selection.to_dict())
+                     if isinstance(self.selection, scheduling.Selection)
+                     else scheduling.Selection.from_dict(self.selection))
+        request = (ProfilePreparationRequest.from_dict(self.profile_request.to_dict())
+                   if isinstance(self.profile_request, ProfilePreparationRequest)
+                   else ProfilePreparationRequest.from_dict(self.profile_request))
+        plan_digest = _sha(self.stage_plan_digest, "profile stage_plan_digest")
+        binding = dict(_mapping(_thaw(self.controller_binding), "profile controller binding"))
+        expected_binding = {"schema", "campaign_id", "config_digest", "config_generation",
+                            "supervisor_id", "supervisor_incarnation", "artifact_root"}
+        if (set(binding) != expected_binding
+                or binding["schema"] != MATERIALIZATION_BINDING_SCHEMA
+                or not isinstance(binding["campaign_id"], str)
+                or not binding["campaign_id"].strip()
+                or not isinstance(binding["supervisor_id"], str)
+                or not binding["supervisor_id"].strip()
+                or not isinstance(binding["artifact_root"], str)
+                or not Path(binding["artifact_root"]).is_absolute()):
+            raise DriverRefused("profile controller binding is malformed")
+        _sha(binding["config_digest"], "profile controller config_digest")
+        for name in ("config_generation", "supervisor_incarnation"):
+            if (not isinstance(binding[name], int) or isinstance(binding[name], bool)
+                    or binding[name] < 1):
+                raise DriverRefused(f"profile controller {name} must be positive")
+        if (selection.status != "selected" or selection.proposal is None
+                or selection.proposal != request.stage_proposal
+                or request.target_revision_digest != selection.proposal.target_revision
+                or plan_digest != _digest(request.to_dict())
+                or self.transition_id != _digest({
+                    "catalog_id": self.catalog_id, "selection": selection.to_dict()})):
+            raise DriverRefused("selected profile work bindings differ")
+        object.__setattr__(self, "selection", selection)
+        object.__setattr__(self, "profile_request", request)
+        object.__setattr__(self, "stage_plan_digest", plan_digest)
+        object.__setattr__(self, "controller_binding", _freeze(binding))
+
+    @classmethod
+    def from_dict(cls, value: Any) -> "SelectedProfileWork":
+        row = dict(_mapping(value, "selected profile work"))
+        expected = {"schema", "catalog_id", "transition_id", "selection",
+                    "profile_request", "stage_plan_digest", "controller_binding",
+                    "execution_authorized"}
+        if set(row) != expected:
+            raise DriverRefused("selected profile work fields differ")
+        return cls(**row)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"schema": self.schema, "catalog_id": self.catalog_id,
+                "transition_id": self.transition_id,
+                "selection": self.selection.to_dict(),
+                "profile_request": self.profile_request.to_dict(),
+                "stage_plan_digest": self.stage_plan_digest,
+                "controller_binding": _thaw(self.controller_binding),
+                "execution_authorized": False}
 
 
 @dataclass(frozen=True)
@@ -560,6 +636,47 @@ class UnifiedCampaignDriver:
         return unified_worker.PreparedPlannedServingStage.from_dict(
             {**body, "prepared_digest": _digest(body)})
 
+    def materialize_profile(self, outcome: DriverOutcome) -> SelectedProfileWork:
+        """Resolve exact selected profile advice through the current controller owner."""
+        if (not isinstance(outcome, DriverOutcome)
+                or outcome.status != "intent_recorded"
+                or outcome.transition_id is None or outcome.selection is None
+                or self._issued_catalog is None
+                or outcome.transition_id != self._issued_transition_id):
+            raise DriverRefused("profile materialization requires the current issued intent")
+        try:
+            selection = scheduling.Selection.from_dict(_thaw(outcome.selection))
+        except Exception as exc:
+            raise DriverRefused("issued profile selection is invalid") from exc
+        if selection.proposal is None:
+            raise DriverRefused("issued profile intent has no selected proposal")
+        work = self._issued_catalog.work_by_stage_digest.get(selection.proposal.digest)
+        if work is None or work["kind"] != "profile_preparation":
+            raise DriverRefused("selected work is not profile preparation")
+        request = ProfilePreparationRequest.from_dict(_thaw(work["payload"]))
+        if (request.stage_proposal != selection.proposal
+                or work["stage_plan_binding"] != "preparation_contract"
+                or work["stage_plan_digest"] != _digest(request.to_dict())):
+            raise DriverRefused("selected profile catalog binding differs")
+        callback = getattr(self.controller, "unified_driver_materialization_binding", None)
+        if not callable(callback):
+            raise DriverRefused("controller-owned profile binding is unavailable")
+        try:
+            binding = callback(
+                catalog_id=self._issued_catalog.catalog_id,
+                transition_id=outcome.transition_id,
+                selection=selection.to_dict())
+        except campaign_control.ControlRefused as exc:
+            raise DriverRefused(f"controller refused profile materialization: {exc}") from exc
+        result = SelectedProfileWork(
+            self._issued_catalog.catalog_id, outcome.transition_id, selection, request,
+            work["stage_plan_digest"], binding)
+        if (result.controller_binding["campaign_id"] != self.resolved.campaign_id
+                or result.controller_binding["config_digest"]
+                   != campaign_control.resolved_config_digest(self.resolved)):
+            raise DriverRefused("profile controller binding is stale or foreign")
+        return SelectedProfileWork.from_dict(result.to_dict())
+
     def tick(self, *, now: float | None = None, stop_requested=lambda: False) -> DriverOutcome:
         if self._pending is not None or self._poisoned:
             raise DriverTransactionUncertain("exact pending transition retry is required")
@@ -777,6 +894,7 @@ __all__ = ["CATALOG_SCHEMA", "CONFIG_SCHEMA", "DriverConfig", "DriverOutcome", "
            "DriverTransactionUncertain", "PlanningCatalog", "OUTCOME_SCHEMA",
            "EXECUTION_INPUT_SCHEMA", "ExecutionInput",
            "PROFILE_CONTRACT_SCHEMA", "PROFILE_REQUEST_SCHEMA", "ProfilePreparationRequest",
+           "SELECTED_PROFILE_WORK_SCHEMA", "SelectedProfileWork",
            "READINESS_SCHEMA",
            "TRANSACTION_RECEIPT_SCHEMA", "UnifiedCampaignDriver",
            "load_config", "main"]
