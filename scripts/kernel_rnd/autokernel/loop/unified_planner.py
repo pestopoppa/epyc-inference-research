@@ -1171,6 +1171,19 @@ def plan_iteration(*, resolved_campaign: campaign.ResolvedCampaign,
                                     else experiment_plan.ExperimentPlan.from_dict(raw_plan))
                         except Exception as exc:
                             raise PlanningRefused(f"experiment plan is invalid: {exc}") from exc
+                        expected_anchor = _thaw(serving_arm_identity(pair.anchor))
+                        expected_candidate = _thaw(serving_arm_identity(pair.candidate))
+                        if plan.schema != experiment_plan.PLAN_SCHEMA:
+                            # The closed plan parser admits v2 only with its loaded
+                            # instrument pin. Proposal/claim identities remain recipes;
+                            # the plan additionally binds the measurement instrument.
+                            from .planned_serving import arm_identity
+                            loaded = _thaw(plan.loaded_instrument)
+                            expected_anchor = arm_identity(
+                                pair.anchor.template, pair.anchor, loaded_instrument=loaded)
+                            expected_candidate = arm_identity(
+                                pair.candidate.template, pair.candidate,
+                                loaded_instrument=loaded)
                         if (plan.campaign_id != resolved_campaign.campaign_id
                                 or plan.target_revision != digest
                                 or plan.metric != opportunity.metric
@@ -1185,9 +1198,9 @@ def plan_iteration(*, resolved_campaign: campaign.ResolvedCampaign,
                                 or _thaw(opportunity.claim_key.intervention_identity)
                                    != _thaw(serving_arm_identity(pair.candidate))
                                 or _thaw(plan.anchor_identity)
-                                   != _thaw(serving_arm_identity(pair.anchor))
+                                   != expected_anchor
                                 or _thaw(plan.candidate_identity)
-                                   != _thaw(serving_arm_identity(pair.candidate))):
+                                   != expected_candidate):
                             raise PlanningRefused(
                                 "experiment plan differs from proposal/arm identities")
                         generated.append(_runtime_proposal(target, opportunity, pair, snapshot,
