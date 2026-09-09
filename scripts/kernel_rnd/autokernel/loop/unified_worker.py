@@ -76,6 +76,9 @@ UNIT_COMPLETION_SCHEMA = "epyc.autokernel.planned_worker_unit_completion.v1"
 UNIT_CHAIN_SCHEMA_V2 = "epyc.autokernel.planned_worker_unit_chain.v2"
 OBSERVATION_PHASE_REQUEST_SCHEMA = \
     "epyc.autokernel.planned_worker_observation_phase_request.v1"
+OBSERVATION_PHASE_REQUEST_SCHEMA_V2 = \
+    "epyc.autokernel.planned_worker_observation_phase_request.v2"
+OBSERVATION_WINDOW_MARKERS = ("health", "warmup", "measurement", "measurement_end", "teardown")
 OBSERVATION_PHASE_ACK_SCHEMA = \
     "epyc.autokernel.planned_worker_observation_phase_ack.v1"
 CONTINUATION_REQUEST_SCHEMA = "epyc.autokernel.planned_worker_continuation_request.v1"
@@ -870,9 +873,11 @@ class InheritedUnitAuthority:
                           fence: ps.StageFence, binding: ob.ObservationUnitBinding,
                           target: Mapping[str, Any], phase: str,
                           boundary_monotonic_s: float) -> Mapping[str, Any]:
-        if phase != "health":
-            raise WorkerBridgeRefused("only the declared live health readback is supported")
-        body = {"schema": OBSERVATION_PHASE_REQUEST_SCHEMA, "nonce": self.start.nonce,
+        if phase not in OBSERVATION_WINDOW_MARKERS:
+            raise WorkerBridgeRefused("unsupported live observation marker")
+        schema = (OBSERVATION_PHASE_REQUEST_SCHEMA if phase == "health"
+                  else OBSERVATION_PHASE_REQUEST_SCHEMA_V2)
+        body = {"schema": schema, "nonce": self.start.nonce,
             "sequence": sequence, "unit_id": unit.unit_id,
             "process_generation_id": unit.process_id, "fence_id": fence.fence_id,
             "binding_digest": binding.to_dict()["binding_digest"],
@@ -1350,7 +1355,7 @@ class PlannedWorkerInvocation:
             str, int, ep.UnitSpec, ps.StageFence, int] | None = None
         self._active_observation_binding: ob.ObservationUnitBinding | None = None
         self._active_observation_target: Mapping[str, Any] | None = None
-        self._active_phase_request: Mapping[str, Any] | None = None
+        self._active_phase_requests: dict[str, Mapping[str, Any]] = {}
         self._pending_observation_phase: tuple[str, Mapping[str, Any]] | None = None
         self._launched = False
         self._closed = False
@@ -1614,7 +1619,7 @@ class PlannedWorkerInvocation:
         self._active = None
         self._active_observation_binding = None
         self._active_observation_target = None
-        self._active_phase_request = None
+        self._active_phase_requests.clear()
         self._pending_completion = None
         self._next += 1
 
@@ -1787,22 +1792,39 @@ class PlannedWorkerInvocation:
         supplied = _sha(row.pop("request_digest"), "phase notice digest")
         sequence, fence = self._active
         unit = sorted(self.prepared.plan.expected_units, key=lambda item: item.order_index)[self._next]
-        if (row["schema"] != OBSERVATION_PHASE_REQUEST_SCHEMA
+        marker = row["phase"]
+        schema = (OBSERVATION_PHASE_REQUEST_SCHEMA if marker == "health"
+                  else OBSERVATION_PHASE_REQUEST_SCHEMA_V2)
+        if (row["schema"] != schema or marker not in OBSERVATION_WINDOW_MARKERS
                 or row["nonce"] != self.start.nonce or type(row["sequence"]) is not int
                 or row["sequence"] != sequence or row["unit_id"] != unit.unit_id
                 or row["process_generation_id"] != unit.process_id
-                or row["fence_id"] != fence.fence_id or row["phase"] != "health"
+                or row["fence_id"] != fence.fence_id
                 or row["binding_digest"] != self._active_observation_binding.to_dict()["binding_digest"]
                 or row["descendant_binding_ref"] != self._active_observation_target["binding_ref"]
                 or supplied != _digest(row)):
             raise WorkerBridgeRefused("phase notice identity differs from parent unit")
         _finite(row["boundary_monotonic_s"], "phase boundary")
         row["request_digest"] = supplied
-        if self._active_phase_request is not None and self._active_phase_request != row:
-            raise WorkerBridgeRefused("same-unit health notice retry conflicts")
+        prior = self._active_phase_requests.get(marker)
+        if prior is not None and prior != row:
+            raise WorkerBridgeRefused("same-unit marker notice retry conflicts")
+        if prior is None and self._active_phase_requests:
+            last = next(reversed(self._active_phase_requests))
+            if (OBSERVATION_WINDOW_MARKERS.index(marker)
+                    <= OBSERVATION_WINDOW_MARKERS.index(last)
+                    or row["boundary_monotonic_s"] < self._active_phase_requests[last][
+                        "boundary_monotonic_s"]):
+                raise WorkerBridgeRefused("observation marker moved backwards")
+        if prior is None and marker not in ("health", "teardown"):
+            required = OBSERVATION_WINDOW_MARKERS[OBSERVATION_WINDOW_MARKERS.index(marker) - 1]
+            if required not in self._active_phase_requests:
+                raise WorkerBridgeRefused("observation marker skipped its prior boundary")
         if self._pending_observation_phase is not None:
+            if self._pending_observation_phase[1] != row:
+                raise WorkerBridgeRefused("another observation marker is pending")
             return
-        self._active_phase_request = _freeze(row)
+        self._active_phase_requests[marker] = _freeze(row)
         key, ack = self.parent_authority.request_observation_phase(
             start=self.start, unit=unit, fence=fence, request=row)
         self._pending_observation_phase = (key, _freeze(row))
@@ -1940,9 +1962,15 @@ def run_prepared_stage(prepared: PreparedPlannedServingStage, start: WorkerStart
             if closure.get("schema") == PRODUCER_SOURCE_SCHEMA_V2:
                 from .native_scientific_witness import installed_scientific_adapters
                 scientific_adapters = installed_scientific_adapters(closure["scientific_adapters"])
+            window_configuration = None
+            if "search_window_configuration" in declared_identity["used_constants"]:
+                from .search_window import InstalledSearchWindowConfiguration
+                window_configuration = InstalledSearchWindowConfiguration.from_dict(
+                    declared_identity["used_constants"]["search_window_configuration"])
             instrument = ob.seal_loaded_instrument(
                 store=store, measurement_callable=selected_measure,
-                fence_clock=clock, serving_timer=time.time, scientific_adapters=scientific_adapters)
+                fence_clock=clock, serving_timer=time.time, scientific_adapters=scientific_adapters,
+                search_window_configuration=window_configuration)
             expected_instrument = ob.LoadedInstrumentReference.from_dict(
                 _plain(prepared.plan.loaded_instrument))
             if instrument != expected_instrument or not instrument.configuration_complete:

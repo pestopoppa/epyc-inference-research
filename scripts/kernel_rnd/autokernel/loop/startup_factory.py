@@ -20,6 +20,7 @@ from . import scheduling, scoped_evidence, unified_driver, unified_planner
 
 REQUEST_SCHEMA = "epyc.autokernel.startup_factory_request.v1"
 FEED_REQUEST_SCHEMA = "epyc.autokernel.startup_factory_request.v2"
+NATIVE_REQUEST_SCHEMA = "epyc.autokernel.startup_factory_request.v3"
 RECEIPT_SCHEMA = "epyc.autokernel.startup_factory_receipt.v1"
 MAX_INPUT_BYTES = 4 * 1024 * 1024
 TARGET_FIELDS = {"profile", "profile_request", "execution", "runtime_dimensions"}
@@ -148,10 +149,15 @@ def build_startup(request: Mapping[str, Any], *, output_dir: Path) -> dict[str, 
               "evidence_index", "actor_identities", "providers", "native_artifact_sink_ref",
               "dry_run_runner"}
     feed_mode = request.get("schema") == FEED_REQUEST_SCHEMA
+    native_mode = request.get("schema") == NATIVE_REQUEST_SCHEMA
+    feed_mode = feed_mode or native_mode
     if feed_mode:
         fields = (fields - {"evidence_index"}) | {"evidence_feed"}
+    if native_mode:
+        fields |= {"native_evidence"}
     request = _closed(request, fields, "factory request")
-    if request["schema"] not in {REQUEST_SCHEMA, FEED_REQUEST_SCHEMA}:
+    if request["schema"] not in {REQUEST_SCHEMA, FEED_REQUEST_SCHEMA,
+                                 NATIVE_REQUEST_SCHEMA}:
         raise StartupFactoryRefused("unsupported factory request schema")
     output_dir = Path(output_dir)
     store_path = Path(request["store_path"])
@@ -299,21 +305,67 @@ def build_startup(request: Mapping[str, Any], *, output_dir: Path) -> dict[str, 
         elif settings["profile_request"] is not None:
             profile_requests[digest] = _profile_request(target, digest, settings["profile_request"], config)
         if settings["execution"] is not None:
-            execution = _closed(settings["execution"], {"prompt_manifest", "max_stage_seconds",
-                                "teardown_seconds", "instrument_id"}, "execution configuration")
+            execution_fields = {"prompt_manifest", "max_stage_seconds", "teardown_seconds"}
+            if not native_mode:
+                execution_fields.add("instrument_id")
+            execution = _closed(settings["execution"], execution_fields,
+                                "execution configuration")
             prompts = planned_serving.FrozenPromptManifest.from_dict(pins.read(
                 execution["prompt_manifest"], "prompt manifest"))
+            instrument_id = execution.get("instrument_id")
+            if native_mode:
+                instrument_id = "pending-native-instrument"
             parsed = unified_driver.ExecutionInput(
                 digest, prompts, execution["max_stage_seconds"], execution["teardown_seconds"],
-                execution["instrument_id"])
+                instrument_id)
             if parsed.max_stage_seconds > config.max_stage_seconds:
                 raise StartupFactoryRefused("execution input exceeds configured stage budget")
             executions[digest] = parsed.to_dict()
     prepared_anchors = unified_planner.prepare_runtime_anchors(resolved, anchors)
     if not isinstance(request["experiment_plans"], Mapping):
         raise StartupFactoryRefused("experiment plans must be an explicit mapping")
-    plans = {key: experiment_plan.ExperimentPlan.from_dict(pins.read(pin, "experiment plan")).to_dict()
-             for key, pin in request["experiment_plans"].items()}
+    native_document = None
+    native_reference = None
+    if native_mode:
+        native_request = _closed(request["native_evidence"], {
+            "scientific_adapters", "model_preparations", "observation_configuration",
+            "search_window_configuration"},
+            "native evidence request")
+        window_configuration = None
+        if native_request["search_window_configuration"] is not None:
+            from .search_window import InstalledSearchWindowConfiguration
+            window_configuration = InstalledSearchWindowConfiguration.from_dict(
+                native_request["search_window_configuration"])
+        artifact_root = str(Path(request["native_artifact_sink_ref"]))
+        native_document = standalone_inputs.native_evidence_document(
+            scientific_adapters=native_request["scientific_adapters"],
+            model_preparations=native_request["model_preparations"],
+            artifact_root=artifact_root,
+            observation_configuration=native_request["observation_configuration"],
+            search_window_configuration=window_configuration)
+        _, _, native_reference, _, _ = standalone_inputs._native_evidence(native_document)
+        for digest, item in list(executions.items()):
+            item = unified_driver.ExecutionInput.from_dict(item)
+            executions[digest] = unified_driver.ExecutionInput(
+                item.target_revision_digest, item.prompt_manifest,
+                item.max_stage_seconds, item.teardown_seconds,
+                native_reference.identity_sha256).to_dict()
+    plans = {}
+    for key, pin in request["experiment_plans"].items():
+        plan = experiment_plan.ExperimentPlan.from_dict(pins.read(pin, "experiment plan"))
+        row = plan.to_dict()
+        if native_mode:
+            if plan.schema != experiment_plan.PLAN_SCHEMA_V2:
+                raise StartupFactoryRefused("native startup requires explicit v2 experiment plans")
+            loaded = native_reference.to_dict()
+            row["loaded_instrument"] = loaded
+            for arm in ("anchor_identity", "candidate_identity"):
+                row[arm] = dict(row[arm]) | {
+                    "schema": "epyc.autokernel.serving_arm_identity.v2",
+                    "instrument_identity_sha256": loaded["identity_sha256"],
+                    "instrument_configuration_complete": loaded["configuration_complete"]}
+            plan = experiment_plan.ExperimentPlan.from_dict(row)
+        plans[key] = plan.to_dict()
     provider_fields = {"lifecycle", "readiness"}
     if not feed_mode:
         provider_fields.add("evidence_verifier")
@@ -334,8 +386,11 @@ def build_startup(request: Mapping[str, Any], *, output_dir: Path) -> dict[str, 
             "lifecycle_provider_id": providers["lifecycle"], "readiness_provider_id": providers["readiness"],
             }
     if feed is not None:
-        body.update(schema=standalone_inputs.FEED_MANIFEST_SCHEMA,
+        body.update(schema=(standalone_inputs.NATIVE_MANIFEST_SCHEMA if native_mode
+                            else standalone_inputs.FEED_MANIFEST_SCHEMA),
                     evidence_feed=feed.to_dict())
+        if native_mode:
+            body["native_evidence"] = native_document
     else:
         assert evidence is not None
         body.update(evidence_index=evidence.to_dict(),

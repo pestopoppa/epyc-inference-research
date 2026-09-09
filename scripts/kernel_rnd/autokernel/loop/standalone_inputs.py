@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import copy
+import time
 from dataclasses import dataclass, replace
 from pathlib import Path
 from types import MappingProxyType
@@ -20,7 +21,11 @@ from . import (campaign, campaign_control, campaign_service, experiment_plan,
 
 MANIFEST_SCHEMA = "epyc.autokernel.standalone_inputs.v1"
 FEED_MANIFEST_SCHEMA = "epyc.autokernel.standalone_inputs.v2"
+NATIVE_MANIFEST_SCHEMA = "epyc.autokernel.standalone_inputs.v3"
+NATIVE_EVIDENCE_SCHEMA = "epyc.autokernel.standalone_native_evidence.v1"
+SCIENTIFIC_SELECTION_SCHEMA = "epyc.autokernel.scientific_adapter_selection.v1"
 PREFLIGHT_SCHEMA = "epyc.autokernel.standalone_inputs_preflight.v1"
+NATIVE_PREFLIGHT_SCHEMA = "epyc.autokernel.standalone_inputs_preflight.v2"
 _PROVIDER_METHODS = (
     "authorize", "inspect_pending", "refresh", "release", "inspect",
     "close_held_receipt", "describe_active_observation_claim",
@@ -84,6 +89,7 @@ class StartupManifest:
     manifest_digest: str
     schema: str = MANIFEST_SCHEMA
     evidence_feed: feed_runtime.FeedConfig | None = None
+    native_evidence: Mapping[str, Any] | None = None
 
     @classmethod
     def from_dict(cls, value: Any) -> "StartupManifest":
@@ -91,10 +97,14 @@ class StartupManifest:
         fields = {"schema", "driver_config", "evidence_index", "actor_identities",
                   "lifecycle_provider_id", "readiness_provider_id",
                   "evidence_verifier_id", "manifest_digest"}
-        feed_mode = row.get("schema") == FEED_MANIFEST_SCHEMA
+        feed_mode = row.get("schema") in {FEED_MANIFEST_SCHEMA, NATIVE_MANIFEST_SCHEMA}
         if feed_mode:
             fields = (fields - {"evidence_index", "evidence_verifier_id"}) | {"evidence_feed"}
-        if set(row) != fields or row["schema"] not in {MANIFEST_SCHEMA, FEED_MANIFEST_SCHEMA}:
+        native_mode = row.get("schema") == NATIVE_MANIFEST_SCHEMA
+        if native_mode:
+            fields |= {"native_evidence"}
+        if set(row) != fields or row["schema"] not in {
+                MANIFEST_SCHEMA, FEED_MANIFEST_SCHEMA, NATIVE_MANIFEST_SCHEMA}:
             raise StandaloneInputsRefused("startup manifest fields/schema differ")
         supplied_digest = row.pop("manifest_digest")
         if (not isinstance(supplied_digest, str) or len(supplied_digest) != 64
@@ -114,12 +124,14 @@ class StartupManifest:
             actors[kind] = _freeze(_mapping(identity, f"actor_identities.{kind}"))
             if not actors[kind]:
                 raise StandaloneInputsRefused("actor identity must not be empty")
+        native = (_freeze(_mapping(row["native_evidence"], "native_evidence"))
+                  if native_mode else None)
         return cls(
             config, evidence, MappingProxyType(actors),
             _text(row["lifecycle_provider_id"], "lifecycle_provider_id"),
             _text(row["readiness_provider_id"], "readiness_provider_id"),
             "" if feed_mode else _text(row["evidence_verifier_id"], "evidence_verifier_id"),
-            supplied_digest, row["schema"], feed,
+            supplied_digest, row["schema"], feed, native,
         )
 
     def body(self) -> dict[str, Any]:
@@ -147,12 +159,16 @@ class StartupManifest:
             "readiness_provider_id": self.readiness_provider_id,
             "evidence_verifier_id": self.evidence_verifier_id,
         }
-        if self.schema == FEED_MANIFEST_SCHEMA:
+        if self.schema in {FEED_MANIFEST_SCHEMA, NATIVE_MANIFEST_SCHEMA}:
             if self.evidence_feed is None:
                 raise StandaloneInputsRefused("feed manifest requires typed feed configuration")
             result.pop("evidence_index")
             result.pop("evidence_verifier_id")
             result["evidence_feed"] = self.evidence_feed.to_dict()
+        if self.schema == NATIVE_MANIFEST_SCHEMA:
+            if self.native_evidence is None:
+                raise StandaloneInputsRefused("native manifest requires native evidence configuration")
+            result["native_evidence"] = _thaw(self.native_evidence)
         return result
 
     def to_dict(self) -> dict[str, Any]:
@@ -229,6 +245,109 @@ class ProviderRegistry:
         return self._evidence_feeds.get(identifier)
 
 
+def _installed_scientific_adapters(value: Any):
+    """Construct one closed installed adapter registry without restoring issuance."""
+    from . import native_scientific_witness as nsw
+    selection = dict(_mapping(value, "scientific adapter selection"))
+    if set(selection) != {"schema", "correctness", "purpose", "contention", "residency"} \
+            or selection["schema"] != SCIENTIFIC_SELECTION_SCHEMA \
+            or any(selection[name] is not None for name in ("purpose", "contention", "residency")):
+        raise StandaloneInputsRefused("scientific adapter selection is unsupported")
+    correctness = dict(_mapping(selection["correctness"], "correctness adapter selection"))
+    if set(correctness) != {"adapter_id", "max_units"} \
+            or correctness["adapter_id"] != nsw.ADAPTER_ID:
+        raise StandaloneInputsRefused("configured correctness adapter is not installed")
+    try:
+        return nsw.ParentScientificWitnessAdapters(
+            correctness=nsw.NativeT0WitnessAdapter(max_units=correctness["max_units"]))
+    except Exception as exc:
+        raise StandaloneInputsRefused(f"scientific adapter selection is invalid: {exc}") from exc
+
+
+def native_evidence_document(*, scientific_adapters: Any,
+                             model_preparations: Any,
+                             artifact_root: str,
+                             observation_configuration: Any,
+                             search_window_configuration: Any = None) -> dict[str, Any]:
+    """Create the v3 manifest projection from a closed installed selection."""
+    from . import observation_binding as ob, serving
+    adapters = _installed_scientific_adapters(scientific_adapters)
+    identity_kwargs = {"measurement_callable": serving._measure_once,
+                       "fence_clock": time.monotonic, "serving_timer": time.time,
+                       "scientific_adapters": adapters}
+    if search_window_configuration is not None:
+        identity_kwargs["search_window_configuration"] = search_window_configuration
+    identity = ob._plain(ob.loaded_planned_serving_identity(**identity_kwargs))
+    root = Path(_text(artifact_root, "native artifact root"))
+    if not root.is_absolute():
+        raise StandaloneInputsRefused("native artifact root must be absolute")
+    return {"schema": NATIVE_EVIDENCE_SCHEMA,
+            "scientific_adapters": _thaw(scientific_adapters),
+            "model_preparations": _thaw(model_preparations),
+            "loaded_instrument_identity": identity, "artifact_root": str(root),
+            "observation_configuration": _thaw(observation_configuration),
+            "search_window_configuration": (None if search_window_configuration is None
+                else search_window_configuration.to_dict())}
+
+
+def _native_evidence(value: Any):
+    """Rebuild the one installed factual configuration selected by startup v3."""
+    from . import measurement_capture as mc, native_parent_service as nps
+    from . import observation_binding as ob, serving
+    row = dict(_mapping(_thaw(value), "native evidence configuration"))
+    if set(row) != {"schema", "scientific_adapters", "model_preparations",
+                    "loaded_instrument_identity", "artifact_root",
+                    "observation_configuration", "search_window_configuration"} \
+            or row["schema"] != NATIVE_EVIDENCE_SCHEMA:
+        raise StandaloneInputsRefused("native evidence configuration fields/schema differ")
+    adapters = _installed_scientific_adapters(row["scientific_adapters"])
+    search_window = None
+    if row["search_window_configuration"] is not None:
+        try:
+            from .search_window import InstalledSearchWindowConfiguration
+            search_window = InstalledSearchWindowConfiguration.from_dict(
+                row["search_window_configuration"])
+        except Exception as exc:
+            raise StandaloneInputsRefused(
+                f"search window configuration is invalid: {exc}") from exc
+    try:
+        configuration = nps.NativeFactualEvidenceConfiguration(
+            schema=nps.FACTUAL_CONFIGURATION_SCHEMA_V2,
+            scientific_adapters=adapters, model_preparations=row["model_preparations"],
+            search_window_configuration=search_window)
+        identity_kwargs = {"measurement_callable": serving._measure_once,
+                           "fence_clock": time.monotonic, "serving_timer": time.time,
+                           "scientific_adapters": adapters}
+        if search_window is not None:
+            identity_kwargs["search_window_configuration"] = search_window
+        identity = ob._plain(ob.loaded_planned_serving_identity(**identity_kwargs))
+    except Exception as exc:
+        raise StandaloneInputsRefused(f"native evidence configuration is invalid: {exc}") from exc
+    supplied = ob._plain(_mapping(row["loaded_instrument_identity"],
+                                  "loaded instrument identity"))
+    if supplied != identity:
+        raise StandaloneInputsRefused(
+            "configured loaded instrument differs from the installed adapters")
+    name, encoded, _ = mc.ArtifactStore._identity(
+        f"loaded-instrument:{identity['sha256']}", identity)
+    reference = ob.LoadedInstrumentReference(
+        identity["sha256"], identity["configuration_complete"],
+        mc.StoredArtifact(name, hashlib.sha256(encoded).hexdigest(), True))
+    root = Path(_text(row["artifact_root"], "native artifact root"))
+    if not root.is_absolute():
+        raise StandaloneInputsRefused("native artifact root must be absolute")
+    observation = dict(_mapping(row["observation_configuration"],
+                                "observation configuration"))
+    if set(observation) != {"requested_effective_states", "required_gpu_dsos",
+                            "cadence_s", "gap_limit_s", "budgets"}:
+        raise StandaloneInputsRefused("observation configuration fields differ")
+    try:
+        parsed_observation = ob.ParentObservationConfiguration(**observation)
+    except Exception as exc:
+        raise StandaloneInputsRefused(f"observation configuration is invalid: {exc}") from exc
+    return configuration, _freeze(identity), reference, root, parsed_observation
+
+
 @dataclass(frozen=True)
 class MaterializedInputs:
     manifest: StartupManifest
@@ -302,8 +421,9 @@ class MaterializedInputs:
                 else:
                     missing.append(
                         f"target:{target}:profile_execution:{mechanism_id}:runtime_consumer_unavailable")
-        return {
-            "schema": PREFLIGHT_SCHEMA,
+        result = {
+            "schema": (NATIVE_PREFLIGHT_SCHEMA if self.manifest.schema == NATIVE_MANIFEST_SCHEMA
+                       else PREFLIGHT_SCHEMA),
             "status": "ready" if not missing else "unavailable",
             "manifest_digest": self.manifest.manifest_digest,
             "campaign_id": self.resolved.campaign_id,
@@ -313,6 +433,9 @@ class MaterializedInputs:
             "pending_profile_targets": list(self.pending_profile_targets),
             "execution_authorized": False,
         }
+        if self.manifest.schema == NATIVE_MANIFEST_SCHEMA:
+            result["native_instrument_runtime_status"] = "planned_unpublished"
+        return result
 
 
 def materialize(value: StartupManifest) -> MaterializedInputs:
@@ -368,6 +491,76 @@ def materialize(value: StartupManifest) -> MaterializedInputs:
             if key != parsed.target_revision_digest or key not in target_digests:
                 raise StandaloneInputsRefused("execution input key differs from target revision")
             execution[key] = parsed
+        native_configuration = None
+        native_identity = None
+        native_reference = None
+        native_artifact_root = None
+        observation_configuration = None
+        if value.schema == NATIVE_MANIFEST_SCHEMA:
+            (native_configuration, native_identity, native_reference,
+             native_artifact_root, observation_configuration) = _native_evidence(
+                 value.native_evidence)
+            if (native_artifact_root != Path(config.native_artifact_sink_ref)
+                    or native_artifact_root
+                       != Path(config.store_path) / "unified-native-artifacts"):
+                raise StandaloneInputsRefused(
+                    "native artifact root differs from controller/startup configuration")
+            expected_reference = native_reference.to_dict()
+            for key, plan in plans.items():
+                if (plan.schema != experiment_plan.PLAN_SCHEMA_V2
+                        or _thaw(plan.loaded_instrument) != expected_reference):
+                    raise StandaloneInputsRefused(
+                        f"experiment plan {key} differs from configured loaded instrument")
+                target_execution = execution.get(plan.target_revision)
+                if (target_execution is None
+                        or target_execution.instrument_id != native_reference.identity_sha256):
+                    raise StandaloneInputsRefused(
+                        f"experiment plan {key} lacks matching native execution input")
+            from . import lifecycle_observation as lo
+            expected_recipes = {}
+            expected_target_recipes = {}
+            for target_digest, anchor in anchors.recipes.items():
+                recipes = [anchor]
+                recipes.extend(arm for pair in unified_planner.enumerate_runtime_dimensions(
+                    anchor, dimensions.get(target_digest, ()))
+                               for arm in (pair.anchor, pair.candidate))
+                for recipe in recipes:
+                    expected_target_recipes[target_digest, recipe.execution_digest] = recipe
+                    previous = expected_recipes.setdefault(recipe.execution_digest, recipe)
+                    if previous.to_dict() != recipe.to_dict():
+                        raise StandaloneInputsRefused(
+                            "one execution digest identifies different native recipes")
+            states = observation_configuration.requested_effective_states
+            dsos = observation_configuration.required_gpu_dsos
+            if set(states) != set(expected_recipes) or set(dsos) - set(expected_recipes):
+                raise StandaloneInputsRefused(
+                    "observation configuration does not cover exact native recipes")
+            for digest, recipe in expected_recipes.items():
+                if recipe.template.cpu_list is None:
+                    raise StandaloneInputsRefused(
+                        "native observation requires explicit recipe CPU placement")
+                if list(states[digest]["logical_cpus"]) != sorted(
+                        lo.parse_cpu_list(recipe.template.cpu_list)):
+                    raise StandaloneInputsRefused(
+                        "observation CPU placement differs from native recipe")
+                expected_dsos = ([] if recipe.backend == "cpu" else
+                                 [item.to_dict() for item in recipe.dsos])
+                if _thaw(dsos.get(digest, ())) != expected_dsos:
+                    raise StandaloneInputsRefused(
+                        "observation GPU DSO identities differ from native recipe")
+            configured_pairs = {(target, recipe) for target, recipes in
+                                native_configuration.model_preparations.items()
+                                for recipe in recipes}
+            if configured_pairs != set(expected_target_recipes):
+                raise StandaloneInputsRefused(
+                    "model preparations do not cover exact target/recipe pairs")
+            for (target, digest), recipe in expected_target_recipes.items():
+                preparation = native_configuration.preparation(target, digest)
+                if (preparation is None
+                        or (preparation.entry_path, preparation.entry_sha256)
+                           != (recipe.model.path, recipe.model.sha256)):
+                    raise StandaloneInputsRefused(
+                        "model preparation entry differs from native recipe model")
     except StandaloneInputsRefused:
         raise
     except Exception as exc:
@@ -394,12 +587,15 @@ def materialize(value: StartupManifest) -> MaterializedInputs:
         missing.append(f"actor_identity:{kind}:unavailable")
     if value.evidence_feed is None and not evidence.projection_available:
         missing.append("evidence_index:projection_unavailable")
-    if native_runtime_requested:
+    if native_runtime_requested and value.schema != NATIVE_MANIFEST_SCHEMA:
         missing.append("native_observation:typed_source_runtime_consumer_unavailable")
     inputs = standalone_runtime.StandaloneRuntimeInputs(
         resolved, scheduler_engine, MappingProxyType(profiles), evidence, anchors,
         MappingProxyType(dimensions), MappingProxyType(plans), MappingProxyType(requests),
-        value.actor_identities, MappingProxyType(execution), config.native_artifact_sink_ref)
+        value.actor_identities, MappingProxyType(execution), config.native_artifact_sink_ref,
+        None, native_configuration, native_identity,
+        None if native_reference is None else _freeze(native_reference.to_dict()),
+        native_artifact_root, observation_configuration)
     return MaterializedInputs(
         value, resolved, inputs, tuple(sorted(missing)), tuple(sorted(pending_profiles)))
 
@@ -449,6 +645,20 @@ def runtime_factory(materialized: MaterializedInputs, registry: ProviderRegistry
             if materialized.manifest.evidence_feed is not None:
                 current_inputs = replace(verified_inputs, feed_owner=feed_runtime.FeedRuntimeOwner(
                     materialized.manifest.evidence_feed, binding))
+            if current_inputs.native_evidence_configuration is not None:
+                from . import measurement_capture as mc, observation_binding as ob
+                identity = _thaw(current_inputs.loaded_instrument_identity)
+                reference = ob.LoadedInstrumentReference.from_dict(
+                    _thaw(current_inputs.loaded_instrument_reference))
+                store = mc.ArtifactStore(current_inputs.native_artifact_root)
+                try:
+                    written = store.write(
+                        f"loaded-instrument:{identity['sha256']}", identity)
+                finally:
+                    store.close()
+                if written.to_dict() != reference.artifact.to_dict():
+                    raise StandaloneInputsRefused(
+                        "runtime loaded instrument publication differs from startup")
             runtime = standalone_runtime.StandaloneRuntime.compose(
                 controller=controller, inputs=current_inputs)
         except BaseException:
@@ -474,6 +684,9 @@ def _verified_snapshot_inputs(materialized, verifier):
     return replace(materialized.inputs, evidence_index=evidence)
 
 
-__all__ = ["MANIFEST_SCHEMA", "PREFLIGHT_SCHEMA", "EvidenceVerifierBinding", "MaterializedInputs",
+__all__ = ["MANIFEST_SCHEMA", "FEED_MANIFEST_SCHEMA", "NATIVE_MANIFEST_SCHEMA",
+           "NATIVE_EVIDENCE_SCHEMA", "SCIENTIFIC_SELECTION_SCHEMA", "PREFLIGHT_SCHEMA",
+           "NATIVE_PREFLIGHT_SCHEMA",
+           "EvidenceVerifierBinding", "MaterializedInputs",
            "ProviderBinding", "ProviderRegistry", "StandaloneInputsRefused",
-           "StartupManifest", "materialize", "runtime_factory"]
+           "StartupManifest", "materialize", "native_evidence_document", "runtime_factory"]

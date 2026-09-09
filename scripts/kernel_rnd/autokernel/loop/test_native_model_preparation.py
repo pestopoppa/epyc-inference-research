@@ -72,7 +72,12 @@ def _native_service(tmp_path: Path, spec, *, claim=None):
     instance = object.__new__(service.NativeParentEvidenceService)
     instance.scientific_adapters = scientific.ParentScientificWitnessAdapters(
         correctness=scientific.NativeT0WitnessAdapter(max_units=2))
-    instance.model_preparations = {spec.recipe_execution_digest: spec}
+    instance.factual_configuration = service.NativeFactualEvidenceConfiguration(
+        schema=service.FACTUAL_CONFIGURATION_SCHEMA_V2,
+        scientific_adapters=instance.scientific_adapters,
+        model_preparations={spec.target_revision_digest: {
+            spec.recipe_execution_digest: spec}})
+    instance.model_preparations = instance.factual_configuration.model_preparations
     instance.lifecycle = ClaimLifecycle(claim)
     instance._native_store = mc.ArtifactStore(tmp_path / "artifacts")
     instance._model_preparation_receipts = {}
@@ -90,6 +95,33 @@ def test_closed_spec_is_detached_and_digest_bound(tmp_path):
     with pytest.raises(model_prep.ModelPreparationRefused, match="digest"):
         model_prep.ScheduledModelPreparation.from_dict(changed)
     assert restored.inventory_identity["model_sha256"] != "3" * 64
+
+
+def test_factual_configuration_v2_binds_target_and_detaches_nested_input(tmp_path):
+    (tmp_path / "first").mkdir()
+    (tmp_path / "second").mkdir()
+    first = _spec(tmp_path / "first", target="1" * 64, execution="2" * 64)
+    second = _spec(tmp_path / "second", target="3" * 64, execution="2" * 64)
+    adapters = scientific.ParentScientificWitnessAdapters(
+        correctness=scientific.NativeT0WitnessAdapter(max_units=2))
+    supplied = {first.target_revision_digest: {first.recipe_execution_digest: first.to_dict()},
+                second.target_revision_digest: {second.recipe_execution_digest: second.to_dict()}}
+    configured = service.NativeFactualEvidenceConfiguration(
+        schema=service.FACTUAL_CONFIGURATION_SCHEMA_V2,
+        scientific_adapters=adapters, model_preparations=supplied)
+    supplied[first.target_revision_digest][first.recipe_execution_digest]["entry_sha256"] = "f" * 64
+    assert configured.preparation(first.target_revision_digest,
+                                  first.recipe_execution_digest).entry_sha256 == first.entry_sha256
+    assert configured.preparation(second.target_revision_digest,
+                                  second.recipe_execution_digest).entry_path == second.entry_path
+    assert configured.preparation("4" * 64, first.recipe_execution_digest) is None
+    legacy = service.NativeFactualEvidenceConfiguration(
+        scientific_adapters=adapters,
+        model_preparations={first.recipe_execution_digest: first})
+    assert legacy.preparation(first.target_revision_digest,
+                              first.recipe_execution_digest) == first
+    assert legacy.preparation(second.target_revision_digest,
+                              first.recipe_execution_digest) is None
 
 
 def test_full_six_shard_hash_finishes_under_same_live_claim_before_measure(tmp_path):

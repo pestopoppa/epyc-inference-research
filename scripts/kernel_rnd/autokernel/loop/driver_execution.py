@@ -153,11 +153,27 @@ class UnknownParentEvidenceProducer:
         """Optional parent preparation while the child is blocked on its binding."""
         del start, unit, fence, recipe, claim
 
+    def _binding_ready(self, *, start: unified_worker.WorkerStart,
+                       binding: ob.ObservationUnitBinding,
+                       claim: Mapping[str, Any]) -> None:
+        """Post-preparation, pre-spawn hook on the owning evidence thread."""
+
+    def _poll_live_evidence(self) -> None:
+        """At most one bounded collector step; the default performs no I/O."""
+
+    def _evidence_poll_delay(self) -> float:
+        return 0.05
+
     def _run(self) -> None:
         while not self._stop.is_set():
             try:
-                notice = self.authority.next_notice(timeout=0.05)
+                notice = self.authority.next_notice(timeout=self._evidence_poll_delay())
             except queue.Empty:
+                try:
+                    self._poll_live_evidence()
+                except BaseException as exc:
+                    self._errors.append(exc)
+                    self._stop.set()
                 continue
             try:
                 kind = notice.get("kind")
@@ -258,6 +274,7 @@ class UnknownParentEvidenceProducer:
                     if prior_claim is not None and prior_claim != claim:
                         raise DriverExecutionRefused("observation claim retry conflicts")
                     self._claims[binding_key] = claim
+                    self._binding_ready(start=start, binding=binding, claim=claim)
                     self.authority.publish_observation_binding(key, binding)
                 elif kind == "observation_target":
                     start = notice.get("start")
@@ -292,6 +309,13 @@ class UnknownParentEvidenceProducer:
             except BaseException as exc:
                 self._errors.append(exc)
                 self._stop.set()
+
+            if not self._stop.is_set():
+                try:
+                    self._poll_live_evidence()
+                except BaseException as exc:
+                    self._errors.append(exc)
+                    self._stop.set()
 
     def stop_and_join(self, timeout: float = 2.0) -> None:
         self._stop.set()
@@ -719,7 +743,8 @@ class UnifiedDriverExecution:
         if catalog is None:
             raise DriverExecutionRefused("driver no longer owns the issued catalog")
         readiness = self.controller.unified_driver_readiness()
-        records_per_unit = 4 if prepared.schema == unified_worker.PREPARED_SCHEMA_V2 else 2
+        records_per_unit = (3 + len(unified_worker.OBSERVATION_WINDOW_MARKERS)
+                            if prepared.schema == unified_worker.PREPARED_SCHEMA_V2 else 2)
         record_capacity = max(8, len(prepared.plan.expected_units) * records_per_unit)
         if record_capacity > 1024:
             raise DriverExecutionRefused("prepared parent notices exceed the fixed evidence cache bound")
@@ -737,8 +762,7 @@ class UnifiedDriverExecution:
             producer = NativeParentEvidenceService(
                 authority, prepared, self.controller._worker_lifecycle,
                 self._observation_configuration, registry=registry,
-                scientific_adapters=self._native_evidence_configuration.scientific_adapters,
-                model_preparations=self._native_evidence_configuration.model_preparations)
+                factual_configuration=self._native_evidence_configuration)
             self._parent_evidence_registries[transition_id] = registry
         invocation = unified_worker.PlannedWorkerInvocation.open(prepared, authority)
         request_id = selection.proposal.proposal_id

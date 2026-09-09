@@ -144,6 +144,30 @@ receipt means publication did not complete; select a different output path.
 
 ## Acceptance scope and remaining boundaries
 
+### Native observation v3
+
+The explicit v3 request/manifest extends continuous-feed v2 with a closed
+native-evidence block: an installed scientific-adapter selector, a
+target-revision → recipe-execution → scheduled-model-preparation map, and the
+complete parent observation configuration. Recipe-only preparation keys are
+insufficient because two enrolled targets may share a launch recipe while
+requiring different model inventories.
+
+The factory derives the loaded-instrument identity from the actually imported
+measurement, clocks, and selected adapter implementation, then emits matching
+v2 plans and execution inputs. Dry-run reports the runtime object as
+`planned_unpublished`; it performs no model hashing and creates no campaign
+artifact store. The installed runtime factory publishes and reopens the exact
+predicted bytes at the configured absolute native artifact root before runtime
+composition. Direct composition without them refuses before scheduling. One
+concrete adapter instance remains installed for the runtime lifetime, preserving
+its parent-only issuance registry across selected stages.
+
+The current closed selector supports the generic parent-issued T0 adapter only;
+unknown variants refuse. This does not claim the generic tool run is equivalent
+to same-server correctness. The server-native adapter remains a distinct
+versioned selector until its owning registry contract is published.
+
 `test_startup_factory.py` exercises the actual campaign CLI production/local seed
 path, both CPU/GPU configurations, all typed constructors, refusal boundaries,
 supplied-profile/execution preservation and resumed scheduler accounting. Set
@@ -152,9 +176,10 @@ enable its subprocess test of both module CLIs and the emitted dry-run command.
 Tests use clearly synthetic artifact identities; they establish integration, not
 production-model correctness or a completed production-backed campaign dry run.
 
-This factory depends on the separately reviewed `standalone_inputs.py` and
-`standalone_runtime.py` delivery. It adds no changes to existing driver/provider
-symbols or packaging. Standalone CLI injection, canonical ROOT/source-pin repair,
+This combined delivery includes the reviewed `standalone_inputs.py`,
+`standalone_runtime.py`, parent-evidence driver hooks, and factual-service
+configuration needed by the native v3 path. It adds no provider authority or
+packaging entrypoint. Standalone CLI injection, canonical ROOT/source-pin repair,
 installed provider bindings, live profile availability, dashboard/control projection
 and controller recovery acceptance remain their respective owners' work. In
 particular this proof does **not** complete handoff AKU-12a or bypass AKU-12c.

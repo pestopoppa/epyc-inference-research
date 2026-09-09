@@ -504,10 +504,14 @@ class ContainedObservationFactory:
 
         def notify(phase: str, marker: Mapping[str, Any],
                    target: Mapping[str, Any] | None) -> None:
-            if phase != "health":
+            if phase not in ("health", "warmup", "measurement", "measurement_end", "teardown"):
                 return
             if target is None:
-                raise ObservationBindingError("health notification lacks an observed owned target")
+                # Exceptional pre-spawn teardown has no descendant. It cannot
+                # supply a close witness, but must not interfere with cleanup.
+                if phase == "teardown":
+                    return
+                raise ObservationBindingError("phase notification lacks an observed owned target")
             self.authority.observation_phase(
                 sequence=order_index + 1, unit=unit, fence=fence, binding=binding,
                 target=target, phase=phase, boundary_monotonic_s=marker["monotonic_s"])
@@ -564,10 +568,25 @@ class ValidatedObservationLink:
 def loaded_planned_serving_identity(*, measurement_callable: Callable[..., Any],
                                     fence_clock: Callable[..., Any],
                                     serving_timer: Callable[..., Any],
-                                    scientific_adapters: Any = None) -> Mapping[str, Any]:
+                                    scientific_adapters: Any = None,
+                                    search_window_configuration: Any = None) -> Mapping[str, Any]:
     """Identify the actual selected measurement/timers and enumerated direct support."""
-    from .unified_worker import InheritedUnitAuthority
+    from .unified_worker import (InheritedUnitAuthority, PlannedWorkerInvocation,
+                                ParentUnitEvidenceAuthority)
     from .native_producer_source import loaded_producer_source_closure
+    from .driver_execution import UnknownParentEvidenceProducer
+    from .native_parent_service import NativeParentEvidenceService
+    from .worker_lifecycle import WorkerLifecycle
+    from ..resource import preflight
+    window_constants = {}
+    if search_window_configuration is not None:
+        from . import search_window
+        if type(search_window_configuration) is not search_window.InstalledSearchWindowConfiguration:
+            raise ObservationBindingError("window pin requires its concrete installed configuration")
+        if search_window_configuration.expected_source_digest != search_window.source_digest():
+            raise ObservationBindingError("installed window source pin differs from actual loaded implementation")
+        window_constants = {"search_window_configuration": search_window_configuration.to_dict(),
+            "search_window_source": _plain(search_window.source_identity())}
     from .native_server_response import source_identity as server_response_source_identity
     server_response_source = server_response_source_identity()
     if any(row["implementation_status"] != "pinned" or row["configuration_status"] != "pinned"
@@ -594,14 +613,28 @@ def loaded_planned_serving_identity(*, measurement_callable: Callable[..., Any],
             lo.ObservationSession.checkpoint, lo.ObservationSession.finish,
             lo.ObservationSession.reconcile_shutdown, lo.FilesystemProbe.capture,
             ContainedObservationFactory.create, InheritedUnitAuthority.observation_phase,
-            InheritedUnitAuthority._exchange),
-        used_constants={"serving_residency_schema": serving.RESIDENCY_SCHEMA,
+            InheritedUnitAuthority._exchange,
+            PlannedWorkerInvocation.handle_observation_phase,
+            PlannedWorkerInvocation._finish_observation_phase,
+            ParentUnitEvidenceAuthority.request_observation_phase,
+            ParentUnitEvidenceAuthority.publish_observation_phase,
+            WorkerLifecycle._wait_outcome,
+            UnknownParentEvidenceProducer._run,
+            NativeParentEvidenceService._phase_for,
+            NativeParentEvidenceService._binding_ready,
+            NativeParentEvidenceService._poll_live_evidence,
+            NativeParentEvidenceService._evidence_poll_delay,
+            NativeParentEvidenceService._artifact_completion_for,
+            preflight.reduce_claim_witness, preflight.reduce_owned_scope,
+            preflight.parse_proc_locks, preflight.parse_region_claim),
+        used_constants={**window_constants, "serving_residency_schema": serving.RESIDENCY_SCHEMA,
             "observer_context_schema": lo.CONTEXT_SCHEMA,
             "observer_sample_schema": lo.SAMPLE_SCHEMA,
             "observer_record_schema": lo.OBSERVATION_SCHEMA,
             "observer_instrument_schema": lo.INSTRUMENT_SCHEMA,
             "detector_version": lo.DETECTOR_VERSION, "phases": list(lo.PHASES),
             "parent_readback_phase": "health",
+            "parent_window_markers": ["health", "warmup", "measurement", "measurement_end", "teardown"],
             "server_response_source": _plain(server_response_source),
             "producer_source_closure": _plain(loaded_producer_source_closure(
                 scientific_adapters=scientific_adapters)),
@@ -625,10 +658,12 @@ def seal_loaded_instrument(*, store: mc.ArtifactStore,
                            measurement_callable: Callable[..., Any],
                            fence_clock: Callable[..., Any],
                            serving_timer: Callable[..., Any],
-                           scientific_adapters: Any = None) -> LoadedInstrumentReference:
+                           scientific_adapters: Any = None,
+                           search_window_configuration: Any = None) -> LoadedInstrumentReference:
     identity = _plain(loaded_planned_serving_identity(
         measurement_callable=measurement_callable, fence_clock=fence_clock,
-        serving_timer=serving_timer, scientific_adapters=scientific_adapters))
+        serving_timer=serving_timer, scientific_adapters=scientific_adapters,
+        search_window_configuration=search_window_configuration))
     validated = lo.validate_instrument_identity(identity)
     artifact = store.write(f"loaded-instrument:{validated['sha256']}", validated)
     return LoadedInstrumentReference(validated["sha256"],
