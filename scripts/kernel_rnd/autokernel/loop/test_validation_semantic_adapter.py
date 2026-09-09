@@ -80,7 +80,12 @@ def test_pinned_root_uses_registered_projector_and_refuses_older_v1_shape(tmp_pa
                 captures["anchor"][1], receipt_locator=receipt.native_evidence_ref,
                 receipt_sha256=receipt.native_evidence_digest,
                 corpus_root=capture_store.root)
-        assert not projection.native_v2_available
+        assert projection.native_v2_available
+        assert projection.source_pin == sa.ProjectionSourcePin(
+            sa.FINAL_V2_ROOT_COMMIT, sa.FINAL_V2_CLAIM_TUPLE_SHA256,
+            sa.FINAL_V2_ARM_PROJECTOR_SHA256, sa.FINAL_V2_ADAPTER_ID,
+            sa.FINAL_V2_MEASUREMENT_CAPTURE_SHA256,
+            sa.FINAL_V2_OBSERVATION_BINDING_SHA256)
         reopened = consumer.verify_row_receipt(receipt, row, candidate, comparator)
         assert reopened["row"]["row_id"] == row.row_id
         with pytest.raises(vc.ValidationConsumerError):
@@ -223,6 +228,7 @@ def test_moving_team2_v2_receipt_reprojects_but_is_compatibility_only(tmp_path):
     body = projection.reopen_receipt(
         reference=reference, source_store=source_store, receipt_store=receipt_store)
     assert body["authority_scope"] == "compatibility_only"
+
     assert body["source_identity"]["measurement_capture_source_sha256"] \
         == TEAM2_PIN.measurement_capture_source_sha256
     assert body["source_identity"]["observation_binding_source_sha256"] \
@@ -259,6 +265,45 @@ def test_moving_team2_v2_receipt_reprojects_but_is_compatibility_only(tmp_path):
         projection.produce_receipt(
             source_store=source_store, source_locator=malformed_artifact.locator,
             source_sha256=malformed_artifact.sha256, receipt_store=receipt_store)
+
+
+def test_final_verifier_pins_do_not_retroactively_attest_producer_source(
+        tmp_path, monkeypatch):
+    fixture_module = runpy.run_path(
+        str(ROOT / "tests/vidya/test_autokernel_unified_arm.py"))
+    source_store = mc.ArtifactStore(tmp_path / "source")
+    receipt_store = mc.ArtifactStore(tmp_path / "receipts")
+    carrier = fixture_module["v2_carrier_fixture"](source_store.root)
+    carrier_artifact = source_store.write("native-v2-carrier", carrier)
+    event = {"journal_schema": "epyc.autokernel.journal_entry.v1",
+             "event_id": "event-final-v2", "seq": 1,
+             "kind": "PLANNED_SERVING_ARM_CAPTURED",
+             "campaign_id": "campaign-1", "record_id": carrier["measurement_id"],
+             "written_at": "2026-09-09T00:00:02Z",
+             "payload": {"schema": "epyc.autokernel.unified_arm_capture.v2",
+                 "measurement_id": carrier["measurement_id"], "carrier": carrier,
+                 "artifact": carrier_artifact.to_dict()}}
+    event_artifact = source_store.write("native-v2-journal-event", event)
+    projection = sa.PinnedRootProjection(ROOT)
+    assert projection.native_v2_available
+    reference = projection.produce_receipt(
+        source_store=source_store, source_locator=event_artifact.locator,
+        source_sha256=event_artifact.sha256, receipt_store=receipt_store)
+    body = projection.reopen_receipt(
+        reference=reference, source_store=source_store, receipt_store=receipt_store)
+    assert body["authority_scope"] == "compatibility_only"
+    candidate_body = json.loads(json.dumps(body))
+    candidate_body["native_binding"]["arm"] = "candidate"
+    semantic = sa.ValidationSemanticAdapter(projection)
+    monkeypatch.setattr(
+        semantic, "reopen_receipt_pair",
+        lambda **_kwargs: (body, candidate_body))
+    decision = semantic.evaluate_receipt_pair(
+        sa.ep.ExperimentPlan.from_dict(carrier["plan"]), anchor=reference,
+        candidate=reference, source_store=source_store,
+        receipt_store=receipt_store)
+    assert not decision.permitted
+    assert "native producer source identity is compatibility-only" in decision.reasons
     wrong_schema = json.loads(json.dumps(event))
     wrong_schema["payload"]["carrier"]["lifecycle_observations"][0]["schema"] = \
         "epyc.autokernel.lifecycle_observation_reference.other"

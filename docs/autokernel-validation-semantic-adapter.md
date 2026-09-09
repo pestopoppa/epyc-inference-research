@@ -11,13 +11,26 @@ The installed ROOT sources are pinned byte-for-byte:
 - `scripts/vidya/claim_tuple.py` at
   `375d46450d2fa01314ebcbddfba26411f3901f7e0df751773fd35a43f00606bb`
 - `scripts/vidya/adapters/autokernel_unified_arm.py` at
-  `590b1ac656b0123517a12fa194003bfed148bd3cf25553f986ee3a48ef7b0eae`
+  `ad87bdec7afc4d07f04fe48375adf4fe476a20423481b2be662e776a2b590192`
 
-The registered adapter is `vidya.adapters.autokernel_unified_arm/v1`. It expects
-the newer canonical carrier closure and refuses the older research v1 carrier;
-even a compatible v1 row would not supply the prospective native-v2
-loaded-instrument/lifecycle authority. The concrete consumer therefore returns
-an unavailable typed decision and cannot produce a passed row.
+The registered adapter is `vidya.adapters.autokernel_unified_arm/v1`, published
+from ROOT commit `2010b713f6a02d18c36799eac7c35c1361c06764`. The default
+construction selects this complete native-v2 source closure, including research
+measurement-capture SHA-256
+`04cacacc8576048ff18a96e2c332ca2e2ea59bfdbfcc0acc451c1939f0ad3123`
+and observation-binding SHA-256
+`fa893b554d6ab73222f3e003ffdefa7e062651adbce0de6014951731e6d0eed3`.
+It still refuses older research-v1 carriers, which do not supply prospective
+loaded-instrument/lifecycle authority. An explicit legacy source pin remains
+diagnostic/compatibility-only and cannot inherit native-v2 authority.
+
+The final pins identify the verifier code loaded when a receipt is projected;
+they do not prove which measurement-capture and observation-binding code was
+loaded during an earlier run. Current native-v2 carriers do not record those
+two producer-source identities, so their canonical receipts remain
+`compatibility_only`. A prospective carrier must bind the exact loaded producer
+implementations before `final_pinned_source` is available; an on-disk hash
+observed later cannot supply that warrant.
 
 The actual `autokernel.release.readiness/v1` reducer result may be sealed by
 `validation_objective_decision.py`. Its result is advisory (`is_trigger=false`),
@@ -107,11 +120,11 @@ The compatibility-only producer pins are measurement capture SHA-256
 `04cacacc8576048ff18a96e2c332ca2e2ea59bfdbfcc0acc451c1939f0ad3123`
 with `epyc.autokernel.measurement_capture/v2` and observation binding SHA-256
 `00a880b3fa12dcd1cd2b06d4b9e30959ee14c38441cc5f28ae706d8e2ee68839`.
-It is provisional and receipts are forced to `compatibility_only`. Final
-enablement requires the corrected projector and producer publication followed by
-all six exact final pins: ROOT commit, ClaimTuple SHA, adapter SHA and adapter ID,
-measurement-capture SHA and observation-binding SHA. There is no “latest file”
-lookup or caller-selected final flag.
+It is provisional and receipts are forced to `compatibility_only`. The default
+source closure instead requires all six exact final pins: ROOT commit, ClaimTuple
+SHA, adapter SHA and adapter ID, measurement-capture SHA and observation-binding
+SHA. There is no “latest file” lookup or caller-selected final flag, and these
+pins do not retroactively upgrade receipts made from earlier source bytes.
 
 The pin loader opens each source nonblocking with no symlink following, rejects
 FIFOs and other non-regular inputs before reading, bounds its size,
