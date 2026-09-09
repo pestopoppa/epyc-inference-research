@@ -91,6 +91,31 @@ class IssuedNativeEvidenceRegistry:
             raise ParentReceiptRefused("original parent issuance is unavailable")
         return found
 
+    def snapshot(self, *, plan: Any, store: mc.ArtifactStore) -> tuple[_Issued, ...]:
+        """Exact full original plan membership; no restoration from artifact bytes."""
+        from .experiment_plan import ExperimentPlan
+        if type(plan) is not ExperimentPlan or type(store) is not mc.ArtifactStore:
+            raise ParentReceiptRefused("snapshot requires concrete plan and artifact store")
+        plan = ExperimentPlan.from_dict(plan.to_dict())
+        if store.root != self.artifact_root:
+            raise ParentReceiptRefused("snapshot artifact root differs from original owner")
+        with self._lock:
+            entries = tuple(self._entries.values())
+        expected = tuple(sorted(plan.expected_units, key=lambda item: item.order_index))
+        if len(entries) != len(expected):
+            raise ParentReceiptRefused("snapshot lacks exact complete original plan membership")
+        by_id = {entry.context.unit_id: entry for entry in entries}
+        if len(by_id) != len(entries) or set(by_id) != {item.unit_id for item in expected}:
+            raise ParentReceiptRefused("snapshot original unit membership differs")
+        ordered = tuple(by_id[item.unit_id] for item in expected)
+        for unit, entry in zip(expected, ordered):
+            if entry.context.plan.to_dict() != plan.to_dict() or entry.context.unit != unit:
+                raise ParentReceiptRefused("snapshot belongs to a different original plan")
+            body = store.read(entry.result.receipt.locator, entry.result.receipt.sha256)
+            npe._equal(body, entry.body, "original snapshot receipt bytes")
+            store.verify(f"parent-unit-evidence:{entry.result.receipt_digest}", body)
+        return ordered
+
 
 class NativeParentReceiptReplayer:
     """Concrete replayer scoped by its owner to one retained original registry."""

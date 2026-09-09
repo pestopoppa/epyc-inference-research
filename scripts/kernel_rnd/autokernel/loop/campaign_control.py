@@ -2488,8 +2488,8 @@ class CampaignController:
             self, measurement_id: str, payload: Mapping[str, Any], *, token: object,
             lifetime_token: object | None, thread_id: int):
         """Prevalidate v2 artifacts outside the mutex; retain v1's exact path."""
-        is_v2 = isinstance(payload, Mapping) \
-            and payload.get("schema") == "epyc.autokernel.unified_arm_capture.v2"
+        is_v2 = isinstance(payload, Mapping) and payload.get("schema") in (
+            "epyc.autokernel.unified_arm_capture.v2", "epyc.autokernel.unified_arm_capture.v3")
         if not is_v2:
             with self._mutex:
                 return self._capture_native_locked(

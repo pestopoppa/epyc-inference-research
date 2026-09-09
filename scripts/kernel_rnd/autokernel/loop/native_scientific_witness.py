@@ -28,6 +28,7 @@ from . import observation_binding as ob
 from . import worker_lifecycle as wl
 
 ADAPTERS_SCHEMA = "epyc.autokernel.parent_scientific_witness_adapters.v1"
+ADAPTERS_SCHEMA_V2 = "epyc.autokernel.parent_scientific_witness_adapters.v2"
 T0_SCHEMA = "epyc.autokernel.parent_issued_t0_evidence.v1"
 WITNESS_SCHEMA = "epyc.autokernel.parent_scientific_witness.v1"
 ADAPTER_ID = "epyc.autokernel.native_t0_witness.v1"
@@ -603,6 +604,13 @@ class ParentScientificWitnessAdapters:
     schema: str = ADAPTERS_SCHEMA
 
     def __post_init__(self) -> None:
+        from .native_server_t0_witness import NativeServerT0WitnessAdapter
+        if type(self.correctness) is NativeServerT0WitnessAdapter:
+            if self.schema not in (ADAPTERS_SCHEMA, ADAPTERS_SCHEMA_V2) or any(
+                    getattr(self, name) is not None for name in SLOTS[1:]):
+                raise ScientificWitnessRefused("unsupported server T0 adapter registry slots")
+            object.__setattr__(self, "schema", ADAPTERS_SCHEMA_V2)
+            return
         if (self.schema != ADAPTERS_SCHEMA or self.correctness is not None
                 and type(self.correctness) is not NativeT0WitnessAdapter
                 or any(getattr(self, name) is not None for name in SLOTS[1:])):
@@ -626,7 +634,8 @@ class ParentScientificWitnessAdapters:
                 body = adapter.reopen(reference, context=context, native=native,
                     lifecycle_link=lifecycle_link, runtime_readbacks=runtime_readbacks, store=store)
                 result[name] = {"status": body["status"],
-                    "reason": REPLAY_COVERAGE, "facts": {"receipt": reference.to_dict(),
+                    "reason": (body["replay_coverage"] if self.schema == ADAPTERS_SCHEMA_V2
+                               else REPLAY_COVERAGE), "facts": {"receipt": reference.to_dict(),
                     "report": ob._plain(body["report"]), "scope_defects": list(body["scope_defects"]),
                     "adapter_source": ob._plain(body["source"])}}
             except Exception as exc:
@@ -639,6 +648,12 @@ def validate_scientific_source(value: Any) -> Mapping[str, Any]:
     """Closed historical grammar; no comparison with today's installation here."""
     from .native_producer_source import _closed, _identity, _callables
     row = _closed(value, ("schema", *SLOTS), "scientific adapter source")
+    if row["schema"] == ADAPTERS_SCHEMA_V2:
+        from .native_server_t0_witness import validate_server_source
+        if row["correctness"] is None or any(row[name] is not None for name in SLOTS[1:]):
+            raise ScientificWitnessRefused("server T0 registry requires exact concrete correctness slot")
+        row["correctness"] = validate_server_source(row["correctness"])
+        return ob._freeze(ob._plain(row))
     if row["schema"] != ADAPTERS_SCHEMA or any(row[name] is not None for name in SLOTS[1:]):
         raise ScientificWitnessRefused("unsupported scientific adapter source schema/slots")
     if row["correctness"] is not None:
@@ -670,6 +685,9 @@ def validate_scientific_source(value: Any) -> Mapping[str, Any]:
 def scientific_source_identities(value: Any) -> tuple[Mapping[str, Any], ...]:
     row = validate_scientific_source(value)
     adapter = row["correctness"]
+    if row["schema"] == ADAPTERS_SCHEMA_V2:
+        from .native_server_t0_witness import server_source_identities
+        return server_source_identities(adapter)
     if adapter is None:
         return ()
     return tuple(item["identity"] for item in adapter["callables"]) + tuple(
@@ -680,6 +698,14 @@ def installed_scientific_adapters(value: Any) -> ParentScientificWitnessAdapters
     """Reconstruct selected installed TYPE/CONFIG only; never restore its issuance."""
     row = validate_scientific_source(value)
     adapter = row["correctness"]
+    if row["schema"] == ADAPTERS_SCHEMA_V2:
+        from .native_server_t0_witness import NativeServerT0WitnessAdapter
+        config = adapter["configuration"]
+        selected = ParentScientificWitnessAdapters(correctness=NativeServerT0WitnessAdapter(
+            max_units=config["max_units"],
+            owning_issuer=NativeT0WitnessAdapter(max_units=config["owning_issuer_max_units"])))
+        _same(selected.source_identity(), row, "installed server scientific adapter source")
+        return selected
     selected = ParentScientificWitnessAdapters(correctness=None if adapter is None else
         NativeT0WitnessAdapter(max_units=adapter["configuration"]["max_units"]))
     _same(selected.source_identity(), row, "installed scientific adapter source")

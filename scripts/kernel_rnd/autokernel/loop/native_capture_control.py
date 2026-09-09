@@ -232,6 +232,15 @@ class NativeCaptureValidator:
     def prevalidate(self, measurement_id: str,
                     payload: Mapping[str, Any]) -> PrevalidatedNativeCapture:
         """Perform all potentially large v2 reads before controller serialization."""
+        from . import native_final_trial as final
+        if isinstance(payload, Mapping) and payload.get("schema") == final.CAPTURE_SCHEMA:
+            from .native_server_t0_witness import NativeServerT0WitnessAdapter
+            if self.parent_receipt_replayer is None:
+                raise NativeCaptureRefused("final capture original parent replay is unavailable")
+            selected = self.parent_receipt_replayer.selected_scientific_adapters()
+            if selected is None or type(selected.correctness) is not NativeServerT0WitnessAdapter:
+                raise NativeCaptureRefused("final capture requires the concrete original server T0 owner")
+            return selected.correctness.final_trial_owner.prevalidate(self, measurement_id, payload)
         measurement_id = _sha(measurement_id, "measurement_id")
         row = _plain(payload)
         if (not isinstance(row, dict)
