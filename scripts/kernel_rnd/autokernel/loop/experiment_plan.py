@@ -666,7 +666,9 @@ def _validated_view(plan: ExperimentPlan,
 
 def eligibility(plan: ExperimentPlan, view: AdmissibleUnitView,
                 intended_use: str, *, current_epoch: str,
-                registered_claim_grade: Any = None) -> UseDisposition:
+                registered_claim_grade: Any = None,
+                nomination_verifier: Any = None,
+                nomination_receipt: Any = None) -> UseDisposition:
     """Check structural evidence use.  This deliberately does not grade claims."""
     try:
         plan = _normalized_plan(plan)
@@ -677,6 +679,7 @@ def eligibility(plan: ExperimentPlan, view: AdmissibleUnitView,
         return _disposition("refused", (f"unsupported intended use {intended_use!r}",))
     refusals: list[str] = []
     undefined: list[str] = []
+    nomination_verified = False
     if view.plan_digest != plan.digest:
         refusals.append("unit view belongs to a different plan")
     if intended_use != plan.intended_use:
@@ -695,9 +698,6 @@ def eligibility(plan: ExperimentPlan, view: AdmissibleUnitView,
     if (plan.record_class in {"discovery_screen", "strict_search"}
             and intended_use == "rank" and current_epoch != plan.epoch):
         refusals.append("cross-epoch search magnitude cannot rank")
-    if intended_use != "explore" and not view.complete:
-        refusals.append("complete admissible-unit view required")
-
     if plan.record_class == "discovery_screen":
         if plan.phase != "discovery":
             refusals.append("discovery_screen requires discovery phase")
@@ -708,11 +708,22 @@ def eligibility(plan: ExperimentPlan, view: AdmissibleUnitView,
         if len(plan.changed_factors) != 1:
             refusals.append("A2 requires exactly one declared changed factor")
         if intended_use == "nominate":
-            # No semantic bank/frame/sole-factor adapter is wired in v1.  Labels
-            # and arbitrary witness references cannot bootstrap that authority.
-            undefined.append(
-                "nomination missing registered runtime-attestation verifier for "
-                "sealed bank identity, sole-factor semantics, and zero new anchor launches")
+            try:
+                from .discovery_screen import RegisteredNominationVerifier
+                if not isinstance(nomination_verifier, RegisteredNominationVerifier):
+                    undefined.append(
+                        "nomination missing registered runtime-attestation verifier for "
+                        "sealed bank identity, sole-factor semantics, and zero new anchor launches")
+                else:
+                    nomination_verified = nomination_verifier.verify(
+                        plan, view, nomination_receipt)
+            except Exception as exc:
+                refusals.append(f"registered A2 nomination verification failed: {exc}")
+
+    if (intended_use != "explore" and not view.complete
+            and not (plan.record_class == "discovery_screen"
+                     and intended_use == "nominate" and nomination_verified)):
+        refusals.append("complete admissible-unit view required")
 
     if plan.record_class == "strict_search" and intended_use in {"headline", "release"}:
         refusals.append("strict_search evidence cannot support headline/release use")

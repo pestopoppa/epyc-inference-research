@@ -39,7 +39,7 @@ import time
 from typing import TYPE_CHECKING
 import urllib.request
 
-from . import residency, status
+from . import lifecycle_observation, residency, status
 
 if TYPE_CHECKING:
     from .resolved_recipe import ResolvedRecipe
@@ -617,7 +617,9 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                   evidence: list | None = None,
                   resolved_recipe: "ResolvedRecipe | None" = None,
                   frozen_requests: Sequence[tuple[str, bytes]] | None = None,
-                  observation: list | None = None) -> float:
+                  observation: list | None = None,
+                  observation_session: lifecycle_observation.ObservationSession | None = None
+                  ) -> float:
     """Launch the server under `recipe`, fire `np` concurrent requests, return aggregate
     tok/s. The server is always stopped, even on error.
 
@@ -638,6 +640,22 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
     process_pid: int | None = None
     teardown = "not_started"
     failure: str | None = None
+    observer_finish_ok = observation_session is None
+
+    def observe(method: str, *args) -> bool:
+        if observation_session is None:
+            return True
+        try:
+            getattr(observation_session, method)(*args)
+            return True
+        except Exception as exc:
+            # The session retains its own diagnostic whenever it can. Observation is
+            # auxiliary: it must never skip owned teardown or replace a serving error.
+            try:
+                observation_session.note_hook_failure(method, exc)
+            except Exception:
+                pass
+            return False
     if frozen_requests is not None:
         if len(frozen_requests) != recipe.np:
             raise RecipeError("frozen request count must equal recipe.np")
@@ -657,16 +675,23 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
     else:
         argv = recipe.server_argv(build_dir, port)
         launch_env = recipe.server_env(build_dir)
-    sampler = residency.Sampler()
+    observe("start", "setup")
+    sampler = None
     window_start = time.time()
     request_start: float | None = None
     request_end: float | None = None
     try:
+        sampler = residency.Sampler()
         with sampler:
+            observe("phase", "load")
             srv = subprocess.Popen(argv, stdout=subprocess.DEVNULL,
                                    stderr=subprocess.DEVNULL,
                                    env=launch_env)
             process_pid = srv.pid
+            observe("attach_target", srv.pid)
+            # Placement is an overlapping launcher marker inside the load window;
+            # load itself remains open until the health marker below.
+            observe("phase", "placement")
             try:
                 for _ in range(boot_timeout_s // 2):
                     if srv.poll() is not None:
@@ -678,6 +703,7 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                         time.sleep(2)
                 else:
                     raise ServerDied("server not healthy within boot timeout")
+                observe("phase", "health")
                 # The env arm is verified on the LIVE process, before a single token is measured.
                 if resolved_recipe is None:
                     verify_env_readback(recipe, srv.pid)
@@ -737,10 +763,13 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                 request_start = time.time()
                 # Warmup: one full np-wide round discarded, so cold-cache/clock-ramp does not
                 # land in the measured sample (the first calibration run read high, then settled).
+                observe("phase", "warmup")
                 with cf.ThreadPoolExecutor(recipe.np) as ex:
                     warmup_rows = list(ex.map(lambda i: one(i, "warmup"), range(recipe.np)))
+                observe("phase", "measurement")
                 with cf.ThreadPoolExecutor(recipe.np) as ex:
                     rows = list(ex.map(lambda i: one(i, "measurement"), range(recipe.np)))
+                observe("checkpoint", "measurement_end")
                 request_end = time.time()
                 request_rows = [row[3] for row in warmup_rows + rows]
                 toks = [row[0] for row in rows]
@@ -752,6 +781,7 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                     raise ServerDied("frozen request lacks explicit terminal completion")
                 value = sum(row[1] for row in rows)
             finally:
+                observe("phase", "teardown")
                 srv.terminate()
                 try:
                     srv.wait(30)
@@ -765,21 +795,35 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
         raise
     finally:
         window_end = time.time()
-        record = _residency_record(sampler, window_start=window_start,
-                                   window_end=window_end,
-                                   request_start=request_start,
-                                   request_end=request_end, backend=backend)
-        if evidence is not None:
-            evidence.append(record)
-        if observation is not None:
-            observation.append({"schema": "epyc.autokernel.serving_observation.v1",
-                                "process_pid": process_pid, "requests": request_rows,
-                                "residency": record, "teardown": teardown,
-                                "failure": failure})
+        try:
+            if sampler is not None:
+                try:
+                    record = _residency_record(sampler, window_start=window_start,
+                                               window_end=window_end,
+                                               request_start=request_start,
+                                               request_end=request_end, backend=backend)
+                    if evidence is not None:
+                        evidence.append(record)
+                    if observation is not None:
+                        observation.append({
+                            "schema": "epyc.autokernel.serving_observation.v1",
+                            "process_pid": process_pid, "requests": request_rows,
+                            "residency": record, "teardown": teardown, "failure": failure})
+                except Exception:
+                    if failure is None:
+                        raise
+                    # Preserve the serving exception already in flight. The auxiliary
+                    # export failure cannot replace the launch/readback/request cause.
+        finally:
+            observer_finish_ok = observe("finish")
     # Success path only. An exception already in flight carries its own reason, and
     # replacing it with a residency refusal would hide the real fault -- while the
     # record above is appended either way, so a failed launch still leaves its window.
     _refuse_if_not_resident(recipe, record, backend=backend)
+    if observation_session is not None and (
+            not observer_finish_ok or not observation_session.shutdown_resolved):
+        raise lifecycle_observation.ObserverShutdownUnresolved(
+            "lifecycle observer ownership remains unresolved; refusing a successor unit")
     return value
 
 
