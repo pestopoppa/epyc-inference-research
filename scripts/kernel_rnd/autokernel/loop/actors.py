@@ -228,9 +228,20 @@ def _extract_json(text: str) -> dict:
     return best
 
 
+def _cpu_target(context: Mapping[str, Any]) -> bool:
+    target = context.get("target")
+    recipe = target.get("recipe") if isinstance(target, Mapping) else None
+    return isinstance(recipe, Mapping) and recipe.get("backend") == "cpu"
+
+
 def render_context(context: Mapping[str, Any], *, limit: int = 12) -> str:
     """The bundle, as the actor sees it. Everything here was previously discarded."""
     lines: list[str] = []
+    cpu = _cpu_target(context)
+    if context.get("target"):
+        lines.extend(["## Selected target (original launch, model, requests and build)",
+                      "```json", json.dumps(context["target"], indent=2, sort_keys=True),
+                      "```", ""])
 
     # First, because it is the cheapest rejection: standing constraints and the
     # settled list. `program.md` carried "Already in v9: GGML_IQK, MMQ, HIP graphs"
@@ -265,7 +276,8 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12) -> str:
         lines.append("")
 
     hotspots = context.get("kernel_hotspots") or []
-    lines.append("## Where the device time actually goes (rocprofv3, current champion)")
+    lines.append("## CPU profile for the selected experimental target" if cpu else
+                 "## Where the device time actually goes (rocprofv3, current champion)")
     if hotspots:
         lines.append("| share | ns | calls | kernel |")
         lines.append("|---|---|---|---|")
@@ -357,8 +369,7 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12) -> str:
     return "\n".join(lines)
 
 
-_HYPOTHESIS_TASK = """You are proposing ONE kernel optimisation for llama.cpp on an \
-AMD MI210 (gfx90a, ROCm 6.2).
+_HYPOTHESIS_TASK = """You are proposing ONE kernel optimisation for llama.cpp on {platform}.
 
 {context}
 
@@ -366,10 +377,10 @@ Propose exactly one hypothesis. Reply with ONE json object and nothing else:
 {{"mechanism_id": "akm-<short-slug>",
   "statement": "<what changes, mechanically, and why it should be faster>",
   "falsifier": "<the measurement that would prove this wrong>",
-  "target_surface": "<one path under ggml/src/ggml-cuda/>",
+  "target_surface": "<{target_path}>",
   "target_symbol": "<the function you will change>"}}
 
-Rules: attack a route near the top of the profile; name a MECHANISM, not a wish; \
+Rules: {profile_rule}; name a MECHANISM, not a wish; \
 state a falsifier that could actually fail."""
 
 
@@ -384,7 +395,16 @@ class AgentPlanner:
     transient_streak: int = 0
 
     def propose(self, context: Mapping[str, Any]) -> Hypothesis:
-        prompt = _HYPOTHESIS_TASK.format(context=render_context(context))
+        cpu = _cpu_target(context)
+        prompt = _HYPOTHESIS_TASK.format(
+            context=render_context(context),
+            platform=("the CPUs in the selected original serving launch" if cpu else
+                      "an AMD MI210 (gfx90a, ROCm 6.2)"),
+            target_path=("one source path on the selected CPU serving route" if cpu else
+                         "one path under ggml/src/ggml-cuda/"),
+            profile_rule=("use the original CPU launch/model and inspect its source route; "
+                          "if the CPU profile is unavailable, state that limit and do not invent timing evidence"
+                          if cpu else "attack a route near the top of the profile"))
         raw, streak = _with_backoff(
             lambda: _run_agent(prompt, workspace=self.workspace,
                                timeout_s=self.timeout_s, backend=self.backend))
@@ -406,6 +426,10 @@ class AgentPlanner:
 
     def author(self, hypothesis: Hypothesis,
                context: Mapping[str, Any]) -> tuple[str, ...]:
+        cpu = _cpu_target(context)
+        resource = "selected CPU resources" if cpu else "GPU"
+        reply = (json.dumps({"paths": [hypothesis.target_surface]}) if cpu else
+                 '{"paths": ["ggml/src/ggml-cuda/<file>"]}')
         prompt = (
             f"Implement this hypothesis in the worktree at {self.workspace}.\n\n"
             f"mechanism: {hypothesis.mechanism_id}\n"
@@ -416,11 +440,11 @@ class AgentPlanner:
             "Edit the file directly. Keep the change minimal and confined to the "
             "named file.\n\n"
             "DO NOT BUILD, COMPILE, BENCHMARK OR TEST. The loop owns the build and "
-            "the GPU; a build you start is unmeasured compute taken from another "
+            f"the {resource}; a build you start is unmeasured compute taken from another "
             "session and it will not be used. Make the edit and stop.\n\n"
             "Then reply with ONE json object naming the files you actually changed, "
             "using their real paths:\n"
-            '{"paths": ["ggml/src/ggml-cuda/<file>"]}')
+            f"{reply}")
         raw, streak = _with_backoff(
             lambda: _run_agent(prompt, workspace=self.workspace,
                                timeout_s=self.timeout_s, backend=self.backend))
@@ -480,15 +504,21 @@ class AgentCritic:
 
     def review_hypothesis(self, hypothesis: Hypothesis,
                           context: Mapping[str, Any]) -> Review:
+        grounds = (
+            "it was already measured under the selected conditions; the mechanism is unsupported "
+            "by the selected CPU source route; it invents unavailable profile evidence; "
+            "there is no real falsifier; or it is already present in the selected source"
+            if _cpu_target(context) else
+            "it was already measured; the mechanism is unsupported by the profile; "
+            "there is no real falsifier; the target has negligible device-time share; "
+            "or it is already present in production v9")
         return self._review(
             f"Review this HYPOTHESIS before any patch is written:\n"
             f"  mechanism: {hypothesis.mechanism_id}\n"
             f"  statement: {hypothesis.statement}\n"
             f"  falsifier: {hypothesis.falsifier}\n"
             f"  target:    {hypothesis.target_surface}::{hypothesis.target_symbol}",
-            "it was already measured; the mechanism is unsupported by the profile; "
-            "there is no real falsifier; the target has negligible device-time share; "
-            "or it is already present in production v9",
+            grounds,
             context)
 
     def review_patch(self, hypothesis: Hypothesis, paths: Sequence[str],

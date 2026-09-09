@@ -4,6 +4,7 @@ The two things that must hold before this touches a real API: consecutive failur
 back off (a codex 401 produced 284 failures in 23 minutes with zero delay), and the
 context bundle actually carries what the old planner never received.
 """
+import json
 from pathlib import Path
 import unittest
 from unittest import mock
@@ -109,6 +110,55 @@ class ContextBundle(unittest.TestCase):
 
 
 class PlannerContract(unittest.TestCase):
+
+    def test_original_cpu_target_reaches_planner_author_and_critic_without_gpu_constraints(self):
+        from .test_glm_frozen_requests import _canonical_launch
+
+        _template, selected = _canonical_launch(18311)
+        target = {"scope": "experimental candidate, NOT canonical champion",
+                  "recipe": selected.to_dict(), "requests": "/original/frozen-prompts.json",
+                  "hotspot_status": "CPU profile unavailable; do not infer GPU hotspots"}
+        context = {"target": target, "program": "Preserve original target; source edits only."}
+        hypothesis = {"mechanism_id": "akm-cpu", "statement": "inspect CPU loop",
+                      "falsifier": "paired serving regresses",
+                      "target_surface": "ggml/src/ggml-cpu/ggml-cpu.cpp", "target_symbol": "cpu_loop"}
+        captured = []
+
+        def reply(prompt, **kwargs):
+            captured.append(prompt)
+            if prompt.startswith("Implement"):
+                return json.dumps({"paths": [hypothesis["target_surface"]]})
+            if prompt.startswith("Review"):
+                return '{"accepted": true, "reason": "fixture reply"}'
+            return json.dumps(hypothesis)
+
+        planner = actors.AgentPlanner(workspace=Path("/tmp"))
+        critic = actors.AgentCritic(workspace=Path("/tmp"))
+        with mock.patch.object(actors, "_run_agent", side_effect=reply), \
+                mock.patch.object(actors.subprocess, "run", return_value=mock.Mock(
+                    stdout=" M " + hypothesis["target_surface"])):
+            proposed = planner.propose(context)
+            self.assertEqual(planner.author(proposed, context), (hypothesis["target_surface"],))
+            self.assertTrue(critic.review_hypothesis(proposed, context).accepted)
+            for prompt in captured:
+                self.assertIn(json.dumps(target, indent=2, sort_keys=True), prompt)
+                self.assertNotIn("AMD MI210", prompt)
+                self.assertNotIn("ggml/src/ggml-cuda/", prompt)
+            self.assertTrue(captured[0].startswith(
+                "You are proposing ONE kernel optimisation for llama.cpp on the CPUs"))
+            self.assertIn("do not invent timing evidence", captured[0])
+            self.assertIn("DO NOT BUILD, COMPILE, BENCHMARK OR TEST", captured[1])
+            self.assertIn(json.dumps({"paths": [hypothesis["target_surface"]]}), captured[1])
+            self.assertIn("invents unavailable profile evidence", captured[2])
+            captured.clear()
+            planner.propose({})
+            planner.author(proposed, {})
+            critic.review_hypothesis(proposed, {})
+        self.assertTrue(captured[0].startswith(
+            "You are proposing ONE kernel optimisation for llama.cpp on an AMD MI210 (gfx90a, ROCm 6.2)."))
+        self.assertIn('"target_surface": "<one path under ggml/src/ggml-cuda/>"', captured[0])
+        self.assertIn('{"paths": ["ggml/src/ggml-cuda/<file>"]}', captured[1])
+        self.assertIn("negligible device-time share", captured[2])
 
     def test_a_complete_hypothesis_parses(self):
         planner = actors.AgentPlanner(workspace=Path("/tmp"))
