@@ -111,6 +111,8 @@ class StandaloneRuntimeInputs:
     loaded_instrument_reference: Mapping[str, Any] | None = None
     native_artifact_root: Path | None = None
     observation_configuration: Any = None
+    retention_catalog_seed: Any = None
+    retention_runtime_recipes: Any = None
 
 
 @dataclass(frozen=True)
@@ -241,6 +243,7 @@ class StandaloneRuntime:
                 raise StandaloneRuntimeRefused("runtime requires a concrete feed owner")
             feed_runtime.validate_paths(inputs.feed_owner.config, controller.store)
         if inputs.native_evidence_configuration is not None:
+            from . import native_retention_catalog
             from . import measurement_capture as mc, observation_binding as ob
             if (inputs.native_artifact_root is None
                     or inputs.loaded_instrument_identity is None
@@ -259,6 +262,12 @@ class StandaloneRuntime:
             if actual.to_dict() != expected.artifact.to_dict():
                 raise StandaloneRuntimeRefused(
                     "published native instrument differs from startup")
+            if (not isinstance(inputs.retention_catalog_seed,
+                               native_retention_catalog.NativeRetentionCatalogSeed)
+                    or controller.native_retention_catalog_seed_digest()
+                       != inputs.retention_catalog_seed.seed_digest):
+                raise StandaloneRuntimeRefused(
+                    "native retention catalog is not durably installed")
         readiness = controller.unified_driver_readiness()
         if (
             readiness["scheduler_projection_digest"]

@@ -435,6 +435,7 @@ class MaterializedInputs:
         }
         if self.manifest.schema == NATIVE_MANIFEST_SCHEMA:
             result["native_instrument_runtime_status"] = "planned_unpublished"
+            result["native_retention_catalog_status"] = "planned_unpublished"
         return result
 
 
@@ -496,6 +497,8 @@ def materialize(value: StartupManifest) -> MaterializedInputs:
         native_reference = None
         native_artifact_root = None
         observation_configuration = None
+        retention_catalog_seed = None
+        retention_runtime_recipes = None
         if value.schema == NATIVE_MANIFEST_SCHEMA:
             (native_configuration, native_identity, native_reference,
              native_artifact_root, observation_configuration) = _native_evidence(
@@ -561,6 +564,19 @@ def materialize(value: StartupManifest) -> MaterializedInputs:
                            != (recipe.model.path, recipe.model.sha256)):
                     raise StandaloneInputsRefused(
                         "model preparation entry differs from native recipe model")
+            from . import native_retention_catalog
+            retention_runtime_recipes = MappingProxyType({
+                target: MappingProxyType({
+                    recipe: expected_target_recipes[target, recipe]
+                    for known_target, recipe in expected_target_recipes
+                    if known_target == target})
+                for target in sorted({target for target, _recipe in expected_target_recipes})})
+            retention_catalog_seed = native_retention_catalog.build_seed(
+                resolved, anchors,
+                config_digest=campaign_control.resolved_config_digest(resolved),
+                model_preparations=native_configuration.model_preparations,
+                runtime_recipes=retention_runtime_recipes,
+                artifact_root=native_artifact_root)
     except StandaloneInputsRefused:
         raise
     except Exception as exc:
@@ -596,6 +612,10 @@ def materialize(value: StartupManifest) -> MaterializedInputs:
         None, native_configuration, native_identity,
         None if native_reference is None else _freeze(native_reference.to_dict()),
         native_artifact_root, observation_configuration)
+    if retention_catalog_seed is not None:
+        inputs = replace(
+            inputs, retention_catalog_seed=retention_catalog_seed,
+            retention_runtime_recipes=retention_runtime_recipes)
     return MaterializedInputs(
         value, resolved, inputs, tuple(sorted(missing)), tuple(sorted(pending_profiles)))
 
@@ -646,6 +666,13 @@ def runtime_factory(materialized: MaterializedInputs, registry: ProviderRegistry
                 current_inputs = replace(verified_inputs, feed_owner=feed_runtime.FeedRuntimeOwner(
                     materialized.manifest.evidence_feed, binding))
             if current_inputs.native_evidence_configuration is not None:
+                controller.install_native_retention_catalog(
+                    current_inputs.retention_catalog_seed,
+                    runtime_anchors=current_inputs.runtime_anchors,
+                    model_preparations=(
+                        current_inputs.native_evidence_configuration.model_preparations),
+                    runtime_recipes=current_inputs.retention_runtime_recipes,
+                    artifact_root=current_inputs.native_artifact_root)
                 from . import measurement_capture as mc, observation_binding as ob
                 identity = _thaw(current_inputs.loaded_instrument_identity)
                 reference = ob.LoadedInstrumentReference.from_dict(

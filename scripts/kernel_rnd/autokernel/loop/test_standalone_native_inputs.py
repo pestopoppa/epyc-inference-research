@@ -157,6 +157,7 @@ def test_v3_dry_run_labels_instrument_unpublished_without_store_io(
     report = json.loads(capsys.readouterr().out)
     assert report["schema"] == inputs.NATIVE_PREFLIGHT_SCHEMA
     assert report["native_instrument_runtime_status"] == "planned_unpublished"
+    assert report["native_retention_catalog_status"] == "planned_unpublished"
     assert report["execution_authorized"] is False
     assert not Path(document["driver_config"]["store_path"]).exists()
 
@@ -179,6 +180,16 @@ def test_direct_compose_requires_runtime_instrument_then_reuses_one_adapter(tmp_
             store.write(f"loaded-instrument:{identity['sha256']}", identity)
         finally:
             store.close()
+        with pytest.raises(Exception, match="retention catalog is not durably installed"):
+            standalone_runtime.StandaloneRuntime.compose(
+                controller=controller, inputs=materialized.inputs)
+        controller.install_native_retention_catalog(
+            materialized.inputs.retention_catalog_seed,
+            runtime_anchors=materialized.inputs.runtime_anchors,
+            model_preparations=(
+                materialized.inputs.native_evidence_configuration.model_preparations),
+            runtime_recipes=materialized.inputs.retention_runtime_recipes,
+            artifact_root=materialized.inputs.native_artifact_root)
         runtime = standalone_runtime.StandaloneRuntime.compose(
             controller=controller, inputs=materialized.inputs)
         try:
@@ -328,6 +339,10 @@ def test_runtime_factory_publishes_before_compose_and_retains_adapter_instance(t
         assert runtime.executor._native_evidence_configuration is configured
         assert runtime.executor._native_evidence_configuration.scientific_adapters.correctness \
             is configured.scientific_adapters.correctness
+        assert controller.native_retention_catalog_seed_digest() == \
+            materialized.inputs.retention_catalog_seed.seed_digest
+        assert [entry.kind for entry in controller._journal.read_all()].count(
+            "RETENTION_CATALOG_INSTALLED") == 1
         store = mc.ArtifactStore(materialized.inputs.native_artifact_root)
         try:
             identity = dict(materialized.inputs.loaded_instrument_identity)

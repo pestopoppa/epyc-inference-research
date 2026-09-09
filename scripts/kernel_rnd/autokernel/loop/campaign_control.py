@@ -28,6 +28,7 @@ from . import status
 from . import actor_preparation_state as actor_state_module
 from . import campaign_command_v2
 from . import maintenance_execution as maintenance_module
+from . import native_retention_catalog as retention_catalog_module
 from . import scheduling
 from . import worker_lifecycle as worker_lifecycle_module
 from .native_capture_control import (CurrentOwnerToken, NativeCaptureRefused,
@@ -689,6 +690,9 @@ class CampaignController:
         self._maintenance_events: list[dict[str, Any]] = []
         self._maintenance_state = maintenance_module.MaintenanceState()
         self._maintenance_tombstone_intent = False
+        self._retention_catalog_seed = None
+        self._retention_catalog_event = None
+        self._prepared_retention_jobs: dict[str, tuple[Any, ...]] = {}
         self._scheduler_engine = scheduler_engine
         self._driver_issued: dict[str, dict[str, Any]] = {}
         self._driver_settled: dict[str, dict[str, Any]] = {}
@@ -848,6 +852,7 @@ class CampaignController:
         a2_bank_sources: dict[str, list[str]] = {}
         actor_preparation_events: list[dict[str, Any]] = []
         actor_preparation_state = actor_state_module.ActorPreparationProjection()
+        retention_catalog_event = None
         for entry in entries:
             self._journal_cursor = entry.seq
             if entry.campaign_id not in (None, self.resolved.campaign_id):
@@ -902,6 +907,22 @@ class CampaignController:
                     sources = a2_bank_sources.setdefault(bank_digest, [])
                     if row["execution_id"] not in sources:
                         sources.append(row["execution_id"])
+                continue
+            if entry.kind == journal_module.KIND_RETENTION_CATALOG_INSTALLED:
+                try:
+                    row = retention_catalog_module.validate_install_event(entry.payload)
+                except retention_catalog_module.NativeRetentionCatalogRefused as exc:
+                    raise journal_module.JournalCorruption(
+                        f"invalid native retention catalog history: {exc}") from exc
+                if (self.snapshot_version != 3 or not saw_start
+                        or row["campaign_id"] != self.resolved.campaign_id
+                        or row["config_generation"] != self.config_generation
+                        or row["config_digest"] != self.config_digest
+                        or row["supervisor_incarnation"] != last_incarnation
+                        or retention_catalog_event is not None):
+                    raise journal_module.JournalCorruption(
+                        "native retention catalog breaks durable controller binding")
+                retention_catalog_event = retention_catalog_module._plain(row)
                 continue
             if entry.kind == journal_module.KIND_WORKER_LIFECYCLE:
                 violations = journal_module._validate_native_payload(entry.kind, entry.payload)
@@ -1391,6 +1412,19 @@ class CampaignController:
                 maintenance_state, phase="UNRESOLVED",
                 reason="controller restarted before exact maintenance settlement")
         self._maintenance_tombstone_intent = maintenance_state.owned
+        self._retention_catalog_event = retention_catalog_event
+        self._retention_catalog_seed = None
+        if retention_catalog_event is not None:
+            seed_row = dict(retention_catalog_event["seed"])
+            supplied = seed_row.pop("seed_digest")
+            self._retention_catalog_seed = retention_catalog_module.NativeRetentionCatalogSeed(
+                seed_row["campaign_id"], seed_row["config_digest"],
+                seed_row["manifest_digest"],
+                tuple(retention_catalog_module.CatalogArtifact.from_dict(item)
+                      for item in seed_row["artifacts"]),
+                tuple(seed_row["model_inventories"]),
+                tuple(seed_row["uncertain_scopes"]), supplied,
+                seed_row["schema"], retention_catalog_module._TOKEN)
         self._a2_execution_entries = a2_execution_entries
         self._a2_logical_executions = a2_logical_executions
         self._a2_bank_sources = a2_bank_sources
@@ -2676,8 +2710,146 @@ class CampaignController:
                     "INTENT", token, occurred_at=self.clock()))
                 self._maintenance_tombstone_intent = True
                 return token
-            raise ControlRefused(
-                "native retention artifact/dependency catalog coverage is unavailable")
+            prepared = self._prepared_retention_jobs.get(job.plan.plan_digest)
+            frontier = self._retention_frontier_locked()
+            if (prepared is None or prepared[0] != frontier
+                    or job.plan.snapshot_digest != prepared[1]
+                    or job.policy_digest != prepared[2]
+                    or tuple(job.selected_artifact_ids) != prepared[3]):
+                raise ControlRefused(
+                    "maintenance job lacks exact current native catalog preparation")
+            token = maintenance_module.ExclusionToken(
+                "maintenance-" + job.plan.plan_digest[:24],
+                self.resolved.campaign_id, self.config_digest,
+                self.config_generation, self._maintenance_supervisor_id(),
+                self.supervisor_incarnation, job.plan.snapshot_id,
+                job.plan.snapshot_generation, job.plan.snapshot_digest,
+                job.plan.plan_digest, job.policy_digest,
+                job.selected_artifact_ids, self.clock(), None)
+            self._maintenance_append_locked(maintenance_module.make_event(
+                "INTENT", token, occurred_at=self.clock()))
+            self._maintenance_tombstone_intent = True
+            return token
+
+    def install_native_retention_catalog(
+            self, seed, *, runtime_anchors, model_preparations, artifact_root,
+            runtime_recipes=None, runtime_recipe_snapshots=None) -> dict[str, Any]:
+        """Durably install the one token-built static catalog before driver work."""
+        if not isinstance(seed, retention_catalog_module.NativeRetentionCatalogSeed):
+            raise TypeError("seed must be NativeRetentionCatalogSeed")
+        expected = retention_catalog_module.build_seed(
+            self.resolved, runtime_anchors, config_digest=self.config_digest,
+            model_preparations=model_preparations, runtime_recipes=runtime_recipes,
+            runtime_recipe_snapshots=runtime_recipe_snapshots,
+            artifact_root=artifact_root)
+        if seed is not expected and seed != expected:
+            raise ControlRefused("native retention catalog was not rederived from owning inputs")
+        with self._mutex:
+            self._require_active_locked()
+            if self.snapshot_version != 3 or seed.campaign_id != self.resolved.campaign_id \
+                    or seed.config_digest != self.config_digest \
+                    or seed.manifest_digest != self.resolved.manifest_digest:
+                raise ControlRefused("native retention catalog binding differs")
+            if self._retention_catalog_event is not None:
+                if self._retention_catalog_seed != seed:
+                    raise ControlRefused("native retention catalog is already installed differently")
+                return copy.deepcopy(self._retention_catalog_event)
+            row = retention_catalog_module.make_install_event(
+                seed, config_generation=self.config_generation,
+                supervisor_incarnation=self.supervisor_incarnation)
+            assert self._journal is not None
+            try:
+                entry = self._journal.append(
+                    journal_module.KIND_RETENTION_CATALOG_INSTALLED, row,
+                    record_id=seed.seed_digest)
+                self._verify_journal_layout(self.store / "journal")
+            except BaseException:
+                self._poisoned = True
+                raise
+            self._journal_cursor = entry.seq
+            self._retention_catalog_seed = seed
+            self._retention_catalog_event = copy.deepcopy(row)
+            return copy.deepcopy(row)
+
+    def _retention_frontier_locked(self) -> tuple[Any, ...]:
+        seed = self._retention_catalog_seed
+        if seed is None:
+            raise ControlRefused("native retention catalog is unavailable")
+        return (seed.seed_digest,
+                schemas.content_hash(seed.to_dict()),
+                self._candidate_projection_position,
+                self._worker_lifecycle_revision,
+                tuple(sorted(self._native_payload_digests.items())),
+                tuple(sorted((key, row["transition_id"])
+                             for key, row in self._driver_issued.items())),
+                tuple(sorted(self._driver_settled)),
+                self.supervisor_incarnation, self.control_revision)
+
+    def native_retention_catalog_capture(self) -> Mapping[str, Any]:
+        """Capture declarations and exact dynamic owner frontier; performs no file I/O."""
+        with self._mutex:
+            self._require_active_locked()
+            frontier = self._retention_frontier_locked()
+            return {
+                "seed": self._retention_catalog_seed,
+                "frontier": frontier,
+                "candidate_records": copy.deepcopy(self._candidate_completed_records),
+                "active_workers": copy.deepcopy(self._active_worker_events),
+                "active_acquisitions": copy.deepcopy(self._active_acquisition_events),
+                "native_records": copy.deepcopy(self._native_records),
+                "driver_issued": copy.deepcopy(self._driver_issued),
+                "driver_settled": copy.deepcopy(self._driver_settled),
+            }
+
+    def _native_retention_catalog_capture_locked(self, candidate_state) -> Mapping[str, Any]:
+        """Capture a settled candidate state while its replay context owns the mutex."""
+        if not self._mutex._is_owned() or self._candidate_context_token is None:
+            raise ControlRefused("native retention capture requires candidate owner context")
+        capture = dict(self.native_retention_catalog_capture())
+        capture["candidate_state"] = copy.deepcopy(candidate_state.to_dict())
+        return capture
+
+    def validate_native_retention_frontier(self, frontier: tuple[Any, ...]) -> None:
+        """Recheck a completed external catalog collection against current authority."""
+        if not isinstance(frontier, tuple):
+            raise TypeError("frontier must be a tuple")
+        with self._mutex:
+            self._require_active_locked()
+            if frontier != self._retention_frontier_locked():
+                raise ControlRefused("native retention catalog changed during collection")
+
+    def bind_prepared_retention_job(self, job, *, prepared, policy) -> None:
+        """Bind an externally collected immutable plan to the unchanged owner frontier."""
+        from .retention_consumer import RetentionJob
+        if (not isinstance(job, RetentionJob)
+                or not isinstance(prepared, retention_catalog_module.PreparedCatalogView)):
+            raise TypeError("prepared retention binding requires native typed capability")
+        from . import retention as retention_module
+        from . import retention_consumer as retention_consumer_module
+        snapshot = retention_consumer_module.collect_native_snapshot(prepared.view)
+        expected_plan = retention_module.plan_retention(snapshot)
+        if (job.plan != expected_plan
+                or job.policy_digest != retention_consumer_module._policy_digest(policy)
+                or tuple(job.selected_artifact_ids) != job.plan.expirable_ids[:len(
+                    job.selected_artifact_ids)]):
+            raise ControlRefused("maintenance job differs from native preparation")
+        with self._mutex:
+            self._require_active_locked()
+            current = self._retention_frontier_locked()
+            if (prepared.frontier != current
+                    or job.plan.snapshot_id != self._retention_catalog_seed.seed_digest
+                    or job.plan.snapshot_generation != max(1, int(current[2]) + 1)
+                    or job.plan.snapshot_digest != prepared.view_digest):
+                raise ControlRefused("native retention catalog changed during preparation")
+            self._prepared_retention_jobs[job.plan.plan_digest] = (
+                current, prepared.view_digest, job.policy_digest,
+                tuple(job.selected_artifact_ids))
+
+    def native_retention_catalog_seed_digest(self) -> str | None:
+        with self._mutex:
+            self._require_active_locked()
+            return (None if self._retention_catalog_seed is None
+                    else self._retention_catalog_seed.seed_digest)
 
     def maintenance_revalidate(self, token, hold) -> None:
         with self._mutex:
@@ -4120,6 +4292,9 @@ class CampaignController:
             self._native_payload_digests = {}
             self._native_validator = None
             self._native_capabilities = set()
+            self._retention_catalog_seed = None
+            self._retention_catalog_event = None
+            self._prepared_retention_jobs = {}
             self._command_requests = {}
             self._driver_issued = {}
             self._driver_settled = {}

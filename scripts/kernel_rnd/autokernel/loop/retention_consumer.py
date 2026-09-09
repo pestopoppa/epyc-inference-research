@@ -92,19 +92,27 @@ class NativeArtifactIdentity:
     artifact_id: str
     path: str
     sha256: str
-    branch: str
-    source: cm.SourceIdentity
+    branch: str | None
+    source: cm.SourceIdentity | None
 
     def __post_init__(self) -> None:
-        if not isinstance(self.source, cm.SourceIdentity):
-            raise TypeError("source must be a SourceIdentity")
-        object.__setattr__(self, "source", cm.SourceIdentity.from_dict(self.source.to_dict()))
+        if self.source is not None:
+            if not isinstance(self.source, cm.SourceIdentity):
+                raise TypeError("source must be a SourceIdentity or None")
+            object.__setattr__(self, "source",
+                               cm.SourceIdentity.from_dict(self.source.to_dict()))
+        if (self.branch is None) != (self.source is None):
+            raise RetentionConsumerRefused(
+                "native source and branch must both be known or both unavailable")
+        if self.branch is not None and (not isinstance(self.branch, str)
+                                        or not self.branch.strip()):
+            raise RetentionConsumerRefused("known native branch must be non-empty")
         if not Path(self.path).is_absolute() or str(Path(self.path)) != self.path:
             raise RetentionConsumerRefused("native artifact path must be absolute and canonical")
         if len(self.sha256) != 64 or any(char not in "0123456789abcdef" for char in self.sha256):
             raise RetentionConsumerRefused("native artifact sha256 must be lowercase SHA-256")
-        if not self.artifact_id or not self.branch:
-            raise RetentionConsumerRefused("native artifact ID and branch are required")
+        if not self.artifact_id:
+            raise RetentionConsumerRefused("native artifact ID is required")
 
 
 @dataclass(frozen=True, slots=True)
@@ -166,10 +174,14 @@ def collect_native_snapshot(view: NativeRetentionView) -> retention.RetentionSna
         if node.expiry is not None and identity.sha256 != node.expiry.sha256:
             raise RetentionConsumerRefused(
                 f"expiry identity for {node.artifact_id} differs from native identity")
-        if identity.branch.startswith(("production-consolidated-", "production-speech-")) \
+        if identity.branch is not None and identity.branch.startswith(
+                ("production-consolidated-", "production-speech-")) \
                 and node.retention_class == "expirable":
             raise RetentionConsumerRefused(
                 f"artifact {node.artifact_id} is on protected branch {identity.branch}")
+        if node.retention_class == "expirable" and identity.source is None:
+            raise RetentionConsumerRefused(
+                f"expirable artifact {node.artifact_id} lacks source ownership")
     by_manifest: dict[str, tuple[str, ...]] = {}
     for binding in view.manifests:
         digest = binding.manifest.manifest_digest
