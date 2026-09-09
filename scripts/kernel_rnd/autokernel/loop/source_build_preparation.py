@@ -12,6 +12,7 @@ from dataclasses import dataclass, replace
 import hashlib
 import json
 import math
+import weakref
 from typing import Any, Mapping
 
 from .. import source_candidate as source
@@ -22,6 +23,9 @@ from . import actor_preparation as actor, campaign, campaign_control
 from . import lifecycle_observation, unified_driver as driver, unified_planner
 
 SCHEMA = "epyc.autokernel.bound_source_build_preparation.v1"
+BUILD_SCHEMA_V2 = "epyc.autokernel.bound_source_build_preparation.v2"
+_MATERIALIZED_SOURCE_TOKEN = object()
+_MATERIALIZED_SOURCE_ISSUED = weakref.WeakKeyDictionary()
 
 
 class PreparationBindingRefused(RuntimeError):
@@ -101,6 +105,62 @@ class BoundSourcePreparation:
         return json.loads(self.canonical)
 
 
+@dataclass(frozen=True, eq=False)
+class MaterializedSourceCapability(Mapping[str, Any]):
+    """Same-process proof that the owned source operation made these bytes."""
+
+    canonical: bytes
+    bound_digest: str
+    target_revision_digest: str
+    controller_binding: Mapping[str, Any]
+    source_worktree: worktree.Worktree
+    _token: object
+
+    __hash__ = object.__hash__
+    __eq__ = object.__eq__
+
+    def __post_init__(self):
+        if (self._token is not _MATERIALIZED_SOURCE_TOKEN
+                or not isinstance(self.canonical, bytes)
+                or not isinstance(self.source_worktree, worktree.Worktree)):
+            raise PreparationBindingRefused(
+                "materialized source capability lacks its native issuer")
+        row = json.loads(self.canonical)
+        if (_bytes(row) != self.canonical
+                or row.get("schema") != "epyc.autokernel.source_preparation_result.v1"
+                or row.get("preparation_digest") != self.bound_digest):
+            raise PreparationBindingRefused("materialized source receipt differs")
+        driver._sha(self.target_revision_digest, "materialized source target")
+        object.__setattr__(self, "controller_binding",
+                           driver._freeze(driver._thaw(self.controller_binding)))
+
+    def __getitem__(self, key):
+        return driver._freeze(json.loads(self.canonical)[key])
+
+    def __iter__(self):
+        return iter(json.loads(self.canonical))
+
+    def __len__(self):
+        return len(json.loads(self.canonical))
+
+    def to_dict(self):
+        return json.loads(self.canonical)
+
+
+def _validate_materialized_source(capability):
+    if not isinstance(capability, MaterializedSourceCapability):
+        raise PreparationBindingRefused(
+            "candidate build lacks its exact materialized source capability")
+    expected = _MATERIALIZED_SOURCE_ISSUED.get(capability)
+    actual = (capability.canonical, capability.bound_digest,
+              capability.target_revision_digest,
+              driver._thaw(capability.controller_binding),
+              capability.source_worktree)
+    if expected is None or actual != expected:
+        raise PreparationBindingRefused(
+            "materialized source capability is not an original owner issuance")
+
+
 def _validate_source(row):
     if set(row) != {"schema", "kind", "selected_work", "resolved_campaign", "advice",
                     "actor_profile_digest", "execution_authorized", "assignment",
@@ -134,8 +194,9 @@ def _validate_source(row):
     return manifest, proposal
 
 
-def _validate_common_row(row, kind):
-    if row["schema"] != SCHEMA or row["kind"] != kind or row["execution_authorized"] is not False:
+def _validate_common_row(row, kind, *, schemas=(SCHEMA,)):
+    if (row["schema"] not in schemas or row["kind"] != kind
+            or row["execution_authorized"] is not False):
         raise PreparationBindingRefused("preparation schema/kind/authority differs")
     selected = driver.SelectedActorWork.from_dict(row["selected_work"])
     resolved = campaign.ResolvedCampaign.from_dict(row["resolved_campaign"])
@@ -177,7 +238,7 @@ def _current_owner(selected, campaign_driver):
 
 
 def materialize_source(bound: BoundSourcePreparation, *, campaign_driver,
-                       actor_worktree: worktree.Worktree) -> Mapping[str, Any]:
+                       actor_worktree: worktree.Worktree) -> MaterializedSourceCapability:
     """Apply only through an explicitly supplied existing private Worktree.
 
     The caller must serialize its selected preparation operation and own recovery.
@@ -194,9 +255,14 @@ def materialize_source(bound: BoundSourcePreparation, *, campaign_driver,
                 manifest.production_base_commit, manifest.instrument_commit)):
         raise PreparationBindingRefused("source instrument does not descend from the pinned base")
     applied = source.apply_source_candidate(manifest, proposal=proposal, actor=actor_worktree)
+    if (actor_worktree.head_commit() != applied.candidate_commit
+            or not actor_worktree.is_clean()):
+        raise PreparationBindingRefused(
+            "materialized candidate commit/worktree is not exact and clean")
+    snapshot = actor_worktree.snapshot_digest()
     receipt = {"schema": "epyc.autokernel.source_preparation_result.v1",
                "preparation_digest": bound.digest, "source_commit": applied.candidate_commit,
-               "source_tree_digest": actor_worktree.snapshot_digest().sha256,
+               "source_tree_digest": snapshot.sha256,
                "patch_bundle_sha256": manifest.patch_bundle_sha256,
                "diff_sha256": hashlib.sha256(applied.diff_text.encode()).hexdigest(),
                "actual_files": list(applied.actual_files),
@@ -207,13 +273,23 @@ def materialize_source(bound: BoundSourcePreparation, *, campaign_driver,
                                       for name, check in applied.diff_evidence.checks},
                "mutation_receipt": applied.mutation_receipt,
                "build_status": "pending", "execution_authorized": False}
-    return driver._freeze(json.loads(_bytes(receipt)))
+    selected = driver.SelectedActorWork.from_dict(row["selected_work"])
+    capability = MaterializedSourceCapability(
+        _bytes(receipt), bound.digest,
+        selected.actor_request.proposal.target_revision_digest,
+        selected.controller_binding, actor_worktree, _MATERIALIZED_SOURCE_TOKEN)
+    _MATERIALIZED_SOURCE_ISSUED[capability] = (
+        capability.canonical, capability.bound_digest,
+        capability.target_revision_digest,
+        driver._thaw(capability.controller_binding), actor_worktree)
+    return capability
 
 
 @dataclass(frozen=True)
 class BoundBuildPreparation:
     canonical: bytes
     plan: worktree.BuildPlan
+    source_capability: MaterializedSourceCapability | None = None
 
     def __post_init__(self):
         if not isinstance(self.canonical, bytes):
@@ -236,13 +312,31 @@ class BoundBuildPreparation:
                                 "source_commit", "source_tree_digest", "recipe_digest", "build_plan"}
                 or row["build_plan"] != plan.to_dict()):
             raise PreparationBindingRefused("build preparation plan/carrier differs")
-        _validate_common_row(row, "build_recipe")
+        _validate_common_row(row, "build_recipe", schemas=(SCHEMA, BUILD_SCHEMA_V2))
         driver._sha(row["source_tree_digest"], "build source tree digest")
         resolved = campaign.ResolvedCampaign.from_dict(row["resolved_campaign"])
         cpus = (lifecycle_observation.parse_cpu_list(plan.parallelism.cpu_list)
                 if plan.parallelism.cpu_list is not None else ())
-        if (row["source_commit"] != driver._pinned_source_revision(resolved)
-                or plan.parallelism.jobs > resolved.resources.build_jobs
+        selected = driver.SelectedActorWork.from_dict(row["selected_work"])
+        pinned_source = row["source_commit"] == driver._pinned_source_revision(resolved)
+        capability = self.source_capability
+        if capability is not None:
+            _validate_materialized_source(capability)
+        candidate_invalid = (not pinned_source and (
+                row["schema"] != BUILD_SCHEMA_V2
+                or not isinstance(capability, MaterializedSourceCapability)
+                or capability.source_worktree.path.path != plan.source_root.path
+                or capability["source_commit"] != row["source_commit"]
+                or capability["source_tree_digest"] != row["source_tree_digest"]
+                or capability.target_revision_digest
+                   != selected.actor_request.proposal.target_revision_digest
+                or driver._thaw(capability.controller_binding)
+                   != driver._thaw(selected.controller_binding)))
+        if ((pinned_source and (capability is not None or row["schema"] != SCHEMA))
+                or candidate_invalid):
+            raise PreparationBindingRefused(
+                "candidate build lacks its exact materialized source capability")
+        if (plan.parallelism.jobs > resolved.resources.build_jobs
                 or not cpus or not set(cpus) <= set(resolved.resources.cpu_logical)
                 or row["advice"]["build_system"] != "cmake"
                 or row["advice"]["configured_options"] != [
@@ -260,9 +354,11 @@ class BoundBuildPreparation:
         return json.loads(self.canonical)
 
 
-def _source_snapshot(plan, source_worktree, source_commit):
+def _source_snapshot(plan, source_worktree, source_commit, source_capability=None):
     if (not isinstance(source_worktree, worktree.Worktree)
-            or source_worktree.branch is not None
+            or (source_worktree.branch is not None
+                and (not isinstance(source_capability, MaterializedSourceCapability)
+                     or source_capability.source_worktree is not source_worktree))
             or source_worktree.path.path != plan.source_root.path
             or source_worktree.head_commit() != source_commit
             or not source_worktree.is_clean()):
@@ -272,16 +368,21 @@ def _source_snapshot(plan, source_worktree, source_commit):
 
 def bind_build_preparation(*, selected_actor_work, preparation_result, resolved_campaign,
                            source_commit: str, build_plan: worktree.BuildPlan,
-                           source_worktree: worktree.Worktree
+                           source_worktree: worktree.Worktree,
+                           materialized_source: MaterializedSourceCapability | None = None,
                            ) -> BoundBuildPreparation:
     if not isinstance(build_plan, worktree.BuildPlan):
         raise PreparationBindingRefused("an explicit typed build plan is required")
     row = _common(selected_actor_work, preparation_result, resolved_campaign, "build_recipe")
+    if materialized_source is not None:
+        _validate_materialized_source(materialized_source)
+        row["schema"] = BUILD_SCHEMA_V2
     row.update(source_commit=source_commit,
-               source_tree_digest=_source_snapshot(build_plan, source_worktree, source_commit),
+               source_tree_digest=_source_snapshot(
+                   build_plan, source_worktree, source_commit, materialized_source),
                recipe_digest=driver._digest(build_plan.to_dict()),
                build_plan=build_plan.to_dict())
-    return BoundBuildPreparation(_bytes(row), build_plan)
+    return BoundBuildPreparation(_bytes(row), build_plan, materialized_source)
 
 
 def delegate_build(bound: BoundBuildPreparation, *, campaign_driver, runner, source_worktree,
@@ -295,10 +396,11 @@ def delegate_build(bound: BoundBuildPreparation, *, campaign_driver, runner, sou
     if not isinstance(bound, BoundBuildPreparation) or not callable(runner):
         raise PreparationBindingRefused("bound build and owned runner are required")
     # Validate again at the delegation boundary; never synthesize missing budgets.
-    checked = BoundBuildPreparation(bound.canonical, bound.plan)
+    checked = BoundBuildPreparation(bound.canonical, bound.plan, bound.source_capability)
     selected = driver.SelectedActorWork.from_dict(checked.to_dict()["selected_work"])
     _current_owner(selected, campaign_driver)
-    if _source_snapshot(checked.plan, source_worktree, checked.to_dict()["source_commit"]) \
+    if _source_snapshot(checked.plan, source_worktree, checked.to_dict()["source_commit"],
+                        checked.source_capability) \
             != checked.to_dict()["source_tree_digest"]:
         raise PreparationBindingRefused("build snapshot changed before delegation")
     for value in (configure_timeout_s, build_timeout_s):

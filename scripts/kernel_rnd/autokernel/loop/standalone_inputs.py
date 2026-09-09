@@ -123,7 +123,10 @@ class StartupManifest:
         evidence = _freeze(_mapping(row.get("evidence_index", {}), "evidence_index"))
         feed = feed_runtime.FeedConfig.from_dict(row["evidence_feed"]) if feed_mode else None
         actor_rows = _mapping(row["actor_identities"], "actor_identities")
-        if not set(actor_rows) <= {"source", "build"}:
+        # ``build`` is retained as a parsed legacy key.  The planner's closed
+        # opportunity grammar has always named executable build advice
+        # ``build_recipe``; do not relabel either identity on read.
+        if not set(actor_rows) <= {"source", "build", "build_recipe"}:
             raise StandaloneInputsRefused("actor identities contain an unsupported actor kind")
         actors = {}
         for kind, identity in actor_rows.items():
@@ -686,7 +689,7 @@ def materialize(value: StartupManifest) -> MaterializedInputs:
         if profile is not None:
             required_actor_kinds.update(
                 item.kind for item in profile.opportunities
-                if item.kind in {"source", "build"})
+                if item.kind in {"source", "build_recipe"})
             native_runtime_requested = native_runtime_requested or any(
                 item.kind == "runtime_recipe" for item in profile.opportunities)
     for kind in sorted(required_actor_kinds - set(value.actor_identities)):
