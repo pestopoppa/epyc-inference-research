@@ -307,6 +307,7 @@ CAMPAIGN_COMMAND_V2_SCHEMA = "epyc.autokernel.campaign_command_transition.v2"
 KIND_CAMPAIGN_COMMAND_V3 = "CAMPAIGN_COMMAND_V3"
 CAMPAIGN_COMMAND_V3_SCHEMA = "epyc.autokernel.campaign_command_transition.v3"
 KIND_MAINTENANCE_EXECUTION = "MAINTENANCE_EXECUTION"
+KIND_RETENTION_CATALOG_INSTALLED = "RETENTION_CATALOG_INSTALLED"
 KIND_UNIFIED_DRIVER_ISSUED = "UNIFIED_DRIVER_ISSUED"
 UNIFIED_DRIVER_ISSUED_SCHEMA = "epyc.autokernel.unified_driver_issued.v1"
 KIND_UNIFIED_DRIVER_SETTLED = "UNIFIED_DRIVER_SETTLED"
@@ -347,6 +348,7 @@ NATIVE_KINDS = frozenset({
     KIND_CAMPAIGN_COMMAND_V2,
     KIND_CAMPAIGN_COMMAND_V3,
     KIND_MAINTENANCE_EXECUTION,
+    KIND_RETENTION_CATALOG_INSTALLED,
     KIND_UNIFIED_DRIVER_ISSUED,
     KIND_UNIFIED_DRIVER_SETTLED,
     KIND_A2_RUNTIME_EXECUTION,
@@ -1269,6 +1271,15 @@ def _validate_native_payload(kind: str, payload: Mapping[str, Any]) -> list:
             validate_event(payload)
         except Exception as exc:
             out.append(f"maintenance execution event: {exc}")
+    elif kind == KIND_RETENTION_CATALOG_INSTALLED:
+        try:
+            if __package__:
+                from .loop.native_retention_catalog import validate_install_event
+            else:
+                from autokernel.loop.native_retention_catalog import validate_install_event
+            validate_install_event(payload)
+        except Exception as exc:
+            out.append(f"retention catalog event: {exc}")
     elif kind == KIND_PLANNED_SERVING_ARM_CAPTURED:
         capture_schema = payload.get("schema")
         is_v2 = capture_schema == PLANNED_SERVING_ARM_CAPTURE_SCHEMA_V2
@@ -4089,6 +4100,7 @@ __all__ = [
     "KIND_CAMPAIGN_COMMAND_V2", "CAMPAIGN_COMMAND_V2_SCHEMA",
     "KIND_CAMPAIGN_COMMAND_V3", "CAMPAIGN_COMMAND_V3_SCHEMA",
     "KIND_MAINTENANCE_EXECUTION",
+    "KIND_RETENTION_CATALOG_INSTALLED",
     "KIND_UNIFIED_DRIVER_ISSUED", "UNIFIED_DRIVER_ISSUED_SCHEMA",
     "KIND_UNIFIED_DRIVER_SETTLED", "UNIFIED_DRIVER_SETTLED_SCHEMA",
     "KIND_A2_RUNTIME_EXECUTION", "A2_RUNTIME_EXECUTION_SCHEMA",

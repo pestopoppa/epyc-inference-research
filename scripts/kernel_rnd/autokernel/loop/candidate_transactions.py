@@ -314,7 +314,7 @@ class CandidateTransactions:
         return self.controller.candidate_transaction(self._inspect_locked)
 
     def retention_view(self):
-        """Verify actual candidate objects, then refuse absent external catalog roots."""
+        """Collect a complete native view without file I/O under the controller mutex."""
         def locked(context):
             replay = self._replay(context)
             if replay.pending is not None or replay.state is None:
@@ -331,7 +331,6 @@ class CandidateTransactions:
                     if kind != "manifest":
                         continue
                     manifest = cm.CandidateManifest.from_dict(value)
-                    self._verify_immutable("manifest", manifest.to_dict())
                     manifests[manifest.manifest_digest] = manifest
             required = {replay.state.integration_tip}
             if replay.state.validated_candidate is not None:
@@ -343,11 +342,60 @@ class CandidateTransactions:
             if missing:
                 raise CandidateRecoveryRequired(
                     f"restore native candidate manifests before retention: {missing}")
-            raise CandidateRecoveryRequired(
-                "native retention artifact/dependency catalog coverage is unavailable; "
-                "candidate objects alone do not cover worker, evidence, DSO/RUNPATH roots")
+            capture = self.controller._native_retention_catalog_capture_locked(replay.state)
+            return capture, tuple(manifests.values())
 
-        return self.controller.candidate_transaction(locked)
+        capture, manifests = self.controller.candidate_transaction(locked)
+        for manifest in manifests:
+            self._verify_immutable("manifest", manifest.to_dict())
+        from . import native_retention_catalog
+        prepared = native_retention_catalog.build_native_view(capture)
+        self.controller.validate_native_retention_frontier(prepared.frontier)
+        return prepared.view
+
+    def prepare_retention(self, policy, *, limit: int = 64, now=None):
+        """Collect, prepare, and owner-bind one fresh retention job if any is safe."""
+        def locked(context):
+            replay = self._replay(context)
+            if replay.pending is not None or replay.state is None:
+                raise CandidateRecoveryRequired(
+                    "candidate state is not settled for retention collection")
+            manifests = []
+            for request_id in context.completed_candidate_ids():
+                completed = context.completed_candidate(request_id)
+                if completed is None:
+                    continue
+                row = completed["intent"]
+                for kind, value in self._documents(
+                        row["operation"], row["data"]["operation_payload"]):
+                    if kind == "manifest":
+                        manifests.append(cm.CandidateManifest.from_dict(value))
+            by_digest = {item.manifest_digest: item for item in manifests}
+            required = {replay.state.integration_tip}
+            if replay.state.validated_candidate is not None:
+                required.add(replay.state.validated_candidate)
+            for batch in replay.state.active_batches:
+                required.update((batch.candidate_manifest_digest,
+                                 batch.comparator_manifest_digest))
+            missing = sorted(required - set(by_digest))
+            if missing:
+                raise CandidateRecoveryRequired(
+                    f"restore native candidate manifests before retention: {missing}")
+            return (self.controller._native_retention_catalog_capture_locked(replay.state),
+                    tuple(by_digest.values()))
+
+        capture, manifests = self.controller.candidate_transaction(locked)
+        for manifest in manifests:
+            self._verify_immutable("manifest", manifest.to_dict())
+        from . import native_retention_catalog, retention_consumer
+        prepared = native_retention_catalog.build_native_view(capture)
+        job, previews = retention_consumer.prepare(
+            prepared.view, policy, limit=limit, now=now)
+        self.controller.validate_native_retention_frontier(prepared.frontier)
+        if job is not None:
+            self.controller.bind_prepared_retention_job(
+                job, prepared=prepared, policy=policy)
+        return job, previews
 
     def _inspect_locked(self, context) -> dict[str, Any]:
         replay = self._replay(context)
