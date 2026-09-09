@@ -815,6 +815,14 @@ class UnifiedCampaignDriver:
         payload = _mapping(_thaw(work["payload"]), "selected runtime work")
         proposal = unified_planner.UnifiedProposal.from_dict(payload["proposal"])
         plan = experiment_plan.ExperimentPlan.from_dict(payload["experiment_plan"])
+        from .discovery_screen import A2_PROTOCOL
+        if (plan.phase == "discovery" or plan.record_class == "discovery_screen"
+                or plan.protocol_ref == A2_PROTOCOL):
+            # Preserve replay of the old closed catalog language, but never use
+            # a misclassified historical intent as per-unit launch authority.
+            raise DriverRefused(
+                "discovery requires its installed per-unit owner; "
+                "ordinary runtime comparison materialization is unavailable")
         execution_input = self.execution_inputs.get(proposal.target_revision_digest)
         if execution_input is None:
             raise DriverRefused(
@@ -1055,10 +1063,21 @@ class UnifiedCampaignDriver:
                         for item in planning.actor_preparations}
         runtime_stages = []
         missing_inputs = []
+        discovery_unavailable = []
+        from .discovery_screen import A2_PROTOCOL
         for stage in planning.stage_proposals:
             proposal = proposals_by_id.get(stage.proposal_id)
             if proposal is None:
                 raise DriverRefused("scheduler stage lacks exact planner proposal")
+            plan = self.experiment_plans.get(proposal.proposal_id)
+            if (proposal.proposal_id not in actors_by_id and plan is not None
+                    and (plan.phase == "discovery" or plan.record_class == "discovery_screen"
+                         or plan.protocol_ref == A2_PROTOCOL)):
+                reason = (f"target:{proposal.target_revision_digest}:"
+                          "discovery_unit:executor_unavailable")
+                if reason not in discovery_unavailable:
+                    discovery_unavailable.append(reason)
+                continue
             if (proposal.proposal_id not in actors_by_id
                     and proposal.target_revision_digest not in self.execution_inputs):
                 missing_inputs.append(
@@ -1078,7 +1097,8 @@ class UnifiedCampaignDriver:
                   *(item.stage_proposal for item in calibration_requests))
         if not stages:
             return DriverOutcome(
-                "waiting", tuple(missing_inputs) or ("no scheduler-ready work",), None, None)
+                "waiting", tuple((*missing_inputs, *discovery_unavailable))
+                or ("no scheduler-ready work",), None, None)
         if stop_requested():
             return DriverOutcome("stopped", ("stop requested before scheduling",), None, None)
         work_by_digest: dict[str, Mapping[str, Any]] = {}
@@ -1119,7 +1139,7 @@ class UnifiedCampaignDriver:
                                 "experiment_plan": plan.to_dict()},
                     "stage_plan_binding": "experiment_plan",
                     "stage_plan_digest": plan.digest}
-        unavailable = list(profile_debt.values())
+        unavailable = [*profile_debt.values(), *discovery_unavailable]
         executable_stages = []
         for stage in stages:
             kind = work_by_digest[stage.digest]["kind"]
