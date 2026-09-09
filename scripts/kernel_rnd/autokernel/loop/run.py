@@ -15,10 +15,8 @@ memory that outlives this process.
 from __future__ import annotations
 
 import argparse
-import json
 from pathlib import Path
 import signal
-import shutil
 import subprocess
 import sys
 import time
@@ -614,11 +612,23 @@ def main(argv: list[str] | None = None) -> int:
         # at. Re-profiling here is what makes a long run keep aiming at the truth
         # rather than at wherever the time went hours ago.
         reprofile()
-        dropped = pool.prune_anchor_generations(args.store, current=anchor_build[0],
-                                                protect=[cor_build[0]])
-        if dropped:
-            print(f"anchor    pruned {len(dropped)} superseded generation(s) "
-                  f"(~{201 * len(dropped)} MB)")
+        cleanup = pool.prune_anchor_generations(
+            args.store, current=anchor_build[0], protect=[cor_build[0]], unified=True)
+        if cleanup.removed:
+            print(f"anchor    pruned {len(cleanup.removed)} superseded generation(s); "
+                  "reclaimed bytes unknown (not scanned on measurement path)")
+        if cleanup.failed:
+            print("anchor    cleanup incomplete: "
+                  + "; ".join(f"{path}: {reason}" for path, reason in cleanup.failed),
+                  file=sys.stderr)
+        if cleanup.quarantined:
+            print("anchor    recoverable cleanup quarantine: "
+                  + "; ".join(f"{original} -> {quarantine} ({reason})"
+                              for original, quarantine, reason in cleanup.quarantined),
+                  file=sys.stderr)
+        if cleanup.retention_unknown:
+            print("anchor    cleanup skipped (retention_unknown): "
+                  + "; ".join(cleanup.retention_unknown), file=sys.stderr)
 
     def accumulate_after_keep(mechanism_id: str) -> None:
         """R23-44 compound-then-gate. The accumulator just advanced on a bench keep; batch it

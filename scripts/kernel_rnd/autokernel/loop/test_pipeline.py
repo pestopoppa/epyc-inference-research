@@ -21,11 +21,13 @@ measuring something other than the pipeline.
 """
 from __future__ import annotations
 
+import os
 from pathlib import Path
 import tempfile
 import threading
 import time
 import unittest
+from unittest import mock
 
 from autokernel.loop import bench, gates, loop, pipeline
 
@@ -1051,9 +1053,258 @@ class TheStopSentinelAndPruning(unittest.TestCase):
             for i in range(1, 7):
                 (store / f"anchor-gen-{i:03d}").mkdir()
             current = store / "anchor-gen-002"
-            pool.prune_anchor_generations(store, keep=3, current=current)
+            report = pool.prune_anchor_generations(store, keep=3, current=current)
             self.assertTrue(current.is_dir(), "the anchor in use must survive")
             self.assertLessEqual(len(list(store.glob("anchor-gen-*"))), 4)
+            self.assertEqual(report.status, "completed")
+
+    def test_keep_must_be_a_positive_non_boolean_integer(self):
+        from autokernel.loop import pool
+        with tempfile.TemporaryDirectory() as tmp:
+            for keep in (0, -1, True, 1.5):
+                with self.subTest(keep=keep), self.assertRaises(ValueError):
+                    pool.prune_anchor_generations(Path(tmp), keep=keep)
+
+    def test_symlink_generation_is_never_followed_or_reported_removed(self):
+        from autokernel.loop import pool
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Path(tmp)
+            target = store / "actual-build"
+            target.mkdir()
+            (store / "anchor-gen-001").symlink_to(target, target_is_directory=True)
+            (store / "anchor-gen-002").mkdir()
+            report = pool.prune_anchor_generations(store, keep=1)
+            self.assertEqual(report.removed, ())
+            self.assertEqual(report.failed[0][0].name, "anchor-gen-001")
+            self.assertTrue(target.is_dir())
+
+    def test_symlinked_protect_path_still_protects_its_generation(self):
+        from autokernel.loop import pool
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Path(tmp)
+            protected = store / "anchor-gen-001"
+            protected.mkdir()
+            (store / "anchor-gen-002").mkdir()
+            alias = store / "protected-alias"
+            alias.symlink_to(protected, target_is_directory=True)
+            report = pool.prune_anchor_generations(store, keep=1, protect=[alias])
+            self.assertTrue(protected.is_dir())
+            self.assertFalse(report.removed)
+
+    def test_protected_descendant_retains_its_generation(self):
+        from autokernel.loop import pool
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Path(tmp)
+            old = store / "anchor-gen-001"
+            dependency = old / "lib" / "libggml.so"
+            dependency.parent.mkdir(parents=True)
+            dependency.touch()
+            (store / "anchor-gen-002").mkdir()
+            report = pool.prune_anchor_generations(store, keep=1, protect=[dependency])
+            self.assertFalse(report.removed)
+            self.assertTrue(dependency.is_file())
+
+    def test_deletion_failure_and_partial_cleanup_are_reported_truthfully(self):
+        from autokernel.loop import pool
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Path(tmp)
+            for number in range(1, 4):
+                (store / f"anchor-gen-{number:03d}").mkdir()
+            real_rmtree = pool.shutil.rmtree
+
+            def remove(path, **kwargs):
+                if "anchor-gen-001" in Path(path).name:
+                    raise OSError("fixture refusal")
+                return real_rmtree(path, **kwargs)
+
+            with mock.patch.object(pool.shutil, "rmtree", side_effect=remove):
+                report = pool.prune_anchor_generations(store, keep=1)
+            self.assertEqual(report.status, "partial")
+            self.assertIsNone(report.reclaimed_bytes)
+            self.assertEqual(tuple(path.name for path in report.removed),
+                             ("anchor-gen-002",))
+            self.assertEqual(report.failed[0][0].name, "anchor-gen-001")
+            self.assertEqual(len(report.quarantined), 1)
+            self.assertTrue(report.quarantined[0][1].is_dir())
+            self.assertFalse((store / "anchor-gen-002").exists())
+
+    def test_generation_swapped_to_symlink_at_delete_is_not_followed(self):
+        from autokernel.loop import pool
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Path(tmp)
+            doomed = store / "anchor-gen-001"
+            doomed.mkdir()
+            (store / "anchor-gen-002").mkdir()
+            outside = store / "outside"
+            outside.mkdir()
+            real_rename = pool.os.rename
+
+            def swap(source, destination, **kwargs):
+                moved = store / "moved-original"
+                real_rename(doomed, moved)
+                doomed.symlink_to(outside, target_is_directory=True)
+                return real_rename(source, destination, **kwargs)
+
+            with mock.patch.object(pool.os, "rename", side_effect=swap):
+                report = pool.prune_anchor_generations(store, keep=1)
+            self.assertFalse(report.removed)
+            self.assertTrue(report.failed)
+            self.assertTrue(report.quarantined)
+            self.assertTrue((store / "moved-original").is_dir())
+            self.assertTrue(outside.is_dir())
+
+    def test_store_replaced_at_quarantine_boundary_preserves_generation(self):
+        from autokernel.loop import pool
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Path(tmp) / "store"
+            store.mkdir()
+            (store / "anchor-gen-001").mkdir()
+            (store / "anchor-gen-002").mkdir()
+            moved_store = Path(tmp) / "moved-store"
+            real_rename = pool.os.rename
+
+            def replace_store(source, destination, **kwargs):
+                real_rename(store, moved_store)
+                store.mkdir()
+                return real_rename(source, destination, **kwargs)
+
+            with mock.patch.object(pool.os, "rename", side_effect=replace_store):
+                report = pool.prune_anchor_generations(store, keep=1)
+            self.assertFalse(report.removed)
+            self.assertTrue(report.failed and report.quarantined)
+            self.assertTrue(report.quarantined[0][1].exists())
+
+    def test_store_replaced_between_capture_and_open_is_refused(self):
+        from autokernel.loop import pool
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Path(tmp) / "store"
+            store.mkdir()
+            (store / "anchor-gen-001").mkdir()
+            (store / "anchor-gen-002").mkdir()
+            moved_store = Path(tmp) / "captured-store"
+            real_open = pool.os.open
+            calls = {"count": 0}
+
+            def replace_before_open(path, flags, *args, **kwargs):
+                calls["count"] += 1
+                if calls["count"] == 1:
+                    store.rename(moved_store)
+                    store.mkdir()
+                    (store / "anchor-gen-001").mkdir()
+                    (store / "anchor-gen-002").mkdir()
+                return real_open(path, flags, *args, **kwargs)
+
+            with mock.patch.object(pool.os, "open", side_effect=replace_before_open):
+                with self.assertRaisesRegex(ValueError, "identity changed before discovery"):
+                    pool.prune_anchor_generations(store, keep=1)
+            self.assertTrue((moved_store / "anchor-gen-001").is_dir())
+            self.assertTrue((store / "anchor-gen-001").is_dir())
+
+    def test_private_quarantine_replacement_cannot_redirect_deletion(self):
+        from autokernel.loop import pool
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Path(tmp) / "store"
+            store.mkdir()
+            (store / "anchor-gen-001").mkdir()
+            (store / "anchor-gen-001" / "owned-content").write_text(
+                "must remain recoverable", encoding="utf-8")
+            (store / "anchor-gen-002").mkdir()
+            outside = Path(tmp) / "outside"
+            outside.mkdir()
+            (outside / "must-survive").write_text("owned elsewhere", encoding="utf-8")
+            moved_quarantine = Path(tmp) / "opened-quarantine"
+            def replace_quarantine(path, **kwargs):
+                private = next(store.glob(".anchor-prune-private-*"))
+                private.rename(moved_quarantine)
+                private.symlink_to(outside, target_is_directory=True)
+                raise OSError("fixture refusal after public-path replacement")
+
+            with mock.patch.object(pool.shutil, "rmtree",
+                                   side_effect=replace_quarantine):
+                report = pool.prune_anchor_generations(store, keep=1)
+            self.assertEqual(report.status, "partial")
+            self.assertTrue(report.failed and report.quarantined)
+            self.assertTrue((outside / "must-survive").is_file())
+            self.assertTrue(moved_quarantine.is_dir())
+            recovery = report.quarantined[0][1]
+            self.assertEqual(recovery, moved_quarantine / "anchor-gen-001")
+            self.assertTrue((recovery / "owned-content").is_file())
+            self.assertIn("foreign replacement left untouched", report.failed[0][1])
+
+    def test_removed_owned_target_does_not_label_foreign_path_recoverable(self):
+        from autokernel.loop import pool
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Path(tmp) / "store"
+            store.mkdir()
+            (store / "anchor-gen-001").mkdir()
+            (store / "anchor-gen-002").mkdir()
+            outside = Path(tmp) / "outside"
+            outside.mkdir()
+            moved_quarantine = Path(tmp) / "opened-quarantine"
+            real_rmtree = pool.shutil.rmtree
+
+            def replace_then_remove(path, **kwargs):
+                private = next(store.glob(".anchor-prune-private-*"))
+                private.rename(moved_quarantine)
+                private.symlink_to(outside, target_is_directory=True)
+                return real_rmtree(path, **kwargs)
+
+            with mock.patch.object(pool.shutil, "rmtree",
+                                   side_effect=replace_then_remove):
+                report = pool.prune_anchor_generations(store, keep=1)
+            self.assertEqual(report.status, "partial")
+            self.assertFalse(report.quarantined)
+            self.assertTrue(outside.is_dir())
+            self.assertIn("foreign replacement left untouched", report.failed[0][1])
+
+    def test_descriptor_ownership_covers_discovery_and_finalization_failures(self):
+        from autokernel.loop import pool
+
+        def fd_count():
+            return len(os.listdir("/proc/self/fd"))
+
+        for operation in ("readlink", "listdir"):
+            with self.subTest(operation=operation), tempfile.TemporaryDirectory() as tmp:
+                store = Path(tmp)
+                (store / "anchor-gen-001").mkdir()
+                before = fd_count()
+                with mock.patch.object(pool.os, operation,
+                                       side_effect=OSError("fixture discovery failure")):
+                    with self.assertRaisesRegex(OSError, "discovery failure"):
+                        pool.prune_anchor_generations(store, keep=1)
+                self.assertEqual(fd_count(), before)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Path(tmp)
+            (store / "anchor-gen-001").mkdir()
+            (store / "anchor-gen-002").mkdir()
+            real_listdir = pool.os.listdir
+            calls = {"count": 0}
+
+            def fail_cleanup_listdir(path):
+                calls["count"] += 1
+                if calls["count"] == 2:
+                    raise OSError("fixture finalization failure")
+                return real_listdir(path)
+
+            before = fd_count()
+            with mock.patch.object(pool.os, "listdir", side_effect=fail_cleanup_listdir):
+                report = pool.prune_anchor_generations(store, keep=1)
+            self.assertEqual(fd_count(), before)
+            self.assertEqual(report.status, "partial")
+            self.assertTrue(any("finalization failure" in reason
+                                for _, reason in report.failed))
+
+    def test_unified_cleanup_without_complete_closure_is_skipped(self):
+        from autokernel.loop import pool
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Path(tmp)
+            (store / "anchor-gen-001").mkdir()
+            (store / "anchor-gen-002").mkdir()
+            report = pool.prune_anchor_generations(store, keep=1, unified=True)
+            self.assertEqual(report.status, "retention_unknown")
+            self.assertFalse(report.removed)
+            self.assertEqual(len(list(store.glob("anchor-gen-*"))), 2)
 
 
 class NoLaneMayDieOutsideTheTry(unittest.TestCase):
