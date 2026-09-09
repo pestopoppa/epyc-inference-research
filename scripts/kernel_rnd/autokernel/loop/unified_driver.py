@@ -33,6 +33,7 @@ OUTCOME_SCHEMA = "epyc.autokernel.unified_driver_outcome.v1"
 EXECUTION_INPUT_SCHEMA = "epyc.autokernel.unified_execution_input.v1"
 MATERIALIZATION_BINDING_SCHEMA = "epyc.autokernel.unified_materialization_binding.v1"
 SELECTED_PROFILE_WORK_SCHEMA = "epyc.autokernel.selected_profile_work.v1"
+SELECTED_ACTOR_WORK_SCHEMA = "epyc.autokernel.selected_actor_work.v1"
 WORK_KINDS = frozenset({"runtime_comparison", "actor_preparation", "profile_preparation"})
 
 
@@ -253,6 +254,84 @@ class SelectedProfileWork:
                 "transition_id": self.transition_id,
                 "selection": self.selection.to_dict(),
                 "profile_request": self.profile_request.to_dict(),
+                "stage_plan_digest": self.stage_plan_digest,
+                "controller_binding": _thaw(self.controller_binding),
+                "execution_authorized": False}
+
+
+@dataclass(frozen=True)
+class SelectedActorWork:
+    """Exact selected source/build advice, without mutation or launch authority."""
+
+    catalog_id: str
+    transition_id: str
+    selection: scheduling.Selection
+    actor_request: unified_planner.ActorPreparationRequest
+    stage_plan_digest: str
+    controller_binding: Mapping[str, Any]
+    execution_authorized: bool = False
+    schema: str = SELECTED_ACTOR_WORK_SCHEMA
+
+    def __post_init__(self) -> None:
+        if self.schema != SELECTED_ACTOR_WORK_SCHEMA or self.execution_authorized is not False:
+            raise DriverRefused("selected actor work schema/authority is invalid")
+        _sha(self.catalog_id, "actor catalog_id")
+        _sha(self.transition_id, "actor transition_id")
+        _sha(self.stage_plan_digest, "actor stage_plan_digest")
+        selection = scheduling.Selection.from_dict(
+            self.selection.to_dict() if isinstance(self.selection, scheduling.Selection)
+            else self.selection)
+        raw = (self.actor_request.to_dict()
+               if isinstance(self.actor_request, unified_planner.ActorPreparationRequest)
+               else dict(_mapping(self.actor_request, "actor request")))
+        if set(raw) != {"schema", "actor_kind", "actor_identity", "prompt",
+                        "mandatory_conflicts", "proposal", "cache_key"}:
+            raise DriverRefused("selected actor request fields differ")
+        try:
+            request = unified_planner.ActorPreparationRequest(
+                raw["actor_kind"], raw["actor_identity"], raw["prompt"],
+                tuple(raw["mandatory_conflicts"]),
+                unified_planner.UnifiedProposal.from_dict(raw["proposal"]),
+                raw["cache_key"], raw["schema"])
+        except (unified_planner.PlanningRefused, TypeError, ValueError) as exc:
+            raise DriverRefused(f"selected actor request is invalid: {exc}") from exc
+        binding = dict(_mapping(_thaw(self.controller_binding), "actor controller binding"))
+        if (set(binding) != {"schema", "campaign_id", "config_digest", "config_generation",
+                            "supervisor_id", "supervisor_incarnation", "artifact_root"}
+                or binding["schema"] != MATERIALIZATION_BINDING_SCHEMA
+                or any(not isinstance(binding[name], str) or not binding[name].strip()
+                       for name in ("campaign_id", "supervisor_id", "artifact_root"))
+                or not Path(binding["artifact_root"]).is_absolute()):
+            raise DriverRefused("actor controller binding is malformed")
+        _sha(binding["config_digest"], "actor controller config_digest")
+        for name in ("config_generation", "supervisor_incarnation"):
+            if type(binding[name]) is not int or binding[name] < 1:
+                raise DriverRefused(f"actor controller {name} must be positive")
+        stage, proposal = selection.proposal, request.proposal
+        if (selection.status != "selected" or stage is None
+                or stage.proposal_id != proposal.proposal_id
+                or stage.target_revision != proposal.target_revision_digest
+                or stage.backend != proposal.backend or stage.stage_class != "prerequisite"
+                or self.stage_plan_digest != request.cache_key
+                or self.transition_id != _digest({"catalog_id": self.catalog_id,
+                                                  "selection": selection.to_dict()})):
+            raise DriverRefused("selected actor work bindings differ")
+        object.__setattr__(self, "selection", selection)
+        object.__setattr__(self, "actor_request", request)
+        object.__setattr__(self, "controller_binding", _freeze(binding))
+
+    @classmethod
+    def from_dict(cls, value: Any) -> "SelectedActorWork":
+        row = dict(_mapping(value, "selected actor work"))
+        if set(row) != {"schema", "catalog_id", "transition_id", "selection", "actor_request",
+                        "stage_plan_digest", "controller_binding", "execution_authorized"}:
+            raise DriverRefused("selected actor work fields differ")
+        return cls(**row)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"schema": self.schema, "catalog_id": self.catalog_id,
+                "transition_id": self.transition_id, "selection": self.selection.to_dict(),
+                "actor_request": self.actor_request.to_dict(),
                 "stage_plan_digest": self.stage_plan_digest,
                 "controller_binding": _thaw(self.controller_binding),
                 "execution_authorized": False}
@@ -792,6 +871,39 @@ class UnifiedCampaignDriver:
             raise DriverRefused("profile controller binding is stale or foreign")
         return SelectedProfileWork.from_dict(result.to_dict())
 
+    def materialize_actor(self, outcome: DriverOutcome) -> SelectedActorWork:
+        """Resolve selected actor advice through the existing controller binding."""
+        if (not isinstance(outcome, DriverOutcome) or outcome.status != "intent_recorded"
+                or outcome.transition_id is None or outcome.selection is None
+                or self._issued_catalog is None
+                or outcome.transition_id != self._issued_transition_id):
+            raise DriverRefused("actor materialization requires the current issued intent")
+        selection = scheduling.Selection.from_dict(_thaw(outcome.selection))
+        if selection.proposal is None:
+            raise DriverRefused("issued actor intent has no selected proposal")
+        work = self._issued_catalog.work_by_stage_digest.get(selection.proposal.digest)
+        if work is None or work["kind"] != "actor_preparation":
+            raise DriverRefused("selected work is not actor preparation")
+        if work["stage_plan_binding"] != "preparation_contract":
+            raise DriverRefused("selected actor preparation binding differs")
+        callback = getattr(self.controller, "unified_driver_materialization_binding", None)
+        if not callable(callback):
+            raise DriverRefused("controller-owned actor binding is unavailable")
+        try:
+            binding = callback(catalog_id=self._issued_catalog.catalog_id,
+                               transition_id=outcome.transition_id,
+                               selection=selection.to_dict())
+        except campaign_control.ControlRefused as exc:
+            raise DriverRefused(f"controller refused actor materialization: {exc}") from exc
+        result = SelectedActorWork(
+            self._issued_catalog.catalog_id, outcome.transition_id, selection,
+            _thaw(work["payload"]), work["stage_plan_digest"], binding)
+        if (result.controller_binding["campaign_id"] != self.resolved.campaign_id
+                or result.controller_binding["config_digest"]
+                   != campaign_control.resolved_config_digest(self.resolved)):
+            raise DriverRefused("actor controller binding is stale or foreign")
+        return SelectedActorWork.from_dict(result.to_dict())
+
     def tick(self, *, now: float | None = None, stop_requested=lambda: False) -> DriverOutcome:
         if self._pending is not None or self._poisoned:
             raise DriverTransactionUncertain("exact pending transition retry is required")
@@ -1065,7 +1177,8 @@ if __name__ == "__main__":
     raise SystemExit(main())
 
 
-__all__ = ["CATALOG_SCHEMA", "CONFIG_SCHEMA", "DriverConfig", "DriverOutcome", "DriverRefused",
+__all__ = ["SELECTED_ACTOR_WORK_SCHEMA", "SelectedActorWork",
+           "CATALOG_SCHEMA", "CONFIG_SCHEMA", "DriverConfig", "DriverOutcome", "DriverRefused",
            "DriverTransactionUncertain", "PlanningCatalog", "OUTCOME_SCHEMA",
            "EXECUTION_INPUT_SCHEMA", "ExecutionInput",
            "PROFILE_CONTRACT_SCHEMA", "PROFILE_REQUEST_SCHEMA", "ProfilePreparationRequest",
