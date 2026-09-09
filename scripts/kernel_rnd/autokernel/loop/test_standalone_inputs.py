@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import copy
+from dataclasses import replace
 import os
 from pathlib import Path
 import signal
@@ -287,6 +288,8 @@ def test_typed_factory_constructs_and_restarts_same_owner_inputs(tmp_path):
     controller, runtime = factory(materialized.resolved, Args())
     try:
         assert runtime.recover().status == "recovered"
+        assert runtime.driver.scheduler is controller._scheduler_engine
+        assert runtime.driver.scheduler is not materialized.inputs.scheduler_engine
         first = controller.snapshot()
         assert first["schema"].endswith(".v3")
     finally:
@@ -296,6 +299,8 @@ def test_typed_factory_constructs_and_restarts_same_owner_inputs(tmp_path):
     restarted, rerun = factory(materialized.resolved, Args())
     try:
         assert rerun.recover().status == "recovered"
+        assert rerun.driver.scheduler is restarted._scheduler_engine
+        assert rerun.driver.scheduler is not runtime.driver.scheduler
         assert restarted.resolved.to_dict() == materialized.resolved.to_dict()
         assert restarted.store == controller.store
         assert rerun.driver.evidence.to_dict() == materialized.inputs.evidence_index.to_dict()
@@ -303,6 +308,27 @@ def test_typed_factory_constructs_and_restarts_same_owner_inputs(tmp_path):
     finally:
         rerun.close()
         restarted.close()
+
+
+def test_factory_refuses_materialized_scheduler_drift(tmp_path):
+    document = _management_document(tmp_path)
+    materialized = inputs.materialize(inputs.StartupManifest.from_dict(document))
+    state = materialized.inputs.scheduler_engine.export_state().to_dict()
+    state["successor_fences"] = ["fixture drift"]
+    changed = scheduling.SchedulerEngine(
+        scheduling.SchedulerConfig.from_dict(document["driver_config"]["scheduler_config"]),
+        scheduling.SchedulerState.from_dict(state))
+    materialized = replace(materialized, inputs=replace(
+        materialized.inputs, scheduler_engine=changed))
+    registry = inputs.ProviderRegistry({
+        "fixture-lifecycle": inputs.ProviderBinding(
+            lifecycle_provider=FullHeldProvider(tmp_path / "containers")),
+        "fixture-readiness": inputs.ProviderBinding(readiness_check=lambda: (True, None)),
+    }, evidence_verifiers={"fixture-evidence": _verifier()})
+    (tmp_path / "containers").mkdir(mode=0o700)
+    with pytest.raises(inputs.StandaloneInputsRefused,
+                       match="differs from the immutable startup seed"):
+        inputs.runtime_factory(materialized, registry)
 
 
 def test_listen_entrypoint_delegates_exact_factory_to_existing_service(

@@ -12,7 +12,7 @@ import subprocess
 import sys
 import threading
 import time
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError
 
@@ -22,7 +22,7 @@ from . import evidence_feed, feed_runtime as F, scoped_evidence as E
 from . import campaign_control, standalone_inputs as S, startup_factory, unified_driver, unified_planner
 from .test_evidence_feed import _root_repo, _native_event, _prospective_fixture_finding
 from .test_scoped_evidence import claim_dict, finding, trusted_index, invalidation
-from .test_standalone_inputs import _management_document
+from .test_standalone_inputs import _management_document, FullHeldProvider
 from .test_unified_driver import runtime_driver
 
 
@@ -358,6 +358,42 @@ def test_v2_dry_run_never_constructs_feed_or_sqlite(tmp_path, monkeypatch, capsy
     assert not report["execution_authorized"]
     assert not Path(doc["evidence_feed"]["store_root"]).exists()
     assert not Path(doc["driver_config"]["store_path"]).exists()
+
+
+def test_feed_factory_reuses_fresh_scheduler_for_restart(tmp_path):
+    document = feed_document(tmp_path)
+    materialized = S.materialize(S.StartupManifest.from_dict(document))
+    feed = materialized.manifest.evidence_feed
+    for path in (Path(feed.corpus_root), Path(feed.store_root),
+                 Path(feed.ledger_path).parent, tmp_path / "containers"):
+        path.mkdir(parents=True, exist_ok=True)
+    registry = S.ProviderRegistry({
+        "fixture-lifecycle": S.ProviderBinding(
+            lifecycle_provider=FullHeldProvider(tmp_path / "containers")),
+        "fixture-readiness": S.ProviderBinding(readiness_check=lambda: (True, None)),
+    }, evidence_feeds={feed.binding_id: binding()})
+    factory = S.runtime_factory(materialized, registry)
+    config = materialized.manifest.driver_config
+    args = SimpleNamespace(store=config.store_path,
+                           config_generation=config.config_generation, snapshot_version=3)
+    seed = materialized.inputs.scheduler_engine.export_state().to_dict()
+    controller, runtime = factory(materialized.resolved, args)
+    try:
+        assert runtime.driver.scheduler is controller._scheduler_engine
+        assert runtime.driver.scheduler is not materialized.inputs.scheduler_engine
+        assert runtime.recover().status == "recovered"
+    finally:
+        runtime.close()
+        controller.close()
+    reopened, restarted = factory(materialized.resolved, args)
+    try:
+        assert restarted.driver.scheduler is reopened._scheduler_engine
+        assert restarted.driver.scheduler is not runtime.driver.scheduler
+        assert restarted.recover().status == "recovered"
+        assert materialized.inputs.scheduler_engine.export_state().to_dict() == seed
+    finally:
+        restarted.close()
+        reopened.close()
 
 
 @pytest.mark.parametrize("field,value", [("max_shards", 0), ("max_shards", True),
