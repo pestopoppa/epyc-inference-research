@@ -42,10 +42,10 @@ from . import residency
 #: changes what the fields MEAN, so it must change the hash too.
 RECIPE_SCHEMA = "epyc.autokernel.canonical_recipe.v1"
 
-#: Variables the LOADER owns. A recipe may not set these, and the refusal is a hard error
-#: rather than a silent override: `LD_LIBRARY_PATH` is what pins the build's OWN ggml, and
-#: three ggml generations live on this host -- a binary that inherits another tree's ggml
-#: runs silently wrong and no exit code reports it. `HSA_OVERRIDE_GFX_VERSION` is
+#: Variables the LOADER owns. A recipe may neither set nor unset these, and the refusal is
+#: a hard error rather than a silent override: `LD_LIBRARY_PATH` is what pins the build's
+#: OWN ggml, and three ggml generations live on this host -- a binary that inherits another
+#: tree's ggml runs silently wrong and no exit code reports it. `HSA_OVERRIDE_GFX_VERSION` is
 #: deliberately UNSET by the loader env for the same reason. An arm that needs either of
 #: these is not an env arm; it is a different build or a different device.
 LOADER_OWNED_ENV = ("LD_LIBRARY_PATH", "HSA_OVERRIDE_GFX_VERSION")
@@ -147,10 +147,18 @@ class Recipe:
     #: check: a control arm whose readback was never declared is a control that was never
     #: checked, and a control that is secretly the treatment cannot be detected afterwards.
     env_readback: tuple = ()
+    #: Environment variables explicitly REMOVED from the launched process after the
+    #: inherited and loader environments are assembled.  This is deliberately separate
+    #: from `env`: absence from `env` means "inherit", while presence here means "unset".
+    #: A tuple keeps the declaration immutable; construction canonicalises its order so
+    #: equivalent recipes have one serialized identity. Kept last to preserve the legacy
+    #: positional constructor shape for every pre-existing field.
+    explicit_unsets: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         for key, value in (self.env or {}).items():
-            if not isinstance(key, str) or not isinstance(value, str):
+            self._validate_env_key(key, "env")
+            if not isinstance(value, str):
                 raise RecipeError(
                     f"env {key!r}={value!r}: environment variables are strings. Quote the "
                     f"value in the recipe JSON -- coercing it here would let the record "
@@ -161,9 +169,39 @@ class Recipe:
                     f"overriding it would break the three-ggml-generations linkage "
                     f"guarantee the residency check depends on. An arm that needs a "
                     f"different {key} is a different BUILD, not an env arm.")
+        if isinstance(self.explicit_unsets, str):
+            raise RecipeError("explicit_unsets must be a sequence of environment keys, not a string")
+        try:
+            unsets = tuple(self.explicit_unsets)
+        except TypeError as exc:
+            raise RecipeError("explicit_unsets must be a sequence of environment keys") from exc
+        for key in unsets:
+            self._validate_env_key(key, "explicit_unsets")
+            if key in LOADER_OWNED_ENV:
+                raise RecipeError(
+                    f"recipe env may not unset {key!r}: it is owned by the loader env, and "
+                    f"removing it would break the loader's linkage/device guarantee. An arm "
+                    f"that needs a different {key} is not an env arm.")
+        if len(set(unsets)) != len(unsets):
+            duplicates = sorted(key for key in set(unsets) if unsets.count(key) > 1)
+            raise RecipeError(f"explicit_unsets contains duplicate keys: {duplicates}")
+        unsets = tuple(sorted(unsets))
+        conflict = sorted(set(self.env or {}).intersection(unsets))
+        if conflict:
+            raise RecipeError(
+                f"recipe env keys cannot be both set and explicitly unset: {conflict}")
+        object.__setattr__(self, "explicit_unsets", unsets)
         # Resolve the readback declaration NOW, so an uncovered env state fails at
         # construction (including through `with_env`) rather than mid-measurement.
         self.readback_expectations()
+
+    @staticmethod
+    def _validate_env_key(key: object, source: str) -> None:
+        """Reject keys that cannot be passed faithfully through an OS environment."""
+        if not isinstance(key, str) or not key or "=" in key or "\0" in key:
+            raise RecipeError(
+                f"{source} key {key!r}: environment variable names must be non-empty "
+                f"strings containing neither '=' nor NUL")
 
     @classmethod
     def load(cls, path: Path | str) -> "Recipe":
@@ -176,22 +214,28 @@ class Recipe:
         d["extra_flags"] = tuple(d.get("extra_flags", ()))
         if d.get("env") is not None:
             d["env"] = dict(d["env"])
+        d["explicit_unsets"] = d.get("explicit_unsets") or ()
         d["env_readback"] = tuple(dict(c) for c in (d.get("env_readback") or ()))
         return cls(**d)
 
     def to_dict(self) -> dict:
         """Every field, in the shape `from_dict` reads back. There are no cosmetic fields:
         each one either changes what is launched or changes what the number means."""
-        return {"schema": RECIPE_SCHEMA, "name": self.name, "model": self.model,
-                "device": self.device, "ngl": self.ngl,
-                "spec_decode": dict(self.spec_decode), "np": self.np, "ctx": self.ctx,
-                "threads": self.threads, "batch": self.batch, "ubatch": self.ubatch,
-                "ctk": self.ctk, "ctv": self.ctv, "fa": self.fa,
-                "kv_unified": self.kv_unified, "extra_flags": list(self.extra_flags),
-                "cpu_list": self.cpu_list, "n_predict": self.n_predict,
-                "temperature": self.temperature, "top_p": self.top_p, "top_k": self.top_k,
-                "metric": self.metric, "env": dict(self.env or {}),
-                "env_readback": [dict(c) for c in self.env_readback]}
+        out = {"schema": RECIPE_SCHEMA, "name": self.name, "model": self.model,
+               "device": self.device, "ngl": self.ngl,
+               "spec_decode": dict(self.spec_decode), "np": self.np, "ctx": self.ctx,
+               "threads": self.threads, "batch": self.batch, "ubatch": self.ubatch,
+               "ctk": self.ctk, "ctv": self.ctv, "fa": self.fa,
+               "kv_unified": self.kv_unified, "extra_flags": list(self.extra_flags),
+               "cpu_list": self.cpu_list, "n_predict": self.n_predict,
+               "temperature": self.temperature, "top_p": self.top_p, "top_k": self.top_k,
+               "metric": self.metric, "env": dict(self.env or {}),
+               "env_readback": [dict(c) for c in self.env_readback]}
+        # Additive only when the new semantic is used: legacy recipe serialization and
+        # hashes remain byte-for-byte identical, so old floors are not reinterpreted.
+        if self.explicit_unsets:
+            out["explicit_unsets"] = list(self.explicit_unsets)
+        return out
 
     @property
     def recipe_hash(self) -> str:
@@ -204,8 +248,10 @@ class Recipe:
         a measurement whose recipe does not match the one the floor was calibrated under,
         instead of silently comparing two conditions.
 
-        It covers `to_dict()`, i.e. every field including `env` and `env_readback`. `None`
-        and `{}` env normalise to the same digest, because "no extra env" is one condition.
+        It covers `to_dict()`, i.e. every field including `env`, `explicit_unsets`, and
+        `env_readback`. `None` and `{}` env normalise to the same digest, because "no extra
+        env" is one condition. The explicit-unset field is omitted when empty to preserve
+        every legacy digest.
         """
         return hashlib.sha256(
             json.dumps(self.to_dict(), sort_keys=True,
@@ -242,22 +288,27 @@ class Recipe:
     def server_env(self, build_dir: Path, *,
                    base: Mapping[str, str] | None = None) -> dict[str, str]:
         """The exact environment the server is launched with: inherited env, then the
-        loader pin, then the recipe's own `env` LAST.
+        loader pin, then the recipe's own `env`, then its explicit unsets LAST.
 
-        Precedence is recipe > loader > inherited, and it is total only because the loader's
-        own variables are refused to `env` outright (`LOADER_OWNED_ENV`) -- so the recipe
-        can override any host variable it likes without ever being able to silently drop
-        the linkage pin the residency check depends on.
+        Precedence is explicit unset > recipe set > loader > inherited, and it is total only
+        because the loader's own variables are refused to both recipe states
+        (`LOADER_OWNED_ENV`) -- so the recipe can override any host variable it likes
+        without ever being able to silently drop the linkage pin the residency check
+        depends on.
         """
         env = dict(os.environ if base is None else base)
         env["LD_LIBRARY_PATH"] = str(Path(build_dir) / "bin")
         env.update(self.env or {})
+        for key in self.explicit_unsets:
+            env.pop(key, None)
         return env
 
     def with_env(self, *, name: str | None = None, **overrides: str | None) -> "Recipe":
         """A sibling recipe differing only in `env` -- the two arms of a paired env A/B from
-        ONE recipe file, with no JSON editing. A `None` value REMOVES a variable, so the
-        control arm of an ON recipe is `with_env(KNOB=None)`.
+        ONE recipe file, with no JSON editing. A `None` value explicitly UNSETS a variable
+        after inherited env is assembled, so the control arm of an ON recipe is
+        `with_env(KNOB=None)`. Setting a value replaces an unset marker, and unsetting a
+        value removes any recipe override; the source recipe is never mutated.
 
         The name gets the override appended by default, because the serving floor FILE is
         keyed by recipe name (`serving-floor.<name>.json`) and a different env is a
@@ -271,15 +322,18 @@ class Recipe:
         env VALUE reaches the name here and may carry `/` or whitespace.
         """
         merged = dict(self.env or {})
+        unsets = set(self.explicit_unsets)
         for key, value in overrides.items():
             if value is None:
                 merged.pop(key, None)
+                unsets.add(key)
             else:
                 merged[key] = value
+                unsets.discard(key)
         if name is None:
             name = self.name + "".join(
                 f"+{k}={UNSET if v is None else v}" for k, v in sorted(overrides.items()))
-        return replace(self, name=name, env=merged)
+        return replace(self, name=name, env=merged, explicit_unsets=tuple(sorted(unsets)))
 
     def server_argv(self, build_dir: Path, port: int) -> list[str]:
         argv = ["taskset", "-c", self.cpu_list] if self.cpu_list else []
@@ -317,8 +371,9 @@ class Recipe:
         sd = self.spec_decode.get("type", "none")
         pin = f" cpu={self.cpu_list}" if self.cpu_list else " cpu=unpinned"
         env = self.env or {}
-        envs = (" env=" + ",".join(f"{k}={v}" for k, v in sorted(env.items()))
-                if env else " env=none")
+        env_states = ([f"{k}={v}" for k, v in sorted(env.items())]
+                      + [f"{k}=<unset>" for k in self.explicit_unsets])
+        envs = " env=" + ",".join(env_states) if env_states else " env=none"
         rb = self.readback_expectations()
         rbs = " readback=" + ",".join(f"{f}={v}" for f, v in rb) if rb else ""
         return (f"{self.name} [np{self.np} {sd} {self.metric}{pin}{envs}{rbs} "

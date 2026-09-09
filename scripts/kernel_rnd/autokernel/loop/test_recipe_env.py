@@ -61,6 +61,14 @@ class EnvReachesTheProcess(unittest.TestCase):
         env = r.server_env(Path("/B"), base={"GGML_NOHUGEPAGE_PROCESS": "0"})
         self.assertEqual(env["GGML_NOHUGEPAGE_PROCESS"], "1")
 
+    def test_explicit_unset_removes_an_inherited_parent_value(self):
+        control = BASE.with_env(GGML_NOHUGEPAGE_PROCESS=None)
+        env = control.server_env(
+            Path("/B"), base={"GGML_NOHUGEPAGE_PROCESS": "1", "HOME": "/h"})
+        self.assertNotIn("GGML_NOHUGEPAGE_PROCESS", env)
+        self.assertEqual(env["HOME"], "/h")
+        self.assertEqual(env["LD_LIBRARY_PATH"], "/B/bin")
+
     def test_the_launch_path_uses_server_env_and_not_a_hand_built_dict(self):
         """The env must reach `Popen`, not merely exist on the recipe."""
         r = dataclasses.replace(BASE, env=dict(THP))
@@ -112,9 +120,33 @@ class LoaderVariablesAreRefused(unittest.TestCase):
             with self.subTest(name=name), self.assertRaises(serving.RecipeError):
                 dataclasses.replace(BASE, env={name: "x"})
 
+    def test_every_loader_owned_name_is_also_refused_as_an_explicit_unset(self):
+        for name in serving.LOADER_OWNED_ENV:
+            with self.subTest(name=name), self.assertRaises(serving.RecipeError):
+                dataclasses.replace(BASE, explicit_unsets=(name,))
+
     def test_a_non_string_env_value_is_refused_rather_than_coerced(self):
         with self.assertRaises(serving.RecipeError):
             dataclasses.replace(BASE, env={"GGML_NOHUGEPAGE_PROCESS": 1})
+
+    def test_invalid_set_and_unset_keys_are_refused(self):
+        for key in ("", "A=B", "A\0B", 1):
+            with self.subTest(key=key), self.assertRaises(serving.RecipeError):
+                dataclasses.replace(BASE, env={key: "x"})
+            with self.subTest(key=key), self.assertRaises(serving.RecipeError):
+                dataclasses.replace(BASE, explicit_unsets=(key,))
+
+    def test_a_key_cannot_be_both_set_and_unset(self):
+        with self.assertRaises(serving.RecipeError):
+            dataclasses.replace(BASE, env={"KNOB": "1"}, explicit_unsets=("KNOB",))
+
+    def test_duplicate_unset_keys_are_refused(self):
+        with self.assertRaises(serving.RecipeError):
+            dataclasses.replace(BASE, explicit_unsets=("A", "A"))
+
+    def test_a_string_is_not_misread_as_a_sequence_of_unset_keys(self):
+        with self.assertRaises(serving.RecipeError):
+            serving.Recipe.from_dict({**BASE.to_dict(), "explicit_unsets": "KNOB"})
 
 
 class DescribeStatesTheArm(unittest.TestCase):
@@ -124,6 +156,9 @@ class DescribeStatesTheArm(unittest.TestCase):
 
     def test_describe_says_env_none_when_there_is_none(self):
         self.assertIn("env=none", BASE.describe())
+
+    def test_describe_renders_explicit_unsets(self):
+        self.assertIn("env=KNOB=<unset>", BASE.with_env(KNOB=None).describe())
 
     def test_describe_renders_the_resolved_readback(self):
         r = dataclasses.replace(BASE, env=dict(THP), env_readback=THP_READBACK)
@@ -143,6 +178,26 @@ class RecipeIdentity(unittest.TestCase):
 
     def test_no_env_and_empty_env_are_the_same_condition(self):
         self.assertEqual(BASE.recipe_hash, dataclasses.replace(BASE, env={}).recipe_hash)
+
+    def test_legacy_serialization_and_hash_are_exactly_unchanged(self):
+        self.assertNotIn("explicit_unsets", BASE.to_dict())
+        self.assertEqual(
+            BASE.recipe_hash,
+            "36f0b19a0ba9c0d6c82b69a06851673d806512b7431dba89ebac41fa3865de98")
+
+    def test_explicit_unset_is_distinct_from_ordinary_inherited_state(self):
+        control = BASE.with_env(name=BASE.name, GGML_NOHUGEPAGE_PROCESS=None)
+        self.assertNotEqual(control.recipe_hash, BASE.recipe_hash)
+        self.assertEqual(control.env, {})
+        self.assertEqual(control.explicit_unsets, ("GGML_NOHUGEPAGE_PROCESS",))
+
+    def test_explicit_unsets_round_trip_in_canonical_sorted_order(self):
+        r = dataclasses.replace(BASE, explicit_unsets=("Z_KNOB", "A_KNOB"))
+        self.assertEqual(r.explicit_unsets, ("A_KNOB", "Z_KNOB"))
+        self.assertEqual(r.to_dict()["explicit_unsets"], ["A_KNOB", "Z_KNOB"])
+        back = serving.Recipe.from_dict(json.loads(json.dumps(r.to_dict())))
+        self.assertEqual(back.explicit_unsets, r.explicit_unsets)
+        self.assertEqual(back.recipe_hash, r.recipe_hash)
 
     def test_the_hash_is_stable_across_reserialization(self):
         r = dataclasses.replace(BASE, env=dict(THP), env_readback=THP_READBACK)
@@ -183,12 +238,34 @@ class WithEnv(unittest.TestCase):
         on = BASE.with_env(GGML_NOHUGEPAGE_PROCESS="1")
         off = on.with_env(GGML_NOHUGEPAGE_PROCESS=None)
         self.assertEqual(off.env, {})
-        # Same LAUNCH condition as the base -- but not the same recipe_hash, because the
-        # derived name is part of the identity and the floor is keyed by name.
-        self.assertEqual(dataclasses.replace(off, name=BASE.name).recipe_hash,
-                         BASE.recipe_hash)
+        self.assertEqual(off.explicit_unsets, ("GGML_NOHUGEPAGE_PROCESS",))
+        # Explicit removal is distinct from permitted inheritance even after normalising
+        # the name, because the parent process may carry the knob.
+        self.assertNotEqual(dataclasses.replace(off, name=BASE.name).recipe_hash,
+                            BASE.recipe_hash)
         self.assertNotEqual(off.recipe_hash, BASE.recipe_hash)
         self.assertNotEqual(off.name, BASE.name)
+
+    def test_setting_an_explicitly_unset_key_replaces_the_marker(self):
+        control = BASE.with_env(KNOB=None)
+        treatment = control.with_env(KNOB="1")
+        self.assertEqual(treatment.env, {"KNOB": "1"})
+        self.assertEqual(treatment.explicit_unsets, ())
+
+    def test_unsetting_a_set_key_deletes_the_override_and_records_the_marker(self):
+        treatment = BASE.with_env(KNOB="1")
+        control = treatment.with_env(KNOB=None)
+        self.assertEqual(control.env, {})
+        self.assertEqual(control.explicit_unsets, ("KNOB",))
+
+    def test_derivation_never_mutates_the_base_recipe(self):
+        base = dataclasses.replace(BASE, env={"KEEP": "yes"},
+                                   explicit_unsets=("OLD",))
+        derived = base.with_env(KEEP=None, OLD="new", ADDED=None)
+        self.assertEqual(base.env, {"KEEP": "yes"})
+        self.assertEqual(base.explicit_unsets, ("OLD",))
+        self.assertEqual(derived.env, {"OLD": "new"})
+        self.assertEqual(derived.explicit_unsets, ("ADDED", "KEEP"))
 
     def test_an_explicit_name_is_honoured(self):
         self.assertEqual(BASE.with_env(name="thp-on", GGML_NOHUGEPAGE_PROCESS="1").name,
@@ -217,6 +294,14 @@ class EnvReadback(unittest.TestCase):
             control, 1, status_text=_status(THP_enabled="1")), {"THP_enabled": "1"})
         with self.assertRaises(serving.EnvReadbackFailed):
             serving.verify_env_readback(control, 1, status_text=_status(THP_enabled="0"))
+
+    def test_explicit_control_unset_preserves_bidirectional_readback(self):
+        treatment = dataclasses.replace(BASE, env=dict(THP), env_readback=THP_READBACK)
+        control = treatment.with_env(GGML_NOHUGEPAGE_PROCESS=None)
+        self.assertEqual(treatment.readback_expectations(), (("THP_enabled", "0"),))
+        self.assertEqual(control.readback_expectations(), (("THP_enabled", "1"),))
+        self.assertNotIn("GGML_NOHUGEPAGE_PROCESS", control.server_env(
+            Path("/B"), base={"GGML_NOHUGEPAGE_PROCESS": "1"}))
 
     def test_a_missing_status_field_refuses_rather_than_passing(self):
         r = dataclasses.replace(BASE, env=dict(THP), env_readback=THP_READBACK)

@@ -56,14 +56,39 @@ def write_json(store_root: Path, name: str, body: Any, *,
     store_root.mkdir(parents=True, exist_ok=True)
     target = store_root / name
     handle, temporary = tempfile.mkstemp(dir=str(store_root), prefix=prefix)
+    published = False
     try:
-        with os.fdopen(handle, "w", encoding="utf-8") as stream:
+        try:
+            stream = os.fdopen(handle, "w", encoding="utf-8")
+        except BaseException:
+            os.close(handle)
+            raise
+        try:
             json.dump(body, stream, indent=2, sort_keys=True)
             stream.flush()
             os.fsync(stream.fileno())
+        finally:
+            stream.close()
         os.replace(temporary, target)
+        published = True
+
+        directory = os.open(
+            store_root, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
     except BaseException:
-        Path(temporary).unlink(missing_ok=True)
+        # Once renamed, `temporary` no longer names this call's inode. In
+        # particular, a directory-fsync failure must neither remove the published
+        # target nor unlink a new file another process placed at the scratch name.
+        if not published:
+            try:
+                Path(temporary).unlink(missing_ok=True)
+            except OSError:
+                # Preserve the publication fault; cleanup is best effort and must
+                # never turn into deletion outside this call's scratch path.
+                pass
         raise
     return target
 
