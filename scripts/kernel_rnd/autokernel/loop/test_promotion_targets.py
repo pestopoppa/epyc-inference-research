@@ -46,7 +46,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-from autokernel.loop import (anchor, bench, champion, gates, hotspots, loop,
+from autokernel.loop import (accumulate, anchor, bench, champion, gates, hotspots, loop,
                              pipeline, pool)
 from autokernel.loop import run as run_mod
 
@@ -169,6 +169,7 @@ class TheKeepBuildsAProductionCompleteAnchor(unittest.TestCase):
 
     def _run_one_keep(self):
         """Drive `run.main` through exactly one kept iteration; return the record."""
+        accumulate.Bundle(champion_of_record=self.tip, tip=self.tip).save(self.store)
         compile_calls: list[dict] = []
         planners: list = []
         scratch = self.root / "scratch-verify"

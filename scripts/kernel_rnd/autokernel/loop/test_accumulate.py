@@ -1,5 +1,7 @@
 """R23-44 compound-then-gate policy. Pure logic, no GPU: the loop injects the compounded
 bench number and the serving row, and these pin the decisions those inputs must yield."""
+import pytest
+
 from autokernel.loop import accumulate as A
 
 
@@ -140,23 +142,24 @@ def test_bundle_load_rejects_state_the_tree_no_longer_contains():
         # (a) rewound branch: the cor is not an ancestor of the anchor
         A.Bundle(champion_of_record="gone", tip="gone", keeps=["m1"],
                  compounded_bench_pct=5.0).save(store)
-        got, note = A.load_bundle(store, anchor_commit="a1", is_ancestor=_linear("a1"))
-        assert got.is_empty() and got.champion_of_record == "a1"
-        assert "not an ancestor" in note, note
+        with pytest.raises(A.BundleRecoveryRequired, match="invalid COR/tip ancestry"):
+            A.load_bundle(store, anchor_commit="a1", is_ancestor=_linear("a1"))
         # (b) anchor behind the persisted tip: generations were dropped
         A.Bundle(champion_of_record="cor0", tip="k2", keeps=["m1"],
                  compounded_bench_pct=3.0).save(store)
-        got, note = A.load_bundle(store, anchor_commit="k1",
-                                  is_ancestor=_linear("cor0", "k1", "k2"))
-        assert got.is_empty() and "behind persisted tip" in note, note
-        # (c) unreadable file: start fresh, never raise into the loop's startup
+        with pytest.raises(A.BundleRecoveryRequired, match="invalid tip/anchor ancestry"):
+            A.load_bundle(store, anchor_commit="k1",
+                          is_ancestor=_linear("cor0", "k1", "k2"))
+        # (c) unreadable projection: replay the authoritative journal snapshot
         (store / A.Bundle.FILENAME).write_text("{not json", encoding="utf-8")
-        got, note = A.load_bundle(store, anchor_commit="a1", is_ancestor=_linear("a1"))
-        assert got.is_empty() and "unreadable" in note, note
-        # (d) no file at all
+        got, _ = A.load_bundle(store, anchor_commit="k2",
+                               is_ancestor=_linear("cor0", "k1", "k2"))
+        assert got.champion_of_record == "cor0" and got.tip == "k2"
+        # (d) a missing projection is recovered the same way
         (store / A.Bundle.FILENAME).unlink()
-        got, note = A.load_bundle(store, anchor_commit="a1", is_ancestor=_linear("a1"))
-        assert got.is_empty() and "no persisted bundle" in note, note
+        got, _ = A.load_bundle(store, anchor_commit="k2",
+                               is_ancestor=_linear("cor0", "k1", "k2"))
+        assert got.champion_of_record == "cor0" and got.tip == "k2"
     finally:
         shutil.rmtree(store, ignore_errors=True)
 
@@ -173,6 +176,8 @@ def test_anchor_ahead_of_bundle_keeps_the_cor_and_advances_only_the_tip():
         got, note = A.load_bundle(store, anchor_commit="k2",
                                   is_ancestor=_linear("cor0", "k1", "k2"))
         assert got.champion_of_record == "cor0" and got.tip == "k2"
+        assert got.compounded_bench_pct == 2.0
+        assert got.measurement_validity == A.MEASUREMENT_STALE_TIP_ADVANCE
         assert "tip advanced" in note, note
     finally:
         shutil.rmtree(store, ignore_errors=True)
