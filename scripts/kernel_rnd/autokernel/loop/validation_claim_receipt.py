@@ -14,6 +14,7 @@ from .. import schemas
 
 RECEIPT_SCHEMA = "epyc.autokernel.canonical_claim_grade_receipt.v1"
 REFERENCE_SCHEMA = "epyc.autokernel.canonical_claim_grade_receipt_reference.v1"
+PAIR_REFERENCE_SCHEMA = "epyc.autokernel.canonical_claim_grade_receipt_pair.v1"
 PRODUCER_ID = "autokernel.loop.validation_semantic_adapter/v1"
 
 
@@ -60,7 +61,41 @@ class ClaimGradeReceiptReference:
         return {"schema": REFERENCE_SCHEMA, **self.__dict__}
 
 
+@dataclass(frozen=True)
+class ClaimGradeReceiptPairReference:
+    anchor: ClaimGradeReceiptReference
+    candidate: ClaimGradeReceiptReference
+    anchor_measurement_id: str
+    candidate_measurement_id: str
+    admissible_view_digest: str
+
+    @classmethod
+    def from_dict(cls, value: Any) -> "ClaimGradeReceiptPairReference":
+        row = _exact(value, {"schema", "anchor", "candidate", "anchor_measurement_id",
+                            "candidate_measurement_id", "admissible_view_digest"}, "claim-grade pair")
+        if row["schema"] != PAIR_REFERENCE_SCHEMA:
+            raise ClaimReceiptError("claim-grade pair schema is unsupported")
+        return cls(ClaimGradeReceiptReference.from_dict(row["anchor"]),
+                   ClaimGradeReceiptReference.from_dict(row["candidate"]),
+                   _sha(row["anchor_measurement_id"], "anchor measurement"),
+                   _sha(row["candidate_measurement_id"], "candidate measurement"),
+                   _sha(row["admissible_view_digest"], "admissible view"))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"schema": PAIR_REFERENCE_SCHEMA, "anchor": self.anchor.to_dict(),
+                "candidate": self.candidate.to_dict(),
+                "anchor_measurement_id": self.anchor_measurement_id,
+                "candidate_measurement_id": self.candidate_measurement_id,
+                "admissible_view_digest": self.admissible_view_digest}
+
+
 def validate_receipt_body(value: Any) -> Mapping[str, Any]:
+    from . import validation_projection_source as current
+    if isinstance(value, Mapping) and value.get("schema") == current.RECEIPT_SCHEMA:
+        try:
+            return current.validate_current_receipt(value)
+        except (ValueError, TypeError, KeyError) as exc:
+            raise ClaimReceiptError("current canonical receipt is malformed") from exc
     fields = {"schema", "producer", "receipt_id", "source_identity",
               "source_event", "projection", "native_binding", "authority_scope"}
     row = _exact(value, fields, "claim-grade receipt")
@@ -122,5 +157,6 @@ def validate_receipt_body(value: Any) -> Mapping[str, Any]:
     return row
 
 
-__all__ = ["ClaimGradeReceiptReference", "ClaimReceiptError", "PRODUCER_ID",
+__all__ = ["ClaimGradeReceiptReference", "ClaimGradeReceiptPairReference",
+           "PAIR_REFERENCE_SCHEMA", "ClaimReceiptError", "PRODUCER_ID",
            "RECEIPT_SCHEMA", "REFERENCE_SCHEMA", "validate_receipt_body"]

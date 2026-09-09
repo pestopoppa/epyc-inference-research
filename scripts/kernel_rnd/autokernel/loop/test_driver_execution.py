@@ -364,8 +364,12 @@ def _observation_configuration(prepared):
         "thp_mode": "madvise"}
         for recipe in (prepared.runtime_pair.anchor, prepared.runtime_pair.candidate)}
     return ob.ParentObservationConfiguration(
-        requested, {}, 0.01, 0.05, _budgets(
-            max_samples=64, phase_ack_timeout_s=0.5, join_timeout_s=0.5))
+        # Original owning T0 collection runs while placement is still held.
+        # A 10 ms / 64-sample fixture exhausted its capacity before later
+        # mandatory markers under scheduling pressure. Pin a bounded ~25 s
+        # periodic allowance; retain the 4 MiB byte cap and real marker checks.
+        requested, {}, 0.1, 0.2, _budgets(
+            max_samples=256, phase_ack_timeout_s=0.5, join_timeout_s=0.5))
 
 
 def _run_real_controller_child_v2_capture_and_restart(

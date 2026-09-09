@@ -10,6 +10,7 @@ from pathlib import Path
 import py_compile
 import runpy
 import shutil
+import subprocess
 import sys
 import time
 from types import ModuleType
@@ -37,6 +38,21 @@ TEAM2_PIN = sa.ProjectionSourcePin(
     sa.ARM_ADAPTER_ID,
     "04cacacc8576048ff18a96e2c332ca2e2ea59bfdbfcc0acc451c1939f0ad3123",
     "00a880b3fa12dcd1cd2b06d4b9e30959ee14c38441cc5f28ae706d8e2ee68839")
+
+
+@pytest.fixture(scope="module")
+def historical_root(tmp_path_factory):
+    root = tmp_path_factory.mktemp("historical-semantic-root")
+    for relative, expected in (
+            ("scripts/vidya/claim_tuple.py", sa.FINAL_V2_CLAIM_TUPLE_SHA256),
+            ("scripts/vidya/adapters/autokernel_unified_arm.py", sa.FINAL_V2_ARM_PROJECTOR_SHA256)):
+        raw = subprocess.run(["git", "show", f"{sa.FINAL_V2_ROOT_COMMIT}:{relative}"],
+            cwd=ROOT, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE).stdout
+        assert hashlib.sha256(raw).hexdigest() == expected
+        target = root / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(raw)
+    return root
 
 
 def _alter_decision(store, reference, *, binding=None, native=None):
@@ -69,12 +85,12 @@ def _assembly_and_receipt(tmp_path, *, fixture_authority=True):
     return values, assembly, state.receipt, evidence_store
 
 
-def test_pinned_root_uses_registered_projector_and_refuses_older_v1_shape(tmp_path):
+def test_pinned_root_uses_registered_projector_and_refuses_older_v1_shape(tmp_path, historical_root):
     values, _assembly, receipt, _store = _assembly_and_receipt(tmp_path)
     controller, consumer, candidate, comparator, row, _row_set, _plan, captures, \
         _calibration, capture_store, _evidence_store = values
     try:
-        projection = sa.PinnedRootProjection(ROOT)
+        projection = sa.PinnedRootProjection(historical_root)
         with pytest.raises(sa.SemanticAdapterError, match="refused the native source"):
             projection.grade_v1(
                 captures["anchor"][1], receipt_locator=receipt.native_evidence_ref,
@@ -174,9 +190,9 @@ def test_source_fifo_is_refused_without_blocking(tmp_path):
     assert time.monotonic() - started < 0.5
 
 
-def test_concurrent_projector_construction_cannot_cross_wire_registration():
+def test_concurrent_projector_construction_cannot_cross_wire_registration(historical_root):
     def construct(_index):
-        projection = sa.PinnedRootProjection(ROOT)
+        projection = sa.PinnedRootProjection(historical_root)
         return projection.projector.__globals__["ClaimTuple"], \
             projection.claim_tuple.ClaimTuple
 
@@ -185,12 +201,12 @@ def test_concurrent_projector_construction_cannot_cross_wire_registration():
     assert all(projected is registered for projected, registered in pairs)
 
 
-def test_real_adapter_keeps_candidate_row_unavailable(tmp_path):
+def test_real_adapter_keeps_candidate_row_unavailable(tmp_path, historical_root):
     values = _consumer(tmp_path, authority=False, keep_count=1, cadence=0)
     controller, consumer, candidate, comparator, row, row_set, _plan, captures, calibration, \
         _capture_store, _evidence_store = values
     try:
-        adapter = sa.ValidationSemanticAdapter(sa.PinnedRootProjection(ROOT))
+        adapter = sa.ValidationSemanticAdapter(sa.PinnedRootProjection(historical_root))
         consumer.semantic_authorities["real"] = adapter.registered_authority("owner-v1")
         assembly = consumer.assemble_due_batch(
             request_id="start", candidate=candidate, comparator=comparator, row_set=row_set)
@@ -268,7 +284,7 @@ def test_moving_team2_v2_receipt_reprojects_but_is_compatibility_only(tmp_path):
 
 
 def test_final_verifier_pins_do_not_retroactively_attest_producer_source(
-        tmp_path, monkeypatch):
+        tmp_path, monkeypatch, historical_root):
     fixture_module = runpy.run_path(
         str(ROOT / "tests/vidya/test_autokernel_unified_arm.py"))
     source_store = mc.ArtifactStore(tmp_path / "source")
@@ -284,7 +300,7 @@ def test_final_verifier_pins_do_not_retroactively_attest_producer_source(
                  "measurement_id": carrier["measurement_id"], "carrier": carrier,
                  "artifact": carrier_artifact.to_dict()}}
     event_artifact = source_store.write("native-v2-journal-event", event)
-    projection = sa.PinnedRootProjection(ROOT)
+    projection = sa.PinnedRootProjection(historical_root)
     assert projection.native_v2_available
     reference = projection.produce_receipt(
         source_store=source_store, source_locator=event_artifact.locator,
