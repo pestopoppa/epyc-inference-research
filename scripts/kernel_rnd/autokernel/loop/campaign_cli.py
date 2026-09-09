@@ -16,6 +16,7 @@ from .status import write_json
 
 REGISTRY_SNAPSHOT_SCHEMA = "epyc.autokernel.artifact_registry_snapshot.v1"
 DRY_RESOLUTION_SCHEMA = "epyc.autokernel.campaign_dry_resolution.v1"
+PRODUCTION_DRY_RESOLUTION_SCHEMA = "epyc.autokernel.production_campaign_dry_resolution.v2"
 ARTIFACT_KINDS = frozenset({"source", "model", "build", "recipe"})
 
 
@@ -74,11 +75,15 @@ def load_previous(path: Path | str) -> campaign.ResolvedCampaign:
     row = _object(_read_json(Path(path), "previous resolution"), "previous resolution")
     if row.get("schema") == campaign.RESOLVED_SCHEMA:
         return campaign.ResolvedCampaign.from_dict(row)
-    if row.get("schema") != DRY_RESOLUTION_SCHEMA:
+    schema = row.get("schema")
+    if schema not in {DRY_RESOLUTION_SCHEMA, PRODUCTION_DRY_RESOLUTION_SCHEMA}:
         raise campaign.ManifestError(
-            f"previous resolution: unsupported schema {row.get('schema')!r}")
-    _exact_keys(row, {"schema", "mode", "admission_ready", "disposition",
-                      "resolved_campaign", "target_dispositions", "summary", "verification"},
+            f"previous resolution: unsupported schema {schema!r}")
+    fields = {"schema", "mode", "admission_ready", "disposition",
+              "resolved_campaign", "target_dispositions", "summary", "verification"}
+    if schema == PRODUCTION_DRY_RESOLUTION_SCHEMA:
+        fields.add("production_enrollment")
+    _exact_keys(row, fields,
                 "previous resolution")
     return campaign.ResolvedCampaign.from_dict(row["resolved_campaign"])
 
@@ -188,8 +193,12 @@ def build_output(resolved: campaign.ResolvedCampaign, *, verify_artifacts: bool
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Resolve a unified AutoKernel campaign offline; never execute it")
-    parser.add_argument("--manifest", type=Path, required=True)
-    parser.add_argument("--registry-snapshot", type=Path, required=True)
+    declaration = parser.add_mutually_exclusive_group(required=True)
+    declaration.add_argument("--manifest", type=Path)
+    declaration.add_argument("--production-campaign-config", type=Path)
+    registry = parser.add_mutually_exclusive_group(required=True)
+    registry.add_argument("--registry-snapshot", type=Path)
+    registry.add_argument("--production-enrollment", type=Path)
     parser.add_argument("--previous", type=Path)
     parser.add_argument("--out", type=Path)
     parser.add_argument("--verify-artifacts", action="store_true")
@@ -199,12 +208,41 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
-        manifest = campaign.load_manifest(args.manifest)
-        registry = load_registry_snapshot(args.registry_snapshot)
+        if args.production_enrollment is not None:
+            from .production_enrollment import (manifest_from_export,
+                                                merge_local_seed_registry,
+                                                production_enrollment_diagnostics,
+                                                registry_snapshot_from_export)
+            registry = registry_snapshot_from_export(args.production_enrollment)
+            production_diagnostics = production_enrollment_diagnostics(
+                args.production_enrollment)
+            if args.production_campaign_config is not None:
+                production_config = _read_json(
+                    args.production_campaign_config, "production campaign configuration")
+                manifest = manifest_from_export(
+                    args.production_enrollment,
+                    campaign_config=production_config)
+                registry = merge_local_seed_registry(
+                    registry, campaign_config=production_config)
+            else:
+                manifest = campaign.load_manifest(args.manifest)
+        else:
+            production_diagnostics = None
+            if args.production_campaign_config is not None:
+                raise campaign.ManifestError(
+                    "--production-campaign-config requires --production-enrollment")
+            manifest = campaign.load_manifest(args.manifest)
+            registry = load_registry_snapshot(args.registry_snapshot)
         previous = load_previous(args.previous) if args.previous is not None else None
         resolved = campaign.resolve_manifest(
             manifest, registry_snapshot=registry, previous=previous)
         output = build_output(resolved, verify_artifacts=args.verify_artifacts)
+        if production_diagnostics is not None:
+            output["schema"] = PRODUCTION_DRY_RESOLUTION_SCHEMA
+            output["production_enrollment"] = production_diagnostics
+            if any(row["status"] != "ready" or not row["enrolled_target_ids"]
+                   for row in production_diagnostics["targets"]):
+                output["disposition"] = "partial"
         if args.out is None:
             json.dump(output, sys.stdout, indent=2, sort_keys=True)
             sys.stdout.write("\n")
@@ -220,5 +258,6 @@ if __name__ == "__main__":
     raise SystemExit(main())
 
 
-__all__ = ["DRY_RESOLUTION_SCHEMA", "REGISTRY_SNAPSHOT_SCHEMA", "build_output",
+__all__ = ["DRY_RESOLUTION_SCHEMA", "PRODUCTION_DRY_RESOLUTION_SCHEMA",
+           "REGISTRY_SNAPSHOT_SCHEMA", "build_output",
            "load_previous", "load_registry_snapshot", "main"]

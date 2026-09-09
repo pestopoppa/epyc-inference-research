@@ -21,6 +21,7 @@ ARTIFACT_SCHEMA = "epyc.autokernel.launch_artifact.v1"
 ENVIRONMENT_POLICY_SCHEMA = "epyc.autokernel.environment_policy.v1"
 CAPABILITY_SCHEMA = "epyc.autokernel.recipe_capability.v1"
 RESOLVED_RECIPE_SCHEMA = "epyc.autokernel.resolved_recipe.v1"
+CANONICAL_RESOLVED_RECIPE_SCHEMA = "epyc.autokernel.canonical_launch.v1"
 SUPPORTED_BACKENDS = frozenset({"cpu", "gpu"})
 WITNESS_KINDS = frozenset({"recipe_readback", "runtime_set", "master_off"})
 SPECULATION_TYPES = frozenset({"none", "draft-dflash", "draft-mtp"})
@@ -479,6 +480,276 @@ class ResolvedRecipe:
         return resolved
 
 
+_CANONICAL_VALUE_FLAGS = frozenset({
+    "-m", "--host", "--port", "-np", "-c", "-t", "-tb", "-b", "-ub",
+    "--flash-attn", "-fa", "-ctk", "-ctv", "--chat-template-file", "--spec-type",
+    "--spec-draft-n-max", "--reasoning", "--slot-save-path", "--device",
+    "--device-draft", "-ngl", "-md", "-ngld",
+})
+_CANONICAL_SWITCH_FLAGS = frozenset({
+    "--jinja", "--mlock", "--no-mmap", "--kv-unified", "--no-kv-unified",
+    "--metrics", "--slots",
+})
+
+
+def _canonical_command(command: tuple[str, ...]) -> tuple[str, dict[str, str | bool]]:
+    if not command:
+        raise ResolutionError("canonical command must not be empty")
+    executable = _text(command[0], "canonical command executable")
+    parsed: dict[str, str | bool] = {}
+    index = 1
+    while index < len(command):
+        token = command[index]
+        if token in _CANONICAL_SWITCH_FLAGS:
+            if token in parsed:
+                raise ResolutionError(f"canonical command repeats {token}")
+            parsed[token] = True
+            index += 1
+            continue
+        if token in _CANONICAL_VALUE_FLAGS:
+            if token in parsed or index + 1 >= len(command):
+                raise ResolutionError(f"canonical command repeats or omits value for {token}")
+            parsed[token] = _text(command[index + 1], f"canonical command {token}")
+            index += 2
+            continue
+        # Equals spellings make duplicate detection ambiguous with launcher output and
+        # are not emitted by the supported canonical builder grammar.
+        raise ResolutionError(f"canonical command has unsupported flag {token!r}")
+    for required in ("-m", "--host", "--port", "-np", "-c", "-t"):
+        if required not in parsed:
+            raise ResolutionError(f"canonical command omits required {required}")
+    if parsed["--host"] != "127.0.0.1":
+        raise ResolutionError("canonical command must use the loopback host")
+    return executable, parsed
+
+
+def _canonical_prefix(prefix: tuple[str, ...]) -> str | None:
+    if not prefix:
+        return None
+    offset = 0
+    if prefix[0] == "numactl":
+        if len(prefix) < 4 or prefix[2] != "--":
+            raise ResolutionError("malformed canonical numactl prefix")
+        policy = prefix[1]
+        if not re.fullmatch(r"--(?:interleave=(?:all|[0-9]+(?:,[0-9]+)*)|"
+                            r"membind=[0-9]+(?:,[0-9]+)*)", policy):
+            raise ResolutionError("unsupported canonical numactl policy")
+        offset = 3
+    if len(prefix) != offset + 3 or prefix[offset:offset + 2] != ("taskset", "-c"):
+        raise ResolutionError("canonical topology prefix must end in one taskset declaration")
+    cpu_list = _text(prefix[-1], "canonical topology CPU list")
+    if not re.fullmatch(r"[0-9]+(?:-[0-9]+)?(?:,[0-9]+(?:-[0-9]+)?)*", cpu_list):
+        raise ResolutionError("canonical topology CPU list is malformed")
+    return cpu_list
+
+
+def canonical_recipe_projection(*, name: str, command_argv: Sequence[str],
+                                topology_prefix: Sequence[str], n_predict: int = 256,
+                                temperature: float = 0.6, top_p: float = 0.95,
+                                top_k: int = 20, metric: str = "aggregate_tok_s"
+                                ) -> serving.Recipe:
+    """Parse the closed production grammar into Recipe's semantic fields."""
+    command = _argv_sequence(command_argv, "canonical command_argv")
+    executable, parsed = _canonical_command(command)
+    del executable
+    if isinstance(topology_prefix, (str, bytes)) or not isinstance(topology_prefix, Sequence):
+        raise ResolutionError("topology_prefix must be an array")
+    prefix = tuple(_text(x, "topology_prefix[]") for x in topology_prefix)
+    cpu_list = _canonical_prefix(prefix)
+    device = str(parsed.get("--device", "none"))
+    raw_ngl = parsed.get("-ngl")
+    ngl = 99 if raw_ngl == "all" else (
+        0 if raw_ngl is None and device == "none" else _canonical_int(parsed, "-ngl"))
+    spec_type = str(parsed.get("--spec-type", "none"))
+    spec: dict[str, Any] = {"type": spec_type}
+    if "-md" in parsed:
+        spec["drafter"] = str(parsed["-md"])
+        spec["ngld"] = _canonical_int(parsed, "-ngld", ngl)
+    if "--spec-draft-n-max" in parsed:
+        spec["draft_n_max"] = _canonical_int(parsed, "--spec-draft-n-max")
+    extra: tuple[str, ...] = ()
+    if "--device-draft" in parsed:
+        extra = ("--device-draft", str(parsed["--device-draft"]))
+    if "-tb" in parsed and _canonical_int(parsed, "-tb") != _canonical_int(parsed, "-t"):
+        raise ResolutionError("canonical -tb differs from -t")
+    if "--flash-attn" in parsed and "-fa" in parsed:
+        raise ResolutionError("canonical command repeats flash-attention through aliases")
+    kv_unified = "--kv-unified" in parsed
+    if kv_unified and "--no-kv-unified" in parsed:
+        raise ResolutionError("canonical command declares conflicting KV-unified states")
+    return serving.Recipe(
+        name=_text(name, "canonical recipe name"), model=str(parsed["-m"]),
+        device=device, ngl=ngl, spec_decode=spec, np=_canonical_int(parsed, "-np"),
+        ctx=_canonical_int(parsed, "-c"), threads=_canonical_int(parsed, "-t"),
+        batch=_canonical_int(parsed, "-b", 2048), ubatch=_canonical_int(parsed, "-ub", 2048),
+        ctk=str(parsed.get("-ctk", "f16")), ctv=str(parsed.get("-ctv", "f16")),
+        fa=str(parsed.get("--flash-attn", parsed.get("-fa", "off"))),
+        kv_unified=kv_unified, extra_flags=extra, cpu_list=cpu_list,
+        n_predict=n_predict, temperature=temperature, top_p=top_p, top_k=top_k,
+        metric=metric)
+
+
+@dataclass(frozen=True)
+class CanonicalResolvedRecipe:
+    """Exact production command snapshot under a closed, versioned launch grammar."""
+
+    template_hash: str
+    template: serving.Recipe
+    backend: str
+    build_dir: str
+    port: int
+    command_argv: tuple[str, ...]
+    topology_prefix: tuple[str, ...]
+    argv: tuple[str, ...]
+    launch_env: tuple[tuple[str, str], ...]
+    absent_environment: tuple[str, ...]
+    relevant_environment: tuple[tuple[str, str | None], ...]
+    readback_expectations: tuple[tuple[str, str], ...]
+    workload: WorkloadSpec
+    environment_policy: EnvironmentPolicy
+    model: ArtifactDigest
+    drafter: ArtifactDigest | None
+    executable: ArtifactDigest
+    dsos: tuple[ArtifactDigest, ...]
+    capability: CapabilityReport
+    runtime_binary_dir: str | None
+    runtime_ld_paths: tuple[str, ...]
+    provenance: tuple[tuple[str, str], ...]
+    snapshot_digest: str
+    execution_digest: str
+
+    def _snapshot_dict(self) -> dict[str, Any]:
+        return {"launch_contract": "orchestrator-production/v1",
+                "template_hash": self.template_hash, "template": self.template.to_dict(),
+                "backend": self.backend,
+                "build_dir": self.build_dir, "port": self.port,
+                "command_argv": list(self.command_argv),
+                "topology_prefix": list(self.topology_prefix), "argv": list(self.argv),
+                "launch_env": dict(self.launch_env),
+                "absent_environment": list(self.absent_environment),
+                "relevant_environment": {
+                    key: ({"state": "absent"} if value is None else
+                          {"state": "value", "value": value})
+                    for key, value in self.relevant_environment},
+                "readback_expectations": [list(item) for item in self.readback_expectations],
+                "workload": self.workload.to_dict(),
+                "environment_policy": self.environment_policy.to_dict(),
+                "model": self.model.to_dict(),
+                "drafter": self.drafter.to_dict() if self.drafter else None,
+                "executable": self.executable.to_dict(),
+                "dsos": [item.to_dict() for item in self.dsos],
+                "capability": self.capability.to_dict(),
+                "runtime_binary_dir": self.runtime_binary_dir,
+                "runtime_ld_paths": list(self.runtime_ld_paths),
+                "provenance": dict(self.provenance)}
+
+    def _normalized_execution_dict(self) -> dict[str, Any]:
+        command = list(self.command_argv)
+        command[0] = f"<executable:{self.executable.sha256}>"
+        replacements = {"-m": f"<model:{self.model.sha256}>", "--port": "<listen-port>"}
+        if self.drafter:
+            replacements["-md"] = f"<drafter:{self.drafter.sha256}>"
+        for index, token in enumerate(command[:-1]):
+            if token in replacements:
+                command[index + 1] = replacements[token]
+        env = dict(self.launch_env)
+        env["LD_LIBRARY_PATH"] = "<sealed-dso-set>"
+        return {"launch_contract": "orchestrator-production/v1", "backend": self.backend,
+                "command_argv": command, "topology_prefix": list(self.topology_prefix),
+                "launch_env": env, "absent_environment": list(self.absent_environment),
+                "relevant_environment": dict(self.relevant_environment),
+                "workload": self.workload.to_dict(),
+                "environment_policy_version": self.environment_policy.version,
+                "artifacts": {"model": self.model.sha256,
+                              "drafter": self.drafter.sha256 if self.drafter else None,
+                              "executable": self.executable.sha256,
+                              "dsos": sorted((Path(x.path).name, x.sha256) for x in self.dsos)}}
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"schema": CANONICAL_RESOLVED_RECIPE_SCHEMA, **self._snapshot_dict(),
+                "snapshot_digest": self.snapshot_digest,
+                "execution_digest": self.execution_digest}
+
+    def validate_launch(self, template: serving.Recipe, build_dir: Path | str,
+                        port: int) -> None:
+        if self.snapshot_digest != _digest(self._snapshot_dict()) \
+                or self.execution_digest != _digest(self._normalized_execution_dict()):
+            raise ResolutionError("canonical launch integrity check failed")
+        _validate_canonical_consistency(self, template)
+        if str(Path(build_dir)) != self.build_dir or port != self.port:
+            raise ResolutionError("canonical launch does not match build/port")
+        if not self.capability.supported:
+            codes = ",".join(item.code for item in self.capability.reasons)
+            raise UnsupportedRecipeCapability(f"canonical launch is unsupported: {codes}")
+
+    @classmethod
+    def from_dict(cls, value: Any) -> "CanonicalResolvedRecipe":
+        row = _object(value, "canonical resolved recipe")
+        required = {"schema", "launch_contract", "template_hash", "template", "backend", "build_dir",
+                    "port", "command_argv", "topology_prefix", "argv", "launch_env",
+                    "absent_environment", "relevant_environment", "readback_expectations",
+                    "workload", "environment_policy", "model", "drafter", "executable",
+                    "dsos", "capability", "runtime_binary_dir", "runtime_ld_paths",
+                    "provenance", "snapshot_digest", "execution_digest"}
+        _keys(row, required, "canonical resolved recipe")
+        if row["schema"] != CANONICAL_RESOLVED_RECIPE_SCHEMA \
+                or row["launch_contract"] != "orchestrator-production/v1":
+            raise ResolutionError("unsupported canonical launch schema/contract")
+        policy = EnvironmentPolicy.from_dict(row["environment_policy"])
+        launch = _object(row["launch_env"], "canonical launch env")
+        relevant_row = _object(row["relevant_environment"], "canonical relevant env")
+        relevant = []
+        for key, raw in relevant_row.items():
+            state = _object(raw, f"canonical relevant env {key}")
+            if state == {"state": "absent"}:
+                relevant.append((_env_key(key, "canonical relevant env key"), None))
+            elif set(state) == {"state", "value"} and state["state"] == "value" \
+                    and isinstance(state["value"], str):
+                relevant.append((_env_key(key, "canonical relevant env key"), state["value"]))
+            else:
+                raise ResolutionError("malformed canonical relevant environment")
+        runtime_binary = row["runtime_binary_dir"]
+        if runtime_binary is not None:
+            runtime_binary = _text(runtime_binary, "runtime_binary_dir")
+        try:
+            frozen_template = serving.Recipe.from_dict(row["template"])
+        except Exception as exc:
+            raise ResolutionError(f"malformed canonical template: {exc}") from exc
+        resolved = cls(
+            _sha(row["template_hash"], "template_hash"), frozen_template,
+            _text(row["backend"], "backend"), _text(row["build_dir"], "build_dir"),
+            _port(row["port"]), _argv_sequence(row["command_argv"], "command_argv"),
+            tuple(_text(x, "topology_prefix[]") for x in
+                  (row["topology_prefix"] if isinstance(row["topology_prefix"], list) else
+                   (_ for _ in ()).throw(ResolutionError("topology_prefix must be an array")))),
+            _argv_sequence(row["argv"], "argv"),
+            tuple(sorted((_env_key(k, "launch env key"),
+                          v if isinstance(v, str) else (_ for _ in ()).throw(
+                              ResolutionError("launch env values must be strings")))
+                         for k, v in launch.items())),
+            tuple(sorted(_env_key(x, "absent env") for x in
+                         _string_sequence(row["absent_environment"], "absent env"))),
+            tuple(sorted(relevant)),
+            _readback_pairs(row["readback_expectations"], "readback expectations"),
+            WorkloadSpec.from_dict(row["workload"]), policy,
+            ArtifactDigest.from_dict(row["model"], role="model"),
+            None if row["drafter"] is None else ArtifactDigest.from_dict(row["drafter"], role="drafter"),
+            ArtifactDigest.from_dict(row["executable"], role="executable"),
+            tuple(ArtifactDigest.from_dict(x, role="dso") for x in row["dsos"]),
+            CapabilityReport.from_dict(row["capability"]), runtime_binary,
+            tuple(_text(x, "runtime_ld_paths[]") for x in
+                  _string_sequence(row["runtime_ld_paths"], "runtime_ld_paths")),
+            tuple(sorted((_text(k, "provenance key"), _text(v, f"provenance.{k}"))
+                         for k, v in _object(row["provenance"], "provenance").items())),
+            _sha(row["snapshot_digest"], "snapshot_digest"),
+            _sha(row["execution_digest"], "execution_digest"))
+        if resolved.snapshot_digest != _digest(resolved._snapshot_dict()) \
+                or resolved.execution_digest != _digest(resolved._normalized_execution_dict()):
+            raise ResolutionError("canonical resolved recipe integrity check failed")
+        _validate_canonical_consistency(resolved, resolved.template)
+        return resolved
+
+
 def _port(value: Any) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= 65535:
         raise ResolutionError("port must be an integer from 1 through 65535")
@@ -789,6 +1060,184 @@ def _capability(template: serving.Recipe, backend: str, drafter: ArtifactDigest 
         cpu_placement="unproven", contention="unproven")
 
 
+def _canonical_int(parsed: Mapping[str, str | bool], name: str,
+                   default: int | None = None) -> int:
+    raw = parsed.get(name)
+    if raw is None and default is not None:
+        return default
+    if not isinstance(raw, str):
+        raise ResolutionError(f"canonical command {name} must be an integer")
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise ResolutionError(f"canonical command {name} must be an integer") from exc
+    if value < 0:
+        raise ResolutionError(f"canonical command {name} must be non-negative")
+    return value
+
+
+def _validate_canonical_consistency(resolved: CanonicalResolvedRecipe,
+                                    template: serving.Recipe) -> None:
+    _validate_template(template)
+    if template.recipe_hash != resolved.template_hash or template != resolved.template:
+        raise ResolutionError("canonical launch template identity mismatch")
+    if resolved.argv != resolved.topology_prefix + resolved.command_argv:
+        raise ResolutionError("canonical actual argv is not topology prefix plus command")
+    projected = canonical_recipe_projection(
+        name=template.name, command_argv=resolved.command_argv,
+        topology_prefix=resolved.topology_prefix, n_predict=template.n_predict,
+        temperature=template.temperature, top_p=template.top_p, top_k=template.top_k,
+        metric=template.metric)
+    if projected.to_dict() != template.to_dict():
+        raise ResolutionError("canonical command semantic projection differs from template")
+    cpu_list = _canonical_prefix(resolved.topology_prefix)
+    if cpu_list != template.cpu_list:
+        raise ResolutionError("canonical topology CPU list differs from template")
+    executable, parsed = _canonical_command(resolved.command_argv)
+    if executable != resolved.executable.path \
+            or executable != str(Path(resolved.build_dir) / "bin" / "llama-server"):
+        raise ResolutionError("canonical executable/build identities disagree")
+    if (resolved.runtime_binary_dir is not None
+            and resolved.runtime_binary_dir != str(Path(executable).parent)):
+        raise ResolutionError("canonical runtime binary directory differs from executable")
+    if parsed["-m"] != template.model or parsed["-m"] != resolved.model.path:
+        raise ResolutionError("canonical model identity differs from template")
+    if _canonical_int(parsed, "--port") != resolved.port:
+        raise ResolutionError("canonical port differs from snapshot")
+    for flag, expected in (("-np", template.np), ("-c", template.ctx),
+                           ("-t", template.threads), ("-ub", template.ubatch)):
+        if _canonical_int(parsed, flag) != expected:
+            raise ResolutionError(f"canonical {flag} differs from template")
+    if "-b" in parsed and _canonical_int(parsed, "-b") != template.batch:
+        raise ResolutionError("canonical batch differs from template")
+    if str(parsed.get("-ctk", "f16")) != template.ctk \
+            or str(parsed.get("-ctv", "f16")) != template.ctv:
+        raise ResolutionError("canonical KV types differ from template")
+    flash = str(parsed.get("--flash-attn", parsed.get("-fa", "off")))
+    if flash != template.fa:
+        raise ResolutionError("canonical flash-attention state differs from template")
+    device = parsed.get("--device", "none")
+    if device != template.device:
+        raise ResolutionError("canonical device differs from template")
+    ngl_raw = parsed.get("-ngl")
+    if resolved.backend == "cpu":
+        if (0 if ngl_raw is None else _canonical_int(parsed, "-ngl")) != 0 \
+                or template.ngl != 0:
+            raise ResolutionError("canonical CPU offload state differs from template")
+    elif ngl_raw == "all":
+        if template.ngl <= 0:
+            raise ResolutionError("canonical GPU offload differs from template")
+    elif _canonical_int(parsed, "-ngl") != template.ngl:
+        raise ResolutionError("canonical GPU offload differs from template")
+    spec = template.spec_decode
+    if str(parsed.get("--spec-type", "none")) != spec.get("type", "none"):
+        raise ResolutionError("canonical speculation differs from template")
+    if parsed.get("-md") != spec.get("drafter"):
+        raise ResolutionError("canonical drafter differs from template")
+    if spec.get("draft_n_max") is not None \
+            and _canonical_int(parsed, "--spec-draft-n-max") != spec["draft_n_max"]:
+        raise ResolutionError("canonical draft limit differs from template")
+    if (resolved.drafter is None) != (parsed.get("-md") is None):
+        raise ResolutionError("canonical drafter artifact presence differs from command")
+    if resolved.drafter is not None and resolved.drafter.path != parsed.get("-md"):
+        raise ResolutionError("canonical drafter artifact differs from command")
+    if len({Path(item.path).name for item in resolved.dsos}) != len(resolved.dsos):
+        raise ResolutionError("canonical DSO loader names must be unique")
+    launch = dict(resolved.launch_env)
+    ld_dirs = {part for part in launch.get("LD_LIBRARY_PATH", "").split(":") if part}
+    dso_dirs = {str(Path(item.path).parent) for item in resolved.dsos}
+    permitted_dso_dirs = ld_dirs | {str(Path(resolved.executable.path).parent)}
+    if not resolved.dsos or any(path not in permitted_dso_dirs for path in dso_dirs):
+        raise ResolutionError("canonical DSO identities are outside the loader path")
+    if any(path not in ld_dirs for path in resolved.runtime_ld_paths):
+        raise ResolutionError("canonical runtime loader path differs from launch environment")
+    if any(path not in dso_dirs for path in resolved.runtime_ld_paths):
+        raise ResolutionError("canonical runtime loader paths lack sealed DSO identities")
+    policy = EnvironmentPolicy.from_dict(resolved.environment_policy.to_dict())
+    relevant = dict(resolved.relevant_environment)
+    if set(relevant) != set(policy.measurement_keys):
+        raise ResolutionError("canonical relevant environment differs from policy")
+    allowed = set(policy.measurement_keys) | set(policy.allowed_inherit_keys) | {"LD_LIBRARY_PATH"}
+    if set(launch) - allowed:
+        raise ResolutionError("canonical launch environment exceeds policy")
+    if any(marker in key.upper() for key in launch for marker in _CREDENTIAL_MARKERS):
+        raise ResolutionError("canonical launch environment contains credential-like keys")
+    if set(resolved.absent_environment) != {k for k, v in relevant.items() if v is None}:
+        raise ResolutionError("canonical absent environment differs from relevant state")
+    if any(value is not None and launch.get(key) != value for key, value in relevant.items()) \
+            or any(value is None and key in launch for key, value in relevant.items()):
+        raise ResolutionError("canonical relevant environment differs from launch")
+    if any(relevant.get(key) != value for key, value in (template.env or {}).items()) \
+            or any(relevant.get(key, "<missing>") is not None
+                   for key in template.explicit_unsets):
+        raise ResolutionError("canonical template environment differs from frozen launch")
+    if template.readback_expectations() != resolved.readback_expectations:
+        raise ResolutionError("canonical readback expectations differ from template")
+    provenance = dict(resolved.provenance)
+    _sha(provenance.get("export_sha256"), "provenance.export_sha256")
+    if (provenance.get("instance_mode") not in {"full", "quarter", "both"}
+            or not any(key.startswith("source:") for key in provenance)):
+        raise ResolutionError("canonical provenance is incomplete")
+    expected_capability = _capability(
+        template, resolved.backend, resolved.drafter,
+        _witness_reports(template, policy, resolved.readback_expectations))
+    if resolved.capability != expected_capability:
+        raise ResolutionError("canonical capability is not derived from its template")
+    if WorkloadSpec(template.n_predict, template.temperature, template.top_p,
+                    template.top_k, template.metric) != resolved.workload:
+        raise ResolutionError("canonical workload differs from template")
+
+
+def resolve_canonical_launch(template: serving.Recipe, *, build_dir: Path | str,
+                             command_argv: Sequence[str], topology_prefix: Sequence[str],
+                             launch_environment: Mapping[str, str],
+                             artifact_identities: Mapping[str, Any], backend: str,
+                             environment_policy: EnvironmentPolicy | Mapping[str, Any],
+                             port: int, runtime_binary_dir: str | None,
+                             runtime_ld_paths: Sequence[str],
+                             provenance: Mapping[str, str]) -> CanonicalResolvedRecipe:
+    """Freeze one exact production command without reformatting its argv."""
+    _validate_template(template)
+    command = _argv_sequence(command_argv, "canonical command_argv")
+    if isinstance(topology_prefix, (str, bytes)) or not isinstance(topology_prefix, Sequence):
+        raise ResolutionError("topology_prefix must be an array")
+    prefix = tuple(_text(x, "topology_prefix[]") for x in topology_prefix)
+    _canonical_prefix(prefix)
+    root = Path(build_dir)
+    if not root.is_absolute():
+        raise ResolutionError("build_dir must be absolute")
+    resolved_port = _port(port)
+    policy = EnvironmentPolicy.from_dict(
+        environment_policy.to_dict() if isinstance(environment_policy, EnvironmentPolicy)
+        else environment_policy)
+    launch = _object(launch_environment, "canonical launch environment")
+    if not all(isinstance(k, str) and isinstance(v, str) for k, v in launch.items()):
+        raise ResolutionError("canonical launch environment must map strings to strings")
+    model, drafter, executable, dsos = _artifact_set(artifact_identities)
+    relevant = tuple(sorted((key, launch.get(key)) for key in policy.measurement_keys))
+    readbacks = template.readback_expectations()
+    witnesses = _witness_reports(template, policy, readbacks)
+    capability = _capability(template, backend, drafter, witnesses)
+    workload = WorkloadSpec(template.n_predict, template.temperature, template.top_p,
+                            template.top_k, template.metric)
+    if runtime_binary_dir is not None:
+        runtime_binary_dir = _text(runtime_binary_dir, "runtime_binary_dir")
+    runtime_ld = tuple(_text(x, "runtime_ld_paths[]") for x in runtime_ld_paths)
+    provenance_pairs = tuple(sorted((_text(k, "provenance key"),
+                                     _text(v, f"provenance.{k}"))
+                                    for k, v in _object(provenance, "provenance").items()))
+    provisional = CanonicalResolvedRecipe(
+        template.recipe_hash, template, backend, str(root), resolved_port, command, prefix,
+        prefix + command, tuple(sorted(launch.items())),
+        tuple(sorted(key for key, value in relevant if value is None)), relevant, readbacks,
+        workload, policy, model, drafter, executable, dsos, capability,
+        runtime_binary_dir, runtime_ld, provenance_pairs, "0" * 64, "0" * 64)
+    resolved = replace(provisional, snapshot_digest=_digest(provisional._snapshot_dict()),
+                       execution_digest=_digest(provisional._normalized_execution_dict()))
+    _validate_canonical_consistency(resolved, template)
+    return resolved
+
+
 def resolve_recipe(template: serving.Recipe, *, build_dir: Path | str,
                    artifact_identities: Mapping[str, Any], backend: str,
                    environment_policy: EnvironmentPolicy | Mapping[str, Any],
@@ -875,7 +1324,21 @@ def resolve_recipe(template: serving.Recipe, *, build_dir: Path | str,
     return resolved
 
 
-__all__ = ["ARTIFACT_SCHEMA", "CAPABILITY_SCHEMA", "ENVIRONMENT_POLICY_SCHEMA",
-           "RESOLVED_RECIPE_SCHEMA", "ArtifactDigest", "CapabilityReason",
-           "CapabilityReport", "EnvironmentPolicy", "ResolutionError", "ResolvedRecipe",
-           "UnsupportedRecipeCapability", "WitnessReport", "WorkloadSpec", "resolve_recipe"]
+def resolved_recipe_from_dict(value: Any) -> ResolvedRecipe | CanonicalResolvedRecipe:
+    """Explicit schema dispatcher; unknown records never fall back to a looser parser."""
+    row = _object(value, "resolved recipe")
+    schema = row.get("schema")
+    if schema == RESOLVED_RECIPE_SCHEMA:
+        return ResolvedRecipe.from_dict(row)
+    if schema == CANONICAL_RESOLVED_RECIPE_SCHEMA:
+        return CanonicalResolvedRecipe.from_dict(row)
+    raise ResolutionError(f"resolved recipe: unsupported schema {schema!r}")
+
+
+__all__ = ["ARTIFACT_SCHEMA", "CANONICAL_RESOLVED_RECIPE_SCHEMA", "CAPABILITY_SCHEMA",
+           "ENVIRONMENT_POLICY_SCHEMA", "RESOLVED_RECIPE_SCHEMA", "ArtifactDigest",
+           "CanonicalResolvedRecipe", "CapabilityReason", "CapabilityReport",
+           "EnvironmentPolicy", "ResolutionError", "ResolvedRecipe",
+           "UnsupportedRecipeCapability", "WitnessReport", "WorkloadSpec",
+           "canonical_recipe_projection", "resolve_canonical_launch", "resolve_recipe",
+           "resolved_recipe_from_dict"]
