@@ -25,6 +25,7 @@ from ..controller.discovery_supervisor_secure import (
     RuntimeRoot, SecureRuntimeError, object_identity, read_stable_fd,
 )
 from . import status
+from . import actor_preparation_state as actor_state_module
 from . import campaign_command_v2
 from . import maintenance_execution as maintenance_module
 from . import scheduling
@@ -692,6 +693,15 @@ class CampaignController:
         self._a2_logical_executions: dict[str, str] = {}
         self._a2_bank_sources: dict[str, list[str]] = {}
         self._supervisor_id: str | None = None
+        self._actor_preparation_events: list[dict[str, Any]] = []
+        self._actor_preparation_state = actor_state_module.ActorPreparationProjection()
+        self._actor_profile_producer: Any = None
+        self._current_actor_profile_receipts: dict[str, Any] = {}
+        self._actor_trusted_held_receipts: dict[str, tuple[Any, Any]] = {}
+        self._actor_profile_execution_reservations: dict[str, Any] = {}
+        self._actor_profile_execution_settlements: dict[str, Any] = {}
+        self._actor_profile_cancelled_attempts: set[tuple[Any, ...]] = set()
+        self._actor_profile_attempt_phases: dict[tuple[Any, ...], str] = {}
         if scheduler_engine is not None and (
                 scheduler_engine.scheduler_id != normalized.campaign_id
                 or scheduler_engine.config.config_id != normalized.campaign_id):
@@ -763,6 +773,11 @@ class CampaignController:
                     entries = self._journal.read_all()
                 self._verify_store()
                 self._verify_journal_layout(journal_root)
+                self._supervisor_id = "supervisor-" + schemas.content_hash({
+                    "campaign_id": self.resolved.campaign_id,
+                    "config_digest": self.config_digest,
+                    "store": str(self.store),
+                })
                 self._replay(entries)
                 self.supervisor_incarnation += 1
                 self.stream_epoch += 1
@@ -806,6 +821,8 @@ class CampaignController:
         a2_execution_entries: dict[str, list[Any]] = {}
         a2_logical_executions: dict[str, str] = {}
         a2_bank_sources: dict[str, list[str]] = {}
+        actor_preparation_events: list[dict[str, Any]] = []
+        actor_preparation_state = actor_state_module.ActorPreparationProjection()
         for entry in entries:
             self._journal_cursor = entry.seq
             if entry.campaign_id not in (None, self.resolved.campaign_id):
@@ -888,6 +905,24 @@ class CampaignController:
                         raise journal_module.JournalCorruption(
                             "worker lifecycle continuation breaks durable owner binding")
                 worker_events.append(copy.deepcopy(dict(entry.payload)))
+                continue
+            if entry.kind == journal_module.KIND_ACTOR_PREPARATION:
+                try:
+                    row = actor_state_module.validate_event(entry.payload)
+                    if (not saw_start
+                            or row["campaign_id"] != self.resolved.campaign_id
+                            or row["config_generation"] != self.config_generation
+                            or row["config_digest"] != self.config_digest
+                            or row["supervisor_incarnation"] != last_incarnation
+                            or row["supervisor_id"] != self._supervisor_id):
+                        raise actor_state_module.ActorStateRefused(
+                            "actor event breaks current owner binding")
+                    actor_preparation_events.append(copy.deepcopy(row))
+                    actor_preparation_state = actor_state_module.project_events(
+                        actor_preparation_events)
+                except actor_state_module.ActorStateRefused as exc:
+                    raise journal_module.JournalCorruption(
+                        f"actor preparation replay is inconsistent: {exc}") from exc
                 continue
             if entry.kind == journal_module.KIND_MAINTENANCE_EXECUTION:
                 try:
@@ -1330,6 +1365,23 @@ class CampaignController:
         self._a2_execution_entries = a2_execution_entries
         self._a2_logical_executions = a2_logical_executions
         self._a2_bank_sources = a2_bank_sources
+        self._actor_preparation_events = actor_preparation_events
+        self._actor_preparation_state = actor_preparation_state
+        if actor_preparation_state.profiles:
+            from .actor_lifecycle import TargetProfileReceipt
+            self._current_actor_profile_receipts = {}
+            for profile_row in actor_preparation_state.profiles.values():
+                receipt = TargetProfileReceipt(
+                    campaign_digest=profile_row["config_digest"],
+                    profile_request=profile_row["profile_request"],
+                    profile_request_digest=profile_row["profile_request_digest"],
+                    target_revision_digest=profile_row["target_revision_digest"],
+                    target_profile_digest=profile_row["target_profile_digest"],
+                    verified_at=profile_row["verified_at"],
+                    valid_until=profile_row["valid_until"],
+                    clock_domain=profile_row["clock_domain"],
+                    verifier_ref=profile_row["verifier_ref"])
+                self._current_actor_profile_receipts[receipt.digest] = receipt
 
     def _maintenance_supervisor_id(self) -> str:
         if self._supervisor_id is not None:
@@ -1580,6 +1632,8 @@ class CampaignController:
                        if self._worker_lifecycle is not None else None)
             attempt_key = (None if binding is None else
                            self._worker_attempt_key(request, binding))
+            if attempt_key in self._actor_profile_cancelled_attempts:
+                raise ControlRefused("target-profile admission was cancelled by this owner")
             if attempt_key is not None and self._worker_no_acquisition == attempt_key:
                 # A newer call for the same logical request supersedes any earlier
                 # denial proof before it can touch provider or lifecycle state.
@@ -1606,6 +1660,10 @@ class CampaignController:
                 pre_engine_refusal(worker_lifecycle_module.WaitingAuthority(
                     "trusted grant provider is unavailable"))
             engine = self._worker_lifecycle
+            if attempt_key in self._actor_profile_attempt_phases:
+                if self._actor_profile_attempt_phases[attempt_key] != "prelaunch":
+                    raise ControlRefused("target-profile admission is already attempting")
+                self._actor_profile_attempt_phases[attempt_key] = "attempting"
             self._worker_run_active = True
         try:
             return engine.run_stage(request, planned_invocation=planned_invocation)
@@ -3081,6 +3139,499 @@ class CampaignController:
                 "status": "accepted", "selection": preview.selection.to_dict(),
             }
 
+    def register_target_profile_producer(self, producer) -> None:
+        """Install the one producer capability; serialized receipts grant nothing."""
+        from .target_profile_execution import TargetProfileExecution
+        if (not isinstance(producer, TargetProfileExecution)
+                or producer.controller is not self):
+            raise TypeError("profile producer must be this owner's TargetProfileExecution")
+        with self._mutex:
+            self._require_active_locked()
+            if self._actor_profile_producer is not None:
+                raise ControlRefused("target-profile producer is already registered")
+            self._actor_profile_producer = producer
+
+    def actor_held_claim_receipt(self, terminal):
+        """Bind provider-authored cost to an exact terminal for actor settlement."""
+        supplied = self.worker_held_claim_receipt(terminal)
+        if not isinstance(supplied, scheduling.HeldClaimReceipt):
+            raise ControlRefused("actor held accounting receipt is untyped")
+        if (supplied.ownership_generation != terminal.worker_generation
+                or supplied.allocation_generation != terminal.grant_generation):
+            raise ControlRefused("actor held accounting receipt binding differs")
+        with self._mutex:
+            self._require_active_locked()
+            exact = self.worker_terminal_for_request(
+                request_id=terminal.request_id, plan_digest=terminal.plan_digest,
+                lineage_id=terminal.lineage_id, stage_id=terminal.stage_id)
+            if exact != terminal:
+                raise ControlRefused("actor held accounting terminal is not current")
+            self._actor_trusted_held_receipts[terminal.request_id] = (supplied, terminal)
+            return supplied
+
+    def _selected_profile_work_locked(self, *, catalog_id: str, transition_id: str,
+                                      request_digest: str,
+                                      stage_plan_digest: str) -> tuple[dict, dict]:
+        issued = self._driver_issued.get(catalog_id)
+        if not isinstance(issued, Mapping) or issued.get("transition_id") != transition_id:
+            raise ControlRefused("profile result lacks exact issued transition")
+        selection = issued.get("selection", {})
+        catalog = issued.get("catalog", {})
+        work_map = catalog.get("work_by_stage_digest", {})
+        work = work_map.get(selection.get("proposal_digest")) \
+            if isinstance(work_map, Mapping) else None
+        if (selection.get("status") != "selected" or not isinstance(work, Mapping)
+                or work.get("kind") != "profile_preparation"
+                or work.get("stage_plan_digest") != stage_plan_digest
+                or actor_state_module.digest(work.get("payload")) != request_digest):
+            raise ControlRefused("profile result differs from selected work")
+        return copy.deepcopy(dict(issued)), copy.deepcopy(dict(work))
+
+    def reserve_target_profile_execution(
+            self, *, profile_request: Mapping[str, Any], profile_request_digest: str,
+            catalog_id: str, transition_id: str, stage_plan_digest: str,
+            max_output_bytes: int, selected_work=None):
+        """Admit exact current selected profile work before any producer I/O."""
+        from .target_profile_execution import TargetProfileExecutionReservation
+        if (actor_state_module.digest(profile_request) != profile_request_digest
+                or isinstance(max_output_bytes, bool)
+                or not isinstance(max_output_bytes, int) or max_output_bytes < 1):
+            raise ControlRefused("profile execution admission is malformed")
+        request_id = "profile-" + profile_request_digest[:24]
+        stage_id = "target-profile-" + profile_request_digest[:24]
+        with self._mutex:
+            self._require_active_locked()
+            if self.desired_state != "running":
+                raise ControlRefused("profile execution requires running controller")
+            self._selected_profile_work_locked(
+                catalog_id=catalog_id, transition_id=transition_id,
+                request_digest=profile_request_digest,
+                stage_plan_digest=stage_plan_digest)
+            if self.snapshot_version == 3 and selected_work is None:
+                raise ControlRefused(
+                    "unified profile execution requires public selected profile advice")
+            if selected_work is not None:
+                from . import unified_driver
+                if not isinstance(selected_work, unified_driver.SelectedProfileWork):
+                    raise ControlRefused("selected profile advice is untyped")
+                expected_binding = self.unified_driver_materialization_binding(
+                    catalog_id=catalog_id, transition_id=transition_id,
+                    selection=selected_work.selection.to_dict())
+                if (selected_work.catalog_id != catalog_id
+                        or selected_work.transition_id != transition_id
+                        or selected_work.profile_request.to_dict() != dict(profile_request)
+                        or selected_work.stage_plan_digest != stage_plan_digest
+                        or dict(selected_work.controller_binding) != expected_binding
+                        or selected_work.execution_authorized is not False):
+                    raise ControlRefused("selected profile advice binding differs")
+            if any(item.request_id == request_id
+                   for item in self._actor_profile_execution_reservations.values()):
+                raise ControlRefused("profile execution is already admitted")
+            attempt_status = self.worker_attempt_status(
+                request_id=request_id, plan_digest=stage_plan_digest,
+                lineage_id=transition_id, stage_id=stage_id)
+            attempt_key = self._worker_attempt_key_fields(
+                self._worker_lifecycle.binding, request_id, stage_plan_digest,
+                transition_id, stage_id)
+            if (attempt_status in {"terminal", "unresolved"}
+                    or attempt_key in self._actor_profile_attempt_phases):
+                raise ControlRefused("profile attempt identity is already used or unresolved")
+            capability = object()
+            reservation_id = actor_state_module.digest({
+                "catalog_id": catalog_id, "transition_id": transition_id,
+                "profile_request_digest": profile_request_digest,
+                "stage_plan_digest": stage_plan_digest,
+                "supervisor_incarnation": self.supervisor_incarnation,
+                "control_revision": self.control_revision})
+            reservation = TargetProfileExecutionReservation(
+                reservation_id, catalog_id, transition_id, profile_request_digest,
+                stage_plan_digest, request_id, stage_id, self.supervisor_incarnation,
+                self.control_revision, max_output_bytes, capability)
+            self._actor_profile_execution_reservations[reservation_id] = reservation
+            self._actor_profile_attempt_phases[attempt_key] = "prelaunch"
+            return reservation
+
+    def record_verified_target_profile(
+            self, value: Mapping[str, Any], *, reservation, terminal,
+            provider_cost_receipt):
+        """Join selected work, exact terminal/cost and bounded owner-read output."""
+        from .target_profile_execution import (
+            PROFILE_OUTPUT_SCHEMA, TargetProfileExecutionReservation)
+        from .actor_lifecycle import TargetProfileReceipt
+        row = actor_state_module.validate_event(value)
+        if row["event"] != "PROFILE_VERIFIED":
+            raise ControlRefused("target-profile publication requires PROFILE_VERIFIED")
+        if not isinstance(reservation, TargetProfileExecutionReservation):
+            raise ControlRefused("target-profile reservation is untyped")
+        with self._mutex:
+            self._require_active_locked()
+            if self._actor_profile_execution_reservations.get(
+                    reservation.reservation_id) is not reservation:
+                raise ControlRefused("target-profile reservation is not current owner authority")
+            self._selected_profile_work_locked(
+                catalog_id=row["catalog_id"], transition_id=row["transition_id"],
+                request_digest=row["profile_request_digest"],
+                stage_plan_digest=row["stage_plan_digest"])
+            trusted = self._actor_trusted_held_receipts.get(terminal.request_id)
+            if (trusted != (provider_cost_receipt, terminal)
+                    or not isinstance(provider_cost_receipt, scheduling.HeldClaimReceipt)
+                    or reservation.request_id != terminal.request_id
+                    or reservation.stage_id != terminal.stage_id
+                    or reservation.stage_plan_digest != terminal.plan_digest
+                    or reservation.transition_id != terminal.lineage_id
+                    or terminal.return_code != 0 or not terminal.accepted
+                    or terminal.result_digest is None
+                    or row["verifier_ref"] !=
+                       f"controller-worker:{terminal.worker_id}:{terminal.worker_generation}"
+                    or row["campaign_id"] != self.resolved.campaign_id
+                    or row["config_digest"] != self.config_digest
+                    or row["config_generation"] != self.config_generation
+                    or row["supervisor_id"] != self._supervisor_id
+                    or row["supervisor_incarnation"] != self.supervisor_incarnation
+                    or row["control_revision"] != self.control_revision):
+                raise ControlRefused("profile result differs from selected current owner work")
+            owner_binding = (self.supervisor_incarnation, self.control_revision,
+                             self.config_digest, self.desired_state)
+        raw = self.read_worker_stdout(
+            request_id=terminal.request_id, plan_digest=terminal.plan_digest,
+            lineage_id=terminal.lineage_id, stage_id=terminal.stage_id,
+            worker_id=terminal.worker_id, worker_generation=terminal.worker_generation,
+            result_digest=terminal.result_digest,
+            max_bytes=reservation.max_output_bytes)
+        try:
+            output = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ControlRefused("trusted profile stdout is not UTF-8 JSON") from exc
+        expected_output = {
+            "schema": PROFILE_OUTPUT_SCHEMA, "profile_content": row["profile_content"],
+            "loaded_identity": row["loaded_identity"],
+            "artifact_identity": row["artifact_identity"],
+            "measurement_carrier": row["measurement_carrier"],
+        }
+        if output != expected_output:
+            raise ControlRefused("profile event differs from controller-read worker stdout")
+        with self._mutex:
+            self._require_active_locked()
+            if (owner_binding != (self.supervisor_incarnation, self.control_revision,
+                                  self.config_digest, self.desired_state)
+                    or self._actor_profile_execution_reservations.get(
+                        reservation.reservation_id) is not reservation
+                    or self._actor_trusted_held_receipts.get(terminal.request_id)
+                       != (provider_cost_receipt, terminal)):
+                raise ControlRefused("profile owner changed during bounded output read")
+            self._selected_profile_work_locked(
+                catalog_id=row["catalog_id"], transition_id=row["transition_id"],
+                request_digest=row["profile_request_digest"],
+                stage_plan_digest=row["stage_plan_digest"])
+            receipt = TargetProfileReceipt(
+                campaign_digest=row["config_digest"], profile_request=row["profile_request"],
+                profile_request_digest=row["profile_request_digest"],
+                target_revision_digest=row["target_revision_digest"],
+                target_profile_digest=row["target_profile_digest"],
+                verified_at=row["verified_at"], valid_until=row["valid_until"],
+                clock_domain=row["clock_domain"], verifier_ref=row["verifier_ref"])
+            prior = self._actor_preparation_state.profiles.get(
+                row["target_revision_digest"])
+            if prior is not None:
+                if prior != row:
+                    raise ControlRefused(
+                        "target profile replacement requires a new owner epoch")
+                return receipt
+            self._append_actor_event_locked(row)
+            self._current_actor_profile_receipts[receipt.digest] = receipt
+            del self._actor_profile_execution_reservations[reservation.reservation_id]
+            self._actor_profile_execution_settlements[reservation.reservation_id] = (
+                provider_cost_receipt, terminal)
+            return receipt
+
+    def cancel_target_profile_execution(self, reservation) -> None:
+        """Cancel only a proved pre-launch profile admission."""
+        from .target_profile_execution import TargetProfileExecutionReservation
+        if not isinstance(reservation, TargetProfileExecutionReservation):
+            raise ControlRefused("target-profile reservation is untyped")
+        with self._mutex:
+            self._require_active_locked()
+            if self._actor_profile_execution_reservations.get(
+                    reservation.reservation_id) is not reservation:
+                raise ControlRefused("target-profile reservation is not current owner authority")
+            status = self.worker_attempt_status(
+                request_id=reservation.request_id, plan_digest=reservation.stage_plan_digest,
+                lineage_id=reservation.transition_id, stage_id=reservation.stage_id)
+            attempt_key = self._worker_attempt_key_fields(
+                self._worker_lifecycle.binding, reservation.request_id,
+                reservation.stage_plan_digest, reservation.transition_id, reservation.stage_id)
+            phase = self._actor_profile_attempt_phases.get(attempt_key)
+            # A freshly issued phase is owner-maintained proof. Absence of held
+            # cost, terminal, or provider records is never such proof by itself.
+            if phase != "prelaunch" or status in {"terminal", "unresolved"}:
+                raise ControlRefused(
+                    f"target-profile cancellation lacks negative-admission proof: {phase}/{status}")
+            self._actor_profile_attempt_phases[attempt_key] = "cancelled"
+            self._actor_profile_cancelled_attempts.add(attempt_key)
+            del self._actor_profile_execution_reservations[reservation.reservation_id]
+
+    def finish_target_profile_execution(
+            self, *, reservation, terminal, provider_cost_receipt):
+        """Close a completed profile admission with its exact provider-held cost."""
+        from .target_profile_execution import TargetProfileExecutionReservation
+        if not isinstance(reservation, TargetProfileExecutionReservation):
+            raise ControlRefused("target-profile reservation is untyped")
+        with self._mutex:
+            self._require_active_locked()
+            if self._actor_profile_execution_reservations.get(
+                    reservation.reservation_id) is not reservation:
+                raise ControlRefused("target-profile reservation is not current owner authority")
+            if (self._actor_trusted_held_receipts.get(terminal.request_id)
+                    != (provider_cost_receipt, terminal)
+                    or not isinstance(provider_cost_receipt, scheduling.HeldClaimReceipt)):
+                raise ControlRefused("target-profile cost is not provider-authored")
+            del self._actor_profile_execution_reservations[reservation.reservation_id]
+            self._actor_profile_execution_settlements[reservation.reservation_id] = (
+                provider_cost_receipt, terminal)
+            return provider_cost_receipt
+
+    def verified_target_profile(self, **request):
+        """Ask the producer outside the mutex, then recheck exact controller binding."""
+        with self._mutex:
+            self._require_active_locked()
+            producer = self._actor_profile_producer
+            binding = (self.supervisor_incarnation, self.control_revision,
+                       self.config_digest, self.desired_state)
+            if producer is None:
+                return None
+        receipt = producer.verified_target_profile(**request)
+        if receipt is None:
+            return None
+        from .actor_lifecycle import TargetProfileReceipt
+        if not isinstance(receipt, TargetProfileReceipt):
+            raise ControlRefused("profile producer returned an untyped receipt")
+        with self._mutex:
+            self._require_active_locked()
+            if binding != (self.supervisor_incarnation, self.control_revision,
+                           self.config_digest, self.desired_state):
+                raise ControlRefused("controller changed during profile verification")
+            if (receipt.campaign_digest != self.config_digest
+                    or receipt.target_revision_digest
+                       != request.get("target_revision_digest")):
+                raise ControlRefused("profile receipt differs from current owner request")
+            self._current_actor_profile_receipts[receipt.digest] = receipt
+            return receipt
+
+    def _selected_actor_work_locked(self, request_digest: str,
+                                    stage_plan_digest: str) -> tuple[dict, dict]:
+        issued_rows = getattr(self, "_driver_issued", {})
+        matches = []
+        for issued in issued_rows.values():
+            catalog = issued.get("catalog", {})
+            selection = issued.get("selection", {})
+            work_map = catalog.get("work_by_stage_digest", {})
+            selected_stage = selection.get("proposal_digest")
+            work = work_map.get(selected_stage) if isinstance(work_map, Mapping) else None
+            if (isinstance(work, Mapping) and work.get("kind") == "actor_preparation"
+                    and work.get("stage_plan_digest") == stage_plan_digest
+                    and actor_state_module.digest(work.get("payload")) == request_digest
+                    and selection.get("status") == "selected"):
+                matches.append((copy.deepcopy(dict(issued)), copy.deepcopy(dict(work))))
+        if len(matches) != 1:
+            raise ControlRefused("actor request lacks one exact issued selected transition")
+        return matches[0]
+
+    def _append_actor_event_locked(self, row: Mapping[str, Any]):
+        self._require_active_locked()
+        validated = actor_state_module.validate_event(row)
+        projected = actor_state_module.project_events(
+            [*self._actor_preparation_events, validated])
+        assert self._journal is not None
+        try:
+            entry = self._journal.append(
+                journal_module.KIND_ACTOR_PREPARATION, validated,
+                record_id=(validated["reservation_id"]
+                           if validated["event"] != "PROFILE_VERIFIED"
+                           else validated["target_profile_digest"]))
+            self._verify_journal_layout(self.store / "journal")
+        except BaseException:
+            self._poisoned = True
+            raise
+        self._journal_cursor = entry.seq
+        self._actor_preparation_events.append(copy.deepcopy(validated))
+        self._actor_preparation_state = projected
+        return copy.deepcopy(entry)
+
+    def reserve_actor_preparation(
+            self, *, request: Mapping[str, Any], request_digest: str,
+            stage_plan_digest: str, actor_profile: Mapping[str, Any],
+            actor_profile_digest: str, target_profile_receipt: Mapping[str, Any],
+            target_profile_receipt_digest: str, budgets: Mapping[str, int],
+            now: float, clock_domain: str) -> Mapping[str, Any]:
+        """Revalidate selected work and durably reserve all budgets before launch."""
+        from . import actor_preparation as actor_module
+        from .actor_lifecycle import TargetProfileReceipt
+        profile = actor_module.ActorProfile.from_dict(actor_profile)
+        receipt = TargetProfileReceipt(**dict(target_profile_receipt))
+        actor_state_module._budget_map(budgets, "budgets", integral=True)
+        if (isinstance(now, bool) or not isinstance(now, (int, float))
+                or not math.isfinite(now)):
+            raise ControlRefused("actor reservation time must be finite")
+        if (request_digest != actor_state_module.digest(request)
+                or actor_profile_digest != profile.digest
+                or target_profile_receipt_digest != receipt.digest
+                or receipt.clock_domain != clock_domain
+                or receipt.verified_at > now or receipt.valid_until <= now):
+            raise ControlRefused("actor reservation inputs lack current producer authority")
+        with self._mutex:
+            self._require_active_locked()
+            if self._current_actor_profile_receipts.get(receipt.digest) != receipt:
+                raise ControlRefused(
+                    "actor reservation lacks current producer receipt authority")
+            if self.desired_state != "running" or self._worker_run_active:
+                raise ControlRefused("actor admission is closed or worker is active")
+            issued, work = self._selected_actor_work_locked(
+                request_digest, stage_plan_digest)
+            target = work["payload"]["proposal"]["target_revision_digest"]
+            if target != receipt.target_revision_digest:
+                raise ControlRefused("selected actor target differs from verified profile")
+            prior_budgets = [row["budgets"] for row in self._actor_preparation_events
+                             if row["event"] == "INTENT"]
+            if any(dict(previous) != dict(budgets) for previous in prior_budgets):
+                raise ControlRefused(
+                    "actor budgets differ from the durable campaign configuration")
+            debits = {key: 0.0 for key in actor_state_module.BUDGET_KEYS}
+            debits["actor_calls_per_target"] = 1.0
+            debits["actor_calls_per_campaign"] = 1.0
+            target_events = [row for row in self._actor_preparation_events
+                             if row["target_revision_digest"] == target]
+            target_projection = actor_state_module.project_events(target_events)
+            for key in actor_state_module.BUDGET_KEYS:
+                used = target_projection.spent[key] + target_projection.reserved[key]
+                if key == "actor_calls_per_campaign":
+                    used = (self._actor_preparation_state.spent[key]
+                            + self._actor_preparation_state.reserved[key])
+                if used + debits[key] > float(budgets[key]):
+                    raise ControlRefused(f"actor budget exhausted: {key}")
+            reservation_id = "actor-" + actor_state_module.digest({
+                "transition_id": issued["transition_id"], "request": request_digest,
+                "actor": actor_profile_digest, "profile": receipt.digest,
+            })[:24]
+            if reservation_id in self._actor_preparation_state.pending:
+                raise ControlRefused("actor reservation is unresolved; reinvocation forbidden")
+            if reservation_id in self._actor_preparation_state.finished:
+                raise ControlRefused("actor reservation already settled; reinvocation forbidden")
+            deadline = min(receipt.valid_until,
+                           float(now) + float(budgets["provider_seconds_per_target"]))
+            if deadline <= now:
+                raise ControlRefused("actor reservation deadline is not future")
+            row = {
+                "schema": actor_state_module.INTENT_SCHEMA, "event": "INTENT",
+                "reservation_id": reservation_id,
+                "campaign_id": self.resolved.campaign_id,
+                "config_generation": self.config_generation,
+                "config_digest": self.config_digest,
+                "supervisor_id": self._supervisor_id,
+                "supervisor_incarnation": self.supervisor_incarnation,
+                "control_revision": self.control_revision,
+                "catalog_id": issued["catalog_id"],
+                "transition_id": issued["transition_id"],
+                "request_digest": request_digest,
+                "stage_plan_digest": stage_plan_digest,
+                "target_revision_digest": target,
+                "target_profile_digest": receipt.target_profile_digest,
+                "target_profile_receipt_digest": receipt.digest,
+                "actor_profile_digest": actor_profile_digest,
+                "backend_key": profile.backend().describe(),
+                "clock_domain": clock_domain, "deadline": deadline,
+                "occurred_at": self.clock(), "budgets": dict(budgets), "debits": debits,
+            }
+            self._append_actor_event_locked(row)
+            return {
+                "schema": actor_module.RESERVATION_SCHEMA,
+                "reservation_id": reservation_id, "request_digest": request_digest,
+                "stage_plan_digest": stage_plan_digest,
+                "transition_id": issued["transition_id"],
+                "target_profile_digest": receipt.target_profile_digest,
+                "target_profile_receipt_digest": receipt.digest,
+                "actor_profile_digest": actor_profile_digest, "deadline": deadline,
+                "clock_domain": clock_domain, "control_revision": self.control_revision,
+            }
+
+    def finish_actor_preparation(
+            self, *, reservation: Mapping[str, Any], outcome: Mapping[str, Any],
+            disposition: str, provider_cost_receipt=None) -> None:
+        """Settle one exact reservation; identical retry returns without another append."""
+        from . import actor_preparation as actor_module
+        reserved = actor_module.StageReservation.from_dict(reservation)
+        result = actor_module.StageOutcome.from_dict(outcome)
+        with self._mutex:
+            self._require_active_locked()
+            prior = self._actor_preparation_state.finished.get(reserved.reservation_id)
+            if prior is not None:
+                if (prior["outcome_digest"] == actor_state_module.digest(result.to_dict())
+                        and prior["disposition"] == disposition):
+                    return
+                raise ControlRefused("actor finish retry differs from durable settlement")
+            intent = self._actor_preparation_state.pending.get(reserved.reservation_id)
+            if intent is None:
+                raise ControlRefused("actor finish lacks unresolved durable intent")
+            if any(reserved.to_dict()[key] != intent[key] for key in (
+                    "reservation_id", "request_digest", "stage_plan_digest", "transition_id",
+                    "target_profile_digest", "target_profile_receipt_digest",
+                    "actor_profile_digest", "deadline", "clock_domain", "control_revision")):
+                raise ControlRefused("actor finish reservation differs from durable intent")
+            if result.charged_seconds:
+                held = provider_cost_receipt
+                issued_cost = self._actor_trusted_held_receipts.get(
+                    reserved.reservation_id)
+                if (not isinstance(held, scheduling.HeldClaimReceipt)
+                        or issued_cost is None or issued_cost[0] is not held
+                        or issued_cost[1].request_id != reserved.reservation_id
+                        or issued_cost[1].plan_digest != reserved.stage_plan_digest
+                        or held.ownership_generation
+                           != issued_cost[1].worker_generation
+                        or held.allocation_generation
+                           != issued_cost[1].grant_generation
+                        or held.ended_at - held.started_at
+                           != result.charged_seconds):
+                    raise ControlRefused(
+                        "actor finish lacks exact provider-authored held cost")
+            elif provider_cost_receipt is not None:
+                raise ControlRefused("zero-cost actor finish carries a provider receipt")
+            charges = {key: 0.0 for key in actor_state_module.BUDGET_KEYS}
+            charges["actor_calls_per_target"] = 1.0
+            charges["actor_calls_per_campaign"] = 1.0
+            charges["provider_seconds_per_target"] = result.charged_seconds
+            failed = result.status != "completed"
+            charges["resource_failures_per_target"] = float(
+                failed and not result.resource_enforced)
+            previous = self._actor_preparation_state.availability.get(intent["backend_key"], {})
+            streak = 0 if not failed else int(previous.get("consecutive_failures", 0)) + 1
+            retry = None if not failed else intent["deadline"]
+            row = {key: value for key, value in intent.items()
+                   if key not in {"budgets", "debits"}}
+            row.update({
+                "schema": actor_state_module.FINISH_SCHEMA, "event": "FINISH",
+                "occurred_at": self.clock(),
+                "outcome_digest": actor_state_module.digest(result.to_dict()),
+                "status": result.status, "failure_class": result.failure_class,
+                "charged_seconds": result.charged_seconds,
+                "resource_enforced": result.resource_enforced,
+                "descendants_clean": result.descendants_clean,
+                "disposition": disposition, "charges": charges,
+                "consecutive_failures": streak,
+                "last_success": None if failed else intent["deadline"],
+                "retry_after": retry, "reset_at": None,
+                "next_eligible_at": retry,
+            })
+            self._append_actor_event_locked(row)
+
+    def current_actor_profile(self, target_revision_digest: str):
+        """Return only the current producer-verified receipt for one exact target."""
+        with self._mutex:
+            self._require_active_locked()
+            matches = [receipt for receipt in self._current_actor_profile_receipts.values()
+                       if receipt.target_revision_digest == target_revision_digest]
+            if len(matches) != 1:
+                return None
+            return matches[0]
+
     def register_unified_settlement_validator(
             self, validator: Callable[[Mapping[str, Any]], Mapping[str, Any]]) -> None:
         """Install the trusted worker-owner terminal/held-receipt verifier."""
@@ -3500,6 +4051,15 @@ class CampaignController:
             self._a2_execution_entries = {}
             self._a2_logical_executions = {}
             self._a2_bank_sources = {}
+            self._actor_preparation_events = []
+            self._actor_preparation_state = actor_state_module.ActorPreparationProjection()
+            self._actor_profile_producer = None
+            self._current_actor_profile_receipts = {}
+            self._actor_trusted_held_receipts = {}
+            self._actor_profile_execution_reservations = {}
+            self._actor_profile_execution_settlements = {}
+            self._actor_profile_cancelled_attempts = set()
+            self._actor_profile_attempt_phases = {}
             self._supervisor_id = None
             self._worker_lifecycle = None
             self._active_worker_events = []

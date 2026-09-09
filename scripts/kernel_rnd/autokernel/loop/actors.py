@@ -119,8 +119,9 @@ def backend_for(model: str, effort: str) -> Backend:
 #: The 2026-09-03 path this reverts: Fable 5.1 @medium planner + sol @high critic
 #: (f81bbeb6) -> Opus 5 @high planner (1ffe4fdf, never launched) -> DeepSeek V4 Flash
 #: @max via opencode (c2bfe916), taken for throughput after run 27 measured 54-71%
-#: GPU-idle. Both defaults are now LOCAL CLIs again, so no actor prompt egresses
-#: off-host; opencode remains available as an explicit `provider/model` opt-in.
+#: GPU-idle. A locally installed CLI is not a transport boundary: the configured
+#: model/provider decides whether prompt bytes leave the host. Opencode remains
+#: available as an explicit `provider/model` opt-in.
 PLANNER_DEFAULT = backend_for("gpt-5.6-sol", "high")
 #: Critic effort is MEDIUM, not high (operator 2026-09-07, pre-emptive): Fable measured
 #: ~75 s/call at medium as run 27's planner and left the GPU 54-71% idle-while-claimed;

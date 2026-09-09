@@ -258,6 +258,7 @@ PLANNED_SERVING_ARM_CAPTURE_SCHEMA_V2 = "epyc.autokernel.unified_arm_capture.v2"
 KIND_WORKER_LIFECYCLE = "WORKER_LIFECYCLE"
 WORKER_LIFECYCLE_SCHEMA = "epyc.autokernel.worker_lifecycle_event.v1"
 KIND_WORKER_ACQUISITION = "WORKER_ACQUISITION"
+KIND_ACTOR_PREPARATION = "ACTOR_PREPARATION"
 WORKER_ACQUISITION_SCHEMA = "epyc.autokernel.worker_acquisition_transition.v1"
 KIND_CAMPAIGN_COMMAND_V2 = "CAMPAIGN_COMMAND_V2"
 CAMPAIGN_COMMAND_V2_SCHEMA = "epyc.autokernel.campaign_command_transition.v2"
@@ -300,6 +301,7 @@ NATIVE_KINDS = frozenset({
     KIND_PLANNED_SERVING_ARM_CAPTURED,
     KIND_WORKER_LIFECYCLE,
     KIND_WORKER_ACQUISITION,
+    KIND_ACTOR_PREPARATION,
     KIND_CAMPAIGN_COMMAND_V2,
     KIND_CAMPAIGN_COMMAND_V3,
     KIND_MAINTENANCE_EXECUTION,
@@ -1153,6 +1155,15 @@ def _validate_native_payload(kind: str, payload: Mapping[str, Any]) -> list:
             json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False)
         except (TypeError, ValueError) as exc:
             out.append(f"payload: non-canonical JSON value: {exc}")
+    elif kind == KIND_ACTOR_PREPARATION:
+        try:
+            if __package__:
+                from .loop.actor_preparation_state import validate_event
+            else:
+                from autokernel.loop.actor_preparation_state import validate_event
+            validate_event(payload)
+        except Exception as exc:
+            out.append(f"payload: invalid actor preparation event: {exc}")
     elif kind in {KIND_WORKER_LIFECYCLE, KIND_WORKER_ACQUISITION,
                   KIND_CAMPAIGN_COMMAND_V2, KIND_CAMPAIGN_COMMAND_V3}:
         try:
@@ -3165,6 +3176,7 @@ __all__ = [
     "CAMPAIGN_SUPERVISOR_EVENTS", "KIND_CANDIDATE_TRANSACTION",
     "KIND_WORKER_LIFECYCLE", "WORKER_LIFECYCLE_SCHEMA",
     "KIND_WORKER_ACQUISITION", "WORKER_ACQUISITION_SCHEMA",
+    "KIND_ACTOR_PREPARATION",
     "KIND_CAMPAIGN_COMMAND_V2", "CAMPAIGN_COMMAND_V2_SCHEMA",
     "KIND_CAMPAIGN_COMMAND_V3", "CAMPAIGN_COMMAND_V3_SCHEMA",
     "KIND_MAINTENANCE_EXECUTION",
