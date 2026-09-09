@@ -594,3 +594,40 @@ def test_live_controller_refuses_replaced_journal_directory(tmp_path):
             controller.snapshot()
     finally:
         controller.close()
+
+
+def test_candidate_transaction_context_is_serialized_and_expires(tmp_path):
+    controller = control.CampaignController(_resolved(), tmp_path / "service")
+    controller.__enter__()
+    entered = threading.Event()
+    release = threading.Event()
+    retained = []
+
+    def transaction(context):
+        retained.append(context)
+        entered.set()
+        assert release.wait(2)
+
+    worker = threading.Thread(
+        target=lambda: controller.candidate_transaction(transaction))
+    reader_done = threading.Event()
+    reader = threading.Thread(
+        target=lambda: (controller.snapshot(), reader_done.set()))
+    try:
+        worker.start()
+        assert entered.wait(1)
+        reader.start()
+        assert not reader_done.wait(0.05)
+        release.set()
+        worker.join(2)
+        reader.join(2)
+        assert reader_done.is_set()
+        with pytest.raises(control.ControlRefused, match="no longer active"):
+            retained[0].append(
+                phase="INTENT", transaction_id="late", operation="init",
+                payload_digest="0" * 64, data={})
+    finally:
+        release.set()
+        worker.join(2)
+        reader.join(2)
+        controller.close()

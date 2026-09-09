@@ -9,6 +9,9 @@ import sys
 from typing import Any, Sequence
 
 from . import candidate_manifest as cm
+from . import candidate_transactions as ct
+from .campaign import ResolvedCampaign
+from .campaign_control import CampaignController, ControlRefused
 from . import status
 
 
@@ -95,9 +98,147 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: Sequence[str] | None = None) -> int:
-    args = _parser().parse_args(argv)
+def _mutation_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Persist an explicit candidate transaction; never execute or promote")
+    subparsers = parser.add_subparsers(dest="operation", required=True)
+
+    def command(name: str) -> argparse.ArgumentParser:
+        child = subparsers.add_parser(name)
+        child.add_argument("--resolved-campaign", required=True, type=Path)
+        child.add_argument("--store", required=True, type=Path)
+        child.add_argument("--config-generation", type=int, default=1)
+        child.add_argument("--request-id", required=True)
+        child.add_argument("--repo", action="append", default=[], metavar="ID=PATH",
+                           help="exact repository root for every manifest source")
+        return child
+
+    init = command("init")
+    init.add_argument("--manifest", required=True, type=Path)
+    init.add_argument("--state", required=True, type=Path)
+    integrate = command("integrate")
+    integrate.add_argument("--previous", required=True, type=Path)
+    integrate.add_argument("--manifest", required=True, type=Path)
+    start = command("start-batch")
+    start.add_argument("--batch", required=True, type=Path)
+    start.add_argument("--row-set", required=True, type=Path)
+    start.add_argument("--manifest", required=True, type=Path)
+    start.add_argument("--comparator", required=True, type=Path)
+    row = command("record-row")
+    row.add_argument("--batch-id", required=True)
+    row.add_argument("--row-set", required=True, type=Path)
+    row.add_argument("--row-state", required=True, type=Path)
+    complete = command("complete")
+    complete.add_argument("--batch", required=True, type=Path)
+    return parser
+
+
+def _resolved(path: Path) -> ResolvedCampaign:
     try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ct.CandidateTransactionError(
+            f"cannot load resolved campaign {path}: {exc}") from exc
+    if isinstance(value, dict) and "resolved_campaign" in value:
+        value = value["resolved_campaign"]
+    try:
+        return ResolvedCampaign.from_dict(value)
+    except (TypeError, ValueError) as exc:
+        raise ct.CandidateTransactionError(f"invalid resolved campaign: {exc}") from exc
+
+
+def _repos(values: Sequence[str]) -> dict[str, Path]:
+    result: dict[str, Path] = {}
+    for value in values:
+        repo_id, separator, path = value.partition("=")
+        if not separator or not repo_id or not path or repo_id in result:
+            raise ct.CandidateTransactionError(
+                "--repo must be unique non-empty ID=PATH")
+        result[repo_id] = Path(path)
+    return result
+
+
+def _mutate(argv: Sequence[str]) -> int:
+    args = _mutation_parser().parse_args(argv)
+    resolved = _resolved(args.resolved_campaign)
+    if args.config_generation < 1:
+        raise ct.CandidateTransactionError("config generation must be positive")
+    repos = _repos(args.repo)
+    backend = ct.GitCandidateBackend(repos, campaign_id=resolved.campaign_id)
+
+    # Parse all caller-controlled records, and verify source/repository bindings,
+    # before acquiring a store whose controller entry appends a START event.
+    if args.operation == "init":
+        operation_values = {
+            "state": _read(args.state, cm.CandidateState.from_dict, "candidate state"),
+            "manifest": _read(args.manifest, cm.CandidateManifest.from_dict,
+                              "candidate manifest"),
+        }
+        backend.plan(args.request_id, operation_values["manifest"].sources)
+    elif args.operation == "integrate":
+        operation_values = {
+            "previous": _read(args.previous, cm.CandidateManifest.from_dict,
+                              "previous candidate manifest"),
+            "candidate": _read(args.manifest, cm.CandidateManifest.from_dict,
+                               "candidate manifest"),
+        }
+        backend.plan(args.request_id, operation_values["candidate"].sources)
+    elif args.operation == "start-batch":
+        operation_values = {
+            "batch": _read(args.batch, cm.ValidationBatch.from_dict,
+                           "validation batch"),
+            "row_set": _read(args.row_set, cm.RequiredRowSet.from_dict, "row set"),
+            "candidate": _read(args.manifest, cm.CandidateManifest.from_dict,
+                               "candidate manifest"),
+            "comparator": _read(args.comparator, cm.CandidateManifest.from_dict,
+                                "comparator manifest"),
+        }
+    elif args.operation == "record-row":
+        operation_values = {
+            "batch_id": args.batch_id,
+            "row_set": _read(args.row_set, cm.RequiredRowSet.from_dict, "row set"),
+            "row_state": _read(args.row_state, cm.ValidationRowState.from_dict,
+                               "row state"),
+        }
+    else:
+        operation_values = {
+            "batch": _read(args.batch, cm.ValidationBatch.from_dict,
+                           "validation batch"),
+        }
+    controller = CampaignController(
+        resolved, args.store, config_generation=args.config_generation)
+    controller.__enter__()
+    try:
+        transactions = ct.CandidateTransactions(controller, git_backend=backend)
+        if args.operation == "init":
+            result = transactions.initialize(
+                request_id=args.request_id, **operation_values)
+        elif args.operation == "integrate":
+            result = transactions.integrate(
+                request_id=args.request_id, **operation_values)
+        elif args.operation == "start-batch":
+            result = transactions.start_batch(
+                request_id=args.request_id, **operation_values)
+        elif args.operation == "record-row":
+            result = transactions.record_row(
+                request_id=args.request_id, **operation_values)
+        else:
+            result = transactions.complete_batch(
+                request_id=args.request_id, **operation_values)
+        json.dump(result, sys.stdout, indent=2, sort_keys=True)
+        sys.stdout.write("\n")
+        return 0
+    finally:
+        controller.close()
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    values = list(argv) if argv is not None else sys.argv[1:]
+    try:
+        if values and values[0] in {
+                "init", "integrate", "start-batch", "record-row", "complete"}:
+            return _mutate(values)
+        args = _parser().parse_args(values)
         manifest = _read(args.manifest, cm.CandidateManifest.from_dict, "candidate manifest")
         row_set = (_read(args.row_set, cm.RequiredRowSet.from_dict, "row set")
                    if args.row_set else None)
@@ -111,8 +252,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         else:
             json.dump(body, sys.stdout, indent=2, sort_keys=True)
             sys.stdout.write("\n")
-    except (cm.CandidateError, OSError) as exc:
-        print(f"candidate dry validation refused: {exc}", file=sys.stderr)
+    except (cm.CandidateError, cm.TransitionError, ct.CandidateTransactionError,
+            ControlRefused, OSError) as exc:
+        print(f"candidate operation refused: {exc}", file=sys.stderr)
         return 2
     return 0
 

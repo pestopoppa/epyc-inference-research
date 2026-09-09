@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from datetime import datetime, timezone
 import hashlib
 import json
 import math
@@ -171,6 +172,11 @@ class StageFence:
     container_id: str
     clock_domain: str
     valid_until: float
+    supervisor_id: str | None = None
+    supervisor_incarnation: int | None = None
+    config_generation: int | None = None
+    worker_id: str | None = None
+    worker_incarnation: int | None = None
 
 
 @dataclass(frozen=True)
@@ -204,7 +210,7 @@ class TrustedStageProvider(Protocol):
     def guard(self, fence: StageFence): ...
 
 
-ArtifactSink = Callable[[Mapping[str, Any]], None]
+ArtifactSink = Callable[[Mapping[str, Any]], Any]
 Measure = Callable[..., float]
 ContinuationVerifier = Callable[
     [ep.RawUnit, ep.ExperimentPlan, FrozenPromptManifest, str], bool]
@@ -223,6 +229,7 @@ class PlannedServingRun:
     use_status: str
     execution_complete: bool
     paused_reason: str | None
+    capture_receipts: tuple[Mapping[str, Any], ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {"schema": self.schema, "plan_digest": self.plan_digest,
@@ -234,7 +241,8 @@ class PlannedServingRun:
                 "admissible_view": self.admissible_view.to_dict(),
                 "use_status": self.use_status,
                 "execution_complete": self.execution_complete,
-                "paused_reason": self.paused_reason}
+                "paused_reason": self.paused_reason,
+                "capture_receipts": [dict(item) for item in self.capture_receipts]}
 
 
 def _validated_fence(value: Any, spec: ep.UnitSpec, lineage_id: str,
@@ -250,6 +258,15 @@ def _validated_fence(value: Any, spec: ep.UnitSpec, lineage_id: str,
     if (value.unit_id != spec.unit_id or value.process_generation_id != spec.process_id
             or value.lineage_id != lineage_id or value.clock_domain != clock_domain):
         raise PlannedServingError("trusted provider returned a mismatched stage fence")
+    optional_text = (value.supervisor_id, value.worker_id)
+    if any(item is not None and (not isinstance(item, str) or not item.strip())
+           for item in optional_text):
+        raise PlannedServingError("stage fence optional worker identities must be text")
+    optional_int = (value.supervisor_incarnation, value.config_generation,
+                    value.worker_incarnation)
+    if any(item is not None and (isinstance(item, bool) or not isinstance(item, int)
+                                 or item <= 0) for item in optional_int):
+        raise PlannedServingError("stage fence optional incarnations must be positive integers")
     return value
 
 
@@ -299,7 +316,8 @@ def _dso_digest(recipe: rr.ResolvedRecipe) -> str:
 
 def arm_identity(template: serving.Recipe, recipe: rr.ResolvedRecipe) -> dict[str, Any]:
     """Canonical exact identity expected in an ExperimentPlan arm mapping."""
-    return {"template_hash": template.recipe_hash,
+    return {"backend": recipe.backend,
+            "template_hash": template.recipe_hash,
             "resolved_execution_digest": recipe.execution_digest,
             "resolved_snapshot_digest": recipe.snapshot_digest,
             "workload_digest": schemas.content_hash(recipe.workload.to_dict()),
@@ -316,6 +334,23 @@ def _normalized_plan(plan: ep.ExperimentPlan) -> ep.ExperimentPlan:
         raise PlannedServingError(f"invalid experiment plan: {exc}") from exc
 
 
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _wall_timestamp(clock: Callable[[], str], label: str) -> tuple[str, datetime]:
+    value = clock()
+    if not isinstance(value, str) or not value.strip():
+        raise PlannedServingError(f"{label} did not return a timestamp")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise PlannedServingError(f"{label} returned an invalid timestamp") from exc
+    if parsed.tzinfo is None:
+        raise PlannedServingError(f"{label} returned a timezone-naive timestamp")
+    return value, parsed
+
+
 def run_planned_comparison(plan: ep.ExperimentPlan, *,
                            anchor_template: serving.Recipe,
                            candidate_template: serving.Recipe,
@@ -327,6 +362,7 @@ def run_planned_comparison(plan: ep.ExperimentPlan, *,
                            lineage_id: str,
                            clock: Callable[[], float] = time.monotonic,
                            clock_domain: str = "monotonic",
+                           wall_clock: Callable[[], str] = _utc_now,
                            measure: Measure = serving._measure_once,
                            previous_raws: Sequence[ep.RawUnit] = (),
                            previous_lineage_id: str | None = None,
@@ -445,6 +481,8 @@ def run_planned_comparison(plan: ep.ExperimentPlan, *,
         observations: list[dict[str, Any]] = []
         value: float | None = None
         error: str | None = None
+        observed_started_at, observed_started = _wall_timestamp(
+            wall_clock, "measurement start clock")
         guard_factory = getattr(stage_provider, "guard", None)
         if not callable(guard_factory):
             raise UnsupportedContainment("provider has no enclosing execution guard")
@@ -459,6 +497,10 @@ def run_planned_comparison(plan: ep.ExperimentPlan, *,
             if isinstance(exc, UnsupportedContainment):
                 raise
             error = f"{type(exc).__name__}: {exc}"
+        observed_ended_at, observed_ended = _wall_timestamp(
+            wall_clock, "measurement end clock")
+        if observed_ended < observed_started:
+            raise PlannedServingError("producer-authored measurement interval is reversed")
         if value is not None and not math.isfinite(value):
             error = "measurement returned a non-finite value"
             value = None
@@ -480,6 +522,13 @@ def run_planned_comparison(plan: ep.ExperimentPlan, *,
                        "arm": spec.arm, "process_generation_id": spec.process_id,
                        "lineage_id": lineage_id, "fence_id": fence.fence_id,
                        "grant_id": fence.grant_id, "container_id": fence.container_id,
+                       "worker_identity": {"supervisor_id": fence.supervisor_id,
+                                           "supervisor_incarnation": fence.supervisor_incarnation,
+                                           "config_generation": fence.config_generation,
+                                           "worker_id": fence.worker_id,
+                                           "worker_incarnation": fence.worker_incarnation},
+                       "observed_started_at": observed_started_at,
+                       "observed_ended_at": observed_ended_at,
                        "prompt_manifest_digest": prompts.digest,
                        "comparison_identities": actual_identities,
                        "observations": retained_observations,
@@ -524,6 +573,14 @@ def run_planned_comparison(plan: ep.ExperimentPlan, *,
                          "unit_id": spec.unit_id, "arm": spec.arm,
                          "process_generation_id": spec.process_id,
                          "lineage_id": lineage_id, "fence_id": fence.fence_id,
+                         "grant_id": fence.grant_id, "container_id": fence.container_id,
+                         "worker_identity": {"supervisor_id": fence.supervisor_id,
+                                             "supervisor_incarnation": fence.supervisor_incarnation,
+                                             "config_generation": fence.config_generation,
+                                             "worker_id": fence.worker_id,
+                                             "worker_incarnation": fence.worker_incarnation},
+                         "observed_started_at": observed_started_at,
+                         "observed_ended_at": observed_ended_at,
                          "prompt_manifest_digest": prompts.digest,
                          "prompt_ids": list(prompt_ids),
                          "comparison_identities": actual_identities,
@@ -547,11 +604,33 @@ def run_planned_comparison(plan: ep.ExperimentPlan, *,
                     "artifact_digest": artifact_digest,
                     "observed_order_index": spec.order_index}))
     view = ep.admissible_units(plan, raws)
+    capture_receipts: tuple[Mapping[str, Any], ...] = ()
+    finalizer = getattr(artifact_sink, "finalize_run", None)
+    if callable(finalizer):
+        try:
+            finalized = finalizer(_freeze({
+                "plan": plan.to_dict(), "plan_digest": plan.digest,
+                "prompt_manifest": prompts.to_dict(),
+                "prompt_manifest_digest": prompts.digest,
+                "lineage_id": lineage_id,
+                "comparison_identities": actual_identities,
+                "raw_units": [item.to_dict() for item in raws],
+                "admissible_view": view.to_dict(),
+                "execution_complete": view.complete,
+                "paused_reason": paused_reason,
+            }))
+        except Exception as exc:
+            raise PlannedServingError("native measurement capture finalization failed") from exc
+        if (not isinstance(finalized, Sequence)
+                or isinstance(finalized, (str, bytes))
+                or any(not isinstance(item, Mapping) for item in finalized)):
+            raise PlannedServingError("native measurement capture returned malformed receipts")
+        capture_receipts = tuple(_freeze(dict(item)) for item in finalized)
     return PlannedServingRun(RUN_SCHEMA, plan.digest, prompts.digest, lineage_id,
                              _freeze(actual_identities["anchor"]),
                              _freeze(actual_identities["candidate"]),
                              tuple(raws), view, "policy_undefined", view.complete,
-                             paused_reason)
+                             paused_reason, capture_receipts)
 
 
 __all__ = ["ARTIFACT_SCHEMA", "PROMPT_SCHEMA", "RUN_SCHEMA", "FrozenPrompt",
