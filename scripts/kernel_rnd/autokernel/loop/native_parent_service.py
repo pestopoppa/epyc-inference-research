@@ -19,10 +19,14 @@ from . import worker_lifecycle as wl
 class NativeFactualEvidenceConfiguration:
     """Explicit factual mode; not eligibility, correctness, purpose, or GPU authority."""
     schema: str = "epyc.autokernel.native_factual_evidence_configuration.v1"
+    scientific_adapters: Any = None
 
     def __post_init__(self) -> None:
+        from .native_scientific_witness import ParentScientificWitnessAdapters
         if self.schema != "epyc.autokernel.native_factual_evidence_configuration.v1":
             raise de.DriverExecutionRefused("unsupported factual evidence configuration")
+        if self.scientific_adapters is not None and type(self.scientific_adapters) is not ParentScientificWitnessAdapters:
+            raise de.DriverExecutionRefused("scientific configuration requires its concrete registry")
 
 
 class NativeParentEvidenceService(de.UnknownParentEvidenceProducer):
@@ -30,7 +34,8 @@ class NativeParentEvidenceService(de.UnknownParentEvidenceProducer):
                  prepared: uw.PreparedPlannedServingStage, lifecycle: wl.WorkerLifecycle,
                  observation_configuration: ob.ParentObservationConfiguration, *,
                  registry: replay.IssuedNativeEvidenceRegistry,
-                 runtime_probe: lo.FilesystemProbe | None = None) -> None:
+                 runtime_probe: lo.FilesystemProbe | None = None,
+                 scientific_adapters: Any = None) -> None:
         super().__init__(authority, prepared, lifecycle, observation_configuration)
         if (prepared.schema != uw.PREPARED_SCHEMA_V2
                 or type(registry) is not replay.IssuedNativeEvidenceRegistry
@@ -39,6 +44,8 @@ class NativeParentEvidenceService(de.UnknownParentEvidenceProducer):
         if runtime_probe is not None and type(runtime_probe) is not lo.FilesystemProbe:
             raise de.DriverExecutionRefused("native readback requires the concrete bounded reader")
         self.registry = registry
+        self.scientific_adapters = NativeFactualEvidenceConfiguration(
+            scientific_adapters=scientific_adapters).scientific_adapters
         self._native_store = mc.ArtifactStore(prepared.artifact_root)
         self._native_probe = runtime_probe
         self._unit_producers: dict[str, npe.NativeUnitEvidenceProducer] = {}
@@ -70,7 +77,8 @@ class NativeParentEvidenceService(de.UnknownParentEvidenceProducer):
         context = npe.ParentUnitContext(self.plan, unit.unit_id, recipe, self.prepared.prompts,
             fence, binding, event, claim, start.nonce)
         producer = npe.NativeUnitEvidenceProducer(
-            store=self._native_store, context=context, runtime_probe=self._native_probe)
+            store=self._native_store, context=context, runtime_probe=self._native_probe,
+            scientific_adapters=self.scientific_adapters)
         self._unit_producers[unit.unit_id] = producer
         return producer
 

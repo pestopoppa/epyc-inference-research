@@ -215,12 +215,27 @@ class NativeUnitEvidenceProducer:
     """
 
     def __init__(self, *, store: mc.ArtifactStore, context: ParentUnitContext,
-                 runtime_probe: lo.FilesystemProbe | None = None) -> None:
+                 runtime_probe: lo.FilesystemProbe | None = None,
+                 scientific_adapters: Any = None) -> None:
+        from .native_scientific_witness import ParentScientificWitnessAdapters
         if type(store) is not mc.ArtifactStore or type(context) is not ParentUnitContext:
             raise NativeEvidenceRefused("concrete artifact store and parent context required")
         if runtime_probe is not None and type(runtime_probe) is not lo.FilesystemProbe:
             raise NativeEvidenceRefused("runtime probe must be the bounded filesystem reader")
         self.store, self.context = store, context
+        if scientific_adapters is not None and type(scientific_adapters) is not ParentScientificWitnessAdapters:
+            raise NativeEvidenceRefused("scientific evidence requires the closed concrete adapter registry")
+        self.scientific_adapters = scientific_adapters
+        if scientific_adapters is not None:
+            from .native_producer_source import PRODUCER_SOURCE_SCHEMA_V2, validate_producer_source_closure
+            original_instrument = store.read(context.binding.instrument.artifact.locator,
+                                             context.binding.instrument.artifact.sha256)
+            closure = validate_producer_source_closure(
+                original_instrument["used_constants"].get("producer_source_closure"))
+            if closure["schema"] != PRODUCER_SOURCE_SCHEMA_V2:
+                raise NativeEvidenceRefused("scientific adapter was not bound before plan issuance")
+            _equal(closure["scientific_adapters"], scientific_adapters.source_identity(),
+                   "prospectively selected scientific adapter")
         self._probe = runtime_probe if runtime_probe is not None else lo.FilesystemProbe()
         self._readbacks: list[mc.StoredArtifact] = []
         self._request_digest: str | None = None
@@ -240,6 +255,8 @@ class NativeUnitEvidenceProducer:
                 lo.validate_observation, lo.physical_footprint, lo._intervals,
                 serving.verify_env_readback, ob.validate_reopened_observation,
                 wl.validate_event)}}
+        if self.scientific_adapters is not None:
+            self._source_pins["scientific_adapters"] = _plain(self.scientific_adapters.source_identity())
 
     def capture_runtime_readback(self, *, phase: str) -> mc.StoredArtifact:
         if phase not in ("health", "warmup", "measurement"):
@@ -326,6 +343,11 @@ class NativeUnitEvidenceProducer:
                 "reason": "frozen terminal request/value join" if requests_ok else "request membership/completion/value mismatch",
                 "facts": request_facts},
             "placement": placement, "runtime_readback": runtime}
+        if self.scientific_adapters is not None:
+            _equal(self.scientific_adapters.source_identity(),
+                   self._source_pins["scientific_adapters"], "selected scientific adapter source")
+            findings.update(_plain(self.scientific_adapters.findings(context, native, link,
+                tuple(self._readbacks), store=self.store)))
         for name in set(context.plan.required_witnesses) | set(("correctness", "contention", "purpose", "residency")):
             findings.setdefault(name, {"status": "unknown", "reason": "no owning evidence adapter implemented",
                                        "facts": {"backend": context.recipe.backend}})

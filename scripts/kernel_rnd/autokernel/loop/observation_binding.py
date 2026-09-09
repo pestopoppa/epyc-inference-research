@@ -563,7 +563,8 @@ class ValidatedObservationLink:
 
 def loaded_planned_serving_identity(*, measurement_callable: Callable[..., Any],
                                     fence_clock: Callable[..., Any],
-                                    serving_timer: Callable[..., Any]) -> Mapping[str, Any]:
+                                    serving_timer: Callable[..., Any],
+                                    scientific_adapters: Any = None) -> Mapping[str, Any]:
     """Identify the actual selected measurement/timers and enumerated direct support."""
     from .unified_worker import InheritedUnitAuthority
     from .native_producer_source import loaded_producer_source_closure
@@ -596,7 +597,8 @@ def loaded_planned_serving_identity(*, measurement_callable: Callable[..., Any],
             "observer_instrument_schema": lo.INSTRUMENT_SCHEMA,
             "detector_version": lo.DETECTOR_VERSION, "phases": list(lo.PHASES),
             "parent_readback_phase": "health",
-            "producer_source_closure": _plain(loaded_producer_source_closure()),
+            "producer_source_closure": _plain(loaded_producer_source_closure(
+                scientific_adapters=scientific_adapters)),
             "budget_fields": sorted(lo.BUDGET_FIELDS),
             "builtin_callable_provenance": {
                 "fence_clock": clock_provenance,
@@ -616,10 +618,11 @@ def loaded_planned_serving_identity(*, measurement_callable: Callable[..., Any],
 def seal_loaded_instrument(*, store: mc.ArtifactStore,
                            measurement_callable: Callable[..., Any],
                            fence_clock: Callable[..., Any],
-                           serving_timer: Callable[..., Any]) -> LoadedInstrumentReference:
+                           serving_timer: Callable[..., Any],
+                           scientific_adapters: Any = None) -> LoadedInstrumentReference:
     identity = _plain(loaded_planned_serving_identity(
         measurement_callable=measurement_callable, fence_clock=fence_clock,
-        serving_timer=serving_timer))
+        serving_timer=serving_timer, scientific_adapters=scientific_adapters))
     validated = lo.validate_instrument_identity(identity)
     artifact = store.write(f"loaded-instrument:{validated['sha256']}", validated)
     return LoadedInstrumentReference(validated["sha256"],

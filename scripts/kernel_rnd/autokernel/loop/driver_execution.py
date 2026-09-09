@@ -727,7 +727,8 @@ class UnifiedDriverExecution:
                 artifact_root=prepared.artifact_root, max_units=len(prepared.plan.expected_units))
             producer = NativeParentEvidenceService(
                 authority, prepared, self.controller._worker_lifecycle,
-                self._observation_configuration, registry=registry)
+                self._observation_configuration, registry=registry,
+                scientific_adapters=self._native_evidence_configuration.scientific_adapters)
             self._parent_evidence_registries[transition_id] = registry
         invocation = unified_worker.PlannedWorkerInvocation.open(prepared, authority)
         request_id = selection.proposal.proposal_id
