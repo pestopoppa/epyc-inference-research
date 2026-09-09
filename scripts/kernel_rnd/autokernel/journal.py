@@ -266,6 +266,8 @@ KIND_UNIFIED_DRIVER_ISSUED = "UNIFIED_DRIVER_ISSUED"
 UNIFIED_DRIVER_ISSUED_SCHEMA = "epyc.autokernel.unified_driver_issued.v1"
 KIND_UNIFIED_DRIVER_SETTLED = "UNIFIED_DRIVER_SETTLED"
 UNIFIED_DRIVER_SETTLED_SCHEMA = "epyc.autokernel.unified_driver_settled.v1"
+KIND_A2_RUNTIME_EXECUTION = "A2_RUNTIME_EXECUTION"
+A2_RUNTIME_EXECUTION_SCHEMA = "epyc.autokernel.a2_runtime_execution_transition.v1"
 LOOP_BUNDLE_SAVED_SCHEMA = "epyc.autokernel.loop_bundle_saved.v1"
 LOOP_BUNDLE_SNAPSHOT_SCHEMA_V1 = "epyc.autokernel.accumulator_bundle.v1"
 LOOP_BUNDLE_SNAPSHOT_SCHEMA_V2 = "epyc.autokernel.accumulator_bundle.v2"
@@ -300,6 +302,7 @@ NATIVE_KINDS = frozenset({
     KIND_CAMPAIGN_COMMAND_V3,
     KIND_UNIFIED_DRIVER_ISSUED,
     KIND_UNIFIED_DRIVER_SETTLED,
+    KIND_A2_RUNTIME_EXECUTION,
     KIND_MICROBENCH_RUN_COMPLETED,
     KIND_T0_REFUSAL,
     KIND_POST_T0_QUIET_BOUNDARY,
@@ -1096,7 +1099,16 @@ def _validate_native_payload(kind: str, payload: Mapping[str, Any]) -> list:
     out: list = []
     if not isinstance(payload, Mapping):
         return ["payload: required mapping"]
-    if kind in {KIND_UNIFIED_DRIVER_ISSUED, KIND_UNIFIED_DRIVER_SETTLED}:
+    if kind == KIND_A2_RUNTIME_EXECUTION:
+        try:
+            if __package__:
+                from .loop.a2_execution_state import validate_transition
+            else:
+                from autokernel.loop.a2_execution_state import validate_transition
+            validate_transition(payload)
+        except Exception as exc:
+            out.append(f"A2 runtime execution transition: {exc}")
+    elif kind in {KIND_UNIFIED_DRIVER_ISSUED, KIND_UNIFIED_DRIVER_SETTLED}:
         expected = {"schema", "catalog_id", "campaign_id", "config_generation",
                     "config_digest", "supervisor_incarnation", "catalog", "selection",
                     "prior_projection_digest", "after_projection_digest", "transition_id"}
@@ -3132,6 +3144,7 @@ __all__ = [
     "KIND_CAMPAIGN_COMMAND_V3", "CAMPAIGN_COMMAND_V3_SCHEMA",
     "KIND_UNIFIED_DRIVER_ISSUED", "UNIFIED_DRIVER_ISSUED_SCHEMA",
     "KIND_UNIFIED_DRIVER_SETTLED", "UNIFIED_DRIVER_SETTLED_SCHEMA",
+    "KIND_A2_RUNTIME_EXECUTION", "A2_RUNTIME_EXECUTION_SCHEMA",
     "CANDIDATE_TRANSACTION_SCHEMA", "CANDIDATE_TRANSACTION_PHASES",
     "CANDIDATE_TRANSACTION_OPERATIONS",
     "KIND_PLANNED_SERVING_ARM_CAPTURED", "PLANNED_SERVING_ARM_CAPTURE_SCHEMA",

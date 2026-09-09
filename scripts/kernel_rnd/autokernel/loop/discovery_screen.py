@@ -453,6 +453,55 @@ def _validated_event(value: Any, *, plan_digest: str,
     return _plain(value)
 
 
+def validate_phase_event(value: Any, *, plan_digest: str | None = None,
+                         frame_digest: str | None = None) -> dict[str, Any]:
+    """Validate one closed phase event without granting replay authority."""
+    if not isinstance(value, Mapping):
+        raise DiscoveryScreenRefused("phase event must be an object")
+    expected_plan = value.get("plan_digest") if plan_digest is None else plan_digest
+    expected_frame = value.get("frame_digest") if frame_digest is None else frame_digest
+    return _validated_event(value, plan_digest=_sha(expected_plan, "plan_digest"),
+                            frame_digest=_sha(expected_frame, "frame_digest"))
+
+
+def attest_controller_phase_history(controller: Any, *, execution_id: str,
+                                    plan_digest: str, frame_digest: str,
+                                    events: Sequence[Mapping[str, Any]]) \
+        -> "RegisteredPhaseVerifier":
+    """Mint replay authority only from the active controller's indexed Journal state."""
+    from .campaign_control import CampaignController
+
+    if type(controller) is not CampaignController:
+        raise DiscoveryScreenRefused("phase history attestation requires CampaignController")
+    normalized = tuple(validate_phase_event(
+        event, plan_digest=plan_digest, frame_digest=frame_digest) for event in events)
+    if controller._attest_a2_runtime_history(
+            execution_id=execution_id, plan_digest=plan_digest,
+            frame_digest=frame_digest, events=normalized) is not True:
+        raise DiscoveryScreenRefused("controller did not attest exact indexed phase history")
+    identity = _digest({"plan_digest": plan_digest, "frame_digest": frame_digest,
+                        "events": list(normalized)})
+    return RegisteredPhaseVerifier(frozenset({identity}), _VERIFIER_TOKEN)
+
+
+def attest_controller_bank_reference(controller: Any, *, execution_id: str,
+                                     bank_reference: Mapping[str, Any],
+                                     bank: Mapping[str, Any]) \
+        -> "RegisteredBankVerifier":
+    """Mint bank reuse authority only from a reopened controller Journal source."""
+    from .campaign_control import CampaignController
+
+    if type(controller) is not CampaignController:
+        raise DiscoveryScreenRefused("bank reference attestation requires CampaignController")
+    normalized = BaselineBank.from_dict(bank)
+    if controller._attest_a2_bank_reference(
+            execution_id=execution_id, bank_reference=bank_reference,
+            bank=normalized.to_dict()) is not True:
+        raise DiscoveryScreenRefused(
+            "controller did not attest the exact indexed bank reference")
+    return RegisteredBankVerifier({normalized.bank_digest: normalized}, _VERIFIER_TOKEN)
+
+
 def _validate_result(result: InvocationResult, plan: ep.ExperimentPlan,
                      unit: ep.UnitSpec, *, producer: Mapping[str, Any]) -> InvocationResult:
     result = InvocationResult.from_dict(result.to_dict())
@@ -770,6 +819,7 @@ def advisory_history(receipts: Sequence[ScreenReceipt | Mapping[str, Any]], *,
 
 
 __all__ = ["A2RuntimeScreen", "BaselineBank", "DiscoveryScreenRefused",
+           "attest_controller_bank_reference", "attest_controller_phase_history",
            "InvocationProof", "InvocationResult", "RegisteredNominationVerifier",
            "RegisteredBankVerifier", "RegisteredPhaseVerifier", "RuntimeFrameContext", "ScreenReceipt",
-           "advisory_history"]
+           "advisory_history", "validate_phase_event"]
