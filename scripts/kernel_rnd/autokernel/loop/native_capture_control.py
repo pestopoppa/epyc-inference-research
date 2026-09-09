@@ -545,7 +545,10 @@ class NativeCaptureValidator:
             expected_artifact_schema = (ps.ARTIFACT_SCHEMA_V2
                                         if carrier["schema"] == mc.CAPTURE_SCHEMA_V2
                                         else ps.ARTIFACT_SCHEMA)
-            if document.get("schema") != expected_artifact_schema:
+            selected_artifact = (document.get("schema") == ps.ARTIFACT_SCHEMA_V3
+                                 and document.get("kind") == "completed_attempt"
+                                 and expected_artifact_schema == ps.ARTIFACT_SCHEMA_V2)
+            if document.get("schema") != expected_artifact_schema and not selected_artifact:
                 raise NativeCaptureRefused("raw artifact schema is unsupported")
             kind = document.get("kind")
             if not isinstance(kind, str) or kind not in {
@@ -586,8 +589,22 @@ class NativeCaptureValidator:
                 shapes["native_observation"] |= {"lifecycle_observation"}
                 shapes["completed_attempt"] |= {
                     "lifecycle_observation_content_sha256"}
+            if selected_artifact:
+                shapes["completed_attempt"] |= {"selected_range"}
             if set(document) != shapes[kind]:
                 raise NativeCaptureRefused(f"raw {kind} artifact shape is not closed")
+            if selected_artifact:
+                from .planned_unit_selection import SelectedPlanUnitRange, SelectionRefused
+                try:
+                    scope = SelectedPlanUnitRange.from_dict(document["selected_range"])
+                    units = scope.units(ep.ExperimentPlan.from_dict(carrier["plan"]))
+                    if len(units) != 1 or (document.get("unit_id"), document.get("arm"),
+                            document.get("process_generation_id"), tuple(document.get("prompt_ids", ()))) != (
+                            units[0].unit_id, units[0].arm, units[0].process_id,
+                            units[0].expected_prompt_ids):
+                        raise SelectionRefused("selected artifact differs from exact original unit")
+                except (SelectionRefused, ep.PlanValidationError) as exc:
+                    raise NativeCaptureRefused("selected artifact range/membership differs") from exc
             if document.get("arm") != carrier["arm"]:
                 raise NativeCaptureRefused("raw artifact belongs to another carrier arm")
             if (document.get("plan_digest") != schemas.content_hash(carrier["plan"])
@@ -636,6 +653,12 @@ class NativeCaptureValidator:
                     "admissible row lacks its exact retained completed attempt")
         attempts = [document for document in documents.values()
                     if document.get("kind") == "completed_attempt"]
+        selected_attempts = [document for document in attempts
+                             if document["schema"] == ps.ARTIFACT_SCHEMA_V3]
+        if selected_attempts and (len(attempts) != 1 or any(
+                document.get("unit_id") != selected_attempts[0]["unit_id"]
+                for document in documents.values())):
+            raise NativeCaptureRefused("selected capture mixes original unit ranges")
         plan = ep.ExperimentPlan.from_dict(carrier["plan"])
         self._rederive_view(plan, carrier, documents, attempts)
         self._validate_measurement_links(plan, carrier, documents, attempts)

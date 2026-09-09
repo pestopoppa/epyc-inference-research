@@ -403,7 +403,8 @@ def test_native_sample_admission_precedes_thread_provider_and_child(tmp_path, mo
 
 def _run_real_controller_child_v2_capture_and_restart(
         tmp_path, monkeypatch, *, producer_type, recipe=None,
-        scientific_adapters=None, search_window_configuration=None):
+        scientific_adapters=None, search_window_configuration=None, prepare_transport=None,
+        inspect_result=None):
     driver, controller, lifecycle, engine = _owned_stack(
         tmp_path, monkeypatch, recipe=recipe)
     # Restore the actual lifecycle watcher; this test does not inject a completion.
@@ -507,6 +508,10 @@ def observed_measure(template, build_dir, port, **kwargs):
         prepared, measure_module.observed_measure,
         scientific_adapters=scientific_adapters,
         search_window_configuration=search_window_configuration)
+    if prepare_transport is not None:
+        prepared = prepare_transport(prepared)
+    transport_units = (prepared.selected_range.units(prepared.plan)
+                       if prepared.selected_range is not None else prepared.plan.expected_units)
     store = mc.ArtifactStore(prepared.artifact_root)
     validator = nc.NativeCaptureValidator(
         binding=nc.NativeCaptureBinding(
@@ -600,9 +605,12 @@ uw.run_from_fds(start_fd=args.start_fd, control_fd=args.control_fd,
         return real_popen(argv, *args, **kwargs)
 
     monkeypatch.setattr(wl.subprocess, "Popen", fixture_bootstrap)
+    selected_dispatch = prepared.selected_dispatch
     request = invocation.stage_request(
-        request_id="v2-real-fixture", lineage_id="v2-lineage",
-        stage_id="v2-stage", control_revision=controller.control_revision)
+        request_id=selected_dispatch.request_id if selected_dispatch else "v2-real-fixture",
+        lineage_id=selected_dispatch.lineage_id if selected_dispatch else "v2-lineage",
+        stage_id=selected_dispatch.stage_id if selected_dispatch else "v2-stage",
+        control_revision=controller.control_revision)
     producer.start()
     terminal = None
     try:
@@ -613,16 +621,21 @@ uw.run_from_fds(start_fd=args.start_fd, control_fd=args.control_fd,
     claim_threads = controller._lifecycle_provider.claim_threads
     assert all(name == "autokernel-parent-evidence" for name in claim_threads)
     checks_per_unit = 1 if search_window_configuration is None else 2
-    assert len(claim_threads) >= checks_per_unit * len(prepared.plan.expected_units)
+    assert len(claim_threads) >= checks_per_unit * len(transport_units)
     start = invocation.start
     assert start is not None
     reference = invocation.result_reference()
     fence = controller.worker_result_fence(terminal)
+    reopened, _ = unified_worker.reopen_deferred_result(
+        reference, prepared=prepared, start=start, terminal=terminal, fence=fence)
+    if inspect_result is not None:
+        inspect_result(prepared=prepared, start=start, terminal=terminal,
+                       fence=fence, reference=reference, result=reopened)
     with controller.native_capture_callback() as capture:
         receipts = unified_worker.ingest_deferred_result(
             reference, prepared=prepared, start=start, terminal=terminal,
             fence=fence, capture_transaction=capture)
-    assert len(receipts) == 2  # one sealed native carrier per arm
+    assert len(receipts) == len({unit.arm for unit in transport_units})
     descendant_events = [row for row in controller._active_worker_events
                          if row["event"] == "OWNED_DESCENDANT_CAPTURED"]
     # Terminal projection clears the active list; durable replay below proves retention.
@@ -632,7 +645,7 @@ uw.run_from_fds(start_fd=args.start_fd, control_fd=args.control_fd,
         pid, ticks = (int(value) for value in line.split())
         identities.append(wl.ProcessIdentity(
             pid, ticks, wl.process_identity(os.getpid()).boot_id))
-    assert len(identities) == len(prepared.plan.expected_units)
+    assert len(identities) == len(transport_units)
     assert all(not wl.same_process(identity) for identity in identities)
     for identity in identities:
         print(f"OWNED_V2_SERVING_PID pid={identity.pid} "
@@ -661,7 +674,7 @@ uw.run_from_fds(start_fd=args.start_fd, control_fd=args.control_fd,
                           if entry.kind == journal_module.KIND_WORKER_LIFECYCLE]
         captured = [row for row in lifecycle_rows
                     if row["event"] == "OWNED_DESCENDANT_CAPTURED"]
-        assert len(captured) == len(prepared.plan.expected_units)
+        assert len(captured) == len(transport_units)
         projection = wl.project_events(lifecycle_rows)
         assert not projection.active
         replayed_terminal = projection.terminal[terminal.worker_id]
@@ -669,6 +682,7 @@ uw.run_from_fds(start_fd=args.start_fd, control_fd=args.control_fd,
         assert restarted._acquisition_projection.pending is None
     finally:
         restarted.close()
+    return prepared, reopened, tuple(identities)
 
 
 def test_real_controller_child_v2_capture_and_restart(tmp_path, monkeypatch):

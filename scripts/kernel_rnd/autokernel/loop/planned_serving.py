@@ -26,7 +26,9 @@ PROMPT_SCHEMA = "epyc.autokernel.frozen_prompt_manifest.v1"
 ARTIFACT_SCHEMA = "epyc.autokernel.planned_serving_artifact.v1"
 RUN_SCHEMA = "epyc.autokernel.planned_serving_run.v1"
 ARTIFACT_SCHEMA_V2 = "epyc.autokernel.planned_serving_artifact.v2"
+ARTIFACT_SCHEMA_V3 = "epyc.autokernel.planned_serving_artifact.v3"
 RUN_SCHEMA_V2 = "epyc.autokernel.planned_serving_run.v2"
+RUN_SCHEMA_V3 = "epyc.autokernel.planned_serving_run.v3"
 STAGES = ("setup", "load", "placement", "readback", "warmup", "request", "teardown")
 
 
@@ -252,6 +254,7 @@ class PlannedServingRun:
     paused_reason: str | None
     capture_receipts: tuple[Mapping[str, Any], ...] = ()
     lifecycle_observation_references: tuple[Mapping[str, Any], ...] = ()
+    selected_range: Mapping[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         body = {"schema": self.schema, "plan_digest": self.plan_digest,
@@ -265,9 +268,14 @@ class PlannedServingRun:
                 "execution_complete": self.execution_complete,
                 "paused_reason": self.paused_reason,
                 "capture_receipts": [dict(item) for item in self.capture_receipts]}
-        if self.schema == RUN_SCHEMA_V2:
+        if self.schema in {RUN_SCHEMA_V2, RUN_SCHEMA_V3}:
             body["lifecycle_observation_references"] = [
                 dict(item) for item in self.lifecycle_observation_references]
+        if self.schema == RUN_SCHEMA_V3:
+            body["selected_range"] = _plain(self.selected_range)
+            body["selected_range_complete"] = (
+                [unit.unit_id for unit in self.raw_units] == list(self.selected_range["unit_ids"])
+                and all(unit.terminal for unit in self.raw_units))
         return body
 
 
@@ -405,7 +413,8 @@ def run_planned_comparison(plan: ep.ExperimentPlan, *,
                            previous_raws: Sequence[ep.RawUnit] = (),
                            previous_lineage_id: str | None = None,
                            continuation_verifier: ContinuationVerifier | None = None,
-                           observation_session_factory: ObservationSessionFactory | None = None) \
+                           observation_session_factory: ObservationSessionFactory | None = None,
+                           selected_range: Any = None) \
         -> PlannedServingRun:
     """Run exactly the plan's frozen unit order through fresh `_measure_once` launches."""
     plan = _normalized_plan(plan)
@@ -419,6 +428,17 @@ def run_planned_comparison(plan: ep.ExperimentPlan, *,
     if artifact_sink is None:
         raise PlannedServingError("explicit raw artifact sink is required")
     v2 = plan.schema == ep.PLAN_SCHEMA_V2
+    ordered_units = tuple(sorted(plan.expected_units, key=lambda unit: unit.order_index))
+    if selected_range is not None:
+        from .planned_unit_selection import SelectedPlanUnitRange
+        if type(selected_range) is not SelectedPlanUnitRange or not v2:
+            raise PlannedServingError("selected range requires concrete native-v2 transport")
+        selected_range = SelectedPlanUnitRange.from_dict(selected_range.to_dict())
+        ordered_units = selected_range.units(plan)
+        if len(ordered_units) != 1:
+            raise PlannedServingError("selected native transport requires exactly one original unit")
+        if previous_raws or previous_lineage_id is not None or continuation_verifier is not None:
+            raise PlannedServingError("selected range cannot reinterpret continuation")
     if v2 and observation_session_factory is None:
         raise TrustedStageProviderRequired(
             "v2 lifecycle observation authority is not connected")
@@ -495,7 +515,7 @@ def run_planned_comparison(plan: ep.ExperimentPlan, *,
             raise PlannedServingError("previous unit is not eligible for exact continuation")
     paused_reason: str | None = None
     lifecycle_references: list[Mapping[str, Any]] = []
-    for spec in sorted(plan.expected_units, key=lambda item: item.order_index):
+    for spec in ordered_units:
         template, recipe = arms[spec.arm]
         frozen_requests = requests_by_unit[spec.unit_id]
         prior = prior_by_id.get(spec.unit_id)
@@ -691,6 +711,9 @@ def run_planned_comparison(plan: ep.ExperimentPlan, *,
             artifact_body["lifecycle_observation_content_sha256"] = (
                 lifecycle_reference.get("observation_content_sha256")
                 if lifecycle_reference is not None else None)
+        if selected_range is not None:
+            artifact_body["schema"] = ARTIFACT_SCHEMA_V3
+            artifact_body["selected_range"] = selected_range.to_dict()
         artifact_digest = schemas.content_hash(artifact_body)
         artifact_sink(_freeze(dict(artifact_body, artifact_digest=artifact_digest)))
         if lifecycle_reference is not None:
@@ -731,17 +754,19 @@ def run_planned_comparison(plan: ep.ExperimentPlan, *,
                 or any(not isinstance(item, Mapping) for item in finalized)):
             raise PlannedServingError("native measurement capture returned malformed receipts")
         capture_receipts = tuple(_freeze(dict(item)) for item in finalized)
-    return PlannedServingRun(RUN_SCHEMA_V2 if v2 else RUN_SCHEMA,
+    return PlannedServingRun(RUN_SCHEMA_V3 if selected_range is not None else
+                             RUN_SCHEMA_V2 if v2 else RUN_SCHEMA,
                              plan.digest, prompts.digest, lineage_id,
                              _freeze(actual_identities["anchor"]),
                              _freeze(actual_identities["candidate"]),
                              tuple(raws), view, "policy_undefined", view.complete,
                              paused_reason, capture_receipts,
-                             tuple(lifecycle_references))
+                             tuple(lifecycle_references),
+                             _freeze(selected_range.to_dict()) if selected_range is not None else None)
 
 
-__all__ = ["ARTIFACT_SCHEMA", "ARTIFACT_SCHEMA_V2", "PROMPT_SCHEMA", "RUN_SCHEMA",
-           "RUN_SCHEMA_V2", "FrozenPrompt",
+__all__ = ["ARTIFACT_SCHEMA", "ARTIFACT_SCHEMA_V2", "ARTIFACT_SCHEMA_V3", "PROMPT_SCHEMA", "RUN_SCHEMA",
+           "RUN_SCHEMA_V2", "RUN_SCHEMA_V3", "FrozenPrompt",
            "FrozenPromptManifest", "ExecutionGuard", "PlannedServingError",
            "PlannedServingRun", "STAGES", "StageCompletion", "StageFence", "StagePaused",
            "TrustedStageProvider", "ObservationSessionFactory",
