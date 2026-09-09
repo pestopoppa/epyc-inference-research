@@ -682,6 +682,9 @@ class CampaignController:
         self._driver_settled: dict[str, dict[str, Any]] = {}
         self._driver_settlement_validator: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None
         self._driver_artifact_store: Any = None
+        self._a2_execution_entries: dict[str, list[Any]] = {}
+        self._a2_logical_executions: dict[str, str] = {}
+        self._a2_bank_sources: dict[str, list[str]] = {}
         self._supervisor_id: str | None = None
         if scheduler_engine is not None and (
                 scheduler_engine.scheduler_id != normalized.campaign_id
@@ -792,10 +795,64 @@ class CampaignController:
         acquisition_events: list[dict[str, Any]] = []
         acquisition_revision = 0
         acquisition_last_generation = 0
+        a2_execution_entries: dict[str, list[Any]] = {}
+        a2_logical_executions: dict[str, str] = {}
+        a2_bank_sources: dict[str, list[str]] = {}
         for entry in entries:
             self._journal_cursor = entry.seq
             if entry.campaign_id not in (None, self.resolved.campaign_id):
                 raise ControlRefused("store contains another campaign identity")
+            if entry.kind == journal_module.KIND_A2_RUNTIME_EXECUTION:
+                from . import a2_execution_state
+                try:
+                    row = a2_execution_state.validate_transition(entry.payload)
+                except a2_execution_state.A2ExecutionStateRefused as exc:
+                    raise journal_module.JournalCorruption(
+                        f"invalid A2 runtime execution history: {exc}") from exc
+                if (not saw_start or entry.record_id != row["execution_id"]
+                        or row["campaign_id"] != self.resolved.campaign_id
+                        or row["config_generation"] != self.config_generation
+                        or row["config_digest"] != self.config_digest
+                        or row["supervisor_incarnation"] != last_incarnation):
+                    raise journal_module.JournalCorruption(
+                        "A2 runtime execution event breaks durable owner binding")
+                prior_execution = a2_logical_executions.get(row["logical_id"])
+                if prior_execution not in {None, row["execution_id"]}:
+                    raise journal_module.JournalCorruption(
+                        "A2 logical execution changes its fixed plan/frame identity")
+                candidate = [*a2_execution_entries.get(row["execution_id"], []),
+                             copy.deepcopy(entry)]
+                try:
+                    projection = a2_execution_state.project_transitions(
+                        [item.payload for item in candidate])
+                    reference = projection.bank_reference
+                    if reference is not None:
+                        source = a2_execution_entries.get(reference["source_execution_id"])
+                        if not source:
+                            raise a2_execution_state.A2ExecutionStateRefused(
+                                "A2 bank reference source is absent or ordered after its reuse")
+                        expected_reference = a2_execution_state.make_bank_reference(
+                            source_values=[item.payload for item in source],
+                            source_journal_entry_ids=[item.event_id for item in source],
+                            target_plan_digest=projection.plan_digest,
+                            target_frame_digest=projection.frame_digest)
+                        if reference != expected_reference:
+                            raise a2_execution_state.A2ExecutionStateRefused(
+                                "A2 bank reference differs from its original source history")
+                except a2_execution_state.A2ExecutionStateRefused as exc:
+                    raise journal_module.JournalCorruption(
+                        f"A2 runtime execution replay is inconsistent: {exc}") from exc
+                a2_logical_executions[row["logical_id"]] = row["execution_id"]
+                a2_execution_entries[row["execution_id"]] = candidate
+                if "anchor_bank" in projection.sealed_phases:
+                    seal = next(event for event in projection.events
+                                if event["phase"] == "anchor_bank"
+                                and event["state"] == "SEALED")
+                    bank_digest = seal["payload"]["bank_digest"]
+                    sources = a2_bank_sources.setdefault(bank_digest, [])
+                    if row["execution_id"] not in sources:
+                        sources.append(row["execution_id"])
+                continue
             if entry.kind == journal_module.KIND_WORKER_LIFECYCLE:
                 violations = journal_module._validate_native_payload(entry.kind, entry.payload)
                 if violations:
@@ -1236,6 +1293,9 @@ class CampaignController:
         self._candidate_entries = candidate_entries
         self._native_records = native_records
         self._native_payload_digests = native_payload_digests
+        self._a2_execution_entries = a2_execution_entries
+        self._a2_logical_executions = a2_logical_executions
+        self._a2_bank_sources = a2_bank_sources
 
     def _initialize_worker_lifecycle_locked(self) -> None:
         if not self._mutex._is_owned():
@@ -1508,6 +1568,294 @@ class CampaignController:
             with self._mutex:
                 self._worker_run_active = False
                 self._settle_v2_commands_locked()
+
+    def append_a2_runtime_transition(self, *, logical_id: str, plan,
+                                     event: Mapping[str, Any]) -> Mapping[str, Any]:
+        """Append or exactly replay one current-owner A2 phase event."""
+        from . import a2_execution_state
+
+        with self._mutex:
+            self._require_active_locked()
+            assert self._journal is not None
+            try:
+                from . import experiment_plan as experiment_plan_module
+                if not isinstance(plan, experiment_plan_module.ExperimentPlan):
+                    raise a2_execution_state.A2ExecutionStateRefused(
+                        "A2 append requires an ExperimentPlan")
+                plan = experiment_plan_module.ExperimentPlan.from_dict(plan.to_dict())
+                if plan.campaign_id != self.resolved.campaign_id:
+                    raise a2_execution_state.A2ExecutionStateRefused(
+                        "A2 plan and controller campaign differ")
+                event = a2_execution_state.validate_event_membership(event, plan)
+                transition = a2_execution_state.make_transition(
+                    campaign_id=self.resolved.campaign_id,
+                    config_generation=self.config_generation,
+                    config_digest=self.config_digest,
+                    supervisor_incarnation=self.supervisor_incarnation,
+                    logical_id=logical_id, event=event)
+            except a2_execution_state.A2ExecutionStateRefused as exc:
+                raise ControlRefused(f"invalid A2 runtime transition: {exc}") from exc
+            execution_id = transition["execution_id"]
+            prior_execution = self._a2_logical_executions.get(transition["logical_id"])
+            if prior_execution not in {None, execution_id}:
+                raise ControlRefused("A2 logical execution changes fixed identity")
+            entries = self._a2_execution_entries.get(execution_id, [])
+            event_digest = transition["event"]["event_digest"]
+            prior = next((item for item in entries
+                          if item.payload["event"].get("event_digest") == event_digest), None)
+            if prior is not None:
+                return copy.deepcopy(prior.payload["event"])
+            try:
+                a2_execution_state.project_transitions(
+                    [*(item.payload for item in entries), transition])
+            except a2_execution_state.A2ExecutionStateRefused as exc:
+                raise ControlRefused(f"A2 runtime transition is inconsistent: {exc}") from exc
+            try:
+                entry = self._journal.append(
+                    journal_module.KIND_A2_RUNTIME_EXECUTION, transition,
+                    campaign_id=self.resolved.campaign_id, record_id=execution_id)
+                self._verify_journal_layout(self.store / "journal")
+            except BaseException:
+                self._poisoned = True
+                raise
+            self._journal_cursor = entry.seq
+            self._a2_logical_executions[transition["logical_id"]] = execution_id
+            self._a2_execution_entries.setdefault(execution_id, []).append(
+                copy.deepcopy(entry))
+            if transition["event"]["phase"] == "anchor_bank" \
+                    and transition["event"]["state"] == "SEALED":
+                bank_digest = transition["event"]["payload"]["bank_digest"]
+                sources = self._a2_bank_sources.setdefault(bank_digest, [])
+                if execution_id not in sources:
+                    sources.append(execution_id)
+            return copy.deepcopy(transition["event"])
+
+    def _a2_resolve_bank_source_locked(self, bank, *, target_plan_digest: str,
+                                       target_frame_digest: str):
+        from . import a2_execution_state, discovery_screen
+
+        if not self._mutex._is_owned():
+            raise ControlRefused("A2 bank source resolution requires controller lock")
+        try:
+            bank = discovery_screen.BaselineBank.from_dict(bank.to_dict())
+        except Exception as exc:
+            raise ControlRefused(f"A2 reused bank is invalid: {exc}") from exc
+        matches = []
+        for source_id in self._a2_bank_sources.get(bank.bank_digest, []):
+            entries = self._a2_execution_entries.get(source_id)
+            if not entries:
+                continue
+            try:
+                reference = a2_execution_state.make_bank_reference(
+                    source_values=[item.payload for item in entries],
+                    source_journal_entry_ids=[item.event_id for item in entries],
+                    target_plan_digest=target_plan_digest,
+                    target_frame_digest=target_frame_digest)
+                projection = a2_execution_state.project_transitions(
+                    [item.payload for item in entries])
+                seal = next(event for event in projection.events
+                            if event["phase"] == "anchor_bank"
+                            and event["state"] == "SEALED")
+                stored = discovery_screen.BaselineBank.from_dict(seal["payload"])
+            except (a2_execution_state.A2ExecutionStateRefused,
+                    discovery_screen.DiscoveryScreenRefused, StopIteration):
+                continue
+            if (reference["source_frame_digest"] == target_frame_digest
+                    and stored.to_dict() == bank.to_dict()):
+                matches.append((reference, stored))
+        if len(matches) != 1:
+            raise ControlRefused(
+                "A2 reused bank lacks one exact indexed original sealed source")
+        return matches[0]
+
+    def _bank_for_a2_reference_locked(self, reference: Mapping[str, Any]):
+        from . import a2_execution_state, discovery_screen
+
+        if not self._mutex._is_owned():
+            raise ControlRefused("A2 bank reference reopening requires controller lock")
+        source = self._a2_execution_entries.get(reference["source_execution_id"])
+        if not source:
+            raise ControlRefused("A2 bank reference source is missing")
+        try:
+            expected = a2_execution_state.make_bank_reference(
+                source_values=[item.payload for item in source],
+                source_journal_entry_ids=[item.event_id for item in source],
+                target_plan_digest=reference["target_plan_digest"],
+                target_frame_digest=reference["target_frame_digest"])
+            projection = a2_execution_state.project_transitions(
+                [item.payload for item in source])
+            seal = next(event for event in projection.events
+                        if event["phase"] == "anchor_bank"
+                        and event["state"] == "SEALED")
+            bank = discovery_screen.BaselineBank.from_dict(seal["payload"])
+        except (a2_execution_state.A2ExecutionStateRefused,
+                discovery_screen.DiscoveryScreenRefused, StopIteration) as exc:
+            raise ControlRefused(f"A2 bank reference source cannot be reopened: {exc}") from exc
+        if expected != dict(reference):
+            raise ControlRefused("A2 bank reference differs from original source history")
+        return bank
+
+    def append_a2_bank_reference(self, *, logical_id: str, plan,
+                                 frame_digest: str, bank) -> Mapping[str, Any]:
+        """Durably bind one imported bank to its indexed original anchor history."""
+        from . import a2_execution_state
+        from . import experiment_plan as experiment_plan_module
+
+        with self._mutex:
+            self._require_active_locked()
+            assert self._journal is not None
+            if not isinstance(plan, experiment_plan_module.ExperimentPlan):
+                raise ControlRefused("A2 bank reuse requires an ExperimentPlan")
+            plan = experiment_plan_module.ExperimentPlan.from_dict(plan.to_dict())
+            if plan.campaign_id != self.resolved.campaign_id:
+                raise ControlRefused("A2 bank reuse plan and controller campaign differ")
+            execution_id = a2_execution_state.execution_identity(
+                campaign_id=self.resolved.campaign_id,
+                config_generation=self.config_generation,
+                config_digest=self.config_digest, logical_id=logical_id,
+                plan_digest=plan.digest, frame_digest=frame_digest)
+            prior_execution = self._a2_logical_executions.get(logical_id)
+            if prior_execution not in {None, execution_id}:
+                raise ControlRefused("A2 logical execution changes fixed identity")
+            entries = self._a2_execution_entries.get(execution_id, [])
+            if entries:
+                try:
+                    projection = a2_execution_state.project_transitions(
+                        [item.payload for item in entries])
+                except a2_execution_state.A2ExecutionStateRefused as exc:
+                    raise ControlRefused(f"A2 bank reuse history is invalid: {exc}") from exc
+                reference = projection.bank_reference
+                if reference is None:
+                    raise ControlRefused(
+                        "A2 bank reference must precede every local phase event")
+                expected, stored = self._a2_resolve_bank_source_locked(
+                    bank, target_plan_digest=plan.digest,
+                    target_frame_digest=frame_digest)
+                if reference != expected:
+                    raise ControlRefused("A2 bank reuse retry changes its original source")
+                return {"bank_reference": copy.deepcopy(reference),
+                        "bank": stored.to_dict()}
+            reference, stored = self._a2_resolve_bank_source_locked(
+                bank, target_plan_digest=plan.digest,
+                target_frame_digest=frame_digest)
+            transition = a2_execution_state.make_transition(
+                campaign_id=self.resolved.campaign_id,
+                config_generation=self.config_generation,
+                config_digest=self.config_digest,
+                supervisor_incarnation=self.supervisor_incarnation,
+                logical_id=logical_id, event=reference)
+            try:
+                a2_execution_state.project_transitions([transition])
+                entry = self._journal.append(
+                    journal_module.KIND_A2_RUNTIME_EXECUTION, transition,
+                    campaign_id=self.resolved.campaign_id, record_id=execution_id)
+                self._verify_journal_layout(self.store / "journal")
+            except BaseException:
+                self._poisoned = True
+                raise
+            self._journal_cursor = entry.seq
+            self._a2_logical_executions[logical_id] = execution_id
+            self._a2_execution_entries[execution_id] = [copy.deepcopy(entry)]
+            return {"bank_reference": copy.deepcopy(reference),
+                    "bank": stored.to_dict()}
+
+    def _attest_a2_bank_reference(self, *, execution_id: str,
+                                  bank_reference: Mapping[str, Any], bank) -> bool:
+        from . import a2_execution_state, discovery_screen
+
+        with self._mutex:
+            self._require_active_locked()
+            entries = self._a2_execution_entries.get(execution_id)
+            if not entries:
+                return False
+            try:
+                projection = a2_execution_state.project_transitions(
+                    [item.payload for item in entries])
+                if projection.bank_reference != bank_reference:
+                    return False
+                stored = self._bank_for_a2_reference_locked(bank_reference)
+            except (a2_execution_state.A2ExecutionStateRefused,
+                    discovery_screen.DiscoveryScreenRefused, ControlRefused):
+                return False
+            return stored.to_dict() == dict(bank)
+
+    def _attest_a2_runtime_history(self, *, execution_id: str,
+                                   plan_digest: str, frame_digest: str,
+                                   events) -> bool:
+        """Private half of discovery_screen's actual-owner verifier mint."""
+        from . import a2_execution_state
+
+        with self._mutex:
+            self._require_active_locked()
+            entries = self._a2_execution_entries.get(execution_id)
+            if not entries:
+                return False
+            try:
+                projection = a2_execution_state.project_transitions(
+                    [item.payload for item in entries])
+            except a2_execution_state.A2ExecutionStateRefused:
+                return False
+            return (projection.plan_digest == plan_digest
+                    and projection.frame_digest == frame_digest
+                    and tuple(projection.events) == tuple(events))
+
+    def replay_a2_runtime_execution(self, *, logical_id: str,
+                                    plan_digest: str,
+                                    frame_digest: str) -> Mapping[str, Any]:
+        """Return one bounded indexed replay plus live current-owner attestation."""
+        from . import a2_execution_state, discovery_screen
+
+        with self._mutex:
+            self._require_active_locked()
+            execution_id = a2_execution_state.execution_identity(
+                campaign_id=self.resolved.campaign_id,
+                config_generation=self.config_generation,
+                config_digest=self.config_digest, logical_id=logical_id,
+                plan_digest=plan_digest, frame_digest=frame_digest)
+            prior_execution = self._a2_logical_executions.get(logical_id)
+            if prior_execution not in {None, execution_id}:
+                raise ControlRefused("A2 logical execution has identity drift")
+            entries = self._a2_execution_entries.get(execution_id, [])
+            if not entries:
+                return {"execution_id": execution_id, "logical_id": logical_id,
+                        "plan_digest": plan_digest, "frame_digest": frame_digest,
+                        "events": (), "pending_intents": (), "sealed_phases": (),
+                        "bank_reference": None, "reused_bank": None,
+                        "bank_verifier": None,
+                        "journal_entry_ids": (), "journal_cursor": 0,
+                        "history_digest": None, "phase_verifier": None}
+            try:
+                projection = a2_execution_state.project_transitions(
+                    [item.payload for item in entries])
+                verifier = (discovery_screen.attest_controller_phase_history(
+                    self, execution_id=execution_id, plan_digest=plan_digest,
+                    frame_digest=frame_digest, events=projection.events)
+                    if projection.events else None)
+                reused_bank = None
+                bank_verifier = None
+                if projection.bank_reference is not None:
+                    stored = self._bank_for_a2_reference_locked(
+                        projection.bank_reference)
+                    reused_bank = stored.to_dict()
+                    bank_verifier = discovery_screen.attest_controller_bank_reference(
+                        self, execution_id=execution_id,
+                        bank_reference=projection.bank_reference, bank=reused_bank)
+            except (a2_execution_state.A2ExecutionStateRefused,
+                    discovery_screen.DiscoveryScreenRefused) as exc:
+                raise ControlRefused(f"A2 runtime replay refused: {exc}") from exc
+            return {"execution_id": execution_id, "logical_id": logical_id,
+                    "plan_digest": plan_digest, "frame_digest": frame_digest,
+                    "events": tuple(copy.deepcopy(list(projection.events))),
+                    "pending_intents": tuple(copy.deepcopy(list(
+                        projection.pending_intents))),
+                    "sealed_phases": projection.sealed_phases,
+                    "bank_reference": copy.deepcopy(projection.bank_reference),
+                    "reused_bank": copy.deepcopy(reused_bank),
+                    "bank_verifier": bank_verifier,
+                    "journal_entry_ids": tuple(item.event_id for item in entries),
+                    "journal_cursor": entries[-1].seq,
+                    "history_digest": projection.history_digest,
+                    "phase_verifier": verifier}
 
     def worker_terminal_for_request(self, *, request_id: str, plan_digest: str,
                                     lineage_id: str, stage_id: str):
@@ -2800,6 +3148,9 @@ class CampaignController:
             self._driver_settled = {}
             self._driver_settlement_validator = None
             artifact_store, self._driver_artifact_store = self._driver_artifact_store, None
+            self._a2_execution_entries = {}
+            self._a2_logical_executions = {}
+            self._a2_bank_sources = {}
             self._supervisor_id = None
             self._worker_lifecycle = None
             self._active_worker_events = []
