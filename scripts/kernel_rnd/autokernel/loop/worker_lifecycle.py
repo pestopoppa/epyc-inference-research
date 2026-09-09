@@ -17,6 +17,7 @@ import os
 from pathlib import Path
 import select
 import signal
+import stat
 import subprocess
 import sys
 import time
@@ -24,7 +25,11 @@ import types
 from typing import Any, Callable, Mapping, Protocol, Sequence
 import uuid
 
-from ..controller.discovery_supervisor_secure import RuntimeRoot
+from ..controller.discovery_supervisor_secure import (
+    RuntimeRoot,
+    SecureRuntimeError,
+    object_identity,
+)
 from .native_capture_control import TrustedWorkerResultFence
 from .worker_bootstrap import MAX_OUTCOME_BYTES, OUTCOME_SCHEMA, make_contract
 
@@ -1066,9 +1071,13 @@ class WorkerLifecycle:
         self._terminal_requests: dict[tuple[str, str, str, str], set[tuple[str, int]]] = {}
         self._terminal_bindings: dict[tuple[str, int], CampaignBinding] = {}
         self._held_receipts: dict[tuple[str, int], TrustedHeldClaimReceipt] = {}
+        self._stdout_identities: dict[tuple[str, int], dict[str, int]] = {}
+        self._stdout_proofs: dict[tuple[str, int], dict[str, Any]] = {}
 
     def _register_terminal(self, terminal: TerminalWorker,
-                           binding: CampaignBinding | None = None) -> None:
+                           binding: CampaignBinding | None = None,
+                           stdout_identity: Mapping[str, int] | None = None,
+                           stdout_proof: Mapping[str, Any] | None = None) -> None:
         """Index only a terminal whose final lifecycle event was durably emitted."""
         owner = binding or self.binding
         worker_key = (terminal.worker_id, terminal.worker_generation)
@@ -1077,6 +1086,34 @@ class WorkerLifecycle:
         self._terminals[worker_key] = terminal
         self._terminal_bindings[worker_key] = owner
         self._terminal_requests.setdefault(request_key, set()).add(worker_key)
+        if stdout_identity is not None:
+            self._stdout_identities[worker_key] = dict(stdout_identity)
+        if stdout_proof is not None:
+            self._stdout_proofs[worker_key] = dict(stdout_proof)
+
+    @staticmethod
+    def stdout_leaf(worker_id: str, worker_generation: int) -> str:
+        _text(worker_id, "worker_id")
+        _positive(worker_generation, "worker_generation")
+        leaf = hashlib.sha256(f"{worker_id}:{worker_generation}".encode()).hexdigest()[:24]
+        return f"worker-{leaf}.stdout.log"
+
+    def _stdout_identity(self, worker_id: str, worker_generation: int) \
+            -> dict[str, int] | None:
+        name = self.stdout_leaf(worker_id, worker_generation)
+        fd = -1
+        try:
+            fd = self.runtime.open_leaf(name, os.O_RDONLY | os.O_NONBLOCK)
+            info = os.fstat(fd)
+            if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid()
+                    or stat.S_IMODE(info.st_mode) != 0o600 or info.st_nlink != 1):
+                return None
+            return object_identity(info)
+        except (OSError, SecureRuntimeError):
+            return None
+        finally:
+            if fd >= 0:
+                os.close(fd)
 
     def _emit(self, event: str, *, worker_id: str, worker_generation: int,
               request: StageRequest, grant: GrantReceipt, container_id: str,
@@ -1502,11 +1539,18 @@ class WorkerLifecycle:
             container_id, result["return_code"] if result is not None else None,
             retained_digest, accepted, reason)
         event = "WORKER_RESULT_ACCEPTED" if accepted else "WORKER_RESULT_STALE"
+        stdout_identity = self._stdout_identity(worker_id, generation)
+        stdout_proof = None if result is None else {
+            "stdout_bytes": result["stdout_bytes"],
+            "stdout_sha256": result["stdout_sha256"],
+            "stdout_truncated": result["stdout_truncated"],
+        }
         self._emit(event, worker_id=worker_id, worker_generation=generation,
                    request=request, grant=grant, container_id=container_id,
                    data={"result_digest": retained_digest, "accepted": accepted,
                          "reason": reason})
-        self._register_terminal(terminal)
+        self._register_terminal(
+            terminal, stdout_identity=stdout_identity, stdout_proof=stdout_proof)
         if held_receipt is not None:
             self._held_receipts[(worker_id, generation)] = held_receipt
         if planned_invocation is not None and accepted and retained_digest is not None:
@@ -1837,6 +1881,27 @@ class WorkerLifecycle:
             return self._held_receipts[(terminal.worker_id, terminal.worker_generation)].receipt
         except KeyError as exc:
             raise WaitingAuthority("trusted provider held receipt is unavailable") from exc
+
+    def stdout_identity_for_terminal(self, terminal: TerminalWorker) -> Mapping[str, int]:
+        """Return the detached file identity captured for one exact live terminal."""
+        current = self._terminals.get((terminal.worker_id, terminal.worker_generation))
+        if current != terminal:
+            raise LifecycleRefused("terminal worker receipt is not owned by this lifecycle")
+        identity = self._stdout_identities.get(
+            (terminal.worker_id, terminal.worker_generation))
+        if identity is None:
+            raise LifecycleRefused("retained worker stdout is unavailable")
+        return dict(identity)
+
+    def stdout_proof_for_terminal(self, terminal: TerminalWorker) -> Mapping[str, Any]:
+        """Return authenticated bootstrap stdout facts for an exact live terminal."""
+        current = self._terminals.get((terminal.worker_id, terminal.worker_generation))
+        if current != terminal:
+            raise LifecycleRefused("terminal worker receipt is not owned by this lifecycle")
+        proof = self._stdout_proofs.get((terminal.worker_id, terminal.worker_generation))
+        if proof is None:
+            raise LifecycleRefused("retained worker stdout proof is unavailable")
+        return dict(proof)
 
     def reconcile_acquisition(self, events: Sequence[Mapping[str, Any]],
                               lifecycle_events: Sequence[Mapping[str, Any]]) -> str:
