@@ -23,6 +23,7 @@ from . import experiment_plan as ep
 from . import measurement_capture as mc
 from . import validation_claim_receipt as cr
 from . import validation_consumer as vc
+from .validation_projection_source import ProjectionSourceClosure
 
 
 PROJECTOR_NAME = "autokernel-unified-arm-measurement"
@@ -170,8 +171,23 @@ def _final_v2_source_pin() -> ProjectionSourcePin | None:
 class PinnedRootProjection:
     """An explicitly hash-pinned installation of ROOT's registered projector."""
 
-    def __init__(self, root: Path, *, source_pin: ProjectionSourcePin | None = None):
+    def __init__(self, root: Path, *, source_pin: ProjectionSourcePin | None = None,
+                 source_closure: ProjectionSourceClosure | None = None):
         root = Path(root).resolve()
+        self.source_closure = None
+        if source_closure is not None:
+            if source_pin is not None or type(source_closure) is not ProjectionSourceClosure:
+                raise SemanticAdapterError("select one concrete current or historical source")
+            from .feed_runtime import LoadedFeedProjection
+            loaded = LoadedFeedProjection.load(root, source_closure.root_source_sha256)
+            self.root, self.loaded_projection = root, loaded
+            self.claim_tuple, self.arm_adapter = loaded.claim_tuple, loaded.adapter
+            self.projector = loaded.claim_tuple.registered()[PROJECTOR_NAME]
+            self.source_closure = source_closure
+            self.source_pin = None
+            from .validation_projection_source import source_identity
+            self._installed_source_identity = source_identity(self)
+            return
         claim_path = root / "scripts/vidya/claim_tuple.py"
         adapter_path = root / "scripts/vidya/adapters/autokernel_unified_arm.py"
         pin = source_pin or _final_v2_source_pin() or ProjectionSourcePin(
@@ -206,7 +222,7 @@ class PinnedRootProjection:
     @property
     def native_v2_available(self) -> bool:
         return bool(
-            FINAL_V2_ROOT_COMMIT
+            self.source_closure is None and FINAL_V2_ROOT_COMMIT
             and FINAL_V2_CLAIM_TUPLE_SHA256
             and FINAL_V2_ARM_PROJECTOR_SHA256
             and FINAL_V2_ADAPTER_ID
@@ -222,8 +238,19 @@ class PinnedRootProjection:
             == FINAL_V2_OBSERVATION_BINDING_SHA256
             and hasattr(self.arm_adapter, "CAPTURE_SCHEMA_V2"))
 
+    def _current_receipt_body(self, event, *, source_store, source_reference):
+        from .validation_projection_source import build_receipt
+        try:
+            return build_receipt(self, event, source_store=source_store,
+                                 source_reference=source_reference)
+        except Exception as exc:
+            raise SemanticAdapterError("canonical current source/provenance refused") from exc
+
     def _receipt_body(self, event: Mapping[str, Any], *, source_store: mc.ArtifactStore,
                       source_reference: Mapping[str, str]) -> dict[str, Any]:
+        if self.source_closure is not None:
+            return mc._plain(self._current_receipt_body(event, source_store=source_store,
+                                                       source_reference=source_reference))
         try:
             payload = event["payload"]
             carrier = payload["carrier"]
@@ -301,9 +328,13 @@ class PinnedRootProjection:
                 receipt_store.read(reference.locator, reference.sha256)))
         except (ValueError, mc.CaptureError, mc.SecureRuntimeError) as exc:
             raise SemanticAdapterError("canonical grade receipt cannot be reopened") from exc
+        if self.source_closure is not None:
+            from .validation_projection_source import source_identity
+            expected_source = mc._plain(source_identity(self))
+        else:
+            expected_source = self.source_pin.to_dict(capture_schema=body["source_identity"]["capture_schema"])
         if (body["receipt_id"] != reference.receipt_id
-                or body["source_identity"]
-                != self.source_pin.to_dict(capture_schema=body["source_identity"]["capture_schema"])):
+                or mc._plain(body["source_identity"]) != expected_source):
             raise SemanticAdapterError("canonical grade receipt source identity changed")
         source = body["source_event"]
         try:
@@ -332,6 +363,79 @@ class PinnedRootProjection:
         return CanonicalGrade(grade, trace, tuple(reasons))
 
 
+@dataclass(frozen=True)
+class ReopenedClaimReceiptPair:
+    plan: ep.ExperimentPlan
+    view: ep.AdmissibleUnitView
+    anchor: Mapping[str, Any]
+    candidate: Mapping[str, Any]
+    anchor_carrier: Mapping[str, Any]
+    candidate_carrier: Mapping[str, Any]
+
+
+@dataclass(frozen=True)
+class RegisteredClaimGradeVerifier:
+    """One concrete receipt owner for historical facts and strict grade checking.
+
+    A retained native validator may identify an application installation, but
+    historical replay never invokes it or reconstructs its original registry.
+    """
+
+    projection: PinnedRootProjection
+    source_store: mc.ArtifactStore
+    receipt_store: mc.ArtifactStore
+    native_validator: Any = None
+
+    def __post_init__(self):
+        from .native_capture_control import NativeCaptureValidator
+        if (type(self.projection) is not PinnedRootProjection
+                or type(self.source_store) is not mc.ArtifactStore
+                or type(self.receipt_store) is not mc.ArtifactStore
+                or self.native_validator is not None
+                and type(self.native_validator) is not NativeCaptureValidator):
+            raise SemanticAdapterError("claim-grade verifier requires concrete installed dependencies")
+
+    def reopen_pair(self, pair: cr.ClaimGradeReceiptPairReference) -> ReopenedClaimReceiptPair:
+        from . import observation_binding as ob
+        from . import validation_projection_source as current
+        if type(pair) is not cr.ClaimGradeReceiptPairReference or self.projection.source_closure is None:
+            raise SemanticAdapterError("current historical replay requires a concrete receipt pair/source")
+        pair = cr.ClaimGradeReceiptPairReference.from_dict(pair.to_dict())
+        receipts = ValidationSemanticAdapter(self.projection).reopen_receipt_pair(
+            anchor=pair.anchor, candidate=pair.candidate,
+            source_store=self.source_store, receipt_store=self.receipt_store)
+        native = []
+        for body in receipts:
+            source = body["source_event"]
+            event = mc._plain(self.source_store.read(source["locator"], source["sha256"]))
+            native.append(current.reopen_native(self.projection, event, self.source_store))
+        _a_projection, a, plan, view, _a_provenance = native[0]
+        _c_projection, c, other_plan, other_view, _c_provenance = native[1]
+        if (a["measurement_id"] != pair.anchor_measurement_id
+                or c["measurement_id"] != pair.candidate_measurement_id
+                or plan.to_dict() != other_plan.to_dict() or view.to_dict() != other_view.to_dict()
+                or view.view_digest != pair.admissible_view_digest
+                or a["parent_final_trial"] != c["parent_final_trial"]
+                or receipts[0]["source_identity"] != receipts[1]["source_identity"]):
+            raise SemanticAdapterError("canonical receipt pair differs from original full final evidence")
+        return ReopenedClaimReceiptPair(plan, view, receipts[0], receipts[1], ob._freeze(a), ob._freeze(c))
+
+    def verify(self, plan: ep.ExperimentPlan, view: ep.AdmissibleUnitView,
+               pair: cr.ClaimGradeReceiptPairReference) -> ep.AdmissibleUnitView:
+        """Strict continuation interface; a diagnostic cannot discharge a grade."""
+        plan = ep.ExperimentPlan.from_dict(plan.to_dict())
+        supplied = ep._validated_view(plan, view)
+        actual = self.reopen_pair(pair)
+        if (actual.plan.to_dict() != plan.to_dict() or actual.view.to_dict() != supplied.to_dict()
+                or not actual.view.complete or any(
+                    body["projection"].get("status") != "measurement"
+                    or (body["projection"].get("source_grade"), body["projection"].get("trace_grade"))
+                    != ("Witnessed", "Attested") or body["authority_scope"] != "final_pinned_source"
+                    for body in (actual.anchor, actual.candidate))):
+            raise SemanticAdapterError("canonical receipt pair lacks complete qualified measurement evidence")
+        return actual.view
+
+
 class ValidationSemanticAdapter:
     """Consumer-shaped adapter that preserves current unavailable authority."""
 
@@ -357,6 +461,10 @@ class ValidationSemanticAdapter:
                 or a_binding["instrument_identity_sha256"]
                 != c_binding["instrument_identity_sha256"]):
             raise SemanticAdapterError("canonical receipt pair identity differs")
+        if self.projection.source_closure is not None and (
+                a_binding["parent_final_trial"] != c_binding["parent_final_trial"]
+                or a_binding["final_view_digest"] != c_binding["final_view_digest"]):
+            raise SemanticAdapterError("canonical receipt pair final identity differs")
         return left, right
 
     def evaluate_receipt_pair(
@@ -370,6 +478,13 @@ class ValidationSemanticAdapter:
         left, right = self.reopen_receipt_pair(
             anchor=anchor, candidate=candidate, source_store=source_store,
             receipt_store=receipt_store)
+        if self.projection.source_closure is not None and any(
+                item["native_binding"]["plan_digest"] != plan.digest for item in (left, right)):
+            raise SemanticAdapterError("current canonical receipt pair belongs to a different plan")
+        if self.projection.source_closure is not None and any(
+                item["projection"]["status"] == "diagnostic" for item in (left, right)):
+            return vc.SemanticDecision("Unavailable", "Unavailable", "validate_production", False,
+                ("canonical final-trial projection is diagnostic; no ClaimTuple or grade exists",))
         grades = {(item["projection"]["source_grade"],
                    item["projection"]["trace_grade"]) for item in (left, right)}
         authority_scopes = {item["authority_scope"] for item in (left, right)}
@@ -379,7 +494,7 @@ class ValidationSemanticAdapter:
             reasons.append("canonical receipt pair belongs to a different plan")
         if grades != {("Witnessed", "Attested")}:
             reasons.append("canonical receipt pair is below Witnessed/Attested")
-        if not self.projection.native_v2_available:
+        if self.projection.source_closure is None and not self.projection.native_v2_available:
             reasons.append("native-v2 projector/producer identity is compatibility-only")
         if authority_scopes != {"final_pinned_source"}:
             reasons.append("native producer source identity is compatibility-only")
@@ -392,22 +507,63 @@ class ValidationSemanticAdapter:
             "validate_production", False, tuple(reasons))
 
     def evaluate(self, plan: ep.ExperimentPlan,
-                 evidence: Mapping[str, Any]) -> vc.SemanticDecision:
-        ep.ExperimentPlan.from_dict(plan.to_dict())
+                 evidence: Mapping[str, Any], *,
+                 claim_grade_verifier: RegisteredClaimGradeVerifier | None = None) -> vc.SemanticDecision:
+        plan = ep.ExperimentPlan.from_dict(plan.to_dict())
         if not isinstance(evidence, Mapping):
             raise SemanticAdapterError("semantic evidence must be a mapping")
+        if claim_grade_verifier is not None:
+            if type(claim_grade_verifier) is not RegisteredClaimGradeVerifier:
+                raise SemanticAdapterError("semantic receipt verifier must be the concrete registration")
+            actual = claim_grade_verifier.reopen_pair(evidence.get("claim_grade_pair"))
+            if actual.plan.to_dict() != plan.to_dict():
+                raise SemanticAdapterError("semantic receipt pair belongs to another plan")
+            if any(body["projection"]["status"] == "diagnostic" for body in (actual.anchor, actual.candidate)):
+                return vc.SemanticDecision("Unavailable", "Unavailable", "validate_production", False,
+                    ("canonical final-trial projection is diagnostic; no ClaimTuple or grade exists",
+                     "complete_native_measurement_pair", "original_control_evidence_unavailable",
+                     "original_calibration_evidence_unavailable"))
+            # The same strict registration serves the future owning qualified
+            # serving-decision route; source/grade proof alone is not that rule.
+            claim_grade_verifier.verify(plan, actual.view, evidence["claim_grade_pair"])
+            return vc.SemanticDecision("Witnessed", "Attested", "validate_production", False,
+                ("owning qualified measurement/serving decision is required",))
         return vc.SemanticDecision(
             "Unavailable", "Unavailable", "validate_production", False,
             ("canonical native-v2 projector is not installed",
              "owning production-validation numerical policy/result is undefined"))
 
-    def registered_authority(self, transaction_verifier_id: str) \
+    def registered_authority(self, transaction_verifier_id: str, *,
+                             source_store: mc.ArtifactStore | None = None,
+                             receipt_store: mc.ArtifactStore | None = None,
+                             native_validator: Any = None) \
             -> vc.RegisteredSemanticAuthority:
         """Expose a real capability whose current result is an explicit refusal."""
+        if source_store is not None or receipt_store is not None or native_validator is not None:
+            verifier = RegisteredClaimGradeVerifier(self.projection, source_store, receipt_store, native_validator)
+            return vc.RegisteredSemanticAuthority(AUTHORITY_ID, transaction_verifier_id,
+                RegisteredServingSemanticEvaluator(self, verifier), fixture_only=False,
+                claim_grade_verifier=verifier)
         return vc.RegisteredSemanticAuthority(
             AUTHORITY_ID, transaction_verifier_id, self.evaluate, fixture_only=False)
 
 
+@dataclass(frozen=True)
+class RegisteredServingSemanticEvaluator:
+    adapter: ValidationSemanticAdapter
+    claim_grade_verifier: RegisteredClaimGradeVerifier
+
+    def __post_init__(self):
+        if (type(self.adapter) is not ValidationSemanticAdapter
+                or type(self.claim_grade_verifier) is not RegisteredClaimGradeVerifier
+                or self.adapter.projection is not self.claim_grade_verifier.projection):
+            raise SemanticAdapterError("semantic evaluator requires concrete installed dependencies")
+
+    def __call__(self, plan, evidence):
+        return self.adapter.evaluate(plan, evidence, claim_grade_verifier=self.claim_grade_verifier)
+
+
 __all__ = ["ARM_ADAPTER_ID", "ARM_PROJECTOR_SHA256", "AUTHORITY_ID",
            "CLAIM_TUPLE_SHA256", "CanonicalGrade", "PinnedRootProjection",
+           "ProjectionSourceClosure", "RegisteredClaimGradeVerifier", "RegisteredServingSemanticEvaluator",
            "SemanticAdapterError", "ValidationSemanticAdapter"]
