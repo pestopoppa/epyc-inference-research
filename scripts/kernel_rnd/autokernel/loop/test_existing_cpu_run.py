@@ -169,6 +169,7 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(dry_run)
                     build_recipe=run.build_recipe.NATIVE_CPU_RECIPE.to_dict(),
                     host_state=changed) != expected_epoch
             assert result["baseline_scope"] == "experimental_candidate_not_champion"
+            assert run.status.read(fixture.store)["baseline_scope"] == result["baseline_scope"]
             assert [row["status"] for row in result["iterations"]] == [
                 "measured_null", "measured_null", "measured_null", "kept", "measured_null"]
             assert all(row["comparison"]["request_digest"] == result["floor_request_digest"]
@@ -186,6 +187,7 @@ def test_gpu_actor_program_and_epoch_inputs_remain_legacy_exact():
         with mock.patch.object(run.archive, "epoch_for", wraps=original_epoch) as epoch:
             rc, _calls, planners, _scratch, log = fixture._run_one_keep()
         assert rc == 0, log
+        assert "baseline_scope" not in run.status.read(fixture.store)
         epoch.assert_called_once_with(
             anchor_commit=fixture.tip, build_recipe=run.build_recipe.HOUSE_GPU_RECIPE.to_dict())
         assert planners[0].contexts[0]["program"] == run.loop.PROGRAM.read_text(encoding="utf-8")
