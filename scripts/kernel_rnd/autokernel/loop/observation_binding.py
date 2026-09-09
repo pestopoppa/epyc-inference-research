@@ -568,6 +568,11 @@ def loaded_planned_serving_identity(*, measurement_callable: Callable[..., Any],
     """Identify the actual selected measurement/timers and enumerated direct support."""
     from .unified_worker import InheritedUnitAuthority
     from .native_producer_source import loaded_producer_source_closure
+    from .native_server_response import source_identity as server_response_source_identity
+    server_response_source = server_response_source_identity()
+    if any(row["implementation_status"] != "pinned" or row["configuration_status"] != "pinned"
+           for row in server_response_source["callables"]):
+        raise ObservationBindingError("native server response producer identity is incomplete")
     if (getattr(fence_clock, "__module__", None),
             getattr(fence_clock, "__qualname__", None)) != ("time", "monotonic"):
         raise ObservationBindingError(
@@ -597,6 +602,7 @@ def loaded_planned_serving_identity(*, measurement_callable: Callable[..., Any],
             "observer_instrument_schema": lo.INSTRUMENT_SCHEMA,
             "detector_version": lo.DETECTOR_VERSION, "phases": list(lo.PHASES),
             "parent_readback_phase": "health",
+            "server_response_source": _plain(server_response_source),
             "producer_source_closure": _plain(loaded_producer_source_closure(
                 scientific_adapters=scientific_adapters)),
             "budget_fields": sorted(lo.BUDGET_FIELDS),
