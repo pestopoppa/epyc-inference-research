@@ -23,6 +23,7 @@ from . import serving
 
 
 PROMPT_SCHEMA = "epyc.autokernel.frozen_prompt_manifest.v1"
+PROMPT_SCHEMA_V2 = "epyc.autokernel.frozen_prompt_manifest.v2"
 ARTIFACT_SCHEMA = "epyc.autokernel.planned_serving_artifact.v1"
 RUN_SCHEMA = "epyc.autokernel.planned_serving_run.v1"
 ARTIFACT_SCHEMA_V2 = "epyc.autokernel.planned_serving_artifact.v2"
@@ -85,16 +86,22 @@ def _text(value: Any, label: str) -> str:
 @dataclass(frozen=True)
 class FrozenPrompt:
     prompt_id: str
-    prompt: str
+    prompt: str | tuple[int, ...]
     n_predict: int
     temperature: float
-    top_p: float
+    top_p: float | None
     top_k: int
     cache_prompt: bool
     request_digest: str
+    request_options: tuple[tuple[str, Any], ...] = ()
+    schema: str = PROMPT_SCHEMA
 
     @classmethod
-    def from_dict(cls, value: Mapping[str, Any]) -> "FrozenPrompt":
+    def from_dict(cls, value: Mapping[str, Any], *, schema: str = PROMPT_SCHEMA) -> "FrozenPrompt":
+        if schema == PROMPT_SCHEMA_V2:
+            return cls._from_v2(value)
+        if schema != PROMPT_SCHEMA:
+            raise PlannedServingError("unsupported frozen prompt schema")
         fields = {"prompt_id", "prompt", "n_predict", "temperature", "top_p", "top_k",
                   "cache_prompt", "request_digest"}
         if not isinstance(value, Mapping) or set(value) != fields:
@@ -119,13 +126,69 @@ class FrozenPrompt:
             raise PlannedServingError("frozen prompt request digest mismatch")
         return result
 
+    @classmethod
+    def _from_v2(cls, value: Mapping[str, Any]) -> "FrozenPrompt":
+        # Same /completion request used by the validated GLM client, not a
+        # tokenizer or an inferred server default. All optional bytes stay explicit.
+        from .native_server_response import MAX_REQUEST_BYTES
+        if not isinstance(value, Mapping) or set(value) != {"prompt_id", "request", "request_digest"}:
+            raise PlannedServingError("v2 frozen prompt fields differ")
+        request = value["request"]
+        required = {"prompt", "n_predict", "temperature", "top_k", "cache_prompt",
+                    "seed", "ignore_eos", "return_tokens", "stream"}
+        if (not isinstance(request, Mapping) or not required <= set(request)
+                or set(request) - required - {"top_p"}):
+            raise PlannedServingError("v2 completion request fields differ")
+        prompt = request["prompt"]
+        if isinstance(prompt, str):
+            _text(prompt, "prompt")
+            if len(prompt) > MAX_REQUEST_BYTES:
+                raise PlannedServingError("v2 prompt exceeds request byte bound")
+        elif isinstance(prompt, (list, tuple)):
+            if (not prompt or len(prompt) > MAX_REQUEST_BYTES // 2
+                    or any(type(token) is not int or not 0 <= token < 2 ** 31 for token in prompt)):
+                raise PlannedServingError("v2 token prompt must be bounded non-negative integer IDs")
+            prompt = tuple(prompt)
+        else:
+            raise PlannedServingError("v2 prompt must be text or token IDs")
+        if type(request["n_predict"]) is not int or request["n_predict"] <= 0:
+            raise PlannedServingError("v2 n_predict must be a positive integer")
+        if type(request["top_k"]) is not int or request["top_k"] < 0:
+            raise PlannedServingError("v2 top_k must be a non-negative integer")
+        if type(request["seed"]) is not int or not 0 <= request["seed"] < 2 ** 32:
+            raise PlannedServingError("v2 seed must be an explicit unsigned 32-bit integer")
+        for key in ("temperature", "top_p"):
+            if key in request and (type(request[key]) not in (int, float)
+                                   or not math.isfinite(request[key])):
+                raise PlannedServingError("v2 sampling values must be finite")
+        if any(type(request[key]) is not bool for key in ("cache_prompt", "ignore_eos", "return_tokens", "stream")):
+            raise PlannedServingError("v2 completion switches must be booleans")
+        if request["stream"] is not False:
+            raise PlannedServingError("v2 serving requires a complete non-streaming response")
+        result = cls(_text(value["prompt_id"], "prompt_id"), prompt, request["n_predict"],
+            request["temperature"], request.get("top_p"), request["top_k"], request["cache_prompt"],
+            _sha(value["request_digest"], "request_digest"),
+            tuple((key, request[key]) for key in ("seed", "ignore_eos", "return_tokens", "stream")),
+            PROMPT_SCHEMA_V2)
+        if len(result.body) > MAX_REQUEST_BYTES:
+            raise PlannedServingError("v2 completion request exceeds native capture byte bound")
+        if result.request_digest != hashlib.sha256(result.body).hexdigest():
+            raise PlannedServingError("frozen prompt request digest mismatch")
+        return result
+
     @property
     def body(self) -> bytes:
-        return _canonical({"prompt": self.prompt, "n_predict": self.n_predict,
-                           "temperature": self.temperature, "top_p": self.top_p,
-                           "top_k": self.top_k, "cache_prompt": self.cache_prompt})
+        body = {"prompt": self.prompt, "n_predict": self.n_predict,
+                "temperature": self.temperature, "top_k": self.top_k,
+                "cache_prompt": self.cache_prompt, **dict(self.request_options)}
+        if self.top_p is not None:
+            body["top_p"] = self.top_p
+        return _canonical(body)
 
     def to_dict(self) -> dict[str, Any]:
+        if self.schema == PROMPT_SCHEMA_V2:
+            return {"prompt_id": self.prompt_id, "request": json.loads(self.body),
+                    "request_digest": self.request_digest}
         return {"prompt_id": self.prompt_id, "prompt": self.prompt,
                 "n_predict": self.n_predict, "temperature": self.temperature,
                 "top_p": self.top_p, "top_k": self.top_k,
@@ -137,28 +200,29 @@ class FrozenPromptManifest:
     version: str
     prompts: tuple[FrozenPrompt, ...]
     digest: str
+    schema: str = PROMPT_SCHEMA
 
     @classmethod
     def from_dict(cls, value: Mapping[str, Any]) -> "FrozenPromptManifest":
         if not isinstance(value, Mapping) or set(value) != {"schema", "version", "prompts",
                                                               "digest"} \
-                or value["schema"] != PROMPT_SCHEMA:
+                or value["schema"] not in {PROMPT_SCHEMA, PROMPT_SCHEMA_V2}:
             raise PlannedServingError("unsupported or malformed frozen prompt manifest")
         if not isinstance(value["prompts"], Sequence) or isinstance(value["prompts"], (str, bytes)):
             raise PlannedServingError("frozen prompt manifest prompts must be an array")
-        prompts = tuple(FrozenPrompt.from_dict(item) for item in value["prompts"])
+        prompts = tuple(FrozenPrompt.from_dict(item, schema=value["schema"]) for item in value["prompts"])
         if not prompts or len({item.prompt_id for item in prompts}) != len(prompts):
             raise PlannedServingError("frozen prompt IDs must be nonempty and unique")
         version = _text(value["version"], "prompt manifest version")
-        body = {"schema": PROMPT_SCHEMA, "version": version,
+        body = {"schema": value["schema"], "version": version,
                 "prompts": [item.to_dict() for item in prompts]}
         digest = _sha(value["digest"], "prompt manifest digest")
         if digest != schemas.content_hash(body):
             raise PlannedServingError("frozen prompt manifest digest mismatch")
-        return cls(version, prompts, digest)
+        return cls(version, prompts, digest, value["schema"])
 
     def to_dict(self) -> dict[str, Any]:
-        return {"schema": PROMPT_SCHEMA, "version": self.version,
+        return {"schema": self.schema, "version": self.version,
                 "prompts": [item.to_dict() for item in self.prompts], "digest": self.digest}
 
     def requests(self, prompt_ids: Sequence[str], recipe: serving.Recipe) \
@@ -169,8 +233,9 @@ class FrozenPromptManifest:
         except KeyError as exc:
             raise PlannedServingError(f"plan names unknown frozen prompt {exc.args[0]!r}") from exc
         for item in selected:
-            if (item.n_predict, item.temperature, item.top_p, item.top_k) != (
-                    recipe.n_predict, recipe.temperature, recipe.top_p, recipe.top_k):
+            if ((item.n_predict, item.temperature, item.top_k) != (
+                    recipe.n_predict, recipe.temperature, recipe.top_k)
+                    or (item.top_p is not None and item.top_p != recipe.top_p)):
                 raise PlannedServingError("frozen prompt workload differs from arm recipe")
         return tuple((item.prompt_id, item.body) for item in selected)
 
@@ -765,7 +830,7 @@ def run_planned_comparison(plan: ep.ExperimentPlan, *,
                              _freeze(selected_range.to_dict()) if selected_range is not None else None)
 
 
-__all__ = ["ARTIFACT_SCHEMA", "ARTIFACT_SCHEMA_V2", "ARTIFACT_SCHEMA_V3", "PROMPT_SCHEMA", "RUN_SCHEMA",
+__all__ = ["ARTIFACT_SCHEMA", "ARTIFACT_SCHEMA_V2", "ARTIFACT_SCHEMA_V3", "PROMPT_SCHEMA", "PROMPT_SCHEMA_V2", "RUN_SCHEMA",
            "RUN_SCHEMA_V2", "RUN_SCHEMA_V3", "FrozenPrompt",
            "FrozenPromptManifest", "ExecutionGuard", "PlannedServingError",
            "PlannedServingRun", "STAGES", "StageCompletion", "StageFence", "StagePaused",
