@@ -535,18 +535,24 @@ def _canonical_command(command: tuple[str, ...]) -> tuple[str, dict[str, str | b
 def _canonical_prefix(prefix: tuple[str, ...]) -> str | None:
     if not prefix:
         return None
-    offset = 0
-    if prefix[0] == "numactl":
-        if len(prefix) < 4 or prefix[2] != "--":
-            raise ResolutionError("malformed canonical numactl prefix")
-        policy = prefix[1]
-        if not re.fullmatch(r"--(?:interleave=(?:all|[0-9]+(?:,[0-9]+)*)|"
-                            r"membind=[0-9]+(?:,[0-9]+)*)", policy):
+    policy_pattern = (r"--(?:interleave=(?:all|[0-9]+(?:,[0-9]+)*)|"
+                      r"membind=[0-9]+(?:,[0-9]+)*)")
+    if len(prefix) == 3 and prefix[:2] == ("taskset", "-c"):
+        cpu_list = prefix[2]
+    elif (len(prefix) == 5 and prefix[:2] == ("taskset", "-c")
+          and prefix[3] == "numactl"):
+        cpu_list = prefix[2]
+        if not re.fullmatch(policy_pattern, prefix[4]):
             raise ResolutionError("unsupported canonical numactl policy")
-        offset = 3
-    if len(prefix) != offset + 3 or prefix[offset:offset + 2] != ("taskset", "-c"):
-        raise ResolutionError("canonical topology prefix must end in one taskset declaration")
-    cpu_list = _text(prefix[-1], "canonical topology CPU list")
+    elif (len(prefix) == 6 and prefix[0] == "numactl" and prefix[2] == "--"
+          and prefix[3:5] == ("taskset", "-c")):
+        cpu_list = prefix[5]
+        if not re.fullmatch(policy_pattern, prefix[1]):
+            raise ResolutionError("unsupported canonical numactl policy")
+    else:
+        raise ResolutionError(
+            "canonical topology prefix must contain one taskset declaration and optional numactl")
+    cpu_list = _text(cpu_list, "canonical topology CPU list")
     if not re.fullmatch(r"[0-9]+(?:-[0-9]+)?(?:,[0-9]+(?:-[0-9]+)?)*", cpu_list):
         raise ResolutionError("canonical topology CPU list is malformed")
     return cpu_list
