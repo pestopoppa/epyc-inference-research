@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import copy
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 import errno
 import fcntl
@@ -26,6 +26,7 @@ from ..controller.discovery_supervisor_secure import (
 )
 from . import status
 from . import campaign_command_v2
+from . import maintenance_execution as maintenance_module
 from . import scheduling
 from . import worker_lifecycle as worker_lifecycle_module
 from .native_capture_control import NativeCaptureRefused, NativeCaptureValidator
@@ -677,6 +678,9 @@ class CampaignController:
         self._native_payload_digests: dict[str, str] = {}
         self._native_validator: NativeCaptureValidator | None = None
         self._native_capabilities: set[object] = set()
+        self._maintenance_events: list[dict[str, Any]] = []
+        self._maintenance_state = maintenance_module.MaintenanceState()
+        self._maintenance_tombstone_intent = False
         self._scheduler_engine = scheduler_engine
         self._driver_issued: dict[str, dict[str, Any]] = {}
         self._driver_settled: dict[str, dict[str, Any]] = {}
@@ -795,6 +799,8 @@ class CampaignController:
         acquisition_events: list[dict[str, Any]] = []
         acquisition_revision = 0
         acquisition_last_generation = 0
+        maintenance_events: list[dict[str, Any]] = []
+        maintenance_state = maintenance_module.MaintenanceState()
         a2_execution_entries: dict[str, list[Any]] = {}
         a2_logical_executions: dict[str, str] = {}
         a2_bank_sources: dict[str, list[str]] = {}
@@ -880,6 +886,25 @@ class CampaignController:
                         raise journal_module.JournalCorruption(
                             "worker lifecycle continuation breaks durable owner binding")
                 worker_events.append(copy.deepcopy(dict(entry.payload)))
+                continue
+            if entry.kind == journal_module.KIND_MAINTENANCE_EXECUTION:
+                try:
+                    row = maintenance_module.validate_event(entry.payload)
+                    token = maintenance_module.ExclusionToken.from_dict(row["token"])
+                    if (not saw_start
+                            or token.campaign_id != self.resolved.campaign_id
+                            or token.config_generation != self.config_generation
+                            or token.config_digest != self.config_digest
+                            or token.supervisor_incarnation != last_incarnation
+                            or token.supervisor_id
+                            != self._maintenance_supervisor_id()):
+                        raise maintenance_module.MaintenanceExecutionRefused(
+                            "maintenance event breaks current owner binding")
+                    maintenance_events.append(copy.deepcopy(row))
+                    maintenance_state = maintenance_module.project_events(maintenance_events)
+                except maintenance_module.MaintenanceExecutionRefused as exc:
+                    raise journal_module.JournalCorruption(
+                        f"maintenance execution replay is inconsistent: {exc}") from exc
                 continue
             if entry.kind == journal_module.KIND_WORKER_ACQUISITION:
                 violations = journal_module._validate_native_payload(entry.kind, entry.payload)
@@ -1293,9 +1318,25 @@ class CampaignController:
         self._candidate_entries = candidate_entries
         self._native_records = native_records
         self._native_payload_digests = native_payload_digests
+        self._maintenance_events = maintenance_events
+        self._maintenance_state = maintenance_state
+        if maintenance_state.owned and maintenance_state.phase != "UNRESOLVED":
+            self._maintenance_state = replace(
+                maintenance_state, phase="UNRESOLVED",
+                reason="controller restarted before exact maintenance settlement")
+        self._maintenance_tombstone_intent = maintenance_state.owned
         self._a2_execution_entries = a2_execution_entries
         self._a2_logical_executions = a2_logical_executions
         self._a2_bank_sources = a2_bank_sources
+
+    def _maintenance_supervisor_id(self) -> str:
+        if self._supervisor_id is not None:
+            return self._supervisor_id
+        return "supervisor-" + schemas.content_hash({
+            "campaign_id": self.resolved.campaign_id,
+            "config_digest": self.config_digest,
+            "store": str(self.store),
+        })
 
     def _initialize_worker_lifecycle_locked(self) -> None:
         if not self._mutex._is_owned():
@@ -1529,6 +1570,8 @@ class CampaignController:
         """Run one provider-authorized stage without holding the command lock."""
         with self._mutex:
             self._require_active_locked()
+            if self._maintenance_state.owned:
+                raise ControlRefused("worker admission is fenced by maintenance exclusion")
             if not isinstance(request, worker_lifecycle_module.StageRequest):
                 raise TypeError("request must be StageRequest")
             binding = (self._worker_lifecycle.binding
@@ -2044,7 +2087,8 @@ class CampaignController:
     def _settle_v2_commands_locked(self) -> None:
         if self.snapshot_version not in {2, 3} or self._worker_run_active \
                 or self._worker_projection.active \
-                or self._acquisition_projection.pending is not None:
+                or self._acquisition_projection.pending is not None \
+                or self._maintenance_state.owned:
             return
         for request_id, prior in tuple(self._command_results.items()):
             if prior.get("completed") is not False:
@@ -2252,7 +2296,8 @@ class CampaignController:
                              and self.desired_state == "drained"
                              and not self._worker_run_active
                              and not self._worker_projection.active
-                             and self._acquisition_projection.pending is None)
+                             and self._acquisition_projection.pending is None
+                             and not self._maintenance_state.owned)
                 if clean:
                     return copy.deepcopy(result)
                 remaining = float(deadline) - time.monotonic()
@@ -2348,6 +2393,9 @@ class CampaignController:
                 raise NativeCaptureRefused(
                     "measurement_id was already used for different capture bytes")
             return copy.deepcopy(prior)
+        if self._maintenance_state.owned:
+            raise NativeCaptureRefused(
+                "new native dependency publication is fenced by maintenance exclusion")
         if self.desired_state == "drained":
             raise NativeCaptureRefused("drained controller refuses new native captures")
         if self._native_validator is None:
@@ -2370,6 +2418,226 @@ class CampaignController:
             self._poisoned = True
             raise
         return copy.deepcopy(entry)
+
+    def _maintenance_require_token_locked(
+            self, token: maintenance_module.ExclusionToken) -> None:
+        if not isinstance(token, maintenance_module.ExclusionToken):
+            raise TypeError("token must be an ExclusionToken")
+        current = self._maintenance_state.token
+        if not self._maintenance_state.owned or current is None or token != current:
+            raise ControlRefused("maintenance exclusion token is not the indexed owner")
+        if (token.campaign_id != self.resolved.campaign_id
+                or token.config_digest != self.config_digest
+                or token.config_generation != self.config_generation
+                or token.supervisor_id != self._maintenance_supervisor_id()
+                or token.supervisor_incarnation != self.supervisor_incarnation):
+            raise ControlRefused("maintenance exclusion token has stale owner binding")
+
+    def _maintenance_append_locked(self, row: Mapping[str, Any]):
+        self._require_active_locked()
+        validated = maintenance_module.validate_event(row)
+        try:
+            projected = maintenance_module.project_events(
+                [*self._maintenance_events, validated])
+        except maintenance_module.MaintenanceExecutionRefused as exc:
+            raise ControlRefused(f"invalid maintenance transition: {exc}") from exc
+        assert self._journal is not None
+        try:
+            entry = self._journal.append(
+                journal_module.KIND_MAINTENANCE_EXECUTION, validated)
+            self._verify_journal_layout(self.store / "journal")
+        except BaseException:
+            self._poisoned = True
+            raise
+        self._journal_cursor = entry.seq
+        self._maintenance_events.append(copy.deepcopy(validated))
+        self._maintenance_state = projected
+        return copy.deepcopy(entry)
+
+    def maintenance_admit(self, job):
+        """Reserve only from a complete native catalog; unavailable until connected."""
+        if not isinstance(job, maintenance_module.consumer.RetentionJob):
+            raise TypeError("job must be a native RetentionJob")
+        with self._mutex:
+            self._require_active_locked()
+            if (self._worker_run_active or self._worker_projection.active
+                    or self._acquisition_projection.pending is not None):
+                raise ControlRefused("worker ownership prevents maintenance admission")
+            if self._candidate_pending is not None or self._candidate_context_token is not None:
+                raise ControlRefused("candidate mutation prevents maintenance admission")
+            if self._maintenance_state.owned:
+                previous = self._maintenance_state.token
+                if self._maintenance_state.phase != "UNRESOLVED" or previous is None:
+                    raise ControlRefused("maintenance exclusion is already owned")
+                if (job.plan.snapshot_id != previous.snapshot_id
+                        or job.plan.snapshot_generation != previous.snapshot_generation
+                        or job.plan.snapshot_digest != previous.snapshot_digest
+                        or job.plan.plan_digest != previous.plan_digest
+                        or job.policy_digest != previous.policy_digest
+                        or job.selected_artifact_ids != previous.selected_artifact_ids):
+                    raise ControlRefused(
+                        "maintenance recovery job differs from unresolved intent")
+                token = maintenance_module.ExclusionToken(
+                    "maintenance-recovery-" + schemas.content_hash({
+                        "predecessor": previous.token_digest,
+                        "supervisor_incarnation": self.supervisor_incarnation,
+                    })[:24],
+                    self.resolved.campaign_id, self.config_digest,
+                    self.config_generation, self._maintenance_supervisor_id(),
+                    self.supervisor_incarnation, previous.snapshot_id,
+                    previous.snapshot_generation, previous.snapshot_digest,
+                    previous.plan_digest, previous.policy_digest,
+                    previous.selected_artifact_ids, self.clock(), previous.token_digest)
+                self._maintenance_append_locked(maintenance_module.make_event(
+                    "INTENT", token, occurred_at=self.clock()))
+                self._maintenance_tombstone_intent = True
+                return token
+            raise ControlRefused(
+                "native retention artifact/dependency catalog coverage is unavailable")
+
+    def maintenance_revalidate(self, token, hold) -> None:
+        with self._mutex:
+            self._require_active_locked()
+            self._maintenance_require_token_locked(token)
+            maintenance_module._validate_hold(hold, token,
+                                              previous=self._maintenance_state.hold)
+            try:
+                current = datetime.fromisoformat(self.clock().replace("Z", "+00:00"))
+            except ValueError as exc:
+                raise ControlRefused("controller clock is not ISO-8601") from exc
+            if hold.deadline <= current.timestamp():
+                raise ControlRefused("maintenance hold deadline expired")
+            phase = self._maintenance_state.phase
+            if phase not in {"INTENT", "PROVIDER_HELD", "MUTATION_REVALIDATED"}:
+                raise ControlRefused("maintenance exclusion is not revalidatable")
+            event = "PROVIDER_HELD" if phase == "INTENT" else "MUTATION_REVALIDATED"
+            self._maintenance_append_locked(maintenance_module.make_event(
+                event, token, hold=hold, occurred_at=self.clock()))
+
+    def maintenance_append_tombstone(
+            self, token, kind: str, payload: Mapping[str, Any], campaign_id: str | None):
+        with self._mutex:
+            self._require_active_locked()
+            self._maintenance_require_token_locked(token)
+            if self._maintenance_state.phase != "MUTATION_REVALIDATED":
+                raise ControlRefused("tombstone append lacks immediate maintenance revalidation")
+            if kind != journal_module.KIND_TOMBSTONE:
+                raise ControlRefused("maintenance may append only native tombstones")
+            if campaign_id != self.resolved.campaign_id:
+                raise ControlRefused("maintenance tombstone campaign binding differs")
+            assert self._journal is not None
+            try:
+                entry = self._journal.append(kind, payload, campaign_id=campaign_id)
+                self._verify_journal_layout(self.store / "journal")
+            except BaseException:
+                self._poisoned = True
+                raise
+            self._journal_cursor = entry.seq
+            if payload.get("reclamation_state") == "intent":
+                self._maintenance_tombstone_intent = True
+            self._maintenance_state = replace(
+                self._maintenance_state, phase="PROVIDER_HELD")
+            return copy.deepcopy(entry)
+
+    def maintenance_io_complete(self, token, cost) -> None:
+        if not isinstance(cost, maintenance_module.MaintenanceCost):
+            raise TypeError("cost must be MaintenanceCost")
+        with self._mutex:
+            self._require_active_locked()
+            if (self._maintenance_state.token == token
+                    and self._maintenance_state.phase == "IO_COMPLETE"
+                    and self._maintenance_state.cost == cost):
+                return
+            self._maintenance_require_token_locked(token)
+            if self._maintenance_state.phase not in {
+                    "PROVIDER_HELD", "MUTATION_REVALIDATED"}:
+                raise ControlRefused("maintenance I/O completion is out of order")
+            self._maintenance_append_locked(maintenance_module.make_event(
+                "IO_COMPLETE", token, hold=self._maintenance_state.hold, cost=cost,
+                occurred_at=self.clock()))
+
+    def maintenance_complete(self, token, accounting) -> None:
+        if not isinstance(accounting, maintenance_module.AccountingReceipt):
+            raise TypeError("accounting must be AccountingReceipt")
+        with self._mutex:
+            self._require_active_locked()
+            if (self._maintenance_state.token == token
+                    and self._maintenance_state.phase == "COMPLETED"
+                    and self._maintenance_state.accounting_receipt_digest
+                    == accounting.receipt_digest):
+                return
+            self._maintenance_require_token_locked(token)
+            if (self._maintenance_state.phase != "IO_COMPLETE"
+                    or accounting.token_digest != token.token_digest
+                    or self._maintenance_state.hold is None
+                    or accounting.hold_receipt_digest
+                    != self._maintenance_state.hold.receipt_digest
+                    or accounting.cost != self._maintenance_state.cost
+                    or accounting.disposition != "complete"):
+                raise ControlRefused("maintenance accounting is out of order or misbound")
+            self._maintenance_append_locked(maintenance_module.make_event(
+                "COMPLETED", token, hold=self._maintenance_state.hold,
+                cost=self._maintenance_state.cost,
+                accounting_receipt_digest=accounting.receipt_digest,
+                occurred_at=self.clock()))
+            self._maintenance_tombstone_intent = False
+            self._settle_v2_commands_locked()
+
+    def maintenance_abort(self, token, reason: str, receipt, hold=None) -> None:
+        with self._mutex:
+            self._require_active_locked()
+            receipt_digest = getattr(receipt, "receipt_digest", None)
+            if (self._maintenance_state.token == token
+                    and self._maintenance_state.phase == "ABORTED"
+                    and self._maintenance_state.reason == reason
+                    and self._maintenance_state.abort_receipt_digest == receipt_digest):
+                return
+            self._maintenance_require_token_locked(token)
+            if self._maintenance_tombstone_intent:
+                raise ControlRefused("durable tombstone intent requires unresolved recovery")
+            if isinstance(receipt, maintenance_module.NoHoldReceipt):
+                if hold is not None or self._maintenance_state.phase != "INTENT":
+                    raise ControlRefused("no-hold refusal is out of order")
+                try:
+                    maintenance_module._validate_no_hold(receipt, token)
+                except maintenance_module.MaintenanceExecutionRefused as exc:
+                    raise ControlRefused("no-hold refusal receipt is misbound") from exc
+                event_hold = event_cost = accounting_digest = None
+            elif isinstance(receipt, maintenance_module.AccountingReceipt):
+                if not isinstance(hold, maintenance_module.HoldReceipt):
+                    raise ControlRefused("aborted accounting lacks its provider hold")
+                previous = self._maintenance_state.hold
+                try:
+                    maintenance_module._validate_hold(hold, token, previous=previous)
+                    event_cost = maintenance_module.MaintenanceCost(0, 0, 0, 0)
+                    maintenance_module._validate_accounting(
+                        receipt, hold, token, event_cost, "aborted")
+                except maintenance_module.MaintenanceExecutionRefused as exc:
+                    raise ControlRefused("aborted accounting receipt is misbound") from exc
+                event_hold = hold
+                accounting_digest = receipt.receipt_digest
+            else:
+                raise TypeError("receipt must be AccountingReceipt or NoHoldReceipt")
+            self._maintenance_append_locked(maintenance_module.make_event(
+                "ABORTED", token, hold=event_hold, cost=event_cost,
+                accounting_receipt_digest=accounting_digest,
+                abort_receipt=receipt,
+                reason=reason, occurred_at=self.clock()))
+            self._settle_v2_commands_locked()
+
+    def maintenance_unresolved(self, token, reason: str) -> None:
+        with self._mutex:
+            self._require_active_locked()
+            if (self._maintenance_state.token == token
+                    and self._maintenance_state.phase == "UNRESOLVED"
+                    and self._maintenance_state.reason == reason):
+                return
+            self._maintenance_require_token_locked(token)
+            self._maintenance_append_locked(maintenance_module.make_event(
+                "UNRESOLVED", token, hold=self._maintenance_state.hold,
+                cost=self._maintenance_state.cost, reason=reason,
+                occurred_at=self.clock()))
+
 
     @property
     def command_results(self) -> dict[str, dict[str, Any]]:
@@ -2493,6 +2761,9 @@ class CampaignController:
         transaction_key = (str(payload["transaction_id"]), str(payload["operation"]),
                            str(payload["payload_digest"]))
         if payload["phase"] == "INTENT":
+            if self._maintenance_state.owned:
+                raise ControlRefused(
+                    "candidate mutation is fenced by maintenance exclusion")
             if (self._candidate_pending is not None
                     or transaction_key[0] in self._candidate_completed):
                 raise ControlRefused(
@@ -3119,6 +3390,10 @@ class CampaignController:
 
     def close(self) -> None:
         with self._mutex:
+            if self._entered and self._maintenance_state.owned:
+                raise ControlRefused(
+                    "maintenance ownership is active/unresolved; "
+                    "controller ownership retained")
             if self.snapshot_version in {2, 3} and self._entered \
                     and (self._worker_run_active or self._worker_projection.active
                          or self._acquisition_projection.pending is not None):
