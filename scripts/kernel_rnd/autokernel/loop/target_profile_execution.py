@@ -100,23 +100,38 @@ class TargetProfileExecution:
     """Execute one configured profiler and publish its immutable native result."""
 
     def __init__(self, *, controller: campaign_control.CampaignController,
-                 mechanism: ProfileMechanism) -> None:
+                 mechanism: ProfileMechanism | None = None,
+                 mechanisms: Mapping[str, ProfileMechanism] | None = None) -> None:
         if not isinstance(controller, campaign_control.CampaignController):
             raise TypeError("controller must be CampaignController")
-        if not isinstance(mechanism, ProfileMechanism):
+        if mechanisms is not None:
+            if mechanism is not None or not isinstance(mechanisms, Mapping) or not mechanisms:
+                raise ProfileExecutionRefused("profile mechanism selection is ambiguous/empty")
+            selected = dict(mechanisms)
+            for target, item in selected.items():
+                if (type(item) is not ProfileMechanism
+                        or target != item.loaded_identity["target_revision_digest"]):
+                    raise ProfileExecutionRefused("profile mechanism target/type differs")
+        elif isinstance(mechanism, ProfileMechanism):
+            selected = {mechanism.loaded_identity["target_revision_digest"]: mechanism}
+        else:
             raise ProfileExecutionRefused("target profiling mechanism is unsupported/absent")
         self.controller = controller
         self.mechanism = mechanism
+        self.mechanisms = MappingProxyType(selected)
 
     def prepare(self, *, profile_request: Mapping[str, Any], catalog_id: str,
                 transition_id: str, stage_plan_digest: str, clock_domain: str,
                 verified_at: float, valid_until: float,
                 selected_work: Any = None) -> Mapping[str, Any]:
         request = _profile_request(profile_request)
+        mechanism = self.mechanisms.get(request["target_revision_digest"])
+        if mechanism is None:
+            raise ProfileExecutionRefused("mechanism loaded identity targets another revision")
         for value, label in ((catalog_id, "catalog_id"), (transition_id, "transition_id"),
                              (stage_plan_digest, "stage_plan_digest")):
             state._sha(value, label)
-        if request["target_revision_digest"] != self.mechanism.loaded_identity[
+        if request["target_revision_digest"] != mechanism.loaded_identity[
                 "target_revision_digest"]:
             raise ProfileExecutionRefused("mechanism loaded identity targets another revision")
         request_digest = state.digest(request)
@@ -124,27 +139,27 @@ class TargetProfileExecution:
             profile_request=request, profile_request_digest=request_digest,
             catalog_id=catalog_id, transition_id=transition_id,
             stage_plan_digest=stage_plan_digest,
-            max_output_bytes=self.mechanism.max_output_bytes,
+            max_output_bytes=mechanism.max_output_bytes,
             selected_work=selected_work)
         try:
-            current_sha = observation_binding._artifact_identity(self.mechanism.binary)["sha256"]
+            current_sha = observation_binding._artifact_identity(mechanism.binary)["sha256"]
         except (OSError, observation_binding.ObservationBindingError) as exc:
             self.controller.cancel_target_profile_execution(reservation)
             raise ProfileExecutionRefused("profiling mechanism is unreadable") from exc
-        if current_sha != self.mechanism.binary_sha256:
+        if current_sha != mechanism.binary_sha256:
             self.controller.cancel_target_profile_execution(reservation)
             raise ProfileExecutionRefused("profiling mechanism bytes changed")
         worker_request = worker_lifecycle.StageRequest(
             request_id=reservation.request_id, plan_digest=stage_plan_digest,
             lineage_id=transition_id, stage_id=reservation.stage_id, stage="setup",
-            argv=(str(self.mechanism.binary), json.dumps(
+            argv=(str(mechanism.binary), json.dumps(
                 request, sort_keys=True, separators=(",", ":"))),
-            env=dict(self.mechanism.env), cwd=self.mechanism.cwd,
+            env=dict(mechanism.env), cwd=mechanism.cwd,
             artifact_contract_digest=state.digest({
                 "profile_request": request_digest,
-                "loaded_identity": dict(self.mechanism.loaded_identity)}),
-            max_stage_seconds=self.mechanism.max_stage_seconds,
-            teardown_seconds=self.mechanism.teardown_seconds,
+                "loaded_identity": dict(mechanism.loaded_identity)}),
+            max_stage_seconds=mechanism.max_stage_seconds,
+            teardown_seconds=mechanism.teardown_seconds,
             control_revision=self.controller.control_revision)
         terminal = self.controller.run_worker_stage(worker_request)
         exact = self.controller.worker_terminal_for_request(
@@ -170,7 +185,7 @@ class TargetProfileExecution:
                 lineage_id=terminal.lineage_id, stage_id=terminal.stage_id,
                 worker_id=terminal.worker_id, worker_generation=terminal.worker_generation,
                 result_digest=terminal.result_digest,
-                max_bytes=self.mechanism.max_output_bytes)
+                max_bytes=mechanism.max_output_bytes)
         except Exception as exc:
             self.controller.finish_target_profile_execution(
                 reservation=reservation, terminal=terminal,
@@ -187,7 +202,7 @@ class TargetProfileExecution:
                 or set(output) != {"schema", "profile_content", "loaded_identity",
                                    "artifact_identity", "measurement_carrier"}
                 or output["schema"] != PROFILE_OUTPUT_SCHEMA
-                or output["loaded_identity"] != dict(self.mechanism.loaded_identity)):
+                or output["loaded_identity"] != dict(mechanism.loaded_identity)):
             self.controller.finish_target_profile_execution(
                 reservation=reservation, terminal=terminal,
                 provider_cost_receipt=held)
@@ -211,31 +226,40 @@ class TargetProfileExecution:
                 reservation=reservation, terminal=terminal,
                 provider_cost_receipt=held)
             raise ProfileExecutionRefused("profile output lacks registered write-side carriers")
-        profile_digest = state.digest({
-            "profile_content": output["profile_content"],
-            "loaded_identity": output["loaded_identity"],
-            "artifact_identity": output["artifact_identity"]})
-        event = {
-            "schema": state.PROFILE_SCHEMA, "event": "PROFILE_VERIFIED",
-            "campaign_id": self.controller.resolved.campaign_id,
-            "config_generation": self.controller.config_generation,
-            "config_digest": self.controller.config_digest,
-            "supervisor_id": self.controller._supervisor_id,
-            "supervisor_incarnation": self.controller.supervisor_incarnation,
-            "control_revision": self.controller.control_revision,
-            "catalog_id": catalog_id, "transition_id": transition_id,
-            "stage_plan_digest": stage_plan_digest,
-            "profile_request_digest": request_digest,
-            "target_revision_digest": request["target_revision_digest"],
-            "target_profile_digest": profile_digest,
-            "profile_request": request, "profile_content": dict(output["profile_content"]),
-            "artifact_identity": dict(output["artifact_identity"]),
-            "loaded_identity": dict(output["loaded_identity"]),
-            "measurement_carrier": dict(carrier), "clock_domain": clock_domain,
-            "verifier_ref": f"controller-worker:{terminal.worker_id}:{terminal.worker_generation}",
-            "verified_at": verified_at, "valid_until": valid_until,
-            "occurred_at": self.controller.clock(),
-        }
+        try:
+            for name in ("profile_content", "artifact_identity"):
+                if not isinstance(output[name], Mapping) or not output[name]:
+                    raise ProfileExecutionRefused(f"profile output {name} must be a nonempty object")
+            state._canonical(output)
+            profile_digest = state.digest({
+                "profile_content": output["profile_content"],
+                "loaded_identity": output["loaded_identity"],
+                "artifact_identity": output["artifact_identity"]})
+            event = {
+                "schema": state.PROFILE_SCHEMA, "event": "PROFILE_VERIFIED",
+                "campaign_id": self.controller.resolved.campaign_id,
+                "config_generation": self.controller.config_generation,
+                "config_digest": self.controller.config_digest,
+                "supervisor_id": self.controller._supervisor_id,
+                "supervisor_incarnation": self.controller.supervisor_incarnation,
+                "control_revision": self.controller.control_revision,
+                "catalog_id": catalog_id, "transition_id": transition_id,
+                "stage_plan_digest": stage_plan_digest,
+                "profile_request_digest": request_digest,
+                "target_revision_digest": request["target_revision_digest"],
+                "target_profile_digest": profile_digest,
+                "profile_request": request, "profile_content": dict(output["profile_content"]),
+                "artifact_identity": dict(output["artifact_identity"]),
+                "loaded_identity": dict(output["loaded_identity"]),
+                "measurement_carrier": dict(carrier), "clock_domain": clock_domain,
+                "verifier_ref": f"controller-worker:{terminal.worker_id}:{terminal.worker_generation}",
+                "verified_at": verified_at, "valid_until": valid_until,
+                "occurred_at": self.controller.clock(),
+            }
+        except Exception as exc:
+            self.controller.finish_target_profile_execution(
+                reservation=reservation, terminal=terminal, provider_cost_receipt=held)
+            raise ProfileExecutionRefused("profile output content/identity is malformed") from exc
         try:
             return self.controller.record_verified_target_profile(
                 event, reservation=reservation, terminal=terminal,
