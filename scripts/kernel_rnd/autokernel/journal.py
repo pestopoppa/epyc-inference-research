@@ -262,6 +262,7 @@ KIND_CAMPAIGN_COMMAND_V2 = "CAMPAIGN_COMMAND_V2"
 CAMPAIGN_COMMAND_V2_SCHEMA = "epyc.autokernel.campaign_command_transition.v2"
 KIND_CAMPAIGN_COMMAND_V3 = "CAMPAIGN_COMMAND_V3"
 CAMPAIGN_COMMAND_V3_SCHEMA = "epyc.autokernel.campaign_command_transition.v3"
+KIND_MAINTENANCE_EXECUTION = "MAINTENANCE_EXECUTION"
 KIND_UNIFIED_DRIVER_ISSUED = "UNIFIED_DRIVER_ISSUED"
 UNIFIED_DRIVER_ISSUED_SCHEMA = "epyc.autokernel.unified_driver_issued.v1"
 KIND_UNIFIED_DRIVER_SETTLED = "UNIFIED_DRIVER_SETTLED"
@@ -300,6 +301,7 @@ NATIVE_KINDS = frozenset({
     KIND_WORKER_ACQUISITION,
     KIND_CAMPAIGN_COMMAND_V2,
     KIND_CAMPAIGN_COMMAND_V3,
+    KIND_MAINTENANCE_EXECUTION,
     KIND_UNIFIED_DRIVER_ISSUED,
     KIND_UNIFIED_DRIVER_SETTLED,
     KIND_A2_RUNTIME_EXECUTION,
@@ -1177,6 +1179,15 @@ def _validate_native_payload(kind: str, payload: Mapping[str, Any]) -> list:
                 validate_transition(payload)
         except Exception as exc:
             out.append(f"lifecycle/control event: {exc}")
+    elif kind == KIND_MAINTENANCE_EXECUTION:
+        try:
+            if __package__:
+                from .loop.maintenance_execution import validate_event
+            else:
+                from autokernel.loop.maintenance_execution import validate_event
+            validate_event(payload)
+        except Exception as exc:
+            out.append(f"maintenance execution event: {exc}")
     elif kind == KIND_PLANNED_SERVING_ARM_CAPTURED:
         expected = {"schema", "measurement_id", "carrier", "artifact"}
         if set(payload) != expected:
@@ -3142,6 +3153,7 @@ __all__ = [
     "KIND_WORKER_ACQUISITION", "WORKER_ACQUISITION_SCHEMA",
     "KIND_CAMPAIGN_COMMAND_V2", "CAMPAIGN_COMMAND_V2_SCHEMA",
     "KIND_CAMPAIGN_COMMAND_V3", "CAMPAIGN_COMMAND_V3_SCHEMA",
+    "KIND_MAINTENANCE_EXECUTION",
     "KIND_UNIFIED_DRIVER_ISSUED", "UNIFIED_DRIVER_ISSUED_SCHEMA",
     "KIND_UNIFIED_DRIVER_SETTLED", "UNIFIED_DRIVER_SETTLED_SCHEMA",
     "KIND_A2_RUNTIME_EXECUTION", "A2_RUNTIME_EXECUTION_SCHEMA",

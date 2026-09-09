@@ -313,6 +313,42 @@ class CandidateTransactions:
     def inspect(self) -> dict[str, Any]:
         return self.controller.candidate_transaction(self._inspect_locked)
 
+    def retention_view(self):
+        """Verify actual candidate objects, then refuse absent external catalog roots."""
+        def locked(context):
+            replay = self._replay(context)
+            if replay.pending is not None or replay.state is None:
+                raise CandidateRecoveryRequired(
+                    "candidate state is not settled for retention collection")
+            manifests: dict[str, cm.CandidateManifest] = {}
+            for request_id in context.completed_candidate_ids():
+                completed = context.completed_candidate(request_id)
+                if completed is None:
+                    continue
+                row = completed["intent"]
+                for kind, value in self._documents(
+                        row["operation"], row["data"]["operation_payload"]):
+                    if kind != "manifest":
+                        continue
+                    manifest = cm.CandidateManifest.from_dict(value)
+                    self._verify_immutable("manifest", manifest.to_dict())
+                    manifests[manifest.manifest_digest] = manifest
+            required = {replay.state.integration_tip}
+            if replay.state.validated_candidate is not None:
+                required.add(replay.state.validated_candidate)
+            for batch in replay.state.active_batches:
+                required.add(batch.candidate_manifest_digest)
+                required.add(batch.comparator_manifest_digest)
+            missing = sorted(required - set(manifests))
+            if missing:
+                raise CandidateRecoveryRequired(
+                    f"restore native candidate manifests before retention: {missing}")
+            raise CandidateRecoveryRequired(
+                "native retention artifact/dependency catalog coverage is unavailable; "
+                "candidate objects alone do not cover worker, evidence, DSO/RUNPATH roots")
+
+        return self.controller.candidate_transaction(locked)
+
     def _inspect_locked(self, context) -> dict[str, Any]:
         replay = self._replay(context)
         if replay.pending is not None:
