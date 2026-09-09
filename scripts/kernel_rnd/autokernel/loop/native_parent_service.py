@@ -100,7 +100,7 @@ class NativeParentEvidenceService(de.UnknownParentEvidenceProducer):
                  model_preparations: Mapping[str, Any] | None = None,
                  factual_configuration: NativeFactualEvidenceConfiguration | None = None) -> None:
         super().__init__(authority, prepared, lifecycle, observation_configuration)
-        if (prepared.schema != uw.PREPARED_SCHEMA_V2
+        if (not prepared.native_observed
                 or type(registry) is not replay.IssuedNativeEvidenceRegistry
                 or lifecycle is None or observation_configuration is None):
             raise de.DriverExecutionRefused("native factual service requires v2 parent authority")
@@ -144,7 +144,7 @@ class NativeParentEvidenceService(de.UnknownParentEvidenceProducer):
             return
         from .native_model_preparation import (
             ActiveObservationPreparationClaim, BINDING_SCHEMA)
-        target = self.prepared.dispatch["proposal"]["target_revision_digest"]
+        target = self.prepared.plan.target_revision
         preparation = self.factual_configuration.preparation(
             target, recipe.execution_digest)
         if preparation is None:

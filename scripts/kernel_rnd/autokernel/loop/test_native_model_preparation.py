@@ -81,8 +81,8 @@ def _native_service(tmp_path: Path, spec, *, claim=None):
     instance.lifecycle = ClaimLifecycle(claim)
     instance._native_store = mc.ArtifactStore(tmp_path / "artifacts")
     instance._model_preparation_receipts = {}
-    instance.prepared = SimpleNamespace(dispatch={"proposal": {
-        "target_revision_digest": spec.target_revision_digest}})
+    instance.prepared = SimpleNamespace(
+        plan=SimpleNamespace(target_revision=spec.target_revision_digest))
     return instance, claim
 
 
@@ -163,7 +163,7 @@ def test_selected_target_recipe_and_entry_must_match_before_binding(tmp_path, fi
                               to_dict=lambda: {"path": spec.entry_path,
                                                "sha256": spec.entry_sha256}))
     if field == "target":
-        parent.prepared.dispatch["proposal"]["target_revision_digest"] = "3" * 64
+        parent.prepared.plan.target_revision = "3" * 64
     elif field == "execution":
         recipe.execution_digest = "3" * 64
     elif field == "path":

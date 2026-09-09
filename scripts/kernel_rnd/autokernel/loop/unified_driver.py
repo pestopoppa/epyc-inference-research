@@ -35,6 +35,8 @@ MATERIALIZATION_BINDING_SCHEMA = "epyc.autokernel.unified_materialization_bindin
 SELECTED_PROFILE_WORK_SCHEMA = "epyc.autokernel.selected_profile_work.v1"
 SELECTED_ACTOR_WORK_SCHEMA = "epyc.autokernel.selected_actor_work.v1"
 WORK_KINDS = frozenset({"runtime_comparison", "actor_preparation", "profile_preparation"})
+CALIBRATION_WORK_KIND = "calibration_preparation"
+WORK_KINDS = WORK_KINDS | {CALIBRATION_WORK_KIND}
 
 
 class DriverRefused(RuntimeError):
@@ -369,15 +371,14 @@ class PlanningCatalog:
             row = dict(_mapping(work[stage.digest], "catalog work"))
             if set(row) != {"kind", "stage_plan_binding", "stage_plan_digest", "payload"}:
                 raise DriverRefused("catalog work fields differ")
-            if row["kind"] not in {"runtime_comparison", "actor_preparation",
-                                    "profile_preparation"}:
+            if row["kind"] not in WORK_KINDS:
                 raise DriverRefused("catalog work kind is unsupported")
             if row["stage_plan_binding"] not in {"experiment_plan",
                                                   "preparation_contract"}:
                 raise DriverRefused("catalog plan binding is unsupported")
-            if ((row["kind"] == "runtime_comparison")
+            if ((row["kind"] in {"runtime_comparison", CALIBRATION_WORK_KIND})
                     != (row["stage_plan_binding"] == "experiment_plan")):
-                raise DriverRefused("only runtime work may bind an ExperimentPlan")
+                raise DriverRefused("only runtime work or typed calibration may bind an ExperimentPlan")
             _sha(row["stage_plan_digest"], "stage_plan_digest")
             payload = _mapping(row["payload"], "catalog work payload")
             if row["kind"] == "runtime_comparison":
@@ -392,6 +393,12 @@ class PlanningCatalog:
                         or proposal.experiment_plan_digest != plan.digest
                         or plan.digest != row["stage_plan_digest"]):
                     raise DriverRefused("runtime catalog Plan/proposal/stage binding differs")
+            elif row["kind"] == CALIBRATION_WORK_KIND:
+                from .serving_preparation import CalibrationPreparationRequest
+                request = CalibrationPreparationRequest.from_dict(payload)
+                if (request.stage_proposal.digest != stage.digest
+                        or request.plan.digest != row["stage_plan_digest"]):
+                    raise DriverRefused("calibration catalog Plan/request/stage binding differs")
             elif row["kind"] == "actor_preparation":
                 required = {"schema", "actor_kind", "actor_identity", "prompt",
                             "mandatory_conflicts", "proposal", "cache_key"}
@@ -498,6 +505,7 @@ class UnifiedCampaignDriver:
                  execution_inputs: Mapping[str, Mapping[str, Any] | ExecutionInput] | None = None,
                  executable_work_kinds: Collection[str] | None = None,
                  feed_owner: Any = None,
+                 calibration_requests: Sequence[Any] = (),
                  monotonic_clock=time.monotonic) -> None:
         self.resolved = campaign.ResolvedCampaign.from_dict(resolved_campaign.to_dict())
         self.controller = controller
@@ -542,6 +550,50 @@ class UnifiedCampaignDriver:
                 raise DriverRefused("execution input key differs from target revision")
             parsed_inputs[key] = parsed
         self.execution_inputs = MappingProxyType(parsed_inputs)
+        from .serving_preparation import bounded_requests
+        requests = bounded_requests(calibration_requests,
+                                    max_requests=self.scheduler.config.campaign_attempt_cap)
+        targets = {unified_planner._target_digest(target): target for target in self.resolved.targets}
+        for request in requests:
+            declared = request.declaration
+            anchor = self.runtime_anchors.recipes.get(declared.target_revision)
+            if (declared.target_revision not in targets or anchor is None
+                    or declared.campaign_id != self.resolved.campaign_id
+                    or declared.aa_pair.anchor.to_dict() != anchor.to_dict()):
+                raise DriverRefused("calibration declaration differs from enrolled canonical target")
+            target = targets[declared.target_revision]
+            if (declared.frame["metric"] != target.execution.metric
+                    or declared.frame["metric_direction"] != {
+                        "higher": "higher_better", "lower": "lower_better"
+                    }[target.execution.metric_direction]):
+                raise DriverRefused("calibration metric differs from enrolled target execution")
+            execution = self.execution_inputs.get(declared.target_revision)
+            if (execution is None
+                    or request.prompts.to_dict() != execution.prompt_manifest.to_dict()
+                    or declared.max_stage_seconds != execution.max_stage_seconds
+                    or declared.teardown_seconds != execution.teardown_seconds
+                    or request.plan.loaded_instrument["identity_sha256"] != execution.instrument_id):
+                raise DriverRefused("calibration differs from installed execution inputs")
+            # Reuse the serving owner's per-unit selection semantics. A manifest
+            # may contain more prompts than the arm's concurrent slot count.
+            pair = request.pair
+            for unit in request.plan.expected_units:
+                template = (pair.anchor if unit.arm == "anchor" else pair.candidate).template
+                try:
+                    selected_prompts = request.prompts.requests(unit.expected_prompt_ids, template)
+                except planned_serving.PlannedServingError as exc:
+                    raise DriverRefused(f"calibration unit prompts differ: {exc}") from exc
+                if len(selected_prompts) != template.np:
+                    raise DriverRefused("calibration unit request count differs from arm np")
+            profile = self.profiles.get(declared.target_revision)
+            if profile is not None and profile.quant != declared.frame["quant"]:
+                raise DriverRefused("calibration quant differs from original enrolled profile")
+        if len({item.stage_proposal.digest for item in requests}) != len(requests):
+            raise DriverRefused("calibration requests repeat a scheduler proposal")
+        self.calibration_requests = requests
+        from .serving_preparation import InstalledServingPreparationOwner
+        self.preparation_owner = (InstalledServingPreparationOwner(
+            controller=self.controller, requests=requests) if requests else None)
         self.sink_ref = native_artifact_sink_ref
         raw_kinds = WORK_KINDS if executable_work_kinds is None else executable_work_kinds
         if (isinstance(raw_kinds, (str, bytes)) or not isinstance(raw_kinds, Collection)
@@ -708,7 +760,8 @@ class UnifiedCampaignDriver:
                              selection.to_dict())
 
     def issued_work_kind(self, outcome: DriverOutcome) -> Literal[
-            "runtime_comparison", "actor_preparation", "profile_preparation"]:
+            "runtime_comparison", "actor_preparation", "profile_preparation",
+            "calibration_preparation"]:
         """Return the closed kind of the exact currently issued controller intent."""
         if (not isinstance(outcome, DriverOutcome)
                 or outcome.status != "intent_recorded"
@@ -837,6 +890,49 @@ class UnifiedCampaignDriver:
         return unified_worker.PreparedPlannedServingStage.from_dict(
             {**body, "prepared_digest": _digest(body)})
 
+    def materialize_calibration(self, outcome: DriverOutcome):
+        """Materialize exact scheduler-selected A/A/neutral advice, with no grant."""
+        from . import serving_preparation as preparation, unified_worker
+        if self.issued_work_kind(outcome) != CALIBRATION_WORK_KIND:
+            raise DriverRefused("selected work is not calibration preparation")
+        selection = scheduling.Selection.from_dict(_thaw(outcome.selection))
+        catalog = self._issued_catalog
+        work = catalog.work_by_stage_digest[selection.proposal.digest]
+        request = preparation.CalibrationPreparationRequest.from_dict(_thaw(work["payload"]))
+        dispatch = preparation.CalibrationPreparationDispatch(request, selection)
+        binding = self.controller.unified_driver_materialization_binding(
+            catalog_id=catalog.catalog_id, transition_id=outcome.transition_id,
+            selection=selection.to_dict())
+        binding = dict(_mapping(binding, "calibration materialization binding"))
+        if (set(binding) != {"schema", "campaign_id", "config_digest", "config_generation",
+                "supervisor_id", "supervisor_incarnation", "artifact_root"}
+                or binding.pop("schema") != MATERIALIZATION_BINDING_SCHEMA
+                or binding["campaign_id"] != self.resolved.campaign_id
+                or binding["config_digest"] != campaign_control.resolved_config_digest(self.resolved)):
+            raise DriverRefused("controller calibration materialization binding is stale or foreign")
+        revision = _pinned_source_revision(self.resolved)
+        pair = request.pair
+        sources = {name: {"source_revision": revision,
+                          "model_sha256": recipe.model.sha256,
+                          "build_sha256": recipe.executable.sha256,
+                          "recipe_hash": recipe.template.recipe_hash}
+                   for name, recipe in (("anchor", pair.anchor), ("candidate", pair.candidate))}
+        plan = request.plan
+        capture_base = {key: binding[key] for key in (
+            "campaign_id", "config_digest", "config_generation", "supervisor_id",
+            "supervisor_incarnation")}
+        capture_base.update(instrument_id=plan.loaded_instrument["identity_sha256"],
+            protocol_id=plan.protocol_ref, protocol_status=plan.protocol_status,
+            source_identities=sources)
+        body = {"schema": unified_worker.PREPARED_SCHEMA_V3, "dispatch": dispatch.to_dict(),
+                "plan": plan.to_dict(), "prompt_manifest": request.prompts.to_dict(),
+                "runtime_pair": pair.to_dict(), "capture_context_base": capture_base,
+                "artifact_root": binding["artifact_root"], "previous": None,
+                "max_stage_seconds": request.declaration.max_stage_seconds,
+                "teardown_seconds": request.declaration.teardown_seconds}
+        return unified_worker.PreparedPlannedServingStage.from_dict(
+            {**body, "prepared_digest": _digest(body)})
+
     def materialize_profile(self, outcome: DriverOutcome) -> SelectedProfileWork:
         """Resolve exact selected profile advice through the current controller owner."""
         if (not isinstance(outcome, DriverOutcome)
@@ -961,7 +1057,12 @@ class UnifiedCampaignDriver:
         profile_stages = tuple(request.stage_proposal
                                for key, request in self.profile_requests.items()
                                if key not in self.profiles)
-        stages = (*runtime_stages, *profile_stages)
+        calibration_requests = (() if self.preparation_owner is None else
+                                self.preparation_owner.pending_requests())
+        calibration_by_digest = {item.stage_proposal.digest: item
+                                 for item in calibration_requests}
+        stages = (*runtime_stages, *profile_stages,
+                  *(item.stage_proposal for item in calibration_requests))
         if not stages:
             return DriverOutcome(
                 "waiting", tuple(missing_inputs) or ("no scheduler-ready work",), None, None)
@@ -971,6 +1072,13 @@ class UnifiedCampaignDriver:
         profiles_by_digest = {item.stage_proposal.digest: item
                               for item in self.profile_requests.values()}
         for stage in stages:
+            preparation = calibration_by_digest.get(stage.digest)
+            if preparation is not None:
+                work_by_digest[stage.digest] = {
+                    "kind": CALIBRATION_WORK_KIND, "payload": preparation.to_dict(),
+                    "stage_plan_binding": "experiment_plan",
+                    "stage_plan_digest": preparation.plan.digest}
+                continue
             profile = profiles_by_digest.get(stage.digest)
             if profile is not None:
                 payload = profile.to_dict()

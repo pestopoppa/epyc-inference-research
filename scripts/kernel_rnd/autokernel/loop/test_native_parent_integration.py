@@ -143,7 +143,8 @@ def phase_invocation(tmp_path, issued):
     prepared = _prepared(tmp_path)
     authority = uw.ParentUnitEvidenceAuthority(max_records=len(uw.OBSERVATION_WINDOW_MARKERS))
     invocation = uw.PlannedWorkerInvocation(prepared, authority)
-    invocation.prepared = SimpleNamespace(schema=uw.PREPARED_SCHEMA_V2, plan=context.plan)
+    invocation.prepared = SimpleNamespace(
+        schema=uw.PREPARED_SCHEMA_V2, native_observed=True, plan=context.plan)
     invocation.start = _start(prepared)
     invocation._next = context.unit.order_index
     invocation._active = (context.unit.order_index + 1, context.fence)

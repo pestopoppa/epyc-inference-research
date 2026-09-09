@@ -804,7 +804,7 @@ class CampaignController:
                     selected = (work.get(selection.get("proposal_digest"))
                                 if isinstance(work, Mapping) else None)
                     if (isinstance(selected, Mapping)
-                            and selected.get("kind") == "runtime_comparison"):
+                            and selected.get("kind") in {"runtime_comparison", "calibration_preparation"}):
                         pending_runtime = True
                         break
                 if (self.snapshot_version == 3
@@ -3256,7 +3256,8 @@ class CampaignController:
                     or issued["selection"] != copy.deepcopy(selection)
                     or (issued["supervisor_incarnation"] != self.supervisor_incarnation
                         and (not isinstance(issued_work, Mapping)
-                             or issued_work.get("kind") != "runtime_comparison"))
+                             or issued_work.get("kind") not in {
+                                 "runtime_comparison", "calibration_preparation"}))
                     or issued["config_generation"] != self.config_generation
                     or issued["config_digest"] != self.config_digest):
                 raise ControlRefused(
@@ -3274,6 +3275,53 @@ class CampaignController:
                 "supervisor_incarnation": self.supervisor_incarnation,
                 "artifact_root": str(self._driver_artifact_store.root),
             }
+
+    def unified_driver_preparation_history(self, requests) -> Mapping[str, Any]:
+        """Bounded immutable original issue/settlement facts, with no new authority.
+
+        Only the in-memory journal replay projection is read under this mutex.
+        Preparation artifact reopening and numerical reduction belong to the
+        installed consumer outside the controller lock.
+        """
+        from . import serving_preparation as preparation
+        with self._mutex:
+            self._require_active_locked()
+            if self._scheduler_engine is None:
+                raise ControlRefused("preparation history requires its scheduler budget")
+            maximum = self._scheduler_engine.config.campaign_attempt_cap
+        parsed = preparation.bounded_requests(requests, max_requests=maximum)
+        by_stage = {item.stage_proposal.digest: (
+            item.to_dict(), item.plan.digest, item.digest) for item in parsed}
+        if len(by_stage) != len(parsed):
+            raise ControlRefused("preparation history requests repeat a selected stage")
+        snapshots = []
+        with self._mutex:
+            self._require_active_locked()
+            for issued in self._driver_issued.values():
+                selection = issued["selection"]
+                stage_digest = selection.get("proposal_digest")
+                expected = by_stage.get(stage_digest)
+                if expected is None:
+                    continue
+                request_body, plan_digest, request_digest = expected
+                work = issued["catalog"]["work_by_stage_digest"].get(stage_digest)
+                if (not isinstance(work, Mapping) or work.get("kind") != "calibration_preparation"
+                        or work.get("stage_plan_binding") != "experiment_plan"
+                        or work.get("stage_plan_digest") != plan_digest
+                        or work.get("payload") != request_body):
+                    raise ControlRefused("preparation history differs from exact requested material")
+                original = {key: issued[key] for key in (
+                    "catalog_id", "transition_id", "campaign_id", "config_digest",
+                    "config_generation", "supervisor_incarnation", "selection")}
+                snapshots.append(copy.deepcopy({"request_digest": request_digest,
+                    "issued": original,
+                    "settlement": self._driver_settled.get(issued["transition_id"])}))
+                if len(snapshots) > maximum:
+                    raise ControlRefused("preparation history exceeds campaign attempt budget")
+        body = {"schema": "epyc.autokernel.preparation_history.v1", "records": snapshots}
+        if len(preparation._bytes(body)) > preparation.MAX_CONFIGURATION_BYTES:
+            raise ControlRefused("preparation history exceeds bounded retained bytes")
+        return preparation._freeze(body)
 
     def unified_driver_pending_intent(self) -> Mapping[str, Any] | None:
         """Return the one exact replayed issued-but-unsettled driver record."""
