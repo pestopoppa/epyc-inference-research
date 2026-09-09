@@ -43,7 +43,9 @@ class CaptureProvider:
                                 fence.process_generation_id, fence.lineage_id,
                                 fence.grant_id, fence.container_id, True, True)
 
-    def complete(self, fence, observation):
+    def complete(self, fence, observation, *, native_observation=None):
+        if native_observation is not None:
+            assert set(native_observation) == {"locator", "sha256", "verified"}
         return ps.StageCompletion(
             fence.fence_id, True,
             {name: ep.Witness("pass", f"{name}:{fence.unit_id}")

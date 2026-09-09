@@ -265,6 +265,11 @@ def _code_projection(code: types.CodeType) -> tuple[str, dict[str, Any]]:
     for item in code.co_consts:
         if isinstance(item, types.CodeType):
             status, value = _code_projection(item)
+        elif (type(item) is frozenset and len(item) <= 4096
+              and all(type(member) is str for member in item)):
+            # CPython emits these for literal membership tests. Preserve the
+            # existing outer type tag and sort only exact immutable strings.
+            status, value = "pinned", sorted(item)
         else:
             status, value = _stable_json_value(item)
         constants.append({"status": status, "value": value,
@@ -965,7 +970,9 @@ class ObservationSession:
                                             Mapping[str, Any]] | None = None,
                  monotonic: Callable[[], float] = time.monotonic,
                  wall_clock: Callable[[], str] = _now_utc,
-                 record_callback: Callable[[Mapping[str, Any]], Any] | None = None) -> None:
+                 record_callback: Callable[[Mapping[str, Any]], Any] | None = None,
+                 phase_notice: Callable[[str, Mapping[str, Any],
+                                         Mapping[str, Any] | None], None] | None = None) -> None:
         if not callable(owned_identity_resolver):
             raise ObservationError("a trusted owned identity resolver is required")
         self.context = validate_context(context)
@@ -976,6 +983,9 @@ class ObservationSession:
         self.monotonic = monotonic
         self.wall_clock = wall_clock
         self.record_callback = record_callback
+        if phase_notice is not None and not callable(phase_notice):
+            raise ObservationError("phase notification must be callable")
+        self.phase_notice = phase_notice
         self.artifact_receipt: Any = None
         self.callback_error: str | None = None
         self._condition = threading.Condition()
@@ -1131,6 +1141,13 @@ class ObservationSession:
                                      "captured_at": wall})
             done = self._enqueue_locked(phase, "boundary", mono, wall)
         self._wait_marker(done, phase)
+        if self.phase_notice is not None:
+            with self._condition:
+                target = _json_copy(self._target_binding)
+            # Notification only, never a witness verdict. No observer lock is held
+            # while the inherited parent authority captures its own live readback.
+            self.phase_notice(phase, {"phase": phase, "monotonic_s": mono,
+                                     "captured_at": wall}, target)
 
     def checkpoint(self, label: str) -> None:
         """Request one bounded sample inside the current lifecycle phase."""

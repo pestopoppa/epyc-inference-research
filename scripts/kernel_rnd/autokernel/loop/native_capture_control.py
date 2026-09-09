@@ -171,7 +171,8 @@ class NativeCaptureValidator:
     def __init__(self, *, binding: NativeCaptureBinding, store: mc.ArtifactStore,
                  fence_provider: FenceProvider | None = None,
                  observation_verifiers: ob.ParentObservationVerifiers =
-                 ob.ParentObservationVerifiers()) -> None:
+                 ob.ParentObservationVerifiers(),
+                 parent_receipt_replayer: Any | None = None) -> None:
         if not isinstance(binding, NativeCaptureBinding):
             raise NativeCaptureRefused("binding must be NativeCaptureBinding")
         self.binding = NativeCaptureBinding.from_dict(binding.to_dict())
@@ -184,6 +185,11 @@ class NativeCaptureValidator:
         if not isinstance(observation_verifiers, ob.ParentObservationVerifiers):
             raise NativeCaptureRefused("observation verifiers must be the concrete adapter set")
         self.observation_verifiers = observation_verifiers
+        if parent_receipt_replayer is not None:
+            from .native_parent_receipt_replay import NativeParentReceiptReplayer
+            if type(parent_receipt_replayer) is not NativeParentReceiptReplayer:
+                raise NativeCaptureRefused("parent receipt replay requires its concrete adapter")
+        self.parent_receipt_replayer = parent_receipt_replayer
 
     def validate(self, measurement_id: str,
                  payload: Mapping[str, Any]) -> ValidatedNativeCapture:
@@ -241,6 +247,13 @@ class NativeCaptureValidator:
         self._validate_binding(context)
         self._verify_artifacts(measurement_id, carrier, row["artifact"])
         grant_generation, links = self._verify_observations(carrier)
+        from .native_producer_source import verify_capture_producer_source
+        verify_capture_producer_source(carrier, store=self.store, validator=self)
+        from .native_parent_receipt_replay import has_parent_receipt_refs
+        if self.parent_receipt_replayer is not None:
+            self.parent_receipt_replayer.replay(carrier, store=self.store)
+        elif has_parent_receipt_refs(carrier):
+            raise NativeCaptureRefused("original parent-issued receipt replay authority is unavailable")
         validated = ValidatedNativeCapture(
             measurement_id, schemas.content_hash(row), carrier["status"], False,
             json.dumps(row, sort_keys=True, separators=(",", ":"),

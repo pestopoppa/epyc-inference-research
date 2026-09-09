@@ -1385,9 +1385,23 @@ class WorkerLifecycle:
                     "grant_generation": context["grant"].generation,
                     "container_identity": dict(context["container_identity"])},
                 "binding_ref": _digest(_plain_json(row)), "fence_id": fence_id,
-                "binding_digest": binding_digest, "process": captured.to_dict()})
+                "binding_digest": binding_digest, "process": captured.to_dict(),
+                "descendant_event": _plain_json(row)})
             self._descendant_receipts[key] = receipt
             return receipt
+
+    def owned_descendant_event(self, *, binding_ref: str) -> Mapping[str, Any]:
+        """Return only an event already emitted by this current lifecycle owner."""
+        binding_ref = _sha(binding_ref, "owned descendant event reference")
+        with self._observation_lock:
+            matches = [row for row in self._descendant_receipts.values()
+                       if row["binding_ref"] == binding_ref]
+            if self._observation_context is None or len(matches) != 1:
+                raise WaitingAuthority("original owned descendant event is unavailable")
+            event = matches[0]["descendant_event"]
+            if _digest(_plain_json(event)) != binding_ref:
+                raise ContainmentFailure("owned descendant event reference differs")
+            return _freeze_json(_plain_json(event))
 
     def _emit_acquisition(self, phase: str, identity: ProspectiveAcquisitionIdentity,
                           *, deadline: float | None = None,
@@ -1980,8 +1994,13 @@ class WorkerLifecycle:
                             planned_invocation.queue_unit_permit(
                                 sequence=sequence, unit=unit, fence=fence,
                                 allowed=allowed, reason=reason)
-                        elif schema == "epyc.autokernel.planned_worker_unit_completion_request.v1":
+                        elif schema in {
+                                "epyc.autokernel.planned_worker_unit_completion_request.v1",
+                                "epyc.autokernel.planned_worker_unit_completion_request.v2"}:
                             planned_invocation.handle_completion(message)
+                        elif schema == \
+                                "epyc.autokernel.planned_worker_observation_phase_request.v1":
+                            planned_invocation.handle_observation_phase(message)
                         elif schema == "epyc.autokernel.planned_worker_continuation_request.v1":
                             planned_invocation.handle_continuation(message)
                         elif schema == \

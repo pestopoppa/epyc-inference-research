@@ -427,6 +427,10 @@ class ContainedObservationAuthority(Protocol):
     def observation_target(self, *, sequence: int, unit: Any, fence: Any,
                            pid: int) -> Mapping[str, Any]: ...
 
+    def observation_phase(self, *, sequence: int, unit: Any, fence: Any,
+                          binding: ObservationUnitBinding, target: Mapping[str, Any],
+                          phase: str, boundary_monotonic_s: float) -> Mapping[str, Any]: ...
+
 
 class ContainedObservationFactory:
     """Create and seal exactly one whole-lifecycle observer per fixed unit."""
@@ -445,7 +449,7 @@ class ContainedObservationFactory:
                 or not callable(monotonic) or not callable(wall_clock)
                 or isinstance(max_units, bool) or not 1 <= max_units <= 1024):
             raise ObservationBindingError("contained observer factory inputs are invalid")
-        for name in ("observation_binding", "observation_target"):
+        for name in ("observation_binding", "observation_target", "observation_phase"):
             if not callable(getattr(authority, name, None)):
                 raise ObservationBindingError("contained observer authority is incomplete")
         self.authority = authority
@@ -498,11 +502,21 @@ class ContainedObservationFactory:
             return self.authority.observation_target(
                 sequence=order_index + 1, unit=unit, fence=fence, pid=pid)
 
+        def notify(phase: str, marker: Mapping[str, Any],
+                   target: Mapping[str, Any] | None) -> None:
+            if phase != "health":
+                return
+            if target is None:
+                raise ObservationBindingError("health notification lacks an observed owned target")
+            self.authority.observation_phase(
+                sequence=order_index + 1, unit=unit, fence=fence, binding=binding,
+                target=target, phase=phase, boundary_monotonic_s=marker["monotonic_s"])
+
         session = lo.ObservationSession(
             context, probe=self.probe, owned_identity_resolver=resolve,
             foreign_verifier=self.foreign_verifier,
             runtime_verifier=self.runtime_verifier, monotonic=self.monotonic,
-            wall_clock=self.wall_clock)
+            wall_clock=self.wall_clock, phase_notice=notify)
         self._sessions[unit_id] = (session, binding)
         return session
 
@@ -551,6 +565,8 @@ def loaded_planned_serving_identity(*, measurement_callable: Callable[..., Any],
                                     fence_clock: Callable[..., Any],
                                     serving_timer: Callable[..., Any]) -> Mapping[str, Any]:
     """Identify the actual selected measurement/timers and enumerated direct support."""
+    from .unified_worker import InheritedUnitAuthority
+    from .native_producer_source import loaded_producer_source_closure
     if (getattr(fence_clock, "__module__", None),
             getattr(fence_clock, "__qualname__", None)) != ("time", "monotonic"):
         raise ObservationBindingError(
@@ -570,13 +586,17 @@ def loaded_planned_serving_identity(*, measurement_callable: Callable[..., Any],
             serving._refuse_if_not_resident, lo.ObservationSession.start,
             lo.ObservationSession.attach_target, lo.ObservationSession.phase,
             lo.ObservationSession.checkpoint, lo.ObservationSession.finish,
-            lo.ObservationSession.reconcile_shutdown, lo.FilesystemProbe.capture),
+            lo.ObservationSession.reconcile_shutdown, lo.FilesystemProbe.capture,
+            ContainedObservationFactory.create, InheritedUnitAuthority.observation_phase,
+            InheritedUnitAuthority._exchange),
         used_constants={"serving_residency_schema": serving.RESIDENCY_SCHEMA,
             "observer_context_schema": lo.CONTEXT_SCHEMA,
             "observer_sample_schema": lo.SAMPLE_SCHEMA,
             "observer_record_schema": lo.OBSERVATION_SCHEMA,
             "observer_instrument_schema": lo.INSTRUMENT_SCHEMA,
             "detector_version": lo.DETECTOR_VERSION, "phases": list(lo.PHASES),
+            "parent_readback_phase": "health",
+            "producer_source_closure": _plain(loaded_producer_source_closure()),
             "budget_fields": sorted(lo.BUDGET_FIELDS),
             "builtin_callable_provenance": {
                 "fence_clock": clock_provenance,
@@ -662,9 +682,11 @@ def validate_reopened_observation(reference: LifecycleObservationReference, *,
                                   store: mc.ArtifactStore,
                                   expected: Mapping[str, Any],
                                   instrument: LoadedInstrumentReference,
-                                  verifiers: ParentObservationVerifiers = ParentObservationVerifiers()
+                                  verifiers: ParentObservationVerifiers | None = None
                                   ) -> ValidatedObservationLink:
     """Reopen immutable bytes, then derive only parent-verified per-phase facts."""
+    if verifiers is None:
+        verifiers = ParentObservationVerifiers()
     reference = LifecycleObservationReference.from_dict(reference.to_dict())
     instrument = LoadedInstrumentReference.from_dict(instrument.to_dict())
     identity = lo.validate_instrument_identity(_plain(store.read(

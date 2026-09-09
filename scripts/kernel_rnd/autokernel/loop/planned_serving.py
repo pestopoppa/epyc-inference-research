@@ -215,7 +215,8 @@ class TrustedStageProvider(Protocol):
     def admit(self, plan_digest: str, unit: ep.UnitSpec,
               stages: tuple[str, ...]) -> StageFence: ...
 
-    def complete(self, fence: StageFence, observation: Mapping[str, Any]) \
+    def complete(self, fence: StageFence, observation: Mapping[str, Any], *,
+                 native_observation: Mapping[str, Any] | None = None) \
             -> StageCompletion: ...
 
     def guard(self, fence: StageFence): ...
@@ -614,9 +615,17 @@ def run_planned_comparison(plan: ep.ExperimentPlan, *,
             native_body["lifecycle_observation"] = (
                 None if lifecycle_reference is None else _plain(lifecycle_reference))
         native_digest = schemas.content_hash(native_body)
-        artifact_sink(_freeze(dict(native_body, artifact_digest=native_digest)))
+        sealed_native = artifact_sink(_freeze(dict(native_body, artifact_digest=native_digest)))
         try:
-            completion = _validated_completion(stage_provider.complete(fence, observation), fence)
+            if v2:
+                if (not isinstance(sealed_native, Mapping)
+                        or set(sealed_native) != {"locator", "sha256", "verified"}):
+                    raise PlannedServingError("v2 completion requires the sealed native artifact reference")
+                completed = stage_provider.complete(
+                    fence, observation, native_observation=_freeze(dict(sealed_native)))
+            else:
+                completed = stage_provider.complete(fence, observation)
+            completion = _validated_completion(completed, fence)
         except Exception as exc:
             if isinstance(exc, PlannedServingError):
                 raise
