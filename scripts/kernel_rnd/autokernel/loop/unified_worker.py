@@ -48,6 +48,7 @@ if __package__ in {None, ""}:  # fixed absolute-script entry under isolated Pyth
     from autokernel.loop import native_capture_control as nc
     from autokernel.loop import observation_binding as ob
     from autokernel.loop import planned_serving as ps
+    from autokernel.loop import planned_unit_selection as selection
     from autokernel.loop import serving
     from autokernel.loop import serving_preparation as preparation
     from autokernel.loop import unified_planner as up
@@ -59,6 +60,7 @@ else:
     from . import native_capture_control as nc
     from . import observation_binding as ob
     from . import planned_serving as ps
+    from . import planned_unit_selection as selection
     from . import serving
     from . import serving_preparation as preparation
     from . import unified_planner as up
@@ -68,6 +70,7 @@ else:
 PREPARED_SCHEMA = "epyc.autokernel.prepared_planned_serving_stage.v1"
 PREPARED_SCHEMA_V2 = "epyc.autokernel.prepared_planned_serving_stage.v2"
 PREPARED_SCHEMA_V3 = "epyc.autokernel.prepared_planned_serving_stage.v3"
+PREPARED_SCHEMA_V4 = "epyc.autokernel.prepared_planned_serving_stage.v4"
 HELLO_SCHEMA = "epyc.autokernel.planned_worker_hello.v1"
 INVOCATION_SCHEMA = "epyc.autokernel.planned_worker_invocation.v1"
 START_SCHEMA = "epyc.autokernel.planned_worker_start.v1"
@@ -97,6 +100,8 @@ RESULT_SCHEMA = "epyc.autokernel.planned_worker_result.v1"
 RESULT_REFERENCE_SCHEMA = "epyc.autokernel.planned_worker_result_reference.v1"
 RESULT_SCHEMA_V2 = "epyc.autokernel.planned_worker_result.v2"
 RESULT_REFERENCE_SCHEMA_V2 = "epyc.autokernel.planned_worker_result_reference.v2"
+RESULT_SCHEMA_V3 = "epyc.autokernel.planned_worker_result.v3"
+RESULT_REFERENCE_SCHEMA_V3 = "epyc.autokernel.planned_worker_result_reference.v3"
 MAX_MESSAGE_BYTES = 256 * 1024
 MAX_RESULT_BYTES = 16 * 1024 * 1024
 
@@ -240,8 +245,25 @@ class PreparedPlannedServingStage:
     @property
     def native_observed(self) -> bool:
         """Closed capability, independent of the dispatch envelope version."""
-        return (self.schema in {PREPARED_SCHEMA_V2, PREPARED_SCHEMA_V3}
+        return (self.schema in {PREPARED_SCHEMA_V2, PREPARED_SCHEMA_V3, PREPARED_SCHEMA_V4}
                 and self.plan.schema == ep.PLAN_SCHEMA_V2)
+
+    @property
+    def selected_dispatch(self) -> selection.SelectedUnitDispatch | None:
+        return (selection.SelectedUnitDispatch.from_dict(self.dispatch)
+                if self.schema == PREPARED_SCHEMA_V4 else None)
+
+    @property
+    def selected_range(self) -> selection.SelectedPlanUnitRange | None:
+        dispatch = self.selected_dispatch
+        return dispatch.selection if dispatch is not None else None
+
+    @property
+    def unit_bounds(self) -> tuple[int, int]:
+        selected = self.selected_range
+        return ((selected.start_order, selected.stop_order) if selected is not None else
+                (len(self.previous["raw_units"]) if self.previous else 0,
+                 len(self.plan.expected_units)))
 
     @classmethod
     def from_dict(cls, value: Any) -> "PreparedPlannedServingStage":
@@ -249,7 +271,8 @@ class PreparedPlannedServingStage:
                              "runtime_pair", "capture_context_base", "artifact_root",
                              "previous", "max_stage_seconds", "teardown_seconds",
                              "prepared_digest"}, "prepared planned-serving stage")
-        if row["schema"] not in {PREPARED_SCHEMA, PREPARED_SCHEMA_V2, PREPARED_SCHEMA_V3}:
+        if row["schema"] not in {PREPARED_SCHEMA, PREPARED_SCHEMA_V2, PREPARED_SCHEMA_V3,
+                                 PREPARED_SCHEMA_V4}:
             raise WorkerBridgeRefused("prepared stage schema is unsupported")
         supplied_digest = _sha(row.pop("prepared_digest"), "prepared_digest")
         if supplied_digest != _digest(row):
@@ -260,12 +283,16 @@ class PreparedPlannedServingStage:
             if row["schema"] == PREPARED_SCHEMA_V3:
                 dispatch = preparation.CalibrationPreparationDispatch.from_dict(row["dispatch"])
                 pair = preparation.PreparationArmPair.from_dict(row["runtime_pair"])
+            elif row["schema"] == PREPARED_SCHEMA_V4:
+                dispatch = selection.SelectedUnitDispatch.from_dict(row["dispatch"])
+                dispatch.validate_plan(plan)
+                pair = up.RuntimeArmPair.from_dict(_plain(row["runtime_pair"]))
             else:
                 dispatch = up.DispatchRequest(**_plain(row["dispatch"]))
                 pair = up.RuntimeArmPair.from_dict(_plain(row["runtime_pair"]))
         except Exception as exc:
             raise WorkerBridgeRefused(f"prepared typed input is invalid: {exc}") from exc
-        if ((row["schema"] in {PREPARED_SCHEMA_V2, PREPARED_SCHEMA_V3}) !=
+        if ((row["schema"] in {PREPARED_SCHEMA_V2, PREPARED_SCHEMA_V3, PREPARED_SCHEMA_V4}) !=
                 (plan.schema == ep.PLAN_SCHEMA_V2)):
             raise WorkerBridgeRefused("prepared stage and plan schema versions differ")
         if row["schema"] == PREPARED_SCHEMA_V3:
@@ -275,6 +302,10 @@ class PreparedPlannedServingStage:
                 request.prompts.to_dict() == prompts.to_dict(),
                 request.declaration.max_stage_seconds == row["max_stage_seconds"],
                 request.declaration.teardown_seconds == row["teardown_seconds"])
+        elif row["schema"] == PREPARED_SCHEMA_V4:
+            bindings = (dispatch.plan_digest == plan.digest,
+                        dispatch.target_revision == plan.target_revision,
+                        row["previous"] is None)
         else:
             proposal = up.UnifiedProposal.from_dict(_plain(dispatch.proposal))
             bindings = (
@@ -1082,7 +1113,7 @@ class OwnedWorkerStageProvider:
         self.clock = clock
         self._ordered = tuple(sorted(prepared.plan.expected_units,
                                      key=lambda item: item.order_index))
-        self._next = len(prepared.previous["raw_units"]) if prepared.previous else 0
+        self._next, self._stop = prepared.unit_bounds
         self._active: tuple[int, ps.StageFence] | None = None
         self._prior_digest: str | None = None
         self._validate_start()
@@ -1099,13 +1130,18 @@ class OwnedWorkerStageProvider:
                 or self.start.supervisor_incarnation
                    != self.prepared.capture_context_base["supervisor_incarnation"]):
             raise WorkerBridgeRefused("worker start differs from prepared stage")
+        dispatch = self.prepared.selected_dispatch
+        if dispatch is not None and (self.start.request_id, self.start.lineage_id,
+                self.start.stage_id) != (dispatch.request_id, dispatch.lineage_id,
+                                       dispatch.stage_id):
+            raise WorkerBridgeRefused("worker start differs from selected unit transport")
         self._membership(self.start)
 
     def admit(self, plan_digest: str, unit: ep.UnitSpec,
               stages: tuple[str, ...]) -> ps.StageFence:
         if stages != ps.STAGES or plan_digest != self.prepared.plan.digest:
             raise WorkerBridgeRefused("planned stage request changed")
-        if self._active is not None or self._next >= len(self._ordered) \
+        if self._active is not None or self._next >= self._stop \
                 or unit != self._ordered[self._next]:
             raise WorkerBridgeRefused("unit is duplicate, out of order, or undeclared")
         self._membership(self.start)
@@ -1191,10 +1227,12 @@ class PlannedWorkerResult:
             "lineage_id", "stage_id", "worker_id", "worker_generation", "grant_id",
             "grant_generation", "container_id", "completed_unit_ids", "run", "captures",
             "result_digest"}
-        if schema == RESULT_SCHEMA_V2:
+        if schema in {RESULT_SCHEMA_V2, RESULT_SCHEMA_V3}:
             fields |= {"lifecycle_observation_references"}
+        if schema == RESULT_SCHEMA_V3:
+            fields |= {"selected_range"}
         row = _exact(value, fields, "planned worker result")
-        if row["schema"] not in {RESULT_SCHEMA, RESULT_SCHEMA_V2}:
+        if row["schema"] not in {RESULT_SCHEMA, RESULT_SCHEMA_V2, RESULT_SCHEMA_V3}:
             raise WorkerBridgeRefused("planned worker result schema is unsupported")
         supplied = _sha(row.pop("result_digest"), "result_digest")
         if supplied != _digest(row):
@@ -1216,10 +1254,13 @@ class PlannedWorkerResult:
                 "lineage_id", "anchor_identity", "candidate_identity", "raw_units",
                 "admissible_view", "use_status", "execution_complete", "paused_reason",
                 "capture_receipts"}
-            if schema == RESULT_SCHEMA_V2:
+            if schema in {RESULT_SCHEMA_V2, RESULT_SCHEMA_V3}:
                 run_fields |= {"lifecycle_observation_references"}
+            if schema == RESULT_SCHEMA_V3:
+                run_fields |= {"selected_range", "selected_range_complete"}
             run_row = _exact(row["run"], run_fields, "planned serving run")
-            expected_run_schema = ps.RUN_SCHEMA_V2 if schema == RESULT_SCHEMA_V2 else ps.RUN_SCHEMA
+            expected_run_schema = {RESULT_SCHEMA: ps.RUN_SCHEMA,
+                RESULT_SCHEMA_V2: ps.RUN_SCHEMA_V2, RESULT_SCHEMA_V3: ps.RUN_SCHEMA_V3}[schema]
             if run_row["schema"] != expected_run_schema:
                 raise WorkerBridgeRefused("planned serving run schema is unsupported")
             if (run_row["plan_digest"] != row["plan_digest"]
@@ -1239,7 +1280,18 @@ class PlannedWorkerResult:
                         or _sha(capture["payload_digest"], "payload_digest")
                         != _digest(capture["payload"])):
                     raise WorkerBridgeRefused("deferred capture digest/binding mismatch")
-            if schema == RESULT_SCHEMA_V2:
+            if schema == RESULT_SCHEMA_V3:
+                selected = selection.SelectedPlanUnitRange.from_dict(row["selected_range"])
+                if (selected.plan_digest != row["plan_digest"]
+                        or len(selected.unit_ids) != 1
+                        or _plain(run_row["selected_range"]) != selected.to_dict()
+                        or list(completed) != list(selected.unit_ids[:len(completed)])
+                        or type(run_row["selected_range_complete"]) is not bool
+                        or run_row["selected_range_complete"] != (
+                            [raw["unit_id"] for raw in run_row["raw_units"]] == list(selected.unit_ids)
+                            and all(raw["terminal"] for raw in run_row["raw_units"]))):
+                    raise WorkerBridgeRefused("selected result range/completed units differ")
+            if schema in {RESULT_SCHEMA_V2, RESULT_SCHEMA_V3}:
                 references = [ob.LifecycleObservationReference.from_dict(
                                   _plain(item)).to_dict()
                               for item in row["lifecycle_observation_references"]]
@@ -1281,7 +1333,8 @@ class PlannedWorkerResultReference:
         row = _exact(value, {"schema", "nonce", "prepared_digest", "worker_id",
                              "worker_generation", "result_digest", "result_locator",
                              "result_sha256", "reference_digest"}, "result reference")
-        if row["schema"] not in {RESULT_REFERENCE_SCHEMA, RESULT_REFERENCE_SCHEMA_V2}:
+        if row["schema"] not in {RESULT_REFERENCE_SCHEMA, RESULT_REFERENCE_SCHEMA_V2,
+                                 RESULT_REFERENCE_SCHEMA_V3}:
             raise WorkerBridgeRefused("result reference schema is unsupported")
         supplied = _sha(row.pop("reference_digest"), "reference_digest")
         if supplied != _digest(row):
@@ -1363,8 +1416,7 @@ class PlannedWorkerInvocation:
         self._reference: PlannedWorkerResultReference | None = None
         self._reference_digest: str | None = None
         self._accepted_digest: str | None = None
-        self._next = len(self.prepared.previous["raw_units"]) \
-            if self.prepared.previous else 0
+        self._next, self._stop = self.prepared.unit_bounds
         self._continuation_next = 0
         self._prior_completion_digest: str | None = None
         self._active: tuple[int, ps.StageFence] | None = None
@@ -1407,6 +1459,10 @@ class PlannedWorkerInvocation:
                 or request.max_stage_seconds != self.prepared.max_stage_seconds
                 or request.teardown_seconds != self.prepared.teardown_seconds):
             raise WorkerBridgeRefused("stage request differs from planned invocation")
+        dispatch = self.prepared.selected_dispatch
+        if dispatch is not None and (request.request_id, request.lineage_id, request.stage_id) != (
+                dispatch.request_id, dispatch.lineage_id, dispatch.stage_id):
+            raise WorkerBridgeRefused("stage request differs from selected unit transport")
 
     def child_fds(self) -> tuple[int, int, int]:
         if self._launched or self._closed:
@@ -1560,7 +1616,7 @@ class PlannedWorkerInvocation:
                 or row["plan_digest"] != self.prepared.plan.digest
                 or row["lineage_id"] != self.start.lineage_id
                 or row["prior_completion_digest"] != self._prior_completion_digest
-                or self._next >= len(ordered) or supplied != _digest(row)):
+                or self._next >= self._stop or supplied != _digest(row)):
             raise WorkerBridgeRefused("planned unit request binding/order differs")
         try:
             unit = ep.UnitSpec.from_dict(row["unit"])
@@ -2022,9 +2078,12 @@ def run_prepared_stage(prepared: PreparedPlannedServingStage, start: WorkerStart
             clock=clock, clock_domain=start.clock_domain, wall_clock=wall_clock,
             measure=_test_measure or serving._measure_once, previous_raws=previous_raws,
             previous_lineage_id=previous_lineage, continuation_verifier=continuation,
-            observation_session_factory=observation_factory)
+            observation_session_factory=observation_factory,
+            selected_range=prepared.selected_range)
         completed = [item.unit_id for item in run.raw_units]
         result_schema = RESULT_SCHEMA_V2 if observation_factory is not None else RESULT_SCHEMA
+        if prepared.selected_range is not None:
+            result_schema = RESULT_SCHEMA_V3
         body = {"schema": result_schema, "nonce": start.nonce,
             "prepared_digest": prepared.prepared_digest, "plan_digest": prepared.plan.digest,
             "lineage_id": start.lineage_id, "stage_id": start.stage_id,
@@ -2035,14 +2094,16 @@ def run_prepared_stage(prepared: PreparedPlannedServingStage, start: WorkerStart
         if observation_factory is not None:
             body["lifecycle_observation_references"] = _plain(
                 run.lifecycle_observation_references)
+        if prepared.selected_range is not None:
+            body["selected_range"] = prepared.selected_range.to_dict()
         result = PlannedWorkerResult.from_dict({**body, "result_digest": _digest(body)})
         namespace = f"planned-worker-result:{prepared.prepared_digest}:{start.nonce}"
         sealed = store.write(namespace, result.to_dict())
         return PlannedWorkerResultReference(
             start.nonce, prepared.prepared_digest, start.worker_id, start.worker_generation,
             result.result_digest, sealed.locator, sealed.sha256,
-            RESULT_REFERENCE_SCHEMA_V2 if observation_factory is not None
-            else RESULT_REFERENCE_SCHEMA)
+            RESULT_REFERENCE_SCHEMA_V3 if prepared.selected_range is not None else
+            RESULT_REFERENCE_SCHEMA_V2 if observation_factory is not None else RESULT_REFERENCE_SCHEMA)
     finally:
         store.close()
         if authority is not None:
@@ -2078,7 +2139,10 @@ def reopen_deferred_result(reference: PlannedWorkerResultReference, *,
     prepared = PreparedPlannedServingStage.from_dict(prepared.to_dict())
     start = WorkerStart.from_dict(start.to_dict())
     v2 = prepared.native_observed
-    if (reference.schema == RESULT_REFERENCE_SCHEMA_V2) is not v2:
+    selected = prepared.selected_range
+    expected_reference_schema = (RESULT_REFERENCE_SCHEMA_V3 if selected is not None else
+                                 RESULT_REFERENCE_SCHEMA_V2 if v2 else RESULT_REFERENCE_SCHEMA)
+    if reference.schema != expected_reference_schema:
         raise WorkerBridgeRefused("prepared/result reference schema versions differ")
     if not isinstance(terminal, wl.TerminalWorker) or not isinstance(
             fence, nc.TrustedWorkerResultFence):
@@ -2114,7 +2178,9 @@ def reopen_deferred_result(reference: PlannedWorkerResultReference, *,
         result = PlannedWorkerResult.from_dict(body)
         if result.result_digest != reference.result_digest:
             raise WorkerBridgeRefused("result reference points to a different result digest")
-        if (result.body["schema"] == RESULT_SCHEMA_V2) is not v2:
+        expected_result_schema = (RESULT_SCHEMA_V3 if selected is not None else
+                                  RESULT_SCHEMA_V2 if v2 else RESULT_SCHEMA)
+        if result.body["schema"] != expected_result_schema:
             raise WorkerBridgeRefused("sealed result schema differs from its reference")
         store.verify(f"planned-worker-result:{prepared.prepared_digest}:{start.nonce}",
                      result.to_dict())
@@ -2130,6 +2196,10 @@ def reopen_deferred_result(reference: PlannedWorkerResultReference, *,
             raise WorkerBridgeRefused("sealed result identity differs from current worker")
         expected = [item.unit_id for item in sorted(
             prepared.plan.expected_units, key=lambda item: item.order_index)]
+        if selected is not None:
+            expected = [unit.unit_id for unit in selected.units(prepared.plan)]
+            if row["selected_range"] != selected.to_dict():
+                raise WorkerBridgeRefused("sealed range differs from prepared membership")
         completed = row["completed_unit_ids"]
         if completed != expected[:len(completed)]:
             raise WorkerBridgeRefused("sealed result completed units are not a fixed prefix")
@@ -2140,6 +2210,20 @@ def reopen_deferred_result(reference: PlannedWorkerResultReference, *,
                 raise WorkerBridgeRefused(
                     "sealed observation references are not a fixed unit prefix")
         run_row = row["run"]
+        if selected is not None:
+            specs = {unit.unit_id: unit for unit in selected.units(prepared.plan)}
+            for raw in run_row["raw_units"]:
+                spec = specs.get(raw["unit_id"])
+                if (spec is None or raw["plan_digest"] != prepared.plan.digest
+                        or raw["process_id"] != spec.process_id or raw["arm"] != spec.arm
+                        or raw["observed_order_index"] != spec.order_index
+                        or tuple(raw["prompt_ids"]) != spec.expected_prompt_ids):
+                    raise WorkerBridgeRefused("selected raw differs from original absolute unit")
+            full_view = ep.admissible_units(prepared.plan,
+                tuple(ep.RawUnit.from_dict(raw) for raw in run_row["raw_units"]))
+            if (run_row["admissible_view"] != full_view.to_dict()
+                    or run_row["execution_complete"] != full_view.complete):
+                raise WorkerBridgeRefused("selected run relabels full-plan scientific completeness")
         if (run_row["prompt_manifest_digest"] != prepared.prompts.digest
                 or run_row["anchor_identity"] != _plain(prepared.plan.anchor_identity)
                 or run_row["candidate_identity"]
@@ -2174,6 +2258,17 @@ def reopen_deferred_result(reference: PlannedWorkerResultReference, *,
                 normalized_payload = validator.validate(
                     capture["measurement_id"], payload).payload()
             arm = payload["carrier"].get("arm")
+            if selected is not None:
+                carrier = payload["carrier"]
+                if (carrier.get("plan") != prepared.plan.to_dict()
+                        or carrier.get("lineage_id") != start.lineage_id
+                        or arm != selected.units(prepared.plan)[0].arm):
+                    raise WorkerBridgeRefused("selected capture full-plan/lineage/arm differs")
+                attempts = [item["document"] for item in carrier["raw_artifacts"]
+                            if item["document"].get("kind") == "completed_attempt"]
+                if (len(attempts) != 1 or attempts[0].get("selected_range") != selected.to_dict()
+                        or attempts[0].get("unit_id") != selected.unit_ids[0]):
+                    raise WorkerBridgeRefused("selected capture attempt membership differs")
             arms.append(arm)
             validated_captures.append((capture["measurement_id"], normalized_payload))
         if arms != [arm for arm in ("anchor", "candidate") if arm in arms]:
@@ -2355,8 +2450,10 @@ if __name__ == "__main__":
 
 __all__ = ["CONTINUATION_REQUEST_SCHEMA", "CONTINUATION_SCHEMA", "HELLO_SCHEMA",
            "INVOCATION_SCHEMA", "MAX_MESSAGE_BYTES", "MAX_RESULT_BYTES", "PREPARED_SCHEMA",
-           "PREPARED_SCHEMA_V2", "PREPARED_SCHEMA_V3", "RESULT_SCHEMA", "RESULT_SCHEMA_V2",
-           "RESULT_REFERENCE_SCHEMA", "RESULT_REFERENCE_SCHEMA_V2", "START_SCHEMA", "UNIT_COMPLETION_REQUEST_SCHEMA",
+           "PREPARED_SCHEMA_V2", "PREPARED_SCHEMA_V3", "PREPARED_SCHEMA_V4",
+           "RESULT_SCHEMA", "RESULT_SCHEMA_V2", "RESULT_SCHEMA_V3",
+           "RESULT_REFERENCE_SCHEMA", "RESULT_REFERENCE_SCHEMA_V2", "RESULT_REFERENCE_SCHEMA_V3",
+           "START_SCHEMA", "UNIT_COMPLETION_REQUEST_SCHEMA",
            "UNIT_COMPLETION_SCHEMA", "UNIT_PERMIT_SCHEMA", "UNIT_REQUEST_SCHEMA",
            "InheritedUnitAuthority", "MembershipProbe", "OwnedWorkerStageProvider",
            "ParentUnitEvidenceAuthority", "PlannedWorkerInvocation",

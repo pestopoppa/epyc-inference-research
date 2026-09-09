@@ -591,7 +591,12 @@ def loaded_planned_serving_identity(*, measurement_callable: Callable[..., Any],
                                     search_window_configuration: Any = None) -> Mapping[str, Any]:
     """Identify the actual selected measurement/timers and enumerated direct support."""
     from .unified_worker import (InheritedUnitAuthority, PlannedWorkerInvocation,
-                                ParentUnitEvidenceAuthority)
+                                ParentUnitEvidenceAuthority, OwnedWorkerStageProvider,
+                                PreparedPlannedServingStage, PlannedWorkerResult,
+                                reopen_deferred_result)
+    from .planned_unit_selection import (SelectedPlanUnitRange, SelectedUnitDispatch,
+                                        loaded_source_identity)
+    from .planned_serving import PlannedServingRun
     from .native_producer_source import loaded_producer_source_closure
     from .driver_execution import UnknownParentEvidenceProducer
     from .native_parent_service import NativeParentEvidenceService
@@ -635,6 +640,16 @@ def loaded_planned_serving_identity(*, measurement_callable: Callable[..., Any],
             serving._refuse_if_not_resident, lo.ObservationSession.start,
             lo.required_sample_capacity, validate_planned_sample_capacity,
             ParentObservationConfiguration.__post_init__,
+            SelectedPlanUnitRange.from_plan.__func__, SelectedPlanUnitRange.from_dict.__func__,
+            SelectedPlanUnitRange.units, SelectedUnitDispatch.from_dict.__func__,
+            SelectedUnitDispatch.validate_plan, PreparedPlannedServingStage.from_dict.__func__,
+            PreparedPlannedServingStage.unit_bounds.fget,
+            OwnedWorkerStageProvider.admit,
+            OwnedWorkerStageProvider._validate_start,
+            PlannedWorkerInvocation.__init__, PlannedWorkerInvocation.validate_request,
+            PlannedWorkerInvocation.validate_unit_request,
+            PlannedServingRun.to_dict, PlannedWorkerResult.from_dict.__func__,
+            reopen_deferred_result, loaded_source_identity,
             UnknownParentEvidenceProducer.__init__,
             lo.ObservationSession._run, lo.ObservationSession._enqueue_locked,
             lo.ObservationSession._commit,
@@ -672,6 +687,13 @@ def loaded_planned_serving_identity(*, measurement_callable: Callable[..., Any],
                 "sample_bound": "ceil(duration/cadence)+phase_boundaries+target_attachments+checkpoints"},
             "server_response_source": _plain(server_response_source),
             "serving_preparation_source": _plain(preparation_source),
+            "selected_unit_transport": {
+                "prepared_schema": "epyc.autokernel.prepared_planned_serving_stage.v4",
+                "selection_schema": "epyc.autokernel.selected_plan_unit_range.v1",
+                "dispatch_schema": "epyc.autokernel.selected_unit_dispatch.v1",
+                "unit_order": "absolute original full-plan order",
+                "execution_authorized": False},
+            "selected_unit_transport_source": loaded_source_identity(),
             "producer_source_closure": _plain(loaded_producer_source_closure(
                 scientific_adapters=scientific_adapters)),
             "budget_fields": sorted(lo.BUDGET_FIELDS),
