@@ -1,11 +1,9 @@
 """Pinned bridge to the canonical ROOT ClaimTuple projection and grade.
 
-The bridge deliberately has no grading or scientific policy of its own.  The
-currently pinned ROOT adapter is v1, whose AutoKernel rows lack prospective
-loaded-instrument evidence and a write-bound attestation verification bit.  It
-can therefore diagnose/grade historical rows, but cannot authorize candidate
-validation.  A future v2 pin is an explicit source update, never an inferred
-upgrade of these bytes.
+The bridge deliberately has no grading or scientific policy of its own.  Its
+default is the complete, explicitly published native-v2 source closure.  The
+legacy v1 pin remains available only when selected explicitly; old receipts are
+never inferred to have the prospective evidence carried by native v2.
 """
 from __future__ import annotations
 
@@ -32,13 +30,15 @@ CLAIM_TUPLE_SHA256 = "375d46450d2fa01314ebcbddfba26411f3901f7e0df751773fd35a43f0
 ARM_PROJECTOR_SHA256 = "590b1ac656b0123517a12fa194003bfed148bd3cf25553f986ee3a48ef7b0eae"
 ARM_ADAPTER_ID = "vidya.adapters.autokernel_unified_arm/v1"
 AUTHORITY_ID = "autokernel.validation.semantic-owner/v1"
-# Filled only after the producer and corrected team-2 source are published.
-FINAL_V2_ROOT_COMMIT: str | None = None
-FINAL_V2_CLAIM_TUPLE_SHA256: str | None = None
-FINAL_V2_ARM_PROJECTOR_SHA256: str | None = None
-FINAL_V2_ADAPTER_ID: str | None = None
-FINAL_V2_MEASUREMENT_CAPTURE_SHA256: str | None = None
-FINAL_V2_OBSERVATION_BINDING_SHA256: str | None = None
+FINAL_V2_ROOT_COMMIT: str | None = "2010b713f6a02d18c36799eac7c35c1361c06764"
+FINAL_V2_CLAIM_TUPLE_SHA256: str | None = CLAIM_TUPLE_SHA256
+FINAL_V2_ARM_PROJECTOR_SHA256: str | None = \
+    "ad87bdec7afc4d07f04fe48375adf4fe476a20423481b2be662e776a2b590192"
+FINAL_V2_ADAPTER_ID: str | None = ARM_ADAPTER_ID
+FINAL_V2_MEASUREMENT_CAPTURE_SHA256: str | None = \
+    "04cacacc8576048ff18a96e2c332ca2e2ea59bfdbfcc0acc451c1939f0ad3123"
+FINAL_V2_OBSERVATION_BINDING_SHA256: str | None = \
+    "fa893b554d6ab73222f3e003ffdefa7e062651adbce0de6014951731e6d0eed3"
 
 MEASUREMENT_CAPTURE_PRODUCER_V2 = "epyc.autokernel.measurement_capture/v2"
 CAPTURE_SCHEMA_V2 = "epyc.autokernel.unified_arm_capture.v2"
@@ -156,6 +156,17 @@ class ProjectionSourcePin:
                 "observation_binding_schemas": dict(OBSERVATION_BINDING_SCHEMAS)}
 
 
+def _final_v2_source_pin() -> ProjectionSourcePin | None:
+    values = (FINAL_V2_ROOT_COMMIT, FINAL_V2_CLAIM_TUPLE_SHA256,
+              FINAL_V2_ARM_PROJECTOR_SHA256, FINAL_V2_ADAPTER_ID,
+              FINAL_V2_MEASUREMENT_CAPTURE_SHA256,
+              FINAL_V2_OBSERVATION_BINDING_SHA256)
+    if not all(isinstance(value, str) and value for value in values):
+        return None
+    root, claim, adapter, adapter_id, capture, observation = values
+    return ProjectionSourcePin(root, claim, adapter, adapter_id, capture, observation)
+
+
 class PinnedRootProjection:
     """An explicitly hash-pinned installation of ROOT's registered projector."""
 
@@ -163,7 +174,7 @@ class PinnedRootProjection:
         root = Path(root).resolve()
         claim_path = root / "scripts/vidya/claim_tuple.py"
         adapter_path = root / "scripts/vidya/adapters/autokernel_unified_arm.py"
-        pin = source_pin or ProjectionSourcePin(
+        pin = source_pin or _final_v2_source_pin() or ProjectionSourcePin(
             "8fa14b0f8b53259db4c8a5991094bd06347b9a1e",
             CLAIM_TUPLE_SHA256, ARM_PROJECTOR_SHA256, ARM_ADAPTER_ID,
             "0" * 64, "0" * 64)
@@ -260,8 +271,11 @@ class PinnedRootProjection:
                     "source_grade": grade, "trace_grade": trace,
                     "reasons": list(reasons)},
                 "native_binding": binding,
-                "authority_scope": ("final_pinned_source" if self.native_v2_available
-                                    else "compatibility_only")}
+                # These pins identify the verifier source loaded now.  Existing
+                # native-v2 carriers do not bind the capture and observation
+                # producer implementations that were loaded for the run, so
+                # their provenance cannot be upgraded retrospectively.
+                "authority_scope": "compatibility_only"}
         body["receipt_id"] = "claim-grade-" + schemas.content_hash(body)[:24]
         return dict(cr.validate_receipt_body(body))
 
@@ -358,6 +372,7 @@ class ValidationSemanticAdapter:
             receipt_store=receipt_store)
         grades = {(item["projection"]["source_grade"],
                    item["projection"]["trace_grade"]) for item in (left, right)}
+        authority_scopes = {item["authority_scope"] for item in (left, right)}
         binding = left["native_binding"]
         reasons: list[str] = []
         if binding["plan_digest"] != plan.digest:
@@ -366,6 +381,8 @@ class ValidationSemanticAdapter:
             reasons.append("canonical receipt pair is below Witnessed/Attested")
         if not self.projection.native_v2_available:
             reasons.append("native-v2 projector/producer identity is compatibility-only")
+        if authority_scopes != {"final_pinned_source"}:
+            reasons.append("native producer source identity is compatibility-only")
         # Canonical grading discharges the missing grader connection only.  It
         # does not decide the experimental serving comparison or production use.
         reasons.append("owning validation objective/serving decision is required")
