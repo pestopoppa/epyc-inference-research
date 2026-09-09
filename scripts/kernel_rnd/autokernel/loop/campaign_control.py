@@ -24,14 +24,32 @@ from ..controller.discovery_supervisor_secure import (
     RuntimeRoot, SecureRuntimeError, object_identity,
 )
 from . import status
+from . import worker_lifecycle as worker_lifecycle_module
 from .native_capture_control import NativeCaptureRefused, NativeCaptureValidator
 from .campaign import ResolvedCampaign
 
 COMMAND_SCHEMA = "epyc.autokernel.campaign_command.v1"
 SNAPSHOT_SCHEMA = "epyc.autokernel.campaign_snapshot.v1"
+SNAPSHOT_SCHEMA_V2 = "epyc.autokernel.campaign_snapshot.v2"
 SNAPSHOT_FILE = "campaign-snapshot.json"
 _CANDIDATE_REPLAYER_TOKEN = object()
 OPERATIONS = frozenset({"pause", "resume", "drain"})
+SNAPSHOT_V2_FIELDS = frozenset({
+    "schema", "producer_build", "producer_schema", "campaign_id",
+    "config_generation", "config_digest", "requested_manifest_digest",
+    "supervisor_incarnation", "stream_epoch", "sequence", "journal_cursor",
+    "control_revision", "generated_at", "desired_state", "observed_state",
+    "command_results", "active_worker", "producer_heartbeat_at",
+    "last_scientific_result_at", "worker_activity_at", "execution_authorized",
+    "execution_capability_available", "worker_lifecycle_revision",
+    "prerequisite_reason",
+})
+ACTIVE_WORKER_V2_FIELDS = frozenset({
+    "worker_id", "worker_generation", "request_id", "plan_digest", "lineage_id",
+    "stage_id", "state", "grant_id", "grant_generation", "container_id",
+    "provider_deadline", "deadline_clock_domain", "control_revision", "started_at",
+    "activity_at", "termination_deadline", "unresolved_reason",
+})
 
 
 class ControlRefused(RuntimeError):
@@ -87,6 +105,132 @@ def validate_command(value: Mapping[str, Any]) -> dict[str, Any]:
     if not hmac.compare_digest(row["payload_digest"], expected):
         raise ControlRefused("payload_digest does not match command semantics")
     row["payload"] = {}
+    return row
+
+
+def validate_snapshot_v2(value: Mapping[str, Any]) -> dict[str, Any]:
+    if not isinstance(value, Mapping) or set(value) != SNAPSHOT_V2_FIELDS:
+        raise ControlRefused("v2 snapshot has missing/unknown fields")
+    row = copy.deepcopy(dict(value))
+    if row["schema"] != SNAPSHOT_SCHEMA_V2 or row["producer_schema"] != SNAPSHOT_SCHEMA_V2:
+        raise ControlRefused("v2 snapshot schema identity is invalid")
+    for name in ("campaign_id", "requested_manifest_digest"):
+        if not isinstance(row[name], str) or not row[name]:
+            raise ControlRefused(f"v2 snapshot {name} is invalid")
+    for name in ("config_digest", "requested_manifest_digest"):
+        if (not isinstance(row[name], str) or len(row[name]) != 64
+                or any(char not in "0123456789abcdef" for char in row[name])):
+            raise ControlRefused(f"v2 snapshot {name} must be lowercase SHA-256")
+    for name, minimum in (("config_generation", 1), ("supervisor_incarnation", 1),
+                          ("stream_epoch", 1), ("sequence", 1),
+                          ("journal_cursor", 0), ("control_revision", 0)):
+        if (not isinstance(row[name], int) or isinstance(row[name], bool)
+                or row[name] < minimum):
+            raise ControlRefused(f"v2 snapshot {name} is invalid")
+    for name in ("generated_at", "producer_heartbeat_at"):
+        if not isinstance(row[name], str):
+            raise ControlRefused(f"v2 snapshot {name} is invalid")
+        try:
+            parsed = datetime.fromisoformat(row[name].replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ControlRefused(f"v2 snapshot {name} is not ISO-8601") from exc
+        if parsed.tzinfo is None:
+            raise ControlRefused(f"v2 snapshot {name} lacks timezone")
+    for name in ("worker_activity_at", "last_scientific_result_at"):
+        if row[name] is not None:
+            if not isinstance(row[name], str):
+                raise ControlRefused(f"v2 snapshot {name} is invalid")
+            try:
+                parsed = datetime.fromisoformat(row[name].replace("Z", "+00:00"))
+            except ValueError as exc:
+                raise ControlRefused(f"v2 snapshot {name} is not ISO-8601") from exc
+            if parsed.tzinfo is None:
+                raise ControlRefused(f"v2 snapshot {name} lacks timezone")
+    if row["desired_state"] not in {"paused", "running", "drained"}:
+        raise ControlRefused("v2 snapshot desired_state is invalid")
+    if row["observed_state"] not in {
+            "paused", "running", "drained", "pausing", "draining",
+            "waiting_prerequisite", "ownership_unresolved"}:
+        raise ControlRefused("v2 snapshot observed_state is invalid")
+    if row["prerequisite_reason"] is not None \
+            and (not isinstance(row["prerequisite_reason"], str)
+                 or not row["prerequisite_reason"]):
+        raise ControlRefused("v2 snapshot prerequisite_reason is invalid")
+    build = row["producer_build"]
+    build_fields = {"schema", "scope", "module", "identity_basis", "included_symbols",
+                    "excluded_scope", "sha256"}
+    if (not isinstance(build, Mapping) or set(build) != build_fields
+            or not isinstance(build["included_symbols"], list)
+            or not isinstance(build["excluded_scope"], list)
+            or any(not isinstance(item, str) or not item
+                   for item in [build["schema"], build["scope"], build["module"],
+                                build["identity_basis"], *build["included_symbols"],
+                                *build["excluded_scope"]])
+            or not isinstance(build["sha256"], str) or len(build["sha256"]) != 64
+            or any(char not in "0123456789abcdef" for char in build["sha256"])):
+        raise ControlRefused("v2 snapshot producer_build is invalid")
+    if type(row["execution_authorized"]) is not bool \
+            or type(row["execution_capability_available"]) is not bool:
+        raise ControlRefused("v2 snapshot execution flags must be boolean")
+    if (not isinstance(row["worker_lifecycle_revision"], int)
+            or isinstance(row["worker_lifecycle_revision"], bool)
+            or row["worker_lifecycle_revision"] < 0):
+        raise ControlRefused("v2 worker lifecycle revision is invalid")
+    if not isinstance(row["command_results"], list):
+        raise ControlRefused("v2 command_results must be a list")
+    row["command_results"] = [
+        worker_lifecycle_module.validate_command_result_v2(item)
+        for item in row["command_results"]]
+    active = row["active_worker"]
+    if active is not None:
+        if not isinstance(active, Mapping) or set(active) != ACTIVE_WORKER_V2_FIELDS:
+            raise ControlRefused("v2 active_worker has missing/unknown fields")
+        for name in ("worker_id", "request_id", "plan_digest", "lineage_id", "stage_id",
+                     "state", "grant_id", "container_id", "deadline_clock_domain",
+                     "started_at"):
+            if not isinstance(active[name], str) or not active[name]:
+                raise ControlRefused(f"v2 active_worker {name} is invalid")
+        if (len(active["plan_digest"]) != 64
+                or any(char not in "0123456789abcdef" for char in active["plan_digest"])):
+            raise ControlRefused("v2 active_worker plan_digest is invalid")
+        if active["state"] not in {
+                "intent", "container_created", "child_captured", "exec_release_intent",
+                "executing", "result_retained", "tearing_down", "teardown_failed",
+                "unresolved"}:
+            raise ControlRefused("v2 active_worker state is invalid")
+        for name in ("worker_generation", "grant_generation"):
+            if not isinstance(active[name], int) or isinstance(active[name], bool) \
+                    or active[name] < 1:
+                raise ControlRefused(f"v2 active_worker {name} is invalid")
+        if not isinstance(active["control_revision"], int) \
+                or isinstance(active["control_revision"], bool) \
+                or active["control_revision"] < 0:
+            raise ControlRefused("v2 active_worker control_revision is invalid")
+        for name in ("provider_deadline", "termination_deadline"):
+            if active[name] is not None and (not isinstance(active[name], (int, float))
+                    or isinstance(active[name], bool) or not math.isfinite(active[name])):
+                raise ControlRefused(f"v2 active_worker {name} is invalid")
+        for name in ("activity_at", "unresolved_reason"):
+            if active[name] is not None \
+                    and (not isinstance(active[name], str) or not active[name]):
+                raise ControlRefused(f"v2 active_worker {name} is invalid")
+        for name in ("started_at", "activity_at"):
+            if active[name] is not None:
+                try:
+                    parsed = datetime.fromisoformat(active[name].replace("Z", "+00:00"))
+                except ValueError as exc:
+                    raise ControlRefused(
+                        f"v2 active_worker {name} is not ISO-8601") from exc
+                if parsed.tzinfo is None:
+                    raise ControlRefused(f"v2 active_worker {name} lacks timezone")
+        if row["worker_activity_at"] != active["activity_at"]:
+            raise ControlRefused("v2 snapshot worker activity clocks disagree")
+        if row["observed_state"] in {"paused", "drained"}:
+            raise ControlRefused(
+                "v2 snapshot cannot certify quiescence with an active worker")
+        row["active_worker"] = dict(active)
+    elif row["worker_activity_at"] is not None or row["execution_authorized"]:
+        raise ControlRefused("v2 snapshot has worker activity/authority without active worker")
     return row
 
 
@@ -328,12 +472,19 @@ class CampaignController:
     def __init__(self, resolved: ResolvedCampaign, store: Path, *,
                  config_generation: int = 1,
                  readiness_check: Callable[[], tuple[bool, str | None]] | None = None,
+                 snapshot_version: int = 1,
+                 lifecycle_provider: Any = None,
+                 lifecycle_dependency_check: Callable[[], bool | None] | None = None,
                  clock: Callable[[], str] = _now) -> None:
         if not isinstance(resolved, ResolvedCampaign):
             raise TypeError("resolved must be ResolvedCampaign")
         if not isinstance(config_generation, int) or isinstance(config_generation, bool) \
                 or config_generation < 1:
             raise ValueError("config_generation must be positive")
+        if snapshot_version not in {1, 2}:
+            raise ValueError("snapshot_version must be 1 or 2")
+        if snapshot_version == 1 and lifecycle_provider is not None:
+            raise ControlRefused("worker lifecycle provider requires explicit snapshot v2")
         try:
             normalized = ResolvedCampaign.from_dict(resolved.to_dict())
         except Exception as exc:
@@ -346,6 +497,17 @@ class CampaignController:
         self.requested_manifest_digest = normalized.manifest_digest
         self.config_digest = resolved_config_digest(normalized)
         self._producer_build = _loaded_producer_build_identity()
+        self.snapshot_version = snapshot_version
+        self._lifecycle_provider = lifecycle_provider
+        self._lifecycle_dependency_check = lifecycle_dependency_check or (lambda: True)
+        self._worker_lifecycle = None
+        self._active_worker_events: list[dict[str, Any]] = []
+        self._active_acquisition_events: list[dict[str, Any]] = []
+        self._acquisition_projection = worker_lifecycle_module.project_acquisitions([])
+        self._worker_lifecycle_revision = 0
+        self._worker_last_generation = 0
+        self._worker_projection = worker_lifecycle_module.project_events([])
+        self._worker_run_active = False
         self.readiness_check = readiness_check or (lambda: (False, "execution authority absent"))
         self.clock = clock
         self._mutex = threading.RLock()
@@ -458,6 +620,8 @@ class CampaignController:
                 })
                 self._entered = True
                 self._poisoned = False
+                if self.snapshot_version == 2:
+                    self._initialize_worker_lifecycle_locked()
                 return self
             except BaseException:
                 self.close()
@@ -468,6 +632,7 @@ class CampaignController:
         last_epoch = 0
         last_revision = 0
         saw_start = False
+        saw_v2_start = False
         candidate_pending: tuple[str, str, str] | None = None
         candidate_pending_payload: Mapping[str, Any] | None = None
         candidate_prepared = False
@@ -476,10 +641,138 @@ class CampaignController:
         candidate_entries = []
         native_records: dict[str, Any] = {}
         native_payload_digests: dict[str, str] = {}
+        worker_events: list[dict[str, Any]] = []
+        acquisition_events: list[dict[str, Any]] = []
+        acquisition_revision = 0
+        acquisition_last_generation = 0
         for entry in entries:
             self._journal_cursor = entry.seq
             if entry.campaign_id not in (None, self.resolved.campaign_id):
                 raise ControlRefused("store contains another campaign identity")
+            if entry.kind == journal_module.KIND_WORKER_LIFECYCLE:
+                violations = journal_module._validate_native_payload(entry.kind, entry.payload)
+                if violations:
+                    raise journal_module.JournalCorruption(
+                        "invalid worker lifecycle history: " + "; ".join(violations))
+                if self.snapshot_version != 2:
+                    raise ControlRefused(
+                        "store contains worker lifecycle v2; reopen explicitly as v2")
+                row = entry.payload
+                if (not saw_start or row["campaign_id"] != self.resolved.campaign_id
+                        or row["config_generation"] != self.config_generation
+                        or row["config_digest"] != self.config_digest):
+                    raise journal_module.JournalCorruption(
+                        "worker lifecycle event breaks controller binding")
+                if row["event"] == "OWNED_LAUNCH_INTENT":
+                    if row["supervisor_incarnation"] != last_incarnation:
+                        raise journal_module.JournalCorruption(
+                            "worker lifecycle intent breaks current supervisor binding")
+                else:
+                    prior = next((item for item in reversed(worker_events)
+                                  if item["worker_id"] == row["worker_id"]), None)
+                    if (prior is None or row["supervisor_id"] != prior["supervisor_id"]
+                            or row["supervisor_incarnation"]
+                            != prior["supervisor_incarnation"]):
+                        raise journal_module.JournalCorruption(
+                            "worker lifecycle continuation breaks durable owner binding")
+                worker_events.append(copy.deepcopy(dict(entry.payload)))
+                continue
+            if entry.kind == journal_module.KIND_WORKER_ACQUISITION:
+                violations = journal_module._validate_native_payload(entry.kind, entry.payload)
+                if violations:
+                    raise journal_module.JournalCorruption(
+                        "invalid worker acquisition history: " + "; ".join(violations))
+                if self.snapshot_version != 2:
+                    raise ControlRefused(
+                        "store contains worker acquisition v2; reopen explicitly as v2")
+                row = worker_lifecycle_module.validate_acquisition_transition(entry.payload)
+                if row["phase"] == "INTENT":
+                    if (acquisition_events or not saw_start
+                            or row["campaign_id"] != self.resolved.campaign_id
+                            or row["config_generation"] != self.config_generation
+                            or row["config_digest"] != self.config_digest
+                            or row["supervisor_incarnation"] != last_incarnation
+                            or (acquisition_last_generation
+                                and row["worker_generation"]
+                                != acquisition_last_generation + 1)):
+                        raise journal_module.JournalCorruption(
+                            "worker acquisition intent breaks controller binding")
+                    acquisition_events = [copy.deepcopy(row)]
+                else:
+                    if not acquisition_events:
+                        raise journal_module.JournalCorruption(
+                            "worker acquisition resolution lacks indexed intent")
+                    candidate = [*acquisition_events, copy.deepcopy(row)]
+                    if row["data"]["outcome"] == "lifecycle_handoff":
+                        matches = [item for item in worker_events
+                                   if item["event"] == "OWNED_LAUNCH_INTENT"
+                                   and item["worker_id"] == row["worker_id"]
+                                   and item["worker_generation"]
+                                   == row["worker_generation"]]
+                        if len(matches) != 1:
+                            raise journal_module.JournalCorruption(
+                                "acquisition handoff lacks prior exact journal lifecycle intent")
+                        try:
+                            handoff_grant = worker_lifecycle_module.validate_lifecycle_handoff(
+                                acquisition_events[0], matches[0])
+                        except worker_lifecycle_module.LifecycleRefused as exc:
+                            raise journal_module.JournalCorruption(
+                                "acquisition handoff differs from lifecycle intent") from exc
+                        if ((handoff_grant.grant_id, handoff_grant.generation)
+                                != (row["data"]["grant_id"],
+                                    row["data"]["grant_generation"])):
+                            raise journal_module.JournalCorruption(
+                                "acquisition handoff grant identity differs")
+                    acquisition_events = candidate
+                try:
+                    acquisition_projection = worker_lifecycle_module.project_acquisitions(
+                        acquisition_events)
+                except worker_lifecycle_module.LifecycleRefused as exc:
+                    raise journal_module.JournalCorruption(
+                        f"worker acquisition replay is inconsistent: {exc}") from exc
+                acquisition_revision += 1
+                acquisition_last_generation = max(
+                    acquisition_last_generation, row["worker_generation"])
+                if acquisition_projection.pending is None:
+                    acquisition_events = []
+                continue
+            if entry.kind == journal_module.KIND_CAMPAIGN_COMMAND_V2:
+                violations = journal_module._validate_native_payload(entry.kind, entry.payload)
+                if violations:
+                    raise journal_module.JournalCorruption(
+                        "invalid v2 command history: " + "; ".join(violations))
+                if self.snapshot_version != 2:
+                    raise ControlRefused(
+                        "store contains campaign controls v2; reopen explicitly as v2")
+                row = worker_lifecycle_module.validate_command_transition_v2(entry.payload)
+                if (not saw_start
+                        or row["campaign_id"] != self.resolved.campaign_id
+                        or row["config_generation"] != self.config_generation
+                        or row["config_digest"] != self.config_digest
+                        or row["supervisor_incarnation"] != last_incarnation):
+                    raise journal_module.JournalCorruption(
+                        "v2 command breaks campaign/config/supervisor binding")
+                result = row["result"]
+                request_id = result["request_id"]
+                if row["phase"] == "ACCEPTED":
+                    if row["control_revision"] != last_revision + 1 \
+                            or request_id in self._command_results:
+                        raise journal_module.JournalCorruption(
+                            "v2 command acceptance breaks revision/idempotency")
+                    last_revision = row["control_revision"]
+                else:
+                    prior = self._command_results.get(request_id)
+                    if (prior is None or prior.get("completed") is not False
+                            or row["control_revision"] > last_revision
+                            or prior["payload_digest"] != result["payload_digest"]):
+                        raise journal_module.JournalCorruption(
+                            "v2 command completion lacks exact pending acceptance")
+                if row["control_revision"] == last_revision:
+                    self.desired_state = result["desired_state"]
+                    self.observed_state = result["observed_state"]
+                    self.prerequisite_reason = result["prerequisite_reason"]
+                self._command_results[request_id] = copy.deepcopy(result)
+                continue
             if entry.kind == journal_module.KIND_PLANNED_SERVING_ARM_CAPTURED:
                 row = entry.payload
                 violations = journal_module._validate_native_payload(entry.kind, row)
@@ -555,6 +848,14 @@ class CampaignController:
             if violations:
                 raise journal_module.JournalCorruption(
                     "invalid campaign supervisor history: " + "; ".join(violations))
+            if row["schema"] == journal_module.CAMPAIGN_SUPERVISOR_EVENT_SCHEMA_V2:
+                if self.snapshot_version != 2:
+                    raise ControlRefused(
+                        "store is fenced for controller v2; v1 downgrade is refused")
+                saw_v2_start = True
+            elif saw_v2_start:
+                raise journal_module.JournalCorruption(
+                    "v1 supervisor events cannot follow the durable v2 fence")
             if (row["campaign_id"] != self.resolved.campaign_id
                     or row["config_generation"] != self.config_generation
                     or row["config_digest"] != self.config_digest):
@@ -623,6 +924,35 @@ class CampaignController:
                 self._command_results[request_id] = dict(result)
         self.supervisor_incarnation = last_incarnation
         self.stream_epoch = last_epoch
+        self._worker_lifecycle_revision = len(worker_events) + acquisition_revision
+        self._worker_last_generation = max(
+            [row["worker_generation"] for row in worker_events]
+            + [acquisition_last_generation], default=0)
+        try:
+            self._worker_projection = worker_lifecycle_module.project_events(worker_events)
+        except worker_lifecycle_module.LifecycleRefused as exc:
+            raise journal_module.JournalCorruption(
+                f"worker lifecycle replay is inconsistent: {exc}") from exc
+        if self._worker_projection.active:
+            active_id = next(iter(self._worker_projection.active))
+            self._active_worker_events = [
+                row for row in worker_events if row["worker_id"] == active_id]
+        else:
+            self._active_worker_events = []
+        self._active_acquisition_events = acquisition_events
+        self._acquisition_projection = worker_lifecycle_module.project_acquisitions(
+            acquisition_events)
+        if self._acquisition_projection.pending is not None:
+            self.observed_state = "ownership_unresolved"
+            self.prerequisite_reason = (
+                "worker_acquisition_pending:"
+                + str(self._acquisition_projection.pending["request_id"]))
+        elif self._worker_projection.active:
+            self.observed_state = "ownership_unresolved"
+            self.prerequisite_reason = "owned worker reconciliation required"
+        elif self.prerequisite_reason == "owned worker reconciliation required":
+            self.observed_state = self.desired_state
+            self.prerequisite_reason = None
         self.control_revision = last_revision
         self._candidate_pending = candidate_pending
         self._candidate_pending_payload = candidate_pending_payload
@@ -632,6 +962,404 @@ class CampaignController:
         self._candidate_entries = candidate_entries
         self._native_records = native_records
         self._native_payload_digests = native_payload_digests
+
+    def _initialize_worker_lifecycle_locked(self) -> None:
+        if not self._mutex._is_owned():
+            raise ControlRefused("worker lifecycle initialization requires controller lock")
+        if self._runtime_root is None:
+            raise ControlRefused("worker lifecycle runtime root is unavailable")
+        supervisor_id = "supervisor-" + schemas.content_hash({
+            "campaign_id": self.resolved.campaign_id,
+            "config_digest": self.config_digest,
+            "store": str(self.store),
+        })
+        binding = worker_lifecycle_module.CampaignBinding(
+            self.resolved.campaign_id, self.config_digest, self.config_generation,
+            supervisor_id, self.supervisor_incarnation)
+
+        def admission(request, grant, now, required_until):
+            with self._mutex:
+                self._require_active_locked()
+                remaining_stage = required_until - now - request.teardown_seconds
+                if remaining_stage <= 0:
+                    return worker_lifecycle_module.StageAdmission(
+                        False, "stage budget expired before admission")
+                decision = may_start_stage(
+                    desired_state=self.desired_state,
+                    current_control_revision=self.control_revision,
+                    control_revision=request.control_revision,
+                    current_supervisor_incarnation=self.supervisor_incarnation,
+                    supervisor_incarnation=binding.supervisor_incarnation,
+                    grant=TrustedGrant(grant.grant_id, grant.generation, grant.deadline,
+                                       grant.revoked, grant.renewal_ok),
+                    grant_identity=grant.grant_id, grant_generation=grant.generation,
+                    now=now, max_stage_seconds=remaining_stage,
+                    teardown_seconds=request.teardown_seconds,
+                    dependency_check=self._lifecycle_dependency_check)
+                return worker_lifecycle_module.StageAdmission(
+                    decision.allowed, decision.reason)
+
+        def binding_current(candidate):
+            with self._mutex:
+                return bool(
+                    self._entered and not self._poisoned
+                    and candidate.campaign_id == self.resolved.campaign_id
+                    and candidate.config_digest == self.config_digest
+                    and candidate.config_generation == self.config_generation
+                    and candidate.supervisor_id == supervisor_id
+                    and candidate.supervisor_incarnation == self.supervisor_incarnation)
+
+        def runtime_fence(_request, _now):
+            with self._mutex:
+                self._require_active_locked()
+                if self.desired_state == "drained":
+                    return worker_lifecycle_module.RuntimeDirective(
+                        "drain", "accepted drain reached the stage boundary")
+                return worker_lifecycle_module.RuntimeDirective(
+                    "continue", ("pause closes successors; held stage may settle"
+                                 if self.desired_state == "paused"
+                                 else "current held stage remains authorized"))
+
+        self._worker_lifecycle = worker_lifecycle_module.WorkerLifecycle(
+            binding=binding, runtime=self._runtime_root,
+            event_sink=self._append_worker_event,
+            provider=self._lifecycle_provider, admission_fence=admission,
+            binding_fence=binding_current, runtime_fence=runtime_fence,
+            wall_clock=self.clock)
+        self._worker_lifecycle._worker_generation = self._worker_last_generation
+        if self._acquisition_projection.pending is not None:
+            self._worker_lifecycle._pending_acquisition = (
+                worker_lifecycle_module.prospective_identity_from_transition(
+                    self._acquisition_projection.pending))
+            self._worker_lifecycle._ownership_unresolved = True
+        if self._worker_projection.active:
+            self._worker_lifecycle._ownership_unresolved = True
+
+    def _append_worker_event(self, value: Mapping[str, Any]) -> None:
+        if isinstance(value, Mapping) and value.get("schema") \
+                == worker_lifecycle_module.ACQUISITION_SCHEMA:
+            self._append_acquisition_event(value)
+            return
+        row = worker_lifecycle_module.validate_event(value)
+        with self._mutex:
+            self._require_active_locked()
+            binding = self._worker_lifecycle.binding if self._worker_lifecycle else None
+            if (binding is None or row["campaign_id"] != self.resolved.campaign_id
+                    or row["config_digest"] != self.config_digest
+                    or row["config_generation"] != self.config_generation):
+                raise ControlRefused("worker event binding is not current")
+            assert self._journal is not None
+            if row["event"] == "OWNED_LAUNCH_INTENT":
+                if (self._active_worker_events
+                        or row["supervisor_id"] != binding.supervisor_id
+                        or row["supervisor_incarnation"] != self.supervisor_incarnation):
+                    raise ControlRefused("worker intent overlaps active lifecycle")
+                pending = self._acquisition_projection.pending
+                if (pending is None
+                        or any(row[name] != pending[name] for name in (
+                            "worker_id", "worker_generation", "request_id", "plan_digest",
+                            "lineage_id", "stage_id", "container_id", "control_revision"))):
+                    raise ControlRefused(
+                        "worker lifecycle intent lacks exact durable prospective acquisition")
+                candidate_events = [copy.deepcopy(row)]
+            else:
+                if (not self._active_worker_events
+                        or self._active_worker_events[0]["worker_id"] != row["worker_id"]):
+                    raise ControlRefused("worker event lacks its indexed active intent")
+                candidate_events = [*self._active_worker_events, copy.deepcopy(row)]
+            projection = worker_lifecycle_module.project_events(candidate_events)
+            try:
+                entry = self._journal.append(journal_module.KIND_WORKER_LIFECYCLE, row)
+                self._verify_journal_layout(self.store / "journal")
+            except BaseException:
+                self._poisoned = True
+                raise
+            self._journal_cursor = entry.seq
+            self._worker_lifecycle_revision += 1
+            self._worker_last_generation = max(
+                self._worker_last_generation, row["worker_generation"])
+            self._worker_projection = projection
+            self._active_worker_events = (
+                candidate_events if projection.active else [])
+            if (not projection.active
+                    and self._acquisition_projection.pending is None
+                    and self.prerequisite_reason == "owned worker reconciliation required"):
+                self.observed_state = self.desired_state
+                self.prerequisite_reason = None
+
+    def _append_acquisition_event(self, value: Mapping[str, Any]) -> None:
+        row = worker_lifecycle_module.validate_acquisition_transition(value)
+        with self._mutex:
+            self._require_active_locked()
+            binding = self._worker_lifecycle.binding if self._worker_lifecycle else None
+            assert self._journal is not None
+            if row["phase"] == "INTENT":
+                if (binding is None or self._active_acquisition_events
+                        or self._active_worker_events
+                        or row["campaign_id"] != self.resolved.campaign_id
+                        or row["config_digest"] != self.config_digest
+                        or row["config_generation"] != self.config_generation
+                        or row["supervisor_id"] != binding.supervisor_id
+                        or row["supervisor_incarnation"] != self.supervisor_incarnation
+                        or row["worker_generation"] != self._worker_last_generation + 1):
+                    raise ControlRefused(
+                        "prospective acquisition overlaps or breaks current binding/generation")
+                candidate_events = [copy.deepcopy(row)]
+            else:
+                pending = self._acquisition_projection.pending
+                if pending is None or not self._active_acquisition_events:
+                    raise ControlRefused("acquisition resolution lacks indexed pending intent")
+                candidate_events = [*self._active_acquisition_events, copy.deepcopy(row)]
+                if row["data"]["outcome"] == "lifecycle_handoff":
+                    matches = [item for item in self._active_worker_events
+                               if item["event"] == "OWNED_LAUNCH_INTENT"
+                               and item["worker_id"] == row["worker_id"]
+                               and item["worker_generation"] == row["worker_generation"]]
+                    if len(matches) != 1:
+                        raise ControlRefused(
+                            "acquisition handoff lacks actual durable lifecycle intent")
+                    try:
+                        handoff_grant = worker_lifecycle_module.validate_lifecycle_handoff(
+                            self._active_acquisition_events[0], matches[0])
+                    except worker_lifecycle_module.LifecycleRefused as exc:
+                        raise ControlRefused(
+                            "acquisition handoff differs from lifecycle intent") from exc
+                    if ((handoff_grant.grant_id, handoff_grant.generation)
+                            != (row["data"]["grant_id"],
+                                row["data"]["grant_generation"])):
+                        raise ControlRefused("acquisition handoff grant identity differs")
+                elif self._active_worker_events:
+                    raise ControlRefused(
+                        "grant-free acquisition resolution conflicts with active lifecycle")
+            projection = worker_lifecycle_module.project_acquisitions(candidate_events)
+            try:
+                entry = self._journal.append(
+                    journal_module.KIND_WORKER_ACQUISITION, row)
+                self._verify_journal_layout(self.store / "journal")
+            except BaseException:
+                self._poisoned = True
+                raise
+            self._journal_cursor = entry.seq
+            self._worker_lifecycle_revision += 1
+            self._worker_last_generation = max(
+                self._worker_last_generation, row["worker_generation"])
+            self._acquisition_projection = projection
+            self._active_acquisition_events = (
+                candidate_events if projection.pending is not None else [])
+            if projection.pending is not None:
+                self.observed_state = "ownership_unresolved"
+                self.prerequisite_reason = (
+                    "worker_acquisition_pending:" + str(row["request_id"]))
+            elif (isinstance(self.prerequisite_reason, str)
+                  and self.prerequisite_reason.startswith("worker_acquisition_pending:")):
+                if self._worker_projection.active:
+                    launch = self._active_worker_events[0]
+                    if launch["supervisor_incarnation"] == self.supervisor_incarnation:
+                        self.observed_state = self.desired_state
+                        self.prerequisite_reason = None
+                    else:
+                        self.observed_state = "ownership_unresolved"
+                        self.prerequisite_reason = "owned worker reconciliation required"
+                else:
+                    self.observed_state = self.desired_state
+                    self.prerequisite_reason = None
+
+    def run_worker_stage(self, request: worker_lifecycle_module.StageRequest):
+        """Run one provider-authorized stage without holding the command lock."""
+        with self._mutex:
+            self._require_active_locked()
+            if self.snapshot_version != 2 or self._worker_lifecycle is None:
+                raise ControlRefused("worker lifecycle requires explicit snapshot v2")
+            if (self._worker_run_active or self._worker_projection.active
+                    or self._acquisition_projection.pending is not None):
+                raise ControlRefused("an owned worker is active or unresolved")
+            if self.desired_state != "running":
+                raise ControlRefused(f"worker admission is closed: {self.desired_state}")
+            if request.control_revision != self.control_revision:
+                raise ControlRefused("worker request has stale control revision")
+            engine = self._worker_lifecycle
+            self._worker_run_active = True
+        try:
+            return engine.run_stage(request)
+        finally:
+            with self._mutex:
+                self._worker_run_active = False
+                self._settle_v2_commands_locked()
+
+    def reconcile_workers(self):
+        """Reconcile retained v2 ownership outside the controller command lock."""
+        with self._mutex:
+            self._require_active_locked()
+            if self.snapshot_version != 2 or self._worker_lifecycle is None:
+                raise ControlRefused("worker reconciliation requires explicit snapshot v2")
+            if self._worker_run_active:
+                raise ControlRefused("worker execution is already active")
+            engine = self._worker_lifecycle
+            events = copy.deepcopy(self._active_worker_events)
+            acquisition_events = copy.deepcopy(self._active_acquisition_events)
+            self._worker_run_active = True
+        try:
+            if acquisition_events:
+                status = engine.reconcile_acquisition(acquisition_events, events)
+                if status != "handoff":
+                    return None
+            return engine.reconcile(events)
+        finally:
+            with self._mutex:
+                self._worker_run_active = False
+                self._settle_v2_commands_locked()
+
+    def worker_result_fence(self, terminal):
+        with self._mutex:
+            self._require_active_locked()
+            if self._worker_lifecycle is None:
+                raise ControlRefused("worker lifecycle is unavailable")
+            engine = self._worker_lifecycle
+        return engine.trusted_result_fence(terminal)
+
+    def _append_v2_command_locked(self, phase: str, command: Mapping[str, Any],
+                                  result: Mapping[str, Any]) -> None:
+        assert self._journal is not None and self._worker_lifecycle is not None
+        row = worker_lifecycle_module.validate_command_transition_v2({
+            "schema": worker_lifecycle_module.COMMAND_TRANSITION_SCHEMA,
+            "phase": phase, "campaign_id": self.resolved.campaign_id,
+            "config_digest": self.config_digest,
+            "config_generation": self.config_generation,
+            "supervisor_id": self._worker_lifecycle.binding.supervisor_id,
+            "supervisor_incarnation": self.supervisor_incarnation,
+            "control_revision": result["control_revision"],
+            "occurred_at": self.clock(), "command": dict(command),
+            "result": dict(result),
+        })
+        try:
+            entry = self._journal.append(journal_module.KIND_CAMPAIGN_COMMAND_V2, row)
+            self._verify_journal_layout(self.store / "journal")
+        except BaseException:
+            self._poisoned = True
+            raise
+        self._journal_cursor = entry.seq
+
+    def _settle_v2_commands_locked(self) -> None:
+        if self.snapshot_version != 2 or self._worker_run_active \
+                or self._worker_projection.active \
+                or self._acquisition_projection.pending is not None:
+            return
+        for request_id, prior in tuple(self._command_results.items()):
+            if prior.get("completed") is not False:
+                continue
+            operation = prior["operation"]
+            if operation not in {"pause", "drain"}:
+                continue
+            result = dict(prior)
+            result.update({
+                "completed": True, "completed_at": self.clock(),
+                "completion_reason": "owned workers quiesced and claims released",
+                "observed_state": "paused" if operation == "pause" else "drained",
+            })
+            command = {
+                "schema": COMMAND_SCHEMA, "campaign_id": self.resolved.campaign_id,
+                "config_generation": self.config_generation, "request_id": request_id,
+                "operation": operation, "payload": {},
+                "payload_digest": result["payload_digest"],
+                "expected_control_revision": result["control_revision"] - 1,
+            }
+            result = worker_lifecycle_module.validate_command_result_v2(result)
+            self._append_v2_command_locked("COMPLETED", command, result)
+            self._command_results[request_id] = result
+            if result["control_revision"] == self.control_revision:
+                self.observed_state = result["observed_state"]
+                self.prerequisite_reason = result["prerequisite_reason"]
+
+    def _supersede_pending_pause_locked(self) -> None:
+        for request_id, prior in tuple(self._command_results.items()):
+            if prior.get("operation") != "pause" or prior.get("completed") is not False:
+                continue
+            result = dict(prior)
+            result.update({
+                "completed": True, "completed_at": self.clock(),
+                "completion_reason": "superseded by a later accepted drain",
+                "desired_state": "drained", "observed_state": "draining",
+                "prerequisite_reason": None,
+            })
+            command = {
+                "schema": COMMAND_SCHEMA, "campaign_id": self.resolved.campaign_id,
+                "config_generation": self.config_generation, "request_id": request_id,
+                "operation": "pause", "payload": {},
+                "payload_digest": result["payload_digest"],
+                "expected_control_revision": result["control_revision"] - 1,
+            }
+            result = worker_lifecycle_module.validate_command_result_v2(result)
+            self._append_v2_command_locked("COMPLETED", command, result)
+            self._command_results[request_id] = result
+
+    def _apply_command_v2_locked(self, value: Mapping[str, Any]) -> dict[str, Any]:
+        row = validate_command(value)
+        if row["campaign_id"] != self.resolved.campaign_id \
+                or row["config_generation"] != self.config_generation:
+            raise ControlRefused("command campaign/config generation does not match")
+        prior = self._command_results.get(row["request_id"])
+        if prior is not None:
+            if prior["payload_digest"] != row["payload_digest"]:
+                raise ControlRefused("request_id was already used for different semantics")
+            self._publish_snapshot_locked()
+            return copy.deepcopy(prior)
+        pending = [result for result in self._command_results.values()
+                   if result.get("completed") is False]
+        if pending and not (row["operation"] == "drain"
+                            and all(item["operation"] == "pause" for item in pending)):
+            raise ControlRefused("a prior lifecycle command is accepted but incomplete")
+        if row["expected_control_revision"] != self.control_revision:
+            raise ControlRefused(f"stale control revision; current={self.control_revision}")
+        if self.desired_state == "drained":
+            raise ControlRefused("drained is terminal for this campaign generation")
+        revision = self.control_revision + 1
+        accepted_at = self.clock()
+        active = (self._worker_run_active or bool(self._worker_projection.active)
+                  or self._acquisition_projection.pending is not None)
+        if row["operation"] == "resume":
+            try:
+                ready, reason = self.readiness_check()
+            except Exception as exc:
+                raise ControlRefused(f"readiness prerequisite check failed: {exc}") from exc
+            if type(ready) is not bool or (reason is not None and
+                    (not isinstance(reason, str) or not reason.strip())):
+                raise ControlRefused("readiness prerequisite returned malformed result")
+            desired = "running"
+            observed = "running" if ready else "waiting_prerequisite"
+            prerequisite = None if ready else (reason or "prerequisite unavailable")
+            completed = True
+            completion_reason = "running" if ready else "waiting on named prerequisite"
+        else:
+            desired = "paused" if row["operation"] == "pause" else "drained"
+            prerequisite = None
+            completed = not active
+            observed = (desired if completed
+                        else ("pausing" if row["operation"] == "pause" else "draining"))
+            completion_reason = ("already quiescent" if completed else None)
+        result = worker_lifecycle_module.validate_command_result_v2({
+            "schema": worker_lifecycle_module.COMMAND_RESULT_SCHEMA,
+            "request_id": row["request_id"], "operation": row["operation"],
+            "payload_digest": row["payload_digest"], "accepted": True,
+            "accepted_at": accepted_at, "completed": completed,
+            "completed_at": accepted_at if completed else None,
+            "completion_reason": completion_reason,
+            "control_revision": revision, "desired_state": desired,
+            "observed_state": observed, "prerequisite_reason": prerequisite,
+        })
+        old_revision = self.control_revision
+        self.control_revision = revision
+        try:
+            self._append_v2_command_locked("ACCEPTED", row, result)
+        except BaseException:
+            self.control_revision = old_revision
+            raise
+        self.desired_state, self.observed_state = desired, observed
+        self.prerequisite_reason = prerequisite
+        self._command_results[row["request_id"]] = result
+        if row["operation"] == "drain":
+            self._supersede_pending_pause_locked()
+        self._publish_snapshot_locked()
+        return copy.deepcopy(result)
 
     def register_native_capture(self, validator: NativeCaptureValidator) -> None:
         """Install the explicit trusted worker-result consumer for this lifetime.
@@ -806,8 +1534,13 @@ class CampaignController:
         self._verify_store()
         if self._journal is None:
             raise ControlRefused("controller journal is unavailable")
+        if self.snapshot_version == 2 and event != "START":
+            raise ControlRefused("v2 supervisor schema is restricted to START")
+        schema = (journal_module.CAMPAIGN_SUPERVISOR_EVENT_SCHEMA_V2
+                  if self.snapshot_version == 2
+                  else journal_module.CAMPAIGN_SUPERVISOR_EVENT_SCHEMA)
         entry = self._journal.append(journal_module.KIND_CAMPAIGN_SUPERVISOR_EVENT, {
-            "schema": journal_module.CAMPAIGN_SUPERVISOR_EVENT_SCHEMA,
+            "schema": schema,
             "event": event, "campaign_id": self.resolved.campaign_id,
             "config_generation": self.config_generation,
             "config_digest": self.config_digest,
@@ -932,6 +1665,8 @@ class CampaignController:
     def apply_command(self, value: Mapping[str, Any]) -> dict[str, Any]:
         with self._mutex:
             self._require_active_locked()
+            if self.snapshot_version == 2:
+                return self._apply_command_v2_locked(value)
             row = validate_command(value)
             if row["campaign_id"] != self.resolved.campaign_id \
                     or row["config_generation"] != self.config_generation:
@@ -991,6 +1726,8 @@ class CampaignController:
 
     def _snapshot_locked(self) -> dict[str, Any]:
         self._require_active_locked()
+        if self.snapshot_version == 2:
+            return self._snapshot_v2_locked()
         self.sequence += 1
         generated_at = self.clock()
         return {"schema": SNAPSHOT_SCHEMA,
@@ -1011,6 +1748,89 @@ class CampaignController:
                     "last_scientific_result_at": None, "worker_activity_at": None,
                     "execution_authorized": False,
                     "prerequisite_reason": self.prerequisite_reason}
+
+    def _snapshot_v2_locked(self) -> dict[str, Any]:
+        self.sequence += 1
+        generated_at = self.clock()
+        observed_state = self.observed_state
+        prerequisite_reason = self.prerequisite_reason
+        if self._acquisition_projection.pending is not None:
+            observed_state = "ownership_unresolved"
+            prerequisite_reason = (
+                "worker_acquisition_pending:"
+                + str(self._acquisition_projection.pending["request_id"]))
+        active_worker = None
+        worker_activity_at = None
+        if self._worker_projection.active:
+            worker_id, latest = next(iter(self._worker_projection.active.items()))
+            rows = self._active_worker_events
+            intent = next(row for row in rows if row["event"] == "OWNED_LAUNCH_INTENT")
+            stage_rows = [row for row in rows if row["event"] == "WORKER_STAGE"]
+            teardown_rows = [row for row in rows
+                             if row["event"] == "OWNED_TEARDOWN_STARTED"]
+            unresolved_rows = [row for row in rows if row["event"] in {
+                "WORKER_UNRESOLVED", "OWNED_TEARDOWN_FAILED"}]
+            worker_activity_at = (stage_rows[-1]["data"]["activity_at"]
+                                  if stage_rows else None)
+            state = {
+                "OWNED_LAUNCH_INTENT": "intent",
+                "OWNED_CONTAINER_CREATED": "container_created",
+                "OWNED_CHILD_CAPTURED": "child_captured",
+                "OWNED_EXEC_RELEASE_INTENT": "exec_release_intent",
+                "OWNED_EXEC_RELEASED": "executing",
+                "WORKER_STAGE": "executing",
+                "WORKER_RESULT_RETAINED": "result_retained",
+                "OWNED_TEARDOWN_STARTED": "tearing_down",
+                "OWNED_TEARDOWN_FAILED": "teardown_failed",
+                "WORKER_UNRESOLVED": "unresolved",
+                "WORKER_RESULT_STALE": "unresolved",
+            }[latest["event"]]
+            active_worker = {
+                "worker_id": worker_id,
+                "worker_generation": intent["worker_generation"],
+                "request_id": intent["request_id"],
+                "plan_digest": intent["plan_digest"],
+                "lineage_id": intent["lineage_id"],
+                "stage_id": intent["stage_id"], "state": state,
+                "grant_id": intent["grant_id"],
+                "grant_generation": intent["grant_generation"],
+                "container_id": intent["container_id"],
+                "provider_deadline": intent["data"]["provider_deadline"],
+                "deadline_clock_domain": intent["data"]["clock_domain"],
+                "control_revision": intent["control_revision"],
+                "started_at": intent["occurred_at"],
+                "activity_at": worker_activity_at,
+                "termination_deadline": (teardown_rows[-1]["data"]["termination_deadline"]
+                                         if teardown_rows else None),
+                "unresolved_reason": (unresolved_rows[-1]["data"]["reason"]
+                                      if unresolved_rows else None),
+            }
+        return validate_snapshot_v2({
+            "schema": SNAPSHOT_SCHEMA_V2,
+            "producer_build": copy.deepcopy(self._producer_build),
+            "producer_schema": SNAPSHOT_SCHEMA_V2,
+            "campaign_id": self.resolved.campaign_id,
+            "config_generation": self.config_generation,
+            "config_digest": self.config_digest,
+            "requested_manifest_digest": self.requested_manifest_digest,
+            "supervisor_incarnation": self.supervisor_incarnation,
+            "stream_epoch": self.stream_epoch, "sequence": self.sequence,
+            "journal_cursor": self._journal_cursor,
+            "control_revision": self.control_revision,
+            "generated_at": generated_at, "desired_state": self.desired_state,
+            "observed_state": observed_state,
+            "command_results": copy.deepcopy(list(self._command_results.values())),
+            "active_worker": active_worker,
+            "producer_heartbeat_at": generated_at,
+            "last_scientific_result_at": None,
+            "worker_activity_at": worker_activity_at,
+            # A snapshot does not call the provider under the controller lock;
+            # therefore it makes no live grant claim from cached history.
+            "execution_authorized": False,
+            "execution_capability_available": self._lifecycle_provider is not None,
+            "worker_lifecycle_revision": self._worker_lifecycle_revision,
+            "prerequisite_reason": prerequisite_reason,
+        })
 
     def snapshot(self) -> dict[str, Any]:
         with self._mutex:
@@ -1037,6 +1857,11 @@ class CampaignController:
 
     def close(self) -> None:
         with self._mutex:
+            if self.snapshot_version == 2 and self._entered \
+                    and (self._worker_run_active or self._worker_projection.active
+                         or self._acquisition_projection.pending is not None):
+                raise ControlRefused(
+                    "owned worker is active/unresolved; controller ownership retained")
             fd, self._lease_fd = self._lease_fd, None
             runtime, self._runtime_root = self._runtime_root, None
             self._lock_identity = None
@@ -1056,6 +1881,13 @@ class CampaignController:
             self._native_payload_digests = {}
             self._native_validator = None
             self._native_capabilities = set()
+            self._worker_lifecycle = None
+            self._active_worker_events = []
+            self._active_acquisition_events = []
+            self._acquisition_projection = worker_lifecycle_module.project_acquisitions([])
+            self._worker_lifecycle_revision = 0
+            self._worker_last_generation = 0
+            self._worker_projection = worker_lifecycle_module.project_events([])
             self._lifetime_token = None
             if fd is not None:
                 try:
@@ -1069,7 +1901,8 @@ class CampaignController:
         self.close()
 
 
-__all__ = ["AdmissionDecision", "CampaignController", "COMMAND_SCHEMA",
-           "ControlRefused", "SNAPSHOT_FILE", "SNAPSHOT_SCHEMA", "TrustedGrant",
+__all__ = ["ACTIVE_WORKER_V2_FIELDS", "AdmissionDecision", "CampaignController",
+           "COMMAND_SCHEMA", "ControlRefused", "SNAPSHOT_FILE", "SNAPSHOT_SCHEMA",
+           "SNAPSHOT_SCHEMA_V2", "SNAPSHOT_V2_FIELDS", "TrustedGrant",
            "command_digest", "may_start_stage", "resolved_config_digest",
-           "validate_command"]
+           "validate_command", "validate_snapshot_v2"]
