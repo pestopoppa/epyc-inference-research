@@ -15,8 +15,9 @@ model that does not use speculative decode carries `none` and its own optimal `n
 about DFlash2 is baked into the framework; today's champion just happens to serve the 27B on
 gfx90a with DFlash2 at np4 (the aggregate-throughput knee measured by DF2-5).
 
-THE METRIC. `aggregate_tok_s` = sum of predicted tokens across `np` concurrent requests /
-wall time -- what a busy server sustains, which is what the operator chose to optimise.
+THE METRIC. `aggregate_tok_s` is the sum of each concurrent slot's reported
+`predicted_per_second`. It is not common-window wall throughput; changing to that estimator would
+require a new metric identity and calibration.
 
 This module is backend-blind about the kernel: it takes two BUILD DIRECTORIES (champion vs
 candidate) and the recipe, and returns a paired A/B `Comparison`-shaped result the loop's
@@ -34,9 +35,13 @@ from pathlib import Path
 import statistics
 import subprocess
 import time
+from typing import TYPE_CHECKING
 import urllib.request
 
-from . import residency
+from . import residency, status
+
+if TYPE_CHECKING:
+    from .resolved_recipe import ResolvedRecipe
 
 #: Schema of the on-disk recipe file, and part of the recipe's identity: a schema bump
 #: changes what the fields MEAN, so it must change the hash too.
@@ -65,6 +70,8 @@ RESIDENCY_PROVEN = "proven"
 #: INSTRUMENT failure, and refusing every launch on one would stop the campaign on a
 #: fault that says nothing about the measurement.
 RESIDENCY_UNPROVEN = "unproven"
+#: CPU launches neither require nor earn a GPU residency warrant.
+RESIDENCY_NOT_APPLICABLE = "not_applicable"
 
 #: Characters a recipe name may carry VERBATIM into `serving-floor.<name>.json`: safe in a
 #: filename and as an unquoted shell word -- no `/`, no whitespace, no glob metacharacter,
@@ -297,6 +304,7 @@ class Recipe:
         depends on.
         """
         env = dict(os.environ if base is None else base)
+        env.pop("HSA_OVERRIDE_GFX_VERSION", None)
         env["LD_LIBRARY_PATH"] = str(Path(build_dir) / "bin")
         env.update(self.env or {})
         for key in self.explicit_unsets:
@@ -435,7 +443,9 @@ def _status_fields(text: str) -> dict[str, str]:
 
 
 def verify_env_readback(recipe: Recipe, pid: int, *,
-                        status_text: str | None = None) -> dict[str, str | None]:
+                        status_text: str | None = None,
+                        expectations: Sequence[tuple[str, str]] | None = None
+                        ) -> dict[str, str | None]:
     """Prove the recipe's env arm took effect on the LAUNCHED process, or refuse.
 
     Fail-closed in both directions and in every failure mode: a mismatch raises, a field the
@@ -446,7 +456,8 @@ def verify_env_readback(recipe: Recipe, pid: int, *,
     `pid` is `Popen.pid`, which is the SERVER even under `taskset`: taskset `exec`s the
     binary in place rather than forking, and `PR_SET_THP_DISABLE` survives `exec`.
     """
-    expectations = recipe.readback_expectations()
+    expectations = (recipe.readback_expectations() if expectations is None
+                    else tuple(expectations))
     if not expectations:
         return {}
     if status_text is None:
@@ -502,7 +513,7 @@ def covers_request_phase(record: Mapping) -> bool:
 
 def _residency_record(sampler, *, window_start: float, window_end: float,
                       request_start: float | None,
-                      request_end: float | None) -> dict:
+                      request_end: float | None, backend: str = "gpu") -> dict:
     """One launch's residency evidence: what bench records, plus the window it covers.
 
     `status` is three-valued in effect: `proven`, `unproven`, or -- when the window DID
@@ -512,7 +523,7 @@ def _residency_record(sampler, *, window_start: float, window_end: float,
     """
     proof = dict(sampler.proof)
     sampled = bool(proof.get("samples")) and bool(proof.get("vram_reads"))
-    record = {"schema": RESIDENCY_SCHEMA, **proof,
+    record = {"schema": RESIDENCY_SCHEMA, "backend": backend, **proof,
               # Distinguishes an unreadable instrument from a device read as empty.
               "sampled": sampled,
               "resident_floor_bytes": residency.RESIDENT_FLOOR_BYTES,
@@ -520,14 +531,19 @@ def _residency_record(sampler, *, window_start: float, window_end: float,
               "window_s": round(window_end - window_start, 3),
               "request_start": request_start, "request_end": request_end}
     record["covers_request_phase"] = covers_request_phase(record)
-    record["status"] = (
-        RESIDENCY_PROVEN
-        if sampled and record["covers_request_phase"] and proof.get("resident")
-        else RESIDENCY_UNPROVEN)
+    record["status"] = (RESIDENCY_NOT_APPLICABLE if backend == "cpu" else
+                        RESIDENCY_PROVEN
+                        if sampled and record["covers_request_phase"] and proof.get("resident")
+                        else RESIDENCY_UNPROVEN)
+    record["gpu_residency"] = record["status"]
+    if backend == "cpu":
+        # These need a CPU lifecycle sampler; absence is never a clean observation.
+        record["cpu_placement"] = "unproven"
+        record["contention"] = "unproven"
     return record
 
 
-def _refuse_if_not_resident(recipe: Recipe, record: Mapping) -> None:
+def _refuse_if_not_resident(recipe: Recipe, record: Mapping, *, backend: str = "gpu") -> None:
     """Abort a launch MEASURED non-resident. Record, but do not abort, an unsampled one.
 
     The asymmetry is the same one `verify_env_readback` enforces, and it is not a
@@ -538,6 +554,9 @@ def _refuse_if_not_resident(recipe: Recipe, record: Mapping) -> None:
     with the whole record in hand.
     """
     if record.get("status") == RESIDENCY_PROVEN:
+        return
+    if (record.get("status") == RESIDENCY_NOT_APPLICABLE and backend == "cpu"
+            and recipe.ngl == 0 and recipe.device == "none"):
         return
     if not (record.get("sampled") and record.get("covers_request_phase")):
         return
@@ -559,15 +578,22 @@ def _residency_fold(records: Sequence[Mapping]) -> dict:
     unproven no matter how the rest sampled.
     """
     rows = [dict(record) for record in records]
+    cpu_only = bool(rows) and all(row.get("backend") == "cpu" for row in rows)
     fold = {"schema": RESIDENCY_SCHEMA,
-            "status": RESIDENCY_UNPROVEN if not rows else (
+            "backend": "cpu" if cpu_only else "gpu",
+            "status": RESIDENCY_NOT_APPLICABLE if cpu_only else (
+                RESIDENCY_UNPROVEN if not rows else (
                 RESIDENCY_PROVEN
                 if all(r.get("status") == RESIDENCY_PROVEN for r in rows)
-                else RESIDENCY_UNPROVEN),
+                else RESIDENCY_UNPROVEN)),
             "invocations": len(rows),
             "resident": sum(1 for r in rows if r.get("resident")),
             "proven": sum(1 for r in rows if r.get("status") == RESIDENCY_PROVEN),
             "resident_floor_bytes": residency.RESIDENT_FLOOR_BYTES}
+    fold["gpu_residency"] = fold["status"]
+    if cpu_only:
+        fold["cpu_placement"] = "unproven"
+        fold["contention"] = "unproven"
     if not rows:
         return fold
     fold.update({
@@ -587,7 +613,8 @@ def _residency_fold(records: Sequence[Mapping]) -> dict:
 
 def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                   boot_timeout_s: int = 360, *,
-                  evidence: list | None = None) -> float:
+                  evidence: list | None = None,
+                  resolved_recipe: "ResolvedRecipe | None" = None) -> float:
     """Launch the server under `recipe`, fire `np` concurrent requests, return aggregate
     tok/s. The server is always stopped, even on error.
 
@@ -604,7 +631,16 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
     measured non-resident raises `ServingNotResident` whether or not anyone asked for
     the record.
     """
-    argv = recipe.server_argv(build_dir, port)
+    backend = "gpu"
+    if resolved_recipe is not None:
+        # Refuse unsupported capabilities or moved inputs before sampler/Popen.
+        resolved_recipe.validate_launch(recipe, build_dir, port)
+        argv = list(resolved_recipe.argv)
+        launch_env = dict(resolved_recipe.launch_env)
+        backend = resolved_recipe.backend
+    else:
+        argv = recipe.server_argv(build_dir, port)
+        launch_env = recipe.server_env(build_dir)
     sampler = residency.Sampler()
     window_start = time.time()
     request_start: float | None = None
@@ -613,7 +649,7 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
         with sampler:
             srv = subprocess.Popen(argv, stdout=subprocess.DEVNULL,
                                    stderr=subprocess.DEVNULL,
-                                   env=recipe.server_env(build_dir))
+                                   env=launch_env)
             try:
                 for _ in range(boot_timeout_s // 2):
                     if srv.poll() is not None:
@@ -626,7 +662,12 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                 else:
                     raise ServerDied("server not healthy within boot timeout")
                 # The env arm is verified on the LIVE process, before a single token is measured.
-                verify_env_readback(recipe, srv.pid)
+                if resolved_recipe is None:
+                    verify_env_readback(recipe, srv.pid)
+                else:
+                    verify_env_readback(
+                        recipe, srv.pid,
+                        expectations=resolved_recipe.readback_expectations)
 
                 def one(i: int) -> tuple[int, float]:
                     body = json.dumps({"prompt": _PROMPTS[i % len(_PROMPTS)],
@@ -668,13 +709,13 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
         record = _residency_record(sampler, window_start=window_start,
                                    window_end=window_end,
                                    request_start=request_start,
-                                   request_end=request_end)
+                                   request_end=request_end, backend=backend)
         if evidence is not None:
             evidence.append(record)
     # Success path only. An exception already in flight carries its own reason, and
     # replacing it with a residency refusal would hide the real fault -- while the
     # record above is appended either way, so a failed launch still leaves its window.
-    _refuse_if_not_resident(recipe, record)
+    _refuse_if_not_resident(recipe, record, backend=backend)
     return value
 
 
@@ -882,15 +923,7 @@ def write_floor(store: Path | str, recipe: Recipe, row: Mapping, *,
     # the calibration ran on the CPU, it is a refusal to let the absence pass unremarked.
     body["residency"] = _stamped_residency(body.get("residency"))
     target = floor_path(store, recipe)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    temporary = target.with_name(f".sv-floor-{os.getpid()}-{target.name}")
-    try:
-        temporary.write_text(json.dumps(body, indent=2, sort_keys=True), encoding="utf-8")
-        os.replace(temporary, target)
-    except BaseException:
-        temporary.unlink(missing_ok=True)
-        raise
-    return target
+    return status.write_json(target.parent, target.name, body, prefix=".sv-floor-")
 
 
 def load_floor(store: Path | str, recipe: Recipe) -> FloorReading:
@@ -926,7 +959,7 @@ def load_floor(store: Path | str, recipe: Recipe) -> FloorReading:
 
 
 __all__ = ["FLOOR_KEY_MAX", "LOADER_OWNED_ENV", "RECIPE_SCHEMA", "RESIDENCY_PROVEN",
-           "RESIDENCY_SCHEMA", "RESIDENCY_UNPROVEN", "UNSET",
+           "RESIDENCY_NOT_APPLICABLE", "RESIDENCY_SCHEMA", "RESIDENCY_UNPROVEN", "UNSET",
            "EnvReadbackFailed", "FloorReading", "Recipe", "RecipeError", "ServerDied",
            "ServingFloorMismatch", "ServingNotResident", "calibrate_floor", "compare",
            "covers_request_phase", "floor_key", "floor_path", "load_floor",
