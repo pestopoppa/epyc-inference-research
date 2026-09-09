@@ -355,7 +355,15 @@ def test_runtime_factory_publishes_before_compose_and_retains_adapter_instance(t
         controller.close()
 
 
-def test_runtime_factory_installs_exact_nonnull_window_owner(tmp_path):
+def test_runtime_factory_installs_exact_nonnull_window_owner(tmp_path, monkeypatch):
+    # This fixture constructs the parent service: declare its full admission
+    # capacity before native_document seals the prospective instrument identity.
+    budgets = _budgets()
+    budgets["max_samples"] = lo.required_sample_capacity(
+        max_duration_s=30 + 2, cadence_s=0.01,
+        nonperiodic_samples=len(lo.PHASES) + 2)
+    assert budgets["max_samples"] == 3209
+    monkeypatch.setattr(__name__ + "._budgets", lambda: dict(budgets))
     window = window_configuration(tmp_path)
     document = native_document(tmp_path, window=window)
     materialized = inputs.materialize(inputs.StartupManifest.from_dict(document))
@@ -383,6 +391,10 @@ def test_runtime_factory_installs_exact_nonnull_window_owner(tmp_path):
         _command(controller, "resume", "window-startup-resume")
         outcome = runtime.driver.tick(now=1.0)
         prepared = runtime.driver.materialize_runtime(outcome)
+        assert ob.validate_planned_sample_capacity(
+            materialized.inputs.observation_configuration,
+            max_stage_seconds=prepared.max_stage_seconds,
+            teardown_seconds=prepared.teardown_seconds) == budgets["max_samples"]
         authority = unified_worker.ParentUnitEvidenceAuthority(
             max_records=len(prepared.plan.expected_units)
             * (3 + len(unified_worker.OBSERVATION_WINDOW_MARKERS)))
