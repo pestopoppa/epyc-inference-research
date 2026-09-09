@@ -113,6 +113,8 @@ class StandaloneRuntimeInputs:
     observation_configuration: Any = None
     retention_catalog_seed: Any = None
     retention_runtime_recipes: Any = None
+    retention_runtime_recipe_snapshots: Any = None
+    calibration_requests: tuple = ()
 
 
 @dataclass(frozen=True)
@@ -288,7 +290,9 @@ class StandaloneRuntime:
             native_artifact_sink_ref=inputs.native_artifact_sink_ref,
             execution_inputs=inputs.execution_inputs,
             monotonic_clock=monotonic_clock,
-            executable_work_kinds={"runtime_comparison"},
+            executable_work_kinds=({"runtime_comparison", "calibration_preparation"}
+                                   if inputs.calibration_requests else {"runtime_comparison"}),
+            calibration_requests=inputs.calibration_requests,
             feed_owner=inputs.feed_owner,
         )
         executor = driver_execution.UnifiedDriverExecution(
@@ -445,7 +449,10 @@ class StandaloneRuntime:
                 return RuntimeTickResult(
                     "stopped", "; ".join(outcome.reasons), 0, self._snapshot(), outcome.to_dict()
                 )
-            if self.driver.issued_work_kind(outcome) != "runtime_comparison":
+            available_kinds = ({"runtime_comparison", "calibration_preparation"}
+                               if self.driver.preparation_owner is not None
+                               else {"runtime_comparison"})
+            if self.driver.issued_work_kind(outcome) not in available_kinds:
                 raise StandaloneRuntimeRefused("standalone runtime received unavailable work")
             with self._condition:
                 self._pending_outcome = outcome

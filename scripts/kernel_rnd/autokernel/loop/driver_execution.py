@@ -8,6 +8,7 @@ observations are charged as ``invalid`` rather than promoted to comparisons.
 from __future__ import annotations
 
 import copy
+import json
 import queue
 import threading
 from contextlib import nullcontext
@@ -27,6 +28,7 @@ from . import unified_worker
 from . import worker_lifecycle
 
 EXECUTION_RECEIPT_SCHEMA = "epyc.autokernel.unified_driver_execution_receipt.v1"
+EXECUTION_RECEIPT_SCHEMA_V2 = "epyc.autokernel.unified_driver_execution_receipt.v2"
 
 
 class DriverExecutionRefused(RuntimeError):
@@ -358,8 +360,9 @@ class DriverExecutionReceipt:
     schema: str = EXECUTION_RECEIPT_SCHEMA
 
     def __post_init__(self) -> None:
-        if self.schema != EXECUTION_RECEIPT_SCHEMA:
+        if self.schema not in {EXECUTION_RECEIPT_SCHEMA, EXECUTION_RECEIPT_SCHEMA_V2}:
             raise DriverExecutionRefused("execution receipt schema is unsupported")
+        calibration = self.schema == EXECUTION_RECEIPT_SCHEMA_V2
         for name in ("catalog_id", "transition_id", "prepared_digest"):
             object.__setattr__(self, name, _sha(getattr(self, name), name))
         for name in ("request_id", "lineage_id", "stage_id"):
@@ -402,7 +405,8 @@ class DriverExecutionReceipt:
                 or selection_request["schema"] != campaign_control.DRIVER_SETTLEMENT_SCHEMA
                 or selection_request["catalog_id"] != self.catalog_id
                 or selection_request["transition_id"] != self.transition_id
-                or selection_request["outcome"] not in {"invalid", "failed"}):
+                or selection_request["outcome"] not in (
+                    {"invalid", "failed", "calibration"} if calibration else {"invalid", "failed"})):
             raise DriverExecutionRefused("execution receipt settlement request differs")
         selection = scheduling.Selection.from_dict(selection_request["selection"])
         held = scheduling.HeldClaimReceipt.from_dict(selection_request["receipt"])
@@ -411,6 +415,9 @@ class DriverExecutionReceipt:
                 or held.ownership_generation != self.terminal["worker_generation"]
                 or held.allocation_generation != self.terminal["grant_generation"]):
             raise DriverExecutionRefused("execution receipt held/selection binding differs")
+        if calibration and (selection.proposal.stage_class != "calibration"
+                            or held.stage_class != "calibration"):
+            raise DriverExecutionRefused("v2 receipt requires the selected calibration stage")
         if self.terminal["accepted"]:
             if (reference is None
                     or reference.worker_id != self.terminal["worker_id"]
@@ -422,9 +429,25 @@ class DriverExecutionReceipt:
             result_envelope_digest = unified_worker._digest(reference.to_dict())
             if self.terminal["result_digest"] != result_envelope_digest:
                 raise DriverExecutionRefused("execution receipt terminal references differ")
-            if selection_request["outcome"] == "invalid":
-                expected_refs = [f"native:{item}" for item in self.native_measurement_ids] + [
-                    f"result:{result_envelope_digest}"]
+            if selection_request["outcome"] in {"invalid", "calibration"}:
+                expected_refs = [f"native:{item}" for item in self.native_measurement_ids]
+                if calibration:
+                    from . import serving_preparation as preparation
+                    raw_refs = selection_request["terminal_refs"]
+                    collection_refs = [item for item in raw_refs
+                                       if isinstance(item, str) and item.startswith("calibration-collected:")]
+                    if len(collection_refs) != 1 or reference.schema != unified_worker.RESULT_REFERENCE_SCHEMA_V2:
+                        raise DriverExecutionRefused("v2 receipt needs exactly one native calibration collection")
+                    try:
+                        collected = preparation.CollectedCalibrationReference.from_dict(json.loads(
+                            collection_refs[0].removeprefix("calibration-collected:")))
+                    except (ValueError, TypeError) as exc:
+                        raise DriverExecutionRefused("calibration collection reference is malformed") from exc
+                    if collected.declaration_digest != selection.proposal.eligibility_ref:
+                        raise DriverExecutionRefused("calibration collection declaration differs from selection")
+                    expected_refs.append("calibration-collected:" + unified_driver._canonical(
+                        collected.to_dict()).decode())
+                expected_refs.append(f"result:{result_envelope_digest}")
                 if (not self.native_measurement_ids
                         or selection_request["terminal_refs"] != expected_refs):
                     raise DriverExecutionRefused(
@@ -586,6 +609,19 @@ class UnifiedDriverExecution:
                        != attempt.terminal.result_digest):
                 raise DriverExecutionRefused("terminal/result authority is stale or differs")
             for measurement_id in trusted["terminal_refs"][:-1]:
+                if measurement_id.startswith("calibration-collected:"):
+                    from . import serving_preparation as preparation
+                    if (attempt.prepared.schema != unified_worker.PREPARED_SCHEMA_V3
+                            or self.driver.preparation_owner is None):
+                        raise DriverExecutionRefused("unexpected calibration collection reference")
+                    reference = preparation.CollectedCalibrationReference.from_dict(json.loads(
+                        measurement_id.removeprefix("calibration-collected:")))
+                    request = preparation.CalibrationPreparationDispatch.from_dict(
+                        attempt.prepared.dispatch).request
+                    outcome = self.driver.preparation_owner.collection_outcome(reference, request=request)
+                    if outcome != trusted["outcome"]:
+                        raise DriverExecutionRefused("raw collection and settlement dispositions differ")
+                    continue
                 if not measurement_id.startswith("native:"):
                     raise DriverExecutionRefused("native terminal reference is malformed")
                 native_id = measurement_id.removeprefix("native:")
@@ -655,9 +691,10 @@ class UnifiedDriverExecution:
             if self._closed:
                 raise DriverExecutionRefused("driver execution connector is closed")
             transition_id = outcome.transition_id
-            if transition_id is None or self.driver.issued_work_kind(outcome) != "runtime_comparison":
-                raise DriverExecutionRefused("recovery requires an exact restored runtime intent")
-            prepared = self.driver.materialize_runtime(outcome)
+            if transition_id is None or self.driver.issued_work_kind(outcome) not in {
+                    "runtime_comparison", "calibration_preparation"}:
+                raise DriverExecutionRefused("recovery requires an exact restored serving intent")
+            prepared = self._materialize_serving(outcome)
             selection = scheduling.Selection.from_dict(outcome.selection)
             if selection.proposal is None or self.driver._issued_catalog is None:
                 raise DriverExecutionRefused("restored runtime selection is incomplete")
@@ -708,6 +745,14 @@ class UnifiedDriverExecution:
             "parent evidence producer remains alive; successor execution is fenced")
         return error or DriverExecutionUncertain(self._successor_fence)
 
+    def _materialize_serving(self, outcome: unified_driver.DriverOutcome):
+        kind = self.driver.issued_work_kind(outcome)
+        if kind == unified_driver.CALIBRATION_WORK_KIND:
+            return self.driver.materialize_calibration(outcome)
+        if kind != "runtime_comparison":
+            raise DriverExecutionRefused("selected work has no installed serving executor")
+        return self.driver.materialize_runtime(outcome)
+
     def _execute_locked(self, outcome: unified_driver.DriverOutcome) \
             -> DriverExecutionReceipt:
         transition_id = outcome.transition_id
@@ -727,11 +772,11 @@ class UnifiedDriverExecution:
                 "started lifecycle attempt requires owned reconciliation; it is not rerun")
         if self._successor_fence is not None:
             raise DriverExecutionUncertain(self._successor_fence)
-        prepared = self.driver.materialize_runtime(outcome)
+        prepared = self._materialize_serving(outcome)
         if (self._native_evidence_configuration is not None
-                and prepared.schema != unified_worker.PREPARED_SCHEMA_V2):
+                and not prepared.native_observed):
             raise DriverExecutionRefused("native factual evidence requires an already-issued v2 plan")
-        if prepared.schema == unified_worker.PREPARED_SCHEMA_V2:
+        if prepared.native_observed:
             lifecycle = getattr(self.controller, "_worker_lifecycle", None)
             provider = getattr(self.controller, "_lifecycle_provider", None)
             if (not isinstance(lifecycle, worker_lifecycle.WorkerLifecycle)
@@ -748,7 +793,7 @@ class UnifiedDriverExecution:
             raise DriverExecutionRefused("driver no longer owns the issued catalog")
         readiness = self.controller.unified_driver_readiness()
         records_per_unit = (3 + len(unified_worker.OBSERVATION_WINDOW_MARKERS)
-                            if prepared.schema == unified_worker.PREPARED_SCHEMA_V2 else 2)
+                            if prepared.native_observed else 2)
         record_capacity = max(8, len(prepared.plan.expected_units) * records_per_unit)
         if record_capacity > 1024:
             raise DriverExecutionRefused("prepared parent notices exceed the fixed evidence cache bound")
@@ -873,9 +918,13 @@ class UnifiedDriverExecution:
                 attempt.terminal.request_id, attempt.terminal.lineage_id,
                 attempt.terminal.stage_id, _terminal_body(attempt.terminal),
                 (None if attempt.reference is None else attempt.reference.to_dict()), (),
-                request, settlement)
+                request, settlement, schema=(EXECUTION_RECEIPT_SCHEMA_V2
+                    if attempt.prepared.schema == unified_worker.PREPARED_SCHEMA_V3
+                    else EXECUTION_RECEIPT_SCHEMA))
             self._receipts[attempt.transition_id] = receipt
             self._parent_evidence_registries.pop(attempt.transition_id, None)
+            if attempt.prepared.schema == unified_worker.PREPARED_SCHEMA_V3:
+                self.driver.preparation_owner.refresh_settled()
             return receipt
         self._install_capture_validator(attempt.prepared)
         self._active_fence = attempt.fence
@@ -895,13 +944,27 @@ class UnifiedDriverExecution:
         if any(not isinstance(item, str) or not item for item in measurement_ids):
             raise DriverExecutionUncertain("native journal returned malformed record identities")
         terminal_refs = [f"native:{item}" for item in measurement_ids]
+        calibration = attempt.prepared.schema == unified_worker.PREPARED_SCHEMA_V3
+        outcome = "invalid"
+        if calibration:
+            from . import serving_preparation as preparation
+            owner = self.driver.preparation_owner
+            if owner is None:
+                raise DriverExecutionUncertain("installed raw preparation owner is unavailable")
+            reference = owner.accept(prepared=attempt.prepared, start=attempt.start,
+                terminal=attempt.terminal, reference=attempt.reference, fence=attempt.fence)
+            original_request = preparation.CalibrationPreparationDispatch.from_dict(
+                attempt.prepared.dispatch).request
+            outcome = owner.collection_outcome(reference, request=original_request)
+            terminal_refs.append("calibration-collected:" + unified_driver._canonical(
+                reference.to_dict()).decode())
         terminal_refs.append(
             f"result:{unified_worker._digest(attempt.reference.to_dict())}")
         request = {
             "schema": campaign_control.DRIVER_SETTLEMENT_SCHEMA,
             "catalog_id": attempt.catalog_id, "transition_id": attempt.transition_id,
             "selection": attempt.selection.to_dict(), "receipt": attempt.held.to_dict(),
-            "outcome": "invalid", "terminal_refs": terminal_refs,
+            "outcome": outcome, "terminal_refs": terminal_refs,
         }
         with self._lock:
             self._trusted_settlements[attempt.transition_id] = copy.deepcopy(request)
@@ -914,9 +977,12 @@ class UnifiedDriverExecution:
             attempt.catalog_id, attempt.transition_id, attempt.prepared.prepared_digest,
             attempt.start.request_id, attempt.start.lineage_id, attempt.start.stage_id,
             _terminal_body(attempt.terminal), attempt.reference.to_dict(), measurement_ids,
-            request, settlement)
+            request, settlement, schema=(EXECUTION_RECEIPT_SCHEMA_V2 if calibration
+                                         else EXECUTION_RECEIPT_SCHEMA))
         self._receipts[attempt.transition_id] = receipt
         self._parent_evidence_registries.pop(attempt.transition_id, None)
+        if calibration:
+            self.driver.preparation_owner.refresh_settled()
         return receipt
 
     @staticmethod
@@ -945,9 +1011,11 @@ class UnifiedDriverExecution:
             if self._capture_store is not None:
                 self._capture_store.close()
                 self._capture_store = None
+            if self.driver.preparation_owner is not None:
+                self.driver.preparation_owner.close()
             self._closed = True
 
 
 __all__ = ["DriverExecutionReceipt", "DriverExecutionRefused",
-           "DriverExecutionUncertain", "EXECUTION_RECEIPT_SCHEMA",
+           "DriverExecutionUncertain", "EXECUTION_RECEIPT_SCHEMA", "EXECUTION_RECEIPT_SCHEMA_V2",
            "UnifiedDriverExecution", "UnknownParentEvidenceProducer"]

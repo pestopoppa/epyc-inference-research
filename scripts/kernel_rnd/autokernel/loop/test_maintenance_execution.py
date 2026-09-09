@@ -667,9 +667,9 @@ def test_default_core_and_provider_releases_are_unavailable(runtime):
     controller, candidates, _git_backend, _view_value, old, job = runtime
     with pytest.raises(me.MaintenanceExecutionRefused, match="controller maintenance"):
         me.execute(job, now=NOW)
-    with pytest.raises(Exception, match="catalog coverage is unavailable"):
+    with pytest.raises(Exception, match="native retention catalog is unavailable"):
         controller.maintenance_admit(job)
-    with pytest.raises(Exception, match="catalog coverage is unavailable"):
+    with pytest.raises(Exception, match="native retention catalog is unavailable"):
         candidates.retention_view()
     assert old.exists()
 
@@ -999,7 +999,7 @@ def test_exclusion_gates_worker_candidate_and_new_native_publication(runtime):
     controller, candidates, _git_backend, view, _old, job = runtime
     _activate_actual_controller(controller, job)
     assert candidates.inspect()["state"] == view.candidate_state.to_dict()
-    with pytest.raises(Exception, match="artifact/dependency catalog coverage"):
+    with pytest.raises(Exception, match="native retention catalog is unavailable"):
         candidates.retention_view()
     with pytest.raises(Exception, match="worker admission is fenced"):
         controller.run_worker_stage(object())

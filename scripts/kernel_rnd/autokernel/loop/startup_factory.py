@@ -21,6 +21,7 @@ from . import scheduling, scoped_evidence, unified_driver, unified_planner
 REQUEST_SCHEMA = "epyc.autokernel.startup_factory_request.v1"
 FEED_REQUEST_SCHEMA = "epyc.autokernel.startup_factory_request.v2"
 NATIVE_REQUEST_SCHEMA = "epyc.autokernel.startup_factory_request.v3"
+PREPARATION_REQUEST_SCHEMA = "epyc.autokernel.startup_factory_request.v4"
 RECEIPT_SCHEMA = "epyc.autokernel.startup_factory_receipt.v1"
 MAX_INPUT_BYTES = 4 * 1024 * 1024
 TARGET_FIELDS = {"profile", "profile_request", "execution", "runtime_dimensions"}
@@ -149,15 +150,18 @@ def build_startup(request: Mapping[str, Any], *, output_dir: Path) -> dict[str, 
               "evidence_index", "actor_identities", "providers", "native_artifact_sink_ref",
               "dry_run_runner"}
     feed_mode = request.get("schema") == FEED_REQUEST_SCHEMA
-    native_mode = request.get("schema") == NATIVE_REQUEST_SCHEMA
+    preparation_mode = request.get("schema") == PREPARATION_REQUEST_SCHEMA
+    native_mode = request.get("schema") == NATIVE_REQUEST_SCHEMA or preparation_mode
     feed_mode = feed_mode or native_mode
     if feed_mode:
         fields = (fields - {"evidence_index"}) | {"evidence_feed"}
     if native_mode:
         fields |= {"native_evidence"}
+    if preparation_mode:
+        fields |= {"serving_preparation"}
     request = _closed(request, fields, "factory request")
     if request["schema"] not in {REQUEST_SCHEMA, FEED_REQUEST_SCHEMA,
-                                 NATIVE_REQUEST_SCHEMA}:
+                                 NATIVE_REQUEST_SCHEMA, PREPARATION_REQUEST_SCHEMA}:
         raise StartupFactoryRefused("unsupported factory request schema")
     output_dir = Path(output_dir)
     store_path = Path(request["store_path"])
@@ -391,6 +395,12 @@ def build_startup(request: Mapping[str, Any], *, output_dir: Path) -> dict[str, 
                     evidence_feed=feed.to_dict())
         if native_mode:
             body["native_evidence"] = native_document
+        if preparation_mode:
+            from .serving_preparation_startup import PreparationStartupConfiguration
+            preparation = PreparationStartupConfiguration.from_dict(
+                pins.read(request["serving_preparation"], "original serving preparation"))
+            body.update(schema=standalone_inputs.PREPARATION_MANIFEST_SCHEMA,
+                        serving_preparation=preparation.to_dict())
     else:
         assert evidence is not None
         body.update(evidence_index=evidence.to_dict(),

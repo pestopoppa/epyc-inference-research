@@ -607,7 +607,12 @@ def loaded_planned_serving_identity(*, measurement_callable: Callable[..., Any],
         window_constants = {"search_window_configuration": search_window_configuration.to_dict(),
             "search_window_source": _plain(search_window.source_identity())}
     from .native_server_response import source_identity as server_response_source_identity
+    from .serving_preparation import source_identity as preparation_source_identity
     server_response_source = server_response_source_identity()
+    preparation_source = preparation_source_identity()
+    if any(row["implementation_status"] != "pinned" or row["configuration_status"] != "pinned"
+           for row in preparation_source["callables"]):
+        raise ObservationBindingError("serving preparation admission source identity is incomplete")
     if any(row["implementation_status"] != "pinned" or row["configuration_status"] != "pinned"
            for row in server_response_source["callables"]):
         raise ObservationBindingError("native server response producer identity is incomplete")
@@ -666,6 +671,7 @@ def loaded_planned_serving_identity(*, measurement_callable: Callable[..., Any],
                 "duration_bound": "max_stage_seconds+teardown_seconds",
                 "sample_bound": "ceil(duration/cadence)+phase_boundaries+target_attachments+checkpoints"},
             "server_response_source": _plain(server_response_source),
+            "serving_preparation_source": _plain(preparation_source),
             "producer_source_closure": _plain(loaded_producer_source_closure(
                 scientific_adapters=scientific_adapters)),
             "budget_fields": sorted(lo.BUDGET_FIELDS),

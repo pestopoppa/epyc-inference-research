@@ -49,6 +49,7 @@ if __package__ in {None, ""}:  # fixed absolute-script entry under isolated Pyth
     from autokernel.loop import observation_binding as ob
     from autokernel.loop import planned_serving as ps
     from autokernel.loop import serving
+    from autokernel.loop import serving_preparation as preparation
     from autokernel.loop import unified_planner as up
     from autokernel.loop import worker_lifecycle as wl
 else:
@@ -59,12 +60,14 @@ else:
     from . import observation_binding as ob
     from . import planned_serving as ps
     from . import serving
+    from . import serving_preparation as preparation
     from . import unified_planner as up
     from . import worker_lifecycle as wl
 
 
 PREPARED_SCHEMA = "epyc.autokernel.prepared_planned_serving_stage.v1"
 PREPARED_SCHEMA_V2 = "epyc.autokernel.prepared_planned_serving_stage.v2"
+PREPARED_SCHEMA_V3 = "epyc.autokernel.prepared_planned_serving_stage.v3"
 HELLO_SCHEMA = "epyc.autokernel.planned_worker_hello.v1"
 INVOCATION_SCHEMA = "epyc.autokernel.planned_worker_invocation.v1"
 START_SCHEMA = "epyc.autokernel.planned_worker_start.v1"
@@ -226,7 +229,7 @@ class PreparedPlannedServingStage:
     dispatch: Mapping[str, Any]
     plan: ep.ExperimentPlan
     prompts: ps.FrozenPromptManifest
-    runtime_pair: up.RuntimeArmPair
+    runtime_pair: up.RuntimeArmPair | preparation.PreparationArmPair
     capture_context_base: Mapping[str, Any]
     artifact_root: Path
     previous: Mapping[str, Any] | None
@@ -234,34 +237,53 @@ class PreparedPlannedServingStage:
     teardown_seconds: float
     schema: str = PREPARED_SCHEMA
 
+    @property
+    def native_observed(self) -> bool:
+        """Closed capability, independent of the dispatch envelope version."""
+        return (self.schema in {PREPARED_SCHEMA_V2, PREPARED_SCHEMA_V3}
+                and self.plan.schema == ep.PLAN_SCHEMA_V2)
+
     @classmethod
     def from_dict(cls, value: Any) -> "PreparedPlannedServingStage":
         row = _exact(value, {"schema", "dispatch", "plan", "prompt_manifest",
                              "runtime_pair", "capture_context_base", "artifact_root",
                              "previous", "max_stage_seconds", "teardown_seconds",
                              "prepared_digest"}, "prepared planned-serving stage")
-        if row["schema"] not in {PREPARED_SCHEMA, PREPARED_SCHEMA_V2}:
+        if row["schema"] not in {PREPARED_SCHEMA, PREPARED_SCHEMA_V2, PREPARED_SCHEMA_V3}:
             raise WorkerBridgeRefused("prepared stage schema is unsupported")
         supplied_digest = _sha(row.pop("prepared_digest"), "prepared_digest")
         if supplied_digest != _digest(row):
             raise WorkerBridgeRefused("prepared stage digest mismatch")
         try:
-            dispatch = up.DispatchRequest(**_plain(row["dispatch"]))
             plan = ep.ExperimentPlan.from_dict(_plain(row["plan"]))
             prompts = ps.FrozenPromptManifest.from_dict(_plain(row["prompt_manifest"]))
-            pair = up.RuntimeArmPair.from_dict(_plain(row["runtime_pair"]))
+            if row["schema"] == PREPARED_SCHEMA_V3:
+                dispatch = preparation.CalibrationPreparationDispatch.from_dict(row["dispatch"])
+                pair = preparation.PreparationArmPair.from_dict(row["runtime_pair"])
+            else:
+                dispatch = up.DispatchRequest(**_plain(row["dispatch"]))
+                pair = up.RuntimeArmPair.from_dict(_plain(row["runtime_pair"]))
         except Exception as exc:
             raise WorkerBridgeRefused(f"prepared typed input is invalid: {exc}") from exc
-        if ((row["schema"] == PREPARED_SCHEMA_V2) !=
+        if ((row["schema"] in {PREPARED_SCHEMA_V2, PREPARED_SCHEMA_V3}) !=
                 (plan.schema == ep.PLAN_SCHEMA_V2)):
             raise WorkerBridgeRefused("prepared stage and plan schema versions differ")
-        proposal = up.UnifiedProposal.from_dict(_plain(dispatch.proposal))
-        bindings = (
-            dispatch.execution_authorized is False,
-            dispatch.experiment_intent["experiment_plan_digest"] == plan.digest,
-            proposal.experiment_plan_digest == plan.digest,
-            _plain(proposal.runtime_pair) == pair.to_dict(),
-        )
+        if row["schema"] == PREPARED_SCHEMA_V3:
+            request = dispatch.request
+            bindings = (request.plan.to_dict() == plan.to_dict(),
+                request.pair.to_dict() == pair.to_dict(),
+                request.prompts.to_dict() == prompts.to_dict(),
+                request.declaration.max_stage_seconds == row["max_stage_seconds"],
+                request.declaration.teardown_seconds == row["teardown_seconds"])
+        else:
+            proposal = up.UnifiedProposal.from_dict(_plain(dispatch.proposal))
+            bindings = (
+                dispatch.execution_authorized is False,
+                dispatch.experiment_intent["experiment_plan_digest"] == plan.digest,
+                proposal.experiment_plan_digest == plan.digest,
+                proposal.target_revision_digest == plan.target_revision,
+                _plain(proposal.runtime_pair) == pair.to_dict(),
+            )
         if not all(bindings):
             raise WorkerBridgeRefused(
                 f"dispatch, plan, and runtime pair bindings differ: {bindings}")
@@ -1128,7 +1150,7 @@ class OwnedWorkerStageProvider:
         if self._active is None or self._active[1] != fence:
             raise WorkerBridgeRefused("completion does not match active unit")
         sequence = self._active[0]
-        v2 = self.prepared.schema == PREPARED_SCHEMA_V2
+        v2 = self.prepared.native_observed
         if v2 != (native_observation is not None):
             raise WorkerBridgeRefused("completion artifact differs from prepared schema version")
         kwargs = {"native_observation": native_observation} if v2 else {}
@@ -1568,7 +1590,7 @@ class PlannedWorkerInvocation:
                 or self._pending_completion is not None
                 or self._pending_observation_phase is not None):
             raise WorkerBridgeRefused("planned completion has no active unit")
-        v2 = self.prepared.schema == PREPARED_SCHEMA_V2
+        v2 = self.prepared.native_observed
         field = "native_observation" if v2 else "observation"
         row = _exact(value, {"schema", "nonce", "sequence", "fence_id",
                              field, "request_digest"},
@@ -1610,7 +1632,7 @@ class PlannedWorkerInvocation:
                 "reason": completion.reason}
         self._queue(self._control.fileno(),
                     {**body, "completion_digest": _digest(body)}, MAX_MESSAGE_BYTES)
-        if self.prepared.schema == PREPARED_SCHEMA_V2:
+        if self.prepared.native_observed:
             self._prior_completion_digest = _v2_completion_chain(row, completion)
         else:
             self._prior_completion_digest = _digest({
@@ -1668,7 +1690,7 @@ class PlannedWorkerInvocation:
         self._continuation_next += 1
 
     def handle_observation_binding(self, value: Mapping[str, Any]) -> None:
-        if (self.prepared.schema != PREPARED_SCHEMA_V2
+        if (not self.prepared.native_observed
                 or self.start is None or self._active is None
                 or self._pending_observation_binding is not None
                 or self._active_observation_binding is not None):
@@ -1724,7 +1746,7 @@ class PlannedWorkerInvocation:
         self._pending_observation_binding = None
 
     def handle_observation_target(self, value: Mapping[str, Any]) -> None:
-        if (self.prepared.schema != PREPARED_SCHEMA_V2
+        if (not self.prepared.native_observed
                 or self.start is None or self._active is None
                 or self._pending_observation_binding is not None
                 or self._active_observation_binding is None
@@ -1779,7 +1801,7 @@ class PlannedWorkerInvocation:
         self._pending_observation_target = None
 
     def handle_observation_phase(self, value: Mapping[str, Any]) -> None:
-        if (self.prepared.schema != PREPARED_SCHEMA_V2 or self.start is None
+        if (not self.prepared.native_observed or self.start is None
                 or self._active is None or self._active_observation_binding is None
                 or self._active_observation_target is None
                 or self._pending_observation_binding is not None
@@ -1947,7 +1969,7 @@ def run_prepared_stage(prepared: PreparedPlannedServingStage, start: WorkerStart
     try:
         sink = mc.DeferredNativeMeasurementSink(context=context, store=store)
         observation_factory = None
-        if prepared.schema == PREPARED_SCHEMA_V2:
+        if prepared.native_observed:
             if prepared.previous is not None:
                 raise WorkerBridgeRefused(
                     "v2 continuation requires an original observation-bound unit range")
@@ -2055,7 +2077,7 @@ def reopen_deferred_result(reference: PlannedWorkerResultReference, *,
     reference = PlannedWorkerResultReference.from_dict(reference.to_dict())
     prepared = PreparedPlannedServingStage.from_dict(prepared.to_dict())
     start = WorkerStart.from_dict(start.to_dict())
-    v2 = prepared.schema == PREPARED_SCHEMA_V2
+    v2 = prepared.native_observed
     if (reference.schema == RESULT_REFERENCE_SCHEMA_V2) is not v2:
         raise WorkerBridgeRefused("prepared/result reference schema versions differ")
     if not isinstance(terminal, wl.TerminalWorker) or not isinstance(
@@ -2333,7 +2355,7 @@ if __name__ == "__main__":
 
 __all__ = ["CONTINUATION_REQUEST_SCHEMA", "CONTINUATION_SCHEMA", "HELLO_SCHEMA",
            "INVOCATION_SCHEMA", "MAX_MESSAGE_BYTES", "MAX_RESULT_BYTES", "PREPARED_SCHEMA",
-           "PREPARED_SCHEMA_V2", "RESULT_SCHEMA", "RESULT_SCHEMA_V2",
+           "PREPARED_SCHEMA_V2", "PREPARED_SCHEMA_V3", "RESULT_SCHEMA", "RESULT_SCHEMA_V2",
            "RESULT_REFERENCE_SCHEMA", "RESULT_REFERENCE_SCHEMA_V2", "START_SCHEMA", "UNIT_COMPLETION_REQUEST_SCHEMA",
            "UNIT_COMPLETION_SCHEMA", "UNIT_PERMIT_SCHEMA", "UNIT_REQUEST_SCHEMA",
            "InheritedUnitAuthority", "MembershipProbe", "OwnedWorkerStageProvider",

@@ -22,6 +22,7 @@ from . import (campaign, campaign_control, campaign_service, experiment_plan,
 MANIFEST_SCHEMA = "epyc.autokernel.standalone_inputs.v1"
 FEED_MANIFEST_SCHEMA = "epyc.autokernel.standalone_inputs.v2"
 NATIVE_MANIFEST_SCHEMA = "epyc.autokernel.standalone_inputs.v3"
+PREPARATION_MANIFEST_SCHEMA = "epyc.autokernel.standalone_inputs.v4"
 NATIVE_EVIDENCE_SCHEMA = "epyc.autokernel.standalone_native_evidence.v1"
 SCIENTIFIC_SELECTION_SCHEMA = "epyc.autokernel.scientific_adapter_selection.v1"
 PREFLIGHT_SCHEMA = "epyc.autokernel.standalone_inputs_preflight.v1"
@@ -90,6 +91,7 @@ class StartupManifest:
     schema: str = MANIFEST_SCHEMA
     evidence_feed: feed_runtime.FeedConfig | None = None
     native_evidence: Mapping[str, Any] | None = None
+    serving_preparation: Any = None
 
     @classmethod
     def from_dict(cls, value: Any) -> "StartupManifest":
@@ -97,14 +99,18 @@ class StartupManifest:
         fields = {"schema", "driver_config", "evidence_index", "actor_identities",
                   "lifecycle_provider_id", "readiness_provider_id",
                   "evidence_verifier_id", "manifest_digest"}
-        feed_mode = row.get("schema") in {FEED_MANIFEST_SCHEMA, NATIVE_MANIFEST_SCHEMA}
+        feed_mode = row.get("schema") in {
+            FEED_MANIFEST_SCHEMA, NATIVE_MANIFEST_SCHEMA, PREPARATION_MANIFEST_SCHEMA}
         if feed_mode:
             fields = (fields - {"evidence_index", "evidence_verifier_id"}) | {"evidence_feed"}
-        native_mode = row.get("schema") == NATIVE_MANIFEST_SCHEMA
+        native_mode = row.get("schema") in {NATIVE_MANIFEST_SCHEMA, PREPARATION_MANIFEST_SCHEMA}
         if native_mode:
             fields |= {"native_evidence"}
+        if row.get("schema") == PREPARATION_MANIFEST_SCHEMA:
+            fields |= {"serving_preparation"}
         if set(row) != fields or row["schema"] not in {
-                MANIFEST_SCHEMA, FEED_MANIFEST_SCHEMA, NATIVE_MANIFEST_SCHEMA}:
+                MANIFEST_SCHEMA, FEED_MANIFEST_SCHEMA, NATIVE_MANIFEST_SCHEMA,
+                PREPARATION_MANIFEST_SCHEMA}:
             raise StandaloneInputsRefused("startup manifest fields/schema differ")
         supplied_digest = row.pop("manifest_digest")
         if (not isinstance(supplied_digest, str) or len(supplied_digest) != 64
@@ -126,12 +132,16 @@ class StartupManifest:
                 raise StandaloneInputsRefused("actor identity must not be empty")
         native = (_freeze(_mapping(row["native_evidence"], "native_evidence"))
                   if native_mode else None)
+        preparation = None
+        if row["schema"] == PREPARATION_MANIFEST_SCHEMA:
+            from .serving_preparation_startup import PreparationStartupConfiguration
+            preparation = PreparationStartupConfiguration.from_dict(row["serving_preparation"])
         return cls(
             config, evidence, MappingProxyType(actors),
             _text(row["lifecycle_provider_id"], "lifecycle_provider_id"),
             _text(row["readiness_provider_id"], "readiness_provider_id"),
             "" if feed_mode else _text(row["evidence_verifier_id"], "evidence_verifier_id"),
-            supplied_digest, row["schema"], feed, native,
+            supplied_digest, row["schema"], feed, native, preparation,
         )
 
     def body(self) -> dict[str, Any]:
@@ -159,16 +169,21 @@ class StartupManifest:
             "readiness_provider_id": self.readiness_provider_id,
             "evidence_verifier_id": self.evidence_verifier_id,
         }
-        if self.schema in {FEED_MANIFEST_SCHEMA, NATIVE_MANIFEST_SCHEMA}:
+        if self.schema in {FEED_MANIFEST_SCHEMA, NATIVE_MANIFEST_SCHEMA, PREPARATION_MANIFEST_SCHEMA}:
             if self.evidence_feed is None:
                 raise StandaloneInputsRefused("feed manifest requires typed feed configuration")
             result.pop("evidence_index")
             result.pop("evidence_verifier_id")
             result["evidence_feed"] = self.evidence_feed.to_dict()
-        if self.schema == NATIVE_MANIFEST_SCHEMA:
+        if self.schema in {NATIVE_MANIFEST_SCHEMA, PREPARATION_MANIFEST_SCHEMA}:
             if self.native_evidence is None:
                 raise StandaloneInputsRefused("native manifest requires native evidence configuration")
             result["native_evidence"] = _thaw(self.native_evidence)
+        if self.schema == PREPARATION_MANIFEST_SCHEMA:
+            from .serving_preparation_startup import PreparationStartupConfiguration
+            if type(self.serving_preparation) is not PreparationStartupConfiguration:
+                raise StandaloneInputsRefused("v4 requires concrete preparation configuration")
+            result["serving_preparation"] = self.serving_preparation.to_dict()
         return result
 
     def to_dict(self) -> dict[str, Any]:
@@ -422,7 +437,8 @@ class MaterializedInputs:
                     missing.append(
                         f"target:{target}:profile_execution:{mechanism_id}:runtime_consumer_unavailable")
         result = {
-            "schema": (NATIVE_PREFLIGHT_SCHEMA if self.manifest.schema == NATIVE_MANIFEST_SCHEMA
+            "schema": (NATIVE_PREFLIGHT_SCHEMA if self.manifest.schema in {
+                NATIVE_MANIFEST_SCHEMA, PREPARATION_MANIFEST_SCHEMA}
                        else PREFLIGHT_SCHEMA),
             "status": "ready" if not missing else "unavailable",
             "manifest_digest": self.manifest.manifest_digest,
@@ -433,10 +449,35 @@ class MaterializedInputs:
             "pending_profile_targets": list(self.pending_profile_targets),
             "execution_authorized": False,
         }
-        if self.manifest.schema == NATIVE_MANIFEST_SCHEMA:
+        if self.manifest.schema in {NATIVE_MANIFEST_SCHEMA, PREPARATION_MANIFEST_SCHEMA}:
             result["native_instrument_runtime_status"] = "planned_unpublished"
             result["native_retention_catalog_status"] = "planned_unpublished"
+        if self.manifest.schema == PREPARATION_MANIFEST_SCHEMA:
+            result["serving_preparation"] = {
+                "status": "planned_uncollected", "request_count": len(self.inputs.calibration_requests),
+                "qualification": "unavailable", "ranking_authorized": False,
+                "qualification_debt": ["original_window_admissibility_unavailable",
+                                       "qualified_control_panel_unavailable"]}
         return result
+
+
+def _shared_native_settings(recipe: Any) -> dict[str, Any]:
+    """Settings actually shared by the execution-keyed observer/model owner.
+
+    Equal execution digests alone intentionally permit path aliases. Their
+    retained snapshots remain distinct; only an exact unchanged model, workload,
+    placement, environment and DSO binding can share these owner configurations.
+    """
+    return {"model": recipe.model.to_dict(),
+            "drafter": None if recipe.drafter is None else recipe.drafter.to_dict(),
+            "template": recipe.template.to_dict(), "backend": recipe.backend,
+            "dsos": [item.to_dict() for item in recipe.dsos],
+            "topology_prefix": list(recipe.topology_prefix),
+            "launch_env": dict(recipe.launch_env),
+            "relevant_environment": dict(recipe.relevant_environment),
+            "absent_environment": list(recipe.absent_environment),
+            "readback_expectations": list(recipe.readback_expectations),
+            "environment_policy": recipe.environment_policy.to_dict()}
 
 
 def materialize(value: StartupManifest) -> MaterializedInputs:
@@ -499,7 +540,9 @@ def materialize(value: StartupManifest) -> MaterializedInputs:
         observation_configuration = None
         retention_catalog_seed = None
         retention_runtime_recipes = None
-        if value.schema == NATIVE_MANIFEST_SCHEMA:
+        retention_runtime_recipe_snapshots = None
+        calibration_requests = ()
+        if value.schema in {NATIVE_MANIFEST_SCHEMA, PREPARATION_MANIFEST_SCHEMA}:
             (native_configuration, native_identity, native_reference,
              native_artifact_root, observation_configuration) = _native_evidence(
                  value.native_evidence)
@@ -509,6 +552,13 @@ def materialize(value: StartupManifest) -> MaterializedInputs:
                 raise StandaloneInputsRefused(
                     "native artifact root differs from controller/startup configuration")
             expected_reference = native_reference.to_dict()
+            if value.schema == PREPARATION_MANIFEST_SCHEMA:
+                from . import serving_preparation_startup
+                calibration_requests = serving_preparation_startup.materialize(
+                    value.serving_preparation, resolved=resolved, anchors=anchors,
+                    execution_inputs=execution, profiles=profiles,
+                    scheduler_config=scheduler_config, loaded_instrument=expected_reference,
+                    expected_epoch=value.evidence_feed.expected_epoch)
             for key, plan in plans.items():
                 if (plan.schema != experiment_plan.PLAN_SCHEMA_V2
                         or _thaw(plan.loaded_instrument) != expected_reference):
@@ -522,17 +572,27 @@ def materialize(value: StartupManifest) -> MaterializedInputs:
             from . import lifecycle_observation as lo
             expected_recipes = {}
             expected_target_recipes = {}
+            recipe_snapshots = {}
             for target_digest, anchor in anchors.recipes.items():
                 recipes = [anchor]
                 recipes.extend(arm for pair in unified_planner.enumerate_runtime_dimensions(
                     anchor, dimensions.get(target_digest, ()))
                                for arm in (pair.anchor, pair.candidate))
+                recipes.extend(arm for request in calibration_requests
+                               if request.declaration.target_revision == target_digest
+                               for arm in (request.pair.anchor, request.pair.candidate))
                 for recipe in recipes:
-                    expected_target_recipes[target_digest, recipe.execution_digest] = recipe
+                    snapshots = recipe_snapshots.setdefault(target_digest, {})
+                    prior_snapshot = snapshots.setdefault(recipe.snapshot_digest, recipe)
+                    if prior_snapshot.to_dict() != recipe.to_dict():
+                        raise StandaloneInputsRefused("native recipe snapshot collision")
+                    expected_target_recipes.setdefault((target_digest, recipe.execution_digest), recipe)
                     previous = expected_recipes.setdefault(recipe.execution_digest, recipe)
                     if previous.to_dict() != recipe.to_dict():
-                        raise StandaloneInputsRefused(
-                            "one execution digest identifies different native recipes")
+                        if (value.schema != PREPARATION_MANIFEST_SCHEMA
+                                or _shared_native_settings(previous) != _shared_native_settings(recipe)):
+                            raise StandaloneInputsRefused(
+                                "one execution digest identifies incompatible native recipes")
             states = observation_configuration.requested_effective_states
             dsos = observation_configuration.required_gpu_dsos
             if set(states) != set(expected_recipes) or set(dsos) - set(expected_recipes):
@@ -571,12 +631,18 @@ def materialize(value: StartupManifest) -> MaterializedInputs:
                     for known_target, recipe in expected_target_recipes
                     if known_target == target})
                 for target in sorted({target for target, _recipe in expected_target_recipes})})
+            snapshot_kwargs = {}
+            if value.schema == PREPARATION_MANIFEST_SCHEMA:
+                retention_runtime_recipe_snapshots = MappingProxyType({
+                    target: MappingProxyType(dict(snapshots))
+                    for target, snapshots in recipe_snapshots.items()})
+                snapshot_kwargs["runtime_recipe_snapshots"] = retention_runtime_recipe_snapshots
             retention_catalog_seed = native_retention_catalog.build_seed(
                 resolved, anchors,
                 config_digest=campaign_control.resolved_config_digest(resolved),
                 model_preparations=native_configuration.model_preparations,
                 runtime_recipes=retention_runtime_recipes,
-                artifact_root=native_artifact_root)
+                artifact_root=native_artifact_root, **snapshot_kwargs)
     except StandaloneInputsRefused:
         raise
     except Exception as exc:
@@ -603,7 +669,8 @@ def materialize(value: StartupManifest) -> MaterializedInputs:
         missing.append(f"actor_identity:{kind}:unavailable")
     if value.evidence_feed is None and not evidence.projection_available:
         missing.append("evidence_index:projection_unavailable")
-    if native_runtime_requested and value.schema != NATIVE_MANIFEST_SCHEMA:
+    if native_runtime_requested and value.schema not in {
+            NATIVE_MANIFEST_SCHEMA, PREPARATION_MANIFEST_SCHEMA}:
         missing.append("native_observation:typed_source_runtime_consumer_unavailable")
     inputs = standalone_runtime.StandaloneRuntimeInputs(
         resolved, scheduler_engine, MappingProxyType(profiles), evidence, anchors,
@@ -615,7 +682,10 @@ def materialize(value: StartupManifest) -> MaterializedInputs:
     if retention_catalog_seed is not None:
         inputs = replace(
             inputs, retention_catalog_seed=retention_catalog_seed,
-            retention_runtime_recipes=retention_runtime_recipes)
+            retention_runtime_recipes=retention_runtime_recipes,
+            retention_runtime_recipe_snapshots=retention_runtime_recipe_snapshots)
+    if calibration_requests:
+        inputs = replace(inputs, calibration_requests=calibration_requests)
     return MaterializedInputs(
         value, resolved, inputs, tuple(sorted(missing)), tuple(sorted(pending_profiles)))
 
@@ -666,13 +736,15 @@ def runtime_factory(materialized: MaterializedInputs, registry: ProviderRegistry
                 current_inputs = replace(verified_inputs, feed_owner=feed_runtime.FeedRuntimeOwner(
                     materialized.manifest.evidence_feed, binding))
             if current_inputs.native_evidence_configuration is not None:
+                snapshot_kwargs = ({} if current_inputs.retention_runtime_recipe_snapshots is None else {
+                    "runtime_recipe_snapshots": current_inputs.retention_runtime_recipe_snapshots})
                 controller.install_native_retention_catalog(
                     current_inputs.retention_catalog_seed,
                     runtime_anchors=current_inputs.runtime_anchors,
                     model_preparations=(
                         current_inputs.native_evidence_configuration.model_preparations),
                     runtime_recipes=current_inputs.retention_runtime_recipes,
-                    artifact_root=current_inputs.native_artifact_root)
+                    artifact_root=current_inputs.native_artifact_root, **snapshot_kwargs)
                 from . import measurement_capture as mc, observation_binding as ob
                 identity = _thaw(current_inputs.loaded_instrument_identity)
                 reference = ob.LoadedInstrumentReference.from_dict(

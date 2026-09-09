@@ -525,7 +525,7 @@ class SameAttemptWindowOwner:
         from . import worker_lifecycle as wl
         if (type(config) is not InstalledSearchWindowConfiguration
                 or type(prepared) is not uw.PreparedPlannedServingStage
-                or prepared.schema != uw.PREPARED_SCHEMA_V2
+                or not prepared.native_observed
                 or not isinstance(lifecycle, wl.WorkerLifecycle)):
             raise SearchWindowRefused("window owner needs actual v2 parent lifecycle")
         if config.expected_source_digest != source_digest():
