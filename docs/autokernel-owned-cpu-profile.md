@@ -116,6 +116,29 @@ still requires the original successful driver settlement joined to the original
 `PROFILE_VERIFIED`. Restart rematerializes the original immutable startup
 manifest, then replays those durable events without launching a new child.
 
+## Prospective evidence-feed projection
+
+The pinned ROOT feed closure v3 loads `adapters.autokernel_profile`. Its two
+registered projectors retain the producer-authored measurement and receipt-integrity
+tuples; canonical `claim_tuple.grade()` remains the only grader. This is not
+production validation or a comparable speedup observation.
+
+The feed durably retains the original accepted worker terminal before acknowledging
+it. An exact `PROFILE_VERIFIED` join supplies its request, generation, plan,
+lineage, campaign and controller identities. Only the bounded compact capture is
+reopened by the adapter, not raw perf/model payloads. Acknowledgment follows durable
+pair projection; restart and retraction retain both measurement associations even
+with a one-entry cache. Sampled TIDs may be a nonempty subset of pinned threads;
+unsampled threads receive no invented zero-period measurements.
+
+An exact failed driver settlement releases its otherwise unjoinable terminal.
+After an exact publication join, a rejected compact capture or conflicting profile
+has a durable quarantine disposition and releases only its consumed terminal.
+A forged identity join cannot release it. Retryable storage failures leave the
+source cursor unchanged. Legacy closures do not accumulate terminals they cannot
+consume; historical profiles without original terminals produce diagnostic zero
+tuples, never retrospective warrant.
+
 ## Explicit activation limit
 
 This route is not the required exact GLM cached-decode/MTP trial workload. That

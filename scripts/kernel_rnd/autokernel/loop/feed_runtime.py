@@ -25,9 +25,13 @@ ROOT_SOURCES_V1 = (
 ROOT_SOURCES_V2 = ROOT_SOURCES_V1 + (
     "scripts/vidya/adapters/autokernel_final_trial.py",
 )
-ROOT_SOURCES = ROOT_SOURCES_V2
+ROOT_SOURCES_V3 = ROOT_SOURCES_V2 + (
+    "scripts/vidya/adapters/autokernel_profile.py",
+)
+ROOT_SOURCES = ROOT_SOURCES_V3
 ROOT_PROJECTION_SCHEMA_V1 = "epyc.autokernel.root_feed_projection.v1"
 ROOT_PROJECTION_SCHEMA_V2 = "epyc.autokernel.root_feed_projection.v2"
+ROOT_PROJECTION_SCHEMA_V3 = "epyc.autokernel.root_feed_projection.v3"
 
 
 class FeedRuntimeRefused(RuntimeError):
@@ -52,6 +56,8 @@ def _root_source_schema(pins: Mapping[str, str]) -> str:
         schema = ROOT_PROJECTION_SCHEMA_V1
     elif fields == set(ROOT_SOURCES_V2):
         schema = ROOT_PROJECTION_SCHEMA_V2
+    elif fields == set(ROOT_SOURCES_V3):
+        schema = ROOT_PROJECTION_SCHEMA_V3
     else:
         raise FeedRuntimeRefused("installed ROOT requires its exact source closure pins")
     if any(not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{64}", value) is None
@@ -114,6 +120,7 @@ class FeedConfig:
 @dataclass(frozen=True)
 class LoadedFeedProjection:
     adapter: ModuleType
+    profile_adapter: ModuleType | None
     claim_tuple: ModuleType
     frames: ModuleType
     ledger: ModuleType
@@ -138,8 +145,10 @@ class LoadedFeedProjection:
                  "frames": "scripts/vidya/frames.py",
                  "ledger": "scripts/vidya/ledger.py",
                  "autokernel_unified_arm": "scripts/vidya/adapters/autokernel_unified_arm.py"}
-        if schema == ROOT_PROJECTION_SCHEMA_V2:
+        if schema in {ROOT_PROJECTION_SCHEMA_V2, ROOT_PROJECTION_SCHEMA_V3}:
             names["autokernel_final_trial"] = ROOT_SOURCES_V2[-1]
+        if schema == ROOT_PROJECTION_SCHEMA_V3:
+            names["autokernel_profile"] = ROOT_SOURCES_V3[-1]
         modules: dict[str, ModuleType] = {}
         prefix = "_autokernel_feed_" + uuid.uuid4().hex
         # This namespace is retained by the import closure, not ambient module
@@ -176,7 +185,8 @@ class LoadedFeedProjection:
                 sys.modules[qualified] = module  # dataclasses resolves its own module.
                 registered.append(qualified)
                 modules[name] = module
-                if name in {"autokernel_unified_arm", "autokernel_final_trial"}:
+                if name in {"autokernel_unified_arm", "autokernel_final_trial",
+                            "autokernel_profile"}:
                     module.__package__ = adapters.__name__
                     setattr(adapters, name, module)
                 exec(compile(sources[path], str(root / path), "exec", dont_inherit=True),
@@ -184,7 +194,18 @@ class LoadedFeedProjection:
             adapter, claim = modules["autokernel_unified_arm"], modules["claim_tuple"]
             if claim.registered().get("autokernel-unified-arm-measurement") is not adapter.project:
                 raise FeedRuntimeRefused("pinned canonical projector was not registered")
-            return cls(adapter, claim, modules["frames"], modules["ledger"],
+            profile = modules.get("autokernel_profile")
+            if profile is not None and (
+                    claim.registered().get("autokernel-unified-profile-measurement")
+                    is not profile.project_profile
+                    or claim.registered().get("autokernel-unified-profile-integrity")
+                    is not profile.project_integrity
+                    or claim.source_classes().get("autokernel-unified-profile-measurement")
+                    != claim.MEASUREMENT_CLASS
+                    or claim.source_classes().get("autokernel-unified-profile-integrity")
+                    != claim.VERIFIER_CLASS):
+                raise FeedRuntimeRefused("pinned profile projectors were not registered exactly")
+            return cls(adapter, profile, claim, modules["frames"], modules["ledger"],
                        MappingProxyType(dict(pins)))
         finally:
             for name in registered:

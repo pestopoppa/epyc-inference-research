@@ -49,7 +49,9 @@ __all__ = ["BoundedReadAckOwner", "DrainLimits", "OwnedTailBatch", "TailBatch",
 _DB_COLUMNS = {
     "frames": ("id", "digest"),
     "events": ("id", "digest", "seq", "measurement_id"),
+    "event_measurements": ("event_id", "measurement_id"),
     "measurements": ("id", "value"),
+    "profile_terminals": ("id", "value", "seq"),
     "evicted": ("kind", "key"),
     "findings": ("id", "value", "frontier"),
     "invalidations": ("id", "value", "frontier"),
@@ -369,7 +371,7 @@ class BoundedJournalTail:
                 "inode": self._cached_identity[1]}
 
 
-def _load_vidya(root_repo: Path) -> tuple[Any, Any, Any, Any]:
+def _load_vidya(root_repo: Path) -> tuple[Any, Any, Any, Any, Any]:
     vidya = root_repo / "scripts" / "vidya"
     if not vidya.is_dir():
         raise FeedError(f"explicit root repo has no scripts/vidya: {root_repo}")
@@ -377,16 +379,17 @@ def _load_vidya(root_repo: Path) -> tuple[Any, Any, Any, Any]:
     if value not in sys.path:
         sys.path.insert(0, value)
     adapter = importlib.import_module("adapters.autokernel_unified_arm")
+    profile_adapter = importlib.import_module("adapters.autokernel_profile")
     claim_tuple = importlib.import_module("claim_tuple")
     frames = importlib.import_module("frames")
     ledger = importlib.import_module("ledger")
     expected_root = root_repo.resolve()
-    for module in (adapter, claim_tuple, frames, ledger):
+    for module in (adapter, profile_adapter, claim_tuple, frames, ledger):
         module_path = Path(module.__file__).resolve()
         if expected_root not in module_path.parents:
             raise FeedError(
                 f"loaded {module.__name__} from {module_path}, outside explicit root repo")
-    return adapter, claim_tuple, frames, ledger
+    return adapter, profile_adapter, claim_tuple, frames, ledger
 
 
 class EvidenceFeed:
@@ -453,12 +456,14 @@ class EvidenceFeed:
         self.corpus_root = Path(corpus_root)
         self.store_path = self.store_root / PROJECTION_NAME
         if loaded_projection is None:
-            self.adapter, self.claim_tuple, self.frames, ledger_mod = _load_vidya(Path(root_repo))
+            (self.adapter, self.profile_adapter, self.claim_tuple,
+             self.frames, ledger_mod) = _load_vidya(Path(root_repo))
         else:
             from .feed_runtime import LoadedFeedProjection
             if not isinstance(loaded_projection, LoadedFeedProjection):
                 raise FeedError("feed projection must be a concrete loaded source closure")
             self.adapter = loaded_projection.adapter
+            self.profile_adapter = loaded_projection.profile_adapter
             self.claim_tuple = loaded_projection.claim_tuple
             self.frames = loaded_projection.frames
             ledger_mod = loaded_projection.ledger
@@ -497,8 +502,13 @@ class EvidenceFeed:
             CREATE TABLE IF NOT EXISTS events (
                 id TEXT PRIMARY KEY, digest TEXT NOT NULL, seq INTEGER NOT NULL,
                 measurement_id TEXT);
+            CREATE TABLE IF NOT EXISTS event_measurements (
+                event_id TEXT NOT NULL, measurement_id TEXT NOT NULL,
+                PRIMARY KEY(event_id, measurement_id));
             CREATE TABLE IF NOT EXISTS measurements (
                 id TEXT PRIMARY KEY, value TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS profile_terminals (
+                id TEXT PRIMARY KEY, value TEXT NOT NULL, seq INTEGER NOT NULL);
             CREATE TABLE IF NOT EXISTS evicted (
                 kind TEXT NOT NULL, key TEXT NOT NULL, PRIMARY KEY(kind, key));
             CREATE TABLE IF NOT EXISTS findings (
@@ -635,8 +645,12 @@ class EvidenceFeed:
             self._bounded_put(self._events, event_id, {
                 "digest": digest, "seq": seq, "measurement_id": measurement_id})
         for measurement_id, value in self._db.execute(
-                "SELECT m.id, m.value FROM measurements m JOIN events e "
-                "ON e.measurement_id=m.id ORDER BY e.seq DESC LIMIT ?",
+                "SELECT m.id, m.value FROM measurements m JOIN ("
+                "SELECT id AS event_id, measurement_id, seq FROM events "
+                "WHERE measurement_id IS NOT NULL UNION "
+                "SELECT a.event_id, a.measurement_id, e.seq FROM event_measurements a "
+                "JOIN events e ON e.id=a.event_id) x ON x.measurement_id=m.id "
+                "ORDER BY x.seq DESC LIMIT ?",
                 (self.max_projection_entries,)):
             self._bounded_put(self._measurements, measurement_id, json.loads(value))
         for _finding_id, value, _frontier in reversed(self._db.execute(
@@ -953,6 +967,30 @@ class EvidenceFeed:
         return (None if found is None else
                 {"digest": found[0], "seq": found[1], "measurement_id": found[2]})
 
+    def _measurement_ids_for_event(self, event_id: str) -> tuple[str, ...]:
+        values = {measurement_id for measurement_id, item in self._measurements.items()
+                  if item.get("event_id") == event_id}
+        scalar = self._db.execute(
+            "SELECT measurement_id FROM events WHERE id = ?", (event_id,)).fetchone()
+        if scalar is not None and isinstance(scalar[0], str):
+            values.add(scalar[0])
+        values.update(row[0] for row in self._db.execute(
+            "SELECT measurement_id FROM event_measurements WHERE event_id = ?",
+            (event_id,)).fetchall())
+        return tuple(sorted(values))
+
+    def _delete_derived_row(self, table: str, key: tuple[Any, ...]) -> None:
+        columns = _DB_COLUMNS[table]
+        key_columns = columns[:len(key)]
+        where = " AND ".join(f"{column} = ?" for column in key_columns)
+        prior = self._db.execute(
+            f"SELECT {', '.join(columns)} FROM {table} WHERE {where}", key).fetchone()
+        if prior is None:
+            return
+        self._db_xor ^= self._derived_row_token(table, tuple(prior))
+        self._db.execute(f"DELETE FROM {table} WHERE {where}", key)
+        self.state["derived_digest"] = f"{self._db_xor:064x}"
+
     def _prior_measurement(self, measurement_id: str,
                            _before_seq: int) -> dict[str, Any] | None:
         cached = self._measurements.get(measurement_id)
@@ -984,7 +1022,7 @@ class EvidenceFeed:
 
     def _retract_prior(self, measurement_id: str,
                        row: journal_module.JournalEntry, *, replay: bool) -> tuple[str, ...]:
-        prior = self._measurements.get(measurement_id, {})
+        prior = self._prior_measurement(measurement_id, row.seq) or {}
         for frame_id in prior.get("frame_ids", []):
             frame = self.frames.make_frame(
                 frame_type="epyc.vidya/frame/retraction/v1",
@@ -1076,18 +1114,181 @@ class EvidenceFeed:
             "measurements", (key,), (key, _canonical(value).decode()))
         self._bounded_put(self._measurements, str(measurement_id), value)
 
+    @staticmethod
+    def _profile_terminal_key(payload: Mapping[str, Any]) -> str | None:
+        worker = payload.get("worker_id")
+        generation = payload.get("worker_generation")
+        request_id = payload.get("request_id")
+        stage_id = payload.get("stage_id")
+        if (payload.get("event") != "WORKER_RESULT_ACCEPTED"
+                or not isinstance(worker, str) or not worker
+                or type(generation) is not int or generation < 1
+                or not isinstance(request_id, str) or not request_id.startswith("profile-")
+                or not isinstance(stage_id, str) or not stage_id.startswith("target-profile-")
+                or request_id.removeprefix("profile-")
+                   != stage_id.removeprefix("target-profile-")):
+            return None
+        return f"{worker}:{generation}"
+
+    def _remember_profile_terminal(self, row: journal_module.JournalEntry) -> None:
+        if self.profile_adapter is None:
+            return
+        key = self._profile_terminal_key(row.payload)
+        if key is None:
+            return
+        encoded = _canonical(row.envelope()).decode()
+        prior = self._db.execute(
+            "SELECT value, seq FROM profile_terminals WHERE id = ?", (key,)).fetchone()
+        if prior is not None:
+            if prior != (encoded, row.seq):
+                raise FeedError("profile terminal identity was reused with different bytes")
+            return
+        count = self._db.execute("SELECT count(*) FROM profile_terminals").fetchone()[0]
+        if count >= self.max_projection_entries:
+            raise FeedProjectionPending(
+                "unjoined profile terminal capacity exhausted; source cursor remains before event")
+        self._set_derived_row(
+            "profile_terminals", (key,), (key, encoded, row.seq))
+
+    @staticmethod
+    def _profile_terminal_ref(envelope: Mapping[str, Any]) -> str | None:
+        payload = envelope.get("payload")
+        if not isinstance(payload, Mapping):
+            return None
+        data = payload.get("data")
+        if (not isinstance(data, Mapping) or data.get("accepted") is not True
+                or data.get("reason") is not None
+                or not isinstance(data.get("result_digest"), str)):
+            return None
+        fields = ("worker_id", "worker_generation", "request_id", "plan_digest",
+                  "lineage_id", "stage_id", "grant_id", "grant_generation", "container_id")
+        if any(name not in payload for name in fields):
+            return None
+        body = {name: payload[name] for name in fields}
+        body.update(return_code=0, result_digest=data["result_digest"], accepted=True, reason=None)
+        return "lifecycle:" + _digest(body)
+
+    def _release_failed_profile_terminal(
+            self, row: journal_module.JournalEntry, *, replay: bool) -> None:
+        payload = row.payload
+        if self.profile_adapter is None or payload.get("outcome") != "failed":
+            return
+        references = payload.get("terminal_refs")
+        if not isinstance(references, list) or not references:
+            return
+        released = 0
+        for key, encoded in self._db.execute(
+                "SELECT id, value FROM profile_terminals").fetchall():
+            envelope = json.loads(encoded)
+            terminal = envelope.get("payload", {})
+            if (terminal.get("lineage_id") != payload.get("transition_id")
+                    or envelope.get("campaign_id") != row.campaign_id
+                    or terminal.get("campaign_id") != payload.get("campaign_id")
+                    or terminal.get("config_digest") != payload.get("config_digest")
+                    or terminal.get("config_generation") != payload.get("config_generation")
+                    or terminal.get("supervisor_incarnation")
+                       != payload.get("supervisor_incarnation")
+                    or self._profile_terminal_ref(envelope) not in references):
+                continue
+            self._delete_derived_row("profile_terminals", (key,))
+            released += 1
+        if released:
+            self._diagnose(
+                row.event_id,
+                f"released {released} profile terminal after exact failed driver settlement",
+                replay=replay)
+
+    def _process_profile(self, row: journal_module.JournalEntry, *, replay: bool) -> None:
+        if self.profile_adapter is None:
+            self._diagnose(row.event_id, "profile projector is absent from installed ROOT closure",
+                           replay=replay)
+            return
+        verifier = row.payload.get("verifier_ref")
+        if not isinstance(verifier, str) or not verifier.startswith("controller-worker:"):
+            self._quarantine(
+                row, "profile publication lacks its original worker reference", replay=replay)
+            return
+        parts = verifier.removeprefix("controller-worker:").rsplit(":", 1)
+        if len(parts) != 2:
+            self._quarantine(
+                row, "profile publication worker reference is malformed", replay=replay)
+            return
+        try:
+            generation = int(parts[1])
+        except ValueError:
+            self._quarantine(
+                row, "profile publication worker generation is malformed", replay=replay)
+            return
+        key = f"{parts[0]}:{generation}"
+        found = self._db.execute(
+            "SELECT value FROM profile_terminals WHERE id = ?", (key,)).fetchone()
+        if found is None:
+            self._diagnose(
+                row.event_id,
+                "diagnostic_zero_tuple: original accepted profile terminal is unavailable",
+                replay=replay)
+            return
+        terminal = json.loads(found[0])
+        native = {"terminal": terminal, "profile": row.envelope()}
+        self.profile_adapter.joined_journal_pair(native)
+        try:
+            projected = self.profile_adapter.project_journal_pair(
+                native, corpus_root=self.corpus_root)
+        except self.claim_tuple.ProjectionError:
+            # A durable PROFILE_VERIFIED has already consumed this exact
+            # terminal.  Local compact-artifact/schema refusal is a permanent
+            # zero-tuple/quarantine disposition, not a future terminal join.
+            self._delete_derived_row("profile_terminals", (key,))
+            raise
+        if (not isinstance(projected, tuple) or len(projected) != 2
+                or any(not isinstance(item, self.claim_tuple.ClaimTuple) for item in projected)):
+            raise FeedError("profile projector did not return the exact measurement/integrity pair")
+        semantic_digest = _digest(native)
+        prepared: list[tuple[Any, tuple[str, str, list[str]], list[dict[str, Any]]]] = []
+        for item in projected:
+            measurement_id = item.measurement_id
+            prior = self._prior_measurement(measurement_id, row.seq)
+            if prior is not None and prior.get("semantic_digest") != semantic_digest:
+                dependencies: set[str] = set()
+                prior_event = prior.get("event_id")
+                associated = (self._measurement_ids_for_event(prior_event)
+                              if isinstance(prior_event, str) else (measurement_id,))
+                for prior_measurement_id in associated:
+                    dependencies.update(self._retract_prior(
+                        prior_measurement_id, row, replay=replay))
+                self._delete_derived_row("profile_terminals", (key,))
+                self._quarantine(
+                    row, "conflicting profile carrier reused native measurement_id",
+                    affected_dependencies=tuple(sorted(dependencies)), replay=replay)
+                return
+            grade = self.claim_tuple.grade(item)
+            frames = self.claim_tuple.to_frames(
+                item, as_of=row.written_at, adapter_id=self.profile_adapter.ADAPTER_ID)
+            prepared.append((item, grade, frames))
+        for item, _grade, frames in prepared:
+            self._append_frames(frames, replay=replay)
+            value = {"semantic_digest": semantic_digest, "event_id": row.event_id,
+                     "frame_ids": [frame["frame_id"] for frame in frames],
+                     "finding_id": None, "conflicted": False}
+            self._set_derived_row(
+                "measurements", (item.measurement_id,),
+                (item.measurement_id, _canonical(value).decode()))
+            self._set_derived_row(
+                "event_measurements", (row.event_id, item.measurement_id),
+                (row.event_id, item.measurement_id))
+            self._bounded_put(self._measurements, item.measurement_id, value)
+        self._delete_derived_row("profile_terminals", (key,))
+        self.state["readiness"] = "unknown"
+        self._diagnose(
+            row.event_id,
+            "profile observation and receipt integrity only; no production-validation authority",
+            replay=replay)
+
     def _invalidate_source_target(self, row: journal_module.JournalEntry, *, replay: bool) -> None:
         target = row.payload.get("target_event_id")
-        matched = [measurement_id for measurement_id, item
-                   in self._measurements.items()
-                   if item.get("event_id") == target]
-        if not matched and isinstance(target, str):
-            found = self._db.execute(
-                "SELECT measurement_id FROM events WHERE id = ?", (target,)).fetchone()
-            if found is not None and isinstance(found[0], str):
-                self._prior_measurement(found[0], row.seq)
-                matched = [found[0]]
+        matched = self._measurement_ids_for_event(target) if isinstance(target, str) else ()
         for measurement_id in matched:
+            self._prior_measurement(measurement_id, row.seq)
             self._retract_prior(measurement_id, row, replay=replay)
         self.state["readiness"] = "unknown"
         self._diagnose(
@@ -1099,18 +1300,23 @@ class EvidenceFeed:
         prior = self._prior_event(row)
         if prior is not None:
             if prior["digest"] != digest:
-                measurement_id = prior.get("measurement_id")
-                if isinstance(measurement_id, str) and self._prior_measurement(
-                        measurement_id, row.seq) is not None:
-                    dependencies = self._retract_prior(measurement_id, row, replay=replay)
-                else:
-                    dependencies = ()
+                dependencies = set()
+                for measurement_id in self._measurement_ids_for_event(row.event_id):
+                    dependencies.update(self._retract_prior(
+                        measurement_id, row, replay=replay))
                 self._quarantine(row, "event_id reused with conflicting bytes",
-                                 affected_dependencies=dependencies, replay=replay)
+                                 affected_dependencies=tuple(sorted(dependencies)), replay=replay)
             return
         try:
             if row.kind == journal_module.KIND_PLANNED_SERVING_ARM_CAPTURED:
                 self._process_measurement(row, replay=replay)
+            elif row.kind == journal_module.KIND_WORKER_LIFECYCLE:
+                self._remember_profile_terminal(row)
+            elif (row.kind == journal_module.KIND_ACTOR_PREPARATION
+                  and row.payload.get("event") == "PROFILE_VERIFIED"):
+                self._process_profile(row, replay=replay)
+            elif row.kind == journal_module.KIND_UNIFIED_DRIVER_SETTLED:
+                self._release_failed_profile_terminal(row, replay=replay)
             elif row.kind in {journal_module.KIND_SUPERSEDED,
                               journal_module.KIND_RETRIEVAL_SUPERSEDED}:
                 self._invalidate_source_target(row, replay=replay)
