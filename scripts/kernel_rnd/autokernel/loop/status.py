@@ -100,6 +100,7 @@ def write(store_root: Path, *, state: str, epoch: str, campaign_id: str,
           outcomes: Sequence[Mapping[str, Any]] = (),
           iterations_planned: int = 0,
           champion_head: str | None = None,
+          baseline_scope: str | None = None,
           gpu: Mapping[str, Any] | None = None,
           hotspots: Sequence[Mapping[str, Any]] = (),
           step: str | None = None,
@@ -170,6 +171,8 @@ def write(store_root: Path, *, state: str, epoch: str, campaign_id: str,
             for row in list(outcomes)[-10:][::-1]],
     }
 
+    if baseline_scope is not None:
+        body["baseline_scope"] = baseline_scope
     return write_json(store_root, STATUS_FILENAME, body)
 
 

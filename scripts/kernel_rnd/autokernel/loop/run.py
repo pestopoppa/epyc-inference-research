@@ -1019,6 +1019,7 @@ def main(argv: list[str] | None = None) -> int:
             outcomes=[o.to_attempt() for o in outcomes],
             iterations_planned=args.iterations, step=step,
             champion_head=_git(args.worktree, "rev-parse", "HEAD"),
+            **({"baseline_scope": "experimental_candidate_not_champion"} if cpu_launch else {}),
             anchor_guard=anchor_guard_seen[-1] if anchor_guard_seen else None,
             accumulator=accumulator_state(),
             gpu=gpu if gpu is not None else gpu_reading(outcomes),
