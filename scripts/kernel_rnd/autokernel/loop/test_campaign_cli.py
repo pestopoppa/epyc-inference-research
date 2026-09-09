@@ -8,6 +8,8 @@ from pathlib import Path
 import pytest
 
 from . import campaign, campaign_cli
+from . import production_enrollment as pe
+from .production_enrollment import CAMPAIGN_CONFIG_SCHEMA, EXPORT_SCHEMA
 from .test_campaign import _manifest, _target
 
 
@@ -182,3 +184,88 @@ def test_legacy_previous_resolution_is_rejected(tmp_path):
     previous.write_text(json.dumps({"schema": "legacy"}), encoding="utf-8")
     with pytest.raises(campaign.ManifestError, match="unsupported schema"):
         campaign_cli.load_previous(previous)
+
+
+def test_cli_consumes_production_export_instead_of_registry_fixture(tmp_path, capsys):
+    source = _file_artifact(tmp_path, "source", "ignored", b"source")
+    model = _file_artifact(tmp_path, "model", "ignored", b"model")
+    executable = _file_artifact(tmp_path, "build", "ignored", b"binary")
+    target_id = "frontdoor@8070"
+    export = {
+        "schema": EXPORT_SCHEMA,
+        "context": {"sources": [{"name": "kernel", "path": source["path"],
+                                    "sha256": source["sha256"], "revision": "rev1"}]},
+        "targets": [{"target_id": target_id, "status": "ready", "reasons": [],
+                     "argv": ["server"],
+                     "primary_role": "frontdoor", "aliases": ["worker_summarize"],
+                     "obligations": ["frontdoor", "worker_summarize"],
+                     "optional_seed": False, "backend": "cpu", "speculation": "none",
+                     "port": 8070, "numa_instance": 0, "command_argv": ["server"],
+                     "workload": {"np": "2", "context": "4096", "threads": "4"},
+                     "environment": {}, "environment_unsets": [],
+                     "topology": {"argv_prefix": []},
+                     "runtime_requirements": {"binary_dir": None, "ld_library_path": []},
+                     "source_revisions": {"kernel": "rev1"},
+                     "source_revision_kinds": {"kernel": "caller_declared"},
+                     "artifacts": [
+                         {"use": "model", "path": model["path"], "sha256": model["sha256"]},
+                         {"use": "executable", "path": executable["path"],
+                          "sha256": executable["sha256"]}]},
+                    {"target_id": "speech:whisper", "status": "unsupported",
+                     "reasons": ["speech_instrument_unsupported"],
+                     "argv": ["whisper"], "environment": {}, "primary_role": "whisper",
+                     "aliases": [], "obligations": ["whisper"], "backend": "cpu"},
+                    {"target_id": "optional-unknown", "status": "unsupported",
+                     "reasons": ["role_not_in_selected_fleet"], "argv": [],
+                     "environment": {}, "primary_role": "optional-unknown",
+                     "aliases": [], "obligations": ["optional-unknown"],
+                     "optional_seed": True, "backend": "unknown"}],
+        "disposition": {"ready": 1, "waiting_artifact": 0, "unsupported": 2},
+    }
+    recipe_body = (json.dumps(pe._recipe_body(export["targets"][0]), sort_keys=True,
+                              separators=(",", ":")) + "\n").encode()
+    recipe_path = tmp_path / "frontdoor.recipe.json"
+    recipe_path.write_bytes(recipe_body)
+    export["targets"][0]["artifacts"].append(
+        {"use": "recipe", "path": str(recipe_path),
+         "sha256": hashlib.sha256(recipe_body).hexdigest()})
+    export["export_sha256"] = hashlib.sha256(json.dumps(
+        export, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    export_path = tmp_path / "production.json"
+    export_path.write_text(json.dumps(export))
+    config = {"schema": CAMPAIGN_CONFIG_SCHEMA, "campaign_id": "production-test",
+              "request_id": "request-1",
+              "resources": {"schema": campaign.RESOURCE_SCHEMA, "cpu_logical": [0, 1],
+                            "gpu_ids": [], "stage_timeout_s": 60, "build_timeout_s": 60,
+                            "build_jobs": 1, "max_builds": 1},
+              "objective_ref": "objective/aggregate-throughput-v1",
+              "actors": {"planner": "planner"}, "fallbacks": {"planner": []},
+              "metric": "aggregate_tok_s", "metric_direction": "higher"}
+    future_model = _file_artifact(tmp_path, "model", "future-model", b"future model")
+    future = _target("future-model-seed", model="future-model", context=8192)
+    future["backend"] = "cpu"
+    future["build_ref"] = f"production:{target_id}:executable"
+    future["recipe_ref"] = f"production:{target_id}:recipe"
+    future.pop("baseline_ref", None)
+    config["local_seeds"] = {
+        "targets": [future],
+        "artifacts": {"model": {"future-model": future_model}},
+    }
+    config_path = tmp_path / "campaign-config.json"
+    config_path.write_text(json.dumps(config))
+    assert campaign_cli.main([
+        "--production-campaign-config", str(config_path),
+        "--production-enrollment", str(export_path)]) == 0
+    output = json.loads(capsys.readouterr().out)
+    assert output["schema"] == campaign_cli.PRODUCTION_DRY_RESOLUTION_SCHEMA
+    assert output["summary"]["resolution_dispositions"] == {"ready": 2}
+    assert output["admission_ready"] is False
+    assert output["disposition"] == "partial"
+    diagnostics = {row["target_id"]: row
+                   for row in output["production_enrollment"]["targets"]}
+    assert diagnostics["speech:whisper"]["status"] == "unsupported"
+    assert diagnostics["optional-unknown"]["enrolled_target_ids"] == []
+    future_row = next(row for row in output["resolved_campaign"]["targets"]
+                      if "future-model-seed" in row["target_ids"])
+    assert future_row["status"] == "ready"
+    assert future_row["baseline"] == future_row["execution"]["build"]
