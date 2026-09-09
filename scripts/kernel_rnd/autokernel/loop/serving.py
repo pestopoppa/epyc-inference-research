@@ -38,8 +38,10 @@ import subprocess
 import time
 from typing import TYPE_CHECKING
 import urllib.request
+import urllib.error
 
 from . import lifecycle_observation, residency, status
+from . import native_server_response as server_response
 
 if TYPE_CHECKING:
     from .resolved_recipe import ResolvedRecipe
@@ -618,7 +620,8 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                   resolved_recipe: "ResolvedRecipe | None" = None,
                   frozen_requests: Sequence[tuple[str, bytes]] | None = None,
                   observation: list | None = None,
-                  observation_session: lifecycle_observation.ObservationSession | None = None
+                  observation_session: lifecycle_observation.ObservationSession | None = None,
+                  response_capture: server_response.ServerResponseCapture | None = None
                   ) -> float:
     """Launch the server under `recipe`, fire `np` concurrent requests, return aggregate
     tok/s. The server is always stopped, even on error.
@@ -641,6 +644,13 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
     teardown = "not_started"
     failure: str | None = None
     observer_finish_ok = observation_session is None
+    response_reference = None
+    if response_capture is not None and type(response_capture) is not server_response.ServerResponseCapture:
+        raise RecipeError("response capture must be the concrete native server recorder")
+    if response_capture is not None and (resolved_recipe is None or frozen_requests is None):
+        raise RecipeError("server response capture requires the frozen resolved launch")
+    if response_capture is not None:
+        response_capture.validate_launch(resolved_recipe, frozen_requests)
 
     def observe(method: str, *args) -> bool:
         if observation_session is None:
@@ -697,8 +707,13 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                     if srv.poll() is not None:
                         raise ServerDied(f"server exited {srv.returncode} during load ({recipe.describe()})")
                     try:
-                        urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=2)
+                        health = urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=2)
+                        if callable(getattr(health, "close", None)):
+                            health.close()
                         break
+                    except urllib.error.HTTPError as exc:
+                        exc.close()
+                        time.sleep(2)
                     except Exception:
                         time.sleep(2)
                 else:
@@ -712,7 +727,7 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                         recipe, srv.pid,
                         expectations=resolved_recipe.readback_expectations)
 
-                def one(i: int, phase: str) -> tuple[int, float, bool, dict]:
+                def one(i: int, phase: str) -> tuple:
                     if frozen_requests is None:
                         prompt_id = f"legacy-slot-{i}"
                         body = json.dumps({"prompt": _PROMPTS[i % len(_PROMPTS)],
@@ -726,11 +741,37 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                               "request_sha256": hashlib.sha256(body).hexdigest(),
                               "predicted_n": None, "predicted_per_second": None,
                               "terminal": False, "error": None}
+                    response_bytes = None
+                    started_monotonic = time.monotonic()
+                    ended_monotonic = started_monotonic
+                    result = (0, 0.0, False)
                     try:
                         req = urllib.request.Request(
                             f"http://127.0.0.1:{port}/completion", data=body,
                             headers={"Content-Type": "application/json"})
-                        response = json.loads(urllib.request.urlopen(req, timeout=600).read())
+                        http_error = None
+                        try:
+                            opened = urllib.request.urlopen(req, timeout=600)
+                        except urllib.error.HTTPError as exc:
+                            if response_capture is None:
+                                exc.close()
+                                raise
+                            opened, http_error = exc, exc
+                        try:
+                            if response_capture is None:
+                                response_bytes = opened.read()
+                            else:
+                                response_bytes = opened.read(server_response.MAX_RESPONSE_BYTES + 1)
+                                if len(response_bytes) > server_response.MAX_RESPONSE_BYTES:
+                                    response_bytes = None
+                                    raise ValueError("server response exceeds raw capture byte budget")
+                        finally:
+                            if callable(getattr(opened, "close", None)):
+                                opened.close()
+                        ended_monotonic = time.monotonic()
+                        if http_error is not None:
+                            raise http_error
+                        response = json.loads(response_bytes)
                         timings = response.get("timings", {})
                         # per-request decode rate, NOT wall-clock: each slot reports its own
                         # predicted_n / predicted_ms; the aggregate remains the sum of rates.
@@ -753,14 +794,19 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                         terminal = response.get("stop") is True
                         record.update(predicted_n=tokens, predicted_per_second=rate,
                                       terminal=terminal)
-                        return tokens, rate, terminal, record
+                        result = (tokens, rate, terminal)
                     except Exception as exc:
+                        ended_monotonic = time.monotonic()
                         record["error"] = f"{type(exc).__name__}: {exc}"
-                        return 0, 0.0, False, record
+                    captured = None if response_capture is None else server_response.RawServerResponse(
+                        phase, i, prompt_id, body, response_bytes, started_monotonic,
+                        ended_monotonic, record["error"])
+                    return (*result, record, captured)
 
                 # The request phase proper starts HERE, warmup included: the
                 # residency window must overlap the work, not merely the boot.
                 request_start = time.time()
+                request_started_monotonic = time.monotonic()
                 # Warmup: one full np-wide round discarded, so cold-cache/clock-ramp does not
                 # land in the measured sample (the first calibration run read high, then settled).
                 observe("phase", "warmup")
@@ -771,7 +817,15 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                     rows = list(ex.map(lambda i: one(i, "measurement"), range(recipe.np)))
                 observe("checkpoint", "measurement_end")
                 request_end = time.time()
+                request_ended_monotonic = time.monotonic()
                 request_rows = [row[3] for row in warmup_rows + rows]
+                if response_capture is not None:
+                    # Persistence is outside both timed rounds and still inside the
+                    # existing owned lifecycle, before its finally-driven teardown.
+                    response_reference = response_capture.seal(
+                        tuple(row[4] for row in warmup_rows + rows), process_pid=srv.pid,
+                        request_started_monotonic_s=request_started_monotonic,
+                        request_ended_monotonic_s=request_ended_monotonic)
                 toks = [row[0] for row in rows]
                 if any(row[3]["error"] for row in warmup_rows + rows):
                     raise ServerDied("one or more serving slots failed; see collected observation")
@@ -805,10 +859,13 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                     if evidence is not None:
                         evidence.append(record)
                     if observation is not None:
-                        observation.append({
+                        exported = {
                             "schema": "epyc.autokernel.serving_observation.v1",
                             "process_pid": process_pid, "requests": request_rows,
-                            "residency": record, "teardown": teardown, "failure": failure})
+                            "residency": record, "teardown": teardown, "failure": failure}
+                        if response_reference is not None:
+                            exported["server_responses"] = response_reference
+                        observation.append(exported)
                 except Exception:
                     if failure is None:
                         raise

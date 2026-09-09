@@ -533,6 +533,12 @@ def run_planned_comparison(plan: ep.ExperimentPlan, *,
         if observation_session_factory is not None:
             observation_session = observation_session_factory.create(
                 unit=spec, fence=fence, recipe=recipe)
+        response_capture = None
+        if v2 and type(observation_session_factory) is ob.ContainedObservationFactory:
+            from .native_server_response import ServerResponseCapture
+            response_capture = ServerResponseCapture(store=observation_session_factory.store,
+                plan=plan, unit=spec, fence=fence, recipe=recipe, prompts=prompts,
+                frozen_requests=frozen_requests)
         value: float | None = None
         error: str | None = None
         observed_started_at, observed_started = _wall_timestamp(
@@ -548,6 +554,8 @@ def run_planned_comparison(plan: ep.ExperimentPlan, *,
                                   "observation": observations}
                 if observation_session is not None:
                     measure_kwargs["observation_session"] = observation_session
+                if response_capture is not None:
+                    measure_kwargs["response_capture"] = response_capture
                 value = float(measure(template, recipe.build_dir, recipe.port,
                                       **measure_kwargs))
         except Exception as exc:
