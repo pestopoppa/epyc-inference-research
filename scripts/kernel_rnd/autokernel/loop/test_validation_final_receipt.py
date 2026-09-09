@@ -40,7 +40,10 @@ def real(actual_final, tmp_path_factory):
     instrument = events["anchor"]["payload"]["carrier"]["loaded_instrument"]["artifact"]
     original = mc._plain(source.read(instrument["locator"], instrument["sha256"]))
     expected = original["used_constants"]["producer_source_closure"]
-    pins = {path: hashlib.sha256((root / path).read_bytes()).hexdigest() for path in feed.ROOT_SOURCES}
+    # Final-receipt semantics own the seven-file v2 closure independently of
+    # the feed's current v3 profile projection closure.
+    pins = {path: hashlib.sha256((root / path).read_bytes()).hexdigest()
+            for path in feed.ROOT_SOURCES_V2}
     closure = sa.ProjectionSourceClosure("80f4f60b5de46825b0e2488bced4a085bd8f58ad", pins, expected)
     projection = sa.PinnedRootProjection(root, source_closure=closure)
     refs, bodies = {}, {}

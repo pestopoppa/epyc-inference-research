@@ -42,7 +42,12 @@ def _synthetic_modules():
     return {name for name in sys.modules if name.startswith("_autokernel_feed_")}
 
 
-def test_current_closure_pins_both_late_imports_and_reverse_dependency(tmp_path, monkeypatch):
+@pytest.mark.parametrize("paths,schema", [
+    (F.ROOT_SOURCES_V2, F.ROOT_PROJECTION_SCHEMA_V2),
+    (F.ROOT_SOURCES_V3, F.ROOT_PROJECTION_SCHEMA_V3),
+])
+def test_current_closure_pins_both_late_imports_and_reverse_dependency(
+        tmp_path, monkeypatch, paths, schema):
     root = _copy_root(tmp_path)
     helper_path = root / F.ROOT_SOURCES_V2[-1]
     helper_path.write_bytes(helper_path.read_bytes() + b'\nCAPTURED_TEST_MARKER = "original"\n')
@@ -50,11 +55,12 @@ def test_current_closure_pins_both_late_imports_and_reverse_dependency(tmp_path,
     stale.CAPTURED_TEST_MARKER = "ambient"
     monkeypatch.setitem(sys.modules, stale.__name__, stale)
     before = _synthetic_modules()
-    installed = F.InstalledFeedBinding(root, _pins(root), "epoch-1")
+    installed = F.InstalledFeedBinding(root, _pins(root, paths), "epoch-1")
     loaded = installed.load(config(tmp_path))
     assert _synthetic_modules() == before
-    assert loaded.source_schema == F.ROOT_PROJECTION_SCHEMA_V2
-    assert set(loaded.source_sha256) == set(F.ROOT_SOURCES_V2)
+    assert loaded.source_schema == schema
+    assert set(loaded.source_sha256) == set(paths)
+    assert (loaded.profile_adapter is not None) == (schema == F.ROOT_PROJECTION_SCHEMA_V3)
     helper = _import(loaded, "autokernel_final_trial", ("REFERENCE_SCHEMA",))
     assert helper is _import(loaded, "autokernel_final_trial", ("validate_final",))
     assert helper is not stale and helper.CAPTURED_TEST_MARKER == "original"
@@ -130,9 +136,14 @@ def test_last_helper_hash_is_verified_before_any_captured_source_executes(tmp_pa
 
 
 @pytest.mark.parametrize("direct", [False, True])
-def test_pins_are_snapshotted_once_before_validation_and_execution(tmp_path, direct):
+@pytest.mark.parametrize("paths,schema", [
+    (F.ROOT_SOURCES_V2, F.ROOT_PROJECTION_SCHEMA_V2),
+    (F.ROOT_SOURCES_V3, F.ROOT_PROJECTION_SCHEMA_V3),
+])
+def test_pins_are_snapshotted_once_before_validation_and_execution(
+        tmp_path, direct, paths, schema):
     root = _root_repo()
-    original = _pins(root)
+    original = _pins(root, paths)
 
     class ChangingPins(Mapping):
         iterations = 0
@@ -154,7 +165,7 @@ def test_pins_are_snapshotted_once_before_validation_and_execution(tmp_path, dir
         loaded = F.InstalledFeedBinding(root, pins, "epoch-1").load(config(tmp_path))
     assert pins.iterations == 1
     assert dict(loaded.source_sha256) == original
-    assert loaded.source_schema == F.ROOT_PROJECTION_SCHEMA_V2
+    assert loaded.source_schema == schema
 
 
 @pytest.mark.parametrize("suffix, exception", [
@@ -193,12 +204,16 @@ def actual_final(tmp_path_factory):
     return controller, events, native
 
 
-def test_actual_final_v3_installed_feed_owner_and_restart_remain_diagnostic(actual_final, tmp_path, monkeypatch):
+@pytest.mark.parametrize("paths", [F.ROOT_SOURCES_V2, F.ROOT_SOURCES_V3])
+def test_actual_final_v3_installed_feed_owner_and_restart_remain_diagnostic(
+        actual_final, tmp_path, monkeypatch, paths):
     controller, events, native = actual_final
     root = _root_repo()
-    installed = F.InstalledFeedBinding(root, _pins(root), "epoch-1")
-    cfg = replace(config(tmp_path), source_root=str(controller / "journal"),
+    installed = F.InstalledFeedBinding(root, _pins(root, paths), "epoch-1")
+    closure_version = "v3" if paths == F.ROOT_SOURCES_V3 else "v2"
+    cfg = replace(config(tmp_path / str(len(paths))), source_root=str(controller / "journal"),
         corpus_root=str(controller / "unified-native-artifacts"),
+        reader_id=f"test-final-feed-{closure_version}",
         max_events=128, max_bytes=32 * 1024 * 1024, max_seconds=30)
     monkeypatch.setattr(evidence_feed, "_load_vidya", lambda *_: pytest.fail("ambient ROOT fallback"))
     first_state = None
