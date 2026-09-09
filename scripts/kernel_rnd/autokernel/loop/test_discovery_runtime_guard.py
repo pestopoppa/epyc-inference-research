@@ -179,6 +179,11 @@ def test_installed_native_startup_tick_keeps_discovery_unavailable(tmp_path):
                 break
         assert outcome.status == "waiting"
         assert _reason(declared) in outcome.driver_outcome["reasons"]
+        projection = controller.publish_snapshot()
+        assert projection["unified"]["runtime"]["reason"] == outcome.reason
+        assert projection["unified"]["runtime"]["publication_error"] is None
+        assert projection["observed_state"] == "running"  # ACK is admission, not progress.
+        assert projection["unified"]["runtime"]["installed_work_kinds"] == ["runtime_comparison"]
         assert controller.unified_driver_pending_intent() is None
         kinds = [entry.kind for entry in controller._journal.read_all()]
         assert "RETENTION_CATALOG_INSTALLED" in kinds

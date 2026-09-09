@@ -41,6 +41,11 @@ SNAPSHOT_SCHEMA = "epyc.autokernel.campaign_snapshot.v1"
 SNAPSHOT_SCHEMA_V2 = "epyc.autokernel.campaign_snapshot.v2"
 SNAPSHOT_SCHEMA_V3 = "epyc.autokernel.campaign_snapshot.v3"
 UNIFIED_PROJECTION_SCHEMA = "epyc.autokernel.unified_campaign_projection.v1"
+UNIFIED_PROJECTION_SCHEMA_V2 = "epyc.autokernel.unified_campaign_projection.v2"
+RUNTIME_OBSERVATION_FIELDS = frozenset({
+    "status", "reason", "reason_truncated", "observed_at", "observation_sequence",
+    "retry_after_seconds", "work_kind", "target_revision", "transition_id",
+    "settlement_outcome", "installed_work_kinds", "publication_error"})
 DRIVER_SETTLEMENT_SCHEMA = "epyc.autokernel.unified_driver_settlement_request.v1"
 DRIVER_SETTLEMENT_RECEIPT_SCHEMA = "epyc.autokernel.unified_driver_settlement_receipt.v1"
 _MAX_WORKER_STDOUT_BYTES = 64 * 1024 * 1024
@@ -252,6 +257,58 @@ def validate_snapshot_v2(value: Mapping[str, Any]) -> dict[str, Any]:
     return row
 
 
+def validate_runtime_observation(value: Any) -> dict[str, Any]:
+    if not isinstance(value, Mapping) or set(value) != RUNTIME_OBSERVATION_FIELDS:
+        raise ControlRefused("runtime observation fields differ")
+    row = copy.deepcopy(dict(value))
+    kinds = {"runtime_comparison", "actor_preparation", "profile_preparation",
+             "calibration_preparation"}
+    if (not isinstance(row["status"], str)
+            or row["status"] not in {"not_reported", "recovered", "waiting", "settled",
+                              "stopped", "recovery_required"}
+            or not isinstance(row["reason"], str) or not 0 < len(row["reason"]) <= 4096
+            or type(row["reason_truncated"]) is not bool
+            or type(row["observation_sequence"]) is not int or row["observation_sequence"] < 0
+            or not isinstance(row["installed_work_kinds"], list)
+            or any(not isinstance(kind, str) or kind not in kinds for kind in row["installed_work_kinds"])
+            or len(set(row["installed_work_kinds"])) != len(row["installed_work_kinds"])):
+        raise ControlRefused("runtime observation status/bounds differ")
+    error = row["publication_error"]
+    if error is not None and (not isinstance(error, str) or not 0 < len(error) <= 4096):
+        raise ControlRefused("runtime publication error is invalid")
+    delay = row["retry_after_seconds"]
+    if type(delay) not in (int, float) or not math.isfinite(delay) or delay < 0:
+        raise ControlRefused("runtime observation retry delay is invalid")
+    missing = row["status"] == "not_reported"
+    if (missing != (row["observed_at"] is None) or (row["observation_sequence"] == 0 and not missing)
+            or missing and row["observation_sequence"] > 0 and error is None):
+        raise ControlRefused("runtime observation date/sequence differs")
+    if not missing:
+        try:
+            stamp = datetime.fromisoformat(row["observed_at"].replace("Z", "+00:00"))
+        except (ValueError, AttributeError) as exc:
+            raise ControlRefused("runtime observation date is invalid") from exc
+        if stamp.tzinfo is None:
+            raise ControlRefused("runtime observation date lacks timezone")
+    for name in ("target_revision", "transition_id"):
+        item = row[name]
+        if item is not None and (not isinstance(item, str) or len(item) != 64
+                                or any(c not in "0123456789abcdef" for c in item)):
+            raise ControlRefused("runtime observation identity is invalid")
+    selected = row["work_kind"] is not None
+    if (selected and (not isinstance(row["work_kind"], str) or row["work_kind"] not in kinds)
+            or selected != (row["target_revision"] is not None)
+            or selected != (row["transition_id"] is not None)
+            or missing and (selected or delay != 0 or row["reason_truncated"])
+            or row["settlement_outcome"] is not None
+            and (not isinstance(row["settlement_outcome"], str)
+                 or row["settlement_outcome"] not in scheduling.OUTCOMES)
+            or (row["status"] == "settled") != (row["settlement_outcome"] is not None)
+            or row["status"] == "settled" and not selected):
+        raise ControlRefused("runtime observation work/settlement differs")
+    return row
+
+
 def validate_snapshot_v3(value: Mapping[str, Any]) -> dict[str, Any]:
     if not isinstance(value, Mapping) or set(value) != SNAPSHOT_V3_FIELDS:
         raise ControlRefused("v3 snapshot has missing/unknown fields")
@@ -265,9 +322,41 @@ def validate_snapshot_v3(value: Mapping[str, Any]) -> dict[str, Any]:
         raise ControlRefused("v3 snapshot schema identity is invalid")
     expected = {"schema", "scheduler", "resources", "actors", "evidence",
                 "candidate", "targets"}
+    runtime_aware = isinstance(unified, Mapping) and unified.get("schema") == UNIFIED_PROJECTION_SCHEMA_V2
+    if runtime_aware:
+        expected.update({"runtime", "worker_timing"})
     if not isinstance(unified, Mapping) or set(unified) != expected \
-            or unified.get("schema") != UNIFIED_PROJECTION_SCHEMA:
+            or unified.get("schema") not in {UNIFIED_PROJECTION_SCHEMA, UNIFIED_PROJECTION_SCHEMA_V2}:
         raise ControlRefused("v3 unified projection fields/schema differ")
+    if runtime_aware:
+        unified["runtime"] = validate_runtime_observation(unified["runtime"])
+        stamp = unified["runtime"]["observed_at"]
+        if stamp is not None and datetime.fromisoformat(stamp.replace("Z", "+00:00")) > \
+                datetime.fromisoformat(row["generated_at"].replace("Z", "+00:00")):
+            raise ControlRefused("runtime observation is newer than its snapshot")
+        timing, worker = unified["worker_timing"], row["active_worker"]
+        if worker is None:
+            if timing is not None:
+                raise ControlRefused("runtime worker timing has no original worker")
+        else:
+            fields = {"worker_id", "worker_generation", "lifecycle_revision", "checked_at",
+                      "state", "remaining_seconds"}
+            if (not isinstance(timing, Mapping) or set(timing) != fields
+                    or timing["worker_id"] != worker["worker_id"]
+                    or type(timing["worker_generation"]) is not int
+                    or timing["worker_generation"] != worker["worker_generation"]
+                    or type(timing["lifecycle_revision"]) is not int
+                    or timing["lifecycle_revision"] != row["worker_lifecycle_revision"]
+                    or timing["checked_at"] != row["generated_at"]
+                    or timing["state"] not in ("within_deadline", "deadline_elapsed", "clock_unavailable")):
+                raise ControlRefused("runtime worker timing identity differs")
+            remaining = timing["remaining_seconds"]
+            if timing["state"] == "clock_unavailable":
+                if remaining is not None:
+                    raise ControlRefused("unknown worker clock cannot supply a remainder")
+            elif (type(remaining) not in (int, float) or not math.isfinite(remaining)
+                  or remaining < 0 or (remaining > 0) != (timing["state"] == "within_deadline")):
+                raise ControlRefused("runtime worker timing remainder differs")
     closed = {
         "resources": {"schema", "status", "reason", "requested", "granted", "held", "used"},
         "actors": {"schema", "status", "reason", "clock_semantics", "items"},
@@ -4148,6 +4237,8 @@ class CampaignController:
             base["schema"] = SNAPSHOT_SCHEMA_V3
             base["producer_schema"] = SNAPSHOT_SCHEMA_V3
             base["unified"] = self._unified_projection_locked()
+            if base["unified"]["schema"] == UNIFIED_PROJECTION_SCHEMA_V2:
+                base["unified"]["worker_timing"] = self._runtime_worker_timing_locked(base)
             return validate_snapshot_v3(base)
         if self.snapshot_version == 2:
             return self._snapshot_v2_locked()
@@ -4265,7 +4356,7 @@ class CampaignController:
         prerequisite = len(targets) - ready
         seed_enrolled = sum("seed" in item.enrolled_as for item in targets)
         production_enrolled = sum("production" in item.enrolled_as for item in targets)
-        return {
+        result = {
             "schema": UNIFIED_PROJECTION_SCHEMA,
             "scheduler": {
                 "schema": "epyc.autokernel.unified_scheduler_projection.v1",
@@ -4312,6 +4403,115 @@ class CampaignController:
                 "items_page_ref": None,
             },
         }
+        if (getattr(self, "_runtime_projection_token", None) is not None
+                and self._runtime_projection_token is self._lifetime_token):
+            result["schema"] = UNIFIED_PROJECTION_SCHEMA_V2
+            result["runtime"] = copy.deepcopy(self._runtime_observation)
+        return result
+
+    def _runtime_worker_timing_locked(self, snapshot):
+        """Project an original deadline, not activity, grants, or timeout authority."""
+        worker = snapshot["active_worker"]
+        if worker is None:
+            return None
+        intent = next(row for row in self._active_worker_events
+                      if row["event"] == "OWNED_LAUNCH_INTENT")
+        state, remaining = "clock_unavailable", None
+        if (intent["supervisor_incarnation"] == self.supervisor_incarnation
+                and self._runtime_clock_domain is not None
+                and worker["deadline_clock_domain"] == self._runtime_clock_domain):
+            deadline = (worker["termination_deadline"] if worker["termination_deadline"] is not None
+                        else worker["provider_deadline"])
+            remaining = max(0.0, deadline - time.monotonic())
+            state = "within_deadline" if remaining > 0 else "deadline_elapsed"
+        return {"worker_id": worker["worker_id"], "worker_generation": worker["worker_generation"],
+                "lifecycle_revision": snapshot["worker_lifecycle_revision"],
+                "checked_at": snapshot["generated_at"], "state": state,
+                "remaining_seconds": remaining}
+
+    def register_runtime_projection(self, runtime) -> None:
+        """Connect only the installed owner; this grants no execution authority."""
+        from .standalone_runtime import StandaloneRuntime
+        if type(runtime) is not StandaloneRuntime or runtime.controller is not self:
+            raise ControlRefused("runtime projection requires the concrete owning runtime")
+        kinds = ["runtime_comparison"]
+        if runtime.profile_executor is not None:
+            kinds.append("profile_preparation")
+        if runtime.driver.preparation_owner is not None:
+            kinds.append("calibration_preparation")
+        try:
+            clock_domain = worker_lifecycle_module.monotonic_clock_domain()
+        except worker_lifecycle_module.LifecycleRefused:
+            clock_domain = None
+        with self._mutex:
+            self._require_active_locked()
+            if self.snapshot_version != 3:
+                raise ControlRefused("runtime projection requires snapshot v3")
+            if getattr(self, "_runtime_projection_token", None) is self._lifetime_token:
+                raise ControlRefused("runtime projection owner is already registered")
+            self._runtime_projection_token = self._lifetime_token
+            self._runtime_projection_owner = runtime
+            self._runtime_clock_domain = clock_domain
+            self._runtime_observation = validate_runtime_observation({
+                "status": "not_reported", "reason": "runtime owner has not reported",
+                "reason_truncated": False, "observed_at": None, "observation_sequence": 0,
+                "retry_after_seconds": 0, "work_kind": None, "target_revision": None,
+                "transition_id": None, "settlement_outcome": None,
+                "installed_work_kinds": sorted(kinds), "publication_error": None})
+
+    def record_runtime_observation(self, runtime, result, *, catalog_id=None) -> None:
+        """Retain bounded owner-local facts; no I/O, callbacks, or durable authority."""
+        from .standalone_runtime import RuntimeTickResult
+        if type(result) is not RuntimeTickResult:
+            raise ControlRefused("runtime observation requires the original typed result")
+        source = result.to_dict()
+        snapshot = source["controller_snapshot"]
+        outcome = source["driver_outcome"]
+        with self._mutex:
+            self._require_active_locked()
+            if (getattr(self, "_runtime_projection_owner", None) is not runtime
+                    or self._runtime_projection_token is not self._lifetime_token
+                    or any(snapshot[name] != getattr(self, name) for name in (
+                        "config_digest", "config_generation", "supervisor_incarnation"))
+                    or snapshot["campaign_id"] != self.resolved.campaign_id):
+                raise ControlRefused("runtime observation belongs to another owner/incarnation")
+            work_kind = target = transition = settled = None
+            if outcome is not None and outcome["transition_id"] is not None:
+                if not isinstance(catalog_id, str):
+                    raise ControlRefused("runtime observation lacks original selected catalog")
+                issued = self._driver_issued.get(catalog_id)
+                if (issued is None or issued["transition_id"] != outcome["transition_id"]
+                        or issued["selection"] != outcome["selection"]):
+                    raise ControlRefused("runtime observation differs from durable selection")
+                selection = scheduling.Selection.from_dict(issued["selection"])
+                work_kind = issued["catalog"]["work_by_stage_digest"][selection.proposal.digest]["kind"]
+                target, transition = selection.proposal.target_revision, issued["transition_id"]
+                if result.status == "settled":
+                    committed = self._driver_settled.get(transition)
+                    if committed is None:
+                        raise ControlRefused("runtime observation lacks original durable settlement")
+                    settled = committed["outcome"]
+            self._runtime_observation = validate_runtime_observation({
+                "status": result.status, "reason": result.reason[:4096],
+                "reason_truncated": len(result.reason) > 4096,
+                "observed_at": snapshot["generated_at"],
+                "observation_sequence": self._runtime_observation["observation_sequence"] + 1,
+                "retry_after_seconds": result.retry_after_seconds, "work_kind": work_kind,
+                "target_revision": target, "transition_id": transition, "settlement_outcome": settled,
+                "installed_work_kinds": self._runtime_observation["installed_work_kinds"],
+                "publication_error": None})
+
+    def runtime_observation_failed(self, runtime, reason: str) -> None:
+        """Date no new work when observation publication itself fails."""
+        with self._mutex:
+            self._require_active_locked()
+            if (getattr(self, "_runtime_projection_owner", None) is not runtime
+                    or self._runtime_projection_token is not self._lifetime_token):
+                raise ControlRefused("runtime publication failure belongs to another owner")
+            row = dict(self._runtime_observation)
+            row["publication_error"] = str(reason)[:4096] or "observation publication failed"
+            row["observation_sequence"] += 1
+            self._runtime_observation = validate_runtime_observation(row)
 
     def snapshot(self) -> dict[str, Any]:
         with self._mutex:
