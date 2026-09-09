@@ -25,6 +25,7 @@ from ..controller.discovery_supervisor_secure import (
     RuntimeRoot, SecureRuntimeError, object_identity, read_stable_fd,
 )
 from . import status
+from . import runtime_aggregates as aggregates
 from . import actor_preparation_state as actor_state_module
 from . import campaign_command_v2
 from . import maintenance_execution as maintenance_module
@@ -42,6 +43,7 @@ SNAPSHOT_SCHEMA_V2 = "epyc.autokernel.campaign_snapshot.v2"
 SNAPSHOT_SCHEMA_V3 = "epyc.autokernel.campaign_snapshot.v3"
 UNIFIED_PROJECTION_SCHEMA = "epyc.autokernel.unified_campaign_projection.v1"
 UNIFIED_PROJECTION_SCHEMA_V2 = "epyc.autokernel.unified_campaign_projection.v2"
+UNIFIED_PROJECTION_SCHEMA_V3 = "epyc.autokernel.unified_campaign_projection.v3"
 RUNTIME_OBSERVATION_FIELDS = frozenset({
     "status", "reason", "reason_truncated", "observed_at", "observation_sequence",
     "retry_after_seconds", "work_kind", "target_revision", "transition_id",
@@ -313,6 +315,40 @@ def validate_snapshot_v3(value: Mapping[str, Any]) -> dict[str, Any]:
     if not isinstance(value, Mapping) or set(value) != SNAPSHOT_V3_FIELDS:
         raise ControlRefused("v3 snapshot has missing/unknown fields")
     row = copy.deepcopy(dict(value))
+    if isinstance(row.get("unified"), Mapping) and row["unified"].get("schema") == UNIFIED_PROJECTION_SCHEMA_V3:
+        unified = row["unified"]
+        if set(unified) != {"schema", "scheduler", "resources", "actors", "evidence", "candidate",
+                            "targets", "runtime", "worker_timing"}:
+            raise ControlRefused("aggregate unified projection fields differ")
+        actors = unified["actors"]
+        if (not isinstance(actors, Mapping) or set(actors) != {"schema", "status", "reason", "actor", "profile", "calibration"}
+                or actors["schema"] != "epyc.autokernel.unified_actor_status.v2"
+                or actors["status"] not in ("available", "unknown")
+                or not isinstance(actors["reason"], str) or not 0 < len(actors["reason"]) <= 512):
+            raise ControlRefused("aggregate preparation wrapper differs")
+        # Validate unchanged scalar/time/worker fields before using their types.
+        legacy = copy.deepcopy(row)
+        legacy["unified"]["schema"] = UNIFIED_PROJECTION_SCHEMA_V2
+        legacy["unified"]["actors"] = {"schema": "epyc.autokernel.unified_actor_status.v1",
+            "status": "not_connected", "reason": "legacy validation carrier", "items": [],
+            "clock_semantics": "UTC wall-clock projection; runtime fences remain monotonic"}
+        legacy["unified"]["evidence"] = {"schema": "epyc.autokernel.unified_evidence_status.v1",
+            "status": "not_connected", "reason": "legacy validation carrier", "frontier_digest": None, "lag_seconds": None}
+        validate_snapshot_v3(legacy)
+        try:
+            aggregate_rows = aggregates.validate_bundle({"evidence": unified["evidence"],
+                **{kind: actors[kind] for kind in ("actor", "profile", "calibration")}})
+            if actors["status"] != ("unknown" if any(aggregate_rows[kind]["status"] == "unknown"
+                    for kind in ("actor", "profile", "calibration")) else "available"):
+                raise ValueError("preparation aggregate status contradicts observations")
+            for item in aggregate_rows.values():
+                for name in ("observed_at", "attempted_at"):
+                    if item[name] is not None and datetime.fromisoformat(item[name].replace("Z", "+00:00")) > \
+                            datetime.fromisoformat(row["generated_at"].replace("Z", "+00:00")):
+                        raise ValueError("aggregate observation is newer than snapshot")
+        except (ValueError, TypeError, OverflowError) as exc:
+            raise ControlRefused(str(exc)) from exc
+        return row
     unified = row.pop("unified")
     base = dict(row)
     base["schema"] = SNAPSHOT_SCHEMA_V2
@@ -547,6 +583,11 @@ def _loaded_producer_build_identity() -> dict[str, Any]:
             encoded = repr(sorted(value)) if isinstance(value, frozenset) else repr(value)
             digest.update(encoded.encode())
             included.append(label)
+    # The installed aggregate validator is an explicit dependency, not captured
+    # cache state. Its own identity covers all helper code and closed constants.
+    digest.update(json.dumps(aggregates.source_identity(), sort_keys=True,
+                             separators=(",", ":"), ensure_ascii=False).encode())
+    included.append("installed_dependency:runtime_aggregates")
     return {"schema": "epyc.autokernel.loaded_producer_build.v1",
             "scope": "campaign_control_callable_bytecode_and_selected_constants",
             "module": __name__,
@@ -4237,7 +4278,7 @@ class CampaignController:
             base["schema"] = SNAPSHOT_SCHEMA_V3
             base["producer_schema"] = SNAPSHOT_SCHEMA_V3
             base["unified"] = self._unified_projection_locked()
-            if base["unified"]["schema"] == UNIFIED_PROJECTION_SCHEMA_V2:
+            if base["unified"]["schema"] in {UNIFIED_PROJECTION_SCHEMA_V2, UNIFIED_PROJECTION_SCHEMA_V3}:
                 base["unified"]["worker_timing"] = self._runtime_worker_timing_locked(base)
             return validate_snapshot_v3(base)
         if self.snapshot_version == 2:
@@ -4405,8 +4446,14 @@ class CampaignController:
         }
         if (getattr(self, "_runtime_projection_token", None) is not None
                 and self._runtime_projection_token is self._lifetime_token):
-            result["schema"] = UNIFIED_PROJECTION_SCHEMA_V2
+            result["schema"] = UNIFIED_PROJECTION_SCHEMA_V3
             result["runtime"] = copy.deepcopy(self._runtime_observation)
+            rows = aggregates.plain(self._runtime_aggregates)
+            result["evidence"] = rows["evidence"]
+            parts = {kind: rows[kind] for kind in ("actor", "profile", "calibration")}
+            result["actors"] = {"schema": "epyc.autokernel.unified_actor_status.v2",
+                "status": "unknown" if any(item["status"] == "unknown" for item in parts.values()) else "available",
+                "reason": "original preparation observations; installation is not execution authority", **parts}
         return result
 
     def _runtime_worker_timing_locked(self, snapshot):
@@ -4452,12 +4499,69 @@ class CampaignController:
             self._runtime_projection_token = self._lifetime_token
             self._runtime_projection_owner = runtime
             self._runtime_clock_domain = clock_domain
+            self._runtime_aggregates = aggregates.freeze({kind: aggregates.observation(kind)
+                                                          for kind in aggregates.KINDS})
             self._runtime_observation = validate_runtime_observation({
                 "status": "not_reported", "reason": "runtime owner has not reported",
                 "reason_truncated": False, "observed_at": None, "observation_sequence": 0,
                 "retry_after_seconds": 0, "work_kind": None, "target_revision": None,
                 "transition_id": None, "settlement_outcome": None,
                 "installed_work_kinds": sorted(kinds), "publication_error": None})
+
+    def record_runtime_aggregates(self, runtime, value) -> None:
+        retained = aggregates.freeze(aggregates.validate_bundle(value))
+        with self._mutex:
+            self._require_active_locked()
+            if (getattr(self, "_runtime_projection_owner", None) is not runtime
+                    or self._runtime_projection_token is not self._lifetime_token):
+                raise ControlRefused("aggregate observation belongs to another runtime")
+            now = datetime.fromisoformat(self.clock().replace("Z", "+00:00"))
+            for row in retained.values():
+                for field in ("observed_at", "attempted_at"):
+                    if row[field] is not None and datetime.fromisoformat(row[field].replace("Z", "+00:00")) > now:
+                        raise ControlRefused("aggregate observation is newer than its publication attempt")
+            self._runtime_aggregates = retained
+
+    def runtime_aggregate_observation(self, runtime):
+        """Bounded immutable retained values; never invoke source owners here."""
+        with self._mutex:
+            self._require_active_locked()
+            if (getattr(self, "_runtime_projection_owner", None) is not runtime
+                    or self._runtime_projection_token is not self._lifetime_token):
+                raise ControlRefused("aggregate observation belongs to another runtime")
+            return self._runtime_aggregates
+
+    def actor_preparation_observation(self):
+        from itertools import chain, islice
+        with self._mutex:
+            self._require_active_locked()
+            state = self._actor_preparation_state
+            items = []
+            now = time.monotonic()
+            for row in islice(chain(state.pending.values(), state.finished.values()), 16):
+                settlement = self._driver_settled.get(row["transition_id"])
+                if settlement is not None and settlement["catalog_id"] != row["catalog_id"]:
+                    raise ControlRefused("actor observation original settlement differs")
+                availability = state.availability.get(row["backend_key"], {})
+                domain = getattr(self, "_runtime_clock_domain", None)
+                same_clock = (domain is not None and availability.get("clock_domain") == domain)
+                retry = availability.get("retry_after")
+                items.append({"request_digest": row["request_digest"], "target_revision": row["target_revision_digest"],
+                    "transition_id": row["transition_id"], "phase": "pending" if row["event"] == "INTENT" else
+                        "settled" if settlement is not None else "finished_unsettled",
+                    "settlement_outcome": None if settlement is None else settlement["outcome"],
+                    "retry_remaining_seconds": max(0., retry - now) if same_clock and retry is not None else None,
+                    "clock_known": same_clock})
+            total = len(state.pending) + len(state.finished)
+            stamp = self.clock()
+            return aggregates.observation("actor", status="available", observed_at=stamp, attempted_at=stamp,
+                generation=len(self._actor_preparation_events),
+                reason="original actor indexes; FINISH is not scheduler settlement; installation grants no authority",
+                data={"pending_count": len(state.pending), "finished_count": len(state.finished),
+                    "backend_count": len(state.availability), "event_count": len(self._actor_preparation_events),
+                    "executor_installed": "actor_preparation" in getattr(self, "_runtime_observation", {}).get("installed_work_kinds", ()),
+                    "reserved": dict(state.reserved), "spent": dict(state.spent),
+                    "items": items, "items_total": total, "items_truncated": total > len(items)})
 
     def record_runtime_observation(self, runtime, result, *, catalog_id=None) -> None:
         """Retain bounded owner-local facts; no I/O, callbacks, or durable authority."""

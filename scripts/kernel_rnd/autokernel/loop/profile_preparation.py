@@ -54,6 +54,7 @@ def _driver_tick_source():
 
 
 def _source_closure():
+    from . import runtime_aggregates as aggregate
     roles = {
         "source_closure": _source_closure,
         "binding_body": InstalledProfileMechanismBinding.body,
@@ -77,6 +78,10 @@ def _source_closure():
         "profile_verify": InstalledProfilePreparationOwner.verify_settlement,
         "profile_replay": InstalledProfilePreparationOwner.planner_profiles,
         "profile_refresh_debt": InstalledProfilePreparationOwner.consumed_request_debt,
+        "profile_observation_row": InstalledProfilePreparationOwner._profile_observation_row,
+        "profile_observation_failed": InstalledProfilePreparationOwner._profile_observation_failed,
+        "profile_debt_observation": InstalledProfilePreparationOwner._record_profile_debt,
+        "profile_observation_snapshot": InstalledProfilePreparationOwner.observation_snapshot,
         "profile_driver_refresh": ud.UnifiedCampaignDriver.refresh_installed_profiles,
         "profile_driver_tick_source": _driver_tick_source,
         "profile_snapshot": InstalledProfilePreparationOwner._profile,
@@ -94,6 +99,7 @@ def _source_closure():
         raise ProfilePreparationRefused(
             "installed profile source closure is incomplete: " + ",".join(incomplete))
     return {"schema": SOURCE_SCHEMA, "callables": identities,
+            "observation_codec": aggregate.source_identity(),
             "driver_tick": _driver_tick_source(),
             "profile_output_schema": tp.PROFILE_OUTPUT_SCHEMA,
             "profile_event_schema": state.PROFILE_SCHEMA,
@@ -382,8 +388,15 @@ class InstalledProfilePreparationOwner:
         now = state._finite(now, "profile planning time")
         domain = wl.monotonic_clock_domain()
         profiles = dict(self._configured)
+        observations = []
+        observation_error = None
         for target in self.binding.mechanisms:
             snapshot = self._profile(target)
+            try:
+                if len(observations) < 24:
+                    observations.append(self._profile_observation_row(target, snapshot, domain, now))
+            except Exception as exc:
+                observation_error = exc
             if snapshot is None:
                 continue
             # A generated original supersedes a configured snapshot; expiry
@@ -413,7 +426,47 @@ class InstalledProfilePreparationOwner:
                     or profile.quant != row["loaded_identity"]["quantization"]):
                 raise ProfilePreparationRefused("profile content target/quant differs")
             profiles[target] = profile
-        return MappingProxyType(profiles)
+        result = MappingProxyType(profiles)
+        try:
+            from . import runtime_aggregates as aggregate
+            if observation_error is not None:
+                raise observation_error
+            for item in observations:
+                item["available_at_planning"] = item["target_revision"] in result
+            data = aggregate.freeze({
+                "configured_count": len(self._configured), "usable_count": len(result),
+                "mechanism_count": len(self.binding.mechanisms), "debt_count": None,
+                "planning_observed_at": aggregate.utc_now(), "items": observations,
+                "items_total": len(self.binding.mechanisms),
+                "items_truncated": len(self.binding.mechanisms) > len(observations)})
+            self._observation_view = result
+            self._observation_profiles = data
+            self._observation_attempted_at = data["planning_observed_at"]
+            self._observation_error = None
+            self._observation_generation = getattr(self, "_observation_generation", 0) + 1
+        except Exception as exc:
+            self._profile_observation_failed(exc)
+        return result
+
+    @staticmethod
+    def _profile_observation_row(target, snapshot, domain, now):
+        row = None if snapshot is None else snapshot["profile_event"]
+        same_clock = row is not None and row["clock_domain"] == domain
+        return {"target_revision": target,
+            "profile_digest": None if row is None else row["target_profile_digest"],
+            "transition_id": None if row is None else row["transition_id"],
+            "available_at_planning": False,
+            "settled": snapshot is not None and snapshot["settlement"] is not None,
+            "remaining_seconds": max(0., row["valid_until"] - now) if same_clock else None,
+            "clock_known": same_clock, "consumed_request_debt": None}
+
+    def _profile_observation_failed(self, exc):
+        try:
+            from . import runtime_aggregates as aggregate
+            self._observation_error = str(exc)[:512] or type(exc).__name__
+            self._observation_attempted_at = aggregate.utc_now()
+        except Exception:
+            pass  # retain the earlier immutable cache, never alter profile selection
 
     def consumed_request_debt(self, requests, profiles):
         """Exclude an already consumed fixed request without inventing renewal."""
@@ -427,7 +480,33 @@ class InstalledProfilePreparationOwner:
                         == state.digest(request.to_dict())):
                 debt[target] = (f"target:{target}:profile_refresh_unavailable:"
                     "original_request_consumed:fresh_predeclared_request_required")
-        return MappingProxyType(debt)
+        result = MappingProxyType(debt)
+        try:
+            self._record_profile_debt(profiles, result)
+        except Exception as exc:
+            self._profile_observation_failed(exc)
+        return result
+
+    def _record_profile_debt(self, profiles, debt):
+        if profiles is getattr(self, "_observation_view", None):
+            from . import runtime_aggregates as aggregate
+            data = aggregate.plain(self._observation_profiles)
+            data["debt_count"] = len(debt)
+            for item in data["items"]:
+                item["consumed_request_debt"] = item["target_revision"] in debt
+            self._observation_profiles = aggregate.freeze(data)
+
+    def observation_snapshot(self):
+        """Only the latest actual owning reduction; never rerun it for publication."""
+        from . import runtime_aggregates as aggregate
+        data = getattr(self, "_observation_profiles", None)
+        stamp = None if data is None else data["planning_observed_at"]
+        error = getattr(self, "_observation_error", None)
+        return aggregate.observation("profile", data=data, observed_at=stamp,
+            attempted_at=getattr(self, "_observation_attempted_at", stamp), error=error,
+            generation=getattr(self, "_observation_generation", 0),
+            status="available" if data is not None and data["debt_count"] is not None and error is None else "unknown",
+            reason="original settled profile reduction; counts apply at planning observation")
 
     def execute(self, driver, outcome):
         if type(driver) is not ud.UnifiedCampaignDriver or driver.controller is not self.controller:

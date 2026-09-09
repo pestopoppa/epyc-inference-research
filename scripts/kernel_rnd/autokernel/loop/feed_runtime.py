@@ -346,6 +346,13 @@ class FeedRuntimeOwner:
         self._admission_frontier: int | None = None
         self.last_admitted_frontier: int | None = None
         self.ready = False
+        self._observation_at = None
+        self._attempted_at = None
+        self._observation_error = None
+        self._observation_source = None
+        self._observation_generation = 0
+        self._observation_ready = False
+        self._observation_admitted = None
 
     def _check_thread(self) -> None:
         if self._thread is not None and self._thread is not threading.current_thread():
@@ -358,16 +365,23 @@ class FeedRuntimeOwner:
         return self._feed
 
     def drain(self) -> Mapping[str, Any]:
+        from . import runtime_aggregates as aggregate
         self._check_thread()
         if self.closed or self.failed:
             raise FeedRuntimeRefused(self.failed or "evidence feed is closed")
         self._thread = threading.current_thread()
         self.ready = False
         try:
+            self._attempted_at = aggregate.utc_now()
+            self._observation_error = None
+        except Exception:
+            self._observation_error = "diagnostic clock unavailable"
+        try:
             if self._feed is None:
                 self._feed = self._open()
             result = self._feed.drain_once(self.config.limits())
         except BaseException as exc:
+            self._observation_error = str(exc)[:512]
             cause = exc
             while cause is not None:
                 if isinstance(cause, (BlockingIOError, TimeoutError,
@@ -384,11 +398,54 @@ class FeedRuntimeOwner:
             admission_frontier=self._admission_frontier))
         if (result.get("proof_pending") or result.get("readiness") == "outage"
                 or result["projection_frontier"] < self._admission_frontier):
+            self._capture_observation()
             raise FeedNotReady("bounded evidence projection/proof is not ready")
         self.last_admitted_frontier = self._admission_frontier
         self._admission_frontier = None
         self.ready = True
+        self._capture_observation()
         return self.last_snapshot
+
+    def _capture_observation(self):
+        try:
+            from . import runtime_aggregates as aggregate
+            stamp = aggregate.utc_now()
+            self._observation_source = self.last_snapshot
+            self._observation_generation = self.generation
+            self._observation_ready = self.ready
+            self._observation_admitted = self.last_admitted_frontier
+            self._observation_at = self._attempted_at = stamp
+            self._observation_error = None
+        except Exception:
+            self._observation_error = "diagnostic clock unavailable"
+
+    def observation_snapshot(self):
+        """Read cached owner facts only, on the existing execution thread."""
+        from . import runtime_aggregates as aggregate
+        self._check_thread()
+        source = self._observation_source
+        data = None
+        if source is not None and self._observation_at is not None:
+            data = {"reader_id": self.config.reader_id, "epoch": self.binding.current_epoch,
+                "owner_state": "closed" if self.closed else "failed" if self.failed else
+                    "ready" if self._observation_ready else "pending",
+                "ready": self._observation_ready and not self.closed and not self.failed,
+                "readiness": source["readiness"], "source_frontier": source["source_frontier"],
+                "cursor_frontier": source["cursor_frontier"], "projection_frontier": source["projection_frontier"],
+                "admission_frontier": source["admission_frontier"],
+                "last_admitted_frontier": self._observation_admitted,
+                "projection_checksum": source["projection_checksum"],
+                "proof_pending": bool(source.get("proof_pending", False)),
+                "lag_events": source["lag"], "lag_seconds": None,
+                "quarantine_count": source["quarantine_count"], "cached_finding_count": source["finding_count"]}
+        reason = self.failed or ("evidence owner closed" if self.closed else
+            "captured frontier projected; support is per-query" if self.ready else
+            "evidence admission frontier not yet available")
+        return aggregate.observation("evidence",
+            status="available" if self.ready and data is not None and self._observation_error is None else "unknown",
+            reason=reason,
+            data=data, observed_at=self._observation_at, attempted_at=self._attempted_at,
+            generation=self._observation_generation, error=self._observation_error)
 
     def _open(self) -> evidence_feed.EvidenceFeed:
         projection = self.binding.load(self.config)
@@ -404,12 +461,17 @@ class FeedRuntimeOwner:
                 support_rule_identity=self.binding.support_rule_identity,
                 max_projection_entries=self.config.max_projection_entries)
     def close(self) -> None:
+        from . import runtime_aggregates as aggregate
         self._check_thread()
         if self._feed is not None:
             self._feed.close()
             self._feed = None
         self.closed = True
         self.ready = False
+        try:
+            self._attempted_at = aggregate.utc_now()
+        except Exception:
+            self._observation_error = "diagnostic clock unavailable"
 
     def close_if_owner(self) -> bool:
         if self.closed:
