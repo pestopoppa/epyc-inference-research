@@ -105,6 +105,11 @@ def test_pinned_loaded_source_ignores_old_cached_module_and_later_path_changes(t
     loaded = installed.load(config(tmp_path))
     adapter_path.write_bytes(adapter_path.read_bytes() + b'\nFEED_SOURCE_MARKER = "later-path"\n')
     assert loaded.adapter.FEED_SOURCE_MARKER == "captured-new"
+    assert loaded.profile_adapter is not None
+    assert (loaded.claim_tuple.registered()["autokernel-unified-profile-measurement"]
+            is loaded.profile_adapter.project_profile)
+    assert (loaded.claim_tuple.registered()["autokernel-unified-profile-integrity"]
+            is loaded.profile_adapter.project_integrity)
     assert old.FEED_SOURCE_MARKER == "old"
     assert loaded.claim_tuple.registered()["autokernel-unified-arm-measurement"] is loaded.adapter.project
     with pytest.raises(Exception, match="not the pinned"):
