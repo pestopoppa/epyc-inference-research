@@ -1930,9 +1930,19 @@ def run_prepared_stage(prepared: PreparedPlannedServingStage, start: WorkerStart
                 raise WorkerBridgeRefused(
                     "v2 continuation requires an original observation-bound unit range")
             selected_measure = _test_measure or serving._measure_once
+            declared_instrument = ob.LoadedInstrumentReference.from_dict(
+                _plain(prepared.plan.loaded_instrument))
+            declared_identity = store.read(declared_instrument.artifact.locator,
+                                           declared_instrument.artifact.sha256)
+            closure = declared_identity["used_constants"].get("producer_source_closure", {})
+            scientific_adapters = None
+            from .native_producer_source import PRODUCER_SOURCE_SCHEMA_V2
+            if closure.get("schema") == PRODUCER_SOURCE_SCHEMA_V2:
+                from .native_scientific_witness import installed_scientific_adapters
+                scientific_adapters = installed_scientific_adapters(closure["scientific_adapters"])
             instrument = ob.seal_loaded_instrument(
                 store=store, measurement_callable=selected_measure,
-                fence_clock=clock, serving_timer=time.time)
+                fence_clock=clock, serving_timer=time.time, scientific_adapters=scientific_adapters)
             expected_instrument = ob.LoadedInstrumentReference.from_dict(
                 _plain(prepared.plan.loaded_instrument))
             if instrument != expected_instrument or not instrument.configuration_complete:

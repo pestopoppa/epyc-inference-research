@@ -14,6 +14,7 @@ from . import observation_binding as ob
 
 
 PRODUCER_SOURCE_SCHEMA = "epyc.autokernel.native_capture_producer_source.v1"
+PRODUCER_SOURCE_SCHEMA_V2 = "epyc.autokernel.native_capture_producer_source.v2"
 CAPTURE_ROLES = ("deferred_sink.__call__", "deferred_sink._build_payloads",
                  "deferred_sink.finalize_run")
 OBSERVATION_ROLES = ("seal_observation", "validate_reopened_observation",
@@ -69,9 +70,10 @@ def _callables(value: Any, roles: tuple[str, ...]) -> list[dict[str, Any]]:
 
 def validate_producer_source_closure(value: Any) -> Mapping[str, Any]:
     """Validate a closed original record without comparing it to installed code."""
-    row = _closed(value, ("schema", "measurement_capture", "observation_binding",
-                          "native_validator"), "producer source closure")
-    if row["schema"] != PRODUCER_SOURCE_SCHEMA:
+    v2 = isinstance(value, Mapping) and value.get("schema") == PRODUCER_SOURCE_SCHEMA_V2
+    fields = ("schema", "measurement_capture", "observation_binding", "native_validator")
+    row = _closed(value, fields + (("scientific_adapters",) if v2 else ()), "producer source closure")
+    if row["schema"] not in (PRODUCER_SOURCE_SCHEMA, PRODUCER_SOURCE_SCHEMA_V2):
         raise ProducerSourceRefused("producer source schema is unsupported")
     capture = _closed(row["measurement_capture"], ("producer_id", "capture_schema", "callables"),
                       "measurement capture source")
@@ -91,8 +93,12 @@ def validate_producer_source_closure(value: Any) -> Mapping[str, Any]:
                         "selected parent observation verifiers")
     validator["observation_verifiers"] = {
         name: None if item is None else _identity(item) for name, item in verifiers.items()}
-    return ob._freeze({"schema": row["schema"], "measurement_capture": capture,
-                       "observation_binding": observation, "native_validator": validator})
+    result = {"schema": row["schema"], "measurement_capture": capture,
+              "observation_binding": observation, "native_validator": validator}
+    if v2:
+        from .native_scientific_witness import validate_scientific_source
+        result["scientific_adapters"] = validate_scientific_source(row["scientific_adapters"])
+    return ob._freeze(result)
 
 
 def producer_source_closure_complete(value: Any) -> bool:
@@ -103,13 +109,17 @@ def producer_source_closure_complete(value: Any) -> bool:
         for item in row[group]["callables"]]
     identities.extend(item for item in row["native_validator"]["observation_verifiers"].values()
                       if item is not None)
+    if row["schema"] == PRODUCER_SOURCE_SCHEMA_V2:
+        from .native_scientific_witness import scientific_source_identities
+        identities.extend(scientific_source_identities(row["scientific_adapters"]))
     return all(item["implementation_status"] == "pinned"
                and item["configuration_status"] == "pinned" for item in identities)
 
 
 def loaded_producer_source_closure(*, capture_type: type | None = None,
                                   validator_type: type | None = None,
-                                  observation_verifiers: ob.ParentObservationVerifiers | None = None
+                                  observation_verifiers: ob.ParentObservationVerifiers | None = None,
+                                  scientific_adapters: Any = None
                                   ) -> Mapping[str, Any]:
     """Resolve actual selected methods, including inherited deferred-sink methods."""
     from . import native_capture_control as nc
@@ -133,7 +143,7 @@ def loaded_producer_source_closure(*, capture_type: type | None = None,
     def records(roles, functions):
         return [{"role": role, "identity": lo.callable_identity(function)}
                 for role, function in zip(roles, functions)]
-    return validate_producer_source_closure({"schema": PRODUCER_SOURCE_SCHEMA,
+    result = {"schema": PRODUCER_SOURCE_SCHEMA,
         "measurement_capture": {"producer_id": mc.PRODUCER_ID_V2,
             "capture_schema": mc.CAPTURE_SCHEMA_V2,
             "callables": records(CAPTURE_ROLES, capture_functions)},
@@ -144,7 +154,14 @@ def loaded_producer_source_closure(*, capture_type: type | None = None,
             "lifecycle_observation_link": ob.OBSERVATION_LINK_SCHEMA},
             "callables": records(OBSERVATION_ROLES, observation_functions)},
         "native_validator": {"callables": records(VALIDATOR_ROLES, validator_functions),
-                             "observation_verifiers": verifier_identities}})
+                             "observation_verifiers": verifier_identities}}
+    if scientific_adapters is not None:
+        from .native_scientific_witness import ParentScientificWitnessAdapters
+        if type(scientific_adapters) is not ParentScientificWitnessAdapters:
+            raise ProducerSourceRefused("scientific producer configuration must be concrete")
+        result.update(schema=PRODUCER_SOURCE_SCHEMA_V2,
+                      scientific_adapters=scientific_adapters.source_identity())
+    return validate_producer_source_closure(result)
 
 
 def verify_capture_producer_source(carrier: Mapping[str, Any], *, store: mc.ArtifactStore,
@@ -166,13 +183,23 @@ def verify_capture_producer_source(carrier: Mapping[str, Any], *, store: mc.Arti
     if closure is None:
         return False
     expected = validate_producer_source_closure(closure)
+    scientific_adapters = None
+    if expected["schema"] == PRODUCER_SOURCE_SCHEMA_V2:
+        if validator is None:
+            from .native_scientific_witness import installed_scientific_adapters
+            scientific_adapters = installed_scientific_adapters(expected["scientific_adapters"])
+        else:
+            replayer = validator.parent_receipt_replayer
+            if replayer is None:
+                raise ProducerSourceRefused("original selected scientific authority is unavailable")
+            scientific_adapters = replayer.selected_scientific_adapters()
     actual = loaded_producer_source_closure(validator_type=validator_type,
-                                           observation_verifiers=selected_verifiers)
+        observation_verifiers=selected_verifiers, scientific_adapters=scientific_adapters)
     if expected != actual:
         raise ProducerSourceRefused("selected native producer source differs from issued instrument")
     return producer_source_closure_complete(expected)
 
 
-__all__ = ["PRODUCER_SOURCE_SCHEMA", "ProducerSourceRefused",
+__all__ = ["PRODUCER_SOURCE_SCHEMA", "PRODUCER_SOURCE_SCHEMA_V2", "ProducerSourceRefused",
     "loaded_producer_source_closure", "validate_producer_source_closure",
     "producer_source_closure_complete", "verify_capture_producer_source"]

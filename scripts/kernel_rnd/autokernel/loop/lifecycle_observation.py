@@ -270,6 +270,10 @@ def _code_projection(code: types.CodeType) -> tuple[str, dict[str, Any]]:
             # CPython emits these for literal membership tests. Preserve the
             # existing outer type tag and sort only exact immutable strings.
             status, value = "pinned", sorted(item)
+        elif type(item) is bytes and len(item) <= 4096:
+            # Immutable code constants only. Configuration/object projection stays
+            # unchanged; mutable buffers and bytes subclasses remain unproven.
+            status, value = "pinned", item.hex()
         else:
             status, value = _stable_json_value(item)
         constants.append({"status": status, "value": value,

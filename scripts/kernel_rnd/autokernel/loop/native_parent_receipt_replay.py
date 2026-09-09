@@ -25,6 +25,7 @@ class _Issued:
     result: npe.NativeUnitEvidenceResult
     body: Mapping[str, Any]
     native_validation_source_pins: Mapping[str, Any]
+    scientific_adapters: Any = None
 
 
 def _native_validation_pins() -> Mapping[str, Any]:
@@ -70,7 +71,8 @@ class IssuedNativeEvidenceRegistry:
             raise ParentReceiptRefused("parent evidence receipt digest differs")
         producer.store.verify(f"parent-unit-evidence:{result.receipt_digest}", body)
         entry = _Issued(context, ob._freeze(ob._plain(request)), result,
-                        ob._freeze(ob._plain(body)), _native_validation_pins())
+                        ob._freeze(ob._plain(body)), _native_validation_pins(),
+                        producer.scientific_adapters)
         with self._lock:
             prior = self._entries.get(key)
             if prior is not None and prior != entry:
@@ -123,6 +125,20 @@ class NativeParentReceiptReplayer:
                 entry = registry._lookup(carrier, native)
                 self._replay_unit(entry, native, attempts[native["unit_id"]], store)
 
+    def selected_scientific_adapters(self):
+        """Selected original parent configuration, never inferred from child bytes."""
+        with self._lock:
+            if self._registry is None:
+                raise ParentReceiptRefused("original scientific registry scope is unavailable")
+            with self._registry._lock:
+                entries = tuple(self._registry._entries.values())
+            if not entries:
+                raise ParentReceiptRefused("original scientific issuance is unavailable")
+            first = entries[0].scientific_adapters
+            if any(entry.scientific_adapters is not first for entry in entries):
+                raise ParentReceiptRefused("original scientific adapter configuration differs by unit")
+            return first
+
     @staticmethod
     def _replay_unit(entry: _Issued, native: Mapping[str, Any], attempt: Mapping[str, Any],
                      store: mc.ArtifactStore) -> None:
@@ -145,14 +161,15 @@ class NativeParentReceiptReplayer:
         reopened = ob._plain(store.read(native_ref.locator, native_ref.sha256))
         npe._equal(reopened, native, "attempt native artifact")
         store.verify(f"raw:{native['artifact_digest']}", reopened)
-        producer = npe.NativeUnitEvidenceProducer(store=store, context=context)
+        producer = npe.NativeUnitEvidenceProducer(store=store, context=context,
+                                                  scientific_adapters=entry.scientific_adapters)
         npe._equal(body["producer_supporting_pins"], producer._source_pins, "producer supporting pins")
         npe._equal(body["producer_source_pin"], lo.callable_identity(type(producer).evaluate),
                    "producer implementation pin")
         producer._join_native(reopened)
         reference = ob.LifecycleObservationReference.from_dict(body["lifecycle_observation"])
         npe._equal(reference.to_dict(), native["lifecycle_observation"], "issued lifecycle reference")
-        ob.validate_reopened_observation(reference, store=store,
+        link = ob.validate_reopened_observation(reference, store=store,
             expected={"unit_id": context.unit_id, "process_generation_id": context.unit.process_id,
                 "fence_id": context.fence.fence_id, "active_claim_ref": context.binding.active_claim_ref,
                 "container_id": context.binding.container_id,
@@ -177,6 +194,11 @@ class NativeParentReceiptReplayer:
                    "replayed placement facts")
         npe._equal(findings["runtime_readback"], producer._runtime(observation),
                    "replayed runtime facts")
+        if producer.scientific_adapters is not None:
+            scientific = producer.scientific_adapters.findings(context, native, link,
+                tuple(producer._readbacks), store=store)
+            for name, finding in scientific.items():
+                npe._equal(findings[name], finding, "replayed original scientific finding")
         expected = {name: witness.to_dict() for name, witness
                     in result.completion.stage_witnesses.items()}
         npe._equal(attempt["stage_witnesses"], expected, "issued whole witness map")
