@@ -250,6 +250,8 @@ CANDIDATE_TRANSACTION_OPERATIONS = frozenset({
     "init", "integrate", "start_batch", "record_row", "complete_batch",
     "advance_validated",
 })
+KIND_PLANNED_SERVING_ARM_CAPTURED = "PLANNED_SERVING_ARM_CAPTURED"
+PLANNED_SERVING_ARM_CAPTURE_SCHEMA = "epyc.autokernel.unified_arm_capture.v1"
 LOOP_BUNDLE_SAVED_SCHEMA = "epyc.autokernel.loop_bundle_saved.v1"
 LOOP_BUNDLE_SNAPSHOT_SCHEMA_V1 = "epyc.autokernel.accumulator_bundle.v1"
 LOOP_BUNDLE_SNAPSHOT_SCHEMA_V2 = "epyc.autokernel.accumulator_bundle.v2"
@@ -277,6 +279,7 @@ NATIVE_KINDS = frozenset({
     KIND_LOOP_BUNDLE_SAVED,
     KIND_CAMPAIGN_SUPERVISOR_EVENT,
     KIND_CANDIDATE_TRANSACTION,
+    KIND_PLANNED_SERVING_ARM_CAPTURED,
     KIND_MICROBENCH_RUN_COMPLETED,
     KIND_T0_REFUSAL,
     KIND_POST_T0_QUIET_BOUNDARY,
@@ -305,6 +308,7 @@ RECORD_ID_KEY_BY_KIND = {
     KIND_OPERATOR_RELEASE_DRY_RUN_REQUESTED: "request_id",
     KIND_OPERATOR_RELEASE_DRY_RUN_TERMINATED: "terminal_sha256",
     KIND_POST_T0_QUIET_BOUNDARY: "receipt_id",
+    KIND_PLANNED_SERVING_ARM_CAPTURED: "measurement_id",
 }
 
 # §5.8 storage classes. Only the expirable class may ever be tombstoned:
@@ -1072,7 +1076,127 @@ def _validate_native_payload(kind: str, payload: Mapping[str, Any]) -> list:
     out: list = []
     if not isinstance(payload, Mapping):
         return ["payload: required mapping"]
-    if kind in (KIND_SUPERSEDED, KIND_RETRIEVAL_SUPERSEDED):
+    if kind == KIND_PLANNED_SERVING_ARM_CAPTURED:
+        expected = {"schema", "measurement_id", "carrier", "artifact"}
+        if set(payload) != expected:
+            out.append("payload: native capture has missing/unknown fields")
+        if payload.get("schema") != PLANNED_SERVING_ARM_CAPTURE_SCHEMA:
+            out.append(
+                f"schema: must be {PLANNED_SERVING_ARM_CAPTURE_SCHEMA!r}")
+        measurement_id = payload.get("measurement_id")
+        if not isinstance(measurement_id, str) or not _SHA256_RE.fullmatch(measurement_id):
+            out.append("measurement_id: required lowercase SHA-256")
+        artifact = payload.get("artifact")
+        if (not isinstance(artifact, Mapping)
+                or set(artifact) != {"locator", "sha256", "verified"}
+                or not isinstance(artifact.get("locator"), str)
+                or not artifact.get("locator")
+                or not isinstance(artifact.get("sha256"), str)
+                or not _SHA256_RE.fullmatch(artifact.get("sha256", ""))
+                or artifact.get("verified") is not True):
+            out.append("artifact: requires exact locator/sha256/verified receipt")
+        carrier = payload.get("carrier")
+        carrier_fields = {
+            "schema", "producer", "measurement_id", "arm", "arm_locator", "plan",
+            "prompt_manifest", "prompt_manifest_digest", "lineage_id",
+            "comparison_identities", "source_identity", "capture_context",
+            "admissible_view", "raw_artifacts", "environment_verdicts", "status",
+            "diagnostic_reason", "measurement", "claim", "category", "phase",
+            "record_class", "intended_use", "protocol_id", "protocol_status",
+            "instrument_id", "interval", "carrier_digest",
+        }
+        if not isinstance(carrier, Mapping) or set(carrier) != carrier_fields:
+            out.append("carrier: native carrier has missing/unknown fields")
+        else:
+            if (carrier.get("schema") != PLANNED_SERVING_ARM_CAPTURE_SCHEMA
+                    or carrier.get("measurement_id") != measurement_id):
+                out.append("carrier: schema/measurement_id binding mismatch")
+            if carrier.get("producer") != "epyc.autokernel.measurement_capture/v1":
+                out.append("carrier.producer: unsupported producer")
+            if (not isinstance(carrier.get("arm"), str)
+                    or carrier.get("arm") not in {"anchor", "candidate"}):
+                out.append("carrier.arm: must be anchor or candidate")
+            context = carrier.get("capture_context")
+            plan = carrier.get("plan")
+            if not isinstance(context, Mapping) or not isinstance(plan, Mapping):
+                out.append("carrier: plan and capture_context must be objects")
+            else:
+                context_fields = {
+                    "campaign_id", "config_digest", "supervisor_id",
+                    "supervisor_incarnation", "config_generation", "worker_id",
+                    "worker_incarnation", "grant_id", "container_id", "lineage_id",
+                    "instrument_id", "protocol_id", "protocol_status",
+                    "source_identities",
+                }
+                if set(context) != context_fields:
+                    out.append("carrier.capture_context: missing/unknown fields")
+                campaign_id = context.get("campaign_id")
+                generation = context.get("config_generation")
+                incarnation = context.get("supervisor_incarnation")
+                if (not isinstance(campaign_id, str) or not campaign_id
+                        or plan.get("campaign_id") != campaign_id):
+                    out.append("carrier: plan/capture campaign binding is invalid")
+                if (not isinstance(generation, int) or isinstance(generation, bool)
+                        or generation < 1 or not isinstance(incarnation, int)
+                        or isinstance(incarnation, bool) or incarnation < 1):
+                    out.append("carrier: config/supervisor generation is invalid")
+                arm = carrier.get("arm")
+                lineage = carrier.get("lineage_id")
+                try:
+                    plan_digest = schemas.content_hash(dict(plan))
+                    expected_measurement_id = schemas.content_hash({
+                        "producer": "epyc.autokernel.measurement_capture/v1",
+                        "plan_digest": plan_digest, "lineage_id": lineage,
+                        "arm": arm,
+                    })
+                except Exception:
+                    expected_measurement_id = None
+                    plan_digest = None
+                if (not isinstance(lineage, str) or not lineage
+                        or context.get("lineage_id") != lineage
+                        or expected_measurement_id != measurement_id
+                        or carrier.get("arm_locator") !=
+                        f"planned-serving:{plan_digest}:{lineage}:{arm}"):
+                    out.append("carrier: measurement/arm locator binding is invalid")
+                manifest = carrier.get("prompt_manifest")
+                manifest_digest = carrier.get("prompt_manifest_digest")
+                if isinstance(manifest, Mapping):
+                    manifest_body = dict(manifest)
+                    declared = manifest_body.pop("digest", None)
+                    try:
+                        actual_manifest_digest = schemas.content_hash(manifest_body)
+                    except Exception:
+                        actual_manifest_digest = None
+                else:
+                    declared = actual_manifest_digest = None
+                if (not isinstance(manifest_digest, str)
+                        or manifest_digest != declared
+                        or manifest_digest != actual_manifest_digest):
+                    out.append("carrier: prompt manifest digest is invalid")
+            if (not isinstance(carrier.get("comparison_identities"), Mapping)
+                    or set(carrier["comparison_identities"]) != {"anchor", "candidate"}
+                    or not isinstance(carrier.get("plan"), Mapping)
+                    or not isinstance(carrier.get("raw_artifacts"), list)
+                    or not carrier["raw_artifacts"]
+                    or not isinstance(carrier.get("admissible_view"), Mapping)
+                    or not isinstance(carrier.get("environment_verdicts"), list)):
+                out.append("carrier: identity/view/raw/environment structure is invalid")
+            elif (carrier["comparison_identities"].get("anchor") !=
+                  carrier["plan"].get("anchor_identity")
+                  or carrier["comparison_identities"].get("candidate") !=
+                  carrier["plan"].get("candidate_identity")):
+                out.append("carrier: comparison identities differ from frozen plan")
+            digest = carrier.get("carrier_digest")
+            body = dict(carrier)
+            body.pop("carrier_digest", None)
+            try:
+                expected_digest = schemas.content_hash(body)
+            except Exception:
+                expected_digest = None
+            if (not isinstance(digest, str) or not _SHA256_RE.fullmatch(digest)
+                    or digest != expected_digest):
+                out.append("carrier_digest: does not bind canonical carrier")
+    elif kind in (KIND_SUPERSEDED, KIND_RETRIEVAL_SUPERSEDED):
         target = payload.get("target_event_id")
         if not isinstance(target, str) or not target:
             out.append("target_event_id: required, must be a non-empty event id")
@@ -2903,6 +3027,7 @@ __all__ = [
     "CAMPAIGN_SUPERVISOR_EVENTS", "KIND_CANDIDATE_TRANSACTION",
     "CANDIDATE_TRANSACTION_SCHEMA", "CANDIDATE_TRANSACTION_PHASES",
     "CANDIDATE_TRANSACTION_OPERATIONS",
+    "KIND_PLANNED_SERVING_ARM_CAPTURED", "PLANNED_SERVING_ARM_CAPTURE_SCHEMA",
     "tombstone_view_key",
     "Journal", "JournalEntry", "JournalDefect", "ShardRef", "TornTail",
     "ReadReport", "Cursor", "Views",

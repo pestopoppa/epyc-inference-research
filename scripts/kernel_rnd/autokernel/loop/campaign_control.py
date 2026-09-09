@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import errno
@@ -18,11 +19,12 @@ import types
 import threading
 from typing import Any, Callable, Mapping
 
-from .. import journal as journal_module
+from .. import journal as journal_module, schemas
 from ..controller.discovery_supervisor_secure import (
     RuntimeRoot, SecureRuntimeError, object_identity,
 )
 from . import status
+from .native_capture_control import NativeCaptureRefused, NativeCaptureValidator
 from .campaign import ResolvedCampaign
 
 COMMAND_SCHEMA = "epyc.autokernel.campaign_command.v1"
@@ -374,6 +376,10 @@ class CampaignController:
         self._candidate_projection_position = 0
         self._lifetime_token: object | None = None
         self._candidate_context_token: object | None = None
+        self._native_records: dict[str, Any] = {}
+        self._native_payload_digests: dict[str, str] = {}
+        self._native_validator: NativeCaptureValidator | None = None
+        self._native_capabilities: set[object] = set()
 
     def _acquire(self) -> None:
         runtime: RuntimeRoot | None = None
@@ -468,10 +474,36 @@ class CampaignController:
         candidate_completed: set[str] = set()
         candidate_completed_records: dict[str, dict[str, Mapping[str, Any]]] = {}
         candidate_entries = []
+        native_records: dict[str, Any] = {}
+        native_payload_digests: dict[str, str] = {}
         for entry in entries:
             self._journal_cursor = entry.seq
             if entry.campaign_id not in (None, self.resolved.campaign_id):
                 raise ControlRefused("store contains another campaign identity")
+            if entry.kind == journal_module.KIND_PLANNED_SERVING_ARM_CAPTURED:
+                row = entry.payload
+                violations = journal_module._validate_native_payload(entry.kind, row)
+                if violations:
+                    raise journal_module.JournalCorruption(
+                        "invalid native capture history: " + "; ".join(violations))
+                context = row["carrier"]["capture_context"]
+                plan = row["carrier"]["plan"]
+                measurement_id = row["measurement_id"]
+                if (not saw_start or entry.record_id != measurement_id
+                        or context["campaign_id"] != self.resolved.campaign_id
+                        or plan["campaign_id"] != self.resolved.campaign_id
+                        or context["config_generation"] != self.config_generation
+                        or context["config_digest"] != self.config_digest
+                        or context["supervisor_incarnation"] != last_incarnation):
+                    raise journal_module.JournalCorruption(
+                        "native capture event breaks campaign/config/incarnation binding")
+                digest = schemas.content_hash(row)
+                if measurement_id in native_records:
+                    raise journal_module.JournalCorruption(
+                        "native capture history repeats a measurement_id")
+                native_records[measurement_id] = copy.deepcopy(entry)
+                native_payload_digests[measurement_id] = digest
+                continue
             if entry.kind == journal_module.KIND_CANDIDATE_TRANSACTION:
                 candidate_entries.append(copy.deepcopy(entry))
                 row = entry.payload
@@ -598,6 +630,103 @@ class CampaignController:
         self._candidate_completed = candidate_completed
         self._candidate_completed_records = candidate_completed_records
         self._candidate_entries = candidate_entries
+        self._native_records = native_records
+        self._native_payload_digests = native_payload_digests
+
+    def register_native_capture(self, validator: NativeCaptureValidator) -> None:
+        """Install the explicit trusted worker-result consumer for this lifetime.
+
+        The controller has no worker, grant, or supervisor-id authority of its own.
+        Its lifecycle owner must construct this validator from those trusted sources.
+        """
+        if not isinstance(validator, NativeCaptureValidator):
+            raise TypeError("validator must be NativeCaptureValidator")
+        with self._mutex:
+            self._require_active_locked()
+            binding = validator.binding
+            if (binding.campaign_id != self.resolved.campaign_id
+                    or binding.config_digest != self.config_digest
+                    or binding.config_generation != self.config_generation
+                    or binding.supervisor_incarnation != self.supervisor_incarnation):
+                raise ControlRefused("native capture validator binding is not current")
+            if self._native_validator is not None:
+                raise ControlRefused("native capture validator is already installed")
+            self._native_validator = validator
+
+    def native_capture(self, measurement_id: str):
+        """Return a detached recorded event; this does not restore eligibility."""
+        with self._mutex:
+            self._require_active_locked()
+            if not isinstance(measurement_id, str):
+                raise TypeError("measurement_id must be text")
+            return copy.deepcopy(self._native_records.get(measurement_id))
+
+    @contextmanager
+    def native_capture_callback(self):
+        """Yield a same-thread, lifetime-bound callback for NativeMeasurementSink."""
+        with self._mutex:
+            self._require_active_locked()
+            token = object()
+            lifetime = self._lifetime_token
+            thread_id = threading.get_ident()
+            self._native_capabilities.add(token)
+
+        def capture(measurement_id: str, payload: Mapping[str, Any]):
+            if threading.get_ident() != thread_id:
+                raise ControlRefused("native capture callback belongs to another thread")
+            with self._mutex:
+                return self._capture_native_locked(
+                    measurement_id, payload, token=token,
+                    lifetime_token=lifetime, thread_id=thread_id)
+
+        try:
+            yield capture
+        finally:
+            with self._mutex:
+                self._native_capabilities.discard(token)
+
+    def _capture_native_locked(
+            self, measurement_id: str, payload: Mapping[str, Any], *, token: object,
+            lifetime_token: object | None, thread_id: int):
+        if (threading.get_ident() != thread_id or not self._mutex._is_owned()
+                or lifetime_token is None or lifetime_token is not self._lifetime_token
+                or token not in self._native_capabilities):
+            raise ControlRefused("native capture callback is not current owner")
+        self._require_active_locked()
+        if not isinstance(measurement_id, str) or not isinstance(payload, Mapping):
+            raise NativeCaptureRefused("native capture identity/payload is malformed")
+        try:
+            supplied_digest = schemas.content_hash(dict(payload))
+        except Exception as exc:
+            raise NativeCaptureRefused("native capture payload is not canonical JSON") from exc
+        prior = self._native_records.get(measurement_id)
+        if prior is not None:
+            if self._native_payload_digests[measurement_id] != supplied_digest:
+                raise NativeCaptureRefused(
+                    "measurement_id was already used for different capture bytes")
+            return copy.deepcopy(prior)
+        if self.desired_state == "drained":
+            raise NativeCaptureRefused("drained controller refuses new native captures")
+        if self._native_validator is None:
+            raise NativeCaptureRefused(
+                "trusted native capture validator is not connected")
+        validated = self._native_validator.validate(measurement_id, payload)
+        row = validated.payload()
+        if validated.payload_digest != supplied_digest:
+            raise NativeCaptureRefused("validated native payload differs from callback bytes")
+        assert self._journal is not None
+        try:
+            entry = self._journal.append(
+                journal_module.KIND_PLANNED_SERVING_ARM_CAPTURED, row,
+                record_id=measurement_id)
+            self._verify_journal_layout(self.store / "journal")
+            self._journal_cursor = entry.seq
+            self._native_records[measurement_id] = copy.deepcopy(entry)
+            self._native_payload_digests[measurement_id] = supplied_digest
+        except BaseException:
+            self._poisoned = True
+            raise
+        return copy.deepcopy(entry)
 
     @property
     def command_results(self) -> dict[str, dict[str, Any]]:
@@ -923,6 +1052,10 @@ class CampaignController:
             self._candidate_projection_cache = None
             self._candidate_projection_position = 0
             self._candidate_context_token = None
+            self._native_records = {}
+            self._native_payload_digests = {}
+            self._native_validator = None
+            self._native_capabilities = set()
             self._lifetime_token = None
             if fd is not None:
                 try:
