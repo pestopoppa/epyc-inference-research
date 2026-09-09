@@ -682,7 +682,7 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                 raise RecipeError("frozen requests need non-empty prompt IDs and body bytes")
         if len({item[0] for item in frozen_requests}) != len(frozen_requests):
             raise RecipeError("frozen request prompt IDs must be unique within a launch")
-    backend = "gpu"
+    backend = "cpu" if recipe.device == "none" and recipe.ngl == 0 else "gpu"
     if resolved_recipe is not None:
         # Refuse unsupported capabilities or moved inputs before sampler/Popen.
         resolved_recipe.validate_launch(recipe, build_dir, port)
@@ -943,11 +943,58 @@ def _spread(runs: Sequence[float]) -> dict:
             "runs": runs}
 
 
+def _frozen_requests(recipe: Recipe, rows) -> tuple | None:
+    if rows is None:
+        return None
+    try:
+        frozen = tuple((prompt_id, body) for prompt_id, body in rows)
+    except (TypeError, ValueError) as exc:
+        raise RecipeError("frozen requests must be prompt-ID/body pairs") from exc
+    if (len(frozen) != recipe.np or any(
+            not isinstance(prompt_id, str) or not prompt_id.strip()
+            or not isinstance(body, bytes) or not body for prompt_id, body in frozen)
+            or len({prompt_id for prompt_id, _ in frozen}) != len(frozen)):
+        raise RecipeError("frozen requests must cover every slot with unique IDs and body bytes")
+    return frozen
+
+
+def request_digest(recipe: Recipe, frozen_requests=None) -> str | None:
+    """Identity of the exact ordered request bytes; None retains the legacy workload."""
+    rows = _frozen_requests(recipe, frozen_requests)
+    if rows is None:
+        return None
+    return hashlib.sha256(json.dumps(
+        [[prompt_id, hashlib.sha256(body).hexdigest()] for prompt_id, body in rows],
+        ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
+
+
+def _resolved_launch_options(recipe, build_dir, port, resolved):
+    if resolved is None:
+        return {}
+    from .resolved_recipe import CanonicalResolvedRecipe, ResolvedRecipe
+    if type(resolved) not in (CanonicalResolvedRecipe, ResolvedRecipe):
+        raise RecipeError("resolved launch must be an existing concrete recipe")
+    resolved.validate_launch(recipe, build_dir, port)
+    return {"resolved_recipe": resolved}
+
+
 def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs: int,
-            floor_pct: float | None, port: int = 18311) -> dict:
+            floor_pct: float | None, port: int = 18311,
+            anchor_resolved_recipe=None, candidate_resolved_recipe=None,
+            frozen_requests=None, floor_request_digest: str | None = None) -> dict:
     """Paired, alternating serving A/B: anchor vs candidate, `pairs` times, each pair a
     fresh server per side (drift control). Effect = median(candidate)/median(anchor) - 1.
     `decisive` is None when uncalibrated (no floor), so the keep gate fails closed."""
+    frozen_requests = _frozen_requests(recipe, frozen_requests)
+    requests_digest = request_digest(recipe, frozen_requests)
+    if floor_request_digest != (requests_digest if floor_pct is not None else None):
+        raise ServingFloorMismatch("serving floor does not identify these exact request bytes")
+    if (anchor_resolved_recipe is None) != (candidate_resolved_recipe is None):
+        raise RecipeError("resolved comparison requires both original arm launches")
+    a_options = _resolved_launch_options(recipe, anchor_build, port, anchor_resolved_recipe)
+    c_options = _resolved_launch_options(recipe, candidate_build, port, candidate_resolved_recipe)
+    if frozen_requests is not None:
+        a_options["frozen_requests"] = c_options["frozen_requests"] = frozen_requests
     a_runs, c_runs = [], []
     # Per-launch residency evidence, one record per server launch, per arm. Written by
     # `_measure_once`; a launch it could not sample lands here as `unproven` and a launch
@@ -955,12 +1002,12 @@ def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs:
     a_residency: list[dict] = []
     c_residency: list[dict] = []
     for _ in range(pairs):
-        a_runs.append(_measure_once(recipe, anchor_build, port, evidence=a_residency))
-        c_runs.append(_measure_once(recipe, candidate_build, port, evidence=c_residency))
+        a_runs.append(_measure_once(recipe, anchor_build, port, evidence=a_residency, **a_options))
+        c_runs.append(_measure_once(recipe, candidate_build, port, evidence=c_residency, **c_options))
     a_med, c_med = statistics.median(a_runs), statistics.median(c_runs)
     effect = c_med / a_med - 1.0
     decisive = None if floor_pct is None else (abs(effect) * 100.0 >= floor_pct)
-    return {"schema": "epyc.autokernel.serving_ab.v1", "recipe": recipe.name,
+    out = {"schema": "epyc.autokernel.serving_ab.v1", "recipe": recipe.name,
             # The recipe is part of the artifact, so its identity travels with the number:
             # a reader (or a gate) can tell whether this row and the floor it was judged
             # against were even produced under the same launch conditions (R23-59).
@@ -979,19 +1026,27 @@ def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs:
             # after the fact, which is the one thing no re-analysis can supply.
             "residency": _residency_fold(a_residency + c_residency),
             "anchor_residency": a_residency, "candidate_residency": c_residency}
+    if requests_digest is not None:
+        out.update(request_digest=requests_digest, floor_request_digest=floor_request_digest)
+    return out
 
 
-def calibrate_floor(recipe: Recipe, build_dir: Path, *, samples: int, port: int = 18311) -> dict:
+def calibrate_floor(recipe: Recipe, build_dir: Path, *, samples: int, port: int = 18311,
+                    resolved_recipe=None, frozen_requests=None) -> dict:
     """A/A the serving metric `samples` times on ONE build: the run-to-run spread IS the
     noise floor a keep must clear. floor = p95 of |pairwise effect| against the median,
     reported at a few sample counts so a keep at N pairs is judged against the N-pair bar."""
+    frozen_requests = _frozen_requests(recipe, frozen_requests)
+    options = _resolved_launch_options(recipe, build_dir, port, resolved_recipe)
+    if frozen_requests is not None:
+        options["frozen_requests"] = frozen_requests
     launch_residency: list[dict] = []
-    runs = [_measure_once(recipe, build_dir, port, evidence=launch_residency)
+    runs = [_measure_once(recipe, build_dir, port, evidence=launch_residency, **options)
             for _ in range(samples)]
     # `floor_pct` IS this arm's p95 deviation from its own median -- taken from `_spread`
     # so the floor and the per-arm spread reported by `compare` can never drift apart.
     sp = _spread(runs)
-    return {"schema": "epyc.autokernel.serving_floor.v1", "recipe": recipe.name,
+    out = {"schema": "epyc.autokernel.serving_floor.v1", "recipe": recipe.name,
             "recipe_hash": recipe.recipe_hash, "recipe_env": dict(recipe.env or {}),
             "recipe_describe": recipe.describe(),
             "metric": recipe.metric, "np": recipe.np, "samples": samples,
@@ -1002,6 +1057,9 @@ def calibrate_floor(recipe: Recipe, build_dir: Path, *, samples: int, port: int 
             # carries this to disk.
             "residency": _residency_fold(launch_residency),
             "launch_residency": launch_residency}
+    if frozen_requests is not None:
+        out["request_digest"] = request_digest(recipe, frozen_requests)
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -1034,10 +1092,12 @@ def floor_key(name: str) -> str:
     return f"{cleaned}-{digest}"
 
 
-def floor_path(store: Path | str, recipe: Recipe) -> Path:
+def floor_path(store: Path | str, recipe: Recipe, *, frozen_requests=None) -> Path:
     """Where THIS recipe's serving floor lives. One place, so a reader and a writer can
     never disagree about the filename."""
-    return Path(store) / f"serving-floor.{floor_key(recipe.name)}.json"
+    identity = request_digest(recipe, frozen_requests)
+    suffix = "" if identity is None else f".requests-{identity}"
+    return Path(store) / f"serving-floor.{floor_key(recipe.name)}{suffix}.json"
 
 
 @dataclass(frozen=True)
@@ -1067,6 +1127,10 @@ class FloorReading:
         return self.provenance == "verified"
 
     @property
+    def request_digest(self) -> str | None:
+        return self.row.get("request_digest")
+
+    @property
     def residency_status(self) -> str:
         """`proven` only when the file says so. Absent evidence reads as `unproven`,
         never as proven -- the same fail-closed direction `provenance` takes."""
@@ -1087,7 +1151,7 @@ def _stamped_residency(block: object) -> dict:
 
 
 def write_floor(store: Path | str, recipe: Recipe, row: Mapping, *,
-                conditions: Mapping | None = None) -> Path:
+                conditions: Mapping | None = None, frozen_requests=None) -> Path:
     """Persist a calibrated floor WITH the identity of the recipe it was calibrated under.
 
     THE ONE WRITER. `calibrate_floor` already returns `recipe_hash` / `recipe_describe` /
@@ -1100,7 +1164,13 @@ def write_floor(store: Path | str, recipe: Recipe, row: Mapping, *,
     `conditions` is free-form provenance for humans (host state, harness, timestamp); it
     is merged, never allowed to overwrite the identity keys.
     """
+    frozen_requests = _frozen_requests(recipe, frozen_requests)
     body = dict(row)
+    requests_digest = request_digest(recipe, frozen_requests)
+    if body.get("request_digest") != requests_digest:
+        raise ServingFloorMismatch("floor row does not identify the exact calibrated requests")
+    if requests_digest is not None and body.get("recipe_hash") != recipe.recipe_hash:
+        raise ServingFloorMismatch("explicit-request floor lacks its original recipe identity")
     stamped = body.get("recipe_hash")
     if stamped is not None and stamped != recipe.recipe_hash:
         raise ServingFloorMismatch(
@@ -1118,11 +1188,11 @@ def write_floor(store: Path | str, recipe: Recipe, row: Mapping, *,
     # with no residency block is stamped `unproven` EXPLICITLY -- it is not a claim that
     # the calibration ran on the CPU, it is a refusal to let the absence pass unremarked.
     body["residency"] = _stamped_residency(body.get("residency"))
-    target = floor_path(store, recipe)
+    target = floor_path(store, recipe, frozen_requests=frozen_requests)
     return status.write_json(target.parent, target.name, body, prefix=".sv-floor-")
 
 
-def load_floor(store: Path | str, recipe: Recipe) -> FloorReading:
+def load_floor(store: Path | str, recipe: Recipe, *, frozen_requests=None) -> FloorReading:
     """Load the serving floor for `recipe`, or REFUSE one calibrated under another.
 
     Fail-closed, and deliberately NOT by degrading to "no floor": an absent floor already
@@ -1131,10 +1201,16 @@ def load_floor(store: Path | str, recipe: Recipe) -> FloorReading:
     caller gets an exception naming both hashes, or a reading it can trust the provenance
     of.
     """
-    path = floor_path(store, recipe)
+    frozen_requests = _frozen_requests(recipe, frozen_requests)
+    requests_digest = request_digest(recipe, frozen_requests)
+    path = floor_path(store, recipe, frozen_requests=frozen_requests)
     if not path.is_file():
         return FloorReading(None, "absent", path, {})
     row = json.loads(path.read_text(encoding="utf-8"))
+    if row.get("request_digest") != requests_digest:
+        raise ServingFloorMismatch("stored floor request identity differs or is missing")
+    if requests_digest is not None and row.get("recipe_hash") != recipe.recipe_hash:
+        raise ServingFloorMismatch("explicit-request floor recipe identity differs or is missing")
     stamped = row.get("recipe_hash")
     if stamped is None:
         # Grandfathered: written before floors carried an identity. Proceed -- hard-failing
@@ -1158,5 +1234,5 @@ __all__ = ["FLOOR_KEY_MAX", "LOADER_OWNED_ENV", "RECIPE_SCHEMA", "RESIDENCY_PROV
            "RESIDENCY_NOT_APPLICABLE", "RESIDENCY_SCHEMA", "RESIDENCY_UNPROVEN", "UNSET",
            "EnvReadbackFailed", "FloorReading", "Recipe", "RecipeError", "ServerDied",
            "ServingFloorMismatch", "ServingNotResident", "calibrate_floor", "compare",
-           "covers_request_phase", "floor_key", "floor_path", "load_floor",
+           "covers_request_phase", "floor_key", "floor_path", "load_floor", "request_digest",
            "verify_env_readback", "write_floor"]
