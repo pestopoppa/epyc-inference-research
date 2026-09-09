@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 import queue
+import os
 import socket
 import threading
 import time
@@ -140,7 +141,7 @@ def phase_invocation(tmp_path, issued):
     case, _registry, _carrier, _result_value = issued
     context = case["context"]
     prepared = _prepared(tmp_path)
-    authority = uw.ParentUnitEvidenceAuthority(max_records=4)
+    authority = uw.ParentUnitEvidenceAuthority(max_records=len(uw.OBSERVATION_WINDOW_MARKERS))
     invocation = uw.PlannedWorkerInvocation(prepared, authority)
     invocation.prepared = SimpleNamespace(schema=uw.PREPARED_SCHEMA_V2, plan=context.plan)
     invocation.start = _start(prepared)
@@ -271,7 +272,9 @@ def test_contended_exchange_cannot_extend_original_provider_deadline(tmp_path):
         parent.close()
 
 
-def test_actual_tiny_child_artifact_phase_and_parent_replay_then_restart_duplicate(tmp_path, monkeypatch):
+@pytest.mark.parametrize("with_window", [False, True])
+def test_actual_tiny_child_artifact_phase_and_parent_replay_then_restart_duplicate(
+        tmp_path, monkeypatch, with_window):
     """No fixture scorer: the actual parent producer is the only result issuer."""
     replayer = replay.NativeParentReceiptReplayer()
     registry_scopes = []
@@ -280,6 +283,15 @@ def test_actual_tiny_child_artifact_phase_and_parent_replay_then_restart_duplica
     injected = pytest.MonkeyPatch()
     original_validator_init = nc.NativeCaptureValidator.__init__
     original_enter = cc.CampaignController.__enter__
+    window_config = None
+    if with_window:
+        from .test_search_window_owner import configuration as window_configuration
+        from .search_window import WindowLimits
+        root = tmp_path / "window-probe"
+        root.mkdir()
+        window_config = replace(window_configuration(root,
+            tuple(sorted(os.sched_getaffinity(0))[:4])),
+            limits=WindowLimits(cadence_s=0.005, max_sample_duration_s=0.02, max_gap_s=0.05))
 
     def validator_init(self, *args, **kwargs):
         kwargs["parent_receipt_replayer"] = replayer
@@ -299,8 +311,11 @@ def test_actual_tiny_child_artifact_phase_and_parent_replay_then_restart_duplica
         root = tmp_path / "fixture-probe"
         probe = lo.FilesystemProbe(proc_root=root / "proc", sysfs_cpu_root=root / "cpu",
             boot_id_path=root / "boot", cgroup_root=root / "cgroup")
+        factual = service.NativeFactualEvidenceConfiguration(
+            search_window_configuration=window_config)
         producer = service.NativeParentEvidenceService(authority, prepared, lifecycle,
-            configuration, registry=registry, runtime_probe=probe)
+            configuration, registry=registry, runtime_probe=probe,
+            factual_configuration=factual)
         services.append(producer)
         return producer
 
@@ -308,11 +323,21 @@ def test_actual_tiny_child_artifact_phase_and_parent_replay_then_restart_duplica
     injected.setattr(cc.CampaignController, "__enter__", enter)
     try:
         _run_real_controller_child_v2_capture_and_restart(
-            tmp_path, monkeypatch, producer_type=producer_factory)
+            tmp_path, monkeypatch, producer_type=producer_factory,
+            search_window_configuration=window_config)
         assert len(services) == 1 and services[0].stopped
         producer = services[0]
+        unit_count = len(producer.prepared.plan.expected_units)
+        assert len(producer.authority._retained_keys()) == unit_count * (3 + len(uw.OBSERVATION_WINDOW_MARKERS))
+        assert len(producer.authority._observation_bindings) == unit_count
+        assert len(producer.authority._observation_targets) == unit_count
+        assert len(producer.authority._completions) == unit_count
+        assert len(producer.authority._phase_acks) == unit_count * len(uw.OBSERVATION_WINDOW_MARKERS)
+        assert not producer.authority._continuations
         assert len(producer._unit_producers) == len(producer.prepared.plan.expected_units)
-        assert len(producer._phase_results) == len(producer.prepared.plan.expected_units)
+        assert set(producer._phase_results) == {
+            (unit.unit_id, marker) for unit in producer.prepared.plan.expected_units
+            for marker in uw.OBSERVATION_WINDOW_MARKERS}
         for actual in producer._unit_producers.values():
             result = actual._result
             assert result.completion.recorded_screen == "flagged_but_retained"
@@ -321,6 +346,34 @@ def test_actual_tiny_child_artifact_phase_and_parent_replay_then_restart_duplica
             assert result.completion.stage_witnesses["correctness"] == ep.Witness("unknown", None)
             assert result.completion.stage_witnesses["contention"] == ep.Witness("unknown", None)
             assert len(actual._readbacks) == 1
+            if with_window:
+                receipt = producer.search_window_receipts[actual.context.unit_id]
+                store = mc.ArtifactStore(producer.prepared.artifact_root)
+                try:
+                    body = ob._plain(store.read(receipt.artifact.locator, receipt.artifact.sha256))
+                    assert lo._digest(body) == receipt.digest
+                    assert body["identity"] == actual.context.identity
+                    assert body["facts"]["closed"]
+                    assert body["facts"]["close_claim_error"] is None
+                    assert body["facts"]["close_claim"] == body["facts"]["original"]["claim"]
+                    assert tuple(body["facts"]["markers"]) == tuple(sorted(uw.OBSERVATION_WINDOW_MARKERS))
+                    assert body["facts"]["samples"]
+                    assert body["preparation_requirements"] == [
+                        "original_serving_cell_calibration_material", "original_serving_cell_executed_control_material"]
+                    assert body["scientific_authority"].startswith("none")
+                    assert body["parent_factual_receipt"] == result.receipt.to_dict()
+                    assert body["lifecycle_facts"]["marker_join"] == "observed"
+                    parent_body = ob._plain(store.read(result.receipt.locator, result.receipt.sha256))
+                    assert body["lifecycle_observation"] == parent_body["lifecycle_observation"]
+                    native_ref = parent_body["native_observation"]
+                    original_native = ob._plain(store.read(native_ref["locator"], native_ref["sha256"]))
+                    reopened = producer.search_window_owner.reopen(receipt,
+                        context=actual.context, native=original_native)
+                    assert ob._plain(reopened) == body
+                    with pytest.raises(TypeError):
+                        reopened["facts"]["markers"]["health"]["phase"] = "measurement"
+                finally:
+                    store.close()
         original = controllers[0]
         rows = journal_module.Journal(str(original.store / "journal")).read_all()
         native = [row for row in rows if row.kind == journal_module.KIND_PLANNED_SERVING_ARM_CAPTURED]

@@ -481,7 +481,7 @@ def test_v2_direct_worker_uses_concrete_observer_factory_and_result_envelope(tmp
     class ObservedAuthority(Authority):
         def observation_phase(self, *, sequence, unit, fence, binding, target,
                               phase, boundary_monotonic_s):
-            assert phase == "health" and sequence == unit.order_index + 1
+            assert phase in uw.OBSERVATION_WINDOW_MARKERS and sequence == unit.order_index + 1
             assert binding.fence_id == fence.fence_id and target["pid"] == 101
             assert boundary_monotonic_s > 0
             return {"outcome": "unavailable"}

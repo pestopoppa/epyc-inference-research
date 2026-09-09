@@ -9,6 +9,7 @@ from __future__ import annotations
 import copy
 from dataclasses import dataclass
 import math
+from pathlib import Path
 import threading
 import time
 from types import MappingProxyType
@@ -105,6 +106,11 @@ class StandaloneRuntimeInputs:
     execution_inputs: Mapping[str, unified_driver.ExecutionInput | Mapping[str, Any]]
     native_artifact_sink_ref: str
     feed_owner: Any = None
+    native_evidence_configuration: Any = None
+    loaded_instrument_identity: Mapping[str, Any] | None = None
+    loaded_instrument_reference: Mapping[str, Any] | None = None
+    native_artifact_root: Path | None = None
+    observation_configuration: Any = None
 
 
 @dataclass(frozen=True)
@@ -234,6 +240,25 @@ class StandaloneRuntime:
             if not isinstance(inputs.feed_owner, feed_runtime.FeedRuntimeOwner):
                 raise StandaloneRuntimeRefused("runtime requires a concrete feed owner")
             feed_runtime.validate_paths(inputs.feed_owner.config, controller.store)
+        if inputs.native_evidence_configuration is not None:
+            from . import measurement_capture as mc, observation_binding as ob
+            if (inputs.native_artifact_root is None
+                    or inputs.loaded_instrument_identity is None
+                    or inputs.loaded_instrument_reference is None):
+                raise StandaloneRuntimeRefused(
+                    "native runtime requires its exact published instrument")
+            store = mc.ArtifactStore(inputs.native_artifact_root)
+            try:
+                expected = ob.LoadedInstrumentReference.from_dict(
+                    unified_driver._thaw(inputs.loaded_instrument_reference))
+                actual = store.verify(
+                    f"loaded-instrument:{inputs.loaded_instrument_identity['sha256']}",
+                    unified_driver._thaw(inputs.loaded_instrument_identity))
+            finally:
+                store.close()
+            if actual.to_dict() != expected.artifact.to_dict():
+                raise StandaloneRuntimeRefused(
+                    "published native instrument differs from startup")
         readiness = controller.unified_driver_readiness()
         if (
             readiness["scheduler_projection_digest"]
@@ -257,7 +282,10 @@ class StandaloneRuntime:
             executable_work_kinds={"runtime_comparison"},
             feed_owner=inputs.feed_owner,
         )
-        executor = driver_execution.UnifiedDriverExecution(driver=driver, controller=controller)
+        executor = driver_execution.UnifiedDriverExecution(
+            driver=driver, controller=controller,
+            observation_configuration=inputs.observation_configuration,
+            native_evidence_configuration=inputs.native_evidence_configuration)
         return cls(
             controller=controller,
             driver=driver,

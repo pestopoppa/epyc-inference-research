@@ -1998,8 +1998,9 @@ class WorkerLifecycle:
                                 "epyc.autokernel.planned_worker_unit_completion_request.v1",
                                 "epyc.autokernel.planned_worker_unit_completion_request.v2"}:
                             planned_invocation.handle_completion(message)
-                        elif schema == \
-                                "epyc.autokernel.planned_worker_observation_phase_request.v1":
+                        elif schema in {
+                                "epyc.autokernel.planned_worker_observation_phase_request.v1",
+                                "epyc.autokernel.planned_worker_observation_phase_request.v2"}:
                             planned_invocation.handle_observation_phase(message)
                         elif schema == "epyc.autokernel.planned_worker_continuation_request.v1":
                             planned_invocation.handle_continuation(message)

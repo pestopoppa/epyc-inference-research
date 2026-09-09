@@ -321,13 +321,15 @@ def _owned_stack(tmp_path, monkeypatch, *, return_code=0, recipe=None):
     return driver, controller, lifecycle, engine
 
 
-def _as_observed_v2(prepared, measurement_callable, *, scientific_adapters=None):
+def _as_observed_v2(prepared, measurement_callable, *, scientific_adapters=None,
+                    search_window_configuration=None):
     store = mc.ArtifactStore(prepared.artifact_root)
     try:
         instrument = ob.seal_loaded_instrument(
             store=store, measurement_callable=measurement_callable,
             fence_clock=time.monotonic, serving_timer=time.time,
-            scientific_adapters=scientific_adapters)
+            scientific_adapters=scientific_adapters,
+            search_window_configuration=search_window_configuration)
     finally:
         store.close()
     plan_row = prepared.plan.to_dict() | {
@@ -368,7 +370,7 @@ def _observation_configuration(prepared):
 
 def _run_real_controller_child_v2_capture_and_restart(
         tmp_path, monkeypatch, *, producer_type, recipe=None,
-        scientific_adapters=None):
+        scientific_adapters=None, search_window_configuration=None):
     driver, controller, lifecycle, engine = _owned_stack(
         tmp_path, monkeypatch, recipe=recipe)
     # Restore the actual lifecycle watcher; this test does not inject a completion.
@@ -442,6 +444,10 @@ def observed_measure(template, build_dir, port, **kwargs):
         session.attach_target(server.pid)
         for phase in ('placement', 'health', 'warmup', 'measurement'):
             session.phase(phase)
+        # A labelled synthetic interval, not model work: let both actual
+        # observer loops run DURING the fixture's measurement window.
+        import time
+        time.sleep(0.04)
         session.checkpoint('measurement_end')
         prompt_id, body = kwargs['frozen_requests'][0]
         kwargs['observation'].append({
@@ -466,7 +472,8 @@ def observed_measure(template, build_dir, port, **kwargs):
     spec.loader.exec_module(measure_module)
     prepared, _instrument = _as_observed_v2(
         prepared, measure_module.observed_measure,
-        scientific_adapters=scientific_adapters)
+        scientific_adapters=scientific_adapters,
+        search_window_configuration=search_window_configuration)
     store = mc.ArtifactStore(prepared.artifact_root)
     validator = nc.NativeCaptureValidator(
         binding=nc.NativeCaptureBinding(
@@ -478,7 +485,9 @@ def observed_measure(template, build_dir, port, **kwargs):
         store=store, fence_provider=lambda *_args: None,
         observation_verifiers=ob.ParentObservationVerifiers())
     controller.register_native_capture(validator)
-    authority = unified_worker.ParentUnitEvidenceAuthority(max_records=16)
+    authority = unified_worker.ParentUnitEvidenceAuthority(
+        max_records=len(prepared.plan.expected_units) * (
+            3 + len(unified_worker.OBSERVATION_WINDOW_MARKERS)))
     producer = producer_type(
         authority, prepared, lifecycle, _observation_configuration(prepared))
     invocation = unified_worker.PlannedWorkerInvocation.open(prepared, authority)
@@ -570,10 +579,8 @@ uw.run_from_fds(start_fd=args.start_fd, control_fd=args.control_fd,
     assert terminal.accepted
     claim_threads = controller._lifecycle_provider.claim_threads
     assert all(name == "autokernel-parent-evidence" for name in claim_threads)
-    if scientific_adapters is None:
-        assert len(claim_threads) == len(prepared.plan.expected_units)
-    else:
-        assert len(claim_threads) >= len(prepared.plan.expected_units)
+    checks_per_unit = 1 if search_window_configuration is None else 2
+    assert len(claim_threads) >= checks_per_unit * len(prepared.plan.expected_units)
     start = invocation.start
     assert start is not None
     reference = invocation.result_reference()

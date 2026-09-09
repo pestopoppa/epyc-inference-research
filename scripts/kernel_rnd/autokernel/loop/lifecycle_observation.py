@@ -1163,6 +1163,12 @@ class ObservationSession:
             phase = self._phase
             done = self._enqueue_locked(phase, "checkpoint", mono, wall, label)
         self._wait_marker(done, phase)
+        if label == "measurement_end" and phase == "measurement" and self.phase_notice is not None:
+            with self._condition:
+                target = _json_copy(self._target_binding)
+            self.phase_notice("measurement_end", {
+                "phase": phase, "marker_label": label,
+                "monotonic_s": mono, "captured_at": wall}, target)
 
     def _resolve_target(self, pid: int) -> dict[str, Any]:
         supplied = self.owned_identity_resolver(pid)
