@@ -60,4 +60,30 @@ def hold(lock_path: Path = DEVICE_LOCK, *, device_id: str = DEVICE_ID) -> Iterat
         handle.close()
 
 
-__all__ = ["ClaimRefused", "DEVICE_ID", "DEVICE_LOCK", "hold"]
+@contextmanager
+def hold_cpu(cpu_list: str) -> Iterator[dict]:
+    """Use the installed orchestrator's physical region owner, never a new flock."""
+    os.environ.setdefault("ORCHESTRATOR_CROSS_ROLE_DISJOINT_PLACEMENT", "1")
+    if os.environ["ORCHESTRATOR_CROSS_ROLE_DISJOINT_PLACEMENT"].lower() not in {
+            "1", "true", "yes", "on"}:
+        raise ClaimRefused("CPU run requires the existing cross-role region mutex")
+    from src.runtime.cpu_region_lock import cpu_region_lock
+    from src.runtime.instance_topology import cpu_list_to_regions
+    from src.runtime.region_lock_cli import _preflight
+
+    reason = _preflight(strict=True)
+    if reason:
+        raise ClaimRefused(reason)
+    regions = cpu_list_to_regions(cpu_list)
+    if not regions:
+        raise ClaimRefused("CPU affinity maps to no physical regions")
+    with cpu_region_lock("autokernel-cpu", regions, timeout_s=1.0,
+                         request_tag="autokernel-experimental-serving") as held:
+        if set(held) != set(regions):
+            raise ClaimRefused("CPU owner did not acquire the requested physical regions")
+        yield {"device_id": "cpu", "cpu_list": cpu_list, "regions": sorted(held),
+               "lock_paths": {key: str(value) for key, value in held.items()},
+               "pid": os.getpid()}
+
+
+__all__ = ["ClaimRefused", "DEVICE_ID", "DEVICE_LOCK", "hold", "hold_cpu"]
