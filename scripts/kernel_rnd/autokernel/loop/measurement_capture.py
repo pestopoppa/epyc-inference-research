@@ -232,6 +232,18 @@ class ArtifactStore:
                 if remaining == 0:
                     fcntl.flock(self._runtime.fd, fcntl.LOCK_UN)
 
+    @contextmanager
+    def exclusive(self):
+        """Hold this store instance's verified, reentrant publication exclusion.
+
+        The capability exists only for the lifetime of this context and this open
+        ``ArtifactStore`` instance.  It is not a transferable root authority.  Public
+        methods such as :meth:`write` and :meth:`verify` may be called inside it; their
+        nested acquisition is intentionally reentrant on the current thread.
+        """
+        with self._exclusive():
+            yield
+
     def write(self, namespace: str, body: Mapping[str, Any]) -> StoredArtifact:
         with self._exclusive():
             return self._write_locked(namespace, body)

@@ -533,12 +533,17 @@ def validate_plan_snapshot(plan: RetentionPlan | Mapping[str, Any],
 def plan_expiry_candidates(plan: RetentionPlan | Mapping[str, Any],
                            snapshot: RetentionSnapshot | Mapping[str, Any],
                            policy: storage.StoragePolicy, *,
+                           artifact_ids: Sequence[str] | None = None,
                            now: datetime | None = None) -> tuple[storage.ExpiryOutcome, ...]:
     """Apply the existing storage policy to complete, unretained candidates; never delete."""
     plan, snapshot = validate_plan_snapshot(plan, snapshot)
     nodes = {node.artifact_id: node for node in snapshot.nodes}
+    selected = plan.expirable_ids if artifact_ids is None else _texts(
+        artifact_ids, "expiry candidate selection")
+    if not set(selected).issubset(plan.expirable_ids):
+        raise RetentionRefused("expiry candidate selection is outside the complete plan")
     outcomes = []
-    for artifact_id in plan.expirable_ids:
+    for artifact_id in selected:
         node = nodes[artifact_id]
         if node.retention_class != "expirable" or node.expiry is None or node.path is None:
             raise RetentionRefused(f"candidate {artifact_id} is not explicitly expirable")

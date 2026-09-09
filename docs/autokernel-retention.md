@@ -35,8 +35,37 @@ An unretained node can become a candidate only when it explicitly carries the ex
 `expirable` and a complete `ExpiryDescriptor`. `plan_expiry_candidates()` then constructs the existing
 `storage.ExpirableArtifact` and calls `storage.plan_expiry()`. It does not implement another expiry rule,
 tombstone format, or deletion path. Permanent classes and source refs never become expiry candidates.
-Actual reclamation still requires the existing tombstone-before-bytes `storage.expire_artifact()` flow
-and its owning maintenance consumer.
+Actual reclamation still requires the existing tombstone-before-bytes `storage.expire_artifact()` flow.
+
+## Native held consumer
+
+`loop.retention_consumer` connects that existing flow without adding a deletion framework. Its native
+view carries actual `CandidateState`/`CandidateManifest` objects, exact manifest-to-artifact membership,
+the fixed production/rollback/worker/intent/evidence root vocabulary, and exact Git source, branch,
+worktree path, and artifact digest identities. `inspect_candidate_state()` accepts the actual
+`CandidateTransactions` owner and rederives its state digest; caller mappings have no execution path.
+Missing manifest membership, path identity, operational roots, dependencies, or protected production
+and speech branches fail closed.
+
+`prepare()` projects the native view through the existing closure and applies storage dry policy only
+to the selected bounded batch. It writes no journal, creates no cursor, and limits a job to 64 artifacts.
+`execute()` defaults to the named
+unavailable maintenance/root-exclusion owner. A primary controller integration must implement
+`MaintenanceOwner.held()` and supply one atomic `MaintenanceLease`: current native generation, existing
+`StoragePolicy`, Journal, held-owner receipt, and a bounded exact tombstone-history selection (at most
+intent/failed/reclaimed for each of the 64 selected artifacts, not all campaign history). The consumer
+validates and keys that history once per held operation. Under that exclusion the
+consumer recollects and revalidates the exact generation and dependencies, remeasures/rechecks content,
+then calls existing `storage.expire_artifact(..., force=True)` through `JournalTombstoneSink`. Reported
+bytes come only from storage measurement or an original durable intent, never a caller estimate.
+
+A restart after intent and byte removal completes the original tombstone without deleting again. A
+conflicting/duplicate tombstone, replaced artifact, generation race, live bytes after `reclaimed`, or
+append/delete/completion fault refuses or propagates visibly. Replay requires the complete current
+descriptor, preconditions, exact owned path, and prepared storage-policy digest to match; tombstone ID
+equality alone is insufficient. The returned `HeldRetentionResult` carries
+the primary owner's held receipt plus the existing storage outcomes for selected maintenance-result
+integration.
 
 ## Legacy anchor pruning
 
@@ -65,10 +94,9 @@ scientific discovery by itself.
 
 ## Remaining integration
 
-The real consumer must project roots and immutable dependency identities from the existing Journal,
-candidate/integration state, active workers and launch intents, retained evidence, resolved recipes,
-absolute RUNPATHs, and dependent DSO directories. Immediately before maintenance it must reload the
-same generation, validate the plan/snapshot binding, use existing storage expiry/tombstone policy for
-eligible classes, and journal the bounded maintenance result. Disk admission may separately pause
-storage-heavy work when headroom is unavailable. This helper alone does not complete AKU-10, perform
-backup verification, advance a maintenance cursor, or make cleanup invisible per arm.
+The primary controller still must implement the short-held `MaintenanceOwner` adapter that atomically
+collects active workers, acquisition/launch/integration intents, retained evidence, resolved recipes,
+absolute RUNPATH/DSO dependencies, and Journal tombstones, and then consumes the returned held receipt.
+Until that explicit capability exists, execution is unavailable by default. Disk admission may
+separately pause storage-heavy work when headroom is unavailable. This consumer does not perform backup
+verification, advance a maintenance cursor, or make cleanup invisible per arm.
