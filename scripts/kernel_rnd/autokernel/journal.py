@@ -238,6 +238,11 @@ KIND_PREFLIGHT_ATTESTATION = "PREFLIGHT_ATTESTATION"
 # Operational accumulator state, not a §7 evidence record.  Persisting or
 # importing this snapshot grants no measurement or claim eligibility.
 KIND_LOOP_BUNDLE_SAVED = "LOOP_BUNDLE_SAVED"
+KIND_CAMPAIGN_SUPERVISOR_EVENT = "CAMPAIGN_SUPERVISOR_EVENT"
+CAMPAIGN_SUPERVISOR_EVENT_SCHEMA = "epyc.autokernel.campaign_supervisor_event.v1"
+CAMPAIGN_SUPERVISOR_EVENTS = frozenset({
+    "START", "CONTROL_ACCEPTED",
+})
 LOOP_BUNDLE_SAVED_SCHEMA = "epyc.autokernel.loop_bundle_saved.v1"
 LOOP_BUNDLE_SNAPSHOT_SCHEMA_V1 = "epyc.autokernel.accumulator_bundle.v1"
 LOOP_BUNDLE_SNAPSHOT_SCHEMA_V2 = "epyc.autokernel.accumulator_bundle.v2"
@@ -263,6 +268,7 @@ NATIVE_KINDS = frozenset({
     KIND_TORN_APPEND_DISCARDED, KIND_OPERATOR_CONTROL_ACK, KIND_VIEW_REBASED,
     KIND_PROPOSAL_SKIPPED, KIND_STOP_STATE, KIND_PREFLIGHT_ATTESTATION,
     KIND_LOOP_BUNDLE_SAVED,
+    KIND_CAMPAIGN_SUPERVISOR_EVENT,
     KIND_MICROBENCH_RUN_COMPLETED,
     KIND_T0_REFUSAL,
     KIND_POST_T0_QUIET_BOUNDARY,
@@ -1056,6 +1062,8 @@ def retrieval_filter(
 
 def _validate_native_payload(kind: str, payload: Mapping[str, Any]) -> list:
     out: list = []
+    if not isinstance(payload, Mapping):
+        return ["payload: required mapping"]
     if kind in (KIND_SUPERSEDED, KIND_RETRIEVAL_SUPERSEDED):
         target = payload.get("target_event_id")
         if not isinstance(target, str) or not target:
@@ -1149,6 +1157,181 @@ def _validate_native_payload(kind: str, payload: Mapping[str, Any]) -> list:
                 "reasons: a COULD_NOT_CHECK attestation must say why it could "
                 "not check — inability to evaluate is a third outcome, not a pass"
             )
+    elif kind == KIND_CAMPAIGN_SUPERVISOR_EVENT:
+        required = {"schema", "event", "campaign_id", "config_generation",
+                    "config_digest", "supervisor_incarnation", "stream_epoch",
+                    "control_revision", "data"}
+        missing = sorted(required - set(payload))
+        extra = sorted(set(payload) - required)
+        if missing:
+            out.append(f"missing required field(s) {missing}")
+        if extra:
+            out.append(f"unknown field(s) {extra}")
+        if payload.get("schema") != CAMPAIGN_SUPERVISOR_EVENT_SCHEMA:
+            out.append(f"schema: must be {CAMPAIGN_SUPERVISOR_EVENT_SCHEMA!r}")
+        event = payload.get("event")
+        if not isinstance(event, str) or event not in CAMPAIGN_SUPERVISOR_EVENTS:
+            out.append(f"event: must be one of {sorted(CAMPAIGN_SUPERVISOR_EVENTS)}")
+        for key in ("campaign_id", "config_digest"):
+            value = payload.get(key)
+            if not isinstance(value, str) or not value.strip():
+                out.append(f"{key}: required and non-empty")
+        digest_value = payload.get("config_digest")
+        if isinstance(digest_value, str) and not _SHA256_RE.match(digest_value):
+            out.append("config_digest: required lowercase hex sha256")
+        for key in ("config_generation", "supervisor_incarnation", "stream_epoch"):
+            value = payload.get(key)
+            if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+                out.append(f"{key}: required positive integer")
+        revision = payload.get("control_revision")
+        if not isinstance(revision, int) or isinstance(revision, bool) or revision < 0:
+            out.append("control_revision: required non-negative integer")
+        data = payload.get("data")
+        if not isinstance(data, Mapping):
+            out.append("data: required mapping")
+        elif payload.get("event") == "START":
+            expected = {"desired_state", "observed_state", "prerequisite_reason",
+                        "lock_identity"}
+            if set(data) != expected:
+                out.append("data: START requires exactly desired_state, observed_state, "
+                           "prerequisite_reason, lock_identity")
+            desired_state = data.get("desired_state")
+            if not isinstance(desired_state, str) or desired_state not in {
+                    "paused", "running", "drained"}:
+                out.append("data.desired_state: invalid")
+            observed_state = data.get("observed_state")
+            if not isinstance(observed_state, str) or observed_state not in {
+                    "paused", "running", "drained", "waiting_prerequisite"}:
+                out.append("data.observed_state: invalid")
+            reason = data.get("prerequisite_reason")
+            if reason is not None and (not isinstance(reason, str) or not reason.strip()):
+                out.append("data.prerequisite_reason: must be null or non-empty string")
+            identity = data.get("lock_identity")
+            identity_fields = {"dev", "ino", "uid", "nlink", "mode", "size"}
+            if not isinstance(identity, Mapping) or set(identity) != identity_fields:
+                out.append("data.lock_identity: malformed object identity")
+            elif any(not isinstance(identity.get(key), int)
+                     or isinstance(identity.get(key), bool) or identity[key] < 0
+                     for key in identity_fields):
+                out.append("data.lock_identity: fields must be non-negative integers")
+        elif payload.get("event") == "CONTROL_ACCEPTED":
+            expected = {"request_id", "command", "desired_state", "observed_state",
+                        "prerequisite_reason", "result"}
+            if set(data) != expected:
+                out.append(f"data: CONTROL_ACCEPTED fields differ from {sorted(expected)}")
+            command = data.get("command")
+            command_fields = {"schema", "campaign_id", "config_generation", "request_id",
+                              "operation", "payload", "payload_digest",
+                              "expected_control_revision"}
+            if not isinstance(command, Mapping) or set(command) != command_fields:
+                out.append("data.command: malformed strict command object")
+            else:
+                if command.get("schema") != "epyc.autokernel.campaign_command.v1":
+                    out.append("data.command.schema: unsupported")
+                operation = command.get("operation")
+                valid_operation = (isinstance(operation, str)
+                                   and operation in {"pause", "resume", "drain"})
+                if not valid_operation:
+                    out.append("data.command.operation: invalid")
+                if not isinstance(command.get("payload"), Mapping) or command.get("payload"):
+                    out.append("data.command.payload: must be empty mapping")
+                for key in ("campaign_id", "request_id", "payload_digest"):
+                    value = command.get(key)
+                    if not isinstance(value, str) or not value.strip():
+                        out.append(f"data.command.{key}: required non-empty string")
+                command_digest = command.get("payload_digest")
+                if isinstance(command_digest, str) and not _SHA256_RE.match(command_digest):
+                    out.append("data.command.payload_digest: required lowercase hex sha256")
+                for key, minimum in (("config_generation", 1),
+                                     ("expected_control_revision", 0)):
+                    value = command.get(key)
+                    if not isinstance(value, int) or isinstance(value, bool) or value < minimum:
+                        out.append(f"data.command.{key}: invalid integer")
+                if valid_operation \
+                        and isinstance(command.get("payload"), Mapping) \
+                        and not command.get("payload") \
+                        and isinstance(command.get("campaign_id"), str) \
+                        and isinstance(command.get("config_generation"), int) \
+                        and not isinstance(command.get("config_generation"), bool):
+                    digest = schemas.content_hash({
+                        "operation": operation, "payload": dict(command.get("payload", {})),
+                        "campaign_id": command["campaign_id"],
+                        "config_generation": command["config_generation"],
+                    })
+                    if command.get("payload_digest") != digest:
+                        out.append("data.command.payload_digest: semantic digest mismatch")
+                if command.get("campaign_id") != payload.get("campaign_id"):
+                    out.append("data.command.campaign_id: does not match event")
+                if command.get("config_generation") != payload.get("config_generation"):
+                    out.append("data.command.config_generation: does not match event")
+            result = data.get("result")
+            result_fields = {"request_id", "operation", "payload_digest", "accepted",
+                             "completed", "control_revision", "desired_state",
+                             "observed_state", "prerequisite_reason"}
+            if not isinstance(result, Mapping) or set(result) != result_fields:
+                out.append("data.result: malformed strict result object")
+            else:
+                for key in ("accepted", "completed"):
+                    if not isinstance(result.get(key), bool):
+                        out.append(f"data.result.{key}: required boolean")
+                if result.get("accepted") is not True:
+                    out.append("data.result.accepted: CONTROL_ACCEPTED must be true")
+                revision = result.get("control_revision")
+                if not isinstance(revision, int) or isinstance(revision, bool) or revision < 1:
+                    out.append("data.result.control_revision: invalid")
+                for key in ("request_id", "operation", "payload_digest", "desired_state",
+                            "observed_state"):
+                    if result.get(key) != data.get(key) and key in data:
+                        out.append(f"data.result.{key}: does not match transition")
+                if isinstance(command, Mapping):
+                    for key in ("request_id", "operation", "payload_digest"):
+                        if result.get(key) != command.get(key):
+                            out.append(f"data.result.{key}: does not match command")
+                    operation = command.get("operation")
+                    expected_desired = ({"pause": "paused", "resume": "running",
+                                         "drain": "drained"}.get(operation)
+                                        if isinstance(operation, str) else None)
+                    if data.get("desired_state") != expected_desired:
+                        out.append("data.desired_state: does not match operation")
+                    observed = data.get("observed_state")
+                    valid_observed = (
+                        isinstance(observed, str)
+                        and ((operation == "pause" and observed == "paused")
+                             or (operation == "drain" and observed == "drained")
+                             or (operation == "resume"
+                                 and observed in {"running", "waiting_prerequisite"}))
+                    )
+                    if not valid_observed:
+                        out.append("data.observed_state: does not match operation")
+                    expected_completed = (isinstance(operation, str)
+                                          and (operation in {"pause", "drain"}
+                                               or (operation == "resume"
+                                                   and data.get("observed_state") == "running")))
+                    if result.get("completed") is not expected_completed:
+                        out.append("data.result.completed: inconsistent with transition")
+                    reason = data.get("prerequisite_reason")
+                    expects_reason = (operation == "resume"
+                                      and observed == "waiting_prerequisite")
+                    if ((expects_reason and
+                         (not isinstance(reason, str) or not reason.strip()))
+                            or (not expects_reason and reason is not None)):
+                        out.append(
+                            "data.prerequisite_reason: inconsistent with transition")
+                if result.get("prerequisite_reason") != data.get("prerequisite_reason"):
+                    out.append("data.result.prerequisite_reason: does not match transition")
+            if data.get("request_id") != (command.get("request_id")
+                                           if isinstance(command, Mapping) else None):
+                out.append("data.request_id: does not match command")
+            for key in ("desired_state", "observed_state"):
+                state = data.get(key)
+                allowed = ({"paused", "running", "drained"}
+                           if key == "desired_state" else
+                           {"paused", "running", "drained", "waiting_prerequisite"})
+                if not isinstance(state, str) or state not in allowed:
+                    out.append(f"data.{key}: invalid")
+            reason = data.get("prerequisite_reason")
+            if reason is not None and (not isinstance(reason, str) or not reason.strip()):
+                out.append("data.prerequisite_reason: must be null or non-empty string")
     elif kind == KIND_TORN_APPEND_DISCARDED:
         for key in ("discarded_byte_count", "shard_index"):
             value = payload.get(key)
@@ -2438,6 +2621,8 @@ __all__ = [
     "KIND_COMPOSITION_FAILED", "KIND_COMPOSITION_REJECTED",
     "KIND_OPERATOR_RELEASE_DRY_RUN_REQUESTED",
     "KIND_OPERATOR_RELEASE_DRY_RUN_TERMINATED",
+    "KIND_CAMPAIGN_SUPERVISOR_EVENT", "CAMPAIGN_SUPERVISOR_EVENT_SCHEMA",
+    "CAMPAIGN_SUPERVISOR_EVENTS",
     "tombstone_view_key",
     "Journal", "JournalEntry", "JournalDefect", "ShardRef", "TornTail",
     "ReadReport", "Cursor", "Views",
