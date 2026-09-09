@@ -933,6 +933,17 @@ class UnifiedCampaignDriver:
         return unified_worker.PreparedPlannedServingStage.from_dict(
             {**body, "prepared_digest": _digest(body)})
 
+    def refresh_installed_profiles(self, owner, *, now: float) -> None:
+        """Refresh only original settled profile views before issuing a new catalog."""
+        from .profile_preparation import InstalledProfilePreparationOwner
+        if (type(owner) is not InstalledProfilePreparationOwner
+                or owner.controller is not self.controller):
+            raise DriverRefused("installed profile owner differs from this driver")
+        if self._pending is not None or self.controller.unified_driver_pending_intent() is not None:
+            raise DriverRefused("cannot refresh profiles underneath an issued catalog")
+        self.profiles = owner.planner_profiles(now)
+        self._profile_request_debt = owner.consumed_request_debt(self.profile_requests, self.profiles)
+
     def materialize_profile(self, outcome: DriverOutcome) -> SelectedProfileWork:
         """Resolve exact selected profile advice through the current controller owner."""
         if (not isinstance(outcome, DriverOutcome)
@@ -1054,9 +1065,11 @@ class UnifiedCampaignDriver:
                     f"target:{proposal.target_revision_digest}:execution_input_missing")
                 continue
             runtime_stages.append(stage)
+        profile_debt = getattr(self, "_profile_request_debt", {})
+        missing_inputs.extend(profile_debt.values())
         profile_stages = tuple(request.stage_proposal
                                for key, request in self.profile_requests.items()
-                               if key not in self.profiles)
+                               if key not in self.profiles and key not in profile_debt)
         calibration_requests = (() if self.preparation_owner is None else
                                 self.preparation_owner.pending_requests())
         calibration_by_digest = {item.stage_proposal.digest: item
@@ -1106,7 +1119,7 @@ class UnifiedCampaignDriver:
                                 "experiment_plan": plan.to_dict()},
                     "stage_plan_binding": "experiment_plan",
                     "stage_plan_digest": plan.digest}
-        unavailable = []
+        unavailable = list(profile_debt.values())
         executable_stages = []
         for stage in stages:
             kind = work_by_digest[stage.digest]["kind"]

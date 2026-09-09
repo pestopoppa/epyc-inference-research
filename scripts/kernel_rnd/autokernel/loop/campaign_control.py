@@ -3929,6 +3929,32 @@ class CampaignController:
                 return None
             return matches[0]
 
+    def current_verified_profile_result(self, target_revision_digest: str):
+        """Read original indexed profile/issuance/settlement; create no live authority."""
+        from . import unified_driver
+        actor_state_module._sha(target_revision_digest, "profile target")
+        with self._mutex:
+            self._require_active_locked()
+            row = self._actor_preparation_state.profiles.get(target_revision_digest)
+            receipt = self.current_actor_profile(target_revision_digest)
+            if row is None or receipt is None:
+                return None
+            row = actor_state_module.validate_event(copy.deepcopy(dict(row)))
+            if (row["config_digest"] != self.config_digest
+                    or row["config_generation"] != self.config_generation
+                    or row["target_revision_digest"] != target_revision_digest
+                    or row["profile_request_digest"] != receipt.profile_request_digest
+                    or row["target_profile_digest"] != receipt.target_profile_digest
+                    or row["profile_request"] != receipt.to_dict()["profile_request"]
+                    or any(row[name] != getattr(receipt, name) for name in (
+                        "verified_at", "valid_until", "clock_domain", "verifier_ref"))):
+                raise ControlRefused("original profile receipt/index identity differs")
+            return unified_driver._freeze({
+                "profile_event": row, "profile_receipt": receipt.to_dict(),
+                "issued": copy.deepcopy(self._driver_issued.get(row["catalog_id"])),
+                "settlement": copy.deepcopy(self._driver_settled.get(row["transition_id"])),
+            })
+
     def register_unified_settlement_validator(
             self, validator: Callable[[Mapping[str, Any]], Mapping[str, Any]]) -> None:
         """Install the trusted worker-owner terminal/held-receipt verifier."""

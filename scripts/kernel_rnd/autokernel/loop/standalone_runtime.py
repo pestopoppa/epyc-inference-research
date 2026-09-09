@@ -17,6 +17,7 @@ from typing import Any, Mapping, Sequence
 
 from . import campaign, campaign_control, driver_execution, experiment_plan, feed_runtime
 from . import scheduling, scoped_evidence, unified_driver, unified_planner, worker_lifecycle
+from .profile_preparation import ProfilePreparationRefused
 
 CONFIG_SCHEMA = "epyc.autokernel.standalone_runtime_config.v1"
 RESULT_SCHEMA = "epyc.autokernel.standalone_runtime_result.v1"
@@ -115,6 +116,7 @@ class StandaloneRuntimeInputs:
     retention_runtime_recipes: Any = None
     retention_runtime_recipe_snapshots: Any = None
     calibration_requests: tuple = ()
+    profile_binding: Any = None
 
 
 @dataclass(frozen=True)
@@ -199,10 +201,12 @@ class StandaloneRuntime:
         executor: driver_execution.UnifiedDriverExecution,
         config: StandaloneRuntimeConfig,
         monotonic_clock,
+        profile_executor=None,
     ) -> None:
         self.controller = controller
         self.driver = driver
         self.executor = executor
+        self.profile_executor = profile_executor
         self.config = config
         self._clock = monotonic_clock
         self._condition = threading.Condition(threading.RLock())
@@ -276,6 +280,15 @@ class StandaloneRuntime:
             != inputs.scheduler_engine.operational_projection().projection_digest
         ):
             raise StandaloneRuntimeRefused("controller and runtime scheduler differ")
+        profile_executor = None
+        if inputs.profile_binding is not None:
+            from .profile_preparation import InstalledProfilePreparationBinding
+            if type(inputs.profile_binding) is not InstalledProfilePreparationBinding:
+                raise StandaloneRuntimeRefused("profile binding must be the installed concrete type")
+            profile_executor = inputs.profile_binding.install(
+                controller=controller, resolved=inputs.resolved_campaign,
+                runtime_anchors=inputs.runtime_anchors, requests=inputs.profile_requests,
+                configured_profiles=inputs.profiles)
         driver = unified_driver.UnifiedCampaignDriver(
             resolved_campaign=inputs.resolved_campaign,
             controller=controller,
@@ -290,21 +303,24 @@ class StandaloneRuntime:
             native_artifact_sink_ref=inputs.native_artifact_sink_ref,
             execution_inputs=inputs.execution_inputs,
             monotonic_clock=monotonic_clock,
-            executable_work_kinds=({"runtime_comparison", "calibration_preparation"}
-                                   if inputs.calibration_requests else {"runtime_comparison"}),
+            executable_work_kinds=({"runtime_comparison"}
+                | ({"calibration_preparation"} if inputs.calibration_requests else set())
+                | ({"profile_preparation"} if profile_executor is not None else set())),
             calibration_requests=inputs.calibration_requests,
             feed_owner=inputs.feed_owner,
         )
         executor = driver_execution.UnifiedDriverExecution(
             driver=driver, controller=controller,
             observation_configuration=inputs.observation_configuration,
-            native_evidence_configuration=inputs.native_evidence_configuration)
+            native_evidence_configuration=inputs.native_evidence_configuration,
+            profile_executor=profile_executor)
         return cls(
             controller=controller,
             driver=driver,
             executor=executor,
             config=config or StandaloneRuntimeConfig(),
             monotonic_clock=monotonic_clock,
+            profile_executor=profile_executor,
         )
 
     def _snapshot(self) -> Mapping[str, Any]:
@@ -371,6 +387,10 @@ class StandaloneRuntime:
             receipt = None
             if pending is None:
                 self.controller.reconcile_workers()
+            elif self.driver.issued_work_kind(pending) == "profile_preparation":
+                if self.profile_executor is None:
+                    raise StandaloneRuntimeRefused("profile recovery owner is not installed")
+                receipt = self.profile_executor.recover_issued(self.driver, pending)
             else:
                 receipt = self.executor.recover_issued(pending)
             with self._condition:
@@ -434,6 +454,8 @@ class StandaloneRuntime:
             elif retry:
                 raise StandaloneRuntimeRefused("runtime has no exact pending operation")
             else:
+                if self.profile_executor is not None:
+                    self.driver.refresh_installed_profiles(self.profile_executor, now=self._clock())
                 outcome = self.driver.tick(
                     stop_requested=lambda: self._stop_requested or external_stop()
                 )
@@ -452,11 +474,15 @@ class StandaloneRuntime:
             available_kinds = ({"runtime_comparison", "calibration_preparation"}
                                if self.driver.preparation_owner is not None
                                else {"runtime_comparison"})
-            if self.driver.issued_work_kind(outcome) not in available_kinds:
+            if self.profile_executor is not None:
+                available_kinds.add("profile_preparation")
+            kind = self.driver.issued_work_kind(outcome)
+            if kind not in available_kinds:
                 raise StandaloneRuntimeRefused("standalone runtime received unavailable work")
             with self._condition:
                 self._pending_outcome = outcome
-            receipt = self.executor.execute(outcome)
+            receipt = (self.profile_executor.execute(self.driver, outcome)
+                       if kind == "profile_preparation" else self.executor.execute(outcome))
             with self._condition:
                 self._pending_outcome = None
                 self._uncertain = None
@@ -484,7 +510,8 @@ class StandaloneRuntime:
                 0 if stopping else self._delay(unavailable=True),
                 self._snapshot(),
             )
-        except (worker_lifecycle.WaitingAuthority, campaign_control.ControlRefused) as exc:
+        except (worker_lifecycle.WaitingAuthority, campaign_control.ControlRefused,
+                ProfilePreparationRefused) as exc:
             if outcome is None:
                 if retry:
                     retryable = self._mark_uncertain(

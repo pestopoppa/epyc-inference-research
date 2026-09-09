@@ -207,14 +207,14 @@ class EvidenceVerifierBinding:
 class ProviderRegistry:
     """Application-owned locator; configuration cannot construct its values.
 
-    Profile entries are deliberately non-authoritative ``Any`` locators while their
-    owner module is absent. They are never consumed here and, when that module is
-    present, are checked against its concrete TargetProfileExecution type.
+    Legacy controller-bound profile_executions remain non-runnable locators.
+    Concrete profile_bindings install only after the actual controller exists.
     """
 
     def __init__(self, bindings: Mapping[str, ProviderBinding], *,
                  evidence_verifiers: Mapping[str, EvidenceVerifierBinding] | None = None,
                  profile_executions: Mapping[str, Any] | None = None,
+                 profile_bindings: Mapping[str, Any] | None = None,
                  evidence_feeds: Mapping[str, feed_runtime.InstalledFeedBinding] | None = None
                  ) -> None:
         if not isinstance(bindings, Mapping):
@@ -239,6 +239,17 @@ class ProviderRegistry:
             _text(identifier, "profile execution identifier")
             profiles[identifier] = execution
         self._profile_executions = MappingProxyType(profiles)
+        from .profile_preparation import InstalledProfilePreparationBinding
+        installed_profiles = {}
+        for identifier, binding in (profile_bindings or {}).items():
+            _text(identifier, "profile binding identifier")
+            if type(binding) is not InstalledProfilePreparationBinding:
+                raise StandaloneInputsRefused("profile binding is not the installed concrete type")
+            if any(value.mechanism.mechanism_id != identifier
+                   for value in binding.mechanisms.values()):
+                raise StandaloneInputsRefused("profile binding identifier differs from mechanisms")
+            installed_profiles[identifier] = binding
+        self._profile_bindings = MappingProxyType(installed_profiles)
         feeds = {}
         for identifier, binding in (evidence_feeds or {}).items():
             _text(identifier, "feed binding identifier")
@@ -258,6 +269,9 @@ class ProviderRegistry:
 
     def evidence_feed(self, identifier: str) -> feed_runtime.InstalledFeedBinding | None:
         return self._evidence_feeds.get(identifier)
+
+    def profile_binding(self, identifier: str):
+        return self._profile_bindings.get(identifier)
 
 
 def _installed_scientific_adapters(value: Any):
@@ -419,6 +433,16 @@ class MaterializedInputs:
             for target in self.pending_profile_targets:
                 request = self.inputs.profile_requests[target]
                 mechanism_id = request.profile_contract["adapter_id"]
+                binding = registry.profile_binding(mechanism_id)
+                if binding is not None:
+                    try:
+                        binding.validate(self.resolved, self.inputs.runtime_anchors,
+                                         self.inputs.profile_requests)
+                        if target not in binding.mechanisms:
+                            raise ValueError("profile binding omits selected target")
+                    except (ValueError, TypeError) as exc:
+                        missing.append(f"target:{target}:profile_binding:{mechanism_id}:invalid:{exc}")
+                    continue
                 execution = registry.profile_execution(mechanism_id)
                 if execution is None:
                     missing.append(
@@ -716,6 +740,19 @@ def runtime_factory(materialized: MaterializedInputs, registry: ProviderRegistry
     else:
         assert verifier is not None
         verified_inputs = _verified_snapshot_inputs(materialized, verifier)
+
+    mechanisms = {}
+    for target, request in materialized.inputs.profile_requests.items():
+        installed = registry.profile_binding(request.profile_contract["adapter_id"])
+        if installed is None or target not in installed.mechanisms:
+            if target in materialized.pending_profile_targets:
+                raise StandaloneInputsRefused("profile binding changed after preflight")
+            continue
+        mechanisms[target] = installed.mechanisms[target]
+    if mechanisms:
+        from .profile_preparation import InstalledProfilePreparationBinding
+        verified_inputs = replace(verified_inputs,
+            profile_binding=InstalledProfilePreparationBinding(mechanisms))
 
     def build(resolved: campaign.ResolvedCampaign, args):
         config = materialized.manifest.driver_config

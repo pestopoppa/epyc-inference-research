@@ -541,7 +541,8 @@ class UnifiedDriverExecution:
                  observation_verifiers: ob.ParentObservationVerifiers =
                  ob.ParentObservationVerifiers(),
                  observation_configuration: ob.ParentObservationConfiguration | None = None,
-                 native_evidence_configuration: Any | None = None
+                 native_evidence_configuration: Any | None = None,
+                 profile_executor: Any | None = None
                  ) -> None:
         if (not isinstance(driver, unified_driver.UnifiedCampaignDriver)
                 or not isinstance(controller, campaign_control.CampaignController)):
@@ -559,6 +560,12 @@ class UnifiedDriverExecution:
                 "observation configuration must be the concrete parent type")
         self.driver = driver
         self.controller = controller
+        if profile_executor is not None:
+            from .profile_preparation import InstalledProfilePreparationOwner
+            if (type(profile_executor) is not InstalledProfilePreparationOwner
+                    or profile_executor.controller is not controller):
+                raise DriverExecutionRefused("profile executor is not this concrete owner")
+        self._profile_executor = profile_executor
         self._launched: set[str] = set()
         self._finished: dict[str, _FinishedAttempt | _FailedAttempt] = {}
         self._trusted_settlements: dict[str, dict[str, Any]] = {}
@@ -592,6 +599,12 @@ class UnifiedDriverExecution:
         if not isinstance(supplied, Mapping):
             raise DriverExecutionRefused("settlement candidate is malformed")
         transition_id = supplied.get("transition_id")
+        if (self._profile_executor is not None
+                and self._profile_executor.owns_settlement(transition_id)):
+            with self._lock:
+                if self._closed:
+                    raise DriverExecutionRefused("driver execution connector is closed")
+            return self._profile_executor.verify_settlement(supplied)
         with self._lock:
             if self._closed:
                 raise DriverExecutionRefused("driver execution connector is closed")
