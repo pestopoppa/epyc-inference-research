@@ -223,6 +223,10 @@ class StandaloneRuntime:
         self.controller.register_runtime_projection(self)
 
     def _observed_result(self, *args, **kwargs) -> RuntimeTickResult:
+        try:
+            self._observe_aggregates()
+        except Exception:
+            pass  # diagnostic dispatch faults cannot change the operational result
         result = RuntimeTickResult(*args, **kwargs)
         try:
             # Capture immutable selected identity on the execution thread, before
@@ -241,6 +245,31 @@ class StandaloneRuntime:
             except Exception:
                 pass  # retained old observation remains dated; no freshness invented
             return result
+
+    def _observe_aggregates(self):
+        try:
+            from . import runtime_aggregates as aggregate
+            rows = aggregate.plain(self.controller.runtime_aggregate_observation(self))
+            owners = {"evidence": self.driver.feed_owner, "profile": self.profile_executor,
+                      "calibration": self.driver.preparation_owner}
+            for kind in aggregate.KINDS:
+                try:
+                    if kind == "actor":
+                        value = self.controller.actor_preparation_observation()
+                    elif owners[kind] is None:
+                        value = aggregate.observation(kind, status="not_connected", reason="owner is not installed")
+                    else:
+                        value = owners[kind].observation_snapshot()
+                    rows[kind] = aggregate.validate(kind, value)
+                except Exception as exc:
+                    prior = rows[kind]
+                    rows[kind] = aggregate.plain(aggregate.observation(kind, status="unknown",
+                        reason="aggregate observation failed; original dated facts retained",
+                        observed_at=prior["observed_at"], attempted_at=aggregate.utc_now(),
+                        generation=prior["generation"], data=prior["data"], error=str(exc)))
+            self.controller.record_runtime_aggregates(self, rows)
+        except Exception:
+            pass  # observation cannot change an operational outcome or redate old source facts
 
     @classmethod
     def compose(
@@ -502,6 +531,10 @@ class StandaloneRuntime:
                 raise StandaloneRuntimeRefused("standalone runtime received unavailable work")
             with self._condition:
                 self._pending_outcome = outcome
+            try:
+                self._observe_aggregates()  # completed drain/reductions before long owned work
+            except Exception:
+                pass
             receipt = (self.profile_executor.execute(self.driver, outcome)
                        if kind == "profile_preparation" else self.executor.execute(outcome))
             with self._condition:
@@ -584,6 +617,10 @@ class StandaloneRuntime:
             owner = self.driver.feed_owner
             if owner is not None:
                 owner.close()
+            try:
+                self._observe_aggregates()
+            except Exception:
+                pass
 
     def _run_owned(self, stop_event: threading.Event) -> RuntimeTickResult:
         if not isinstance(stop_event, threading.Event):

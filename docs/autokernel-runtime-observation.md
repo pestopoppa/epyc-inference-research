@@ -1,7 +1,7 @@
 # Standalone runtime operational observation
 
 The existing `campaign_snapshot.v3` carrier accepts a closed
-`unified_campaign_projection.v2`. The controller registers exactly one concrete
+`unified_campaign_projection.v2` and additive v3. The controller registers exactly one concrete
 `StandaloneRuntime` owner per controller lifetime. Controllers without that owner
 continue producing the exact old unified projection v1. This is a data-plane addition;
 ROOT's existing `/loop`, `/api/loop`, health envelope and browser consume it. There is
@@ -51,27 +51,56 @@ Without a worker, runtime freshness uses the original observation plus the exist
 while transport remains healthy. Operational diagnostics do not disable otherwise
 valid command controls.
 
-## Scope and remaining aggregate connections
+## Bounded original-owner aggregates (projection v3)
 
-This connects actual operational observation, not all of AKU-09. Resources, actor-cache,
-evidence and candidate aggregate sections remain explicitly `not_connected`; they
-continue degrading semantic health. Concrete next producer/read indexes are:
+The registered runtime publishes closed `evidence_observation.v1` plus actor,
+profile and calibration observation v1 records inside `unified_actor_status.v2`.
+The shared installed codec admits at most 16 actor + 24 profile + 24 calibration
+detail rows, 64 combined, and 32 KiB of UTF-8 canonical JSON. Evidence counters are
+flat. Samples use bounded original iteration order, not a full history scan/sort.
+Original cached totals are labelled separately from truncated details; there is no
+inferred global settled-actor total, total corpus count or current usable-profile total.
 
-- Profile preparation: installed executor `planner_profiles` and controller
-  `current_verified_profile_result`, joined to original successful settlement and
-  expiry. No PROFILE_VERIFIED-only readiness shortcut.
-- Calibration preparation: `InstalledServingPreparationOwner.disposition`/`pending_requests` over
-  exact settled chunks. Reopening artifacts stays on the execution thread, outside
-  publisher/controller mutex; diagnostic solve is not qualified controls.
-- Evidence: execution-thread `FeedRuntimeOwner` generation/readiness and current feed
-  projection snapshot. Never query its same-thread SQLite connection on the publisher
-  thread, or substitute a publisher timestamp for a projected frontier.
-- Actors/source-build: controller's original actor/profile indexes and candidate-state
-  read transaction; installed source/build execution remains unavailable pending its
-  separately reviewed settlement integration.
-- Resources/candidate: original lifecycle projection and trusted held receipt versus
-  scheduler accounting are distinct; candidate lineage state is not validation or
-  frozen-production authority. These need their own bounded producer projections.
+- FeedRuntimeOwner caches its actual completed bounded drain/proof result: original
+  source/cursor/projected/captured-admission frontiers, generation, readiness, lag in
+  events, quarantine count and cached finding count. Event lag never becomes time lag.
+  A projected frontier does not grant support to any particular query/finding.
+- Profile owner caches only its actual `planner_profiles`/`consumed_request_debt`
+  reductions. PROFILE_VERIFIED without exact successful settlement remains unusable;
+  expiry never falls back to an obsolete configured profile. `consumed_request_debt`
+  means unavailable-and-consumed, not all consumed requests. Same-domain remaining
+  validity is observed once and aged by the consumer, never refreshed by publication.
+- Calibration owner caches the existing successful Journal reconciliation. Orphan CAS
+  chunks cannot count before settlement. Failed/contaminated attempts remain separate
+  from collected original chunks; only predeclared retries enter pending counts.
+  Reopened settled chunks survive restart without rerun. Diagnostic numeric solve
+  never supplies qualification, controls, ranking or promotion authority.
+- Actor details come from the controller's original cached pending/finished maps and
+  exact transition-indexed settlements. FINISH is not scheduler settlement. Reserved
+  and spent totals are the original actor-budget projection, not live resource usage.
+  Current source/build executor installation remains false; preparation advice does
+  not silently activate standalone source/build execution.
+
+The execution thread copies these immutable caches after recovery/planning/settlement
+and feed close, including before long execution. The publisher reads only the retained
+controller copy: no SQLite, native ArtifactStore, profile verifier or raw-pool I/O.
+`observed_at` dates the original reduction; `attempted_at` dates a refresh attempt.
+On diagnostic failure the last immutable dated cache is retained with bounded error
+where possible. If the diagnostic destination itself fails, its earlier cache simply
+ages. Diagnostic failures cannot change selection, durable settlement, retry or ACKs.
+
+ROOT's independent parser and browser preserve closed v1/v2 shapes and reject aggregate
+downgrade/rollback. Per-owner freshness is distinct from transport/runtime clocks;
+old source facts are historical even during a valid long owned operation. A new
+incarnation starts undated and recovers only from its own original indexes. No owner
+means explicitly `not_connected`; an installed owner not yet observed is `unknown`.
+
+## Remaining connections
+
+This is not all of AKU-09. Resource and candidate sections remain `not_connected`.
+Their actual lifecycle/held accounting and candidate lineage/validation/frozen-production
+sources need separate bounded projections. No resource or candidate authority is inferred
+from the connected operational/preparation/evidence observations.
 
 Hermetic tests cross actual runtime/controller/Journal paths and ROOT/browser readers.
 Tiny child and profile/calibration provider observations are labelled fixtures, not

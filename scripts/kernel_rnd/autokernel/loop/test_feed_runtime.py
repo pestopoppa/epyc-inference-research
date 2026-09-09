@@ -436,6 +436,8 @@ def test_real_listening_service_opens_drains_plans_and_closes_on_execution_threa
 import json, sys, threading
 from pathlib import Path
 from autokernel.loop import standalone_inputs as S, unified_driver, unified_planner, evidence_feed, standalone_runtime
+from autokernel.loop import campaign_control, measurement_capture, campaign_service
+campaign_service.DEFAULT_REFRESH_INTERVAL_S = 0.05  # Fixture publisher cadence only.
 from autokernel.loop.test_feed_runtime import binding
 from autokernel.loop.test_standalone_inputs import FullHeldProvider
 root = Path(sys.argv[1])
@@ -476,6 +478,12 @@ def run(self, *args, **kwargs):
     try:
         result = real_run(self, *args, **kwargs)
         (root / "run-result.txt").write_text(repr((result.status, result.reason)))
+        from autokernel.loop import runtime_aggregates
+        try:
+            row = runtime_aggregates.plain(self.driver.feed_owner.observation_snapshot())
+        except Exception as exc:
+            row = {"diagnostic_error": repr(exc)}
+        (root / "aggregate-owner.json").write_text(json.dumps(row))
         return result
     except BaseException as exc:
         (root / "run-result.txt").write_text(repr(exc))
@@ -486,17 +494,49 @@ evidence_feed.EvidenceFeed.close = close
 unified_planner.plan_iteration = plan
 unified_driver.UnifiedCampaignDriver.tick = tick
 standalone_runtime.StandaloneRuntime.run = run
+publication_depth = {}
+publication_checks = {"snapshots": 0, "publisher_snapshots": 0, "sqlite_reads": 0,
+                      "artifact_reads": 0, "outside_sqlite": 0, "observed_frontiers": []}
+snapshot_code = campaign_control.CampaignController.publish_snapshot.__code__
+artifact_codes = {measurement_capture.ArtifactStore.read.__code__,
+                  measurement_capture.ArtifactStore._durable_read.__code__,
+                  measurement_capture.ArtifactStore._read_pinned.__code__}
+def inspect_publication(frame, event, value):
+    ident = threading.get_ident()
+    if frame.f_code is snapshot_code:
+        if event == "call":
+            publication_depth[ident] = publication_depth.get(ident, 0) + 1
+            publication_checks["snapshots"] += 1
+            publication_checks["publisher_snapshots"] += threading.current_thread().name == "campaign-snapshot-publisher"
+        elif event == "return":
+            publication_depth[ident] -= 1
+            if threading.current_thread().name == "campaign-snapshot-publisher":
+                (root / "publisher-observed").write_text("published")
+            if isinstance(value, dict) and value.get("unified", {}).get("evidence", {}).get("data"):
+                row = value["unified"]["evidence"]
+                publication_checks["observed_frontiers"].append([row["observed_at"], row["data"]["projection_frontier"]])
+    if event == "c_call" and type(getattr(value, "__self__", None)).__module__ == "sqlite3":
+        publication_checks["sqlite_reads" if publication_depth.get(ident, 0) else "outside_sqlite"] += 1
+    if event == "call" and frame.f_code in artifact_codes and publication_depth.get(ident, 0):
+        publication_checks["artifact_reads"] += 1
+sys.setprofile(inspect_publication)
+threading.setprofile(inspect_publication)
 registry = S.ProviderRegistry({
     "fixture-lifecycle": S.ProviderBinding(lifecycle_provider=FullHeldProvider(root / "containers")),
     "fixture-readiness": S.ProviderBinding(readiness_check=lambda: (True, None)),
 }, evidence_feeds={"installed-feed": binding()})
-raise SystemExit(unified_driver.main(["--config", str(root / "startup.json"),
-    "--listen", "127.0.0.1:" + sys.argv[2]], provider_registry=registry))
+result = unified_driver.main(["--config", str(root / "startup.json"),
+    "--listen", "127.0.0.1:" + sys.argv[2]], provider_registry=registry)
+sys.setprofile(None)
+threading.setprofile(None)
+(root / "publication-reads.json").write_text(json.dumps(publication_checks))
+raise SystemExit(result)
 '''
     env = os.environ.copy()
     env.update(AUTOKERNEL_CONTROL_TOKEN="feed-fixture-token",
                PYTHONPATH=str(Path(__file__).parents[2]), EPYC_ROOT_REPO=str(_root_repo()))
     for restart in range(2):
+        (tmp_path / "publisher-observed").unlink(missing_ok=True)
         probe = socket.socket()
         probe.bind(("127.0.0.1", 0))
         port = probe.getsockname()[1]
@@ -527,9 +567,11 @@ raise SystemExit(unified_driver.main(["--config", str(root / "startup.json"),
                                     data=json.dumps(row).encode(), headers=headers), timeout=1):
                                 resumed = True
                         events = json.loads((tmp_path / "threads.json").read_text())
-                        if (restart == 0 and any(row[0] == "plan" for row in events)):
+                        if (restart == 0 and any(row[0] == "plan" for row in events)
+                                and (tmp_path / "publisher-observed").exists()):
                             break
-                        if restart == 1 and any(row[0] == "drain" for row in events):
+                        if (restart == 1 and any(row[0] == "drain" for row in events)
+                                and (tmp_path / "publisher-observed").exists()):
                             with urlopen(Request(f"http://127.0.0.1:{port}/snapshot", headers={
                                     "Authorization": "Bearer feed-fixture-token"}), timeout=1) as response:
                                 assert json.loads(response.read())["desired_state"] == "drained"
@@ -548,6 +590,11 @@ raise SystemExit(unified_driver.main(["--config", str(root / "startup.json"),
                 time.sleep(.02)
             os.kill(process.pid, signal.SIGTERM)
             assert process.wait(timeout=6) == 0
+            checks = json.loads((tmp_path / "publication-reads.json").read_text())
+            assert checks["snapshots"] > 0 and checks["outside_sqlite"] > 0
+            assert checks["publisher_snapshots"] > 0
+            assert checks["sqlite_reads"] == checks["artifact_reads"] == 0
+            assert checks["observed_frontiers"], (tmp_path / "aggregate-owner.json").read_text()
             events = json.loads((tmp_path / "threads.json").read_text())
             main = events[0][1]
             owned = [row for row in events if row[0] != "construct"]

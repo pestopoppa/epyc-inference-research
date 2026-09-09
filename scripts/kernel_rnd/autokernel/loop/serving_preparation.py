@@ -529,9 +529,10 @@ def source_identity() -> Mapping[str, Any]:
     """Loaded preparation admission implementations, pinned before native issue."""
     from . import lifecycle_observation as lo, unified_worker as worker, unified_driver as driver
     from . import serving_preparation_startup as startup
-    from . import standalone_inputs
+    from . import standalone_inputs, runtime_aggregates as aggregate
     from ..evaluator import controls
     return _freeze({"schema": "epyc.autokernel.serving_preparation_source.v1",
+        "observation_codec": aggregate.source_identity(),
         "schemas": [DECLARATION_SCHEMA, STATISTICS_SCHEMA, PAIR_SCHEMA,
                     REQUEST_SCHEMA, DISPATCH_SCHEMA, worker.PREPARED_SCHEMA_V3,
                     startup.SCHEMA, standalone_inputs.PREPARATION_MANIFEST_SCHEMA],
@@ -563,6 +564,7 @@ def source_identity() -> Mapping[str, Any]:
             CollectedCalibrationReference.from_dict.__func__, CollectedCalibrationReference.to_dict,
             InstalledServingPreparationOwner.__init__, InstalledServingPreparationOwner._own,
             InstalledServingPreparationOwner.recover, InstalledServingPreparationOwner.pending_requests,
+            InstalledServingPreparationOwner.observation_snapshot,
             InstalledServingPreparationOwner.disposition, InstalledServingPreparationOwner.accept,
             InstalledServingPreparationOwner._collect_original,
             InstalledServingPreparationOwner.reopen_chunk,
@@ -744,6 +746,7 @@ class InstalledServingPreparationOwner:
             return
         history = self.controller.unified_driver_preparation_history(self.requests)
         settled, chunks = {}, {}
+        failed_count = contaminated_count = 0
         for row in history["records"]:
             request_digest = row["request_digest"]
             settlement = row["settlement"]
@@ -752,6 +755,8 @@ class InstalledServingPreparationOwner:
             if request_digest in settled:
                 raise PreparationRefused("one original calibration chunk was settled more than once")
             settled[request_digest] = settlement
+            failed_count += settlement["outcome"] == "failed"
+            contaminated_count += settlement["outcome"] == "invalid"
             references = [item for item in settlement["terminal_refs"]
                           if item.startswith("calibration-collected:")]
             if settlement["outcome"] in ("calibration", "invalid"):
@@ -768,9 +773,44 @@ class InstalledServingPreparationOwner:
                 chunks[request_digest] = chunk
             elif settlement["outcome"] != "failed" or references:
                 raise PreparationRefused("failed preparation settlement has unsupported collection evidence")
-        preparation_disposition(self.requests, settled)
+        disposition = preparation_disposition(self.requests, settled)
         self._settled, self._chunks = settled, chunks
         self._recovered = True
+        try:
+            from . import runtime_aggregates as aggregate
+            items = [{"request_digest": request.digest, "chunk_digest": request.chunk_identity,
+                      "outcome": settled.get(request.digest, {}).get("outcome")}
+                     for request in self.requests[:24]]
+            self._observation_calibration = aggregate.observation("calibration", status="available",
+                reason="original settled raw chunks; calibration/control qualification unavailable",
+                observed_at=(stamp := aggregate.utc_now()), attempted_at=stamp,
+                generation=len(settled), data={"request_count": len(self.requests),
+                    "pending_count": len(disposition["pending"]), "collected_count": len(disposition["collected"]),
+                    "exhausted_count": len(disposition["exhausted"]), "failed_count": failed_count,
+                    "contaminated_count": contaminated_count, "qualification": "unavailable",
+                    "ranking_authorized": False, "items": items, "items_total": len(self.requests),
+                    "items_truncated": len(self.requests) > len(items)})
+            self._observation_error = None
+            self._observation_attempted_at = stamp
+        except Exception as exc:
+            try:
+                self._observation_error = str(exc)[:512] or type(exc).__name__
+                self._observation_attempted_at = aggregate.utc_now()
+            except Exception:
+                pass  # preserve prior immutable source cache on diagnostic failure
+
+    def observation_snapshot(self):
+        """Read already reconciled scalars; orphan CAS artifacts are never counted."""
+        from . import runtime_aggregates as aggregate
+        value = getattr(self, "_observation_calibration", None)
+        error = getattr(self, "_observation_error", None)
+        if error is not None:
+            row = aggregate.plain(value) if value is not None else aggregate.plain(aggregate.observation("calibration"))
+            row.update(status="unknown", error=error,
+                       attempted_at=getattr(self, "_observation_attempted_at", row["attempted_at"]))
+            return aggregate.freeze(aggregate.validate("calibration", row))
+        return value if value is not None else aggregate.observation(
+            "calibration", reason="original settled raw pool has not been observed")
 
     def pending_requests(self) -> tuple[CalibrationPreparationRequest, ...]:
         self.recover()
