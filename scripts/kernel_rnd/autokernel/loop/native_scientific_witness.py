@@ -334,6 +334,9 @@ class NativeT0WitnessAdapter:
                 "preparation_claim_id": claim_id,
                 "authority": "original full-byte inventory verification; later stats prove continuity only"}
             artifact = store.write(f"parent-verified-model:{wl._digest(body)}", body)
+            _same(t0.require_claim(
+                preparation_claim, what="model identity preparation publication close"),
+                claim_id, "model preparation publication claim")
             with self._lock:
                 self._models[key] = (artifact, ob._freeze(body))
             return artifact

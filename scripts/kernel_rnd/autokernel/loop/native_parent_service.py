@@ -1,8 +1,10 @@
 """Concrete bounded parent service: owned facts in, no scientific policy out."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from pathlib import Path
 import time
+from types import MappingProxyType
 from typing import Any, Mapping
 
 from . import driver_execution as de
@@ -20,6 +22,7 @@ class NativeFactualEvidenceConfiguration:
     """Explicit factual mode; not eligibility, correctness, purpose, or GPU authority."""
     schema: str = "epyc.autokernel.native_factual_evidence_configuration.v1"
     scientific_adapters: Any = None
+    model_preparations: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         from .native_scientific_witness import ParentScientificWitnessAdapters
@@ -27,6 +30,27 @@ class NativeFactualEvidenceConfiguration:
             raise de.DriverExecutionRefused("unsupported factual evidence configuration")
         if self.scientific_adapters is not None and type(self.scientific_adapters) is not ParentScientificWitnessAdapters:
             raise de.DriverExecutionRefused("scientific configuration requires its concrete registry")
+        from .native_model_preparation import ScheduledModelPreparation
+        prepared = {}
+        if not isinstance(self.model_preparations, Mapping):
+            raise de.DriverExecutionRefused("model preparations must be a mapping")
+        for key, value in self.model_preparations.items():
+            if not isinstance(key, str):
+                raise de.DriverExecutionRefused("model preparation keys must be text")
+            try:
+                item = (ScheduledModelPreparation.from_dict(value.to_dict())
+                        if isinstance(value, ScheduledModelPreparation)
+                        else ScheduledModelPreparation.from_dict(value))
+            except Exception as exc:
+                raise de.DriverExecutionRefused("model preparation is invalid") from exc
+            if key != item.recipe_execution_digest or key in prepared:
+                raise de.DriverExecutionRefused("model preparation key differs or is duplicated")
+            prepared[key] = item
+        if prepared and (self.scientific_adapters is None
+                         or self.scientific_adapters.correctness is None):
+            raise de.DriverExecutionRefused(
+                "model preparation requires the configured concrete T0 adapter")
+        object.__setattr__(self, "model_preparations", MappingProxyType(prepared))
 
 
 class NativeParentEvidenceService(de.UnknownParentEvidenceProducer):
@@ -35,7 +59,8 @@ class NativeParentEvidenceService(de.UnknownParentEvidenceProducer):
                  observation_configuration: ob.ParentObservationConfiguration, *,
                  registry: replay.IssuedNativeEvidenceRegistry,
                  runtime_probe: lo.FilesystemProbe | None = None,
-                 scientific_adapters: Any = None) -> None:
+                 scientific_adapters: Any = None,
+                 model_preparations: Mapping[str, Any] | None = None) -> None:
         super().__init__(authority, prepared, lifecycle, observation_configuration)
         if (prepared.schema != uw.PREPARED_SCHEMA_V2
                 or type(registry) is not replay.IssuedNativeEvidenceRegistry
@@ -44,13 +69,61 @@ class NativeParentEvidenceService(de.UnknownParentEvidenceProducer):
         if runtime_probe is not None and type(runtime_probe) is not lo.FilesystemProbe:
             raise de.DriverExecutionRefused("native readback requires the concrete bounded reader")
         self.registry = registry
-        self.scientific_adapters = NativeFactualEvidenceConfiguration(
-            scientific_adapters=scientific_adapters).scientific_adapters
+        configured = NativeFactualEvidenceConfiguration(
+            scientific_adapters=scientific_adapters,
+            model_preparations={} if model_preparations is None else model_preparations)
+        self.scientific_adapters = configured.scientific_adapters
+        self.model_preparations = configured.model_preparations
         self._native_store = mc.ArtifactStore(prepared.artifact_root)
         self._native_probe = runtime_probe
         self._unit_producers: dict[str, npe.NativeUnitEvidenceProducer] = {}
         self._phase_requests: dict[str, Mapping[str, Any]] = {}
         self._phase_results: dict[str, Mapping[str, Any]] = {}
+        self._model_preparation_receipts: dict[str, mc.StoredArtifact] = {}
+
+    def _before_observation_binding(self, *, start: uw.WorkerStart, unit: Any,
+                                    fence: Any, recipe: Any,
+                                    claim: Mapping[str, Any]) -> None:
+        if self.scientific_adapters is None or self.scientific_adapters.correctness is None:
+            return
+        from .native_model_preparation import (
+            ActiveObservationPreparationClaim, BINDING_SCHEMA)
+        preparation = self.model_preparations.get(recipe.execution_digest)
+        if preparation is None:
+            raise de.DriverExecutionRefused(
+                "selected native recipe lacks scheduled complete-model preparation")
+        target = self.prepared.dispatch["proposal"]["target_revision_digest"]
+        if (preparation.target_revision_digest != target
+                or preparation.recipe_execution_digest != recipe.execution_digest
+                or (preparation.entry_path, preparation.entry_sha256)
+                   != (recipe.model.path, recipe.model.sha256)):
+            raise de.DriverExecutionRefused(
+                "model preparation differs from selected target/recipe/model")
+        live_claim = ActiveObservationPreparationClaim(
+            lifecycle=self.lifecycle, start=start, unit=unit, fence=fence,
+            initial_claim=claim)
+        receipt = self.scientific_adapters.correctness.prepare_model_identity(
+            store=self._native_store, identity=preparation.identity(),
+            entry_path=Path(preparation.entry_path), preparation_claim=live_claim)
+        original = self._native_store.read(receipt.locator, receipt.sha256)
+        if (original.get("entry_path"), original.get("entry_sha256")) != (
+                recipe.model.path, recipe.model.sha256):
+            raise de.DriverExecutionRefused(
+                "verified model inventory entry differs from selected recipe model")
+        binding_body = {"schema": BINDING_SCHEMA,
+            "preparation": preparation.to_dict(),
+            "selected_model": recipe.model.to_dict(),
+            "original_model_receipt": receipt.to_dict(),
+            "preparation_claim_id": original["preparation_claim_id"]}
+        binding = self._native_store.write(
+            f"scheduled-model-preparation:{preparation.preparation_digest}", binding_body)
+        if not live_claim.is_held():
+            raise de.DriverExecutionRefused(
+                "model preparation claim expired before observation binding")
+        prior = self._model_preparation_receipts.get(recipe.execution_digest)
+        if prior is not None and prior != binding:
+            raise de.DriverExecutionRefused("model preparation retry changed its receipt")
+        self._model_preparation_receipts[recipe.execution_digest] = binding
 
     def _producer_for(self, notice: Mapping[str, Any]) -> npe.NativeUnitEvidenceProducer:
         start, fence = notice["start"], notice["fence"]

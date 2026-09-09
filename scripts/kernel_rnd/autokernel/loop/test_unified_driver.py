@@ -81,9 +81,13 @@ def _prompt_manifest(recipe):
         {**body, "digest": driver._digest(body)})
 
 
-def runtime_driver(*, controller=None, git_source=False, with_execution_input=True):
-    recipe = canonical_recipe()
-    enrolled = campaign_for_recipe(recipe)
+def runtime_driver(*, controller=None, git_source=False, with_execution_input=True,
+                   recipe=None):
+    supplied_recipe = recipe is not None
+    recipe = canonical_recipe() if recipe is None else recipe
+    enrolled = (campaign_for_recipe(
+        recipe, model_path=recipe.model.path, model_sha=recipe.model.sha256)
+        if supplied_recipe else campaign_for_recipe(recipe))
     if git_source:
         revision = "a" * 40
         row = enrolled.to_dict()
