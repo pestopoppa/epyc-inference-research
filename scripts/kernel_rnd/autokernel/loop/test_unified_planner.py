@@ -7,7 +7,7 @@ import tempfile
 
 import pytest
 
-from . import campaign, scheduling, scoped_evidence as evidence, serving
+from . import campaign, planned_serving, scheduling, scoped_evidence as evidence, serving
 from . import unified_planner as planner
 from .resolved_recipe import (ARTIFACT_SCHEMA, ENVIRONMENT_POLICY_SCHEMA,
                               CanonicalResolvedRecipe, resolve_canonical_launch)
@@ -22,11 +22,13 @@ def artifact(kind: str, ref: str, digit: str) -> dict:
 def resolved_campaign(*, backend="cpu", include_missing=False, model_digit="a",
                       build_digit="b", recipe_digit="d", context=128,
                       concurrency=1, target_env=None, recipe_sha=None,
-                      campaign_id="unified-test", request_id="request-1"):
+                      campaign_id="unified-test", request_id="request-1",
+                      as_seed=False, recipe_path=None, build_ref="production:test:executable",
+                      model_path=None, build_path=None):
     def target(target_id, model="model"):
         return {"schema": campaign.TARGET_SCHEMA, "request_id": request_id,
                 "target_id": target_id, "backend": backend, "model_ref": model,
-                "build_ref": "production:test:executable",
+                "build_ref": build_ref,
                 "recipe_ref": "production:test:recipe", "baseline_ref": "base",
                 "context": context, "concurrency": concurrency,
                 "speculation": "none", "env": target_env or {},
@@ -42,16 +44,23 @@ def resolved_campaign(*, backend="cpu", include_missing=False, model_digit="a",
                          "stage_timeout_s": 60, "build_timeout_s": 60,
                          "build_jobs": 1, "max_builds": 1},
            "objective_ref": "objective", "actors": {"planner": "offline"},
-           "fallbacks": {"planner": []}, "production": targets, "seeds": []}
+           "fallbacks": {"planner": []},
+           "production": [] if as_seed else targets,
+           "seeds": targets if as_seed else []}
     registry = {"source": {"source": artifact("source", "source", "1")},
                 "model": {"model": artifact("model", "model", model_digit)},
-                "build": {"production:test:executable": artifact(
-                              "build", "production:test:executable", build_digit),
+                "build": {build_ref: artifact("build", build_ref, build_digit),
                           "base": artifact("build", "base", "4")},
                 "recipe": {"production:test:recipe": artifact(
                     "recipe", "production:test:recipe", recipe_digit)}}
     if recipe_sha is not None:
         registry["recipe"]["production:test:recipe"]["sha256"] = recipe_sha
+    if recipe_path is not None:
+        registry["recipe"]["production:test:recipe"]["path"] = str(recipe_path)
+    if model_path is not None:
+        registry["model"]["model"]["path"] = str(model_path)
+    if build_path is not None:
+        registry["build"][build_ref]["path"] = str(build_path)
     return campaign.resolve_manifest(campaign.CampaignManifest.from_dict(raw),
                                      registry_snapshot=registry)
 
@@ -111,9 +120,9 @@ def claim(backend="cpu", quant="Q8_0", pair=None, target=None, allocation=None):
         "target_scope": {"target": target_id, "backend": backend, "model": model,
                          "quant": quant, "workload": workload,
                          "allocation": allocation or "0" * 64},
-        "control_identity": ({"execution_digest": pair.anchor.execution_digest}
+        "control_identity": (dict(planner.serving_arm_identity(pair.anchor))
                              if pair else {"recipe": "anchor"}),
-        "intervention_identity": ({"execution_digest": pair.candidate.execution_digest}
+        "intervention_identity": (dict(planner.serving_arm_identity(pair.candidate))
                                   if pair else {"recipe": "candidate"}),
         "mechanism_identity": {"id": "threads"}, "estimand": "level",
         "metric": "aggregate_tok_s", "metric_direction": "higher",
@@ -239,8 +248,8 @@ def experiment(pair, target_digest, campaign_id="unified-test"):
     raw.update(campaign_id=campaign_id, target_revision=target_digest,
                metric="aggregate_tok_s", changed_factors=["threads"],
                required_witnesses=["native-capture-v1"],
-               anchor_identity={"execution_digest": pair.anchor.execution_digest},
-               candidate_identity={"execution_digest": pair.candidate.execution_digest})
+               anchor_identity=dict(planner.serving_arm_identity(pair.anchor)),
+               candidate_identity=dict(planner.serving_arm_identity(pair.candidate)))
     return raw
 
 
@@ -251,11 +260,12 @@ def run(*, backend="cpu", include_missing=False, source_actor=None, build_actor=
     ready = next(row for row in enrolled.targets if row.status == "ready")
     digest = planner._target_digest(ready)
     _, engine = scheduler(backend)
-    pair = planner.enumerate_runtime_dimensions(anchor, [dimension()])[0]
+    anchors = prepared(enrolled, {digest: runtime_anchor(ready, anchor)})
+    pair = planner.enumerate_runtime_dimensions(anchors.recipes[digest], [dimension()])[0]
     return planner.plan_iteration(
         resolved_campaign=enrolled, profiles={digest: profile(ready, backend=backend, pair=pair)},
         evidence_index=evidence.EvidenceIndex((), current_epoch="epoch-1"),
-        runtime_anchors=prepared(enrolled, {digest: runtime_anchor(ready, anchor)}),
+        runtime_anchors=anchors,
         runtime_dimensions={digest: [dimension()]},
         source_actor=source_actor or (lambda *_: (_ for _ in ()).throw(AssertionError())),
         build_actor=build_actor or (lambda *_: (_ for _ in ()).throw(AssertionError())),
@@ -280,6 +290,34 @@ def test_runtime_sweep_revalidates_canonical_recipe_skips_actors_and_dispatches_
     assert result.dispatch.experiment_intent["experiment_plan_digest"] == \
         result.dispatch.proposal["experiment_plan_digest"]
     assert result.dispatch.experiment_intent["arm_scalars_are_gain_evidence"] is False
+
+
+def test_legacy_digest_only_serving_plan_is_not_execution_ready():
+    anchor = canonical_recipe()
+    enrolled = campaign_for_recipe(anchor)
+    target = enrolled.targets[0]
+    target_digest = planner._target_digest(target)
+    anchors = prepared(enrolled, {target_digest: runtime_anchor(target, anchor)})
+    pair = planner.enumerate_runtime_dimensions(anchors.recipes[target_digest], [dimension()])[0]
+    raw_plan = experiment(pair, target_digest)
+    raw_plan["anchor_identity"] = {"execution_digest": pair.anchor.execution_digest}
+    raw_plan["candidate_identity"] = {"execution_digest": pair.candidate.execution_digest}
+    _, engine = scheduler()
+    with pytest.raises(planner.PlanningRefused, match="arm identities"):
+        planner.plan_iteration(
+            resolved_campaign=enrolled,
+            profiles={target_digest: profile(target, pair=pair)},
+            evidence_index=evidence.EvidenceIndex((), current_epoch="epoch-1"),
+            runtime_anchors=anchors, runtime_dimensions={target_digest: [dimension()]},
+            source_actor=None, build_actor=None, scheduler_engine=engine,
+            experiment_plans={"opp-runtime_recipe:threads-4-8": raw_plan}, now=1,
+            native_artifact_sink_ref="native:capture")
+
+
+def test_planner_arm_identity_is_exact_planned_serving_identity():
+    recipe = canonical_recipe(backend="gpu")
+    assert dict(planner.serving_arm_identity(recipe)) == planned_serving.arm_identity(
+        recipe.template, recipe)
 
 
 def test_threads_and_cpu_list_are_concrete_validated_dimensions_and_env_refuses_scoped():
@@ -364,7 +402,7 @@ def test_stop_before_next_target_or_stage_handler_preserves_no_execution():
     result = run(stop=stop, stage_handler=lambda _: pytest.fail("must not dispatch"))
     assert not result.proposals
     assert result.selection is None
-    assert result.scheduler_state.round_number == 0
+    assert result.scheduler_state is None
     assert result.dispatch is None
 
 
@@ -446,12 +484,13 @@ def test_missing_final_plan_is_retained_as_pending_and_never_dispatched():
     enrolled = campaign_for_recipe(anchor)
     target = enrolled.targets[0]
     digest = planner._target_digest(target)
-    pair = planner.enumerate_runtime_dimensions(anchor, [dimension()])[0]
+    anchors = prepared(enrolled, {digest: runtime_anchor(target, anchor)})
+    pair = planner.enumerate_runtime_dimensions(anchors.recipes[digest], [dimension()])[0]
     _, engine = scheduler()
     result = planner.plan_iteration(
         resolved_campaign=enrolled, profiles={digest: profile(target, pair=pair)},
         evidence_index=evidence.EvidenceIndex((), current_epoch="epoch-1"),
-        runtime_anchors=prepared(enrolled, {digest: runtime_anchor(target, anchor)}),
+        runtime_anchors=anchors,
         runtime_dimensions={digest: [dimension()]},
         source_actor=lambda *_: pytest.fail("no source actor"),
         build_actor=lambda *_: pytest.fail("no build actor"), scheduler_engine=engine,
@@ -465,13 +504,14 @@ def test_projection_outage_blocks_reuse_support_not_fresh_runtime_hypothesis():
     enrolled = campaign_for_recipe(anchor)
     target = enrolled.targets[0]
     digest = planner._target_digest(target)
-    pair = planner.enumerate_runtime_dimensions(anchor, [dimension()])[0]
+    anchors = prepared(enrolled, {digest: runtime_anchor(target, anchor)})
+    pair = planner.enumerate_runtime_dimensions(anchors.recipes[digest], [dimension()])[0]
     _, engine = scheduler()
     result = planner.plan_iteration(
         resolved_campaign=enrolled, profiles={digest: profile(target, pair=pair)},
         evidence_index=evidence.EvidenceIndex(
             (), current_epoch="epoch-1", projection_available=False),
-        runtime_anchors=prepared(enrolled, {digest: runtime_anchor(target, anchor)}),
+        runtime_anchors=anchors,
         runtime_dimensions={digest: [dimension()]},
         source_actor=lambda *_: pytest.fail("no source actor"),
         build_actor=lambda *_: pytest.fail("no build actor"), scheduler_engine=engine,
@@ -558,6 +598,102 @@ def test_prepared_anchors_cannot_be_reused_for_changed_campaign():
             build_actor=lambda *_: pytest.fail("must not build"),
             scheduler_engine=moved_engine, experiment_plans={}, now=1,
             native_artifact_sink_ref="native:capture")
+
+
+def test_local_seed_sidecar_is_prepared_but_runtime_stays_prerequisite(tmp_path):
+    canonical = canonical_recipe()
+    sidecar = tmp_path / "local-recipe.json"
+    raw = json.dumps(canonical.to_dict(), sort_keys=True, separators=(",", ":"))
+    sidecar.write_text(raw)
+    digest_value = hashlib.sha256(raw.encode()).hexdigest()
+    enrolled = resolved_campaign(
+        as_seed=True, recipe_sha=digest_value, recipe_path=sidecar,
+        build_ref="local:future:executable", model_path="/models/model.gguf",
+        build_path="/build/bin/llama-server")
+    target = enrolled.targets[0]
+    target_digest = planner._target_digest(target)
+    prepared_local = prepared(enrolled, {target_digest: {
+        "schema": planner.LOCAL_ANCHOR_SCHEMA,
+        "target_revision_digest": target_digest,
+        "recipe_sidecar_path": str(sidecar.resolve()),
+        "recipe_sidecar_sha256": digest_value,
+    }})
+    assert prepared_local.recipes[target_digest].execution_digest == canonical.execution_digest
+    assert prepared_local.runtime_prerequisites[target_digest] == (
+        "local_artifact_byte_verification_required",
+        "local_first_launch_correctness_required",
+    )
+    pair = planner.enumerate_runtime_dimensions(canonical, [dimension()])[0]
+    _, engine = scheduler()
+    result = planner.plan_iteration(
+        resolved_campaign=enrolled,
+        profiles={target_digest: profile(target, pair=pair)},
+        evidence_index=evidence.EvidenceIndex((), current_epoch="epoch-1"),
+        runtime_anchors=prepared_local, runtime_dimensions={target_digest: [dimension()]},
+        source_actor=None, build_actor=None, scheduler_engine=engine,
+        experiment_plans={"opp-runtime_recipe:threads-4-8": experiment(
+            pair, target_digest)}, now=1, native_artifact_sink_ref="native:capture",
+        defer_actor_preparation=True)
+    assert result.selection.status == "complete"
+    assert any(row["status"] == "runtime_prerequisite" for row in result.dispositions)
+
+
+def test_local_recipe_sidecar_is_bounded_and_symlinks_refuse(tmp_path):
+    enrolled = resolved_campaign(as_seed=True)
+    target = enrolled.targets[0]
+    digest_value = planner._target_digest(target)
+    oversized = tmp_path / "oversized.json"
+    oversized.write_bytes(b"x" * (planner._MAX_LOCAL_RECIPE_BYTES + 1))
+    oversized_sha = hashlib.sha256(oversized.read_bytes()).hexdigest()
+    with pytest.raises(planner.PlanningRefused, match="regular non-symlink"):
+        prepared(enrolled, {digest_value: {
+            "schema": planner.LOCAL_ANCHOR_SCHEMA,
+            "target_revision_digest": digest_value,
+            "recipe_sidecar_path": str(oversized),
+            "recipe_sidecar_sha256": oversized_sha,
+        }})
+    target_file = tmp_path / "recipe.json"
+    target_file.write_text("{}")
+    link = tmp_path / "recipe-link.json"
+    link.symlink_to(target_file)
+    with pytest.raises(planner.PlanningRefused, match="cannot read"):
+        prepared(enrolled, {digest_value: {
+            "schema": planner.LOCAL_ANCHOR_SCHEMA,
+            "target_revision_digest": digest_value,
+            "recipe_sidecar_path": str(link),
+            "recipe_sidecar_sha256": hashlib.sha256(b"{}").hexdigest(),
+        }})
+
+
+def test_deferred_actor_enumeration_calls_no_actor_before_scheduler_selection():
+    enrolled = resolved_campaign()
+    target = enrolled.targets[0]
+    digest_value = planner._target_digest(target)
+    raw_profile = profile(target)
+    raw_profile["opportunities"] = [opportunity(
+        kind="source", target=target,
+        allocation=scheduling.ResourceVector.from_dict(
+            raw_profile["resource_cost"]).digest)]
+    _, engine = scheduler()
+    before = engine.export_state()
+    enumerated = planner.plan_iteration(
+        resolved_campaign=enrolled, profiles={digest_value: raw_profile},
+        evidence_index=evidence.EvidenceIndex((), current_epoch="epoch-1"),
+        runtime_anchors=prepared(enrolled), runtime_dimensions={},
+        source_actor=lambda *_: pytest.fail("actor must be worker-owned"),
+        build_actor=lambda *_: pytest.fail("actor must be worker-owned"),
+        scheduler_engine=engine, experiment_plans={}, now=1,
+        native_artifact_sink_ref="native:capture",
+        defer_actor_preparation=True, issue_selection=False,
+        actor_identities={"source": {"build": "1" * 64}})
+    assert engine.export_state() == before
+    assert len(enumerated.actor_preparations) == 1
+    request = enumerated.actor_preparations[0]
+    assert request.actor_kind == "source"
+    selected = engine.select_stage(enumerated.stage_proposals, now=1)
+    dispatch = planner.materialize_selection(enumerated, selected)
+    assert dispatch.proposal["proposal_id"] == request.proposal.proposal_id
+    assert dispatch.experiment_intent["status"] == "pending_plan_preparation"
 
 
 @pytest.mark.parametrize("field", ["target", "model", "workload", "mechanism"])

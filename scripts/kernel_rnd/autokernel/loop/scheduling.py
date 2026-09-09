@@ -25,6 +25,9 @@ STATE_SCHEMA = "epyc.autokernel.scheduler_state.v1"
 SELECTION_SCHEMA = "epyc.autokernel.stage_selection.v1"
 ACCOUNTING_SCHEMA = "epyc.autokernel.accounting_view.v1"
 RECEIPT_RECORD_SCHEMA = "epyc.autokernel.accounted_receipt.v1"
+OPERATIONAL_SCHEMA = "epyc.autokernel.scheduler_operational_projection.v1"
+SELECTION_PREVIEW_SCHEMA = "epyc.autokernel.scheduler_selection_preview.v1"
+ACCOUNTING_PREVIEW_SCHEMA = "epyc.autokernel.scheduler_accounting_preview.v1"
 
 STAGE_CLASSES = frozenset({
     "search", "prerequisite", "calibration", "validation", "reject_audit",
@@ -40,6 +43,66 @@ OUTCOMES = frozenset({"valid_comparison", "invalid", "failed", "prerequisite",
 
 class SchedulingRefused(ValueError):
     """An input or transition cannot be proven within this accounting model."""
+
+
+@dataclass(frozen=True, slots=True)
+class OperationalProjection:
+    """Bounded scheduler state used by serialized issue transactions.
+
+    Receipt history is represented by its already-computed accounting view and
+    counts, never copied into a steady-state transaction.
+    """
+
+    body: Mapping[str, Any]
+    schema: str = OPERATIONAL_SCHEMA
+
+    def __post_init__(self) -> None:
+        if self.schema != OPERATIONAL_SCHEMA or not isinstance(self.body, Mapping):
+            raise SchedulingRefused("operational projection is invalid")
+        canonical = json.loads(_canonical(self.body))
+        if not isinstance(canonical, dict) or canonical.get("schema") != OPERATIONAL_SCHEMA:
+            raise SchedulingRefused("operational projection body/schema differs")
+        object.__setattr__(self, "body", _deep_freeze(canonical))
+
+    @property
+    def projection_digest(self) -> str:
+        return digest(_plain(self.body))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"schema": self.schema, "projection_digest": self.projection_digest,
+                "body": _plain(self.body)}
+
+
+@dataclass(frozen=True, slots=True)
+class SelectionPreview:
+    prior: OperationalProjection
+    selection: "Selection"
+    after: OperationalProjection
+    preview_digest: str
+    schema: str = SELECTION_PREVIEW_SCHEMA
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"schema": self.schema, "prior_digest": self.prior.projection_digest,
+                "selection": self.selection.to_dict(),
+                "after_digest": self.after.projection_digest,
+                "preview_digest": self.preview_digest}
+
+
+@dataclass(frozen=True, slots=True)
+class AccountingPreview:
+    prior: OperationalProjection
+    selection: "Selection"
+    receipt: "HeldClaimReceipt"
+    outcome: str
+    after: OperationalProjection
+    preview_digest: str
+    schema: str = ACCOUNTING_PREVIEW_SCHEMA
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"schema": self.schema, "prior_digest": self.prior.projection_digest,
+                "selection": self.selection.to_dict(), "receipt": self.receipt.to_dict(),
+                "outcome": self.outcome, "after_digest": self.after.projection_digest,
+                "preview_digest": self.preview_digest}
 
 
 def _exact(value: Any, fields: frozenset[str], label: str) -> Mapping[str, Any]:
@@ -98,6 +161,22 @@ def _texts(value: Any, label: str) -> tuple[str, ...]:
 def _canonical(value: Any) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":"),
                       ensure_ascii=False, allow_nan=False).encode()
+
+
+def _deep_freeze(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return MappingProxyType({key: _deep_freeze(item) for key, item in value.items()})
+    if isinstance(value, list):
+        return tuple(_deep_freeze(item) for item in value)
+    return value
+
+
+def _plain(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {key: _plain(item) for key, item in value.items()}
+    if isinstance(value, tuple):
+        return [_plain(item) for item in value]
+    return value
 
 
 def digest(value: Mapping[str, Any]) -> str:
@@ -1079,6 +1158,223 @@ class SchedulerEngine:
             self._index_receipt(receipt, replay=True)
         for intervals in self._claim_intervals.values():
             intervals.sort()
+        self._seed_commitment = 0
+        for seed in self.seed_accounts:
+            self._seed_commitment ^= int(digest(seed.to_dict()), 16)
+        self._outstanding_preview: SelectionPreview | None = None
+        self._outstanding_accounting: AccountingPreview | None = None
+        self._seed_preview_undo: list[tuple[str, Any]] | None = None
+
+    def _operational_body(self) -> dict[str, Any]:
+        return {
+            "schema": OPERATIONAL_SCHEMA,
+            "scheduler_id": self.scheduler_id,
+            "config_digest": self.config_digest,
+            "policy_digest": self.policy_digest,
+            "accounting_epoch": self.accounting_epoch,
+            "capacity": self.capacity.to_dict(),
+            "capacity_digest": self.capacity_digest,
+            "round_number": self.round_number,
+            "frozen_frontier": list(self.frozen_frontier),
+            "coverage_debt": dict(self.coverage_debt),
+            "used_coverage": dict(self.used_coverage),
+            "used_noncoverage": list(self.used_noncoverage),
+            "skipped_noncoverage": list(self.skipped_noncoverage),
+            "round_reservations": dict(self.round_reservations),
+            "round_seed_used": self.round_seed_used,
+            "deficits": dict(self.deficits),
+            "seed_account_count": len(self.seed_accounts),
+            "seed_commitment": f"{self._seed_commitment:064x}",
+            "campaign_attempts": self.campaign_attempts,
+            "campaign_charged_seconds": self.campaign_charged_seconds,
+            "successor_fences": list(self.successor_fences),
+            "issued_selection_digests": list(self.issued_selection_digests),
+            "existing_stage_until": self.existing_stage_until,
+            "accounting_view": self.accounting_view().to_dict(),
+        }
+
+    def operational_projection(self) -> OperationalProjection:
+        """Return state whose size is independent of receipt-history length."""
+        return OperationalProjection(self._operational_body())
+
+    def _restore_operational(self, projection: OperationalProjection) -> None:
+        body = projection.body
+        if (body["scheduler_id"] != self.scheduler_id
+                or body["config_digest"] != self.config_digest
+                or body["policy_digest"] != self.policy_digest
+                or body["accounting_epoch"] != self.accounting_epoch
+                or body["capacity_digest"] != self.capacity_digest
+                or _plain(body["capacity"]) != self.capacity.to_dict()
+                or _plain(body["accounting_view"]) != self.accounting_view().to_dict()):
+            raise SchedulingRefused("operational projection differs from scheduler authority")
+        self.round_number = body["round_number"]
+        self.frozen_frontier = list(body["frozen_frontier"])
+        self.coverage_debt = dict(body["coverage_debt"])
+        self.used_coverage = dict(body["used_coverage"])
+        self.used_noncoverage = list(body["used_noncoverage"])
+        self.skipped_noncoverage = list(body["skipped_noncoverage"])
+        self.round_reservations = dict(body["round_reservations"])
+        self.round_seed_used = body["round_seed_used"]
+        self.deficits = dict(body["deficits"])
+        if (body["seed_account_count"] != len(self.seed_accounts)
+                or body["seed_commitment"] != f"{self._seed_commitment:064x}"):
+            raise SchedulingRefused("operational seed commitment differs")
+        self.campaign_attempts = body["campaign_attempts"]
+        self.campaign_charged_seconds = body["campaign_charged_seconds"]
+        self.successor_fences = list(body["successor_fences"])
+        self.issued_selection_digests = tuple(body["issued_selection_digests"])
+        self.existing_stage_until = body["existing_stage_until"]
+
+    def preview_selection(self, proposals: Sequence[StageProposal | Mapping[str, Any]], *,
+                          now: float,
+                          outages: Sequence[Outage | Mapping[str, Any]] = ()) -> SelectionPreview:
+        """Preview one issue without mutating the persistent engine."""
+        normalized = tuple(_normalize(item, StageProposal) for item in proposals)
+        for proposal in normalized:
+            if proposal.seed_id is not None:
+                self._seed_for(proposal)
+        prior = self.operational_projection()
+        try:
+            selection = self.select_stage(normalized, now=now, outages=outages,
+                                          _register_new_seeds=False)
+            after = self.operational_projection()
+        finally:
+            self._restore_operational(prior)
+        body = {"schema": SELECTION_PREVIEW_SCHEMA,
+                "prior_digest": prior.projection_digest,
+                "selection": selection.to_dict(),
+                "after_digest": after.projection_digest}
+        preview = SelectionPreview(prior, selection, after, digest(body))
+        self._outstanding_preview = preview
+        return preview
+
+    def apply_preview(self, preview: SelectionPreview) -> bool:
+        """Apply an exact locally-derived preview, refusing stale or forged state."""
+        if not isinstance(preview, SelectionPreview) or preview is not self._outstanding_preview:
+            raise SchedulingRefused("selection preview is not locally derived")
+        body = {"schema": preview.schema,
+                "prior_digest": preview.prior.projection_digest,
+                "selection": preview.selection.to_dict(),
+                "after_digest": preview.after.projection_digest}
+        if preview.schema != SELECTION_PREVIEW_SCHEMA or digest(body) != preview.preview_digest:
+            raise SchedulingRefused("selection preview integrity differs")
+        current = self.operational_projection().projection_digest
+        if current == preview.after.projection_digest:
+            return False
+        if current != preview.prior.projection_digest:
+            raise SchedulingRefused("selection preview is stale")
+        self._restore_operational(preview.after)
+        return True
+
+    def preview_accounting(self, selection: Selection | Mapping[str, Any],
+                           receipt: HeldClaimReceipt | Mapping[str, Any], *,
+                           outcome: str) -> AccountingPreview:
+        """Validate one settlement and derive its compact result without retaining it."""
+        selection = _normalize(selection, Selection)
+        receipt = _normalize(receipt, HeldClaimReceipt)
+        outcome = _enum(outcome, OUTCOMES, "stage outcome")
+        prior = self.operational_projection()
+        gpu_prior = {key: self._gpu_seconds.get(key) for key in receipt.gpu_device_ids}
+        beneficiary_prior = {key: self._beneficiary_seconds.get(key)
+                             for key in receipt.beneficiary_shares}
+        scalar_prior = (self._held_seconds, self._physical_seconds, self._memory_seconds)
+        receipt_count = len(self._receipts)
+        record_count = len(self._records)
+        prior_receipt = self._receipt_by_id.get(receipt.receipt_id)
+        prior_record = self._record_by_id.get(receipt.receipt_id)
+        seed_prior = (self._seed_for(selection.proposal)
+                      if selection.proposal is not None
+                      and selection.proposal.seed_id is not None else None)
+        seed_backend = seed_prior.backend if seed_prior is not None else None
+        queue_preexisting = seed_backend in self._seed_queue if seed_backend is not None else False
+        if self._seed_preview_undo is not None:
+            raise SchedulingRefused("nested accounting preview is unsupported")
+        self._seed_preview_undo = []
+        try:
+            changed = self.account_stage(selection, receipt, outcome=outcome)
+            if not changed:
+                raise SchedulingRefused("accounting preview receipt was already applied")
+            after = self.operational_projection()
+        finally:
+            seed_undo, self._seed_preview_undo = self._seed_preview_undo, None
+            appended = (prior_receipt is None and prior_record is None
+                        and len(self._receipts) == receipt_count + 1
+                        and len(self._records) == record_count + 1
+                        and self._receipts[-1].receipt_id == receipt.receipt_id
+                        and self._records[-1].receipt_id == receipt.receipt_id)
+            if appended:
+                self._receipts.pop()
+                self._records.pop()
+                self._receipt_by_id.pop(receipt.receipt_id, None)
+                self._record_by_id.pop(receipt.receipt_id, None)
+                point = (receipt.started_at, receipt.ended_at, receipt.receipt_id)
+                for claim in (*receipt.physical_claim_ids, *receipt.gpu_device_ids):
+                    intervals = self._claim_intervals.get(claim, [])
+                    try:
+                        intervals.remove(point)
+                    except ValueError:
+                        pass
+                    if not intervals:
+                        self._claim_intervals.pop(claim, None)
+            self._held_seconds, self._physical_seconds, self._memory_seconds = scalar_prior
+            for key, value in gpu_prior.items():
+                if value is None:
+                    self._gpu_seconds.pop(key, None)
+                else:
+                    self._gpu_seconds[key] = value
+            for key, value in beneficiary_prior.items():
+                if value is None:
+                    self._beneficiary_seconds.pop(key, None)
+                else:
+                    self._beneficiary_seconds[key] = value
+            for kind, item in reversed(seed_undo or []):
+                if kind == "replace":
+                    original, updated = item
+                    identity = (updated.backend, updated.target_revision,
+                                updated.alias_identity)
+                    current = self._seed_by_identity[identity]
+                    if current != updated:
+                        raise SchedulingRefused(
+                            "seed changed outside the accounting preview")
+                    self._replace_seed(current, original)
+                else:
+                    backend, queued = item
+                    heapq.heappush(self._seed_queue.setdefault(backend, []), queued)
+            if seed_backend is not None and not queue_preexisting \
+                    and not self._seed_queue.get(seed_backend):
+                self._seed_queue.pop(seed_backend, None)
+            self._restore_operational(prior)
+        body = {"schema": ACCOUNTING_PREVIEW_SCHEMA,
+                "prior_digest": prior.projection_digest,
+                "selection": selection.to_dict(), "receipt": receipt.to_dict(),
+                "outcome": outcome, "after_digest": after.projection_digest}
+        preview = AccountingPreview(prior, selection, receipt, outcome, after, digest(body))
+        self._outstanding_accounting = preview
+        return preview
+
+    def apply_accounting_preview(self, preview: AccountingPreview) -> bool:
+        if (not isinstance(preview, AccountingPreview)
+                or preview is not self._outstanding_accounting):
+            raise SchedulingRefused("accounting preview is not locally derived")
+        body = {"schema": preview.schema,
+                "prior_digest": preview.prior.projection_digest,
+                "selection": preview.selection.to_dict(),
+                "receipt": preview.receipt.to_dict(), "outcome": preview.outcome,
+                "after_digest": preview.after.projection_digest}
+        if preview.schema != ACCOUNTING_PREVIEW_SCHEMA or digest(body) != preview.preview_digest:
+            raise SchedulingRefused("accounting preview integrity differs")
+        current = self.operational_projection().projection_digest
+        if current == preview.after.projection_digest:
+            prior = self._record_by_id.get(preview.receipt.receipt_id)
+            if prior is None:
+                raise SchedulingRefused("accounting retry lacks its durable receipt")
+            return False
+        if current != preview.prior.projection_digest:
+            raise SchedulingRefused("accounting preview is stale")
+        changed = self.account_stage(preview.selection, preview.receipt, outcome=preview.outcome)
+        if self.operational_projection().projection_digest != preview.after.projection_digest:
+            raise SchedulingRefused("accounting application differs from preview")
+        return changed
 
     def _seed_identity(self, proposal: StageProposal) -> tuple[str, str, str]:
         return proposal.backend, proposal.target_revision, proposal.alias_identity
@@ -1099,6 +1395,10 @@ class SchedulerEngine:
         identity = (original.backend, original.target_revision, original.alias_identity)
         if identity != (updated.backend, updated.target_revision, updated.alias_identity):
             raise SchedulingRefused("seed immutable identity cannot change")
+        if self._seed_preview_undo is not None:
+            self._seed_preview_undo.append(("replace", (original, updated)))
+        self._seed_commitment ^= (int(digest(original.to_dict()), 16)
+                                  ^ int(digest(updated.to_dict()), 16))
         self.seed_accounts[self._seed_position[identity]] = updated
         self._seed_by_identity[identity] = updated
         for seed_id in updated.seed_ids:
@@ -1137,6 +1437,7 @@ class SchedulerEngine:
                 boosted=boosted)
             self._seed_position[identity] = len(self.seed_accounts)
             self.seed_accounts.append(seed)
+            self._seed_commitment ^= int(digest(seed.to_dict()), 16)
             self._seed_by_identity[identity] = seed
             self._seed_by_id[proposal.seed_id] = seed
             if boosted:
@@ -1155,7 +1456,10 @@ class SchedulerEngine:
             return
         queue = self._seed_queue.setdefault(backend, [])
         while queue:
-            _submitted, _seed_id, identity = heapq.heappop(queue)
+            queued = heapq.heappop(queue)
+            if self._seed_preview_undo is not None:
+                self._seed_preview_undo.append(("queue_pop", (backend, queued)))
+            _submitted, _seed_id, identity = queued
             seed = self._seed_by_identity[identity]
             if (seed.boosted or seed.attempts >= self.config.seed_attempt_cap
                     or seed.charged_seconds >= self.config.seed_charged_seconds_cap
@@ -1238,7 +1542,8 @@ class SchedulerEngine:
                    and not self._active_outages(proposal, outages) for proposal in eligible)
 
     def select_stage(self, proposals: Sequence[StageProposal | Mapping[str, Any]], *, now: float,
-                     outages: Sequence[Outage | Mapping[str, Any]] = ()) -> Selection:
+                     outages: Sequence[Outage | Mapping[str, Any]] = (),
+                     _register_new_seeds: bool = True) -> Selection:
         proposals = tuple(_normalize(proposal, StageProposal) for proposal in proposals)
         outages = tuple(_normalize(outage, Outage) for outage in outages)
         now = _number(now, "now")
@@ -1256,7 +1561,8 @@ class SchedulerEngine:
                or (outage.ended_at is not None and outage.ended_at > now)
                for outage in outages):
             raise SchedulingRefused("outage event is later than the selection observation time")
-        self._register_seeds(proposals)
+        if _register_new_seeds:
+            self._register_seeds(proposals)
         eligible = tuple(proposal for proposal in proposals if proposal.eligible)
         if self.round_number == 0:
             self._start_round(eligible)
@@ -1270,6 +1576,9 @@ class SchedulerEngine:
                                        None, None, outages, now)
         if self.successor_fences:
             return self._selection("refused", tuple(self.successor_fences), None,
+                                   None, None, outages, now)
+        if self.issued_selection_digests:
+            return self._selection("waiting", ("issued selection awaits settlement",), None,
                                    None, None, outages, now)
         if self.campaign_attempts >= self.config.campaign_attempt_cap:
             return self._selection("refused", ("campaign attempt budget exhausted",), None,

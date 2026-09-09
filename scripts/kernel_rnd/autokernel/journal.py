@@ -241,6 +241,7 @@ KIND_LOOP_BUNDLE_SAVED = "LOOP_BUNDLE_SAVED"
 KIND_CAMPAIGN_SUPERVISOR_EVENT = "CAMPAIGN_SUPERVISOR_EVENT"
 CAMPAIGN_SUPERVISOR_EVENT_SCHEMA = "epyc.autokernel.campaign_supervisor_event.v1"
 CAMPAIGN_SUPERVISOR_EVENT_SCHEMA_V2 = "epyc.autokernel.campaign_supervisor_event.v2"
+CAMPAIGN_SUPERVISOR_EVENT_SCHEMA_V3 = "epyc.autokernel.campaign_supervisor_event.v3"
 CAMPAIGN_SUPERVISOR_EVENTS = frozenset({
     "START", "CONTROL_ACCEPTED",
 })
@@ -259,6 +260,10 @@ KIND_WORKER_ACQUISITION = "WORKER_ACQUISITION"
 WORKER_ACQUISITION_SCHEMA = "epyc.autokernel.worker_acquisition_transition.v1"
 KIND_CAMPAIGN_COMMAND_V2 = "CAMPAIGN_COMMAND_V2"
 CAMPAIGN_COMMAND_V2_SCHEMA = "epyc.autokernel.campaign_command_transition.v2"
+KIND_UNIFIED_DRIVER_ISSUED = "UNIFIED_DRIVER_ISSUED"
+UNIFIED_DRIVER_ISSUED_SCHEMA = "epyc.autokernel.unified_driver_issued.v1"
+KIND_UNIFIED_DRIVER_SETTLED = "UNIFIED_DRIVER_SETTLED"
+UNIFIED_DRIVER_SETTLED_SCHEMA = "epyc.autokernel.unified_driver_settled.v1"
 LOOP_BUNDLE_SAVED_SCHEMA = "epyc.autokernel.loop_bundle_saved.v1"
 LOOP_BUNDLE_SNAPSHOT_SCHEMA_V1 = "epyc.autokernel.accumulator_bundle.v1"
 LOOP_BUNDLE_SNAPSHOT_SCHEMA_V2 = "epyc.autokernel.accumulator_bundle.v2"
@@ -290,6 +295,8 @@ NATIVE_KINDS = frozenset({
     KIND_WORKER_LIFECYCLE,
     KIND_WORKER_ACQUISITION,
     KIND_CAMPAIGN_COMMAND_V2,
+    KIND_UNIFIED_DRIVER_ISSUED,
+    KIND_UNIFIED_DRIVER_SETTLED,
     KIND_MICROBENCH_RUN_COMPLETED,
     KIND_T0_REFUSAL,
     KIND_POST_T0_QUIET_BOUNDARY,
@@ -1086,7 +1093,49 @@ def _validate_native_payload(kind: str, payload: Mapping[str, Any]) -> list:
     out: list = []
     if not isinstance(payload, Mapping):
         return ["payload: required mapping"]
-    if kind in {KIND_WORKER_LIFECYCLE, KIND_WORKER_ACQUISITION,
+    if kind in {KIND_UNIFIED_DRIVER_ISSUED, KIND_UNIFIED_DRIVER_SETTLED}:
+        expected = {"schema", "catalog_id", "campaign_id", "config_generation",
+                    "config_digest", "supervisor_incarnation", "catalog", "selection",
+                    "prior_projection_digest", "after_projection_digest", "transition_id"}
+        if kind == KIND_UNIFIED_DRIVER_SETTLED:
+            expected = (expected - {"catalog"}) | {"receipt", "outcome", "terminal_refs"}
+        if set(payload) != expected:
+            out.append("payload: unified driver transition has missing/unknown fields")
+        wanted_schema = (UNIFIED_DRIVER_ISSUED_SCHEMA if kind == KIND_UNIFIED_DRIVER_ISSUED
+                         else UNIFIED_DRIVER_SETTLED_SCHEMA)
+        if payload.get("schema") != wanted_schema:
+            out.append(f"schema: must be {wanted_schema!r}")
+        for name in ("catalog_id", "config_digest", "prior_projection_digest",
+                     "after_projection_digest", "transition_id"):
+            if not isinstance(payload.get(name), str) or not _SHA256_RE.fullmatch(payload[name]):
+                out.append(f"{name}: required lowercase SHA-256")
+        if not isinstance(payload.get("campaign_id"), str) or not payload.get("campaign_id"):
+            out.append("campaign_id: required non-empty text")
+        for name in ("config_generation", "supervisor_incarnation"):
+            if (not isinstance(payload.get(name), int) or isinstance(payload.get(name), bool)
+                    or payload[name] < 1):
+                out.append(f"{name}: required positive integer")
+        if kind == KIND_UNIFIED_DRIVER_ISSUED and not isinstance(payload.get("catalog"), Mapping):
+            out.append("catalog: required mapping")
+        if not isinstance(payload.get("selection"), Mapping):
+            out.append("selection: required mapping")
+        if kind == KIND_UNIFIED_DRIVER_SETTLED:
+            if not isinstance(payload.get("receipt"), Mapping):
+                out.append("receipt: required mapping")
+            if payload.get("outcome") not in {"valid_comparison", "invalid", "failed",
+                                               "prerequisite", "calibration", "validation",
+                                               "reject_audit", "maintenance"}:
+                out.append("outcome: unsupported")
+            refs = payload.get("terminal_refs")
+            if (not isinstance(refs, list) or not refs
+                    or any(not isinstance(item, str) or not item for item in refs)
+                    or len(refs) != len(set(refs))):
+                out.append("terminal_refs: required unique nonempty strings")
+        try:
+            json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        except (TypeError, ValueError) as exc:
+            out.append(f"payload: non-canonical JSON value: {exc}")
+    elif kind in {KIND_WORKER_LIFECYCLE, KIND_WORKER_ACQUISITION,
                 KIND_CAMPAIGN_COMMAND_V2}:
         try:
             if __package__:
@@ -1334,12 +1383,13 @@ def _validate_native_payload(kind: str, payload: Mapping[str, Any]) -> list:
         if not isinstance(event, str) or event not in CAMPAIGN_SUPERVISOR_EVENTS:
             out.append(f"event: must be one of {sorted(CAMPAIGN_SUPERVISOR_EVENTS)}")
         schema = payload.get("schema")
-        if schema == CAMPAIGN_SUPERVISOR_EVENT_SCHEMA_V2:
+        if schema in {CAMPAIGN_SUPERVISOR_EVENT_SCHEMA_V2,
+                      CAMPAIGN_SUPERVISOR_EVENT_SCHEMA_V3}:
             if event != "START":
-                out.append("schema: v2 supervisor schema is restricted to START")
+                out.append("schema: versioned supervisor schema is restricted to START")
         elif schema != CAMPAIGN_SUPERVISOR_EVENT_SCHEMA:
             out.append(
-                "schema: must be the v1 supervisor schema or v2 START schema")
+                "schema: must be the v1 supervisor schema or a versioned START schema")
         for key in ("campaign_id", "config_digest"):
             value = payload.get(key)
             if not isinstance(value, str) or not value.strip():
@@ -3065,10 +3115,13 @@ __all__ = [
     "KIND_OPERATOR_RELEASE_DRY_RUN_TERMINATED",
     "KIND_CAMPAIGN_SUPERVISOR_EVENT", "CAMPAIGN_SUPERVISOR_EVENT_SCHEMA",
     "CAMPAIGN_SUPERVISOR_EVENT_SCHEMA_V2",
+    "CAMPAIGN_SUPERVISOR_EVENT_SCHEMA_V3",
     "CAMPAIGN_SUPERVISOR_EVENTS", "KIND_CANDIDATE_TRANSACTION",
     "KIND_WORKER_LIFECYCLE", "WORKER_LIFECYCLE_SCHEMA",
     "KIND_WORKER_ACQUISITION", "WORKER_ACQUISITION_SCHEMA",
     "KIND_CAMPAIGN_COMMAND_V2", "CAMPAIGN_COMMAND_V2_SCHEMA",
+    "KIND_UNIFIED_DRIVER_ISSUED", "UNIFIED_DRIVER_ISSUED_SCHEMA",
+    "KIND_UNIFIED_DRIVER_SETTLED", "UNIFIED_DRIVER_SETTLED_SCHEMA",
     "CANDIDATE_TRANSACTION_SCHEMA", "CANDIDATE_TRANSACTION_PHASES",
     "CANDIDATE_TRANSACTION_OPERATIONS",
     "KIND_PLANNED_SERVING_ARM_CAPTURED", "PLANNED_SERVING_ARM_CAPTURE_SCHEMA",

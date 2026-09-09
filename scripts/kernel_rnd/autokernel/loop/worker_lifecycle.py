@@ -409,6 +409,12 @@ class TrustedGrantProvider(Protocol):
     def release(self, authorization: AuthorizedLaunch, deadline: float) -> bool: ...
     def inspect(self, grant: GrantReceipt, container_id: str,
                 deadline: float) -> RecoveryInspection: ...
+    def close_held_receipt(self, *, authorization: AuthorizedLaunch,
+                           request: StageRequest, worker_id: str,
+                           worker_generation: int,
+                           container_identity: Mapping[str, Any] | None,
+                           lifecycle_started_at: float, released_at: float,
+                           deadline: float) -> TrustedHeldClaimReceipt: ...
 
 
 @dataclass(frozen=True)
@@ -467,6 +473,43 @@ class TerminalWorker:
     result_digest: str | None
     accepted: bool
     reason: str | None
+
+
+@dataclass(frozen=True)
+class TrustedHeldClaimReceipt:
+    """Provider-authored accounting receipt bound to one exact lifecycle owner."""
+
+    request_id: str
+    plan_digest: str
+    worker_id: str
+    worker_generation: int
+    grant_id: str
+    grant_generation: int
+    container_id: str
+    clock_domain: str
+    held_started_at: float
+    held_ended_at: float
+    receipt: Any
+
+    def __post_init__(self) -> None:
+        from .scheduling import HeldClaimReceipt
+        for name in ("request_id", "worker_id", "grant_id", "container_id",
+                     "clock_domain"):
+            _text(getattr(self, name), name)
+        _sha(self.plan_digest, "plan_digest")
+        _positive(self.worker_generation, "worker_generation")
+        _positive(self.grant_generation, "grant_generation")
+        start = _finite(self.held_started_at, "held_started_at")
+        end = _finite(self.held_ended_at, "held_ended_at")
+        if end <= start:
+            raise LifecycleRefused("held accounting interval is invalid")
+        parsed = (self.receipt if isinstance(self.receipt, HeldClaimReceipt)
+                  else HeldClaimReceipt.from_dict(self.receipt))
+        if (parsed.started_at != start or parsed.ended_at != end
+                or parsed.ownership_generation != self.worker_generation
+                or parsed.allocation_generation != self.grant_generation):
+            raise LifecycleRefused("held receipt interval/generations differ")
+        object.__setattr__(self, "receipt", parsed)
 
 
 @dataclass(frozen=True)
@@ -1020,6 +1063,7 @@ class WorkerLifecycle:
         self._pending_acquisition: ProspectiveAcquisitionIdentity | None = None
         self._unattached_identity: ProcessIdentity | None = None
         self._terminals: dict[tuple[str, int], TerminalWorker] = {}
+        self._held_receipts: dict[tuple[str, int], TrustedHeldClaimReceipt] = {}
 
     def _emit(self, event: str, *, worker_id: str, worker_generation: int,
               request: StageRequest, grant: GrantReceipt, container_id: str,
@@ -1091,7 +1135,18 @@ class WorkerLifecycle:
             raise WaitingAuthority("insufficient_grant_deadline")
         return grant
 
-    def run_stage(self, request: StageRequest) -> TerminalWorker:
+    def run_stage(self, request: StageRequest, *, planned_invocation: Any = None) \
+            -> TerminalWorker:
+        try:
+            return self._run_stage(request, planned_invocation=planned_invocation)
+        finally:
+            if planned_invocation is not None:
+                close = getattr(planned_invocation, "close", None)
+                if callable(close):
+                    close()
+
+    def _run_stage(self, request: StageRequest, *, planned_invocation: Any = None) \
+            -> TerminalWorker:
         if not isinstance(request, StageRequest):
             raise TypeError("request must be StageRequest")
         request = StageRequest(
@@ -1099,11 +1154,26 @@ class WorkerLifecycle:
             request.stage, tuple(request.argv), dict(request.env), Path(str(request.cwd)),
             request.artifact_contract_digest, request.max_stage_seconds,
             request.teardown_seconds, request.control_revision)
+        if planned_invocation is not None:
+            from .unified_worker import PlannedWorkerInvocation
+            if type(planned_invocation) is not PlannedWorkerInvocation:
+                raise TypeError("planned_invocation must be the closed planned-worker type")
+            try:
+                planned_invocation.validate_request(request)
+            except BaseException:
+                planned_invocation.close()
+                raise
         if self._active:
+            if planned_invocation is not None:
+                planned_invocation.close()
             raise LifecycleRefused("a worker stage is already active")
         if self._ownership_unresolved:
+            if planned_invocation is not None:
+                planned_invocation.close()
             raise ContainmentFailure("prior owned worker state remains unresolved")
         if self.provider is None:
+            if planned_invocation is not None:
+                planned_invocation.close()
             raise WaitingAuthority("trusted grant provider is unavailable")
         self.runtime.verify()
         worker_id = f"worker-{self.id_factory()}"
@@ -1203,6 +1273,7 @@ class WorkerLifecycle:
         container_create_attempted = False
         failure: BaseException | None = None
         simulated_crash = False
+        held_receipt: TrustedHeldClaimReceipt | None = None
         try:
             nonce = self.id_factory()
             contract = make_contract(nonce=nonce, argv=request.argv, env=request.env,
@@ -1241,19 +1312,33 @@ class WorkerLifecycle:
             owned_fds.add(stderr_fd)
             for fd in (stdout_fd, stderr_fd):
                 os.set_inheritable(fd, True)
+            planned_child_fds: tuple[int, int, int] | None = None
+            if planned_invocation is not None:
+                planned_child_fds = planned_invocation.child_fds()
             bootstrap_path = Path(__file__).with_name("worker_bootstrap.py").resolve(strict=True)
-            bootstrap = (
+            bootstrap: tuple[str, ...] = (
                 sys.executable, "-I", "-S", "-B", str(bootstrap_path),
                 "--gate-fd", str(gate_read), "--contract-fd", str(contract_read),
                 "--outcome-fd", str(outcome_write), "--stdout-fd", str(stdout_fd),
                 "--stderr-fd", str(stderr_fd),
             )
+            if planned_child_fds is not None:
+                bootstrap += (
+                    "--planned-start-fd", str(planned_child_fds[0]),
+                    "--planned-control-fd", str(planned_child_fds[1]),
+                    "--planned-result-fd", str(planned_child_fds[2]),
+                )
             bootstrap_env = {"PYTHONDONTWRITEBYTECODE": "1"}
+            inherited = (gate_read, contract_read, outcome_write, stdout_fd, stderr_fd)
+            if planned_child_fds is not None:
+                inherited += planned_child_fds
             process = subprocess.Popen(
                 bootstrap, cwd=str(request.cwd), env=bootstrap_env,
                 stdin=subprocess.DEVNULL, stdout=stderr_fd, stderr=stderr_fd,
                 close_fds=True,
-                pass_fds=(gate_read, contract_read, outcome_write, stdout_fd, stderr_fd))
+                pass_fds=inherited)
+            if planned_invocation is not None:
+                planned_invocation.close_child_fds()
             self._unattached_identity = process_identity(process.pid)
             self.fault_hook("AFTER_POPEN_BEFORE_ATTACH")
             for fd in (gate_read, contract_read, outcome_write, stdout_fd, stderr_fd):
@@ -1307,10 +1392,17 @@ class WorkerLifecycle:
                 process, outcome_read, nonce, contract["contract_digest"], request,
                 authorization, grant,
                 min(overall_deadline - request.teardown_seconds,
-                    grant.deadline - request.teardown_seconds))
+                    grant.deadline - request.teardown_seconds),
+                planned_invocation=planned_invocation,
+                container_identity=container_identity,
+                worker_id=worker_id, worker_generation=generation,
+                container_id=container_id)
             close_owned(outcome_read)
             outcome_read = None
-            retained_digest = _digest(result)
+            retained_digest = (planned_invocation.reference_digest
+                               if planned_invocation is not None else _digest(result))
+            if retained_digest is None:
+                raise LifecycleRefused("planned result reference was not retained")
             self._emit("WORKER_RESULT_RETAINED", worker_id=worker_id,
                        worker_generation=generation, request=request, grant=grant,
                        container_id=container_id,
@@ -1329,6 +1421,8 @@ class WorkerLifecycle:
                     os.close(fd)
                 except OSError:
                     pass
+            if planned_invocation is not None:
+                planned_invocation.close()
             if not simulated_crash:
                 try:
                     cleanup_ok = self._teardown(
@@ -1341,6 +1435,43 @@ class WorkerLifecycle:
                     failure = exc
                 self._active = not cleanup_ok
                 self._ownership_unresolved = not cleanup_ok
+                close_receipt = getattr(self.provider, "close_held_receipt", None)
+                if cleanup_ok and callable(close_receipt):
+                    try:
+                        released_at = _finite(self.monotonic(), "held release time")
+                        if released_at > overall_deadline:
+                            raise WaitingAuthority(
+                                "held receipt deadline expired after exact release")
+                        supplied = close_receipt(
+                            authorization=authorization, request=request,
+                            worker_id=worker_id, worker_generation=generation,
+                            container_identity=(None if container_identity is None
+                                                else dict(container_identity)),
+                            lifecycle_started_at=started_at,
+                            released_at=released_at, deadline=overall_deadline)
+                        if not isinstance(supplied, TrustedHeldClaimReceipt):
+                            raise WaitingAuthority(
+                                "trusted provider held receipt is unavailable")
+                        if (supplied.request_id != request.request_id
+                                or supplied.plan_digest != request.plan_digest
+                                or supplied.worker_id != worker_id
+                                or supplied.worker_generation != generation
+                                or supplied.grant_id != grant.grant_id
+                                or supplied.grant_generation != grant.generation
+                                or supplied.container_id != container_id
+                                or supplied.clock_domain != grant.clock_domain
+                                or supplied.held_started_at > started_at
+                                or supplied.held_ended_at != released_at):
+                            raise WaitingAuthority(
+                                "trusted provider held receipt binding differs")
+                        held_receipt = supplied
+                        returned_at = _finite(
+                            self.monotonic(), "held receipt return time")
+                        if returned_at > overall_deadline:
+                            raise WaitingAuthority(
+                                "trusted provider held receipt returned after lifecycle deadline")
+                    except BaseException as exc:
+                        failure = exc
 
         if not cleanup_ok:
             if failure is not None:
@@ -1357,12 +1488,16 @@ class WorkerLifecycle:
             request.lineage_id, request.stage_id, grant.grant_id, grant.generation,
             container_id, result["return_code"] if result is not None else None,
             retained_digest, accepted, reason)
-        self._terminals[(worker_id, generation)] = terminal
         event = "WORKER_RESULT_ACCEPTED" if accepted else "WORKER_RESULT_STALE"
         self._emit(event, worker_id=worker_id, worker_generation=generation,
                    request=request, grant=grant, container_id=container_id,
                    data={"result_digest": retained_digest, "accepted": accepted,
                          "reason": reason})
+        self._terminals[(worker_id, generation)] = terminal
+        if held_receipt is not None:
+            self._held_receipts[(worker_id, generation)] = held_receipt
+        if planned_invocation is not None and accepted and retained_digest is not None:
+            planned_invocation.bind_terminal_digest(retained_digest)
         if failure is not None:
             raise LifecycleRefused(reason or "worker stage failed") from failure
         return terminal
@@ -1388,11 +1523,16 @@ class WorkerLifecycle:
     def _wait_outcome(self, process: subprocess.Popen[bytes], fd: int,
                       nonce: str, contract_digest: str, request: StageRequest,
                       authorization: AuthorizedLaunch, held_grant: GrantReceipt,
-                      deadline: float) -> dict[str, Any]:
+                      deadline: float, *, planned_invocation: Any = None,
+                      container_identity: Mapping[str, Any] | None = None,
+                      worker_id: str | None = None,
+                      worker_generation: int | None = None,
+                      container_id: str | None = None) -> dict[str, Any]:
         chunks: list[bytes] = []
         size = 0
         eof = False
-        while not eof:
+        while not eof or (planned_invocation is not None
+                          and not planned_invocation.channels_drained):
             now = self.monotonic()
             if now >= deadline:
                 raise LifecycleRefused("worker stage deadline expired")
@@ -1425,8 +1565,17 @@ class WorkerLifecycle:
             remaining = deadline - self.monotonic()
             if remaining <= 0:
                 raise LifecycleRefused("worker stage deadline expired")
-            ready, _, _ = select.select([fd], [], [], min(remaining, 0.05))
-            if ready:
+            reads = [] if eof else [fd]
+            writes: list[int] = []
+            if planned_invocation is not None:
+                planned_invocation.poll_evidence()
+                reads.extend(planned_invocation.read_fds())
+                writes.extend(planned_invocation.write_fds())
+            ready, writable, _ = select.select(
+                reads, writes, [], min(remaining, 0.05))
+            for write_fd in writable:
+                planned_invocation.flush_ready(write_fd)
+            if not eof and fd in ready:
                 chunk = os.read(fd, min(65536, MAX_OUTCOME_BYTES + 1 - size))
                 if not chunk:
                     eof = True
@@ -1435,9 +1584,69 @@ class WorkerLifecycle:
                     size += len(chunk)
                     if size > MAX_OUTCOME_BYTES:
                         raise LifecycleRefused("worker outcome exceeded size limit")
-            elif process.poll() is not None:
-                # The write end closes with the bootstrap; one more select observes EOF.
-                continue
+            if planned_invocation is not None:
+                for ready_fd in ready:
+                    if ready_fd == fd:
+                        continue
+                    for kind, message in planned_invocation.receive_ready(ready_fd):
+                        if kind == "result":
+                            planned_invocation.accept_result(message)
+                            continue
+                        schema = message.get("schema")
+                        if schema == "epyc.autokernel.planned_worker_hello.v1":
+                            child = planned_invocation.accept_hello(message)
+                            if (container_identity is None or worker_id is None
+                                    or worker_generation is None or container_id is None):
+                                raise LifecycleRefused("planned worker binding is incomplete")
+                            _same_container(authorization.container, container_identity)
+                            if (not same_process(child)
+                                    or child.pid not in authorization.container.pids()):
+                                raise ContainmentFailure(
+                                    "planned child is absent from its exact owned container")
+                            from .unified_worker import WorkerStart
+                            start = WorkerStart(
+                                str(message["nonce"]),
+                                request.request_id,
+                                planned_invocation.prepared.prepared_digest,
+                                request.plan_digest, request.lineage_id, request.stage_id,
+                                self.binding.campaign_id, self.binding.config_digest,
+                                self.binding.config_generation, self.binding.supervisor_id,
+                                self.binding.supervisor_incarnation, worker_id,
+                                worker_generation, held_grant.grant_id,
+                                held_grant.generation, container_id, child,
+                                dict(container_identity), held_grant.clock_domain,
+                                deadline)
+                            planned_invocation.queue_start(start)
+                        elif schema == "epyc.autokernel.planned_worker_unit_request.v1":
+                            sequence, unit, _prior = \
+                                planned_invocation.validate_unit_request(message)
+                            start = planned_invocation.start
+                            if start is None or not same_process(start.child_process) \
+                                    or start.child_process.pid not in authorization.container.pids():
+                                raise ContainmentFailure("planned child membership became stale")
+                            directive = self.runtime_fence(request, self.monotonic())
+                            allowed = directive.action == "continue"
+                            if allowed:
+                                self._admit(
+                                    request, refreshed, deadline + request.teardown_seconds)
+                            reason = ("held lifecycle allocation admitted fixed unit" if allowed
+                                      else directive.reason)
+                            from .planned_serving import StageFence
+                            fence = StageFence(
+                                f"fence-{self.id_factory()}", unit.unit_id, unit.process_id,
+                                request.lineage_id, held_grant.grant_id, container_id,
+                                held_grant.clock_domain, deadline, self.binding.supervisor_id,
+                                self.binding.supervisor_incarnation,
+                                self.binding.config_generation, worker_id, worker_generation)
+                            planned_invocation.queue_unit_permit(
+                                sequence=sequence, unit=unit, fence=fence,
+                                allowed=allowed, reason=reason)
+                        elif schema == "epyc.autokernel.planned_worker_unit_completion_request.v1":
+                            planned_invocation.handle_completion(message)
+                        elif schema == "epyc.autokernel.planned_worker_continuation_request.v1":
+                            planned_invocation.handle_continuation(message)
+                        else:
+                            raise LifecycleRefused("planned worker control schema is unsupported")
         try:
             row = json.loads(b"".join(chunks))
         except (json.JSONDecodeError, UnicodeDecodeError) as exc:
@@ -1462,6 +1671,8 @@ class WorkerLifecycle:
                        for name in ("stdout_sha256", "stderr_sha256"))):
             raise LifecycleRefused("worker outcome schema is invalid")
         process.wait(timeout=max(0.0, deadline - self.monotonic()))
+        if planned_invocation is not None and planned_invocation.reference_digest is None:
+            raise LifecycleRefused("planned worker outcome lacks its sealed result reference")
         return dict(row)
 
     def _member_identities(self, container: OwnedContainer) -> dict[int, int]:
@@ -1586,6 +1797,16 @@ class WorkerLifecycle:
             self.binding.supervisor_incarnation, terminal.worker_id,
             terminal.worker_generation, terminal.grant_id, terminal.container_id,
             terminal.lineage_id, is_current, is_current)
+
+    def trusted_held_claim_receipt(self, terminal: TerminalWorker):
+        """Return provider facts only for an exactly owned durably terminal worker."""
+        current = self._terminals.get((terminal.worker_id, terminal.worker_generation))
+        if current != terminal:
+            raise LifecycleRefused("terminal worker receipt is not owned by this lifecycle")
+        try:
+            return self._held_receipts[(terminal.worker_id, terminal.worker_generation)].receipt
+        except KeyError as exc:
+            raise WaitingAuthority("trusted provider held receipt is unavailable") from exc
 
     def reconcile_acquisition(self, events: Sequence[Mapping[str, Any]],
                               lifecycle_events: Sequence[Mapping[str, Any]]) -> str:
@@ -1819,6 +2040,7 @@ __all__ = ["ACQUISITION_SCHEMA", "AcquisitionProjection", "AuthorizationDenied",
            "ProcessIdentity", "ProspectiveAcquisitionIdentity", "RecoveryInspection",
            "RESULT_SCHEMA", "RuntimeDirective", "SimulatedCrash", "StageAdmission",
            "StageRequest", "TerminalWorker", "TrustedGrantProvider",
+           "TrustedHeldClaimReceipt",
            "WaitingAuthority", "WorkerLifecycle", "process_identity", "same_process",
            "monotonic_clock_domain", "project_acquisitions", "project_events",
            "prospective_identity_from_transition", "prospective_request_digest",
