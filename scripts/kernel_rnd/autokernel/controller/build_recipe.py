@@ -32,7 +32,7 @@ filed against the promotion runbook, not fixed here.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 import hashlib
 import json
 from typing import Any, Mapping, Sequence
@@ -186,7 +186,23 @@ HOUSE_GPU_RECIPE = BuildRecipe(
 )
 
 
+# The historical serializer is named gpu_build_recipe.v1, but its payload is the
+# generic flags/notes contract consumed by the existing builder/archive. Preserve
+# that contract rather than creating another recipe parser for CPU configuration.
+NATIVE_CPU_RECIPE = BuildRecipe(
+    name="native-openmp-gcc15-cpu-v1",
+    notes="Experimental CPU build; no production adoption or cross-model qualification.",
+    flags=tuple(Flag(name, value, None, "Explicit experimental CPU build recipe")
+                for name, value in (("GGML_HIP", "OFF"), ("GGML_NATIVE", "ON"),
+                                    ("GGML_OPENMP", "ON"),
+                                    ("CMAKE_C_COMPILER", "/usr/bin/gcc-15"),
+                                    ("CMAKE_CXX_COMPILER", "/usr/bin/g++-15"))),
+)
+
+
 def recipe_for(name: str) -> BuildRecipe:
+    if name == NATIVE_CPU_RECIPE.name:
+        return NATIVE_CPU_RECIPE
     if name != HOUSE_GPU_RECIPE.name:
         raise BuildRecipeError(f"unknown build recipe {name!r}")
     return HOUSE_GPU_RECIPE
@@ -205,5 +221,6 @@ def from_flags(name: str, flags: Sequence[Mapping[str, Any]], *,
 
 
 __all__ = ["BuildRecipe", "BuildRecipeError", "Flag", "HOUSE_GPU_RECIPE",
+           "NATIVE_CPU_RECIPE",
            "NonAdoption", "PRODUCTION_RECIPE_IS_VERIFIABLE", "RECIPE_SCHEMA",
            "SETTLED_NON_ADOPTIONS", "from_flags", "recipe_for"]
