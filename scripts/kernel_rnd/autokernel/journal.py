@@ -260,6 +260,8 @@ KIND_WORKER_ACQUISITION = "WORKER_ACQUISITION"
 WORKER_ACQUISITION_SCHEMA = "epyc.autokernel.worker_acquisition_transition.v1"
 KIND_CAMPAIGN_COMMAND_V2 = "CAMPAIGN_COMMAND_V2"
 CAMPAIGN_COMMAND_V2_SCHEMA = "epyc.autokernel.campaign_command_transition.v2"
+KIND_CAMPAIGN_COMMAND_V3 = "CAMPAIGN_COMMAND_V3"
+CAMPAIGN_COMMAND_V3_SCHEMA = "epyc.autokernel.campaign_command_transition.v3"
 KIND_UNIFIED_DRIVER_ISSUED = "UNIFIED_DRIVER_ISSUED"
 UNIFIED_DRIVER_ISSUED_SCHEMA = "epyc.autokernel.unified_driver_issued.v1"
 KIND_UNIFIED_DRIVER_SETTLED = "UNIFIED_DRIVER_SETTLED"
@@ -295,6 +297,7 @@ NATIVE_KINDS = frozenset({
     KIND_WORKER_LIFECYCLE,
     KIND_WORKER_ACQUISITION,
     KIND_CAMPAIGN_COMMAND_V2,
+    KIND_CAMPAIGN_COMMAND_V3,
     KIND_UNIFIED_DRIVER_ISSUED,
     KIND_UNIFIED_DRIVER_SETTLED,
     KIND_MICROBENCH_RUN_COMPLETED,
@@ -1136,7 +1139,7 @@ def _validate_native_payload(kind: str, payload: Mapping[str, Any]) -> list:
         except (TypeError, ValueError) as exc:
             out.append(f"payload: non-canonical JSON value: {exc}")
     elif kind in {KIND_WORKER_LIFECYCLE, KIND_WORKER_ACQUISITION,
-                KIND_CAMPAIGN_COMMAND_V2}:
+                  KIND_CAMPAIGN_COMMAND_V2, KIND_CAMPAIGN_COMMAND_V3}:
         try:
             if __package__:
                 from .loop.worker_lifecycle import (
@@ -1152,8 +1155,14 @@ def _validate_native_payload(kind: str, payload: Mapping[str, Any]) -> list:
                 validate_event(payload)
             elif kind == KIND_WORKER_ACQUISITION:
                 validate_acquisition_transition(payload)
-            else:
+            elif kind == KIND_CAMPAIGN_COMMAND_V2:
                 validate_command_transition_v2(payload)
+            else:
+                if __package__:
+                    from .loop.campaign_command_v2 import validate_transition
+                else:
+                    from autokernel.loop.campaign_command_v2 import validate_transition
+                validate_transition(payload)
         except Exception as exc:
             out.append(f"lifecycle/control event: {exc}")
     elif kind == KIND_PLANNED_SERVING_ARM_CAPTURED:
@@ -3120,6 +3129,7 @@ __all__ = [
     "KIND_WORKER_LIFECYCLE", "WORKER_LIFECYCLE_SCHEMA",
     "KIND_WORKER_ACQUISITION", "WORKER_ACQUISITION_SCHEMA",
     "KIND_CAMPAIGN_COMMAND_V2", "CAMPAIGN_COMMAND_V2_SCHEMA",
+    "KIND_CAMPAIGN_COMMAND_V3", "CAMPAIGN_COMMAND_V3_SCHEMA",
     "KIND_UNIFIED_DRIVER_ISSUED", "UNIFIED_DRIVER_ISSUED_SCHEMA",
     "KIND_UNIFIED_DRIVER_SETTLED", "UNIFIED_DRIVER_SETTLED_SCHEMA",
     "CANDIDATE_TRANSACTION_SCHEMA", "CANDIDATE_TRANSACTION_PHASES",
