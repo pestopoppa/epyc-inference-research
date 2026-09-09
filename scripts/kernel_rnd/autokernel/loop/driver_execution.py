@@ -91,6 +91,10 @@ class UnknownParentEvidenceProducer:
             raise DriverExecutionRefused("observation configuration is untyped")
         self.lifecycle = lifecycle
         self.observation_configuration = observation_configuration
+        if self.plan.schema == ep.PLAN_SCHEMA_V2 and observation_configuration is not None:
+            ob.validate_planned_sample_capacity(observation_configuration,
+                max_stage_seconds=self.prepared.max_stage_seconds,
+                teardown_seconds=self.prepared.teardown_seconds)
         self._bindings: dict[tuple[str, int, str, str, str],
                              ob.ObservationUnitBinding] = {}
         self._targets: dict[tuple[str, int, str, str, str], Mapping[str, Any]] = {}

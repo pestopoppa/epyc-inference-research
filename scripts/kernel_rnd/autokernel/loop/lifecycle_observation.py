@@ -101,6 +101,16 @@ def _finite(value: Any, label: str, *, positive: bool = False) -> float:
     return float(value)
 
 
+def required_sample_capacity(*, max_duration_s: float, cadence_s: float,
+                             nonperiodic_samples: int) -> int:
+    """Bound counts for a fixed marker schedule inside an enforced duration."""
+    duration = _finite(max_duration_s, "observation maximum duration", positive=True)
+    cadence = _finite(cadence_s, "observation cadence", positive=True)
+    markers = _integer(nonperiodic_samples, "nonperiodic sample count")
+    quotient = _finite(duration / cadence, "observation sample count ratio", positive=True)
+    return math.ceil(quotient) + markers
+
+
 def _utc(value: Any, label: str) -> str:
     value = _text(value, label)
     try:
@@ -1342,26 +1352,38 @@ class ObservationSession:
 
     def _run(self) -> None:
         cadence = self.context["cadence_s"]
+        due = None
         while True:
-            periodic_phase = None
             with self._condition:
-                if not self._pending and not self._stopping:
-                    self._condition.wait(cadence)
-                    if not self._pending and not self._stopping and self._phase is not None:
-                        periodic_phase = self._phase
                 if self._pending:
                     marker = self._pending.popleft()
+                    due = None
                 elif self._stopping:
                     return
-                elif periodic_phase is None:
-                    continue
                 else:
                     marker = None
+                periodic_phase = self._phase
             if marker is None:
                 mono, wall = self._time_pair()
                 with self._condition:
                     if self._stopping:
                         return
+                    # A boundary/checkpoint may arrive during the unlocked clock
+                    # read. Do not queue an old-phase sample behind that marker.
+                    if self._pending or self._phase != periodic_phase:
+                        due = None
+                        continue
+                    if periodic_phase is None:
+                        raise ObservationError("active observer has no phase")
+                    if due is None:
+                        due = mono + cadence
+                    remaining = due - mono
+                    if remaining > 0:
+                        # Keep the same due time through empty early/spurious
+                        # wakeups: they neither sample early nor postpone forever.
+                        self._condition.wait(remaining)
+                        continue
+                    due = None
                     done = self._enqueue_locked(periodic_phase, "periodic", mono, wall)
                     marker = self._pending.popleft() if done is not None else None
                 if marker is None:
