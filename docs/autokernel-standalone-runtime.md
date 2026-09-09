@@ -16,9 +16,10 @@ single-writer acquisition complete, then pass the same typed campaign and schedu
 `StandaloneRuntimeInputs` to `StandaloneRuntime.compose`.
 
 Composition constructs the actual `UnifiedCampaignDriver` and
-`UnifiedDriverExecution`. Its executable-kind filter admits only
-`runtime_comparison`; actor and profile preparation remain named unavailable work
-before any selection is durably issued. Their targets and scheduler coverage debt are
+`UnifiedDriverExecution`. Its executable-kind filter admits runtime comparison plus
+profile/calibration preparation only when their concrete installed owners are present.
+Discovery/A2 and actor/source-build work remain named unavailable before selection;
+their targets and scheduler coverage debt are
 not converted to success. Evidence planning consumes the real `EvidenceIndex`, while
 the executor's default parent producer preserves scientific authority as unknown.
 Candidate validation and maintenance remain the controller snapshot's `not_connected`
@@ -98,10 +99,10 @@ during durable drain, and joins it before controller close. The startup material
 uses the existing typed parsers for scheduler state, anchors, plans, profiles, prompt
 manifests and execution inputs. Real installed lifecycle/provider bindings and real
 export-backed acceptance remain outstanding; configuration cannot mint authority.
-Current closed
-snapshot v3 must not be extended by mutating returned mappings; any future runtime
-producer projection requires a separately versioned controller and hub-reader
-migration.
+The closed snapshot-v3 carrier now supports a separately versioned unified projection
+v2 with operational observations; see [runtime dashboard observation](autokernel-runtime-observation.md).
+Old unified projection v1 remains closed and unchanged. Returned snapshot mappings
+must never be extended by callers.
 
 The admission/shutdown race has a typed refusal: if drain closes admission between
 planning and the controller transaction, the runtime stops or waits without treating

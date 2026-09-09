@@ -220,6 +220,27 @@ class StandaloneRuntime:
         self._uncertain: str | None = None
         self._retry_failures = 0
         self._uncertainty_reason: str | None = None
+        self.controller.register_runtime_projection(self)
+
+    def _observed_result(self, *args, **kwargs) -> RuntimeTickResult:
+        result = RuntimeTickResult(*args, **kwargs)
+        try:
+            # Capture immutable selected identity on the execution thread, before
+            # the controller mutex. The controller reopens its own original row.
+            catalog = self.driver._issued_catalog
+            catalog_id = None if catalog is None else catalog.catalog_id
+            self.controller.record_runtime_observation(self, result, catalog_id=catalog_id)
+            return RuntimeTickResult(
+                result.status, result.reason, result.retry_after_seconds, self._snapshot(),
+                result.driver_outcome, result.execution_receipt)
+        except Exception as exc:
+            # Diagnostics cannot turn an already settled operation into an exact
+            # retry or change the original command/execution outcome.
+            try:
+                self.controller.runtime_observation_failed(self, f"{type(exc).__name__}: {exc}")
+            except Exception:
+                pass  # retained old observation remains dated; no freshness invented
+            return result
 
     @classmethod
     def compose(
@@ -370,7 +391,7 @@ class StandaloneRuntime:
 
     def recover(self) -> RuntimeTickResult:
         if not self._enter():
-            return RuntimeTickResult("stopped", "stop requested", 0, self._snapshot())
+            return self._observed_result("stopped", "stop requested", 0, self._snapshot())
         try:
             pending_record = self.controller.unified_driver_pending_intent()
             with self._condition:
@@ -400,7 +421,7 @@ class StandaloneRuntime:
                 self._retry_failures = 0
                 self._uncertainty_reason = None
             if receipt is not None:
-                return RuntimeTickResult(
+                return self._observed_result(
                     "settled",
                     "restored issued execution durably settled",
                     0,
@@ -408,7 +429,7 @@ class StandaloneRuntime:
                     pending.to_dict(),
                     receipt.to_dict(),
                 )
-            return RuntimeTickResult(
+            return self._observed_result(
                 "recovered", "owned lifecycle recovery completed", 0, self._snapshot()
             )
         except Exception as exc:
@@ -417,7 +438,7 @@ class StandaloneRuntime:
                     self._pending_outcome = pending
                 self._uncertain = "execution_recovery_required"
                 self._uncertainty_reason = str(exc)
-            return RuntimeTickResult(
+            return self._observed_result(
                 "recovery_required", str(exc), self._delay(unavailable=True), self._snapshot()
             )
         finally:
@@ -425,7 +446,7 @@ class StandaloneRuntime:
 
     def _drive(self, *, retry: bool, external_stop=lambda: False) -> RuntimeTickResult:
         if not self._enter():
-            return RuntimeTickResult("stopped", "stop requested", 0, self._snapshot())
+            return self._observed_result("stopped", "stop requested", 0, self._snapshot())
         outcome: unified_driver.DriverOutcome | None = None
         try:
             with self._condition:
@@ -434,14 +455,14 @@ class StandaloneRuntime:
                 pending = self._pending_outcome
                 uncertainty_reason = self._uncertainty_reason
             if not recovered:
-                return RuntimeTickResult(
+                return self._observed_result(
                     "recovery_required",
                     "worker recovery must precede admission",
                     self._delay(unavailable=True),
                     self._snapshot(),
                 )
             if uncertain is not None and not retry:
-                return RuntimeTickResult(
+                return self._observed_result(
                     "recovery_required",
                     uncertainty_reason or uncertain,
                     self._delay(unavailable=True),
@@ -460,7 +481,7 @@ class StandaloneRuntime:
                     stop_requested=lambda: self._stop_requested or external_stop()
                 )
             if outcome.status == "waiting":
-                return RuntimeTickResult(
+                return self._observed_result(
                     "waiting",
                     "; ".join(outcome.reasons),
                     self._delay(unavailable=True),
@@ -468,7 +489,7 @@ class StandaloneRuntime:
                     outcome.to_dict(),
                 )
             if outcome.status == "stopped":
-                return RuntimeTickResult(
+                return self._observed_result(
                     "stopped", "; ".join(outcome.reasons), 0, self._snapshot(), outcome.to_dict()
                 )
             available_kinds = ({"runtime_comparison", "calibration_preparation"}
@@ -488,7 +509,7 @@ class StandaloneRuntime:
                 self._uncertain = None
                 self._retry_failures = 0
                 self._uncertainty_reason = None
-            return RuntimeTickResult(
+            return self._observed_result(
                 "settled",
                 "runtime attempt durably settled",
                 self._delay(),
@@ -497,14 +518,14 @@ class StandaloneRuntime:
                 receipt.to_dict(),
             )
         except feed_runtime.FeedRuntimeRefused as exc:
-            return RuntimeTickResult(
+            return self._observed_result(
                 "recovery_required", str(exc), self._delay(unavailable=True), self._snapshot())
         except unified_driver.DriverTransactionUncertain as exc:
             self._mark_uncertain("driver_transaction_retry_required", str(exc), retry=retry)
             raise StandaloneRuntimeUncertain(str(exc)) from exc
         except campaign_control.DriverAdmissionClosed as exc:
             stopping = self._stop_requested or external_stop()
-            return RuntimeTickResult(
+            return self._observed_result(
                 "stopped" if stopping else "waiting",
                 str(exc),
                 0 if stopping else self._delay(unavailable=True),
@@ -520,7 +541,7 @@ class StandaloneRuntime:
                         retry=True,
                     )
                     if not retryable:
-                        return RuntimeTickResult(
+                        return self._observed_result(
                             "recovery_required",
                             self._uncertainty_reason or str(exc),
                             self._delay(unavailable=True),
@@ -531,13 +552,13 @@ class StandaloneRuntime:
                         self._uncertain = None
                         self._retry_failures = 0
                         self._uncertainty_reason = None
-                return RuntimeTickResult(
+                return self._observed_result(
                     "waiting", str(exc), self._delay(unavailable=True), self._snapshot()
                 )
             retryable = self._mark_uncertain(
                 "execution_exact_retry_required", str(exc), retry=retry
             )
-            return RuntimeTickResult(
+            return self._observed_result(
                 "waiting" if retryable else "recovery_required",
                 str(exc) if retryable else self._uncertainty_reason or str(exc),
                 self._delay(unavailable=True),
@@ -570,7 +591,7 @@ class StandaloneRuntime:
         last = (
             self.recover()
             if not self._recovered
-            else RuntimeTickResult(
+            else self._observed_result(
                 "waiting",
                 "runtime already recovered",
                 self.config.idle_interval_seconds,
@@ -589,13 +610,13 @@ class StandaloneRuntime:
                     retryable = self._uncertain in _RETRYABLE_STATES
                     reason = self._uncertainty_reason or str(exc)
                 if not retryable:
-                    return RuntimeTickResult(
+                    return self._observed_result(
                         "recovery_required",
                         reason,
                         self._delay(unavailable=True),
                         self._snapshot(),
                     )
-                last = RuntimeTickResult(
+                last = self._observed_result(
                     "waiting",
                     reason,
                     self._delay(unavailable=True),

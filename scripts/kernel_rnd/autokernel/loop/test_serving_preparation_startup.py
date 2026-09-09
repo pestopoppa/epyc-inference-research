@@ -348,6 +348,12 @@ def test_actual_factory_materialize_runtime_tick_and_restart_preserve_preissued_
                 result = runtime.tick()
                 if result.status == "settled":
                     assert result.execution_receipt["settlement_request"]["outcome"] == "calibration", producer_errors
+                    observation = result.to_dict()["controller_snapshot"]["unified"]["runtime"]
+                    assert observation["status"] == "settled" and observation["publication_error"] is None
+                    assert observation["work_kind"] == "calibration_preparation"
+                    assert observation["settlement_outcome"] == "calibration"
+                    assert observation["transition_id"] == result.driver_outcome["transition_id"]
+                    assert result.controller_snapshot["last_scientific_result_at"] is None
                     settled.append(result)
                 elif result.status == "waiting":
                     time.sleep(min(result.retry_after_seconds, 0.01))
