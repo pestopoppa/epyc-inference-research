@@ -621,7 +621,8 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                   frozen_requests: Sequence[tuple[str, bytes]] | None = None,
                   observation: list | None = None,
                   observation_session: lifecycle_observation.ObservationSession | None = None,
-                  response_capture: server_response.ServerResponseCapture | None = None
+                  response_capture: server_response.ServerResponseCapture | None = None,
+                  cpu_profile_capture=None
                   ) -> float:
     """Launch the server under `recipe`, fire `np` concurrent requests, return aggregate
     tok/s. The server is always stopped, even on error.
@@ -645,6 +646,12 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
     failure: str | None = None
     observer_finish_ok = observation_session is None
     response_reference = None
+    if cpu_profile_capture is not None:
+        from .cpu_profile import CpuProfileCapture
+        if (type(cpu_profile_capture) is not CpuProfileCapture or resolved_recipe is None
+                or resolved_recipe.backend != "cpu" or frozen_requests is None):
+            raise RecipeError("CPU profiling requires concrete capture and frozen CPU launch")
+        cpu_profile_capture.validate_launch(resolved_recipe, frozen_requests)
     if response_capture is not None and type(response_capture) is not server_response.ServerResponseCapture:
         raise RecipeError("response capture must be the concrete native server recorder")
     if response_capture is not None and (resolved_recipe is None or frozen_requests is None):
@@ -691,7 +698,11 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
     request_start: float | None = None
     request_end: float | None = None
     try:
-        sampler = residency.Sampler()
+        if cpu_profile_capture is None:
+            sampler = residency.Sampler()
+        else:
+            from .cpu_profile import CpuOnlySampler
+            sampler = CpuOnlySampler()
         with sampler:
             observe("phase", "load")
             srv = subprocess.Popen(argv, stdout=subprocess.DEVNULL,
@@ -703,6 +714,8 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
             # load itself remains open until the health marker below.
             observe("phase", "placement")
             try:
+                if cpu_profile_capture is not None:
+                    cpu_profile_capture.attach_target(srv.pid)
                 for _ in range(boot_timeout_s // 2):
                     if srv.poll() is not None:
                         raise ServerDied(f"server exited {srv.returncode} during load ({recipe.describe()})")
@@ -753,12 +766,12 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                         try:
                             opened = urllib.request.urlopen(req, timeout=600)
                         except urllib.error.HTTPError as exc:
-                            if response_capture is None:
+                            if response_capture is None and cpu_profile_capture is None:
                                 exc.close()
                                 raise
                             opened, http_error = exc, exc
                         try:
-                            if response_capture is None:
+                            if response_capture is None and cpu_profile_capture is None:
                                 response_bytes = opened.read()
                             else:
                                 response_bytes = opened.read(server_response.MAX_RESPONSE_BYTES + 1)
@@ -798,7 +811,7 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                     except Exception as exc:
                         ended_monotonic = time.monotonic()
                         record["error"] = f"{type(exc).__name__}: {exc}"
-                    captured = None if response_capture is None else server_response.RawServerResponse(
+                    captured = None if response_capture is None and cpu_profile_capture is None else server_response.RawServerResponse(
                         phase, i, prompt_id, body, response_bytes, started_monotonic,
                         ended_monotonic, record["error"])
                     return (*result, record, captured)
@@ -810,11 +823,20 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                 # Warmup: one full np-wide round discarded, so cold-cache/clock-ramp does not
                 # land in the measured sample (the first calibration run read high, then settled).
                 observe("phase", "warmup")
+                if cpu_profile_capture is not None:
+                    cpu_profile_capture.begin_round("warmup")
                 with cf.ThreadPoolExecutor(recipe.np) as ex:
                     warmup_rows = list(ex.map(lambda i: one(i, "warmup"), range(recipe.np)))
+                if cpu_profile_capture is not None:
+                    cpu_profile_capture.end_round("warmup")
                 observe("phase", "measurement")
+                if cpu_profile_capture is not None:
+                    cpu_profile_capture.begin_round("measurement")
                 with cf.ThreadPoolExecutor(recipe.np) as ex:
                     rows = list(ex.map(lambda i: one(i, "measurement"), range(recipe.np)))
+                if cpu_profile_capture is not None:
+                    cpu_profile_capture.end_round("measurement")
+                    cpu_profile_capture.retain_responses(tuple(row[4] for row in warmup_rows + rows))
                 observe("checkpoint", "measurement_end")
                 request_end = time.time()
                 request_ended_monotonic = time.monotonic()
@@ -836,6 +858,13 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                 value = sum(row[1] for row in rows)
             finally:
                 observe("phase", "teardown")
+                if cpu_profile_capture is not None:
+                    # Perf cleanup cannot skip the serving owner's server teardown.
+                    try:
+                        if cpu_profile_capture.active:
+                            cpu_profile_capture.abort("serving teardown with unfinished perf")
+                    except Exception as exc:
+                        cpu_profile_capture.failed = str(exc)
                 srv.terminate()
                 try:
                     srv.wait(30)
@@ -873,6 +902,8 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                     # export failure cannot replace the launch/readback/request cause.
         finally:
             observer_finish_ok = observe("finish")
+            if cpu_profile_capture is not None:
+                cpu_profile_capture.finish()
     # Success path only. An exception already in flight carries its own reason, and
     # replacing it with a residency refusal would hide the real fault -- while the
     # record above is appended either way, so a failed launch still leaves its window.
