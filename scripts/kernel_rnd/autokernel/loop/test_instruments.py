@@ -19,6 +19,7 @@ import ast
 import dataclasses
 import json
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -89,14 +90,16 @@ class Posture(unittest.TestCase):
 
     def test_apply_implies_execute(self):
         parser = serving_gate.build_parser()
-        args = parser.parse_args(["--cor-build", "/a", "--tip-build", "/b", "--apply"])
+        args = parser.parse_args(
+            ["--cor-build", "/a", "--tip-build", "/b", "--tip", "abc", "--apply"])
         posture = instruments.resolve_posture(args)
         self.assertTrue(posture.execute)
         self.assertTrue(posture.apply)
 
     def test_execute_alone_does_not_apply(self):
         parser = serving_gate.build_parser()
-        args = parser.parse_args(["--cor-build", "/a", "--tip-build", "/b", "--execute"])
+        args = parser.parse_args(
+            ["--cor-build", "/a", "--tip-build", "/b", "--tip", "abc", "--execute"])
         posture = instruments.resolve_posture(args)
         self.assertTrue(posture.execute)
         self.assertFalse(posture.apply)
@@ -304,7 +307,8 @@ class ServingGate(unittest.TestCase):
 
     def _argv(self, *extra):
         return ["--store", str(self.store), "--recipe", str(SHIPPED_RECIPE),
-                "--cor-build", str(self.cor), "--tip-build", str(self.tip), *extra]
+                "--cor-build", str(self.cor), "--tip-build", str(self.tip),
+                "--tip", "t" * 40, "--champion-worktree", str(self.root), *extra]
 
     def _run(self, *extra, row=None):
         row = row if row is not None else _serving_row(5.0, True)
@@ -315,6 +319,7 @@ class ServingGate(unittest.TestCase):
             return row
 
         with mock.patch.object(serving_gate, "measure", seam), \
+             mock.patch.object(serving_gate, "_is_ancestor", return_value=True), \
              mock.patch("builtins.print"):
             rc = serving_gate.main(self._argv(*extra))
         return rc, calls
@@ -324,6 +329,47 @@ class ServingGate(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertEqual(calls, [])
         self.assertFalse((self.store / "serving").exists())
+
+    def test_bundle_output_names_validity_without_inventing_measurement_source(self):
+        source = Path(serving_gate.__file__).read_text(encoding="utf-8")
+        self.assertNotIn("(MEASURED by seed_bundle)", source)
+        self.assertIn("validity={bundle.measurement_validity}", source)
+        self.assertIn("historical-only magnitude; threshold disabled", source)
+
+    def test_dry_legacy_replay_does_not_import_or_rewrite(self):
+        shutil.rmtree(self.store / accumulate.JOURNAL_DIRNAME)
+        legacy = {
+            "schema": accumulate.Bundle.LEGACY_SCHEMA,
+            "champion_of_record": "c" * 40,
+            "tip": "t" * 40,
+            "keeps": ["akm-a", "akm-b"],
+            "compounded_bench_pct": 12.0,
+            "keeps_since_serving_gate": 2,
+        }
+        path = self.store / accumulate.Bundle.FILENAME
+        original = json.dumps(legacy)
+        path.write_text(original, encoding="utf-8")
+        rc, calls = self._run("--force")
+        self.assertEqual(rc, 0)
+        self.assertEqual(calls, [])
+        self.assertFalse((self.store / accumulate.JOURNAL_DIRNAME).exists())
+        self.assertEqual(path.read_text(), original)
+
+    def test_missing_bundle_state_refuses_without_measuring(self):
+        shutil.rmtree(self.store / accumulate.JOURNAL_DIRNAME)
+        (self.store / accumulate.Bundle.FILENAME).unlink()
+        rc, calls = self._run("--execute")
+        self.assertEqual(rc, instruments.REFUSED)
+        self.assertEqual(calls, [])
+
+    def test_corrupt_journal_refuses_instead_of_trusting_projection(self):
+        events = (self.store / accumulate.JOURNAL_DIRNAME
+                  / "events.jsonl")
+        with events.open("a", encoding="utf-8") as stream:
+            stream.write("{corrupt}\n")
+        rc, calls = self._run("--execute")
+        self.assertEqual(rc, instruments.REFUSED)
+        self.assertEqual(calls, [])
 
     def test_execute_writes_the_record_but_does_not_advance_the_champion(self):
         rc, calls = self._run("--execute")

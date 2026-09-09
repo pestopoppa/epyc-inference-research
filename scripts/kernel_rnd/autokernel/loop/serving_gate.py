@@ -31,10 +31,11 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import subprocess
 import sys
 import time
 
-from . import accumulate, instruments, serving, status
+from . import accumulate, instruments, pool, serving, status
 
 
 def measure(recipe: serving.Recipe, cor_build: Path, tip_build: Path, *,
@@ -48,6 +49,18 @@ def measure(recipe: serving.Recipe, cor_build: Path, tip_build: Path, *,
     return serving.compare(recipe, cor_build, tip_build, pairs=pairs, floor_pct=floor_pct)
 
 
+def _is_ancestor(worktree: Path, ancestor: str, descendant: str) -> bool:
+    """Read-only lineage check for the explicitly pinned serving-gate tip."""
+    done = subprocess.run(
+        ["git", "-C", str(worktree), "merge-base", "--is-ancestor",
+         ancestor, descendant], capture_output=True, text=True)
+    if done.returncode not in (0, 1):
+        raise RuntimeError(
+            f"git ancestry check failed in {worktree}: {done.stderr.strip()}"
+        )
+    return done.returncode == 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="autokernel.loop.serving_gate", description=__doc__,
@@ -57,6 +70,10 @@ def build_parser() -> argparse.ArgumentParser:
                         help="build of the champion OF RECORD (the anchor arm)")
     parser.add_argument("--tip-build", type=Path, required=True,
                         help="build of the accumulator TIP (the candidate arm)")
+    parser.add_argument("--tip", required=True,
+                        help="source commit exactly represented by --tip-build")
+    parser.add_argument("--champion-worktree", type=Path, default=pool.CHAMPION_TREE,
+                        help="read-only source topology for Bundle ancestry checks")
     parser.add_argument("--pairs", type=int, default=5)
     parser.add_argument("--fire-multiple", type=float, default=2.5)
     instruments.add_posture_args(
@@ -78,15 +95,23 @@ def main(argv: list[str] | None = None) -> int:
         print(f"recipe    {recipe.describe()}")
         reading = instruments.read_floor(args.store, recipe)
         floor = reading.floor_pct
-        bundle = accumulate.Bundle.from_dict(
-            json.loads((Path(args.store) / accumulate.Bundle.FILENAME).read_text()))
+        bundle, _ = accumulate.load_bundle(
+            Path(args.store), anchor_commit=args.tip,
+            is_ancestor=lambda older, newer: _is_ancestor(
+                args.champion_worktree, older, newer),
+            read_only=posture.dry_run)
         policy = accumulate.AccumulatorPolicy(fire_multiple=args.fire_multiple)
         thr = policy.fire_threshold_pct(floor)
         print(f"floor     {floor:.3f}% [{reading.provenance}] from {reading.path.name} | "
               f"fire threshold {thr:.2f}%")
+        magnitude_label = (
+            "current combined measurement"
+            if bundle.measurement_validity == accumulate.MEASUREMENT_CURRENT
+            else "historical-only magnitude; threshold disabled"
+        )
         print(f"bundle    cor {bundle.champion_of_record[:12]} tip {bundle.tip[:12]} "
               f"keeps {len(bundle.keeps)} compounded {bundle.compounded_bench_pct:+.3f}% "
-              f"(MEASURED by seed_bundle)")
+              f"validity={bundle.measurement_validity} ({magnitude_label})")
         decision = accumulate.decide_after_keep(bundle, floor, policy)
         print(f"schedule  decide_after_keep -> {decision}  (fire_multiple x floor = "
               f"{thr:.2f}% is only the loop's SCHEDULING heuristic)")
@@ -110,7 +135,8 @@ def main(argv: list[str] | None = None) -> int:
         started = time.time()
         row = measure(recipe, args.cor_build, args.tip_build,
                       pairs=args.pairs, floor_pct=floor)
-    except (instruments.InstrumentRefusal, serving.ServingFloorMismatch) as refusal:
+    except (instruments.InstrumentRefusal, serving.ServingFloorMismatch,
+            accumulate.BundleRecoveryRequired) as refusal:
         # A floor calibrated under a DIFFERENT recipe is a refusal, not a verdict: it
         # exits REFUSED with the message rather than a traceback, so the caller can tell
         # "no reading" from "a bad reading".

@@ -32,7 +32,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-from autokernel.loop import archive, bench, champion, claim, pipeline, pool
+from autokernel.loop import accumulate, archive, bench, champion, claim, pipeline, pool
 from autokernel.loop import run as run_mod
 
 CANONICAL = champion.CANONICAL_BRANCH
@@ -145,6 +145,8 @@ class TheIncidentStateRefusesToStart(_Incident):
         claim before the verify (refusal after device acquisition)."""
         events: list[str] = []
         real = champion.verify_startup
+        accumulate.Bundle(champion_of_record=self.champion_tip,
+                          tip=self.champion_tip).save(self.store)
 
         @contextmanager
         def hold(*a, **k):

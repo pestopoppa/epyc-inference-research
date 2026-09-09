@@ -21,15 +21,15 @@ import signal
 import shutil
 import subprocess
 import sys
-import threading
 import time
 
 from ..controller import (anchor_integrity, build_recipe, inbox, rung_confirm,
                           workload_contract)
 HEARTBEAT_S = 30  # status heartbeat period; envelope = 6x this
+HEARTBEAT_STOP_TIMEOUT_S = 10
 
 from . import (accumulate, actors, anchor, archive, bench, champion, claim, gates,
-               hotspots, loop, serving,
+               heartbeat, hotspots, loop, serving,
                pipeline, pool, production, status)
 
 
@@ -393,8 +393,16 @@ def main(argv: list[str] | None = None) -> int:
         return subprocess.run(["git", "-C", str(args.worktree), "merge-base",
                                "--is-ancestor", a, b],
                               capture_output=True).returncode == 0
-    restored, note = accumulate.load_bundle(args.store, anchor_commit=anchor_commit,
-                                            is_ancestor=_is_ancestor)
+    try:
+        restored, note = accumulate.load_bundle(
+            args.store, anchor_commit=anchor_commit, is_ancestor=_is_ancestor)
+    except accumulate.BundleRecoveryRequired as exc:
+        raise champion.StartupRefused(
+            f"REFUSED: {exc}. Inspect and restore the authoritative accumulator "
+            "journal and its evidence before restarting. `seed_bundle` applies only "
+            "to a genuinely new explicit baseline under existing measurement and "
+            "resource authorization; it is not a repair for a corrupt journal. No "
+            "automatic rerun occurred and no champion-of-record was inferred.") from exc
     bundle = [restored]
     cor_commit = [restored.champion_of_record]
     cor_build = [args.anchor_build]
@@ -739,15 +747,22 @@ def main(argv: list[str] | None = None) -> int:
         }
 
     def accumulator_state() -> dict | None:
-        """The two-tier champion's live bundle, for the dashboard (R23-44): how many
-        bench keeps have accumulated on the champion of record and how far their
-        compounded gain has climbed toward the serving gate's fire threshold. None when
-        there is no serving tier (no --serving-recipe)."""
+        """Project the two-tier bundle without upgrading a stale measurement.
+
+        Membership and cadence remain live operational state. Numeric gain/progress
+        are current only when measured for this exact tip; a retained older magnitude
+        is separately labelled historical. None means there is no serving tier.
+        """
         if serving_recipe is None:
             return None
         thr = (accum_policy.fire_threshold_pct(serving_floor_pct)
                if serving_floor_pct is not None else None)
-        comp = bundle[0].compounded_bench_pct
+        validity = bundle[0].measurement_validity
+        measurement_current = validity == accumulate.MEASUREMENT_CURRENT
+        historical_comp = (None if measurement_current
+                           else round(bundle[0].compounded_bench_pct, 3))
+        comp = (round(bundle[0].compounded_bench_pct, 3)
+                if measurement_current else None)
         # R23-54: the cadence half of the trigger, so the card can say "2/4 keeps to the
         # mandatory gate" and name the reason the last gate fired instead of leaving a
         # reader to infer it from the compounded number that 2026-09-08 proved unreliable.
@@ -757,7 +772,9 @@ def main(argv: list[str] | None = None) -> int:
             "accumulator_tip": bundle[0].tip,
             "keeps": list(bundle[0].keeps),
             "n_keeps": len(bundle[0].keeps),
-            "compounded_bench_pct": round(comp, 3),
+            "measurement_validity": validity,
+            "compounded_bench_pct": comp,
+            "historical_compounded_bench_pct": historical_comp,
             "serving_floor_pct": serving_floor_pct,
             # R23-49's lesson on the surface: a floor nobody could prove belonged to this
             # recipe looked exactly like one that did.
@@ -765,15 +782,13 @@ def main(argv: list[str] | None = None) -> int:
             "fire_multiple": accum_policy.fire_multiple,
             "fire_threshold_pct": round(thr, 3) if thr is not None else None,
             "progress_fraction": (round(min(comp / thr, 1.0), 4)
-                                  if thr and thr > 0 else None),
+                                  if comp is not None and thr and thr > 0 else None),
             "keeps_since_serving_gate": bundle[0].keeps_since_serving_gate,
             "gate_every_keeps": accum_policy.every_keeps,
             "next_trigger": trig,
             "fires_next": trig is not None,
             "last_serving_gate": last_gate[0],
         }
-
-    last_step = [None]
 
     def actor_health(outcomes) -> dict:
         """What the dashboard needs to say 'the critic is failing' instead of 'running'."""
@@ -788,8 +803,6 @@ def main(argv: list[str] | None = None) -> int:
     def publish(state: str, outcomes=(), gpu=None, hotspot_rows=(),
                 step: str | None = None) -> None:
         """A loop that only reports when it succeeds looks identical to a stuck one."""
-        if step is not None:
-            last_step[0] = step
         status.write(
             args.store, state=state, epoch=epoch, campaign_id="ak-loop",
             anchor_commit=current_anchor_commit[0], surface=args.surface, pairs=args.pairs,
@@ -812,16 +825,18 @@ def main(argv: list[str] | None = None) -> int:
     # Stage-boundary writes left the dashboard blind for 30-47 min during builds and long gates.
     # A daemon thread re-publishes the LAST known step every HEARTBEAT_S with fresh
     # generated_at; the main thread's publishes carry the new step whenever a stage changes.
-    _hb_stop = threading.Event()
-
-    def _heartbeat() -> None:
-        while not _hb_stop.wait(HEARTBEAT_S):
-            try:
-                publish("running", latest, hotspot_rows=hotspot_rows, step=last_step[0])
-            except Exception as exc:  # never let the heartbeat kill the loop
-                print(f"heartbeat  skipped: {exc}", file=sys.stderr)
-
-    threading.Thread(target=_heartbeat, name="status-heartbeat", daemon=True).start()
+    status_publisher = heartbeat.WorkerStatusPublisher(
+        publish,
+        lambda: {"outcomes": list(latest),
+                 "hotspot_rows": list(hotspot_rows)},
+        interval_s=HEARTBEAT_S,
+        join_timeout_s=HEARTBEAT_STOP_TIMEOUT_S,
+        error_sink=lambda message: print(f"status     {message}", file=sys.stderr),
+    )
+    # All existing closure call sites resolve this rebound name at execution time.
+    # The original function above remains the one snapshot renderer; this wrapper is
+    # the sole lifecycle/serialization path into it.
+    publish = status_publisher.publish
 
     def run_pooled() -> pool.PoolResult:
         """Drive the loop across N detached lanes. THE run path -- the sequential
@@ -911,33 +926,58 @@ def main(argv: list[str] | None = None) -> int:
             on_step=step_pooled)
 
     claim_started = None
-    publish("starting")
-    started = time.time()
-    with claim.hold() as receipt:
-        claim_started = time.time()
-        print(f"claim     held on {receipt['device_id']}\n")
-        # R23-44: snapshot the starting champion into the protected champion-of-record slot
-        # BEFORE the accumulator can advance and prune. The serving gate reads cor_build as
-        # its A-arm; without this snapshot the first accumulator prune could delete it.
-        if serving_recipe is not None:
-            print(f"cor       champion of record {cor_commit[0][:12]} = {cor_build[0].name} "
-                  f"(serving A-arm, protected from prune; headline follows serving-"
-                  f"demonstrated advances only)")
-        # Profiles the CURRENT anchor on the SAME surface the A/B will measure, and
-        # is re-run whenever a keep advances the champion.
-        reprofile()
+    try:
+        publish("starting")
+        status_publisher.start()
+        started = time.time()
+        with claim.hold() as receipt:
+            claim_started = time.time()
+            print(f"claim     held on {receipt['device_id']}\n")
+            # R23-44: snapshot the starting champion into the protected champion-of-record slot
+            # BEFORE the accumulator can advance and prune. The serving gate reads cor_build as
+            # its A-arm; without this snapshot the first accumulator prune could delete it.
+            if serving_recipe is not None:
+                print(f"cor       champion of record {cor_commit[0][:12]} = {cor_build[0].name} "
+                      f"(serving A-arm, protected from prune; headline follows serving-"
+                      f"demonstrated advances only)")
+            # Profiles the CURRENT anchor on the SAME surface the A/B will measure, and
+            # is re-run whenever a keep advances the champion.
+            reprofile()
 
-        publish("running", hotspot_rows=hotspot_rows)
-        try:
+            publish("running", hotspot_rows=hotspot_rows)
             pooled = run_pooled()
             outcomes = pooled.outcomes
-        except BaseException:
-            # A crashed loop must SAY it crashed. Going quiet reads as "slow".
-            publish("failed", hotspot_rows=hotspot_rows)
-            raise
 
-    elapsed = time.time() - started
-    publish("complete", outcomes, hotspot_rows=hotspot_rows)
+        elapsed = time.time() - started
+        if args.out:
+            args.out.mkdir(parents=True, exist_ok=True)
+            # `phase_seconds` are LANE-seconds (`pool.PhaseClock`): with N lanes they can
+            # legitimately sum to more than the wall clock, and the flag beside them says
+            # so to any reader that predates the pooled accounting.
+            pooled_body = pooled.to_dict(workers=args.workers)
+            body = {
+                "schema": "epyc.autokernel.loop_run.v1",
+                "epoch": epoch, "anchor_commit": anchor_commit,
+                "surface": args.surface, "pairs": args.pairs,
+                "noise_floor_pct": floor, "elapsed_s": round(elapsed, 1),
+                "workers": args.workers,
+                "iterations": [outcome.to_attempt() for outcome in outcomes],
+                "phase_seconds": pooled_body.pop("phase_lane_seconds"),
+                "phase_seconds_are_lane_seconds": True,
+                "pool": pooled_body,
+            }
+            status.write_json(args.out, "loop-run.json", body, prefix=".loop-run-")
+    except BaseException as exc:
+        # Starting, claim acquisition, reprofiling, and the run body all terminate
+        # through the same ordered lifecycle. A failed status write cannot mask `exc`.
+        status_publisher.close_failed(
+            exc, list(latest), hotspot_rows=list(hotspot_rows))
+        raise
+    else:
+        # The artifact is durable before this claim is made, and the heartbeat has
+        # stopped and joined before the terminal snapshot is rendered.
+        status_publisher.close("complete", outcomes, hotspot_rows=hotspot_rows)
+
     kept = sum(1 for outcome in outcomes if outcome.status == "kept")
     measured = sum(1 for outcome in outcomes
                    if outcome.status in {"kept", "measured_null", "keep_candidate"})
@@ -955,24 +995,6 @@ def main(argv: list[str] | None = None) -> int:
               f"{outcome.hypothesis.mechanism_id if outcome.hypothesis else ''}")
 
     if args.out:
-        args.out.mkdir(parents=True, exist_ok=True)
-        # `phase_seconds` are LANE-seconds (`pool.PhaseClock`): with N lanes they can
-        # legitimately sum to more than the wall clock, and the flag beside them says
-        # so to any reader that predates the pooled accounting.
-        pooled_body = pooled.to_dict(workers=args.workers)
-        body = {
-            "schema": "epyc.autokernel.loop_run.v1",
-            "epoch": epoch, "anchor_commit": anchor_commit,
-            "surface": args.surface, "pairs": args.pairs,
-            "noise_floor_pct": floor, "elapsed_s": round(elapsed, 1),
-            "workers": args.workers,
-            "iterations": [outcome.to_attempt() for outcome in outcomes],
-            "phase_seconds": pooled_body.pop("phase_lane_seconds"),
-            "phase_seconds_are_lane_seconds": True,
-            "pool": pooled_body,
-        }
-        (args.out / "loop-run.json").write_text(json.dumps(body, indent=2),
-                                                encoding="utf-8")
         print(f"\nwrote {args.out / 'loop-run.json'}")
     return 0
 

@@ -44,10 +44,18 @@ injects the compounded-bench number and the serving-gate row; `accumulate` decid
 """
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-import json
 import enum
+import fcntl
+import json
+import math
+import os
+import stat
+
+from .. import journal
+from . import status
 
 
 #: R23-54 (operator ruling 2026-09-08): the serving gate is MANDATORY on a fixed KEEP
@@ -67,6 +75,20 @@ import enum
 #: plausible chance of resolving the bundle, and it bounds how far the accumulator can
 #: drift from serving-demonstrated reality (at most 4 keeps of unverified bench gain).
 SERVING_GATE_EVERY_KEEPS = 4
+JOURNAL_DIRNAME = "journal"
+MEASUREMENT_CURRENT = "current_snapshot"
+MEASUREMENT_UNKNOWN_LEGACY = "unknown_legacy"
+MEASUREMENT_STALE_TIP_ADVANCE = "stale_external_tip_advance"
+BUNDLE_SCHEMA_V1 = journal.LOOP_BUNDLE_SNAPSHOT_SCHEMA_V1
+BUNDLE_SCHEMA_V2 = journal.LOOP_BUNDLE_SNAPSHOT_SCHEMA_V2
+
+
+class BundleRecoveryRequired(RuntimeError):
+    """Authoritative accumulator state cannot be proved safe to resume."""
+
+    def __init__(self, reason: str) -> None:
+        self.reason = reason
+        super().__init__(f"bundle recovery required: {reason}")
 
 
 class Decision(enum.Enum):
@@ -133,12 +155,17 @@ class Bundle:
     #: real serving reading. Durable like the rest of the bundle, so restarts (which run 29
     #: proved are guaranteed) cannot postpone the gate forever by resetting the count.
     keeps_since_serving_gate: int = 0
+    #: Whether compounded_bench_pct was measured for this exact tip.  Legacy v1
+    #: JSON predates the field and therefore maps to the matching historical
+    #: snapshot; a later external tip advance makes the magnitude stale.
+    measurement_validity: str = MEASUREMENT_CURRENT
 
     def add_keep(self, mechanism_id: str, tip: str, compounded_bench_pct: float) -> None:
         self.keeps.append(mechanism_id)
         self.tip = tip
         self.compounded_bench_pct = compounded_bench_pct
         self.keeps_since_serving_gate += 1
+        self.measurement_validity = MEASUREMENT_CURRENT
 
     def mark_serving_gate_fired(self) -> None:
         """The serving gate RAN -- reset the cadence counter. Called on every outcome
@@ -159,69 +186,276 @@ class Bundle:
     #: threshold and was reset before it could get there. Persisting it is what makes
     #: "compound until the gate fires" survive the restarts that a long campaign guarantees.
     FILENAME = "accumulator-bundle.json"
-    SCHEMA = "epyc.autokernel.accumulator_bundle.v1"
+    LEGACY_SCHEMA = BUNDLE_SCHEMA_V1
+    SCHEMA = BUNDLE_SCHEMA_V2
 
     def to_dict(self) -> dict:
         return {"schema": self.SCHEMA, "champion_of_record": self.champion_of_record,
                 "tip": self.tip, "keeps": list(self.keeps),
                 "compounded_bench_pct": self.compounded_bench_pct,
-                "keeps_since_serving_gate": int(self.keeps_since_serving_gate)}
+                "keeps_since_serving_gate": int(self.keeps_since_serving_gate),
+                "measurement_validity": self.measurement_validity}
 
     @classmethod
     def from_dict(cls, d: dict) -> "Bundle":
-        if d.get("schema") != cls.SCHEMA:
+        if not isinstance(d, dict):
+            raise ValueError("bundle must be a JSON object")
+        schema = d.get("schema")
+        if schema not in (cls.LEGACY_SCHEMA, cls.SCHEMA):
             raise ValueError(f"unknown bundle schema {d.get('schema')!r}")
-        # `keeps_since_serving_gate` is ADDITIVE (R23-54), so the schema id does NOT bump:
-        # a bundle written before 2026-09-08 is still a valid v1 bundle and loads with the
-        # counter at 0. That default is also the safe one -- it starts the cadence at this
-        # bundle's next keep rather than firing an unscheduled gate on restore.
+        common = {"schema", "champion_of_record", "tip", "keeps",
+                  "compounded_bench_pct"}
+        allowed = (common | {"keeps_since_serving_gate"}
+                   if schema == cls.LEGACY_SCHEMA else
+                   common | {"keeps_since_serving_gate", "measurement_validity"})
+        required = (common if schema == cls.LEGACY_SCHEMA else allowed)
+        extra = sorted(set(d) - allowed)
+        missing = sorted(required - set(d))
+        if extra:
+            raise ValueError(f"unknown bundle field(s) {extra}")
+        if missing:
+            raise ValueError(f"missing required bundle field(s) {missing}")
+        for key in ("champion_of_record", "tip"):
+            if not isinstance(d.get(key), str) or not d[key].strip():
+                raise ValueError(f"{key} must be a non-empty string")
+        keeps = d["keeps"]
+        if (not isinstance(keeps, list)
+                or any(not isinstance(value, str) or not value.strip()
+                       for value in keeps)):
+            raise ValueError("keeps must be a list of non-empty strings")
+        gain = d["compounded_bench_pct"]
+        if (not isinstance(gain, (int, float)) or isinstance(gain, bool)
+                or not math.isfinite(float(gain))):
+            raise ValueError("compounded_bench_pct must be a finite number")
+        cadence = d.get("keeps_since_serving_gate", 0)
+        if cadence is None and schema == cls.LEGACY_SCHEMA:
+            cadence = 0
+        if (not isinstance(cadence, int) or isinstance(cadence, bool)
+                or cadence < 0):
+            raise ValueError("keeps_since_serving_gate must be a non-negative integer")
+        validity = (MEASUREMENT_UNKNOWN_LEGACY if schema == cls.LEGACY_SCHEMA
+                    else d["measurement_validity"])
+        if validity not in journal.LOOP_BUNDLE_MEASUREMENT_VALIDITIES:
+            raise ValueError(f"unknown measurement_validity {validity!r}")
+        # v1 predates explicit measurement validity.  It remains readable as
+        # unknown legacy state, but only v2 can represent a current measurement.
         return cls(champion_of_record=d["champion_of_record"], tip=d["tip"],
-                   keeps=list(d.get("keeps", [])),
-                   compounded_bench_pct=float(d.get("compounded_bench_pct", 0.0)),
-                   keeps_since_serving_gate=int(d.get("keeps_since_serving_gate", 0) or 0))
+                   keeps=list(keeps), compounded_bench_pct=float(gain),
+                   keeps_since_serving_gate=cadence,
+                   measurement_validity=validity)
 
     def save(self, store: Path) -> Path:
-        p = Path(store) / self.FILENAME
-        p.write_text(json.dumps(self.to_dict(), indent=2), encoding="utf-8")
-        return p
+        store = Path(store)
+        book = journal.Journal(str(store / JOURNAL_DIRNAME))
+        book.initialize()
+        snapshot = self.to_dict()
+        with book.write_lock():
+            _append_snapshot_locked(book, snapshot, provenance="current_snapshot")
+            return status.write_json(store, self.FILENAME, snapshot,
+                                     prefix=".accumulator-bundle-")
 
 
-def load_bundle(store: Path, *, anchor_commit: str, is_ancestor) -> tuple:
-    """Restore the bundle, or explain why a fresh one is correct. Returns (bundle, note).
+def _saved_payload(snapshot: dict, *, provenance: str) -> dict:
+    return {
+        "schema": journal.LOOP_BUNDLE_SAVED_SCHEMA,
+        "snapshot": snapshot,
+        "snapshot_sha256": journal.loop_bundle_snapshot_digest(snapshot),
+        "provenance": provenance,
+    }
 
-    `is_ancestor(a, b)` must answer "is commit a an ancestor of (or equal to) b" against the
-    REAL champion branch -- the persisted state is only trustworthy if the tree still
-    contains it. Two rejections, both of which must start fresh rather than guess:
-      * the champion of record is not an ancestor of the current anchor -> the branch was
-        rewound or rebuilt under us, so the bundle describes a lineage that no longer exists;
-      * the anchor is BEHIND the persisted tip -> generations were dropped, so keeps the
-        bundle claims are no longer in the tree.
-    A fresh bundle here is honest; silently keeping a stale one would re-introduce the very
-    laundering this function exists to stop."""
-    p = Path(store) / Bundle.FILENAME
-    if not p.is_file():
-        return Bundle(champion_of_record=anchor_commit, tip=anchor_commit), "no persisted bundle — starting fresh"
+
+def _last_saved_snapshot(entries: list) -> tuple[dict, str] | None:
+    saved = []
+    for entry in entries:
+        if entry.kind != journal.KIND_LOOP_BUNDLE_SAVED:
+            continue
+        violations = journal.validate_loop_bundle_saved_payload(entry.payload)
+        if violations:
+            raise BundleRecoveryRequired(
+                f"journal LOOP_BUNDLE_SAVED event {entry.event_id} is invalid: "
+                + "; ".join(violations)
+            )
+        saved.append(entry.payload)
+    if not saved:
+        return None
+    payload = saved[-1]
+    return dict(payload["snapshot"]), str(payload["provenance"])
+
+
+def _read_entries(book: journal.Journal) -> list:
     try:
-        b = Bundle.from_dict(json.loads(p.read_text()))
+        return book.read_all()
+    except (journal.JournalCorruption, OSError) as exc:
+        raise BundleRecoveryRequired(
+            f"journal read failure prevents authoritative recovery: {exc}"
+        ) from exc
+
+
+@contextmanager
+def _existing_shared_lock(book: journal.Journal):
+    """Share an existing Journal lock without creating any path or inode."""
+    lock_path = Path(book.root) / journal.LOCK_NAME
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        fd = os.open(lock_path, flags)
+    except OSError as exc:
+        raise BundleRecoveryRequired(
+            f"read-only recovery requires existing journal lock {lock_path}: {exc}"
+        ) from exc
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise BundleRecoveryRequired(
+                f"read-only recovery journal lock is not a regular file: {lock_path}"
+            )
+        try:
+            fcntl.flock(fd, fcntl.LOCK_SH)
+        except OSError as exc:
+            raise BundleRecoveryRequired(
+                f"read-only recovery cannot acquire journal lock {lock_path}: {exc}"
+            ) from exc
+        try:
+            yield
+        finally:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+    finally:
+        os.close(fd)
+
+
+def _append_snapshot_locked(book: journal.Journal, snapshot: dict, *,
+                            provenance: str) -> None:
+    entries = _read_entries(book)
+    previous = _last_saved_snapshot(entries)
+    if previous is not None:
+        previous_snapshot, _ = previous
+        try:
+            if (Bundle.from_dict(previous_snapshot).to_dict()
+                    == Bundle.from_dict(snapshot).to_dict()):
+                return
+        except (TypeError, ValueError) as exc:
+            raise BundleRecoveryRequired(
+                f"journal bundle snapshot cannot be restored: {exc}"
+            ) from exc
+    book.append(journal.KIND_LOOP_BUNDLE_SAVED,
+                _saved_payload(snapshot, provenance=provenance))
+
+
+def _read_legacy_projection(path: Path) -> tuple[dict | None, str | None]:
+    if not path.is_file():
+        return None, "legacy Bundle JSON is missing"
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(raw, dict) or raw.get("schema") != Bundle.LEGACY_SCHEMA:
+            raise ValueError(
+                f"only {Bundle.LEGACY_SCHEMA!r} is importable legacy state"
+            )
+        Bundle.from_dict(raw)
+    except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
+        return None, f"legacy Bundle JSON is unreadable or invalid: {exc}"
+    return raw, None
+
+
+def _require_valid_ancestry(bundle: Bundle, anchor_commit: str, is_ancestor) -> None:
+    try:
+        cor_precedes_tip = bool(is_ancestor(bundle.champion_of_record, bundle.tip))
+        tip_precedes_anchor = bool(is_ancestor(bundle.tip, anchor_commit))
     except Exception as exc:
-        return (Bundle(champion_of_record=anchor_commit, tip=anchor_commit),
-                f"persisted bundle unreadable ({exc}) — starting fresh")
-    if not is_ancestor(b.champion_of_record, anchor_commit):
-        return (Bundle(champion_of_record=anchor_commit, tip=anchor_commit),
-                f"champion of record {b.champion_of_record[:12]} is not an ancestor of anchor "
-                f"{anchor_commit[:12]} — branch rewound, starting fresh")
-    if not is_ancestor(b.tip, anchor_commit):
-        return (Bundle(champion_of_record=anchor_commit, tip=anchor_commit),
-                f"anchor {anchor_commit[:12]} is behind persisted tip {b.tip[:12]} — "
-                "generations dropped, starting fresh")
-    if b.tip != anchor_commit:
-        # The anchor moved ahead of the bundle while the loop was down (a keep committed but
-        # not recorded, or a hand commit). Trust the TREE for the tip and say so.
-        b.tip = anchor_commit
-        return b, (f"restored {len(b.keeps)} keep(s), {b.compounded_bench_pct:+.2f}% vs cor "
-                   f"{b.champion_of_record[:12]}; tip advanced to the anchor")
-    return b, (f"restored {len(b.keeps)} keep(s), {b.compounded_bench_pct:+.2f}% vs cor "
-               f"{b.champion_of_record[:12]}")
+        raise BundleRecoveryRequired(f"commit ancestry check failed: {exc}") from exc
+    if not cor_precedes_tip:
+        raise BundleRecoveryRequired(
+            f"invalid COR/tip ancestry: champion of record "
+            f"{bundle.champion_of_record[:12]} is not an ancestor of tip "
+            f"{bundle.tip[:12]}"
+        )
+    if not tip_precedes_anchor:
+        raise BundleRecoveryRequired(
+            f"invalid tip/anchor ancestry: persisted tip {bundle.tip[:12]} is not "
+            f"an ancestor of anchor {anchor_commit[:12]}"
+        )
+
+
+def load_bundle(store: Path, *, anchor_commit: str, is_ancestor,
+                read_only: bool = False) -> tuple:
+    """Restore authoritative journal state, importing legacy JSON only once.
+
+    The JSON file is a projection. Missing state and any state whose lineage or
+    journal integrity cannot be proved raise ``BundleRecoveryRequired``. Corrupt
+    history requires inspection/restoration of authoritative evidence; it must
+    never be replaced with a fresh seed. ``seed_bundle`` is only for a genuinely
+    new campaign/baseline under existing authority, never for repairing history.
+    """
+    store = Path(store)
+    p = store / Bundle.FILENAME
+    journal_root = store / JOURNAL_DIRNAME
+    legacy, legacy_error = _read_legacy_projection(p)
+
+    journal_exists = journal_root.exists()
+    if not journal_exists and legacy is None:
+        raise BundleRecoveryRequired(f"no accumulator state: {legacy_error}")
+
+    if read_only and not journal_exists:
+        # Dry consumers may inspect an importable v1 projection, but may not
+        # create the journal, import it, or repair the projection.
+        try:
+            b = Bundle.from_dict(legacy)
+        except (TypeError, ValueError) as exc:  # defensive; reader validated it
+            raise BundleRecoveryRequired(f"legacy snapshot cannot be restored: {exc}") from exc
+        _require_valid_ancestry(b, anchor_commit, is_ancestor)
+        if b.tip != anchor_commit:
+            b.tip = anchor_commit
+            b.measurement_validity = MEASUREMENT_STALE_TIP_ADVANCE
+        return b, (f"read-only legacy v1 state: restored {len(b.keeps)} keep(s) "
+                   f"with {b.measurement_validity} measurement")
+
+    book = journal.Journal(str(journal_root))
+    if not journal_exists:
+        book.initialize()
+
+    lock = _existing_shared_lock(book) if read_only else book.write_lock()
+    with lock:
+        entries = _read_entries(book)
+        saved = _last_saved_snapshot(entries)
+        provenance = "current_snapshot"
+        if saved is None:
+            if legacy is None:
+                raise BundleRecoveryRequired(
+                    "journal contains no LOOP_BUNDLE_SAVED snapshot and "
+                    f"{legacy_error}"
+                )
+            snapshot = legacy
+            provenance = "imported_legacy_state"
+        else:
+            snapshot, provenance = saved
+        try:
+            b = Bundle.from_dict(snapshot)
+        except (TypeError, ValueError) as exc:
+            raise BundleRecoveryRequired(
+                f"authoritative journal snapshot cannot be restored: {exc}"
+            ) from exc
+
+        _require_valid_ancestry(b, anchor_commit, is_ancestor)
+        if saved is None and not read_only:
+            # An invalid legacy lineage must fail above without ever becoming
+            # authoritative journal state.
+            _append_snapshot_locked(book, snapshot,
+                                    provenance="imported_legacy_state")
+        if b.tip != anchor_commit:
+            # Preserve the provable COR and cadence/keep history, but an external tree
+            # advance invalidates the old tip-vs-COR magnitude.  Keep that magnitude as
+            # historical data and make validity the authority-bearing status.
+            b.tip = anchor_commit
+            b.measurement_validity = MEASUREMENT_STALE_TIP_ADVANCE
+            if not read_only:
+                _append_snapshot_locked(book, b.to_dict(), provenance="current_snapshot")
+                status.write_json(store, Bundle.FILENAME, b.to_dict(),
+                                  prefix=".accumulator-bundle-")
+            return b, (f"restored {len(b.keeps)} keep(s) from {provenance}; tip advanced "
+                       "to the anchor and compounded measurement marked stale")
+        if not read_only:
+            status.write_json(store, Bundle.FILENAME, b.to_dict(),
+                              prefix=".accumulator-bundle-")
+        return b, (f"restored {len(b.keeps)} keep(s), "
+                   f"{b.compounded_bench_pct:+.2f}% vs cor "
+                   f"{b.champion_of_record[:12]} from {provenance}")
 
 
 def gate_trigger(bundle: Bundle, serving_floor_pct: float | None,
@@ -244,7 +478,10 @@ def gate_trigger(bundle: Bundle, serving_floor_pct: float | None,
     is a gate that cannot judge, which R23-43's grammar has always refused to spend."""
     if serving_floor_pct is None:
         return None
-    threshold = bundle.compounded_bench_pct >= policy.fire_threshold_pct(serving_floor_pct)
+    threshold = (
+        bundle.measurement_validity == MEASUREMENT_CURRENT
+        and bundle.compounded_bench_pct >= policy.fire_threshold_pct(serving_floor_pct)
+    )
     cadence = (policy.every_keeps > 0
                and bundle.keeps_since_serving_gate >= policy.every_keeps)
     if threshold and cadence:

@@ -85,6 +85,7 @@ from __future__ import annotations
 import fcntl
 import hashlib
 import json
+import math
 import os
 import re
 from contextlib import contextmanager
@@ -234,6 +235,18 @@ KIND_OPERATOR_RELEASE_DRY_RUN_TERMINATED = "OPERATOR_RELEASE_DRY_RUN_TERMINATED"
 # invariant 7 exists for had nowhere durable to go. Two modules wrote two halves
 # of one contract and neither half was wrong on its own.
 KIND_PREFLIGHT_ATTESTATION = "PREFLIGHT_ATTESTATION"
+# Operational accumulator state, not a §7 evidence record.  Persisting or
+# importing this snapshot grants no measurement or claim eligibility.
+KIND_LOOP_BUNDLE_SAVED = "LOOP_BUNDLE_SAVED"
+LOOP_BUNDLE_SAVED_SCHEMA = "epyc.autokernel.loop_bundle_saved.v1"
+LOOP_BUNDLE_SNAPSHOT_SCHEMA_V1 = "epyc.autokernel.accumulator_bundle.v1"
+LOOP_BUNDLE_SNAPSHOT_SCHEMA_V2 = "epyc.autokernel.accumulator_bundle.v2"
+LOOP_BUNDLE_PROVENANCES = frozenset({
+    "current_snapshot", "imported_legacy_state",
+})
+LOOP_BUNDLE_MEASUREMENT_VALIDITIES = frozenset({
+    "current_snapshot", "unknown_legacy", "stale_external_tip_advance",
+})
 
 # §19.4 bootstrap-knowledge event types. Their payloads are campaign-specific
 # structures owned by the bootstrap corpus task, so they are checked only for
@@ -249,6 +262,7 @@ NATIVE_KINDS = frozenset({
     KIND_SUPERSEDED, KIND_RETRIEVAL_SUPERSEDED, KIND_TOMBSTONE,
     KIND_TORN_APPEND_DISCARDED, KIND_OPERATOR_CONTROL_ACK, KIND_VIEW_REBASED,
     KIND_PROPOSAL_SKIPPED, KIND_STOP_STATE, KIND_PREFLIGHT_ATTESTATION,
+    KIND_LOOP_BUNDLE_SAVED,
     KIND_MICROBENCH_RUN_COMPLETED,
     KIND_T0_REFUSAL,
     KIND_POST_T0_QUIET_BOUNDARY,
@@ -314,6 +328,103 @@ NARRATIVE_KEYS = frozenset({"narrative"})
 #: validator in this package started with, and two of those forgot to also refuse
 #: a placeholder. See the `require` header in `schemas.py`.
 _SHA256_RE = schemas.SHA256_RE
+
+
+def loop_bundle_snapshot_digest(snapshot: Mapping[str, Any]) -> str:
+    """Content-address one Bundle snapshot with the journal's canonical JSON."""
+    return schemas.content_hash(snapshot)
+
+
+def validate_loop_bundle_saved_payload(payload: Mapping[str, Any]) -> list:
+    """Validate operational Bundle state without granting evidence authority."""
+    out: list[str] = []
+    allowed_payload = {"schema", "snapshot", "snapshot_sha256", "provenance"}
+    extra_payload = sorted(set(payload) - allowed_payload)
+    if extra_payload:
+        out.append(f"payload: unknown field(s) {extra_payload}")
+    if payload.get("schema") != LOOP_BUNDLE_SAVED_SCHEMA:
+        out.append(f"schema: must be {LOOP_BUNDLE_SAVED_SCHEMA!r}")
+    provenance = payload.get("provenance")
+    if provenance not in LOOP_BUNDLE_PROVENANCES:
+        out.append(
+            f"provenance: required, one of {sorted(LOOP_BUNDLE_PROVENANCES)}"
+        )
+    snapshot = payload.get("snapshot")
+    if not isinstance(snapshot, Mapping):
+        out.append("snapshot: required Bundle mapping")
+        return out
+
+    schema = snapshot.get("schema")
+    common = {"schema", "champion_of_record", "tip", "keeps",
+              "compounded_bench_pct"}
+    if schema == LOOP_BUNDLE_SNAPSHOT_SCHEMA_V1:
+        allowed_snapshot = common | {"keeps_since_serving_gate"}
+        required_snapshot = common
+        if provenance != "imported_legacy_state":
+            out.append("snapshot.schema: v1 is admitted only as imported legacy state")
+    elif schema == LOOP_BUNDLE_SNAPSHOT_SCHEMA_V2:
+        allowed_snapshot = common | {
+            "keeps_since_serving_gate", "measurement_validity",
+        }
+        required_snapshot = allowed_snapshot
+        if provenance != "current_snapshot":
+            out.append("snapshot.schema: v2 must use current_snapshot provenance")
+    else:
+        allowed_snapshot = set(snapshot)
+        required_snapshot = set()
+        out.append(
+            "snapshot.schema: unsupported; expected legacy v1 or current v2"
+        )
+    extra_snapshot = sorted(set(snapshot) - allowed_snapshot)
+    missing_snapshot = sorted(required_snapshot - set(snapshot))
+    if extra_snapshot:
+        out.append(f"snapshot: unknown field(s) {extra_snapshot}")
+    if missing_snapshot:
+        out.append(f"snapshot: missing required field(s) {missing_snapshot}")
+    for key in ("champion_of_record", "tip"):
+        value = snapshot.get(key)
+        if not isinstance(value, str) or not value.strip():
+            out.append(f"snapshot.{key}: required and non-empty")
+    keeps = snapshot.get("keeps")
+    if (not isinstance(keeps, list)
+            or any(not isinstance(value, str) or not value.strip()
+                   for value in keeps)):
+        out.append("snapshot.keeps: required list of non-empty strings")
+    gain = snapshot.get("compounded_bench_pct")
+    if (not isinstance(gain, (int, float)) or isinstance(gain, bool)
+            or not math.isfinite(float(gain))):
+        out.append("snapshot.compounded_bench_pct: required finite number")
+    cadence = snapshot.get("keeps_since_serving_gate")
+    if schema == LOOP_BUNDLE_SNAPSHOT_SCHEMA_V2 and cadence is None:
+        out.append(
+            "snapshot.keeps_since_serving_gate: required non-negative integer in v2"
+        )
+    elif cadence is not None and (
+            not isinstance(cadence, int) or isinstance(cadence, bool)
+            or cadence < 0):
+        out.append(
+            "snapshot.keeps_since_serving_gate: must be a non-negative integer"
+        )
+    validity = snapshot.get("measurement_validity")
+    if schema == LOOP_BUNDLE_SNAPSHOT_SCHEMA_V2:
+        if validity not in LOOP_BUNDLE_MEASUREMENT_VALIDITIES:
+            out.append(
+                "snapshot.measurement_validity: required, one of "
+                f"{sorted(LOOP_BUNDLE_MEASUREMENT_VALIDITIES)}"
+            )
+    elif validity is not None:
+        out.append("snapshot.measurement_validity: not defined by legacy v1")
+    try:
+        expected_digest = loop_bundle_snapshot_digest(snapshot)
+    except (TypeError, ValueError) as exc:
+        out.append(f"snapshot: cannot be content-hashed: {exc}")
+    else:
+        digest = payload.get("snapshot_sha256")
+        if not isinstance(digest, str) or not _SHA256_RE.match(digest):
+            out.append("snapshot_sha256: required lowercase hex sha256")
+        elif digest != expected_digest:
+            out.append("snapshot_sha256: must be the content hash of snapshot")
+    return out
 
 
 def _iso_now() -> str:
@@ -1062,6 +1173,8 @@ def _validate_native_payload(kind: str, payload: Mapping[str, Any]) -> list:
         state = payload.get("state")
         if not isinstance(state, str) or not state.strip():
             out.append("state: required and non-empty")
+    elif kind == KIND_LOOP_BUNDLE_SAVED:
+        out.extend(validate_loop_bundle_saved_payload(payload))
     elif kind == KIND_MICROBENCH_RUN_COMPLETED:
         for key in ("campaign_id", "candidate_id", "run_id", "completed_at"):
             value = payload.get(key)
