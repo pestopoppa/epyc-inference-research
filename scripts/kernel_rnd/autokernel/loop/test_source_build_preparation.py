@@ -108,7 +108,6 @@ def test_public_actor_selection_and_deeply_immutable_materialization(tmp_path, k
     finally:
         controller.close()
 
-
 @pytest.mark.parametrize("field", ["authority", "transition", "stage", "request", "owner"])
 def test_selected_actor_record_refuses_binding_changes(tmp_path, field):
     instance, controller, outcome = selected_actor(tmp_path)
@@ -159,6 +158,83 @@ def test_real_guarded_source_materialization_not_a_build(tmp_path, tiny_source):
         assert "return x + 2" in Path(tiny_source.actor.path.path, PATH).read_text()
     finally:
         controller.close()
+
+
+def test_materialized_candidate_source_capability_is_exact_and_not_replayable(
+        tmp_path, tiny_source):
+    source_driver, source_controller, source_outcome = selected_actor(
+        tmp_path / "source-owner", revision=tiny_source.base)
+    build_driver, build_controller, build_outcome = selected_actor(
+        tmp_path / "build-owner", kind="build_recipe", revision=tiny_source.base)
+    try:
+        selected_source = source_driver.materialize_actor(source_outcome)
+        source_bound = bound_source(source_driver, selected_source, tiny_source)
+        capability = bridge.materialize_source(
+            source_bound, campaign_driver=source_driver,
+            actor_worktree=tiny_source.actor)
+        assert isinstance(capability, bridge.MaterializedSourceCapability)
+        selected_build = build_driver.materialize_actor(build_outcome)
+        # A different controller binding cannot consume even genuine candidate
+        # source bytes.
+        plan = W.BuildPlan(
+            tiny_source.actor.path,
+            W.SandboxPath.create(tmp_path / "candidate-build", sandbox_root=tmp_path,
+                                 production_trees=()),
+            tiny_source.actor.path, W.BuildParallelism(1, cpu_list="0"),
+            targets=("fixture",), cmake_defines=(("X", "1"),), cmake="/usr/bin/cmake")
+        result = advice(selected_build, options=[
+            f"-D{k}={v}" for k, v in plan.effective_defines])
+        with pytest.raises(bridge.PreparationBindingRefused,
+                           match="materialized source capability"):
+            bridge.bind_build_preparation(
+                selected_actor_work=selected_build, preparation_result=result,
+                resolved_campaign=build_driver.resolved,
+                source_commit=capability["source_commit"], build_plan=plan,
+                source_worktree=tiny_source.actor,
+                materialized_source=capability)
+
+        # Exercise the same-owner binding independently of the still-missing
+        # durable source-transition settlement: only replace the build record's
+        # controller view with the exact source owner view.
+        same_owner_row = selected_build.to_dict()
+        same_owner_row["controller_binding"] = driver._thaw(
+            capability.controller_binding)
+        same_owner = driver.SelectedActorWork.from_dict(same_owner_row)
+        same_result = advice(same_owner, options=[
+            f"-D{k}={v}" for k, v in plan.effective_defines])
+        bound = bridge.bind_build_preparation(
+            selected_actor_work=same_owner, preparation_result=same_result,
+            resolved_campaign=build_driver.resolved,
+            source_commit=capability["source_commit"], build_plan=plan,
+            source_worktree=tiny_source.actor, materialized_source=capability)
+        assert bound.to_dict()["schema"] == bridge.BUILD_SCHEMA_V2
+        with pytest.raises(bridge.PreparationBindingRefused,
+                           match="materialized source capability"):
+            bridge.BoundBuildPreparation(bound.canonical, bound.plan)
+        copied = replace(capability)
+        assert copied is not capability and copied != capability
+        with pytest.raises(bridge.PreparationBindingRefused,
+                           match="original owner issuance"):
+            bridge.bind_build_preparation(
+                selected_actor_work=same_owner, preparation_result=same_result,
+                resolved_campaign=build_driver.resolved,
+                source_commit=capability["source_commit"], build_plan=plan,
+                source_worktree=tiny_source.actor, materialized_source=copied)
+        with pytest.raises(bridge.PreparationBindingRefused, match="native issuer"):
+            bridge.MaterializedSourceCapability(
+                capability.canonical, capability.bound_digest,
+                capability.target_revision_digest, capability.controller_binding,
+                tiny_source.actor, object())
+        (Path(tiny_source.actor.path.path) / PATH).write_text("changed after capability\n")
+        with pytest.raises(bridge.PreparationBindingRefused, match="clean detached"):
+            bridge.bind_build_preparation(
+                selected_actor_work=same_owner, preparation_result=same_result,
+                resolved_campaign=build_driver.resolved,
+                source_commit=capability["source_commit"], build_plan=plan,
+                source_worktree=tiny_source.actor, materialized_source=capability)
+    finally:
+        source_controller.close()
+        build_controller.close()
 
 
 def test_source_carrier_owns_patch_and_nested_declarations(tmp_path, tiny_source):
