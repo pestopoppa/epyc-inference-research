@@ -596,7 +596,9 @@ def loaded_planned_serving_identity(*, measurement_callable: Callable[..., Any],
                                 reopen_deferred_result)
     from .planned_unit_selection import (SelectedPlanUnitRange, SelectedUnitDispatch,
                                         loaded_source_identity)
-    from .planned_serving import PlannedServingRun
+    from .planned_serving import (PlannedServingRun, FrozenPrompt, FrozenPromptManifest,
+                                 PROMPT_SCHEMA, PROMPT_SCHEMA_V2)
+    from . import resolved_recipe as recipe_contract
     from .native_producer_source import loaded_producer_source_closure
     from .driver_execution import UnknownParentEvidenceProducer
     from .native_parent_service import NativeParentEvidenceService
@@ -649,6 +651,12 @@ def loaded_planned_serving_identity(*, measurement_callable: Callable[..., Any],
             PlannedWorkerInvocation.__init__, PlannedWorkerInvocation.validate_request,
             PlannedWorkerInvocation.validate_unit_request,
             PlannedServingRun.to_dict, PlannedWorkerResult.from_dict.__func__,
+            FrozenPrompt.from_dict.__func__, FrozenPrompt._from_v2.__func__,
+            FrozenPrompt.body.fget, FrozenPrompt.to_dict,
+            FrozenPromptManifest.from_dict.__func__, FrozenPromptManifest.to_dict,
+            FrozenPromptManifest.requests,
+            recipe_contract._canonical_command, recipe_contract._canonical_int,
+            recipe_contract.canonical_recipe_projection,
             reopen_deferred_result, loaded_source_identity,
             UnknownParentEvidenceProducer.__init__,
             lo.ObservationSession._run, lo.ObservationSession._enqueue_locked,
@@ -672,6 +680,9 @@ def loaded_planned_serving_identity(*, measurement_callable: Callable[..., Any],
             preflight.reduce_claim_witness, preflight.reduce_owned_scope,
             preflight.parse_proc_locks, preflight.parse_region_claim),
         used_constants={**window_constants, "serving_residency_schema": serving.RESIDENCY_SCHEMA,
+            "frozen_prompt_schemas": [PROMPT_SCHEMA, PROMPT_SCHEMA_V2],
+            "canonical_launch_value_flags": sorted(recipe_contract._CANONICAL_VALUE_FLAGS),
+            "canonical_launch_switch_flags": sorted(recipe_contract._CANONICAL_SWITCH_FLAGS),
             "observer_context_schema": lo.CONTEXT_SCHEMA,
             "observer_sample_schema": lo.SAMPLE_SCHEMA,
             "observer_record_schema": lo.OBSERVATION_SCHEMA,

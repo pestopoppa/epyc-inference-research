@@ -483,12 +483,12 @@ class ResolvedRecipe:
 _CANONICAL_VALUE_FLAGS = frozenset({
     "-m", "--host", "--port", "-np", "-c", "-t", "-tb", "-b", "-ub",
     "--flash-attn", "-fa", "-ctk", "-ctv", "--chat-template-file", "--spec-type",
-    "--spec-draft-n-max", "--reasoning", "--slot-save-path", "--device",
+    "--spec-draft-n-max", "--spec-draft-p-min", "--reasoning", "--slot-save-path", "--device", "-lv",
     "--device-draft", "-ngl", "-md", "-ngld",
 })
 _CANONICAL_SWITCH_FLAGS = frozenset({
     "--jinja", "--mlock", "--no-mmap", "--kv-unified", "--no-kv-unified",
-    "--metrics", "--slots",
+    "--metrics", "--slots", "--no-webui",
 })
 
 
@@ -520,6 +520,15 @@ def _canonical_command(command: tuple[str, ...]) -> tuple[str, dict[str, str | b
             raise ResolutionError(f"canonical command omits required {required}")
     if parsed["--host"] != "127.0.0.1":
         raise ResolutionError("canonical command must use the loopback host")
+    if "--spec-draft-p-min" in parsed:
+        try:
+            probability = float(parsed["--spec-draft-p-min"])
+        except (TypeError, ValueError) as exc:
+            raise ResolutionError("canonical draft probability must be finite in [0,1]") from exc
+        if not math.isfinite(probability) or not 0 <= probability <= 1:
+            raise ResolutionError("canonical draft probability must be finite in [0,1]")
+    if "-lv" in parsed:
+        _canonical_int(parsed, "-lv")
     return executable, parsed
 
 
