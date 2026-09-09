@@ -327,6 +327,20 @@ class ValidationConsumer:
             raise ValidationConsumerError("sealed row locator/digest differs from receipt")
         return self._validate_reopened_bundle(bundle, receipt)
 
+    def verify_row_receipt(self, receipt: cm.RowReceipt, row: cm.ValidationRow,
+                           candidate: cm.CandidateManifest,
+                           comparator: cm.CandidateManifest) -> Mapping[str, Any]:
+        """Public replay verifier for the exact typed candidate transaction join."""
+        row = cm.ValidationRow.from_dict(row.to_dict())
+        candidate, comparator = candidate.validated(), comparator.validated()
+        bundle = self.reopen_row(receipt)
+        if (cm.ValidationRow.from_dict(bundle["row"]) != row
+                or cm.CandidateManifest.from_dict(bundle["candidate"]) != candidate
+                or cm.CandidateManifest.from_dict(bundle["comparator"]) != comparator):
+            raise ValidationConsumerError(
+                "replayed row/candidate/comparator differs from verifier arguments")
+        return bundle
+
     def _validate_reopened_bundle(self, bundle: Mapping[str, Any],
                                   receipt: cm.RowReceipt) -> Mapping[str, Any]:
         fields = {"schema", "batch", "row", "candidate", "comparator", "row_set",
