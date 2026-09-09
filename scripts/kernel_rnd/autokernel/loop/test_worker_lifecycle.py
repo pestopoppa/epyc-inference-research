@@ -258,12 +258,89 @@ def test_provider_authored_held_receipt_binds_exact_durable_terminal():
     try:
         terminal = harness.engine.run_stage(harness.request("pass"))
         receipt = harness.engine.trusted_held_claim_receipt(terminal)
+        assert harness.engine.terminal_for_request(
+            request_id=terminal.request_id, plan_digest=terminal.plan_digest,
+            lineage_id=terminal.lineage_id, stage_id=terminal.stage_id) == terminal
         assert receipt.ownership_generation == terminal.worker_generation
         assert receipt.allocation_generation == terminal.grant_generation
         assert receipt.beneficiary_shares == {terminal.request_id: 1.0}
         assert receipt.ended_at > receipt.started_at
         for identity in _captured(harness.events):
             assert not lifecycle.same_process(identity)
+    finally:
+        harness.close()
+
+
+def test_terminal_lookup_is_indexed_exact_and_ambiguous_generations_refuse():
+    harness = Harness()
+    provider = ReceiptProvider(harness.path / "containers")
+    harness.provider = provider
+    harness.engine.provider = provider
+    request = harness.request("raise SystemExit(7)")
+    try:
+        first = harness.engine.run_stage(request)
+        assert first.accepted is False
+        assert harness.engine.terminal_for_request(
+            request_id=request.request_id, plan_digest=request.plan_digest,
+            lineage_id=request.lineage_id, stage_id=request.stage_id) == first
+        second = harness.engine.run_stage(request)
+        assert second.worker_generation != first.worker_generation
+        with pytest.raises(lifecycle.LifecycleRefused, match="ambiguous"):
+            harness.engine.terminal_for_request(
+                request_id=request.request_id, plan_digest=request.plan_digest,
+                lineage_id=request.lineage_id, stage_id=request.stage_id)
+        assert harness.engine.terminal_for_request(
+            request_id="foreign", plan_digest=request.plan_digest,
+            lineage_id=request.lineage_id, stage_id=request.stage_id) is None
+    finally:
+        harness.close()
+
+
+def test_failed_final_terminal_append_is_not_retrievable_or_receipt_authority():
+    harness = Harness()
+    provider = ReceiptProvider(harness.path / "containers")
+    harness.provider = provider
+    request = harness.request("raise SystemExit(9)")
+
+    def fail_terminal(row):
+        harness._record_event(row)
+        if row.get("event") == "WORKER_RESULT_STALE":
+            raise OSError("injected final terminal append failure")
+
+    harness.engine = lifecycle.WorkerLifecycle(
+        binding=harness.binding, runtime=harness.runtime, event_sink=fail_terminal,
+        provider=provider,
+        admission_fence=lambda *_: lifecycle.StageAdmission(True, "admitted"),
+        binding_fence=lambda _binding: True,
+        runtime_fence=lambda *_: lifecycle.RuntimeDirective("continue", "held"),
+        wall_clock=_now)
+    try:
+        with pytest.raises(OSError, match="terminal append"):
+            harness.engine.run_stage(request)
+        assert harness.engine.terminal_for_request(
+            request_id=request.request_id, plan_digest=request.plan_digest,
+            lineage_id=request.lineage_id, stage_id=request.stage_id) is None
+        restarted = lifecycle.WorkerLifecycle(
+            binding=harness.binding, runtime=harness.runtime,
+            event_sink=lambda _row: None, provider=provider,
+            admission_fence=lambda *_: lifecycle.StageAdmission(True, "admitted"),
+            binding_fence=lambda _binding: True,
+            runtime_fence=lambda *_: lifecycle.RuntimeDirective("continue", "held"),
+            wall_clock=_now)
+        assert restarted.terminal_for_request(
+            request_id=request.request_id, plan_digest=request.plan_digest,
+            lineage_id=request.lineage_id, stage_id=request.stage_id) is None
+    finally:
+        harness.close()
+
+
+def test_terminal_lookup_refuses_stale_live_binding():
+    harness = Harness(binding_current=False)
+    try:
+        with pytest.raises(lifecycle.LifecycleRefused, match="not current"):
+            harness.engine.terminal_for_request(
+                request_id="request", plan_digest="a" * 64,
+                lineage_id="lineage", stage_id="stage")
     finally:
         harness.close()
 

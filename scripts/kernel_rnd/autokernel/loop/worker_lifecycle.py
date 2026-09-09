@@ -1063,7 +1063,20 @@ class WorkerLifecycle:
         self._pending_acquisition: ProspectiveAcquisitionIdentity | None = None
         self._unattached_identity: ProcessIdentity | None = None
         self._terminals: dict[tuple[str, int], TerminalWorker] = {}
+        self._terminal_requests: dict[tuple[str, str, str, str], set[tuple[str, int]]] = {}
+        self._terminal_bindings: dict[tuple[str, int], CampaignBinding] = {}
         self._held_receipts: dict[tuple[str, int], TrustedHeldClaimReceipt] = {}
+
+    def _register_terminal(self, terminal: TerminalWorker,
+                           binding: CampaignBinding | None = None) -> None:
+        """Index only a terminal whose final lifecycle event was durably emitted."""
+        owner = binding or self.binding
+        worker_key = (terminal.worker_id, terminal.worker_generation)
+        request_key = (terminal.request_id, terminal.plan_digest,
+                       terminal.lineage_id, terminal.stage_id)
+        self._terminals[worker_key] = terminal
+        self._terminal_bindings[worker_key] = owner
+        self._terminal_requests.setdefault(request_key, set()).add(worker_key)
 
     def _emit(self, event: str, *, worker_id: str, worker_generation: int,
               request: StageRequest, grant: GrantReceipt, container_id: str,
@@ -1493,7 +1506,7 @@ class WorkerLifecycle:
                    request=request, grant=grant, container_id=container_id,
                    data={"result_digest": retained_digest, "accepted": accepted,
                          "reason": reason})
-        self._terminals[(worker_id, generation)] = terminal
+        self._register_terminal(terminal)
         if held_receipt is not None:
             self._held_receipts[(worker_id, generation)] = held_receipt
         if planned_invocation is not None and accepted and retained_digest is not None:
@@ -1798,6 +1811,23 @@ class WorkerLifecycle:
             terminal.worker_generation, terminal.grant_id, terminal.container_id,
             terminal.lineage_id, is_current, is_current)
 
+    def terminal_for_request(self, *, request_id: str, plan_digest: str,
+                             lineage_id: str, stage_id: str) -> TerminalWorker | None:
+        """Return one exact current durably emitted terminal without restoring authority."""
+        request_key = (_text(request_id, "request_id"), _sha(plan_digest, "plan_digest"),
+                       _text(lineage_id, "lineage_id"), _text(stage_id, "stage_id"))
+        if not self.binding_fence(self.binding):
+            raise LifecycleRefused("terminal lookup campaign binding is not current")
+        matches = tuple(self._terminal_requests.get(request_key, ()))
+        if not matches:
+            return None
+        current = [key for key in matches
+                   if self._terminal_bindings.get(key) == self.binding]
+        if len(current) != 1:
+            raise LifecycleRefused("terminal lookup is ambiguous across worker generations")
+        terminal = self._terminals[current[0]]
+        return TerminalWorker(**terminal.__dict__)
+
     def trusted_held_claim_receipt(self, terminal: TerminalWorker):
         """Return provider facts only for an exactly owned durably terminal worker."""
         current = self._terminals.get((terminal.worker_id, terminal.worker_generation))
@@ -2013,12 +2043,12 @@ class WorkerLifecycle:
             request.plan_digest, request.lineage_id, request.stage_id, grant.grant_id,
             grant.generation, intent["container_id"], return_code, result_digest, False,
             "recovered old/uncertain worker result is diagnostic only")
-        self._terminals[(worker_id, intent["worker_generation"])] = terminal
         self._emit("WORKER_RESULT_STALE", worker_id=worker_id,
                    worker_generation=intent["worker_generation"], request=request,
                    grant=grant, container_id=intent["container_id"],
                    data={"result_digest": result_digest, "accepted": False,
                          "reason": terminal.reason}, event_binding=event_binding)
+        self._register_terminal(terminal, event_binding)
         self._active = not cleanup_ok
         self._ownership_unresolved = not cleanup_ok
         return terminal

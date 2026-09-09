@@ -634,6 +634,7 @@ class CampaignController:
         self._worker_last_generation = 0
         self._worker_projection = worker_lifecycle_module.project_events([])
         self._worker_run_active = False
+        self._worker_no_acquisition: tuple[Any, ...] | None = None
         self.readiness_check = readiness_check or (lambda: (False, "execution authority absent"))
         self._cached_driver_readiness = (False, "provider readiness not refreshed")
         self.clock = clock
@@ -872,6 +873,9 @@ class CampaignController:
                 acquisition_revision += 1
                 acquisition_last_generation = max(
                     acquisition_last_generation, row["worker_generation"])
+                if (row["phase"] == "RESOLVED"
+                        and row["data"]["outcome"] == "denied"):
+                    self._worker_no_acquisition = self._worker_attempt_key(row)
                 if acquisition_projection.pending is None:
                     acquisition_events = []
                 continue
@@ -1369,6 +1373,9 @@ class CampaignController:
             self._acquisition_projection = projection
             self._active_acquisition_events = (
                 candidate_events if projection.pending is not None else [])
+            if (row["phase"] == "RESOLVED"
+                    and row["data"]["outcome"] == "denied"):
+                self._worker_no_acquisition = self._worker_attempt_key(row)
             if projection.pending is not None:
                 self.observed_state = "ownership_unresolved"
                 self.prerequisite_reason = (
@@ -1387,27 +1394,115 @@ class CampaignController:
                     self.observed_state = self.desired_state
                     self.prerequisite_reason = None
 
-    def run_worker_stage(self, request: worker_lifecycle_module.StageRequest):
+    @staticmethod
+    def _worker_attempt_key_fields(binding, request_id: str, plan_digest: str,
+                                   lineage_id: str, stage_id: str) -> tuple[Any, ...]:
+        return (
+            binding.campaign_id, binding.config_digest, binding.config_generation,
+            binding.supervisor_id, binding.supervisor_incarnation,
+            request_id, plan_digest, lineage_id, stage_id,
+        )
+
+    @classmethod
+    def _worker_attempt_key(cls, value, binding=None) -> tuple[Any, ...]:
+        if binding is not None:
+            return cls._worker_attempt_key_fields(
+                binding, value.request_id, value.plan_digest,
+                value.lineage_id, value.stage_id)
+        owner = worker_lifecycle_module.CampaignBinding(
+            value["campaign_id"], value["config_digest"], value["config_generation"],
+            value["supervisor_id"], value["supervisor_incarnation"])
+        return cls._worker_attempt_key_fields(
+            owner, value["request_id"], value["plan_digest"],
+            value["lineage_id"], value["stage_id"])
+
+    def run_worker_stage(self, request: worker_lifecycle_module.StageRequest,
+                         *, planned_invocation=None):
         """Run one provider-authorized stage without holding the command lock."""
         with self._mutex:
             self._require_active_locked()
+            if not isinstance(request, worker_lifecycle_module.StageRequest):
+                raise TypeError("request must be StageRequest")
+            binding = (self._worker_lifecycle.binding
+                       if self._worker_lifecycle is not None else None)
+            attempt_key = (None if binding is None else
+                           self._worker_attempt_key(request, binding))
+            if attempt_key is not None and self._worker_no_acquisition == attempt_key:
+                # A newer call for the same logical request supersedes any earlier
+                # denial proof before it can touch provider or lifecycle state.
+                self._worker_no_acquisition = None
+
+            def pre_engine_refusal(exc):
+                if attempt_key is not None:
+                    self._worker_no_acquisition = attempt_key
+                raise exc
+
             if self.snapshot_version not in {2, 3} or self._worker_lifecycle is None:
-                raise ControlRefused("worker lifecycle requires explicit snapshot v2")
+                pre_engine_refusal(
+                    ControlRefused("worker lifecycle requires explicit snapshot v2"))
             if (self._worker_run_active or self._worker_projection.active
                     or self._acquisition_projection.pending is not None):
-                raise ControlRefused("an owned worker is active or unresolved")
+                pre_engine_refusal(
+                    ControlRefused("an owned worker is active or unresolved"))
             if self.desired_state != "running":
-                raise ControlRefused(f"worker admission is closed: {self.desired_state}")
+                pre_engine_refusal(
+                    ControlRefused(f"worker admission is closed: {self.desired_state}"))
             if request.control_revision != self.control_revision:
-                raise ControlRefused("worker request has stale control revision")
+                pre_engine_refusal(ControlRefused("worker request has stale control revision"))
+            if self._lifecycle_provider is None:
+                pre_engine_refusal(worker_lifecycle_module.WaitingAuthority(
+                    "trusted grant provider is unavailable"))
             engine = self._worker_lifecycle
             self._worker_run_active = True
         try:
-            return engine.run_stage(request)
+            return engine.run_stage(request, planned_invocation=planned_invocation)
         finally:
             with self._mutex:
                 self._worker_run_active = False
                 self._settle_v2_commands_locked()
+
+    def worker_terminal_for_request(self, *, request_id: str, plan_digest: str,
+                                    lineage_id: str, stage_id: str):
+        """Return one exact current-owner terminal without restoring result authority."""
+        with self._mutex:
+            self._require_active_locked()
+            if self._worker_lifecycle is None:
+                raise ControlRefused("worker lifecycle is unavailable")
+            return self._worker_lifecycle.terminal_for_request(
+                request_id=request_id, plan_digest=plan_digest,
+                lineage_id=lineage_id, stage_id=stage_id)
+
+    def worker_held_claim_receipt(self, terminal):
+        """Return provider-authored held facts for an exact owned terminal."""
+        with self._mutex:
+            self._require_active_locked()
+            if self._worker_lifecycle is None:
+                raise ControlRefused("worker lifecycle is unavailable")
+            return self._worker_lifecycle.trusted_held_claim_receipt(terminal)
+
+    def worker_attempt_status(self, *, request_id: str, plan_digest: str,
+                              lineage_id: str, stage_id: str) -> str:
+        """Classify an exact request; absence alone remains unknown."""
+        with self._mutex:
+            self._require_active_locked()
+            if self._worker_lifecycle is None:
+                raise ControlRefused("worker lifecycle is unavailable")
+            keys = ("request_id", "plan_digest", "lineage_id", "stage_id")
+            expected = (request_id, plan_digest, lineage_id, stage_id)
+            active = (*self._active_acquisition_events, *self._active_worker_events)
+            if self._worker_run_active or any(
+                    tuple(row.get(key) for key in keys) == expected for row in active):
+                return "unresolved"
+            terminal = self._worker_lifecycle.terminal_for_request(
+                request_id=request_id, plan_digest=plan_digest,
+                lineage_id=lineage_id, stage_id=stage_id)
+            if terminal is not None:
+                return "terminal"
+            attempt_key = self._worker_attempt_key_fields(
+                self._worker_lifecycle.binding, request_id, plan_digest,
+                lineage_id, stage_id)
+            return ("not_acquired" if attempt_key == self._worker_no_acquisition
+                    else "unknown")
 
     def reconcile_workers(self):
         """Reconcile retained v2 ownership outside the controller command lock."""
@@ -1437,8 +1532,7 @@ class CampaignController:
             self._require_active_locked()
             if self._worker_lifecycle is None:
                 raise ControlRefused("worker lifecycle is unavailable")
-            engine = self._worker_lifecycle
-        return engine.trusted_result_fence(terminal)
+            return self._worker_lifecycle.trusted_result_fence(terminal)
 
     def _append_v2_command_locked(self, phase: str, command: Mapping[str, Any],
                                   result: Mapping[str, Any]) -> None:
