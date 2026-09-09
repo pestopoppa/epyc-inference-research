@@ -243,6 +243,13 @@ CAMPAIGN_SUPERVISOR_EVENT_SCHEMA = "epyc.autokernel.campaign_supervisor_event.v1
 CAMPAIGN_SUPERVISOR_EVENTS = frozenset({
     "START", "CONTROL_ACCEPTED",
 })
+KIND_CANDIDATE_TRANSACTION = "CANDIDATE_TRANSACTION"
+CANDIDATE_TRANSACTION_SCHEMA = "epyc.autokernel.candidate_transaction_event.v1"
+CANDIDATE_TRANSACTION_PHASES = frozenset({"INTENT", "PREPARED", "COMMITTED"})
+CANDIDATE_TRANSACTION_OPERATIONS = frozenset({
+    "init", "integrate", "start_batch", "record_row", "complete_batch",
+    "advance_validated",
+})
 LOOP_BUNDLE_SAVED_SCHEMA = "epyc.autokernel.loop_bundle_saved.v1"
 LOOP_BUNDLE_SNAPSHOT_SCHEMA_V1 = "epyc.autokernel.accumulator_bundle.v1"
 LOOP_BUNDLE_SNAPSHOT_SCHEMA_V2 = "epyc.autokernel.accumulator_bundle.v2"
@@ -269,6 +276,7 @@ NATIVE_KINDS = frozenset({
     KIND_PROPOSAL_SKIPPED, KIND_STOP_STATE, KIND_PREFLIGHT_ATTESTATION,
     KIND_LOOP_BUNDLE_SAVED,
     KIND_CAMPAIGN_SUPERVISOR_EVENT,
+    KIND_CANDIDATE_TRANSACTION,
     KIND_MICROBENCH_RUN_COMPLETED,
     KIND_T0_REFUSAL,
     KIND_POST_T0_QUIET_BOUNDARY,
@@ -1332,6 +1340,276 @@ def _validate_native_payload(kind: str, payload: Mapping[str, Any]) -> list:
             reason = data.get("prerequisite_reason")
             if reason is not None and (not isinstance(reason, str) or not reason.strip()):
                 out.append("data.prerequisite_reason: must be null or non-empty string")
+    elif kind == KIND_CANDIDATE_TRANSACTION:
+        required = {"schema", "phase", "campaign_id", "config_generation",
+                    "config_digest", "supervisor_incarnation", "transaction_id",
+                    "operation", "payload_digest", "data"}
+        missing = sorted(required - set(payload))
+        extra = sorted(set(payload) - required)
+        if missing:
+            out.append(f"missing required field(s) {missing}")
+        if extra:
+            out.append(f"unknown field(s) {extra}")
+        if payload.get("schema") != CANDIDATE_TRANSACTION_SCHEMA:
+            out.append(f"schema: must be {CANDIDATE_TRANSACTION_SCHEMA!r}")
+        phase = payload.get("phase")
+        if not isinstance(phase, str) or phase not in CANDIDATE_TRANSACTION_PHASES:
+            out.append(f"phase: must be one of {sorted(CANDIDATE_TRANSACTION_PHASES)}")
+        operation = payload.get("operation")
+        if (not isinstance(operation, str)
+                or operation not in CANDIDATE_TRANSACTION_OPERATIONS):
+            out.append(
+                f"operation: must be one of {sorted(CANDIDATE_TRANSACTION_OPERATIONS)}")
+        for key in ("campaign_id", "transaction_id"):
+            value = payload.get(key)
+            if not isinstance(value, str) or not value.strip():
+                out.append(f"{key}: required non-empty string")
+        for key in ("config_digest", "payload_digest"):
+            value = payload.get(key)
+            if not isinstance(value, str) or not _SHA256_RE.match(value):
+                out.append(f"{key}: required lowercase hex sha256")
+        for key in ("config_generation", "supervisor_incarnation"):
+            value = payload.get(key)
+            if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+                out.append(f"{key}: required positive integer")
+        data = payload.get("data")
+        if not isinstance(data, Mapping):
+            out.append("data: required mapping")
+        elif phase == "INTENT":
+            expected = {"expected_state_digest", "operation_payload",
+                        "prepared_objects", "prepared_refs"}
+            if set(data) != expected:
+                out.append(f"data: INTENT fields differ from {sorted(expected)}")
+            expected_state = data.get("expected_state_digest")
+            if (expected_state is not None and
+                    (not isinstance(expected_state, str)
+                     or not _SHA256_RE.match(expected_state))):
+                out.append("data.expected_state_digest: must be null or sha256")
+            operation_payload = data.get("operation_payload")
+            if not isinstance(operation_payload, Mapping):
+                out.append("data.operation_payload: required mapping")
+            elif isinstance(operation, str) \
+                    and operation in CANDIDATE_TRANSACTION_OPERATIONS:
+                operation_fields = {
+                    "init": {"state", "manifest"},
+                    "integrate": {"previous", "candidate", "threshold_signal",
+                                  "integration_request_id"},
+                    "start_batch": {"batch", "row_set", "candidate", "comparator"},
+                    "record_row": {"batch_id", "row_set", "row_state"},
+                    "complete_batch": {"batch"},
+                    "advance_validated": {"verifier_id", "batch", "row_set",
+                                          "candidate", "comparator", "loo_plans",
+                                          "loo_results"},
+                }[operation]
+                if set(operation_payload) != operation_fields:
+                    out.append(
+                        f"data.operation_payload: {operation} fields differ from "
+                        f"{sorted(operation_fields)}")
+                mapping_fields = operation_fields - {
+                    "threshold_signal", "integration_request_id", "batch_id",
+                    "verifier_id",
+                }
+                for key in mapping_fields:
+                    if not isinstance(operation_payload.get(key), Mapping):
+                        out.append(f"data.operation_payload.{key}: required mapping")
+                for key in operation_fields & {
+                        "integration_request_id", "batch_id", "verifier_id"}:
+                    value = operation_payload.get(key)
+                    if not isinstance(value, str) or not value.strip():
+                        out.append(f"data.operation_payload.{key}: invalid")
+                if operation == "integrate" \
+                        and not isinstance(operation_payload.get("threshold_signal"), bool):
+                    out.append(
+                        "data.operation_payload.threshold_signal: required boolean")
+            objects = data.get("prepared_objects")
+            if not isinstance(objects, list):
+                out.append("data.prepared_objects: required list")
+            else:
+                allowed_object_kinds = {
+                    "manifest", "row-set", "batch", "row-state", "loo-plan",
+                    "loo-result", "state",
+                }
+                for index, item in enumerate(objects):
+                    if (not isinstance(item, Mapping)
+                            or set(item) != {"kind", "digest"}
+                            or not isinstance(item.get("kind"), str)
+                            or item["kind"] not in allowed_object_kinds
+                            or not isinstance(item.get("digest"), str)
+                            or not _SHA256_RE.match(item["digest"])):
+                        out.append(f"data.prepared_objects[{index}]: malformed")
+            refs = data.get("prepared_refs")
+            if not isinstance(refs, list):
+                out.append("data.prepared_refs: required list")
+            else:
+                ref_fields = {"repo_id", "ref", "commit", "tree", "object_format"}
+                for index, ref in enumerate(refs):
+                    if not isinstance(ref, Mapping) or set(ref) != ref_fields:
+                        out.append(f"data.prepared_refs[{index}]: malformed")
+                        continue
+                    for key in ref_fields:
+                        if not isinstance(ref.get(key), str) or not ref[key]:
+                            out.append(f"data.prepared_refs[{index}].{key}: invalid")
+                    ref_name = ref.get("ref")
+                    if isinstance(ref_name, str) \
+                            and not ref_name.startswith("refs/autokernel/candidates/"):
+                        out.append(
+                            f"data.prepared_refs[{index}].ref: outside owned namespace")
+                    object_format = ref.get("object_format")
+                    if object_format not in {"sha1", "sha256"}:
+                        out.append(
+                            f"data.prepared_refs[{index}].object_format: invalid")
+                    elif all(isinstance(ref.get(key), str)
+                             for key in ("commit", "tree")):
+                        oid_length = 40 if object_format == "sha1" else 64
+                        for key in ("commit", "tree"):
+                            oid = ref[key]
+                            if len(oid) != oid_length or any(
+                                    char not in "0123456789abcdef" for char in oid):
+                                out.append(
+                                    f"data.prepared_refs[{index}].{key}: invalid object id")
+                repo_ids = [ref.get("repo_id") for ref in refs
+                            if isinstance(ref, Mapping)
+                            and isinstance(ref.get("repo_id"), str)]
+                if len(repo_ids) != len(set(repo_ids)):
+                    out.append("data.prepared_refs: duplicate repo_id")
+            if (isinstance(operation, str)
+                    and isinstance(operation_payload, Mapping)
+                    and isinstance(refs, list)):
+                try:
+                    expected_digest = schemas.content_hash({
+                        "operation": operation,
+                        "expected_state_digest": expected_state,
+                        "operation_payload": dict(operation_payload),
+                        "prepared_objects": objects,
+                        "prepared_refs": refs,
+                    })
+                except (TypeError, ValueError):
+                    out.append("data: intent is not canonical finite JSON")
+                else:
+                    if payload.get("payload_digest") != expected_digest:
+                        out.append("payload_digest: does not match intent semantics")
+        elif phase == "PREPARED":
+            expected = {"prepared_objects", "prepared_refs"}
+            if set(data) != expected:
+                out.append(f"data: PREPARED fields differ from {sorted(expected)}")
+            objects = data.get("prepared_objects")
+            refs = data.get("prepared_refs")
+            if not isinstance(objects, list):
+                out.append("data.prepared_objects: required list")
+            else:
+                allowed_object_kinds = {
+                    "manifest", "row-set", "batch", "row-state", "loo-plan",
+                    "loo-result", "state",
+                }
+                for index, item in enumerate(objects):
+                    if (not isinstance(item, Mapping)
+                            or set(item) != {"kind", "digest"}
+                            or item.get("kind") not in allowed_object_kinds
+                            or not isinstance(item.get("digest"), str)
+                            or not _SHA256_RE.match(item["digest"])):
+                        out.append(f"data.prepared_objects[{index}]: malformed")
+            if not isinstance(refs, list):
+                out.append("data.prepared_refs: required list")
+            else:
+                ref_fields = {"repo_id", "ref", "commit", "tree", "object_format"}
+                for index, ref in enumerate(refs):
+                    if not isinstance(ref, Mapping) or set(ref) != ref_fields:
+                        out.append(f"data.prepared_refs[{index}]: malformed")
+                        continue
+                    object_format = ref.get("object_format")
+                    if (any(not isinstance(ref.get(key), str) or not ref[key]
+                            for key in ref_fields)
+                            or not ref["ref"].startswith(
+                                "refs/autokernel/candidates/")
+                            or object_format not in {"sha1", "sha256"}):
+                        out.append(f"data.prepared_refs[{index}]: invalid")
+                        continue
+                    oid_length = 40 if object_format == "sha1" else 64
+                    if any(len(ref[key]) != oid_length or any(
+                            char not in "0123456789abcdef" for char in ref[key])
+                           for key in ("commit", "tree")):
+                        out.append(
+                            f"data.prepared_refs[{index}]: invalid object id")
+                repo_ids = [ref.get("repo_id") for ref in refs
+                            if isinstance(ref, Mapping)
+                            and isinstance(ref.get("repo_id"), str)]
+                if len(repo_ids) != len(set(repo_ids)):
+                    out.append("data.prepared_refs: duplicate repo_id")
+            try:
+                schemas.content_hash(dict(data))
+            except (TypeError, ValueError):
+                out.append("data: preparation is not canonical finite JSON")
+        elif phase == "COMMITTED":
+            expected = {"state", "state_digest", "result", "transition_receipt"}
+            if set(data) != expected:
+                out.append(f"data: COMMITTED fields differ from {sorted(expected)}")
+            state_value = data.get("state")
+            if not isinstance(state_value, Mapping):
+                out.append("data.state: required mapping")
+            state_digest = data.get("state_digest")
+            if not isinstance(state_digest, str) or not _SHA256_RE.match(state_digest):
+                out.append("data.state_digest: required lowercase hex sha256")
+            elif isinstance(state_value, Mapping):
+                try:
+                    actual = schemas.content_hash(dict(state_value))
+                except (TypeError, ValueError):
+                    out.append("data.state: must be canonical finite JSON")
+                else:
+                    if actual != state_digest:
+                        out.append("data.state_digest: does not match state")
+            result = data.get("result")
+            result_fields = {"state_digest", "integration_tip", "validated_candidate",
+                             "gate_due", "validation_debt"}
+            if not isinstance(result, Mapping) or set(result) != result_fields:
+                out.append("data.result: required mapping")
+            else:
+                for key in ("state_digest", "integration_tip"):
+                    value = result.get(key)
+                    if not isinstance(value, str) or not _SHA256_RE.match(value):
+                        out.append(f"data.result.{key}: required sha256")
+                if result.get("state_digest") != state_digest:
+                    out.append("data.result.state_digest: does not match committed state")
+                validated = result.get("validated_candidate")
+                if validated is not None and (
+                        not isinstance(validated, str) or not _SHA256_RE.match(validated)):
+                    out.append("data.result.validated_candidate: must be null or sha256")
+                if not isinstance(result.get("gate_due"), bool):
+                    out.append("data.result.gate_due: required boolean")
+                debt = result.get("validation_debt")
+                if (not isinstance(debt, list)
+                        or any(not isinstance(item, str) or not item for item in debt)
+                        or len(debt) != len(set(debt))):
+                    out.append("data.result.validation_debt: invalid string list")
+            receipt = data.get("transition_receipt")
+            receipt_fields = {
+                "schema", "operation", "payload_digest", "expected_state_digest",
+                "resulting_state_digest", "decision", "verifier_id",
+            }
+            if not isinstance(receipt, Mapping) or set(receipt) != receipt_fields:
+                out.append("data.transition_receipt: required exact mapping")
+            else:
+                if receipt.get("schema") != \
+                        "epyc.autokernel.candidate_transition_receipt.v1":
+                    out.append("data.transition_receipt.schema: invalid")
+                if receipt.get("operation") != operation:
+                    out.append("data.transition_receipt.operation: does not match")
+                if receipt.get("payload_digest") != payload.get("payload_digest"):
+                    out.append("data.transition_receipt.payload_digest: does not match")
+                prior = receipt.get("expected_state_digest")
+                if prior is not None and (
+                        not isinstance(prior, str) or not _SHA256_RE.match(prior)):
+                    out.append("data.transition_receipt.expected_state_digest: invalid")
+                if receipt.get("resulting_state_digest") != state_digest:
+                    out.append("data.transition_receipt.resulting_state_digest: does not match")
+                decision = receipt.get("decision")
+                verifier_id = receipt.get("verifier_id")
+                if operation == "advance_validated":
+                    if decision != "trusted_verifiers_accepted":
+                        out.append("data.transition_receipt.decision: invalid trusted decision")
+                    if not isinstance(verifier_id, str) or not verifier_id.strip():
+                        out.append("data.transition_receipt.verifier_id: required")
+                elif decision != "pure_transition" or verifier_id is not None:
+                    out.append("data.transition_receipt: invalid pure transition receipt")
     elif kind == KIND_TORN_APPEND_DISCARDED:
         for key in ("discarded_byte_count", "shard_index"):
             value = payload.get(key)
@@ -2622,7 +2900,9 @@ __all__ = [
     "KIND_OPERATOR_RELEASE_DRY_RUN_REQUESTED",
     "KIND_OPERATOR_RELEASE_DRY_RUN_TERMINATED",
     "KIND_CAMPAIGN_SUPERVISOR_EVENT", "CAMPAIGN_SUPERVISOR_EVENT_SCHEMA",
-    "CAMPAIGN_SUPERVISOR_EVENTS",
+    "CAMPAIGN_SUPERVISOR_EVENTS", "KIND_CANDIDATE_TRANSACTION",
+    "CANDIDATE_TRANSACTION_SCHEMA", "CANDIDATE_TRANSACTION_PHASES",
+    "CANDIDATE_TRANSACTION_OPERATIONS",
     "tombstone_view_key",
     "Journal", "JournalEntry", "JournalDefect", "ShardRef", "TornTail",
     "ReadReport", "Cursor", "Views",

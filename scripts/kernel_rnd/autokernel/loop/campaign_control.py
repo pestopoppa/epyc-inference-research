@@ -28,6 +28,7 @@ from .campaign import ResolvedCampaign
 COMMAND_SCHEMA = "epyc.autokernel.campaign_command.v1"
 SNAPSHOT_SCHEMA = "epyc.autokernel.campaign_snapshot.v1"
 SNAPSHOT_FILE = "campaign-snapshot.json"
+_CANDIDATE_REPLAYER_TOKEN = object()
 OPERATIONS = frozenset({"pause", "resume", "drain"})
 
 
@@ -247,6 +248,78 @@ def may_start_stage(*, desired_state: str, current_control_revision: int,
     return AdmissionDecision(True, "admitted")
 
 
+class _CandidateTransactionContext:
+    """Ephemeral journal capability valid only under its controller's RLock."""
+
+    def __init__(self, owner: "CampaignController", entries: tuple[Any, ...],
+                 entry_offset: int) -> None:
+        self._owner = owner
+        self._active = True
+        self._thread_id = threading.get_ident()
+        self._lifetime_token = owner._lifetime_token
+        self._context_token = owner._candidate_context_token
+        self.entries = entries
+        self.entry_offset = entry_offset
+        self.store = owner.store
+        self.campaign_id = owner.resolved.campaign_id
+        self.config_generation = owner.config_generation
+        self.config_digest = owner.config_digest
+        self.supervisor_incarnation = owner.supervisor_incarnation
+
+    def append(self, *, phase: str, transaction_id: str, operation: str,
+               payload_digest: str, data: Mapping[str, Any]):
+        if not self._active:
+            raise ControlRefused("candidate transaction context is no longer active")
+        if threading.get_ident() != self._thread_id:
+            raise ControlRefused("candidate transaction context belongs to another thread")
+        payload = {
+            "schema": journal_module.CANDIDATE_TRANSACTION_SCHEMA,
+            "phase": phase,
+            "campaign_id": self.campaign_id,
+            "config_generation": self.config_generation,
+            "config_digest": self.config_digest,
+            "supervisor_incarnation": self.supervisor_incarnation,
+            "transaction_id": transaction_id,
+            "operation": operation,
+            "payload_digest": payload_digest,
+            "data": dict(data),
+        }
+        return self._owner._append_candidate_event_locked(
+            payload, lifetime_token=self._lifetime_token,
+            context_token=self._context_token, thread_id=self._thread_id)
+
+    def _close(self) -> None:
+        self._active = False
+
+    def projection_cache(self) -> Any:
+        if not self._active or threading.get_ident() != self._thread_id:
+            raise ControlRefused("candidate transaction context is not current")
+        return copy.deepcopy(self._owner._candidate_projection_cache)
+
+    def update_projection_cache(self, value: Any) -> None:
+        del value
+        raise ControlRefused(
+            "candidate projection replacement is reserved for the trusted replayer")
+
+    def _update_projection_cache_trusted(self, value: Any, *, authority: object) -> None:
+        if not self._active or threading.get_ident() != self._thread_id:
+            raise ControlRefused("candidate transaction context is not current")
+        self._owner._update_candidate_projection_cache_locked(
+            value, lifetime_token=self._lifetime_token,
+            context_token=self._context_token, thread_id=self._thread_id,
+            authority=authority)
+
+    def completed_candidate(self, request_id: str) -> Any:
+        if not self._active or threading.get_ident() != self._thread_id:
+            raise ControlRefused("candidate transaction context is not current")
+        return copy.deepcopy(self._owner._candidate_completed_records.get(request_id))
+
+    def completed_candidate_ids(self) -> tuple[str, ...]:
+        if not self._active or threading.get_ident() != self._thread_id:
+            raise ControlRefused("candidate transaction context is not current")
+        return tuple(sorted(self._owner._candidate_completed_records))
+
+
 class CampaignController:
     """One lock-owning durable control projection for one resolved generation."""
 
@@ -291,6 +364,16 @@ class CampaignController:
         self.observed_state = "paused"
         self.prerequisite_reason: str | None = "explicit resume required"
         self._command_results: dict[str, dict[str, Any]] = {}
+        self._candidate_pending: tuple[str, str, str] | None = None
+        self._candidate_pending_payload: Mapping[str, Any] | None = None
+        self._candidate_prepared = False
+        self._candidate_completed: set[str] = set()
+        self._candidate_completed_records: dict[str, dict[str, Mapping[str, Any]]] = {}
+        self._candidate_entries: list[Any] = []
+        self._candidate_projection_cache: Any = None
+        self._candidate_projection_position = 0
+        self._lifetime_token: object | None = None
+        self._candidate_context_token: object | None = None
 
     def _acquire(self) -> None:
         runtime: RuntimeRoot | None = None
@@ -338,6 +421,7 @@ class CampaignController:
                 raise ControlRefused("controller instances are single-lifetime")
             self._acquire()
             self._ever_entered = True
+            self._lifetime_token = object()
             try:
                 journal_root = self.store / "journal"
                 fresh = not os.path.lexists(journal_root)
@@ -378,10 +462,60 @@ class CampaignController:
         last_epoch = 0
         last_revision = 0
         saw_start = False
+        candidate_pending: tuple[str, str, str] | None = None
+        candidate_pending_payload: Mapping[str, Any] | None = None
+        candidate_prepared = False
+        candidate_completed: set[str] = set()
+        candidate_completed_records: dict[str, dict[str, Mapping[str, Any]]] = {}
+        candidate_entries = []
         for entry in entries:
             self._journal_cursor = entry.seq
             if entry.campaign_id not in (None, self.resolved.campaign_id):
                 raise ControlRefused("store contains another campaign identity")
+            if entry.kind == journal_module.KIND_CANDIDATE_TRANSACTION:
+                candidate_entries.append(copy.deepcopy(entry))
+                row = entry.payload
+                violations = journal_module._validate_native_payload(entry.kind, row)
+                if violations:
+                    raise journal_module.JournalCorruption(
+                        "invalid candidate transaction history: "
+                        + "; ".join(violations))
+                if (not saw_start
+                        or row["campaign_id"] != self.resolved.campaign_id
+                        or row["config_generation"] != self.config_generation
+                        or row["config_digest"] != self.config_digest
+                        or row["supervisor_incarnation"] != last_incarnation):
+                    raise journal_module.JournalCorruption(
+                        "candidate transaction event breaks supervisor binding")
+                transaction_key = (row["transaction_id"], row["operation"],
+                                   row["payload_digest"])
+                if row["phase"] == "INTENT":
+                    if candidate_pending is not None \
+                            or row["transaction_id"] in candidate_completed:
+                        raise journal_module.JournalCorruption(
+                            "candidate transaction intent overlaps or reuses an id")
+                    candidate_pending = transaction_key
+                    candidate_pending_payload = copy.deepcopy(row)
+                    candidate_prepared = False
+                elif row["phase"] == "PREPARED":
+                    if candidate_pending != transaction_key or candidate_prepared:
+                        raise journal_module.JournalCorruption(
+                            "candidate preparation lacks exact intent or is duplicated")
+                    candidate_prepared = True
+                elif candidate_pending != transaction_key:
+                    raise journal_module.JournalCorruption(
+                        "candidate transaction completion lacks exact intent")
+                else:
+                    candidate_completed.add(row["transaction_id"])
+                    assert candidate_pending_payload is not None
+                    candidate_completed_records[row["transaction_id"]] = {
+                        "intent": candidate_pending_payload,
+                        "completion": copy.deepcopy(row),
+                    }
+                    candidate_pending = None
+                    candidate_pending_payload = None
+                    candidate_prepared = False
+                continue
             if entry.kind != journal_module.KIND_CAMPAIGN_SUPERVISOR_EVENT:
                 continue
             row = entry.payload
@@ -458,6 +592,12 @@ class CampaignController:
         self.supervisor_incarnation = last_incarnation
         self.stream_epoch = last_epoch
         self.control_revision = last_revision
+        self._candidate_pending = candidate_pending
+        self._candidate_pending_payload = candidate_pending_payload
+        self._candidate_prepared = candidate_prepared
+        self._candidate_completed = candidate_completed
+        self._candidate_completed_records = candidate_completed_records
+        self._candidate_entries = candidate_entries
 
     @property
     def command_results(self) -> dict[str, dict[str, Any]]:
@@ -550,6 +690,115 @@ class CampaignController:
         self._journal_cursor = entry.seq
         self._verify_journal_layout(self.store / "journal")
         return entry
+
+    def _append_candidate_event_locked(
+            self, payload: Mapping[str, Any], *, lifetime_token: object | None,
+            context_token: object | None, thread_id: int):
+        if (threading.get_ident() != thread_id
+                or lifetime_token is None or lifetime_token is not self._lifetime_token
+                or context_token is None
+                or context_token is not self._candidate_context_token
+                or not self._mutex._is_owned()):
+            raise ControlRefused("candidate transaction capability is not current owner")
+        self._require_active_locked()
+        violations = journal_module._validate_native_payload(
+            journal_module.KIND_CANDIDATE_TRANSACTION, payload)
+        if violations:
+            raise ControlRefused("invalid candidate transaction event: "
+                                 + "; ".join(violations))
+        if (payload.get("campaign_id") != self.resolved.campaign_id
+                or payload.get("config_generation") != self.config_generation
+                or payload.get("config_digest") != self.config_digest
+                or payload.get("supervisor_incarnation") != self.supervisor_incarnation):
+            raise ControlRefused("candidate transaction binding does not match controller")
+        transaction_key = (str(payload["transaction_id"]), str(payload["operation"]),
+                           str(payload["payload_digest"]))
+        if payload["phase"] == "INTENT":
+            if (self._candidate_pending is not None
+                    or transaction_key[0] in self._candidate_completed):
+                raise ControlRefused(
+                    "candidate transaction intent overlaps or reuses an id")
+        elif payload["phase"] == "PREPARED":
+            if self._candidate_pending != transaction_key or self._candidate_prepared:
+                raise ControlRefused(
+                    "candidate preparation lacks exact active intent")
+        elif self._candidate_pending != transaction_key or not self._candidate_prepared:
+            raise ControlRefused(
+                "candidate transaction completion lacks exact prepared intent")
+        self._verify_store()
+        if self._journal is None:
+            raise ControlRefused("controller journal is unavailable")
+        try:
+            entry = self._journal.append(
+                journal_module.KIND_CANDIDATE_TRANSACTION, payload,
+                record_id=str(payload["transaction_id"]))
+            self._verify_journal_layout(self.store / "journal")
+        except BaseException:
+            self._poisoned = True
+            raise
+        self._journal_cursor = entry.seq
+        self._candidate_entries.append(copy.deepcopy(entry))
+        if payload["phase"] == "INTENT":
+            self._candidate_pending = transaction_key
+            self._candidate_pending_payload = copy.deepcopy(payload)
+            self._candidate_prepared = False
+        elif payload["phase"] == "PREPARED":
+            self._candidate_prepared = True
+        else:
+            self._candidate_completed.add(transaction_key[0])
+            assert self._candidate_pending_payload is not None
+            self._candidate_completed_records[transaction_key[0]] = {
+                "intent": self._candidate_pending_payload,
+                "completion": copy.deepcopy(payload),
+            }
+            self._candidate_pending = None
+            self._candidate_pending_payload = None
+            self._candidate_prepared = False
+        return entry
+
+    def _update_candidate_projection_cache_locked(
+            self, value: Any, *, lifetime_token: object | None,
+            context_token: object | None, thread_id: int, authority: object) -> None:
+        if (threading.get_ident() != thread_id
+                or authority is not _CANDIDATE_REPLAYER_TOKEN
+                or lifetime_token is None or lifetime_token is not self._lifetime_token
+                or context_token is None
+                or context_token is not self._candidate_context_token
+                or not self._mutex._is_owned()):
+            raise ControlRefused("candidate projection cache writer is not current owner")
+        self._require_active_locked()
+        position = getattr(value, "position", None)
+        if (not isinstance(position, int) or isinstance(position, bool)
+                or not 0 <= position <= len(self._candidate_entries)):
+            raise ControlRefused("candidate projection cache position is invalid")
+        self._candidate_projection_cache = copy.deepcopy(value)
+        self._candidate_projection_position = position
+
+    def candidate_transaction(self, callback: Callable[[Any], Any]) -> Any:
+        """Run one candidate operation under the sole controller/journal owner.
+
+        The callback receives a short-lived append capability and a detached copy
+        of the unprojected candidate-event suffix. It cannot retain that capability
+        after return. Candidate append uncertainty poisons this incarnation until
+        replay.
+        """
+        if not callable(callback):
+            raise TypeError("candidate transaction callback must be callable")
+        with self._mutex:
+            self._require_active_locked()
+            if self._candidate_context_token is not None:
+                raise ControlRefused("nested candidate transaction is refused")
+            assert self._journal is not None
+            offset = self._candidate_projection_position
+            entries = tuple(copy.deepcopy(self._candidate_entries[offset:]))
+            self._verify_store()
+            self._candidate_context_token = object()
+            context = _CandidateTransactionContext(self, entries, offset)
+            try:
+                return callback(context)
+            finally:
+                context._close()
+                self._candidate_context_token = None
 
     def apply_command(self, value: Mapping[str, Any]) -> dict[str, Any]:
         with self._mutex:
@@ -665,6 +914,16 @@ class CampaignController:
             self._journal_root_identity = None
             self._entered = False
             self._journal = None
+            self._candidate_pending = None
+            self._candidate_pending_payload = None
+            self._candidate_prepared = False
+            self._candidate_completed = set()
+            self._candidate_completed_records = {}
+            self._candidate_entries = []
+            self._candidate_projection_cache = None
+            self._candidate_projection_position = 0
+            self._candidate_context_token = None
+            self._lifetime_token = None
             if fd is not None:
                 try:
                     fcntl.flock(fd, fcntl.LOCK_UN)
