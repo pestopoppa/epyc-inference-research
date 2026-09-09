@@ -142,6 +142,8 @@ class PlannedObservationSeam(unittest.TestCase):
         self.assertTrue(all(row["terminal"] for row in observations[0]["requests"]))
         self.assertEqual(observations[0]["process_pid"], 4321)
         self.assertEqual(observations[0]["teardown"], "terminated")
+        self.assertEqual(set(observations[0]), {
+            "schema", "process_pid", "requests", "residency", "teardown", "failure"})
 
     def test_partial_slot_failure_retains_warmup_and_measurement_records(self):
         recipe = serving.Recipe(name="planned", model="/m", np=2, n_predict=4)
@@ -236,6 +238,187 @@ class PlannedObservationSeam(unittest.TestCase):
                                     in observations[0]["requests"]))
                 self.assertTrue(all(row["predicted_n"] is None for row
                                     in observations[0]["requests"]))
+
+
+class LifecycleObservationHook(unittest.TestCase):
+    class Sampler:
+        proof = {"samples": 2, "vram_reads": 2, "resident": True,
+                 "peak_vram_bytes": 2**30, "median_vram_bytes": 2**30,
+                 "peak_kfd_processes": 1, "sclk_min_mhz": 1000,
+                 "sclk_max_mhz": 1000, "clock_stable": True}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+    class Response:
+        def __init__(self, body):
+            self.body = body
+
+        def read(self):
+            return self.body
+
+    class Observer:
+        def __init__(self, events, fail=None, resolved=True):
+            self.events, self.fail = events, fail
+            self.shutdown_resolved = resolved
+
+        def _call(self, name, *args):
+            self.events.append((name, *args))
+            if self.fail == name:
+                raise RuntimeError(f"observer {name} failed")
+
+        def start(self, phase):
+            self._call("observer.start", phase)
+
+        def attach_target(self, pid):
+            self._call("observer.attach", pid)
+
+        def phase(self, phase):
+            self._call("observer.phase", phase)
+
+        def checkpoint(self, label):
+            self._call("observer.checkpoint", label)
+
+        def finish(self):
+            self._call("observer.finish")
+
+    @staticmethod
+    def _recipe():
+        return serving.Recipe(name="hook", model="/m", np=1, n_predict=4)
+
+    @staticmethod
+    def _requests():
+        return (("p0", json.dumps({"prompt": "fixture"}).encode()),)
+
+    def _run(self, *, observer_fail=None, observer_resolved=True,
+             popen_error=None, readback_error=None, request_error=None,
+             sampler_error=None, residency_record_error=None):
+        events = []
+        self.last_events = events
+
+        class Process:
+            pid = 4321
+            returncode = None
+
+            def poll(self):
+                return None
+
+            def terminate(self):
+                events.append(("process.terminate",))
+
+            def wait(self, timeout):
+                events.append(("process.wait", timeout))
+                return 0
+
+            def kill(self):
+                events.append(("process.kill",))
+
+        def popen(*_args, **_kwargs):
+            events.append(("popen",))
+            if popen_error:
+                raise popen_error
+            return Process()
+
+        def urlopen(request, timeout):
+            if isinstance(request, str):
+                events.append(("health",))
+                return self.Response(b"ok")
+            phase = "warmup" if not any(row[0] == "request.warmup" for row in events) \
+                else "measurement"
+            events.append((f"request.{phase}",))
+            if request_error:
+                raise request_error
+            return self.Response(json.dumps({"stop": True, "timings": {
+                "predicted_n": 4, "predicted_per_second": 10.0}}).encode())
+
+        def readback(*_args, **_kwargs):
+            events.append(("readback",))
+            if readback_error:
+                raise readback_error
+            return {}
+
+        observer = self.Observer(events, observer_fail, observer_resolved)
+        original_residency_record = serving._residency_record
+
+        def residency_record(*args, **kwargs):
+            if residency_record_error:
+                raise residency_record_error
+            return original_residency_record(*args, **kwargs)
+
+        sampler_effect = sampler_error if sampler_error else lambda: self.Sampler()
+        with mock.patch.object(serving.subprocess, "Popen", side_effect=popen), \
+                mock.patch.object(serving.residency, "Sampler", side_effect=sampler_effect), \
+                mock.patch.object(serving.urllib.request, "urlopen", side_effect=urlopen), \
+                mock.patch.object(serving, "verify_env_readback", side_effect=readback), \
+                mock.patch.object(serving, "_residency_record", side_effect=residency_record):
+            result = serving._measure_once(
+                self._recipe(), Path("/b"), 18000, frozen_requests=self._requests(),
+                observation_session=observer)
+        return result, events
+
+    def test_hook_covers_setup_load_placement_health_requests_and_owned_teardown(self):
+        value, events = self._run()
+        self.assertEqual(value, 10.0)
+        expected = [
+            ("observer.start", "setup"), ("observer.phase", "load"), ("popen",),
+            ("observer.attach", 4321), ("observer.phase", "placement"), ("health",),
+            ("observer.phase", "health"), ("readback",),
+            ("observer.phase", "warmup"), ("request.warmup",),
+            ("observer.phase", "measurement"), ("request.measurement",),
+            ("observer.checkpoint", "measurement_end"),
+            ("observer.phase", "teardown"), ("process.terminate",),
+            ("process.wait", 30), ("observer.finish",)]
+        self.assertEqual(events, expected)
+
+    def test_observer_failure_does_not_skip_cleanup_or_replace_success(self):
+        value, events = self._run(observer_fail="observer.phase")
+        self.assertEqual(value, 10.0)
+        self.assertIn(("process.terminate",), events)
+        self.assertIn(("process.wait", 30), events)
+        self.assertEqual(events[-1], ("observer.finish",))
+
+    def test_popen_failure_still_finishes_observer_and_preserves_original(self):
+        with self.assertRaisesRegex(OSError, "launch failed"):
+            self._run(popen_error=OSError("launch failed"),
+                      residency_record_error=RuntimeError("secondary export"),
+                      observer_fail="observer.finish")
+        self.assertEqual(self.last_events[-1], ("observer.finish",))
+
+    def test_readback_failure_tears_down_finishes_and_preserves_original(self):
+        try:
+            self._run(readback_error=serving.EnvReadbackFailed("readback-original"))
+        except serving.EnvReadbackFailed as exc:
+            self.assertEqual(str(exc), "readback-original")
+        else:
+            self.fail("readback failure was not preserved")
+        self.assertLess(self.last_events.index(("observer.phase", "teardown")),
+                        self.last_events.index(("process.terminate",)))
+        self.assertEqual(self.last_events[-1], ("observer.finish",))
+
+    def test_request_failure_tears_down_and_finishes_observer(self):
+        with self.assertRaises(serving.ServerDied):
+            self._run(request_error=OSError("request failed"))
+        self.assertIn(("process.wait", 30), self.last_events)
+        self.assertEqual(self.last_events[-1], ("observer.finish",))
+
+    def test_unresolved_observer_refuses_successor_after_owned_cleanup(self):
+        with self.assertRaises(serving.lifecycle_observation.ObserverShutdownUnresolved):
+            self._run(observer_resolved=False)
+
+    def test_sampler_constructor_failure_still_finishes_observer(self):
+        with self.assertRaisesRegex(RuntimeError, "sampler constructor"):
+            self._run(sampler_error=RuntimeError("sampler constructor"))
+        self.assertEqual(self.last_events,
+                         [("observer.start", "setup"), ("observer.finish",)])
+
+    def test_residency_export_failure_follows_cleanup_and_still_finishes_observer(self):
+        with self.assertRaisesRegex(RuntimeError, "residency export"):
+            self._run(residency_record_error=RuntimeError("residency export"))
+        self.assertIn(("process.wait", 30), self.last_events)
+        self.assertEqual(self.last_events[-1], ("observer.finish",))
 
 class ServerAffinity(unittest.TestCase):
     """R23-49: the server's host threads must be PINNABLE, and unpinned must stay the
