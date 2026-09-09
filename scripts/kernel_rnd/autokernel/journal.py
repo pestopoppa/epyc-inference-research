@@ -296,6 +296,7 @@ CANDIDATE_TRANSACTION_OPERATIONS = frozenset({
 KIND_PLANNED_SERVING_ARM_CAPTURED = "PLANNED_SERVING_ARM_CAPTURED"
 PLANNED_SERVING_ARM_CAPTURE_SCHEMA = "epyc.autokernel.unified_arm_capture.v1"
 PLANNED_SERVING_ARM_CAPTURE_SCHEMA_V2 = "epyc.autokernel.unified_arm_capture.v2"
+PLANNED_SERVING_ARM_CAPTURE_SCHEMA_V3 = "epyc.autokernel.unified_arm_capture.v3"
 KIND_WORKER_LIFECYCLE = "WORKER_LIFECYCLE"
 WORKER_LIFECYCLE_SCHEMA = "epyc.autokernel.worker_lifecycle_event.v1"
 KIND_WORKER_ACQUISITION = "WORKER_ACQUISITION"
@@ -1271,12 +1272,14 @@ def _validate_native_payload(kind: str, payload: Mapping[str, Any]) -> list:
     elif kind == KIND_PLANNED_SERVING_ARM_CAPTURED:
         capture_schema = payload.get("schema")
         is_v2 = capture_schema == PLANNED_SERVING_ARM_CAPTURE_SCHEMA_V2
+        is_v3 = capture_schema == PLANNED_SERVING_ARM_CAPTURE_SCHEMA_V3
         expected = {"schema", "measurement_id", "carrier", "artifact"}
         if set(payload) != expected:
             out.append("payload: native capture has missing/unknown fields")
         if capture_schema not in {
                 PLANNED_SERVING_ARM_CAPTURE_SCHEMA,
-                PLANNED_SERVING_ARM_CAPTURE_SCHEMA_V2}:
+                PLANNED_SERVING_ARM_CAPTURE_SCHEMA_V2,
+                PLANNED_SERVING_ARM_CAPTURE_SCHEMA_V3}:
             out.append(
                 "schema: must be a supported planned-serving capture schema")
         measurement_id = payload.get("measurement_id")
@@ -1301,18 +1304,52 @@ def _validate_native_payload(kind: str, payload: Mapping[str, Any]) -> list:
             "record_class", "intended_use", "protocol_id", "protocol_status",
             "instrument_id", "interval", "carrier_digest",
         }
-        if is_v2:
+        if is_v2 or is_v3:
             carrier_fields |= {"loaded_instrument", "lifecycle_observations"}
+        if is_v3:
+            carrier_fields |= {"original_arm_capture", "parent_final_trial"}
         if not isinstance(carrier, Mapping) or set(carrier) != carrier_fields:
             out.append("carrier: native carrier has missing/unknown fields")
         else:
             if (carrier.get("schema") != capture_schema
                     or carrier.get("measurement_id") != measurement_id):
                 out.append("carrier: schema/measurement_id binding mismatch")
-            producer = ("epyc.autokernel.measurement_capture/v2" if is_v2
-                        else "epyc.autokernel.measurement_capture/v1")
+            producer = ("epyc.autokernel.measurement_capture/v3" if is_v3 else
+                        "epyc.autokernel.measurement_capture/v2" if is_v2 else
+                        "epyc.autokernel.measurement_capture/v1")
             if carrier.get("producer") != producer:
                 out.append("carrier.producer: unsupported producer")
+            final_digest = None
+            original = carrier.get("original_arm_capture")
+            if is_v3:
+                final = carrier.get("parent_final_trial")
+                if (not isinstance(final, Mapping)
+                        or set(final) != {"schema", "artifact", "digest"}
+                        or final.get("schema") != "epyc.autokernel.parent_final_trial_reference.v1"
+                        or not isinstance(final.get("digest"), str)
+                        or not _SHA256_RE.fullmatch(final.get("digest", ""))):
+                    out.append("carrier.parent_final_trial: invalid closed reference")
+                else:
+                    final_digest = final["digest"]
+                if (not isinstance(original, Mapping)
+                        or set(original) != {"measurement_id", "carrier_digest", "artifact"}
+                        or any(not isinstance(original.get(field), str)
+                               or not _SHA256_RE.fullmatch(original.get(field, ""))
+                               for field in ("measurement_id", "carrier_digest"))):
+                    out.append("carrier.original_arm_capture: invalid closed reference")
+                # Shape checks only: the native final owner separately reopens
+                # original issuance/artifact bytes before any new append.
+                for name, reference in (("parent_final_trial", final),
+                                        ("original_arm_capture", original)):
+                    receipt = reference.get("artifact") if isinstance(reference, Mapping) else None
+                    if (not isinstance(receipt, Mapping)
+                            or set(receipt) != {"locator", "sha256", "verified"}
+                            or not isinstance(receipt.get("locator"), str)
+                            or not receipt.get("locator")
+                            or not isinstance(receipt.get("sha256"), str)
+                            or not _SHA256_RE.fullmatch(receipt.get("sha256", ""))
+                            or receipt.get("verified") is not True):
+                        out.append(f"carrier.{name}.artifact: invalid closed receipt")
             if (not isinstance(carrier.get("arm"), str)
                     or carrier.get("arm") not in {"anchor", "candidate"}):
                 out.append("carrier.arm: must be anchor or candidate")
@@ -1347,21 +1384,30 @@ def _validate_native_payload(kind: str, payload: Mapping[str, Any]) -> list:
                     identity = {"producer": producer,
                                 "plan_digest": plan_digest, "lineage_id": lineage,
                                 "arm": arm}
-                    if is_v2:
+                    if is_v2 or is_v3:
                         loaded = carrier.get("loaded_instrument")
                         identity |= {"capture_schema": capture_schema,
                                      "instrument_identity_sha256": (
                                          loaded.get("identity_sha256")
                                          if isinstance(loaded, Mapping) else None)}
+                    if is_v3:
+                        original_identity = identity | {
+                            "producer": "epyc.autokernel.measurement_capture/v2",
+                            "capture_schema": PLANNED_SERVING_ARM_CAPTURE_SCHEMA_V2}
+                        if (not isinstance(original, Mapping)
+                                or original.get("measurement_id") != schemas.content_hash(original_identity)):
+                            out.append("carrier.original_arm_capture: original identity binding is invalid")
+                        identity["parent_final_trial_digest"] = final_digest
                     expected_measurement_id = schemas.content_hash(identity)
                 except Exception:
                     expected_measurement_id = None
                     plan_digest = None
+                expected_locator = (f"parent-final-serving:{plan_digest}:{lineage}:{arm}:{final_digest}"
+                                    if is_v3 else f"planned-serving:{plan_digest}:{lineage}:{arm}")
                 if (not isinstance(lineage, str) or not lineage
                         or context.get("lineage_id") != lineage
                         or expected_measurement_id != measurement_id
-                        or carrier.get("arm_locator") !=
-                        f"planned-serving:{plan_digest}:{lineage}:{arm}"):
+                        or carrier.get("arm_locator") != expected_locator):
                     out.append("carrier: measurement/arm locator binding is invalid")
                 manifest = carrier.get("prompt_manifest")
                 manifest_digest = carrier.get("prompt_manifest_digest")
@@ -4050,6 +4096,7 @@ __all__ = [
     "CANDIDATE_TRANSACTION_OPERATIONS",
     "KIND_PLANNED_SERVING_ARM_CAPTURED", "PLANNED_SERVING_ARM_CAPTURE_SCHEMA",
     "PLANNED_SERVING_ARM_CAPTURE_SCHEMA_V2",
+    "PLANNED_SERVING_ARM_CAPTURE_SCHEMA_V3",
     "tombstone_view_key",
     "Journal", "JournalEntry", "JournalDefect", "ShardRef", "TornTail",
     "ReadReport", "Cursor", "DurablePublication", "DurableFeedBatch", "Views",

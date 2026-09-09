@@ -2034,6 +2034,24 @@ def ingest_deferred_result(reference: PlannedWorkerResultReference, *,
                            capture_transaction: mc.CaptureTransaction) \
         -> tuple[Any, ...]:
     """Parent-only generation-fenced ingestion into the current native callback."""
+    if not callable(capture_transaction):
+        raise WorkerBridgeRefused("current parent native capture callback is required")
+    _result, captures = reopen_deferred_result(reference, prepared=prepared, start=start,
+                                              terminal=terminal, fence=fence)
+    return tuple(capture_transaction(measurement_id, _plain(payload))
+                 for measurement_id, payload in captures)
+
+
+def reopen_deferred_result(reference: PlannedWorkerResultReference, *,
+                           prepared: PreparedPlannedServingStage, start: WorkerStart,
+                           terminal: wl.TerminalWorker,
+                           fence: nc.TrustedWorkerResultFence) \
+        -> tuple[PlannedWorkerResult, tuple[tuple[str, Mapping[str, Any]], ...]]:
+    """Bounded original result reopening with no capture/Journal side effect.
+
+    Retains the ingestion identity checks; v2 native scientific prevalidation is
+    still the current parent's separate capture boundary, not this reader.
+    """
     reference = PlannedWorkerResultReference.from_dict(reference.to_dict())
     prepared = PreparedPlannedServingStage.from_dict(prepared.to_dict())
     start = WorkerStart.from_dict(start.to_dict())
@@ -2068,8 +2086,6 @@ def ingest_deferred_result(reference: PlannedWorkerResultReference, *,
             or reference.worker_generation != start.worker_generation
             or terminal.result_digest != _digest(reference.to_dict())):
         raise WorkerBridgeRefused("deferred result is stale or differs from current worker fence")
-    if not callable(capture_transaction):
-        raise WorkerBridgeRefused("current parent native capture callback is required")
     store = mc.ArtifactStore(prepared.artifact_root)
     try:
         body = store.read(reference.result_locator, reference.result_sha256)
@@ -2140,8 +2156,8 @@ def ingest_deferred_result(reference: PlannedWorkerResultReference, *,
             validated_captures.append((capture["measurement_id"], normalized_payload))
         if arms != [arm for arm in ("anchor", "candidate") if arm in arms]:
             raise WorkerBridgeRefused("deferred captures are duplicate or out of arm order")
-        return tuple(capture_transaction(measurement_id, payload)
-                     for measurement_id, payload in validated_captures)
+        return result, tuple((measurement_id, _freeze(_plain(payload)))
+                             for measurement_id, payload in validated_captures)
     finally:
         store.close()
 
