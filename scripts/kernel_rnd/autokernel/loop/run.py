@@ -351,7 +351,8 @@ def main(argv: list[str] | None = None) -> int:
     verified_head = champion.verify_startup(
         worktree=args.worktree, branch=args.champion_branch,
         anchor_build=args.anchor_build,
-        allow_unverified_anchor=args.allow_unverified_anchor)
+        allow_unverified_anchor=args.allow_unverified_anchor,
+        experimental_identity=cpu_launch is not None)
     print(f"{'candidate' if cpu_launch else 'champion'}  {args.champion_branch} "
           f"@ {verified_head[:12]} — verified")
 
