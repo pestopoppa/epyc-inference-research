@@ -493,7 +493,7 @@ def main(argv: list[str] | None = None) -> int:
     scheduler_selection = None
     if args.scheduler_selection is not None:
         from . import scheduling, unified_planner
-        from src.runtime.instance_topology import ATOMIC_REGIONS, cpu_list_to_regions
+        from ..execution.cpu_region_claim import ATOMIC_REGIONS, cpu_list_to_regions
         if selected_target is None or args.out is None or owned_cpu_list is None:
             parser.error("scheduler accounting requires an enrolled target, original resources and --out")
         try:

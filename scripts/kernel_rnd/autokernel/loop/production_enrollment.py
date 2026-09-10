@@ -375,7 +375,12 @@ def manifest_from_export(value: Path | str | Mapping[str, Any], *,
             "model_ref": f"production:{target_id}:model",
             "build_ref": f"production:{target_id}:executable",
             "recipe_ref": f"production:{target_id}:recipe", "context": context,
-            "concurrency": concurrency, "speculation": str(target.get("speculation", "none")),
+            "concurrency": concurrency,
+            # The production exporter names the command-line mechanism; campaign
+            # execution names whether the resolved recipe drafts from itself or an
+            # external model.  Bind the two once at the owning import boundary.
+            "speculation": ("none" if target.get("speculation", "none") == "none" else
+                            "external_draft" if "drafter" in artifacts else "self_draft"),
             "env": {key: val for key, val in target.get("environment", {}).items()
                     if key != "LD_LIBRARY_PATH"},
             "metric": config["metric"], "metric_direction": config["metric_direction"],
