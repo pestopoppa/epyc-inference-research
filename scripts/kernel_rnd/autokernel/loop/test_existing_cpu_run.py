@@ -16,7 +16,8 @@ from . import test_promotion_targets as promotion_fixture
 
 @pytest.mark.parametrize("dry_run", [True, False])
 def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
-        dry_run, feedback_root=None, profile_observer=None, profile_contexts=None, runtime_only=False):
+        dry_run, feedback_root=None, profile_observer=None, profile_contexts=None, runtime_only=False,
+        invalid_once=False):
     fixture = promotion_fixture.TheKeepBuildsAProductionCompleteAnchor()
     fixture.setUp()
     try:
@@ -62,6 +63,8 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
         prompt_file.write_text(json.dumps(manifest.to_dict()))
         expected_requests = manifest.requests(("glm-fixed2029",), template)
         held, issued, measured, builds, oracles = [], [], [], [], []
+        invalidated = []
+        builds_at_invalid = []
         feedback_contexts = []
         real_main = run.main
 
@@ -81,6 +84,27 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
             resolved_recipe.validate_launch(recipe, build, port)
             assert resolved_recipe.backend == "cpu"
             measured.append((str(build), tuple(resolved_recipe.argv), frozen_requests))
+            candidate = (recipe.threads != template.threads if runtime_only
+                         else Path(build).name == "lane0-build")
+            if invalid_once and issued and candidate:
+                if not invalidated:
+                    builds_at_invalid.append(len(builds))
+                    invalidated.append(resolved_recipe.to_dict())
+                    raise run.loop.MeasurementInvalid("synthetic observed placement contradiction", {
+                        "resolved_recipe": resolved_recipe.to_dict(), "teardown": "terminated",
+                        "fixture": "synthetic whole-arm observation, not real inference"})
+                elif len(invalidated) == 1:
+                    assert len(builds) == builds_at_invalid[0]
+                    import sqlite3
+                    # Actual original owner wrote its invalid outcome before the
+                    # same-build retry; no source reset or substitute candidate.
+                    with sqlite3.connect(fixture.store / "experiments.db") as db:
+                        stored = json.loads(db.execute(
+                            "SELECT payload FROM experiments WHERE status='measurement_invalid'"
+                        ).fetchone()[0])
+                    assert stored["invalid_measurement"]["invalid_arm"]["resolved_recipe"] == resolved_recipe.to_dict()
+                    assert invalidated[0] == resolved_recipe.to_dict()
+                    invalidated.append(stored)
             if evidence is not None:
                 now = time.time()
                 evidence.append({"backend": "cpu", "status": serving.RESIDENCY_NOT_APPLICABLE,
@@ -175,7 +199,8 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
             assert not any((held, issued, measured, builds, oracles))
             assert "DRY RUN" in log
         else:
-            assert len(issued) == 5 and len(oracles) == 5
+            assert len(issued) == (4 if invalid_once else 5)
+            assert len(oracles) == len(issued)
             assert held == [True, False]
             result = json.loads((fixture.root / "result/loop-run.json").read_text())
             epoch_inputs = {"cpu_execution_digest": selected.execution_digest,
@@ -194,6 +219,23 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
                     host_state=changed) != expected_epoch
             assert result["baseline_scope"] == "experimental_candidate_not_champion"
             assert run.status.read(fixture.store)["baseline_scope"] == result["baseline_scope"]
+            if invalid_once:
+                rows = result["iterations"]
+                assert len(rows) == 5 and rows[0]["status"] == "measurement_invalid"
+                assert "comparison" not in rows[0] and "effect_fraction" not in rows[0]
+                assert rows[1]["comparison"]["rescheduled_invalid_arms"][0]["failed_arm"] == "candidate"
+                assert run.status.read(fixture.store)["measurements_reached"] == 4
+                assert len(invalidated) == 2
+                assert len(list((fixture.store / "serving-beliefs").glob("*.json"))) == 4
+                assert rows[0]["mechanism_id"] == rows[1]["mechanism_id"] == "cpu-1"
+                if runtime_only:
+                    assert rows[0]["runtime_pair"] == rows[1]["runtime_pair"]
+                else:
+                    assert (fixture.store / "patches/cpu-1.lane0.patch").is_file()
+                # The three A/A launches precede A,B(invalid),B(rescheduled).
+                assert measured[4] == measured[5]
+                assert measured[3] != measured[4]
+                return
             if runtime_only:
                 assert not builds
                 assert run.status.read(fixture.store)["measurements_reached"] == 5

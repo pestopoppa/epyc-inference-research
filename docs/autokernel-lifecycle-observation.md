@@ -148,3 +148,42 @@ a demonstrated native adapter with PID-start/boot-specific allocation evidence, 
 attribution remains unknown. Tests use an explicitly fake adapter only. The observer does
 not authenticate callbacks; that authority belongs to the lifecycle/provider bridge that
 constructs the session.
+
+## Existing direct CPU loop: factual noise and bounded arm reschedule
+
+The separate, unsealed `residency.CpuLifecycleSampler` now retains aggregate CPU
+ticks, memory/swap counters, memory PSI, and bounded non-target process CPU-tick
+intervals during its original launch lifetime, including host reads before target
+attachment. Each positive process interval retains both PID/start identities and
+allowed CPU lists. These are observations, not a model-inference classifier or a
+physical held-region overlap proof. Missing reads, partial censuses, phase crossings,
+gaps and count/time/byte exhaustion remain explicit. No endpoint substitutes for a
+missing during-phase observation.
+
+P-AK-SEARCH-1-A2 ordinary host/build activity and PSI remain diagnostic noise. They
+never block, abort, or trigger a retry. No process-name classifier, pressure cutoff,
+new noise floor, or foreign process signal was added. Contention and actual NUMA
+page placement remain unproven; competing-inference classification is unavailable
+in this direct sampler.
+
+After readiness, the same PID/start identity changing is an instrument contradiction.
+A task affinity outside the original recipe invalidates only after **two distinct,
+non-crossing samples of the same TID/start identity**; a single sample does not act.
+Setup/exec and teardown are excluded from that decision. Missing facts never confer
+a positive placement or quiet-window warrant.
+
+An invalid server launch finishes owned teardown before raising `MeasurementInvalid`.
+Its original resolved recipe/build artifacts, request bytes/digest, failed condition,
+whole retained lifecycle record and inadmissible raw rate survive in the existing
+experiment payload as `measurement_invalid`, without a comparison/effect or null.
+The loop may charge one additional existing iteration-budget draw and archive this
+invalid outcome before rescheduling that whole original server launch once. The
+same serialized tail retains the hypothesis, archived patch and build: no reset,
+reauthoring, rebuild, profiling or recalibration occurs. Completed valid launches
+are not repeated. The final comparison identifies the archived invalid attempt by
+digest and still uses the existing serving reducer and belief export.
+
+STOP, exhausted budget, a second invalid launch, or an unresolved server cleanup
+prevents rescheduling. This is an in-process continuation, **not restart recovery**;
+stored JSON cannot recreate it. The recipe-only path retains its original arm pair
+and remains subject to its owning runtime admission, not a borrowed source floor.

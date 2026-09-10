@@ -104,3 +104,29 @@ def test_planner_binds_candidate_to_original_context(tmp_path):
 def test_actual_main_cpu_runtime_five_iterations_no_source_change():
     from .test_existing_cpu_run import test_existing_main_cpu_five_iterations_preserves_canonical_champion
     test_existing_main_cpu_five_iterations_preserves_canonical_champion(False, runtime_only=True)
+
+
+@pytest.mark.parametrize("installed", [True, False])
+def test_only_installed_runtime_option_skips_routine_critics(tmp_path, installed):
+    pair, _, _ = _fixture(tmp_path)
+    hypothesis = loop.Hypothesis("threads-test", "overhead", "same rate", "runtime", "threads",
+                                 runtime_pair=pair)
+    calls = []
+
+    def review(*args):
+        calls.append("hypothesis")
+        return loop.Review(True)
+
+    def forbidden(*args):
+        pytest.fail("runtime treatment reached source author/diff/commit")
+
+    comparison = run.ServingComparison({"effect": 0.0, "decisive": None,
+        "noise_floor_pct": None, "metric": "aggregate_tok_s", "recipe": pair.anchor.template.name})
+    outcome = loop.iterate(
+        planner=SimpleNamespace(propose=lambda context: hypothesis, author=forbidden),
+        critic=SimpleNamespace(review_hypothesis=review, review_patch=forbidden),
+        context={"runtime_anchor": pair.anchor.to_dict(), "runtime_env_keys": []}
+                if installed else {},
+        gate=lambda *args: (True, []), measure=lambda *args: comparison, commit=forbidden)
+    assert outcome.status == "runtime_observed"
+    assert calls == ([] if installed else ["hypothesis"])

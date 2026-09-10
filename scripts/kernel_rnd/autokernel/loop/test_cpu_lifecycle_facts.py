@@ -182,7 +182,7 @@ def test_gap_is_preserved_and_error_only_rows_are_not_observed(tmp_path):
     sampler.finish()
 
 
-def test_actual_measure_path_retains_in_window_cpu_facts_without_a_new_grade(tmp_path):
+def test_actual_measure_path_invalidates_observed_outside_affinity_after_owned_teardown(tmp_path):
     sampler = _fixture(tmp_path)
     # The owning serving method calls attach_target itself after its mocked Popen.
     sampler._target = None
@@ -194,7 +194,7 @@ def test_actual_measure_path_retains_in_window_cpu_facts_without_a_new_grade(tmp
         def read(self):
             reads.append(sampler._phase)
             _proc(tmp_path / "4321/task/4322", 4322, ticks=101,
-                  cpus="96-97" if sampler._phase == "warmup" else "0-95")
+                  cpus="96-97")
             sampler._sample()  # synthetic observation boundary inside the actual request
             return json.dumps({"timings": {"predicted_n": recipe.n_predict,
                                           "predicted_per_second": 25.0}}).encode()
@@ -208,11 +208,19 @@ def test_actual_measure_path_retains_in_window_cpu_facts_without_a_new_grade(tmp
             mock.patch.object(serving.urllib.request, "urlopen", return_value=Response()), \
             mock.patch.object(serving.residency, "Sampler", _sampler_class(_proof())), \
             mock.patch.object(serving, "verify_env_readback"):
-        value = serving._measure_once(recipe, BUILD, 18311, evidence=evidence, resolved_recipe=resolved)
-    assert value == 25.0 and reads == ["warmup", "measurement"]
+        with pytest.raises(serving.MeasurementInvalid) as failed:
+            serving._measure_once(recipe, BUILD, 18311, evidence=evidence, resolved_recipe=resolved)
+    assert reads == ["warmup", "measurement"]
     process.terminate.assert_called_once()
+    process.wait.assert_called_once_with(30)
+    assert failed.value.record["resolved_recipe"] == resolved.to_dict()
+    assert failed.value.record["recipe"] == recipe.to_dict()
+    assert failed.value.record["teardown"] == "terminated"
+    assert failed.value.record["observed_rate_not_admissible_tok_s"] == 25.0
+    assert failed.value.record["residency"] == evidence[0]
     facts = evidence[0]["cpu_lifecycle"]
-    assert [row["tasks"][1]["Cpus_allowed_list"] for row in facts["samples"]] == ["96-97", "0-95"]
+    assert [row["tasks"][1]["Cpus_allowed_list"] for row in facts["samples"]] == ["96-97", "96-97"]
+    assert failed.value.record["failed_conditions"][0]["observations"] == 2
     assert [row["phase"] for row in facts["markers"]] == ["setup", "load", "placement", "health",
                                                          "warmup", "measurement", "measurement_end",
                                                          "teardown", "closed"]

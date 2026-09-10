@@ -72,6 +72,17 @@ class ServingComparison:
                 "baseline_scope": self.baseline_scope}
 
 
+def _serving_comparison(invoke, baseline_scope):
+    """Keep native original-arm continuations behind the same existing view."""
+    try:
+        return ServingComparison(invoke(), baseline_scope)
+    except loop.MeasurementInvalid as exc:
+        if exc.reschedule is not None:
+            original = exc.reschedule
+            exc.reschedule = lambda: _serving_comparison(original, baseline_scope)
+        raise
+
+
 def _read_cpu_document(path: Path) -> dict:
     with path.open("rb") as stream:
         data = stream.read(2 * 1024 * 1024 + 1)
@@ -787,12 +798,12 @@ def main(argv: list[str] | None = None) -> int:
         def measure(hypothesis, paths):
             if hypothesis.runtime_pair is not None:
                 pair = hypothesis.runtime_pair
-                row = serving.compare(
+                return _serving_comparison(lambda: serving.compare(
                     pair.anchor.template, anchor_build[0], anchor_build[0],
                     pairs=args.serving_pairs, floor_pct=None, port=pair.anchor.port,
                     anchor_resolved_recipe=pair.anchor, candidate_resolved_recipe=pair.candidate,
-                    frozen_requests=frozen_requests, runtime_pair=pair)
-                return ServingComparison(row, "experimental_runtime_treatment_not_source_champion")
+                    frozen_requests=frozen_requests, runtime_pair=pair),
+                    "experimental_runtime_treatment_not_source_champion")
             if direct_launch:
                 return cpu_compare(anchor_build[0], worker.build_dir)
             # The anchor build is SHARED across lanes and only ever read, so it needs
@@ -811,14 +822,14 @@ def main(argv: list[str] | None = None) -> int:
         # Reuse the actual comparison's rebind, including after an anchor keep;
         # never hash a build a second time merely to assemble a planner prompt.
         feedback_anchor[0] = anchor_recipe
-        row = serving.compare(
+        return _serving_comparison(lambda: serving.compare(
             serving_recipe, a_build, c_build, pairs=args.serving_pairs,
             floor_pct=floor, port=direct_launch.port,
             anchor_resolved_recipe=anchor_recipe,
             candidate_resolved_recipe=candidate_recipe,
-            frozen_requests=frozen_requests, floor_request_digest=floor_request_digest)
-        return ServingComparison(row, "experimental_candidate_not_champion" if experimental
-                                 else "canonical_candidate_vs_current_anchor")
+            frozen_requests=frozen_requests, floor_request_digest=floor_request_digest),
+            "experimental_candidate_not_champion" if experimental
+            else "canonical_candidate_vs_current_anchor")
 
     def confirm_measure(worker):
         """The confirm rung's A/B for one keep-candidate (§5.3): same arms, the
