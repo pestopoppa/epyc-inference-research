@@ -18,6 +18,7 @@ import argparse
 from dataclasses import dataclass
 import hashlib
 import json
+import os
 from pathlib import Path
 import signal
 import subprocess
@@ -1129,6 +1130,8 @@ def main(argv: list[str] | None = None) -> int:
             iterations_planned=args.iterations, step=step,
             champion_head=_git(args.worktree, "rev-parse", "HEAD"),
             **({"target": selected_identity} if selected_identity is not None else {}),
+            **({"batch": {"output_dir": str(args.out.resolve()), "pid": os.getpid()}}
+               if args.out is not None else {}),
             **({"baseline_scope": "experimental_candidate_not_champion"} if cpu_launch else {}),
             anchor_guard=anchor_guard_seen[-1] if anchor_guard_seen else None,
             accumulator=accumulator_state(),
