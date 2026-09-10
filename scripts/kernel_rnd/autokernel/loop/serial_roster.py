@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from . import champion, legacy_targets, planned_serving, resolved_recipe
+from . import archive, champion, legacy_targets, planned_serving, resolved_recipe
 
 
 def build_targets(resolved_path, owned_path, *, target_root, common_path=None):
@@ -54,7 +54,8 @@ def build_targets(resolved_path, owned_path, *, target_root, common_path=None):
             raise sr.SerialRefused("common args must be a bounded JSON string array")
         # Target/workload/resource identities are never overridden by common argv.
         valued = {"--workers", "--planner-model", "--planner-effort", "--critic-model",
-                  "--critic-effort", "--pairs", "--serving-pairs", "--belief-root-repo"}
+                  "--critic-effort", "--pairs", "--serving-pairs", "--belief-root-repo",
+                  "--shared-history-root"}
         iterator = iter(extra)
         for arg in iterator:
             flag, equals, value = arg.partition("=")
@@ -122,4 +123,11 @@ def build_targets(resolved_path, owned_path, *, target_root, common_path=None):
         targets.append(argv + common)
     if not targets:
         raise sr.SerialRefused(f"no ready owned executable targets: {skipped}")
+    history_roots = [str(archive.CANONICAL_HISTORY_ROOT),
+                     *[sr.option(row, "--store") for row in targets]]
+    for row in targets:
+        own = Path(sr.option(row, "--store")).resolve()
+        for history in dict.fromkeys(history_roots):
+            if Path(history).resolve() != own:
+                row += ["--shared-history-root", history]
     return targets, skipped, tuple(sorted(allowed_cpus))

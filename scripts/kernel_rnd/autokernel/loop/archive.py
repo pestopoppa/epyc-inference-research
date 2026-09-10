@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 import re
 import stat
+import threading
 import subprocess
 import sys
 import tempfile
@@ -387,6 +388,123 @@ def recall(store_root: Path, *, epoch: str, limit: int = 40,
     with experiments.ExperimentStore(store_root) as store:
         return store.recall(epoch=epoch, limit=limit,
                             ranking_authorized=ranking_authorized)
+
+
+CANONICAL_HISTORY_ROOT = Path("/mnt/raid0/llm/autokernel/loop-memory")
+
+
+def _shared_rows(source, scope):
+    """Bounded formation lookup: useful outcomes cannot be buried by transients.
+
+    Relevance orders suggestions, not evidence applicability. No magnitude enters
+    this selection. Keep qualitative negative/invalid outcomes and their caveats.
+    """
+    kept = ("kept", "runtime_kept")
+    measured = ("measured_null", "runtime_observed", "measurement_invalid",
+                "confirm_vetoed", "screened_out")
+    pools = [source.recall(epoch="", limit=16, include_source_scope=True, statuses=kept),
+             source.recall(epoch="", limit=16, include_source_scope=True, statuses=measured),
+             source.recall(epoch="", limit=16, include_source_scope=True,
+                           statuses=kept + measured, exclude_statuses=True)]
+
+    def relevance(row):
+        original = row["research_scope"] or {}
+        model = original.get("model")
+        model = model.get("path") if isinstance(model, dict) else model
+        return tuple(bool(value is not None and value == scope.get(key)) for key, value in (
+            ("model", model), ("quant", original.get("quant")),
+            ("backend", original.get("backend")),
+            ("measurement_surface", original.get("measurement_surface"))))
+
+    pools = [sorted(rows, key=relevance, reverse=True) for rows in pools]
+    rows, seen = [], set()
+
+    def take(pool, count):
+        while pool and count and len(rows) < 5:
+            row = pool.pop(0)
+            key = (row["mechanism_id"] or row["attempt_id"], row["status"])
+            if key not in seen:
+                rows.append(row)
+                seen.add(key)
+                count -= 1
+
+    for pool, count in zip(pools, (1, 3, 1)):
+        take(pool, count)
+    for pool in pools:
+        take(pool, 5)
+    return rows
+
+
+class SharedHistory:
+    """Read-only formation suggestions, separate from current-target evidence."""
+
+    def __init__(self, roots, *, current_store: Path, batch_directory=None):
+        current = Path(current_store).resolve()
+        self.roots = tuple(dict.fromkeys(Path(root).resolve() for root in roots
+                                        if Path(root).resolve() != current))
+        # The original serial owner supplies --out .../batch-NNNNNN. Use only
+        # that declared identity, never scan directories or infer process state.
+        # The sweep term prevents a roster-sized batch stride aliasing forever
+        # to the same roots when every child performs only one iteration.
+        batch = re.fullmatch(r"batch-(\d+)", Path(batch_directory).name) if batch_directory else None
+        number = int(batch[1]) if batch else 0
+        self._cursor = 8 * (number + number // max(1, len(self.roots)))
+        self._lock = threading.Lock()
+
+    def recall(self, *, scope=None) -> dict:
+        with self._lock:
+            # Rotate the bounded read budget, including for a 17-target roster.
+            # Omitted roots are explicit; no claim of complete memory coverage.
+            count = min(8, len(self.roots))
+            selected = [self.roots[(self._cursor + i) % len(self.roots)] for i in range(count)]
+            self._cursor = (self._cursor + count) % len(self.roots) if self.roots else 0
+        result = {"status": "shared_history_nontransfer", "rows": [], "errors": [],
+                  "queried_roots": [str(root) for root in selected],
+                  "omitted_roots": [str(root) for root in self.roots if root not in selected],
+                  "omitted_rows": 0, "comparable_measurement": False,
+                  "selection": "bounded recent pools: 16 keeps, 16 measured/invalid, 16 other per root; "
+                               "up to 5 distinct mechanism/status suggestions, qualitative scope relevance only",
+                  "use": "historical mechanism suggestions only; not local gain or refutation"}
+        for root in selected:
+            try:
+                with experiments.ExperimentStore(root, read_only=True) as source:
+                    rows = _shared_rows(source, scope or {})
+                for row in rows:
+                    row.update(source_store=str(root), comparable_measurement=False,
+                               same_epoch=False, stale_epoch=True, magnitude_redacted=True,
+                               transfer="unproven_not_local_gain_or_refutation")
+                    for key in experiments._MAGNITUDE_FIELDS:
+                        row[key] = None
+                    if row["research_scope"] is None:
+                        row["research_scope"] = {"model": None, "quant": None, "recipe": None,
+                            "measurement_surface": None,
+                            "unknown_reason": "not captured or outside bounded source-scope projection"}
+                    candidate = {**result, "rows": [*result["rows"], row]}
+                    if len(json.dumps(candidate).encode()) > 128 * 1024:
+                        result["omitted_rows"] += 1
+                    else:
+                        result["rows"].append(row)
+            except Exception as exc:
+                # Advisory read failure never prevents fresh local research.
+                result["errors"].append({"source_store": str(root),
+                                         "reason": f"{type(exc).__name__}: {exc}"[:512]})
+        return result
+
+
+def original_research_scope(attempt, *, model, quant, backend, build_recipe, surface) -> dict:
+    """Original owner metadata; arm recipes come from the recorded comparison.
+
+    In particular, never read the current post-keep anchor to label an older arm.
+    Missing historical facts remain missing; this function is write-side only.
+    """
+    comparison = attempt.get("comparison") or {}
+    inputs = (comparison.get("belief_capture") or {}).get("inputs") or {}
+    arms = inputs.get("resolved_arms") or {}
+    return {"model": {"path": str(model), "sha256":
+                      ((arms.get("anchor") or {}).get("model") or {}).get("sha256")},
+            "quant": quant, "backend": backend, "measurement_surface": surface,
+            "recipe": {"build_recipe": build_recipe, "original_serving_arms": arms or None},
+            "request_digest": comparison.get("request_digest")}
 
 
 def epoch_for(*, anchor_commit: str, build_recipe: Mapping[str, Any],
