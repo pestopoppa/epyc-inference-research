@@ -50,7 +50,7 @@ def _inputs(tmp_path, *, backends=("cpu", "gpu"), unowned=False, missing=False, 
         owners[name] = {"worktree": str(root / "source"), "anchor_build": str(build),
             "branch": ("ak/experimental/roster" if backend == "cpu" or experimental_gpu
                        else sr.champion.CANONICAL_BRANCH),
-            "frozen_prompts": str(prompt_path), "calibrate_serving": 2}
+            "frozen_prompts": str(prompt_path), "calibrate_serving": 24 if backend == "cpu" else 2}
     if unowned:
         production.append(_target("unowned", model="model-b"))
     if missing:
@@ -163,10 +163,18 @@ def test_multiple_cpu_targets_serialize_one_owned_source_with_latest_anchor(
     seen = [json.loads(line)["argv"] for line in (
         tmp_path / "router" / "seen.jsonl").read_text().splitlines()]
     assert len(seen) == 4
-    assert sr.option(seen[-1], "--source-anchor-continuation").endswith(
-        "batch-000002/loop-continuation.json")
-    assert sr.option(seen[1], "--resume-run").endswith(
-        "batch-000000/loop-continuation.json")
+    for number, row in enumerate(seen[1:], start=1):
+        # Cost-informed selection need not alternate seed targets. Whichever
+        # target wins must consume the latest original shared-source result.
+        reference = (sr.option(row, "--source-anchor-continuation")
+                     or sr.option(row, "--resume-run"))
+        assert reference.endswith(f"batch-{number - 1:06d}/loop-continuation.json")
+    targets, _, _ = _build(argv)
+    other = next(row for row in targets if sr.option(row, "--target-id") != sr.option(seen[-1], "--target-id"))
+    state = json.loads((tmp_path / "router/serial-state.json").read_text())
+    latest = state["source_results"][sr._source_owner_key(other)]
+    forwarded = sr._batch_argv(other, None, 1, tmp_path / "next", source_prior=latest)
+    assert sr.option(forwarded, "--source-anchor-continuation") == latest["path"]
 
 
 def test_identical_owned_aliases_schedule_once_and_missing_ownership_is_not_success(tmp_path):

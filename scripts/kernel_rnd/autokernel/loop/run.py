@@ -341,6 +341,10 @@ def main(argv: list[str] | None = None) -> int:
                              "throughput under it (llama-server), not just the bench screen")
     parser.add_argument("--serving-pairs", type=int, default=5,
                         help="paired serving A/B runs per bundle at the serving gate")
+    parser.add_argument("--serving-instrument", default=serving.LEGACY_INSTRUMENT,
+                        choices=(serving.LEGACY_INSTRUMENT, serving.MATCHED_INSTRUMENT),
+                        help="matched_process_v2 uses counterbalanced process pairs and a matching floor; "
+                             "direct CLI defaults to the historical v1 instrument")
     parser.add_argument("--cpu-serving-launch", type=Path,
                         help="selected target's canonical resolved CPU launch JSON")
     parser.add_argument("--gpu-serving-launch", type=Path,
@@ -701,6 +705,9 @@ def main(argv: list[str] | None = None) -> int:
                 allow_nan=False).encode()).hexdigest())
     if screen_state is not None:
         epoch_inputs["cpu_screen"] = dict(screen_state)
+    if args.serving_instrument == serving.MATCHED_INSTRUMENT:
+        epoch_inputs["serving_instrument"] = {"version": args.serving_instrument,
+                                               "pairs": args.serving_pairs}
     epoch = archive.epoch_for(anchor_commit=anchor_commit,
                               build_recipe=recipe.to_dict(),
                               **({"host_state": epoch_inputs} if epoch_inputs else {}))
@@ -736,10 +743,16 @@ def main(argv: list[str] | None = None) -> int:
     #: payload, because a reader cannot otherwise tell a checked floor from an assumed one.
     serving_floor_provenance = "absent"
     floor_request_digest = None
+    floor_record = None
+    source_instrument = ({"instrument": args.serving_instrument, "pairs": args.serving_pairs}
+                         if args.serving_instrument == serving.MATCHED_INSTRUMENT else {})
+    if source_instrument and not direct_launch:
+        parser.error("matched_process_v2 requires an explicit resolved serving launch")
     if direct_launch:
         serving_recipe = direct_launch.template
         floor_reading = serving.load_floor(args.store, serving_recipe,
-                                           frozen_requests=frozen_requests)
+                                           frozen_requests=frozen_requests, **source_instrument)
+        floor_record = floor_reading.row or None
         floor = serving_floor_pct = floor_reading.floor_pct
         calibrated = floor is not None
         serving_floor_provenance = floor_reading.provenance
@@ -750,12 +763,16 @@ def main(argv: list[str] | None = None) -> int:
             # Reuse the declared finite pair count only when no explicit calibration
             # count was supplied. Existing exact floors are never auto-recalibrated;
             # load_floor still refuses malformed/mismatched records above.
-            calibration_samples = calibration_samples or max(2, args.serving_pairs)
+            calibration_samples = calibration_samples or (serving.MATCHED_CALIBRATION_PAIRS
+                if source_instrument else max(2, args.serving_pairs))
+        if source_instrument and calibration_samples and calibration_samples < serving.MATCHED_CALIBRATION_PAIRS:
+            parser.error("matched_process_v2 calibration count is independent pairs and must be >=24")
         args.surface = "serving:" + serving_recipe.name
         print(f"serving   selected {direct_launch.backend} workload: {serving_recipe.describe()}; "
               f"request-bound floor {floor} [{serving_floor_provenance}]")
         if calibration_samples:
-            print(f"serving   prepare {calibration_samples} original calibration launches "
+            print(f"serving   prepare {calibration_samples * (2 if source_instrument else 1)} "
+                  f"original calibration launches ({args.serving_instrument}) "
                   "under the owning claim before source iterations")
     if args.serving_recipe is not None:
         serving_recipe = serving.Recipe.load(args.serving_recipe)
@@ -856,6 +873,7 @@ def main(argv: list[str] | None = None) -> int:
                 + "\n\n" + program)
         return {
             "program": program,
+            **({"serving_instrument": dict(source_instrument)} if source_instrument else {}),
             **({"cpu_screen": {**screen_state,
                                "full_target": full_cpu_target.to_dict()}} if screen_state else {}),
             "kernel_hotspots": [row.to_dict() for row in hotspot_rows],
@@ -1086,7 +1104,7 @@ def main(argv: list[str] | None = None) -> int:
         return measure
 
     def cpu_compare(a_build, c_build):
-        nonlocal floor, floor_request_digest, calibrated
+        nonlocal floor, floor_request_digest, floor_record, calibrated
         anchor_recipe = _cpu_arm(direct_launch, a_build)
         candidate_recipe = _cpu_arm(direct_launch, c_build)
         # Reuse the actual comparison's rebind, including after an anchor keep;
@@ -1096,14 +1114,19 @@ def main(argv: list[str] | None = None) -> int:
             # Existing source-comparison floor, freshly keyed to the retained
             # runtime recipe and original requests. Never reuse the old recipe's.
             floor_store = args.store / "runtime-source-floors" / serving_recipe.recipe_hash
-            reading = serving.load_floor(floor_store, serving_recipe, frozen_requests=frozen_requests)
+            reading = serving.load_floor(floor_store, serving_recipe, frozen_requests=frozen_requests,
+                                         **source_instrument)
             if reading.floor_pct is None:
                 value = serving.calibrate_floor(serving_recipe, a_build,
-                    samples=max(2, args.serving_pairs), port=direct_launch.port,
-                    resolved_recipe=anchor_recipe, frozen_requests=frozen_requests)
-                serving.write_floor(floor_store, serving_recipe, value, frozen_requests=frozen_requests)
-                reading = serving.load_floor(floor_store, serving_recipe, frozen_requests=frozen_requests)
+                    samples=serving.MATCHED_CALIBRATION_PAIRS if source_instrument else max(2, args.serving_pairs),
+                    port=direct_launch.port, resolved_recipe=anchor_recipe, frozen_requests=frozen_requests,
+                    **source_instrument)
+                serving.write_floor(floor_store, serving_recipe, value, frozen_requests=frozen_requests,
+                                    **source_instrument)
+                reading = serving.load_floor(floor_store, serving_recipe, frozen_requests=frozen_requests,
+                                             **source_instrument)
             floor, floor_request_digest = reading.floor_pct, reading.request_digest
+            floor_record = reading.row or None
             calibrated = floor is not None
             source_floor_refresh[0] = False
             runtime_preparation["source_comparison_floor"] = str(reading.path)
@@ -1112,7 +1135,9 @@ def main(argv: list[str] | None = None) -> int:
             floor_pct=floor, port=direct_launch.port,
             anchor_resolved_recipe=anchor_recipe,
             candidate_resolved_recipe=candidate_recipe,
-            frozen_requests=frozen_requests, floor_request_digest=floor_request_digest),
+            frozen_requests=frozen_requests, floor_request_digest=floor_request_digest,
+            **({"instrument": args.serving_instrument, "floor_record": floor_record}
+               if source_instrument else {})),
             "experimental_candidate_not_champion" if experimental
             else "canonical_candidate_vs_current_anchor")
 
@@ -1427,7 +1452,9 @@ def main(argv: list[str] | None = None) -> int:
                                      "anchor_resolved_recipe": _cpu_arm(direct_launch, cor_build[0]),
                                      "candidate_resolved_recipe": _cpu_arm(direct_launch, anchor_build[0]),
                                      "frozen_requests": frozen_requests,
-                                     "floor_request_digest": floor_request_digest}
+                                     "floor_request_digest": floor_request_digest,
+                                     **({"instrument": args.serving_instrument, "floor_record": floor_record}
+                                        if source_instrument else {})}
                                     if direct_launch else {}))
         plan = accumulate.resolve(bundle[0], sv_row, accum_policy)
         # WHY it fired is part of the reading: a cadence firing at +2% compounded is a
@@ -1995,6 +2022,8 @@ def main(argv: list[str] | None = None) -> int:
                             arms = inputs.get("resolved_arms") if isinstance(inputs, dict) else None
                             candidate = arms.get("candidate") if isinstance(arms, dict) else None
                             if (origin.kept_commit == source_resumed["current_anchor"]["commit"]
+                                    and serving.comparison_instrument_matches(comparison,
+                                        instrument=args.serving_instrument, pairs=args.serving_pairs)
                                     and comparison.get("request_digest") == serving.request_digest(
                                         serving_recipe, frozen_requests)
                                     and isinstance(candidate, dict)
@@ -2017,11 +2046,12 @@ def main(argv: list[str] | None = None) -> int:
                     serving_recipe, calibration_anchor, samples=calibration_samples,
                     port=direct_launch.port,
                     resolved_recipe=_cpu_arm(direct_launch, calibration_anchor),
-                    frozen_requests=frozen_requests)
+                    frozen_requests=frozen_requests, **source_instrument)
                 serving.write_floor(args.store, serving_recipe, calibration,
-                                    frozen_requests=frozen_requests)
+                                    frozen_requests=frozen_requests, **source_instrument)
                 floor_reading = serving.load_floor(args.store, serving_recipe,
-                                                   frozen_requests=frozen_requests)
+                                                   frozen_requests=frozen_requests, **source_instrument)
+                floor_record = floor_reading.row or None
                 floor = serving_floor_pct = floor_reading.floor_pct
                 calibrated = floor is not None
                 serving_floor_provenance = floor_reading.provenance
@@ -2062,13 +2092,15 @@ def main(argv: list[str] | None = None) -> int:
                                                 "validation: original request-bound calibration"))
                         calibration = serving.calibrate_floor(
                             serving_recipe, validation_anchor_build,
-                            samples=max(2, args.serving_pairs), port=direct_launch.port,
+                            samples=serving.MATCHED_CALIBRATION_PAIRS if source_instrument else max(2, args.serving_pairs),
+                            port=direct_launch.port,
                             resolved_recipe=_cpu_arm(direct_launch, validation_anchor_build),
-                            frozen_requests=frozen_requests)
+                            frozen_requests=frozen_requests, **source_instrument)
                         serving.write_floor(args.store, serving_recipe, calibration,
-                                            frozen_requests=frozen_requests)
+                                            frozen_requests=frozen_requests, **source_instrument)
                         floor_reading = serving.load_floor(
-                            args.store, serving_recipe, frozen_requests=frozen_requests)
+                            args.store, serving_recipe, frozen_requests=frozen_requests, **source_instrument)
+                        floor_record = floor_reading.row or None
                         floor = serving_floor_pct = floor_reading.floor_pct
                         calibrated = floor is not None
                         serving_floor_provenance = floor_reading.provenance
@@ -2084,7 +2116,9 @@ def main(argv: list[str] | None = None) -> int:
                             anchor_resolved_recipe=original_launch,
                             candidate_resolved_recipe=candidate_launch,
                             frozen_requests=frozen_requests,
-                            floor_request_digest=floor_request_digest)
+                            floor_request_digest=floor_request_digest,
+                            **({"instrument": args.serving_instrument, "floor_record": floor_record}
+                               if source_instrument else {}))
                     except (loop.MeasurementInvalid, serving.ServerDied) as exc:
                         failure = (dict(exc.record) if isinstance(exc, loop.MeasurementInvalid)
                                    and isinstance(exc.record, dict) else

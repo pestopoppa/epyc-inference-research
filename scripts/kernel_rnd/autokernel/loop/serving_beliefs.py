@@ -12,6 +12,7 @@ from pathlib import Path
 
 CAPTURE_SCHEMA = "epyc.vidya.legacy_serving_capture.v1"
 RUNTIME_CAPTURE_SCHEMA = "epyc.vidya.legacy_serving_capture.v2"
+MATCHED_CAPTURE_SCHEMA = "epyc.vidya.legacy_serving_capture.v3"
 RECEIPT_SCHEMA = "epyc.vidya.legacy_serving_receipt.v1"
 PRODUCER_ID = "autokernel.loop.serving_beliefs/v1"
 MAX_BYTES = 64 << 20
@@ -23,7 +24,7 @@ def digest(value) -> str:
 
 
 def prepare(recipe, *, anchor, candidate, anchor_build, candidate_build, frozen_requests, pairs,
-            candidate_recipe=None, runtime_pair=None):
+            candidate_recipe=None, runtime_pair=None, measurement_plan=None):
     if type(pairs) is not int or not 1 <= pairs <= 64:
         raise ValueError("belief capture supports at most 64 original pairs")
     if recipe.metric != "aggregate_tok_s":
@@ -41,6 +42,8 @@ def prepare(recipe, *, anchor, candidate, anchor_build, candidate_build, frozen_
     if runtime_pair is not None:
         inputs.update(runtime_pair=runtime_pair.to_dict(),
                       candidate_recipe=candidate_recipe.to_dict())
+    if measurement_plan is not None:
+        inputs["measurement_plan"] = measurement_plan
     return json.loads(json.dumps(inputs, allow_nan=False))
 
 
@@ -78,9 +81,12 @@ def finish(comparison, inputs):
                                "resolved_snapshot_digest": None if resolved is None else resolved.get("snapshot_digest"),
                                "execution_digest": None if resolved is None else resolved.get("execution_digest"),
                                "model_path": inputs["recipe"]["model"],
+                               **({"measurement_plan": inputs["measurement_plan"]}
+                                  if "measurement_plan" in inputs else {}),
                                "applicability": "direct_serving_observation_only",
                                "cpu_facts": "dependency_only_not_placement_or_contention_proof"}})
-    capture = {"schema": RUNTIME_CAPTURE_SCHEMA if "runtime_pair" in inputs else CAPTURE_SCHEMA,
+    capture = {"schema": (MATCHED_CAPTURE_SCHEMA if "measurement_plan" in inputs else
+                          RUNTIME_CAPTURE_SCHEMA if "runtime_pair" in inputs else CAPTURE_SCHEMA),
                "inputs": inputs, "capture_id": capture_id,
                "native_sha256": native_digest, "belief_measurements": rows}
     capture["capture_sha256"] = digest(capture)

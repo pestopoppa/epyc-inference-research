@@ -59,8 +59,11 @@ def original_anchor_commit(build: Path, repo: Path) -> str:
 
 def classify(comparison: Mapping[str, Any], *, intended_target: bool) -> str:
     """Return the existing owner's exact three-valued validation disposition."""
-    if not isinstance(comparison, Mapping) or comparison.get("schema") != \
-            "epyc.autokernel.serving_ab.v1":
+    from . import serving
+    if not isinstance(comparison, Mapping) or not (
+            comparison.get("schema") == "epyc.autokernel.serving_ab.v1"
+            or serving.comparison_instrument_matches(comparison,
+                instrument=serving.MATCHED_INSTRUMENT, pairs=comparison.get("pairs"))):
         raise SurfaceValidationRefused("validation requires an original serving A/B row")
     effect = comparison.get("effect")
     effect_pct = comparison.get("effect_pct")
