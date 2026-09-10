@@ -285,6 +285,20 @@ def production_enrollment_diagnostics(
             "targets": rows}
 
 
+def _entry_artifacts(target: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    """Keep argv entry shards in singular launch slots; export retains all pins."""
+    artifacts = target.get("artifacts", [])
+    command = target.get("command_argv", [])
+    entries = {}
+    for use, flags in (("model", ("-m", "--model")),
+                       ("drafter", ("-md", "--model-draft"))):
+        if sum(item.get("use") == use for item in artifacts) > 1:
+            entries[use] = next((command[i + 1] for i, token in enumerate(command[:-1])
+                                 if token in flags), None)
+    return [item for item in artifacts
+            if item["use"] not in entries or item["path"] == entries[item["use"]]]
+
+
 def registry_snapshot_from_export(value: Path | str | Mapping[str, Any]
                                   ) -> dict[str, dict[str, Any]]:
     """Project pins into Campaign's existing registry shape; grant no readiness."""
@@ -298,7 +312,7 @@ def registry_snapshot_from_export(value: Path | str | Mapping[str, Any]
             "path": source["path"], "sha256": source["sha256"]}
     for target in export["targets"]:
         target_id = target["target_id"]
-        for artifact in target.get("artifacts", []):
+        for artifact in _entry_artifacts(target):
             kind = {"model": "model", "drafter": "model",
                     "executable": "build", "recipe": "recipe"}.get(artifact.get("use"))
             if kind is None:
@@ -409,7 +423,7 @@ def resolve_exported_recipes(value: Path | str | Mapping[str, Any], *,
                 name=f"production:{target['target_id']}", command_argv=command,
                 topology_prefix=prefix)
             artifacts = {"model": None, "drafter": None, "executable": None, "dsos": []}
-            for item in target.get("artifacts", []):
+            for item in _entry_artifacts(target):
                 role = item["use"]
                 if role == "dso":
                     artifacts["dsos"].append({"schema": LAUNCH_ARTIFACT_SCHEMA,

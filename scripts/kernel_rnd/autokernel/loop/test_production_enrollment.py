@@ -109,6 +109,26 @@ def _campaign_config(backend: str = "cpu") -> dict:
             "metric": "aggregate_tok_s", "metric_direction": "higher"}
 
 
+def test_split_model_entry_is_not_overwritten_by_last_shard(tmp_path: Path):
+    export = _export(tmp_path)
+    target = export["targets"][0]
+    original = target["artifacts"][0]
+    first = str(tmp_path / "model-00001-of-00003.gguf")
+    original["path"] = first
+    target["command_argv"][2] = first
+    target["argv"] = target["topology"]["argv_prefix"] + target["command_argv"]
+    target["artifacts"].extend({"use": "model",
+        "path": str(tmp_path / f"model-{i:05d}-of-00003.gguf"), "sha256": str(i) * 64}
+        for i in (2, 3))
+    export = _seal_recipe_artifacts(export, tmp_path)
+    registry = registry_snapshot_from_export(export)
+    assert registry["model"]["production:frontdoor@8070:model"]["path"] == first
+    resolved = resolve_exported_recipes(export, environment_policy=_policy())
+    assert resolved["targets"][0]["status"] == "resolved"
+    assert len([a for a in load_export(export)["targets"][0]["artifacts"]
+                if a["use"] == "model"]) == 3
+
+
 def test_integrity_and_registry_projection(tmp_path: Path):
     export = _export(tmp_path)
     registry = registry_snapshot_from_export(export)
