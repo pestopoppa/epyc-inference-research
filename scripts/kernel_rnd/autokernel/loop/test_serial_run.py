@@ -77,7 +77,7 @@ if selection_path:
                 "memory_reservation_bytes": proposal.estimated_claims.memory_reservation_bytes,
                 "affinity_cores": ["0"], "open": opened,
                 "close": observation(pid, suffix), "released": True}
-    base = float((selection.round_number * 10 + selection.slot_index) * 10)
+    base = float(int(out.name.rsplit("-", 1)[-1]) * 100)
     components = [component("cpu", base + 1.0, base + 4.0,
                             proposal.estimated_claims.physical_region_fraction,
                             "cpu", [])]

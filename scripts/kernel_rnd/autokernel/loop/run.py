@@ -347,6 +347,10 @@ def main(argv: list[str] | None = None) -> int:
                         help="collect this many original serving calibration launches before iterations")
     parser.add_argument("--cpu-profiler", type=Path, default=Path("/usr/bin/perf"),
                         help="perf executable for separate observational CPU request profiling")
+    parser.add_argument("--cpu-screen-scope", choices=("quarter", "half"),
+                        help="common reduced CPU source screen; positive requires separate full confirmation")
+    parser.add_argument("--cpu-confirm-from", type=Path,
+                        help="original completed reduced batch retaining the exact source/build to confirm")
     parser.add_argument("--gpu-calibrate-serving", type=int,
                         help="collect this many original GPU serving calibration launches before iterations")
     parser.add_argument("--fire-multiple", type=float, default=2.5,
@@ -390,6 +394,12 @@ def main(argv: list[str] | None = None) -> int:
                         default=pool.WORKER_BUILD_ROOT,
                         help="parent of the per-lane candidate build directories")
     args = parser.parse_args(argv)
+    if args.cpu_screen_scope or args.cpu_confirm_from:
+        if (not args.cpu_serving_launch or not args.resolved_campaign or not args.out
+                or args.iterations != 1
+                or (args.cpu_screen_scope and args.cpu_confirm_from)):
+            parser.error("CPU screen/confirmation requires one enrolled CPU iteration/lane and --out")
+        args.workers = 1  # One finite candidate owns the retained build until confirmation.
     if args.cpu_serving_launch and args.gpu_serving_launch:
         parser.error("select only one CPU or GPU serving launch")
     if args.gpu_serving_launch and not args.resolved_campaign:
@@ -514,6 +524,28 @@ def main(argv: list[str] | None = None) -> int:
         build_cpu_list = owned_cpu_list
         build_jobs = min(build_jobs, resolved_campaign.resources.build_jobs)
 
+    # Select BOTH source arms' common conditions before the actual region claim,
+    # scheduler join, floor lookup or actor call. The enrolled full target is kept.
+    screen_prepared = None
+    screen_confirmation = None
+    screen_state = None
+    screen_hint = None
+    full_cpu_target = cpu_launch
+    if args.cpu_screen_scope:
+        from . import cpu_screen
+        try:
+            screen_prepared = cpu_screen.prepare_launch(
+                full_cpu_target, args.cpu_screen_scope, resolved_campaign.resources.cpu_logical)
+        except ValueError as exc:
+            parser.error(f"CPU screen refused: {exc}")
+        direct_launch = cpu_launch = screen_prepared["launch"]
+        build_cpu_list = owned_cpu_list = screen_prepared["cpu_list"]
+        build_jobs = min(build_jobs, cpu_launch.template.threads)
+        screen_state = {"scope": args.cpu_screen_scope,
+                        "full_execution_digest": full_cpu_target.execution_digest,
+                        "measured_execution_digest": cpu_launch.execution_digest, "candidate": None}
+        screen_hint = cpu_screen.planned_hint(args.out, original_argv, args.cpu_screen_scope)
+
     scheduler_selection = None
     if args.scheduler_selection is not None:
         from . import scheduling, unified_planner
@@ -561,6 +593,23 @@ def main(argv: list[str] | None = None) -> int:
                                        experimental=experimental)
     print(f"{'candidate' if experimental else 'champion'}  {args.champion_branch} "
           f"@ {verified_head[:12]} — verified")
+    if args.cpu_confirm_from:
+        from . import cpu_screen
+        try:
+            screen_confirmation = cpu_screen.confirmation_from(args.cpu_confirm_from,
+                full_target=full_cpu_target, selected_target=selected_identity,
+                request_digest=serving.request_digest(cpu_launch.template, frozen_requests),
+                original_head=verified_head)
+            screen_prepared = cpu_screen.prepare_launch(full_cpu_target,
+                screen_confirmation["scope"], resolved_campaign.resources.cpu_logical)
+            if screen_prepared["launch"].execution_digest != CanonicalResolvedRecipe.from_dict(
+                    screen_confirmation["evaluated_anchor"]).execution_digest:
+                raise cpu_screen.ScreenRefused("original reduced anchor differs from prepared common scope")
+        except (OSError, ValueError) as exc:
+            parser.error(f"CPU confirmation refused: {exc}")
+        screen_state = {"scope": "full_confirmation",
+                        "full_execution_digest": full_cpu_target.execution_digest,
+                        "measured_execution_digest": cpu_launch.execution_digest, "candidate": None}
 
     # The workload must dispatch the kernels production dispatches. Refuse loudly.
     census = (workload_contract.read_census(args.model) if direct_launch
@@ -583,6 +632,8 @@ def main(argv: list[str] | None = None) -> int:
             enrolled_target_digest=hashlib.sha256(json.dumps(
                 selected_target.to_dict(), sort_keys=True, separators=(",", ":"),
                 allow_nan=False).encode()).hexdigest())
+    if screen_state is not None:
+        epoch_inputs["cpu_screen"] = dict(screen_state)
     epoch = archive.epoch_for(anchor_commit=anchor_commit,
                               build_recipe=recipe.to_dict(),
                               **({"host_state": epoch_inputs} if epoch_inputs else {}))
@@ -626,6 +677,11 @@ def main(argv: list[str] | None = None) -> int:
         calibrated = floor is not None
         serving_floor_provenance = floor_reading.provenance
         floor_request_digest = floor_reading.request_digest
+        if screen_state is not None and floor is None:
+            # A different common recipe cannot borrow the full target's floor.
+            # Use the existing declared finite serving pair count when the original
+            # calibration option is absent (including resumed serial children).
+            calibration_samples = calibration_samples or max(2, args.serving_pairs)
         args.surface = "serving:" + serving_recipe.name
         print(f"serving   selected {direct_launch.backend} workload: {serving_recipe.describe()}; "
               f"request-bound floor {floor} [{serving_floor_provenance}]")
@@ -688,6 +744,19 @@ def main(argv: list[str] | None = None) -> int:
                 "Keeps remain on the explicitly selected experimental candidate branch; "
                 "they do not promote the canonical champion or production.\n\n"
                 + program)
+            if screen_state is not None:
+                program = (
+                    "CPU COMMON-SCOPE SOURCE WORK: " + screen_state["scope"] + ". "
+                    "Both A/B arms share the listed threads and affinity; this is NOT an "
+                    "effect from changing those settings. Author source only, not a runtime "
+                    "treatment. Reduced positive is provisional until the SAME source/build "
+                    "clears the original full target; reduced null cannot globally retire a "
+                    "scaling-sensitive mechanism. No NUMA-local or full-scale transfer assumed.\n\n"
+                    + program)
+                if screen_hint is not None:
+                    program = ("Original common-scope selection hint: " + json.dumps(screen_hint,
+                        sort_keys=True) + ". Propose a source mechanism matching this stated family; "
+                        "the hint is advice, not evidence of full-target transfer.\n\n" + program)
         elif direct_launch:
             program = (
                 "EXPLICIT GPU SERVING TARGET — measure the selected server launch and frozen "
@@ -701,6 +770,8 @@ def main(argv: list[str] | None = None) -> int:
                 + "\n\n" + program)
         return {
             "program": program,
+            **({"cpu_screen": {**screen_state,
+                               "full_target": full_cpu_target.to_dict()}} if screen_state else {}),
             "kernel_hotspots": [row.to_dict() for row in hotspot_rows],
             **({"cpu_profile": dict(cpu_profile_observation)} if cpu_launch else {}),
             "prior_experiments": prior_experiments(args, epoch),
@@ -719,12 +790,16 @@ def main(argv: list[str] | None = None) -> int:
                 "runtime_env_keys": sorted(set(direct_launch.environment_policy.measurement_keys)
                                            & {"GGML_IQK", "OMP_NUM_THREADS", "OMP_PROC_BIND",
                                               "OMP_PLACES", "OMP_WAIT_POLICY"})}
-               if cpu_launch else {}),
+               if cpu_launch and screen_state is None else {}),
             **({"target": {"scope": "experimental candidate, NOT canonical champion",
                             "recipe": feedback_anchor[0].to_dict(),
                             "requests": str(args.frozen_prompts),
                             "build_recipe": recipe.to_dict(),
                             "hotspot_status": cpu_profile_observation["status"],
+                            **({"common_cpu_scope": {**screen_state,
+                                "original_selection_hint": screen_hint,
+                                "full_transfer_target": full_cpu_target.to_dict()}}
+                               if screen_state is not None else {}),
                             **({"enrollment": selected_identity} if selected_identity else {})}}
                if cpu_launch else {"target": {"scope": "selected GPU serving workload",
                                              "recipe": direct_launch.to_dict(),
@@ -758,6 +833,9 @@ def main(argv: list[str] | None = None) -> int:
 
     def gate_for(worker):
         def gate(hypothesis, paths):
+            if screen_state and hypothesis.runtime_pair is not None:
+                return False, [gates.Verdict("cpu_screen", False,
+                                            "common-scope source screen does not select runtime recipes")]
             if hypothesis.runtime_pair is not None:
                 pair = hypothesis.runtime_pair
                 if not cpu_launch or paths:
@@ -783,6 +861,13 @@ def main(argv: list[str] | None = None) -> int:
             # The diff first: a build that fails still leaves a patch worth reading,
             # and this is the last moment it exists on disk.
             keep_the_diff(worker, hypothesis)
+            if screen_confirmation is not None:
+                cpu_screen.verify_restored(screen_confirmation, worker, screen_prepared["launch"],
+                                           args.store, hypothesis)
+                # Original candidate executable/DSOs already proved, source restored
+                # exactly. Re-run the ordinary oracle at FULL conditions, no rebuild.
+                return gates.run_all(lambda: gates.op_correctness(worker.build_dir,
+                    backend="CPU", resolved_recipe=_cpu_arm(direct_launch, worker.build_dir)))
             # Callables, so a failed build actually short-circuits: an eagerly
             # evaluated op_correctness ran the suite against a stale binary and blamed
             # this patch.
@@ -1417,6 +1502,9 @@ def main(argv: list[str] | None = None) -> int:
                 attempt, model=args.model, quant=census.dominant_quant,
                 backend="cpu" if cpu_launch else "gpu", build_recipe=recipe.to_dict(),
                 surface=outcome.comparison.surface if outcome.comparison is not None else args.surface)
+            if screen_state is not None:
+                attempt["cpu_screen"] = dict(screen_state)
+                attempt["research_scope"]["cpu_screen"] = dict(screen_state)
             archive.record(args.store, attempt, epoch=epoch,
                            recorded_at=loop._now(), campaign_id="ak-loop",
                            on_serving_export=feedback.exported)
@@ -1446,6 +1534,12 @@ def main(argv: list[str] | None = None) -> int:
             if hypothesis.runtime_pair is not None:
                 raise loop.ConfirmVetoed("runtime recipe requires original strict frame admission")
             refuse_uncalibrated_keep(args.surface, calibrated, comparison)
+            if screen_state and screen_state["scope"] in {"quarter", "half"}:
+                screen_state["candidate"] = cpu_screen.retain_candidate(
+                    store_root=args.store, origin_batch=args.out, worker=worker,
+                    target=selected_identity, hypothesis=hypothesis, paths=paths,
+                    full_target=full_cpu_target, comparison=comparison)
+                raise loop.ConfirmVetoed("reduced positive retained; original full-target confirmation pending")
             # R23-44: the BENCH confirm rung is the KEEP GATE -- a cheap, deterministic screen
             # a keep must clear to enter the accumulator (§5.3: one extra bench.compare per
             # confirm surface, in this same serialized tail; the veto lands the candidate as
@@ -1482,8 +1576,9 @@ def main(argv: list[str] | None = None) -> int:
                                    root=args.worker_root,
                                    build_root=args.worker_build_root,
                                    execute=True),
-            make_planner=lambda worker: actors.AgentPlanner(
-                workspace=worker.worktree, backend=planner_backend),
+            make_planner=lambda worker: (cpu_screen.RetainedPlanner(
+                screen_confirmation, worker, screen_prepared["launch"]) if screen_confirmation
+                else actors.AgentPlanner(workspace=worker.worktree, backend=planner_backend)),
             make_critic=lambda worker: actors.AgentCritic(
                 workspace=worker.worktree, backend=critic_backend),
             build_context=build_context, make_gate=gate_for,
@@ -1533,7 +1628,8 @@ def main(argv: list[str] | None = None) -> int:
                 # This thread and future actor/oracle children inherit the declared
                 # CPUs; pre-existing telemetry threads are not relabelled as confined.
                 previous_affinity = os.sched_getaffinity(0)
-                os.sched_setaffinity(0, set(resolved_campaign.resources.cpu_logical))
+                from ..execution.cpu_region_claim import parse_cpu_list
+                os.sched_setaffinity(0, set(parse_cpu_list(owned_cpu_list)))
                 ownership.callback(os.sched_setaffinity, 0, previous_affinity)
                 receipt = ownership.enter_context(claim.hold_cpu(owned_cpu_list))
                 original_claims.append(receipt)
@@ -1554,7 +1650,11 @@ def main(argv: list[str] | None = None) -> int:
                       f"demonstrated advances only)")
             # Profiles the CURRENT anchor on the SAME surface the A/B will measure, and
             # is re-run whenever a keep advances the champion.
-            reprofile()
+            if screen_confirmation is None:
+                reprofile()
+            else:
+                cpu_profile_observation.update(status="not_collected",
+                    reason="confirm original retained source/build; no new proposal or profiling requested")
 
             if direct_launch and calibration_samples:
                 publish("running", step=f"{direct_launch.backend.upper()} serving: request-bound original calibration")
@@ -1603,12 +1703,14 @@ def main(argv: list[str] | None = None) -> int:
                     cor_build=cor_build[0] if not experimental else None,
                     cor_commit=serial_run.full_commit(args.worktree, cor_commit[0])
                     if not experimental else None,
+                    **({"cpu_screen": screen_state} if screen_state is not None else {}),
                     **({"held_claim_evidence": held_claim_evidence}
                        if held_claim_evidence is not None else {})),
                 **({"held_claim_evidence": held_claim_evidence}
                    if held_claim_evidence is not None else {}),
                 **({"held_claim_error": held_claim_error} if held_claim_error else {}),
                 **({"target": selected_identity} if selected_identity is not None else {}),
+                **({"cpu_screen": screen_state} if screen_state is not None else {}),
                 **({"baseline_scope": "experimental_candidate_not_champion",
                     "experimental_branch": args.experimental_branch} if experimental else {}),
                 **({"launch_snapshot": direct_launch.snapshot_digest,

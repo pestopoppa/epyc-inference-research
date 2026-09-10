@@ -25,7 +25,8 @@ _DOCUMENT_FLAGS = ("--resolved-campaign", "--cpu-serving-launch", "--gpu-serving
                    "--frozen-prompts", "--serving-recipe")
 _CHANGING_FLAGS = frozenset({"--out", "--iterations", "--resume-run", "--anchor-build",
                             "--cor-build", "--cpu-calibrate-serving", "--gpu-calibrate-serving",
-                            "--scheduler-selection", "--dry-run"})
+                            "--scheduler-selection", "--dry-run", "--cpu-screen-scope",
+                            "--cpu-confirm-from"})
 _CONTINUATION_FIELDS = {"schema", "terminal", "input_argv", "input_argv_sha256", "binding",
                         "worktree", "branch", "model", "selected_target", "current_anchor", "cor_anchor",
                         "iterations_requested", "iterations_completed", "outcome_counts", "result_file"}
@@ -118,7 +119,7 @@ def _held_reference(value):
 
 def continuation(*, argv, binding, terminal, worktree, branch, model, selected_target,
                  anchor_build, anchor_commit, iterations_requested, outcomes,
-                 cor_build=None, cor_commit=None, held_claim_evidence=None) -> dict:
+                 cor_build=None, cor_commit=None, held_claim_evidence=None, cpu_screen=None) -> dict:
     counts = {}
     for outcome in outcomes:
         counts[outcome.status] = counts.get(outcome.status, 0) + 1
@@ -134,6 +135,9 @@ def continuation(*, argv, binding, terminal, worktree, branch, model, selected_t
     if held_claim_evidence is not None:
         row["schema"] = CONTINUATION_SCHEMA_V2
         row["held_claim_evidence"] = _held_reference(held_claim_evidence)
+    if cpu_screen is not None:
+        from .cpu_screen import routing
+        row["cpu_screen"] = routing(cpu_screen, argv)
     return row
 
 
@@ -145,6 +149,8 @@ def load_completed(path: Path, *, expected_argv=None, expected_binding=None):
     expected_fields = (_CONTINUATION_FIELDS_V2 if isinstance(row, dict)
                        and row.get("schema") == CONTINUATION_SCHEMA_V2
                        else _CONTINUATION_FIELDS)
+    if isinstance(row, dict) and "cpu_screen" in row:
+        expected_fields = expected_fields | {"cpu_screen"}
     if not isinstance(row, dict) or set(row) != expected_fields \
             or row["schema"] not in {CONTINUATION_SCHEMA, CONTINUATION_SCHEMA_V2} \
             or row["terminal"] not in {"complete", "stopped"}:
@@ -157,6 +163,14 @@ def load_completed(path: Path, *, expected_argv=None, expected_binding=None):
         raise SerialRefused("continuation input arguments differ")
     if expected_argv is not None and argv != list(expected_argv):
         raise SerialRefused("result is for different actual child arguments")
+    if "cpu_screen" in row:
+        from .cpu_screen import routing
+        row["cpu_screen"] = routing(row["cpu_screen"], argv)
+        if row["cpu_screen"]["candidate"] is not None and (
+                row["outcome_counts"] != {"keep_candidate": 1}):
+            raise SerialRefused("pending screen candidate lacks its original completed provisional outcome")
+    elif option(argv, "--cpu-screen-scope") or option(argv, "--cpu-confirm-from"):
+        raise SerialRefused("CPU screen result omitted its original scope")
     if not isinstance(row["binding"], dict) or set(row["binding"]) != {"argv", "documents"}:
         raise SerialRefused("invalid original input binding")
     if expected_binding is not None and row["binding"] != expected_binding:
@@ -324,7 +338,9 @@ def _derived_scheduler_manifest(targets, resolved_path, rounds):
             backend=selected.execution.backend,
             target_revision=unified_planner._target_digest(selected),
             alias_identity=selected.workload_signature,
-            frontier_id=None, production_frontier=False,
+            frontier_id=(unified_planner._target_digest(selected)
+                         if "production" in selected.enrolled_as else None),
+            production_frontier="production" in selected.enrolled_as,
             seed_id=(unified_planner._target_digest(selected)
                      if selected.seed_boost_units else None),
             stage_class="search", estimated_duration_seconds=max_stage,
@@ -450,7 +466,8 @@ def main(argv=None) -> int:
                       scheduler_manifest=scheduler_manifest)
 
 
-def _batch_argv(original, prior, batch_iterations, directory, *, scheduler_selection=None):
+def _batch_argv(original, prior, batch_iterations, directory, *, scheduler_selection=None,
+                scope_preview=None):
     child_argv = list(original)
     if prior is not None:
         _body, sha = load_completed(Path(prior["path"]), expected_binding=input_binding(original))
@@ -458,6 +475,11 @@ def _batch_argv(original, prior, batch_iterations, directory, *, scheduler_selec
             raise SerialRefused("retained child result changed")
         child_argv = _without(child_argv, {"--cpu-calibrate-serving", "--gpu-calibrate-serving"})
         child_argv += ["--resume-run", prior["path"]]
+    # Prospective common-scope selection remains inside these original child
+    # arguments. Scheduler selection/claims must agree before this child launches.
+    from . import cpu_screen
+    child_argv, _screen_selection = cpu_screen.prepare_batch(
+        child_argv, prior, directory, batch_iterations=batch_iterations, previewed=scope_preview)
     child_argv += ["--iterations", str(batch_iterations), "--out", str(directory)]
     if scheduler_selection is not None:
         child_argv += ["--scheduler-selection", str(Path(scheduler_selection).resolve())]
@@ -627,13 +649,13 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
     def save():
         status.write_json(root, state_path.name, state)
 
-    def publish(phase, active=None):
+    def publish(phase, active=None, reason=None):
         if isinstance(active, dict):
             active = {key: value for key, value in active.items()
                       if key not in {"scheduler_selection", "scheduler_selection_sha256"}}
         status.write(root, state=phase, epoch=config, campaign_id="legacy-serial",
                      anchor_commit="", surface="serial_targets", pairs=0, noise_floor_pct=None,
-                     target=active, step="serial routing only; detailed original status stays in target store",
+                     target=active, step=reason or "serial routing only; detailed original status stays in target store",
                      routing={"target_count": len(targets), "rounds": rounds,
                               "batch_iterations": batch_iterations, "next_batch": state["next_batch"],
                               "stop_requested": stopped(),
@@ -673,15 +695,40 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
                 return 1  # Continuous mode must not spin over a failed roster.
             number = state["next_batch"]
             selection = None
+            previews = None
             if scheduler_manifest is not None:
-                from . import scheduling, serial_scheduling
+                from . import cpu_screen, scheduling, serial_scheduling
                 available = tuple((i, target) for i, target in enumerate(targets)
                                   if str(i) not in state["failed_targets"])
+                source_state = scheduling.SchedulerState.from_dict(state["scheduler_state"])
+                previews, scope_debt, ready = {}, {}, []
+                collisions = cpu_screen.pending_collisions(targets, state["last_results"])
+                for i, target in available:
+                    selected_id = option(target, "--target-id")
+                    if i in collisions:
+                        scope_debt[selected_id] = collisions[i]
+                        continue
+                    preview = cpu_screen.preview_batch(target, state["last_results"].get(str(i)),
+                                                       batch_iterations=batch_iterations)
+                    proposal = cpu_screen.scoped_proposal(scheduler_manifest.proposals[selected_id], preview)
+                    debt = cpu_screen.confirmation_debt(
+                        scheduler_manifest.config, source_state, proposal, preview)
+                    if debt:
+                        scope_debt[selected_id] = debt
+                    else:
+                        ready.append((i, target))
+                        previews[selected_id] = preview
+                state["scope_debt"] = scope_debt
+                available = tuple(ready)
+                if not available and scope_debt:
+                    save()
+                    publish("failed", reason="; ".join(f"{key}: {value}" for key, value in scope_debt.items()))
+                    return 1  # Retain pending refs; no busy spin or new same-target search.
                 scheduler_state, selection, available_index = serial_scheduling.select_target(
                     scheduler_manifest,
-                    scheduling.SchedulerState.from_dict(state["scheduler_state"]),
+                    source_state,
                     tuple(option(target, "--target-id") for _i, target in available),
-                    now=time.time(), stage_number=number)
+                    now=time.time(), stage_number=number, scope_previews=previews)
                 if available_index < 0:
                     state["scheduler_state"] = scheduler_state.to_dict()
                     save()
@@ -706,7 +753,9 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
                 status.write_json(directory, selection_path.name, selection.to_dict(),
                                   prefix=".scheduler-selection-")
             child_argv = _batch_argv(original, prior, batch_iterations, directory,
-                                     scheduler_selection=selection_path)
+                                     scheduler_selection=selection_path,
+                                     scope_preview=(previews[option(original, "--target-id")]
+                                                    if previews is not None else None))
             expected_binding = input_binding(child_argv)
             active = {"target_index": index, "selected_id": option(original, "--target-id"),
                       "store": option(original, "--store"), "batch_dir": str(directory),
