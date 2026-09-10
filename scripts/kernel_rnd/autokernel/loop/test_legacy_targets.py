@@ -9,6 +9,7 @@ from unittest import mock
 import pytest
 
 from . import campaign, campaign_cli, legacy_targets as lt, planned_serving, run
+from . import scheduling, serial_run, serial_scheduling
 from .test_campaign import _manifest, _registry, _target
 from .test_glm_frozen_requests import _canonical_launch, _manifest as _prompts, _request
 from . import test_promotion_targets as promotion_fixture
@@ -115,6 +116,76 @@ def test_actual_main_selects_target_and_retains_existing_dry_run(
     assert ("cpu_serving_selected_workload" if backend == "cpu" else "legacy_gpu_screen") in output
     assert "DRY RUN" in output
     assert resolved.targets[0].enrolled_as == (("seed",) if seed else ("production",))
+
+
+def test_actual_main_accepts_exact_scheduled_selection_without_ambient_src_package(
+        tmp_path, monkeypatch):
+    resolved, launch = _resolved(backend="cpu", seed=True)
+    argv = _argv(tmp_path, resolved, launch, cpu=True)
+    manifest = serial_run._derived_scheduler_manifest(
+        [[item for item in argv if item != "--dry-run"]], tmp_path / "resolved.json", 1)
+    state = scheduling.initial_state(manifest.config, manifest.scheduler_id)
+    _state, selection, index = serial_scheduling.select_target(
+        manifest, state, ("selected",), now=1.0, stage_number=0)
+    assert index == 0 and selection is not None
+    selected_path = tmp_path / "selection.json"
+    selected_path.write_text(json.dumps(selection.to_dict()))
+    argv += ["--scheduler-selection", str(selected_path), "--out", str(tmp_path / "out")]
+    _forbid_execution(monkeypatch)
+    monkeypatch.setattr(run.champion, "verify_startup", lambda **_kwargs: "a" * 40)
+    monkeypatch.setattr(run, "_git", lambda *_args: "a" * 40)
+    monkeypatch.setattr(run.workload_contract, "read_census", lambda _model: SimpleNamespace(
+        n_embd=4096, dominant_quant="Q4_K"))
+    monkeypatch.setattr(run, "noise_floor_pct", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(run.actors, "backend_for",
+                        lambda *_args: SimpleNamespace(describe=lambda: "fixture"))
+    assert run.main(argv) == 0
+
+
+def test_actual_main_reopens_digest_bound_latest_shared_source_anchor(
+        tmp_path, monkeypatch):
+    resolved, launch = _resolved(backend="cpu", seed=True)
+    argv = _argv(tmp_path, resolved, launch, cpu=True)
+    identity = {"campaign_id": resolved.campaign_id, "request_id": resolved.request_id,
+                "manifest_digest": resolved.manifest_digest, "selected_id": "selected",
+                "scope": "cpu_serving_selected_workload",
+                "original_target": resolved.targets[0].to_dict()}
+    latest_build = tmp_path / "latest-build"
+    source_dir = tmp_path / "source-result"
+    source_dir.mkdir()
+    source_argv = ["--worktree", str(tmp_path / "source"), "--model", launch.model.path,
+                   "--cpu-serving-launch", str(tmp_path / "launch.json"),
+                   "--experimental-branch", "ak/experimental/connector",
+                   "--resolved-campaign", str(tmp_path / "resolved.json"),
+                   "--target-id", "selected",
+                   "--iterations", "1", "--out", str(source_dir)]
+    continuation = serial_run.continuation(
+        argv=source_argv, binding=serial_run.input_binding(source_argv), terminal="complete",
+        worktree=tmp_path / "source", branch="ak/experimental/connector",
+        model=launch.model.path, selected_target=identity,
+        anchor_build=latest_build, anchor_commit="b" * 40,
+        iterations_requested=1, outcomes=[SimpleNamespace(status="measured_null")])
+    source_path = source_dir / "loop-continuation.json"
+    source_path.write_text(json.dumps(continuation))
+    (source_dir / "loop-run.json").write_text("{}")
+    source_sha = __import__("hashlib").sha256(source_path.read_bytes()).hexdigest()
+    argv += ["--source-anchor-continuation", str(source_path),
+             "--source-anchor-sha256", source_sha]
+    _forbid_execution(monkeypatch)
+    startups = []
+    monkeypatch.setattr(run.champion, "verify_startup",
+                        lambda **kwargs: startups.append(kwargs) or "b" * 40)
+    monkeypatch.setattr(run, "_cpu_arm",
+                        lambda recipe, build: replace(recipe, build_dir=str(build)))
+    monkeypatch.setattr(serial_run, "verify_exact_anchor", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(run, "_git", lambda *_args: "b" * 40)
+    monkeypatch.setattr(run.workload_contract, "read_census", lambda _model: SimpleNamespace(
+        n_embd=4096, dominant_quant="Q4_K"))
+    monkeypatch.setattr(run, "noise_floor_pct", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(run.actors, "backend_for",
+                        lambda *_args: SimpleNamespace(describe=lambda: "fixture"))
+    assert run.main(argv) == 0
+    assert startups[0]["anchor_build"] == latest_build
 
 
 @pytest.mark.parametrize("case", ["unknown", "ambiguous", "missing", "cpu_as_gpu", "gpu_as_cpu",

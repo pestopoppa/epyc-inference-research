@@ -149,6 +149,26 @@ def test_generated_roster_drives_actual_children_and_completed_restart(tmp_path,
     assert len((state / "seen.jsonl").read_text().splitlines()) == 4
 
 
+def test_multiple_cpu_targets_serialize_one_owned_source_with_latest_anchor(
+        tmp_path, monkeypatch):
+    _, owners, argv = _inputs(tmp_path, backends=("cpu", "cpu"))
+    owners["cpu-1"]["worktree"] = owners["cpu-0"]["worktree"]
+    owners["cpu-1"]["branch"] = owners["cpu-0"]["branch"]
+    Path(sr.option(argv, "--owned-targets")).write_text(json.dumps(owners))
+    child = tmp_path / "tiny.py"
+    child.write_text(CHILD)
+    monkeypatch.setattr(sr, "_child_command", lambda args: [sr.sys.executable, str(child), *args])
+    monkeypatch.setenv("PYTHONPATH", str(Path(sr.__file__).resolve().parents[4]))
+    assert sr.main(argv) == 0
+    seen = [json.loads(line)["argv"] for line in (
+        tmp_path / "router" / "seen.jsonl").read_text().splitlines()]
+    assert len(seen) == 4
+    assert sr.option(seen[-1], "--source-anchor-continuation").endswith(
+        "batch-000002/loop-continuation.json")
+    assert sr.option(seen[1], "--resume-run").endswith(
+        "batch-000000/loop-continuation.json")
+
+
 def test_identical_owned_aliases_schedule_once_and_missing_ownership_is_not_success(tmp_path):
     resolved, owners, argv = _inputs(tmp_path, backends=("cpu",))
     first = resolved.targets[0]
@@ -223,7 +243,7 @@ def test_invalid_generated_inputs_refuse_before_launch(tmp_path, monkeypatch, ca
         common.write_text(json.dumps(["--model", "/foreign-model"]))
         argv += ["--common-args", str(common)]
     elif case == "overlap":
-        owners["cpu-1"]["worktree"] = owners["cpu-0"]["worktree"]
+        owners["cpu-1"]["worktree"] = str(Path(owners["cpu-0"]["worktree"]) / "nested")
     elif case == "production_branch":
         owners["cpu-0"]["branch"] = "production-consolidated-v9"
     path.write_text(json.dumps(owners))

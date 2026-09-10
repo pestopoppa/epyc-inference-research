@@ -1,4 +1,5 @@
 """Owned tiny children and original loop fixtures; no hardware or providers."""
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -241,6 +242,32 @@ def test_actual_children_rotate_reuse_inputs_and_stop_at_finite_budget(tmp_path,
             os.kill(row["pid"], 0)
 
 
+def test_serialized_targets_share_latest_source_anchor_without_losing_own_resume(
+        tmp_path, monkeypatch):
+    state, argv = _inputs(tmp_path, monkeypatch, rounds=2)
+    paths = [Path(argv[index + 1]) for index, value in enumerate(argv)
+             if value == "--target-args"]
+    first = json.loads(paths[0].read_text())
+    second = json.loads(paths[1].read_text())
+    second[second.index("--worktree") + 1] = sr.option(first, "--worktree")
+    first += ["--experimental-branch", sr.champion.CANONICAL_BRANCH]
+    paths[0].write_text(json.dumps(first))
+    paths[1].write_text(json.dumps(second))
+    assert sr.main(argv) == 0
+    seen = [json.loads(line)["argv"]
+            for line in (state / "seen.jsonl").read_text().splitlines()]
+    assert sr.option(seen[0], "--source-anchor-continuation") is None
+    assert sr.option(seen[1], "--source-anchor-continuation").endswith(
+        "batch-000000/loop-continuation.json")
+    assert sr.option(seen[2], "--resume-run").endswith(
+        "batch-000000/loop-continuation.json")
+    assert sr.option(seen[2], "--source-anchor-continuation").endswith(
+        "batch-000001/loop-continuation.json")
+    source_path = Path(sr.option(seen[2], "--source-anchor-continuation"))
+    assert sr.option(seen[2], "--source-anchor-sha256") == hashlib.sha256(
+        source_path.read_bytes()).hexdigest()
+
+
 @pytest.mark.parametrize("mode", ["missing", "wrong_args", "fail"])
 def test_no_success_without_matching_terminal_and_all_failed_continuous_exits(
         tmp_path, monkeypatch, mode):
@@ -401,3 +428,49 @@ def test_actual_cpu_post_keep_resume_rebinds_original_launch_without_recalibrati
     with mock.patch.object(run, "main", first_then_resume_dry_run):
         cpu_fixture.test_existing_main_cpu_five_iterations_preserves_canonical_champion(False)
     assert len(resumed) == 1
+
+
+def test_actual_cpu_keep_cross_target_then_older_history_uses_latest_source():
+    original_main = run.main
+    observed = []
+
+    def exercise(argv):
+        assert original_main(argv) == 0
+        first = Path(sr.option(argv, "--out"))
+        first_row, first_sha = sr.load_completed(first / "loop-continuation.json")
+        assert first_row["selected_target"]["selected_id"] == "target-a"
+
+        second = first.parent / "target-b"
+        target_b = list(argv)
+        target_b[target_b.index("--target-id") + 1] = "target-b"
+        target_b[target_b.index("--store") + 1] = str(first.parent / "store-b")
+        target_b += ["--source-anchor-continuation", str(first / "loop-continuation.json"),
+                     "--source-anchor-sha256", first_sha, "--out", str(second)]
+        assert original_main(target_b) == 0
+        second_row, second_sha = sr.load_completed(second / "loop-continuation.json")
+        assert second_row["selected_target"]["selected_id"] == "target-b"
+        assert second_row["current_anchor"] != first_row["current_anchor"]
+
+        # A keeps its own request/history receipt while consuming B's newer exact
+        # source/build.  Dry-run proves startup/rebinding without another proposal.
+        third = first.parent / "target-a-resumed"
+        target_a = [*argv, "--resume-run", str(first / "loop-continuation.json"),
+                    "--source-anchor-continuation", str(second / "loop-continuation.json"),
+                    "--source-anchor-sha256", second_sha, "--out", str(third), "--dry-run"]
+        starts = []
+        real_startup = run.champion.verify_startup
+
+        def startup(**kwargs):
+            starts.append(kwargs["anchor_build"])
+            return real_startup(**kwargs)
+
+        with mock.patch.object(run.champion, "verify_startup", startup):
+            assert original_main(target_a) == 0
+        assert starts == [Path(second_row["current_anchor"]["path"])]
+        observed.append((first_row, second_row))
+        return 0
+
+    with mock.patch.object(run, "main", exercise):
+        cpu_fixture.test_existing_main_cpu_five_iterations_preserves_canonical_champion(
+            False, enrolled_pair=True)
+    assert len(observed) == 1

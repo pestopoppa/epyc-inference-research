@@ -26,7 +26,8 @@ _DOCUMENT_FLAGS = ("--resolved-campaign", "--cpu-serving-launch", "--gpu-serving
 _CHANGING_FLAGS = frozenset({"--out", "--iterations", "--resume-run", "--anchor-build",
                             "--cor-build", "--cpu-calibrate-serving", "--gpu-calibrate-serving",
                             "--scheduler-selection", "--dry-run", "--cpu-screen-scope",
-                            "--cpu-confirm-from"})
+                            "--cpu-confirm-from", "--source-anchor-continuation",
+                            "--source-anchor-sha256"})
 _CONTINUATION_FIELDS = {"schema", "terminal", "input_argv", "input_argv_sha256", "binding",
                         "worktree", "branch", "model", "selected_target", "current_anchor", "cor_anchor",
                         "iterations_requested", "iterations_completed", "outcome_counts", "result_file"}
@@ -266,6 +267,7 @@ def _validate_target_args(argv, *, owner_anchor_waiver=False) -> list[str]:
         raise SerialRefused("target args must be a bounded JSON string array")
     reserved = {"--out", "--iterations", "--resume-run", "--scheduler-selection", "--dry-run",
                 "--calibrate-surface",
+                "--source-anchor-continuation", "--source-anchor-sha256",
                 "--allow-unverified-anchor", "--help", "-h"}
     if owner_anchor_waiver:
         reserved.remove("--allow-unverified-anchor")
@@ -415,8 +417,16 @@ def main(argv=None) -> int:
         # build lanes or history. The owner never creates/repoints those roots.
         for flag in ("--worktree", "--store", "--worker-root", "--worker-build-root"):
             paths = [Path(option(row, flag)).resolve() for row in targets]
-            if any(a == b or a in b.parents or b in a.parents
-                   for i, a in enumerate(paths) for b in paths[i + 1:]):
+            overlaps = [(i, j, a, b) for i, a in enumerate(paths)
+                        for j, b in enumerate(paths[i + 1:], start=i + 1)
+                        if a == b or a in b.parents or b in a.parents]
+            if flag == "--worktree":
+                overlaps = [(i, j, a, b) for i, j, a, b in overlaps
+                            if not (a == b and option(targets[i], "--experimental-branch",
+                                                     champion.CANONICAL_BRANCH) ==
+                                    option(targets[j], "--experimental-branch",
+                                           champion.CANONICAL_BRANCH))]
+            if overlaps:
                 raise SerialRefused(f"target {flag} roots overlap")
         scheduler_manifest = None
         if args.scheduler_manifest is not None:
@@ -466,8 +476,14 @@ def main(argv=None) -> int:
                       scheduler_manifest=scheduler_manifest)
 
 
+def _source_owner_key(argv):
+    return _digest({"worktree": str(Path(option(argv, "--worktree")).resolve()),
+                    "branch": option(argv, "--experimental-branch",
+                                     champion.CANONICAL_BRANCH)})
+
+
 def _batch_argv(original, prior, batch_iterations, directory, *, scheduler_selection=None,
-                scope_preview=None):
+                scope_preview=None, source_prior=None):
     child_argv = list(original)
     if prior is not None:
         _body, sha = load_completed(Path(prior["path"]), expected_binding=input_binding(original))
@@ -475,6 +491,12 @@ def _batch_argv(original, prior, batch_iterations, directory, *, scheduler_selec
             raise SerialRefused("retained child result changed")
         child_argv = _without(child_argv, {"--cpu-calibrate-serving", "--gpu-calibrate-serving"})
         child_argv += ["--resume-run", prior["path"]]
+    if source_prior is not None and (prior is None or source_prior != prior):
+        _source_body, source_sha = load_completed(Path(source_prior["path"]))
+        if source_sha != source_prior["sha256"]:
+            raise SerialRefused("retained shared-source continuation changed")
+        child_argv += ["--source-anchor-continuation", source_prior["path"],
+                       "--source-anchor-sha256", source_sha]
     # Prospective common-scope selection remains inside these original child
     # arguments. Scheduler selection/claims must agree before this child launches.
     from . import cpu_screen
@@ -546,8 +568,10 @@ def _reconcile_completed(root, state, targets, batch_iterations):
         selection_body, _selection_file_sha = _json(selection_path, limit=256 * 1024)
         if selection_body != scheduled:
             raise SerialRefused("previous scheduler selection file changed")
-    argv = _batch_argv(original, state["last_results"].get(str(index)), batch_iterations,
-                       directory, scheduler_selection=selection_path)
+    argv = _batch_argv(
+        original, state["last_results"].get(str(index)), batch_iterations,
+        directory, scheduler_selection=selection_path,
+        source_prior=state.get("source_results", {}).get(_source_owner_key(original)))
     expected = {"target_index": index, "selected_id": option(original, "--target-id"),
                 "store": option(original, "--store"), "batch_dir": str(directory),
                 "input_argv_sha256": _digest(argv)}
@@ -623,11 +647,13 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
             raise SerialRefused("serial state belongs to different inputs")
     else:
         state = {"schema": SERIAL_SCHEMA, "config_digest": config, "next_batch": 0,
-                 "active": None, "last_results": {}, "failed_targets": {}}
+                 "active": None, "last_results": {}, "source_results": {},
+                 "failed_targets": {}}
         if scheduler_manifest is not None:
             from . import scheduling
             state["scheduler_state"] = scheduling.initial_state(
                 scheduler_manifest.config, scheduler_manifest.scheduler_id).to_dict()
+    state.setdefault("source_results", {})
     if scheduler_manifest is not None:
         from . import scheduling
         scheduling.SchedulerState.from_dict(state.get("scheduler_state"))
@@ -669,20 +695,25 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
         if state.get("active") is not None:
             recovered_active = dict(state["active"])
             recovered = _reconcile_completed(root, state, targets, batch_iterations)
+            recovered_dir = root / "batches" / f"batch-{recovered['batch_number']:06d}"
+            expected_recovered_argv = _batch_argv(
+                targets[recovered["target_index"]],
+                state["last_results"].get(str(recovered["target_index"])),
+                batch_iterations, recovered_dir,
+                source_prior=state["source_results"].get(
+                    _source_owner_key(targets[recovered["target_index"]])),
+                scheduler_selection=(recovered_dir / "scheduler-selection.json"
+                                     if scheduler_manifest is not None else None))
+            body, _sha = load_completed(
+                Path(recovered["result"]["path"]),
+                expected_binding=input_binding(expected_recovered_argv))
             if scheduler_manifest is not None:
-                body, _sha = load_completed(
-                    Path(recovered["result"]["path"]),
-                    expected_binding=input_binding(_batch_argv(
-                        targets[recovered["target_index"]],
-                        state["last_results"].get(str(recovered["target_index"])),
-                        batch_iterations,
-                        root / "batches" / f"batch-{recovered['batch_number']:06d}",
-                        scheduler_selection=root / "batches" /
-                        f"batch-{recovered['batch_number']:06d}" / "scheduler-selection.json")))
                 state["scheduler_state"] = _scheduled_account(
                     state, scheduler_manifest, recovered_active, body,
-                    root / "batches" / f"batch-{recovered['batch_number']:06d}").to_dict()
+                    recovered_dir).to_dict()
             state["last_results"][str(recovered["target_index"])] = recovered["result"]
+            state["source_results"][_source_owner_key(
+                targets[recovered["target_index"]])] = recovered["result"]
             state["last_reconciliation"] = recovered
             state["active"] = None
             state["next_batch"] += 1
@@ -755,7 +786,9 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
             child_argv = _batch_argv(original, prior, batch_iterations, directory,
                                      scheduler_selection=selection_path,
                                      scope_preview=(previews[option(original, "--target-id")]
-                                                    if previews is not None else None))
+                                                    if previews is not None else None),
+                                     source_prior=state["source_results"].get(
+                                         _source_owner_key(original)))
             expected_binding = input_binding(child_argv)
             active = {"target_index": index, "selected_id": option(original, "--target-id"),
                       "store": option(original, "--store"), "batch_dir": str(directory),
@@ -806,6 +839,8 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
                 if not isinstance(identity, dict) or identity.get("selected_id") != active["selected_id"]:
                     raise SerialRefused("child terminal belongs to another selected target")
                 state["last_results"][key] = {"path": str(result_path), "sha256": sha}
+                state["source_results"][_source_owner_key(original)] = {
+                    "path": str(result_path), "sha256": sha}
                 if scheduler_manifest is not None:
                     state["scheduler_state"] = _scheduled_account(
                         state, scheduler_manifest, active, body, directory).to_dict()
