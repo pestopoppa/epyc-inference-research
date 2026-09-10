@@ -14,8 +14,13 @@ reading of 0% VRAM is the NORMAL result and not evidence of a CPU run.
 from __future__ import annotations
 
 from pathlib import Path
+import json
+import math
+import os
+import re
 import statistics
 import threading
+import time
 
 VRAM_SYSFS = Path("/sys/class/drm/card2/device/mem_info_vram_used")
 KFD_PROC = Path("/sys/class/kfd/kfd/proc")
@@ -132,6 +137,225 @@ class Sampler:
             "samples": self.samples,
             "resident": self.peak_vram >= RESIDENT_FLOOR_BYTES,
         }
+
+
+class CpuLifecycleSampler:
+    """Bounded factual procfs observations, NOT a placement/contention warrant.
+
+    Allowed NUMA nodes are permissions, not actual page placement. Each task is
+    identified by TID/start ticks; the process must retain its attached identity.
+    Phase-boundary-crossing reads, missing reads and exhausted budgets stay visible.
+    No campaign, container, lock or scientific identity is manufactured here.
+    """
+
+    def __init__(self, *, proc_root: Path = Path("/proc"), interval: float = 1.0,
+                 max_samples: int = 8192, max_tasks: int = 512,
+                 max_bytes: int = 32 << 20, max_sample_s: float = 0.1):
+        for value, limit in ((max_samples, 8192), (max_tasks, 512), (max_bytes, 32 << 20)):
+            if type(value) is not int or not 1 <= value <= limit:
+                raise ValueError("CPU observation count/byte budget is out of bounds")
+        if not all(math.isfinite(value) and 0 < value <= 60
+                   for value in (interval, max_sample_s)):
+            raise ValueError("CPU observation timing budget is out of bounds")
+        self.proc_root, self.interval = proc_root, interval
+        self.max_samples, self.max_tasks = max_samples, max_tasks
+        self.max_bytes, self.max_sample_s = max_bytes, max_sample_s
+        self._lock = threading.Lock()
+        self._stop = threading.Event()
+        self._wake = threading.Event()
+        self._thread = None
+        self._target = None
+        self._phase = "setup"
+        self._generation = 0
+        self._samples = []
+        self._markers = []
+        self._errors = []
+        self._bytes = 0
+        self._last_sample = None
+        self._finished = False
+        self._truncated = False
+        self._boot_id = None
+
+    @staticmethod
+    def _text(path: Path) -> str:
+        fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW)
+        try:
+            raw = os.read(fd, 16385)
+            if len(raw) > 16384:
+                raise ValueError("proc read byte bound exceeded")
+            return raw.decode("ascii")
+        finally:
+            os.close(fd)
+
+    def _identity(self, root: Path, pid: int) -> int:
+        text = self._text(root / "stat")
+        prefix, separator, tail = text.rpartition(") ")
+        if not separator or prefix.split(" (", 1)[0] != str(pid):
+            raise ValueError("proc stat PID differs")
+        start_ticks = int(tail.split()[19])
+        if start_ticks < 0:
+            raise ValueError("negative process start ticks")
+        return start_ticks
+
+    def _task(self, root: Path, pid: int) -> dict:
+        before = self._identity(root, pid)
+        fields = {}
+        for line in self._text(root / "status").splitlines():
+            key, _, value = line.partition(":")
+            if key in {"Cpus_allowed_list", "Mems_allowed_list"}:
+                value = value.strip()
+                if key in fields or not re.fullmatch(r"[0-9]+(?:-[0-9]+)?(?:,[0-9]+(?:-[0-9]+)?)*", value):
+                    raise ValueError("malformed or duplicate allowed-list field")
+                previous = -1
+                for part in value.split(","):
+                    bounds = [int(number) for number in part.split("-")]
+                    if bounds[0] <= previous or bounds[-1] < bounds[0]:
+                        raise ValueError("unordered allowed-list field")
+                    previous = bounds[-1]
+                fields[key] = value
+        if len(fields) != 2:
+            raise ValueError("missing CPU/NUMA allowed-list fields")
+        if self._identity(root, pid) != before:
+            raise ValueError("PID/TID identity changed during read")
+        return {"id": pid, "start_ticks": before, **fields}
+
+    def _task_ids(self, root: Path) -> list[int]:
+        ids = []
+        with os.scandir(root / "task") as entries:
+            for entry in entries:
+                if not entry.name.isdecimal():
+                    raise ValueError("unexpected task directory entry")
+                ids.append(int(entry.name))
+                if len(ids) > self.max_tasks:
+                    raise ValueError("task count bound exceeded")
+        return sorted(ids)
+
+    def note_hook_failure(self, method: str, exc: Exception) -> None:
+        with self._lock:
+            if len(self._errors) < 16:
+                self._errors.append(f"{method}: {type(exc).__name__}: {exc}"[:256])
+
+    def phase(self, phase: str) -> None:
+        with self._lock:
+            self._phase = phase
+            self._generation += 1
+            if len(self._markers) < 32:
+                self._markers.append({"phase": phase, "monotonic_s": time.monotonic(),
+                                      "wall_s": time.time()})
+            else:
+                self._truncated = True
+        self._wake.set()
+
+    def checkpoint(self, marker: str) -> None:
+        self.phase(marker)
+
+    def start(self, phase: str = "setup") -> None:
+        self.phase(phase)
+        try:
+            self._boot_id = self._text(self.proc_root / "sys/kernel/random/boot_id").strip()
+        except Exception as exc:
+            self.note_hook_failure("boot_id", exc)
+        self._thread = threading.Thread(target=self._loop, name="cpu-lifecycle-observer", daemon=True)
+        self._thread.start()
+
+    def attach_target(self, pid: int) -> None:
+        # Bind immediately after the owning Popen, never to a later reused PID.
+        start_ticks = self._identity(self.proc_root / str(pid), pid)
+        with self._lock:
+            if self._target is not None:
+                raise ValueError("CPU observer target already attached")
+            self._target = {"pid": pid, "start_ticks": start_ticks}
+        self._wake.set()
+
+    def _sample(self) -> None:
+        started = time.monotonic()
+        with self._lock:
+            if self._target is None or self._stop.is_set():
+                return
+            if len(self._samples) >= self.max_samples:
+                self._truncated = True
+                self._stop.set()
+                return
+            target, phase, generation = dict(self._target), self._phase, self._generation
+        row = {"started_monotonic_s": started, "wall_s": time.time(), "phase": phase,
+               "process": None, "tasks": [], "error": None}
+        try:
+            root = self.proc_root / str(target["pid"])
+            if self._identity(root, target["pid"]) != target["start_ticks"]:
+                raise ValueError("attached process identity changed")
+            row["process"] = self._task(root, target["pid"])
+            ids = self._task_ids(root)
+            if not ids:
+                raise ValueError("empty task census")
+            for tid in ids:
+                if self._stop.is_set():
+                    raise ValueError("observer closed during sample")
+                if time.monotonic() - started > self.max_sample_s:
+                    raise ValueError("sample duration bound exceeded")
+                row["tasks"].append(self._task(root / "task" / str(tid), tid))
+            if self._task_ids(root) != ids:
+                raise ValueError("task census changed during read")
+            if self._identity(root, target["pid"]) != target["start_ticks"]:
+                raise ValueError("attached process identity changed during sample")
+            if time.monotonic() - started > self.max_sample_s:
+                raise ValueError("sample duration bound exceeded")
+            if self._stop.is_set():
+                raise ValueError("observer closed during sample")
+        except Exception as exc:
+            row["error"] = f"{type(exc).__name__}: {exc}"[:256]
+        ended = time.monotonic()
+        with self._lock:
+            row.update(ended_monotonic_s=ended, phase_at_end=self._phase,
+                       crosses_phase_boundary=generation != self._generation,
+                       gap_before_s=None if self._last_sample is None else started - self._last_sample)
+            size = len(json.dumps(row, separators=(",", ":")).encode("utf-8"))
+            if self._bytes + size > self.max_bytes:
+                self._truncated = True
+                self._stop.set()
+                return
+            self._samples.append(row)
+            self._bytes += size
+            self._last_sample = started
+
+    def _loop(self) -> None:
+        try:
+            while not self._stop.is_set():
+                self._wake.clear()
+                self._sample()
+                self._wake.wait(self.interval)
+        except Exception as exc:
+            self.note_hook_failure("sample", exc)
+
+    def finish(self) -> None:
+        if self._finished:
+            return
+        self._finished = True
+        self.phase("closed")
+        self._stop.set()
+        self._wake.set()
+        if self._thread is not None:
+            self._thread.join(timeout=1)
+
+    @property
+    def observation(self) -> dict:
+        with self._lock:
+            alive = self._thread is not None and self._thread.is_alive()
+            status = "unavailable"
+            if any(row["process"] is not None or row["tasks"] for row in self._samples):
+                status = "observed" if any(row["error"] is None for row in self._samples) else "partial"
+            # A detached snapshot: no background mutation of already archived rows.
+            return json.loads(json.dumps({
+                "schema": "epyc.autokernel.cpu_lifecycle_facts.v1",
+                "status": status,
+                "scope": "process_and_task_allowed_lists_not_numa_page_placement",
+                "clock_domain": "serving_process_monotonic", "boot_id": self._boot_id,
+                "target": self._target, "markers": self._markers, "samples": self._samples,
+                "errors": self._errors, "truncated": self._truncated,
+                "shutdown_resolved": not alive, "interval_s": self.interval,
+                "bounds": {"samples": self.max_samples, "tasks_per_sample": self.max_tasks,
+                           "sample_bytes": self.max_bytes, "read_bytes": 16384,
+                           "sample_duration_s": self.max_sample_s},
+                "cpu_placement": "unproven", "contention": "unproven"}))
 
 
 def loader_env(binary: Path) -> dict[str, str]:

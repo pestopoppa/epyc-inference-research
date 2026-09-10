@@ -645,6 +645,8 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
     teardown = "not_started"
     failure: str | None = None
     observer_finish_ok = observation_session is None
+    cpu_observer = None
+    cpu_observer_error = None
     response_reference = None
     if cpu_profile_capture is not None:
         from .cpu_profile import CpuProfileCapture
@@ -660,6 +662,15 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
         response_capture.validate_launch(resolved_recipe, frozen_requests)
 
     def observe(method: str, *args) -> bool:
+        if cpu_observer is not None:
+            try:
+                getattr(cpu_observer, method)(*args)
+            except Exception as exc:
+                # Factual telemetry cannot alter serving or owned teardown.
+                try:
+                    cpu_observer.note_hook_failure(method, exc)
+                except Exception:
+                    pass
         if observation_session is None:
             return True
         try:
@@ -692,6 +703,14 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
     else:
         argv = recipe.server_argv(build_dir, port)
         launch_env = recipe.server_env(build_dir)
+    if (backend == "cpu" and resolved_recipe is not None
+            and observation_session is None and cpu_profile_capture is None):
+        # Native observed/profile paths already own their collectors. The legacy
+        # CPU path needs raw facts, not a fabricated sealed native context.
+        try:
+            cpu_observer = residency.CpuLifecycleSampler()
+        except Exception as exc:
+            cpu_observer_error = f"{type(exc).__name__}: {exc}"[:256]
     observe("start", "setup")
     sampler = None
     window_start = time.time()
@@ -877,6 +896,11 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
         failure = f"{type(exc).__name__}: {exc}"
         raise
     finally:
+        if cpu_observer is not None:
+            try:
+                cpu_observer.finish()
+            except Exception as exc:
+                cpu_observer_error = f"{type(exc).__name__}: {exc}"[:256]
         window_end = time.time()
         try:
             if sampler is not None:
@@ -885,6 +909,13 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                                                window_end=window_end,
                                                request_start=request_start,
                                                request_end=request_end, backend=backend)
+                    if cpu_observer is not None:
+                        try:
+                            record["cpu_lifecycle"] = cpu_observer.observation
+                        except Exception as exc:
+                            cpu_observer_error = f"{type(exc).__name__}: {exc}"[:256]
+                    if cpu_observer_error is not None:
+                        record["cpu_lifecycle_error"] = cpu_observer_error
                     if evidence is not None:
                         evidence.append(record)
                     if observation is not None:
