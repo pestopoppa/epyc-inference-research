@@ -50,7 +50,32 @@ identity = {"campaign_id": resolved.campaign_id, "request_id": resolved.request_
             "original_target": selected.to_dict()}
 held = None
 selection_path = sr.option(argv, "--scheduler-selection")
-if selection_path:
+if selection_path and mode == "original_cost":
+    # Actual original private flock/PID/interval writer, no hardware or measurement.
+    import fcntl
+    from scripts.kernel_rnd.autokernel.loop import claim, scheduling
+    from scripts.kernel_rnd.autokernel.loop.measurement_capture import ArtifactStore
+    selection = scheduling.Selection.from_dict(json.loads(Path(selection_path).read_text()))
+    with (root / "fixture-cost.lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        owner = claim.HeldCpuClaim({"device_id": "cpu", "cpu_list": "0"},
+            [root / "fixture-cost.lock"],
+            region_fraction=selection.proposal.estimated_claims.physical_region_fraction,
+            affinity=("0",))
+        try:
+            time.sleep(.02)
+        finally:
+            owner._closing()
+            fcntl.flock(lock, fcntl.LOCK_UN)
+            owner._released_now()
+    store = ArtifactStore(out / "held-claim-artifacts")
+    try:
+        artifact = claim.publish_intervals(store, selection, [owner], target=identity)
+    finally:
+        store.close()
+    held = {"schema": sr.HELD_REFERENCE_SCHEMA, "selection_digest": selection.digest,
+            "evidence": artifact.to_dict()}
+elif selection_path:
     from scripts.kernel_rnd.autokernel.loop import scheduling, serial_scheduling as ss
     from scripts.kernel_rnd.autokernel.loop.measurement_capture import ArtifactStore
     selection = scheduling.Selection.from_dict(json.loads(Path(selection_path).read_text()))
@@ -206,6 +231,7 @@ def test_scheduled_failed_child_accounts_only_original_released_claim(tmp_path, 
     assert scheduler_state.campaign_attempts == 2
     assert {record.outcome for record in scheduler_state.accounted_receipts} == {"failed"}
     assert len(saved["failed_targets"]) == 2
+    assert "cost_forecast" not in saved  # released failed prefixes are charged, not successful forecasts
 
 
 def test_scheduled_restart_accounts_original_completed_child_before_new_selection(
@@ -223,6 +249,44 @@ def test_scheduled_restart_accounts_original_completed_child_before_new_selectio
     assert scheduler_state.campaign_attempts == 2
     assert recovered["last_reconciliation"]["batch_number"] == 0
     assert len((state / "seen.jsonl").read_text().splitlines()) == 2
+
+
+def test_original_child_cost_changes_next_selection_and_recovers_once(tmp_path, monkeypatch):
+    state, argv = _inputs(tmp_path, monkeypatch, mode="original_cost", rounds=3)
+    argv = argv[:2] + argv[4:]  # One synthetic CPU target; no real host resource locks.
+    target_path = Path(argv[1])
+    target = sr._without(json.loads(target_path.read_text()), {"--cpu-calibrate-serving"})
+    target_path.write_text(json.dumps(target))
+    argv = _scheduled(tmp_path, argv)
+    original_account = sr._scheduled_account
+
+    def crash_after_second_original_account(*args, **kwargs):
+        result = original_account(*args, **kwargs)
+        if args[0]["scheduler_state"]["campaign_attempts"] == 1:
+            raise KeyboardInterrupt("original second child completed before state save")
+        return result
+
+    with mock.patch.object(sr, "_scheduled_account", side_effect=crash_after_second_original_account):
+        with pytest.raises(KeyboardInterrupt):
+            sr.main(argv)
+    first = json.loads((state / "batches/batch-000000/scheduler-selection.json").read_text())
+    second = json.loads((state / "batches/batch-000001/scheduler-selection.json").read_text())
+    crashed = json.loads((state / "serial-state.json").read_text())
+    samples = crashed["cost_forecast"]["targets"]["cpu"]["samples"]
+    assert len(samples) == 1
+    assert second["proposal"]["estimated_duration_seconds"] == samples[0]["held_seconds"]
+    assert second["proposal"]["estimated_duration_seconds"] < first["proposal"]["estimated_duration_seconds"]
+    assert sr.main(argv) == 0
+    saved = json.loads((state / "serial-state.json").read_text())
+    assert saved["scheduler_state"]["campaign_attempts"] == 3
+    assert saved["last_reconciliation"]["batch_number"] == 1
+    assert len(saved["cost_forecast"]["targets"]["cpu"]["samples"]) == 3
+    assert saved["cost_forecast"]["policy"] == ss.COST_FORECAST_POLICY
+    seen = [json.loads(row) for row in (state / "seen.jsonl").read_text().splitlines()]
+    assert len(seen) == 3 and all(not Path(f"/proc/{row['pid']}").exists() for row in seen)
+    assert sr.main(argv) == 0
+    assert json.loads((state / "serial-state.json").read_text())["cost_forecast"] == saved["cost_forecast"]
+    assert len((state / "seen.jsonl").read_text().splitlines()) == 3
 
 
 def test_actual_children_rotate_reuse_inputs_and_stop_at_finite_budget(tmp_path, monkeypatch):
