@@ -104,6 +104,7 @@ def write(store_root: Path, *, state: str, epoch: str, campaign_id: str,
           target: Mapping[str, Any] | None = None,
           batch: Mapping[str, Any] | None = None,
           routing: Mapping[str, Any] | None = None,
+          serial_control: Mapping[str, Any] | None = None,
           runtime_preparation: Mapping[str, Any] | None = None,
           gpu: Mapping[str, Any] | None = None,
           hotspots: Sequence[Mapping[str, Any]] = (),
@@ -183,6 +184,8 @@ def write(store_root: Path, *, state: str, epoch: str, campaign_id: str,
         body["batch"] = dict(batch)
     if routing is not None:
         body["routing"] = dict(routing)
+    if serial_control is not None:
+        body["serial_control"] = dict(serial_control)
     if runtime_preparation is not None:
         body["runtime_preparation"] = dict(runtime_preparation)
     return write_json(store_root, STATUS_FILENAME, body)
