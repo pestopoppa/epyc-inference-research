@@ -210,6 +210,13 @@ def test_canonical_cpu_and_gpu_roundtrip_validate_and_reach_measure_once(
     loaded.validate_launch(loaded.template, loaded.build_dir, loaded.port)
     assert result["admission_ready"] is False
 
+    from . import campaign
+    manifest = manifest_from_export(_export(tmp_path, backend=backend),
+                                    campaign_config=_campaign_config(backend))
+    resolved = campaign.resolve_manifest(
+        manifest, registry_snapshot=registry_snapshot_from_export(_export(tmp_path, backend=backend)))
+    assert resolved.targets[0].execution.speculation == "self_draft"
+
     class FakeProcess:
         pid = 123
         returncode = None
