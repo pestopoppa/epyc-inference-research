@@ -8,7 +8,7 @@ from unittest import mock
 
 import pytest
 
-from . import cpu_screen, run, scheduling, serial_run as sr, serial_scheduling as ss
+from . import cpu_screen, run, scheduling, serial_run as sr, serial_scheduling as ss, source_loo
 from . import test_promotion_targets as promotion_fixture
 from . import test_existing_cpu_run as cpu_fixture
 from .test_legacy_targets import _argv, _resolved
@@ -698,7 +698,8 @@ def test_actual_cpu_keep_cross_target_then_older_history_uses_latest_source(
                 a_validation_argv[a_validation_argv.index("--anchor-build") + 1] = \
                     first_row["current_anchor"]["path"]
                 assert original_main([*a_validation_argv, "--resume-run",
-                    str(first / "loop-continuation.json"), "--source-anchor-continuation",
+                    str(first / "loop-continuation.json"),
+                    "--source-anchor-continuation",
                     str(authored / "loop-continuation.json"), "--source-anchor-sha256",
                     authored_sha, "--validate-source-continuation", "--iterations", "1",
                     "--out", str(a_validation)]) == 0
@@ -706,9 +707,48 @@ def test_actual_cpu_keep_cross_target_then_older_history_uses_latest_source(
                     a_validation / "loop-continuation.json")
                 assert run.surface_validation.reopen_reference(
                     a_validation_row["source_validation"])["disposition"] == "passed"
+                loo_references = []
+                for name, disposition in (("loo", "neutral"),
+                                          ("rebaseline", "passed")):
+                    path = first.parent / f"{name}-result.json"
+                    raw = json.dumps({"operation": name, "disposition": disposition,
+                        "deletion_authorized": False,
+                        "target": first_row["selected_target"],
+                        "assembled_commit": authored_row["current_anchor"]["commit"]},
+                                     sort_keys=True).encode() + b"\n"
+                    path.write_bytes(raw)
+                    loo_references.append({"path": str(path),
+                        "sha256": hashlib.sha256(raw).hexdigest(),
+                        "disposition": disposition})
+                loo_calls = []
+                def execute_loo(**kwargs):
+                    assert held_rows[-1] is True
+                    loo_calls.append(kwargs)
+                    return {"loo": [loo_references[0]],
+                            "rebaseline": loo_references[1]}
+                a_loo = first.parent / "target-a-source-loo"
+                with mock.patch.object(source_loo, "execute_surface",
+                                       side_effect=execute_loo), \
+                        mock.patch.object(run.serving, "compare",
+                            side_effect=AssertionError("exact validation must not remeasure")), \
+                        mock.patch.object(run.gates, "compiles",
+                            side_effect=AssertionError("exact validation must not rebuild")):
+                    assert original_main([*a_validation_argv, "--resume-run",
+                        str(a_validation / "loop-continuation.json"),
+                        "--source-anchor-continuation",
+                        str(authored / "loop-continuation.json"), "--source-anchor-sha256",
+                        authored_sha, "--validate-source-continuation",
+                        "--validate-source-loo", "--iterations", "1",
+                        "--out", str(a_loo)]) == 0
+                a_loo_row, _a_loo_sha = sr.load_completed(
+                    a_loo / "loop-continuation.json")
+                assert len(loo_calls) == 1, run.surface_validation.reopen_reference(
+                    a_loo_row["source_validation"])
+                assert a_loo_row["source_loo"] == {
+                    "loo": [loo_references[0]], "rebaseline": loo_references[1]}
                 a_resume = first.parent / "target-a-shared-resume"
                 assert original_main([*argv, "--resume-run",
-                    str(a_validation / "loop-continuation.json"),
+                    str(a_loo / "loop-continuation.json"),
                     "--source-anchor-continuation",
                     str(authored / "loop-continuation.json"), "--source-anchor-sha256",
                     authored_sha, "--iterations", "1", "--out", str(a_resume)]) == 0
@@ -814,7 +854,7 @@ def test_actual_cpu_keep_cross_target_then_older_history_uses_latest_source(
     with mock.patch.object(run, "main", exercise):
         cpu_fixture.test_existing_main_cpu_five_iterations_preserves_canonical_champion(
             False, enrolled_pair=True,
-            expected_claim_cycles=4 if cross_worktree and not validation_failure else 2)
+            expected_claim_cycles=5 if cross_worktree and not validation_failure else 2)
     assert len(observed) == 1
 
 
@@ -892,3 +932,39 @@ def test_required_source_validation_uses_production_and_every_keep_author():
     with mock.patch.object(sr, "_required_source_validation", return_value=None):
         sr._refresh_required_source_validation(state, targets)
     assert state["required_source_validation"] is None
+
+
+def test_required_source_loo_routes_each_validated_target_once(tmp_path):
+    targets = [["--target-id", "a"], ["--target-id", "b"]]
+    state = {"required_source_validation": {"disposition": "passed", "rows": [
+        {"selected_id": "a", "subject": "subject-a"},
+        {"selected_id": "b", "subject": "subject-b"}]}, "source_loo": {},
+        "source_search_counts": {}}
+    assert sr._pending_source_loo(state, targets) == {0: "subject-a", 1: "subject-b"}
+    references = []
+    for name, disposition in (("loo", "neutral"), ("rebaseline", "passed")):
+        path = tmp_path / f"{name}.json"
+        raw = json.dumps({"operation": name, "disposition": disposition,
+                          "deletion_authorized": False},
+                         sort_keys=True).encode() + b"\n"
+        path.write_bytes(raw)
+        references.append({"path": str(path), "sha256": hashlib.sha256(raw).hexdigest(),
+                           "disposition": disposition})
+    state["source_loo"]["subject-a"] = {"result": {
+        "loo": [references[0]], "rebaseline": references[1]},
+        "disposition": "passed", "attempts": 1, "retry_after_search_count": 0}
+    assert sr._pending_source_loo(state, targets) == {1: "subject-b"}
+    inconclusive_path = tmp_path / "inconclusive.json"
+    inconclusive_raw = json.dumps({"operation": "loo", "disposition": "inconclusive",
+                                   "deletion_authorized": False},
+                                  sort_keys=True).encode() + b"\n"
+    inconclusive_path.write_bytes(inconclusive_raw)
+    state["source_loo"]["subject-b"] = {"result": {
+        "loo": [{"path": str(inconclusive_path),
+                 "sha256": hashlib.sha256(inconclusive_raw).hexdigest(),
+                 "disposition": "inconclusive"}],
+        "rebaseline": references[1]}, "disposition": "pending", "attempts": 1,
+        "retry_after_search_count": 1}
+    assert sr._pending_source_loo(state, targets) == {}
+    state["source_search_counts"]["1"] = 1
+    assert sr._pending_source_loo(state, targets) == {1: "subject-b"}

@@ -293,6 +293,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="exact retained digest for --source-anchor-continuation")
     parser.add_argument("--validate-source-continuation", action="store_true",
                         help="serial-owned regression A/B for a propagated source lineage")
+    parser.add_argument("--validate-source-loo", action="store_true",
+                        help="execute retained-keep omissions after exact target validation")
     # THE single champion branch; the worktree must have it checked out at its tip or
     # the loop refuses to start (`champion.verify_startup`).
     parser.add_argument("--champion-branch", default=champion.CANONICAL_BRANCH)
@@ -535,6 +537,8 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("source validation is one scheduled target stage (--iterations 1)")
     if args.validate_source_continuation and args.out is None:
         parser.error("source validation requires a retained --out directory")
+    if args.validate_source_loo and not args.validate_source_continuation:
+        parser.error("source LOO requires the original source-validation stage")
     source_authoring = (foreign_source_owner or cross_tree_source) \
         and not args.validate_source_continuation
     if source_authoring:
@@ -887,6 +891,7 @@ def main(argv: list[str] | None = None) -> int:
     runtime_recipe_reference = [None]
     runtime_status = [None]
     source_validation_reference = None
+    source_loo_result = None
     if source_authoring:
         source_validation_reference = dict(resumed["source_validation"])
     runtime_env_keys = (set(direct_launch.environment_policy.measurement_keys) &
@@ -2088,6 +2093,31 @@ def main(argv: list[str] | None = None) -> int:
                     if validation_original_commit is None:
                         validation_identity_error = prior_validation.get(
                             "reason", "original anchor source identity is unavailable")
+                    if (prior_validation.get("disposition") == "passed"
+                            and prior_validation.get("schema") == surface_validation.SCHEMA):
+                        validation_candidate_build = Path(
+                            prior_validation["candidate_anchor"]["path"])
+                        candidate_execution = _cpu_arm(
+                            direct_launch, validation_candidate_build).execution_digest
+                        comparison = prior_validation["comparison"]
+                        belief = comparison.get("belief_capture")
+                        inputs = belief.get("inputs") if isinstance(belief, dict) else None
+                        arms = inputs.get("resolved_arms") if isinstance(inputs, dict) else None
+                        candidate = arms.get("candidate") if isinstance(arms, dict) else None
+                        if (prior_validation["candidate_anchor"]["commit"]
+                                == source_resumed["current_anchor"]["commit"]
+                                and serving.comparison_instrument_matches(comparison,
+                                    instrument=args.serving_instrument,
+                                    pairs=args.serving_pairs)
+                                and comparison.get("request_digest") == serving.request_digest(
+                                    serving_recipe, frozen_requests)
+                                and isinstance(candidate, dict)
+                                and candidate.get("execution_digest") == candidate_execution):
+                            champion.verify_anchor(
+                                validation_candidate_build, source_checkout,
+                                source_resumed["current_anchor"]["commit"],
+                                experimental_identity=False)
+                            validation_reused_comparison = comparison
                 origins = [receipt for receipt in validation_receipts
                            if receipt.selected_target == selected_identity]
                 validation_intended = bool(
@@ -2129,7 +2159,8 @@ def main(argv: list[str] | None = None) -> int:
                     except surface_validation.SurfaceValidationRefused as exc:
                         validation_identity_error = str(exc)
 
-                if cross_tree_source and validation_identity_error is None:
+                if (cross_tree_source and validation_identity_error is None
+                        and validation_reused_comparison is None):
                     validation_candidate_build = args.out / "whole-source-candidate-build"
                     publish("running", step=(f"{direct_launch.backend.upper()} whole-source "
                                              "validation: target-recipe build and oracle"))
@@ -2265,12 +2296,39 @@ def main(argv: list[str] | None = None) -> int:
                         validation_row = surface_validation.row(
                             **common, comparison=validation_comparison,
                             intended_target=validation_intended)
-                source_validation_reference = surface_validation.retain(args.out, validation_row)
+                if (validation_reused_comparison is not None and resumed is not None
+                        and resumed.get("source_validation") is not None):
+                    source_validation_reference = dict(resumed["source_validation"])
+                else:
+                    source_validation_reference = surface_validation.retain(
+                        args.out, validation_row)
 
             publish("running", hotspot_rows=hotspot_rows)
             if args.validate_source_continuation:
                 validation_body = surface_validation.reopen_reference(
                     source_validation_reference)
+                if args.validate_source_loo and validation_body["disposition"] == "passed":
+                    from . import source_loo
+                    _source_repo, assembled_tree = surface_validation.shared_git_commit(
+                        args.worktree, source_checkout,
+                        source_resumed["current_anchor"]["commit"])
+                    source_loo_result = source_loo.execute_surface(
+                        directory=args.out / "source-loo", store_root=args.store,
+                        repo=source_checkout,
+                        assembled_commit=source_resumed["current_anchor"]["commit"],
+                        assembled_tree=assembled_tree,
+                        keep_references=source_lineage_references,
+                        target=selected_identity,
+                        full_launch=_cpu_arm(direct_launch, validation_candidate_build),
+                        baseline=(validation_original_commit,
+                                  _cpu_arm(direct_launch, validation_anchor_build)),
+                        frozen_requests=frozen_requests, instrument=args.serving_instrument,
+                        pairs=args.serving_pairs, cmake_defines=recipe.cmake_defines(),
+                        jobs=build_jobs, build_cpu_list=build_cpu_list,
+                        held_cpu=original_claims[0],
+                        held_gpu=None if cpu_launch else original_claims[-1],
+                        epoch=epoch, campaign_id="ak-loop", should_stop=should_stop,
+                        on_serving_export=feedback.exported)
                 validation_status = "source_validation_" + validation_body["disposition"]
                 validation_comparison_view = (ServingComparison(
                     validation_body["comparison"], "whole_source_regression_guard")
@@ -2366,6 +2424,8 @@ def main(argv: list[str] | None = None) -> int:
                        if source_lineage_references else {}),
                     **({"source_validation": source_validation_reference}
                        if source_validation_reference is not None else {}),
+                    **({"source_loo": source_loo_result}
+                       if source_loo_result is not None else {}),
                     **({"runtime_recipe_reference": runtime_recipe_reference[0]}
                        if runtime_recipe_reference[0] is not None else {}),
                     last_outcome_reference=serial_run.last_outcome_reference(outcomes, store=args.store),

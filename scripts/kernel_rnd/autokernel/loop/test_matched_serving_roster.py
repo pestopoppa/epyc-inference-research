@@ -35,20 +35,22 @@ def test_fresh_cpu_selects_v2_gpu_unchanged_without_creating_state(tmp_path):
     assert not (tmp_path / "router").exists()
 
 
-def test_applicable_original_v1_floor_stays_v1_and_original_bytes(tmp_path):
+def test_fresh_cpu_legacy_floor_cannot_select_the_new_instrument(tmp_path):
     _, _, argv = _inputs(tmp_path, backends=("cpu",))
     path = _legacy(argv, tmp_path)
     original = path.read_bytes()
     targets, _, _ = _build(argv)
-    assert sr.option(targets[0], "--serving-instrument") is None
+    assert sr.option(targets[0], "--serving-instrument") == serving.MATCHED_INSTRUMENT
     assert path.read_bytes() == original
 
 
-def test_invalid_original_v1_floor_does_not_authorize_migration(tmp_path):
+def test_invalid_original_v1_floor_is_ignored_without_mutation(tmp_path):
     _, _, argv = _inputs(tmp_path, backends=("cpu",))
-    _legacy(argv, tmp_path, corrupt=True)
-    with pytest.raises(json.JSONDecodeError):
-        _build(argv)
+    path = _legacy(argv, tmp_path, corrupt=True)
+    original = path.read_bytes()
+    targets, _, _ = _build(argv)
+    assert sr.option(targets[0], "--serving-instrument") == serving.MATCHED_INSTRUMENT
+    assert path.read_bytes() == original
 
 
 @pytest.mark.parametrize("original", [None, serving.LEGACY_INSTRUMENT, serving.MATCHED_INSTRUMENT])
