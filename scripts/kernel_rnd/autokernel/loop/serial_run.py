@@ -680,6 +680,59 @@ def _selected_identity(argv):
             "original_target": selected.to_dict()}
 
 
+def _cost_body_scope(body, proposal, scheduler_state, *, preview=None, source_body=None):
+    from . import serial_scheduling
+    prospective = preview is not None
+    geometry = (preview["scope"] if prospective else
+                (body.get("cpu_screen") or {}).get("scope", "full"))
+    if geometry == "full_confirmation":
+        return None  # One retained candidate, not another ordinary search batch.
+    argv = body["input_argv"]
+    return serial_scheduling.cost_scope(
+        binding=resume_binding(argv),
+        anchor=(source_body or body)["current_anchor"], cor_anchor=body["cor_anchor"],
+        runtime_recipe=body.get("runtime_recipe_reference"), geometry=geometry,
+        preparation={"cpu_calibration": None if prospective else option(argv, "--cpu-calibrate-serving"),
+                     "gpu_calibration": None if prospective else option(argv, "--gpu-calibrate-serving"),
+                     "runtime_calibration": "--calibrate-runtime" in argv},
+        proposal=proposal, state=scheduler_state)
+
+
+def _cost_forecasts(state, manifest, scheduler_state, available, previews):
+    """Read only original small continuations; absent/incompatible history keeps D."""
+    from . import cpu_screen, serial_scheduling
+    forecasts = {}
+    if not state.get("cost_forecast"):
+        return forecasts
+    for index, original in available:
+        selected_id = option(original, "--target-id")
+        prior = state["last_results"].get(str(index))
+        if prior is None or state["runtime_recovery"].get(str(index)) is not None:
+            continue  # No guessed initial build identity or interrupted-stage forecast.
+        try:
+            body, sha = load_resume(Path(prior["path"]), original)
+            if sha != prior["sha256"]:
+                raise SerialRefused("cost forecast original continuation changed")
+            source_body = None
+            source = state["source_results"].get(_source_owner_key(original))
+            if source is not None and source != prior:
+                source_body, sha = load_completed(Path(source["path"]))
+                if sha != source["sha256"]:
+                    raise SerialRefused("cost forecast original source continuation changed")
+            proposal = cpu_screen.scoped_proposal(manifest.proposals[selected_id], previews[selected_id])
+            scope = _cost_body_scope(body, proposal, scheduler_state,
+                                     preview=previews[selected_id], source_body=source_body)
+            forecast = (serial_scheduling.duration_forecast(
+                state["cost_forecast"], selected_id, scope, proposal=proposal,
+                max_stage_seconds=manifest.config.max_stage_seconds) if scope is not None else None)
+            if forecast is not None:
+                forecasts[selected_id] = forecast
+            state.get("cost_forecast_errors", {}).pop(selected_id, None)
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            state.setdefault("cost_forecast_errors", {})[selected_id] = str(exc)[:400]
+    return forecasts
+
+
 def _scheduled_account(state, manifest, active, body, batch_dir):
     from . import scheduling, serial_scheduling
     selection = scheduling.Selection.from_dict(active["scheduler_selection"])
@@ -693,8 +746,27 @@ def _scheduled_account(state, manifest, active, body, batch_dir):
     scheduler_state = scheduling.SchedulerState.from_dict(state["scheduler_state"])
     outcome = serial_scheduling.one_iteration_outcome(
         body["terminal"], body["outcome_counts"])
-    return scheduling.account_stage_components(
+    settled = scheduling.account_stage_components(
         manifest.config, scheduler_state, selection, receipts, outcome=outcome)
+    # Only a NEW, completed measured search with unchanged source/runtime anchor
+    # trains the forecast. A keep changes future setup; failures/invalids remain
+    # charged above but cannot train successful duration from a truncated prefix.
+    if (settled.campaign_attempts > scheduler_state.campaign_attempts
+            and body["terminal"] == "complete"
+            and body["outcome_counts"] in ({"measured_null": 1}, {"keep_candidate": 1})
+            and selection.proposal.stage_class == "search"
+            and settled.successor_fences == scheduler_state.successor_fences):
+        selected_id = active["selected_id"]
+        try:
+            scope = _cost_body_scope(body, selection.proposal, scheduler_state)
+            if scope is not None:
+                state["cost_forecast"] = serial_scheduling.retain_cost_sample(
+                    state.get("cost_forecast"), selected_id, scope, selection, receipts)
+            state.get("cost_forecast_errors", {}).pop(selected_id, None)
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            # Optional scheduling feedback never undoes original held settlement.
+            state.setdefault("cost_forecast_errors", {})[selected_id] = str(exc)[:400]
+    return settled
 
 
 def _scheduled_failure_account(state, manifest, active, batch_dir, original):
@@ -912,7 +984,9 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
                     scheduler_manifest,
                     source_state,
                     tuple(option(target, "--target-id") for _i, target in available),
-                    now=time.time(), stage_number=number, scope_previews=previews)
+                    now=time.time(), stage_number=number, scope_previews=previews,
+                    duration_forecasts=_cost_forecasts(
+                        state, scheduler_manifest, source_state, available, previews))
                 if available_index < 0:
                     state["scheduler_state"] = scheduler_state.to_dict()
                     save()

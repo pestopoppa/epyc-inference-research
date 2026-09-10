@@ -20,6 +20,8 @@ INVALID_OUTCOMES = frozenset({
 FAILED_OUTCOMES = frozenset({"bench_failed", "planner_transient"})
 INTERVAL_SCHEMA = "epyc.autokernel.direct_held_intervals.v1"
 REFERENCE_SCHEMA = "epyc.autokernel.direct_held_reference.v1"
+COST_FORECAST_POLICY = "original-held-stage-p75-last8.v1"
+COST_SAMPLE_LIMIT = 8
 
 
 class SerialSchedulingRefused(ValueError):
@@ -96,7 +98,8 @@ def validate_target_bindings(manifest: SerialSchedulerManifest,
 
 def select_target(manifest: SerialSchedulerManifest, state: scheduling.SchedulerState,
                   selected_ids: Sequence[str], *, now: float, stage_number: int,
-                  scope_previews: Mapping[str, dict] | None = None
+                  scope_previews: Mapping[str, dict] | None = None,
+                  duration_forecasts: Mapping[str, dict] | None = None
                   ) -> tuple[scheduling.SchedulerState, scheduling.Selection, int]:
     if type(stage_number) is not int or stage_number < 0:
         raise SerialSchedulingRefused("serial stage number must be nonnegative")
@@ -112,6 +115,16 @@ def select_target(manifest: SerialSchedulerManifest, state: scheduling.Scheduler
             preview = scope_previews[selected_id]
             proposal = scoped_proposal(proposal, preview)
             identity["cpu_scope"] = _digest(preview)
+        forecast = (duration_forecasts or {}).get(selected_id)
+        if forecast is not None:
+            # A serial-owner estimate, never a new bound, grant, weight or grade.
+            # Another stage (e.g. source validation) must retain its own estimate.
+            if forecast["stage_class"] == proposal.stage_class:
+                duration = _number(forecast["estimated_duration_seconds"], "duration forecast")
+                if not 0 < duration <= manifest.config.max_stage_seconds:
+                    raise SerialSchedulingRefused("duration forecast is outside the original stage bound")
+                proposal = replace(proposal, estimated_duration_seconds=duration)
+                identity["duration_forecast"] = _digest(forecast)
         indexed.append((index, replace(proposal, proposal_id=_digest(identity), submitted_at=now)))
     proposals = tuple(proposal for _index, proposal in indexed)
     next_state, selection = scheduling.select_stage(
@@ -124,6 +137,79 @@ def select_target(manifest: SerialSchedulerManifest, state: scheduling.Scheduler
             f"{'; '.join(selection.reasons)}")
     by_proposal = {proposal.proposal_id: index for index, proposal in indexed}
     return next_state, selection, by_proposal[selection.proposal.proposal_id]
+
+
+def cost_scope(*, binding, anchor, cor_anchor, runtime_recipe, geometry,
+               preparation, proposal, state):
+    """Compatibility for an operational whole-stage forecast, not scientific reuse.
+
+    The caller supplies original continuation/input facts. No model reads, guessed
+    initial source identity, cross-recipe statistics, or cross-scope gain ranking.
+    """
+    return _digest({"binding": binding, "anchor": anchor, "cor_anchor": cor_anchor,
+        "runtime_recipe": runtime_recipe, "geometry": geometry, "preparation": preparation,
+        "target_revision": proposal.target_revision, "alias_identity": proposal.alias_identity,
+        "backend": proposal.backend, "stage_class": proposal.stage_class,
+        "reservation_kind": proposal.reservation_kind, "claims": proposal.estimated_claims.to_dict(),
+        "accounting_epoch": state.accounting_epoch, "capacity_digest": state.capacity_digest})
+
+
+def _cost_samples(history, selected_id, scope_digest):
+    if history is None:
+        return []
+    _closed(history, {"policy", "targets"}, "serial cost history")
+    if history["policy"] != COST_FORECAST_POLICY or not isinstance(history["targets"], dict) \
+            or len(history["targets"]) > 64:
+        raise SerialSchedulingRefused("serial cost history policy/size differs")
+    row = history["targets"].get(selected_id)
+    if row is None:
+        return []
+    _closed(row, {"scope_digest", "samples"}, "serial cost target")
+    if row["scope_digest"] != scope_digest:
+        return []
+    samples = row["samples"]
+    if not isinstance(samples, list) or not 0 < len(samples) <= COST_SAMPLE_LIMIT:
+        raise SerialSchedulingRefused("serial cost samples exceed their bounded window")
+    ids = set()
+    for sample in samples:
+        _closed(sample, {"selection_digest", "held_seconds"}, "serial cost sample")
+        digest = sample["selection_digest"]
+        if not isinstance(digest, str) or len(digest) != 64 \
+                or any(char not in "0123456789abcdef" for char in digest) or digest in ids \
+                or _number(sample["held_seconds"], "original held duration") <= 0:
+            raise SerialSchedulingRefused("serial cost sample identity/duration differs")
+        ids.add(digest)
+    return [dict(sample) for sample in samples]
+
+
+def retain_cost_sample(history, selected_id, scope_digest, selection, receipts):
+    """After NEW owning settlement only; keep at most eight samples/current target scope."""
+    samples = _cost_samples(history, selected_id, scope_digest)
+    sample = {"selection_digest": selection.digest,
+              "held_seconds": receipts[-1].ended_at - receipts[0].started_at}
+    if sample["held_seconds"] <= 0:
+        raise SerialSchedulingRefused("original held duration must be positive")
+    prior = next((row for row in samples if row["selection_digest"] == selection.digest), None)
+    if prior is not None and prior != sample:
+        raise SerialSchedulingRefused("original settled cost changed")
+    if prior is None:
+        samples.append(sample)
+    targets = json.loads(json.dumps(history["targets"], allow_nan=False)) if history is not None else {}
+    targets[selected_id] = {"scope_digest": scope_digest, "samples": samples[-COST_SAMPLE_LIMIT:]}
+    return {"policy": COST_FORECAST_POLICY, "targets": targets}
+
+
+def duration_forecast(history, selected_id, scope_digest, *, proposal, max_stage_seconds):
+    samples = _cost_samples(history, selected_id, scope_digest)
+    if not samples:
+        return None
+    durations = sorted(row["held_seconds"] for row in samples)
+    # Nearest-rank empirical p75. This is a versioned scheduling heuristic, NOT a
+    # confidence limit, future service guarantee, or measurement precision claim.
+    duration = min(max_stage_seconds, durations[math.ceil(.75 * len(durations)) - 1])
+    return {"policy": COST_FORECAST_POLICY, "scope_digest": scope_digest,
+            "stage_class": proposal.stage_class, "estimated_duration_seconds": duration,
+            "samples": samples}
 
 
 def one_iteration_outcome(terminal: str, outcome_counts: Mapping[str, int]) -> str:
