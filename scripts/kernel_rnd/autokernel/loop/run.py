@@ -312,6 +312,8 @@ def main(argv: list[str] | None = None) -> int:
                              "bench gain over the champion of record reaches this multiple of "
                              "the serving floor (operator: 2-3x; default 2.5)")
     parser.add_argument("--out", type=Path)
+    parser.add_argument("--scheduler-selection", type=Path,
+                        help="original serial scheduler selection for held-resource accounting only")
     parser.add_argument("--dry-run", action="store_true",
                         help="prove the wiring without a provider call or a build")
     # `P-AK-SEARCH-1-A3` (RATIFIED 2026-08-31) narrows denial 4 to permit epoch-scoped
@@ -464,6 +466,29 @@ def main(argv: list[str] | None = None) -> int:
             parser.error(f"target resources refused: {exc}")
         build_cpu_list = owned_cpu_list
         build_jobs = min(build_jobs, resolved_campaign.resources.build_jobs)
+
+    scheduler_selection = None
+    if args.scheduler_selection is not None:
+        from . import scheduling, unified_planner
+        from src.runtime.instance_topology import ATOMIC_REGIONS, cpu_list_to_regions
+        if selected_target is None or args.out is None or owned_cpu_list is None:
+            parser.error("scheduler accounting requires an enrolled target, original resources and --out")
+        try:
+            scheduler_selection = scheduling.Selection.from_dict(
+                _read_cpu_document(args.scheduler_selection))
+            proposal = scheduler_selection.proposal
+            expected_claims = scheduling.ResourceVector(
+                len(cpu_list_to_regions(owned_cpu_list)) / len(ATOMIC_REGIONS),
+                () if cpu_launch else (claim.DEVICE_ID,), 0)
+            if (scheduler_selection.status != "selected" or proposal is None
+                    or proposal.target_revision != unified_planner._target_digest(selected_target)
+                    or proposal.alias_identity != selected_target.workload_signature
+                    or proposal.backend != selected_target.execution.backend
+                    or proposal.stage_class != "search"
+                    or proposal.estimated_claims != expected_claims):
+                raise ValueError("selected accounting target/backend/resources differ from the actual run")
+        except ValueError as exc:
+            parser.error(f"scheduler selection refused: {exc}")
 
     if resumed is not None:
         if (resumed["branch"] != args.champion_branch
@@ -1421,6 +1446,37 @@ def main(argv: list[str] | None = None) -> int:
             on_step=step_pooled)
 
     claim_started = None
+    original_claims = []
+    held_claim_evidence = None
+    held_claim_error = None
+    held_claim_attempted = False
+
+    def publish_held_claims():
+        nonlocal held_claim_evidence, held_claim_error, held_claim_attempted
+        if scheduler_selection is None or held_claim_attempted:
+            return
+        held_claim_attempted = True
+        from .measurement_capture import ArtifactStore
+        original_store = None
+        try:
+            args.out.mkdir(parents=True, exist_ok=True)
+            original_store = ArtifactStore(args.out / "held-claim-artifacts")
+            held_claim_evidence = claim.publish_intervals(
+                original_store, scheduler_selection, original_claims,
+                target=selected_identity).to_dict()
+            status.write_json(args.out, "loop-held-claims.json", {
+                "schema": "epyc.autokernel.direct_held_reference.v1",
+                "selection_digest": scheduler_selection.digest,
+                "evidence": held_claim_evidence}, prefix=".held-claims-")
+        except Exception as capture_error:
+            # Missing accounting remains visible; never relabel an already
+            # archived comparison or replace the original operational exception.
+            held_claim_error = f"{type(capture_error).__name__}: {capture_error}"
+            print(f"held-resource evidence unavailable: {held_claim_error}", file=sys.stderr)
+        finally:
+            if original_store is not None:
+                original_store.close()
+
     try:
         publish("starting")
         status_publisher.start()
@@ -1433,10 +1489,13 @@ def main(argv: list[str] | None = None) -> int:
                 os.sched_setaffinity(0, set(resolved_campaign.resources.cpu_logical))
                 ownership.callback(os.sched_setaffinity, 0, previous_affinity)
                 receipt = ownership.enter_context(claim.hold_cpu(owned_cpu_list))
+                original_claims.append(receipt)
             elif cpu_launch:
                 receipt = ownership.enter_context(claim.hold_cpu(cpu_launch.template.cpu_list))
+                original_claims.append(receipt)
             if not cpu_launch:
                 receipt = ownership.enter_context(claim.hold())
+                original_claims.append(receipt)
             claim_started = time.time()
             print(f"claim     held on {receipt['device_id']}\n")
             # R23-44: snapshot the starting champion into the protected champion-of-record slot
@@ -1469,6 +1528,7 @@ def main(argv: list[str] | None = None) -> int:
             pooled = run_pooled()
             outcomes = pooled.outcomes
 
+        publish_held_claims()
         elapsed = time.time() - started
         if args.out:
             args.out.mkdir(parents=True, exist_ok=True)
@@ -1495,7 +1555,12 @@ def main(argv: list[str] | None = None) -> int:
                     iterations_requested=args.iterations, outcomes=outcomes,
                     cor_build=cor_build[0] if not experimental else None,
                     cor_commit=serial_run.full_commit(args.worktree, cor_commit[0])
-                    if not experimental else None),
+                    if not experimental else None,
+                    **({"held_claim_evidence": held_claim_evidence}
+                       if held_claim_evidence is not None else {})),
+                **({"held_claim_evidence": held_claim_evidence}
+                   if held_claim_evidence is not None else {}),
+                **({"held_claim_error": held_claim_error} if held_claim_error else {}),
                 **({"target": selected_identity} if selected_identity is not None else {}),
                 **({"baseline_scope": "experimental_candidate_not_champion",
                     "experimental_branch": args.experimental_branch} if experimental else {}),
@@ -1504,6 +1569,7 @@ def main(argv: list[str] | None = None) -> int:
             }
             status.write_json(args.out, "loop-run.json", body, prefix=".loop-run-")
     except BaseException as exc:
+        publish_held_claims()
         # Starting, claim acquisition, reprofiling, and the run body all terminate
         # through the same ordered lifecycle. A failed status write cannot mask `exc`.
         status_publisher.close_failed(

@@ -1150,6 +1150,9 @@ class SchedulerEngine:
         self._records = list(source.accounted_receipts)
         self._receipt_by_id = {receipt.receipt_id: receipt for receipt in source.receipts}
         self._record_by_id = {record.receipt_id: record for record in source.accounted_receipts}
+        self._records_by_selection: dict[str, list[AccountedReceipt]] = {}
+        for record in source.accounted_receipts:
+            self._records_by_selection.setdefault(record.selection_digest, []).append(record)
         self._claim_intervals: dict[str, list[tuple[float, float, str]]] = {}
         self._held_seconds = self._physical_seconds = self._memory_seconds = 0.0
         self._gpu_seconds: dict[str, float] = {}
@@ -1307,6 +1310,11 @@ class SchedulerEngine:
                 self._records.pop()
                 self._receipt_by_id.pop(receipt.receipt_id, None)
                 self._record_by_id.pop(receipt.receipt_id, None)
+                selection_records = self._records_by_selection.get(selection.digest, [])
+                if selection_records and selection_records[-1].receipt_id == receipt.receipt_id:
+                    selection_records.pop()
+                    if not selection_records:
+                        self._records_by_selection.pop(selection.digest, None)
                 point = (receipt.started_at, receipt.ended_at, receipt.receipt_id)
                 for claim in (*receipt.physical_claim_ids, *receipt.gpu_device_ids):
                     intervals = self._claim_intervals.get(claim, [])
@@ -1761,17 +1769,33 @@ class SchedulerEngine:
 
     def account_stage(self, selection: Selection | Mapping[str, Any],
                       receipt: HeldClaimReceipt | Mapping[str, Any], *, outcome: str) -> bool:
+        return self.account_stage_components(selection, (receipt,), outcome=outcome)
+
+    def account_stage_components(
+            self, selection: Selection | Mapping[str, Any],
+            receipts: Sequence[HeldClaimReceipt | Mapping[str, Any]], *, outcome: str) -> bool:
+        """Account one selected stage from exact non-overlapping held intervals."""
         selection = _normalize(selection, Selection)
-        receipt = _normalize(receipt, HeldClaimReceipt)
+        receipts = tuple(_normalize(receipt, HeldClaimReceipt) for receipt in receipts)
+        if not receipts:
+            raise SchedulingRefused("stage accounting requires at least one held receipt")
         outcome = _enum(outcome, OUTCOMES, "stage outcome")
-        record = AccountedReceipt(receipt_id=receipt.receipt_id,
-                                  receipt_digest=receipt.digest,
-                                  selection_digest=selection.digest, outcome=outcome)
-        prior = self._record_by_id.get(receipt.receipt_id)
-        if prior is not None:
-            if prior != record:
-                raise SchedulingRefused("receipt ID conflicts with its original selection or outcome")
+        records = tuple(AccountedReceipt(
+            receipt_id=receipt.receipt_id, receipt_digest=receipt.digest,
+            selection_digest=selection.digest, outcome=outcome) for receipt in receipts)
+        if len({receipt.receipt_id for receipt in receipts}) != len(receipts):
+            raise SchedulingRefused("component receipt IDs must be unique")
+        priors = tuple(self._record_by_id.get(receipt.receipt_id) for receipt in receipts)
+        if any(prior is not None for prior in priors):
+            originals = tuple(self._records_by_selection.get(selection.digest, ()))
+            if any(prior is None for prior in priors) or originals != records or any(
+                    prior != record for prior, record in zip(priors, records)):
+                raise SchedulingRefused(
+                    "component receipts conflict with their original selection or outcome")
             return False
+        if self._records_by_selection.get(selection.digest):
+            raise SchedulingRefused(
+                "selection already has a different original component receipt set")
         if (selection.status != "selected" or selection.proposal is None
                 or selection.digest not in self.issued_selection_digests):
             raise SchedulingRefused("selection was not issued by this scheduler round")
@@ -1783,10 +1807,19 @@ class SchedulerEngine:
                 or selection.service_bound_seconds != self._bound()):
             raise SchedulingRefused("selection does not match scheduler/config/epoch/round")
         proposal = selection.proposal
-        if (receipt.proposal_id != proposal.proposal_id
-                or receipt.stage_class != proposal.stage_class
-                or receipt.backend != proposal.backend):
+        if any(receipt.proposal_id != proposal.proposal_id
+               or receipt.stage_class != proposal.stage_class
+               or receipt.backend != proposal.backend for receipt in receipts):
             raise SchedulingRefused("receipt does not match selected proposal identity")
+        ordered = tuple(sorted(receipts, key=lambda item: (item.started_at, item.ended_at,
+                                                            item.receipt_id)))
+        if ordered != receipts or any(
+                left.ended_at != right.started_at for left, right in zip(receipts, receipts[1:])):
+            raise SchedulingRefused(
+                "component receipts must form one ordered contiguous held interval")
+        if any(receipt.beneficiary_shares != receipts[0].beneficiary_shares
+               for receipt in receipts[1:]):
+            raise SchedulingRefused("component beneficiary shares differ")
         if selection.slot_kind == "coverage":
             frontier = proposal.frontier_id
             if (frontier is None or selection.slot_index is None
@@ -1808,14 +1841,18 @@ class SchedulerEngine:
                 raise SchedulingRefused("proposal does not satisfy the frozen slot reservation")
             if reservation is None and selection.slot_kind not in {"seed", "noncoverage"}:
                 raise SchedulingRefused("unreserved slot cannot be relabelled as reserved")
-        self._check_new_intervals(receipt)
-        duration = receipt.ended_at - receipt.started_at
+        if len(receipts) > 1:
+            _check_receipt_overlaps(receipts)
+        for receipt in receipts:
+            self._check_new_intervals(receipt)
+        duration = receipts[-1].ended_at - receipts[0].started_at
         violations = []
         if duration > self.config.max_stage_seconds:
             violations.append("actual held interval exceeded configured stage-plus-teardown D")
-        if (receipt.physical_region_fraction > self.capacity.physical_region_fraction
-                or not set(receipt.gpu_device_ids).issubset(self.capacity.gpu_devices)
-                or receipt.memory_reservation_bytes > self.capacity.memory_reservation_bytes):
+        if any(receipt.physical_region_fraction > self.capacity.physical_region_fraction
+               or not set(receipt.gpu_device_ids).issubset(self.capacity.gpu_devices)
+               or receipt.memory_reservation_bytes > self.capacity.memory_reservation_bytes
+               for receipt in receipts):
             violations.append("actual held claims exceeded configured capacity")
         if selection.slot_kind == "coverage":
             self.used_coverage[proposal.frontier_id] = proposal.proposal_id
@@ -1824,12 +1861,16 @@ class SchedulerEngine:
             self.used_noncoverage.append(proposal.proposal_id)
         terms = []
         if self.capacity.physical_region_fraction:
-            terms.append(duration * receipt.physical_region_fraction
+            terms.append(sum((receipt.ended_at - receipt.started_at)
+                             * receipt.physical_region_fraction for receipt in receipts)
                          / self.capacity.physical_region_fraction)
         if self.capacity.gpu_devices:
-            terms.append(duration * len(receipt.gpu_device_ids) / len(self.capacity.gpu_devices))
+            terms.append(sum((receipt.ended_at - receipt.started_at)
+                             * len(receipt.gpu_device_ids) for receipt in receipts)
+                         / len(self.capacity.gpu_devices))
         if self.capacity.memory_reservation_bytes:
-            terms.append(duration * receipt.memory_reservation_bytes
+            terms.append(sum((receipt.ended_at - receipt.started_at)
+                             * receipt.memory_reservation_bytes for receipt in receipts)
                          / self.capacity.memory_reservation_bytes)
         weight = self.config.normal_weight
         if proposal.seed_id is not None:
@@ -1853,11 +1894,13 @@ class SchedulerEngine:
                                            + max(terms, default=0.0) / weight)
         self.campaign_attempts += 1
         self.campaign_charged_seconds += duration
-        self._receipts.append(receipt)
-        self._records.append(record)
-        self._receipt_by_id[receipt.receipt_id] = receipt
-        self._record_by_id[receipt.receipt_id] = record
-        self._index_receipt(receipt)
+        for receipt, record in zip(receipts, records):
+            self._receipts.append(receipt)
+            self._records.append(record)
+            self._receipt_by_id[receipt.receipt_id] = receipt
+            self._record_by_id[receipt.receipt_id] = record
+            self._records_by_selection.setdefault(selection.digest, []).append(record)
+            self._index_receipt(receipt)
         self.successor_fences.extend(item for item in violations
                                      if item not in self.successor_fences)
         self.issued_selection_digests = ()
@@ -1927,6 +1970,16 @@ def account_stage(config: SchedulerConfig | Mapping[str, Any],
     return engine.export_state()
 
 
+def account_stage_components(
+        config: SchedulerConfig | Mapping[str, Any], state: SchedulerState | Mapping[str, Any],
+        selection: Selection, receipts: Sequence[HeldClaimReceipt | Mapping[str, Any]], *,
+        outcome: str) -> SchedulerState:
+    """Pure one-selection transition for exact chronological resource components."""
+    engine = SchedulerEngine(config, state)
+    engine.account_stage_components(selection, receipts, outcome=outcome)
+    return engine.export_state()
+
+
 def change_capacity(state: SchedulerState | Mapping[str, Any],
                     new_config: SchedulerConfig | Mapping[str, Any]) -> SchedulerState:
     """Start an epoch under a config whose only semantic change is capacity."""
@@ -1960,6 +2013,7 @@ __all__ = [
     "VECTOR_SCHEMA", "AccountedReceipt", "AccountingView", "HeldClaimReceipt", "Outage",
     "ResourceVector", "SchedulerConfig", "SchedulerEngine", "SchedulerState",
     "SchedulingRefused", "SeedAccount", "Selection", "StageProposal",
-    "account_stage", "adaptive_weights", "change_capacity", "charge_receipts", "digest",
+    "account_stage", "account_stage_components", "adaptive_weights", "change_capacity",
+    "charge_receipts", "digest",
     "initial_state", "select_stage",
 ]

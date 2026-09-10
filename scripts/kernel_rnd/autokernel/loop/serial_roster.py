@@ -33,7 +33,7 @@ def build_targets(resolved_path, owned_path, *, target_root, common_path=None):
     if set(owners) - set(aliases):
         raise sr.SerialRefused(f"owned aliases are not enrolled: {sorted(set(owners) - set(aliases))}")
     required = {"worktree", "anchor_build", "branch", "frozen_prompts"}
-    optional = {"launch", "store", "calibrate_serving"}
+    optional = {"launch", "store", "calibrate_serving", "allow_unverified_anchor"}
     for alias, owner in owners.items():
         if not isinstance(owner, dict) or required - owner.keys() or owner.keys() - required - optional:
             raise sr.SerialRefused(f"{alias}: expected ownership fields {sorted(required)} plus {sorted(optional)}")
@@ -46,6 +46,8 @@ def build_targets(resolved_path, owned_path, *, target_root, common_path=None):
         count = owner.get("calibrate_serving")
         if count is not None and (type(count) is not int or count < 2):
             raise sr.SerialRefused(f"{alias}: calibrate_serving needs at least two launches")
+        if type(owner.get("allow_unverified_anchor", False)) is not bool:
+            raise sr.SerialRefused(f"{alias}: allow_unverified_anchor must be boolean")
     common = ["--planner-model", dict(resolved.actors)["planner"],
               "--critic-model", dict(resolved.actors)["critic"]]
     if common_path is not None:
@@ -120,6 +122,8 @@ def build_targets(resolved_path, owned_path, *, target_root, common_path=None):
             argv += ["--experimental-branch", branch]
         if owner.get("calibrate_serving") is not None:
             argv += [f"--{backend}-calibrate-serving", str(owner["calibrate_serving"])]
+        if owner.get("allow_unverified_anchor"):
+            argv.append("--allow-unverified-anchor")
         targets.append(argv + common)
     if not targets:
         raise sr.SerialRefused(f"no ready owned executable targets: {skipped}")

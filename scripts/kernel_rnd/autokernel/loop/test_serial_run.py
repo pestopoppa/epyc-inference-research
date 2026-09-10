@@ -6,7 +6,7 @@ from unittest import mock
 
 import pytest
 
-from . import run, serial_run as sr
+from . import run, scheduling, serial_run as sr, serial_scheduling as ss
 from . import test_promotion_targets as promotion_fixture
 from . import test_existing_cpu_run as cpu_fixture
 from .test_legacy_targets import _argv, _resolved
@@ -47,6 +47,58 @@ identity = {"campaign_id": resolved.campaign_id, "request_id": resolved.request_
             "manifest_digest": resolved.manifest_digest, "selected_id": target_id,
             "scope": "cpu_serving_selected_workload" if cpu else "legacy_gpu_screen",
             "original_target": selected.to_dict()}
+held = None
+selection_path = sr.option(argv, "--scheduler-selection")
+if selection_path:
+    from scripts.kernel_rnd.autokernel.loop import scheduling, serial_scheduling as ss
+    from scripts.kernel_rnd.autokernel.loop.measurement_capture import ArtifactStore
+    selection = scheduling.Selection.from_dict(json.loads(Path(selection_path).read_text()))
+    proposal = selection.proposal
+    def observation(pid, suffix):
+        inode = sum(map(ord, suffix))
+        return {"observed_at": 1.0, "started_monotonic_s": 1.0,
+                "ended_monotonic_s": 1.1, "owner_pid": pid, "error": None,
+                "status": "held", "locks": [{"path": "/locks/" + suffix,
+                "device": 1, "inode": inode, "path_unchanged": True,
+                "owners": [{"pid": pid, "kernel_row": "original"}],
+                "same_holder": True}]}
+    def component(device, start, end, fraction, suffix, gpu):
+        pid = __import__('os').getpid()
+        domain = {"kind": "direct_loop", "clock": "monotonic", "pid": pid,
+                  "boot_id": "fixture-boot", "process_start_ticks": 1, "error": None}
+        opened = observation(pid, suffix)
+        inode = opened["locks"][0]["inode"]
+        return {"context_id": ss._digest({"domain": domain, "started_at": start,
+                                          "locks": opened["locks"]}),
+                "domain": domain, "ownership_generation": 1, "allocation_generation": 1,
+                "started_at": start, "ended_at": end, "device_id": device,
+                "physical_claim_ids": [f"fixture-boot:flock:1:{inode}"],
+                "physical_region_fraction": fraction, "gpu_device_ids": gpu,
+                "memory_reservation_bytes": proposal.estimated_claims.memory_reservation_bytes,
+                "affinity_cores": ["0"], "open": opened,
+                "close": observation(pid, suffix), "released": True}
+    base = float((selection.round_number * 10 + selection.slot_index) * 10)
+    components = [component("cpu", base + 1.0, base + 4.0,
+                            proposal.estimated_claims.physical_region_fraction,
+                            "cpu", [])]
+    if proposal.backend == "gpu":
+        components[0]["ended_at"] = base + 6.0
+        components.append(component(proposal.estimated_claims.gpu_devices[0], base + 2.0,
+                                    base + 5.0,
+                                    0.0, "gpu", list(proposal.estimated_claims.gpu_devices)))
+    store = ArtifactStore(out / "held-claim-artifacts")
+    try:
+        artifact = store.write("direct-held-intervals", {
+            "schema": ss.INTERVAL_SCHEMA, "selection": selection.to_dict(),
+            "selection_digest": selection.digest, "target": identity,
+            "components": components}).to_dict()
+    finally:
+        store.close()
+    held = {"schema": ss.REFERENCE_SCHEMA, "selection_digest": selection.digest,
+            "evidence": artifact}
+    if mode == "fail_held":
+        (out / "loop-held-claims.json").write_text(json.dumps(held))
+        sys.exit(3)
 count = 0 if stopped[0] else int(sr.option(argv, "--iterations"))
 prior = sr.option(argv, "--resume-run")
 anchor = Path(sr.option(argv, "--anchor-build"))
@@ -61,7 +113,8 @@ row = sr.continuation(argv=argv, binding=sr.input_binding(argv),
     anchor_build=anchor, anchor_commit="a" * 40,
     cor_build=None if cpu else anchor, cor_commit=None if cpu else "a" * 40,
     iterations_requested=int(sr.option(argv, "--iterations")),
-    outcomes=[SimpleNamespace(status="measured_null") for _ in range(count)])
+    outcomes=[SimpleNamespace(status="measured_null") for _ in range(count)],
+    **({"held_claim_evidence": held} if held else {}))
 (out / "loop-run.json").write_text(json.dumps({"fixture": "not measurement evidence"}))
 if mode == "wrong_args":
     row["input_argv"].append("--forged")
@@ -83,8 +136,10 @@ def _inputs(tmp_path, monkeypatch, *, mode="good", rounds=2):
     for backend in ("cpu", "gpu"):
         target_root = tmp_path / backend
         target_root.mkdir()
-        resolved, launch = _resolved(backend=backend, seed=backend == "cpu")
+        resolved, launch = _resolved(backend=backend, seed=backend == "cpu",
+                                     changes={"target_id": backend})
         argv = _argv(target_root, resolved, launch, cpu=backend == "cpu")
+        argv[argv.index("--target-id") + 1] = backend
         argv.remove("--dry-run")
         argv += ["--worker-root", str(target_root / "workers"),
                  "--worker-build-root", str(target_root / "builds")]
@@ -94,6 +149,76 @@ def _inputs(tmp_path, monkeypatch, *, mode="good", rounds=2):
         path.write_text(json.dumps(argv))
         files += ["--target-args", str(path)]
     return state, [*files, "--batch-iterations", "1", "--rounds", str(rounds), "--state-dir", str(state)]
+
+
+def _scheduled(tmp_path, argv):
+    from .test_scheduling import config, proposal, vector
+    target_files = [Path(argv[index + 1]) for index, value in enumerate(argv)
+                    if value == "--target-args"]
+    targets = [json.loads(path.read_text()) for path in target_files]
+    bindings = sr._scheduler_bindings(targets)
+    rows = {}
+    for selected_id, binding in bindings.items():
+        backend = binding["backend"]
+        rows[selected_id] = proposal(
+            selected_id, backend=backend, target=binding["target_revision"],
+            alias=binding["alias_identity"],
+            claims=vector(fraction=0.5,
+                          gpus=("mi210_0",) if backend == "gpu" else (), memory=0))
+        rows[selected_id]["eligibility_ref"] = binding["eligibility_ref"]
+    manifest = {"schema": ss.MANIFEST_SCHEMA, "scheduler_id": "serial-integration",
+                "config": config(noncoverage_slots=2,
+                                 capacity=vector(gpus=("mi210_0",), memory=10000)),
+                "targets": rows}
+    path = tmp_path / "scheduler.json"
+    path.write_text(json.dumps(manifest))
+    return [*argv, "--scheduler-manifest", str(path)]
+
+
+def test_scheduled_actual_children_bind_fresh_selection_and_account_original_intervals(
+        tmp_path, monkeypatch):
+    state, argv = _inputs(tmp_path, monkeypatch, rounds=2)
+    argv = _scheduled(tmp_path, argv)
+    assert sr.main(argv) == 0
+    saved = json.loads((state / "serial-state.json").read_text())
+    scheduler_state = scheduling.SchedulerState.from_dict(saved["scheduler_state"])
+    assert scheduler_state.campaign_attempts == 4
+    assert len(scheduler_state.accounted_receipts) >= 4
+    seen = [json.loads(line)["argv"] for line in (state / "seen.jsonl").read_text().splitlines()]
+    assert all(sr.option(row, "--scheduler-selection") for row in seen)
+    assert sr.option(seen[0], "--scheduler-selection") != sr.option(
+        seen[1], "--scheduler-selection")
+    assert sr.option(seen[1], "--resume-run").endswith(
+        "batch-000000/loop-continuation.json")
+    assert sr.input_binding(seen[0]) == sr.input_binding(seen[1])
+
+
+def test_scheduled_failed_child_accounts_only_original_released_claim(tmp_path, monkeypatch):
+    state, argv = _inputs(tmp_path, monkeypatch, mode="fail_held", rounds=1)
+    argv = _scheduled(tmp_path, argv)
+    assert sr.main(argv) == 1
+    saved = json.loads((state / "serial-state.json").read_text())
+    scheduler_state = scheduling.SchedulerState.from_dict(saved["scheduler_state"])
+    assert scheduler_state.campaign_attempts == 2
+    assert {record.outcome for record in scheduler_state.accounted_receipts} == {"failed"}
+    assert len(saved["failed_targets"]) == 2
+
+
+def test_scheduled_restart_accounts_original_completed_child_before_new_selection(
+        tmp_path, monkeypatch):
+    state, argv = _inputs(tmp_path, monkeypatch, rounds=1)
+    argv = _scheduled(tmp_path, argv)
+    with mock.patch.object(sr, "_scheduled_account", side_effect=KeyboardInterrupt):
+        with pytest.raises(KeyboardInterrupt):
+            sr.main(argv)
+    crashed = json.loads((state / "serial-state.json").read_text())
+    assert crashed["active"] is not None and crashed["next_batch"] == 0
+    assert sr.main(argv) == 0
+    recovered = json.loads((state / "serial-state.json").read_text())
+    scheduler_state = scheduling.SchedulerState.from_dict(recovered["scheduler_state"])
+    assert scheduler_state.campaign_attempts == 2
+    assert recovered["last_reconciliation"]["batch_number"] == 0
+    assert len((state / "seen.jsonl").read_text().splitlines()) == 2
 
 
 def test_actual_children_rotate_reuse_inputs_and_stop_at_finite_budget(tmp_path, monkeypatch):

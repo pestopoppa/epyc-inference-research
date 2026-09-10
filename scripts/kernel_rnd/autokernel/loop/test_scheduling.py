@@ -155,6 +155,56 @@ def test_duplicate_preview_preserves_older_receipt_and_later_history(conflicting
     assert engine.export_state().to_dict() == before
 
 
+def test_one_selection_accounts_exact_chronological_resource_components_once():
+    cfg = S.SchedulerConfig.from_dict(config())
+    stage = proposal("gpu-stage", backend="gpu",
+                     claims=vector(fraction=0.5, gpus=("gpu0",), memory=0))
+    engine = S.SchedulerEngine(cfg, S.initial_state(cfg, "scheduler"))
+    selected = engine.select_stage([stage], now=0)
+    components = (
+        receipt(stage, "prefix", start=0, end=1, memory=0),
+        receipt(stage, "gpu", start=1, end=4, memory=0, gpus=("gpu0",)),
+        receipt(stage, "suffix", start=4, end=5, memory=0),
+    )
+    assert engine.account_stage_components(
+        selected, components, outcome="valid_comparison") is True
+    view = engine.accounting_view()
+    assert view.receipt_count == 3
+    assert view.held_seconds == 5
+    assert view.physical_region_seconds == 2.5
+    assert dict(view.gpu_device_seconds) == {"gpu0": 3.0}
+    state = engine.export_state()
+    assert state.campaign_attempts == 1 and state.campaign_charged_seconds == 5
+    reopened = S.SchedulerEngine(cfg, state)
+    assert reopened.account_stage_components(
+        selected, components, outcome="valid_comparison") is False
+    with pytest.raises(S.SchedulingRefused, match="component receipts"):
+        reopened.account_stage_components(
+            selected, components[:1], outcome="valid_comparison")
+    assert reopened.export_state().to_dict() == state.to_dict()
+
+
+@pytest.mark.parametrize("change, match", [
+    ({"started_at": 0.5}, "contiguous"),
+    ({"beneficiary_shares": {"another": 1.0}}, "beneficiary"),
+])
+def test_component_accounting_refuses_gaps_overlap_and_changed_beneficiary(change, match):
+    cfg = S.SchedulerConfig.from_dict(config())
+    stage = proposal("gpu-stage", backend="gpu",
+                     claims=vector(fraction=0.5, gpus=("gpu0",), memory=0))
+    engine = S.SchedulerEngine(cfg, S.initial_state(cfg, "scheduler"))
+    selected = engine.select_stage([stage], now=0)
+    second = receipt(stage, "gpu", start=1, end=4, memory=0,
+                     gpus=("gpu0",)) | change
+    with pytest.raises(S.SchedulingRefused, match=match):
+        engine.account_stage_components(selected, (
+            receipt(stage, "prefix", start=0, end=1, memory=0),
+            second,
+            receipt(stage, "suffix", start=4, end=5, memory=0),
+        ), outcome="valid_comparison")
+    assert engine.accounting_view().receipt_count == 0
+
+
 def test_strict_direct_normalization_freezes_nested_inputs_and_rejects_bool_nan_unknown():
     source = config()
     cfg = S.SchedulerConfig.from_dict(source)
