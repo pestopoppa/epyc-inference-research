@@ -522,7 +522,8 @@ def main(argv=None) -> int:
                 raise SerialRefused("--resolved-campaign requires --owned-targets")
             from .serial_roster import build_targets
             targets, skipped, cpus = build_targets(args.resolved_campaign, args.owned_targets,
-                target_root=args.target_root or args.state_dir / "targets", common_path=args.common_args)
+                target_root=args.target_root or args.state_dir / "targets", common_path=args.common_args,
+                state_root=args.state_dir)
             targets = [_validate_target_args(row, owner_anchor_waiver=True) for row in targets]
             taskset = shutil.which("taskset")
             if taskset is None:
@@ -966,6 +967,11 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
     state.setdefault("runtime_recovery", {})
     state.setdefault("source_validations", {})
     state.setdefault("source_search_counts", {})
+    instruments = {option(row, "--target-id"): option(row, "--serving-instrument", "legacy_v1")
+                   for row in targets}
+    if state.get("serving_instruments", instruments) != instruments:
+        raise SerialRefused("serial serving instrument selection differs from original target arguments")
+    state["serving_instruments"] = instruments
     if scheduler_manifest is not None:
         from . import scheduling
         scheduling.SchedulerState.from_dict(state.get("scheduler_state"))

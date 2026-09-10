@@ -9,10 +9,10 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from . import archive, champion, legacy_targets, planned_serving, resolved_recipe
+from . import archive, champion, legacy_targets, planned_serving, resolved_recipe, serving
 
 
-def build_targets(resolved_path, owned_path, *, target_root, common_path=None):
+def build_targets(resolved_path, owned_path, *, target_root, common_path=None, state_root=None):
     from . import campaign_cli, serial_run as sr
 
     resolved_path = Path(resolved_path).resolve()
@@ -69,6 +69,17 @@ def build_targets(resolved_path, owned_path, *, target_root, common_path=None):
             if not value or value.startswith("--") or "\0" in value:
                 raise sr.SerialRefused(f"common argument {flag} has no valid value")
         common += extra
+    retained_instruments = None
+    state_path = Path(state_root if state_root is not None else Path(target_root).parent) / "serial-state.json"
+    if state_path.exists():
+        original, _ = sr._json(state_path)
+        if original.get("schema") != sr.SERIAL_SCHEMA:
+            raise sr.SerialRefused("original serial state schema differs")
+        retained_instruments = original.get("serving_instruments", {})
+        if (not isinstance(retained_instruments, dict)
+                or any(not isinstance(key, str) or value not in (serving.LEGACY_INSTRUMENT,
+                       serving.MATCHED_INSTRUMENT) for key, value in retained_instruments.items())):
+            raise sr.SerialRefused("original serving instrument selection differs")
     targets, skipped = [], []
     for target in resolved.targets:
         selected = [alias for alias in target.target_ids if alias in owners]
@@ -118,9 +129,25 @@ def build_targets(resolved_path, owned_path, *, target_root, common_path=None):
                 "--worker-root", str(root / "workers"), "--worker-build-root", str(root / "builds"),
                 f"--{backend}-serving-launch", str(launch_path),
                 "--frozen-prompts", owner["frozen_prompts"]]
+        if backend == "cpu":
+            if retained_instruments is not None:
+                instrument = retained_instruments.get(alias, serving.LEGACY_INSTRUMENT)
+            else:
+                requests = prompts.requests(tuple(row.prompt_id for row in prompts.prompts), launch.template)
+                # A corrupt/mismatched original floor is NOT absence and never
+                # authorizes migration. The owning floor reader still refuses it.
+                legacy = serving.load_floor(Path(sr.option(argv, "--store")), launch.template,
+                                             frozen_requests=requests)
+                instrument = (serving.LEGACY_INSTRUMENT if legacy.floor_pct is not None
+                              else serving.MATCHED_INSTRUMENT)
+            if instrument == serving.MATCHED_INSTRUMENT:
+                argv += ["--serving-instrument", instrument]
         if branch != champion.CANONICAL_BRANCH:
             argv += ["--experimental-branch", branch]
         if owner.get("calibrate_serving") is not None:
+            if backend == "cpu" and instrument == serving.MATCHED_INSTRUMENT \
+                    and owner["calibrate_serving"] < serving.MATCHED_CALIBRATION_PAIRS:
+                raise sr.SerialRefused(f"{alias}: matched calibration requires >=24 A/A pairs (48 launches)")
             argv += [f"--{backend}-calibrate-serving", str(owner["calibrate_serving"])]
         if owner.get("allow_unverified_anchor"):
             argv.append("--allow-unverified-anchor")

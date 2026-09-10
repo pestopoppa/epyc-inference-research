@@ -27,6 +27,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
+from functools import lru_cache
 import concurrent.futures as cf
 import base64
 import hashlib
@@ -34,6 +35,7 @@ import json
 import math
 import os
 from pathlib import Path
+import random
 import statistics
 import subprocess
 import time
@@ -51,6 +53,126 @@ if TYPE_CHECKING:
 #: Schema of the on-disk recipe file, and part of the recipe's identity: a schema bump
 #: changes what the fields MEAN, so it must change the hash too.
 RECIPE_SCHEMA = "epyc.autokernel.canonical_recipe.v1"
+LEGACY_INSTRUMENT = "legacy_v1"
+MATCHED_INSTRUMENT = "matched_process_v2"
+MATCHED_ESTIMATOR = "median(candidate)/median(anchor)-1;paired-bootstrap-p95.v1"
+MATCHED_ORDER = "autokernel.evaluator.statistics.OrderSchedule.v1"
+MATCHED_CALIBRATION_PAIRS = 24
+
+
+def _digest(value):
+    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":"),
+                                    allow_nan=False).encode()).hexdigest()
+
+
+def _instrument(instrument, pairs):
+    if instrument not in (LEGACY_INSTRUMENT, MATCHED_INSTRUMENT):
+        raise RecipeError("unknown serving instrument")
+    if instrument == MATCHED_INSTRUMENT and (type(pairs) is not int or not 1 <= pairs <= 64):
+        raise RecipeError("matched serving requires 1–64 predeclared pairs")
+    return instrument == MATCHED_INSTRUMENT
+
+
+def _matched_plan(pairs, *, seed=None):
+    from ..evaluator.statistics import OrderSchedule, ORDER_ANCHOR_FIRST
+    # Draw before the first observation and retain the draw. A reschedule is the
+    # same declared missing arm, not an outcome-dependent new schedule.
+    seed = seed or os.urandom(16).hex()
+    schedule = OrderSchedule.derive(campaign_seed=seed, candidate_id="serving-process",
+                                    base_blocks=pairs)
+    orders = [["anchor", "candidate"] if schedule.order_for(i) == ORDER_ANCHOR_FIRST
+              else ["candidate", "anchor"] for i in range(pairs)]
+    return {"instrument": MATCHED_INSTRUMENT, "estimator": MATCHED_ESTIMATOR,
+            "unit": "process", "pairs": pairs, "stopping": "fixed_pairs",
+            "order_algorithm": MATCHED_ORDER, "seed": seed, "orders": orders}
+
+
+def comparison_instrument_matches(comparison, *, instrument, pairs):
+    """Reuse an original observation only on its original instrument, never upgrade it."""
+    if not isinstance(comparison, Mapping):
+        return False
+    if instrument == LEGACY_INSTRUMENT:
+        return comparison.get("schema") == "epyc.autokernel.serving_ab.v1"
+    if instrument != MATCHED_INSTRUMENT or type(pairs) is not int or not 1 <= pairs <= 64:
+        return False
+    plan = comparison.get("measurement_plan")
+    return (comparison.get("schema") == "epyc.autokernel.serving_ab.v2"
+            and comparison.get("pairs") == pairs and isinstance(plan, dict)
+            and isinstance(plan.get("seed"), str) and len(plan["seed"]) == 32
+            and all(c in "0123456789abcdef" for c in plan["seed"])
+            and plan == _matched_plan(pairs, seed=plan["seed"]))
+
+
+def _matched_frame(recipe, resolved, frozen_requests):
+    if resolved is None:
+        raise RecipeError("matched serving requires the original resolved launch")
+    return {"recipe_hash": recipe.recipe_hash,
+            "request_digest": request_digest(recipe, frozen_requests),
+            "backend": resolved.backend,
+            "model": resolved.model.to_dict(),
+            "drafter": None if resolved.drafter is None else resolved.drafter.to_dict(),
+            "environment": {k: v for k, v in resolved.launch_env if k not in LOADER_OWNED_ENV},
+            "topology_prefix": list(resolved.argv[:resolved.argv.index(resolved.executable.path)]),
+            "applicability": "same_workload_source_build_treatment_only"}
+
+
+def _matched_summary(anchor, candidate, pairs):
+    return json.loads(_matched_summary_cached(tuple(anchor), tuple(candidate), pairs))
+
+
+@lru_cache(maxsize=8)
+def _matched_summary_cached(anchor, candidate, pairs):
+    from .bench import bootstrap_floor
+    from ..evaluator.statistics import percentile
+    # Reuse the existing paired-index scalar exactly. The outer bootstrap is an
+    # explicitly descriptive interval, never a replacement gate endpoint.
+    scalar = bootstrap_floor(anchor, candidate, ks=(pairs,))[pairs]
+    rng = random.Random(20260910)
+    estimates = []
+    for _ in range(256):
+        indices = [rng.randrange(len(anchor)) for _ in anchor]
+        estimates.append(bootstrap_floor([anchor[i] for i in indices],
+            [candidate[i] for i in indices], ks=(pairs,), draws=2000)[pairs])
+    return json.dumps({"floor_pct": scalar,
+            "interval": {"level": 0.95, "low_pct": percentile(estimates, .025),
+                         "high_pct": percentile(estimates, .975),
+                         "method": "paired_outer_bootstrap.v1", "outer_draws": 256,
+                         "inner_draws": 2000, "seed": 20260910,
+                         "use": "descriptive_only_not_gate_endpoint"},
+            "scalar_method": {"owner": "autokernel.loop.bench.bootstrap_floor",
+                              "draws": 20000, "seed": 20260829,
+                              "quantile": .95, "round_digits": 3}}, allow_nan=False)
+
+
+def _validate_matched_floor(row, recipe, frozen_requests, pairs, *, resolved=None):
+    if (row.get("schema") != "epyc.autokernel.serving_floor.v2"
+            or row.get("instrument") != MATCHED_INSTRUMENT
+            or row.get("estimator") != MATCHED_ESTIMATOR or row.get("unit") != "process"
+            or row.get("comparison_pairs") != pairs or row.get("order_algorithm") != MATCHED_ORDER
+            or row.get("recipe_hash") != recipe.recipe_hash
+            or row.get("request_digest") != request_digest(recipe, frozen_requests)):
+        raise ServingFloorMismatch("matched floor instrument/unit/count/workload differs")
+    count = row.get("calibration_pairs")
+    a, c = row.get("anchor_samples"), row.get("candidate_samples")
+    if (type(count) is not int or not MATCHED_CALIBRATION_PAIRS <= count <= 256
+            or not isinstance(a, list) or not isinstance(c, list) or len(a) != count or len(c) != count
+            or any(type(x) not in (int, float) or not math.isfinite(x) or x <= 0 for x in a + c)
+            or row.get("process_launches") != 2 * count
+            or row.get("calibration_plan") != _matched_plan(count, seed=row.get("calibration_plan", {}).get("seed"))):
+        raise ServingFloorMismatch("matched floor original pair membership differs")
+    replay = _matched_summary(a, c, pairs)
+    if (any(row.get(key) != value for key, value in replay.items())
+            or row.get("content_sha256") != _digest({k: v for k, v in row.items()
+                                                    if k not in {"content_sha256", "conditions"}})):
+        raise ServingFloorMismatch("matched floor reducer replay or original content differs")
+    interval = row.get("interval", {})
+    if (interval.get("level") != .95 or interval.get("use") != "descriptive_only_not_gate_endpoint"
+            or not all(type(interval.get(k)) in (int, float) and math.isfinite(interval[k])
+                       for k in ("low_pct", "high_pct"))
+            or not 0 <= interval["low_pct"] <= interval["high_pct"]):
+        raise ServingFloorMismatch("matched floor descriptive interval differs")
+    if resolved is not None and row.get("frame") != _matched_frame(recipe, resolved, frozen_requests):
+        raise ServingFloorMismatch("matched floor placement/model/environment frame differs")
 
 #: Variables the LOADER owns. A recipe may neither set nor unset these, and the refusal is
 #: a hard error rather than a silent override: `LD_LIBRARY_PATH` is what pins the build's
@@ -1035,20 +1157,23 @@ def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs:
             floor_pct: float | None, port: int = 18311,
             anchor_resolved_recipe=None, candidate_resolved_recipe=None,
             frozen_requests=None, floor_request_digest: str | None = None,
-            runtime_pair=None) -> dict:
+            runtime_pair=None, instrument=LEGACY_INSTRUMENT, floor_record=None) -> dict:
     """Paired, alternating serving A/B: anchor vs candidate, `pairs` times, each pair a
     fresh server per side (drift control). Effect = median(candidate)/median(anchor) - 1.
     `decisive` is None when uncalibrated (no floor), so the keep gate fails closed."""
+    matched = _instrument(instrument, pairs)
+    if matched and runtime_pair is not None:
+        raise ServingFloorMismatch("matched source floor cannot qualify a runtime treatment")
     candidate_recipe = recipe
     if runtime_pair is not None:
         from .unified_planner import RuntimeArmPair
         runtime_pair = RuntimeArmPair.from_dict(runtime_pair.to_dict())
         if anchor_resolved_recipe is None or candidate_resolved_recipe is None \
-                or runtime_pair.anchor.backend != "cpu" \
+                or runtime_pair.anchor.backend not in {"cpu", "gpu"} \
                 or runtime_pair.anchor.template.to_dict() != recipe.to_dict() \
                 or runtime_pair.anchor.to_dict() != anchor_resolved_recipe.to_dict() \
                 or runtime_pair.candidate.to_dict() != candidate_resolved_recipe.to_dict():
-            raise RecipeError("runtime comparison differs from its original CPU arm pair")
+            raise RecipeError("runtime comparison differs from its original serving arm pair")
         if floor_pct is not None or floor_request_digest is not None:
             raise ServingFloorMismatch("runtime treatment needs original strict frame admission, not a source floor")
         candidate_recipe = runtime_pair.candidate.template
@@ -1061,6 +1186,20 @@ def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs:
         raise RecipeError("resolved comparison requires both original arm launches")
     a_options = _resolved_launch_options(recipe, anchor_build, port, anchor_resolved_recipe)
     c_options = _resolved_launch_options(candidate_recipe, candidate_build, port, candidate_resolved_recipe)
+    measurement_plan = _matched_plan(pairs) if matched else None
+    if matched:
+        frame = _matched_frame(recipe, anchor_resolved_recipe, frozen_requests)
+        if frame != _matched_frame(candidate_recipe, candidate_resolved_recipe, frozen_requests):
+            raise ServingFloorMismatch("matched source arms differ beyond their source/build treatment")
+        if floor_pct is not None:
+            if not isinstance(floor_record, dict):
+                raise ServingFloorMismatch("matched comparison requires its original v2 floor, not a scalar")
+            _validate_matched_floor(floor_record, recipe, frozen_requests, pairs,
+                                    resolved=anchor_resolved_recipe)
+            if floor_record["floor_pct"] != floor_pct:
+                raise ServingFloorMismatch("matched floor scalar differs from its original record")
+        elif floor_record is not None:
+            raise ServingFloorMismatch("uncalibrated matched comparison cannot carry an unused floor")
     if frozen_requests is not None:
         a_options["frozen_requests"] = c_options["frozen_requests"] = frozen_requests
     belief_inputs = None
@@ -1072,7 +1211,8 @@ def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs:
             anchor_build=anchor_build, candidate_build=candidate_build,
             frozen_requests=frozen_requests, pairs=pairs,
             **({"candidate_recipe": candidate_recipe, "runtime_pair": runtime_pair}
-               if runtime_pair is not None else {}))
+               if runtime_pair is not None else {}),
+            **({"measurement_plan": measurement_plan} if matched else {}))
     except Exception as exc:
         belief_error = f"{type(exc).__name__}: {exc}"[:256]
     a_runs, c_runs = [], []
@@ -1084,6 +1224,7 @@ def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs:
     next_launch = [0]
     reschedules = [0]
     invalid_history = []
+    launch_membership = []
 
     def resume_original():
         if reschedules[0]:
@@ -1094,14 +1235,21 @@ def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs:
     def complete():
         nonlocal belief_error
         for pair_index in range(pairs):
-            for arm, arm_recipe, build, options, runs, records in (
-                    ("anchor", recipe, anchor_build, a_options, a_runs, a_residency),
-                    ("candidate", candidate_recipe, candidate_build, c_options, c_runs, c_residency)):
-                if 2 * pair_index + (arm == "candidate") < next_launch[0]:
+            arms = {"anchor": (recipe, anchor_build, a_options, a_runs, a_residency),
+                    "candidate": (candidate_recipe, candidate_build, c_options, c_runs, c_residency)}
+            order = measurement_plan["orders"][pair_index] if matched else ("anchor", "candidate")
+            for position, arm in enumerate(order):
+                arm_recipe, build, options, runs, records = arms[arm]
+                ordinal = 2 * pair_index + position
+                if ordinal < next_launch[0]:
                     continue
                 records_before = len(records)
                 try:
                     runs.append(_measure_once(arm_recipe, build, port, evidence=records, **options))
+                    if matched:
+                        launch_membership.append({"ordinal": ordinal, "pair_index": pair_index,
+                            "arm": arm, "arm_sample_index": len(runs) - 1,
+                            "residency_sha256": _digest(records[records_before:])})
                     next_launch[0] += 1
                 except MeasurementInvalid as exc:
                     # This attempt is invalid, never a null. Only the explicit
@@ -1116,6 +1264,11 @@ def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs:
                         "anchor_residency": a_residency, "candidate_residency": c_residency,
                         "runtime_pair": None if runtime_pair is None else runtime_pair.to_dict(),
                         "reschedule": "original in-memory continuation only; no restart replay"}
+                    if matched:
+                        exc.record.update(schema="epyc.autokernel.serving_invalid_comparison.v2",
+                            measurement_plan=measurement_plan, failed_ordinal=ordinal,
+                            launch_membership=launch_membership,
+                            floor_sha256=None if floor_record is None else floor_record["content_sha256"])
                     exc.record = json.loads(json.dumps(exc.record))
                     # Retained in the immutable invalid attempt above, not silently
                     # included among the final valid launch vector's evidence.
@@ -1148,6 +1301,10 @@ def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs:
                 # after the fact, which is the one thing no re-analysis can supply.
                 "residency": _residency_fold(a_residency + c_residency),
                 "anchor_residency": a_residency, "candidate_residency": c_residency}
+        if matched:
+            out.update(schema="epyc.autokernel.serving_ab.v2",
+                       measurement_plan=measurement_plan, launch_membership=launch_membership,
+                       floor_sha256=None if floor_record is None else floor_record["content_sha256"])
         if requests_digest is not None:
             out.update(request_digest=requests_digest, floor_request_digest=floor_request_digest)
         if runtime_pair is not None:
@@ -1170,7 +1327,8 @@ def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs:
 
 
 def calibrate_floor(recipe: Recipe, build_dir: Path, *, samples: int, port: int = 18311,
-                    resolved_recipe=None, frozen_requests=None) -> dict:
+                    resolved_recipe=None, frozen_requests=None,
+                    instrument=LEGACY_INSTRUMENT, pairs=None) -> dict:
     """A/A the serving metric `samples` times on ONE build: the run-to-run spread IS the
     noise floor a keep must clear. floor = p95 of |pairwise effect| against the median,
     reported at a few sample counts so a keep at N pairs is judged against the N-pair bar."""
@@ -1178,6 +1336,33 @@ def calibrate_floor(recipe: Recipe, build_dir: Path, *, samples: int, port: int 
     options = _resolved_launch_options(recipe, build_dir, port, resolved_recipe)
     if frozen_requests is not None:
         options["frozen_requests"] = frozen_requests
+    if _instrument(instrument, pairs):
+        if type(samples) is not int or not MATCHED_CALIBRATION_PAIRS <= samples <= 256:
+            raise RecipeError("matched calibration requires 24–256 independent A/A pairs (two launches each)")
+        frame = _matched_frame(recipe, resolved_recipe, frozen_requests)
+        plan = _matched_plan(samples)
+        values = {"anchor": [], "candidate": []}
+        windows = {"anchor": [], "candidate": []}
+        for order in plan["orders"]:
+            for arm in order:
+                values[arm].append(_measure_once(recipe, build_dir, port,
+                                   evidence=windows[arm], **options))
+        row = {"schema": "epyc.autokernel.serving_floor.v2", "instrument": instrument,
+               "recipe": recipe.name, "recipe_hash": recipe.recipe_hash,
+               "recipe_env": dict(recipe.env or {}), "recipe_describe": recipe.describe(),
+               "metric": recipe.metric, "np": recipe.np,
+               "request_digest": request_digest(recipe, frozen_requests),
+               "estimator": MATCHED_ESTIMATOR, "unit": "process",
+               "comparison_pairs": pairs, "calibration_pairs": samples,
+               "process_launches": 2 * samples, "order_algorithm": MATCHED_ORDER,
+               "calibration_plan": plan, "frame": frame,
+               "baseline_resolved_recipe": resolved_recipe.to_dict(),
+               "anchor_samples": values["anchor"], "candidate_samples": values["candidate"],
+               "anchor_residency": windows["anchor"], "candidate_residency": windows["candidate"],
+               "residency": _residency_fold(windows["anchor"] + windows["candidate"]),
+               **_matched_summary(values["anchor"], values["candidate"], pairs)}
+        row["content_sha256"] = _digest(row)
+        return row
     launch_residency: list[dict] = []
     runs = [_measure_once(recipe, build_dir, port, evidence=launch_residency, **options)
             for _ in range(samples)]
@@ -1230,11 +1415,14 @@ def floor_key(name: str) -> str:
     return f"{cleaned}-{digest}"
 
 
-def floor_path(store: Path | str, recipe: Recipe, *, frozen_requests=None) -> Path:
+def floor_path(store: Path | str, recipe: Recipe, *, frozen_requests=None,
+               instrument=LEGACY_INSTRUMENT, pairs=None) -> Path:
     """Where THIS recipe's serving floor lives. One place, so a reader and a writer can
     never disagree about the filename."""
     identity = request_digest(recipe, frozen_requests)
     suffix = "" if identity is None else f".requests-{identity}"
+    if _instrument(instrument, pairs):
+        suffix += f".{MATCHED_INSTRUMENT}.pairs-{pairs}"
     return Path(store) / f"serving-floor.{floor_key(recipe.name)}{suffix}.json"
 
 
@@ -1289,7 +1477,8 @@ def _stamped_residency(block: object) -> dict:
 
 
 def write_floor(store: Path | str, recipe: Recipe, row: Mapping, *,
-                conditions: Mapping | None = None, frozen_requests=None) -> Path:
+                conditions: Mapping | None = None, frozen_requests=None,
+                instrument=LEGACY_INSTRUMENT, pairs=None) -> Path:
     """Persist a calibrated floor WITH the identity of the recipe it was calibrated under.
 
     THE ONE WRITER. `calibrate_floor` already returns `recipe_hash` / `recipe_describe` /
@@ -1304,6 +1493,10 @@ def write_floor(store: Path | str, recipe: Recipe, row: Mapping, *,
     """
     frozen_requests = _frozen_requests(recipe, frozen_requests)
     body = dict(row)
+    if _instrument(instrument, pairs):
+        _validate_matched_floor(body, recipe, frozen_requests, pairs)
+    elif body.get("schema") == "epyc.autokernel.serving_floor.v2":
+        raise ServingFloorMismatch("matched floor cannot overwrite a legacy floor")
     requests_digest = request_digest(recipe, frozen_requests)
     if body.get("request_digest") != requests_digest:
         raise ServingFloorMismatch("floor row does not identify the exact calibrated requests")
@@ -1326,11 +1519,12 @@ def write_floor(store: Path | str, recipe: Recipe, row: Mapping, *,
     # with no residency block is stamped `unproven` EXPLICITLY -- it is not a claim that
     # the calibration ran on the CPU, it is a refusal to let the absence pass unremarked.
     body["residency"] = _stamped_residency(body.get("residency"))
-    target = floor_path(store, recipe, frozen_requests=frozen_requests)
+    target = floor_path(store, recipe, frozen_requests=frozen_requests, instrument=instrument, pairs=pairs)
     return status.write_json(target.parent, target.name, body, prefix=".sv-floor-")
 
 
-def load_floor(store: Path | str, recipe: Recipe, *, frozen_requests=None) -> FloorReading:
+def load_floor(store: Path | str, recipe: Recipe, *, frozen_requests=None,
+               instrument=LEGACY_INSTRUMENT, pairs=None) -> FloorReading:
     """Load the serving floor for `recipe`, or REFUSE one calibrated under another.
 
     Fail-closed, and deliberately NOT by degrading to "no floor": an absent floor already
@@ -1341,10 +1535,14 @@ def load_floor(store: Path | str, recipe: Recipe, *, frozen_requests=None) -> Fl
     """
     frozen_requests = _frozen_requests(recipe, frozen_requests)
     requests_digest = request_digest(recipe, frozen_requests)
-    path = floor_path(store, recipe, frozen_requests=frozen_requests)
+    matched = _instrument(instrument, pairs)
+    path = floor_path(store, recipe, frozen_requests=frozen_requests, instrument=instrument, pairs=pairs)
     if not path.is_file():
         return FloorReading(None, "absent", path, {})
     row = json.loads(path.read_text(encoding="utf-8"))
+    if matched:
+        _validate_matched_floor(row, recipe, frozen_requests, pairs)
+        return FloorReading(row["floor_pct"], "verified", path, row)
     if row.get("request_digest") != requests_digest:
         raise ServingFloorMismatch("stored floor request identity differs or is missing")
     if requests_digest is not None and row.get("recipe_hash") != recipe.recipe_hash:
