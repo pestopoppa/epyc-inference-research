@@ -15,7 +15,7 @@ import sys
 import threading
 import time
 
-from . import campaign_cli, champion, legacy_targets, status
+from . import campaign_cli, champion, legacy_targets, status, worker_lifecycle
 
 CONTINUATION_SCHEMA = "epyc.autokernel.loop_continuation.v1"
 SERIAL_SCHEMA = "epyc.autokernel.serial_run.v1"
@@ -304,6 +304,83 @@ def main(argv=None) -> int:
         return _drive(root, targets, args.batch_iterations, args.rounds, child_prefix=child_prefix)
 
 
+def _batch_argv(original, prior, batch_iterations, directory):
+    child_argv = list(original)
+    if prior is not None:
+        _body, sha = load_completed(Path(prior["path"]), expected_binding=input_binding(original))
+        if sha != prior["sha256"]:
+            raise SerialRefused("retained child result changed")
+        child_argv = _without(child_argv, {"--cpu-calibrate-serving", "--gpu-calibrate-serving"})
+        child_argv += ["--resume-run", prior["path"]]
+    return [*child_argv, "--iterations", str(batch_iterations), "--out", str(directory)]
+
+
+def _original_child_terminal(active):
+    """Read kernel identity only; never adopt, signal or grant from stale status."""
+    pid = active.get("pid")
+    if type(pid) is not int or pid < 1:
+        raise SerialRefused("previous child PID was not captured; terminal ownership unresolved")
+    original = active.get("process_identity")
+    if original is not None and (
+            not isinstance(original, dict) or set(original) != {"pid", "start_ticks", "boot_id"}
+            or original["pid"] != pid or type(original["start_ticks"]) is not int
+            or original["start_ticks"] < 0 or not isinstance(original["boot_id"], str)
+            or not original["boot_id"]):
+        raise SerialRefused("original child process identity is malformed")
+    try:
+        current = worker_lifecycle.process_identity(pid).to_dict()
+    except worker_lifecycle.LifecycleRefused as exc:
+        try:
+            os.stat(f"/proc/{pid}")
+        except FileNotFoundError:
+            # Prove procfs is readable: an absent/unmounted /proc is not a dead PID.
+            worker_lifecycle.process_identity(os.getpid())
+            return "original_pid_absent; exit_status_unavailable"
+        raise SerialRefused("previous child state unreadable; no relaunch") from exc
+    if original is None:
+        raise SerialRefused("legacy child PID still present without original start identity; no relaunch")
+    if current != original:
+        return "original_process_identity_no_longer_present; exit_status_unavailable"
+    # A zombie is an exited original child, even if its reaper has not collected it.
+    fd = os.open(f"/proc/{pid}/stat", os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    try:
+        raw = os.read(fd, 4097)
+    finally:
+        os.close(fd)
+    tail = raw[raw.rfind(b")") + 1:].split()
+    if len(raw) <= 4096 and tail and tail[0] in {b"Z", b"X"} \
+            and worker_lifecycle.process_identity(pid).to_dict() == original:
+        return "original_child_kernel_terminal; exit_status_unavailable"
+    raise SerialRefused("previous original child is still live; no relaunch")
+
+
+def _reconcile_completed(root, state, targets, batch_iterations):
+    active = state["active"]
+    if not isinstance(active, dict):
+        raise SerialRefused("previous active batch is malformed")
+    index, number = active.get("target_index"), state.get("next_batch")
+    if type(index) is not int or not 0 <= index < len(targets) \
+            or type(number) is not int or number < 0:
+        raise SerialRefused("previous active batch index is malformed")
+    directory = root / "batches" / f"batch-{number:06d}"
+    original = targets[index]
+    argv = _batch_argv(original, state["last_results"].get(str(index)), batch_iterations, directory)
+    expected = {"target_index": index, "selected_id": option(original, "--target-id"),
+                "store": option(original, "--store"), "batch_dir": str(directory),
+                "input_argv_sha256": _digest(argv)}
+    if set(active) - {*expected, "pid", "process_identity"} or any(
+            active.get(key) != value for key, value in expected.items()):
+        raise SerialRefused("previous active batch differs from original target/arguments")
+    path = directory / "loop-continuation.json"
+    body, sha = load_completed(path, expected_argv=argv, expected_binding=input_binding(argv))
+    identity = body["selected_target"]
+    if not isinstance(identity, dict) or identity.get("selected_id") != active["selected_id"]:
+        raise SerialRefused("previous terminal result belongs to another selected target")
+    terminal_basis = _original_child_terminal(active)
+    return {"target_index": index, "batch_number": number, "terminal": body["terminal"],
+            "result": {"path": str(path), "sha256": sha}, "process_terminal_basis": terminal_basis}
+
+
 def _drive(root, targets, batch_iterations, rounds, *, child_prefix=()):
     config = _digest({"targets": targets, "batch_iterations": batch_iterations, "rounds": rounds,
                       **({"child_prefix": list(child_prefix)} if child_prefix else {})})
@@ -312,8 +389,6 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=()):
         state, _sha = _json(state_path)
         if state.get("schema") != SERIAL_SCHEMA or state.get("config_digest") != config:
             raise SerialRefused("serial state belongs to different inputs")
-        if state.get("active") is not None:
-            raise SerialRefused("previous owned batch has no reconciled terminal result; no relaunch")
     else:
         state = {"schema": SERIAL_SCHEMA, "config_digest": config, "next_batch": 0,
                  "active": None, "last_results": {}, "failed_targets": {}}
@@ -347,6 +422,15 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=()):
     for sig in handlers:
         signal.signal(sig, request_stop)
     try:
+        if state.get("active") is not None:
+            recovered = _reconcile_completed(root, state, targets, batch_iterations)
+            state["last_results"][str(recovered["target_index"])] = recovered["result"]
+            state["last_reconciliation"] = recovered
+            state["active"] = None
+            state["next_batch"] += 1
+            if recovered["terminal"] == "stopped":
+                request_stop(None, None)
+            save()  # original result and progress committed before selecting another batch
         while not stopped() and (rounds == 0 or state["next_batch"] < rounds * len(targets)):
             if len(state["failed_targets"]) == len(targets):
                 publish("failed")
@@ -361,15 +445,8 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=()):
             original = targets[index]
             directory = root / "batches" / f"batch-{number:06d}"
             directory.mkdir(parents=True, exist_ok=False)
-            child_argv = list(original)
             prior = state["last_results"].get(key)
-            if prior is not None:
-                _body, sha = load_completed(Path(prior["path"]), expected_binding=input_binding(original))
-                if sha != prior["sha256"]:
-                    raise SerialRefused("retained child result changed")
-                child_argv = _without(child_argv, {"--cpu-calibrate-serving", "--gpu-calibrate-serving"})
-                child_argv += ["--resume-run", prior["path"]]
-            child_argv += ["--iterations", str(batch_iterations), "--out", str(directory)]
+            child_argv = _batch_argv(original, prior, batch_iterations, directory)
             expected_binding = input_binding(child_argv)
             active = {"target_index": index, "selected_id": option(original, "--target-id"),
                       "store": option(original, "--store"), "batch_dir": str(directory),
@@ -384,6 +461,12 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=()):
                     process = subprocess.Popen([*child_prefix, *_child_command(child_argv)], stdout=stdout, stderr=stderr,
                                                cwd=Path(__file__).resolve().parents[4])
                     active["pid"] = process.pid
+                    try:
+                        active["process_identity"] = worker_lifecycle.process_identity(process.pid).to_dict()
+                    except worker_lifecycle.LifecycleRefused:
+                        # The original Popen still owns cleanup. Missing identity
+                        # cannot permit later adoption/signaling of a reused PID.
+                        pass
                     save()
                     publish("running", active)
                     sent = False
