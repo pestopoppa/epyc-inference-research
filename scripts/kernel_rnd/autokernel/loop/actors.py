@@ -373,6 +373,15 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12) -> str:
     else:
         lines.append("(nothing yet)")
 
+    shared = context.get("shared_prior_experiments")
+    if shared:
+        lines.append("\n## Shared historical mechanisms — transfer NOT established")
+        lines.append("These are original outcomes on other recorded scopes, not applicable gains, "
+                     "local refutations or reasons to skip validation. Preserve their model, quant, "
+                     "recipe, surface and caveats; unknown means not captured. Use ideas as suggestions "
+                     "only. These rows are excluded from the characterised-mechanism pooling above.")
+        lines.extend(["```json", json.dumps(shared, sort_keys=True, indent=2), "```"])
+
     feedback = context.get("serving_observations")
     if feedback:
         lines.append("\n## Original serving observations — recall, not qualified gains")

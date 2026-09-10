@@ -56,6 +56,7 @@ import hashlib
 import json
 from pathlib import Path
 import sqlite3
+import time
 from typing import Any, Iterable, Mapping, Sequence
 
 SCHEMA_VERSION = 1
@@ -279,15 +280,25 @@ def epoch_sha256(*, anchor_commit: str | None, build_recipe: Mapping[str, Any] |
 class ExperimentStore:
     """Append-only experiment memory keyed by attempt identity."""
 
-    def __init__(self, root: Path | str) -> None:
+    def __init__(self, root: Path | str, *, read_only: bool = False) -> None:
         self.root = Path(root)
-        self.root.mkdir(parents=True, exist_ok=True)
         self.path = self.root / "experiments.db"
         self.markdown_path = self.root / "experiments.md"
-        self._connection = sqlite3.connect(self.path)
+        if read_only:
+            if not self.path.is_file():
+                raise ValueError("shared experiment source is not an existing regular database")
+            self._connection = sqlite3.connect(self.path.resolve().as_uri() + "?mode=ro",
+                                              uri=True, timeout=0.2)
+            self._connection.execute("PRAGMA query_only=ON")
+            deadline = time.monotonic() + 0.2
+            self._connection.set_progress_handler(lambda: time.monotonic() > deadline, 1000)
+        else:
+            self.root.mkdir(parents=True, exist_ok=True)
+            self._connection = sqlite3.connect(self.path)
         self._connection.row_factory = sqlite3.Row
-        self._connection.executescript(_DDL)
-        self._connection.commit()
+        if not read_only:
+            self._connection.executescript(_DDL)
+            self._connection.commit()
 
     def close(self) -> None:
         self._connection.close()
@@ -338,7 +349,10 @@ class ExperimentStore:
     # ---------------------------------------------------------------- recall
 
     def recall(self, *, epoch: str, limit: int = 40,
-               ranking_authorized: bool = False) -> list[dict[str, Any]]:
+               ranking_authorized: bool = False,
+               include_source_scope: bool = False,
+               statuses: Sequence[str] | None = None,
+               exclude_statuses: bool = False) -> list[dict[str, Any]]:
         """Prior attempts, each marked same-epoch or stale.
 
         `ranking_authorized` is the `P-AK-SEARCH-1` denial-4 boundary, narrowed by
@@ -356,9 +370,38 @@ class ExperimentStore:
         readiness, or relaxes a threshold the campaign derives for itself.
         """
         pool = max(int(limit), RANKING_POOL) if ranking_authorized else int(limit)
+        projection = "*"
+        if include_source_scope:
+            # Shared formation recall never materializes full lifecycle payloads.
+            # Large/old records keep explicit unknown scope, not current-run facts.
+            projection = ("attempt_id,recorded_at,campaign_id,epoch_sha256,hypothesis_id,"
+                          "mechanism_id,target_surface,target_symbol,statement,falsifier,status,"
+                          "effect_fraction,exact_effect,target_effect,refusal_reason,result_sha256,"
+                          "CASE WHEN length(payload)<=2097152 THEN "
+                          "CASE WHEN json_valid(payload) THEN coalesce("
+                          "json_extract(payload,'$.research_scope'),json_object("
+                          "'model',coalesce(json_extract(payload,'$.comparison.model'),"
+                          "json_extract(payload,'$.comparison.belief_capture.inputs.recipe.model')),"
+                          "'quant',NULL,'backend',NULL,"
+                          "'measurement_surface',json_extract(payload,'$.comparison.surface'),"
+                          "'request_digest',json_extract(payload,'$.comparison.request_digest'),"
+                          "'recipe',json_object("
+                          "'name',json_extract(payload,'$.comparison.recipe'),"
+                          "'hash',json_extract(payload,'$.comparison.recipe_hash'),"
+                          "'environment',json_extract(payload,'$.comparison.recipe_env'),"
+                          "'description',json_extract(payload,'$.comparison.recipe_describe'),"
+                          "'original_serving_arms',json_extract(payload,'$.comparison.belief_capture.inputs.resolved_arms')),"
+                          "'unknown_reason','legacy record: only original captured fields shown; nulls remain unknown'"
+                          ")) END "
+                          "END AS research_scope")
+        predicate, parameters = "", []
+        if statuses:
+            placeholders = ",".join("?" for _ in statuses)
+            predicate = f" WHERE status {'NOT IN' if exclude_statuses else 'IN'} ({placeholders})"
+            parameters.extend(statuses)
         rows = self._connection.execute(
-            "SELECT * FROM experiments ORDER BY recorded_at DESC, rowid DESC LIMIT ?",
-            (pool,)).fetchall()
+            f"SELECT {projection} FROM experiments{predicate} ORDER BY recorded_at DESC, rowid DESC LIMIT ?",
+            (*parameters, pool)).fetchall()
         recalled = []
         for row in rows:
             same_epoch = row["epoch_sha256"] == epoch
@@ -385,6 +428,10 @@ class ExperimentStore:
                 "comparable_measurement": same_epoch,
                 "ranking_authorized": bool(ranking_authorized),
             })
+            if include_source_scope:
+                scope = json.loads(row["research_scope"]) if row["research_scope"] else None
+                recalled[-1].update(original_epoch=row["epoch_sha256"],
+                                    research_scope=scope if isinstance(scope, dict) else None)
         if not ranking_authorized:
             return recalled
         return rank(recalled)[:int(limit)]

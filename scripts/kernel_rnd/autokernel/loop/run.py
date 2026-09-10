@@ -322,6 +322,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--rank-prior-experiments", action="store_true",
                         help="P-AK-SEARCH-1-A3: order recalled records by merit "
                              "instead of recency, cross-epoch magnitudes redacted")
+    parser.add_argument("--shared-history-root", type=Path, action="append", default=[],
+                        help="read-only prior mechanism store; historical outcomes do not transfer")
     # ---- concurrency. EVERY run is pooled; --workers 1 is a one-lane pool. The
     # separate sequential path was deleted 2026-08-31 once the pool owned the
     # consecutive-error breaker -- two run paths were two things to drift.
@@ -593,6 +595,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     feedback = serving_beliefs.PlannerFeedback(args.store, args.belief_root_repo)
+    shared_history = archive.SharedHistory(args.shared_history_root, current_store=args.store,
+                                           batch_directory=args.out)
     feedback_anchor = [direct_launch]
 
     def build_context() -> dict:
@@ -628,6 +632,10 @@ def main(argv: list[str] | None = None) -> int:
             "kernel_hotspots": [row.to_dict() for row in hotspot_rows],
             **({"cpu_profile": dict(cpu_profile_observation)} if cpu_launch else {}),
             "prior_experiments": prior_experiments(args, epoch),
+            **({"shared_prior_experiments": shared_history.recall(scope={
+                "model": str(args.model), "quant": census.dominant_quant,
+                "backend": "cpu" if cpu_launch else "gpu", "measurement_surface": args.surface})}
+               if args.shared_history_root else {}),
             "serving_observations": feedback.context(lambda: serving_beliefs.feedback_scope(
                 epoch=epoch, recipe=serving_recipe, resolved=feedback_anchor[0],
                 frozen_requests=frozen_requests, anchor_build=anchor_build[0])),
@@ -1332,7 +1340,12 @@ def main(argv: list[str] | None = None) -> int:
             the archive rows comparable across the run.
         """
         def record_pooled(outcome) -> None:
-            archive.record(args.store, outcome.to_attempt(), epoch=epoch,
+            attempt = outcome.to_attempt()
+            attempt["research_scope"] = archive.original_research_scope(
+                attempt, model=args.model, quant=census.dominant_quant,
+                backend="cpu" if cpu_launch else "gpu", build_recipe=recipe.to_dict(),
+                surface=outcome.comparison.surface if outcome.comparison is not None else args.surface)
+            archive.record(args.store, attempt, epoch=epoch,
                            recorded_at=loop._now(), campaign_id="ak-loop",
                            on_serving_export=feedback.exported)
             latest.append(outcome)
