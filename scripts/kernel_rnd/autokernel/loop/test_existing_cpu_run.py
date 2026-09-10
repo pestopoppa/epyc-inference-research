@@ -19,7 +19,7 @@ from . import test_promotion_targets as promotion_fixture
 def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
         dry_run, feedback_root=None, profile_observer=None, profile_contexts=None, runtime_only=False,
         invalid_once=False, enrolled_pair=False, runtime_transition=None,
-        expected_claim_cycles=None):
+        expected_claim_cycles=None, result_expectation=None):
     fixture = promotion_fixture.TheKeepBuildsAProductionCompleteAnchor()
     fixture.setUp()
     try:
@@ -230,16 +230,23 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
             assert not any((held, issued, measured, builds, oracles))
             assert "DRY RUN" in log
         else:
-            assert len(issued) == (4 if invalid_once else 10 if enrolled_pair else 5)
+            assert len(issued) == (5 if result_expectation is not None else
+                                   4 if invalid_once else 10 if enrolled_pair else 5)
             assert len(oracles) == len(issued)
             claim_cycles = (2 if enrolled_pair else 1) \
                 if expected_claim_cycles is None else expected_claim_cycles
             assert held == [value for _ in range(claim_cycles) for value in (True, False)]
             if enrolled_pair:
+                if result_expectation is not None:
+                    result = json.loads((fixture.root / "result/loop-run.json").read_text())
+                    result_expectation(result, measured, builds, fixture, selected)
                 # The caller owns the A -> B -> A identity/history assertions.
                 # This fixture only establishes both original source/build keeps.
                 return
             result = json.loads((fixture.root / "result/loop-run.json").read_text())
+            if result_expectation is not None:
+                result_expectation(result, measured, builds, fixture, selected)
+                return
             epoch_inputs = {"cpu_execution_digest": selected.execution_digest,
                             "frozen_prompt_digest": manifest.digest}
             expected_epoch = run.archive.epoch_for(

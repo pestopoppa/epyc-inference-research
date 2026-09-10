@@ -126,6 +126,10 @@ elif selection_path:
     if mode == "fail_held":
         (out / "loop-held-claims.json").write_text(json.dumps(held))
         sys.exit(3)
+    if mode == "gpu_missing_zero" and target_id == "gpu":
+        (out / "loop-held-claims.json").write_text(json.dumps(held))
+        sys.exit(0)
+result_only_failure = mode == "gpu_result_only_failure" and target_id == "gpu"
 count = 0 if stopped[0] else int(sr.option(argv, "--iterations"))
 prior = sr.option(argv, "--resume-run")
 anchor = Path(sr.option(argv, "--anchor-build"))
@@ -140,11 +144,31 @@ row = sr.continuation(argv=argv, binding=sr.input_binding(argv),
     anchor_build=anchor, anchor_commit="a" * 40,
     cor_build=None if cpu else anchor, cor_commit=None if cpu else "a" * 40,
     iterations_requested=int(sr.option(argv, "--iterations")),
-    outcomes=[SimpleNamespace(status="measured_null") for _ in range(count)],
+    outcomes=[SimpleNamespace(status="bench_failed") for _ in range(count)]
+    if result_only_failure else
+    [SimpleNamespace(status="measured_null") for _ in range(count)],
     **({"runtime_recipe_reference": {"locator": "runtime-selection-fixture",
        "sha256": "b" * 64, "verified": True}}
        if mode == "runtime_ref" and cpu else {}),
     **({"held_claim_evidence": held} if held else {}))
+if result_only_failure:
+    (out / "loop-run.json").write_text(json.dumps({
+        "schema": "epyc.autokernel.loop_run.v1",
+        "epoch": "e" * 64, "anchor_commit": "a" * 40,
+        "surface": "serving:fixture", "pairs": 5, "noise_floor_pct": 1.0,
+        "elapsed_s": 1.0, "workers": 1,
+        "iterations": [{"status": "bench_failed", "turn_recorded_at":
+                        "2026-09-10T00:00:00Z", "reason": "GPU setup failed"}],
+        "phase_seconds": {"setup": 1.0}, "phase_seconds_are_lane_seconds": True,
+        "pool": {"workers": 1, "wall_seconds": 1.0, "tail_seconds": 1.0,
+                 "tail_fraction": 1.0, "superseded": 0},
+        "continuation": row,
+        "target": identity,
+        "runtime_preparation": {"status": "fixture"},
+        "launch_snapshot": "f" * 64, "floor_request_digest": "d" * 64,
+        **({"held_claim_evidence": held} if held else {}),
+    }))
+    sys.exit(3)  # Crash/failure after the full result, before the routing receipt.
 (out / "loop-run.json").write_text(json.dumps({"fixture": "not measurement evidence"}))
 if mode == "wrong_args":
     row["input_argv"].append("--forged")
@@ -308,6 +332,38 @@ def test_actual_children_rotate_reuse_inputs_and_stop_at_finite_budget(tmp_path,
     for row in seen:
         with pytest.raises(ProcessLookupError):
             os.kill(row["pid"], 0)
+
+
+def test_gpu_full_result_recovers_missing_continuation_without_inventing_measured_null(
+        tmp_path, monkeypatch):
+    state, argv = _inputs(tmp_path, monkeypatch,
+                          mode="gpu_result_only_failure", rounds=1)
+    argv = ["--target-args", argv[3], *argv[4:]]
+    argv = _scheduled(tmp_path, argv)
+    assert sr.main(argv) == 0
+    saved = json.loads((state / "serial-state.json").read_text())
+    gpu_path = state / "batches/batch-000000/loop-continuation.json"
+    gpu, gpu_sha = sr.load_completed(gpu_path)
+    assert gpu["outcome_counts"] == {"bench_failed": 1}
+    assert saved["last_results"]["0"] == {
+        "path": str(gpu_path), "sha256": gpu_sha}
+    assert saved["failed_targets"] == {}
+    assert {row["outcome"] for row in
+            saved["scheduler_state"]["accounted_receipts"]} == {"failed"}
+    full = json.loads((gpu_path.parent / "loop-run.json").read_text())
+    assert full["iterations"][0]["reason"] == "GPU setup failed"
+
+
+def test_zero_exit_missing_gpu_terminal_settles_scheduler_failure(tmp_path, monkeypatch):
+    state, argv = _inputs(tmp_path, monkeypatch, mode="gpu_missing_zero", rounds=1)
+    argv = ["--target-args", argv[3], *argv[4:]]
+    argv = _scheduled(tmp_path, argv)
+    assert sr.main(argv) == 1
+    saved = json.loads((state / "serial-state.json").read_text())
+    assert saved["failed_targets"]
+    assert {row["outcome"] for row in
+            saved["scheduler_state"]["accounted_receipts"]} == {"failed"}
+    assert saved["active"] is None and saved["next_batch"] == 1
 
 
 def test_runtime_recipe_reference_is_target_local_digest_bound_and_replay_stable(
@@ -536,8 +592,11 @@ def test_actual_cpu_keep_cross_target_then_older_history_uses_latest_source(
         first = Path(sr.option(argv, "--out"))
         first_row, first_sha = sr.load_completed(first / "loop-continuation.json")
         assert first_row["selected_target"]["selected_id"] == "target-a"
+        source_keeps = (first_row.get("source_lineage_keeps")
+                        or first_row.get("experimental_source_keeps"))
+        assert isinstance(source_keeps, list) and len(source_keeps) == 1
         origin_receipt = run.surface_fold.reopen_reference(
-            first_row["experimental_source_keeps"][0])
+            source_keeps[0])
         origin_capture_id = origin_receipt.comparison["belief_capture"]["capture_id"]
         origin_export = (Path(sr.option(argv, "--store")) / "serving-beliefs"
                          / f"{origin_capture_id}.json")

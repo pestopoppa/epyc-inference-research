@@ -175,6 +175,68 @@ def _cpu_arm(original, build: Path):
                     "experimental_parent_snapshot": original.snapshot_digest})
 
 
+def _source_floor_store(store: Path, recipe, anchor, *, instrument: str,
+                        dynamic: bool = False) -> Path:
+    """Key matched source floors by the exact executable/DSO execution identity."""
+    if instrument != serving.MATCHED_INSTRUMENT:
+        # Preserve the established compatibility split: startup legacy floors
+        # live at the root, while post-runtime-recipe legacy floors are isolated
+        # by recipe identity.
+        return (Path(store) / "runtime-source-floors" / recipe.recipe_hash
+                if dynamic else Path(store))
+    identity = getattr(anchor, "execution_digest", None)
+    if (not isinstance(identity, str) or len(identity) != 64
+            or any(char not in "0123456789abcdef" for char in identity)):
+        raise serving.ServingFloorMismatch(
+            "matched source floor requires an exact anchor execution identity")
+    return (Path(store) / "runtime-source-floors" / recipe.recipe_hash / identity)
+
+
+def _load_source_floor(store: Path, recipe, anchor, *, frozen_requests,
+                       instrument: str, pairs: int, dynamic: bool = False):
+    """Load only a floor calibrated on this exact resolved anchor execution."""
+    floor_store = _source_floor_store(
+        store, recipe, anchor, instrument=instrument, dynamic=dynamic)
+    reading = serving.load_floor(
+        floor_store, recipe, frozen_requests=frozen_requests,
+        instrument=instrument, pairs=pairs)
+    if instrument == serving.MATCHED_INSTRUMENT and reading.row:
+        # The path prevents ordinary cross-anchor reuse. Revalidate the sealed row
+        # too, so copying an older artifact into a new identity directory cannot
+        # turn that path label into authority.
+        serving._validate_matched_floor(
+            reading.row, recipe, frozen_requests, pairs, resolved=anchor)
+        baseline = reading.row.get("baseline_resolved_recipe")
+        if (not isinstance(baseline, dict)
+                or baseline.get("execution_digest") != anchor.execution_digest):
+            raise serving.ServingFloorMismatch(
+                "matched source floor anchor execution identity differs")
+    return floor_store, reading
+
+
+def _write_new_source_floor(floor_store: Path, recipe, anchor, row, *, frozen_requests,
+                            instrument: str, pairs: int) -> Path:
+    """Write one immutable identity-keyed floor; an existing floor is reused."""
+    if instrument == serving.MATCHED_INSTRUMENT:
+        # Validate contamination before it can occupy the immutable identity path.
+        serving._validate_matched_floor(
+            row, recipe, frozen_requests, pairs, resolved=anchor)
+        baseline = row.get("baseline_resolved_recipe")
+        if (not isinstance(baseline, dict)
+                or baseline.get("execution_digest") != anchor.execution_digest):
+            raise serving.ServingFloorMismatch(
+                "matched source floor anchor execution identity differs")
+    target = serving.floor_path(
+        floor_store, recipe, frozen_requests=frozen_requests,
+        instrument=instrument, pairs=pairs)
+    if instrument == serving.MATCHED_INSTRUMENT and target.exists():
+        raise serving.ServingFloorMismatch(
+            "refusing to overwrite an existing anchor-identity floor")
+    return serving.write_floor(
+        floor_store, recipe, row, frozen_requests=frozen_requests,
+        instrument=instrument, pairs=pairs)
+
+
 def noise_floor_pct(surface: str, pairs: int, model: Path | str,
                     store: Path | None = None) -> float | None:
     """The bar for THIS run, scaled to the pairs actually being run.
@@ -720,6 +782,12 @@ def main(argv: list[str] | None = None) -> int:
             anchor_build=args.anchor_build,
             allow_unverified_anchor=args.allow_unverified_anchor,
             experimental_identity=experimental and not source_authoring)
+    if direct_launch is not None and not args.dry_run:
+        # Startup has now proved the selected anchor slot. Derive its executable
+        # and DSO identity once before any live floor lookup, including continuation.
+        # Dry-run retains its established no-additional-artifact-hash contract.
+        direct_launch = _cpu_arm(direct_launch, args.anchor_build)
+        cpu_launch = direct_launch if direct_launch.backend == "cpu" else None
     if ((resumed is not None and not historical_target)
             or (source_resumed is not None and not cross_tree_source)):
         anchor_source = source_resumed if source_resumed is not None else resumed
@@ -816,13 +884,19 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("matched_process_v2 requires an explicit resolved serving launch")
     if direct_launch:
         serving_recipe = direct_launch.template
-        floor_reading = serving.load_floor(args.store, serving_recipe,
-                                           frozen_requests=frozen_requests, **source_instrument)
+        floor_store, floor_reading = _load_source_floor(
+            args.store, serving_recipe, direct_launch,
+            frozen_requests=frozen_requests, instrument=args.serving_instrument,
+            pairs=args.serving_pairs)
         floor_record = floor_reading.row or None
         floor = serving_floor_pct = floor_reading.floor_pct
         calibrated = floor is not None
         serving_floor_provenance = floor_reading.provenance
         floor_request_digest = floor_reading.request_digest
+        if source_instrument and floor is not None:
+            # Exact retained-anchor floors are immutable and reused on restart;
+            # an explicit calibration option may not overwrite their evidence.
+            calibration_samples = None
         if floor is None:
             # Every selected workload needs its OWN request-bound source floor,
             # including a first full-target visit and a reduced common screen.
@@ -902,6 +976,17 @@ def main(argv: list[str] | None = None) -> int:
     shared_history = archive.SharedHistory(args.shared_history_root, current_store=args.store,
                                            batch_directory=args.out)
     feedback_anchor = [direct_launch]
+
+    def invalidate_source_floor() -> None:
+        """Drop the prior in-memory bar after, never during, a successful keep."""
+        nonlocal floor, floor_request_digest, floor_record, calibrated
+        nonlocal serving_floor_pct, serving_floor_provenance
+        floor = serving_floor_pct = None
+        floor_request_digest = None
+        floor_record = None
+        calibrated = False
+        serving_floor_provenance = "absent"
+        source_floor_refresh[0] = True
 
     def build_context() -> dict:
         program = loop.PROGRAM.read_text(encoding="utf-8")
@@ -1174,33 +1259,46 @@ def main(argv: list[str] | None = None) -> int:
                 surface=args.surface, ubatch=ubatch, calibrated=calibrated)
         return measure
 
-    def cpu_compare(a_build, c_build):
+    def ensure_source_floor(anchor_recipe, a_build) -> None:
         nonlocal floor, floor_request_digest, floor_record, calibrated
+        nonlocal serving_floor_pct, serving_floor_provenance
+        if not source_floor_refresh[0]:
+            return
+        # Resolve the newly retained anchor's floor before either candidate arm
+        # can launch. A different executable/DSO identity gets a distinct
+        # immutable artifact even when recipe and requests are unchanged.
+        floor_store, reading = _load_source_floor(
+            args.store, serving_recipe, anchor_recipe,
+            frozen_requests=frozen_requests, instrument=args.serving_instrument,
+            pairs=args.serving_pairs, dynamic=True)
+        if reading.floor_pct is None:
+            value = serving.calibrate_floor(serving_recipe, a_build,
+                samples=serving.MATCHED_CALIBRATION_PAIRS if source_instrument else max(2, args.serving_pairs),
+                port=direct_launch.port, resolved_recipe=anchor_recipe, frozen_requests=frozen_requests,
+                **source_instrument)
+            _write_new_source_floor(
+                floor_store, serving_recipe, anchor_recipe, value,
+                frozen_requests=frozen_requests, instrument=args.serving_instrument,
+                pairs=args.serving_pairs)
+            _floor_store, reading = _load_source_floor(
+                args.store, serving_recipe, anchor_recipe,
+                frozen_requests=frozen_requests, instrument=args.serving_instrument,
+                pairs=args.serving_pairs, dynamic=True)
+        floor = serving_floor_pct = reading.floor_pct
+        floor_request_digest = reading.request_digest
+        floor_record = reading.row or None
+        calibrated = floor is not None
+        serving_floor_provenance = reading.provenance
+        source_floor_refresh[0] = False
+        runtime_preparation["source_comparison_floor"] = str(reading.path)
+
+    def cpu_compare(a_build, c_build):
         anchor_recipe = _cpu_arm(direct_launch, a_build)
         candidate_recipe = _cpu_arm(direct_launch, c_build)
         # Reuse the actual comparison's rebind, including after an anchor keep;
         # never hash a build a second time merely to assemble a planner prompt.
         feedback_anchor[0] = anchor_recipe
-        if source_floor_refresh[0]:
-            # Existing source-comparison floor, freshly keyed to the retained
-            # runtime recipe and original requests. Never reuse the old recipe's.
-            floor_store = args.store / "runtime-source-floors" / serving_recipe.recipe_hash
-            reading = serving.load_floor(floor_store, serving_recipe, frozen_requests=frozen_requests,
-                                         **source_instrument)
-            if reading.floor_pct is None:
-                value = serving.calibrate_floor(serving_recipe, a_build,
-                    samples=serving.MATCHED_CALIBRATION_PAIRS if source_instrument else max(2, args.serving_pairs),
-                    port=direct_launch.port, resolved_recipe=anchor_recipe, frozen_requests=frozen_requests,
-                    **source_instrument)
-                serving.write_floor(floor_store, serving_recipe, value, frozen_requests=frozen_requests,
-                                    **source_instrument)
-                reading = serving.load_floor(floor_store, serving_recipe, frozen_requests=frozen_requests,
-                                             **source_instrument)
-            floor, floor_request_digest = reading.floor_pct, reading.request_digest
-            floor_record = reading.row or None
-            calibrated = floor is not None
-            source_floor_refresh[0] = False
-            runtime_preparation["source_comparison_floor"] = str(reading.path)
+        ensure_source_floor(anchor_recipe, a_build)
         return _serving_comparison(lambda: serving.compare(
             serving_recipe, a_build, c_build, pairs=args.serving_pairs,
             floor_pct=floor, port=direct_launch.port,
@@ -1211,6 +1309,26 @@ def main(argv: list[str] | None = None) -> int:
                if source_instrument else {})),
             "experimental_candidate_not_champion" if experimental
             else "canonical_candidate_vs_current_anchor")
+
+    def cpu_anchor_guard_compare(a_build, c_build):
+        """Measure the promoted-anchor integrity A/A without consuming a source floor.
+
+        The keep was admitted against the previous anchor's floor.  The promoted
+        executable needs its own prospective floor, but calibration is candidate
+        work: it must not sit between moving the champion and completing this guard.
+        The guard therefore measures an explicitly uncalibrated matched A/A and lets
+        ``anchor.verify`` apply the already-admitted numeric tolerance itself.
+        """
+        anchor_recipe = _cpu_arm(direct_launch, a_build)
+        candidate_recipe = _cpu_arm(direct_launch, c_build)
+        return _serving_comparison(lambda: serving.compare(
+            serving_recipe, a_build, c_build, pairs=args.serving_pairs,
+            floor_pct=None, port=direct_launch.port,
+            anchor_resolved_recipe=anchor_recipe,
+            candidate_resolved_recipe=candidate_recipe,
+            frozen_requests=frozen_requests,
+            **({"instrument": args.serving_instrument} if source_instrument else {})),
+            "promoted_anchor_integrity_not_source_candidate")
 
     def confirm_measure(worker):
         """The confirm rung's A/B for one keep-candidate (§5.3): same arms, the
@@ -1368,7 +1486,7 @@ def main(argv: list[str] | None = None) -> int:
                        on_serving_export=feedback.exported)
         print(f"headline  {outcome.reason}")
 
-    def verify_anchor() -> None:
+    def verify_anchor(*, guard_floor=None) -> None:
         """Prove the promoted binary IS the champion; `RunAborted` if not. Runs in the
         serialized tail holding the claim: `commit` is called inside `tail_session`."""
         def keep_verdict(verdict) -> None:
@@ -1383,13 +1501,17 @@ def main(argv: list[str] | None = None) -> int:
 
         anchor.verify(
             champion_commit=_git(args.worktree, "rev-parse", "HEAD"),
-            anchor_build=anchor_build[0], noise_floor_pct=floor,
+            anchor_build=anchor_build[0],
+            noise_floor_pct=floor if guard_floor is None else guard_floor,
             # 2026-09-06: OBJECT digest, not the linked .so. The compiler is reproducible
             # (0/379 objects ever differed); the linker is not (four distinct .so digests
             # for one commit aborted every keep on link noise). Objects prove identity.
             digest=anchor_integrity.object_digest,
             on_verdict=keep_verdict, build=build_champion,
-            compare=lambda promoted, fresh: cpu_compare(promoted, fresh) if direct_launch else bench.compare(
+            compare=lambda promoted, fresh: (
+                cpu_anchor_guard_compare(promoted, fresh)
+                if direct_launch and source_instrument and source_floor_refresh[0]
+                else cpu_compare(promoted, fresh)) if direct_launch else bench.compare(
                 bench.Arm("promoted_anchor", promoted / "bin" / "llama-bench"),
                 bench.Arm("fresh_champion", fresh / "bin" / "llama-bench"),
                 args.model, pp=pp, tg=tg, pairs=args.pairs, noise_floor_pct=floor,
@@ -1404,6 +1526,7 @@ def main(argv: list[str] | None = None) -> int:
         """Advance the anchor by BUILDING the champion into the new slot, never by
         renaming a build directory in (CMake dirs are not relocatable). `pool` owns the
         mechanics so a test can EXECUTE them rather than grep for them."""
+        nonlocal direct_launch, cpu_launch, serving_recipe
         # R23-52: the keep path was silent for 30+ min (clean anchor build + guard + headline +
         # reprofile + accumulate) and the dashboard read the loop as dead. Heartbeat every sub-stage.
         publish("running", latest, hotspot_rows=hotspot_rows,
@@ -1415,9 +1538,23 @@ def main(argv: list[str] | None = None) -> int:
         print(f"anchor    advanced to {anchor_build[0].name} — subsequent effects are "
               f"MARGINAL against this {'experimental candidate' if experimental else 'champion'}, "
               "not cumulative")
+        if direct_launch is not None and source_instrument:
+            # The accepted comparison above was judged against the prior anchor's
+            # floor. Only now bind the launch to the promoted executable/DSOs and
+            # require a new exact-identity A/A before another source candidate can
+            # run.  The integrity guard below is not a research candidate and uses
+            # the prior admitted tolerance without consuming this pending refresh.
+            prior_floor = floor
+            direct_launch = _cpu_arm(direct_launch, anchor_build[0])
+            cpu_launch = direct_launch if direct_launch.backend == "cpu" else None
+            serving_recipe = direct_launch.template
+            feedback_anchor[0] = direct_launch
+            invalidate_source_floor()
+        else:
+            prior_floor = None
         # FIRST, before the loop draws any further work: nothing below is worth doing
         # against an anchor that is not the champion (run 18: 114 candidates, 6.5 h).
-        verify_anchor()
+        verify_anchor(guard_floor=prior_floor)
         if direct_launch is not None:
             # This slot supplies the next hypothesis, not the recipe of the run's
             # initial binary. Rebind once at the actual owning keep boundary.
@@ -1801,7 +1938,7 @@ def main(argv: list[str] | None = None) -> int:
             next tail entry -- their candidates were never built on this champion.
             """
             if hypothesis.runtime_pair is not None:
-                nonlocal direct_launch, cpu_launch, serving_recipe, floor, floor_request_digest
+                nonlocal direct_launch, cpu_launch, serving_recipe
                 selected = runtime_owner[0].retain(comparison.row, feedback_anchor[0])
                 direct_launch = selected
                 cpu_launch = selected if selected.backend == "cpu" else None
@@ -1809,8 +1946,7 @@ def main(argv: list[str] | None = None) -> int:
                 feedback_anchor[0] = selected
                 # The old source-comparison floor belongs to the old recipe.
                 # A recipe keep neither transfers it nor promotes any source.
-                floor = floor_request_digest = None
-                source_floor_refresh[0] = True
+                invalidate_source_floor()
                 runtime_preparation.update(status="selected_runtime_recipe",
                     selected_recipe=comparison.row["runtime_admission"])
                 runtime_recipe_reference[0] = runtime_owner[0].selection_reference(
@@ -1838,6 +1974,12 @@ def main(argv: list[str] | None = None) -> int:
                     raise loop.ConfirmVetoed(verdict["reason"])
             source_fold_candidate = experimental and cpu_launch \
                 and selected_identity is not None
+            # The receipt describes the comparison that admitted this keep.  Promotion
+            # invalidates the in-memory floor for the next anchor, so retain the prior
+            # request identity before moving either source or build state.
+            accepted_floor_request_digest = floor_request_digest
+            accepted_launch_snapshot_digest = (direct_launch.snapshot_digest
+                                                if direct_launch is not None else None)
             patch_path = keep_the_diff(worker, hypothesis) if source_fold_candidate else None
             parent = (_git(worker.worktree, "rev-parse", "HEAD")
                       if source_fold_candidate else None)
@@ -1854,8 +1996,8 @@ def main(argv: list[str] | None = None) -> int:
                     "patch_path": str(patch_path.resolve()),
                     "patch_metadata_path": str(patch_path.with_suffix(".json").resolve()),
                     "selected_target": selected_identity,
-                    "launch_snapshot_digest": direct_launch.snapshot_digest,
-                    "floor_request_digest": floor_request_digest,
+                    "launch_snapshot_digest": accepted_launch_snapshot_digest,
+                    "floor_request_digest": accepted_floor_request_digest,
                     "floor_unit": "process", "comparison": comparison.to_dict(),
                 })
             # The accumulator advanced; batch this keep and, if the bundle now clears the
@@ -1906,7 +2048,7 @@ def main(argv: list[str] | None = None) -> int:
     runtime_deadline = None
 
     def install_runtime_owner():
-        nonlocal direct_launch, cpu_launch, serving_recipe, floor, floor_request_digest
+        nonlocal direct_launch, cpu_launch, serving_recipe
         from . import runtime_admission, runtime_calibration
         from .serving_preparation import ServingStatisticsDeclaration
         from ..evaluator import controls
@@ -1942,8 +2084,7 @@ def main(argv: list[str] | None = None) -> int:
             direct_launch = selected
             cpu_launch = selected if selected.backend == "cpu" else None
             serving_recipe = selected.template
-            floor = floor_request_digest = None
-            source_floor_refresh[0] = True
+            invalidate_source_floor()
         runtime_preparation.update(status="original_frame_ready",
             default_recipe=runtime_owner[0].default.to_dict(),
             selected_recipe=runtime_owner[0].state["selected"],
@@ -2043,8 +2184,7 @@ def main(argv: list[str] | None = None) -> int:
                     direct_launch = selected
                     cpu_launch = selected if selected.backend == "cpu" else None
                     serving_recipe = selected.template
-                    floor = floor_request_digest = None
-                    source_floor_refresh[0] = True
+                    invalidate_source_floor()
                     runtime_recipe_reference[0] = reference
                 install_runtime_owner()
                 if args.calibrate_runtime:
@@ -2200,15 +2340,23 @@ def main(argv: list[str] | None = None) -> int:
                 publish("running", step=f"{direct_launch.backend.upper()} serving: request-bound original calibration")
                 calibration_anchor = (validation_anchor_build
                                       if args.validate_source_continuation else args.anchor_build)
+                calibration_recipe = _cpu_arm(direct_launch, calibration_anchor)
                 calibration = serving.calibrate_floor(
                     serving_recipe, calibration_anchor, samples=calibration_samples,
                     port=direct_launch.port,
-                    resolved_recipe=_cpu_arm(direct_launch, calibration_anchor),
+                    resolved_recipe=calibration_recipe,
                     frozen_requests=frozen_requests, **source_instrument)
-                serving.write_floor(args.store, serving_recipe, calibration,
-                                    frozen_requests=frozen_requests, **source_instrument)
-                floor_reading = serving.load_floor(args.store, serving_recipe,
-                                                   frozen_requests=frozen_requests, **source_instrument)
+                floor_store = _source_floor_store(
+                    args.store, serving_recipe, calibration_recipe,
+                    instrument=args.serving_instrument)
+                _write_new_source_floor(
+                    floor_store, serving_recipe, calibration_recipe, calibration,
+                    frozen_requests=frozen_requests, instrument=args.serving_instrument,
+                    pairs=args.serving_pairs)
+                _floor_store, floor_reading = _load_source_floor(
+                    args.store, serving_recipe, calibration_recipe,
+                    frozen_requests=frozen_requests, instrument=args.serving_instrument,
+                    pairs=args.serving_pairs)
                 floor_record = floor_reading.row or None
                 floor = serving_floor_pct = floor_reading.floor_pct
                 calibrated = floor is not None

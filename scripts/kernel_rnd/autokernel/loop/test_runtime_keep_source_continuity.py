@@ -46,6 +46,9 @@ def test_runtime_keep_then_source_reuses_actual_recipe_and_fresh_source_floor(mo
         def retained_build(self, reference):
             return Path(keeps[0].anchor.build_dir) if keeps else None
 
+        def pending_pair(self):
+            return None
+
     def prune(*args, **kwargs):
         original_runtime_build = Path(keeps[0].anchor.build_dir)
         assert original_runtime_build in kwargs["protect"]

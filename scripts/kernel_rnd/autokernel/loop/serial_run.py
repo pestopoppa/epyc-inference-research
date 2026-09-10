@@ -12,6 +12,7 @@ import shutil
 import stat
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 
@@ -21,6 +22,7 @@ CONTINUATION_SCHEMA = "epyc.autokernel.loop_continuation.v1"
 CONTINUATION_SCHEMA_V2 = "epyc.autokernel.loop_continuation.v2"
 HELD_REFERENCE_SCHEMA = "epyc.autokernel.direct_held_reference.v1"
 SERIAL_SCHEMA = "epyc.autokernel.serial_run.v1"
+FULL_RESULT_RECOVERY_LIMIT = 512 * 1024 * 1024
 _DOCUMENT_FLAGS = ("--resolved-campaign", "--cpu-serving-launch", "--gpu-serving-launch",
                    "--frozen-prompts", "--serving-recipe", "--runtime-recipe-reference",
                    "--runtime-recovery-reference")
@@ -468,6 +470,8 @@ def load_completed(path: Path, *, expected_argv=None, expected_binding=None):
         expected_fields = expected_fields | {"last_outcome_reference"}
     if isinstance(row, dict) and "source_loo" in row:
         expected_fields = expected_fields | {"source_loo"}
+    if isinstance(row, dict) and "recovered_result_sha256" in row:
+        expected_fields = expected_fields | {"recovered_result_sha256"}
     if not isinstance(row, dict) or set(row) != expected_fields \
             or row["schema"] not in {CONTINUATION_SCHEMA, CONTINUATION_SCHEMA_V2} \
             or row["terminal"] not in {"complete", "stopped"}:
@@ -576,6 +580,12 @@ def load_completed(path: Path, *, expected_argv=None, expected_binding=None):
     info = result.lstat()
     if not stat.S_ISREG(info.st_mode) or info.st_size == 0:
         raise SerialRefused("original full result is missing or not a regular nonempty file")
+    recovered_sha = row.get("recovered_result_sha256")
+    if recovered_sha is not None:
+        if (not isinstance(recovered_sha, str) or len(recovered_sha) != 64
+                or any(char not in "0123456789abcdef" for char in recovered_sha)
+                or _json(result, limit=FULL_RESULT_RECOVERY_LIMIT)[1] != recovered_sha):
+            raise SerialRefused("recovered continuation full-result digest differs")
     requested, count = row["iterations_requested"], row["iterations_completed"]
     if type(requested) is not int or type(count) is not int or count < 0 \
             or requested != int(option(argv, "--iterations", "10")):
@@ -587,6 +597,135 @@ def load_completed(path: Path, *, expected_argv=None, expected_binding=None):
     if requested <= 0 or count > requested or (row["terminal"] == "complete" and count != requested):
         raise SerialRefused("result does not cover its finite batch")
     return row, sha
+
+
+def _load_completed_or_recover(path: Path, *, expected_argv=None,
+                               expected_binding=None):
+    """Recover a missing routing receipt only from its stable native full result.
+
+    The loop publishes ``loop-run.json`` first and embeds the exact continuation
+    it intends to publish next. A process failure in that narrow interval must
+    not discard the completed observation or invent a successful outcome. This
+    exceptional reader validates the full result's iteration statuses against
+    the embedded receipt before atomically restoring the tiny routing file.
+    Oversized or malformed full results remain visible and fail closed.
+    """
+    path = Path(path)
+    if path.exists():
+        return (*load_completed(path, expected_argv=expected_argv,
+                                expected_binding=expected_binding), False)
+    result_path = path.parent / "loop-run.json"
+    try:
+        result, _result_sha = _json(
+            result_path, limit=FULL_RESULT_RECOVERY_LIMIT)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        raise SerialRefused(
+            f"missing continuation; durable full result could not be validated: {exc}") from exc
+    required = {"schema", "epoch", "anchor_commit", "surface", "pairs",
+                "noise_floor_pct", "elapsed_s", "workers", "iterations",
+                "phase_seconds", "phase_seconds_are_lane_seconds", "pool",
+                "continuation"}
+    optional = {"runtime_preparation", "runtime_recipe_reference",
+                "held_claim_evidence", "held_claim_error", "target", "cpu_screen",
+                "baseline_scope", "experimental_branch", "launch_snapshot",
+                "floor_request_digest"}
+    if (not isinstance(result, dict) or not required.issubset(result)
+            or not set(result).issubset(required | optional)
+            or result.get("schema") != "epyc.autokernel.loop_run.v1"
+            or not isinstance(result.get("iterations"), list)
+            or not isinstance(result.get("continuation"), dict)):
+        raise SerialRefused("missing continuation; durable full result is malformed")
+    pool_row = result["pool"]
+    if (not isinstance(result["epoch"], str) or len(result["epoch"]) != 64
+            or not isinstance(result["anchor_commit"], str)
+            or len(result["anchor_commit"]) != 40
+            or not isinstance(result["surface"], str) or not result["surface"]
+            or type(result["pairs"]) is not int or result["pairs"] < 1
+            or (result["noise_floor_pct"] is not None
+                and type(result["noise_floor_pct"]) not in (int, float))
+            or type(result["elapsed_s"]) not in (int, float) or result["elapsed_s"] < 0
+            or type(result["workers"]) is not int or result["workers"] < 1
+            or not isinstance(result["phase_seconds"], dict)
+            or result["phase_seconds_are_lane_seconds"] is not True
+            or not isinstance(pool_row, dict)
+            or set(pool_row) != {"workers", "wall_seconds", "tail_seconds",
+                                 "tail_fraction", "superseded"}
+            or pool_row["workers"] != result["workers"]):
+        raise SerialRefused("missing continuation; full result envelope is malformed")
+    counts = {}
+    attempt_fields = {"status", "turn_recorded_at", "mechanism_id", "statement",
+                      "falsifier", "target_surface", "target_symbol", "runtime_pair",
+                      "reason", "effect_fraction", "comparison", "gates",
+                      "champion_head", "invalid_measurement"}
+    for attempt in result["iterations"]:
+        status_name = attempt.get("status") if isinstance(attempt, dict) else None
+        if (not isinstance(status_name, str) or not status_name
+                or "turn_recorded_at" not in attempt
+                or not isinstance(attempt["turn_recorded_at"], str)
+                or not attempt["turn_recorded_at"]
+                or not set(attempt).issubset(attempt_fields)):
+            raise SerialRefused(
+                "missing continuation; full result has a malformed iteration")
+        counts[status_name] = counts.get(status_name, 0) + 1
+    embedded = result["continuation"]
+    expected_argv = list(expected_argv) if expected_argv is not None else None
+    enrolled = expected_argv is not None and option(expected_argv, "--resolved-campaign") is not None
+    scheduled = expected_argv is not None and option(expected_argv, "--scheduler-selection") is not None
+    direct = expected_argv is not None and (option(expected_argv, "--cpu-serving-launch") is not None
+                                            or option(expected_argv, "--gpu-serving-launch") is not None)
+    if (embedded.get("iterations_completed") != len(result["iterations"])
+            or embedded.get("outcome_counts") != counts
+            or (enrolled and result.get("target") != embedded.get("selected_target"))
+            or (not enrolled and "target" in result)
+            or (scheduled and ("held_claim_evidence" not in result
+                or result["held_claim_evidence"] != embedded.get("held_claim_evidence")))
+            or (not scheduled and "held_claim_evidence" in result)
+            or (direct and not {"runtime_preparation", "launch_snapshot",
+                                "floor_request_digest"}.issubset(result))
+            or ("runtime_recipe_reference" in result
+                and result["runtime_recipe_reference"]
+                != embedded.get("runtime_recipe_reference"))
+            or ("cpu_screen" in result
+                and result["cpu_screen"] != embedded.get("cpu_screen"))):
+        raise SerialRefused(
+            "missing continuation; embedded routing receipt differs from the full result")
+    last_reference = embedded.get("last_outcome_reference")
+    if last_reference is not None and (
+            not result["iterations"]
+            or not isinstance(last_reference, dict)
+            or last_reference.get("status") != result["iterations"][-1]["status"]):
+        raise SerialRefused(
+            "missing continuation; last outcome reference differs from the full result")
+    recovered = dict(embedded)
+    recovered["recovered_result_sha256"] = _result_sha
+    descriptor, candidate_name = tempfile.mkstemp(
+        dir=path.parent, prefix=".loop-continuation-recovery-validation-")
+    candidate_path = Path(candidate_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            json.dump(recovered, stream, sort_keys=True)
+            stream.flush()
+            os.fsync(stream.fileno())
+        # Run the complete existing validator before publishing a canonical
+        # receipt. A forged embedded argv/reference must not leave a durable
+        # continuation that wedges every later retry.
+        load_completed(candidate_path, expected_argv=expected_argv,
+                       expected_binding=expected_binding)
+    finally:
+        candidate_path.unlink(missing_ok=True)
+    if _json(result_path, limit=FULL_RESULT_RECOVERY_LIMIT)[1] != _result_sha:
+        raise SerialRefused("durable full result changed before continuation recovery")
+    from . import archive
+    raw = (json.dumps(recovered, sort_keys=True, indent=2) + "\n").encode()
+    try:
+        archive._retain_bytes(path, raw)
+    except (OSError, RuntimeError) as exc:
+        raise SerialRefused(f"continuation recovery publication refused: {exc}") from exc
+    loaded = load_completed(path, expected_argv=expected_argv,
+                            expected_binding=expected_binding)
+    if _json(result_path, limit=FULL_RESULT_RECOVERY_LIMIT)[1] != _result_sha:
+        raise SerialRefused("durable full result changed during continuation recovery")
+    return (*loaded, True)
 
 
 def full_commit(worktree: Path, commit: str) -> str:
@@ -1283,19 +1422,24 @@ def _reconcile_completed(root, state, targets, batch_iterations):
             active.get(key) != value for key, value in expected.items()):
         raise SerialRefused("previous active batch differs from original target/arguments")
     path = directory / "loop-continuation.json"
-    if not path.exists() and scheduled is not None and option(original, "--cpu-serving-launch"):
+    terminal_basis = _original_child_terminal(active) if not path.exists() else None
+    try:
+        body, sha, _recovered = _load_completed_or_recover(
+            path, expected_argv=argv, expected_binding=input_binding(argv))
+    except (OSError, ValueError):
+        if scheduled is None or not option(original, "--cpu-serving-launch"):
+            raise
         from . import runtime_recovery
         recovery = runtime_recovery.retain(directory, active, argv)
         if runtime_recovery.pending(recovery) is None:
             raise SerialRefused("failed child has no original recoverable runtime attempt")
         return {"target_index": index, "batch_number": number, "terminal": "failed",
             "result": None, "runtime_recovery": recovery,
-            "process_terminal_basis": _original_child_terminal(active)}
-    body, sha = load_completed(path, expected_argv=argv, expected_binding=input_binding(argv))
+            "process_terminal_basis": terminal_basis}
     identity = body["selected_target"]
     if not isinstance(identity, dict) or identity.get("selected_id") != active["selected_id"]:
         raise SerialRefused("previous terminal result belongs to another selected target")
-    terminal_basis = _original_child_terminal(active)
+    terminal_basis = terminal_basis or _original_child_terminal(active)
     return {"target_index": index, "batch_number": number, "terminal": body["terminal"],
             "result": {"path": str(path), "sha256": sha}, "process_terminal_basis": terminal_basis}
 
@@ -1732,14 +1876,27 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
                         if time.monotonic() >= heartbeat_at:
                             publish("running", active)
                             heartbeat_at = time.monotonic() + 30
-                    if process.returncode != 0:
-                        if scheduler_manifest is not None:
-                            state["scheduler_state"] = _scheduled_failure_account(
-                                state, scheduler_manifest, active, directory, original).to_dict()
-                        raise SerialRefused(f"child exited {process.returncode}; see retained logs")
                 result_path = directory / "loop-continuation.json"
-                body, sha = load_completed(result_path, expected_argv=child_argv,
-                                           expected_binding=expected_binding)
+                recovery_error = None
+                try:
+                    body, sha, recovered_from_full = _load_completed_or_recover(
+                        result_path, expected_argv=child_argv,
+                        expected_binding=expected_binding)
+                except (OSError, ValueError) as exc:
+                    recovery_error = exc
+                    recovered_from_full = False
+                if (process.returncode != 0 and not recovered_from_full) \
+                        or recovery_error is not None:
+                    if scheduler_manifest is not None:
+                        state["scheduler_state"] = _scheduled_failure_account(
+                            state, scheduler_manifest, active, directory, original).to_dict()
+                if process.returncode != 0 and not recovered_from_full:
+                    detail = (f"; full-result recovery refused: {recovery_error}"
+                              if recovery_error is not None else "")
+                    raise SerialRefused(
+                        f"child exited {process.returncode}; see retained logs{detail}")
+                if recovery_error is not None:
+                    raise recovery_error
                 identity = body["selected_target"]
                 if not isinstance(identity, dict) or identity.get("selected_id") != active["selected_id"]:
                     raise SerialRefused("child terminal belongs to another selected target")

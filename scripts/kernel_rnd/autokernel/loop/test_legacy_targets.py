@@ -178,6 +178,8 @@ def test_actual_main_reopens_digest_bound_latest_shared_source_anchor(
     monkeypatch.setattr(run, "_cpu_arm",
                         lambda recipe, build: replace(recipe, build_dir=str(build)))
     monkeypatch.setattr(serial_run, "verify_exact_anchor", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(run.surface_validation, "shared_source_checkout",
+                        lambda _target, source, _commit: (Path(source), "c" * 40))
     monkeypatch.setattr(run, "_git", lambda *_args: "b" * 40)
     monkeypatch.setattr(run.workload_contract, "read_census", lambda _model: SimpleNamespace(
         n_embd=4096, dominant_quant="Q4_K"))
