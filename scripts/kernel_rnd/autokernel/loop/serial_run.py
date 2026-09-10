@@ -429,10 +429,22 @@ def main(argv=None) -> int:
     parser.add_argument("--rounds", type=int, default=1,
                         help="0 schedules until its configured budget or STOP")
     parser.add_argument("--state-dir", type=Path, required=True)
+    parser.add_argument("--control-listen", help="optional authenticated IPv4 loopback HOST:PORT")
+    parser.add_argument("--control-origin", default=os.environ.get("AUTOKERNEL_TRUSTED_HUB_ORIGIN"),
+                        help="exact trusted hub origin; token comes from AUTOKERNEL_CONTROL_TOKEN")
     args = parser.parse_args(argv)
     if args.batch_iterations <= 0 or args.rounds < 0:
         parser.error("batch iterations must be positive and rounds nonnegative")
     try:
+        if args.control_listen:
+            from . import campaign_service
+            try:
+                campaign_service.parse_listen(args.control_listen)
+                campaign_service.validate_origin(args.control_origin)
+            except campaign_service.ControlRefused as exc:
+                raise SerialRefused(str(exc)) from exc
+            if not os.environ.get("AUTOKERNEL_CONTROL_TOKEN"):
+                raise SerialRefused("AUTOKERNEL_CONTROL_TOKEN is required with --control-listen")
         skipped = []
         child_prefix = ()
         if args.resolved_campaign:
@@ -510,7 +522,8 @@ def main(argv=None) -> int:
         except BlockingIOError as exc:
             raise SerialRefused("serial session already has an owner") from exc
         return _drive(root, targets, args.batch_iterations, args.rounds, child_prefix=child_prefix,
-                      scheduler_manifest=scheduler_manifest)
+                      scheduler_manifest=scheduler_manifest,
+                      control_listen=args.control_listen, control_origin=args.control_origin)
 
 
 def _source_owner_key(argv):
@@ -698,7 +711,7 @@ def _scheduled_failure_account(state, manifest, active, batch_dir, original):
 
 
 def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
-           scheduler_manifest=None):
+           scheduler_manifest=None, control_listen=None, control_origin=None):
     config = _digest({"targets": targets, "batch_iterations": batch_iterations, "rounds": rounds,
                       **({"child_prefix": list(child_prefix)} if child_prefix else {}),
                       **({"scheduler_manifest": scheduler_manifest.digest}
@@ -739,6 +752,8 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
     def save():
         status.write_json(root, state_path.name, state)
 
+    control = service = None
+
     def publish(phase, active=None, reason=None):
         if isinstance(active, dict):
             active = {key: value for key, value in active.items()
@@ -751,6 +766,10 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
                               "stop_requested": stopped(),
                               "failed_targets": {key: value[:240]
                                                  for key, value in state["failed_targets"].items()}},
+                     serial_control=(control.pump(
+                         state.get("active"), terminal=phase in {"complete", "failed"},
+                         stopped=stopped(), failed=phase == "failed" or bool(state["failed_targets"]))
+                         if control is not None else None),
                      stale_after_s=180)
 
     def retain_recovery(active, argv, directory):
@@ -780,6 +799,19 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
     for sig in handlers:
         signal.signal(sig, request_stop)
     try:
+        if control_listen or "control" in state:
+            from .serial_control import SerialControl, SerialHTTPService
+            control = SerialControl(state, save, request_stop, config_digest=config)
+            if (state["control"]["desired_state"] == "paused"
+                    and not control_listen and not stopped()):
+                raise SerialRefused("retained serial pause requires --control-listen and token to resume; "
+                                    "or use the original STOP file to drain without resuming")
+            if control_listen:
+                service = SerialHTTPService(control, control_listen,
+                    os.environ.get("AUTOKERNEL_CONTROL_TOKEN"), allowed_origin=control_origin)
+            control.pump(state.get("active"), stopped=stopped())
+            if service is not None:
+                service.start()
         if state.get("active") is not None:
             recovered_active = dict(state["active"])
             recovered = _reconcile_completed(root, state, targets, batch_iterations)
@@ -817,6 +849,20 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
                 request_stop(None, None)
             save()  # original result and progress committed before selecting another batch
         while not stopped() and (rounds == 0 or state["next_batch"] < rounds * len(targets)):
+            if control is not None:
+                control.pump(stopped=stopped())
+                paused_heartbeat = 0.0
+                while state["control"]["desired_state"] == "paused" and not stopped():
+                    if time.monotonic() >= paused_heartbeat:
+                        publish("running", reason="paused between batches; no child or claims held")
+                        paused_heartbeat = time.monotonic() + 30
+                    time.sleep(.5)
+                    previous = control.publish_snapshot()
+                    control.pump(stopped=stopped())
+                    if control.publish_snapshot() != previous:
+                        paused_heartbeat = 0.0
+                if stopped():
+                    break
             if len(state["failed_targets"]) == len(targets):
                 publish("failed")
                 return 1  # Continuous mode must not spin over a failed roster.
@@ -925,6 +971,10 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
                     sent = False
                     heartbeat_at = time.monotonic() + 30
                     while process.poll() is None:
+                        if control is not None:
+                            previous = control.publish_snapshot()
+                            if control.pump(active, stopped=stopped()) != previous:
+                                publish("running", active)
                         if stopped() and not sent:
                             process.send_signal(signal.SIGTERM)  # This captured child only; it drains its tail.
                             sent = True
@@ -970,8 +1020,12 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
         publish("complete", {"stop_requested": stopped(), "failed_targets": state["failed_targets"]})
         return 1 if state["failed_targets"] else 0
     finally:
-        for sig, handler in handlers.items():
-            signal.signal(sig, handler)
+        try:
+            if service is not None:
+                service.close()
+        finally:
+            for sig, handler in handlers.items():
+                signal.signal(sig, handler)
 
 
 if __name__ == "__main__":
